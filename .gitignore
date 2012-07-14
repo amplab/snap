@@ -10,3 +10,14 @@
 *.lai
 *.la
 *.a
+
+~*
+*.swp
+*.swo
+*.o
+*.d
+*.exe
+*.vcxproj.user
+
+snap
+unit_tests
