@@ -186,7 +186,8 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     // Compute bias table sizes, unless we're using the precomputed ones hardcoded in BiasTables.cpp
     double *biasTable = NULL;
     if (computeBias) {
-        biasTable = new double[index->nHashTables];
+        unsigned nHashTables = 1 << ((max(seedLen,16) - 16) * 2);
+        biasTable = new double[nHashTables];
         ComputeBiasTable(genome, seedLen, biasTable);
     }
 
