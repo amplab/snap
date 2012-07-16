@@ -105,9 +105,6 @@ ReadFASTAGenome(const char *fileName)
             //
             // Convert it to upper case and truncate the newline before adding it to the genome.
             //
-            for (unsigned i = 0; i < lineBufferSize; i++) {
-              lineBuffer[i] = toupper(lineBuffer[i]);
-            }
 
             char *newline = strchr(lineBuffer,'\n');
             if (NULL != newline) {
@@ -119,7 +116,12 @@ ReadFASTAGenome(const char *fileName)
             // in reads (where we just do a straight text comparison.
             //
             size_t lineLen = strlen(lineBuffer);
-            for (unsigned i = 0; i < lineLen; i++) {
+
+			for (unsigned i = 0; i < lineLen; i++) {
+              lineBuffer[i] = toupper(lineBuffer[i]);
+            }
+
+			for (unsigned i = 0; i < lineLen; i++) {
                 if ('N' == lineBuffer[i]) {
                     lineBuffer[i] = 'n';
                 }
