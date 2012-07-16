@@ -291,10 +291,12 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
             }
 
             if (!hashTable->Insert(lowBases,newEntry)) {
-                printf("IndexBuilder: exceeded size of hash table %d at base %d.  Increase slack\n",seed.getHighBases() /2,i);
                 for (unsigned j = 0; j < index->nHashTables; j++) {
                     printf("HashTable[%d] has %lld used elements\n",j,(_int64)index->hashTables[j]->GetUsedElementCount());
                 }
+                printf("IndexBuilder: exceeded size of hash table %d at base %d.\n"
+                       "If you're indexing a non-human genome, make sure to pass the -c option.\n",
+                       seed.getHighBases() / 2, i);
                 exit(1);
             }
         } else {
