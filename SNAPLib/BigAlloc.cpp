@@ -121,7 +121,11 @@ Return Value:
 
 --*/
 {
-    static bool warningPrinted = false;
+    if (sizeToAllocate == 0) {
+       sizeToAllocate = 1;
+   }
+
+   static bool warningPrinted = false;
 
     void *allocatedMemory;
 
