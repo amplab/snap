@@ -239,6 +239,10 @@ void *BigAlloc(
         size_t      sizeToAllocate,
         size_t      *sizeAllocated)
 {
+    if (sizeToAllocate == 0) {
+        sizeToAllocate = 1;
+    }
+
     const size_t ALIGN_SIZE = 4096;
     if (sizeToAllocate % ALIGN_SIZE != 0) {
         sizeToAllocate += ALIGN_SIZE - (sizeToAllocate % ALIGN_SIZE);
