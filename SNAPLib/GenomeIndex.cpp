@@ -27,6 +27,8 @@ Revision History:
 #include "BigAlloc.h"
 #include "Compat.h"
 #include "FASTA.h"
+#include "FixedSizeSet.h"
+#include "FixedSizeVector.h"
 #include "Genome.h"
 #include "GenomeIndex.h"
 #include "HashTable.h"
@@ -863,10 +865,8 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table)
  * We assume that table is already of the correct size for our seed size
  * (namely 4**(seedLen-16)), and just fill in the values.
  *
- * We use a very stupid approximate scheme for counting distinct elements in a
- * stream: just sample 0.1% of the seeds by taking the hash of the seed mod 1001,
- * and keep those in a set for each table entry to estimate its size. Something
- * like Flajolet-Martin counting would be more elegant.
+ * If the genome is less than 2^20 bases, we count the seeds in each table exactly;
+ * otherwise, we estimate them using Flajolet-Martin approximate counters.
  */
 {
     printf("Computing bias table\n");
@@ -874,7 +874,12 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table)
     unsigned nHashTables = (seedLen <= 16 ? 1 : 1 << ((seedLen - 16) * 2));
     unsigned countOfBases = genome->getCountOfBases();
 
-    vector<ApproximateCounter> counters(nHashTables);
+    static const unsigned GENOME_SIZE_FOR_EXACT_COUNT = 1 << 20;  // Needs to be a power of 2 for hash sets
+
+    bool computeExactly = (countOfBases < GENOME_SIZE_FOR_EXACT_COUNT);
+    FixedSizeVector<unsigned> numExactSeeds(nHashTables, 0);
+    FixedSizeSet<_int64> exactSeedsSeen(2 * GENOME_SIZE_FOR_EXACT_COUNT);
+    vector<ApproximateCounter> approxCounters(nHashTables);
     double validSeeds = 0;
 
     for (unsigned i = 0; i < (unsigned)(countOfBases - seedLen); i++) {
@@ -909,16 +914,24 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table)
         }
 
         _ASSERT(seed.getHighBases() < nHashTables);
-        counters[seed.getHighBases()].add(seed.getLowBases());
+        if (computeExactly) {
+            if (!exactSeedsSeen.contains(seed.getBases())) {
+                exactSeedsSeen.add(seed.getBases());
+                numExactSeeds[seed.getHighBases()]++;
+            }
+        } else {
+            approxCounters[seed.getHighBases()].add(seed.getLowBases());
+        }
     }
 
-    double total = 0;
+    double distinctSeeds = 0;
     for (unsigned i = 0; i < nHashTables; i++) {
-        total += counters[i].getCount();
+        distinctSeeds += computeExactly ? numExactSeeds[i] : approxCounters[i].getCount();
     }
 
     for (unsigned i = 0; i < nHashTables; i++) {
-        table[i] = (counters[i].getCount() / total) * (validSeeds / countOfBases) * nHashTables;
+        int count = computeExactly ? numExactSeeds[i] : approxCounters[i].getCount();
+        table[i] = (count / distinctSeeds) * (validSeeds / countOfBases) * nHashTables;
     }
 
     // printf("Bias table:\n");

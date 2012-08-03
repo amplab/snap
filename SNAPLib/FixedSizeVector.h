@@ -11,6 +11,14 @@ public:
         reserve(capacity_);
     }
 
+    // Create a fixed size vector initialized to size copies of an initialValue
+    FixedSizeVector(int size, V initialValue): entries(NULL), curSize(0) {
+        reserve(size);
+        for (int i = 0; i < size; i++) {
+            push_back(initialValue);
+        }
+    }
+
     ~FixedSizeVector() {
         delete[] entries;
     }
