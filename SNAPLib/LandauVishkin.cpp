@@ -34,6 +34,7 @@ int LandauVishkin::computeEditDistance(
         const char* text, int textLen, const char* pattern, int patternLen, int k, _uint64 cacheKey) 
 {
     _ASSERT(k < MAX_K);
+    k = min(MAX_K - 1, k); // enforce limit even in non-debug builds
     if (NULL == text) {
         // This happens when we're trying to read past the end of the genome.
         return -1;
@@ -111,7 +112,6 @@ done1:
                 }
                 return e;
             }
-
             L[e][MAX_K+d] = best;
         }
     }

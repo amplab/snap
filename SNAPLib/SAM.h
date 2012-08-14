@@ -40,6 +40,8 @@ public:
 
     static bool generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize);
    
+    static const int HEADER_BUFFER_SIZE = 256 * 1024 * 1024;
+    
 protected:
 
     //
@@ -107,7 +109,6 @@ private:
                Read *mate, AlignmentResult mateResult, unsigned mateLocation, bool mateIsRC);
 
     static const int BUFFER_SIZE = 8 * 1024 * 1024;
-    static const int HEADER_BUFFER_SIZE = 256 * 1024 * 1024;
 
     FILE *file;
     char *buffer; // For setvbuf
@@ -117,34 +118,35 @@ private:
     LandauVishkinWithCigar lv;
 };
 
-#ifdef  _MSC_VER
 //
 // Like with SimpleSAMWriter there is one of these per thread.  Unlike SimpleSAMWriter they all
 // share a single file.  Each thread maintains its own write buffer.  When the buffer is full,
 // it allocates a write offset by doing an interlocked add of the writeOffset, which is shared
 // among all writers of this file.
+// Abstract base class with a subclass per platform.
 //
 
-class WindowsSAMWriter : public SAMWriter {
+class ThreadSAMWriter : public SAMWriter {
 public:
 
-    WindowsSAMWriter();
-    virtual ~WindowsSAMWriter();
+    ThreadSAMWriter();
+    virtual ~ThreadSAMWriter();
 
-    bool initialize(HANDLE i_hFile, const Genome *i_genome, volatile _int64 *i_nextWriteOffset);
+    bool initialize(const Genome *i_genome, volatile _int64 *i_nextWriteOffset);
     
     bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC);
 
     bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result);
 
-    bool close();
+    virtual bool close();
 
-private:
+protected:
 
-    bool                            startIo();
-    bool                            waitForIoCompletion();
+    // subclasses must implemement to do actual I/O
 
-    HANDLE                          hFile;
+    virtual bool                    startIo() = 0;
+    virtual bool                    waitForIoCompletion() = 0;
+
     volatile _int64                *nextWriteOffset;
 
     static const size_t             BufferSize = 16 * 1024 * 1024;
@@ -152,11 +154,47 @@ private:
     
     unsigned                        bufferBeingCreated; // Which buffer are we generating new SAM into?
     bool                            writeOutstanding;   // Is a write pending on 1-bufferBeingCreated?
-    OVERLAPPED                      lap[2];
     char                           *buffer[2];
     const Genome                   *genome;
 
     LandauVishkinWithCigar          lv;
+};
+
+#ifndef _MSC_VER
+class SimpleThreadSAMWriter : public ThreadSAMWriter {
+public:
+
+    SimpleThreadSAMWriter();
+    virtual ~SimpleThreadSAMWriter();
+
+    bool initialize(int i_fd, const Genome *i_genome, volatile _int64 *i_nextWriteOffset);
+    
+protected:
+
+    virtual bool                    startIo();
+    virtual bool                    waitForIoCompletion();
+
+    int                             fd;
+};
+#endif
+
+#ifdef  _MSC_VER
+class WindowsSAMWriter : public ThreadSAMWriter {
+public:
+
+    WindowsSAMWriter();
+    virtual ~WindowsSAMWriter();
+
+    bool initialize(HANDLE i_hFile, const Genome *i_genome, volatile _int64 *i_nextWriteOffset);
+    
+protected:
+
+    virtual bool                    startIo();
+    virtual bool                    waitForIoCompletion();
+
+    HANDLE                          hFile;
+
+    OVERLAPPED                      lap[2];
 };
 #endif  //_MSC_VER
 
@@ -171,6 +209,7 @@ public:
     virtual bool close() = 0;
 };
 
+#ifndef _MSC_VER
 class SimpleParallelSAMWriter : public ParallelSAMWriter {
 public:
 
@@ -185,9 +224,13 @@ public:
 
 private:
 
-    unsigned             nThreads;
-    SimpleSAMWriter    **writer;
+    unsigned                   nThreads;
+    SimpleThreadSAMWriter    **writer;
+
+    int                        fd;
+    volatile _int64            nextWriteOffset;
 };
+#endif
 
 #ifdef  _MSC_VER
 class WindowsParallelSAMWriter: public ParallelSAMWriter {
