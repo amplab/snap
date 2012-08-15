@@ -73,14 +73,49 @@ public:
         // Methods to read the genome.
         //
         inline const char *getSubstring(size_t offset, size_t lengthNeeded) const {
-            // TODO: Don't return substrings that span piece (chromosome) boundaries
-            if (offset + lengthNeeded > nBases) {
+            if (offset > nBases || offset + lengthNeeded > nBases) {
+                // The first part of the test is for the unsigned version of a negative offset.
                 return NULL;
             }
 
             _ASSERT(offset >= minOffset && offset + lengthNeeded <= maxOffset); // If the caller asks for a genome slice, it's only legal to look within it.
 
-            return bases + (offset-minOffset);
+            //
+            // See if the substring crosses a piece (chromosome) boundary.  If so, disallow it.
+            //
+
+            //
+            // Start by special casing the last piece (it makes the rest of the code easier).
+            //
+            if (pieces[nPieces - 1].beginningOffset <= offset) {
+                //
+                // Because it starts in the last piece, it's OK because we already checked overflow
+                // of the whole genome.
+                //
+                return bases + (offset-minOffset);
+            }
+
+            int min = 0;
+            int max = nPieces - 2;
+            while (min <= max) {
+                int i = (min + max) / 2;
+                if (pieces[i].beginningOffset <= offset) {
+                    if (pieces[i+1].beginningOffset > offset) {
+                        if (pieces[i+1].beginningOffset <= offset + lengthNeeded) {
+                            return NULL;    // This crosses a piece boundary.
+                        } else {
+                            return bases + (offset-minOffset);
+                        }
+                    } else {
+                        min = i+1;
+                    }
+                } else {
+                    max = i-1;
+                }
+            }
+
+            _ASSERT(false && "NOTREACHED");
+            return NULL;
         }
 
         inline unsigned getCountOfBases() const {return nBases;}
@@ -124,7 +159,7 @@ private:
         int          nPieces;
         int          maxPieces;
 
-        Piece       *pieces;
+        Piece       *pieces;    // This is always in order (it's not possible to express it otherwise in FASTA).
 
         Genome *copy(bool copyX, bool copyY, bool copyM) const;
 

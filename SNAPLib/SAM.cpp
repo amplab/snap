@@ -127,14 +127,23 @@ SAMWriter::computeCigarString(
     bool                        isRC
 )
 {
-    int r = lv->computeEditDistance(
-                    genome->getSubstring(genomeLocation, dataLength),
-                    dataLength,
-                    data,
-                    dataLength,
-                    MAX_K - 1,
-                    cigarBuf,
-                    cigarBufLen);
+    const char *reference = genome->getSubstring(genomeLocation, dataLength);
+    int r;
+    if (NULL != reference) {
+        r = lv->computeEditDistance(
+                       genome->getSubstring(genomeLocation, dataLength),
+                        dataLength,
+                        data,
+                        dataLength,
+                        MAX_K - 1,
+                        cigarBuf,
+                        cigarBufLen);
+    } else {
+        //
+        // Fell off the end of the chromosome.
+        //
+        return "*";
+    }
 
     if (r == -2) {
         fprintf(stderr, "WARNING: computeEditDistance returned -2; cigarBuf may be too small\n");
@@ -195,6 +204,15 @@ SAMWriter::generateSAMText(
     const char *matePieceName = "*";
     unsigned matePositionInPiece = 0;
     _int64 templateLength = 0;
+
+    //
+    // If the aligner said it didn't find anything, treat it as such.  Sometimes it will emit the
+    // best match that it found, even if it's not within the maximum edit distance limit (but will
+    // then say NotFound).  Here, we force that to be SAM_UNMAPPED.
+    //
+    if (NotFound == result) {
+        genomeLocation = 0xffffffff;
+    }
 
     // Write the data and quality strings. If the read is reverse complemented, these need to
     // be backwards from the original read. Also, both need to be unclipped.

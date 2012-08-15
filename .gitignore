@@ -28,3 +28,5 @@
 *.suo
 ipch
 obj
+*.vsp
+

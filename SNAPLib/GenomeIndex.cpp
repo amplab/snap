@@ -465,7 +465,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 
     FILE *indexFile = fopen(filenameBuffer,"w");
     if (indexFile == NULL) {
-        fprintf(stderr,"Unable to open file '%s' for write.\n",filenameBuffer);
+        fprintf(stderr,"Unable to open file '%s' for read.\n",filenameBuffer);
         return false;
     }
 
