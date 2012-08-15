@@ -40,6 +40,8 @@ public:
 
     static bool generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize);
    
+    static const int HEADER_BUFFER_SIZE = 256 * 1024 * 1024;
+    
 protected:
 
     //
@@ -107,7 +109,6 @@ private:
                Read *mate, AlignmentResult mateResult, unsigned mateLocation, bool mateIsRC);
 
     static const int BUFFER_SIZE = 8 * 1024 * 1024;
-    static const int HEADER_BUFFER_SIZE = 256 * 1024 * 1024;
 
     FILE *file;
     char *buffer; // For setvbuf
@@ -117,100 +118,64 @@ private:
     LandauVishkinWithCigar lv;
 };
 
-#ifdef  _MSC_VER
 //
 // Like with SimpleSAMWriter there is one of these per thread.  Unlike SimpleSAMWriter they all
 // share a single file.  Each thread maintains its own write buffer.  When the buffer is full,
 // it allocates a write offset by doing an interlocked add of the writeOffset, which is shared
 // among all writers of this file.
+// Abstract base class with a subclass per platform.
 //
 
-class WindowsSAMWriter : public SAMWriter {
+class ThreadSAMWriter : public SAMWriter {
 public:
 
-    WindowsSAMWriter();
-    virtual ~WindowsSAMWriter();
+    ThreadSAMWriter();
+    virtual ~ThreadSAMWriter();
 
-    bool initialize(HANDLE i_hFile, const Genome *i_genome, volatile _int64 *i_nextWriteOffset);
+    bool initialize(AsyncFile* file, const Genome *i_genome, volatile _int64 *i_nextWriteOffset);
     
     bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC);
 
     bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result);
 
-    bool close();
+    virtual bool close();
 
 private:
 
     bool                            startIo();
     bool                            waitForIoCompletion();
 
-    HANDLE                          hFile;
     volatile _int64                *nextWriteOffset;
 
     static const size_t             BufferSize = 16 * 1024 * 1024;
     size_t                          remainingBufferSpace;
     
     unsigned                        bufferBeingCreated; // Which buffer are we generating new SAM into?
-    bool                            writeOutstanding;   // Is a write pending on 1-bufferBeingCreated?
-    OVERLAPPED                      lap[2];
+    AsyncFile::Writer              *writer[2];
     char                           *buffer[2];
     const Genome                   *genome;
 
     LandauVishkinWithCigar          lv;
 };
-#endif  //_MSC_VER
 
 class ParallelSAMWriter {
 public:
-    virtual ~ParallelSAMWriter() {}
+    ~ParallelSAMWriter();
 
     static ParallelSAMWriter* create(const char *fileName, const Genome *genome, unsigned nThreads);
 
-    virtual SAMWriter *getWriterForThread(unsigned whichThread) = 0;
+    SAMWriter *getWriterForThread(unsigned whichThread);
 
-    virtual bool close() = 0;
-};
-
-class SimpleParallelSAMWriter : public ParallelSAMWriter {
-public:
-
-    SimpleParallelSAMWriter() : nThreads(0), writer(NULL) {}
-    virtual ~SimpleParallelSAMWriter();
-
-    SAMWriter *getWriterForThread(unsigned whichThread) {_ASSERT(whichThread < nThreads); return writer[whichThread];}
-
-    static SimpleParallelSAMWriter* create(const char *fileName, const Genome *genome, unsigned i_nThreads);
-
-    virtual bool close();
+    bool close();
 
 private:
 
-    unsigned             nThreads;
-    SimpleSAMWriter    **writer;
+    AsyncFile                      *file;
+    volatile _int64                 nextWriteOffset;
+
+    ThreadSAMWriter               **writer;
+    int                             nThreads;
 };
-
-#ifdef  _MSC_VER
-class WindowsParallelSAMWriter: public ParallelSAMWriter {
-public:
-
-    WindowsParallelSAMWriter() : nThreads(0), writer(NULL), hFile(INVALID_HANDLE_VALUE), nextWriteOffset(0) {}
-    virtual ~WindowsParallelSAMWriter();
-
-    static WindowsParallelSAMWriter* create(const char *fileName, const Genome *genome, unsigned nThreads);
-
-    SAMWriter *getWriterForThread(unsigned whichThread) {_ASSERT(whichThread < nThreads); return writer[whichThread];}
-
-    virtual bool close();
-
-public:
-
-    HANDLE               hFile;
-    unsigned             nThreads;
-    WindowsSAMWriter   **writer;
-    volatile _int64      nextWriteOffset;
-};
-#endif  // _MSC_VER
-
 
 /*
  * Flags for the SAM file format; see http://samtools.sourceforge.net/SAM1.pdf for details.

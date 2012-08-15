@@ -67,6 +67,8 @@ public:
             epoch = 1;
         }
     }
+
+    static const int MaxQuadraticProbes = 4;
     
     inline V get(K key) {
         unsigned pos = hash(key) & mask;
@@ -77,8 +79,11 @@ public:
             } else if (entries[pos].key == key) {
                 return entries[pos].value;
             } else {
-                pos = (pos + i) & mask;
+                pos = (pos + (i <= MaxQuadraticProbes ? i : 1)) & mask;
                 i++;
+                if (i > capacity + MaxQuadraticProbes) {
+                    return V();
+                }
             }
         }
     }
@@ -98,14 +103,51 @@ public:
                 entries[pos].value = value;
                 return;
             } else {
-                pos = (pos + i) & mask;
+                pos = (pos + (i <= MaxQuadraticProbes ? i : 1)) & mask;
                 i++;
+                _ASSERT(i <= capacity + MaxQuadraticProbes); // todo: overlow condition?
             }
         }
     }
+
+    inline int getSize() { return size; }
     
     void *operator new(size_t size) {return BigAlloc(size);}
     void operator delete(void *ptr) {BigDealloc(ptr);}
+    
+    typedef void* iterator;
+
+    iterator begin()
+    {
+        return next(&entries[-1]);
+    }
+
+    iterator next(iterator i)
+    {
+        Entry* final = &entries[capacity];
+        Entry* x = (Entry*) i;
+        if (x < final) {
+            do {
+                x++;
+            } while (x < final && x->epoch != epoch);
+        }
+        return x;
+    }
+
+    iterator end()
+    {
+        return &entries[capacity];
+    }
+
+    K key(iterator i)
+    {
+        return ((Entry*)i)->key;
+    }
+
+    V& value(iterator i)
+    {
+        return ((Entry*)i)->value;
+    }
 
 private:
     struct Entry {
@@ -120,7 +162,6 @@ private:
     Entry *entries;
     int capacity;
     int size;
-    int maxSize;
     int mask;
     int epoch;
     Hash hash;
