@@ -132,7 +132,7 @@ public:
     ThreadSAMWriter();
     virtual ~ThreadSAMWriter();
 
-    bool initialize(const Genome *i_genome, volatile _int64 *i_nextWriteOffset);
+    bool initialize(AsyncFile* file, const Genome *i_genome, volatile _int64 *i_nextWriteOffset);
     
     bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC);
 
@@ -140,12 +140,10 @@ public:
 
     virtual bool close();
 
-protected:
+private:
 
-    // subclasses must implemement to do actual I/O
-
-    virtual bool                    startIo() = 0;
-    virtual bool                    waitForIoCompletion() = 0;
+    bool                            startIo();
+    bool                            waitForIoCompletion();
 
     volatile _int64                *nextWriteOffset;
 
@@ -153,107 +151,31 @@ protected:
     size_t                          remainingBufferSpace;
     
     unsigned                        bufferBeingCreated; // Which buffer are we generating new SAM into?
-    bool                            writeOutstanding;   // Is a write pending on 1-bufferBeingCreated?
+    AsyncFile::Writer              *writer[2];
     char                           *buffer[2];
     const Genome                   *genome;
 
     LandauVishkinWithCigar          lv;
 };
 
-#ifndef _MSC_VER
-class SimpleThreadSAMWriter : public ThreadSAMWriter {
-public:
-
-    SimpleThreadSAMWriter();
-    virtual ~SimpleThreadSAMWriter();
-
-    bool initialize(int i_fd, const Genome *i_genome, volatile _int64 *i_nextWriteOffset);
-    
-protected:
-
-    virtual bool                    startIo();
-    virtual bool                    waitForIoCompletion();
-
-    int                             fd;
-};
-#endif
-
-#ifdef  _MSC_VER
-class WindowsSAMWriter : public ThreadSAMWriter {
-public:
-
-    WindowsSAMWriter();
-    virtual ~WindowsSAMWriter();
-
-    bool initialize(HANDLE i_hFile, const Genome *i_genome, volatile _int64 *i_nextWriteOffset);
-    
-protected:
-
-    virtual bool                    startIo();
-    virtual bool                    waitForIoCompletion();
-
-    HANDLE                          hFile;
-
-    OVERLAPPED                      lap[2];
-};
-#endif  //_MSC_VER
-
 class ParallelSAMWriter {
 public:
-    virtual ~ParallelSAMWriter() {}
+    ~ParallelSAMWriter();
 
     static ParallelSAMWriter* create(const char *fileName, const Genome *genome, unsigned nThreads);
 
-    virtual SAMWriter *getWriterForThread(unsigned whichThread) = 0;
+    SAMWriter *getWriterForThread(unsigned whichThread);
 
-    virtual bool close() = 0;
-};
-
-#ifndef _MSC_VER
-class SimpleParallelSAMWriter : public ParallelSAMWriter {
-public:
-
-    SimpleParallelSAMWriter() : nThreads(0), writer(NULL) {}
-    virtual ~SimpleParallelSAMWriter();
-
-    SAMWriter *getWriterForThread(unsigned whichThread) {_ASSERT(whichThread < nThreads); return writer[whichThread];}
-
-    static SimpleParallelSAMWriter* create(const char *fileName, const Genome *genome, unsigned i_nThreads);
-
-    virtual bool close();
+    bool close();
 
 private:
 
-    unsigned                   nThreads;
-    SimpleThreadSAMWriter    **writer;
+    AsyncFile                      *file;
+    volatile __int64                nextWriteOffset;
 
-    int                        fd;
-    volatile _int64            nextWriteOffset;
+    ThreadSAMWriter               **writer;
+    int                             nThreads;
 };
-#endif
-
-#ifdef  _MSC_VER
-class WindowsParallelSAMWriter: public ParallelSAMWriter {
-public:
-
-    WindowsParallelSAMWriter() : nThreads(0), writer(NULL), hFile(INVALID_HANDLE_VALUE), nextWriteOffset(0) {}
-    virtual ~WindowsParallelSAMWriter();
-
-    static WindowsParallelSAMWriter* create(const char *fileName, const Genome *genome, unsigned nThreads);
-
-    SAMWriter *getWriterForThread(unsigned whichThread) {_ASSERT(whichThread < nThreads); return writer[whichThread];}
-
-    virtual bool close();
-
-public:
-
-    HANDLE               hFile;
-    unsigned             nThreads;
-    WindowsSAMWriter   **writer;
-    volatile _int64      nextWriteOffset;
-};
-#endif  // _MSC_VER
-
 
 /*
  * Flags for the SAM file format; see http://samtools.sourceforge.net/SAM1.pdf for details.

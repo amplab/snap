@@ -42,6 +42,8 @@ AlignerOptions::AlignerOptions(
     inputFilename(NULL),
     inputFileIsFASTQ(true),
     clipping(ClipBack),
+    sortOutput(false),
+    sortMemory(0),
     extra(NULL)
 {
     if (forPairedEnd) {
@@ -86,6 +88,8 @@ AlignerOptions::usageMessage()
         "  -e   compute error rate assuming wgsim-generated reads\n"
         "  -P   disables cache prefetching in the genome; may be helpful for machines\n"
         "       with small caches or lots of cores/cache\n"
+        "  -s   sort output file by aligment location\n"
+        "  -sm  memory to use for sorting in Gb\n"
 #if     USE_DEVTEAM_OPTIONS
         "  -I   ignore IDs that don't match in the paired-end aligner\n"
         "  -S   selectivity; randomly choose 1/selectivity of the reads to score\n"
@@ -161,6 +165,15 @@ AlignerOptions::parse(
     } else if (strcmp(argv[n], "-b") == 0) {
         bindToProcessors = true;
         return true;
+    } else if (strcmp(argv[n], "-s") == 0) {
+        sortOutput = true;
+        return true;
+    } else if (strcmp(argv[n], "-sm") == 0) {
+        if (n + 1 < argc) {
+            sortMemory = atoi(argv[n+1]);
+            n++;
+            return true;
+        }
 #if     USE_DEVTEAM_OPTIONS
     } else if (strcmp(argv[n], "-I") == 0) {
         ignoreMismatchedIDs = true;
