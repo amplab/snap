@@ -455,7 +455,7 @@ SimpleParallelSAMWriter::~SimpleParallelSAMWriter()
     if (NULL != writer) {
         for (unsigned i = 0; i < nThreads; i++) {
             if (NULL != writer[i]) {
-                delete writer[i];
+	        delete writer[i];
             }
         }
         delete [] writer;
@@ -469,7 +469,7 @@ SimpleParallelSAMWriter::create(const char *fileName, const Genome *genome, unsi
 
     parallelWriter->nThreads = nThreads;
     parallelWriter->writer = new SimpleThreadSAMWriter *[nThreads];
-    parallelWriter->fd = open(fileName, O_CREAT | O_TRUNC, S_IRWXU | S_IRGRP);
+    parallelWriter->fd = open(fileName, O_CREAT | O_RDWR | O_TRUNC, S_IRWXU | S_IRGRP);
     if (parallelWriter->fd < 0) {
         fprintf(stderr, "SimpleSAMWriter: open failed\n");
         return NULL;
@@ -484,14 +484,14 @@ SimpleParallelSAMWriter::create(const char *fileName, const Genome *genome, unsi
     }
     if (write(parallelWriter->fd, headerBuffer, headerSize) < headerSize) {
         fprintf(stderr, "SimpleSAMWriter: write header failed\n");
-        close(parallelWriter->fd);
+        ::close(parallelWriter->fd);
         return false;
     }
     delete[] headerBuffer;
 
     for (unsigned i = 0; i < nThreads; i++) {
         parallelWriter->writer[i] = new SimpleThreadSAMWriter();
-        parallelWriter->writer[i]->initialize(parallelWriter->file, genome, &parallelWriter->nextWriteOffset);
+        parallelWriter->writer[i]->initialize(parallelWriter->fd, genome, &parallelWriter->nextWriteOffset);
     }
     
     return parallelWriter;
@@ -500,9 +500,6 @@ SimpleParallelSAMWriter::create(const char *fileName, const Genome *genome, unsi
     bool
 SimpleParallelSAMWriter::close()
 {
-    for (unsigned i = 0; i < nThreads; i++) {
-        delete writer[i];
-    }
     return true;
 }
 #endif
@@ -646,7 +643,7 @@ SimpleThreadSAMWriter::startIo()
                                 (BufferSize - remainingBufferSpace);
     ssize_t written = pwrite(fd, buffer[bufferBeingCreated], (size_t) (BufferSize - remainingBufferSpace), writeOffset);
     if (written < 0) {
-        fprintf(stderr, "pwrite failed\n");
+        fprintf(stderr, "pwrite failed errno=%d\n", errno);
         return false;
     }
     if (written < (ssize_t) (BufferSize - remainingBufferSpace)) {
