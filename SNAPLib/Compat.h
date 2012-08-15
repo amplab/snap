@@ -178,6 +178,51 @@ MemoryMappedFile* OpenMemoryMappedFile(const char* filename, size_t offset, size
 // closes and deallocates the file structure
 void CloseMemoryMappedFile(MemoryMappedFile* mappedFile);
 
+class AsyncFile
+{
+public:
+
+    // open a new file for reading and/or writing
+    static AsyncFile* open(const char* filename, bool write);
+
+    // free resources; must have destroyed all readers & writers first
+    virtual ~AsyncFile();
+
+    // abstract class for asynchronous writes
+    class Writer
+    {
+    public:
+        // waits for all writes to complete, frees resources
+        virtual ~Writer();
+
+        // begin a write; if there is already a write in progress, might wait for it to complete
+        virtual bool beginWrite(void* buffer, size_t length, size_t offset, size_t *bytesWritten) = 0;
+
+        // wait for all prior beginWrites to complete
+        virtual bool waitForCompletion() = 0;
+    };
+
+    // get a new writer, e.g. for another thread to use
+    virtual Writer* getWriter() = 0;
+
+    // abstract class for asynchronous reads
+    class Reader
+    {
+    public:
+        // waits for alls reads to complete, frees resources
+        virtual ~Reader();
+
+        // begin a new read; if there is already a read in progress, might wait for it to complete
+        virtual bool beginRead(void* buffer, size_t length, size_t offset, size_t *bytesRead) = 0;
+
+        // wait for all prior beginReads to complete
+        virtual bool waitForCompletion() = 0;
+    };
+
+    // get a new reader, e.g. for another thread to use
+    virtual Reader* getReader() = 0;
+};
+
 //
 // Macro for counting trailing zeros of a 64-bit value
 //

@@ -24,6 +24,10 @@ Revision History:
 --*/
 #include "stdafx.h"
 #include "Compat.h"
+#ifndef _MSC_VER
+#include <fcntl.h>
+#include <aio.h>
+#endif
 
 using std::min;
 using std::max;
@@ -341,6 +345,185 @@ CloseMemoryMappedFile(
     }
 }
 
+class WindowsAsyncFile : public AsyncFile
+{
+public:
+    static WindowsAsyncFile* open(const char* filename, bool write);
+
+    WindowsAsyncFile(HANDLE i_hFile);
+
+    virtual ~WindowsAsyncFile();
+
+    class Writer : public AsyncFile::Writer
+    {
+    public:
+        Writer(WindowsAsyncFile* i_file);
+
+        virtual ~Writer();
+
+        virtual bool beginWrite(void* buffer, size_t length, size_t offset, size_t *bytesWritten);
+
+        virtual bool waitForCompletion();
+    
+    private:
+        WindowsAsyncFile*   file;
+        bool                writing;
+        OVERLAPPED          lap;
+    };
+
+    virtual AsyncFile::Writer* getWriter();
+    
+    class Reader : public AsyncFile::Reader
+    {
+    public:
+        Reader(WindowsAsyncFile* i_file);
+
+        virtual ~Reader();
+
+        virtual bool beginRead(void* buffer, size_t length, size_t offset, size_t *bytesRead);
+
+        virtual bool waitForCompletion();
+    
+    private:
+        WindowsAsyncFile*   file;
+        bool                reading;
+        OVERLAPPED          lap;
+    };
+
+    virtual AsyncFile::Reader* getReader();
+
+private:
+    HANDLE      hFile;
+};
+
+    WindowsAsyncFile*
+WindowsAsyncFile::open(
+    const char* filename,
+    bool write)
+{
+    HANDLE hFile = CreateFile(filename,GENERIC_READ | GENERIC_WRITE,FILE_SHARE_READ,NULL,CREATE_ALWAYS,FILE_FLAG_OVERLAPPED,NULL);
+    if (INVALID_HANDLE_VALUE == hFile) {
+        fprintf(stderr,"Unable to create SAM file '%s', %d\n",filename,GetLastError());
+        return NULL;
+    }
+    return new WindowsAsyncFile(hFile);
+}
+
+WindowsAsyncFile::WindowsAsyncFile(
+    HANDLE i_hFile)
+    : hFile(i_hFile)
+{
+}
+
+WindowsAsyncFile::~WindowsAsyncFile()
+{
+    CloseHandle(hFile);
+}
+
+    AsyncFile::Writer*
+WindowsAsyncFile::getWriter()
+{
+    return new Writer(this);
+}
+
+WindowsAsyncFile::Writer::Writer(WindowsAsyncFile* i_file)
+    : file(i_file), writing(false)
+{
+    lap.hEvent = CreateEvent(NULL,FALSE,FALSE,NULL);
+}
+
+WindowsAsyncFile::Writer::~Writer()
+{
+    CloseHandle(lap.hEvent);
+}
+
+    bool
+WindowsAsyncFile::Writer::beginWrite(
+    void* buffer,
+    size_t length,
+    size_t offset,
+    size_t *bytesWritten)
+{
+    if (! waitForCompletion()) {
+        return false;
+    }
+    lap.OffsetHigh = (DWORD) (offset >> (8 * sizeof(DWORD)));
+    lap.Offset = (DWORD) offset;
+    if (!WriteFile(file->hFile,buffer, (DWORD) length, (LPDWORD) bytesWritten, &lap)) {
+        if (ERROR_IO_PENDING != GetLastError()) {
+            fprintf(stderr,"WindowsAsyncFile: WriteFile failed, %d\n",GetLastError());
+            return false;
+        }
+    }
+    writing = true;
+    return true;
+}
+
+    bool
+WindowsAsyncFile::Writer::waitForCompletion()
+{
+    if (writing) {
+        DWORD nBytesTransferred;
+        if (!GetOverlappedResult(file->hFile,&lap,&nBytesTransferred,TRUE)) {
+            return false;
+        }
+        writing = false;
+    }
+    return true;
+}
+
+    AsyncFile::Reader*
+WindowsAsyncFile::getReader()
+{
+    return new Reader(this);
+}
+
+WindowsAsyncFile::Reader::Reader(
+    WindowsAsyncFile* i_file)
+    : file(i_file), reading(false)
+{
+    lap.hEvent = CreateEvent(NULL,FALSE,FALSE,NULL);
+}
+
+WindowsAsyncFile::Reader::~Reader()
+{
+    CloseHandle(lap.hEvent);
+}
+
+    bool
+WindowsAsyncFile::Reader::beginRead(
+    void* buffer,
+    size_t length,
+    size_t offset,
+    size_t* bytesRead)
+{
+    if (! waitForCompletion()) {
+        return false;
+    }
+    lap.OffsetHigh = (DWORD) (offset >> (8 * sizeof(DWORD)));
+    lap.Offset = (DWORD) offset;
+    if (!ReadFile(file->hFile,buffer,(DWORD) length, (LPDWORD) bytesRead, &lap)) {
+        if (ERROR_IO_PENDING != GetLastError()) {
+            fprintf(stderr,"WindowsSAMWriter: WriteFile failed, %d\n",GetLastError());
+            return false;
+        }
+    }
+    reading = true;
+    return true;
+}
+
+    bool
+WindowsAsyncFile::Reader::waitForCompletion()
+{
+    if (reading) {
+        DWORD nBytesTransferred;
+        if (!GetOverlappedResult(file->hFile,&lap,&nBytesTransferred,TRUE)) {
+            return false;
+        }
+        reading = false;
+    }
+    return true;
+}
 
 _int64 InterlockedAdd64AndReturnNewValue(volatile _int64 *valueToWhichToAdd, _int64 amountToAdd)
 {
@@ -637,6 +820,230 @@ CloseMemoryMappedFile(
     _ASSERT(false);
 }
 
+class PosixAsyncFile : public AsyncFile
+{
+public:
+    static PosixAsyncFile* open(const char* filename, bool write);
+
+    PosixAsyncFile(int i_fd);
+
+    virtual ~PosixAsyncFile();
+
+    class Writer : public AsyncFile::Writer
+    {
+    public:
+        Writer(PosixAsyncFile* i_file);
+
+        virtual ~Writer();
+
+        virtual bool beginWrite(void* buffer, size_t length, size_t offset, size_t *bytesWritten);
+
+        virtual bool waitForCompletion();
+    
+    private:
+        PosixAsyncFile*     file;
+        bool                writing;
+        SingleWaiterObject  ready;
+        struct aiocb        aiocb;
+        size_t*             result;
+    };
+
+    virtual AsyncFile::Writer* getWriter();
+    
+    class Reader : public AsyncFile::Reader
+    {
+    public:
+        Reader(PosixAsyncFile* i_file);
+
+        virtual ~Reader();
+
+        virtual bool beginRead(void* buffer, size_t length, size_t offset, size_t *bytesRead);
+
+        virtual bool waitForCompletion();
+    
+    private:
+        PosixAsyncFile*     file;
+        bool                reading;
+        SingleWaiterObject  ready;
+        struct aiocb        aiocb;
+        size_t*             result;
+    };
+
+    virtual AsyncFile::Reader* getReader();
+
+private:
+    int         fd;
+};
+
+    PosixAsyncFile*
+PosixAsyncFile::open(
+    const char* filename,
+    bool write)
+{
+    int fd = ::open(filename, write ? O_CREAT | O_RDWR | O_TRUNC : O_RDONLY, write ? S_IRWXU | S_IRGRP : 0);
+    if (fd < 0) {
+        fprintf(stderr,"Unable to create SAM file '%s', %d\n",filename,errno);
+        return NULL;
+    }
+    return new PosixAsyncFile(fd);
+}
+
+PosixAsyncFile::PosixAsyncFile(
+    int i_fd)
+    : fd(i_fd)
+{
+}
+
+PosixAsyncFile::~PosixAsyncFile()
+{
+    close(fd);
+}
+
+    AsyncFile::Writer*
+PosixAsyncFile::getWriter()
+{
+    return new Writer(this);
+}
+
+PosixAsyncFile::Writer::Writer(PosixAsyncFile* i_file)
+    : file(i_file), writing(false)
+{
+    memset(&aiocb, 0, sizeof(aiocb));
+    if (! CreateSingleWaiterObject(&ready)) {
+        fprintf(stderr, "PosixAsyncFile: cannot create waiter\n");
+        exit(1);
+    }
+}
+
+PosixAsyncFile::Writer::~Writer()
+{
+    DestroySingleWaiterObject(&ready);
+}
+
+    void
+sigev_ready(
+    union sigval val)
+{
+    SignalSingleWaiterObject((SingleWaiterObject*) val.sival_ptr);
+}
+
+    void
+aio_setup(
+    struct aiocb* control,
+    SingleWaiterObject* ready,
+    int fd,
+    void* buffer,
+    size_t length,
+    size_t offset)
+{
+    control->aio_fildes = fd;
+    control->aio_buf = buffer;
+    control->aio_nbytes = length;
+    control->aio_offset = offset;
+    control->aio_sigevent.sigev_notify = SIGEV_THREAD;
+    control->aio_sigevent.sigev_value.sival_ptr = ready;
+    control->aio_sigevent.sigev_notify_function = sigev_ready;
+}
+
+
+    bool
+PosixAsyncFile::Writer::beginWrite(
+    void* buffer,
+    size_t length,
+    size_t offset,
+    size_t *bytesWritten)
+{
+    if (! waitForCompletion()) {
+        return false;
+    }
+    aio_setup(&aiocb, &ready, file->fd, buffer, length, offset);
+    result = bytesWritten;
+    if (aio_write(&aiocb) < 0) {
+        fprintf(stderr, "PosixAsyncFile: aio_write failed, %d\n", errno);
+        return false;
+    }
+    writing = true;
+    return true;
+}
+
+    bool
+PosixAsyncFile::Writer::waitForCompletion()
+{
+    if (writing) {
+        WaitForSingleWaiterObject(&ready);
+        writing = false;
+        ssize_t ret = aio_return(&aiocb);
+        if (ret < 0) {
+            printf("PosixAsyncFile: write failed, %d\n", errno);
+            return false;
+        }
+        if (result != NULL) {
+            *result = ret;
+        }
+    }
+    return true;
+}
+
+    AsyncFile::Reader*
+PosixAsyncFile::getReader()
+{
+    return new Reader(this);
+}
+
+PosixAsyncFile::Reader::Reader(
+    PosixAsyncFile* i_file)
+    : file(i_file), reading(false)
+{
+    memset(&aiocb, 0, sizeof(aiocb));
+    if (! CreateSingleWaiterObject(&ready)) {
+        fprintf(stderr, "PosixAsyncFile: cannot create waiter\n");
+        exit(1);
+    }
+}
+
+PosixAsyncFile::Reader::~Reader()
+{
+    DestroySingleWaiterObject(&ready);
+}
+
+    bool
+PosixAsyncFile::Reader::beginRead(
+    void* buffer,
+    size_t length,
+    size_t offset,
+    size_t* bytesRead)
+{
+    if (! waitForCompletion()) {
+        return false;
+    }
+    aio_setup(&aiocb, &ready, file->fd, buffer, length, offset);
+    result = bytesRead;
+    if (aio_read(&aiocb) < 0) {
+        fprintf(stderr, "PosixAsyncFile: aio_read failed, %d\n", errno);
+        return false;
+    }
+    reading = true;
+    return true;
+}
+
+    bool
+PosixAsyncFile::Reader::waitForCompletion()
+{
+    if (reading) {
+        WaitForSingleWaiterObject(&ready);
+        reading = false;
+        ssize_t ret = aio_return(&aiocb);
+        if (ret < 0) {
+            printf("PosixAsyncFile: read failed, %d\n", errno);
+            return false;
+        }
+        if (result != NULL) {
+            *result = ret;
+        }
+    }
+    return true;
+}
+
 int _fseek64bit(FILE *stream, _int64 offset, int origin)
 {
 #ifdef __APPLE__
@@ -648,3 +1055,24 @@ int _fseek64bit(FILE *stream, _int64 offset, int origin)
 }
 
 #endif  // _MSC_VER
+
+AsyncFile* AsyncFile::open(const char* filename, bool write)
+{
+#ifdef _MSC_VER
+    return WindowsAsyncFile::open(filename, write);
+#else
+    return PosixAsyncFile::open(filename, write);
+#endif
+}
+
+AsyncFile::~AsyncFile()
+{
+}
+
+AsyncFile::Writer::~Writer()
+{
+}
+
+AsyncFile::Reader::~Reader()
+{
+}
