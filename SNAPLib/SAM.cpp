@@ -651,9 +651,8 @@ ThreadSAMWriter::startIo()
     //
     _int64 writeOffset = InterlockedAdd64AndReturnNewValue(nextWriteOffset,BufferSize - remainingBufferSpace) - 
                                 (BufferSize - remainingBufferSpace);
-    size_t bytesWritten;
-    if (!writer[bufferBeingCreated]->beginWrite(buffer[bufferBeingCreated],(DWORD)(BufferSize - remainingBufferSpace),writeOffset,&bytesWritten)) {
-        fprintf(stderr,"ThreadSAMWriter: WriteFile failed, %d\n",GetLastError());
+    if (!writer[bufferBeingCreated]->beginWrite(buffer[bufferBeingCreated], BufferSize - remainingBufferSpace, writeOffset, NULL)) {
+        fprintf(stderr,"ThreadSAMWriter: WriteFile failed\n");
         return false;
     }
 
@@ -661,7 +660,7 @@ ThreadSAMWriter::startIo()
     // If necessary, wait for the other buffer to finish writing.
     //
     if (!waitForIoCompletion()) {
-        fprintf(stderr,"ThreadSAMWriter: waitForIoCompletion failed, %d\n",GetLastError());
+        fprintf(stderr,"ThreadSAMWriter: waitForIoCompletion failed\n");
         return false;
     }
     bufferBeingCreated = 1 - bufferBeingCreated;

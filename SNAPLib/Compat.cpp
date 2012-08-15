@@ -25,6 +25,7 @@ Revision History:
 #include "stdafx.h"
 #include "Compat.h"
 #ifndef _MSC_VER
+#include <fcntl.h>
 #include <aio.h>
 #endif
 
@@ -879,9 +880,8 @@ PosixAsyncFile::open(
     const char* filename,
     bool write)
 {
-    int fd = open(write ? O_CREAT | O_RDWR | O_TRUNC : O_RDONLY, write ? S_IRWXU | S_IRGRP : 0);
+    int fd = ::open(filename, write ? O_CREAT | O_RDWR | O_TRUNC : O_RDONLY, write ? S_IRWXU | S_IRGRP : 0);
     if (fd < 0) {
-    }
         fprintf(stderr,"Unable to create SAM file '%s', %d\n",filename,errno);
         return NULL;
     }
@@ -911,7 +911,7 @@ PosixAsyncFile::Writer::Writer(PosixAsyncFile* i_file)
     memset(&aiocb, 0, sizeof(aiocb));
     if (! CreateSingleWaiterObject(&ready)) {
         fprintf(stderr, "PosixAsyncFile: cannot create waiter\n");
-        exit();
+        exit(1);
     }
 }
 
@@ -930,18 +930,19 @@ sigev_ready(
     void
 aio_setup(
     struct aiocb* control,
+    SingleWaiterObject* ready,
     int fd,
     void* buffer,
     size_t length,
     size_t offset)
 {
-    aiocb.aio_fildes = fd;
-    aiocb.aio_buf = buffer;
-    aiocb.aio_nbytes = length;
-    aiocb.aio_offset = offset;
-    aiocb.aio_sigevent.sigev_notify = SIGEV_THREAD;
-    aiocb.aio_sigevent.sigev_value.sival_ptr = &ready;
-    aiocb.aio_sigevent.sigev_notify_function = sigev_ready;
+    control->aio_fildes = fd;
+    control->aio_buf = buffer;
+    control->aio_nbytes = length;
+    control->aio_offset = offset;
+    control->aio_sigevent.sigev_notify = SIGEV_THREAD;
+    control->aio_sigevent.sigev_value.sival_ptr = ready;
+    control->aio_sigevent.sigev_notify_function = sigev_ready;
 }
 
 
@@ -955,7 +956,7 @@ PosixAsyncFile::Writer::beginWrite(
     if (! waitForCompletion()) {
         return false;
     }
-    aio_setup(&aiocb, file->fd, buffer, length, offset);
+    aio_setup(&aiocb, &ready, file->fd, buffer, length, offset);
     result = bytesWritten;
     if (aio_write(&aiocb) < 0) {
         fprintf(stderr, "PosixAsyncFile: aio_write failed, %d\n", errno);
@@ -996,7 +997,7 @@ PosixAsyncFile::Reader::Reader(
     memset(&aiocb, 0, sizeof(aiocb));
     if (! CreateSingleWaiterObject(&ready)) {
         fprintf(stderr, "PosixAsyncFile: cannot create waiter\n");
-        exit();
+        exit(1);
     }
 }
 
@@ -1015,7 +1016,7 @@ PosixAsyncFile::Reader::beginRead(
     if (! waitForCompletion()) {
         return false;
     }
-    aio_setup(&aiocb, file->fd, buffer, length, offset);
+    aio_setup(&aiocb, &ready, file->fd, buffer, length, offset);
     result = bytesRead;
     if (aio_read(&aiocb) < 0) {
         fprintf(stderr, "PosixAsyncFile: aio_read failed, %d\n", errno);

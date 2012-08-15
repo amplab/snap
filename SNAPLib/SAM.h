@@ -171,7 +171,7 @@ public:
 private:
 
     AsyncFile                      *file;
-    volatile __int64                nextWriteOffset;
+    volatile _int64                 nextWriteOffset;
 
     ThreadSAMWriter               **writer;
     int                             nThreads;
