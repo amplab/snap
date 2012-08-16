@@ -456,223 +456,39 @@ bool SimpleSAMWriter::close()
     return true;
 }
 
-    ParallelSAMWriter *
-ParallelSAMWriter::create(const char *fileName, const Genome *genome, unsigned nThreads)
-{
-#ifdef  _MSC_VER
-//    return SimpleParallelSAMWriter::create(fileName, genome, nThreads);
-    return WindowsParallelSAMWriter::create(fileName, genome, nThreads);
-#else   // _MSC_VER
-    return SimpleParallelSAMWriter::create(fileName, genome, nThreads);
-#endif  // _MSC_VER
-}
-
-SimpleParallelSAMWriter::~SimpleParallelSAMWriter()
-{
-    if (NULL != writer) {
-        for (unsigned i = 0; i < nThreads; i++) {
-            if (NULL != writer[i]) {
-                delete writer[i];
-            }
-        }
-        delete [] writer;
-    }
-}
-
-    SimpleParallelSAMWriter *
-SimpleParallelSAMWriter::create(const char *fileName, const Genome *genome, unsigned nThreads)
-{
-    SimpleParallelSAMWriter *parallelWriter = new SimpleParallelSAMWriter();
-
-    parallelWriter->nThreads = nThreads;
-    parallelWriter->writer = new SimpleSAMWriter *[nThreads];
-    
-    size_t filenameBufferSize = strlen(fileName) + 5;
-    char *filenameBuffer = new char[filenameBufferSize];
-
-    for (unsigned i = 0; i < nThreads; i++) {
-        if (nThreads > 1) {
-            const char *fnTemplate = fileName;
-            size_t len = strlen(fnTemplate);
-            // Find the last '.' in the template and add our thread number before it
-            int dotPos = (int)len - 1;
-            while (dotPos >= 0 && fnTemplate[dotPos] != '.') {
-                dotPos--;
-            }
-            if (dotPos != -1) {
-                sprintf(filenameBuffer, "%.*s_%02d%.*s", dotPos, fnTemplate, i,
-                                              (int) (len - dotPos), fnTemplate + dotPos);
-            } else {
-                // The user's filename template had no extension; just append "_<threadNum>" to it
-                sprintf(filenameBuffer, "%s_%02d", fnTemplate, i);
-            }
-        } else {
-            strcpy(filenameBuffer,fileName);
-        }
-
-        parallelWriter->writer[i] = new SimpleSAMWriter;
-        if (!parallelWriter->writer[i]->open(filenameBuffer,genome)) {
-            fprintf(stderr,"SAM writer for file '%s' failed to open.\n",filenameBuffer);
-            delete [] filenameBuffer;
-            delete parallelWriter;
-
-            return NULL;
-        }
-    }
-
-    delete [] filenameBuffer;
-    return parallelWriter;
-}
-
-    bool
-SimpleParallelSAMWriter::close()
-{
-    bool worked = true;
-    for (unsigned i = 0; i < nThreads; i++) {
-        worked &= writer[i]->close();
-    }
-
-    return worked;
-}
-
-#ifdef  _MSC_VER
-    WindowsParallelSAMWriter *
-WindowsParallelSAMWriter::create(const char *fileName, const Genome *genome, unsigned nThreads)
-{
-    WindowsParallelSAMWriter *parallelWriter = new WindowsParallelSAMWriter();
-
-    parallelWriter->hFile = CreateFile(fileName,GENERIC_READ | GENERIC_WRITE,FILE_SHARE_READ,NULL,CREATE_ALWAYS,FILE_FLAG_OVERLAPPED,NULL);
-    if (INVALID_HANDLE_VALUE == parallelWriter->hFile) {
-        fprintf(stderr,"Unable to create SAM file '%s', %d\n",fileName,GetLastError());
-        delete parallelWriter;
-        return NULL;
-    }
-
-    const size_t headerBufferSize = 20000;
-    char headerBuffer[headerBufferSize];
-    size_t headerActualSize;
-
-    if (!SAMWriter::generateHeader(genome,headerBuffer,headerBufferSize,&headerActualSize)) {
-        fprintf(stderr,"WindowsParallelSAMWriter: unable to generate SAM header.\n");
-        delete parallelWriter;
-        return NULL;
-    }
-
-    OVERLAPPED lap;
-    lap.Offset = 0;
-    lap.OffsetHigh = 0;
-    lap.hEvent = CreateEvent(NULL,FALSE,FALSE,NULL);
-    if (NULL == lap.hEvent) {
-        fprintf(stderr,"WindowsParallelSAMWriter: unable to allocate event, %d\n",GetLastError());
-        delete parallelWriter;
-        return NULL;
-    }
-
-    DWORD bytesWritten;
-    if (!WriteFile(parallelWriter->hFile,headerBuffer,(DWORD)headerActualSize,&bytesWritten,&lap)) {
-        if (ERROR_IO_PENDING != GetLastError()) {
-            fprintf(stderr,"WindowsParallelSAMWriter: unable to write header to file, %d\n",GetLastError());
-            delete parallelWriter;
-            return NULL;
-        }
-    }
-
-    if (!GetOverlappedResult(parallelWriter->hFile,&lap,&bytesWritten,TRUE)) {
-            fprintf(stderr,"WindowsParallelSAMWriter: unable to write header to file; GetOverlappedResult failed %d\n",GetLastError());
-            delete parallelWriter;
-            return NULL;
-    }
-
-    if (bytesWritten != headerActualSize) {
-        fprintf(stderr,"WindowsParallelSAMWriter: header didn't write completely.  %d != %lld\n",bytesWritten,headerActualSize);
-            delete parallelWriter;
-            return NULL;
-    }
-
-    CloseHandle(lap.hEvent);
-
-    parallelWriter->nextWriteOffset = bytesWritten;
-
-    parallelWriter->nThreads = nThreads;
-    parallelWriter->writer = new WindowsSAMWriter *[nThreads];
-    bool worked = true;
-
-    for (unsigned i = 0; i < nThreads; i++) {
-        parallelWriter->writer[i] = new WindowsSAMWriter();
-        worked &= parallelWriter->writer[i]->initialize(parallelWriter->hFile,genome,&parallelWriter->nextWriteOffset);
-    }
-
-    if (!worked) {
-        fprintf(stderr,"Unable to create SAM writer.\n");
-        delete parallelWriter;
-        return NULL;
-    }
-
-
-    return parallelWriter;
-}
-
-WindowsParallelSAMWriter::~WindowsParallelSAMWriter()
-{
-    if (NULL != writer) {
-        for (unsigned i = 0; i < nThreads; i++) {
-            if (NULL != writer[i]) {
-                delete writer[i];
-            }
-        }
-        delete [] writer;
-    }
-    CloseHandle(hFile);
-}
-
-    bool
-WindowsParallelSAMWriter::close()
-{
-    bool worked = true;
-    for (unsigned i = 0; i < nThreads; i++) {
-        worked &= writer[i]->close();
-    }
-    return worked;
-}
-
-WindowsSAMWriter::WindowsSAMWriter() : hFile(INVALID_HANDLE_VALUE), nextWriteOffset(NULL), remainingBufferSpace(BufferSize), bufferBeingCreated(0),
-        writeOutstanding(0)
+ThreadSAMWriter::ThreadSAMWriter() : remainingBufferSpace(BufferSize), bufferBeingCreated(0)
 {
     buffer[0] = NULL;
     buffer[1] = NULL;
-    lap[0].hEvent = NULL;
-    lap[1].hEvent = NULL;
 }
 
     bool
-WindowsSAMWriter::initialize(HANDLE i_hFile, const Genome *i_genome, volatile _int64 *i_nextWriteOffset)
+ThreadSAMWriter::initialize(AsyncFile* file, const Genome *i_genome, volatile _int64 *i_nextWriteOffset)
 {
-    hFile = i_hFile;
     genome = i_genome;
     nextWriteOffset = i_nextWriteOffset;
     buffer[0] = (char *)BigAlloc(BufferSize);
     buffer[1] = (char *)BigAlloc(BufferSize);
-    lap[0].hEvent = CreateEvent(NULL,FALSE,FALSE,NULL);
-    lap[1].hEvent = CreateEvent(NULL,FALSE,FALSE,NULL);
-    
-    if (NULL == buffer[0] || NULL == buffer[1] || NULL == lap[0].hEvent || NULL == lap[1].hEvent) {
-        fprintf(stderr,"WindowsSAMWriter: failed to initialize\n");
+    writer[0] = file->getWriter();
+    writer[1] = file->getWriter();
+
+    if (NULL == buffer[0] || NULL == buffer[1] || NULL == writer[0] || NULL == writer[1]) {
+        fprintf(stderr,"ThreadSAMWriter: failed to initialize\n");
         return false;
     }
-
     return true;
 }
-
-WindowsSAMWriter::~WindowsSAMWriter()
+    
+ThreadSAMWriter::~ThreadSAMWriter()
 {
-    CloseHandle(lap[0].hEvent);
-    CloseHandle(lap[1].hEvent);
     BigDealloc(buffer[0]);
     BigDealloc(buffer[1]);
+    delete writer[0];
+    delete writer[1];
 }
 
     bool
-WindowsSAMWriter::close()
+ThreadSAMWriter::close()
 {
     if (remainingBufferSpace != BufferSize) {
         if (!startIo()) {
@@ -688,9 +504,9 @@ WindowsSAMWriter::close()
 
     return true;
 }
-
+    
     bool
-WindowsSAMWriter::write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC)
+ThreadSAMWriter::write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC)
 {
     size_t sizeUsed;
     if (!generateSAMText(read,result,genomeLocation,isRC,false,true,NULL,UnknownAlignment,0,false,genome,&lv,
@@ -707,13 +523,14 @@ WindowsSAMWriter::write(Read *read, AlignmentResult result, unsigned genomeLocat
             return false;
         }
     }
-
+    size_t bufferOffset = BufferSize - remainingBufferSpace;
     remainingBufferSpace -= sizeUsed;
+    afterWrite(genomeLocation, bufferOffset, sizeUsed);
     return true;
 }
 
     bool
-WindowsSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *result)
+ThreadSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *result)
 {
     //
     // We need to write both halves of the pair into the same buffer, so that a write from
@@ -735,51 +552,143 @@ WindowsSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *res
             return false;
         }
 
-    if (!generateSAMText(read0,result->status[0],result->location[0],result->isRC[0],true,true,
-                         read1,result->status[1],result->location[1],result->isRC[1],
-            genome, &lv, buffer[bufferBeingCreated] + BufferSize - remainingBufferSpace,remainingBufferSpace,&sizeUsed[0]) ||
-        !generateSAMText(read1,result->status[1],result->location[1],result->isRC[1],true,false,
-                         read0,result->status[0],result->location[0],result->isRC[0],
-            genome, &lv, buffer[bufferBeingCreated] + BufferSize - remainingBufferSpace + sizeUsed[0],remainingBufferSpace-sizeUsed[0],&sizeUsed[1])) {
+        if (!generateSAMText(read0,result->status[0],result->location[0],result->isRC[0],true,true,
+                             read1,result->status[1],result->location[1],result->isRC[1],
+                genome, &lv, buffer[bufferBeingCreated] + BufferSize - remainingBufferSpace,remainingBufferSpace,&sizeUsed[0]) ||
+            !generateSAMText(read1,result->status[1],result->location[1],result->isRC[1],true,false,
+                             read0,result->status[0],result->location[0],result->isRC[0],
+                genome, &lv, buffer[bufferBeingCreated] + BufferSize - remainingBufferSpace + sizeUsed[0],remainingBufferSpace-sizeUsed[0],&sizeUsed[1])) {
 
-            fprintf(stderr,"WindowsSAMWriter: create SAM string into fresh buffer failed\n");
-            return false;
-        }
+                fprintf(stderr,"WindowsSAMWriter: create SAM string into fresh buffer failed\n");
+                return false;
+            }
     }
 
+    size_t bufferOffset[2] = {BufferSize - sizeUsed[0] - sizeUsed[1], BufferSize - sizeUsed[1]};
     remainingBufferSpace -= (sizeUsed[0] + sizeUsed[1]);
+    afterWrite(result->location[0], bufferOffset[0], sizeUsed[0]);
+    afterWrite(result->location[1], bufferOffset[1], sizeUsed[1]);
     return true;
 }
 
+    ParallelSAMWriter *
+ParallelSAMWriter::create(const char *fileName, const Genome *genome, unsigned nThreads)
+{
+    ParallelSAMWriter *parallelWriter = new ParallelSAMWriter();
+
+    parallelWriter->file = AsyncFile::open(fileName, true);
+    if (NULL == parallelWriter->file) {
+        fprintf(stderr,"Unable to create SAM file '%s'\n",fileName);
+        delete parallelWriter;
+        return NULL;
+    }
+
+    const size_t headerBufferSize = 20000;
+    char headerBuffer[headerBufferSize];
+    size_t headerActualSize;
+
+    if (!SAMWriter::generateHeader(genome,headerBuffer,headerBufferSize,&headerActualSize)) {
+        fprintf(stderr,"WindowsParallelSAMWriter: unable to generate SAM header.\n");
+        delete parallelWriter;
+        return NULL;
+    }
+
+    AsyncFile::Writer* writer = parallelWriter->file->getWriter();
+
+    if (NULL == writer) {
+        fprintf(stderr,"ParallelSAMWriter: unable to create writer\n");
+        delete parallelWriter;
+        return NULL;
+    }
+
+    size_t bytesWritten;
+    if (! writer->beginWrite(headerBuffer, headerActualSize, 0, &bytesWritten)) {
+        fprintf(stderr,"ParallelSAMWriter: unable to write header to file\n");
+        delete parallelWriter;
+        return NULL;
+    }
+
+    if (! writer->waitForCompletion()) {
+            fprintf(stderr,"ParallelSAMWriter: failed to complete\n");
+            delete parallelWriter;
+            return NULL;
+    }
+
+    parallelWriter->nextWriteOffset = bytesWritten;
+
+    parallelWriter->nThreads = nThreads;
+    parallelWriter->writer = new ThreadSAMWriter *[nThreads];
+    bool worked = true;
+
+    for (unsigned i = 0; i < nThreads; i++) {
+        parallelWriter->writer[i] = new ThreadSAMWriter();
+        worked &= parallelWriter->writer[i]->initialize(parallelWriter->file,genome,&parallelWriter->nextWriteOffset);
+    }
+
+    if (!worked) {
+        fprintf(stderr,"Unable to create SAM writer.\n");
+        delete parallelWriter;
+        return NULL;
+    }
+
+    return parallelWriter;
+}
+
+ParallelSAMWriter::~ParallelSAMWriter()
+{
+    if (NULL != writer) {
+        for (unsigned i = 0; i < nThreads; i++) {
+            if (NULL != writer[i]) {
+                delete writer[i];
+            }
+        }
+        delete [] writer;
+    }
+    delete file;
+}
+
+    SAMWriter*
+ParallelSAMWriter::getWriterForThread(
+    unsigned whichThread)
+{
+    _ASSERT(whichThread < nThreads);
+    return writer[whichThread];
+}
+
     bool
-WindowsSAMWriter::startIo()
+ParallelSAMWriter::close()
+{
+    bool worked = true;
+    for (unsigned i = 0; i < nThreads; i++) {
+        worked &= writer[i]->close();
+    }
+    return worked;
+}
+
+    bool
+ThreadSAMWriter::startIo()
 {
     //
     // It didn't fit in the buffer.  Start writing it.
     //
-    LARGE_INTEGER writeOffset;
-    writeOffset.QuadPart = InterlockedAdd64AndReturnNewValue(nextWriteOffset,BufferSize - remainingBufferSpace) - 
+    _int64 writeOffset = InterlockedAdd64AndReturnNewValue(nextWriteOffset,BufferSize - remainingBufferSpace) - 
                                 (BufferSize - remainingBufferSpace);
-    lap[bufferBeingCreated].OffsetHigh = writeOffset.HighPart;
-    lap[bufferBeingCreated].Offset = writeOffset.LowPart;
-    DWORD bytesWritten;
-    if (!WriteFile(hFile,buffer[bufferBeingCreated],(DWORD)(BufferSize - remainingBufferSpace),&bytesWritten,&lap[bufferBeingCreated])) {
-        if (ERROR_IO_PENDING != GetLastError()) {
-            fprintf(stderr,"WindowsSAMWriter: WriteFile failed, %d\n",GetLastError());
-            return false;
-        }
+    if (!beforeFlush(writeOffset)) {
+        fprintf(stderr, "ThreadSAMWriter: beforeFlush failed\n");
+        return false;
+    }
+    if (!writer[bufferBeingCreated]->beginWrite(buffer[bufferBeingCreated], BufferSize - remainingBufferSpace, writeOffset, NULL)) {
+        fprintf(stderr,"ThreadSAMWriter: WriteFile failed\n");
+        return false;
     }
 
     //
     // If necessary, wait for the other buffer to finish writing.
     //
-    if (writeOutstanding) {
-        if (!waitForIoCompletion()) {
-            fprintf(stderr,"WindowsSAMWriter: GetOverlappedResult failed, %d\n",GetLastError());
-            return false;
-        }
+    if (!waitForIoCompletion()) {
+        fprintf(stderr,"ThreadSAMWriter: waitForIoCompletion failed\n");
+        return false;
     }
-    writeOutstanding = true;
     bufferBeingCreated = 1 - bufferBeingCreated;
     remainingBufferSpace = BufferSize;
 
@@ -787,19 +696,81 @@ WindowsSAMWriter::startIo()
 }
 
     bool
-WindowsSAMWriter::waitForIoCompletion()
+ThreadSAMWriter::waitForIoCompletion()
 {
-    _ASSERT(writeOutstanding);
+    return writer[1 - bufferBeingCreated]->waitForCompletion();
+}
     
-    DWORD nBytesTransferred;
-    if (!GetOverlappedResult(hFile,&lap[1-bufferBeingCreated],&nBytesTransferred,TRUE)) {
+    bool
+SortedThreadSAMWriter::initialize(
+    SortedParallelSAMWriter* i_parent,
+    const Genome* i_genome)
+{
+    parent = i_parent;
+    ThreadSAMWriter::initialize(parent->file, i_genome, &parent->nextWriteOffset);
+}
+
+    void
+SortedThreadSAMWriter::afterWrite(
+    unsigned location,
+    size_t bufferOffset,
+    unsigned length)
+{
+    locations.push_back(Entry(bufferOffset, length, location));
+}
+
+    bool
+SortedThreadSAMWriter::beforeFlush(_int64 bufferOffset)
+{
+    // sort buffered reads by location for later merge sort
+    std::sort(locations.begin(), locations.end(), Entry::comparator);
+    
+    // wait for IO of other buffer to finish since we're going to sort into there
+    if (! waitForIoCompletion()) {
+        fprintf(stderr, "SortedThreadSAMWriter waitForIoCompletion failed\n");
         return false;
     }
-    writeOutstanding = false;
+    
+    // copy into other buffer in sorted order & switch
+    unsigned target = 0;
+    for (std::vector<Entry>::iterator i = locations.begin(); i != locations.end(); i++) {
+        memcpy(buffer[1 - bufferBeingCreated] + target, buffer[bufferBeingCreated] + i->offset, i->length);
+        target += i->length;
+        i->offset += bufferOffset; // adjust offset from buffer-relative to file-relative
+    }
+    bufferBeingCreated = 1 - bufferBeingCreated;
+    
+    // remember offsets for full-file sort
+    parent->addLocations(locations);
+    locations.clear();
+
     return true;
 }
 
-#endif  // _MSC_VER
+    SortedParallelSAMWriter*
+SortedParallelSAMWriter::create(
+    const char *fileName,
+    const Genome *genome,
+    unsigned nThreads)
+{
+}
+
+    SAMWriter*
+SortedParallelSAMWriter::getWriterForThread(
+    unsigned whichThread)
+{
+}
+
+    bool
+SortedParallelSAMWriter::close()
+{
+}
+
+    void
+SortedParallelSAMWriter::addLocations(
+    std::vector<Entry> append)
+{
+}
 
     char *
 strnchrs(char *str, char charToFind, char charToFind2, size_t maxLen) // Hokey version that looks for either of two chars

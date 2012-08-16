@@ -59,6 +59,8 @@ struct AlignerOptions : public AbstractOptions
     char               *inputFilename;
     bool                inputFileIsFASTQ;   // Else SAM
     ReadClippingType    clipping;
+    bool                sortOutput;
+    unsigned            sortMemory; // total output sorting buffer size in Gb
     AbstractOptions    *extra; // extra options
 
     void usage();
