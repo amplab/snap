@@ -27,6 +27,7 @@ Revision History:
 #ifndef _MSC_VER
 #include <fcntl.h>
 #include <aio.h>
+#include <err.h>
 #endif
 
 using std::min;
@@ -959,7 +960,7 @@ PosixAsyncFile::Writer::beginWrite(
     aio_setup(&aiocb, &ready, file->fd, buffer, length, offset);
     result = bytesWritten;
     if (aio_write(&aiocb) < 0) {
-        fprintf(stderr, "PosixAsyncFile: aio_write failed, %d\n", errno);
+        warn("PosixAsyncFile aio_write failed\n");
         return false;
     }
     writing = true;
@@ -974,7 +975,7 @@ PosixAsyncFile::Writer::waitForCompletion()
         writing = false;
         ssize_t ret = aio_return(&aiocb);
         if (ret < 0) {
-            printf("PosixAsyncFile: write failed, %d\n", errno);
+            warn("PosixAsyncFile Writer aio_return failed\n");
             return false;
         }
         if (result != NULL) {
@@ -996,7 +997,7 @@ PosixAsyncFile::Reader::Reader(
 {
     memset(&aiocb, 0, sizeof(aiocb));
     if (! CreateSingleWaiterObject(&ready)) {
-        fprintf(stderr, "PosixAsyncFile: cannot create waiter\n");
+        fprintf(stderr, "PosixAsyncFile cannot create waiter\n");
         exit(1);
     }
 }
@@ -1019,7 +1020,7 @@ PosixAsyncFile::Reader::beginRead(
     aio_setup(&aiocb, &ready, file->fd, buffer, length, offset);
     result = bytesRead;
     if (aio_read(&aiocb) < 0) {
-        fprintf(stderr, "PosixAsyncFile: aio_read failed, %d\n", errno);
+        warn("PosixAsyncFile Reader aio_read failed\n");
         return false;
     }
     reading = true;
@@ -1034,7 +1035,7 @@ PosixAsyncFile::Reader::waitForCompletion()
         reading = false;
         ssize_t ret = aio_return(&aiocb);
         if (ret < 0) {
-            printf("PosixAsyncFile: read failed, %d\n", errno);
+            warn("PosixAsyncFile Reader aio_return\n");
             return false;
         }
         if (result != NULL) {
