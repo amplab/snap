@@ -143,7 +143,7 @@ AlignerContext::beginIteration()
 {
     parallelSamWriter = NULL;
     if (NULL != options->samFileTemplate) {
-        parallelSamWriter = ParallelSAMWriter::create(options->samFileTemplate,index->getGenome(),options->numThreads);
+        parallelSamWriter = ParallelSAMWriter::create(options->samFileTemplate,index->getGenome(),options->numThreads, options->sortOutput);
         if (NULL == parallelSamWriter) {
             fprintf(stderr,"Unable to create SAM file writer.  Just aligning for speed, no output will be generated.\n");
         }

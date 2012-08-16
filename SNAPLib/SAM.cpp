@@ -684,8 +684,7 @@ ThreadSAMWriter::startIo()
     //
     // It didn't fit in the buffer.  Start writing it.
     //
-    _int64 writeOffset = InterlockedAdd64AndReturnNewValue(nextWriteOffset,BufferSize - remainingBufferSpace) - 
-                                (BufferSize - remainingBufferSpace);
+    _int64 writeOffset = InterlockedAdd64AndReturnNewValue(nextWriteOffset,BufferSize - remainingBufferSpace) - (BufferSize - remainingBufferSpace);
     if (!beforeFlush(writeOffset)) {
         fprintf(stderr, "ThreadSAMWriter: beforeFlush failed\n");
         return false;
@@ -744,7 +743,7 @@ SortedThreadSAMWriter::beforeFlush(_int64 bufferOffset)
         return false;
     }
     
-    // copy into other buffer in sorted order & switch
+    // copy into other buffer in sorted order & switch buffers
     unsigned target = 0;
     for (std::vector<Entry>::iterator i = locations.begin(); i != locations.end(); i++) {
         memcpy(buffer[1 - bufferBeingCreated] + target, buffer[bufferBeingCreated] + i->offset, i->length);
@@ -793,10 +792,14 @@ SortedParallelSAMWriter::close()
     }
     // sort by location and copy from temp to final file in sorted order
     // because of buffer sorting this should be a merge-sort rather than random-access
+    printf("sorting...");
+    _int64 start = timeInMilis();
     std::sort(locations.begin(), locations.end(), Entry::comparator);
+    printf(" %ld s\n", (timeInMillis() - start) / 1000);
 
+    printf("writing sorted reads...");
     void* p;
-    MemoryMappedFile* map = OpenMemoryMappedFile(tempFile, 0, QueryFileSize(tempFile), &p); // todo: sequential
+    MemoryMappedFile* map = OpenMemoryMappedFile(tempFile, 0, QueryFileSize(tempFile), &p); // todo: sequential flag
     if (map == NULL) {
         fprintf(stderr, "Could not map temporary file\n");
         // todo: just use unsorted file?
@@ -804,7 +807,9 @@ SortedParallelSAMWriter::close()
     }
     char* buffer = (char*) p;
 
-
+    // spin up multiple threads to handle IO latency
+    RangeSplitter range(0, locations.size());
+    
 }
 
     void
