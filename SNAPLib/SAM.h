@@ -167,13 +167,17 @@ class ParallelSAMWriter {
 public:
     virtual ~ParallelSAMWriter();
 
-    static ParallelSAMWriter*       create(const char *fileName, const Genome *genome, unsigned nThreads);
+    static ParallelSAMWriter*       create(const char *fileName, const Genome *genome, unsigned nThreads, bool sort);
 
-    virtual SAMWriter *             getWriterForThread(unsigned whichThread);
+    virtual bool                    initialize(const char *fileName, const Genome *genome, unsigned nThreads);
+
+    SAMWriter *                     getWriterForThread(unsigned whichThread);
 
     virtual bool                    close();
 
 protected:
+
+    virtual bool                    createThreadWriters(Genome* genome);
 
     AsyncFile                      *file;
     volatile _int64                 nextWriteOffset;
@@ -187,10 +191,8 @@ class SortedParallelSAMWriter : public ParallelSAMWriter
 public:
 
     virtual ~SortedParallelSAMWriter() {}
-
-    static SortedParallelSAMWriter* create(const char *fileName, const Genome *genome, unsigned nThreads);
-
-    virtual SAMWriter*              getWriterForThread(unsigned whichThread);
+    
+    virtual bool                    initialize(const char *fileName, const Genome *genome, unsigned nThreads);
 
     bool                            close();
 
@@ -209,12 +211,18 @@ public:
     };
 #pragma pack(pop)
 
+protected:
+    
+    virtual bool                    createThreadWriters(Genome* genome);
+
 private:
     
     friend class SortedThreadSAMWriter;
 
     void                            addLocations(std::vector<Entry> added);
 
+    char*                           tempFile;
+    const char*                     sortedFile;
     std::vector<Entry>              locations;
 };
 

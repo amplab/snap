@@ -572,15 +572,27 @@ ThreadSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *resu
 }
 
     ParallelSAMWriter *
-ParallelSAMWriter::create(const char *fileName, const Genome *genome, unsigned nThreads)
+ParallelSAMWriter::create(const char *fileName, const Genome *genome, unsigned nThreads, bool sort)
 {
-    ParallelSAMWriter *parallelWriter = new ParallelSAMWriter();
-
-    parallelWriter->file = AsyncFile::open(fileName, true);
-    if (NULL == parallelWriter->file) {
-        fprintf(stderr,"Unable to create SAM file '%s'\n",fileName);
+    ParallelSAMWriter *parallelWriter = sort
+        ? new SortedParallelSAMWriter()
+        : new ParallelSAMWriter();
+    if (!parallelWriter->initialize(fileName, genome, nThreads)) {
+        fprintf(stderr, "unable to initialize parallel SAM writer\n");
         delete parallelWriter;
         return NULL;
+    }
+    return parallelWriter;
+}
+
+    bool
+
+ParallelSAMWriter::initialize(const char *fileName, const Genome *genome, unsigned i_nThreads)
+{
+    file = AsyncFile::open(fileName, true);
+    if (NULL == file) {
+        fprintf(stderr,"Unable to create SAM file '%s'\n",fileName);
+        return false;
     }
 
     const size_t headerBufferSize = 20000;
@@ -589,49 +601,50 @@ ParallelSAMWriter::create(const char *fileName, const Genome *genome, unsigned n
 
     if (!SAMWriter::generateHeader(genome,headerBuffer,headerBufferSize,&headerActualSize)) {
         fprintf(stderr,"WindowsParallelSAMWriter: unable to generate SAM header.\n");
-        delete parallelWriter;
-        return NULL;
+        return false;
     }
 
-    AsyncFile::Writer* writer = parallelWriter->file->getWriter();
+    AsyncFile::Writer* hwriter = file->getWriter();
 
-    if (NULL == writer) {
+    if (NULL == hwriter) {
         fprintf(stderr,"ParallelSAMWriter: unable to create writer\n");
-        delete parallelWriter;
-        return NULL;
+        return false;
     }
 
     size_t bytesWritten;
-    if (! writer->beginWrite(headerBuffer, headerActualSize, 0, &bytesWritten)) {
+    if (! hwriter->beginWrite(headerBuffer, headerActualSize, 0, &bytesWritten)) {
         fprintf(stderr,"ParallelSAMWriter: unable to write header to file\n");
-        delete parallelWriter;
-        return NULL;
+        return false;
     }
 
-    if (! writer->waitForCompletion()) {
-            fprintf(stderr,"ParallelSAMWriter: failed to complete\n");
-            delete parallelWriter;
-            return NULL;
+    if (! hwriter->waitForCompletion()) {
+        fprintf(stderr,"ParallelSAMWriter: failed to complete\n");
+        return false;
     }
+    delete hwriter;
 
-    parallelWriter->nextWriteOffset = bytesWritten;
+    nextWriteOffset = bytesWritten;
 
-    parallelWriter->nThreads = nThreads;
-    parallelWriter->writer = new ThreadSAMWriter *[nThreads];
-    bool worked = true;
+    nThreads = i_nThreads;
+    writer = new ThreadSAMWriter *[nThreads];
 
-    for (unsigned i = 0; i < nThreads; i++) {
-        parallelWriter->writer[i] = new ThreadSAMWriter();
-        worked &= parallelWriter->writer[i]->initialize(parallelWriter->file,genome,&parallelWriter->nextWriteOffset);
-    }
-
-    if (!worked) {
+    if (!createThreadWriters()) {
         fprintf(stderr,"Unable to create SAM writer.\n");
-        delete parallelWriter;
-        return NULL;
+        return false;
     }
 
-    return parallelWriter;
+    return true;
+}
+
+    bool
+ParallelSAMWriter::createThreadWriters(Genome* genome)
+{
+    bool worked = true;
+    for (unsigned i = 0; i < nThreads; i++) {
+        writer[i] = new ThreadSAMWriter();
+        worked &= writer[i]->initialize(file, genome, &nextWriteOffset);
+    }
+    return worked;
 }
 
 ParallelSAMWriter::~ParallelSAMWriter()
@@ -747,29 +760,62 @@ SortedThreadSAMWriter::beforeFlush(_int64 bufferOffset)
     return true;
 }
 
-    SortedParallelSAMWriter*
-SortedParallelSAMWriter::create(
+    bool
+SortedParallelSAMWriter::initialize(
     const char *fileName,
     const Genome *genome,
-    unsigned nThreads)
+    unsigned i_nThreads)
 {
+    sortedFile = fileName;
+    tempFile = (char*) malloc(strlen(fileName) + 5);
+    strcpy(tempFile, fileName);
+    strcat(tempFile, ".tmp");
+    return ParallelSAMWriter::initialize(tempFile, genome, i_nThreads);
 }
-
-    SAMWriter*
-SortedParallelSAMWriter::getWriterForThread(
-    unsigned whichThread)
+    
+    bool
+SortedParallelSAMWriter::createThreadWriters(Genome* genome)
 {
+    bool worked = true;
+    for (unsigned i = 0; i < nThreads; i++) {
+        SortedThreadSAMWriter* w = new SortedThreadSAMWriter();
+        writer[i] = w;
+        worked &= w->initialize(this, genome);
+    }
+    return worked;
 }
 
     bool
 SortedParallelSAMWriter::close()
 {
+    if (! ParallelSAMWriter::close()) {
+        return false;
+    }
+    // sort by location and copy from temp to final file in sorted order
+    // because of buffer sorting this should be a merge-sort rather than random-access
+    std::sort(locations.begin(), locations.end(), Entry::comparator);
+
+    void* p;
+    MemoryMappedFile* map = OpenMemoryMappedFile(tempFile, 0, QueryFileSize(tempFile), &p); // todo: sequential
+    if (map == NULL) {
+        fprintf(stderr, "Could not map temporary file\n");
+        // todo: just use unsorted file?
+        return false;
+    }
+    char* buffer = (char*) p;
+
+
 }
 
     void
 SortedParallelSAMWriter::addLocations(
     std::vector<Entry> append)
 {
+    // todo: there must be a better way...
+    locations.reserve(locations.size() + append.size());
+    for (std::vector<Entry>::iterator i =  append.begin(); i != append.end(); i++) {
+        locations.push_back(*i);
+    }
 }
 
     char *
