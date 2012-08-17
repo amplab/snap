@@ -833,25 +833,29 @@ OpenMemoryMappedFile(
     bool write,
     bool sequential)
 {
-    int fd = open(filename, write ? O_CREAT | O_RDWR : O_READ);
+    int fd = open(filename, write ? O_CREAT | O_RDWR : O_RDONLY);
     if (fd < 0) {
-        fprintf(stderr, "OpenMemoryMappedFile %s failed\n", filename);
+        warn("OpenMemoryMappedFile %s failed", filename);
         return NULL;
     }
-    void* map = mmap(NULL, length, (write ? PROT_WRITE : 0) | PROT_READ, 0), fd, offset);
-    if (map == NULL) {
-        fprintf(stderr, "OpenMemoryMappedFile %s mmap failed\n", filename);
+    // todo: large page support
+    size_t page = getpagesize();
+    size_t extra = offset % page;
+    void* map = mmap(NULL, length + extra, (write ? PROT_WRITE : 0) | PROT_READ, MAP_PRIVATE, fd, offset - extra);
+    if (map == NULL || map == MAP_FAILED) {
+        warn("OpenMemoryMappedFile %s mmap failed", filename);
         close(fd);
         return NULL;
     }
-    int e = madvise(map, length, sequential ? MADV_SEQUENTIAL : MADV_RANDOM);
+    int e = madvise(map, length + extra, sequential ? MADV_SEQUENTIAL : MADV_RANDOM);
     if (e < 0) {
-        fprintf(stderr, "warning: OpenMemoryMappedFile %s madvise failed\n");
+        warn("OpenMemoryMappedFile %s madvise failed", filename);
     }
     MemoryMappedFile* result = new MemoryMappedFile();
     result->fd = fd;
     result->map = map;
-    result->length = length;
+    result->length = length + extra;
+    *o_contents = (char*)map + extra;
     return result;
 }
 
