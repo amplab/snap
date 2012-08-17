@@ -156,6 +156,9 @@ unsigned GetNumberOfProcessors();
 
 _int64 QueryFileSize(const char *fileName);
 
+// returns true on success
+bool DeleteSingleFile(const char* filename); // DeleteFile is a Windows macro...
+
 class LargeFileHandle;
 
 // open binary file, supports "r" for read, "w" for rewrite/create, "a" for append

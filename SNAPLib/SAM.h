@@ -38,7 +38,7 @@ public:
 
     static SAMWriter* create(const char *fileName, const Genome *genome);
 
-    static bool generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize);
+    static bool generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize, bool sorted);
    
     static const int HEADER_BUFFER_SIZE = 256 * 1024 * 1024;
     
@@ -172,7 +172,7 @@ public:
 
     static const size_t             UnsortedBufferSize = 16 * 1024 * 1024;
 
-    virtual bool                    initialize(const char *fileName, const Genome *genome, unsigned nThreads);
+    virtual bool                    initialize(const char *fileName, const Genome *genome, unsigned nThreads, bool sorted);
 
     SAMWriter *                     getWriterForThread(unsigned whichThread);
 
@@ -197,7 +197,7 @@ public:
 
     virtual ~SortedParallelSAMWriter() {}
     
-    virtual bool                    initialize(const char *fileName, const Genome *genome, unsigned nThreads);
+    virtual bool                    initialize(const char *fileName, const Genome *genome, unsigned nThreads, bool sorted);
 
     bool                            close();
 

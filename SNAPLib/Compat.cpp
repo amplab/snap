@@ -28,6 +28,7 @@ Revision History:
 #include <fcntl.h>
 #include <aio.h>
 #include <err.h>
+#include <unistd.h>
 #endif
 
 using std::min;
@@ -215,6 +216,12 @@ _int64 QueryFileSize(const char *fileName) {
     return fileSize.QuadPart;
 }
 
+    bool
+DeleteSingleFile(
+    const char* filename)
+{
+    return DeleteFile(filename);
+}
 
 class LargeFileHandle
 {
@@ -320,13 +327,17 @@ OpenMemoryMappedFile(
         delete result;
         return NULL;
     }
-    result->fileMapping = CreateFileMapping(result->fileHandle, NULL, PAGE_READONLY, 0, 0, NULL);
+    result->fileMapping = CreateFileMapping(result->fileHandle, NULL, write ? PAGE_READWRITE : PAGE_READONLY, 0, 0, NULL);
     if (result->fileMapping == NULL) {
         printf("unable to create file mapping %s error 0x%x\n", filename, GetLastError());
         delete result;
         return NULL;
     }
-    *o_contents = MapViewOfFile(result->fileMapping, FILE_MAP_READ, (DWORD) (offset >> (8 * sizeof(DWORD))), (DWORD) offset, length);
+    *o_contents = result->mappedAddress = MapViewOfFile(result->fileMapping,
+        write ? FILE_MAP_WRITE : FILE_MAP_READ,
+        (DWORD) (offset >> (8 * sizeof(DWORD))),
+        (DWORD) offset,
+        length);
     if (*o_contents == NULL) {
         printf("unable to map file %s error 0x%x\n", filename, GetLastError());
         delete result;
@@ -745,6 +756,13 @@ _int64 QueryFileSize(const char *fileName)
     _int64 fileSize = sb.st_size;
     close(fd);
     return fileSize;
+}
+
+    bool
+DeleteSingleFile(
+    const char* filename)
+{
+    return unlink(filename) == 0;
 }
 
 class LargeFileHandle
