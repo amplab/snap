@@ -868,7 +868,7 @@ SortedParallelSAMWriter::close()
     printf("writing sorted reads...");
     start = timeInMillis();
     void* p;
-    MemoryMappedFile* map = OpenMemoryMappedFile(tempFile, 0, QueryFileSize(tempFile), &p, true);
+    MemoryMappedFile* map = OpenMemoryMappedFile(tempFile, 0, QueryFileSize(tempFile), &p, false, true);
     if (map == NULL) {
         fprintf(stderr, "Could not map temporary file\n");
         // todo: just use unsorted file?

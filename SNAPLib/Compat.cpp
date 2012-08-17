@@ -309,10 +309,11 @@ OpenMemoryMappedFile(
     size_t offset,
     size_t length,
     void** o_contents,
+    bool write,
     bool sequential)
 {
     MemoryMappedFile* result = new MemoryMappedFile();
-    result->fileHandle = CreateFile(filename, GENERIC_READ, 0, NULL, OPEN_EXISTING,
+    result->fileHandle = CreateFile(filename, (write ? GENERIC_WRITE : 0) | GENERIC_READ, 0, NULL, OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL | (sequential ? FILE_FLAG_SEQUENTIAL_SCAN : FILE_FLAG_RANDOM_ACCESS), NULL);
     if (result->fileHandle == NULL) {
         printf("unable to open mapped file %s error 0x%x\n", filename, GetLastError());
@@ -799,7 +800,10 @@ CloseLargeFile(
 
 class MemoryMappedFile
 {
-    // todo: implement
+public:
+    int     fd;
+    void*   map;
+    size_t  length;
 };
 
     MemoryMappedFile*
@@ -808,20 +812,40 @@ OpenMemoryMappedFile(
     size_t offset,
     size_t length,
     void** o_contents,
+    bool write,
     bool sequential)
 {
-    printf("not implemented: OpenMemoryMappedFile\n");
-    _ASSERT(false);
-    *o_contents = NULL;
-    return NULL;
+    int fd = open(filename, write ? O_CREAT | O_RDWR : O_READ);
+    if (fd < 0) {
+        fprintf(stderr, "OpenMemoryMappedFile %s failed\n", filename);
+        return NULL;
+    }
+    void* map = mmap(NULL, length, (write ? PROT_WRITE : 0) | PROT_READ, 0), fd, offset);
+    if (map == NULL) {
+        fprintf(stderr, "OpenMemoryMappedFile %s mmap failed\n", filename);
+        close(fd);
+        return NULL;
+    }
+    int e = madvise(map, length, sequential ? MADV_SEQUENTIAL : MADV_RANDOM);
+    if (e < 0) {
+        fprintf(stderr, "warning: OpenMemoryMappedFile %s madvise failed\n");
+    }
+    MemoryMappedFile* result = new MemoryMappedFile();
+    result->fd = fd;
+    result->map = map;
+    result->length = length;
+    return result;
 }
 
     void
 CloseMemoryMappedFile(
     MemoryMappedFile* mappedFile)
 {
-    printf("not implemented: CloseMemoryMappedFile\n");
-    _ASSERT(false);
+    int e = munmap(mappedFile->map, mappedFile->length);
+    int e2 = close(mappedFile->fd);
+    if (e != 0 || e2 != 0) {
+        fprintf(stderr, "CloseMemoryMapped file failed\n");
+    }
 }
 
 class PosixAsyncFile : public AsyncFile
