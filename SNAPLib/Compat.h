@@ -173,7 +173,7 @@ void CloseLargeFile(LargeFileHandle* file);
 
 class MemoryMappedFile;
 
-MemoryMappedFile* OpenMemoryMappedFile(const char* filename, size_t offset, size_t length, void** o_contents);
+MemoryMappedFile* OpenMemoryMappedFile(const char* filename, size_t offset, size_t length, void** o_contents, bool sequential = false);
 
 // closes and deallocates the file structure
 void CloseMemoryMappedFile(MemoryMappedFile* mappedFile);

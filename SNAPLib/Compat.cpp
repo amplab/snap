@@ -308,10 +308,12 @@ OpenMemoryMappedFile(
     const char* filename,
     size_t offset,
     size_t length,
-    void** o_contents)
+    void** o_contents,
+    bool sequential)
 {
     MemoryMappedFile* result = new MemoryMappedFile();
-    result->fileHandle = CreateFile(filename, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    result->fileHandle = CreateFile(filename, GENERIC_READ, 0, NULL, OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL | (sequential ? FILE_FLAG_SEQUENTIAL_SCAN : FILE_FLAG_RANDOM_ACCESS), NULL);
     if (result->fileHandle == NULL) {
         printf("unable to open mapped file %s error 0x%x\n", filename, GetLastError());
         delete result;
@@ -805,7 +807,8 @@ OpenMemoryMappedFile(
     const char* filename,
     size_t offset,
     size_t length,
-    void** o_contents)
+    void** o_contents,
+    bool sequential)
 {
     printf("not implemented: OpenMemoryMappedFile\n");
     _ASSERT(false);

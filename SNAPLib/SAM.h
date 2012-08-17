@@ -129,7 +129,7 @@ private:
 class ThreadSAMWriter : public SAMWriter {
 public:
 
-    ThreadSAMWriter();
+    ThreadSAMWriter(size_t i_bufferSize);
     virtual ~ThreadSAMWriter();
 
     bool initialize(AsyncFile* file, const Genome *i_genome, volatile _int64 *i_nextWriteOffset);
@@ -152,7 +152,7 @@ protected:
 
     volatile _int64                *nextWriteOffset;
 
-    static const size_t             BufferSize = 16 * 1024 * 1024;
+    const size_t                    bufferSize;
     size_t                          remainingBufferSpace;
     
     unsigned                        bufferBeingCreated; // Which buffer are we generating new SAM into?
@@ -167,7 +167,10 @@ class ParallelSAMWriter {
 public:
     virtual ~ParallelSAMWriter();
 
-    static ParallelSAMWriter*       create(const char *fileName, const Genome *genome, unsigned nThreads, bool sort);
+    static ParallelSAMWriter*       create(const char *fileName, const Genome *genome,
+                                        unsigned nThreads, bool sort, size_t sortBufferMemory);
+
+    static const size_t             UnsortedBufferSize = 16 * 1024 * 1024;
 
     virtual bool                    initialize(const char *fileName, const Genome *genome, unsigned nThreads);
 
@@ -177,7 +180,7 @@ public:
 
 protected:
 
-    virtual bool                    createThreadWriters(Genome* genome);
+    virtual bool                    createThreadWriters(const Genome* genome);
 
     AsyncFile                      *file;
     volatile _int64                 nextWriteOffset;
@@ -189,6 +192,8 @@ protected:
 class SortedParallelSAMWriter : public ParallelSAMWriter
 {
 public:
+
+    SortedParallelSAMWriter(size_t i_totalMemory) : totalMemory(i_totalMemory) {}
 
     virtual ~SortedParallelSAMWriter() {}
     
@@ -213,7 +218,7 @@ public:
 
 protected:
     
-    virtual bool                    createThreadWriters(Genome* genome);
+    virtual bool                    createThreadWriters(const Genome* genome);
 
 private:
     
@@ -221,14 +226,18 @@ private:
 
     void                            addLocations(std::vector<Entry> added);
 
+    const size_t                    totalMemory;
     char*                           tempFile;
     const char*                     sortedFile;
+    ExclusiveLock                   lock;
     std::vector<Entry>              locations;
 };
 
 class SortedThreadSAMWriter : public ThreadSAMWriter
 {
 public:
+
+    SortedThreadSAMWriter(size_t i_bufferSize) : ThreadSAMWriter(i_bufferSize) {}
 
     bool                            initialize(SortedParallelSAMWriter* i_parent, const Genome* i_genome);
 
