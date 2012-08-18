@@ -31,6 +31,7 @@ Revision History:
 #include "AlignerStats.h"
 
 using std::max;
+using std::min;
 
 AlignerContext::AlignerContext(AlignerExtension* i_extension)
     :
@@ -147,8 +148,8 @@ AlignerContext::beginIteration()
     // total mem in Gb if given; default 1 Gb/thread for human genome, scale down for smaller genomes
     size_t totalMemory = options->sortMemory > 0
         ? options->sortMemory * ((size_t) 1 << 30)
-        : options->numThreads * std::min(2 * ParallelSAMWriter::UnsortedBufferSize,
-                                         (size_t) index->getGenome()->getCountOfBases() / 3);
+        : options->numThreads * min(2 * ParallelSAMWriter::UnsortedBufferSize,
+                                    (size_t) index->getGenome()->getCountOfBases() / 3);
     if (NULL != options->samFileTemplate) {
         parallelSamWriter = ParallelSAMWriter::create(options->samFileTemplate,index->getGenome(),
             options->numThreads, options->sortOutput, totalMemory);
