@@ -24,6 +24,7 @@ Revision History:
 --*/
 
 #include "stdafx.h"
+#include "Compat.h"
 #include "options.h"
 #include "AlignerOptions.h"
 #include "AlignerContext.h"
@@ -92,6 +93,7 @@ AlignerContext::runThread()
 {
     extension->beginThread();
     runIterationThread();
+    samWriter->close();
     extension->finishThread();
 }
     
@@ -142,12 +144,14 @@ AlignerContext::printStatsHeader()
 AlignerContext::beginIteration()
 {
     parallelSamWriter = NULL;
+    // total mem in Gb if given; default 1 Gb/thread for human genome, scale down for smaller genomes
+    size_t totalMemory = options->sortMemory > 0
+        ? options->sortMemory * ((size_t) 1 << 30)
+        : options->numThreads * std::min(2 * ParallelSAMWriter::UnsortedBufferSize,
+                                         (size_t) index->getGenome()->getCountOfBases() / 3);
     if (NULL != options->samFileTemplate) {
         parallelSamWriter = ParallelSAMWriter::create(options->samFileTemplate,index->getGenome(),
-            options->numThreads, options->sortOutput, 
-            // total mem in Gb if given; default 1 Gb/thread for human genome, scale down for smaller genomes
-            options->sortMemory > 0 ? options->sortMemory * ((size_t) 1 << 30)
-                : options->numThreads * ((size_t) index->getGenome()->getCountOfBases() / 3));
+            options->numThreads, options->sortOutput, totalMemory);
         if (NULL == parallelSamWriter) {
             fprintf(stderr,"Unable to create SAM file writer.  Just aligning for speed, no output will be generated.\n");
         }

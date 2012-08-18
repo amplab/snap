@@ -671,15 +671,14 @@ ParallelSAMWriter::getWriterForThread(
     bool
 ParallelSAMWriter::close()
 {
-    bool worked = true;
     for (unsigned i = 0; i < nThreads; i++) {
-        worked &= writer[i]->close();
+        // writers were already closed by each thread so they could flush in parallel
         delete writer[i];
         writer[i] = NULL;
     }
     delete file;
     file = NULL;
-    return worked;
+    return true;
 }
 
     bool
@@ -751,8 +750,8 @@ SortedThreadSAMWriter::beforeFlush(_int64 bufferOffset)
     unsigned target = 0;
     for (std::vector<Entry>::iterator i = locations.begin(); i != locations.end(); i++) {
         memcpy(buffer[1 - bufferBeingCreated] + target, buffer[bufferBeingCreated] + i->offset, i->length);
+        i->offset = bufferOffset + target;
         target += i->length;
-        i->offset += bufferOffset; // adjust offset from buffer-relative to file-relative
     }
     bufferBeingCreated = 1 - bufferBeingCreated;
     
@@ -775,7 +774,9 @@ SortedParallelSAMWriter::initialize(
     tempFile = (char*) malloc(strlen(fileName) + 5);
     strcpy(tempFile, fileName);
     strcat(tempFile, ".tmp");
-    return ParallelSAMWriter::initialize(tempFile, genome, i_nThreads, sorted);
+    bool ok = ParallelSAMWriter::initialize(tempFile, genome, i_nThreads, sorted);
+    headerSize = nextWriteOffset;
+    return ok;
 }
     
     bool
@@ -880,7 +881,7 @@ SortedParallelSAMWriter::close()
     const unsigned blockSize = 1000;
     unsigned blockCount = (locations.size() + blockSize - 1) / blockSize;
     _int64* blockOffsets = new _int64[blockCount];
-    size_t offset = 0;
+    size_t offset = headerSize;
     for (unsigned block = 0; ; block++) {
         blockOffsets[block] = offset;
         if (block == blockCount - 1) {
@@ -891,6 +892,7 @@ SortedParallelSAMWriter::close()
         }
     }
 
+    // setup for async permutation
     RangeSplitter range(blockCount, nThreads);
     SortContext context;
     context.totalThreads = nThreads; // todo: optimize - might be better to use 2x or more
@@ -907,6 +909,12 @@ SortedParallelSAMWriter::close()
         delete[] blockOffsets;
         return false;
     }
+    // write out header
+    AsyncFile::Writer* hwrite = context.file->getWriter();
+    hwrite->beginWrite(p, headerSize, 0, NULL);
+    hwrite->waitForCompletion();
+    delete hwrite;
+    // run parallel tasks
     ParallelTask<SortContext> task(&context);
     task.run();
 

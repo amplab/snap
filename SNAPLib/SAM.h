@@ -227,6 +227,7 @@ private:
     void                            addLocations(std::vector<Entry> added);
 
     const size_t                    totalMemory;
+    size_t                          headerSize;
     char*                           tempFile;
     const char*                     sortedFile;
     ExclusiveLock                   lock;
