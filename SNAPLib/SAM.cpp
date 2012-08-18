@@ -81,10 +81,10 @@ SAMWriter* SAMWriter::create(const char *fileName, const Genome *genome)
 }
 
     bool
-SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize)
+SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize, bool sorted)
 {
     
-    size_t bytesConsumed = snprintf(header, headerBufferSize, "@HD\tVN:1.4\tSO:unsorted\n");
+    size_t bytesConsumed = snprintf(header, headerBufferSize, "@HD\tVN:1.4\tSO:%s\n", sorted ? "coordinate" : "unsorted");
     if (bytesConsumed > headerBufferSize) {
         fprintf(stderr,"SAMWriter: header buffer too small\n");
         return false;
@@ -381,7 +381,7 @@ bool SimpleSAMWriter::open(const char* fileName, const Genome *genome)
     // Write out SAM header
     char *headerBuffer = new char[HEADER_BUFFER_SIZE];
     size_t headerSize;
-    if (!generateHeader(genome,headerBuffer,HEADER_BUFFER_SIZE,&headerSize)) {
+    if (!generateHeader(genome,headerBuffer,HEADER_BUFFER_SIZE,&headerSize, false)) {
         fprintf(stderr,"SimpleSAMWriter: unable to generate SAM header\n");
         return false;
     }
@@ -585,7 +585,7 @@ ParallelSAMWriter::create(
     ParallelSAMWriter *parallelWriter = sort
         ? new SortedParallelSAMWriter(sortBufferMemory)
         : new ParallelSAMWriter();
-    if (!parallelWriter->initialize(fileName, genome, nThreads)) {
+    if (!parallelWriter->initialize(fileName, genome, nThreads, sort)) {
         fprintf(stderr, "unable to initialize parallel SAM writer\n");
         delete parallelWriter;
         return NULL;
@@ -595,7 +595,7 @@ ParallelSAMWriter::create(
 
     bool
 
-ParallelSAMWriter::initialize(const char *fileName, const Genome *genome, unsigned i_nThreads)
+ParallelSAMWriter::initialize(const char *fileName, const Genome *genome, unsigned i_nThreads, bool sorted)
 {
     file = AsyncFile::open(fileName, true);
     if (NULL == file) {
@@ -607,7 +607,7 @@ ParallelSAMWriter::initialize(const char *fileName, const Genome *genome, unsign
     char headerBuffer[headerBufferSize];
     size_t headerActualSize;
 
-    if (!SAMWriter::generateHeader(genome,headerBuffer,headerBufferSize,&headerActualSize)) {
+    if (!SAMWriter::generateHeader(genome,headerBuffer,headerBufferSize,&headerActualSize, sorted)) {
         fprintf(stderr,"WindowsParallelSAMWriter: unable to generate SAM header.\n");
         return false;
     }
@@ -671,15 +671,14 @@ ParallelSAMWriter::getWriterForThread(
     bool
 ParallelSAMWriter::close()
 {
-    bool worked = true;
     for (unsigned i = 0; i < nThreads; i++) {
-        worked &= writer[i]->close();
+        // writers were already closed by each thread so they could flush in parallel
         delete writer[i];
         writer[i] = NULL;
     }
     delete file;
     file = NULL;
-    return worked;
+    return true;
 }
 
     bool
@@ -751,8 +750,8 @@ SortedThreadSAMWriter::beforeFlush(_int64 bufferOffset)
     unsigned target = 0;
     for (std::vector<Entry>::iterator i = locations.begin(); i != locations.end(); i++) {
         memcpy(buffer[1 - bufferBeingCreated] + target, buffer[bufferBeingCreated] + i->offset, i->length);
+        i->offset = bufferOffset + target;
         target += i->length;
-        i->offset += bufferOffset; // adjust offset from buffer-relative to file-relative
     }
     bufferBeingCreated = 1 - bufferBeingCreated;
     
@@ -767,14 +766,17 @@ SortedThreadSAMWriter::beforeFlush(_int64 bufferOffset)
 SortedParallelSAMWriter::initialize(
     const char *fileName,
     const Genome *genome,
-    unsigned i_nThreads)
+    unsigned i_nThreads,
+    bool sorted)
 {
     InitializeExclusiveLock(&lock);
     sortedFile = fileName;
     tempFile = (char*) malloc(strlen(fileName) + 5);
     strcpy(tempFile, fileName);
     strcat(tempFile, ".tmp");
-    return ParallelSAMWriter::initialize(tempFile, genome, i_nThreads);
+    bool ok = ParallelSAMWriter::initialize(tempFile, genome, i_nThreads, sorted);
+    headerSize = nextWriteOffset;
+    return ok;
 }
     
     bool
@@ -879,7 +881,7 @@ SortedParallelSAMWriter::close()
     const unsigned blockSize = 1000;
     unsigned blockCount = (locations.size() + blockSize - 1) / blockSize;
     _int64* blockOffsets = new _int64[blockCount];
-    size_t offset = 0;
+    size_t offset = headerSize;
     for (unsigned block = 0; ; block++) {
         blockOffsets[block] = offset;
         if (block == blockCount - 1) {
@@ -890,6 +892,7 @@ SortedParallelSAMWriter::close()
         }
     }
 
+    // setup for async permutation
     RangeSplitter range(blockCount, nThreads);
     SortContext context;
     context.totalThreads = nThreads; // todo: optimize - might be better to use 2x or more
@@ -906,13 +909,21 @@ SortedParallelSAMWriter::close()
         delete[] blockOffsets;
         return false;
     }
+    // write out header
+    AsyncFile::Writer* hwrite = context.file->getWriter();
+    hwrite->beginWrite(p, headerSize, 0, NULL);
+    hwrite->waitForCompletion();
+    delete hwrite;
+    // run parallel tasks
     ParallelTask<SortContext> task(&context);
     task.run();
 
     delete [] blockOffsets;
     delete context.file;
     CloseMemoryMappedFile(map);
-    // todo: delete file
+    if (! DeleteSingleFile(tempFile)) {
+        printf("warning: failure deleting temp file %s\n", tempFile);
+    }
 
     printf(" %u reads, %lld bytes, %ld seconds\n",
         locations.size(), offset, (timeInMillis() - start) / 1000);
