@@ -1009,7 +1009,7 @@ PosixAsyncFile::Writer::beginWrite(
     aio_setup(&aiocb, &ready, file->fd, buffer, length, offset);
     result = bytesWritten;
     if (aio_write(&aiocb) < 0) {
-        warn("PosixAsyncFile aio_write failed\n");
+        warn("PosixAsyncFile aio_write failed");
         return false;
     }
     writing = true;
@@ -1023,12 +1023,12 @@ PosixAsyncFile::Writer::waitForCompletion()
         WaitForSingleWaiterObject(&ready);
         writing = false;
         ssize_t ret = aio_return(&aiocb);
-        if (ret < 0) {
-            warn("PosixAsyncFile Writer aio_return failed\n");
+        if (ret < 0 && errno != 0) {
+            warn("PosixAsyncFile Writer aio_return failed");
             return false;
         }
         if (result != NULL) {
-            *result = ret;
+            *result = min((ssize_t)0, ret);
         }
     }
     return true;
@@ -1069,7 +1069,7 @@ PosixAsyncFile::Reader::beginRead(
     aio_setup(&aiocb, &ready, file->fd, buffer, length, offset);
     result = bytesRead;
     if (aio_read(&aiocb) < 0) {
-        warn("PosixAsyncFile Reader aio_read failed\n");
+        warn("PosixAsyncFile Reader aio_read failed");
         return false;
     }
     reading = true;
@@ -1083,12 +1083,12 @@ PosixAsyncFile::Reader::waitForCompletion()
         WaitForSingleWaiterObject(&ready);
         reading = false;
         ssize_t ret = aio_return(&aiocb);
-        if (ret < 0) {
-            warn("PosixAsyncFile Reader aio_return\n");
+        if (ret < 0 && errno != 0) {
+            warn("PosixAsyncFile Reader aio_return");
             return false;
         }
         if (result != NULL) {
-            *result = ret;
+            *result = min((ssize_t)0, ret);
         }
     }
     return true;
