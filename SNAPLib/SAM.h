@@ -23,6 +23,8 @@ Environment:
 #include "LandauVishkin.h"
 #include "PairedEndAligner.h"
 
+using std::vector;
+
 /*
  * Output aligned reads in SAM format. See http://samtools.sourceforge.net/SAM1.pdf for details.
  */
@@ -204,6 +206,7 @@ public:
 #pragma pack(push, 4)
     struct Entry
     {
+        Entry() : offset(0), length(0), location(0) {}
         Entry(size_t i_offset, unsigned i_length, unsigned i_location)
             : offset(i_offset), length(i_length), location(i_location) {}
         size_t                      offset; // offset in file
@@ -224,21 +227,23 @@ private:
     
     friend class SortedThreadSAMWriter;
 
-    void                            addLocations(std::vector<Entry> added);
+    void                            addLocations(vector<Entry>* added);
 
     const size_t                    totalMemory;
     size_t                          headerSize;
     char*                           tempFile;
     const char*                     sortedFile;
     ExclusiveLock                   lock;
-    std::vector<Entry>              locations;
+    vector<vector<Entry>*>          locations;
 };
 
 class SortedThreadSAMWriter : public ThreadSAMWriter
 {
 public:
 
-    SortedThreadSAMWriter(size_t i_bufferSize) : ThreadSAMWriter(i_bufferSize) {}
+    SortedThreadSAMWriter(size_t i_bufferSize);
+    virtual ~SortedThreadSAMWriter();
+
 
     bool                            initialize(SortedParallelSAMWriter* i_parent, const Genome* i_genome);
 
@@ -252,7 +257,8 @@ protected:
 
 private:
     SortedParallelSAMWriter*        parent;
-    std::vector<Entry>              locations;
+    unsigned                        largest; // largest location count so far
+    vector<Entry>*                  locations;
 };
 
 /*

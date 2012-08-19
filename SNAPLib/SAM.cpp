@@ -715,7 +715,20 @@ ThreadSAMWriter::waitForIoCompletion()
 {
     return writer[1 - bufferBeingCreated]->waitForCompletion();
 }
-    
+
+SortedThreadSAMWriter::SortedThreadSAMWriter(size_t i_bufferSize)
+    : ThreadSAMWriter(i_bufferSize),
+        parent(NULL),
+        largest(1000),
+        locations(new vector<Entry>(1000))
+{
+}
+
+SortedThreadSAMWriter::~SortedThreadSAMWriter()
+{
+    delete locations;
+}
+
     bool
 SortedThreadSAMWriter::initialize(
     SortedParallelSAMWriter* i_parent,
@@ -731,14 +744,14 @@ SortedThreadSAMWriter::afterWrite(
     size_t bufferOffset,
     unsigned length)
 {
-    locations.push_back(Entry(bufferOffset, length, location));
+    locations->push_back(Entry(bufferOffset, length, location));
 }
 
     bool
 SortedThreadSAMWriter::beforeFlush(_int64 bufferOffset)
 {
     // sort buffered reads by location for later merge sort
-    std::sort(locations.begin(), locations.end(), Entry::comparator);
+    std::sort(locations->begin(), locations->end(), Entry::comparator);
     
     // wait for IO of other buffer to finish since we're going to sort into there
     if (! waitForIoCompletion()) {
@@ -748,16 +761,19 @@ SortedThreadSAMWriter::beforeFlush(_int64 bufferOffset)
     
     // copy into other buffer in sorted order & switch buffers
     unsigned target = 0;
-    for (std::vector<Entry>::iterator i = locations.begin(); i != locations.end(); i++) {
+    for (vector<Entry>::iterator i = locations->begin(); i != locations->end(); i++) {
         memcpy(buffer[1 - bufferBeingCreated] + target, buffer[bufferBeingCreated] + i->offset, i->length);
         i->offset = bufferOffset + target;
         target += i->length;
     }
     bufferBeingCreated = 1 - bufferBeingCreated;
     
-    // remember offsets for full-file sort
+    // remember offsets for full-file sort, get a new vector of appropriate size
     parent->addLocations(locations);
-    locations.clear();
+    if (locations->size() > largest) {
+        largest = (locations->size() * 6) / 5; // grow by 20% if it exceeds prior max
+    }
+    locations = new vector<Entry>(largest);
 
     return true;
 }
@@ -806,9 +822,10 @@ public:
     size_t          bufferSize;
     unsigned        blockSize;
     RangeSplitter*  range;
-    const _int64*   blockOffsets;
-    std::vector<SortedParallelSAMWriter::Entry>*
-                    locations;
+    const size_t*   blockOffsets;
+    size_t          entryCount;
+    SortedParallelSAMWriter::Entry*
+                    entries;
     AsyncFile*      file;
 };
 
@@ -828,10 +845,10 @@ void SortContext::runThread()
     while (range->getNextRange(&rangeStart, &rangeLength)) {
         size_t targetOffset = blockOffsets[rangeStart];
         size_t bufferOffset = 0;
-        unsigned end = min((unsigned) locations->size(), (unsigned) (rangeStart + rangeLength) * blockSize );
+        unsigned end = min((unsigned) entryCount, (unsigned) (rangeStart + rangeLength) * blockSize );
         for (unsigned read = rangeStart * blockSize; ; read++) {
             SortedParallelSAMWriter::Entry* entry;
-            if (read == end || bufferOffset + (entry = &(*locations)[read])->length > bufferSize) {
+            if (read == end || bufferOffset + (entry = &entries[read])->length > bufferSize) {
                 writers[1 - writingBuffer]->waitForCompletion();
                 writers[writingBuffer]->beginWrite(buffers[writingBuffer], bufferOffset, targetOffset, NULL);
                 writingBuffer = 1 - writingBuffer;
@@ -864,7 +881,18 @@ SortedParallelSAMWriter::close()
     printf("sorting...");
     _int64 start = timeInMillis();
     // todo: use in-memory merge sort instead of standard sort?
-    std::sort(locations.begin(), locations.end(), Entry::comparator);
+    // copy into single buffer before sorting
+    size_t entryCount = 0;
+    for (vector<vector<Entry>*>::iterator i = locations.begin(); i != locations.end(); i++) {
+        entryCount += (*i)->size();
+    }
+    Entry* entries = (Entry*) BigAlloc(entryCount * sizeof(Entry));
+    size_t offset = 0;
+    for (vector<vector<Entry>*>::iterator i = locations.begin(); i != locations.end(); i++) {
+        memcpy(entries + offset, (*i)->data(), (*i)->size() * sizeof(Entry));
+        offset += (*i)->size();
+    }
+    std::sort(entries, entries + entryCount, Entry::comparator);
     printf(" %ld s\n", (timeInMillis() - start) / 1000);
 
     printf("writing sorted reads...");
@@ -879,16 +907,16 @@ SortedParallelSAMWriter::close()
 
     // divide into blocks and figure out offset from base
     const unsigned blockSize = 1000;
-    unsigned blockCount = (locations.size() + blockSize - 1) / blockSize;
-    _int64* blockOffsets = new _int64[blockCount];
-    size_t offset = headerSize;
+    unsigned blockCount = (entryCount + blockSize - 1) / blockSize;
+    size_t* blockOffsets = new size_t[blockCount];
+    offset = headerSize;
     for (unsigned block = 0; ; block++) {
         blockOffsets[block] = offset;
         if (block == blockCount - 1) {
             break;
         }
         for (unsigned i = 0; i < blockSize; i++) {
-            offset += locations[block * blockSize + i].length;
+            offset += entries[block * blockSize + i].length;
         }
     }
 
@@ -902,7 +930,8 @@ SortedParallelSAMWriter::close()
     context.bufferSize = UnsortedBufferSize; // use smaller write buffers
     context.range = &range;
     context.blockOffsets = blockOffsets;
-    context.locations = &locations;
+    context.entries = entries;
+    context.entryCount = entryCount;
     context.file = AsyncFile::open(sortedFile, true);
     if (context.file == NULL) {
         fprintf(stderr, "could not open sorted file for write %s\n", sortedFile);
@@ -920,27 +949,24 @@ SortedParallelSAMWriter::close()
 
     delete [] blockOffsets;
     delete context.file;
+    BigDealloc(entries);
     CloseMemoryMappedFile(map);
     if (! DeleteSingleFile(tempFile)) {
         printf("warning: failure deleting temp file %s\n", tempFile);
     }
 
-    printf(" %u reads, %lld bytes, %ld seconds\n",
-        locations.size(), offset, (timeInMillis() - start) / 1000);
+    printf(" %lld reads, %lld bytes, %ld seconds\n",
+        entryCount, offset, (timeInMillis() - start) / 1000);
 
     return true;
 }
 
     void
 SortedParallelSAMWriter::addLocations(
-    std::vector<Entry> append)
+    vector<Entry>* append)
 {
-    // todo: there must be a better way...
     AcquireExclusiveLock(&lock);
-    locations.reserve(locations.size() + append.size());
-    for (std::vector<Entry>::iterator i =  append.begin(); i != append.end(); i++) {
-        locations.push_back(*i);
-    }
+    locations.push_back(append);
     ReleaseExclusiveLock(&lock);
 }
 
