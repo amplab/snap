@@ -720,7 +720,7 @@ SortedThreadSAMWriter::SortedThreadSAMWriter(size_t i_bufferSize)
     : ThreadSAMWriter(i_bufferSize),
         parent(NULL),
         largest(1000),
-        locations(new vector<Entry>(1000))
+        locations(new VariableSizeVector<Entry>(1000))
 {
 }
 
@@ -761,7 +761,7 @@ SortedThreadSAMWriter::beforeFlush(_int64 bufferOffset)
     
     // copy into other buffer in sorted order & switch buffers
     unsigned target = 0;
-    for (vector<Entry>::iterator i = locations->begin(); i != locations->end(); i++) {
+    for (VariableSizeVector<Entry>::iterator i = locations->begin(); i != locations->end(); i++) {
         memcpy(buffer[1 - bufferBeingCreated] + target, buffer[bufferBeingCreated] + i->offset, i->length);
         i->offset = bufferOffset + target;
         target += i->length;
@@ -773,7 +773,7 @@ SortedThreadSAMWriter::beforeFlush(_int64 bufferOffset)
     if (locations->size() > largest) {
         largest = (locations->size() * 6) / 5; // grow by 20% if it exceeds prior max
     }
-    locations = new vector<Entry>(largest);
+    locations = new VariableSizeVector<Entry>(largest);
 
     return true;
 }
@@ -883,13 +883,13 @@ SortedParallelSAMWriter::close()
     // todo: use in-memory merge sort instead of standard sort?
     // copy into single buffer before sorting
     size_t entryCount = 0;
-    for (vector<vector<Entry>*>::iterator i = locations.begin(); i != locations.end(); i++) {
+    for (VariableSizeVector<VariableSizeVector<Entry>*>::iterator i = locations.begin(); i != locations.end(); i++) {
         entryCount += (*i)->size();
     }
     Entry* entries = (Entry*) BigAlloc(entryCount * sizeof(Entry));
     size_t offset = 0;
-    for (vector<vector<Entry>*>::iterator i = locations.begin(); i != locations.end(); i++) {
-        memcpy(entries + offset, (*i)->data(), (*i)->size() * sizeof(Entry));
+    for (VariableSizeVector<VariableSizeVector<Entry>*>::iterator i = locations.begin(); i != locations.end(); i++) {
+        memcpy(entries + offset, (*i)->begin(), (*i)->size() * sizeof(Entry));
         offset += (*i)->size();
     }
     std::sort(entries, entries + entryCount, Entry::comparator);
@@ -963,7 +963,7 @@ SortedParallelSAMWriter::close()
 
     void
 SortedParallelSAMWriter::addLocations(
-    vector<Entry>* append)
+    VariableSizeVector<Entry>* append)
 {
     AcquireExclusiveLock(&lock);
     locations.push_back(append);

@@ -216,6 +216,9 @@
     <ClInclude Include="PairedAligner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="VariableSizeVector.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="ReadMe.txt" />

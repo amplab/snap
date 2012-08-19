@@ -22,8 +22,7 @@ Environment:
 #include "Compat.h"
 #include "LandauVishkin.h"
 #include "PairedEndAligner.h"
-
-using std::vector;
+#include "VariableSizeVector.h"
 
 /*
  * Output aligned reads in SAM format. See http://samtools.sourceforge.net/SAM1.pdf for details.
@@ -227,14 +226,15 @@ private:
     
     friend class SortedThreadSAMWriter;
 
-    void                            addLocations(vector<Entry>* added);
+    void                            addLocations(VariableSizeVector<Entry>* added);
 
     const size_t                    totalMemory;
     size_t                          headerSize;
     char*                           tempFile;
     const char*                     sortedFile;
     ExclusiveLock                   lock;
-    vector<vector<Entry>*>          locations;
+    VariableSizeVector<VariableSizeVector<Entry>*>
+                                    locations;
 };
 
 class SortedThreadSAMWriter : public ThreadSAMWriter
@@ -258,7 +258,7 @@ protected:
 private:
     SortedParallelSAMWriter*        parent;
     unsigned                        largest; // largest location count so far
-    vector<Entry>*                  locations;
+    VariableSizeVector<Entry>*      locations;
 };
 
 /*

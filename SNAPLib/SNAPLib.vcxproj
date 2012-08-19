@@ -179,6 +179,7 @@
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="Tables.h" />
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="VariableSizeVector.h" />
     <ClInclude Include="VCF.h" />
     <ClInclude Include="wgsim.h" />
   </ItemGroup>
