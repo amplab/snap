@@ -1028,7 +1028,7 @@ PosixAsyncFile::Writer::waitForCompletion()
             return false;
         }
         if (result != NULL) {
-            *result = min((ssize_t)0, ret);
+            *result = max((ssize_t)0, ret);
         }
     }
     return true;
@@ -1088,7 +1088,7 @@ PosixAsyncFile::Reader::waitForCompletion()
             return false;
         }
         if (result != NULL) {
-            *result = min((ssize_t)0, ret);
+            *result = max((ssize_t)0, ret);
         }
     }
     return true;

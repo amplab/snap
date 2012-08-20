@@ -631,7 +631,7 @@ ParallelSAMWriter::initialize(const char *fileName, const Genome *genome, unsign
     }
     delete hwriter;
 
-    nextWriteOffset = bytesWritten;
+    nextWriteOffset = headerActualSize;
 
     nThreads = i_nThreads;
     writer = new ThreadSAMWriter *[nThreads];
