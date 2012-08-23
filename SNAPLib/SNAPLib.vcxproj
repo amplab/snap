@@ -150,6 +150,7 @@
     <ClInclude Include="ApproximateCounter.h" />
     <ClInclude Include="BaseAligner.h" />
     <ClInclude Include="bigalloc.h" />
+    <ClInclude Include="BufferedAsync.h" />
     <ClInclude Include="compat.h" />
     <ClInclude Include="FASTA.h" />
     <ClInclude Include="fastq.h" />
@@ -191,6 +192,7 @@
     <ClCompile Include="BaseAligner.cpp" />
     <ClCompile Include="BiasTables.cpp" />
     <ClCompile Include="bigalloc.cpp" />
+    <ClCompile Include="BufferedAsync.cpp" />
     <ClCompile Include="compat.cpp" />
     <ClCompile Include="FASTA.cpp" />
     <ClCompile Include="fastq.cpp" />

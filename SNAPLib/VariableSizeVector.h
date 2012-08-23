@@ -3,9 +3,21 @@
 //
 // A variable-size vector that does not perform any memory allocation except to grow.
 //
-template<typename V, int grow = 150>
+template<typename V, int grow = 150, bool big = false>
 class VariableSizeVector
 {
+private:
+
+    inline static void* allocate(size_t bytes)
+    {
+        return big ? BigAlloc(bytes) : malloc(bytes);
+    }
+
+    inline static void deallocate(void* p)
+    {
+        if (big) { BigDealloc(p); } else { free(p); }
+    }
+
 public:
     VariableSizeVector(int i_capacity = 16)
         : entries(NULL), count(0), capacity(i_capacity)
@@ -15,7 +27,7 @@ public:
     ~VariableSizeVector()
     {
         if (entries != NULL) {
-            delete[] entries;
+            deallocate(entries);
             entries = NULL;
             count = 0;
         }
@@ -34,10 +46,10 @@ public:
     {
         V* old = entries;
         this->capacity = capacity;
-        entries = new V[capacity];
+        entries = (V*) allocate(capacity * sizeof(V));
         if (old != NULL) {
             memcpy(entries, old, count * sizeof(V));
-            delete[] old;
+            deallocate(old);
         }
     }
 
@@ -51,7 +63,7 @@ public:
         return count;
     }
 
-    inline void push_back(const V& value)
+    inline void push_back(V& value)
     {
         if (entries == NULL) {
             reserve(capacity);

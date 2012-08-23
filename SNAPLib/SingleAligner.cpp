@@ -175,7 +175,7 @@ SingleAlignerContext::writeRead(
     bool isRC,
     int score)
 {
-    if (samWriter != NULL) {
+    if (samWriter != NULL && options->passFilter(read, result)) {
         samWriter->write(read, result, location, isRC);
     }
 }

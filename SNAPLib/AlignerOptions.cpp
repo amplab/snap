@@ -44,6 +44,7 @@ AlignerOptions::AlignerOptions(
     clipping(ClipBack),
     sortOutput(false),
     sortMemory(0),
+    filterFlags(0),
     extra(NULL)
 {
     if (forPairedEnd) {
@@ -90,6 +91,7 @@ AlignerOptions::usageMessage()
         "       with small caches or lots of cores/cache\n"
         "  -s   sort output file by aligment location\n"
         "  -sm  memory to use for sorting in Gb\n"
+        "  -f   filter output (a=aligned only, s=single hit only, u=unaligned only)\n"
 #if     USE_DEVTEAM_OPTIONS
         "  -I   ignore IDs that don't match in the paired-end aligner\n"
         "  -S   selectivity; randomly choose 1/selectivity of the reads to score\n"
@@ -174,6 +176,20 @@ AlignerOptions::parse(
             n++;
             return true;
         }
+    } else if (strcmp(argv[n], "-f") == 0) {
+        if (n + 1 < argc) {
+            n++;
+            if (strcmp(argv[n], "a") == 0) {
+                filterFlags = FilterSingleHit | FilterMultipleHits;
+            } else if (strcmp(argv[n], "s") == 0) {
+                filterFlags = FilterSingleHit;
+            } else if (strcmp(argv[n], "u") == 0) {
+                filterFlags = FilterUnaligned;
+            } else {
+                return false;
+            }
+            return true;
+        }
 #if     USE_DEVTEAM_OPTIONS
     } else if (strcmp(argv[n], "-I") == 0) {
         ignoreMismatchedIDs = true;
@@ -217,4 +233,26 @@ AlignerOptions::parse(
         return extra->parse(argv, argc, n);
     }
     return false;
+}
+
+    bool
+AlignerOptions::passFilter(
+    Read* read,
+    AlignmentResult result)
+{
+    if (filterFlags == 0) {
+        return true;
+    }
+    switch (result) {
+    case NotFound:
+    case UnknownAlignment:
+        return (filterFlags & FilterUnaligned) != 0;
+    case SingleHit:
+    case CertainHit:
+        return (filterFlags & FilterSingleHit) != 0;
+    case MultipleHits:
+        return (filterFlags & FilterMultipleHits) != 0;
+    default:
+        return false; // shouldn't happen!
+    }
 }

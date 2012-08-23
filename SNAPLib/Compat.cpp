@@ -367,14 +367,14 @@ public:
 
     WindowsAsyncFile(HANDLE i_hFile);
 
-    virtual ~WindowsAsyncFile();
+    virtual bool close();
 
     class Writer : public AsyncFile::Writer
     {
     public:
         Writer(WindowsAsyncFile* i_file);
 
-        virtual ~Writer();
+        virtual bool close();
 
         virtual bool beginWrite(void* buffer, size_t length, size_t offset, size_t *bytesWritten);
 
@@ -393,7 +393,7 @@ public:
     public:
         Reader(WindowsAsyncFile* i_file);
 
-        virtual ~Reader();
+        virtual bool close();
 
         virtual bool beginRead(void* buffer, size_t length, size_t offset, size_t *bytesRead);
 
@@ -416,7 +416,13 @@ WindowsAsyncFile::open(
     const char* filename,
     bool write)
 {
-    HANDLE hFile = CreateFile(filename,GENERIC_READ | GENERIC_WRITE,FILE_SHARE_READ,NULL,CREATE_ALWAYS,FILE_FLAG_OVERLAPPED,NULL);
+    HANDLE hFile = CreateFile(filename,
+        GENERIC_READ | (write ? GENERIC_WRITE : 0),
+        write ? 0 : FILE_SHARE_READ,
+        NULL,
+        write ? CREATE_ALWAYS : OPEN_EXISTING,
+        FILE_FLAG_OVERLAPPED,
+        NULL);
     if (INVALID_HANDLE_VALUE == hFile) {
         fprintf(stderr,"Unable to create SAM file '%s', %d\n",filename,GetLastError());
         return NULL;
@@ -430,9 +436,10 @@ WindowsAsyncFile::WindowsAsyncFile(
 {
 }
 
-WindowsAsyncFile::~WindowsAsyncFile()
+    bool
+WindowsAsyncFile::close()
 {
-    CloseHandle(hFile);
+    return CloseHandle(hFile);
 }
 
     AsyncFile::Writer*
@@ -447,9 +454,11 @@ WindowsAsyncFile::Writer::Writer(WindowsAsyncFile* i_file)
     lap.hEvent = CreateEvent(NULL,FALSE,FALSE,NULL);
 }
 
-WindowsAsyncFile::Writer::~Writer()
+    bool
+WindowsAsyncFile::Writer::close()
 {
-    CloseHandle(lap.hEvent);
+    waitForCompletion();
+    return CloseHandle(lap.hEvent);
 }
 
     bool
@@ -500,9 +509,10 @@ WindowsAsyncFile::Reader::Reader(
     lap.hEvent = CreateEvent(NULL,FALSE,FALSE,NULL);
 }
 
-WindowsAsyncFile::Reader::~Reader()
+    bool
+WindowsAsyncFile::Reader::close()
 {
-    CloseHandle(lap.hEvent);
+    return CloseHandle(lap.hEvent);
 }
 
     bool
@@ -877,14 +887,14 @@ public:
 
     PosixAsyncFile(int i_fd);
 
-    virtual ~PosixAsyncFile();
+    virtual bool close();
 
     class Writer : public AsyncFile::Writer
     {
     public:
         Writer(PosixAsyncFile* i_file);
 
-        virtual ~Writer();
+        virtual bool close();
 
         virtual bool beginWrite(void* buffer, size_t length, size_t offset, size_t *bytesWritten);
 
@@ -905,7 +915,7 @@ public:
     public:
         Reader(PosixAsyncFile* i_file);
 
-        virtual ~Reader();
+        virtual bool close();
 
         virtual bool beginRead(void* buffer, size_t length, size_t offset, size_t *bytesRead);
 
@@ -944,9 +954,10 @@ PosixAsyncFile::PosixAsyncFile(
 {
 }
 
-PosixAsyncFile::~PosixAsyncFile()
+    bool
+PosixAsyncFile::close()
 {
-    close(fd);
+    return close(fd) == 0;
 }
 
     AsyncFile::Writer*
@@ -965,9 +976,11 @@ PosixAsyncFile::Writer::Writer(PosixAsyncFile* i_file)
     }
 }
 
-PosixAsyncFile::Writer::~Writer()
+    bool
+PosixAsyncFile::Writer::close()
 {
     DestroySingleWaiterObject(&ready);
+    return true;
 }
 
     void
@@ -1051,9 +1064,11 @@ PosixAsyncFile::Reader::Reader(
     }
 }
 
-PosixAsyncFile::Reader::~Reader()
+    bool
+PosixAsyncFile::Reader::close()
 {
     DestroySingleWaiterObject(&ready);
+    return true;
 }
 
     bool
@@ -1113,16 +1128,4 @@ AsyncFile* AsyncFile::open(const char* filename, bool write)
 #else
     return PosixAsyncFile::open(filename, write);
 #endif
-}
-
-AsyncFile::~AsyncFile()
-{
-}
-
-AsyncFile::Writer::~Writer()
-{
-}
-
-AsyncFile::Reader::~Reader()
-{
 }

@@ -61,6 +61,7 @@ struct AlignerOptions : public AbstractOptions
     ReadClippingType    clipping;
     bool                sortOutput;
     unsigned            sortMemory; // total output sorting buffer size in Gb
+    unsigned            filterFlags;
     AbstractOptions    *extra; // extra options
 
     void usage();
@@ -68,4 +69,13 @@ struct AlignerOptions : public AbstractOptions
     virtual void usageMessage();
 
     virtual bool parse(char** argv, int argc, int& n);
+
+    enum FilterFlags
+    {
+        FilterUnaligned =           0x0001,
+        FilterSingleHit =           0x0002,
+        FilterMultipleHits =        0x0004,
+    };
+
+    bool passFilter(Read* read, AlignmentResult result);
 };

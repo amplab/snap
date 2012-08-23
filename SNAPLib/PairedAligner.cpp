@@ -388,7 +388,7 @@ void PairedAlignerContext::runIterationThread()
 
 void PairedAlignerContext::writePair(Read* read0, Read* read1, PairedAlignmentResult* result)
 {
-    if (samWriter != NULL) {
+    if (samWriter != NULL && (options->passFilter(read0, result->status[0]) || options->passFilter(read1, result->status[1]))) {
         samWriter->writePair(read0, read1, result);
     }
 }

@@ -23,6 +23,7 @@ Environment:
 #include "LandauVishkin.h"
 #include "PairedEndAligner.h"
 #include "VariableSizeVector.h"
+#include "BufferedAsync.h"
 
 /*
  * Output aligned reads in SAM format. See http://samtools.sourceforge.net/SAM1.pdf for details.
@@ -145,7 +146,7 @@ protected:
 
     // hooks to allow for sorting the output buffer
     virtual void                    afterWrite(unsigned location, size_t bufferOffset, unsigned length) {}
-    virtual bool                    beforeFlush(_int64 writeOffset) { return true; }
+    virtual bool                    beforeFlush(_int64 fileOffset, _int64 length) { return true; }
 
     bool                            startIo();
 
@@ -190,6 +191,60 @@ protected:
     int                             nThreads;
 };
 
+#pragma pack(push, 4)
+struct SortEntry
+{
+    SortEntry() : offset(0), length(0), location(0) {}
+    SortEntry(size_t i_offset, unsigned i_length, unsigned i_location)
+        : offset(i_offset), length(i_length), location(i_location) {}
+    size_t                      offset; // offset in file
+    unsigned                    length; // number of bytes
+    unsigned                    location; // location in genome
+    static bool comparator(const SortEntry& e1, const SortEntry& e2)
+    {
+        return e1.location < e2.location;
+    }
+};
+#pragma pack(pop)
+
+struct SortBlock
+{
+    SortBlock();
+    SortBlock(size_t capacity);
+    SortBlock(SortBlock& other);
+    void operator=(SortBlock& other);
+
+    VariableSizeVector<SortEntry>   entries;
+    size_t                          fileOffset;
+    size_t                          fileBytes;
+    unsigned                        index;
+    BufferedAsyncReader             reader; // for reading phase
+};
+
+class SortedParallelSAMWriter;
+
+class SortedThreadSAMWriter : public ThreadSAMWriter
+{
+public:
+
+    SortedThreadSAMWriter(size_t i_bufferSize);
+    virtual ~SortedThreadSAMWriter();
+
+
+    bool                            initialize(SortedParallelSAMWriter* i_parent, const Genome* i_genome);
+
+protected:
+    
+    virtual void                    afterWrite(unsigned location, size_t bufferOffset, unsigned length);
+
+    virtual bool                    beforeFlush(_int64 fileOffset, _int64 length);
+
+private:
+    SortedParallelSAMWriter*        parent;
+    unsigned                        largest; // largest location count so far
+    SortBlock                       locations;
+};
+
 class SortedParallelSAMWriter : public ParallelSAMWriter
 {
 public:
@@ -202,22 +257,6 @@ public:
 
     bool                            close();
 
-#pragma pack(push, 4)
-    struct Entry
-    {
-        Entry() : offset(0), length(0), location(0) {}
-        Entry(size_t i_offset, unsigned i_length, unsigned i_location)
-            : offset(i_offset), length(i_length), location(i_location) {}
-        size_t                      offset; // offset in file
-        unsigned                    length; // number of bytes
-        unsigned                    location; // location in genome
-        static bool comparator(const Entry& e1, const Entry& e2)
-        {
-            return e1.location < e2.location;
-        }
-    };
-#pragma pack(pop)
-
 protected:
     
     virtual bool                    createThreadWriters(const Genome* genome);
@@ -226,39 +265,14 @@ private:
     
     friend class SortedThreadSAMWriter;
 
-    void                            addLocations(VariableSizeVector<Entry>* added);
+    void                            addLocations(SortBlock& added);
 
     const size_t                    totalMemory;
     size_t                          headerSize;
     char*                           tempFile;
     const char*                     sortedFile;
     ExclusiveLock                   lock;
-    VariableSizeVector<VariableSizeVector<Entry>*>
-                                    locations;
-};
-
-class SortedThreadSAMWriter : public ThreadSAMWriter
-{
-public:
-
-    SortedThreadSAMWriter(size_t i_bufferSize);
-    virtual ~SortedThreadSAMWriter();
-
-
-    bool                            initialize(SortedParallelSAMWriter* i_parent, const Genome* i_genome);
-
-    typedef SortedParallelSAMWriter::Entry Entry;
-
-protected:
-    
-    virtual void                    afterWrite(unsigned location, size_t bufferOffset, unsigned length);
-
-    virtual bool                    beforeFlush(_int64 writeOffset);
-
-private:
-    SortedParallelSAMWriter*        parent;
-    unsigned                        largest; // largest location count so far
-    VariableSizeVector<Entry>*      locations;
+    VariableSizeVector<SortBlock>   locations;
 };
 
 /*

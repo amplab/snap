@@ -504,6 +504,11 @@ ThreadSAMWriter::close()
             return false;
         }
     }
+    bool ok = writer[0]->close();
+    ok &= writer[1]->close();
+    if (! ok) {
+        fprintf(stderr, "WindowsSAMWriter::close closing writer failed\n");
+    }
 
     return true;
 }
@@ -629,6 +634,9 @@ ParallelSAMWriter::initialize(const char *fileName, const Genome *genome, unsign
         fprintf(stderr,"ParallelSAMWriter: failed to complete\n");
         return false;
     }
+    if (! hwriter->close()) {
+        fprintf(stderr, "ParallelSAMWriter: failed to close\n");
+    }
     delete hwriter;
 
     nextWriteOffset = headerActualSize;
@@ -676,6 +684,9 @@ ParallelSAMWriter::close()
         delete writer[i];
         writer[i] = NULL;
     }
+    if (! file->close()) {
+        fprintf(stderr, "ParallelSAMWriter::close file close failed\n");
+    }
     delete file;
     file = NULL;
     return true;
@@ -688,7 +699,7 @@ ThreadSAMWriter::startIo()
     // It didn't fit in the buffer.  Start writing it.
     //
     _int64 writeOffset = InterlockedAdd64AndReturnNewValue(nextWriteOffset,bufferSize - remainingBufferSpace) - (bufferSize - remainingBufferSpace);
-    if (!beforeFlush(writeOffset)) {
+    if (!beforeFlush(writeOffset, bufferSize - remainingBufferSpace)) {
         fprintf(stderr, "ThreadSAMWriter: beforeFlush failed\n");
         return false;
     }
@@ -716,17 +727,48 @@ ThreadSAMWriter::waitForIoCompletion()
     return writer[1 - bufferBeingCreated]->waitForCompletion();
 }
 
+SortBlock::SortBlock()
+    : entries(0), fileOffset(0), fileBytes(0), index(0), reader()
+{
+}
+
+SortBlock::SortBlock(size_t capacity)
+    : entries(capacity), fileOffset(0), fileBytes(0), index(0), reader()
+{
+}
+
+SortBlock::SortBlock(
+    SortBlock& other)
+{
+    entries = other.entries;
+    fileOffset = other.fileOffset;
+    fileBytes = other.fileBytes;
+    index = other.index;
+    reader = other.reader;
+}
+
+    void
+SortBlock::operator=(
+    SortBlock& other)
+{
+    entries = other.entries;
+    fileOffset = other.fileOffset;
+    fileBytes = other.fileBytes;
+    index = other.index;
+    index = other.index;
+    reader = other.reader;
+}
+
 SortedThreadSAMWriter::SortedThreadSAMWriter(size_t i_bufferSize)
     : ThreadSAMWriter(i_bufferSize),
         parent(NULL),
         largest(1000),
-        locations(new VariableSizeVector<Entry>(1000))
+        locations(1000)
 {
 }
 
 SortedThreadSAMWriter::~SortedThreadSAMWriter()
 {
-    delete locations;
 }
 
     bool
@@ -744,14 +786,14 @@ SortedThreadSAMWriter::afterWrite(
     size_t bufferOffset,
     unsigned length)
 {
-    locations->push_back(Entry(bufferOffset, length, location));
+    locations.entries.push_back(SortEntry(bufferOffset, length, location));
 }
 
     bool
-SortedThreadSAMWriter::beforeFlush(_int64 bufferOffset)
+SortedThreadSAMWriter::beforeFlush(_int64 fileOffset, _int64 length)
 {
     // sort buffered reads by location for later merge sort
-    std::sort(locations->begin(), locations->end(), Entry::comparator);
+    std::sort(locations.entries.begin(), locations.entries.end(), SortEntry::comparator);
     
     // wait for IO of other buffer to finish since we're going to sort into there
     if (! waitForIoCompletion()) {
@@ -761,19 +803,21 @@ SortedThreadSAMWriter::beforeFlush(_int64 bufferOffset)
     
     // copy into other buffer in sorted order & switch buffers
     unsigned target = 0;
-    for (VariableSizeVector<Entry>::iterator i = locations->begin(); i != locations->end(); i++) {
+    for (VariableSizeVector<SortEntry>::iterator i = locations.entries.begin(); i != locations.entries.end(); i++) {
         memcpy(buffer[1 - bufferBeingCreated] + target, buffer[bufferBeingCreated] + i->offset, i->length);
-        i->offset = bufferOffset + target;
+        i->offset = fileOffset + target;
         target += i->length;
     }
     bufferBeingCreated = 1 - bufferBeingCreated;
     
     // remember offsets for full-file sort, get a new vector of appropriate size
+    locations.fileOffset = fileOffset;
+    locations.fileBytes = length;
     parent->addLocations(locations);
-    if (locations->size() > largest) {
-        largest = (locations->size() * 6) / 5; // grow by 20% if it exceeds prior max
+    if (locations.entries.size() > largest) {
+        largest = (locations.entries.size() * 6) / 5; // grow by 20% if it exceeds prior max
     }
-    locations = new VariableSizeVector<Entry>(largest);
+    locations.entries.reserve(largest);
 
     return true;
 }
@@ -808,67 +852,6 @@ SortedParallelSAMWriter::createThreadWriters(const Genome* genome)
     return worked;
 }
 
-class SortContext : public TaskContextBase
-{
-public:
-
-    void initializeThread() {}
-
-    void runThread();
-
-    void finishThread(SortContext* parent) {}
-
-    char*           source;
-    size_t          bufferSize;
-    unsigned        blockSize;
-    RangeSplitter*  range;
-    const size_t*   blockOffsets;
-    size_t          entryCount;
-    SortedParallelSAMWriter::Entry*
-                    entries;
-    AsyncFile*      file;
-};
-
-void SortContext::runThread()
-{
-    // allocate a pair of buffers and async writers
-    AsyncFile::Writer* writers[2] = {file->getWriter(), file->getWriter()};
-    char* buffers[2] = {(char*) BigAlloc(bufferSize), (char*) BigAlloc(bufferSize)};
-    if (buffers[0] == NULL || buffers[1] == NULL || writers[0] == NULL || writers[1] == NULL) {
-        fprintf(stderr, "could not allocate write buffers\n");
-        return;
-    }
-    int writingBuffer = 0;
-
-    // copy blocks of source into target at desired location
-    _int64 rangeStart, rangeLength;
-    while (range->getNextRange(&rangeStart, &rangeLength)) {
-        size_t targetOffset = blockOffsets[rangeStart];
-        size_t bufferOffset = 0;
-        unsigned end = min((unsigned) entryCount, (unsigned) (rangeStart + rangeLength) * blockSize );
-        for (unsigned read = rangeStart * blockSize; ; read++) {
-            SortedParallelSAMWriter::Entry* entry;
-            if (read == end || bufferOffset + (entry = &entries[read])->length > bufferSize) {
-                writers[1 - writingBuffer]->waitForCompletion();
-                writers[writingBuffer]->beginWrite(buffers[writingBuffer], bufferOffset, targetOffset, NULL);
-                writingBuffer = 1 - writingBuffer;
-                targetOffset += bufferOffset;
-                bufferOffset = 0;
-                if (read == end) {
-                    break;
-                }
-            }
-            memcpy(buffers[writingBuffer] + bufferOffset, source + entry->offset, entry->length);
-            bufferOffset += entry->length;
-        }
-        writers[1 - writingBuffer]->waitForCompletion();
-    }
-    delete writers[0];
-    delete writers[1];
-    BigDealloc(buffers[0]);
-    BigDealloc(buffers[1]);
-}
-
     bool
 SortedParallelSAMWriter::close()
 {
@@ -876,97 +859,118 @@ SortedParallelSAMWriter::close()
         return false;
     }
     DestroyExclusiveLock(&lock);
-    // sort by location and copy from temp to final file in sorted order
-    // because of buffer sorting this should be a merge-sort rather than random-access
+
+    // merge sort from temp file into sorted file
     printf("sorting...");
     _int64 start = timeInMillis();
-    // todo: use in-memory merge sort instead of standard sort?
-    // copy into single buffer before sorting
-    size_t entryCount = 0;
-    for (VariableSizeVector<VariableSizeVector<Entry>*>::iterator i = locations.begin(); i != locations.end(); i++) {
-        entryCount += (*i)->size();
-    }
-    Entry* entries = (Entry*) BigAlloc(entryCount * sizeof(Entry));
-    size_t offset = 0;
-    for (VariableSizeVector<VariableSizeVector<Entry>*>::iterator i = locations.begin(); i != locations.end(); i++) {
-        memcpy(entries + offset, (*i)->begin(), (*i)->size() * sizeof(Entry));
-        offset += (*i)->size();
-    }
-    std::sort(entries, entries + entryCount, Entry::comparator);
-    printf(" %ld s\n", (timeInMillis() - start) / 1000);
 
-    printf("writing sorted reads...");
-    start = timeInMillis();
-    void* p;
-    MemoryMappedFile* map = OpenMemoryMappedFile(tempFile, 0, QueryFileSize(tempFile), &p, false, true);
-    if (map == NULL) {
-        fprintf(stderr, "Could not map temporary file\n");
-        // todo: just use unsorted file?
+    // setup - open all files, read first block, begin read for second
+    AsyncFile* temp = AsyncFile::open(tempFile, false);
+    const size_t ReadBufferSize = UnsortedBufferSize;
+    for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++) {
+        i->reader.open(temp, i->fileOffset, i->fileBytes, ReadBufferSize, true);
+    }
+    for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++) {
+        i->reader.endOpen();
+    }
+
+    // set up double-buffered output
+    AsyncFile* sorted = AsyncFile::open(sortedFile, true);
+    BufferedAsyncWriter writer;
+    const size_t WriteBufferSize = UnsortedBufferSize;
+    if (! writer.open(sorted, WriteBufferSize)) {
+        fprintf(stderr, "open sorted file for write failed\n");
         return false;
     }
 
-    // divide into blocks and figure out offset from base
-    const unsigned blockSize = 1000;
-    unsigned blockCount = (entryCount + blockSize - 1) / blockSize;
-    size_t* blockOffsets = new size_t[blockCount];
-    offset = headerSize;
-    for (unsigned block = 0; ; block++) {
-        blockOffsets[block] = offset;
-        if (block == blockCount - 1) {
+    // write out header
+    if (headerSize > 0) {
+        void* hbuf = BigAlloc(headerSize);
+        AsyncFile::Reader* hread = temp->getReader();
+        bool ok = hread->beginRead(hbuf, headerSize, 0, NULL);
+        ok &= hread->waitForCompletion();
+        ok &= hread->close();
+        delete hread;
+        if (! ok ) {
+            fprintf(stderr, "read header failed\n");
+            return false;
+        }
+        if (! writer.write(hbuf, headerSize)) {
+            fprintf(stderr, "write header failed\n");
+            return false;
+        }
+        BigDealloc(hbuf);
+    }
+
+    // merge input blocks into output
+    unsigned last = 0; // last location written
+    while (true) {
+        bool writingLast = false;
+        unsigned smallest = UINT32_MAX;
+        SortBlock* found = NULL;
+        // find smallest location to write out
+        for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++) {
+            if (i->index >= i->entries.size()) {
+                continue; // end of file
+            }
+            if (writingLast || i->entries[i->index].location == last) {
+                // optimize by writing out all entries that match last location
+                writingLast = true;
+                while (i->index < i->entries.size() && i->entries[i->index].location == last) {
+                    unsigned length = i->entries[i->index].length;
+                    if (! i->reader.read(writer.forWrite(length), length)) {
+                        fprintf(stderr, "read failed during merge sort\n");
+                        return false; // todo: clean up
+                    }
+                    i->index++;
+                }
+            } else if (found == NULL || i->entries[i->index].location < smallest) {
+                smallest = i->entries[i->index].location;
+                found = i;
+            }
+        }
+        if (writingLast) {
+            continue;
+        }
+        if (found == NULL) {
             break;
         }
-        for (unsigned i = 0; i < blockSize; i++) {
-            offset += entries[block * blockSize + i].length;
+        unsigned length = found->entries[found->index].length;
+        if (! found->reader.read(writer.forWrite(length), length)) {
+            fprintf(stderr, "read failed during merge sort\n");
+            return false; // todo: clean up
         }
+        last = found->entries[found->index].location;
+        found->index++;
     }
 
-    // setup for async permutation
-    RangeSplitter range(blockCount, nThreads);
-    SortContext context;
-    context.totalThreads = nThreads; // todo: optimize - might be better to use 2x or more
-    context.bindToProcessors = false; // disk bound, so processor affinity doesn't matter
-    context.source = (char*) p;
-    context.blockSize = blockSize;
-    context.bufferSize = UnsortedBufferSize; // use smaller write buffers
-    context.range = &range;
-    context.blockOffsets = blockOffsets;
-    context.entries = entries;
-    context.entryCount = entryCount;
-    context.file = AsyncFile::open(sortedFile, true);
-    if (context.file == NULL) {
-        fprintf(stderr, "could not open sorted file for write %s\n", sortedFile);
-        delete[] blockOffsets;
-        return false;
+    // close everything
+    bool ok = writer.close();
+    ok &= sorted->close();
+    delete sorted;
+    for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++) {
+        ok &= i->reader.close();
     }
-    // write out header
-    AsyncFile::Writer* hwrite = context.file->getWriter();
-    hwrite->beginWrite(p, headerSize, 0, NULL);
-    hwrite->waitForCompletion();
-    delete hwrite;
-    // run parallel tasks
-    ParallelTask<SortContext> task(&context);
-    task.run();
-
-    delete [] blockOffsets;
-    delete context.file;
-    BigDealloc(entries);
-    CloseMemoryMappedFile(map);
+    ok &= temp->close();
+    delete temp;
+    if (! ok) {
+        printf("files did not close properly\n");
+    }
     if (! DeleteSingleFile(tempFile)) {
         printf("warning: failure deleting temp file %s\n", tempFile);
     }
 
-    printf(" %lld reads, %lld bytes, %ld seconds\n",
-        entryCount, offset, (timeInMillis() - start) / 1000);
+    printf(" %ld s\n", (timeInMillis() - start) / 1000);
 
     return true;
 }
 
     void
 SortedParallelSAMWriter::addLocations(
-    VariableSizeVector<Entry>* append)
+    SortBlock& added)
 {
     AcquireExclusiveLock(&lock);
-    locations.push_back(append);
+    locations.push_back(added);
     ReleaseExclusiveLock(&lock);
 }
 

@@ -189,14 +189,14 @@ public:
     static AsyncFile* open(const char* filename, bool write);
 
     // free resources; must have destroyed all readers & writers first
-    virtual ~AsyncFile();
+    virtual bool close() = 0;
 
     // abstract class for asynchronous writes
     class Writer
     {
     public:
         // waits for all writes to complete, frees resources
-        virtual ~Writer();
+        virtual bool close() = 0;
 
         // begin a write; if there is already a write in progress, might wait for it to complete
         virtual bool beginWrite(void* buffer, size_t length, size_t offset, size_t *bytesWritten) = 0;
@@ -213,7 +213,7 @@ public:
     {
     public:
         // waits for alls reads to complete, frees resources
-        virtual ~Reader();
+        virtual bool close() = 0;
 
         // begin a new read; if there is already a read in progress, might wait for it to complete
         virtual bool beginRead(void* buffer, size_t length, size_t offset, size_t *bytesRead) = 0;
