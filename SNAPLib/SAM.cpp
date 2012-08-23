@@ -786,7 +786,8 @@ SortedThreadSAMWriter::afterWrite(
     size_t bufferOffset,
     unsigned length)
 {
-    locations.entries.push_back(SortEntry(bufferOffset, length, location));
+    SortEntry entry(bufferOffset, length, location);
+    locations.entries.push_back(entry);
 }
 
     bool

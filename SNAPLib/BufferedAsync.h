@@ -54,7 +54,7 @@ private:
     int                 writing; // 0 or 1
     size_t              writeOffset; // within buffer
     size_t              bufferSize;
-    volatile __int64    privateFileOffset; // used by default
+    volatile _int64     privateFileOffset; // used by default
     volatile _int64*    nextFileOffset; // for current buffer to write
     AsyncFile::Writer*  writer[2];
     char*               buffer[2];
