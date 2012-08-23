@@ -786,7 +786,8 @@ SortedThreadSAMWriter::afterWrite(
     size_t bufferOffset,
     unsigned length)
 {
-    locations.entries.push_back(SortEntry(bufferOffset, length, location));
+    SortEntry entry(bufferOffset, length, location);
+    locations.entries.push_back(entry);
 }
 
     bool
@@ -913,19 +914,21 @@ SortedParallelSAMWriter::close()
             if (i->index >= i->entries.size()) {
                 continue; // end of file
             }
-            if (writingLast || i->entries[i->index].location == last) {
+            unsigned location = i->entries[i->index].location;
+            if (writingLast || location == last) {
                 // optimize by writing out all entries that match last location
                 writingLast = true;
-                while (i->index < i->entries.size() && i->entries[i->index].location == last) {
+                while (i->index < i->entries.size() && location == last) {
                     unsigned length = i->entries[i->index].length;
                     if (! i->reader.read(writer.forWrite(length), length)) {
                         fprintf(stderr, "read failed during merge sort\n");
                         return false; // todo: clean up
                     }
                     i->index++;
+                    location = i->entries[i->index].location;
                 }
-            } else if (found == NULL || i->entries[i->index].location < smallest) {
-                smallest = i->entries[i->index].location;
+            } else if (found == NULL || location < smallest) {
+                smallest = location;
                 found = i;
             }
         }
@@ -940,7 +943,7 @@ SortedParallelSAMWriter::close()
             fprintf(stderr, "read failed during merge sort\n");
             return false; // todo: clean up
         }
-        last = found->entries[found->index].location;
+        last = smallest;
         found->index++;
     }
 
