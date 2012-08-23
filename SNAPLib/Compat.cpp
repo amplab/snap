@@ -957,7 +957,7 @@ PosixAsyncFile::PosixAsyncFile(
     bool
 PosixAsyncFile::close()
 {
-    return close(fd) == 0;
+    return ::close(fd) == 0;
 }
 
     AsyncFile::Writer*
