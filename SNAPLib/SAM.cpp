@@ -918,13 +918,16 @@ SortedParallelSAMWriter::close()
             if (writingLast || location == last) {
                 // optimize by writing out all entries that match last location
                 writingLast = true;
-                while (i->index < i->entries.size() && location == last) {
+                while (location == last) {
                     unsigned length = i->entries[i->index].length;
                     if (! i->reader.read(writer.forWrite(length), length)) {
                         fprintf(stderr, "read failed during merge sort\n");
                         return false; // todo: clean up
                     }
                     i->index++;
+                    if (i->index >= i->entries.size()) {
+                        break;
+                    }
                     location = i->entries[i->index].location;
                 }
             } else if (found == NULL || location < smallest) {
