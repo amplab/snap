@@ -51,13 +51,13 @@ BufferedAsyncReader::open(
     reader[0]->beginRead(buffer[0],length[0], offset, NULL);
     if (bytes > bufferSize) {
         length[1] = min(bytes - bufferSize, bufferSize);
-        reader[1]->beginRead(buffer[1], length[1], bufferSize, NULL);
+        reader[1]->beginRead(buffer[1], length[1], offset + bufferSize, NULL);
     } else {
         length[1] = 0;
     }
     reading = 0;
     readOffset = 0;
-    nextFileOffset = min(bytes, 2 * bufferSize);
+    nextFileOffset = offset + min(bytes, 2 * bufferSize);
     if (! async) {
         endOpen();
     }
@@ -108,7 +108,7 @@ BufferedAsyncReader::read(
         // begin read of next block
         if (nextFileOffset < fileSize) {
             length[1 - reading] = min(fileSize - nextFileOffset, bufferSize);
-            reader[1 - reading]->beginRead(buffer[1 - reading], 0, length[1 - reading], NULL);
+            reader[1 - reading]->beginRead(buffer[1 - reading], length[1 - reading], nextFileOffset, NULL);
             nextFileOffset += length[1 - reading];
         } else {
             length[1 - reading] = 0;
