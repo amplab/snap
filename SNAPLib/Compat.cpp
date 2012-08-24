@@ -1034,6 +1034,10 @@ PosixAsyncFile::Writer::waitForCompletion()
     if (writing) {
         WaitForSingleWaiterObject(&ready);
         writing = false;
+        // todo: shouldn't have to wait - signal should have only been given when it was ready
+        while (aio_error(&aiocb) == EINPROGRESS) {
+            usleep(2000);
+        }
         ssize_t ret = aio_return(&aiocb);
         if (ret < 0 && errno != 0) {
             warn("PosixAsyncFile Writer aio_return failed");
@@ -1096,6 +1100,10 @@ PosixAsyncFile::Reader::waitForCompletion()
     if (reading) {
         WaitForSingleWaiterObject(&ready);
         reading = false;
+        // todo: shouldn't have to wait - signal should have only been given when it was ready
+        while (aio_error(&aiocb) == EINPROGRESS) {
+            usleep(2000);
+        }
         ssize_t ret = aio_return(&aiocb);
         if (ret < 0 && errno != 0) {
             warn("PosixAsyncFile Reader aio_return");
