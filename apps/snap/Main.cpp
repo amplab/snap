@@ -32,7 +32,7 @@ Revision History:
 
 using namespace std;
 
-const char *SNAP_VERSION = "0.13.4";
+const char *SNAP_VERSION = "0.13.5";
 
 static void usage()
 {

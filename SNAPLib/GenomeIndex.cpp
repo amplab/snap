@@ -358,7 +358,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     }
 
     printf("%d(%lld%%) overflow entries, %d(%lld%%) duplicate overflows, %d(%lld%%) bad seeds, %d both complements used %d no string\n",
-        nextOverflowIndex,
+        nextOverflowIndex - 1,
         ((_int64)nextOverflowIndex - 1)*100 / countOfBases,
         countOfDuplicateOverflows,
         (_int64)countOfDuplicateOverflows * 100 / countOfBases,

@@ -167,4 +167,17 @@ toComplement(
     }
 }
 
+    
+    inline unsigned
+log10bucket(
+    unsigned n)
+{
+    unsigned factor = 1;
+    while (n >= 10) {
+        n /= 10;
+        factor *= 10;
+    }
+    return n * factor;
+}
+
 } // namespace util

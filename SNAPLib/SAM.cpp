@@ -862,8 +862,10 @@ SortedParallelSAMWriter::close()
     DestroyExclusiveLock(&lock);
 
     // merge sort from temp file into sorted file
+#if USE_DEVTEAM_OPTIONS
     printf("sorting...");
     _int64 start = timeInMillis();
+#endif
 
     // first replace offset in entries with block index, and sort them all in one large array
     size_t total = 0;
@@ -882,18 +884,22 @@ SortedParallelSAMWriter::close()
         offset += i->entries.size();
     }
     std::sort(entries, entries + total, SortEntry::comparator);
+#if USE_DEVTEAM_OPTIONS
     printf(" %ld s\nwriting sorted reads...", (timeInMillis() - start) / 1000);
     start = timeInMillis();
+#endif
 
     // setup - open all files, read first block, begin read for second
     AsyncFile* temp = AsyncFile::open(tempFile, false);
     const size_t ReadBufferSize = UnsortedBufferSize;
     char* buffers = (char*) BigAlloc(ReadBufferSize * 2 * locations.size());
     unsigned j = 0;
+#if USE_DEVTEAM_OPTIONS
     if (timeInMillis() - start > 1000) {
         printf(" (allocated %lld Mb in %lld s)",
             ReadBufferSize * 2 * locations.size() / (2 << 20), (timeInMillis() - start) / 1000);
     }
+#endif
     for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++, j++) {
         i->reader.open(temp, i->fileOffset, i->fileBytes, ReadBufferSize, true,
             buffers + j * 2 * ReadBufferSize, buffers + (j * 2 + 1) * ReadBufferSize);
@@ -960,8 +966,10 @@ SortedParallelSAMWriter::close()
         printf("warning: failure deleting temp file %s\n", tempFile);
     }
 
+#if USE_DEVTEAM_OPTIONS
     printf(" %u reads in %u blocks, %lld s (%lld s read wait, %lld s write wait)\n",
         total, locations.size(), (timeInMillis() - start)/1000, readWait/1000, writer.getWaitTimeInMillis()/1000);
+#endif
 
     return true;
 }
