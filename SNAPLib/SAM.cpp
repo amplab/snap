@@ -814,6 +814,7 @@ SortedThreadSAMWriter::beforeFlush(_int64 fileOffset, _int64 length)
     // remember offsets for full-file sort, get a new vector of appropriate size
     locations.fileOffset = fileOffset;
     locations.fileBytes = length;
+    printf("sorted %d entries at offset %lld length %lld\n", locations.entries.size(), fileOffset, length);
     parent->addLocations(locations);
     if (locations.entries.size() > largest) {
         largest = (locations.entries.size() * 6) / 5; // grow by 20% if it exceeds prior max

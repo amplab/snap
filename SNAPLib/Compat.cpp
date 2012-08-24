@@ -471,6 +471,7 @@ WindowsAsyncFile::Writer::beginWrite(
     if (! waitForCompletion()) {
         return false;
     }
+    printf("beginWrite %lld at %lld\n", length, offset);
     lap.OffsetHigh = (DWORD) (offset >> (8 * sizeof(DWORD)));
     lap.Offset = (DWORD) offset;
     if (!WriteFile(file->hFile,buffer, (DWORD) length, (LPDWORD) bytesWritten, &lap)) {
@@ -525,9 +526,10 @@ WindowsAsyncFile::Reader::beginRead(
     if (! waitForCompletion()) {
         return false;
     }
+    printf("beginRead %lld at %lld\n", length, offset);
     lap.OffsetHigh = (DWORD) (offset >> (8 * sizeof(DWORD)));
     lap.Offset = (DWORD) offset;
-    if (!ReadFile(file->hFile,buffer,(DWORD) length, (LPDWORD) bytesRead, &lap)) {
+    if (!ReadFile(file->hFile, buffer,(DWORD) length, (LPDWORD) bytesRead, &lap)) {
         if (ERROR_IO_PENDING != GetLastError()) {
             fprintf(stderr,"WindowsSAMWriter: WriteFile failed, %d\n",GetLastError());
             return false;
