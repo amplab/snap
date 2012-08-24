@@ -883,7 +883,7 @@ SortedParallelSAMWriter::close()
         }
         offset += i->entries.size();
     }
-    std::sort(entries, entries + total, SortEntry::comparator);
+    std::stable_sort(entries, entries + total, SortEntry::comparator);
 #if USE_DEVTEAM_OPTIONS
     printf(" %ld s\nwriting sorted reads...", (timeInMillis() - start) / 1000);
     start = timeInMillis();
