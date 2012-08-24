@@ -25,7 +25,7 @@ Environment:
 class BufferedAsyncReader
 {
 public:
-    bool                open(AsyncFile* file, size_t offset, size_t length, size_t bufferSize, bool async = false); 
+    bool                open(AsyncFile* file, size_t offset, size_t length, size_t bufferSize, bool async = false, void* buffer0 = NULL, void* buffer1 = NULL); 
     void                endOpen();
     bool                atEnd();
     bool                read(void* data, size_t bytes);
@@ -40,6 +40,7 @@ private:
     AsyncFile::Reader*  reader[2];
     char*               buffer[2];
     size_t              length[2];
+    bool                ownBuffer;
 };
 
 class BufferedAsyncWriter

@@ -867,8 +867,15 @@ SortedParallelSAMWriter::close()
     // setup - open all files, read first block, begin read for second
     AsyncFile* temp = AsyncFile::open(tempFile, false);
     const size_t ReadBufferSize = UnsortedBufferSize;
-    for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++) {
-        i->reader.open(temp, i->fileOffset, i->fileBytes, ReadBufferSize, true);
+    char* buffers = (char*) BigAlloc(ReadBufferSize * 2 * locations.size());
+    unsigned j = 0;
+    if (timeInMillis() - start > 1000) {
+        printf(" (allocated %lld Mb in %lld s)",
+            ReadBufferSize * 2 * locations.size() / (2 << 20), (timeInMillis() - start) / 1000);
+    }
+    for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++, j++) {
+        i->reader.open(temp, i->fileOffset, i->fileBytes, ReadBufferSize, true,
+            buffers + j * 2 * ReadBufferSize, buffers + (j * 2 + 1) * ReadBufferSize);
     }
     for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++) {
         i->reader.endOpen();
@@ -953,6 +960,7 @@ SortedParallelSAMWriter::close()
     }
     ok &= temp->close();
     delete temp;
+    BigDealloc(buffers);
     if (! ok) {
         printf("files did not close properly\n");
     }
