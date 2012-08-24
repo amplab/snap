@@ -945,8 +945,10 @@ SortedParallelSAMWriter::close()
     bool ok = writer.close();
     ok &= sorted->close();
     delete sorted;
+    _int64 readWait = 0;
     for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++) {
         ok &= i->reader.close();
+        readWait += i->reader.getWaitTimeInMillis();
     }
     ok &= temp->close();
     delete temp;
@@ -958,8 +960,8 @@ SortedParallelSAMWriter::close()
         printf("warning: failure deleting temp file %s\n", tempFile);
     }
 
-    printf(" %u reads in %u blocks, %ld s\n",
-        total, locations.size(), (timeInMillis() - start) / 1000);
+    printf(" %u reads in %u blocks, %lld s (%lld s read wait, %lld s write wait)\n",
+        total, locations.size(), (timeInMillis() - start)/1000, readWait/1000, writer.getWaitTimeInMillis()/1000);
 
     return true;
 }

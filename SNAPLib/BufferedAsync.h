@@ -30,6 +30,7 @@ public:
     bool                atEnd();
     bool                read(void* data, size_t bytes);
     bool                close();
+    _int64              getWaitTimeInMillis() { return waitTime / 1000000; }
 
 private:
     int                 reading; // 0 or 1
@@ -41,6 +42,7 @@ private:
     char*               buffer[2];
     size_t              length[2];
     bool                ownBuffer;
+    __int64             waitTime; // in nanos
 };
 
 class BufferedAsyncWriter
@@ -50,6 +52,7 @@ public:
     bool                write(void* data, size_t bytes);
     void*               forWrite(size_t bytes);
     bool                close();
+    _int64              getWaitTimeInMillis() { return waitTime / 1000000; }
 
 private:
     int                 writing; // 0 or 1
@@ -59,4 +62,5 @@ private:
     volatile _int64*    nextFileOffset; // for current buffer to write
     AsyncFile::Writer*  writer[2];
     char*               buffer[2];
+    __int64             waitTime; // in nanos
 };

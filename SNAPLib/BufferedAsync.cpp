@@ -36,6 +36,7 @@ BufferedAsyncReader::open(
     void* buffer1)
 {
     _ASSERT((buffer0 == NULL) == (buffer1 == NULL)); // both null or both non-null
+    waitTime = 0;
     reader[0] = file->getReader();
     reader[1] = file->getReader();
     bufferSize = i_bufferSize;
@@ -67,7 +68,9 @@ BufferedAsyncReader::open(
     void
 BufferedAsyncReader::endOpen()
 {
+    _int64 start = timeInNanos();
     reader[reading]->waitForCompletion();
+    waitTime += timeInNanos() - start;
 }
 
     bool
@@ -95,7 +98,9 @@ BufferedAsyncReader::read(
         // switch buffers
         readOffset -= length[reading];
         reading = 1 - reading;
+        _int64 start = timeInNanos();
         reader[reading]->waitForCompletion();
+        waitTime += timeInNanos() - start;
         if (readOffset > 0) {
             // copy second part of read segment
             // todo: allow for longer reads
@@ -135,6 +140,7 @@ BufferedAsyncWriter::open(
     size_t i_bufferSize,
     volatile _int64* sharedOffset)
 {
+    waitTime = 0;
     writer[0] = file->getWriter();
     writer[1] = file->getWriter();
     bufferSize = i_bufferSize;
@@ -172,7 +178,9 @@ BufferedAsyncWriter::forWrite(
     } else {
         _int64 fileOffset = InterlockedAdd64AndReturnNewValue(nextFileOffset, writeOffset) - writeOffset;
         ok = writer[writing]->beginWrite(buffer[writing], writeOffset, fileOffset, NULL);
+        _int64 start = timeInNanos();
         ok &= writer[1 - writing]->waitForCompletion();
+        waitTime += timeInNanos() - start;
         writing = 1 - writing;
         if (! ok) {
             fprintf(stderr, "BufferedAsyncWriter write failed\n");
@@ -192,11 +200,15 @@ BufferedAsyncWriter::forWrite(
     bool
 BufferedAsyncWriter::close()
 {
+    _int64 start = timeInNanos();
     bool ok = writer[1 - writing]->waitForCompletion();
+    waitTime += timeInNanos() - start;
     if (writeOffset > 0) {
         _int64 fileOffset = InterlockedAdd64AndReturnNewValue(nextFileOffset, writeOffset) - writeOffset;
         ok &= writer[writing]->beginWrite(buffer[writing], writeOffset, fileOffset, NULL);
+        _int64 start = timeInNanos();
         ok &= writer[writing]->waitForCompletion();
+        waitTime += timeInNanos() - start;
     }
     delete writer[0];
     delete writer[1];
