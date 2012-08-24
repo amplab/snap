@@ -866,6 +866,26 @@ SortedParallelSAMWriter::close()
     printf("sorting...");
     _int64 start = timeInMillis();
 
+    // first replace offset in entries with block index, and sort them all in one large array
+    size_t total = 0;
+    for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++) {
+        total += i->entries.size();
+    }
+    SortEntry* entries = (SortEntry*) BigAlloc(total * sizeof(SortEntry));
+    size_t offset = 0;
+    for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++) {
+        unsigned n = i->entries.size();
+        unsigned blockIndex = i - locations.begin();
+        memcpy(entries + offset, i->entries.begin(), n * (size_t) sizeof(SortEntry));
+        for (unsigned j = 0; j < n; j++) {
+            entries[offset + j].offset = blockIndex;
+        }
+        offset += i->entries.size();
+    }
+    std::sort(entries, entries + total, SortEntry::comparator);
+    printf(" %%ld s\nwriting sorted reads...", (timeInMillis() - start) / 1000);
+    start = timeInMillis();
+
     // setup - open all files, read first block, begin read for second
     AsyncFile* temp = AsyncFile::open(tempFile, false);
     const size_t ReadBufferSize = UnsortedBufferSize;
@@ -904,54 +924,18 @@ SortedParallelSAMWriter::close()
         BigDealloc(hbuf);
     }
 
-    // merge input blocks into output
-    unsigned last = 0; // last location written
-    while (true) {
-        bool writingLast = false;
-        unsigned smallest = UINT32_MAX;
-        SortBlock* found = NULL;
-        // find smallest location to write out
-        for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++) {
-            if (i->index >= i->entries.size()) {
-                continue; // end of file
-            }
-            unsigned location = i->entries[i->index].location;
-            if (writingLast || location == last) {
-                // optimize by writing out all entries that match last location
-                writingLast = true;
-                while (location == last) {
-                    unsigned length = i->entries[i->index].length;
-                    if (! i->reader.read(writer.forWrite(length), length)) {
-                        fprintf(stderr, "read failed during merge sort\n");
-                        return false; // todo: clean up
-                    }
-                    i->index++;
-                    if (i->index >= i->entries.size()) {
-                        break;
-                    }
-                    location = i->entries[i->index].location;
-                }
-            } else if (found == NULL || location < smallest) {
-                smallest = location;
-                found = i;
-            }
+    // merge input blocks into output using pre-sorted list
+    for (size_t i = 0; i < total; i++) {
+        SortEntry* entry = &entries[i];
+        void* buf = writer.forWrite(entry->length);
+        if (buf == NULL || ! locations[entry->offset].reader.read(buf, entry->length)) {
+            fprintf(stderr, "merge %s failed\n", buf ? "write" : "read");
+            return false;
         }
-        if (writingLast) {
-            continue;
-        }
-        if (found == NULL) {
-            break;
-        }
-        unsigned length = found->entries[found->index].length;
-        if (! found->reader.read(writer.forWrite(length), length)) {
-            fprintf(stderr, "read failed during merge sort\n");
-            return false; // todo: clean up
-        }
-        last = smallest;
-        found->index++;
     }
 
     // close everything
+    BigDealloc(entries);
     bool ok = writer.close();
     ok &= sorted->close();
     delete sorted;
@@ -967,7 +951,8 @@ SortedParallelSAMWriter::close()
         printf("warning: failure deleting temp file %s\n", tempFile);
     }
 
-    printf(" %ld s\n", (timeInMillis() - start) / 1000);
+    printf(" %u reads in %u blocks, %ld s\n",
+        total, locations.size(), (timeInMillis() - start) / 1000);
 
     return true;
 }
