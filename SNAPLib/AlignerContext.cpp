@@ -94,7 +94,9 @@ AlignerContext::runThread()
 {
     extension->beginThread();
     runIterationThread();
-    samWriter->close();
+    if (samWriter != NULL) {
+        samWriter->close();
+    }
     extension->finishThread();
 }
     
