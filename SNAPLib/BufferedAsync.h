@@ -42,7 +42,7 @@ private:
     char*               buffer[2];
     size_t              length[2];
     bool                ownBuffer;
-    __int64             waitTime; // in nanos
+    _int64              waitTime; // in nanos
 };
 
 class BufferedAsyncWriter
@@ -62,5 +62,5 @@ private:
     volatile _int64*    nextFileOffset; // for current buffer to write
     AsyncFile::Writer*  writer[2];
     char*               buffer[2];
-    __int64             waitTime; // in nanos
+    _int64              waitTime; // in nanos
 };
