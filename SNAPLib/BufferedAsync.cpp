@@ -49,6 +49,7 @@ BufferedAsyncReader::open(
         return false;
     }
     length[0] = min(bytes, bufferSize);
+    _int64 start = timeInNanos();
     reader[0]->beginRead(buffer[0],length[0], offset, NULL);
     if (bytes > bufferSize) {
         length[1] = min(bytes - bufferSize, bufferSize);
@@ -56,6 +57,7 @@ BufferedAsyncReader::open(
     } else {
         length[1] = 0;
     }
+    waitTime += timeInNanos() - start;
     reading = 0;
     readOffset = 0;
     nextFileOffset = offset + min(bytes, 2 * bufferSize);
@@ -113,7 +115,9 @@ BufferedAsyncReader::read(
         // begin read of next block
         if (nextFileOffset < fileSize) {
             length[1 - reading] = min(fileSize - nextFileOffset, bufferSize);
+            start = timeInNanos();
             reader[1 - reading]->beginRead(buffer[1 - reading], length[1 - reading], nextFileOffset, NULL);
+            waitTime += timeInNanos() - start;
             nextFileOffset += length[1 - reading];
         } else {
             length[1 - reading] = 0;
@@ -177,8 +181,8 @@ BufferedAsyncWriter::forWrite(
         return buffer[writing] + writeOffset - bytes;
     } else {
         _int64 fileOffset = InterlockedAdd64AndReturnNewValue(nextFileOffset, writeOffset) - writeOffset;
-        ok = writer[writing]->beginWrite(buffer[writing], writeOffset, fileOffset, NULL);
         _int64 start = timeInNanos();
+        ok = writer[writing]->beginWrite(buffer[writing], writeOffset, fileOffset, NULL);
         ok &= writer[1 - writing]->waitForCompletion();
         waitTime += timeInNanos() - start;
         writing = 1 - writing;
@@ -205,8 +209,8 @@ BufferedAsyncWriter::close()
     waitTime += timeInNanos() - start;
     if (writeOffset > 0) {
         _int64 fileOffset = InterlockedAdd64AndReturnNewValue(nextFileOffset, writeOffset) - writeOffset;
-        ok &= writer[writing]->beginWrite(buffer[writing], writeOffset, fileOffset, NULL);
         _int64 start = timeInNanos();
+        ok &= writer[writing]->beginWrite(buffer[writing], writeOffset, fileOffset, NULL);
         ok &= writer[writing]->waitForCompletion();
         waitTime += timeInNanos() - start;
     }
