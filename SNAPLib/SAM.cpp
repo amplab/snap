@@ -882,7 +882,7 @@ SortedParallelSAMWriter::close()
         offset += i->entries.size();
     }
     std::sort(entries, entries + total, SortEntry::comparator);
-    printf(" %%ld s\nwriting sorted reads...", (timeInMillis() - start) / 1000);
+    printf(" %ld s\nwriting sorted reads...", (timeInMillis() - start) / 1000);
     start = timeInMillis();
 
     // setup - open all files, read first block, begin read for second
