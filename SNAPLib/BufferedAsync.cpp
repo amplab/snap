@@ -26,14 +26,23 @@ using std::min;
 
 
     bool
-BufferedAsyncReader::open(AsyncFile* file, size_t offset, size_t bytes, size_t i_bufferSize, bool async)
+BufferedAsyncReader::open(
+    AsyncFile* file,
+    size_t offset,
+    size_t bytes,
+    size_t i_bufferSize,
+    bool async,
+    void* buffer0,
+    void* buffer1)
 {
+    _ASSERT((buffer0 == NULL) == (buffer1 == NULL)); // both null or both non-null
     reader[0] = file->getReader();
     reader[1] = file->getReader();
     bufferSize = i_bufferSize;
     fileSize = offset + bytes;
-    buffer[0] = (char*) BigAlloc(bufferSize);
-    buffer[1] = (char*) BigAlloc(bufferSize);
+    ownBuffer = buffer0 == NULL;
+    buffer[0] = (char*) (buffer0 != NULL ? buffer0 : BigAlloc(bufferSize));
+    buffer[1] = (char*) (buffer1 != NULL ? buffer1 : BigAlloc(bufferSize));
     if (reader[0] == NULL || reader[1] == NULL || buffer[0] == NULL || buffer[1] == NULL) {
         fprintf(stderr, "unable to setup temp file reader\n");
         return false;
@@ -113,8 +122,10 @@ BufferedAsyncReader::close()
 {
     delete reader[0];
     delete reader[1];
-    BigDealloc(buffer[0]);
-    BigDealloc(buffer[1]);
+    if (ownBuffer) {
+        BigDealloc(buffer[0]);
+        BigDealloc(buffer[1]);
+    }
     return true;
 }
    
