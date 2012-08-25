@@ -124,6 +124,10 @@ bool WaitForSingleWaiterObject(SingleWaiterObject *singleWaiterObject) {
     return true;
 }
 
+void ResetSingleWaiterObject(SingleWaiterObject *singleWaiterObject) {
+    ResetEvent(*singleWaiterObject);
+}
+
 
 void BindThreadToProcessor(unsigned processorNumber) // This hard binds a thread to a processor.  You can no-op it at some perf hit.
 {
@@ -687,6 +691,11 @@ bool WaitForSingleWaiterObject(SingleWaiterObject *waiter)
     return true;
 }
 
+void ResetSingleWaiterObject(SingleWaiterObject *waiter)
+{
+    (*waiter)->init();
+}
+
 _uint32 InterlockedIncrementAndReturnNewValue(volatile _uint32 *valueToDecrement)
 {
     return (_uint32) __sync_fetch_and_add((volatile int*) valueToDecrement, 1) + 1;
@@ -1033,11 +1042,8 @@ PosixAsyncFile::Writer::waitForCompletion()
 {
     if (writing) {
         WaitForSingleWaiterObject(&ready);
+	ResetSingleWaiterObject(&ready);
         writing = false;
-        // todo: shouldn't have to wait - signal should have only been given when it was ready
-        while (aio_error(&aiocb) == EINPROGRESS) {
-            usleep(2000);
-        }
         ssize_t ret = aio_return(&aiocb);
         if (ret < 0 && errno != 0) {
             warn("PosixAsyncFile Writer aio_return failed");
@@ -1099,11 +1105,8 @@ PosixAsyncFile::Reader::waitForCompletion()
 {
     if (reading) {
         WaitForSingleWaiterObject(&ready);
+	ResetSingleWaiterObject(&ready);
         reading = false;
-        // todo: shouldn't have to wait - signal should have only been given when it was ready
-        while (aio_error(&aiocb) == EINPROGRESS) {
-            usleep(2000);
-        }
         ssize_t ret = aio_return(&aiocb);
         if (ret < 0 && errno != 0) {
             warn("PosixAsyncFile Reader aio_return");

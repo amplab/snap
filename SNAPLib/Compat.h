@@ -126,6 +126,7 @@ bool DestroyExclusiveLock(ExclusiveLock *lock);
 //
 // Single waiter objects.  The semantics are that a single thread can wait on one of these, and when it's
 // set by any thread, the waiter will proceed.  It works regardless of the order of waiting and signalling.
+// Can be reset back to unsignalled state.
 //
 
 
@@ -133,6 +134,7 @@ bool CreateSingleWaiterObject(SingleWaiterObject *newWaiter);
 void DestroySingleWaiterObject(SingleWaiterObject *waiter);
 void SignalSingleWaiterObject(SingleWaiterObject *singleWaiterObject);
 bool WaitForSingleWaiterObject(SingleWaiterObject *singleWaiterObject);
+void ResetSingleWaiterObject(SingleWaiterObject *singleWaiterObject);
 
 
 //
