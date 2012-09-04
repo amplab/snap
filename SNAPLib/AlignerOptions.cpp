@@ -89,7 +89,7 @@ AlignerOptions::usageMessage()
         "  -e   compute error rate assuming wgsim-generated reads\n"
         "  -P   disables cache prefetching in the genome; may be helpful for machines\n"
         "       with small caches or lots of cores/cache\n"
-        "  -s   sort output file by aligment location\n"
+        "  -so  sort output file by alignment location\n"
         "  -sm  memory to use for sorting in Gb\n"
         "  -f   filter output (a=aligned only, s=single hit only, u=unaligned only)\n"
 #if     USE_DEVTEAM_OPTIONS
@@ -167,7 +167,7 @@ AlignerOptions::parse(
     } else if (strcmp(argv[n], "-b") == 0) {
         bindToProcessors = true;
         return true;
-    } else if (strcmp(argv[n], "-s") == 0) {
+    } else if (strcmp(argv[n], "-so") == 0) {
         sortOutput = true;
         return true;
     } else if (strcmp(argv[n], "-sm") == 0) {
