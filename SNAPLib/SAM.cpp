@@ -572,7 +572,7 @@ ThreadSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *resu
             }
     }
 
-    size_t bufferOffset[2] = {bufferSize - sizeUsed[0] - sizeUsed[1], bufferSize - sizeUsed[1]};
+    size_t bufferOffset[2] = {bufferSize - remainingBufferSpace, bufferSize - remainingBufferSpace + sizeUsed[0]};
     remainingBufferSpace -= (sizeUsed[0] + sizeUsed[1]);
     afterWrite(result->status[0] != NotFound ? result->location[0] : UINT32_MAX, bufferOffset[0], sizeUsed[0]);
     afterWrite(result->status[1] != NotFound ? result->location[1] : UINT32_MAX, bufferOffset[1], sizeUsed[1]);
@@ -881,7 +881,7 @@ SortedParallelSAMWriter::close()
         for (unsigned j = 0; j < n; j++) {
             entries[offset + j].offset = blockIndex;
         }
-        offset += i->entries.size();
+        offset += n;
     }
     std::stable_sort(entries, entries + total, SortEntry::comparator);
 #if USE_DEVTEAM_OPTIONS
