@@ -94,7 +94,6 @@ BufferedAsyncReader::read(
     }
     size_t first = min(bytes, length[reading] - readOffset);
     memcpy(data, buffer[reading] + readOffset, first);
-    data = (char*) data + first;
     readOffset += bytes;
     if (readOffset >= length[reading]) {
         // switch buffers
@@ -110,7 +109,7 @@ BufferedAsyncReader::read(
                 fprintf(stderr, "read length too big\n");
                 return false;
             }
-            memcpy(data, buffer[reading], readOffset);
+            memcpy((char*) data + first, buffer[reading], readOffset);
         }
         // begin read of next block
         if (nextFileOffset < fileSize) {
