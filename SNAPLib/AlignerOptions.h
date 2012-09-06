@@ -62,6 +62,8 @@ struct AlignerOptions : public AbstractOptions
     bool                sortOutput;
     unsigned            sortMemory; // total output sorting buffer size in Gb
     unsigned            filterFlags;
+    bool                explorePopularSeeds;
+    bool                stopOnFirstHit;
     AbstractOptions    *extra; // extra options
 
     void usage();

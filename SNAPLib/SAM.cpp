@@ -1126,11 +1126,11 @@ SAMReader::parseHeader(const char *fileName, char *firstLine, char *endOfBuffer,
             }
             pieceName[pieceNameBufferSize - 1] = '\0';
 
-            if (!genome->getOffsetOfPiece(pieceName,NULL)) {
-                fprintf(stderr,"SAM file '%s' contains sequence name '%s' that isn't in the reference genome.\n",
-                            fileName,pieceName);
-                return false;
-            }
+            //if (!genome->getOffsetOfPiece(pieceName,NULL)) {
+            //    fprintf(stderr,"SAM file '%s' contains sequence name '%s' that isn't in the reference genome.\n",
+            //                fileName,pieceName);
+            //    return false;
+            //}
         } else if (!strncmp("@HD",nextLineToProcess,3) || !strncmp("@RG",nextLineToProcess,3) || !strncmp("@PG",nextLineToProcess,3) ||
             !strncmp("@CO",nextLineToProcess,3)) {
             //

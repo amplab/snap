@@ -45,6 +45,8 @@ AlignerOptions::AlignerOptions(
     sortOutput(false),
     sortMemory(0),
     filterFlags(0),
+    explorePopularSeeds(false),
+    stopOnFirstHit(false),
     extra(NULL)
 {
     if (forPairedEnd) {
@@ -91,7 +93,9 @@ AlignerOptions::usageMessage()
         "       with small caches or lots of cores/cache\n"
         "  -s   sort output file by aligment location\n"
         "  -sm  memory to use for sorting in Gb\n"
-        "  -f   filter output (a=aligned only, s=single hit only, u=unaligned only)\n"
+        "  -x   explore some hits of overly popular seeds (useful for filtering)\n"
+        "  -f   stop on first match within edit distance limit (filtering mode)\n"
+        "  -F   filter output (a=aligned only, s=single hit only, u=unaligned only)\n"
 #if     USE_DEVTEAM_OPTIONS
         "  -I   ignore IDs that don't match in the paired-end aligner\n"
         "  -S   selectivity; randomly choose 1/selectivity of the reads to score\n"
@@ -176,7 +180,7 @@ AlignerOptions::parse(
             n++;
             return true;
         }
-    } else if (strcmp(argv[n], "-f") == 0) {
+    } else if (strcmp(argv[n], "-F") == 0) {
         if (n + 1 < argc) {
             n++;
             if (strcmp(argv[n], "a") == 0) {
@@ -190,6 +194,12 @@ AlignerOptions::parse(
             }
             return true;
         }
+    } else if (strcmp(argv[n], "-x") == 0) {
+        explorePopularSeeds = true;
+        return true;
+    } else if (strcmp(argv[n], "-f") == 0) {
+        stopOnFirstHit = true;
+        return true;
 #if     USE_DEVTEAM_OPTIONS
     } else if (strcmp(argv[n], "-I") == 0) {
         ignoreMismatchedIDs = true;

@@ -110,6 +110,8 @@ SingleAlignerContext::runIterationThread()
         fprintf(stderr, "Failed to create aligner!\n");
         exit(1);
     }
+    aligner->setExplorePopularSeeds(options->explorePopularSeeds);
+    aligner->setStopOnFirstHit(options->stopOnFirstHit);
 
     // Keep grabbing ranges of the file and processing them.
     ReadReader *reader = NULL;
