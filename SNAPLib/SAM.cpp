@@ -90,6 +90,7 @@ SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBuffe
         return false;
     }
 
+#ifndef SKIP_SQ_LINES
     // Write an @SQ line for each chromosome / piece in the genome
     const Genome::Piece *pieces = genome->getPieces();
     int numPieces = genome->getNumPieces();
@@ -104,6 +105,7 @@ SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBuffe
             return false;
         }
     }
+#endif // SKIP_SQ_LINES
 
     *headerActualSize = bytesConsumed;
     return true;
