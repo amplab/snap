@@ -608,12 +608,12 @@ ParallelSAMWriter::initialize(const char *fileName, const Genome *genome, unsign
         return false;
     }
 
-    const size_t headerBufferSize = 20000;
-    char headerBuffer[headerBufferSize];
+    char *headerBuffer = new char[SAMWriter::HEADER_BUFFER_SIZE];
     size_t headerActualSize;
 
-    if (!SAMWriter::generateHeader(genome,headerBuffer,headerBufferSize,&headerActualSize, sorted)) {
+    if (!SAMWriter::generateHeader(genome,headerBuffer,SAMWriter::HEADER_BUFFER_SIZE,&headerActualSize, sorted)) {
         fprintf(stderr,"WindowsParallelSAMWriter: unable to generate SAM header.\n");
+        delete[] headerBuffer;
         return false;
     }
 
@@ -621,23 +621,27 @@ ParallelSAMWriter::initialize(const char *fileName, const Genome *genome, unsign
 
     if (NULL == hwriter) {
         fprintf(stderr,"ParallelSAMWriter: unable to create writer\n");
+        delete[] headerBuffer;
         return false;
     }
 
     size_t bytesWritten;
     if (! hwriter->beginWrite(headerBuffer, headerActualSize, 0, &bytesWritten)) {
         fprintf(stderr,"ParallelSAMWriter: unable to write header to file\n");
+        delete[] headerBuffer;
         return false;
     }
 
     if (! hwriter->waitForCompletion()) {
         fprintf(stderr,"ParallelSAMWriter: failed to complete\n");
+        delete[] headerBuffer;
         return false;
     }
     if (! hwriter->close()) {
         fprintf(stderr, "ParallelSAMWriter: failed to close\n");
     }
     delete hwriter;
+    delete[] headerBuffer;
 
     nextWriteOffset = headerActualSize;
 
