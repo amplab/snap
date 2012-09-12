@@ -267,6 +267,10 @@ private:
 
     void                            addLocations(SortBlock& added);
 
+    bool                            mergeSort();
+
+    bool                            memoryMappedSort();
+
     const size_t                    totalMemory;
     size_t                          headerSize;
     char*                           tempFile;
