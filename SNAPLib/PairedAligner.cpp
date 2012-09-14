@@ -350,7 +350,7 @@ void PairedAlignerContext::runIterationThread()
                 result.status[1] = NotFound;
                 result.location[0] = 0xFFFFFFFF;
                 result.location[1] = 0xFFFFFFFF;
-                if (samWriter != NULL) {
+                if (samWriter != NULL && (options->passFilter(&read0, result.status[0]) || options->passFilter(&read1, result.status[1]))) {
                     samWriter->writePair(&read0, &read1, &result);
                 }
                 continue;
