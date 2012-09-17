@@ -1366,8 +1366,8 @@ SAMReader::getReadFromLine(
     char *field[nSAMFields];
     size_t fieldLength[nSAMFields];
 
-    if (!parseLine(line,endOfBuffer,field,lineLength,fieldLength)) {
-        fprintf(stderr,"Failed to parse SAM line.\n");
+    if (!parseLine(line, endOfBuffer, field, lineLength, fieldLength)) {
+        fprintf(stderr, "Failed to parse SAM line:\n%.*s\n", lineLength, line);
         exit(1);
     }
 
