@@ -85,7 +85,7 @@ SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBuffe
 {
     
     size_t bytesConsumed = snprintf(header, headerBufferSize, "@HD\tVN:1.4\tSO:%s\n", sorted ? "coordinate" : "unsorted");
-    if (bytesConsumed > headerBufferSize) {
+    if (bytesConsumed >= headerBufferSize) {
         fprintf(stderr,"SAMWriter: header buffer too small\n");
         return false;
     }
@@ -100,7 +100,7 @@ SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBuffe
         unsigned end = (i + 1 < numPieces) ? pieces[i+1].beginningOffset : genomeLen;
         bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%u\n", pieces[i].name, end - start);
 
-        if (bytesConsumed > headerBufferSize) {
+        if (bytesConsumed >= headerBufferSize) {
             fprintf(stderr,"SAMWriter: header buffer too small\n");
             return false;
         }
@@ -342,7 +342,10 @@ SAMWriter::generateSAMText(
         // Out of buffer space.
         //
         return false;
+    } else if (charsInString == bufferSpace) {
+      buffer[bufferSpace-1] = '\n'; // overwrite trailing null with newline
     }
+
 
     if (NULL != spaceUsed) {
         *spaceUsed = charsInString;
