@@ -81,7 +81,7 @@ TEST_F(LandauVishkinTest, "CIGAR strings") {
     ASSERT_STREQ("2=2X1=", cigarBuf);
 
     lvc.computeEditDistance("abcde", 5, "abXXe", 5, 2, cigarBuf, bufLen, true);
-    ASSERT_STREQ("2M2X1M", cigarBuf);
+    ASSERT_STREQ("5M", cigarBuf);
 
     lvc.computeEditDistance("abcde", 5, "abcXXde", 7, 3, cigarBuf, bufLen, false);
     ASSERT_STREQ("3=2I2=", cigarBuf);
