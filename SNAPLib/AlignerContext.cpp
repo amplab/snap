@@ -33,7 +33,7 @@ Revision History:
 using std::max;
 using std::min;
 
-AlignerContext::AlignerContext(AlignerExtension* i_extension)
+AlignerContext::AlignerContext(int i_argc, const char **i_argv, const char *i_version, AlignerExtension* i_extension)
     :
     index(NULL),
     parallelSamWriter(NULL),
@@ -43,7 +43,10 @@ AlignerContext::AlignerContext(AlignerExtension* i_extension)
     extension(i_extension != NULL ? i_extension : new AlignerExtension()),
     inputFilename(NULL),
     fileSplitter(NULL),
-    samWriter(NULL)
+    samWriter(NULL),
+    argc(i_argc),
+    argv(i_argv),
+    version(i_version)
 {
 }
 
@@ -52,9 +55,9 @@ AlignerContext::~AlignerContext()
     delete extension;
 }
 
-void AlignerContext::runAlignment(int argc, char **argv)
+void AlignerContext::runAlignment(int argc, const char **argv, const char *version)
 {
-    options = parseOptions(argc, argv);
+    options = parseOptions(argc, argv, version);
     initialize();
     extension->initialize();
     
@@ -154,7 +157,7 @@ AlignerContext::beginIteration()
                                     (size_t) index->getGenome()->getCountOfBases() / 3);
     if (NULL != options->samFileTemplate) {
         parallelSamWriter = ParallelSAMWriter::create(options->samFileTemplate,index->getGenome(),
-            options->numThreads, options->sortOutput, totalMemory, options->useM);
+            options->numThreads, options->sortOutput, totalMemory, options->useM, argc, argv, version);
         if (NULL == parallelSamWriter) {
             fprintf(stderr,"Unable to create SAM file writer.  Just aligning for speed, no output will be generated.\n");
         }

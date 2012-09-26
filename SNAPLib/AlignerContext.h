@@ -40,13 +40,13 @@ class AlignerContext : public TaskContextBase
 {
 public:
 
-    AlignerContext(AlignerExtension* i_extension = NULL);
+    AlignerContext(int i_argc, const char **i_argv, const char *i_version, AlignerExtension* i_extension = NULL);
 
     ~AlignerContext();
 
     // running alignment
 
-    void runAlignment(int argc, char **argv);
+    void runAlignment(int argc, const char **argv, const char *version);
     
     // ParallelTask template
 
@@ -72,7 +72,7 @@ protected:
     // overrideable by concrete single/paired alignment subclasses
     
     // parse options from the command line
-    virtual AlignerOptions* parseOptions(int argc, char **argv) = 0;
+    virtual AlignerOptions* parseOptions(int argc, const char **argv, const char *version) = 0;
     
     // initialize from options
     virtual void initialize();
@@ -102,12 +102,15 @@ protected:
     int                 confDiff;
     int                 adaptiveConfDiff;
     bool                computeError;
-    char               *inputFilename;
+    const char         *inputFilename;
     bool                inputFileIsFASTQ;   // Else SAM
     RangeSplitter      *fileSplitter;
     unsigned            selectivity;
     bool                detailedStats;
     ReadClippingType    clipping;
+    int                 argc;
+    const char        **argv;
+    const char         *version;
 
     // iteration variables
     int                 confDiff_;

@@ -50,15 +50,20 @@ static bool stringEndsWith(const char* str, const char* pattern) {
 }
 
 SingleAlignerContext::SingleAlignerContext(AlignerExtension* i_extension)
-    : AlignerContext(i_extension)
+    : AlignerContext(0, NULL, NULL, i_extension)
 {
 }
 
     AlignerOptions*
 SingleAlignerContext::parseOptions(
-    int argc,
-    char **argv)
+    int i_argc,
+    const char **i_argv,
+    const char *i_version)
 {
+    argc = i_argc;
+    argv = i_argv;
+    version = i_version;
+
     AlignerOptions* options = new AlignerOptions(
         "snap single <index-dir> <inputFile> [-o output.sam] [<options>]",false);
     options->extra = extension->extraOptions();

@@ -32,7 +32,7 @@ Revision History:
 
 using namespace std;
 
-const char *SNAP_VERSION = "0.13.6";
+const char *SNAP_VERSION = "0.13.7";
 
 static void usage()
 {
@@ -47,7 +47,7 @@ static void usage()
 }
 
 
-int main(int argc, char **argv)
+int main(int argc, const char **argv)
 {
     printf("Welcome to SNAP version %s.\n\n", SNAP_VERSION);
 
@@ -57,10 +57,10 @@ int main(int argc, char **argv)
         GenomeIndex::runIndexer(argc - 2, argv + 2);
     } else if (strcmp(argv[1], "single") == 0) {
         SingleAlignerContext single;
-        single.runAlignment(argc - 2, argv + 2);
+        single.runAlignment(argc - 2, argv + 2, SNAP_VERSION);
     } else if (strcmp(argv[1], "paired") == 0) {
         PairedAlignerContext paired;
-        paired.runAlignment(argc - 2, argv + 2);
+        paired.runAlignment(argc - 2, argv + 2, SNAP_VERSION);
     } else {
         fprintf(stderr, "Invalid command: %s\n\n", argv[1]);
         usage();

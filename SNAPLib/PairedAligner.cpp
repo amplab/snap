@@ -181,7 +181,7 @@ void PairedAlignerOptions::usageMessage()
         DEFAULT_MAX_SPACING);
 }
 
-bool PairedAlignerOptions::parse(char** argv, int argc, int& n)
+bool PairedAlignerOptions::parse(const char** argv, int argc, int& n)
 {
     if (strcmp(argv[n], "-s") == 0) {
         if (n + 2 < argc) {
@@ -196,7 +196,7 @@ bool PairedAlignerOptions::parse(char** argv, int argc, int& n)
 }
 
 PairedAlignerContext::PairedAlignerContext(AlignerExtension* i_extension)
-    : AlignerContext(i_extension)
+    : AlignerContext( 0,  NULL, NULL, i_extension)
 {
 }
 
@@ -209,8 +209,12 @@ static bool stringEndsWith(const char* str, const char* pattern) {
     }
 }
 
-AlignerOptions* PairedAlignerContext::parseOptions(int argc, char **argv)
+AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_argv, const char *i_version)
 {
+    argc = i_argc;
+    argv = i_argv;
+    version = i_version;
+
     PairedAlignerOptions* options = new PairedAlignerOptions(
         "snap paired <index-dir> <read1.fq> <read2.fq> [-o output.sam] [<options>]\n"
         "   or  snap paired <index-dir> <reads.sam> [-o output.sam] [<options>]");

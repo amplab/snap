@@ -38,7 +38,7 @@ protected:
 
     // AlignerContext
     
-    virtual AlignerOptions* parseOptions(int argc, char **argv);
+    virtual AlignerOptions* parseOptions(int argc, const char **argv, const char *version);
 
     virtual void initialize();
 
@@ -68,9 +68,9 @@ struct PairedAlignerOptions : public AlignerOptions
 
     virtual void usageMessage();
 
-    virtual bool parse(char** argv, int argc, int& n);
+    virtual bool parse(const char** argv, int argc, int& n);
 
     int minSpacing;
     int maxSpacing;
-    char* fastqFile1;
+    const char* fastqFile1;
 };

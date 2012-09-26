@@ -37,7 +37,7 @@ protected:
 
     // AlignerContext overrides
 
-    virtual AlignerOptions* parseOptions(int argc, char **argv);
+    virtual AlignerOptions* parseOptions(int i_argc, const char **i_argv, const char *i_version);
 
     virtual AlignerStats* newStats();
     

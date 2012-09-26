@@ -119,7 +119,7 @@ AlignerOptions::usageMessage()
 
     bool
 AlignerOptions::parse(
-    char** argv,
+    const char** argv,
     int argc,
     int& n)
 {

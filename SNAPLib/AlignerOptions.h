@@ -35,7 +35,7 @@ struct AbstractOptions
 {
     virtual void usageMessage() = 0;
 
-    virtual bool parse(char** argv, int argc, int& n) = 0;
+    virtual bool parse(const char** argv, int argc, int& n) = 0;
 };
 
 struct AlignerOptions : public AbstractOptions
@@ -54,9 +54,9 @@ struct AlignerOptions : public AbstractOptions
     bool                bindToProcessors;
     bool                ignoreMismatchedIDs;
     unsigned            selectivity;
-    char               *samFileTemplate;
+    const char         *samFileTemplate;
     bool                doAlignerPrefetch;
-    char               *inputFilename;
+    const char         *inputFilename;
     bool                inputFileIsFASTQ;   // Else SAM
     ReadClippingType    clipping;
     bool                sortOutput;
@@ -71,7 +71,7 @@ struct AlignerOptions : public AbstractOptions
 
     virtual void usageMessage();
 
-    virtual bool parse(char** argv, int argc, int& n);
+    virtual bool parse(const char** argv, int argc, int& n);
 
     enum FilterFlags
     {

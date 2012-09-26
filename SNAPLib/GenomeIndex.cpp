@@ -57,14 +57,14 @@ static void usage()
     void
 GenomeIndex::runIndexer(
     int argc,
-    char **argv)
+    const char **argv)
 {
     if (argc < 2) {
         usage();
     }
 
-    char *fastaFile = argv[0];
-    char *outputDir = argv[1];
+    const char *fastaFile = argv[0];
+    const char *outputDir = argv[1];
 
     int seedLen = DEFAULT_SEED_SIZE;
     double slack = DEFAULT_SLACK;

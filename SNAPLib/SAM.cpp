@@ -69,9 +69,9 @@ SAMWriter:: ~SAMWriter()
 }
 
 
-SAMWriter* SAMWriter::create(const char *fileName, const Genome *genome, bool useM)
+SAMWriter* SAMWriter::create(const char *fileName, const Genome *genome, bool useM, int argc, const char **argv, const char *version)
 {
-    SimpleSAMWriter *writer = new SimpleSAMWriter(useM);
+    SimpleSAMWriter *writer = new SimpleSAMWriter(useM, argc, argv, version);
     if (!writer->open(fileName, genome)) {
         delete writer;
         return NULL;
@@ -81,10 +81,25 @@ SAMWriter* SAMWriter::create(const char *fileName, const Genome *genome, bool us
 }
 
     bool
-SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize, bool sorted)
+SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize, bool sorted, int argc, const char **argv, const char *version )
 {
-    
-    size_t bytesConsumed = snprintf(header, headerBufferSize, "@HD\tVN:1.4\tSO:%s\n", sorted ? "coordinate" : "unsorted");
+    char *commandLine;
+	size_t commandLineSize = 0;
+	for (int i = 0; i < argc; i++) {
+		commandLineSize += strlen(argv[i]) + 1;	// +1 is either a space or the terminating null
+	}
+	commandLine = new char[commandLineSize];
+	commandLine[0] = '\0';
+	for (int i = 0; i < argc; i++) {
+		strcat(commandLine,argv[i]);
+		if (i != argc-1) {
+			strcat(commandLine," ");
+		}
+	}
+    size_t bytesConsumed = snprintf(header, headerBufferSize, "@HD\tVN:1.4\tSO:%s\n@RG\tID:FASTQ\n@PG\tID:SNAP\tPN:SNAP\tCL:%s\tVN:%s\n", 
+		sorted ? "coordinate" : "unsorted",commandLine,version);
+	delete [] commandLine;
+	commandLine = NULL;
     if (bytesConsumed >= headerBufferSize) {
         fprintf(stderr,"SAMWriter: header buffer too small\n");
         return false;
@@ -272,8 +287,16 @@ SAMWriter::generateSAMText(
             const Genome::Piece *piece = genome->getPieceAtLocation(mateLocation);
             matePieceName = piece->name;
             matePositionInPiece = mateLocation - piece->beginningOffset + 1;
+
+            if (mateIsRC) {
+                flags |= SAM_NEXT_REVERSED;
+            }
+
+        } else {
+            flags |= SAM_NEXT_UNMAPPED;
         }
-		if (isOneLocation(result) && isOneLocation(mateResult)) {
+
+        if (genomeLocation != 0xffffffff && mateLocation != 0xffffffff) {
             flags |= SAM_ALL_ALIGNED;
             // Also compute the length of the whole paired-end string whose ends we saw. This is slightly
             // tricky because (a) we may have clipped some bases before/after each end and (b) we need to
@@ -284,20 +307,18 @@ SAMWriter::generateSAMText(
             _int64 mateBasesClippedAfter = mate->getUnclippedLength() - mate->getDataLength() - mateBasesClippedBefore;
             _int64 mateStart = mateLocation - (mateIsRC ? mateBasesClippedAfter : mateBasesClippedBefore);
             _int64 mateEnd = mateLocation + mate->getDataLength() + (!mateIsRC ? mateBasesClippedAfter : mateBasesClippedBefore);
-			if (pieceName == matePieceName) {
+			if (pieceName == matePieceName) { // pointer (not value) comparison, but that's OK.
 				if (myStart < mateStart) {
 					templateLength = mateEnd - myStart;
 				} else {
 					templateLength = -(myEnd - mateStart);
 				}
-			} else {
-				templateLength = 0;
-			}
-        }
-        if (mateIsRC) {
-            flags |= SAM_NEXT_REVERSED;
+ 			} // otherwise leave TLEN as zero.
         }
 
+        if (pieceName == matePieceName) {
+            matePieceName = "=";     // SAM Spec says to do this when they're equal (and not *, which won't happen because this is a pointer, not string, compare)
+        }
     }
 
     if (result == MultipleHits && genomeLocation == 0xFFFFFFFF) {
@@ -332,7 +353,7 @@ SAMWriter::generateSAMText(
         readLen = (unsigned)(firstSpace - read->getId());
     }
 
-    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s\n",
+    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s\tPG:SNAP\tRG:FASTQ\n",
         readLen, read->getId(),
         flags,
         pieceName,
@@ -362,7 +383,7 @@ SAMWriter::generateSAMText(
 }
 
 
-SimpleSAMWriter::SimpleSAMWriter(bool i_useM) : useM(i_useM)
+SimpleSAMWriter::SimpleSAMWriter(bool i_useM, int i_argc, const char **i_argv, const char *i_version) : useM(i_useM), argc(i_argc), argv(i_argv), version(i_version)
 {
     file = NULL;
 }
@@ -394,7 +415,7 @@ bool SimpleSAMWriter::open(const char* fileName, const Genome *genome)
     // Write out SAM header
     char *headerBuffer = new char[HEADER_BUFFER_SIZE];
     size_t headerSize;
-    if (!generateHeader(genome,headerBuffer,HEADER_BUFFER_SIZE,&headerSize, false)) {
+    if (!generateHeader(genome,headerBuffer,HEADER_BUFFER_SIZE,&headerSize, false, argc, argv, version)) {
         fprintf(stderr,"SimpleSAMWriter: unable to generate SAM header\n");
         return false;
     }
@@ -601,11 +622,14 @@ ParallelSAMWriter::create(
     unsigned		 nThreads,
     bool			 sort,
     size_t			 sortBufferMemory,
-	bool			 useM) 
+	bool			 useM,
+    int              argc,
+    const char     **argv,
+    const char      *version) 
 {
     ParallelSAMWriter *parallelWriter = sort
-        ? new SortedParallelSAMWriter(sortBufferMemory, useM)
-        : new ParallelSAMWriter(useM);
+        ? new SortedParallelSAMWriter(sortBufferMemory, useM, argc, argv, version)
+        : new ParallelSAMWriter(useM,argc,argv,version);
     if (!parallelWriter->initialize(fileName, genome, nThreads, sort)) {
         fprintf(stderr, "unable to initialize parallel SAM writer\n");
         delete parallelWriter;
@@ -627,7 +651,7 @@ ParallelSAMWriter::initialize(const char *fileName, const Genome *genome, unsign
     char *headerBuffer = new char[SAMWriter::HEADER_BUFFER_SIZE];
     size_t headerActualSize;
 
-    if (!SAMWriter::generateHeader(genome,headerBuffer,SAMWriter::HEADER_BUFFER_SIZE,&headerActualSize, sorted)) {
+    if (!SAMWriter::generateHeader(genome,headerBuffer,SAMWriter::HEADER_BUFFER_SIZE,&headerActualSize, sorted, argc, argv, version)) {
         fprintf(stderr,"WindowsParallelSAMWriter: unable to generate SAM header.\n");
         delete[] headerBuffer;
         return false;
