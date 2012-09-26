@@ -38,7 +38,7 @@ public:
 
     virtual bool close() = 0;
 
-    static SAMWriter* create(const char *fileName, const Genome *genome);
+    static SAMWriter* create(const char *fileName, const Genome *genome, bool useM);
 
     static bool generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize, bool sorted);
    
@@ -56,6 +56,7 @@ protected:
                         AlignmentResult             result, 
                         unsigned                    genomeLocation, 
                         bool                        isRC, 
+						bool						useM,
                         bool                        hasMate, 
                         bool                        firstInPair, 
                         Read *                      mate, 
@@ -83,7 +84,8 @@ private:
                         unsigned                    basesClippedBefore,
                         unsigned                    basesClippedAfter,
                         unsigned                    genomeLocation,
-                        bool                        isRC
+                        bool                        isRC,
+						bool						useM
                 );
 
 };
@@ -93,7 +95,7 @@ private:
  */
 class SimpleSAMWriter: public SAMWriter {
 public:
-    SimpleSAMWriter();
+    SimpleSAMWriter(bool i_useM);
 
     virtual ~SimpleSAMWriter();
 
@@ -117,6 +119,8 @@ private:
 
     const Genome *genome;
 
+	bool useM;
+
     LandauVishkinWithCigar lv;
 };
 
@@ -131,7 +135,7 @@ private:
 class ThreadSAMWriter : public SAMWriter {
 public:
 
-    ThreadSAMWriter(size_t i_bufferSize);
+    ThreadSAMWriter(size_t i_bufferSize, bool i_useM);
     virtual ~ThreadSAMWriter();
 
     bool initialize(AsyncFile* file, const Genome *i_genome, volatile _int64 *i_nextWriteOffset);
@@ -163,6 +167,8 @@ protected:
     const Genome                   *genome;
 
     LandauVishkinWithCigar          lv;
+
+	bool							useM;
 };
 
 class ParallelSAMWriter {
@@ -170,17 +176,18 @@ public:
     virtual ~ParallelSAMWriter();
 
     static ParallelSAMWriter*       create(const char *fileName, const Genome *genome,
-                                        unsigned nThreads, bool sort, size_t sortBufferMemory);
+                                        unsigned nThreads, bool sort, size_t sortBufferMemory, bool i_useM);
 
     static const size_t             UnsortedBufferSize = 16 * 1024 * 1024;
 
     virtual bool                    initialize(const char *fileName, const Genome *genome, unsigned nThreads, bool sorted);
 
-    SAMWriter *                     getWriterForThread(unsigned whichThread);
+    SAMWriter *                     getWriterForThread(int whichThread);
 
     virtual bool                    close();
 
 protected:
+									ParallelSAMWriter(bool i_useM) : useM(i_useM), writer(NULL) {}
 
     virtual bool                    createThreadWriters(const Genome* genome);
 
@@ -189,6 +196,8 @@ protected:
 
     ThreadSAMWriter               **writer;
     int                             nThreads;
+
+	bool							useM;
 };
 
 #pragma pack(push, 4)
@@ -227,7 +236,7 @@ class SortedThreadSAMWriter : public ThreadSAMWriter
 {
 public:
 
-    SortedThreadSAMWriter(size_t i_bufferSize);
+    SortedThreadSAMWriter(size_t i_bufferSize, bool useM);
     virtual ~SortedThreadSAMWriter();
 
 
@@ -249,7 +258,7 @@ class SortedParallelSAMWriter : public ParallelSAMWriter
 {
 public:
 
-    SortedParallelSAMWriter(size_t i_totalMemory) : totalMemory(i_totalMemory) {}
+    SortedParallelSAMWriter(size_t i_totalMemory, bool useM) : ParallelSAMWriter(useM), totalMemory(i_totalMemory) {}
 
     virtual ~SortedParallelSAMWriter() {}
     

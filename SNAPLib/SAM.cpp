@@ -69,9 +69,9 @@ SAMWriter:: ~SAMWriter()
 }
 
 
-SAMWriter* SAMWriter::create(const char *fileName, const Genome *genome)
+SAMWriter* SAMWriter::create(const char *fileName, const Genome *genome, bool useM)
 {
-    SimpleSAMWriter *writer = new SimpleSAMWriter();
+    SimpleSAMWriter *writer = new SimpleSAMWriter(useM);
     if (!writer->open(fileName, genome)) {
         delete writer;
         return NULL;
@@ -128,7 +128,8 @@ SAMWriter::computeCigarString(
     unsigned                    basesClippedBefore,
     unsigned                    basesClippedAfter,
     unsigned                    genomeLocation,
-    bool                        isRC
+    bool                        isRC,
+	bool						useM
 )
 {
     const char *reference = genome->getSubstring(genomeLocation, dataLength);
@@ -141,7 +142,8 @@ SAMWriter::computeCigarString(
                         dataLength,
                         MAX_K - 1,
                         cigarBuf,
-                        cigarBufLen);
+                        cigarBufLen,
+						useM);
     } else {
         //
         // Fell off the end of the chromosome.
@@ -181,6 +183,7 @@ SAMWriter::generateSAMText(
                 AlignmentResult             result, 
                 unsigned                    genomeLocation, 
                 bool                        isRC, 
+				bool						useM,
                 bool                        hasMate, 
                 bool                        firstInPair, 
                 Read *                      mate, 
@@ -256,7 +259,7 @@ SAMWriter::generateSAMText(
         positionInPiece = genomeLocation - piece->beginningOffset + 1; // SAM is 1-based
         cigar = computeCigarString(genome, lv, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize, 
                                    clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
-                                   genomeLocation, isRC);
+                                   genomeLocation, isRC, useM);
         mapQuality = (result == SingleHit || result == CertainHit) ? 60 : 0;
     } else {
         flags |= SAM_UNMAPPED;
@@ -265,7 +268,12 @@ SAMWriter::generateSAMText(
     if (hasMate) {
         flags |= SAM_MULTI_SEGMENT;
         flags |= (firstInPair ? SAM_FIRST_SEGMENT : SAM_LAST_SEGMENT);
-        if (isOneLocation(result) && isOneLocation(mateResult)) {
+        if (mateLocation != 0xFFFFFFFF) {
+            const Genome::Piece *piece = genome->getPieceAtLocation(mateLocation);
+            matePieceName = piece->name;
+            matePositionInPiece = mateLocation - piece->beginningOffset + 1;
+        }
+		if (isOneLocation(result) && isOneLocation(mateResult)) {
             flags |= SAM_ALL_ALIGNED;
             // Also compute the length of the whole paired-end string whose ends we saw. This is slightly
             // tricky because (a) we may have clipped some bases before/after each end and (b) we need to
@@ -276,20 +284,20 @@ SAMWriter::generateSAMText(
             _int64 mateBasesClippedAfter = mate->getUnclippedLength() - mate->getDataLength() - mateBasesClippedBefore;
             _int64 mateStart = mateLocation - (mateIsRC ? mateBasesClippedAfter : mateBasesClippedBefore);
             _int64 mateEnd = mateLocation + mate->getDataLength() + (!mateIsRC ? mateBasesClippedAfter : mateBasesClippedBefore);
-            if (myStart < mateStart) {
-                templateLength = mateEnd - myStart;
-            } else {
-                templateLength = -(myEnd - mateStart);
-            }
+			if (pieceName == matePieceName) {
+				if (myStart < mateStart) {
+					templateLength = mateEnd - myStart;
+				} else {
+					templateLength = -(myEnd - mateStart);
+				}
+			} else {
+				templateLength = 0;
+			}
         }
         if (mateIsRC) {
             flags |= SAM_NEXT_REVERSED;
         }
-        if (mateLocation != 0xFFFFFFFF) {
-            const Genome::Piece *piece = genome->getPieceAtLocation(mateLocation);
-            matePieceName = piece->name;
-            matePositionInPiece = mateLocation - piece->beginningOffset + 1;
-        }
+
     }
 
     if (result == MultipleHits && genomeLocation == 0xFFFFFFFF) {
@@ -354,7 +362,7 @@ SAMWriter::generateSAMText(
 }
 
 
-SimpleSAMWriter::SimpleSAMWriter()
+SimpleSAMWriter::SimpleSAMWriter(bool i_useM) : useM(i_useM)
 {
     file = NULL;
 }
@@ -438,7 +446,7 @@ void SimpleSAMWriter::write(
     char outputBuffer[maxLineLength];
     size_t outputBufferUsed;
 
-    if (!generateSAMText(read,result,genomeLocation,isRC,hasMate,firstInPair,mate,mateResult,
+    if (!generateSAMText(read, result, genomeLocation, isRC, useM, hasMate, firstInPair, mate, mateResult,
             mateLocation,mateIsRC, genome, &lv, outputBuffer, maxLineLength,&outputBufferUsed)) {
         fprintf(stderr,"SimpleSAMWriter: tried to generate too long of a SAM line (> %d)\n",maxLineLength);
         exit(1);
@@ -463,8 +471,8 @@ bool SimpleSAMWriter::close()
     return true;
 }
 
-ThreadSAMWriter::ThreadSAMWriter(size_t i_bufferSize)
-    : remainingBufferSpace(i_bufferSize), bufferBeingCreated(0), bufferSize(i_bufferSize)
+ThreadSAMWriter::ThreadSAMWriter(size_t i_bufferSize, bool i_useM)
+    : remainingBufferSpace(i_bufferSize), bufferBeingCreated(0), bufferSize(i_bufferSize), useM(i_useM)
 {
     buffer[0] = NULL;
     buffer[1] = NULL;
@@ -522,14 +530,14 @@ ThreadSAMWriter::close()
 ThreadSAMWriter::write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC)
 {
     size_t sizeUsed;
-    if (!generateSAMText(read,result,genomeLocation,isRC,false,true,NULL,UnknownAlignment,0,false,genome,&lv,
-            buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace, &sizeUsed)) {
+    if (!generateSAMText(read, result, genomeLocation, isRC, useM, false, true, NULL, UnknownAlignment, 0, false, genome, &lv,
+            buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace, remainingBufferSpace, &sizeUsed)) {
 
         if (!startIo()) {
             return false;
         }
 
-        if (!generateSAMText(read,result,genomeLocation,isRC,false,true,NULL,UnknownAlignment,0,false,genome,&lv,
+        if (!generateSAMText(read, result, genomeLocation, isRC, useM, false, true, NULL, UnknownAlignment, 0, false, genome, &lv,
                 buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace, &sizeUsed)) {
 
             fprintf(stderr,"WindowsSAMWriter: create SAM string into fresh buffer failed\n");
@@ -538,7 +546,7 @@ ThreadSAMWriter::write(Read *read, AlignmentResult result, unsigned genomeLocati
     }
     size_t bufferOffset = bufferSize - remainingBufferSpace;
     remainingBufferSpace -= sizeUsed;
-    afterWrite(result != NotFound ? genomeLocation : UINT32_MAX, bufferOffset, sizeUsed);
+    afterWrite(result != NotFound ? genomeLocation : UINT32_MAX, bufferOffset, (unsigned)sizeUsed);
     return true;
 }
 
@@ -551,12 +559,13 @@ ThreadSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *resu
     // work start IO and try again.
     //
     size_t sizeUsed[2];
-    bool writesFit = generateSAMText(read0,result->status[0],result->location[0],result->isRC[0],true,true,
-                                     read1,result->status[1],result->location[1],result->isRC[1],
+    bool writesFit = generateSAMText(read0, result->status[0], result->location[0], result->isRC[0], useM, true, true,
+                                     read1, result->status[1], result->location[1], result->isRC[1],
                         genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace,&sizeUsed[0]);
+
     if (writesFit) {
-        writesFit = generateSAMText(read1,result->status[1],result->location[1],result->isRC[1],true,false,
-                                    read0,result->status[0],result->location[0],result->isRC[0],
+        writesFit = generateSAMText(read1, result->status[1], result->location[1], result->isRC[1], useM, true, false,
+                                    read0, result->status[0], result->location[0], result->isRC[0],
                         genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace + sizeUsed[0],remainingBufferSpace-sizeUsed[0],&sizeUsed[1]);
     }
 
@@ -565,36 +574,38 @@ ThreadSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *resu
             return false;
         }
 
-        if (!generateSAMText(read0,result->status[0],result->location[0],result->isRC[0],true,true,
-                             read1,result->status[1],result->location[1],result->isRC[1],
+        if (!generateSAMText(read0, result->status[0], result->location[0], result->isRC[0], useM, true, true,
+                             read1, result->status[1], result->location[1], result->isRC[1],
                 genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace,&sizeUsed[0]) ||
-            !generateSAMText(read1,result->status[1],result->location[1],result->isRC[1],true,false,
-                             read0,result->status[0],result->location[0],result->isRC[0],
+            !generateSAMText(read1, result->status[1] ,result->location[1], result->isRC[1], useM, true, false,
+                             read0, result->status[0], result->location[0], result->isRC[0],
                 genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace + sizeUsed[0],remainingBufferSpace-sizeUsed[0],&sizeUsed[1])) {
 
-                fprintf(stderr,"WindowsSAMWriter: create SAM string into fresh buffer failed\n");
-                return false;
-            }
+
+            fprintf(stderr,"WindowsSAMWriter: create SAM string into fresh buffer failed\n");
+            return false;
+        }
     }
 
     size_t bufferOffset[2] = {bufferSize - remainingBufferSpace, bufferSize - remainingBufferSpace + sizeUsed[0]};
     remainingBufferSpace -= (sizeUsed[0] + sizeUsed[1]);
-    afterWrite(result->status[0] != NotFound ? result->location[0] : UINT32_MAX, bufferOffset[0], sizeUsed[0]);
-    afterWrite(result->status[1] != NotFound ? result->location[1] : UINT32_MAX, bufferOffset[1], sizeUsed[1]);
+    afterWrite(result->status[0] != NotFound ? result->location[0] : UINT32_MAX, bufferOffset[0], (unsigned)sizeUsed[0]);
+    afterWrite(result->status[1] != NotFound ? result->location[1] : UINT32_MAX, bufferOffset[1], (unsigned)sizeUsed[1]);
     return true;
 }
 
     ParallelSAMWriter *
 ParallelSAMWriter::create(
-    const char *fileName,
-    const Genome *genome,
-    unsigned nThreads,
-    bool sort,
-    size_t sortBufferMemory)
+    const char		*fileName,
+    const Genome	*genome,
+    unsigned		 nThreads,
+    bool			 sort,
+    size_t			 sortBufferMemory,
+	bool			 useM) 
 {
     ParallelSAMWriter *parallelWriter = sort
-        ? new SortedParallelSAMWriter(sortBufferMemory)
-        : new ParallelSAMWriter();
+        ? new SortedParallelSAMWriter(sortBufferMemory, useM)
+        : new ParallelSAMWriter(useM);
     if (!parallelWriter->initialize(fileName, genome, nThreads, sort)) {
         fprintf(stderr, "unable to initialize parallel SAM writer\n");
         delete parallelWriter;
@@ -665,8 +676,8 @@ ParallelSAMWriter::initialize(const char *fileName, const Genome *genome, unsign
 ParallelSAMWriter::createThreadWriters(const Genome* genome)
 {
     bool worked = true;
-    for (unsigned i = 0; i < nThreads; i++) {
-        writer[i] = new ThreadSAMWriter(UnsortedBufferSize);
+    for (int i = 0; i < nThreads; i++) {
+        writer[i] = new ThreadSAMWriter(UnsortedBufferSize, useM);
         worked &= writer[i]->initialize(file, genome, &nextWriteOffset);
     }
     return worked;
@@ -679,7 +690,7 @@ ParallelSAMWriter::~ParallelSAMWriter()
 
     SAMWriter*
 ParallelSAMWriter::getWriterForThread(
-    unsigned whichThread)
+    int whichThread)
 {
     _ASSERT(whichThread < nThreads);
     return writer[whichThread];
@@ -688,7 +699,7 @@ ParallelSAMWriter::getWriterForThread(
     bool
 ParallelSAMWriter::close()
 {
-    for (unsigned i = 0; i < nThreads; i++) {
+    for (int i = 0; i < nThreads; i++) {
         // writers were already closed by each thread so they could flush in parallel
         delete writer[i];
         writer[i] = NULL;
@@ -768,8 +779,8 @@ SortBlock::operator=(
     reader = other.reader;
 }
 
-SortedThreadSAMWriter::SortedThreadSAMWriter(size_t i_bufferSize)
-    : ThreadSAMWriter(i_bufferSize),
+SortedThreadSAMWriter::SortedThreadSAMWriter(size_t i_bufferSize, bool useM)
+    : ThreadSAMWriter(i_bufferSize, useM),
         parent(NULL),
         largest(1000),
         locations(1000)
@@ -855,7 +866,7 @@ SortedParallelSAMWriter::createThreadWriters(const Genome* genome)
     size_t bufferSize = totalMemory / nThreads / 2;
     bool worked = true;
     for (unsigned i = 0; i < nThreads; i++) {
-        SortedThreadSAMWriter* w = new SortedThreadSAMWriter(bufferSize);
+        SortedThreadSAMWriter* w = new SortedThreadSAMWriter(bufferSize, useM);
         writer[i] = w;
         worked &= w->initialize(this, genome);
     }
@@ -989,6 +1000,9 @@ SortedParallelSAMWriter::mergeSort()
 
     // set up double-buffered output
     AsyncFile* sorted = AsyncFile::open(sortedFile, true);
+	if (NULL == sorted) {
+		return false;
+	}
     BufferedAsyncWriter writer;
     const size_t WriteBufferSize = UnsortedBufferSize;
     if (! writer.open(sorted, WriteBufferSize)) {

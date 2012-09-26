@@ -67,7 +67,7 @@ public:
     // Compute the edit distance between two strings and write the CIGAR string in cigarBuf.
     // Returns -1 if the edit distance exceeds k or -2 if we run out of space in cigarBuf.
     int computeEditDistance(const char* text, int textLen, const char* pattern, int patternLen, int k,
-                            char* cigarBuf, int cigarBufLen, CigarFormat format = COMPACT_CIGAR_STRING);
+                            char* cigarBuf, int cigarBufLen, bool useM, CigarFormat format = COMPACT_CIGAR_STRING);
 private:
     int L[MAX_K+1][2 * MAX_K + 1];
     

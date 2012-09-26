@@ -224,7 +224,7 @@ _int64 QueryFileSize(const char *fileName) {
 DeleteSingleFile(
     const char* filename)
 {
-    return DeleteFile(filename);
+    return DeleteFile(filename) ? true : false;
 }
 
 class LargeFileHandle
@@ -443,7 +443,7 @@ WindowsAsyncFile::WindowsAsyncFile(
     bool
 WindowsAsyncFile::close()
 {
-    return CloseHandle(hFile);
+    return CloseHandle(hFile) ? true : false;
 }
 
     AsyncFile::Writer*
@@ -462,7 +462,7 @@ WindowsAsyncFile::Writer::Writer(WindowsAsyncFile* i_file)
 WindowsAsyncFile::Writer::close()
 {
     waitForCompletion();
-    return CloseHandle(lap.hEvent);
+    return CloseHandle(lap.hEvent) ? true : false;
 }
 
     bool
@@ -516,7 +516,7 @@ WindowsAsyncFile::Reader::Reader(
     bool
 WindowsAsyncFile::Reader::close()
 {
-    return CloseHandle(lap.hEvent);
+    return CloseHandle(lap.hEvent) ? true : false;
 }
 
     bool

@@ -73,7 +73,6 @@ public:
         // Methods to read the genome.
         //
         inline const char *getSubstring(size_t offset, size_t lengthNeeded) const {
-            // TODO: Don't return substrings that span piece (chromosome) boundaries
             if (offset > nBases || offset + lengthNeeded > nBases) {
                 // The first part of the test is for the unsigned version of a negative offset.
                 return NULL;

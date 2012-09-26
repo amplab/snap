@@ -197,7 +197,7 @@ int LandauVishkinWithCigar::computeEditDistance(
     const char* text, int textLen,
     const char* pattern, int patternLen,
     int k,
-    char *cigarBuf, int cigarBufLen,
+    char *cigarBuf, int cigarBufLen, bool useM, 
     CigarFormat format)
 {
     _ASSERT(k < MAX_K);
@@ -222,16 +222,22 @@ int LandauVishkinWithCigar::computeEditDistance(
     L[0][MAX_K] = end;
 done1:
     if (L[0][MAX_K] == end) {
-        // We matched the text exactly; fill the CIGAR string with all ='s
-        if (! writeCigar(&cigarBuf, &cigarBufLen, end, '=', format)) {
-            return -2;
-        }
-        if (patternLen > end) {
-            // Also need to write a bunch of X's past the end of the text
-            if (! writeCigar(&cigarBuf, &cigarBufLen, patternLen - end, 'X', format)) {
-                return -2;
-            }
-        }
+        // We matched the text exactly; fill the CIGAR string with all ='s (or M's)
+		if (useM) {
+			if (! writeCigar(&cigarBuf, &cigarBufLen, patternLen, 'M', format)) {
+				return -2;
+			}
+		} else {
+			if (! writeCigar(&cigarBuf, &cigarBufLen, end, '=', format)) {
+				return -2;
+			}
+			if (patternLen > end) {
+				// Also need to write a bunch of X's past the end of the text
+				if (! writeCigar(&cigarBuf, &cigarBufLen, patternLen - end, 'X', format)) {
+					return -2;
+				}
+			}
+		}
         return 0;
     }
 
@@ -291,37 +297,48 @@ done1:
                 straightMismatches += patternLen - end;
                 if (straightMismatches == e) {
                     // We can match with no indels; let's do that
-                    int streakStart = 0;
-                    bool matching = (pattern[0] == text[0]);
-                    for (int i = 0; i < end; i++) {
-                        bool newMatching = (pattern[i] == text[i]);
-                        if (newMatching != matching) {
-                            if (!writeCigar(&cigarBuf, &cigarBufLen, i - streakStart, (matching ? '=' : 'X'), format)) {
-                                return -2;
-                            }
-                            matching = newMatching;
-                            streakStart = i;
-                        }
-                    }
-                    // Write the last '=' or 'X' streak
-                    if (patternLen > streakStart) {
-                        if (!matching) {
-                            // Write out X's all the way to patternLen
-                            if (!writeCigar(&cigarBuf, &cigarBufLen, patternLen - streakStart, 'X', format)) {
-                                return -2;
-                            }
-                        } else {
-                            // Write out some ='s and then possibly X's if pattern is longer than text
-                            if (!writeCigar(&cigarBuf, &cigarBufLen, end - streakStart, '=', format)) {
-                                return -2;
-                            }
-                            if (patternLen > end) {
-                                if (!writeCigar(&cigarBuf, &cigarBufLen, patternLen - end, 'X', format)) {
-                                    return -2;
-                                }
-                            }
-                        }
-                    }
+					if (useM) {
+						//
+						// No inserts or deletes, and with useM equal and SNP look the same, so just
+						// emit a simple string.
+						//
+						if (!writeCigar(&cigarBuf, &cigarBufLen, patternLen, 'M', format)) {
+							return -2;
+						}
+					} else {
+						int streakStart = 0;
+						bool matching = (pattern[0] == text[0]);
+						for (int i = 0; i < end; i++) {
+							bool newMatching = (pattern[i] == text[i]);
+							if (newMatching != matching) {
+								if (!writeCigar(&cigarBuf, &cigarBufLen, i - streakStart, (matching ? '=' : 'X'), format)) {
+									return -2;
+								}
+								matching = newMatching;
+								streakStart = i;
+							}
+						}
+					
+						// Write the last '=' or 'X' streak
+						if (patternLen > streakStart) {
+							if (!matching) {
+								// Write out X's all the way to patternLen
+								if (!writeCigar(&cigarBuf, &cigarBufLen, patternLen - streakStart, 'X', format)) {
+									return -2;
+								}
+							} else {
+								// Write out some ='s and then possibly X's if pattern is longer than text
+								if (!writeCigar(&cigarBuf, &cigarBufLen, end - streakStart, '=', format)) {
+									return -2;
+								}
+								if (patternLen > end) {
+									if (!writeCigar(&cigarBuf, &cigarBufLen, patternLen - end, 'X', format)) {
+										return -2;
+									}
+								}
+							}
+						}
+					}
                     return 0;
                 }
                 
@@ -371,12 +388,17 @@ done1:
 #endif
                 }
 
-                // Write out ='s for the first patch of exact matches that brought us to L[0][0]
-                if (L[0][MAX_K+0] > 0) {
-                    if (! writeCigar(&cigarBuf, &cigarBufLen, L[0][MAX_K+0], '=', format)) {
-                        return -2;
-                    }
-                }
+				int accumulatedMs;	// Count of Ms that we need to emit before an I or D (or ending).
+				if (useM) {
+					accumulatedMs = L[0][MAX_K+0];
+				} else {
+					// Write out ='s for the first patch of exact matches that brought us to L[0][0]
+					if (L[0][MAX_K+0] > 0) {
+						if (! writeCigar(&cigarBuf, &cigarBufLen, L[0][MAX_K+0], '=', format)) {
+							return -2;
+						}
+					}
+				}
 
                 int curE = 1;
                 while (curE <= e) {
@@ -387,17 +409,45 @@ done1:
                         actionCount++;
                         curE++;
                     }
-                    if (! writeCigar(&cigarBuf, &cigarBufLen, actionCount, action, format)) {
-                        return -2;
-                    }
+					if (useM) {
+						if (action == '=' || action == 'X') {
+							accumulatedMs += actionCount;
+						} else {
+							if (accumulatedMs != 0) {
+								if (!writeCigar(&cigarBuf, &cigarBufLen, accumulatedMs, 'M', format)) {
+									return -2;
+								}
+								accumulatedMs = 0;
+							}
+							if (!writeCigar(&cigarBuf, &cigarBufLen, actionCount, action, format)) {
+								return -2;
+							}
+						}
+					} else {
+						if (! writeCigar(&cigarBuf, &cigarBufLen, actionCount, action, format)) {
+							return -2;
+						}
+					}
                     // Next, write out ='s for the exact match
                     if (backtraceMatched[curE] > 0) {
-                        if (! writeCigar(&cigarBuf, &cigarBufLen, backtraceMatched[curE], '=', format)) {
-                            return -2;
-                        }
+						if (useM) {
+							accumulatedMs += backtraceMatched[curE];
+						} else {
+							if (! writeCigar(&cigarBuf, &cigarBufLen, backtraceMatched[curE], '=', format)) {
+								return -2;
+							}
+						}
                     }
                     curE++;
                 }
+				if (useM && accumulatedMs != 0) {
+					//
+					// Write out the trailing Ms.
+					//
+					if (!writeCigar(&cigarBuf, &cigarBufLen, accumulatedMs, 'M', format)) {
+						return -2;
+					}
+				}
                 *(cigarBuf - (cigarBufLen == 0 ? 1 : 0)) = '\0'; // terminate string
                 return e;
             }

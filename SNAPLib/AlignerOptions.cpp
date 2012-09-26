@@ -47,7 +47,8 @@ AlignerOptions::AlignerOptions(
     filterFlags(0),
     explorePopularSeeds(false),
     stopOnFirstHit(false),
-    extra(NULL)
+	useM(false),
+	extra(NULL)
 {
     if (forPairedEnd) {
         maxDist             = 15;
@@ -102,6 +103,8 @@ AlignerOptions::usageMessage()
 #endif  // USE_DEVTEAM_OPTIONS
         "  -Cxx must be followed by two + or - symbols saying whether to clip low-quality\n"
         "       bases from front and back of read respectively; default: back only (-C-+)\n"
+		"  -M   indicates that CIGAR strings in the generated SAM file should use M (alignment\n"
+		"       match) rather than = and X (sequence (mis-)match)\n"
             ,
             commandLine,
             maxDist.start,
@@ -217,6 +220,9 @@ AlignerOptions::parse(
             fprintf(stderr,"Must have the selectivity value after -S\n");
         }
 #endif  // USE_DEVTEAM_OPTIONS
+	} else if (strcmp(argv[n], "-M") == 0) {
+		useM = true;
+		return true;
     } else if (strlen(argv[n]) >= 2 && '-' == argv[n][0] && 'C' == argv[n][1]) {
         if (strlen(argv[n]) != 4 || '-' != argv[n][2] && '+' != argv[n][2] ||
             '-' != argv[n][3] && '+' != argv[n][3]) {
