@@ -138,3 +138,62 @@ RangeSplittingReadReader::getNextRead(Read *readToUpdate)
     underlyingReader->reinit(rangeStart,rangeLength);
     return underlyingReader->getNextRead(readToUpdate);
 }
+
+    bool 
+RangeSplittingPairedReadReader::getNextReadPair(Read *read1, Read *read2)
+{
+    if (underlyingReader->getNextReadPair(read1,read2)) {
+        return true;
+    }
+
+    //
+    // We need to clear out the reads, because they may contain references to the buffers in the readers.
+    // These buffer reference counts get reset to 0 at reinit time, which causes problems when they're
+    // still live in read.
+    //
+    //
+    // We need to clear out read, because it may contain references to the buffers in the reader.
+    // These buffer reference counts get reset to 0 at reinit time, which causes problems when they're
+    // still live in read.
+    //
+    read1->deinit();
+    read2->deinit();
+
+    _int64 rangeStart, rangeLength;
+    if (!splitter->getNextRange(&rangeStart, &rangeLength)) {
+        return false;
+    }
+ 
+    underlyingReader->reinit(rangeStart,rangeLength);
+    return underlyingReader->getNextReadPair(read1, read2);
+}
+
+RangeSplittingPairedReadReaderGenerator::RangeSplittingPairedReadReaderGenerator(
+    const char *i_fileName1, const char *i_fileName2, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome) :
+        isSAM(i_isSAM), clipping(i_clipping), genome(i_genome)
+{
+    fileName1 = new char[strlen(i_fileName1) + 1];
+    fileName2 = new char[strlen(i_fileName2) + 1];
+    strcpy(fileName1, i_fileName1);
+    strcpy(fileName2, i_fileName2);
+
+    splitter = new RangeSplitter(QueryFileSize(fileName1),numThreads);
+}
+
+RangeSplittingPairedReadReaderGenerator::~RangeSplittingPairedReadReaderGenerator()
+{
+    delete [] fileName1;
+    delete [] fileName2;
+    delete splitter;
+}
+
+    RangeSplittingReadReader *
+RangeSplittingPairedReadReaderGenerator::createReader()
+{
+    PairedReadReader *underlyingReader;
+    if (isSAM) {
+        underlyingReader = SAMReader::create(inputFilename, index->getGenome(), rangeStart, rangeLength, clipping) 
+    } else {
+    }
+}
+

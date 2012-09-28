@@ -84,3 +84,35 @@ private:
     const Genome *genome;
 };
 
+
+class RangeSplittingPairedReadReader : public PairedReadReader {
+public:
+    RangeSplittingPairedReadReader(RangeSplitter *i_splitter, PairedReadReader *i_underlyingReader) : 
+      splitter(i_splitter), underlyingReader(i_underlyingReader) {}
+
+    virtual bool getNextReadPair(Read *read1, Read *read2);
+    virtual ReadReader *getReaderToInitializeRead(int whichHalfOfPair) {return underlyingReader->getReaderToInitializeRead(whichHalfOfPair);}
+       
+    void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) {fprintf(stderr,"RangeSplittingPairedReadReader: reinit called.\n"); exit(1);}
+
+private:
+    RangeSplitter *splitter;
+    PairedReadReader *underlyingReader;
+};
+
+class RangeSplittingPairedReadReaderGenerator {
+public:
+    RangeSplittingPairedReadReaderGenerator(const char *i_fileName1, const char *i_fileName2, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome);
+    ~RangeSplittingPairedReadReaderGenerator();
+
+    RangeSplittingReadReader *createReader();
+
+private:
+    RangeSplitter *splitter;
+    char *fileName1;
+    char *fileName2;
+    bool isSAM;
+    ReadClippingType clipping;
+    const Genome *genome;
+};
+
