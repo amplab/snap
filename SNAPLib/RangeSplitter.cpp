@@ -64,6 +64,9 @@ bool RangeSplitter::getNextRange(_int64 *rangeStart, _int64 *rangeLength)
         amountToTake = rangeEnd;
     } else if (amountLeft >= rangeEnd / divisionSize) {
         amountToTake = rangeEnd / divisionSize / numThreads;
+	if (amountToTake == 0) {
+	  amountToTake = amountLeft;
+	}
     } else {
         // Figure out units processed in minMillis ms per thread (keeping in mind we ran numThreads in total).
         _int64 unitsInMinms = (position - rangeBegin) * minMillis / max((_int64) (timeInMillis() - startTime) * numThreads, (_int64) 1);
