@@ -100,6 +100,13 @@ SingleAlignerContext::runTask()
     void
 SingleAlignerContext::runIterationThread()
 {
+    ReadReader *reader = readReaderGenerator->createReader();
+    if (NULL == reader) {
+        //
+        // No work for this thread to do.
+        //
+        return;
+    }
     int maxReadSize = 10000;
     int lvLimit = 1000000;
     BaseAligner *aligner = new BaseAligner(
@@ -118,55 +125,37 @@ SingleAlignerContext::runIterationThread()
     aligner->setExplorePopularSeeds(options->explorePopularSeeds);
     aligner->setStopOnFirstHit(options->stopOnFirstHit);
 
-    // Keep grabbing ranges of the file and processing them.
-    ReadReader *reader = NULL;
-    _int64 rangeStart, rangeLength;
-    while (fileSplitter->getNextRange(&rangeStart, &rangeLength)) {
-        if (NULL == reader) {
-            if (inputFileIsFASTQ) {
-                reader = FASTQReader::create(inputFilename, rangeStart, rangeLength, clipping);
-            } else {
-                reader = SAMReader::create(inputFilename, index->getGenome(), rangeStart, rangeLength, clipping);
+    // Align the reads.
+    Read read(reader);
+    while (reader->getNextRead(&read)) {
+        if (1 != selectivity && GoodFastRandom(selectivity-1) != 0) {
+            //
+            // Skip this read.
+            //
+            continue;
+        }
+        stats->totalReads++;
+
+        // Skip the read if it has too many Ns or trailing 2 quality scores.
+        if (read.getDataLength() < 50 || read.countOfNs() > maxDist) {
+            if (samWriter != NULL && options->passFilter(&read, NotFound)) {
+                samWriter->write(&read, NotFound, 0xFFFFFFFF, false);
             }
-            if (NULL == reader) {
-                fprintf(stderr, "Failed to create input file reader for %s.\n", inputFilename);
-                exit(1);
-            }
+            continue;
         } else {
-            reader->reinit(rangeStart, rangeLength);
+            stats->usefulReads++;
         }
 
-        // Align the reads.
-        Read read(reader);
-        while (reader->getNextRead(&read)) {
-            if (1 != selectivity && GoodFastRandom(selectivity-1) != 0) {
-                //
-                // Skip this read.
-                //
-                continue;
-            }
-            stats->totalReads++;
+        unsigned location = 0xFFFFFFFF;
+        bool isRC;
+        int score;
+        AlignmentResult result = aligner->AlignRead(&read, &location, &isRC, &score);
 
-            // Skip the read if it has too many Ns or trailing 2 quality scores.
-            if (read.getDataLength() < 50 || read.countOfNs() > maxDist) {
-                if (samWriter != NULL && options->passFilter(&read, NotFound)) {
-                    samWriter->write(&read, NotFound, 0xFFFFFFFF, false);
-                }
-                continue;
-            } else {
-                stats->usefulReads++;
-            }
+        writeRead(&read, result, location, isRC, score);
 
-            unsigned location = 0xFFFFFFFF;
-            bool isRC;
-            int score;
-            AlignmentResult result = aligner->AlignRead(&read, &location, &isRC, &score);
-
-            writeRead(&read, result, location, isRC, score);
-
-            updateStats(stats, &read, result, location, score);
-        }
+        updateStats(stats, &read, result, location, score);
     }
+  
 
     delete aligner;
     if (reader != NULL) {

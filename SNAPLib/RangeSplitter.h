@@ -27,6 +27,8 @@ Revision History:
 #pragma once
 
 #include "Compat.h"
+#include "Read.h"
+#include "Genome.h"
 
 //
 // Utility class for letting multiple threads split chunks of a range to process.
@@ -50,3 +52,35 @@ private:
     volatile _int64 position;
     volatile _int64 startTime;
 };
+
+class RangeSplittingReadReader : public ReadReader {
+public:
+    RangeSplittingReadReader(RangeSplitter *i_splitter, ReadReader *i_underlyingReader) : 
+      splitter(i_splitter), underlyingReader(i_underlyingReader) {}
+
+    void readDoneWithBuffer(unsigned *referenceCount) {
+        underlyingReader->readDoneWithBuffer(referenceCount);
+     }
+    bool getNextRead(Read *readToUpdate);
+    void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) {fprintf(stderr,"RangeSplittingReadReader: reinit called.\n"); exit(1);}
+
+private:
+    RangeSplitter *splitter;
+    ReadReader *underlyingReader;
+};
+
+class RangeSplittingReadReaderGenerator {
+public:
+    RangeSplittingReadReaderGenerator(const char *i_fileName, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome);
+    ~RangeSplittingReadReaderGenerator();
+
+    RangeSplittingReadReader *createReader();
+
+private:
+    RangeSplitter *splitter;
+    char *fileName;
+    bool isSAM;
+    ReadClippingType clipping;
+    const Genome *genome;
+};
+

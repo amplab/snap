@@ -81,25 +81,20 @@ public:
                 unsigned **newReferenceCounts)
         {
             commonInit(i_id,i_idLength,i_data,i_quality,i_dataLength);
+            dropReferences();
 
-            if (NULL != referenceCounts[0]) {
-                (*referenceCounts[0])--;
-                if (0 == *referenceCounts[0]) {
-                    reader->readDoneWithBuffer(referenceCounts[0]);
-                }
-            }
 
-            if (NULL != referenceCounts[1]) {
-                (*referenceCounts[1])--;
-                if (0 == *referenceCounts[1]) {
-                    reader->readDoneWithBuffer(referenceCounts[1]);
-                }
-            }
 
             if (NULL != newReferenceCounts) {
                 referenceCounts[0] = newReferenceCounts[0];
                 referenceCounts[1] = newReferenceCounts[1];
             }
+        }
+
+        void deinit()
+        {
+            dropReferences();
+            referenceCounts[0] = referenceCounts[1] = NULL;
         }
 
         void init(
@@ -278,6 +273,22 @@ private:
             originalUnclippedDataBuffer = NULL;
             originalUnclippedQualityBuffer = NULL;
             clippingState = NoClipping;
+        }
+
+        inline void dropReferences() {
+            if (NULL != referenceCounts[0]) {
+                (*referenceCounts[0])--;
+                if (0 == *referenceCounts[0]) {
+                    reader->readDoneWithBuffer(referenceCounts[0]);
+                }
+            }
+
+            if (NULL != referenceCounts[1]) {
+                (*referenceCounts[1])--;
+                if (0 == *referenceCounts[1]) {
+                    reader->readDoneWithBuffer(referenceCounts[1]);
+                }
+            }
         }
 
         const char *id;

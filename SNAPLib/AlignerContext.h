@@ -86,31 +86,33 @@ protected:
     // run single thread within single iteration
     virtual void runIterationThread() = 0;
 
-    // common state across all threads
-    GenomeIndex        *index;
-    ParallelSAMWriter  *parallelSamWriter;
-    _int64              alignStart;
-    _int64              alignTime;
-    RangeSplitter       fileSplitterState;
-    AlignerOptions     *options;
-    AlignerStats       *stats;
-    AlignerExtension   *extension;
     friend class AlignerContext2;
-    unsigned            maxDist;
-    int                 numSeeds;
-    int                 maxHits;
-    int                 confDiff;
-    int                 adaptiveConfDiff;
-    bool                computeError;
-    const char         *inputFilename;
-    bool                inputFileIsFASTQ;   // Else SAM
-    RangeSplitter      *fileSplitter;
-    unsigned            selectivity;
-    bool                detailedStats;
-    ReadClippingType    clipping;
-    int                 argc;
-    const char        **argv;
-    const char         *version;
+ 
+    // common state across all threads
+    GenomeIndex                         *index;
+    ParallelSAMWriter                   *parallelSamWriter;
+    _int64                               alignStart;
+    _int64                               alignTime;
+    RangeSplitter                        fileSplitterState;
+    RangeSplittingReadReaderGenerator   *readReaderGenerator; 
+    AlignerOptions                      *options;
+    AlignerStats                        *stats;
+    AlignerExtension                    *extension;
+    unsigned                             maxDist;
+    int                                  numSeeds;
+    int                                  maxHits;
+    int                                  confDiff;
+    int                                  adaptiveConfDiff;
+    bool                                 computeError;
+    const char                          *inputFilename;
+    bool                                 inputFileIsFASTQ;   // Else SAM
+    RangeSplitter                       *fileSplitter;
+    unsigned                             selectivity;
+    bool                                 detailedStats;
+    ReadClippingType                     clipping;
+    int                                  argc;
+    const char                         **argv;
+    const char                          *version;
 
     // iteration variables
     int                 confDiff_;

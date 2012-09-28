@@ -26,6 +26,8 @@ Revision History:
 
 #include "stdafx.h"
 #include "RangeSplitter.h"
+#include "SAM.h"
+#include "FASTQ.h"
 
 using std::max;
 using std::min;
@@ -86,4 +88,53 @@ bool RangeSplitter::getNextRange(_int64 *rangeStart, _int64 *rangeLength)
     *rangeStart = startOffset;
     *rangeLength = amountToTake;
     return true;
+}
+
+RangeSplittingReadReaderGenerator::RangeSplittingReadReaderGenerator(const char *i_fileName, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome) :
+       isSAM(i_isSAM), clipping(i_clipping), genome(i_genome)
+{
+    fileName = new char[strlen(i_fileName) + 1];
+    strcpy(fileName, i_fileName);
+    splitter = new RangeSplitter(QueryFileSize(fileName),numThreads);
+}
+
+RangeSplittingReadReader *
+RangeSplittingReadReaderGenerator::createReader()
+{
+    _int64 rangeStart, rangeLength;
+    if (!splitter->getNextRange(&rangeStart, &rangeLength)) {
+        return NULL;
+    }
+
+    ReadReader *underlyingReader;
+    if (isSAM) {
+        underlyingReader = SAMReader::create(fileName, genome, rangeStart, rangeLength, clipping);
+    } else {
+        underlyingReader = FASTQReader::create(fileName, rangeStart, rangeLength ,clipping);
+    }
+    return new RangeSplittingReadReader(splitter,underlyingReader);
+}
+
+
+    bool 
+RangeSplittingReadReader::getNextRead(Read *readToUpdate)
+{
+    if (underlyingReader->getNextRead(readToUpdate)) {
+        return true;
+    }
+
+    //
+    // We need to clear out read, because it may contain references to the buffers in the reader.
+    // These buffer reference counts get reset to 0 at reinit time, which causes problems when they're
+    // still live in read.
+    //
+    readToUpdate->deinit();
+
+    _int64 rangeStart, rangeLength;
+    if (!splitter->getNextRange(&rangeStart, &rangeLength)) {
+        return false;
+    }
+ 
+    underlyingReader->reinit(rangeStart,rangeLength);
+    return underlyingReader->getNextRead(readToUpdate);
 }

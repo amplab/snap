@@ -180,6 +180,7 @@ AlignerContext::beginIteration()
     inputFilename = options->inputFilename;
     inputFileIsFASTQ = options->inputFileIsFASTQ;
     fileSplitter = &fileSplitterState;
+    readReaderGenerator = new RangeSplittingReadReaderGenerator(options->inputFilename,!inputFileIsFASTQ, options->clipping, options->numThreads,index->getGenome());
 
     if (stats != NULL) {
         delete stats;

@@ -447,6 +447,7 @@ WindowsFASTQReader::reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
     // Reinitilize the buffer info struct.
     //
     for (unsigned i = 0 ; i < nBuffers; i++) {
+        _ASSERT(bufferInfo[i].state != Reading);
         bufferInfo[i].state = Empty;
         bufferInfo[i].isEOF = false;
         bufferInfo[i].offset = 0;
@@ -686,6 +687,7 @@ WindowsFASTQReader::getNextRead(Read *readToUpdate)
                     info->fileOffset,info->offset,info->validBytes,info->nBytesThatMayBeginARead);
                 exit(1);
             }
+
             if (bufferInfo[(nextBufferForConsumer + 1) %nBuffers].state != Full) {
                 waitForBuffer((nextBufferForConsumer + 1) % nBuffers);
             }
@@ -754,9 +756,10 @@ WindowsFASTQReader::getNextRead(Read *readToUpdate)
     }
 
     const char *id = lines[0] + 1; // The '@' on the first line is not part of the ID
+
     readToUpdate->init(id, (unsigned) strlen(id), lines[1], lines[3], line1DataLen, referenceCounts);
     readToUpdate->clip(clipping);
-
+ 
     return true;
 }
 
