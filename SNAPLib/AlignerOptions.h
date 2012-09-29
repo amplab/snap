@@ -66,6 +66,7 @@ struct AlignerOptions : public AbstractOptions
     bool                stopOnFirstHit;
 	bool				useM;	// Should we generate CIGAR strings using = and X, or using the old-style M?
     AbstractOptions    *extra; // extra options
+    const char         *rgLineContents;
 
     void usage();
 

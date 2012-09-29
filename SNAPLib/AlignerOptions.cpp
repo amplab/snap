@@ -48,7 +48,8 @@ AlignerOptions::AlignerOptions(
     explorePopularSeeds(false),
     stopOnFirstHit(false),
 	useM(false),
-	extra(NULL)
+	extra(NULL),
+    rgLineContents(NULL)
 {
     if (forPairedEnd) {
         maxDist             = 15;
@@ -105,6 +106,7 @@ AlignerOptions::usageMessage()
         "       bases from front and back of read respectively; default: back only (-C-+)\n"
 		"  -M   indicates that CIGAR strings in the generated SAM file should use M (alignment\n"
 		"       match) rather than = and X (sequence (mis-)match)\n"
+// not written yet        "  -r   Specify the content of the @RG line in the SAM header.\n"
             ,
             commandLine,
             maxDist.start,
@@ -223,6 +225,24 @@ AlignerOptions::parse(
 	} else if (strcmp(argv[n], "-M") == 0) {
 		useM = true;
 		return true;
+    } else if (strcmp(argv[n], "-r") == 0) {
+#if 0   // This isn't ready yet.
+        if (n + 1 < argc) {
+            //
+            // Check the line for sanity.  It must consist either of @RG\t<fields> or just <fields> (in which
+            // case we add the @RG part).  It must contain a field called ID. Fields are separated by tabs.
+            // We don't require that the fields be things that are listed in the SAM spec, however, because
+            // new ones might be added.
+            //
+            const char *parsePointer = argv[n+1];
+            if (*parsePointer == '@') {
+            }
+
+            rgLineContents = argv[n+1];
+            n++;
+            return true;
+        }
+#endif  // 0
     } else if (strlen(argv[n]) >= 2 && '-' == argv[n][0] && 'C' == argv[n][1]) {
         if (strlen(argv[n]) != 4 || '-' != argv[n][2] && '+' != argv[n][2] ||
             '-' != argv[n][3] && '+' != argv[n][3]) {

@@ -69,9 +69,9 @@ SAMWriter:: ~SAMWriter()
 }
 
 
-SAMWriter* SAMWriter::create(const char *fileName, const Genome *genome, bool useM, int argc, const char **argv, const char *version)
+SAMWriter* SAMWriter::create(const char *fileName, const Genome *genome, bool useM, int argc, const char **argv, const char *version, const char *rgLine)
 {
-    SimpleSAMWriter *writer = new SimpleSAMWriter(useM, argc, argv, version);
+    SimpleSAMWriter *writer = new SimpleSAMWriter(useM, argc, argv, version, rgLine);
     if (!writer->open(fileName, genome)) {
         delete writer;
         return NULL;
@@ -81,7 +81,7 @@ SAMWriter* SAMWriter::create(const char *fileName, const Genome *genome, bool us
 }
 
     bool
-SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize, bool sorted, int argc, const char **argv, const char *version )
+SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize, bool sorted, int argc, const char **argv, const char *version, const char *rgLine )
 {
     char *commandLine;
 	size_t commandLineSize = 0;
@@ -96,8 +96,12 @@ SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBuffe
 			strcat(commandLine," ");
 		}
 	}
-    size_t bytesConsumed = snprintf(header, headerBufferSize, "@HD\tVN:1.4\tSO:%s\n@RG\tID:FASTQ\n@PG\tID:SNAP\tPN:SNAP\tCL:%s\tVN:%s\n", 
-		sorted ? "coordinate" : "unsorted",commandLine,version);
+
+    size_t bytesConsumed = snprintf(header, headerBufferSize, "@HD\tVN:1.4\tSO:%s\n%s\n@PG\tID:SNAP\tPN:SNAP\tCL:%s\tVN:%s\n", 
+		sorted ? "coordinate" : "unsorted",
+        rgLine == NULL ? "@RG\tID:FASTQ\tSM:sample" : rgLine,
+        commandLine,version);
+
 	delete [] commandLine;
 	commandLine = NULL;
     if (bytesConsumed >= headerBufferSize) {
@@ -383,7 +387,8 @@ SAMWriter::generateSAMText(
 }
 
 
-SimpleSAMWriter::SimpleSAMWriter(bool i_useM, int i_argc, const char **i_argv, const char *i_version) : useM(i_useM), argc(i_argc), argv(i_argv), version(i_version)
+SimpleSAMWriter::SimpleSAMWriter(bool i_useM, int i_argc, const char **i_argv, const char *i_version, const char *i_rgLine) : 
+    useM(i_useM), argc(i_argc), argv(i_argv), version(i_version), rgLine(i_rgLine)
 {
     file = NULL;
 }
@@ -415,7 +420,7 @@ bool SimpleSAMWriter::open(const char* fileName, const Genome *genome)
     // Write out SAM header
     char *headerBuffer = new char[HEADER_BUFFER_SIZE];
     size_t headerSize;
-    if (!generateHeader(genome,headerBuffer,HEADER_BUFFER_SIZE,&headerSize, false, argc, argv, version)) {
+    if (!generateHeader(genome,headerBuffer,HEADER_BUFFER_SIZE,&headerSize, false, argc, argv, version, rgLine)) {
         fprintf(stderr,"SimpleSAMWriter: unable to generate SAM header\n");
         return false;
     }
@@ -625,11 +630,12 @@ ParallelSAMWriter::create(
 	bool			 useM,
     int              argc,
     const char     **argv,
-    const char      *version) 
+    const char      *version,
+    const char      *rgLine) 
 {
     ParallelSAMWriter *parallelWriter = sort
-        ? new SortedParallelSAMWriter(sortBufferMemory, useM, argc, argv, version)
-        : new ParallelSAMWriter(useM,argc,argv,version);
+        ? new SortedParallelSAMWriter(sortBufferMemory, useM, argc, argv, version, rgLine)
+        : new ParallelSAMWriter(useM,argc,argv,version, rgLine);
     if (!parallelWriter->initialize(fileName, genome, nThreads, sort)) {
         fprintf(stderr, "unable to initialize parallel SAM writer\n");
         delete parallelWriter;
@@ -651,7 +657,7 @@ ParallelSAMWriter::initialize(const char *fileName, const Genome *genome, unsign
     char *headerBuffer = new char[SAMWriter::HEADER_BUFFER_SIZE];
     size_t headerActualSize;
 
-    if (!SAMWriter::generateHeader(genome,headerBuffer,SAMWriter::HEADER_BUFFER_SIZE,&headerActualSize, sorted, argc, argv, version)) {
+    if (!SAMWriter::generateHeader(genome,headerBuffer,SAMWriter::HEADER_BUFFER_SIZE,&headerActualSize, sorted, argc, argv, version, rgLine)) {
         fprintf(stderr,"WindowsParallelSAMWriter: unable to generate SAM header.\n");
         delete[] headerBuffer;
         return false;
