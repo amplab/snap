@@ -276,6 +276,14 @@ void PairedAlignerContext::runTask()
 
 void PairedAlignerContext::runIterationThread()
 {
+    PairedReadReader *reader = pairedReadReaderGenerator->createReader();
+    if (NULL == reader) {
+        //
+        // No work for this thread to do.
+        //
+        return;
+    }
+
     int maxReadSize = 10000;
     SmarterPairedEndAligner *aligner = new SmarterPairedEndAligner(
             index,
@@ -290,85 +298,61 @@ void PairedAlignerContext::runIterationThread()
 
     SAMWriter *samWriter = this->samWriter;
 
-    // Keep grabbing ranges of the file and processing them.
-    PairedReadReader *reader = NULL;
-
-    _int64 rangeStart, rangeLength;
-    while (fileSplitter->getNextRange(&rangeStart, &rangeLength)) {
-        if (NULL == reader) {
-            if (inputFileIsFASTQ) {
-                reader = PairedFASTQReader::create(inputFilename, fastqFile1, rangeStart, rangeLength, clipping);
-                if (NULL == reader) {
-                    fprintf(stderr, "Failed to create reader for '%s' or '%s'.\n", inputFilename, fastqFile1);
-                    exit(1);
-                }
-            } else {
-                reader = SAMReader::create(inputFilename, index->getGenome(), rangeStart, rangeLength, clipping);
-                if (NULL == reader) {
-                    fprintf(stderr, "Failed to create reader for '%s'.\n", inputFilename);
-                    exit(1);
-                }
-            }
-
-        } else {
-            reader->reinit(rangeStart, rangeLength);
+    // Align the reads.
+    Read read0(reader->getReaderToInitializeRead(0));
+    Read read1(reader->getReaderToInitializeRead(1));
+    _int64 readNum = 0;
+    while (reader->getNextReadPair(&read0,&read1)) {
+        if (1 != selectivity && GoodFastRandom(selectivity-1) != 0) {
+            //
+            // Skip this read.
+            //
+            continue;
         }
 
-        // Align the reads.
-        Read read0(reader->getReaderToInitializeRead(0));
-        Read read1(reader->getReaderToInitializeRead(1));
-        _int64 readNum = 0;
-        while (reader->getNextReadPair(&read0,&read1)) {
-            if (1 != selectivity && GoodFastRandom(selectivity-1) != 0) {
-                //
-                // Skip this read.
-                //
-                continue;
-            }
-
 #ifdef PROFILE
-            readNum++;
-            bool record = (readNum % 1000 == 0);
-            _int64 start;
-            if (record) {
-                start = timeInNanos();
-            }
+        readNum++;
+        bool record = (readNum % 1000 == 0);
+        _int64 start;
+        if (record) {
+            start = timeInNanos();
+        }
 #endif
             
-            // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
-            if (!ignoreMismatchedIDs && !readIdsMatch(&read0, &read1)) {
-                fprintf(stderr, "Unmatched read IDs %.*s and %.*s\n",
-                    read0.getIdLength(), read0.getId(), read1.getIdLength(), read1.getId());
-                exit(1);
-            }
+        // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
+        if (!ignoreMismatchedIDs && !readIdsMatch(&read0, &read1)) {
+            fprintf(stderr, "Unmatched read IDs %.*s and %.*s\n",
+                read0.getIdLength(), read0.getId(), read1.getIdLength(), read1.getId());
+            exit(1);
+        }
 
-            stats->totalReads += 2;
+        stats->totalReads += 2;
 
-            // Skip the pair if there are too many Ns or 2s.
-            int maxDist = this->maxDist;
-            bool useful0 = read0.getDataLength() >= 50 && (int)read0.countOfNs() <= maxDist;
-            bool useful1 = read1.getDataLength() >= 50 && (int)read1.countOfNs() <= maxDist;
-            if (!useful0 && !useful1) {
-                PairedAlignmentResult result;
-                result.status[0] = NotFound;
-                result.status[1] = NotFound;
-                result.location[0] = 0xFFFFFFFF;
-                result.location[1] = 0xFFFFFFFF;
-                if (samWriter != NULL && (options->passFilter(&read0, result.status[0]) || options->passFilter(&read1, result.status[1]))) {
-                    samWriter->writePair(&read0, &read1, &result);
-                }
-                continue;
-            } else {
-                // Here one the reads might still be hopeless, but maybe we can align the other.
-                stats->usefulReads += (useful0 && useful1) ? 2 : 1;
-            }
-
+        // Skip the pair if there are too many Ns or 2s.
+        int maxDist = this->maxDist;
+        bool useful0 = read0.getDataLength() >= 50 && (int)read0.countOfNs() <= maxDist;
+        bool useful1 = read1.getDataLength() >= 50 && (int)read1.countOfNs() <= maxDist;
+        if (!useful0 && !useful1) {
             PairedAlignmentResult result;
-            aligner->align(&read0, &read1, &result);
+            result.status[0] = NotFound;
+            result.status[1] = NotFound;
+            result.location[0] = 0xFFFFFFFF;
+            result.location[1] = 0xFFFFFFFF;
+            if (samWriter != NULL && (options->passFilter(&read0, result.status[0]) || options->passFilter(&read1, result.status[1]))) {
+                samWriter->writePair(&read0, &read1, &result);
+            }
+            continue;
+        } else {
+            // Here one the reads might still be hopeless, but maybe we can align the other.
+            stats->usefulReads += (useful0 && useful1) ? 2 : 1;
+        }
 
-            writePair(&read0, &read1, &result);
+        PairedAlignmentResult result;
+        aligner->align(&read0, &read1, &result);
 
-            updateStats((PairedAlignerStats*) stats, &read0, &read1, &result);
+        writePair(&read0, &read1, &result);
+
+        updateStats((PairedAlignerStats*) stats, &read0, &read1, &result);
 
 #ifdef PROFILE
         if (record) {
@@ -383,7 +367,6 @@ void PairedAlignerContext::runIterationThread()
         }
 #endif
 
-        }
     }
 
     delete aligner;
@@ -422,4 +405,16 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
         stats->incrementDistance(abs((int) (result->location[0] - result->location[1])));
         stats->incrementScore(result->score[0], result->score[1]);
     }
+}
+
+    void 
+PairedAlignerContext::typeSpecificBeginIteration()
+{
+    pairedReadReaderGenerator = new RangeSplittingPairedReadReaderGenerator(options->inputFilename, fastqFile1, !inputFileIsFASTQ, options->clipping, options->numThreads, index->getGenome());
+}
+    void 
+PairedAlignerContext::typeSpecificNextIteration()
+{
+    delete pairedReadReaderGenerator;
+    pairedReadReaderGenerator = NULL;
 }

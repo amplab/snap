@@ -150,6 +150,7 @@
     <ClInclude Include="ApproximateCounter.h" />
     <ClInclude Include="BaseAligner.h" />
     <ClInclude Include="bigalloc.h" />
+    <ClInclude Include="BoundedStringDistance.h" />
     <ClInclude Include="BufferedAsync.h" />
     <ClInclude Include="compat.h" />
     <ClInclude Include="FASTA.h" />
@@ -160,12 +161,7 @@
     <ClInclude Include="GoodRandom.h" />
     <ClInclude Include="HashTable.h" />
     <ClInclude Include="histogram.h" />
-    <ClInclude Include="hybridaligner.h" />
-    <ClInclude Include="IntersectingAligner.h" />
     <ClInclude Include="LandauVishkin.h" />
-    <ClInclude Include="Mutation.h" />
-    <ClInclude Include="Mutator.h" />
-    <ClInclude Include="OldAligner.h" />
     <ClInclude Include="options.h" />
     <ClInclude Include="PairedAligner.h" />
     <ClInclude Include="PairedEndAligner.h" />
@@ -174,14 +170,12 @@
     <ClInclude Include="read.h" />
     <ClInclude Include="sam.h" />
     <ClInclude Include="seed.h" />
-    <ClInclude Include="SimplePairedEndAligner.h" />
     <ClInclude Include="SingleAligner.h" />
     <ClInclude Include="SmarterPairedEndAligner.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="Tables.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="VariableSizeVector.h" />
-    <ClInclude Include="VCF.h" />
     <ClInclude Include="wgsim.h" />
   </ItemGroup>
   <ItemGroup>
@@ -201,18 +195,13 @@
     <ClCompile Include="GoodRandom.cpp" />
     <ClCompile Include="HashTable.cpp" />
     <ClCompile Include="histogram.cpp" />
-    <ClCompile Include="hybridaligner.cpp" />
-    <ClCompile Include="IntersectingAligner.cpp" />
     <ClCompile Include="LandauVishkin.cpp" />
-    <ClCompile Include="Mutator.cpp" />
-    <ClCompile Include="OldAligner.cpp" />
     <ClCompile Include="PairedAligner.cpp" />
     <ClCompile Include="PairedEndAligner.cpp" />
     <ClCompile Include="Range.cpp" />
     <ClCompile Include="RangeSplitter.cpp" />
     <ClCompile Include="sam.cpp" />
     <ClCompile Include="seed.cpp" />
-    <ClCompile Include="SimplePairedEndAligner.cpp" />
     <ClCompile Include="SingleAligner.cpp" />
     <ClCompile Include="SmarterPairedEndAligner.cpp" />
     <ClCompile Include="stdafx.cpp">
@@ -222,7 +211,6 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Tables.cpp" />
-    <ClCompile Include="VCF.cpp" />
     <ClCompile Include="wgsim.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

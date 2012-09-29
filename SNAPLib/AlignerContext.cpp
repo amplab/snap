@@ -180,7 +180,6 @@ AlignerContext::beginIteration()
     inputFilename = options->inputFilename;
     inputFileIsFASTQ = options->inputFileIsFASTQ;
     fileSplitter = &fileSplitterState;
-    readReaderGenerator = new RangeSplittingReadReaderGenerator(options->inputFilename,!inputFileIsFASTQ, options->clipping, options->numThreads,index->getGenome());
 
     if (stats != NULL) {
         delete stats;
@@ -188,6 +187,7 @@ AlignerContext::beginIteration()
     stats = newStats();
     stats->extra = extension->extraStats();
     extension->beginIteration();
+    typeSpecificBeginIteration();
 }
 
     void
@@ -207,7 +207,8 @@ AlignerContext::finishIteration()
     bool
 AlignerContext::nextIteration()
 {
-    if ((adaptiveConfDiff_ += options->adaptiveConfDiff.step) > options->adaptiveConfDiff.end) {
+     typeSpecificNextIteration();
+     if ((adaptiveConfDiff_ += options->adaptiveConfDiff.step) > options->adaptiveConfDiff.end) {
         adaptiveConfDiff_ = options->adaptiveConfDiff.start;
         if ((numSeeds_ += options->numSeeds.step) > options->numSeeds.end) {
             numSeeds_ = options->numSeeds.start;
@@ -222,6 +223,7 @@ AlignerContext::nextIteration()
             }
         }
     }
+
     return true;
 }
 

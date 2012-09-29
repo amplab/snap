@@ -90,7 +90,7 @@ bool RangeSplitter::getNextRange(_int64 *rangeStart, _int64 *rangeLength)
     return true;
 }
 
-RangeSplittingReadReaderGenerator::RangeSplittingReadReaderGenerator(const char *i_fileName, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome) :
+RangeSplittingReadSupplierGenerator::RangeSplittingReadSupplierGenerator(const char *i_fileName, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome) :
        isSAM(i_isSAM), clipping(i_clipping), genome(i_genome)
 {
     fileName = new char[strlen(i_fileName) + 1];
@@ -98,8 +98,8 @@ RangeSplittingReadReaderGenerator::RangeSplittingReadReaderGenerator(const char 
     splitter = new RangeSplitter(QueryFileSize(fileName),numThreads);
 }
 
-RangeSplittingReadReader *
-RangeSplittingReadReaderGenerator::createReader()
+RangeSplittingReadSupplier *
+RangeSplittingReadSupplierGenerator::createReader()
 {
     _int64 rangeStart, rangeLength;
     if (!splitter->getNextRange(&rangeStart, &rangeLength)) {
@@ -112,15 +112,15 @@ RangeSplittingReadReaderGenerator::createReader()
     } else {
         underlyingReader = FASTQReader::create(fileName, rangeStart, rangeLength ,clipping);
     }
-    return new RangeSplittingReadReader(splitter,underlyingReader);
+    return new RangeSplittingReadSupplier(splitter,underlyingReader);
 }
 
 
-    bool 
-RangeSplittingReadReader::getNextRead(Read *readToUpdate)
+    Read * 
+RangeSplittingReadSupplier::getNextRead()
 {
-    if (underlyingReader->getNextRead(readToUpdate)) {
-        return true;
+    if (underlyingReader->getNextRead(&read)) {
+        return &read;
     }
 
     //
@@ -128,15 +128,18 @@ RangeSplittingReadReader::getNextRead(Read *readToUpdate)
     // These buffer reference counts get reset to 0 at reinit time, which causes problems when they're
     // still live in read.
     //
-    readToUpdate->deinit();
+    read.deinit();
 
     _int64 rangeStart, rangeLength;
     if (!splitter->getNextRange(&rangeStart, &rangeLength)) {
-        return false;
+        return NULL;
     }
  
     underlyingReader->reinit(rangeStart,rangeLength);
-    return underlyingReader->getNextRead(readToUpdate);
+    if (!underlyingReader->getNextRead(&read)) {
+        return NULL;
+    }
+    return &read;
 }
 
     bool 
@@ -187,13 +190,21 @@ RangeSplittingPairedReadReaderGenerator::~RangeSplittingPairedReadReaderGenerato
     delete splitter;
 }
 
-    RangeSplittingReadReader *
+    RangeSplittingPairedReadReader *
 RangeSplittingPairedReadReaderGenerator::createReader()
 {
+    _int64 rangeStart, rangeLength;
+    if (!splitter->getNextRange(&rangeStart, &rangeLength)) {
+        return NULL;
+    }
+
     PairedReadReader *underlyingReader;
     if (isSAM) {
-        underlyingReader = SAMReader::create(inputFilename, index->getGenome(), rangeStart, rangeLength, clipping) 
+        underlyingReader = SAMReader::create(fileName1, genome, rangeStart, rangeLength, clipping); 
     } else {
+        underlyingReader = PairedFASTQReader::create(fileName1, fileName2, rangeStart, rangeLength, clipping);
     }
+
+    return new RangeSplittingPairedReadReader(splitter,underlyingReader);
 }
 

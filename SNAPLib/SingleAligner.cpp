@@ -100,7 +100,7 @@ SingleAlignerContext::runTask()
     void
 SingleAlignerContext::runIterationThread()
 {
-    ReadReader *reader = readReaderGenerator->createReader();
+    ReadSupplier *reader = readSupplierGenerator->createReader();
     if (NULL == reader) {
         //
         // No work for this thread to do.
@@ -126,8 +126,8 @@ SingleAlignerContext::runIterationThread()
     aligner->setStopOnFirstHit(options->stopOnFirstHit);
 
     // Align the reads.
-    Read read(reader);
-    while (reader->getNextRead(&read)) {
+    Read *read;
+    while (NULL != (read = reader->getNextRead())) {
         if (1 != selectivity && GoodFastRandom(selectivity-1) != 0) {
             //
             // Skip this read.
@@ -137,9 +137,9 @@ SingleAlignerContext::runIterationThread()
         stats->totalReads++;
 
         // Skip the read if it has too many Ns or trailing 2 quality scores.
-        if (read.getDataLength() < 50 || read.countOfNs() > maxDist) {
-            if (samWriter != NULL && options->passFilter(&read, NotFound)) {
-                samWriter->write(&read, NotFound, 0xFFFFFFFF, false);
+        if (read->getDataLength() < 50 || read->countOfNs() > maxDist) {
+            if (samWriter != NULL && options->passFilter(read, NotFound)) {
+                samWriter->write(read, NotFound, 0xFFFFFFFF, false);
             }
             continue;
         } else {
@@ -149,11 +149,11 @@ SingleAlignerContext::runIterationThread()
         unsigned location = 0xFFFFFFFF;
         bool isRC;
         int score;
-        AlignmentResult result = aligner->AlignRead(&read, &location, &isRC, &score);
+        AlignmentResult result = aligner->AlignRead(read, &location, &isRC, &score);
 
-        writeRead(&read, result, location, isRC, score);
+        writeRead(read, result, location, isRC, score);
 
-        updateStats(stats, &read, result, location, score);
+        updateStats(stats, read, result, location, score);
     }
   
 
@@ -197,4 +197,17 @@ SingleAlignerContext::updateStats(
         _ASSERT(result == NotFound);
         stats->notFound++;
     }
+}
+
+    void 
+SingleAlignerContext::typeSpecificBeginIteration()
+{
+    readSupplierGenerator = new RangeSplittingReadSupplierGenerator(options->inputFilename,!inputFileIsFASTQ, options->clipping, options->numThreads,index->getGenome());
+
+}
+    void 
+SingleAlignerContext::typeSpecificNextIteration()
+{
+    delete readSupplierGenerator;
+    readSupplierGenerator = NULL;
 }

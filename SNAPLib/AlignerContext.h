@@ -86,6 +86,9 @@ protected:
     // run single thread within single iteration
     virtual void runIterationThread() = 0;
 
+    virtual void typeSpecificBeginIteration() = 0;
+    virtual void typeSpecificNextIteration() = 0;
+
     friend class AlignerContext2;
  
     // common state across all threads
@@ -94,7 +97,6 @@ protected:
     _int64                               alignStart;
     _int64                               alignTime;
     RangeSplitter                        fileSplitterState;
-    RangeSplittingReadReaderGenerator   *readReaderGenerator; 
     AlignerOptions                      *options;
     AlignerStats                        *stats;
     AlignerExtension                    *extension;

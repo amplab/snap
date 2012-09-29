@@ -53,28 +53,25 @@ private:
     volatile _int64 startTime;
 };
 
-class RangeSplittingReadReader : public ReadReader {
+class RangeSplittingReadSupplier : public ReadSupplier {
 public:
-    RangeSplittingReadReader(RangeSplitter *i_splitter, ReadReader *i_underlyingReader) : 
-      splitter(i_splitter), underlyingReader(i_underlyingReader) {}
+    RangeSplittingReadSupplier(RangeSplitter *i_splitter, ReadReader *i_underlyingReader) : 
+      splitter(i_splitter), underlyingReader(i_underlyingReader), read(i_underlyingReader) {}
 
-    void readDoneWithBuffer(unsigned *referenceCount) {
-        underlyingReader->readDoneWithBuffer(referenceCount);
-     }
-    bool getNextRead(Read *readToUpdate);
-    void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) {fprintf(stderr,"RangeSplittingReadReader: reinit called.\n"); exit(1);}
-
+    Read *getNextRead();
+ 
 private:
     RangeSplitter *splitter;
     ReadReader *underlyingReader;
+    Read read;
 };
 
-class RangeSplittingReadReaderGenerator {
+class RangeSplittingReadSupplierGenerator {
 public:
-    RangeSplittingReadReaderGenerator(const char *i_fileName, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome);
-    ~RangeSplittingReadReaderGenerator();
+    RangeSplittingReadSupplierGenerator(const char *i_fileName, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome);
+    ~RangeSplittingReadSupplierGenerator() {delete splitter; delete [] fileName;}
 
-    RangeSplittingReadReader *createReader();
+    RangeSplittingReadSupplier *createReader();
 
 private:
     RangeSplitter *splitter;
@@ -105,7 +102,7 @@ public:
     RangeSplittingPairedReadReaderGenerator(const char *i_fileName1, const char *i_fileName2, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome);
     ~RangeSplittingPairedReadReaderGenerator();
 
-    RangeSplittingReadReader *createReader();
+    RangeSplittingPairedReadReader *createReader();
 
 private:
     RangeSplitter *splitter;

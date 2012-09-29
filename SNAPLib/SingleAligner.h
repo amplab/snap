@@ -33,6 +33,7 @@ public:
 
     SingleAlignerContext(AlignerExtension* i_extension = NULL);
     
+
 protected:
 
     // AlignerContext overrides
@@ -45,9 +46,15 @@ protected:
     
     virtual void runIterationThread();
 
+    virtual void typeSpecificBeginIteration();
+    virtual void typeSpecificNextIteration();
+
     // for subclasses
 
     virtual void writeRead(Read* read, AlignmentResult result, unsigned location, bool isRC, int score);
 
     virtual void updateStats(AlignerStats* stats, Read* read, AlignmentResult result, unsigned location, int score);
+
+    RangeSplittingReadSupplierGenerator   *readSupplierGenerator; 
+
 };

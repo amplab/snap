@@ -47,6 +47,17 @@ public:
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
 };
 
+class ReadSupplier {
+public:
+    virtual Read *getNextRead() = 0;    // This read is valid until you call getNextRead, then it's done.  Don't worry about deallocating it.
+};
+
+class PairedReadSupplier {
+public:
+    // These read are valid until you call getNextRead, then they're done.  Don't worry about deallocating them.
+    virtual bool getNextReadPair(Read **read0, Read **read1) = 0;
+};
+
     
 class Read {
 public:
