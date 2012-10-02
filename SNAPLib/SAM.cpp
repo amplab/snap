@@ -357,7 +357,7 @@ SAMWriter::generateSAMText(
         readLen = (unsigned)(firstSpace - read->getId());
     }
 
-    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s\tPG:SNAP\tRG:FASTQ\n",
+    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s\tPG:Z:SNAP\tRG:Z:FASTQ\n",
         readLen, read->getId(),
         flags,
         pieceName,
