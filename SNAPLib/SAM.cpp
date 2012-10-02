@@ -974,7 +974,11 @@ SortedParallelSAMWriter::close()
 #ifdef _MSC_VER
     return mergeSort();
 #else
-    return memoryMappedSort();
+#ifdef __linux__
+    return mergeSort();
+#else
+    return memoryMappedSort(); // async io not supported on OS X
+#endif
 #endif
 }
 
