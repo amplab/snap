@@ -38,8 +38,6 @@ public:
 
     virtual bool close() = 0;
 
-    static SAMWriter* create(const char *fileName, const Genome *genome, bool useM, int argc, const char **argv, const char *version, const char *rgLine);
-
     static bool generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize, bool sorted, int argc, const char **argv, const char *version, const char *rgLine);
    
     static const int HEADER_BUFFER_SIZE = 256 * 1024 * 1024;
@@ -91,46 +89,8 @@ private:
 
 };
 
-/*
- * A SAMWriter that uses the C standard library (fwrite & co).
- */
-class SimpleSAMWriter: public SAMWriter {
-public:
-    SimpleSAMWriter(bool i_useM, int i_argc, const char **i_argv, const char *i_version, const char *i_rgLine);
-
-    virtual ~SimpleSAMWriter();
-
-    bool open(const char* fileName, const Genome *genome);
-
-    virtual bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC);
-
-    virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result);
-
-    virtual bool close();
-
-private:
-    // Write one read's result, whether it's from a pair or not.
-    void write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, bool hasMate, bool firstInPair,
-               Read *mate, AlignmentResult mateResult, unsigned mateLocation, bool mateIsRC);
-
-    static const int BUFFER_SIZE = 8 * 1024 * 1024;
-
-    FILE *file;
-    char *buffer; // For setvbuf
-
-    const Genome *genome;
-
-	bool        useM;
-	int         argc;
-	const char **argv;
-    const char  *version;
-    const char  *rgLine;
-
-    LandauVishkinWithCigar lv;
-};
-
 //
-// Like with SimpleSAMWriter there is one of these per thread.  Unlike SimpleSAMWriter they all
+// There is one of these per thread.  Unlike SimpleSAMWriter they all
 // share a single file.  Each thread maintains its own write buffer.  When the buffer is full,
 // it allocates a write offset by doing an interlocked add of the writeOffset, which is shared
 // among all writers of this file.

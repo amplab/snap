@@ -69,17 +69,6 @@ SAMWriter:: ~SAMWriter()
 }
 
 
-SAMWriter* SAMWriter::create(const char *fileName, const Genome *genome, bool useM, int argc, const char **argv, const char *version, const char *rgLine)
-{
-    SimpleSAMWriter *writer = new SimpleSAMWriter(useM, argc, argv, version, rgLine);
-    if (!writer->open(fileName, genome)) {
-        delete writer;
-        return NULL;
-    } else {
-        return writer;
-    }
-}
-
     bool
 SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize, bool sorted, int argc, const char **argv, const char *version, const char *rgLine )
 {
@@ -396,116 +385,6 @@ SAMWriter::generateSAMText(
     return true;
 }
 
-
-SimpleSAMWriter::SimpleSAMWriter(bool i_useM, int i_argc, const char **i_argv, const char *i_version, const char *i_rgLine) : 
-    useM(i_useM), argc(i_argc), argv(i_argv), version(i_version), rgLine(i_rgLine)
-{
-    file = NULL;
-}
-
-
-SimpleSAMWriter::~SimpleSAMWriter()
-{
-    if (file != NULL) {
-        close();
-    }
-}
-
-
-bool SimpleSAMWriter::open(const char* fileName, const Genome *genome)
-{
-    buffer = (char *) BigAlloc(BUFFER_SIZE);
-    if (buffer == NULL) {
-        fprintf(stderr, "allocating write buffer failed\n");
-        return false;
-    }
-    file = fopen(fileName, "w");
-    if (file == NULL) {
-        fprintf(stderr, "fopen failed\n");
-        return false;
-    }
-    setvbuf(file, buffer, _IOFBF, BUFFER_SIZE);
-    this->genome = genome;
-
-    // Write out SAM header
-    char *headerBuffer = new char[HEADER_BUFFER_SIZE];
-    size_t headerSize;
-    if (!generateHeader(genome,headerBuffer,HEADER_BUFFER_SIZE,&headerSize, false, argc, argv, version, rgLine)) {
-        fprintf(stderr,"SimpleSAMWriter: unable to generate SAM header\n");
-        return false;
-    }
-    fprintf(file, "%s", headerBuffer);
-    delete[] headerBuffer;
-
-    return true;
-}
-
-
-bool SimpleSAMWriter::write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC)
-{
-    if (file == NULL) {
-        return false;
-    }
-
-    write(read, result, genomeLocation, isRC, false, false, NULL, NotFound, 0, false);
-    return true;
-}
-
-
-bool SimpleSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *result)
-{
-    if (file == NULL) {
-        return false;
-    }
-
-    write(read0, result->status[0], result->location[0], result->isRC[0], true, true,
-          read1, result->status[1], result->location[1], result->isRC[1]);
-    write(read1, result->status[1], result->location[1], result->isRC[1], true, false,
-          read0, result->status[0], result->location[0], result->isRC[0]);
-    return true;
-}
-
-
-void SimpleSAMWriter::write(
-        Read *read,
-        AlignmentResult result,
-        unsigned genomeLocation,
-        bool isRC,
-        bool hasMate,
-        bool firstInPair,
-        Read *mate,
-        AlignmentResult mateResult,
-        unsigned mateLocation,
-        bool mateIsRC)
-{
-    const unsigned maxLineLength = 25000;
-    char outputBuffer[maxLineLength];
-    size_t outputBufferUsed;
-
-    if (!generateSAMText(read, result, genomeLocation, isRC, useM, hasMate, firstInPair, mate, mateResult,
-            mateLocation,mateIsRC, genome, &lv, outputBuffer, maxLineLength,&outputBufferUsed)) {
-        fprintf(stderr,"SimpleSAMWriter: tried to generate too long of a SAM line (> %d)\n",maxLineLength);
-        exit(1);
-    }
-    
-    if (1 != fwrite(outputBuffer,outputBufferUsed,1,file)) {
-        fprintf(stderr,"Unable to write to SAM file.\n");
-        exit(1);
-    }
-}
-
-
-bool SimpleSAMWriter::close()
-{
-    if (file == NULL) {
-        return false;
-    }
-    fclose(file);
-    BigDealloc(buffer);
-    file = NULL;
-    buffer = NULL;
-    return true;
-}
 
 ThreadSAMWriter::ThreadSAMWriter(size_t i_bufferSize, bool i_useM)
     : remainingBufferSpace(i_bufferSize), bufferBeingCreated(0), bufferSize(i_bufferSize), useM(i_useM)
