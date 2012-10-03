@@ -148,21 +148,21 @@ SAMWriter::computeCigarString(
     unsigned                    basesClippedAfter,
     unsigned                    genomeLocation,
     bool                        isRC,
-	bool						useM
+	bool						useM,
+    int *                       editDistance
 )
 {
     const char *reference = genome->getSubstring(genomeLocation, dataLength);
-    int r;
     if (NULL != reference) {
-        r = lv->computeEditDistance(
-                       genome->getSubstring(genomeLocation, dataLength),
-                        dataLength,
-                        data,
-                        dataLength,
-                        MAX_K - 1,
-                        cigarBuf,
-                        cigarBufLen,
-						useM);
+        *editDistance = lv->computeEditDistance(
+                            genome->getSubstring(genomeLocation, dataLength),
+                            dataLength,
+                            data,
+                            dataLength,
+                            MAX_K - 1,
+                            cigarBuf,
+                            cigarBufLen,
+						    useM);
     } else {
         //
         // Fell off the end of the chromosome.
@@ -170,10 +170,10 @@ SAMWriter::computeCigarString(
         return "*";
     }
 
-    if (r == -2) {
+    if (*editDistance == -2) {
         fprintf(stderr, "WARNING: computeEditDistance returned -2; cigarBuf may be too small\n");
         return "*";
-    } else if (r == -1) {
+    } else if (*editDistance == -1) {
         static bool warningPrinted = false;
         if (!warningPrinted) {
             fprintf(stderr, "WARNING: computeEditDistance returned -1; this shouldn't happen\n");
@@ -265,6 +265,7 @@ SAMWriter::generateSAMText(
       basesClippedAfter = fullLength - clippedLength - basesClippedBefore;
     }
 
+    int editDistance = -1;
     if (genomeLocation != 0xFFFFFFFF) {
         // This could be either a single hit read or a multiple hit read where we just
         // returned one location, but either way, let's print that location. We will then
@@ -278,7 +279,7 @@ SAMWriter::generateSAMText(
         positionInPiece = genomeLocation - piece->beginningOffset + 1; // SAM is 1-based
         cigar = computeCigarString(genome, lv, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize, 
                                    clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
-                                   genomeLocation, isRC, useM);
+                                   genomeLocation, isRC, useM, &editDistance);
         mapQuality = (result == SingleHit || result == CertainHit) ? 60 : 0;
     } else {
         flags |= SAM_UNMAPPED;
@@ -357,7 +358,15 @@ SAMWriter::generateSAMText(
         readLen = (unsigned)(firstSpace - read->getId());
     }
 
-    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s\tPG:Z:SNAP\tRG:Z:FASTQ\n",
+    const int nmStringSize = 30;// Big enough that it won't buffer overflow regardless of the value of editDistance
+    char nmString[nmStringSize];  
+    if (editDistance >= 0) {
+        snprintf(nmString, nmStringSize, "\tNM:i:%d",editDistance);
+    } else {
+        nmString[0] = '\0';
+    }
+
+    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s\tPG:Z:SNAP\tRG:Z:FASTQ%s\n",
         readLen, read->getId(),
         flags,
         pieceName,
@@ -368,7 +377,8 @@ SAMWriter::generateSAMText(
         matePositionInPiece,
         templateLength,
         fullLength, data,
-        fullLength, quality);
+        fullLength, quality,
+        nmString);
 
     if (charsInString > bufferSpace) {
         //

@@ -339,7 +339,7 @@ done1:
 							}
 						}
 					}
-                    return 0;
+                    return e;
                 }
                 
 #ifdef TRACE_LV

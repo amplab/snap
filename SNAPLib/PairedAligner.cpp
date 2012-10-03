@@ -294,7 +294,13 @@ void PairedAlignerContext::runIterationThread()
     PairedReadReader *reader = NULL;
 
     _int64 rangeStart, rangeLength;
+    _int64 rangeStartTime;
+    int totalRanges = 0;
+    _int64 totalBytes = 0;
     while (fileSplitter->getNextRange(&rangeStart, &rangeLength)) {
+        rangeStartTime = timeInMillis();
+        totalRanges++;
+        totalBytes += rangeLength;
         if (NULL == reader) {
             if (inputFileIsFASTQ) {
                 reader = PairedFASTQReader::create(inputFilename, fastqFile1, rangeStart, rangeLength, clipping);
@@ -385,6 +391,7 @@ void PairedAlignerContext::runIterationThread()
 
         }
     }
+    //printf("Time in s: %lld: thread ran out of work.  Last range was %8lld bytes in %4lldms, starting at %10lld.  Total %4d ranges and %10lld bytes.\n",timeInMillis() / 1000, rangeLength, timeInMillis() - rangeStartTime, rangeStart, totalRanges, totalBytes);
 
     delete aligner;
     delete reader;

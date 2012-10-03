@@ -47,7 +47,7 @@ RangeSplitter::RangeSplitter(_int64 rangeEnd_, int numThreads_, unsigned divisio
 bool RangeSplitter::getNextRange(_int64 *rangeStart, _int64 *rangeLength)
 {
     // If there are multiple threads, start each of them off with (rangeEnd / divionSize / numThreads),
-    // and then keep giving everyone 1 / (2 * numThreads) of the remaining data or the amount
+    // and then keep giving everyone 1 / (divisionSize * numThreads) of the remaining data or the amount
     // of units processed per thread in minMillis ms, whichever is bigger.
     // If there's just one thread, we give it the whole range at the beginning.
 
@@ -64,9 +64,9 @@ bool RangeSplitter::getNextRange(_int64 *rangeStart, _int64 *rangeLength)
         amountToTake = rangeEnd;
     } else if (amountLeft >= rangeEnd / divisionSize) {
         amountToTake = rangeEnd / divisionSize / numThreads;
-	if (amountToTake == 0) {
-	  amountToTake = amountLeft;
-	}
+	    if (amountToTake == 0) {
+	      amountToTake = amountLeft;
+	    }
     } else {
         // Figure out units processed in minMillis ms per thread (keeping in mind we ran numThreads in total).
         _int64 unitsInMinms = (position - rangeBegin) * minMillis / max((_int64) (timeInMillis() - startTime) * numThreads, (_int64) 1);

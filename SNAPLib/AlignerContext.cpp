@@ -164,7 +164,7 @@ AlignerContext::beginIteration()
     }
 
     alignStart = timeInMillis();
-    fileSplitterState = RangeSplitter(QueryFileSize(options->inputFilename), options->numThreads, 15);
+    fileSplitterState = RangeSplitter(QueryFileSize(options->inputFilename), options->numThreads, 100);
 
     clipping = options->clipping;
     totalThreads = options->numThreads;

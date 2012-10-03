@@ -85,7 +85,8 @@ private:
                         unsigned                    basesClippedAfter,
                         unsigned                    genomeLocation,
                         bool                        isRC,
-						bool						useM
+						bool						useM,
+                        int                         *editDistance
                 );
 
 };
