@@ -69,9 +69,9 @@ SAMWriter:: ~SAMWriter()
 }
 
 
-SAMWriter* SAMWriter::create(const char *fileName, const Genome *genome, bool useM, int argc, const char **argv, const char *version)
+SAMWriter* SAMWriter::create(const char *fileName, const Genome *genome, bool useM, int argc, const char **argv, const char *version, const char *rgLine)
 {
-    SimpleSAMWriter *writer = new SimpleSAMWriter(useM, argc, argv, version);
+    SimpleSAMWriter *writer = new SimpleSAMWriter(useM, argc, argv, version, rgLine);
     if (!writer->open(fileName, genome)) {
         delete writer;
         return NULL;
@@ -81,7 +81,7 @@ SAMWriter* SAMWriter::create(const char *fileName, const Genome *genome, bool us
 }
 
     bool
-SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize, bool sorted, int argc, const char **argv, const char *version )
+SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize, bool sorted, int argc, const char **argv, const char *version, const char *rgLine )
 {
     char *commandLine;
 	size_t commandLineSize = 0;
@@ -96,8 +96,12 @@ SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBuffe
 			strcat(commandLine," ");
 		}
 	}
-    size_t bytesConsumed = snprintf(header, headerBufferSize, "@HD\tVN:1.4\tSO:%s\n@RG\tID:FASTQ\n@PG\tID:SNAP\tPN:SNAP\tCL:%s\tVN:%s\n", 
-		sorted ? "coordinate" : "unsorted",commandLine,version);
+
+    size_t bytesConsumed = snprintf(header, headerBufferSize, "@HD\tVN:1.4\tSO:%s\n%s\n@PG\tID:SNAP\tPN:SNAP\tCL:%s\tVN:%s\n", 
+		sorted ? "coordinate" : "unsorted",
+        rgLine == NULL ? "@RG\tID:FASTQ\tSM:sample" : rgLine,
+        commandLine,version);
+
 	delete [] commandLine;
 	commandLine = NULL;
     if (bytesConsumed >= headerBufferSize) {
@@ -144,21 +148,21 @@ SAMWriter::computeCigarString(
     unsigned                    basesClippedAfter,
     unsigned                    genomeLocation,
     bool                        isRC,
-	bool						useM
+	bool						useM,
+    int *                       editDistance
 )
 {
     const char *reference = genome->getSubstring(genomeLocation, dataLength);
-    int r;
     if (NULL != reference) {
-        r = lv->computeEditDistance(
-                       genome->getSubstring(genomeLocation, dataLength),
-                        dataLength,
-                        data,
-                        dataLength,
-                        MAX_K - 1,
-                        cigarBuf,
-                        cigarBufLen,
-						useM);
+        *editDistance = lv->computeEditDistance(
+                            genome->getSubstring(genomeLocation, dataLength),
+                            dataLength,
+                            data,
+                            dataLength,
+                            MAX_K - 1,
+                            cigarBuf,
+                            cigarBufLen,
+						    useM);
     } else {
         //
         // Fell off the end of the chromosome.
@@ -166,10 +170,10 @@ SAMWriter::computeCigarString(
         return "*";
     }
 
-    if (r == -2) {
+    if (*editDistance == -2) {
         fprintf(stderr, "WARNING: computeEditDistance returned -2; cigarBuf may be too small\n");
         return "*";
-    } else if (r == -1) {
+    } else if (*editDistance == -1) {
         static bool warningPrinted = false;
         if (!warningPrinted) {
             fprintf(stderr, "WARNING: computeEditDistance returned -1; this shouldn't happen\n");
@@ -261,6 +265,7 @@ SAMWriter::generateSAMText(
       basesClippedAfter = fullLength - clippedLength - basesClippedBefore;
     }
 
+    int editDistance = -1;
     if (genomeLocation != 0xFFFFFFFF) {
         // This could be either a single hit read or a multiple hit read where we just
         // returned one location, but either way, let's print that location. We will then
@@ -274,7 +279,7 @@ SAMWriter::generateSAMText(
         positionInPiece = genomeLocation - piece->beginningOffset + 1; // SAM is 1-based
         cigar = computeCigarString(genome, lv, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize, 
                                    clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
-                                   genomeLocation, isRC, useM);
+                                   genomeLocation, isRC, useM, &editDistance);
         mapQuality = (result == SingleHit || result == CertainHit) ? 60 : 0;
     } else {
         flags |= SAM_UNMAPPED;
@@ -353,7 +358,15 @@ SAMWriter::generateSAMText(
         readLen = (unsigned)(firstSpace - read->getId());
     }
 
-    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s\tPG:SNAP\tRG:FASTQ\n",
+    const int nmStringSize = 30;// Big enough that it won't buffer overflow regardless of the value of editDistance
+    char nmString[nmStringSize];  
+    if (editDistance >= 0) {
+        snprintf(nmString, nmStringSize, "\tNM:i:%d",editDistance);
+    } else {
+        nmString[0] = '\0';
+    }
+
+    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s\tPG:Z:SNAP\tRG:Z:FASTQ%s\n",
         readLen, read->getId(),
         flags,
         pieceName,
@@ -364,7 +377,8 @@ SAMWriter::generateSAMText(
         matePositionInPiece,
         templateLength,
         fullLength, data,
-        fullLength, quality);
+        fullLength, quality,
+        nmString);
 
     if (charsInString > bufferSpace) {
         //
@@ -383,7 +397,8 @@ SAMWriter::generateSAMText(
 }
 
 
-SimpleSAMWriter::SimpleSAMWriter(bool i_useM, int i_argc, const char **i_argv, const char *i_version) : useM(i_useM), argc(i_argc), argv(i_argv), version(i_version)
+SimpleSAMWriter::SimpleSAMWriter(bool i_useM, int i_argc, const char **i_argv, const char *i_version, const char *i_rgLine) : 
+    useM(i_useM), argc(i_argc), argv(i_argv), version(i_version), rgLine(i_rgLine)
 {
     file = NULL;
 }
@@ -415,7 +430,7 @@ bool SimpleSAMWriter::open(const char* fileName, const Genome *genome)
     // Write out SAM header
     char *headerBuffer = new char[HEADER_BUFFER_SIZE];
     size_t headerSize;
-    if (!generateHeader(genome,headerBuffer,HEADER_BUFFER_SIZE,&headerSize, false, argc, argv, version)) {
+    if (!generateHeader(genome,headerBuffer,HEADER_BUFFER_SIZE,&headerSize, false, argc, argv, version, rgLine)) {
         fprintf(stderr,"SimpleSAMWriter: unable to generate SAM header\n");
         return false;
     }
@@ -625,11 +640,12 @@ ParallelSAMWriter::create(
 	bool			 useM,
     int              argc,
     const char     **argv,
-    const char      *version) 
+    const char      *version,
+    const char      *rgLine) 
 {
     ParallelSAMWriter *parallelWriter = sort
-        ? new SortedParallelSAMWriter(sortBufferMemory, useM, argc, argv, version)
-        : new ParallelSAMWriter(useM,argc,argv,version);
+        ? new SortedParallelSAMWriter(sortBufferMemory, useM, argc, argv, version, rgLine)
+        : new ParallelSAMWriter(useM,argc,argv,version, rgLine);
     if (!parallelWriter->initialize(fileName, genome, nThreads, sort)) {
         fprintf(stderr, "unable to initialize parallel SAM writer\n");
         delete parallelWriter;
@@ -651,7 +667,7 @@ ParallelSAMWriter::initialize(const char *fileName, const Genome *genome, unsign
     char *headerBuffer = new char[SAMWriter::HEADER_BUFFER_SIZE];
     size_t headerActualSize;
 
-    if (!SAMWriter::generateHeader(genome,headerBuffer,SAMWriter::HEADER_BUFFER_SIZE,&headerActualSize, sorted, argc, argv, version)) {
+    if (!SAMWriter::generateHeader(genome,headerBuffer,SAMWriter::HEADER_BUFFER_SIZE,&headerActualSize, sorted, argc, argv, version, rgLine)) {
         fprintf(stderr,"WindowsParallelSAMWriter: unable to generate SAM header.\n");
         delete[] headerBuffer;
         return false;
@@ -968,7 +984,11 @@ SortedParallelSAMWriter::close()
 #ifdef _MSC_VER
     return mergeSort();
 #else
-    return memoryMappedSort();
+#ifdef __linux__
+    return mergeSort();
+#else
+    return memoryMappedSort(); // async io not supported on OS X
+#endif
 #endif
 }
 

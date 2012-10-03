@@ -368,6 +368,7 @@ void PairedAlignerContext::runIterationThread()
 #endif
 
     }
+    //printf("Time in s: %lld: thread ran out of work.  Last range was %8lld bytes in %4lldms, starting at %10lld.  Total %4d ranges and %10lld bytes.\n",timeInMillis() / 1000, rangeLength, timeInMillis() - rangeStartTime, rangeStart, totalRanges, totalBytes);
 
     delete aligner;
     delete reader;

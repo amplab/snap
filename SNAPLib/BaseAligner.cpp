@@ -894,11 +894,12 @@ Return Value:
 // off until we fix the insert/delete problem            _ASSERT(candidates[candidateToScore].score >= candidates[candidateToScore].minPossibleScore); // Else we messed up minPossibleScore (or LV or something)
     
                 if (bestScore > score) {
-		  if ((secondBestScore == UnusedScoreValue || !(secondBestScoreGenomeLocation + maxK > genomeLocation && secondBestScoreGenomeLocation < genomeLocation + maxK)) &&
-		      (bestScore == UnusedScoreValue || !(bestScoreGenomeLocation + maxK > genomeLocation && bestScoreGenomeLocation < genomeLocation + maxK))) {
-                        secondBestScore = bestScore;
-                        secondBestScoreGenomeLocation = bestScoreGenomeLocation;
-                        secondBestScoreIsRC = *hitIsRC;
+		            if ((secondBestScore == UnusedScoreValue || !(secondBestScoreGenomeLocation + maxK > genomeLocation && secondBestScoreGenomeLocation < genomeLocation + maxK)) &&
+		                (bestScore == UnusedScoreValue || !(bestScoreGenomeLocation + maxK > genomeLocation && bestScoreGenomeLocation < genomeLocation + maxK))) 
+                    {
+                            secondBestScore = bestScore;
+                            secondBestScoreGenomeLocation = bestScoreGenomeLocation;
+                            secondBestScoreIsRC = *hitIsRC;
                     }
     
                     //

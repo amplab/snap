@@ -157,14 +157,14 @@ AlignerContext::beginIteration()
                                     (size_t) index->getGenome()->getCountOfBases() / 3);
     if (NULL != options->samFileTemplate) {
         parallelSamWriter = ParallelSAMWriter::create(options->samFileTemplate,index->getGenome(),
-            options->numThreads, options->sortOutput, totalMemory, options->useM, argc, argv, version);
+            options->numThreads, options->sortOutput, totalMemory, options->useM, argc, argv, version, options->rgLineContents);
         if (NULL == parallelSamWriter) {
             fprintf(stderr,"Unable to create SAM file writer.  Just aligning for speed, no output will be generated.\n");
         }
     }
 
     alignStart = timeInMillis();
-    fileSplitterState = RangeSplitter(QueryFileSize(options->inputFilename), options->numThreads, 15);
+    fileSplitterState = RangeSplitter(QueryFileSize(options->inputFilename), options->numThreads, 100);
 
     clipping = options->clipping;
     totalThreads = options->numThreads;
