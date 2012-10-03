@@ -35,7 +35,7 @@ public:
         virtual ~FASTQReader();
 
 
-        static FASTQReader* create(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess,
+        static FASTQReader* create(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess, int numBuffers,
                                    ReadClippingType clipping = ClipBack);
 };
 
@@ -45,7 +45,7 @@ public:
 
 
         static PairedFASTQReader* create(const char *fileName0, const char *fileName1, _int64 startingOffset, 
-                                         _int64 amountOfFileToProcess, ReadClippingType clipping = ClipBack);
+                                         _int64 amountOfFileToProcess, int numBuffers, ReadClippingType clipping = ClipBack);
 
         virtual bool getNextReadPair(Read *read0, Read *read1);
 
@@ -111,7 +111,7 @@ private:
 #ifdef _MSC_VER
 class   WindowsFASTQReader : public FASTQReader {
 public:
-        WindowsFASTQReader(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess, ReadClippingType i_clipping);
+        WindowsFASTQReader(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess, int i_numBuffers, ReadClippingType i_clipping);
 
         virtual ~WindowsFASTQReader();
 
@@ -127,7 +127,7 @@ private:
         //
         // Use several buffers so that we can run IO in parallel with parsing.
         //
-        static const unsigned nBuffers = 3;
+        int numBuffers;
         static const unsigned bufferSize = 16 * 1024 * 1024 - 4096;
 
         static const int maxReadSizeInBytes = 25000;    // Read as in sequencer read, not read-from-the-filesystem.
@@ -159,7 +159,7 @@ private:
             OVERLAPPED      lap;
         };
 
-        BufferInfo bufferInfo[nBuffers];
+        BufferInfo *bufferInfo;
 
         unsigned nextBufferForReader;
         unsigned nextBufferForConsumer;
