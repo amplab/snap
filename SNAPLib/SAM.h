@@ -67,7 +67,8 @@ protected:
                         LandauVishkinWithCigar *    lv, 
                         char *                      buffer, 
                         size_t                      bufferSpace, 
-                        size_t *                    spaceUsed = NULL
+                        size_t *                    spaceUsed = NULL,
+                        size_t                      qnameLen = 0
                 );
 
 private:
