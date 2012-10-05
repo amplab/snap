@@ -202,8 +202,9 @@ SAMWriter::generateSAMText(
                 LandauVishkinWithCigar *    lv, 
                 char *                      buffer, 
                 size_t                      bufferSpace, 
-                size_t *                    spaceUsed)
-{
+                size_t *                    spaceUsed,
+                size_t                      qnameLen)
+ {
     const int MAX_READ = 10000;
     const int cigarBufSize = MAX_READ * 2;
     char cigarBuf[cigarBufSize];
@@ -219,6 +220,10 @@ SAMWriter::generateSAMText(
     const char *matePieceName = "*";
     unsigned matePositionInPiece = 0;
     _int64 templateLength = 0;
+    
+    if (0 == qnameLen) {
+         qnameLen = read->getIdLength();
+    }
 
     //
     // If the aligner said it didn't find anything, treat it as such.  Sometimes it will emit the
@@ -286,8 +291,23 @@ SAMWriter::generateSAMText(
                 flags |= SAM_NEXT_REVERSED;
             }
 
+            if (genomeLocation == 0xFFFFFFFF) {
+                //
+                // The SAM spec says that for paired reads where exactly one end is unmapped that the unmapped
+                // half should just have RNAME and POS copied from the mate.
+                //
+                pieceName = matePieceName;
+                matePieceName = "=";
+                positionInPiece = matePositionInPiece;
+            }
+
         } else {
             flags |= SAM_NEXT_UNMAPPED;
+            //
+            // The mate's unmapped, so point it at us.
+            //
+            matePieceName = "=";
+            matePositionInPiece = positionInPiece;
         }
 
         if (genomeLocation != 0xffffffff && mateLocation != 0xffffffff) {
@@ -315,13 +335,6 @@ SAMWriter::generateSAMText(
         }
     }
 
-    if (result == MultipleHits && genomeLocation == 0xFFFFFFFF) {
-        // Read was MultipleHits but we didn't return even one potential location, which means that all
-        // the seeds were too popular. Report the mapping quality as 1 to let users differentiate this
-        // from a NotFound read.
-        mapQuality = 1;
-    }
-
     // Write the SAM entry, which requires the following fields:
     //
     // 1. QNAME: Query name of the read or the read pair
@@ -339,12 +352,9 @@ SAMWriter::generateSAMText(
     //
     // Some FASTQ files have spaces in their ID strings, which is illegal in SAM.  Just truncate them at the space.
     //
-    unsigned readLen;
-    const char *firstSpace = strnchr(read->getId(),' ',read->getIdLength());
-    if (NULL == firstSpace) {
-        readLen = read->getIdLength();
-    } else {
-        readLen = (unsigned)(firstSpace - read->getId());
+    const char *firstSpace = strnchr(read->getId(),' ',qnameLen);
+    if (NULL != firstSpace) {
+        qnameLen = (unsigned)(firstSpace - read->getId());
     }
 
     const int nmStringSize = 30;// Big enough that it won't buffer overflow regardless of the value of editDistance
@@ -356,7 +366,7 @@ SAMWriter::generateSAMText(
     }
 
     int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s\tPG:Z:SNAP\tRG:Z:FASTQ%s\n",
-        readLen, read->getId(),
+        qnameLen, read->getId(),
         flags,
         pieceName,
         positionInPiece,
@@ -384,7 +394,6 @@ SAMWriter::generateSAMText(
     }
     return true;
 }
-
 
 ThreadSAMWriter::ThreadSAMWriter(size_t i_bufferSize, bool i_useM)
     : remainingBufferSpace(i_bufferSize), bufferBeingCreated(0), bufferSize(i_bufferSize), useM(i_useM)
@@ -473,15 +482,48 @@ ThreadSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *resu
     // some other thread doesn't separate them.  So, try the writes and if either doesn't
     // work start IO and try again.
     //
+    int first, second;
+    Read *reads[2];
+    reads[0] = read0;
+    reads[1] = read1;
+
+    if (result->location[0] <= result->location[1]) {
+        first = 0;
+        second = 1;
+    } else {
+        first = 1;
+        second = 0;
+    }
     size_t sizeUsed[2];
-    bool writesFit = generateSAMText(read0, result->status[0], result->location[0], result->isRC[0], useM, true, true,
-                                     read1, result->status[1], result->location[1], result->isRC[1],
-                        genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace,&sizeUsed[0]);
+
+    //
+    // For paired reads, we need to have the same QNAME for both of them, and it needs to be unique among all other
+    // reads in the dataset.  For now, all we do is see if the read names end in /1 and /2, and if so truncate them.
+    //
+    size_t idLengths[2];
+    idLengths[0] = read0->getIdLength();
+    idLengths[1] = read1->getIdLength();
+    if (idLengths[0] == idLengths[1] && idLengths[0] > 2 && read0->getId()[idLengths[0]-2] == '/' && read1->getId()[idLengths[0]-2] == '/') {
+        char lastChar0, lastChar1;
+        lastChar0 = read0->getId()[idLengths[0] - 1];
+        lastChar1 = read1->getId()[idLengths[1] - 1];
+        if ((lastChar0 == '1' || lastChar0 == '2') && (lastChar0 == '1' || lastChar1 == '2') && 
+            lastChar0 != lastChar1) {
+                idLengths[0] -= 2;
+                idLengths[1] -= 2;
+        }
+    }
+
+    bool writesFit = generateSAMText(reads[first], result->status[first], result->location[first], result->isRC[first], useM, true, true,
+                                     reads[second], result->status[second], result->location[second], result->isRC[second],
+                        genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace,&sizeUsed[first],
+                        idLengths[first]);
 
     if (writesFit) {
-        writesFit = generateSAMText(read1, result->status[1], result->location[1], result->isRC[1], useM, true, false,
-                                    read0, result->status[0], result->location[0], result->isRC[0],
-                        genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace + sizeUsed[0],remainingBufferSpace-sizeUsed[0],&sizeUsed[1]);
+        writesFit = generateSAMText(reads[second], result->status[second], result->location[second], result->isRC[second], useM, true, false,
+                                    reads[first], result->status[first], result->location[first], result->isRC[first],
+                        genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace + sizeUsed[first],remainingBufferSpace-sizeUsed[first],&sizeUsed[second],
+                        idLengths[second]);
     }
 
     if (!writesFit) {
@@ -489,12 +531,14 @@ ThreadSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *resu
             return false;
         }
 
-        if (!generateSAMText(read0, result->status[0], result->location[0], result->isRC[0], useM, true, true,
-                             read1, result->status[1], result->location[1], result->isRC[1],
-                genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace,&sizeUsed[0]) ||
-            !generateSAMText(read1, result->status[1] ,result->location[1], result->isRC[1], useM, true, false,
-                             read0, result->status[0], result->location[0], result->isRC[0],
-                genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace + sizeUsed[0],remainingBufferSpace-sizeUsed[0],&sizeUsed[1])) {
+        if (!generateSAMText(reads[first], result->status[first], result->location[first], result->isRC[first], useM, true, true,
+                             reads[second], result->status[second], result->location[second], result->isRC[second],
+                genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace,&sizeUsed[first],
+                idLengths[first]) ||
+            !generateSAMText(reads[second], result->status[second] ,result->location[second], result->isRC[second], useM, true, false,
+                             reads[first], result->status[first], result->location[first], result->isRC[first],
+                genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace + sizeUsed[first],remainingBufferSpace-sizeUsed[first],&sizeUsed[second],
+                idLengths[second])) {
 
 
             fprintf(stderr,"WindowsSAMWriter: create SAM string into fresh buffer failed\n");
@@ -502,10 +546,13 @@ ThreadSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *resu
         }
     }
 
-    size_t bufferOffset[2] = {bufferSize - remainingBufferSpace, bufferSize - remainingBufferSpace + sizeUsed[0]};
+    size_t bufferOffset[2] = {bufferSize - remainingBufferSpace, bufferSize - remainingBufferSpace + sizeUsed[first]};
     remainingBufferSpace -= (sizeUsed[0] + sizeUsed[1]);
-    afterWrite(result->status[0] != NotFound ? result->location[0] : UINT32_MAX, bufferOffset[0], (unsigned)sizeUsed[0]);
-    afterWrite(result->status[1] != NotFound ? result->location[1] : UINT32_MAX, bufferOffset[1], (unsigned)sizeUsed[1]);
+    //
+    // The strange code that determines the sort key (which uses the coordinate of the mate for unmapped reads) is because we list unmapped reads
+    // with mapped mates at their mates' location so they sort together.  If both halves are unmapped, then  
+    afterWrite(result->status[first] != NotFound ? result->location[first] : ((result->status[second] != NotFound) ? result->location[second] : UINT32_MAX), bufferOffset[0], (unsigned)sizeUsed[first]);
+    afterWrite(result->status[second] != NotFound ? result->location[second] : ((result->status[first] != NotFound) ? result->location[first] : UINT32_MAX), bufferOffset[1], (unsigned)sizeUsed[second]);
     return true;
 }
 
