@@ -543,7 +543,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                     TRACE("Returning 2 * MultipleHits because best and secondBest are both too small\n");
                     for (int i = 0; i < 2; i++) {
                         result->status[i] = MultipleHits;
-                        result->location[i] = bestLoc[i] + getBucket(i, bestRC[i], bestLoc[i])->bestOffset;
+                        result->location[i] = bestLoc[i];
                         result->isRC[i] = bestRC[i] != 0;
                         result->score[i] = bestScores[i];
                     }
