@@ -243,23 +243,23 @@ void *BigAlloc(
         size_t      sizeToAllocate,
         size_t      *sizeAllocated)
 {
-    if (sizeToAllocate == 0) {
-        sizeToAllocate = 1;
-    }
+    // Make space to include the allocated size at the start of our region; this is necessary
+    // so that we can BigDealloc the memory later.
+    sizeToAllocate += sizeof(size_t);
 
     const size_t ALIGN_SIZE = 4096;
     if (sizeToAllocate % ALIGN_SIZE != 0) {
         sizeToAllocate += ALIGN_SIZE - (sizeToAllocate % ALIGN_SIZE);
     }
     if (sizeAllocated != NULL) {
-      *sizeAllocated = sizeToAllocate;
+      *sizeAllocated = sizeToAllocate - sizeof(size_t);
     }
 
     int flags = MAP_PRIVATE|MAP_ANONYMOUS;
 #ifdef USE_HUGETLB
     flags |= MAP_HUGETLB;
 #endif
-    void* mem = mmap(NULL, sizeToAllocate, PROT_READ|PROT_WRITE, flags, -1, 0);
+    char *mem = (char *) mmap(NULL, sizeToAllocate, PROT_READ|PROT_WRITE, flags, -1, 0);
     if (mem == MAP_FAILED) {
         perror("mmap");
         exit(1);
@@ -272,14 +272,21 @@ void *BigAlloc(
     }
 #endif
 
-    return mem;
+    // Remember the size allocated in the first sizeof(size_t) bytes
+    *((size_t *) mem) = sizeToAllocate;
+    return (void *) (mem + sizeof(size_t));
 }
 
 
 void BigDealloc(void *memory)
 {
-    // TODO: Need to pass length around with memory, or remember it somewhere
-    //free(memory);
+    // Figure out the size we had allocated
+    char *startAddress = ((char *) memory) - sizeof(size_t);
+    size_t sizeAllocated = *((size_t *) startAddress);
+    if (munmap(startAddress, sizeAllocated) != 0) {
+        perror("munmap");
+        exit(1);
+    }
 }
 
 void *BigReserve(
