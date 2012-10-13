@@ -47,7 +47,8 @@ static void usage()
             "Options:\n"
             "  -s  seed size (default: %d)\n"
             "  -h  hash table slack (default: %.1f)\n"
-            "  -c  compute table bias (for inputs other than the human genome)\n",
+            "  -c  compute table bias (this is the default, no need to specify it)\n"
+            "  -hg19 use pre-computed table bias for hg19, which results in better speed and balance, but may not work for other references.\n",
             DEFAULT_SEED_SIZE,
             DEFAULT_SLACK);
     exit(1);
@@ -68,7 +69,7 @@ GenomeIndex::runIndexer(
 
     int seedLen = DEFAULT_SEED_SIZE;
     double slack = DEFAULT_SLACK;
-    bool computeBias = false;
+    bool computeBias = true;
 
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
@@ -87,6 +88,8 @@ GenomeIndex::runIndexer(
             }
         } else if (strcmp(argv[n], "-c") == 0) {
             computeBias = true;
+        } else if (strcmp(argv[n], "-hg19") == 0) {
+            computeBias = false;
         } else {
             fprintf(stderr, "Invalid argument: %s\n\n", argv[n]);
             usage();
@@ -297,7 +300,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
                     printf("HashTable[%d] has %lld used elements\n",j,(_int64)index->hashTables[j]->GetUsedElementCount());
                 }
                 printf("IndexBuilder: exceeded size of hash table %d at base %d.\n"
-                       "If you're indexing a non-human genome, make sure to pass the -c option.\n",
+                       "If you're indexing a non-human genome, make sure not to pass the -hg19 option.\n",
                        seed.getHighBases() / 2, i);
                 exit(1);
             }
