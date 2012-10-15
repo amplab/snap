@@ -1162,7 +1162,9 @@ SortedParallelSAMWriter::mergeSort()
     printf(" %u reads in %u blocks, %lld s (%lld s read wait, %lld s write wait)\n",
         total, locations.size(), (timeInMillis() - start)/1000, readWait/1000, writer.getWaitTimeInMillis()/1000);
 #endif
-
+#ifdef PROFILE_BIGALLOC
+    PrintAllocProfile();
+#endif
     return true;
 }
 
