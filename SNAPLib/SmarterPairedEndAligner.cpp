@@ -167,6 +167,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
                 result->status[r] = SingleHit;
                 result->location[r] = loc0;
                 result->isRC[r] = rc0;
+                result->score[r] = score0;
                 result->status[1-r] = NotFound;
                 return;
             }
@@ -178,9 +179,11 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
                 result->status[r] = SingleHit;
                 result->location[r] = loc0;
                 result->isRC[r] = rc0;
+                result->score[r] = score0;
                 result->status[1-r] = isOneLocation(status1) ? SingleHit : status1;
                 result->location[1-r] = loc1;
                 result->isRC[1-r] = rc1;
+                result->score[1-r] = score1;
                 return;
             } else if(status1 == NotFound) {
                 // We found read r at one location and didn't find the mate nearby. Let's remember because
@@ -218,6 +221,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
                 result->status[r] = (singleLoc[r] != 0xFFFFFFFF && bestScore[r] <= 0.6 * maxK) ? SingleHit : NotFound;
                 result->location[r] = singleLoc[r];
                 result->isRC[r] = singleIsRC[r];
+                result->score[r] = bestScore[r];
             }
         }
         return;
@@ -233,6 +237,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
                 result->status[r] = (bestScore[r] <= 0.6 * maxK ? SingleHit : NotFound);
                 result->location[r] = (bestScore[r] <= 0.6 * maxK ? singleLoc[r] : 0xFFFFFFFF);
                 result->isRC[r] = singleIsRC[r];
+                result->score[r] = bestScore[r];
             }
         }
         return;
