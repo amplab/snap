@@ -180,7 +180,7 @@ AlignerOptions::parse(
         sortOutput = true;
         return true;
     } else if (strcmp(argv[n], "-sm") == 0) {
-        if (n + 1 < argc) {
+        if (n + 1 < argc && argv[n+1][0] >= '0' && argv[n+1][0] <= '9') {
             sortMemory = atoi(argv[n+1]);
             n++;
             return true;

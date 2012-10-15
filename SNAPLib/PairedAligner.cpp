@@ -219,7 +219,7 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
         "snap paired <index-dir> <read1.fq> <read2.fq> [-o output.sam] [<options>]\n"
         "   or  snap paired <index-dir> <reads.sam> [-o output.sam] [<options>]");
     options->extra = extension->extraOptions();
-    if (argc < 3) {
+    if (argc < 2) {
         options->usage();
     }
 
@@ -228,7 +228,11 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
 
     bool samInput = stringEndsWith(argv[1], ".sam");
 
-    options->inputFileIsFASTQ = !samInput;
+    if (argc < 3 && !samInput) {
+        options->usage();
+    }
+
+	options->inputFileIsFASTQ = !samInput;
     options->fastqFile1 = samInput ? NULL : argv[2];
 
     for (int n = (samInput ? 2 : 3); n < argc; n++) {

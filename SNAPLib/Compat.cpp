@@ -888,6 +888,8 @@ CloseMemoryMappedFile(
     }
 }
 
+#ifdef __linux__
+
 class PosixAsyncFile : public AsyncFile
 {
 public:
@@ -1119,6 +1121,173 @@ PosixAsyncFile::Reader::waitForCompletion()
     return true;
 }
 
+#else
+
+// todo: make this actually async!
+
+class OsxAsyncFile : public AsyncFile
+{
+public:
+    static OsxAsyncFile* open(const char* filename, bool write);
+
+    OsxAsyncFile(int i_fd);
+
+    virtual bool close();
+
+    class Writer : public AsyncFile::Writer
+    {
+    public:
+        Writer(OsxAsyncFile* i_file);
+
+        virtual bool close();
+
+        virtual bool beginWrite(void* buffer, size_t length, size_t offset, size_t *bytesWritten);
+
+        virtual bool waitForCompletion();
+    
+    private:
+        OsxAsyncFile*       file;
+        bool                writing;
+        SingleWaiterObject  ready;
+        struct aiocb        aiocb;
+        size_t*             result;
+    };
+
+    virtual AsyncFile::Writer* getWriter();
+    
+    class Reader : public AsyncFile::Reader
+    {
+    public:
+        Reader(OsxAsyncFile* i_file);
+
+        virtual bool close();
+
+        virtual bool beginRead(void* buffer, size_t length, size_t offset, size_t *bytesRead);
+
+        virtual bool waitForCompletion();
+    
+    private:
+        OsxAsyncFile*       file;
+        bool                reading;
+        size_t*             result;
+    };
+
+    virtual AsyncFile::Reader* getReader();
+
+private:
+    int         fd;
+};
+
+    OsxAsyncFile*
+OsxAsyncFile::open(
+    const char* filename,
+    bool write)
+{
+    int fd = ::open(filename, write ? O_CREAT | O_RDWR | O_TRUNC : O_RDONLY, write ? S_IRWXU | S_IRGRP : 0);
+    if (fd < 0) {
+        fprintf(stderr,"Unable to create SAM file '%s', %d\n",filename,errno);
+        return NULL;
+    }
+    return new OsxAsyncFile(fd);
+}
+
+OsxAsyncFile::OsxAsyncFile(
+    int i_fd)
+    : fd(i_fd)
+{
+}
+
+    bool
+OsxAsyncFile::close()
+{
+    return ::close(fd) == 0;
+}
+
+    AsyncFile::Writer*
+OsxAsyncFile::getWriter()
+{
+    return new Writer(this);
+}
+
+OsxAsyncFile::Writer::Writer(OsxAsyncFile* i_file)
+    : file(i_file), writing(false)
+{
+}
+
+    bool
+OsxAsyncFile::Writer::close()
+{
+    return true;
+}
+
+    bool
+OsxAsyncFile::Writer::beginWrite(
+    void* buffer,
+    size_t length,
+    size_t offset,
+    size_t *bytesWritten)
+{
+    size_t m = ::lseek(file->fd, offset, SEEK_SET);
+    if (m == -1) {
+        return false;
+    }
+    size_t n = ::write(file->fd, buffer, length);
+    if (bytesWritten) {
+      *bytesWritten = n;
+    }
+    return n != -1;
+}
+
+    bool
+OsxAsyncFile::Writer::waitForCompletion()
+{
+    return true;
+}
+
+    AsyncFile::Reader*
+OsxAsyncFile::getReader()
+{
+    return new Reader(this);
+}
+
+OsxAsyncFile::Reader::Reader(
+    OsxAsyncFile* i_file)
+    : file(i_file), reading(false)
+{
+}
+
+    bool
+OsxAsyncFile::Reader::close()
+{
+    return true;
+}
+
+    bool
+OsxAsyncFile::Reader::beginRead(
+    void* buffer,
+    size_t length,
+    size_t offset,
+    size_t* bytesRead)
+{
+    size_t m = ::lseek(file->fd, offset, SEEK_SET);
+    if (m == -1) {
+        return false;
+    }
+    size_t n = ::read(file->fd, buffer, length);
+    if (bytesRead) {
+        *bytesRead = n;
+    }
+    return n != -1;
+}
+
+    bool
+OsxAsyncFile::Reader::waitForCompletion()
+{
+    return true;
+}
+
+#endif
+
 int _fseek64bit(FILE *stream, _int64 offset, int origin)
 {
 #ifdef __APPLE__
@@ -1136,6 +1305,10 @@ AsyncFile* AsyncFile::open(const char* filename, bool write)
 #ifdef _MSC_VER
     return WindowsAsyncFile::open(filename, write);
 #else
+#ifdef __linux__
     return PosixAsyncFile::open(filename, write);
+#else
+    return OsxAsyncFile::open(filename, write);
+#endif
 #endif
 }
