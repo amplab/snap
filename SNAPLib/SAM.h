@@ -181,6 +181,8 @@ class ParallelSAMWriter {
 public:
     virtual ~ParallelSAMWriter();
 
+    ParallelSAMWriter() : writer(NULL), file(NULL), argv(NULL), version(NULL), rgLine(NULL) {}
+
     static ParallelSAMWriter*       create(const char *fileName, const Genome *genome,
                                         unsigned nThreads, bool sort, size_t sortBufferMemory, bool i_useM,
                                         int argc, const char **argv, const char *version, const char *rgLine);
@@ -263,7 +265,7 @@ protected:
 
 private:
     SortedParallelSAMWriter*        parent;
-    unsigned                        largest; // largest location count so far
+    int                             largest; // largest location count so far
     SortBlock                       locations;
 };
 
@@ -272,7 +274,7 @@ class SortedParallelSAMWriter : public ParallelSAMWriter
 public:
 
     SortedParallelSAMWriter(size_t i_totalMemory, bool useM, int argc, const char**argv, const char *version, const char *rgLine) : 
-      ParallelSAMWriter(useM, argc, argv, version, rgLine), totalMemory(i_totalMemory) {}
+      ParallelSAMWriter(useM, argc, argv, version, rgLine), totalMemory(i_totalMemory), tempFile(NULL), sortedFile(NULL) {}
 
     virtual ~SortedParallelSAMWriter() {}
     
