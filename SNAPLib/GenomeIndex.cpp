@@ -47,7 +47,8 @@ static void usage()
             "Options:\n"
             "  -s  seed size (default: %d)\n"
             "  -h  hash table slack (default: %.1f)\n"
-            "  -c  compute table bias (for inputs other than the human genome)\n",
+            "  -c  compute table bias (this is the default, no need to specify it)\n"
+            "  -hg19 use pre-computed table bias for hg19, which results in better speed and balance, but may not work for other references.\n",
             DEFAULT_SEED_SIZE,
             DEFAULT_SLACK);
     exit(1);
@@ -68,7 +69,7 @@ GenomeIndex::runIndexer(
 
     int seedLen = DEFAULT_SEED_SIZE;
     double slack = DEFAULT_SLACK;
-    bool computeBias = false;
+    bool computeBias = true;
 
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
@@ -87,6 +88,8 @@ GenomeIndex::runIndexer(
             }
         } else if (strcmp(argv[n], "-c") == 0) {
             computeBias = true;
+        } else if (strcmp(argv[n], "-hg19") == 0) {
+            computeBias = false;
         } else {
             fprintf(stderr, "Invalid argument: %s\n\n", argv[n]);
             usage();
@@ -184,6 +187,10 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     index->genome = NULL;   // We always delete the index when we're done, but we delete the genome first to save space during the overflow table build.
 
     unsigned countOfBases = genome->getCountOfBases();
+    if (countOfBases > 0xfffffff0) {
+        fprintf(stderr, "Genome is too big for this index.  Must be some headroom beneath 2^32 bases.\n");
+        return false;
+    }
 
     // Compute bias table sizes, unless we're using the precomputed ones hardcoded in BiasTables.cpp
     double *biasTable = NULL;
@@ -218,14 +225,16 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     unusedDataValue[0] = 0xffffffff;
     unusedDataValue[1] = 0xffffffff;
 
-    unsigned nOverflowEntries = (unsigned) countOfBases;
+    // Don't create *too* many overflow entries because they consume significant memory.
+    // It would be good to grow these dynamically instead of living with a fixed-size array.
+    unsigned nOverflowEntries = min(countOfBases, (unsigned) 200 * 1000 * 1000);
     OverflowEntry *overflowEntries = new OverflowEntry[nOverflowEntries];
     if (NULL == overflowEntries) {
         fprintf(stderr,"Unable to allocate oveflow entries.\n");
         exit(1);
     }
 
-    unsigned nOverflowBackpointers = (unsigned) countOfBases;
+    unsigned nOverflowBackpointers = 5 * nOverflowEntries;
     OverflowBackpointer *overflowBackpointers = new OverflowBackpointer[nOverflowBackpointers];
     if (NULL == overflowBackpointers) {
         fprintf(stderr,"Unable to allocate overflow backpointers\n");
@@ -234,10 +243,6 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     unsigned nextOverflowBackpointer = 0;
 
     size_t nonSeeds = 0;
-    if (countOfBases > 0xfffffff0) {
-        fprintf(stderr,"Genome is too big for this index.  Must be some headroom beneath 2^32 bases.\n");
-        return false;
-    }
     unsigned nextOverflowIndex = 0;
     unsigned countOfDuplicateOverflows = 0;   // Number of extra hits on duplicate indices.  This should come out once we implement the overflow table.
     unsigned bothComplementsUsed = 0;           // Number of hash buckets where both complements are used
@@ -297,7 +302,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
                     printf("HashTable[%d] has %lld used elements\n",j,(_int64)index->hashTables[j]->GetUsedElementCount());
                 }
                 printf("IndexBuilder: exceeded size of hash table %d at base %d.\n"
-                       "If you're indexing a non-human genome, make sure to pass the -c option.\n",
+                       "If you're indexing a non-human genome, make sure not to pass the -hg19 option.\n",
                        seed.getHighBases() / 2, i);
                 exit(1);
             }

@@ -76,6 +76,6 @@ private:
 
     // Arrays for backtracing the actions required to match two strings
     char backtraceAction[MAX_K+1];
-    char backtraceMatched[MAX_K+1];
-    char backtraceD[MAX_K+1];
+    int backtraceMatched[MAX_K+1];
+    int backtraceD[MAX_K+1];
 };

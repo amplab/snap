@@ -934,15 +934,6 @@ Return Value:
                     return true;
                 }
 
-                // TODO: use adaptive confDiff in this check?
-                if (bestScore < confDiff && secondBestScore < bestScore + confDiff && maxHitsToGet == 0) {
-                    //
-                    // We've scored two different places that are good enough that this must be an ambiguous read.
-                    //
-                    *result = MultipleHits;
-                    return true;
-                }
-
                 // Update scoreLimit since we may have improved bestScore or secondBestScore
                 if (maxHitsToGet > 0) {
                     scoreLimit = min(bestScore, maxK) + 3;

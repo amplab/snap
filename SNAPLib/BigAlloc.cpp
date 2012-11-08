@@ -194,12 +194,65 @@ Return Value:
 
 }
 
+#ifdef PROFILE_BIGALLOC
+
+struct ProfileEntry
+{
+    char*   caller;
+    size_t  total;
+    size_t  count;
+};
+
+static const int MaxCallers = 1000;
+static int NCallers = 0;
+static int LastCaller = 0;
+static ProfileEntry AllocProfile[1000];
+
+void *BigAllocProfile(
+        size_t      sizeToAllocate,
+        size_t      *sizeAllocated,
+        char        *caller)
+{
+    if (caller) {
+        if (LastCaller >= NCallers || strcmp(AllocProfile[LastCaller].caller, caller)) {
+            LastCaller = NCallers;
+            for (int i = 0; i < NCallers; i++) {
+                if (0 == strcmp(AllocProfile[i].caller, caller)) {
+                    LastCaller = i;
+                    break;
+                }
+            }
+            if (LastCaller == NCallers && NCallers < MaxCallers) {
+                NCallers++;
+                AllocProfile[LastCaller].caller = caller;
+                AllocProfile[LastCaller].total = AllocProfile[LastCaller].count = 0;
+            }
+        }
+        if (LastCaller < MaxCallers) {
+            AllocProfile[LastCaller].count++;
+            AllocProfile[LastCaller].total += sizeToAllocate;
+        }
+    }
+    return BigAllocInternal(sizeToAllocate, sizeAllocated);
+}
+
+void PrintAllocProfile()
+{
+    printf("BigAlloc usage\n");
+    for (int i = 0; i < NCallers; i++) {
+        printf("%7.1f Mb %7lld %s\n", 
+            AllocProfile[i].total * 1e-6, AllocProfile[i].count, AllocProfile[i].caller);
+    }
+}
+
+#else
 void *BigAlloc(
         size_t      sizeToAllocate,
         size_t      *sizeAllocated)
 {
     return BigAllocInternal(sizeToAllocate, sizeAllocated);
 }
+#endif
 
 void BigDealloc(void *memory)
 /*++
@@ -243,23 +296,23 @@ void *BigAlloc(
         size_t      sizeToAllocate,
         size_t      *sizeAllocated)
 {
-    if (sizeToAllocate == 0) {
-        sizeToAllocate = 1;
-    }
+    // Make space to include the allocated size at the start of our region; this is necessary
+    // so that we can BigDealloc the memory later.
+    sizeToAllocate += sizeof(size_t);
 
     const size_t ALIGN_SIZE = 4096;
     if (sizeToAllocate % ALIGN_SIZE != 0) {
         sizeToAllocate += ALIGN_SIZE - (sizeToAllocate % ALIGN_SIZE);
     }
     if (sizeAllocated != NULL) {
-      *sizeAllocated = sizeToAllocate;
+      *sizeAllocated = sizeToAllocate - sizeof(size_t);
     }
 
     int flags = MAP_PRIVATE|MAP_ANONYMOUS;
 #ifdef USE_HUGETLB
     flags |= MAP_HUGETLB;
 #endif
-    void* mem = mmap(NULL, sizeToAllocate, PROT_READ|PROT_WRITE, flags, -1, 0);
+    char *mem = (char *) mmap(NULL, sizeToAllocate, PROT_READ|PROT_WRITE, flags, -1, 0);
     if (mem == MAP_FAILED) {
         perror("mmap");
         exit(1);
@@ -272,14 +325,21 @@ void *BigAlloc(
     }
 #endif
 
-    return mem;
+    // Remember the size allocated in the first sizeof(size_t) bytes
+    *((size_t *) mem) = sizeToAllocate;
+    return (void *) (mem + sizeof(size_t));
 }
 
 
 void BigDealloc(void *memory)
 {
-    // TODO: Need to pass length around with memory, or remember it somewhere
-    //free(memory);
+    // Figure out the size we had allocated
+    char *startAddress = ((char *) memory) - sizeof(size_t);
+    size_t sizeAllocated = *((size_t *) startAddress);
+    if (munmap(startAddress, sizeAllocated) != 0) {
+        perror("munmap");
+        exit(1);
+    }
 }
 
 void *BigReserve(

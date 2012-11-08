@@ -400,6 +400,10 @@ ThreadSAMWriter::ThreadSAMWriter(size_t i_bufferSize, bool i_useM)
 {
     buffer[0] = NULL;
     buffer[1] = NULL;
+    writer[0] = NULL;
+    writer[1] = NULL;
+    genome = NULL;
+    nextWriteOffset = NULL;
 }
 
     bool
@@ -719,7 +723,7 @@ SortBlock::SortBlock()
 }
 
 SortBlock::SortBlock(size_t capacity)
-    : entries(capacity), fileOffset(0), fileBytes(0), index(0), reader()
+    : entries((int)capacity), fileOffset(0), fileBytes(0), index(0), reader()
 {
 }
 
@@ -831,7 +835,7 @@ SortedParallelSAMWriter::createThreadWriters(const Genome* genome)
 {
     size_t bufferSize = totalMemory / nThreads / 2;
     bool worked = true;
-    for (unsigned i = 0; i < nThreads; i++) {
+    for (int i = 0; i < nThreads; i++) {
         SortedThreadSAMWriter* w = new SortedThreadSAMWriter(bufferSize, useM);
         writer[i] = w;
         worked &= w->initialize(this, genome);
@@ -876,7 +880,7 @@ void SortContext::runThread()
         size_t targetOffset = blockOffsets[rangeStart];
         size_t bufferOffset = 0;
         unsigned end = min((unsigned) entryCount, (unsigned) (rangeStart + rangeLength) * blockSize );
-        for (unsigned read = rangeStart * blockSize; ; read++) {
+        for (size_t read = rangeStart * blockSize; ; read++) {
             SortEntry* entry;
             if (read == end || bufferOffset + (entry = &entries[read])->length > bufferSize) {
                 writers[1 - writingBuffer]->waitForCompletion();
@@ -936,7 +940,7 @@ SortedParallelSAMWriter::mergeSort()
     size_t offset = 0;
     for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++) {
         unsigned n = i->entries.size();
-        unsigned blockIndex = i - locations.begin();
+        size_t blockIndex = i - locations.begin();
         memcpy(entries + offset, i->entries.begin(), n * (size_t) sizeof(SortEntry));
         for (unsigned j = 0; j < n; j++) {
             entries[offset + j].offset = blockIndex;
@@ -1033,7 +1037,9 @@ SortedParallelSAMWriter::mergeSort()
     printf(" %u reads in %u blocks, %lld s (%lld s read wait, %lld s write wait)\n",
         total, locations.size(), (timeInMillis() - start)/1000, readWait/1000, writer.getWaitTimeInMillis()/1000);
 #endif
-
+#ifdef PROFILE_BIGALLOC
+    PrintAllocProfile();
+#endif
     return true;
 }
 
@@ -1071,7 +1077,7 @@ SortedParallelSAMWriter::memoryMappedSort()
 
     // divide into blocks and figure out offset from base
     const unsigned blockSize = 1000;
-    unsigned blockCount = (entryCount + blockSize - 1) / blockSize;
+    size_t blockCount = (entryCount + blockSize - 1) / blockSize;
     size_t* blockOffsets = new size_t[blockCount];
     offset = headerSize;
     for (unsigned block = 0; ; block++) {
