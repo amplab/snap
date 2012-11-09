@@ -281,7 +281,7 @@ class SAMReader : public PairedReadReader, public ReadReader {
 public:
         virtual ~SAMReader();
 
-        virtual bool getNextRead(Read *readToUpdate);
+        virtual bool getNextRead(Read *readToUpdate, bool *isReadFirstInBatch = NULL);
     
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, unsigned *genomeLocation, bool *isRC, unsigned *mapQ,
                         unsigned *flag, const char **cigar)
@@ -298,7 +298,7 @@ public:
         // The PairedReadReader version of getNextReadPair, which throws away the alignment, mapQ and cigar values.
         //
             bool
-        getNextReadPair(Read *read1, Read *read2) {
+        getNextReadPair(Read *read1, Read *read2, bool *areReadsFirstInBatch = NULL) {
             PairedAlignmentResult pairedAlignmentResult;
             unsigned mapQ[2];
 
@@ -342,7 +342,7 @@ protected:
 
         static void getReadFromLine(const Genome *genome, char *line, char *endOfBuffer, Read *read, AlignmentResult *alignmentResult,
                         unsigned *genomeLocation, bool *isRC, unsigned *mapQ, 
-                        size_t *lineLength, unsigned *flag, unsigned **newReferenceCounts, const char **cigar, ReadClippingType clipping);
+                        size_t *lineLength, unsigned *flag, unsigned *newReferenceCount, const char **cigar, ReadClippingType clipping);
 };
 
 #ifdef  _MSC_VER
@@ -355,6 +355,8 @@ public:
         virtual void readDoneWithBuffer(unsigned *referenceCount);
 
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
+
+        virtual bool getsReadsInBatches() {return true;}
 
 protected:
 

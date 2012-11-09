@@ -146,8 +146,9 @@ RangeSplittingReadSupplier::getNextRead()
 }
 
     bool 
-RangeSplittingPairedReadReader::getNextReadPair(Read *read1, Read *read2)
+RangeSplittingPairedReadReader::getNextReadPair(Read *read1, Read *read2, bool *areReadsFirstInBatch)
 {
+    //TODO: handle areReadsFirstInBatch
     if (underlyingReader->getNextReadPair(read1,read2)) {
         return true;
     }

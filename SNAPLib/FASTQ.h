@@ -45,9 +45,9 @@ public:
 
 
         static PairedFASTQReader* create(const char *fileName0, const char *fileName1, _int64 startingOffset, 
-                                         _int64 amountOfFileToProcess, int numBuffers, ReadClippingType clipping = ClipBack);
+                                         _int64 amountOfFileToProcess, ReadClippingType clipping = ClipBack);
 
-        virtual bool getNextReadPair(Read *read0, Read *read1);
+        virtual bool getNextReadPair(Read *read0, Read *read1, bool *areReadsFirstInBatch = NULL);
 
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) {
             for (int i = 0; i < 2; i++) {
@@ -60,6 +60,8 @@ public:
             _ASSERT(0 == whichHalfOfPair || 1 == whichHalfOfPair);
             return readers[whichHalfOfPair];
         }
+
+        virtual bool getsReadsInBatches() {return readers[0]->getsReadsInBatches() || readers[1]->getsReadsInBatches();}
 
 
 private:
@@ -81,11 +83,13 @@ public:
 
         virtual ~MemMapFASTQReader();
 
-        virtual bool getNextRead(Read *readToUpdate);
+        virtual bool getNextRead(Read *readToUpdate, bool *isReadFirstInBatch = NULL);
 
         virtual void readDoneWithBuffer(unsigned *referenceCount);
 
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
+
+        virtual bool getsReadsInBatches() {return false;}
 
 private:
         int fd;
@@ -115,11 +119,13 @@ public:
 
         virtual ~WindowsFASTQReader();
 
-        virtual bool getNextRead(Read *readToUpdate);
+        virtual bool getNextRead(Read *readToUpdate, bool *isReadFirstInBatch = NULL);
 
         virtual void readDoneWithBuffer(unsigned *referenceCount);
 
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
+
+        virtual bool getsReadsInBatches() {return true;}
 private:
 
         HANDLE hFile;
@@ -141,6 +147,9 @@ private:
         enum BufferState {Empty, Reading, Full, UsedButReferenced};
 
         struct BufferInfo {
+            BufferInfo      *next;      // For the empty or full queues.
+            BufferInfo      *prev;
+
             char            *buffer;
             BufferState     state;
             DWORD           validBytes;
@@ -150,19 +159,38 @@ private:
             // Some memory to hold a line that's broken over the end of this buffer and the
             // beginning of the next.
             //
-            char            overflowBuffer[maxLineLen+1];
+            char            overflowBuffer[4*maxLineLen+1];
             bool            isEOF;
             unsigned        offset;     // How far has the consumer gotten?
+            bool            hasFirstCompleteReadBeenConsumed;
 
             _int64          fileOffset;
 
             OVERLAPPED      lap;
+
+            void addToQueue(BufferInfo *queueHead) {
+                next = queueHead;
+                prev = queueHead->prev;
+                next->prev = this;
+                prev->next = this;
+            }
+
+            void removeFromQueue() {
+                next->prev = prev;
+                prev->next = next;
+                next = prev = NULL;
+            }
         };
 
-        BufferInfo *bufferInfo;
+        BufferInfo emptyQueue[1];
+        BufferInfo readingQueue[1];
+        BufferInfo fullQueue[1];
+        BufferInfo *currentBuffer;  // The one that the reader's processing.
 
-        unsigned nextBufferForReader;
-        unsigned nextBufferForConsumer;
+        ExclusiveLock emptyQueueLock[1];
+        SingleWaiterObject *emptyQueueNotEmpty; // This is set when the empty queue has buffers in it.
+
+        BufferInfo *bufferInfo;
 
         LARGE_INTEGER readOffset;
         _int64        endingOffset;
@@ -172,7 +200,7 @@ private:
         bool          didInitialSkip;   // Have we skipped to the beginning of the first fastq line?  We may start in the middle of one.
 
         void startIo();
-        void waitForBuffer(unsigned bufferNumber);
+        void waitForNextBuffer();
 
 };
 #endif

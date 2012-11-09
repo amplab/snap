@@ -1212,8 +1212,9 @@ SAMReader::create(const char *fileName, const Genome *genome, _int64 startingOff
 // alignment results by simply throwing them away.
 //
     bool
-SAMReader::getNextRead(Read *readToUpdate)
+SAMReader::getNextRead(Read *readToUpdate, bool *isReadFirstInBatch)
 {
+    // TODO: handle isReadFirstInBatch
     return getNextRead(readToUpdate, NULL, NULL, NULL, NULL, NULL, NULL);
 }
 
@@ -1351,7 +1352,7 @@ SAMReader::getReadFromLine(
     unsigned            *mapQ,
     size_t              *lineLength,
     unsigned *           flag,
-    unsigned **          newReferenceCounts,
+    unsigned *           newReferenceCount,
     const char **        cigar,
     ReadClippingType     clipping
     )
@@ -1439,7 +1440,7 @@ SAMReader::getReadFromLine(
         //
         // Clip reads where the quality strings end in '#'
         //
-        read->init(field[QNAME],(unsigned)fieldLength[QNAME],field[SEQ],field[QUAL],(unsigned)fieldLength[SEQ],newReferenceCounts);
+        read->init(field[QNAME],(unsigned)fieldLength[QNAME],field[SEQ],field[QUAL],(unsigned)fieldLength[SEQ],newReferenceCount);
         //
         // If this read is RC in the SAM file, we need to reverse it here, since Reads are always the sense that they were as they came
         // out of the base caller.
@@ -1616,14 +1617,13 @@ WindowsOverlappedSAMReader::reinit(_int64 startingOffset, _int64 amountOfFileToP
     unsigned mapQ;
     size_t lineLength;
     unsigned flag;
-    unsigned *referenceCounts[2];
+    unsigned *referenceCount;
 
-    referenceCounts[0] = &info->referenceCount;
-    referenceCounts[1] = NULL;
-
+    referenceCount = &info->referenceCount;
+ 
     getReadFromLine(genome,firstNewline+1,info->buffer + info->validBytes,
                     &read,&alignmentResult,&genomeLocation,&isRC,&mapQ,&lineLength,
-                    &flag,referenceCounts,NULL,clipping);
+                    &flag,referenceCount,NULL,clipping);
 
     if ((flag & SAM_MULTI_SEGMENT) && !(flag & SAM_FIRST_SEGMENT)) {
         //
@@ -1670,9 +1670,8 @@ WindowsOverlappedSAMReader::getNextRead(
         waitForBuffer(nextBufferForConsumer);
     }
 
-    unsigned *referenceCounts[2];
-    referenceCounts[0] = &info->referenceCount;
-    referenceCounts[1] = NULL;
+    unsigned *referenceCount;
+    referenceCount = &info->referenceCount;
 
     char *nextLine;
     char *endOfBuffer;
@@ -1705,7 +1704,8 @@ WindowsOverlappedSAMReader::getNextRead(
 
         nextBufferForConsumer = (nextBufferForConsumer + 1) % nBuffers;
         info = &bufferInfo[nextBufferForConsumer];
-        referenceCounts[1] = &info->referenceCount;
+        // FIXME: don't split reads across buffers
+//        referenceCounts[1] = &info->referenceCount;
 
         newLine = strchr(info->buffer,'\n');
         _ASSERT(NULL != newLine);
@@ -1722,7 +1722,7 @@ WindowsOverlappedSAMReader::getNextRead(
     info->referenceCount++;
 
     size_t lineLength;
-    getReadFromLine(genome,nextLine,endOfBuffer,read,alignmentResult,genomeLocation,isRC,mapQ,&lineLength,flag,referenceCounts,cigar,clipping);
+    getReadFromLine(genome,nextLine,endOfBuffer,read,alignmentResult,genomeLocation,isRC,mapQ,&lineLength,flag,referenceCount,cigar,clipping);
 
     return true;
 }

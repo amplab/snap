@@ -35,14 +35,15 @@ class ReadReader {
 public:
         virtual ~ReadReader() {}
         virtual void readDoneWithBuffer(unsigned *referenceCount) = 0;
-        virtual bool getNextRead(Read *readToUpdate) = 0;
+        virtual bool getNextRead(Read *readToUpdate, bool *isReadFirstInBatch = NULL) = 0;
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
+        virtual bool getsReadsInBatches() = 0; // Let a reader say whether it's got a natural batch size
 };
 
 class PairedReadReader {
 public:
         virtual ~PairedReadReader() {}
-        virtual bool getNextReadPair(Read *read1, Read *read2) = 0;
+        virtual bool getNextReadPair(Read *read1, Read *read2, bool *areReadsFirstInBatch = NULL) = 0;
         virtual ReadReader *getReaderToInitializeRead(int whichHalfOfPair) = 0;
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
 };
@@ -65,7 +66,7 @@ public:
                                             localUnclippedDataBuffer(NULL), localUnclippedQualityBuffer(NULL), localBufferSize(0),
                                             originalUnclippedDataBuffer(NULL), originalUnclippedQualityBuffer(NULL), clippingState(NoClipping)
         {
-            referenceCounts[0] = referenceCounts[1] = NULL;
+            referenceCount = NULL;
         }
 
         ~Read()
@@ -89,23 +90,22 @@ public:
                 const char *i_data, 
                 const char *i_quality, 
                 unsigned i_dataLength, 
-                unsigned **newReferenceCounts)
+                unsigned *newReferenceCount)
         {
             commonInit(i_id,i_idLength,i_data,i_quality,i_dataLength);
-            dropReferences();
+            dropReference();
 
 
 
-            if (NULL != newReferenceCounts) {
-                referenceCounts[0] = newReferenceCounts[0];
-                referenceCounts[1] = newReferenceCounts[1];
+            if (NULL != newReferenceCount) {
+                referenceCount = newReferenceCount;
             }
         }
 
         void deinit()
         {
-            dropReferences();
-            referenceCounts[0] = referenceCounts[1] = NULL;
+            dropReference();
+            referenceCount = NULL;
         }
 
         void init(
@@ -117,7 +117,7 @@ public:
         {
             commonInit(i_id,i_idLength,i_data,i_quality,i_dataLength);
 
-            referenceCounts[0] = referenceCounts[1] = NULL;
+            referenceCount = NULL;
         }
 
         // For efficiency, this class holds id, data and quality pointers that are
@@ -286,18 +286,11 @@ private:
             clippingState = NoClipping;
         }
 
-        inline void dropReferences() {
-            if (NULL != referenceCounts[0]) {
-                (*referenceCounts[0])--;
-                if (0 == *referenceCounts[0]) {
-                    reader->readDoneWithBuffer(referenceCounts[0]);
-                }
-            }
-
-            if (NULL != referenceCounts[1]) {
-                (*referenceCounts[1])--;
-                if (0 == *referenceCounts[1]) {
-                    reader->readDoneWithBuffer(referenceCounts[1]);
+        inline void dropReference() {
+            if (NULL != referenceCount) {
+                (*referenceCount)--;
+                if (0 == *referenceCount) {
+                    reader->readDoneWithBuffer(referenceCount);
                 }
             }
         }
@@ -314,7 +307,7 @@ private:
         ReadClippingType clippingState;
 
         ReadReader *reader;
-        unsigned *referenceCounts[2];
+        unsigned *referenceCount;
 
         //
         // Data stored in the read that's used if we RC ourself.  These are always unclipped.
