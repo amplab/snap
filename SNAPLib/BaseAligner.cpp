@@ -943,7 +943,6 @@ Return Value:
                         // Since secondBestScore already means that our best location so far won't be a SingleHit,
                         // we really just care about finding better locations than that. However, still check for
                         // scores up to bestScore - 1 since those might become a new secondBestScore.
-                        _ASSERT(bestScore >= 1); // Otherwise we would've returned MultipleHits
                         scoreLimit = bestScore - 1;
                     }
                 }

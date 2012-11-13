@@ -184,11 +184,10 @@ private:
 
         BufferInfo emptyQueue[1];
         BufferInfo readingQueue[1];
-        BufferInfo fullQueue[1];
         BufferInfo *currentBuffer;  // The one that the reader's processing.
 
         ExclusiveLock emptyQueueLock[1];
-        SingleWaiterObject *emptyQueueNotEmpty; // This is set when the empty queue has buffers in it.
+        SingleWaiterObject emptyQueueNotEmpty; // This is set when the empty queue has buffers in it.
 
         BufferInfo *bufferInfo;
 

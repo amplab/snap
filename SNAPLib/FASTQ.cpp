@@ -290,15 +290,15 @@ WindowsFASTQReader::WindowsFASTQReader(const char *fileName, _int64 startingOffs
     didInitialSkip = false;
     clipping = i_clipping;
     InitializeExclusiveLock(emptyQueueLock);
-    CreateSingleWaiterObject(emptyQueueNotEmpty);
-    SignalSingleWaiterObject(emptyQueueNotEmpty);
+    CreateSingleWaiterObject(&emptyQueueNotEmpty);
+    SignalSingleWaiterObject(&emptyQueueNotEmpty);
     //
     // Initilize the buffer info struct.
     //
     emptyQueue->next = emptyQueue->prev = emptyQueue;
-    fullQueue->next = fullQueue->prev = fullQueue;
+    readingQueue->next = readingQueue->prev = readingQueue;
     numBuffers = i_numBuffers;
-    bufferInfo = (BufferInfo *)BigAlloc(numBuffers);
+    bufferInfo = (BufferInfo *)BigAlloc(numBuffers * sizeof(*bufferInfo));
     currentBuffer = NULL;
 
     for (int i = 0 ; i < numBuffers; i++) {
@@ -471,7 +471,7 @@ WindowsFASTQReader::reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
         bufferInfo[i].addToQueue(emptyQueue);
     }
 
-    SignalSingleWaiterObject(emptyQueueNotEmpty);
+    SignalSingleWaiterObject(&emptyQueueNotEmpty);
     currentBuffer = NULL;
 
     readOffset.QuadPart = startingOffset;
@@ -564,7 +564,7 @@ WindowsFASTQReader::startIo()
         AcquireExclusiveLock(emptyQueueLock);
 
     } // While buffers in the empty queue
-    ResetSingleWaiterObject(emptyQueueNotEmpty);
+    ResetSingleWaiterObject(&emptyQueueNotEmpty);
     ReleaseExclusiveLock(emptyQueueLock);
 }
 
@@ -581,6 +581,7 @@ WindowsFASTQReader::getNextRead(Read *readToUpdate, bool *isReadFirstInBatch)
         //
         // EOF.
         //
+        currentBuffer->state = UsedButReferenced;
         return false;
     }
 
@@ -588,6 +589,7 @@ WindowsFASTQReader::getNextRead(Read *readToUpdate, bool *isReadFirstInBatch)
         //
         // We have more valid bytes, but it's not ours to handle.  This only happens at the end of our work.
         //
+        currentBuffer->state = UsedButReferenced;
         return false;
     }
 
@@ -720,10 +722,14 @@ WindowsFASTQReader::getNextRead(Read *readToUpdate, bool *isReadFirstInBatch)
             }
         }
 
+        size_t lineLen;
+
         if (NULL == newLine) {
             //
             // There was no next newline; read into the next buffer.
             //
+            startIo();  // There may have been buffers added to the empty queue.  We periodically need to start reading them, and now seems like a good time.
+
             if (currentBuffer->isEOF) {
                 fprintf(stderr,"FASTQ file doesn't end with a newline!  Failing.  fileOffset = %lld, offset = %d, validBytes = %d, nBytesThatMayBeginARead %d\n",
                     currentBuffer->fileOffset,currentBuffer->offset,currentBuffer->validBytes,currentBuffer->nBytesThatMayBeginARead);
@@ -754,61 +760,69 @@ WindowsFASTQReader::getNextRead(Read *readToUpdate, bool *isReadFirstInBatch)
 
             newLine = strchr(currentBuffer->buffer,'\n');
             _ASSERT(NULL != newLine);
-            *newLine = 0;
+            lineLen = amountFromOldBuffer + (newLine - currentBuffer->buffer + 1); // +1 is to include the newline in the line
+
             if (newLine - currentBuffer->buffer + 1 + amountFromOldBuffer > maxLineLen) {
                 fprintf(stderr,"Error parsing FASTQ file(2).  Either it has very long text lines or it is corrupt.\n");
                 exit(1);
             }
-            memcpy(lines[i] + amountFromOldBuffer, currentBuffer->buffer, newLine - currentBuffer->buffer + 1);
-            overflowBufferPointer = lines[i] + amountFromOldBuffer + (newLine - currentBuffer->buffer + 1);
-            overflowBufferSpaceLeft -= amountFromOldBuffer + (newLine - currentBuffer->buffer + 1);
+            memcpy(lines[i] + amountFromOldBuffer, currentBuffer->buffer, lineLen - amountFromOldBuffer);
 
-            if (1 == i) {
-                line1DataLen = (unsigned)(amountFromOldBuffer + newLine - currentBuffer->buffer);
-            }
+            overflowBufferPointer = lines[i] + lineLen;
+            overflowBufferSpaceLeft -= lineLen;
+
         } else if (NULL != overflowBufferPointer) {
             //
             // We're in the state where we've got a read that spans two buffers, and we're copying the end of it
             // into the overlowBuffer portion of the old IO buffer.
             //
-            size_t lineLen = newLine - (currentBuffer->buffer + currentBuffer->offset);
+            lineLen = newLine - (currentBuffer->buffer + currentBuffer->offset) + 1;
             if (lineLen > overflowBufferSpaceLeft) {
                 fprintf(stderr,"FASTQ file either is malformed or has too long reads.  If the latter, set maxLineSize in fastq.h bigger and recompile.\n");
                 exit(1);
             }
-            memcpy(overflowBufferPointer,newLine,lineLen);
+            memcpy(overflowBufferPointer,currentBuffer->buffer + currentBuffer->offset,lineLen);
             lines[i] = overflowBufferPointer;
             overflowBufferPointer += lineLen;
             overflowBufferSpaceLeft -= lineLen;
-            if (1 == i) {
-                line1DataLen = (unsigned)lineLen;
-            }
+
         } else {
             //
             // The normal case where our read is (so far) contained in a single buffer.
             //
+            lineLen = newLine - (currentBuffer->buffer + currentBuffer->offset) + 1;
             lines[i] = currentBuffer->buffer + currentBuffer->offset;
-
-            if (1 == i) {
-                line1DataLen = (unsigned)(newLine - (currentBuffer->buffer + currentBuffer->offset));
-            }
         }
-        if (newLine > currentBuffer->buffer + currentBuffer->offset && *(newLine-1) == '\r') {
+
+        if (0 == lineLen) {
+            fprintf(stderr,"Syntax error in FASTQ file: blank line.\n");
+            exit(1);
+        }
+
+        if (1 == i) {
+            line1DataLen = (unsigned)lineLen;
+        }
+            
+        if (lineLen > 1 && lines[i][lineLen-2] == '\r') {
             //
             // Kill CR in CRLF text.
             //
-            *(newLine-1) = 0;
+            lines[i][lineLen-2] = '\0';
             if (1 == i) {
                 line1DataLen--;
             }
         } else {
-            *newLine = 0;
+            _ASSERT(lines[i][lineLen-1] == '\n');
+            lines[i][lineLen-1] = '\0'; // Overwrite the newline with a string terminator
         }
+
 
         currentBuffer->offset = (unsigned)((newLine - currentBuffer->buffer) + 1);
     }
 
-    currentBuffer->referenceCount++;
+    if (NULL == overflowBufferPointer) {
+        currentBuffer->referenceCount++;
+    }
 
     if ('@' != lines[0][0]) {
         fprintf(stderr,"Syntax error in FASTQ file.  Expected line to start with '@', but it didn't: '%s'\n",lines[0]);
@@ -838,7 +852,7 @@ WindowsFASTQReader::waitForNextBuffer()
             //
             // This happens when there are no empty buffers to start IO on.  Wait for some.
             //
-            WaitForSingleWaiterObject(emptyQueueNotEmpty);
+            WaitForSingleWaiterObject(&emptyQueueNotEmpty);
             startIo();
             _ASSERT(readingQueue->next != readingQueue);
         }
@@ -887,7 +901,7 @@ WindowsFASTQReader::readDoneWithBuffer(unsigned *referenceCount)
     _ASSERT(info->state == UsedButReferenced);
     info->state = Empty;
     info->addToQueue(emptyQueue);
-    SignalSingleWaiterObject(emptyQueueNotEmpty);
+    SignalSingleWaiterObject(&emptyQueueNotEmpty);
 
     ReleaseExclusiveLock(emptyQueueLock);
 }
