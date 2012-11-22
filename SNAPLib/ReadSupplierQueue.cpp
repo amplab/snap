@@ -43,6 +43,7 @@ ReadSupplierQueue::ReadSupplierQueue(int i_nReaders, ReadReader **firstHalfReade
          readerGroups[i].singleReader[0] = firstHalfReaders[i];
          readerGroups[i].singleReader[1] = secondHalfReaders[i];
      }
+     nReadersRunning = 2 * nReaders;
 }
 
 ReadSupplierQueue::ReadSupplierQueue(int i_nReaders, PairedReadReader **pairedReaders)
@@ -331,17 +332,19 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
         
         AcquireExclusiveLock(&lock);
 
-        element->addToTail(&params->group->readyQueue[params->isSecondReader ? 1 : 0]);
-        if (params->group->next == NULL && 
-            (NULL == params->group->singleReader[1] || params->group->readyQueue[params->isSecondReader ? 0 : 1].next != &params->group->readyQueue[params->isSecondReader ? 0 : 1])) {
+        if (element->totalReads > 0) {
+            element->addToTail(&params->group->readyQueue[params->isSecondReader ? 1 : 0]);
+            if (params->group->next == NULL && 
+                (NULL == params->group->singleReader[1] || params->group->readyQueue[params->isSecondReader ? 0 : 1].next != &params->group->readyQueue[params->isSecondReader ? 0 : 1])) {
  
-            //
-            // Our group is not already on the ready queue.  Furthermore, we now have data ready, either because we
-            // are a single file reader or because the queue for the other file is non-empty.  Add us to the
-            // ready queue and signal that there's data ready.
-            //
-            params->group->addToQueue(readerGroupsWithReadyReads);
-            SignalSingleWaiterObject(&readsReady);
+                //
+                // Our group is not already on the ready queue.  Furthermore, we now have data ready, either because we
+                // are a single file reader or because the queue for the other file is non-empty.  Add us to the
+                // ready queue and signal that there's data ready.
+                //
+                params->group->addToQueue(readerGroupsWithReadyReads);
+                SignalSingleWaiterObject(&readsReady);
+            }
         }
     } // While ! done
     _ASSERT(nReadersRunning > 0);

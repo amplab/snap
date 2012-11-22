@@ -25,6 +25,7 @@ Revision History:
 #pragma once
 #include "stdafx.h"
 #include "AlignerContext.h"
+#include "ReadSupplierQueue.h"
 
 struct PairedAlignerStats;
 
@@ -59,7 +60,8 @@ protected:
     virtual void typeSpecificBeginIteration();
     virtual void typeSpecificNextIteration();
 
-    RangeSplittingPairedReadReaderGenerator *pairedReadReaderGenerator;
+    //RangeSplittingPairedReadReaderGenerator *pairedReadReaderGenerator;
+    ReadSupplierQueue *readSupplierQueue;
 
     int                 minSpacing;
     int                 maxSpacing;

@@ -280,8 +280,9 @@ void PairedAlignerContext::runTask()
 
 void PairedAlignerContext::runIterationThread()
 {
-    PairedReadReader *reader = pairedReadReaderGenerator->createReader();
-    if (NULL == reader) {
+    PairedReadSupplier *supplier = readSupplierQueue->createPairedSupplier();
+
+    if (NULL == supplier) {
         //
         // No work for this thread to do.
         //
@@ -303,10 +304,10 @@ void PairedAlignerContext::runIterationThread()
     SAMWriter *samWriter = this->samWriter;
 
     // Align the reads.
-    Read read0(reader->getReaderToInitializeRead(0));
-    Read read1(reader->getReaderToInitializeRead(1));
+    Read *read0;
+    Read *read1;
     _int64 readNum = 0;
-    while (reader->getNextReadPair(&read0,&read1)) {
+    while (supplier->getNextReadPair(&read0,&read1)) {
         if (1 != selectivity && GoodFastRandom(selectivity-1) != 0) {
             //
             // Skip this read.
@@ -324,9 +325,9 @@ void PairedAlignerContext::runIterationThread()
 #endif
             
         // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
-        if (!ignoreMismatchedIDs && !readIdsMatch(&read0, &read1)) {
+        if (!ignoreMismatchedIDs && !readIdsMatch(read0, read1)) {
             fprintf(stderr, "Unmatched read IDs %.*s and %.*s\n",
-                read0.getIdLength(), read0.getId(), read1.getIdLength(), read1.getId());
+                read0->getIdLength(), read0->getId(), read1->getIdLength(), read1->getId());
             exit(1);
         }
 
@@ -334,16 +335,16 @@ void PairedAlignerContext::runIterationThread()
 
         // Skip the pair if there are too many Ns or 2s.
         int maxDist = this->maxDist;
-        bool useful0 = read0.getDataLength() >= 50 && (int)read0.countOfNs() <= maxDist;
-        bool useful1 = read1.getDataLength() >= 50 && (int)read1.countOfNs() <= maxDist;
+        bool useful0 = read0->getDataLength() >= 50 && (int)read0->countOfNs() <= maxDist;
+        bool useful1 = read1->getDataLength() >= 50 && (int)read1->countOfNs() <= maxDist;
         if (!useful0 && !useful1) {
             PairedAlignmentResult result;
             result.status[0] = NotFound;
             result.status[1] = NotFound;
             result.location[0] = 0xFFFFFFFF;
             result.location[1] = 0xFFFFFFFF;
-            if (samWriter != NULL && (options->passFilter(&read0, result.status[0]) || options->passFilter(&read1, result.status[1]))) {
-                samWriter->writePair(&read0, &read1, &result);
+            if (samWriter != NULL && (options->passFilter(read0, result.status[0]) || options->passFilter(read1, result.status[1]))) {
+                samWriter->writePair(read0, read1, &result);
             }
             continue;
         } else {
@@ -352,11 +353,11 @@ void PairedAlignerContext::runIterationThread()
         }
 
         PairedAlignmentResult result;
-        aligner->align(&read0, &read1, &result);
+        aligner->align(read0, read1, &result);
 
-        writePair(&read0, &read1, &result);
+        writePair(read0, read1, &result);
 
-        updateStats((PairedAlignerStats*) stats, &read0, &read1, &result);
+        updateStats((PairedAlignerStats*) stats, read0, read1, &result);
 
 #ifdef PROFILE
         if (record) {
@@ -375,7 +376,7 @@ void PairedAlignerContext::runIterationThread()
     //printf("Time in s: %lld: thread ran out of work.  Last range was %8lld bytes in %4lldms, starting at %10lld.  Total %4d ranges and %10lld bytes.\n",timeInMillis() / 1000, rangeLength, timeInMillis() - rangeStartTime, rangeStart, totalRanges, totalBytes);
 
     delete aligner;
-    delete reader;
+    delete supplier;
 }
 
 void PairedAlignerContext::writePair(Read* read0, Read* read1, PairedAlignmentResult* result)
@@ -415,11 +416,15 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
     void 
 PairedAlignerContext::typeSpecificBeginIteration()
 {
-    pairedReadReaderGenerator = new RangeSplittingPairedReadReaderGenerator(options->inputFilename, fastqFile1, !inputFileIsFASTQ, options->clipping, options->numThreads, index->getGenome());
+    //pairedReadReaderGenerator = new RangeSplittingPairedReadReaderGenerator(options->inputFilename, fastqFile1, !inputFileIsFASTQ, options->clipping, options->numThreads, index->getGenome());
+    ReadReader *reader = FASTQReader::create(options->inputFilename,0,0);
+    ReadReader *reader1 = FASTQReader::create(fastqFile1,0,0);
+    readSupplierQueue = new ReadSupplierQueue(1,&reader,&reader1);
+    readSupplierQueue->startReaders();
 }
     void 
 PairedAlignerContext::typeSpecificNextIteration()
 {
-    delete pairedReadReaderGenerator;
-    pairedReadReaderGenerator = NULL;
+    //delete pairedReadReaderGenerator;
+    //pairedReadReaderGenerator = NULL;
 }

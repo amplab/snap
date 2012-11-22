@@ -38,8 +38,8 @@ struct ReadQueueElement {
     Read                reads[nReads];
 
     void addToTail(ReadQueueElement *queueHead) {
-        prev = queueHead;
-        next = queueHead->prev;
+        next = queueHead;
+        prev = queueHead->prev;
         prev->next = this;
         next->prev = this;
     }
