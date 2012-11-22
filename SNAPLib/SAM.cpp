@@ -1192,11 +1192,8 @@ SAMReader::~SAMReader()
 SAMReader::create(const char *fileName, const Genome *genome, _int64 startingOffset, 
                     _int64 amountOfFileToProcess, ReadClippingType clipping)
 {
-#ifdef  _MSC_VER
-    WindowsOverlappedSAMReader *reader = new WindowsOverlappedSAMReader(clipping);
-#else
     MemMapSAMReader *reader = new MemMapSAMReader(clipping);
-#endif
+
     if (!reader->init(fileName, genome, startingOffset, amountOfFileToProcess)) {
         //
         // Probably couldn't open the file.
@@ -1212,9 +1209,8 @@ SAMReader::create(const char *fileName, const Genome *genome, _int64 startingOff
 // alignment results by simply throwing them away.
 //
     bool
-SAMReader::getNextRead(Read *readToUpdate, bool *isReadFirstInBatch)
+SAMReader::getNextRead(Read *readToUpdate)
 {
-    // TODO: handle isReadFirstInBatch
     return getNextRead(readToUpdate, NULL, NULL, NULL, NULL, NULL, NULL);
 }
 
@@ -1352,7 +1348,6 @@ SAMReader::getReadFromLine(
     unsigned            *mapQ,
     size_t              *lineLength,
     unsigned *           flag,
-    unsigned *           newReferenceCount,
     const char **        cigar,
     ReadClippingType     clipping
     )
@@ -1440,7 +1435,7 @@ SAMReader::getReadFromLine(
         //
         // Clip reads where the quality strings end in '#'
         //
-        read->init(field[QNAME],(unsigned)fieldLength[QNAME],field[SEQ],field[QUAL],(unsigned)fieldLength[SEQ],newReferenceCount);
+        read->init(field[QNAME],(unsigned)fieldLength[QNAME],field[SEQ],field[QUAL],(unsigned)fieldLength[SEQ]);
         //
         // If this read is RC in the SAM file, we need to reverse it here, since Reads are always the sense that they were as they came
         // out of the base caller.
@@ -1486,8 +1481,7 @@ SAMReader::getReadFromLine(
 }
 
 
-#ifdef  _MSC_VER
-
+#if      0
 WindowsOverlappedSAMReader::WindowsOverlappedSAMReader(ReadClippingType i_clipping)
 {
     clipping = i_clipping;
@@ -1617,13 +1611,10 @@ WindowsOverlappedSAMReader::reinit(_int64 startingOffset, _int64 amountOfFileToP
     unsigned mapQ;
     size_t lineLength;
     unsigned flag;
-    unsigned *referenceCount;
-
-    referenceCount = &info->referenceCount;
  
     getReadFromLine(genome,firstNewline+1,info->buffer + info->validBytes,
                     &read,&alignmentResult,&genomeLocation,&isRC,&mapQ,&lineLength,
-                    &flag,referenceCount,NULL,clipping);
+                    &flag,NULL,clipping);
 
     if ((flag & SAM_MULTI_SEGMENT) && !(flag & SAM_FIRST_SEGMENT)) {
         //
@@ -1848,29 +1839,23 @@ WindowsOverlappedSAMReader::readDoneWithBuffer(unsigned *referenceCount)
     }
 }
 
-
-#else   // _MSC_VER
-
+#endif  // 0
 
 MemMapSAMReader::MemMapSAMReader(ReadClippingType i_clipping)
-    : clipping(i_clipping), fileData(NULL), fd(-1)
+    : clipping(i_clipping), fileData(NULL)
 {
 }
 
 
 MemMapSAMReader::~MemMapSAMReader()
 {
-    unmapCurrentRange();
-    if (fd != -1) {
-        close(fd);
-    }
 }
 
 
 void MemMapSAMReader::unmapCurrentRange()
 {
     if (fileData != NULL) {
-        munmap(fileData, amountMapped);
+        fileMapper.unmap();
         fileData = NULL;
     }
 }
@@ -1883,36 +1868,27 @@ bool MemMapSAMReader::init(
         _int64 amountOfFileToProcess)
 {
     genome = i_genome;
-
-    fd = open(fileName, O_RDONLY);
-    if (fd == -1) {
-        fprintf(stderr, "Failed to open %s\n", fileName);
+    if (!fileMapper.init(fileName)) {
+        fprintf(stderr,"Unable to create file mapping for '%s'\n", fileName);
         return false;
     }
-    
-    struct stat sb;
-    int r = fstat(fd, &sb);
-    if (r == -1) {
-        fprintf(stderr, "Failed to stat %s\n", fileName);
-        return false;
-    }
-    fileSize = sb.st_size;
 
-    // Let's first mmap() the whole file to figure out where the header ends.
-    char *allData = (char *) mmap(NULL, fileSize, PROT_READ, MAP_SHARED, fd, 0);
-    if (allData == MAP_FAILED) {
-        fprintf(stderr, "Failed to mmap SAM file\n");
+    fileSize = fileMapper.getFileSize();
+
+    char *allData = fileMapper.createMapping(0,fileSize);
+    if (NULL == allData) {
+        fprintf(stderr,"SAM reader: unable to map file '%s' to read header\n", fileName);
         return false;
     }
 
     if (!parseHeader(fileName, allData, allData + fileSize, genome, &headerSize)) {
         fprintf(stderr, "Failed to parse SAM header from %s\n", fileName);
-        munmap(allData, fileSize);
+        fileMapper.unmap();
         return false;
     }
     //printf("headerSize: %lu\n", headerSize);
 
-    munmap(allData, fileSize);
+    fileMapper.unmap();
 
     reinit(startingOffset, amountOfFileToProcess);
     return true;
@@ -1922,29 +1898,22 @@ bool MemMapSAMReader::init(
 void MemMapSAMReader::reinit(_int64 startingOffset, _int64 amountToProcess)
 {
     unmapCurrentRange();
-
+ 
     if (amountToProcess == 0) {
         // This means to process the whole file.
         amountToProcess = fileSize - startingOffset;
     }
 
-    _int64 misalignment = (startingOffset % getpagesize());
-    _int64 alignedOffset = startingOffset - misalignment;
-
-    size_t amountToMap = min((_uint64) amountToProcess + misalignment + 2 * maxReadSizeInBytes,
-                             (_uint64) fileSize - alignedOffset);
-    //printf("Going to map %llu bytes starting at %lld (amount=%lld)\n", amountToMap, alignedOffset, amountToProcess);
-
-    fileData = (char *) mmap(NULL, amountToMap, PROT_READ, MAP_SHARED, fd, alignedOffset);
-    if (fileData == MAP_FAILED) {
+    fileData = fileMapper.createMapping(startingOffset,amountToProcess + maxReadSizeInBytes);
+    if (fileData == NULL) {
         fprintf(stderr, "mmap failed on SAM file\n");
         exit(1);
     }
 
-    pos = max(misalignment, (_int64) (headerSize - 1 - startingOffset));
-    endPos = misalignment + amountToProcess;
-    offsetMapped = alignedOffset;
-    amountMapped = amountToMap;
+    pos = max((_int64)0, (_int64) (headerSize - 1 - startingOffset));
+    endPos = amountToProcess;
+    offsetMapped = startingOffset;
+    amountMapped = amountToProcess + maxReadSizeInBytes;
 
     // Read to the first newline after our initial position
     while (pos < endPos && fileData[pos] != '\n') {
@@ -1966,18 +1935,14 @@ void MemMapSAMReader::reinit(_int64 startingOffset, _int64 amountToProcess)
 
     getReadFromLine(genome, fileData + pos, fileData + amountMapped, 
                     &read, &alignmentResult, &genomeLocation, &isRC, &mapQ, &lineLength, 
-                    &flag, NULL, NULL, clipping);
+                    &flag, NULL, clipping);
 
     if ((flag & SAM_MULTI_SEGMENT) && !(flag & SAM_FIRST_SEGMENT)) {
         pos += lineLength;
         //printf("Increasing pos by lineLength = %llu\n", lineLength);
     }
 
-    // Do our first madvise()
-    _uint64 amountToMadvise = min((_uint64) madviseSize, amountToMap - pos);
-    int r = madvise(fileData + pos, amountToMadvise, MADV_WILLNEED);
-    _ASSERT(r == 0);
-    lastPosMadvised = pos;
+    fileMapper.prefetch(pos);
 }
 
 
@@ -1999,27 +1964,11 @@ bool MemMapSAMReader::getNextRead(
     size_t lineLength;
 
     getReadFromLine(genome, fileData + pos, fileData + amountMapped, read, alignmentResult,
-                    genomeLocation, isRC, mapQ, &lineLength, flag, NULL, cigar, clipping);
+                    genomeLocation, isRC, mapQ, &lineLength, flag, cigar, clipping);
     pos += lineLength;
 
-    // Call madvise() to (a) start reading more bytes if we're past half our current
-    // range and (b) tell the OS we won't need any stuff we've read in the past
-    if (pos > lastPosMadvised + madviseSize / 2) {
-        _uint64 offset = lastPosMadvised + madviseSize;
-        _uint64 len = (offset > amountMapped ? 0 : min(amountMapped - offset, (_uint64) madviseSize));
-        if (len > 0) {
-            // Start reading new range
-            int r = madvise(fileData + offset, len, MADV_WILLNEED);
-            _ASSERT(r == 0);
-        }
-        if (lastPosMadvised >= madviseSize) {
-          // Unload the range we had before our current one
-          int r = madvise(fileData + lastPosMadvised - madviseSize, madviseSize, MADV_DONTNEED);
-          _ASSERT(r == 0);
-        }
-        lastPosMadvised = offset;
-    }
-
+    fileMapper.prefetch(pos);
+ 
     return true;
 }
 
@@ -2028,6 +1977,3 @@ void MemMapSAMReader::readDoneWithBuffer(unsigned *referenceCount)
 {
     // Ignored because we only unmap the region when the whole reader is closed.
 }
-
-
-#endif  // _MSC_VER

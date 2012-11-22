@@ -87,7 +87,7 @@ public:
     RangeSplittingPairedReadReader(RangeSplitter *i_splitter, PairedReadReader *i_underlyingReader) : 
       splitter(i_splitter), underlyingReader(i_underlyingReader) {}
 
-    virtual bool getNextReadPair(Read *read1, Read *read2, bool *areReadsFirstInBatch = NULL);
+    virtual bool getNextReadPair(Read *read1, Read *read2);
     virtual ReadReader *getReaderToInitializeRead(int whichHalfOfPair) {return underlyingReader->getReaderToInitializeRead(whichHalfOfPair);}
        
     void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) {fprintf(stderr,"RangeSplittingPairedReadReader: reinit called.\n"); exit(1);}

@@ -34,16 +34,14 @@ enum ReadClippingType {NoClipping, ClipFront, ClipBack, ClipFrontAndBack};
 class ReadReader {
 public:
         virtual ~ReadReader() {}
-        virtual void readDoneWithBuffer(unsigned *referenceCount) = 0;
-        virtual bool getNextRead(Read *readToUpdate, bool *isReadFirstInBatch = NULL) = 0;
+        virtual bool getNextRead(Read *readToUpdate) = 0;
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
-        virtual bool getsReadsInBatches() = 0; // Let a reader say whether it's got a natural batch size
 };
 
 class PairedReadReader {
 public:
         virtual ~PairedReadReader() {}
-        virtual bool getNextReadPair(Read *read1, Read *read2, bool *areReadsFirstInBatch = NULL) = 0;
+        virtual bool getNextReadPair(Read *read1, Read *read2) = 0;
         virtual ReadReader *getReaderToInitializeRead(int whichHalfOfPair) = 0;
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
 };
@@ -89,35 +87,18 @@ public:
                 unsigned i_idLength,
                 const char *i_data, 
                 const char *i_quality, 
-                unsigned i_dataLength, 
-                unsigned *newReferenceCount)
-        {
-            commonInit(i_id,i_idLength,i_data,i_quality,i_dataLength);
-            dropReference();
-
-
-
-            if (NULL != newReferenceCount) {
-                referenceCount = newReferenceCount;
-            }
-        }
-
-        void deinit()
-        {
-            dropReference();
-            referenceCount = NULL;
-        }
-
-        void init(
-                const char *i_id, 
-                unsigned i_idLength,
-                const char *i_data, 
-                const char *i_quality, 
                 unsigned i_dataLength)
         {
-            commonInit(i_id,i_idLength,i_data,i_quality,i_dataLength);
-
-            referenceCount = NULL;
+            id = i_id;
+            idLength = i_idLength;
+            data = unclippedData = i_data;
+            quality = unclippedQuality = i_quality;
+            dataLength = i_dataLength;
+            unclippedLength = dataLength;
+            frontClippedLength = 0;
+            originalUnclippedDataBuffer = NULL;
+            originalUnclippedQualityBuffer = NULL;
+            clippingState = NoClipping;
         }
 
         // For efficiency, this class holds id, data and quality pointers that are
@@ -266,34 +247,6 @@ public:
         }
 
 private:
-
-        void commonInit(
-                const char *i_id, 
-                unsigned i_idLength,
-                const char *i_data, 
-                const char *i_quality, 
-                unsigned i_dataLength)
-        {
-            id = i_id;
-            idLength = i_idLength;
-            data = unclippedData = i_data;
-            quality = unclippedQuality = i_quality;
-            dataLength = i_dataLength;
-            unclippedLength = dataLength;
-            frontClippedLength = 0;
-            originalUnclippedDataBuffer = NULL;
-            originalUnclippedQualityBuffer = NULL;
-            clippingState = NoClipping;
-        }
-
-        inline void dropReference() {
-            if (NULL != referenceCount) {
-                (*referenceCount)--;
-                if (0 == *referenceCount) {
-                    reader->readDoneWithBuffer(referenceCount);
-                }
-            }
-        }
 
         const char *id;
         const char *data;

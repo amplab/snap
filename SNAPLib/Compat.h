@@ -26,6 +26,7 @@ Revision History:
 #pragma once
 
 #ifdef  _MSC_VER
+#include <Windows.h>
 
 typedef unsigned _int64 _uint64;
 typedef unsigned _int32 _uint32;
@@ -53,6 +54,8 @@ typedef HANDLE SingleWaiterObject;      // This is an event in Windows.  It's ju
 #define strtok_r strtok_s
 #define strncasecmp _strnicmp
 #define atoll(S) _atoi64(S)
+
+int getpagesize();
 
 
 #else   // _MSC_VER
@@ -140,7 +143,7 @@ void ResetSingleWaiterObject(SingleWaiterObject *singleWaiterObject);
 //
 // Thread-safe read-modify-write operations
 //
-_uint32 InterlockedIncrementAndReturnNewValue(volatile _uint32 *valueToIncrement);
+int InterlockedIncrementAndReturnNewValue(volatile int *valueToIncrement);
 int InterlockedDecrementAndReturnNewValue(volatile int *valueToDecrement);
 _int64 InterlockedAdd64AndReturnNewValue(volatile _int64 *valueToWhichToAdd, _int64 amountToAdd);
 _uint32 InterlockedCompareExchange32AndReturnOldValue(volatile _uint32 *valueToUpdate, _uint32 replacementValue, _uint32 desiredPreviousValue);
@@ -249,3 +252,42 @@ int _fseek64bit(FILE *stream, _int64 offset, int origin);
 #define MAXINT32   ((int32_t)  0x7fffffff)
 
 #endif
+
+// 
+// Class for handling mapped files.  It's got the same interface for both platforms, but different implementations.
+//
+class FileMapper {
+public:
+    FileMapper();
+    ~FileMapper();
+
+    bool init(const char *fileName);
+    const size_t getFileSize() {
+        _ASSERT(initialized);
+        return fileSize;
+    }
+
+    // You only get one of these at a time.  You must call unmap() before making a new mapping
+    char *createMapping(size_t offset, size_t amountToMap); 
+    void unmap();
+
+    void prefetch(size_t currentRead);
+
+private:
+    bool        initialized;
+    size_t      fileSize;
+    char        *mappedBase;    // What we actually mapped, rounded down for alignment
+    char        *mappedRegion;
+    size_t      amountMapped;
+    size_t      pagesize;
+
+#ifdef  _MSC_VER
+    HANDLE      hFile;
+    HANDLE      hMapping;
+#else   // _MSC_VER
+    static const int madviseSize = 4 * 1024 * 1024;
+
+    int         fd;
+    _uint64     lastPosMadvised;
+#endif  // _MSC_VER
+};

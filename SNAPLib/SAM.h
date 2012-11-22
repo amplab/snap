@@ -281,7 +281,7 @@ class SAMReader : public PairedReadReader, public ReadReader {
 public:
         virtual ~SAMReader();
 
-        virtual bool getNextRead(Read *readToUpdate, bool *isReadFirstInBatch = NULL);
+        virtual bool getNextRead(Read *readToUpdate);
     
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, unsigned *genomeLocation, bool *isRC, unsigned *mapQ,
                         unsigned *flag, const char **cigar)
@@ -298,7 +298,7 @@ public:
         // The PairedReadReader version of getNextReadPair, which throws away the alignment, mapQ and cigar values.
         //
             bool
-        getNextReadPair(Read *read1, Read *read2, bool *areReadsFirstInBatch = NULL) {
+        getNextReadPair(Read *read1, Read *read2) {
             PairedAlignmentResult pairedAlignmentResult;
             unsigned mapQ[2];
 
@@ -342,11 +342,10 @@ protected:
 
         static void getReadFromLine(const Genome *genome, char *line, char *endOfBuffer, Read *read, AlignmentResult *alignmentResult,
                         unsigned *genomeLocation, bool *isRC, unsigned *mapQ, 
-                        size_t *lineLength, unsigned *flag, unsigned *newReferenceCount, const char **cigar, ReadClippingType clipping);
+                        size_t *lineLength, unsigned *flag, const char **cigar, ReadClippingType clipping);
 };
 
-#ifdef  _MSC_VER
-
+#if     0 
 class WindowsOverlappedSAMReader : public SAMReader {
 public:
         WindowsOverlappedSAMReader(ReadClippingType i_clipping);
@@ -414,8 +413,7 @@ private:
         void startIo();
         void waitForBuffer(unsigned bufferNumber);
 };
-
-#else   // _MSC_VER
+#endif  // 0
 
 class MemMapSAMReader : public SAMReader {
 public:
@@ -439,9 +437,11 @@ private:
         static const int maxReadSizeInBytes = 25000;
         static const int madviseSize = 4 * 1024 * 1024;
 
+        FileMapper fileMapper;
+
         ReadClippingType clipping;
         const Genome *genome;
-        int fd;
+
         size_t fileSize;
         size_t headerSize;
 
@@ -450,8 +450,4 @@ private:
         _uint64 pos;             // Current position within the range of the file we mapped
         _uint64 endPos;          // Where the range we were requested to parse ends; we might look one read past this
         _uint64 amountMapped;    // Where our current mmap() ends
-        _uint64 lastPosMadvised; // Last position we called madvise() on to initiate a read
 };
-
-
-#endif  // _MSC_VER

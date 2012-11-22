@@ -40,37 +40,29 @@ FASTQReader::~FASTQReader()
 
 
     FASTQReader*
-FASTQReader::create(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess, int numBuffers, ReadClippingType clipping)
+FASTQReader::create(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess, ReadClippingType clipping)
 {
-#ifdef _MSC_VER
-  return new WindowsFASTQReader(fileName, startingOffset, amountOfFileToProcess, numBuffers, clipping);
-#else
-  return new MemMapFASTQReader(fileName, startingOffset, amountOfFileToProcess, clipping);
-#endif
+    return new MemMapFASTQReader(fileName, startingOffset, amountOfFileToProcess, clipping);
 }
 
 
-#ifndef _MSC_VER
 
 MemMapFASTQReader::MemMapFASTQReader(const char* fileName, _int64 startingOffset, _int64 amountOfFileToProcess, ReadClippingType i_clipping)
 {
-    fd = open(fileName, O_RDONLY);
-    if (fd == -1) {
-	fprintf(stderr, "Failed to open %s\n", fileName);
-	exit(1);
+    if (!fileMapper.init(fileName)) {
+        fprintf(stderr,"Unable to create file mapping for '%s'\n",fileName);
+        exit(1);
     }
 
-    struct stat sb;
-    int r = fstat(fd, &sb);
-    if (r == -1) {
-	fprintf(stderr, "Failed to stat %s\n", fileName);
-	exit(1);
-    }
-    fileSize = sb.st_size;
+    fileSize = fileMapper.getFileSize();
 
     fileData = NULL;
 
     clipping = i_clipping;
+
+    if (startingOffset == 0 && amountOfFileToProcess == 0) {
+        amountOfFileToProcess = fileSize;
+    }
 
     reinit(startingOffset, amountOfFileToProcess);
 }
@@ -78,28 +70,28 @@ MemMapFASTQReader::MemMapFASTQReader(const char* fileName, _int64 startingOffset
 
 void MemMapFASTQReader::reinit(_int64 startingOffset, _int64 amountOfFileToProcess) {
     unmapCurrentRange();
+    
+    _ASSERT(startingOffset + amountOfFileToProcess <= (_int64)fileSize);
 
+#if 0 // move to linux mapping code
     _int64 misalignment = (startingOffset % getpagesize());
     _int64 alignedOffset = startingOffset - misalignment;
 
     size_t amountToMap = min((_uint64) amountOfFileToProcess + misalignment + maxReadSizeInBytes,
                              (_uint64) fileSize - alignedOffset);
     //printf("Going to map %llu bytes starting at %lld (amountOfFile=%lld)\n", amountToMap, alignedOffset, amountOfFileToProcess);
+#endif  // 0
 
-    fileData = (char *) mmap(NULL, amountToMap, PROT_READ, MAP_SHARED, fd, alignedOffset);
-    if (fileData == MAP_FAILED) {
-	fprintf(stderr, "mmap failed on FASTQ file\n");
-	exit(1);
+    fileData = fileMapper.createMapping(startingOffset,amountOfFileToProcess + maxReadSizeInBytes);
+    if (NULL == fileData) {
+        fprintf(stderr,"Unable to map FASTQ file.\n");
+        exit(1);
     }
 
-    int r = madvise(fileData, min((size_t) madviseSize, amountToMap), MADV_WILLNEED);
-    _ASSERT(r == 0);
-    lastPosMadvised = 0;
-
-    pos = misalignment;
-    endPos = pos + amountOfFileToProcess;
-    offsetMapped = alignedOffset;
-    amountMapped = amountToMap;
+    pos = 0;
+    endPos = amountOfFileToProcess;
+    offsetMapped = startingOffset;
+    amountMapped = amountOfFileToProcess + maxReadSizeInBytes;
 
     // If we're not at the start of the file, we might have the tail end of a read that someone
     // who got the previous range will process; advance past that. This is fairly tricky because
@@ -118,7 +110,8 @@ void MemMapFASTQReader::reinit(_int64 startingOffset, _int64 amountOfFileToProce
 void MemMapFASTQReader::unmapCurrentRange()
 {
     if (fileData != NULL) {
-        munmap(fileData, amountMapped);
+        fileMapper.unmap();
+
         fileData = NULL;
     }
 }
@@ -126,16 +119,11 @@ void MemMapFASTQReader::unmapCurrentRange()
 
 MemMapFASTQReader::~MemMapFASTQReader()
 {
-    unmapCurrentRange();
-    close(fd);
 }
 
     bool
-MemMapFASTQReader::getNextRead(Read *readToUpdate, bool *isReadFirstInBatch)
+MemMapFASTQReader::getNextRead(Read *readToUpdate)
 {
-    if (NULL != isReadFirstInBatch) {
-        *isReadFirstInBatch = false;
-    }
     _uint64 newPos = parseRead(pos, readToUpdate, true);
     if (newPos == 0) {
         return false;
@@ -249,23 +237,7 @@ MemMapFASTQReader::parseRead(_uint64 pos, Read *readToUpdate, bool exitOnFailure
       pos += dataLen + 1;
     }
 
-    // Call madvise() to (a) start reading more bytes if we're past half our current
-    // range and (b) tell the OS we won't need any stuff we've read in the past
-    if (pos > lastPosMadvised + madviseSize / 2) {
-        _uint64 offset = lastPosMadvised + madviseSize;
-        _uint64 len = (offset > amountMapped ? 0 : min(amountMapped - offset, (_uint64) madviseSize));
-        if (len > 0) {
-            // Start reading new range
-            int r = madvise(fileData + offset, len, MADV_WILLNEED);
-            _ASSERT(r == 0);
-        }
-        if (lastPosMadvised > 0) {
-          // Unload the range we had before our current one
-          int r = madvise(fileData + lastPosMadvised - madviseSize, madviseSize, MADV_DONTNEED);
-          _ASSERT(r == 0);
-        }
-        lastPosMadvised = offset;
-    }
+    fileMapper.prefetch(pos);
 
     readToUpdate->init(id, idLen, data, quality, dataLen);
     readToUpdate->clip(clipping);
@@ -279,10 +251,8 @@ MemMapFASTQReader::readDoneWithBuffer(unsigned *referenceCount)
     // Do nothing, since file is memory-mapped.
 }
 
-#endif /* not _MSC_VER */
 
-
-#ifdef _MSC_VER
+#if 0
 
 WindowsFASTQReader::WindowsFASTQReader(const char *fileName, _int64 startingOffset, 
                                         _int64 amountOfFileToProcess, int i_numBuffers, ReadClippingType i_clipping)
@@ -975,20 +945,18 @@ PairedFASTQReader::create(const char *fileName0, const char *fileName1, _int64 s
 }
 
     bool
-PairedFASTQReader::getNextReadPair(Read *read0, Read *read1, bool *isReadFirstInBatch)
+PairedFASTQReader::getNextReadPair(Read *read0, Read *read1)
 {
-    bool firstInBatch[2];
-    if (!readers[0]->getNextRead(read0, &firstInBatch[0])) {
-        return false;
-    }
-
-    if (!readers[1]->getNextRead(read1, &firstInBatch[1])) {
-        fprintf(stderr,"PairedFASTQReader: failed to read mate.  The FASTQ files may not match properly.\n");
+    bool worked = readers[0]->getNextRead(read0);
+ 
+    if (readers[1]->getNextRead(read1) != worked) {
+        fprintf(stderr,"PairedFASTQReader: reads of both ends responded differently.  The FASTQ files may not match properly.\n");
         exit(1);
     }
 
-    if (NULL != isReadFirstInBatch) {
-        *isReadFirstInBatch = firstInBatch[0] || firstInBatch[1];
+    if (!worked) {
+        return false;
     }
+
     return true;
 }

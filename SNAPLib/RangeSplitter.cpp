@@ -126,13 +126,6 @@ RangeSplittingReadSupplier::getNextRead()
         return &read;
     }
 
-    //
-    // We need to clear out read, because it may contain references to the buffers in the reader.
-    // These buffer reference counts get reset to 0 at reinit time, which causes problems when they're
-    // still live in read.
-    //
-    read.deinit();
-
     _int64 rangeStart, rangeLength;
     if (!splitter->getNextRange(&rangeStart, &rangeLength)) {
         return NULL;
@@ -146,9 +139,8 @@ RangeSplittingReadSupplier::getNextRead()
 }
 
     bool 
-RangeSplittingPairedReadReader::getNextReadPair(Read *read1, Read *read2, bool *areReadsFirstInBatch)
+RangeSplittingPairedReadReader::getNextReadPair(Read *read1, Read *read2)
 {
-    //TODO: handle areReadsFirstInBatch
     if (underlyingReader->getNextReadPair(read1,read2)) {
         return true;
     }
@@ -158,13 +150,6 @@ RangeSplittingPairedReadReader::getNextReadPair(Read *read1, Read *read2, bool *
     // These buffer reference counts get reset to 0 at reinit time, which causes problems when they're
     // still live in read.
     //
-    //
-    // We need to clear out read, because it may contain references to the buffers in the reader.
-    // These buffer reference counts get reset to 0 at reinit time, which causes problems when they're
-    // still live in read.
-    //
-    read1->deinit();
-    read2->deinit();
 
     _int64 rangeStart, rangeLength;
     if (!splitter->getNextRange(&rangeStart, &rangeLength)) {
@@ -180,9 +165,14 @@ RangeSplittingPairedReadReaderGenerator::RangeSplittingPairedReadReaderGenerator
         isSAM(i_isSAM), clipping(i_clipping), genome(i_genome)
 {
     fileName1 = new char[strlen(i_fileName1) + 1];
-    fileName2 = new char[strlen(i_fileName2) + 1];
-    strcpy(fileName1, i_fileName1);
-    strcpy(fileName2, i_fileName2);
+    strcpy(fileName1, i_fileName1); 
+
+    if (!isSAM) {
+        fileName2 = new char[strlen(i_fileName2) + 1];
+        strcpy(fileName2, i_fileName2);
+    } else {
+        fileName2 = NULL;
+    }
 
     splitter = new RangeSplitter(QueryFileSize(fileName1),numThreads);
 }

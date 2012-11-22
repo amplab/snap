@@ -100,7 +100,7 @@ SingleAlignerContext::runTask()
     void
 SingleAlignerContext::runIterationThread()
 {
-    ReadSupplier *reader = readSupplierGenerator->createReader();
+    ReadSupplier *reader = readSupplierQueue->createSupplier();//        readSupplierGenerator->createReader();
     if (NULL == reader) {
         //
         // No work for this thread to do.
@@ -202,12 +202,17 @@ SingleAlignerContext::updateStats(
     void 
 SingleAlignerContext::typeSpecificBeginIteration()
 {
+#if 0
     readSupplierGenerator = new RangeSplittingReadSupplierGenerator(options->inputFilename,!inputFileIsFASTQ, options->clipping, options->numThreads,index->getGenome());
-
+#else
+    ReadReader *reader = FASTQReader::create(options->inputFilename, 0, 0);
+    readSupplierQueue = new ReadSupplierQueue(1, &reader);
+    readSupplierQueue->startReaders();
+#endif  // 0
 }
     void 
 SingleAlignerContext::typeSpecificNextIteration()
 {
-    delete readSupplierGenerator;
-    readSupplierGenerator = NULL;
+    //delete readSupplierGenerator;
+    //readSupplierGenerator = NULL;
 }

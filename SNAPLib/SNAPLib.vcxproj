@@ -168,6 +168,7 @@
     <ClInclude Include="ParallelTask.h" />
     <ClInclude Include="RangeSplitter.h" />
     <ClInclude Include="read.h" />
+    <ClInclude Include="ReadSupplierQueue.h" />
     <ClInclude Include="sam.h" />
     <ClInclude Include="seed.h" />
     <ClInclude Include="SingleAligner.h" />
@@ -200,6 +201,7 @@
     <ClCompile Include="PairedEndAligner.cpp" />
     <ClCompile Include="Range.cpp" />
     <ClCompile Include="RangeSplitter.cpp" />
+    <ClCompile Include="ReadSupplierQueue.cpp" />
     <ClCompile Include="sam.cpp" />
     <ClCompile Include="seed.cpp" />
     <ClCompile Include="SingleAligner.cpp" />
