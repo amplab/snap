@@ -27,6 +27,38 @@ Revision History:
 #include "Compat.h"
 #include "Tables.h"
 
+//
+// Here's a brief description of the classes for input in SNAP:
+// Read:
+//      A Read is some data that's come from a NSG machine.  It includes some bases and associated quality score, as well as an ID.
+//      Reads may be clipped (because the sequencing machine was unsure of some bases).  They may be switched between forward and
+//      reverse complement sense.  They may or may not own their own memory for the various fields.
+//
+// ReadReader:
+//      A ReadReader understands how to generate reads from some input source (i.e., a FASTQ, SAM, BAM or CRAM file, for instance).
+//      It owns the storage for the read's information (i.e., the base string), but does not own the Read object itself.  It is responsible
+//      for assuring that the memory for the read data is valid for the lifetime of the ReadReader (which, in practice, means it needs
+//      to use mapped files).  ReadReaders may assume that they will only be called from one thread.
+//
+// PairedReadReader:
+//      Similar to a ReadReader, except that it gets mate pairs of Reads.
+//
+// ReadSupplier:
+//      A class that supplies reads to a consumer.  It looks similar to a ReadReader, except that it own the storage for the
+//      ReadObject.  The idea here is to allow the supplier to manage the memory that the Read object lives in so that a supplier
+//      can be implemented by a parallel queue with batches of reads in it.  Supplier may, of course, also be implemented in
+//      different ways, such as range splitters.  Like ReadReaders, ReadSuppliers will be called from only one thread.  In
+//      practice, ReadSuppliers will have underlying ReadReaders (which might be behind a shared queue, for example).
+//
+// ReadSupplierGenerator:
+//      A class that creates a ReadSupplier.  This has to be thread safe.  The usual pattern is that the initialization code will
+//      create a read supplier generator, which will then be called on each of the threads to create a supplier, which will supply
+//      the reads to be aligned.
+//
+// PairedReadSupplierGenerator:
+//      The paired version of a ReadSupplier.
+//
+
 class Read;
 
 enum ReadClippingType {NoClipping, ClipFront, ClipBack, ClipFrontAndBack};
@@ -42,7 +74,6 @@ class PairedReadReader {
 public:
         virtual ~PairedReadReader() {}
         virtual bool getNextReadPair(Read *read1, Read *read2) = 0;
-        virtual ReadReader *getReaderToInitializeRead(int whichHalfOfPair) = 0;
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
 };
 
@@ -57,14 +88,23 @@ public:
     virtual bool getNextReadPair(Read **read0, Read **read1) = 0;
 };
 
+class ReadSupplierGenerator {
+public:
+    virtual ReadSupplier *generateNewReadSupplier() = 0;
+};
+
+class PairedReadSupplierGenerator {
+public:
+    virtual PairedReadSupplier *generateNewPairedReadSupplier() = 0;
+};
+
     
 class Read {
 public:
-        Read(ReadReader *i_reader = NULL) : reader(i_reader), id(NULL), data(NULL), quality(NULL), 
-                                            localUnclippedDataBuffer(NULL), localUnclippedQualityBuffer(NULL), localBufferSize(0),
-                                            originalUnclippedDataBuffer(NULL), originalUnclippedQualityBuffer(NULL), clippingState(NoClipping)
+        Read() :    id(NULL), data(NULL), quality(NULL), 
+                    localUnclippedDataBuffer(NULL), localUnclippedQualityBuffer(NULL), localBufferSize(0),
+                    originalUnclippedDataBuffer(NULL), originalUnclippedQualityBuffer(NULL), clippingState(NoClipping)
         {
-            referenceCount = NULL;
         }
 
         ~Read()
@@ -258,9 +298,6 @@ private:
         unsigned unclippedLength;
         unsigned frontClippedLength;
         ReadClippingType clippingState;
-
-        ReadReader *reader;
-        unsigned *referenceCount;
 
         //
         // Data stored in the read that's used if we RC ourself.  These are always unclipped.

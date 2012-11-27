@@ -158,9 +158,11 @@ static bool readIdsMatch(Read *read0, Read *read1)
     for (unsigned i = 0; i < read0->getIdLength(); i++) {
         char c0 = read0->getId()[i];
         char c1 = read1->getId()[i];
-        if (c0 != c1 && !(c0 == '1' && c1 == '2')) {
-            return false;
-        }
+
+        if (c0 != c1) return false;
+ 
+        // don't parse the read ID after the first space or slash, which can represent metadata (or which half of the mate pair the read is).
+        if (c0 == ' ' || c0 == '/') return true;  
     }
     return true;
 }
@@ -240,19 +242,6 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
             options->usage();
         }
     }
-    
-    // Sanity check to make sure our parallel splitting will work.
-    if (options->inputFileIsFASTQ && QueryFileSize(options->inputFilename) != QueryFileSize(options->fastqFile1)) {
-        fprintf(stderr, "The two FASTQ files are not the same size! Make sure they contain\n"
-                        "the same reads in the same order, without comments.\n");
-#if     USE_DEVTEAM_OPTIONS
-        fprintf(stderr,"DEVTEAM: Allowing run, but you need to run on only one thread because the file splitter\n");
-        fprintf(stderr,"Doesn't understand how to deal with files that don't match byte-for-byte.\n");
-        options->numThreads = 1;
-#else   // USE_DEVTEAM_OPTIONS
-        exit(1);
-#endif  // USE_DEVTEAM_OPTIONS
-    }
 
     return options;
 }
@@ -280,7 +269,7 @@ void PairedAlignerContext::runTask()
 
 void PairedAlignerContext::runIterationThread()
 {
-    PairedReadSupplier *supplier = readSupplierQueue->createPairedSupplier();
+    PairedReadSupplier *supplier = pairedReadSupplierGenerator->generateNewPairedReadSupplier();
 
     if (NULL == supplier) {
         //
@@ -326,7 +315,7 @@ void PairedAlignerContext::runIterationThread()
             
         // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
         if (!ignoreMismatchedIDs && !readIdsMatch(read0, read1)) {
-            fprintf(stderr, "Unmatched read IDs %.*s and %.*s\n",
+            fprintf(stderr, "Unmatched read IDs '%.*s' and '%.*s'.  Use the -I option to ignore this.\n",
                 read0->getIdLength(), read0->getId(), read1->getIdLength(), read1->getId());
             exit(1);
         }
@@ -416,11 +405,11 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
     void 
 PairedAlignerContext::typeSpecificBeginIteration()
 {
-    //pairedReadReaderGenerator = new RangeSplittingPairedReadReaderGenerator(options->inputFilename, fastqFile1, !inputFileIsFASTQ, options->clipping, options->numThreads, index->getGenome());
-    ReadReader *reader = FASTQReader::create(options->inputFilename,0,0);
-    ReadReader *reader1 = FASTQReader::create(fastqFile1,0,0);
-    readSupplierQueue = new ReadSupplierQueue(1,&reader,&reader1);
-    readSupplierQueue->startReaders();
+    if (inputFileIsFASTQ) {
+        pairedReadSupplierGenerator = PairedFASTQReader::createPairedReadSupplierGenerator(options->inputFilename, fastqFile1, options->numThreads, options->clipping);
+    } else {
+        pairedReadSupplierGenerator = SAMReader::createPairedReadSupplierGenerator(options->inputFilename, options->numThreads, index->getGenome(), options->clipping);
+    }
 }
     void 
 PairedAlignerContext::typeSpecificNextIteration()

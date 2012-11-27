@@ -60,9 +60,8 @@ protected:
     virtual void typeSpecificBeginIteration();
     virtual void typeSpecificNextIteration();
 
-    //RangeSplittingPairedReadReaderGenerator *pairedReadReaderGenerator;
-    ReadSupplierQueue *readSupplierQueue;
-
+    PairedReadSupplierGenerator *pairedReadSupplierGenerator;
+ 
     int                 minSpacing;
     int                 maxSpacing;
     const char         *fastqFile1;

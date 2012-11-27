@@ -1977,3 +1977,23 @@ void MemMapSAMReader::readDoneWithBuffer(unsigned *referenceCount)
 {
     // Ignored because we only unmap the region when the whole reader is closed.
 }
+
+    ReadSupplierGenerator *
+SAMReader::createReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping)
+{
+    //
+    // SAM files always can be read with the range splitter.
+    //
+    RangeSplitter *splitter = new RangeSplitter(QueryFileSize(fileName), numThreads, 100);
+    return new RangeSplittingReadSupplierGenerator(fileName, true, clipping, numThreads, genome);
+}
+
+    PairedReadSupplierGenerator *
+SAMReader::createPairedReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping)
+{
+   //
+    // SAM files always can be read with the range splitter.
+    //
+    RangeSplitter *splitter = new RangeSplitter(QueryFileSize(fileName), numThreads, 100);
+    return new RangeSplittingPairedReadSupplierGenerator(fileName, NULL, true, clipping, numThreads, genome);
+}

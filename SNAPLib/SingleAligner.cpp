@@ -100,8 +100,8 @@ SingleAlignerContext::runTask()
     void
 SingleAlignerContext::runIterationThread()
 {
-    ReadSupplier *reader = readSupplierQueue->createSupplier();//        readSupplierGenerator->createReader();
-    if (NULL == reader) {
+    ReadSupplier *supplier = readSupplierGenerator->generateNewReadSupplier();
+    if (NULL == supplier) {
         //
         // No work for this thread to do.
         //
@@ -127,7 +127,7 @@ SingleAlignerContext::runIterationThread()
 
     // Align the reads.
     Read *read;
-    while (NULL != (read = reader->getNextRead())) {
+    while (NULL != (read = supplier->getNextRead())) {
         if (1 != selectivity && GoodFastRandom(selectivity-1) != 0) {
             //
             // Skip this read.
@@ -158,8 +158,8 @@ SingleAlignerContext::runIterationThread()
   
 
     delete aligner;
-    if (reader != NULL) {
-        delete reader;
+    if (supplier != NULL) {
+        delete supplier;
     }
 }
     
@@ -202,13 +202,11 @@ SingleAlignerContext::updateStats(
     void 
 SingleAlignerContext::typeSpecificBeginIteration()
 {
-#if 0
-    readSupplierGenerator = new RangeSplittingReadSupplierGenerator(options->inputFilename,!inputFileIsFASTQ, options->clipping, options->numThreads,index->getGenome());
-#else
-    ReadReader *reader = FASTQReader::create(options->inputFilename, 0, 0);
-    readSupplierQueue = new ReadSupplierQueue(1, &reader);
-    readSupplierQueue->startReaders();
-#endif  // 0
+    if (inputFileIsFASTQ) {
+        readSupplierGenerator = FASTQReader::createReadSupplierGenerator(options->inputFilename, options->numThreads, options->clipping);
+    } else {
+        readSupplierGenerator = SAMReader::createReadSupplierGenerator(options->inputFilename, options->numThreads,index->getGenome(), options->clipping);
+    }
 }
     void 
 SingleAlignerContext::typeSpecificNextIteration()

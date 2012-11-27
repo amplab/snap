@@ -101,8 +101,8 @@ RangeSplittingReadSupplierGenerator::RangeSplittingReadSupplierGenerator(const c
     splitter = new RangeSplitter(QueryFileSize(fileName),numThreads);
 }
 
-RangeSplittingReadSupplier *
-RangeSplittingReadSupplierGenerator::createReader()
+ReadSupplier *
+RangeSplittingReadSupplierGenerator::generateNewReadSupplier()
 {
     _int64 rangeStart, rangeLength;
     if (!splitter->getNextRange(&rangeStart, &rangeLength)) {
@@ -139,9 +139,11 @@ RangeSplittingReadSupplier::getNextRead()
 }
 
     bool 
-RangeSplittingPairedReadReader::getNextReadPair(Read *read1, Read *read2)
+RangeSplittingPairedReadSupplier::getNextReadPair(Read **read1, Read **read2)
 {
-    if (underlyingReader->getNextReadPair(read1,read2)) {
+    *read1 = &internalRead1;
+    *read2 = &internalRead2;
+    if (underlyingReader->getNextReadPair(&internalRead1,&internalRead2)) {
         return true;
     }
 
@@ -157,10 +159,10 @@ RangeSplittingPairedReadReader::getNextReadPair(Read *read1, Read *read2)
     }
  
     underlyingReader->reinit(rangeStart,rangeLength);
-    return underlyingReader->getNextReadPair(read1, read2);
+    return underlyingReader->getNextReadPair(&internalRead1, &internalRead2);
 }
 
-RangeSplittingPairedReadReaderGenerator::RangeSplittingPairedReadReaderGenerator(
+RangeSplittingPairedReadSupplierGenerator::RangeSplittingPairedReadSupplierGenerator(
     const char *i_fileName1, const char *i_fileName2, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome) :
         isSAM(i_isSAM), clipping(i_clipping), genome(i_genome)
 {
@@ -177,15 +179,15 @@ RangeSplittingPairedReadReaderGenerator::RangeSplittingPairedReadReaderGenerator
     splitter = new RangeSplitter(QueryFileSize(fileName1),numThreads);
 }
 
-RangeSplittingPairedReadReaderGenerator::~RangeSplittingPairedReadReaderGenerator()
+RangeSplittingPairedReadSupplierGenerator::~RangeSplittingPairedReadSupplierGenerator()
 {
     delete [] fileName1;
     delete [] fileName2;
     delete splitter;
 }
 
-    RangeSplittingPairedReadReader *
-RangeSplittingPairedReadReaderGenerator::createReader()
+    PairedReadSupplier *
+RangeSplittingPairedReadSupplierGenerator::generateNewPairedReadSupplier()
 {
     _int64 rangeStart, rangeLength;
     if (!splitter->getNextRange(&rangeStart, &rangeLength)) {
@@ -199,6 +201,6 @@ RangeSplittingPairedReadReaderGenerator::createReader()
         underlyingReader = PairedFASTQReader::create(fileName1, fileName2, rangeStart, rangeLength, clipping);
     }
 
-    return new RangeSplittingPairedReadReader(splitter,underlyingReader);
+    return new RangeSplittingPairedReadSupplier(splitter,underlyingReader);
 }
 

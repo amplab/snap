@@ -58,5 +58,5 @@ protected:
 
     //RangeSplittingReadSupplierGenerator   *readSupplierGenerator;
 
-    ReadSupplierQueue *readSupplierQueue;
+    ReadSupplierGenerator *readSupplierGenerator;
 };

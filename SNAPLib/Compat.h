@@ -45,6 +45,7 @@ const void* memmem(const void* data, const size_t dataLength, const void* patter
 
 typedef CRITICAL_SECTION    ExclusiveLock;
 typedef HANDLE SingleWaiterObject;      // This is an event in Windows.  It's just a synchronization object that you can wait for and set.
+typedef HANDLE EventObject;
 
 #define PATH_SEP '\\'
 #define snprintf _snprintf
@@ -138,6 +139,19 @@ void DestroySingleWaiterObject(SingleWaiterObject *waiter);
 void SignalSingleWaiterObject(SingleWaiterObject *singleWaiterObject);
 bool WaitForSingleWaiterObject(SingleWaiterObject *singleWaiterObject);
 void ResetSingleWaiterObject(SingleWaiterObject *singleWaiterObject);
+
+//
+// An Event is a synchronization object that acts as a gateway: it can either be open
+// or closed.  Open events allow all waiters to proceed, while closed ones block all
+// waiters.  Events can be opened and closed multiple times, and can have any number of
+// waiters.
+//
+
+void CreateEventObject(EventObject *newEvent);
+void DestroyEventObject(EventObject *eventObject);
+void AllowEventWaitersToProceed(EventObject *eventObject);
+void PreventEventWaitersFromProceeding(EventObject *eventObject);
+void WaitForEvent(EventObject *eventObject); 
 
 
 //

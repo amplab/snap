@@ -51,7 +51,7 @@ struct ReadQueueElement {
     }
 };
     
-class ReadSupplierQueue {
+class ReadSupplierQueue: public ReadSupplierGenerator, public PairedReadSupplierGenerator {
 public:
     //
     // This queue can handle several different kinds of inputs and outputs.  It will do either single
@@ -85,8 +85,8 @@ public:
 
     bool startReaders();
     void waitUntilFinished();
-    ReadSupplierFromQueue *createSupplier();
-    PairedReadSupplierFromQueue *createPairedSupplier();
+    ReadSupplier *generateNewReadSupplier();
+    PairedReadSupplier *generateNewPairedReadSupplier();
 
     ReadQueueElement *getElement();     // Called from the supplier threads
     bool getElements(ReadQueueElement **element1, ReadQueueElement **element2);   // Called from supplier threads
@@ -105,10 +105,20 @@ private:
     // available.
     //
     struct ReaderGroup {
-        ReaderGroup() : next(NULL), prev(NULL), pairedReader(NULL) {
+        ReaderGroup() : next(NULL), prev(NULL), pairedReader(NULL), balance(0) {
             singleReader[0] = singleReader[1] = NULL;
             readyQueue->next = readyQueue->prev = readyQueue;
             readyQueue[1].next = readyQueue[1].prev = &readyQueue[1];
+
+            for (int i = 0; i < 2; i++) {
+                CreateEventObject(&throttle[i]);
+                AllowEventWaitersToProceed(&throttle[i]);
+            }
+        }
+
+        ~ReaderGroup() {
+            DestroyEventObject(&throttle[0]);
+            DestroyEventObject(&throttle[1]);
         }
 
         ReaderGroup         *next;
@@ -131,6 +141,10 @@ private:
             prev->next = next;
             next = prev = NULL;
         }
+
+        EventObject throttle[2];    // Two throttles, one for each of the readers.  At least one must be open at all times.
+        int balance;    // The size of readyQueue[0] - the size of readyQueue[1].  This is used to throttle.
+        static const int MaxImbalance = 5;  // Engage the throttle when |balance| > MaxImbalance
     };
 
     ReaderGroup *readerGroups;
@@ -150,11 +164,11 @@ private:
     // Just one lock for all of the shared objects (the queues and Waiter objects, and counts of
     // readers and suppliers running, as well as allReadsQueued).
     //
-    ExclusiveLock lock;
-    SingleWaiterObject readsReady;
-    SingleWaiterObject emptyBuffersAvailable;
+    ExclusiveLock   lock;
+    EventObject     readsReady;
+    EventObject     emptyBuffersAvailable;
 
-    SingleWaiterObject allReadsConsumed;
+    EventObject     allReadsConsumed;
 
     struct ReaderThreadParams {
         ReadSupplierQueue       *queue;

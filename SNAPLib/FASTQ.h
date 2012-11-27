@@ -29,6 +29,8 @@ Revision History:
 
 #include "Compat.h"
 #include "Read.h"
+#include "ReadSupplierQueue.h"
+#include "RangeSplitter.h"
 
 class   FASTQReader : public ReadReader {
 public:
@@ -37,6 +39,8 @@ public:
 
         static FASTQReader* create(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess,
                                    ReadClippingType clipping = ClipBack);
+
+        static ReadSupplierGenerator *createReadSupplierGenerator(const char *fileName, int numThreads, ReadClippingType clipping = ClipBack);
 };
 
 class PairedFASTQReader: public PairedReadReader {
@@ -60,6 +64,9 @@ public:
             _ASSERT(0 == whichHalfOfPair || 1 == whichHalfOfPair);
             return readers[whichHalfOfPair];
         }
+
+        static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName0, const char *fileName1, int numThreads, ReadClippingType clipping = ClipBack);
+ 
 
 private:
 

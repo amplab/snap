@@ -68,9 +68,9 @@ ReadSupplierQueue::commonInit(int i_nReaders)
     readerGroupsWithReadyReads->next = readerGroupsWithReadyReads->prev = readerGroupsWithReadyReads;
 
     InitializeExclusiveLock(&lock);
-    CreateSingleWaiterObject(&readsReady);
-    CreateSingleWaiterObject(&emptyBuffersAvailable);
-    CreateSingleWaiterObject(&allReadsConsumed);
+    CreateEventObject(&readsReady);
+    CreateEventObject(&emptyBuffersAvailable);
+    CreateEventObject(&allReadsConsumed);
 
     //
     // Create 2 buffers per reader.  We'll add more buffers as we add suppliers.
@@ -80,7 +80,7 @@ ReadSupplierQueue::commonInit(int i_nReaders)
         element->addToTail(emptyQueue);
     }
 
-    SignalSingleWaiterObject(&emptyBuffersAvailable);
+    AllowEventWaitersToProceed(&emptyBuffersAvailable);
 }
 
 ReadSupplierQueue::~ReadSupplierQueue()
@@ -120,12 +120,12 @@ ReadSupplierQueue::startReaders()
     void 
 ReadSupplierQueue::waitUntilFinished()
 {
-    WaitForSingleWaiterObject(&allReadsConsumed);
+    WaitForEvent(&allReadsConsumed);
 }
 
 
-    ReadSupplierFromQueue *
-ReadSupplierQueue::createSupplier()
+    ReadSupplier *
+ReadSupplierQueue::generateNewReadSupplier()
 {
     AcquireExclusiveLock(&lock);
     nSuppliersRunning++;
@@ -137,26 +137,31 @@ ReadSupplierQueue::createSupplier()
         element->addToTail(emptyQueue);
     }
 
-    SignalSingleWaiterObject(&emptyBuffersAvailable);
+    AllowEventWaitersToProceed(&emptyBuffersAvailable);
     ReleaseExclusiveLock(&lock);
    
     return new ReadSupplierFromQueue(this);
 }
 
-        PairedReadSupplierFromQueue *
-ReadSupplierQueue::createPairedSupplier()
+        PairedReadSupplier *
+ReadSupplierQueue::generateNewPairedReadSupplier()
 {
+    ReadQueueElement * newElements[4];
+    for (int i = 0 ; i < ((readerGroups[0].singleReader[1] == NULL) ? 2 : 4); i++) {
+        newElements[i] = new ReadQueueElement;
+    }
+
     AcquireExclusiveLock(&lock);
     nSuppliersRunning++;
     //
     // Add two more queue elements (four for paired-end, double file).
     //
     for (int i = 0; i < ((readerGroups[0].singleReader[1] == NULL) ? 2 : 4); i++) {
-        ReadQueueElement *element = new ReadQueueElement;
+        ReadQueueElement *element = newElements[i];
         element->addToTail(emptyQueue);
     }
 
-    SignalSingleWaiterObject(&emptyBuffersAvailable);
+    AllowEventWaitersToProceed(&emptyBuffersAvailable);
     ReleaseExclusiveLock(&lock);
    
     return new PairedReadSupplierFromQueue(this, readerGroups[0].singleReader[1] != NULL);
@@ -174,7 +179,7 @@ ReadSupplierQueue::getElement()
             //
             return NULL;
         }
-        WaitForSingleWaiterObject(&readsReady);
+        WaitForEvent(&readsReady);
         AcquireExclusiveLock(&lock);
     }
 
@@ -192,7 +197,7 @@ ReadSupplierQueue::getElement()
             //
             // No groups left with reads ready.
             //
-            ResetSingleWaiterObject(&readsReady);
+            PreventEventWaitersFromProceeding(&readsReady);
         }
     } else {
         //
@@ -219,7 +224,7 @@ ReadSupplierQueue::getElements(ReadQueueElement **element1, ReadQueueElement **e
             //
             return NULL;
         }
-        WaitForSingleWaiterObject(&readsReady);
+        WaitForEvent(&readsReady);
         AcquireExclusiveLock(&lock);
     }
 
@@ -240,7 +245,7 @@ ReadSupplierQueue::getElements(ReadQueueElement **element1, ReadQueueElement **e
             //
             // No groups left with reads ready.
             //
-            ResetSingleWaiterObject(&readsReady);
+            PreventEventWaitersFromProceeding(&readsReady);
         }
     } else {
         //
@@ -259,7 +264,7 @@ ReadSupplierQueue::doneWithElement(ReadQueueElement *element)
 {
     AcquireExclusiveLock(&lock);
     element->addToTail(emptyQueue);
-    SignalSingleWaiterObject(&emptyBuffersAvailable);
+    AllowEventWaitersToProceed(&emptyBuffersAvailable);
     ReleaseExclusiveLock(&lock);
 
 }
@@ -271,7 +276,7 @@ ReadSupplierQueue::supplierFinished()
     _ASSERT(nSuppliersRunning > 0);
     nSuppliersRunning--;
     if (0 == nSuppliersRunning) {
-        SignalSingleWaiterObject(&allReadsConsumed);
+        AllowEventWaitersToProceed(&allReadsConsumed);
     }
     ReleaseExclusiveLock(&lock);
 }
@@ -296,19 +301,32 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
         reader = params->group->singleReader[0];
     }
     int increment = (NULL == reader) ? 2 : 1;
+    int balanceIncrement = params->isSecondReader ? -1 : 1;
+    int firstOrSecond = params->isSecondReader ? 0 : 1;
+    bool singleReader = (NULL == params->group->singleReader[1]);
 
     while (!done) {
+        if ((!singleReader) && params->group->balance * balanceIncrement > ReaderGroup::MaxImbalance) {
+            //
+            // We're over full.  Wait to get back in balance.
+            //
+            ReleaseExclusiveLock(&lock);
+            WaitForEvent(&params->group->throttle[firstOrSecond]);
+            AcquireExclusiveLock(&lock);
+            _ASSERT(params->group->balance * balanceIncrement <= ReaderGroup::MaxImbalance);
+        }
+
         while (emptyQueue->next == emptyQueue) {
             // Wait for a buffer.
             ReleaseExclusiveLock(&lock);
-            WaitForSingleWaiterObject(&emptyBuffersAvailable);
+            WaitForEvent(&emptyBuffersAvailable);
             AcquireExclusiveLock(&lock);
         }
 
         ReadQueueElement *element = emptyQueue->next;
         element->removeFromQueue();
         if (emptyQueue->next == emptyQueue) {
-            ResetSingleWaiterObject(&emptyBuffersAvailable);
+            PreventEventWaitersFromProceeding(&emptyBuffersAvailable);
         }
         ReleaseExclusiveLock(&lock);
 
@@ -333,9 +351,9 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
         AcquireExclusiveLock(&lock);
 
         if (element->totalReads > 0) {
-            element->addToTail(&params->group->readyQueue[params->isSecondReader ? 1 : 0]);
+            element->addToTail(&params->group->readyQueue[firstOrSecond]);
             if (params->group->next == NULL && 
-                (NULL == params->group->singleReader[1] || params->group->readyQueue[params->isSecondReader ? 0 : 1].next != &params->group->readyQueue[params->isSecondReader ? 0 : 1])) {
+                (NULL == params->group->singleReader[1] || params->group->readyQueue[1-firstOrSecond].next != &params->group->readyQueue[1-firstOrSecond])) {
  
                 //
                 // Our group is not already on the ready queue.  Furthermore, we now have data ready, either because we
@@ -343,7 +361,24 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
                 // ready queue and signal that there's data ready.
                 //
                 params->group->addToQueue(readerGroupsWithReadyReads);
-                SignalSingleWaiterObject(&readsReady);
+                AllowEventWaitersToProceed(&readsReady);
+            }
+
+            if (!singleReader) {
+                params->group->balance += balanceIncrement;
+                if (params->group->balance * balanceIncrement > ReaderGroup::MaxImbalance) {
+                    _ASSERT(params->group->balance * balanceIncrement == ReaderGroup::MaxImbalance + 1);  // We can get at most one past the limit
+                    //
+                    // We're too far ahead.  Close our throttle.
+                    //
+                    PreventEventWaitersFromProceeding(&params->group->throttle[firstOrSecond]);
+                } else if (params->group->balance * -1 * balanceIncrement == ReaderGroup::MaxImbalance) {
+                    //
+                    // We just pushed it back into balance (barely) for the other guy.  Allow him to
+                    // proceed.
+                    //
+                    AllowEventWaitersToProceed(&params->group->throttle[1-firstOrSecond]);
+                }
             }
         }
     } // While ! done

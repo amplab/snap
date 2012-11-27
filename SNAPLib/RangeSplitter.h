@@ -56,7 +56,7 @@ private:
 class RangeSplittingReadSupplier : public ReadSupplier {
 public:
     RangeSplittingReadSupplier(RangeSplitter *i_splitter, ReadReader *i_underlyingReader) : 
-      splitter(i_splitter), underlyingReader(i_underlyingReader), read(i_underlyingReader) {}
+      splitter(i_splitter), underlyingReader(i_underlyingReader), read() {}
 
     Read *getNextRead();
  
@@ -66,12 +66,12 @@ private:
     Read read;
 };
 
-class RangeSplittingReadSupplierGenerator {
+class RangeSplittingReadSupplierGenerator: public ReadSupplierGenerator {
 public:
     RangeSplittingReadSupplierGenerator(const char *i_fileName, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome);
     ~RangeSplittingReadSupplierGenerator() {delete splitter; delete [] fileName;}
 
-    RangeSplittingReadSupplier *createReader();
+    ReadSupplier *generateNewReadSupplier();
 
 private:
     RangeSplitter *splitter;
@@ -82,27 +82,25 @@ private:
 };
 
 
-class RangeSplittingPairedReadReader : public PairedReadReader {
+class RangeSplittingPairedReadSupplier : public PairedReadSupplier {
 public:
-    RangeSplittingPairedReadReader(RangeSplitter *i_splitter, PairedReadReader *i_underlyingReader) : 
-      splitter(i_splitter), underlyingReader(i_underlyingReader) {}
+    RangeSplittingPairedReadSupplier(RangeSplitter *i_splitter, PairedReadReader *i_underlyingReader) : splitter(i_splitter), underlyingReader(i_underlyingReader) {}
 
-    virtual bool getNextReadPair(Read *read1, Read *read2);
-    virtual ReadReader *getReaderToInitializeRead(int whichHalfOfPair) {return underlyingReader->getReaderToInitializeRead(whichHalfOfPair);}
+    virtual bool getNextReadPair(Read **read1, Read **read2);
        
-    void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) {fprintf(stderr,"RangeSplittingPairedReadReader: reinit called.\n"); exit(1);}
-
-private:
-    RangeSplitter *splitter;
+ private:
     PairedReadReader *underlyingReader;
-};
+    RangeSplitter *splitter;
+    Read internalRead1;
+    Read internalRead2;
+ };
 
-class RangeSplittingPairedReadReaderGenerator {
+class RangeSplittingPairedReadSupplierGenerator: public PairedReadSupplierGenerator {
 public:
-    RangeSplittingPairedReadReaderGenerator(const char *i_fileName1, const char *i_fileName2, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome);
-    ~RangeSplittingPairedReadReaderGenerator();
+    RangeSplittingPairedReadSupplierGenerator(const char *i_fileName1, const char *i_fileName2, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome);
+    ~RangeSplittingPairedReadSupplierGenerator();
 
-    RangeSplittingPairedReadReader *createReader();
+    PairedReadSupplier *generateNewPairedReadSupplier();
 
 private:
     RangeSplitter *splitter;

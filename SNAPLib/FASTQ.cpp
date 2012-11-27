@@ -960,3 +960,38 @@ PairedFASTQReader::getNextReadPair(Read *read0, Read *read1)
 
     return true;
 }
+
+    PairedReadSupplierGenerator *
+PairedFASTQReader::createPairedReadSupplierGenerator(const char *fileName0, const char *fileName1, int numThreads, ReadClippingType clipping)
+{
+    //
+    // Decide whether to use the range splitter or a queue based on whether the files are the same size.
+    //
+    if (QueryFileSize(fileName0) != QueryFileSize(fileName1)) {
+        fprintf(stderr,"FASTQ using supplier queue\n");
+        ReadReader *reader1 = FASTQReader::create(fileName0,0,QueryFileSize(fileName0),clipping);
+        ReadReader *reader2 = FASTQReader::create(fileName1,0,QueryFileSize(fileName1),clipping);
+        if (NULL == reader1 || NULL == reader2) {
+            delete reader1;
+            delete reader2;
+            return NULL;
+        }
+        ReadSupplierQueue *queue = new ReadSupplierQueue(1,&reader1,&reader2); 
+        queue->startReaders();
+        return queue;
+    } else {
+        fprintf(stderr,"FASTQ using range splitter\n");
+        RangeSplitter *splitter = new RangeSplitter(QueryFileSize(fileName0), numThreads, 100);
+        return new RangeSplittingPairedReadSupplierGenerator(fileName0,fileName1,false,clipping,numThreads,NULL /*genome isn't needed for FASTQ files*/);
+    }
+}
+
+    ReadSupplierGenerator *
+FASTQReader::createReadSupplierGenerator(const char *fileName, int numThreads, ReadClippingType clipping)
+{
+    //
+    // Single ended FASTQ files can always be handled by a range splitter.
+    //
+    RangeSplitter *splitter = new RangeSplitter(QueryFileSize(fileName), numThreads, 100);
+    return new RangeSplittingReadSupplierGenerator(fileName, false, clipping, numThreads, NULL /* genome isn't needed for FASTQ files*/);
+}

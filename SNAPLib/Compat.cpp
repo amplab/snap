@@ -128,6 +128,15 @@ void ResetSingleWaiterObject(SingleWaiterObject *singleWaiterObject) {
     ResetEvent(*singleWaiterObject);
 }
 
+//
+// In Windows, the single waiter objects are already implemented using events.
+//
+void CreateEventObject(EventObject *newEvent) {CreateSingleWaiterObject(newEvent);}
+void DestroyEventObject(EventObject *eventObject) {DestroySingleWaiterObject(eventObject);}
+void AllowEventWaitersToProceed(EventObject *eventObject) {SignalSingleWaiterObject(eventObject);}
+void PreventEventWaitersFromProceeding(EventObject *eventObject) {ResetSingleWaiterObject(eventObject);}
+void WaitForEvent(EventObject *eventObject) {WaitForSingleWaiterObject(eventObject);}
+
 
 void BindThreadToProcessor(unsigned processorNumber) // This hard binds a thread to a processor.  You can no-op it at some perf hit.
 {
