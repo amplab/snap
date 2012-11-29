@@ -37,12 +37,9 @@ AlignerContext::AlignerContext(int i_argc, const char **i_argv, const char *i_ve
     :
     index(NULL),
     parallelSamWriter(NULL),
-    fileSplitterState(0, 0),
     options(NULL),
     stats(NULL),
     extension(i_extension != NULL ? i_extension : new AlignerExtension()),
-    inputFilename(NULL),
-    fileSplitter(NULL),
     samWriter(NULL),
     argc(i_argc),
     argv(i_argv),
@@ -128,7 +125,7 @@ AlignerContext::initialize()
     printf("%llds.  %u bases, seed size %d\n",
         loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
 
-    if (options->samFileTemplate != NULL && (options->maxHits.size() > 1 || options->maxDist.size() > 1 || options->numSeeds.size() > 1
+    if (options->outputFileTemplate != NULL && (options->maxHits.size() > 1 || options->maxDist.size() > 1 || options->numSeeds.size() > 1
                 || options->confDiff.size() > 1 || options->adaptiveConfDiff.size() > 1)) {
         fprintf(stderr, "WARNING: You gave ranges for some parameters, so SAM files will be overwritten!\n");
     }
@@ -155,8 +152,8 @@ AlignerContext::beginIteration()
         ? options->sortMemory * ((size_t) 1 << 30)
         : options->numThreads * max(2 * ParallelSAMWriter::UnsortedBufferSize,
                                     (size_t) index->getGenome()->getCountOfBases() / 3);
-    if (NULL != options->samFileTemplate) {
-        parallelSamWriter = ParallelSAMWriter::create(options->samFileTemplate,index->getGenome(),
+    if (NULL != options->outputFileTemplate) {
+        parallelSamWriter = ParallelSAMWriter::create(options->outputFileTemplate,index->getGenome(),
             options->numThreads, options->sortOutput, totalMemory, options->useM, argc, argv, version, options->rgLineContents);
         if (NULL == parallelSamWriter) {
             fprintf(stderr,"Unable to create SAM file writer.  Just aligning for speed, no output will be generated.\n");
@@ -164,7 +161,6 @@ AlignerContext::beginIteration()
     }
 
     alignStart = timeInMillis();
-    fileSplitterState = RangeSplitter(QueryFileSize(options->inputFilename), options->numThreads, 100);
 
     clipping = options->clipping;
     totalThreads = options->numThreads;
@@ -176,10 +172,6 @@ AlignerContext::beginIteration()
     confDiff = confDiff_;
     adaptiveConfDiff = adaptiveConfDiff_;
     selectivity = options->selectivity;
-
-    inputFilename = options->inputFilename;
-    inputFileIsFASTQ = options->inputFileIsFASTQ;
-    fileSplitter = &fileSplitterState;
 
     if (stats != NULL) {
         delete stats;

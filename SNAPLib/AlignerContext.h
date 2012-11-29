@@ -96,7 +96,6 @@ protected:
     ParallelSAMWriter                   *parallelSamWriter;
     _int64                               alignStart;
     _int64                               alignTime;
-    RangeSplitter                        fileSplitterState;
     AlignerOptions                      *options;
     AlignerStats                        *stats;
     AlignerExtension                    *extension;
@@ -106,9 +105,6 @@ protected:
     int                                  confDiff;
     int                                  adaptiveConfDiff;
     bool                                 computeError;
-    const char                          *inputFilename;
-    bool                                 inputFileIsFASTQ;   // Else SAM
-    RangeSplitter                       *fileSplitter;
     unsigned                             selectivity;
     bool                                 detailedStats;
     ReadClippingType                     clipping;

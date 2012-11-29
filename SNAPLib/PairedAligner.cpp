@@ -471,7 +471,7 @@ PairedAlignerContext::typeSpecificBeginIteration()
         for (int i = 0; i < options->nInputs; i++) {
             generators[i] = options->inputs[i].createPairedReadSupplierGenerator(options->numThreads, index->getGenome(), options->clipping);
         }
-        pairedReadSupplierGenerator = new MultiInputReadSupplierGenerator(options->nInputs,generators);
+        pairedReadSupplierGenerator = new MultiInputPairedReadSupplierGenerator(options->nInputs,generators);
     }
 }
     void 
