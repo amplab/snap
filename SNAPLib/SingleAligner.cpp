@@ -80,6 +80,7 @@ SingleAlignerContext::parseOptions(
 		if (argv[i][0] == '-') {
 			break;
 		}
+		nInputs++;
 	}
 
 	if (0 == nInputs) {
@@ -94,8 +95,8 @@ SingleAlignerContext::parseOptions(
 			break;
 		}
 
-		options->inputs[i].fileName = argv[i];
-		options->inputs[i].fileType = stringEndsWith(argv[i],".sam") ? SAMFile : FASTQFile;
+		options->inputs[i-1].fileName = argv[i];
+		options->inputs[i-1].fileType = stringEndsWith(argv[i],".sam") ? SAMFile : FASTQFile;
 	}
 
     for (int n = 1 + nInputs; n < argc; n++) {

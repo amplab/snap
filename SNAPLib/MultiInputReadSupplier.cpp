@@ -144,9 +144,20 @@ MultiInputReadSupplierGenerator::~MultiInputReadSupplierGenerator()
 MultiInputReadSupplierGenerator::generateNewReadSupplier()
 {
     ReadSupplier **readSuppliers = new ReadSupplier *[nReadSuppliers];
-    for (int i = 0; i < nReadSuppliers; i++) {
+    for (int i = 0; i < nReadSuppliers; ) {
         readSuppliers[i] = readSupplierGenerators[i]->generateNewReadSupplier();
+		if (NULL == readSuppliers[i]) {
+			nReadSuppliers--;
+		} else {
+			i++;
+		}
     }
+
+	if (0 == nReadSuppliers) {
+		delete [] readSuppliers;
+		return NULL;
+	}
+
     return new MultiInputReadSupplier(nReadSuppliers,readSuppliers);    // The Supplier owns the array and suppliers we created
 }
 
@@ -173,8 +184,17 @@ MultiInputPairedReadSupplierGenerator::~MultiInputPairedReadSupplierGenerator()
 MultiInputPairedReadSupplierGenerator::generateNewPairedReadSupplier()
 {
     PairedReadSupplier **readSuppliers = new PairedReadSupplier *[nReadSuppliers];
-    for (int i = 0; i < nReadSuppliers; i++) {
+    for (int i = 0; i < nReadSuppliers; ) {
         readSuppliers[i] = readSupplierGenerators[i]->generateNewPairedReadSupplier();
+		if (NULL == readSuppliers[i]) {
+			nReadSuppliers--;
+		} else {
+			i++;
+		}
     }
+	if (0 == nReadSuppliers) {
+		delete [] readSuppliers;
+		return NULL;
+	}
     return new MultiInputPairedReadSupplier(nReadSuppliers,readSuppliers);
 }
