@@ -67,21 +67,22 @@ public:
     // RangeSplitter, like BAM (though that's theoretically possible, so maybe..)  It takes a set 
     // of readers (presumably for different files), each of which runs independently and in parallel.
     // 
-    ReadSupplierQueue(int i_nReaders, ReadReader **readers);
+    ReadSupplierQueue(ReadReader *i_reader);
 
     //
     // The version for paired reads for which each end comes from a different Reader (and presumably
     // file, think FASTQ).  This is mostly useful for cases where the RangeSplitter can't handle
     // the files, probably because they FASTQ files with unequal length reads).
     //
-    ReadSupplierQueue(int i_nReaders, ReadReader **firstHalfReaders, ReadReader **secondHalfReaders);
+    ReadSupplierQueue(ReadReader *i_firstHalfReader, ReadReader *i_secondHalfReader);
 
     //
     // The version for paired reads that come from a single file but for which RangeSplitter won't
     // work (BAM or CRAM or maybe SRA).
     //
-    ReadSupplierQueue(int i_nReaders, PairedReadReader **pairedReaders);
-    ~ReadSupplierQueue();
+    ReadSupplierQueue(PairedReadReader *pairedReader);
+    
+    virtual ~ReadSupplierQueue();
 
     bool startReaders();
     void waitUntilFinished();
@@ -96,64 +97,23 @@ public:
 
 private:
 
-    void commonInit(int i_nReaders);
+    void commonInit();
 
-    //
-    // A reader group is responsible for generating single or paired end reads
-    // from one or two files.  It has its own queue(s).  The ReaderGroups
-    // themselves may be on the queue of reader groups that have reads
-    // available.
-    //
-    struct ReaderGroup {
-        ReaderGroup() : next(NULL), prev(NULL), pairedReader(NULL), balance(0) {
-            singleReader[0] = singleReader[1] = NULL;
-            readyQueue->next = readyQueue->prev = readyQueue;
-            readyQueue[1].next = readyQueue[1].prev = &readyQueue[1];
 
-            for (int i = 0; i < 2; i++) {
-                CreateEventObject(&throttle[i]);
-                AllowEventWaitersToProceed(&throttle[i]);
-            }
-        }
+    ReadReader          *singleReader[2];   // Only [0] is filled in for single ended reads
+    PairedReadReader    *pairedReader;      // This is filled in iff there are no single readers
 
-        ~ReaderGroup() {
-            DestroyEventObject(&throttle[0]);
-            DestroyEventObject(&throttle[1]);
-        }
+    ReadQueueElement    readyQueue[2];      // Queue [1] is used only when there are two single end readers
 
-        ReaderGroup         *next;
-        ReaderGroup         *prev;
-
-        ReadReader          *singleReader[2];   // Only [0] is filled in for single ended reads
-        PairedReadReader    *pairedReader;      // This is filled in iff there are no single readers
-
-        ReadQueueElement     readyQueue[2];     // Queue [1] is used only when there are two single end readers
-
-        void addToQueue(ReaderGroup *queue) {
-            next = queue;
-            prev = queue->prev;
-            next->prev = this;
-            prev->next = this;
-        }
-
-        void removeFromQueue() {
-            next->prev = prev;
-            prev->next = next;
-            next = prev = NULL;
-        }
-
-        EventObject throttle[2];    // Two throttles, one for each of the readers.  At least one must be open at all times.
-        int balance;    // The size of readyQueue[0] - the size of readyQueue[1].  This is used to throttle.
-        static const int MaxImbalance = 5;  // Engage the throttle when |balance| > MaxImbalance
-    };
-
-    ReaderGroup *readerGroups;
-    ReaderGroup readerGroupsWithReadyReads[1];
-
-    int nReaders;
+    EventObject         throttle[2];        // Two throttles, one for each of the readers.  At least one must be open at all times.
+    int balance;                            // The size of readyQueue[0] - the size of readyQueue[1].  This is used to throttle.
+    static const int MaxImbalance = 5;      // Engage the throttle when |balance| > MaxImbalance
+ 
     int nReadersRunning;
     int nSuppliersRunning;
     bool allReadsQueued;
+
+    bool areAnyReadsReady(); // must hold the lock to call this.
 
     //
     // Empty buffers waiting for the readers.
@@ -172,7 +132,6 @@ private:
 
     struct ReaderThreadParams {
         ReadSupplierQueue       *queue;
-        ReaderGroup             *group;
         bool                     isSecondReader;
     };
 

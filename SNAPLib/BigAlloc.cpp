@@ -154,7 +154,7 @@ Return Value:
         DWORD assertPrivilegeError = GetLastError();
 
         size_t largePageSizeToAllocate = ((virtualAllocSize + largePageSize - 1) / largePageSize) * largePageSize;
-        allocatedMemory = (BYTE *)VirtualAlloc(0,largePageSizeToAllocate,commitFlag|MEM_RESERVE|MEM_LARGE_PAGES,PAGE_READWRITE);
+        allocatedMemory = (BYTE *)VirtualAlloc(0,largePageSizeToAllocate,commitFlag|MEM_RESERVE/*|MEM_LARGE_PAGES*/,PAGE_READWRITE);
 
         if (NULL != allocatedMemory) {
             if (NULL != sizeAllocated) {

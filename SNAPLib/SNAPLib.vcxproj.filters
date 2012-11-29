@@ -88,6 +88,9 @@
     <ClCompile Include="ReadSupplierQueue.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="MultiInputReadSupplier.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="aligner.h">
@@ -193,6 +196,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ReadSupplierQueue.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MultiInputReadSupplier.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

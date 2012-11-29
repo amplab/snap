@@ -24,6 +24,7 @@ Revision History:
 --*/
 #include "stdafx.h"
 #include "Compat.h"
+#include "BigAlloc.h"
 #ifndef _MSC_VER
 #include <fcntl.h>
 #include <aio.h>
@@ -583,11 +584,22 @@ int getpagesize()
 FileMapper::FileMapper()
 {
     hFile = INVALID_HANDLE_VALUE;
+    hFilePrefetch = INVALID_HANDLE_VALUE;
     hMapping = NULL;
     mappedRegion = NULL;
     initialized = false;
     amountMapped = 0;
     pagesize = getpagesize();
+    
+    lap->hEvent = NULL;
+    prefetchBuffer = BigAlloc(prefetchBufferSize);
+    isPrefetchOutstanding = false;
+    lastPrefetch = 0;
+
+    millisSpentInReadFile = 0;
+    countOfImmediateCompletions = 0;
+    countOfDelayedCompletions = 0;
+    countOfFailures = 0;
 }
 
 bool
@@ -599,9 +611,18 @@ FileMapper::init(const char *fileName)
         return false;
     }
 
+    hFilePrefetch = CreateFile(fileName, GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_FLAG_OVERLAPPED,NULL);
+    if (INVALID_HANDLE_VALUE == hFilePrefetch) {
+        fprintf(stderr,"Failed to open '%s' for prefetch, error %d\n",fileName, GetLastError());
+        CloseHandle(hFile);
+        return false;
+    }
+
     BY_HANDLE_FILE_INFORMATION fileInfo;
     if (!GetFileInformationByHandle(hFile,&fileInfo)) {
         fprintf(stderr,"Unable to get file information for '%s', error %d\n", fileName, GetLastError());
+        CloseHandle(hFile);
+        CloseHandle(hFilePrefetch);
         return false;
     }
     LARGE_INTEGER liFileSize;
@@ -612,11 +633,16 @@ FileMapper::init(const char *fileName)
     hMapping = CreateFileMapping(hFile,NULL,PAGE_READONLY,0,0,NULL);
     if (NULL == hMapping) {
         fprintf(stderr,"Unable to create mapping to file '%s', %d\n", fileName, GetLastError());
+        CloseHandle(hFile);
+        CloseHandle(hFilePrefetch);
         return false;
     }
 
+    lap->hEvent = CreateEvent(NULL,FALSE,FALSE,NULL);
+
     initialized = true;
 
+ 
     return true;
 }
 
@@ -647,7 +673,10 @@ FileMapper::createMapping(size_t offset, size_t amountToMap)
     mappedRegion = mappedBase + beginRounding;
 
     amountMapped = amountToMap;
-    return mappedRegion;
+
+    prefetch(0);
+
+   return mappedRegion;
 }
 
 void
@@ -665,13 +694,75 @@ FileMapper::unmap()
 FileMapper::~FileMapper()
 {
     unmap();
+    if (isPrefetchOutstanding) {
+        DWORD numberOfBytesTransferred;
+        GetOverlappedResult(hFile,lap,&numberOfBytesTransferred,TRUE);
+    }
+    BigDealloc(prefetchBuffer);
+    prefetchBuffer = NULL;
     CloseHandle(hMapping);
     CloseHandle(hFile);
+    CloseHandle(lap->hEvent);
+    CloseHandle(hFilePrefetch);
+    printf("FileMapper: %lld immediate completions, %lld delayed completions, %lld failures, %lld ms in readfile (%lld ms/call)\n",countOfImmediateCompletions, countOfDelayedCompletions, countOfFailures, millisSpentInReadFile, 
+        millisSpentInReadFile/(countOfImmediateCompletions + countOfDelayedCompletions + countOfFailures));
 }
-
+     
 void
 FileMapper::prefetch(size_t currentRead)
 {
+    if (currentRead + prefetchBufferSize / 2 <= lastPrefetch || lastPrefetch + prefetchBufferSize >= amountMapped) {
+        //
+        // Nothing to do; we're either not ready for more prefetching or we're at the end of our region.
+        //
+        return;
+    }
+
+    if (isPrefetchOutstanding) {
+        //
+        // See if the last prefetch is done.
+        //
+        DWORD numberOfBytesTransferred;
+        if (GetOverlappedResult(hFile,lap,&numberOfBytesTransferred,FALSE)) {
+            isPrefetchOutstanding = false;
+        } else {
+#if     DBG
+            if (GetLastError() != ERROR_IO_PENDING) {
+                fprintf(stderr,"mapped file prefetcher: GetOverlappedResult failed, %d\n", GetLastError());
+            }
+#endif  // DBG
+            return;  // There's still IO on outstanding, we can't start more.
+        }
+    }
+
+    DWORD amountToRead = (DWORD)__min(prefetchBufferSize, amountMapped - lastPrefetch);
+    _ASSERT(amountToRead > 0);  // Else we should have failed the initial check and returned
+    LARGE_INTEGER liReadOffset;
+    lastPrefetch += prefetchBufferSize;
+    liReadOffset.QuadPart = lastPrefetch;
+    lap->OffsetHigh = liReadOffset.HighPart;
+    lap->Offset = liReadOffset.LowPart;
+    DWORD nBytesRead;
+
+    _int64 start = timeInMillis();
+    if (!ReadFile(hFilePrefetch,prefetchBuffer,amountToRead,&nBytesRead,lap)) {
+        if (GetLastError() == ERROR_IO_PENDING) {
+            InterlockedAdd64AndReturnNewValue(&countOfDelayedCompletions,1);
+            isPrefetchOutstanding = true;
+        } else {
+           InterlockedAdd64AndReturnNewValue(&countOfFailures,1);
+#if     DBG
+            if (GetLastError() != ERROR_IO_PENDING) {
+                fprintf(stderr,"mapped file prefetcher: ReadFile failed, %d\n", GetLastError());
+            }
+#endif  // DBG
+            isPrefetchOutstanding = false; // Just ignore it
+        }
+    } else {
+        InterlockedAdd64AndReturnNewValue(&countOfImmediateCompletions,1);
+        isPrefetchOutstanding = false;
+    }
+    InterlockedAdd64AndReturnNewValue(&millisSpentInReadFile,timeInMillis() - start);
 }
 
 

@@ -162,6 +162,7 @@
     <ClInclude Include="HashTable.h" />
     <ClInclude Include="histogram.h" />
     <ClInclude Include="LandauVishkin.h" />
+    <ClInclude Include="MultiInputReadSupplier.h" />
     <ClInclude Include="options.h" />
     <ClInclude Include="PairedAligner.h" />
     <ClInclude Include="PairedEndAligner.h" />
@@ -197,6 +198,7 @@
     <ClCompile Include="HashTable.cpp" />
     <ClCompile Include="histogram.cpp" />
     <ClCompile Include="LandauVishkin.cpp" />
+    <ClCompile Include="MultiInputReadSupplier.cpp" />
     <ClCompile Include="PairedAligner.cpp" />
     <ClCompile Include="PairedEndAligner.cpp" />
     <ClCompile Include="Range.cpp" />

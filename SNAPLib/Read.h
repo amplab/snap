@@ -86,16 +86,19 @@ class PairedReadSupplier {
 public:
     // These read are valid until you call getNextRead, then they're done.  Don't worry about deallocating them.
     virtual bool getNextReadPair(Read **read0, Read **read1) = 0;
+    virtual ~PairedReadSupplier() {}
 };
 
 class ReadSupplierGenerator {
 public:
     virtual ReadSupplier *generateNewReadSupplier() = 0;
+    virtual ~ReadSupplierGenerator() {}
 };
 
 class PairedReadSupplierGenerator {
 public:
     virtual PairedReadSupplier *generateNewPairedReadSupplier() = 0;
+    virtual ~PairedReadSupplierGenerator() {}
 };
 
     

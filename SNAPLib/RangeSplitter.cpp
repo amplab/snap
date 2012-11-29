@@ -118,6 +118,10 @@ RangeSplittingReadSupplierGenerator::generateNewReadSupplier()
     return new RangeSplittingReadSupplier(splitter,underlyingReader);
 }
 
+RangeSplittingReadSupplier::~RangeSplittingReadSupplier()
+{
+}
+
 
     Read * 
 RangeSplittingReadSupplier::getNextRead()
@@ -136,6 +140,10 @@ RangeSplittingReadSupplier::getNextRead()
         return NULL;
     }
     return &read;
+}
+
+RangeSplittingPairedReadSupplier::~RangeSplittingPairedReadSupplier()
+{
 }
 
     bool 

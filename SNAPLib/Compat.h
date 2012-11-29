@@ -297,7 +297,18 @@ private:
 
 #ifdef  _MSC_VER
     HANDLE      hFile;
+    HANDLE      hFilePrefetch;
     HANDLE      hMapping;
+
+    OVERLAPPED  lap[1];     // for the prefetch read
+    void        *prefetchBuffer;
+    static const int prefetchBufferSize = 16 * 1024 * 1024;
+    bool        isPrefetchOutstanding;
+    size_t      lastPrefetch;
+    _int64 millisSpentInReadFile;
+    _int64 countOfImmediateCompletions;
+    _int64 countOfDelayedCompletions;
+    _int64 countOfFailures;
 #else   // _MSC_VER
     static const int madviseSize = 4 * 1024 * 1024;
 

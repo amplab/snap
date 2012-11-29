@@ -967,7 +967,7 @@ PairedFASTQReader::createPairedReadSupplierGenerator(const char *fileName0, cons
     //
     // Decide whether to use the range splitter or a queue based on whether the files are the same size.
     //
-    if (QueryFileSize(fileName0) != QueryFileSize(fileName1)) {
+    if (QueryFileSize(fileName0) != QueryFileSize(fileName1) || 1) {
         fprintf(stderr,"FASTQ using supplier queue\n");
         ReadReader *reader1 = FASTQReader::create(fileName0,0,QueryFileSize(fileName0),clipping);
         ReadReader *reader2 = FASTQReader::create(fileName1,0,QueryFileSize(fileName1),clipping);
@@ -976,7 +976,7 @@ PairedFASTQReader::createPairedReadSupplierGenerator(const char *fileName0, cons
             delete reader2;
             return NULL;
         }
-        ReadSupplierQueue *queue = new ReadSupplierQueue(1,&reader1,&reader2); 
+        ReadSupplierQueue *queue = new ReadSupplierQueue(reader1,reader2); 
         queue->startReaders();
         return queue;
     } else {

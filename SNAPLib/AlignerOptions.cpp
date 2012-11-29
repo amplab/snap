@@ -25,6 +25,8 @@ Revision History:
 #include "stdafx.h"
 #include "options.h"
 #include "AlignerOptions.h"
+#include "FASTQ.h"
+#include "SAM.h"
 
 AlignerOptions::AlignerOptions(
     const char* i_commandLine,
@@ -79,10 +81,7 @@ AlignerOptions::usageMessage()
     fprintf(stderr,
         "Usage: %s\n"
         "Options:\n"
-        "  -o   output alignments to a given SAM file\n"
-#ifndef _MSC_VER
-        "       (note: will create one output file per thread)\n"  // Linux guys: you should fix up your SAM writer!
-#endif  // _MSC_VER 
+        "  -o filename  output alignments to filename in SAM format\n"
         "  -d   maximum edit distance allowed per read or pair (default: %d)\n"
         "  -n   number of seeds to use per read (default: %d)\n"
         "  -h   maximum hits to consider per seed (default: %d)\n"
@@ -163,7 +162,7 @@ AlignerOptions::parse(
         }
     } else if (strcmp(argv[n], "-o") == 0) {
         if (n + 1 < argc) {
-            samFileTemplate = argv[n+1];
+            outputFileTemplate = argv[n+1];
             n++;
             return true;
         }
@@ -290,5 +289,30 @@ AlignerOptions::passFilter(
         return (filterFlags & FilterMultipleHits) != 0;
     default:
         return false; // shouldn't happen!
+    }
+}
+
+    PairedReadSupplierGenerator *
+SNAPInput::createPairedReadSupplierGenerator(int numThreads, const Genome *genome, ReadClippingType clipping)
+{
+    _ASSERT(fileType == SAMFile || secondFileName != NULL); // Caller's responsibility to check this
+
+    if (SAMFile == fileType) {
+        return SAMReader::createPairedReadSupplierGenerator(fileName, numThreads, genome, clipping);
+    } else {
+        _ASSERT(FASTQFile == fileType);
+        return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, clipping);
+    }
+}
+
+    ReadSupplierGenerator *
+SNAPInput::createReadSupplierGenerator(int numThreads, const Genome *genome, ReadClippingType clipping)
+{
+    _ASSERT(secondFileName == NULL);
+    if (SAMFile == fileType) {
+        return SAMReader::createReadSupplierGenerator(fileName,numThreads,genome,clipping);
+    } else {
+       _ASSERT(FASTQFile == fileType);
+       return FASTQReader::createReadSupplierGenerator(fileName,numThreads,clipping);
     }
 }

@@ -45,6 +45,7 @@ Revision History:
 #include "AlignerStats.h"
 #include "FASTQ.h"
 #include "PairedAligner.h"
+#include "MultiInputReadSupplier.h"
 
 using namespace std;
 
@@ -218,27 +219,80 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
     version = i_version;
 
     PairedAlignerOptions* options = new PairedAlignerOptions(
-        "snap paired <index-dir> <read1.fq> <read2.fq> [-o output.sam] [<options>]\n"
-        "   or  snap paired <index-dir> <reads.sam> [-o output.sam] [<options>]");
+        "snap paired <index-dir> <input file(s)> <read2.fq> [<options>]\n"
+        "   where <input file(s)> is a list of files to process.  FASTQ\n"
+        "   files must come in pairs, since each read end is in a separate file.");
     options->extra = extension->extraOptions();
     if (argc < 2) {
         options->usage();
     }
 
     options->indexDir = argv[0];
-    options->inputFilename = argv[1];
-
-    bool samInput = stringEndsWith(argv[1], ".sam");
-
-    if (argc < 3 && !samInput) {
+    //
+    // Figure out how many inputs there are.  All options begin with a '-', so count the
+    // args until we hit an option.  FASTQ files come in pairs, and each pair only counts
+    // as one input.
+    //
+    int nInputs = 0;
+    bool foundFirstHalfOfFASTQ = false;
+    for (int i = 1; i < argc; i++) {
+        if (argv[i][0] == '-') {
+                break;
+        }
+        
+        if (stringEndsWith(argv[i],".sam")) {
+            if (foundFirstHalfOfFASTQ) {
+                fprintf(stderr,"For the paired aligner, FASTQ files must come in pairs.  I found SAM file '%s' after first half FASTQ file '%s'.\n",
+                    argv[i],argv[i-1]);
+                exit(1);
+            }
+            nInputs++;
+        } else {
+            if (foundFirstHalfOfFASTQ) {
+                nInputs++;
+            }
+            foundFirstHalfOfFASTQ = !foundFirstHalfOfFASTQ;
+        }
+    }
+    if (foundFirstHalfOfFASTQ) {
+        fprintf(stderr,"For the paired aligner, FASTQ files must come in pairs.  The last one is unmatched.\n");
+        exit(1);
+    }
+    if (0 == nInputs) {
         options->usage();
     }
+    //
+    // Now build the input array.
+    //
+    options->nInputs = nInputs;
+    options->inputs = new SNAPInput[nInputs];
+    int i;
+    int whichInput = 0;
+    for (i = 1; i < argc; i++) {
+        if (argv[i][0] == '-') {
+                break;
+        }
 
-	options->inputFileIsFASTQ = !samInput;
-    options->fastqFile1 = samInput ? NULL : argv[2];
+        if (stringEndsWith(argv[i],".sam")) {
+            _ASSERT(!foundFirstHalfOfFASTQ);
+            options->inputs[whichInput].fileType = SAMFile;
+            options->inputs[whichInput].fileName = argv[i];
+            whichInput++;
+        } else {
+            if (foundFirstHalfOfFASTQ) {
+                options->inputs[whichInput].fileType = FASTQFile;
+                options->inputs[whichInput].secondFileName = argv[i];
+                whichInput++;
+            } else {
+                options->inputs[whichInput].fileName = argv[i];
+            }
+            foundFirstHalfOfFASTQ = !foundFirstHalfOfFASTQ;
+        }
+    }
+    _ASSERT(whichInput == nInputs);
 
-    for (int n = (samInput ? 2 : 3); n < argc; n++) {
-        if (!options->parse(argv, argc, n)) {
+    for (/* i initialized by previous loop*/; i < argc; i++) {
+        if (!options->parse(argv, argc, i)) {
             options->usage();
         }
     }
@@ -252,7 +306,6 @@ void PairedAlignerContext::initialize()
     PairedAlignerOptions* options2 = (PairedAlignerOptions*) options;
     minSpacing = options2->minSpacing;
     maxSpacing = options2->maxSpacing;
-    fastqFile1 = options2->fastqFile1;
     ignoreMismatchedIDs = options2->ignoreMismatchedIDs;
 }
 
@@ -405,15 +458,25 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
     void 
 PairedAlignerContext::typeSpecificBeginIteration()
 {
-    if (inputFileIsFASTQ) {
-        pairedReadSupplierGenerator = PairedFASTQReader::createPairedReadSupplierGenerator(options->inputFilename, fastqFile1, options->numThreads, options->clipping);
+    if (1 == options->nInputs) {
+        //
+        // We've only got one input, so just connect it directly to the consumer.
+        //
+        pairedReadSupplierGenerator = options->inputs[0].createPairedReadSupplierGenerator(options->numThreads, index->getGenome(), options->clipping);
     } else {
-        pairedReadSupplierGenerator = SAMReader::createPairedReadSupplierGenerator(options->inputFilename, options->numThreads, index->getGenome(), options->clipping);
+        //
+        // We've got multiple inputs, so use a MultiInputReadSupplier to combine the individual inputs.
+        //
+        PairedReadSupplierGenerator **generators = new PairedReadSupplierGenerator *[options->nInputs];
+        for (int i = 0; i < options->nInputs; i++) {
+            generators[i] = options->inputs[i].createPairedReadSupplierGenerator(options->numThreads, index->getGenome(), options->clipping);
+        }
+        pairedReadSupplierGenerator = new MultiInputReadSupplierGenerator(options->nInputs,generators);
     }
 }
     void 
 PairedAlignerContext::typeSpecificNextIteration()
 {
-    //delete pairedReadReaderGenerator;
-    //pairedReadReaderGenerator = NULL;
+    delete pairedReadSupplierGenerator;
+    pairedReadSupplierGenerator = NULL;
 }

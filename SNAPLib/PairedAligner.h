@@ -78,5 +78,4 @@ struct PairedAlignerOptions : public AlignerOptions
 
     int minSpacing;
     int maxSpacing;
-    const char* fastqFile1;
 };
