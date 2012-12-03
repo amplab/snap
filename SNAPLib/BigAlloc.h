@@ -51,4 +51,6 @@ bool BigCommit(
         void        *memoryToCommit,
         size_t      sizeToCommit);
 
+extern bool BigAllocUseHugePages;
+
 

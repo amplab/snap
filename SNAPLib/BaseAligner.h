@@ -140,10 +140,19 @@ public:
     inline bool getStopOnFirstHit() {return stopOnFirstHit;}
     inline void setStopOnFirstHit(bool newValue) {stopOnFirstHit = newValue;}
 
+_int64 nanosInLVByFinalScore[MAX_K+1][MAX_K+1];
+_int64 callsToLVByFinalScore[MAX_K+1][MAX_K+1];
+
 private:
+void applyLVStats(AlignmentResult finalResult, int finalScore);
+void recordLVTime(_int64 start, int score);
+
     LandauVishkin *landauVishkin;
     BoundedStringDistance<> *bsd;
     bool ownLandauVishkin;
+
+_int64 nanosInLVThisRun[MAX_K+1];
+_int64 callsToLVThisRun[MAX_K+1];
 
     // Maximum distance to merge candidates that differe in indels over.
     // This can't be bigger than 32, else some bitvectors overflow.

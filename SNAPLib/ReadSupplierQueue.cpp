@@ -54,6 +54,8 @@ ReadSupplierQueue::commonInit()
     nSuppliersRunning = 0;
     allReadsQueued = false;
 
+    balance = 0;
+
     emptyQueue->next = emptyQueue->prev = emptyQueue;
     readyQueue[0].next = readyQueue[0].prev = &readyQueue[0];
     readyQueue[1].next = readyQueue[1].prev = &readyQueue[1];

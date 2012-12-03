@@ -67,6 +67,12 @@ Arguments:
 
 --*/
 {
+for (int i = 0; i < MAX_K+1; i++) {
+    for (int j = 0; j < MAX_K+1; j++) {
+        nanosInLVByFinalScore[i][j] = 0;
+        callsToLVByFinalScore[i][j] = 0;
+    }
+}
 #if     MAINTAIN_HISTOGRAMS
     lvHistogram = new Histogram(20, true);
     lookupHistogram = new Histogram(20, true);
@@ -210,6 +216,11 @@ Return Value:
 
 --*/
 {
+ for (int i =  0; i < MAX_K+1; i++) {
+     nanosInLVThisRun[i] = 0;
+     callsToLVThisRun[i] = 0;
+ }
+
     *genomeLocation = 0xFFFFFFFF; // Value to return if we don't find a location.
     *hitIsRC = false;             // So we deterministically print the read forward in this case.
     if (finalScore != NULL) {
@@ -375,6 +386,7 @@ Return Value:
 
                 fillHitsFound(maxHitsToGet, multiHitsFound,
                               multiHitLocations, multiHitRCs, multiHitScores);
+applyLVStats(finalResult, *finalScore);
                 return finalResult;
             }
             nextSeedToTest = getWrappedNextSeedToTest(wrapCount);
@@ -559,6 +571,7 @@ Return Value:
 
                 fillHitsFound(maxHitsToGet, multiHitsFound,
                               multiHitLocations, multiHitRCs, multiHitScores);
+applyLVStats(finalResult, *finalScore);
                 return finalResult;
             }
         }
@@ -605,6 +618,7 @@ Return Value:
     
     fillHitsFound(maxHitsToGet, multiHitsFound,
                   multiHitLocations, multiHitRCs, multiHitScores);
+applyLVStats(finalResult, *finalScore);
     return finalResult;
 }
 
@@ -846,10 +860,12 @@ Return Value:
                         if (readId != -1) {
                             cacheKey = ((_uint64) readId) << 33 | ((_uint64) elementToScore->isRC) << 32 | genomeLocation;
                         }
+_int64 start = timeInNanos();
                         score = landauVishkin->computeEditDistance(
                             data, rcRead->getDataLength(),
                             rcRead->getData(), rcRead->getDataLength(),
                             scoreLimit, cacheKey);
+recordLVTime(start,score);
 #endif
                     }
 #ifdef TRACE_ALIGNER
@@ -865,10 +881,12 @@ Return Value:
                         if (readId != -1) {
                             cacheKey = ((_uint64) readId) << 33 | ((_uint64) elementToScore->isRC) << 32 | genomeLocation;
                         }
+_int64 start = timeInNanos();
                         score = landauVishkin->computeEditDistance(
                             data, read->getDataLength(),
                             read->getData(), read->getDataLength(),
                             scoreLimit, cacheKey);
+recordLVTime(start,score);
 #endif
                     }
 #ifdef TRACE_ALIGNER
@@ -1466,4 +1484,24 @@ BaseAligner::incrementWeight(HashTableElement *element)
     element->weightPrev = weightLists[element->weight].weightPrev;
     element->weightNext->weightPrev = element;
     element->weightPrev->weightNext = element;
+}
+
+    void
+BaseAligner::applyLVStats(AlignmentResult finalResult, int finalScore)
+{
+    if (-1 == finalScore) finalScore = MAX_K;
+    for (int i = 0; i < MAX_K+1; i++) {
+        nanosInLVByFinalScore[finalScore][i] += nanosInLVThisRun[i];
+        callsToLVByFinalScore[finalScore][i] += callsToLVThisRun[i];
+    }
+}
+
+    
+    
+    void 
+BaseAligner::recordLVTime(_int64 start, int score)
+{
+    if (-1 == score) score = MAX_K;
+    nanosInLVThisRun[score] += timeInNanos() - start;
+    callsToLVThisRun[score]++;
 }

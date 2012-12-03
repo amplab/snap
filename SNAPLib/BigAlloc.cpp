@@ -24,6 +24,8 @@ Revision History:
 #include "BigAlloc.h"
 #include "Compat.h"
 
+bool BigAllocUseHugePages = true;
+
 
 #ifdef _MSC_VER
 
@@ -154,7 +156,7 @@ Return Value:
         DWORD assertPrivilegeError = GetLastError();
 
         size_t largePageSizeToAllocate = ((virtualAllocSize + largePageSize - 1) / largePageSize) * largePageSize;
-        allocatedMemory = (BYTE *)VirtualAlloc(0,largePageSizeToAllocate,commitFlag|MEM_RESERVE/*|MEM_LARGE_PAGES*/,PAGE_READWRITE);
+        allocatedMemory = (BYTE *)VirtualAlloc(0,largePageSizeToAllocate,commitFlag|MEM_RESERVE|(BigAllocUseHugePages ? MEM_LARGE_PAGES : 0),PAGE_READWRITE);
 
         if (NULL != allocatedMemory) {
             if (NULL != sizeAllocated) {
@@ -320,8 +322,10 @@ void *BigAlloc(
 
 #if (defined(MADV_HUGEPAGE) && !defined(USE_HUGETLB))
     // Tell Linux to use huge pages for this range
-    if (madvise(mem, sizeToAllocate, MADV_HUGEPAGE) == -1) {
-        fprintf(stderr, "WARNING: failed to enable huge pages -- your kernel may not support it\n"); 
+    if (BigAllocUseHugePages) {
+        if (madvise(mem, sizeToAllocate, MADV_HUGEPAGE) == -1) {
+            fprintf(stderr, "WARNING: failed to enable huge pages -- your kernel may not support it\n"); 
+        }
     }
 #endif
 

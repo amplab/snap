@@ -103,6 +103,7 @@ AlignerOptions::usageMessage()
         "       bases from front and back of read respectively; default: back only (-C-+)\n"
 		"  -M   indicates that CIGAR strings in the generated SAM file should use M (alignment\n"
 		"       match) rather than = and X (sequence (mis-)match)\n"
+        "  --hp Indicates not to use huge pages (this may speed up index load and slow down alignment)\n"
 // not written yet        "  -r   Specify the content of the @RG line in the SAM header.\n"
             ,
             commandLine,
@@ -240,6 +241,9 @@ AlignerOptions::parse(
             return true;
         }
 #endif  // 0
+    } else if (strcmp(argv[n], "--hp") == 0) {
+        BigAllocUseHugePages = false;
+        return true;
     } else if (strlen(argv[n]) >= 2 && '-' == argv[n][0] && 'C' == argv[n][1]) {
         if (strlen(argv[n]) != 4 || '-' != argv[n][2] && '+' != argv[n][2] ||
             '-' != argv[n][3] && '+' != argv[n][3]) {

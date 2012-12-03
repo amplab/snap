@@ -74,6 +74,15 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
     }
 
     extension->finishAlignment();
+extern _int64 nanosInSingleAligner;
+extern _int64 callsToSingleAligner;
+extern _int64 nanosInMateAligner;
+extern _int64 callsToMateAligner;
+extern _int64 nanosInAlignTogether;
+extern _int64 callsToAlignTogether;
+printf("%lld s in %lld calls to single aligner, %lld ns/call.  %lld s in %lld calls to mate aligner, %lld ns/call.  %lld s in %lld s calls to align together, %lld ns/call\n",
+    nanosInSingleAligner/1000000000,callsToSingleAligner,nanosInSingleAligner/callsToSingleAligner,nanosInMateAligner/1000000000,callsToMateAligner,nanosInMateAligner/callsToMateAligner,
+    nanosInAlignTogether/1000000000,callsToAlignTogether,nanosInAlignTogether/callsToAlignTogether);
 }
 
     void

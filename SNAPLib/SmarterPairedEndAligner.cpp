@@ -112,6 +112,12 @@ SmarterPairedEndAligner::~SmarterPairedEndAligner()
     delete[] buckets;
 }
 
+_int64 nanosInSingleAligner = 0;
+_int64 callsToSingleAligner = 0;
+_int64 nanosInMateAligner = 0;
+_int64 callsToMateAligner = 0;
+_int64 nanosInAlignTogether = 0;
+_int64 callsToAlignTogether = 0;
 
 void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentResult *result)
 {
@@ -156,7 +162,10 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
         int score0, score1;
         AlignmentResult status0, status1;
         singleAligner->setReadId(r);
+_int64 start = timeInNanos();
         status0 = singleAligner->AlignRead(reads[r], &loc0, &rc0, &score0);
+InterlockedAdd64AndReturnNewValue(&nanosInSingleAligner,timeInNanos() - start);
+InterlockedAdd64AndReturnNewValue(&callsToSingleAligner,1);
         bestScore[r] = (score0 <= (int) (maxK + confDiff ? score0 : INFINITE_SCORE));
         bestScoreCertain[r] = singleAligner->checkedAllSeeds();
         TRACE("Read %d returned %s (%d) at loc %u-%d\n", r, AlignmentResultToString(status0), score0, loc0, rc0);
@@ -173,7 +182,10 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
             }
             mateAligner->setMaxK(maxK - score0 + 1);
             mateAligner->setReadId(1-r);
+start = timeInNanos();
             status1 = mateAligner->AlignRead(reads[1-r], &loc1, &rc1, &score1, maxSpacing, loc0, !rc0);
+InterlockedAdd64AndReturnNewValue(&nanosInMateAligner,timeInNanos() - start);
+InterlockedAdd64AndReturnNewValue(&callsToMateAligner,1);
             TRACE("Mate %d returned %s at loc %u-%d\n", 1-r, AlignmentResultToString(status1), loc1, rc1);
             if (/*status1 != MultipleHits &&*/ score0 + score1 <= (int)maxK) {
                 result->status[r] = SingleHit;
@@ -272,6 +284,8 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
     // At least one read was MultipleHits; let's look for them simultaneously.
     _int64 start = timeInNanos();
     alignTogether(reads, result, lowerBound);
+InterlockedAdd64AndReturnNewValue(&nanosInAlignTogether,timeInNanos() - start);
+InterlockedAdd64AndReturnNewValue(&callsToAlignTogether,1);
     _int64 end = timeInNanos();
     TRACE("alignTogether took %lld ns and returned %s %s\n", end - start,
             AlignmentResultToString(result->status[0]),
