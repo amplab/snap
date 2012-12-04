@@ -22,6 +22,8 @@ Revision History:
 
 #pragma once
 
+#if     0
+
 #include "PairedEndAligner.h"
 #include "BaseAligner.h"
 
@@ -75,3 +77,4 @@ private:
     
     void handleMultiHits2(Read *read0, Read *read1, PairedAlignmentResult *result);
 };
+#endif  // 0

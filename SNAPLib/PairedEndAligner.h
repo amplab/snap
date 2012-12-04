@@ -37,6 +37,8 @@ struct PairedAlignmentResult {
                                 // there to be in the same orientation w.r.t. the reference genome.
 
     int score[2];               // score of each end if matched
+
+    int mapq[2];                // mapping quality of each end, encoded like a Phred score (but as an integer, not ASCII Phred + 33).
 };
 
 /**

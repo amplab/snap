@@ -27,6 +27,8 @@ Revision History:
 
 #pragma once
 
+#if     0
+
 #include "options.h"
 #include "Read.h"
 #include "Seed.h"
@@ -53,7 +55,8 @@ public:
         Read        *read,
         unsigned    *genomeLocation,
         bool        *hitIsRC,
-        int         *score = NULL);
+        int         *score = NULL,
+        int         *mapq = NULL);
 
         void
     ComputeHitDistribution(
@@ -408,3 +411,4 @@ private:
             } // outer switch
         } 
 };
+#endif  // 0

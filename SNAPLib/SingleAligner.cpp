@@ -160,9 +160,10 @@ SingleAlignerContext::runIterationThread()
             unsigned location = 0xFFFFFFFF;
             bool isRC;
             int score;
-            AlignmentResult result = aligner->AlignRead(&read, &location, &isRC, &score);
+            int mapq;
+            AlignmentResult result = aligner->AlignRead(&read, &location, &isRC, &score, &mapq);
 
-            writeRead(&read, result, location, isRC, score);
+            writeRead(&read, result, location, isRC, score, mapq);
 
             updateStats(stats, &read, result, location, score);
         }
@@ -180,10 +181,11 @@ SingleAlignerContext::writeRead(
     AlignmentResult result,
     unsigned location,
     bool isRC,
-    int score)
+    int score,
+    int mapq)
 {
     if (samWriter != NULL && options->passFilter(read, result)) {
-        samWriter->write(read, result, location, isRC);
+        samWriter->write(read, result, location, isRC, mapq);
     }
 }
 

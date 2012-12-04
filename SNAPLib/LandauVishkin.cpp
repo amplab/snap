@@ -31,19 +31,28 @@ LandauVishkin::~LandauVishkin()
 
 
 int LandauVishkin::computeEditDistance(
-        const char* text, int textLen, const char* pattern, int patternLen, int k, _uint64 cacheKey) 
+        const char* text, int textLen, const char* pattern, const char *qualityString, int patternLen, int k, double *matchProbability, _uint64 cacheKey) 
 {
     _ASSERT(k < MAX_K);
     k = min(MAX_K - 1, k); // enforce limit even in non-debug builds
     if (NULL == text) {
         // This happens when we're trying to read past the end of the genome.
+        if (NULL != matchProbability) {
+            *matchProbability = 0.0;
+        }
         return -1;
     }
     if (cache != NULL && cacheKey != 0) {
         LVResult old = cache->get(cacheKey);
         if (old.isValid() && (old.result != -1 || old.k >= k)) {
+            if (NULL != matchProbability) {
+                *matchProbability = old.matchProbability;
+            }
             return old.result;
         }
+    }
+    if (NULL != matchProbability) {
+        *matchProbability = 1.0;    // We'll reduce it as we go.
     }
     const char* p = pattern;
     const char* t = text;
@@ -66,7 +75,7 @@ done1:
     if (L[0][MAX_K] == end) {
         int result = (patternLen > end ? patternLen - end : 0); // Could need some deletions at the end
         if (cache != NULL && cacheKey != 0) {
-            cache->put(cacheKey, LVResult(k, result));
+            cache->put(cacheKey, LVResult(k, result, indelProbabilities[result]));
         }
         return result;
     }
@@ -75,12 +84,17 @@ done1:
         // Search d's in the order 0, 1, -1, 2, -2, etc to find an alignment with as few indels as possible.
         for (int d = 0; d != e+1; d = (d > 0 ? -d : -d+1)) {
             int best = L[e-1][MAX_K+d] + 1; // up
+            A[e][MAX_K+d] = 'X';
             int left = L[e-1][MAX_K+d-1];
-            if (left > best)
+            if (left > best) {
                 best = left;
+                A[e][MAX_K+d] = 'D';
+            }
             int right = L[e-1][MAX_K+d+1] + 1;
-            if (right > best)
+            if (right > best) {
                 best = right;
+                A[e][MAX_K+d] = 'I';
+            }
 
             const char* p = pattern + best;
             const char* t = (text + d) + best;
@@ -107,16 +121,93 @@ done1:
             }
 
             if (best == patternLen) {
-                if (cache != NULL && cacheKey != 0) {
-                    cache->put(cacheKey, LVResult(k, e));
+                if (NULL != matchProbability) {
+                    _ASSERT(*matchProbability == 1.0);
+                    //
+                    // We're done.  Compute the match probability.
+                    //
+                    int straightMismatches = 0;
+                    for (int i = 0; i < end; i++) {
+                        if (pattern[i] != text[i]) {
+                            straightMismatches++;
+                            *matchProbability *= phredToProbability[qualityString[i]];
+                        }
+                    }
+
+                    if (straightMismatches != e) {
+                        //
+                        // There are indels.  
+                        // Trace backward to build up the CIGAR string.  We do this by filling in the backtraceAction,
+                        // backtraceMatched and backtraceD arrays, then going through them in the forward direction to
+                        // figure out our string.
+                        int curD = d;
+                        for (int curE = e; curE >= 1; curE--) {
+                            backtraceAction[curE] = A[curE][MAX_K+curD];
+                            if (backtraceAction[curE] == 'I') {
+                                backtraceD[curE] = curD + 1;
+                                backtraceMatched[curE] = L[curE][MAX_K+curD] - L[curE-1][MAX_K+curD+1] - 1;
+                            } else if (backtraceAction[curE] == 'D') {
+                                backtraceD[curE] = curD - 1;
+                                backtraceMatched[curE] = L[curE][MAX_K+curD] - L[curE-1][MAX_K+curD-1];
+                            } else { // backtraceAction[curE] == 'X'
+                                backtraceD[curE] = curD;
+                                backtraceMatched[curE] = L[curE][MAX_K+curD] - L[curE-1][MAX_K+curD] - 1;
+                            }
+                            curD = backtraceD[curE];
+        #ifdef TRACE_LV
+                            printf("%d %d: %d %c %d %d\n", curE, curD, L[curE][MAX_K+curD], 
+                                backtraceAction[curE], backtraceD[curE], backtraceMatched[curE]);
+        #endif
+                        }
+
+                        int curE = 1;
+                        int offset = L[0][MAX_K+0];
+                        while (curE <= e) {
+                            // First write the action, possibly with a repeat if it occurred multiple times with no exact matches
+                            char action = backtraceAction[curE];
+                            int actionCount = 1;
+                            while (curE+1 <= e && backtraceMatched[curE] == 0 && backtraceAction[curE+1] == action) {
+                                actionCount++;
+                                curE++;
+                            }
+                            if (action == 'I') {
+                                *matchProbability *= indelProbabilities[actionCount];
+                                offset += actionCount; 
+                            } else if (action =='D') {
+                                *matchProbability *= indelProbabilities[actionCount];
+                                offset -= actionCount;
+                            }  else {
+                                _ASSERT(action == 'X');
+                                for (int i = 0; i < actionCount; i++) {
+                                    *matchProbability *= phredToProbability[qualityString[offset]];
+                                    offset++;
+                                }
+                            }
+
+                            offset += backtraceMatched[curE];   // Skip over the matching bases.
+                            curE++;
+                        }
+                    } // if straightMismatches != e (i.e., the indel case)
+                    if (cache != NULL && cacheKey != 0) {
+                        cache->put(cacheKey, LVResult(k, e, *matchProbability));
+                    } 
+                } else {
+                    //
+                    // Not tracking match probability.
+                    //
+                    if (cache != NULL && cacheKey != 0) {
+                        cache->put(cacheKey, LVResult(k, e, -1.0));
+                    }
                 }
                 return e;
             }
+
             L[e][MAX_K+d] = best;
         }
     }
+
     if (cache != NULL && cacheKey != 0) {
-        cache->put(cacheKey, LVResult(k, -1));
+        cache->put(cacheKey, LVResult(k, -1, 0.0));
     }
     return -1;
 }
@@ -459,3 +550,55 @@ done1:
     return -1;
 }
 
+    void 
+LandauVishkin::setProbabilities(double *i_indelProbabilities, double *i_phredToProbability, double mutationProbability)
+{
+    indelProbabilities = i_indelProbabilities;
+
+    //
+    // Compute the phred table to incorporate the mutation probability, assuming that machine errors and mutations
+    // are independent (which there's no reason not to think is the case).  If P(A) and P(B) are independent, then
+    // P(A or B) = P(not (not-A and not-B)) = 1-(1-P(A))(1-P(B)).
+    //
+    for (unsigned i = 0; i < 255; i++) {
+        phredToProbability[i] = 1.0-(1.0 - i_phredToProbability[i]) * (1.0 - mutationProbability);
+    }
+}
+
+    void
+LandauVishkin::initializeProbabilitiesToPhredPlus33()
+{
+    //
+    // indel probability is .0001 for any indel (10% of a SNP real difference), and then 10% worse for each longer base.
+    //
+    _ASSERT(NULL == phredToProbability);
+    phredToProbability = new double[256];
+
+    static const int maxIndels = 10000; // Way more than we'll see, and in practice enough to result in p=0.0;
+    _ASSERT(NULL == indelProbabilities);
+    indelProbabilities = new double[maxIndels];
+ 
+    const double mutationRate = 0.001;
+    indelProbabilities = new double[maxIndels+1];
+    indelProbabilities[0] = 1.0;
+    indelProbabilities[1] = 0.0001;
+    for (int i = 2; i <= maxIndels; i++) {
+        indelProbabilities[i] = indelProbabilities[i-1] * 0.1;
+    }
+
+    //
+    // Use 0.001 as the probability of a real SNP, then or it with the Phred+33 probability.
+    //
+    for (int i = 0; i < 33; i++) {
+        phredToProbability[i] = mutationRate;  // This isn't a sensible Phred score
+    }
+    for (int i = 33; i <= 93 + 33; i++) {
+        phredToProbability[i] = 1.0-(1.0 - pow(10.0,-1 * (i - 33) / 10)) * (1.0 - mutationRate);
+    }
+    for (int i = 93 + 33 + 1; i < 256; i++) {
+        phredToProbability[i] = mutationRate;   // This isn't a sensible Phred score
+    }
+}
+
+double *LandauVishkin::phredToProbability = NULL;
+double *LandauVishkin::indelProbabilities = NULL;

@@ -30,6 +30,8 @@ Revision History:
 #include "IntersectingAligner.h"
 #include "LandauVishkin.h"
 
+#if     0
+
 using std::sort;
 
 
@@ -131,7 +133,7 @@ Arguments:
 
 
     AlignmentResult
-IntersectingAligner::AlignRead(Read *read, unsigned *genomeLocation, bool *hitIsRC, int *finalScore)
+IntersectingAligner::AlignRead(Read *read, unsigned *genomeLocation, bool *hitIsRC, int *finalScore, int *mapq)
 /*++
 
 Routine Description:
@@ -157,6 +159,10 @@ Return Value:
     unsigned lvScores = 0;
     unsigned lvScoresAfterBestFound = 0;
     bool     truncatedIntersection = false;
+
+    if (NULL != mapq) {
+        *mapq = 0;      // Intersecting aligner doesn't support MAPQ
+    }
 
     //
     // A bitvector for used seeds, indexed on the starting location of the seed within the read.
@@ -649,3 +655,5 @@ IntersectingAligner::computeIntersection(
         }
     }   // for ever
 }
+
+#endif  // 0

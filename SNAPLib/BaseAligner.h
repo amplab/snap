@@ -53,7 +53,8 @@ public:
         Read        *read,
         unsigned    *genomeLocation,
         bool        *hitIsRC,
-        int         *finalScore = NULL);
+        int         *finalScore = NULL,
+        int         *mapq = NULL);
         
     //
     // A richer version of AlignRead that allows for searching near a given location.
@@ -66,6 +67,7 @@ public:
         unsigned    *genomeLocation,
         bool        *hitIsRC,
         int         *finalScore,
+        int         *mapq,
         unsigned     searchRadius,       // If non-zero, constrain search around searchLocation in direction searchRC.
         unsigned     searchLocation,
         bool         searchRC);
@@ -80,6 +82,7 @@ public:
         unsigned    *genomeLocation,
         bool        *hitIsRC,
         int         *finalScore,
+        int         *mapq,
         unsigned     searchRadius,       // If non-zero, constrain search around searchLocation in direction searchRC.
         unsigned     searchLocation,
         bool         searchRC,
@@ -264,6 +267,28 @@ private:
 
     static const unsigned UnusedScoreValue = 0xffff;
 
+    //
+    // Storage that's used during a call to AlignRead, but that's also needed by the
+    // score function.  Since BaseAligner is single threaded, it's easier just to make
+    // them member variables than to pass them around.
+    //
+    unsigned lowestPossibleScoreOfAnyUnseenLocation;
+    unsigned lowestPossibleRCScoreOfAnyUnseenLocation;
+    unsigned mostSeedsContainingAnyParticularBase;
+    unsigned mostRCSeedsContainingAnyParticularBase;
+    unsigned nSeedsApplied;
+    unsigned nRCSeedsApplied;
+    unsigned bestScore;
+    unsigned bestScoreGenomeLocation;
+    unsigned secondBestScore;
+    unsigned secondBestScoreGenomeLocation;
+    bool     secondBestScoreIsRC;
+    unsigned scoreLimit;
+    unsigned lvScores;
+    unsigned lvScoresAfterBestFound;
+    double probabilityOfAllCandidates;
+    double probabilityOfBestCandidate;
+
         bool
     score(
         bool             forceResult,
@@ -273,22 +298,9 @@ private:
         int             *finalScore,
         unsigned        *singleHitGenomeLocation,
         bool            *hitIsRC,
-        unsigned         nSeedsApplied,
-        unsigned         nRCSeedsApplied,
-        unsigned         mostSeedsContainingAnyParticularBase,
-        unsigned         mostRCSeedsContainingAnyParticularBase,
-        unsigned        &lowestPossibleScoreOfAnyUnseenLocation,
-        unsigned        &lowestPossibleRCScoreOfAnyUnseenLocation,
         Candidate       *candidates,
-        unsigned        &bestScore,
-        unsigned        &bestScoreGenomeLocation,
-        unsigned        &secondBestScore,
-        unsigned        &secondBestScoreGenomeLocation,
-        bool            &secondBestScoreIsRC,
-        unsigned        &scoreLimit,
-        unsigned        &lvScores,
-        unsigned        &lvScoresAfterBestFound,
-        unsigned         maxHitsToGet);
+        unsigned         maxHitsToGet,
+        int             *mapq);
     
     void clearCandidates();
 
@@ -298,6 +310,8 @@ private:
 
     void fillHitsFound(unsigned maxHitsToGet, int *multiHitsFound, 
                        unsigned *multiHitLocations, bool *multiHitRCs, int *multiHitScores);
+
+    static inline int computeMAPQ(double probabilityOfAllCandidates, double probabilityOfBestCandidate);
 
     const Genome *genome;
     GenomeIndex *genomeIndex;
@@ -314,6 +328,7 @@ private:
     Candidate *candidates;
 
     char *rcReadData;
+    char *rcReadQuality;    // This is allocated along with rcReadData in a single BigAlloc call, so don't free it.
 
     unsigned nTable[256];
 

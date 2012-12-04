@@ -63,7 +63,8 @@ class Aligner {
         Read        *read,
         unsigned    *genomeLocation,
         bool        *hitIsRC,
-        int         *finalScore = NULL) = 0;
+        int         *finalScore = NULL,
+        int         *mapq = NULL) = 0;
 
         virtual void
     ComputeHitDistribution(

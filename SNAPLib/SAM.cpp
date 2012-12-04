@@ -200,6 +200,7 @@ SAMWriter::computeCigarString(
 SAMWriter::generateSAMText(
                 Read *                      read, 
                 AlignmentResult             result, 
+                int                         mapq,
                 unsigned                    genomeLocation, 
                 bool                        isRC, 
 				bool						useM,
@@ -285,7 +286,11 @@ SAMWriter::generateSAMText(
         cigar = computeCigarString(genome, lv, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize, 
                                    clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
                                    genomeLocation, isRC, useM, &editDistance);
-        mapQuality = (result == SingleHit || result == CertainHit) ? 60 : 0;
+        if (-1 == mapq) {
+            mapQuality = (result == SingleHit || result == CertainHit) ? 60 : 0;
+        } else {
+            mapQuality = mapq;
+        }
     } else {
         flags |= SAM_UNMAPPED;
     }
@@ -438,11 +443,16 @@ bool SimpleSAMWriter::open(const char* fileName, const Genome *genome)
     this->genome = genome;
 
     // Write out SAM header
-    char *headerBuffer = new char[HEADER_BUFFER_SIZE];
+    char *headerBuffer = new char[SMALL_HEADER_BUFFER_SIZE];
     size_t headerSize;
-    if (!generateHeader(genome,headerBuffer,HEADER_BUFFER_SIZE,&headerSize, false, argc, argv, version, rgLine)) {
-        fprintf(stderr,"SimpleSAMWriter: unable to generate SAM header\n");
-        return false;
+    if (!generateHeader(genome,headerBuffer,SMALL_HEADER_BUFFER_SIZE,&headerSize, false, argc, argv, version, rgLine)) {
+        delete [] headerBuffer;
+        headerBuffer = new char[HEADER_BUFFER_SIZE];
+        if (!generateHeader(genome,headerBuffer,HEADER_BUFFER_SIZE,&headerSize, false, argc, argv, version, rgLine)) {
+            delete [] headerBuffer;
+            fprintf(stderr,"SimpleSAMWriter: unable to generate SAM header\n");
+            return false;
+        }
     }
     fprintf(file, "%s", headerBuffer);
     delete[] headerBuffer;
@@ -451,13 +461,13 @@ bool SimpleSAMWriter::open(const char* fileName, const Genome *genome)
 }
 
 
-bool SimpleSAMWriter::write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC)
+bool SimpleSAMWriter::write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, int mapq)
 {
     if (file == NULL) {
         return false;
     }
 
-    write(read, result, genomeLocation, isRC, false, false, NULL, NotFound, 0, false);
+    write(read, result, mapq, genomeLocation, isRC, false, false, NULL, NotFound, 0, false);
     return true;
 }
 
@@ -469,14 +479,14 @@ bool SimpleSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult 
     }
 
     if (result->location[0] > result->location[1]) {
-        write(read1, result->status[1], result->location[1], result->isRC[1], true, true,
+        write(read1, result->status[1], result->mapq[1], result->location[1], result->isRC[1], true, true,
               read0, result->status[0], result->location[0], result->isRC[0]);
-        write(read0, result->status[0], result->location[0], result->isRC[0], true, false,
+        write(read0, result->status[0], result->mapq[0], result->location[0], result->isRC[0], true, false,
               read1, result->status[1], result->location[1], result->isRC[1]);
     } else {
-        write(read0, result->status[0], result->location[0], result->isRC[0], true, true,
+        write(read0, result->status[0], result->mapq[0], result->location[0], result->isRC[0], true, true,
               read1, result->status[1], result->location[1], result->isRC[1]);
-        write(read1, result->status[1], result->location[1], result->isRC[1], true, false,
+        write(read1, result->status[1], result->mapq[1], result->location[1], result->isRC[1], true, false,
               read0, result->status[0], result->location[0], result->isRC[0]);
     }
     return true;
@@ -486,6 +496,7 @@ bool SimpleSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult 
 void SimpleSAMWriter::write(
         Read *read,
         AlignmentResult result,
+        int mapq,
         unsigned genomeLocation,
         bool isRC,
         bool hasMate,
@@ -499,7 +510,7 @@ void SimpleSAMWriter::write(
     char outputBuffer[maxLineLength];
     size_t outputBufferUsed;
 
-    if (!generateSAMText(read, result, genomeLocation, isRC, useM, hasMate, firstInPair, mate, mateResult,
+    if (!generateSAMText(read, result, genomeLocation, mapq, isRC, useM, hasMate, firstInPair, mate, mateResult,
             mateLocation,mateIsRC, genome, &lv, outputBuffer, maxLineLength,&outputBufferUsed)) {
         fprintf(stderr,"SimpleSAMWriter: tried to generate too long of a SAM line (> %d)\n",maxLineLength);
         exit(1);
@@ -584,17 +595,17 @@ ThreadSAMWriter::close()
 }
     
     bool
-ThreadSAMWriter::write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC)
+ThreadSAMWriter::write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, int mapq)
 {
     size_t sizeUsed;
-    if (!generateSAMText(read, result, genomeLocation, isRC, useM, false, true, NULL, UnknownAlignment, 0, false, genome, &lv,
+    if (!generateSAMText(read, result, mapq, genomeLocation, isRC, useM, false, true, NULL, UnknownAlignment, 0, false, genome, &lv,
             buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace, remainingBufferSpace, &sizeUsed)) {
 
         if (!startIo()) {
             return false;
         }
 
-        if (!generateSAMText(read, result, genomeLocation, isRC, useM, false, true, NULL, UnknownAlignment, 0, false, genome, &lv,
+        if (!generateSAMText(read, result, mapq, genomeLocation, isRC, useM, false, true, NULL, UnknownAlignment, 0, false, genome, &lv,
                 buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace, &sizeUsed)) {
 
             fprintf(stderr,"WindowsSAMWriter: create SAM string into fresh buffer failed\n");
@@ -647,13 +658,13 @@ ThreadSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *resu
         }
     }
 
-    bool writesFit = generateSAMText(reads[first], result->status[first], result->location[first], result->isRC[first], useM, true, true,
+    bool writesFit = generateSAMText(reads[first], result->status[first], result->mapq[first], result->location[first], result->isRC[first], useM, true, true,
                                      reads[second], result->status[second], result->location[second], result->isRC[second],
                         genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace,&sizeUsed[first],
                         idLengths[first]);
 
     if (writesFit) {
-        writesFit = generateSAMText(reads[second], result->status[second], result->location[second], result->isRC[second], useM, true, false,
+        writesFit = generateSAMText(reads[second], result->status[second], result->mapq[second], result->location[second], result->isRC[second], useM, true, false,
                                     reads[first], result->status[first], result->location[first], result->isRC[first],
                         genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace + sizeUsed[first],remainingBufferSpace-sizeUsed[first],&sizeUsed[second],
                         idLengths[second]);
@@ -664,11 +675,11 @@ ThreadSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *resu
             return false;
         }
 
-        if (!generateSAMText(reads[first], result->status[first], result->location[first], result->isRC[first], useM, true, true,
+        if (!generateSAMText(reads[first], result->status[first], result->mapq[first], result->location[first], result->isRC[first], useM, true, true,
                              reads[second], result->status[second], result->location[second], result->isRC[second],
                 genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace,&sizeUsed[first],
                 idLengths[first]) ||
-            !generateSAMText(reads[second], result->status[second] ,result->location[second], result->isRC[second], useM, true, false,
+            !generateSAMText(reads[second], result->status[second] ,result->mapq[second], result->location[second], result->isRC[second], useM, true, false,
                              reads[first], result->status[first], result->location[first], result->isRC[first],
                 genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace + sizeUsed[first],remainingBufferSpace-sizeUsed[first],&sizeUsed[second],
                 idLengths[second])) {

@@ -32,7 +32,7 @@ class SAMWriter {
 public:
     virtual ~SAMWriter();
 
-    virtual bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC) = 0;
+    virtual bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, int mapq = -1) = 0;
 
     virtual bool writePair(Read *read1, Read *read2, PairedAlignmentResult *result) = 0;
 
@@ -42,7 +42,8 @@ public:
 
     static bool generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize, bool sorted, int argc, const char **argv, const char *version, const char *rgLine);
    
-    static const int HEADER_BUFFER_SIZE = 256 * 1024 * 1024;
+    static const int SMALL_HEADER_BUFFER_SIZE = 16   * 1024;    // plenty big enough for most genomes (hg19 seems to need less than 3K)
+    static const int HEADER_BUFFER_SIZE = 256 * 1024 * 1024;    // big enough even for ridiculous ones.
     
 protected:
 
@@ -53,7 +54,8 @@ protected:
 
     static bool generateSAMText(
                         Read *                      read,
-                        AlignmentResult             result, 
+                        AlignmentResult             result,
+                        int                         mapq,
                         unsigned                    genomeLocation, 
                         bool                        isRC, 
 						bool						useM,
@@ -103,7 +105,7 @@ public:
 
     bool open(const char* fileName, const Genome *genome);
 
-    virtual bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC);
+    virtual bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, int mapq = -1);
 
     virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result);
 
@@ -111,7 +113,7 @@ public:
 
 private:
     // Write one read's result, whether it's from a pair or not.
-    void write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, bool hasMate, bool firstInPair,
+    void write(Read *read, AlignmentResult result, int mapq, unsigned genomeLocation, bool isRC, bool hasMate, bool firstInPair,
                Read *mate, AlignmentResult mateResult, unsigned mateLocation, bool mateIsRC);
 
     static const int BUFFER_SIZE = 8 * 1024 * 1024;
@@ -146,7 +148,7 @@ public:
 
     bool initialize(AsyncFile* file, const Genome *i_genome, volatile _int64 *i_nextWriteOffset);
     
-    bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC);
+    bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, int mapq = -1);
 
     bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result);
 

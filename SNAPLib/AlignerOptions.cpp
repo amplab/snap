@@ -64,6 +64,8 @@ AlignerOptions::AlignerOptions(
         confDiff            = 2;
         adaptiveConfDiff    = 4;
     }
+
+    LandauVishkin::initializeProbabilitiesToPhredPlus33();
 }
 
     void

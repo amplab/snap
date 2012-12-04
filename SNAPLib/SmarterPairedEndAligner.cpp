@@ -130,6 +130,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
     result->location[1] = 0xFFFFFFFF;
 
     unsigned bestScore[2] = {INFINITE_SCORE, INFINITE_SCORE};
+    unsigned bestMapq[2] = {0, 0};
     unsigned singleLoc[2] = {0xFFFFFFFF, 0xFFFFFFFF};
     bool singleIsRC[2] = {false, false};
     bool certainlyNotFound[2] = {false, false};
@@ -154,10 +155,17 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
         unsigned loc0, loc1;
         bool rc0, rc1;
         int score0, score1;
+        int mapq0, mapq1;
         AlignmentResult status0, status1;
         singleAligner->setReadId(r);
-        status0 = singleAligner->AlignRead(reads[r], &loc0, &rc0, &score0);
-        bestScore[r] = (score0 <= (int) (maxK + confDiff ? score0 : INFINITE_SCORE));
+        status0 = singleAligner->AlignRead(reads[r], &loc0, &rc0, &score0, &mapq0);
+        if (score0 <= (int) (maxK + confDiff)) {
+            bestScore[r] = score0;
+            bestMapq[r] = mapq0;
+        } else {
+            bestScore[r] = INFINITE_SCORE;
+            bestMapq[r] = 0;
+        }
         bestScoreCertain[r] = singleAligner->checkedAllSeeds();
         TRACE("Read %d returned %s (%d) at loc %u-%d\n", r, AlignmentResultToString(status0), score0, loc0, rc0);
         if (isOneLocation(status0)) {
@@ -168,22 +176,25 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
                 result->location[r] = loc0;
                 result->isRC[r] = rc0;
                 result->score[r] = score0;
+                result->mapq[r] = mapq0;
                 result->status[1-r] = NotFound;
                 return;
             }
             mateAligner->setMaxK(maxK - score0 + 1);
             mateAligner->setReadId(1-r);
-            status1 = mateAligner->AlignRead(reads[1-r], &loc1, &rc1, &score1, maxSpacing, loc0, !rc0);
+            status1 = mateAligner->AlignRead(reads[1-r], &loc1, &rc1, &score1, &mapq1, maxSpacing, loc0, !rc0);
             TRACE("Mate %d returned %s at loc %u-%d\n", 1-r, AlignmentResultToString(status1), loc1, rc1);
             if (/*status1 != MultipleHits &&*/ score0 + score1 <= (int)maxK) {
                 result->status[r] = SingleHit;
                 result->location[r] = loc0;
                 result->isRC[r] = rc0;
                 result->score[r] = score0;
+                result->mapq[r] = mapq0;
                 result->status[1-r] = isOneLocation(status1) ? SingleHit : status1;
                 result->location[1-r] = loc1;
                 result->isRC[1-r] = rc1;
                 result->score[1-r] = score1;
+                result->mapq[1-r] = mapq1;
                 return;
             } else if(status1 == NotFound) {
                 // We found read r at one location and didn't find the mate nearby. Let's remember because
@@ -222,6 +233,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
                 result->location[r] = singleLoc[r];
                 result->isRC[r] = singleIsRC[r];
                 result->score[r] = bestScore[r];
+                result->mapq[r] = bestMapq[r];
             }
         }
         return;
@@ -238,6 +250,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
                 result->location[r] = (bestScore[r] <= 0.6 * maxK ? singleLoc[r] : 0xFFFFFFFF);
                 result->isRC[r] = singleIsRC[r];
                 result->score[r] = bestScore[r];
+                result->mapq[r] = bestMapq[r];
             }
         }
         return;
@@ -283,11 +296,13 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
 {
     int readLen[2];
     const char *readData[2][2];     // [read][isRC]
+    const char *quality[2];         // [read]
     char rcData[2][MAX_READ_SIZE];
     
     for (int r = 0; r < 2; r++) {
         readLen[r] = reads[r]->getDataLength();
         readData[r][0] = reads[r]->getData();
+        quality[r] = reads[r]->getQuality();
         computeRC(reads[r], &rcData[r][0]);
         readData[r][1] = &rcData[r][0];
     }
@@ -300,6 +315,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
     int bestRC[2];
     int bestIsMulti[2] = {0, 0};
     int bestScores[2] = {INFINITE_SCORE, INFINITE_SCORE};
+    int bestMapqs[2] = {0, 0};
     
     int disjointSeedsUsed[2][2] = {{0, 0}, {0, 0}};   // [read][isRC]
     int popularSeeds[2][2] = {{0, 0}, {0, 0}};        // [read][isRC]
@@ -310,6 +326,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
     int wrapCount[2] = {0, 0};       // How many times we've wraped around on each read
 
     int scoreLimit = maxK + confDiff + 1;
+    double totalMatchProbability = 0.0;
 
     unsigned candidatesTried = 0;
 
@@ -498,7 +515,8 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                 int bestMateScore = b0->minPairScore - (disjointSeedsUsed[r0][rc0] - b0->disjointSeedHits);
                 if (b0->mateStatus == SingleHit)
                     bestMateScore = b0->mateScore;
-                scoreBucket(b0, r0, rc0 != 0, loc0, readData[r0][rc0], readLen[r0], scoreLimit - bestMateScore + 1);
+                double matchProbability = 0.0;
+                scoreBucket(b0, r0, rc0 != 0, loc0, readData[r0][rc0], quality[r0], readLen[r0], scoreLimit - bestMateScore + 1, &matchProbability);
                 if ((int)b0->score > scoreLimit) {
                     continue;
                 }
@@ -648,7 +666,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
 
 
 void SmarterPairedEndAligner::scoreBucket(
-    Bucket *bucket, int readId, bool isRC, unsigned location, const char *readData, int readLen, int scoreLimit)
+    Bucket *bucket, int readId, bool isRC, unsigned location, const char *readData, const char *qualityString, int readLen, int scoreLimit, double *matchProbability)
 {
     //_ASSERT(scoreLimit >= 0);
     if (scoreLimit < 0) {
@@ -668,14 +686,15 @@ void SmarterPairedEndAligner::scoreBucket(
             if (refData != NULL) {
                 TRACE("  Genome: %.*s\n  Read:   %.*s\n", readLen, refData, readLen, readData);
                 _uint64 cacheKey = ((_uint64) readId) << 33 | ((_uint64) isRC) << 32 | (location + offset);
-                score = lv.computeEditDistance(refData, readLen, readData, readLen, scoreLimit, cacheKey);
+                score = lv.computeEditDistance(refData, readLen, readData, qualityString, readLen, scoreLimit, matchProbability, cacheKey);
                 TRACE("  Called LV at %lu with limit %d: %d\n", location + offset, scoreLimit, score);
                 if (score < 0) {
                     score = INFINITE_SCORE;
                 }
             }
-            if (score < bucket->score) {
+            if (score < bucket->score || score == bucket->score && *matchProbability > bucket->matchProbability) {
                 bucket->score = score;
+                bucket->matchProbability = *matchProbability;
                 bucket->bestOffset = (unsigned short)offset;
             }
         }
@@ -696,7 +715,7 @@ void SmarterPairedEndAligner::scoreBucketMate(
         mateAligner->setReadId(1 - readId);
         bool mateRC;
         bucket->mateStatus = mateAligner->AlignRead(
-            mate, &bucket->mateLocation, &mateRC, &bucket->mateScore, maxSpacing + BUCKET_SIZE, location, !isRC);
+            mate, &bucket->mateLocation, &mateRC, &bucket->mateScore, &bucket->mateMapq, maxSpacing + BUCKET_SIZE, location, !isRC);
         
 /*
         // Search for the mate independently in two intervals, at minSpacing/maxSpacing before

@@ -84,12 +84,14 @@ private:
         unsigned found;                  // Bit vector for sub-locations matched
         unsigned scored;                 // Bit vector for sub-locations scored
         unsigned score;                  // Best score for any element in the bucket
+        double matchProbability;         // Match probability of the element represented by score
         unsigned short bestOffset;       // Offset that gave us the best score (if any)
         unsigned short seedHits;         // Number of seeds that hit this bucket
         unsigned short disjointSeedHits; // Number of disjoint seeds that hit this bucket
         unsigned short minPairScore;     // Lower bound on the bucket's pair score (if not known)
         AlignmentResult mateStatus;      // If we've searched for a mate nearby, this is the result
         int mateScore;                   // Score of the mate found nearby, if any
+        int mateMapq;                    // mapping quality of the mate
         unsigned mateLocation;           // Location of the mate found nearby, if any
         
         inline bool allScored() { return scored == found; }
@@ -130,7 +132,7 @@ private:
     void computeRC(Read *read, char *outputBuf);
     
     void scoreBucket(Bucket *bucket, int readId, bool isRC, unsigned location,
-                     const char *readData, int readLen, int scoreLimit);
+                     const char *readData, const char *qualityString, int readLen, int scoreLimit, double *matchProbability);
 
     void scoreBucketMate(Bucket *bucket, int readId, bool isRC, unsigned location, Read *mate, int scoreLimit);
     

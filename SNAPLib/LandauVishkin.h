@@ -22,8 +22,10 @@ public:
             const char* text,
             int textLen, 
             const char* pattern,
+            const char *qualityString,
             int patternLen,
             int k,
+            double *matchProbability,
             _uint64 cacheKey = 0);
 
     // Clear the cache of distances computed.
@@ -32,22 +34,37 @@ public:
     void *operator new(size_t size) {return BigAlloc(size);}
     void operator delete(void *ptr) {BigDealloc(ptr);}
 
+    static void setProbabilities(double *i_indelProbabilities, double *i_phredToProbability, double mutationProbability);
+    static void initializeProbabilitiesToPhredPlus33();
+
 private:
     // TODO: For long reads, we should include a version that only has L be 2 x (2*MAX_K+1) cells
-    short L[MAX_K+1][2 * MAX_K + 1];
+    int L[MAX_K+1][2 * MAX_K + 1];
     
+    // Action we did to get to each position: 'D' = deletion, 'I' = insertion, 'X' = substitution.  This is needed to compute match probability.
+    char A[MAX_K+1][2 * MAX_K + 1];
+
+    // Arrays for backtracing the actions required to match two strings
+    char backtraceAction[MAX_K+1];
+    int  backtraceMatched[MAX_K+1];
+    int  backtraceD[MAX_K+1];
+
     struct LVResult {
         int k;
         int result;
+        double matchProbability;
 
         LVResult() { k = -1; result = -1; }
 
-        LVResult(int k_, int result_) { k = k_; result = result_; }
+        LVResult(int k_, int result_, double matchProbability_) { k = k_; result = result_; matchProbability = matchProbability_;}
 
         inline bool isValid() { return k != -1; }
     };
 
     FixedSizeMap<_uint64, LVResult> *cache;
+
+    static double *indelProbabilities;  // Maps indels by length to probability of occurance.
+    static double *phredToProbability;  // Maps ASCII phred character to probability of error, including 
 };
 
 

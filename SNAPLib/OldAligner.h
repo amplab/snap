@@ -27,6 +27,8 @@ Revision History:
 
 #pragma once
 
+#if     0
+
 #include "options.h"
 #include "Read.h"
 #include "Seed.h"
@@ -450,3 +452,5 @@ private:
             } // outer switch
         } 
 };
+
+#endif  // 0

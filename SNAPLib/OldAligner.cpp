@@ -29,6 +29,8 @@ Revision History:
 #include "LandauVishkin.h"
 #include "OldAligner.h"
 
+#if     0
+
 _int64 nCandidatesCreated = 0;
 _int64 nCandidatesEliminated = 0;
 _int64 nScoredCandidatesEliminated = 0;
@@ -1257,3 +1259,5 @@ OldAligner::ComputeHitDistribution(
 
     return;
 }
+
+#endif  // 0

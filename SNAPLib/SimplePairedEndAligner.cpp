@@ -25,6 +25,8 @@ Revision History:
 #include "SimplePairedEndAligner.h"
 #include "LandauVishkin.h"
 
+#if     0
+
 using namespace std;
 
 
@@ -453,3 +455,4 @@ void SimplePairedEndAligner::handleMultiHits2(Read *read0, Read *read1, PairedAl
 #endif
     }
 }
+#endif  // 0

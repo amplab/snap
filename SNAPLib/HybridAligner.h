@@ -26,6 +26,7 @@ Revision History:
 --*/
 
 #pragma once
+#if     0
 
 #include "options.h"
 #include "Read.h"
@@ -91,5 +92,4 @@ private:
     IntersectingAligner     *intersectingAligner;
 };
 
-
-
+#endif  // 0

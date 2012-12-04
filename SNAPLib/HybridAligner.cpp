@@ -28,6 +28,8 @@ Revision History:
 #include "stdafx.h"
 #include "HybridAligner.h"
 
+#if     0
+
 HybridAligner::HybridAligner(
     GenomeIndex *genomeIndex, 
     unsigned     confDiff, 
@@ -102,5 +104,4 @@ HybridAligner::AlignRead(
 }
     
 
-
-
+#endif  // 0

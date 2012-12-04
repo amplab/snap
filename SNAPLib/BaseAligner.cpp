@@ -98,7 +98,8 @@ Arguments:
         candidates[i].init();
     }
 
-    rcReadData = (char *)BigAlloc(sizeof(char) * maxReadSize);
+    rcReadData = (char *)BigAlloc(sizeof(char) * maxReadSize * 2); // The *2 is to allocte space for the quality string
+    rcReadQuality = rcReadData + maxReadSize;
 
     rcTranslationTable['A'] = 'T';
     rcTranslationTable['G'] = 'C';
@@ -148,9 +149,9 @@ Arguments:
 }
 
     AlignmentResult
-BaseAligner::AlignRead(Read *read, unsigned *genomeLocation, bool *hitIsRC, int *finalScore)
+BaseAligner::AlignRead(Read *read, unsigned *genomeLocation, bool *hitIsRC, int *finalScore, int *mapq)
 {
-    return AlignRead(read, genomeLocation, hitIsRC, finalScore, 0, 0, false, 0, NULL, NULL, NULL, NULL);
+    return AlignRead(read, genomeLocation, hitIsRC, finalScore, mapq, 0, 0, false, 0, NULL, NULL, NULL, NULL);
 }
 
     AlignmentResult
@@ -159,11 +160,12 @@ BaseAligner::AlignRead(
     unsigned  *genomeLocation,
     bool      *hitIsRC,
     int       *finalScore,
+    int       *mapq,
     unsigned   searchRadius,
     unsigned   searchLocation,
     bool       searchRC)
 {
-    return AlignRead(read, genomeLocation, hitIsRC, finalScore,
+    return AlignRead(read, genomeLocation, hitIsRC, finalScore, mapq,
         searchRadius, searchLocation, searchRC, 0, NULL, NULL, NULL, NULL);
 }
 
@@ -173,6 +175,7 @@ BaseAligner::AlignRead(
     unsigned  *genomeLocation,
     bool      *hitIsRC,
     int       *finalScore,
+    int       *mapq,
     unsigned   searchRadius,
     unsigned   searchLocation,
     bool       searchRC,
@@ -196,6 +199,7 @@ Arguments:
     hitIsRC             - the aligner tries to align both the given read and its reverse complement.  If we found a SingleHit this
                           bool is set to indicate whether that hit was on the reverse complement.
     finalScore          - if a single or confident hit, this is the score of the hit (i.e., the LV distance from the read)
+    mapq                - return the mapping quality
     searchRadius        - if non-zero, constrain the search to this distance around searchLocation, in orientation searchRC
     searchLocation      - location to search around if searchRadius is given
     searchRC            - whether to search in reverse complement orientation if searchRadius is given
@@ -210,15 +214,27 @@ Return Value:
 
 --*/
 {
-    *genomeLocation = 0xFFFFFFFF; // Value to return if we don't find a location.
-    *hitIsRC = false;             // So we deterministically print the read forward in this case.
-    if (finalScore != NULL) {
-        *finalScore = UnusedScoreValue;
+    //
+    // mapq and finalScore are optional parameters.  Rather than checking all over the code to see if
+    // they're null, we just point them at locals if they're not passed in.
+    //
+    int unusedMapq;
+    int unusedFinalScore;
+
+    if (NULL == mapq) {
+        mapq = &unusedMapq;
     }
 
+    if (NULL == finalScore) {
+        finalScore = &unusedFinalScore;
+    }
+
+    *genomeLocation = 0xFFFFFFFF; // Value to return if we don't find a location.
+    *hitIsRC = false;             // So we deterministically print the read forward in this case.
+    *finalScore = UnusedScoreValue;
+   
     unsigned lookupsThisRun = 0;
-    unsigned lvScores = 0;
-    unsigned lvScoresAfterBestFound = 0;
+
     popularSeedsSkipped = 0;
     
     // Range of genome locations to search in.
@@ -259,10 +275,12 @@ Return Value:
 
     unsigned readLen = read->getDataLength();
     const char *readData = read->getData();
+    const char *readQuality = read->getQuality();
     unsigned countOfNs = 0;
     for (unsigned i = 0; i < readLen; i++) {
         char baseByte = readData[i];
         rcReadData[readLen - i - 1] = rcTranslationTable[baseByte];
+        rcReadQuality[readLen - i - 1] = readQuality[i];
         countOfNs += nTable[baseByte];
     }
 
@@ -290,7 +308,7 @@ Return Value:
     }
 
     Read rcRead[1];
-    rcRead->init(NULL, 0, rcReadData, NULL, readLen);
+    rcRead->init(NULL, 0, rcReadData, rcReadQuality, readLen);
 
     clearCandidates();
 
@@ -302,18 +320,19 @@ Return Value:
 
     unsigned nextSeedToTest = 0;
     unsigned wrapCount = 0;
-    unsigned lowestPossibleScoreOfAnyUnseenLocation = 0;
-    unsigned lowestPossibleRCScoreOfAnyUnseenLocation = 0;
-    unsigned mostSeedsContainingAnyParticularBase = 1;  // Instead of tracking this for real, we're just conservative and use wrapCount+1.  It's faster.
-    unsigned mostRCSeedsContainingAnyParticularBase = 1;// ditto
-    unsigned bestScore = UnusedScoreValue;
-    unsigned bestScoreGenomeLocation;
-    unsigned secondBestScore = UnusedScoreValue;
-    unsigned secondBestScoreGenomeOffset;
-    bool     secondBestScoreIsRC;
-    unsigned nSeedsApplied = 0;
-    unsigned nRCSeedsApplied = 0;
-    unsigned scoreLimit;
+    lowestPossibleScoreOfAnyUnseenLocation = 0;
+    lowestPossibleRCScoreOfAnyUnseenLocation = 0;
+    mostSeedsContainingAnyParticularBase = 1;  // Instead of tracking this for real, we're just conservative and use wrapCount+1.  It's faster.
+    mostRCSeedsContainingAnyParticularBase = 1;// ditto
+    bestScore = UnusedScoreValue;
+    secondBestScore = UnusedScoreValue;
+    nSeedsApplied = 0;
+    nRCSeedsApplied = 0;
+    lvScores = 0;
+    lvScoresAfterBestFound = 0;
+    probabilityOfAllCandidates = 0.0;
+    probabilityOfBestCandidate = 0.0;
+
     if (maxHitsToGet > 0) {
         scoreLimit = maxK + 3;
     } else {
@@ -347,22 +366,9 @@ Return Value:
                     finalScore,
                     genomeLocation,
                     hitIsRC,
-                    nSeedsApplied,
-                    nRCSeedsApplied,
-                    mostSeedsContainingAnyParticularBase,
-                    mostRCSeedsContainingAnyParticularBase,
-                    lowestPossibleScoreOfAnyUnseenLocation,
-                    lowestPossibleRCScoreOfAnyUnseenLocation,
                     candidates,
-                    bestScore,
-                    bestScoreGenomeLocation,
-                    secondBestScore,
-                    secondBestScoreGenomeOffset,
-                    secondBestScoreIsRC,
-                    scoreLimit,
-                    lvScores,
-                    lvScoresAfterBestFound,
-                    maxHitsToGet);
+                    maxHitsToGet,
+                    mapq);
 #if     MAINTAIN_HISTOGRAMS
                 lvHistogram->addToCount(lvScores,lvScores);
                 lookupHistogram->addToCount(lookupsThisRun,lookupsThisRun);
@@ -531,22 +537,9 @@ Return Value:
                         finalScore,
                         genomeLocation,
                         hitIsRC,
-                        nSeedsApplied,
-                        nRCSeedsApplied,
-                        mostSeedsContainingAnyParticularBase,
-                        mostRCSeedsContainingAnyParticularBase,
-                        lowestPossibleScoreOfAnyUnseenLocation,
-                        lowestPossibleRCScoreOfAnyUnseenLocation,
                         candidates,
-                        bestScore,
-                        bestScoreGenomeLocation,
-                        secondBestScore,
-                        secondBestScoreGenomeOffset,
-                        secondBestScoreIsRC,
-                        scoreLimit,
-                        lvScores,
-                        lvScoresAfterBestFound,
-                        maxHitsToGet)) {
+                        maxHitsToGet,
+                        mapq)) {
 #if     MAINTAIN_HISTOGRAMS
                 lvHistogram->addToCount(lvScores,lvScores);
                 lookupHistogram->addToCount(lookupsThisRun,lookupsThisRun);
@@ -577,22 +570,9 @@ Return Value:
             finalScore,
             genomeLocation,
             hitIsRC,
-            nSeedsApplied,
-            nRCSeedsApplied,
-            mostSeedsContainingAnyParticularBase,
-            mostRCSeedsContainingAnyParticularBase,
-            lowestPossibleScoreOfAnyUnseenLocation,
-            lowestPossibleRCScoreOfAnyUnseenLocation,
             candidates,
-            bestScore,
-            bestScoreGenomeLocation,
-            secondBestScore,
-            secondBestScoreGenomeOffset,
-            secondBestScoreIsRC,
-            scoreLimit,
-            lvScores,
-            lvScoresAfterBestFound,
-            maxHitsToGet);
+            maxHitsToGet,
+            mapq);
 #if     MAINTAIN_HISTOGRAMS
         lvHistogram->addToCount(lvScores,lvScores);
         lookupHistogram->addToCount(lookupsThisRun,lookupsThisRun);
@@ -617,22 +597,9 @@ BaseAligner::score(
     int             *finalScore,
     unsigned        *singleHitGenomeLocation,
     bool            *hitIsRC,
-    unsigned         nSeedsApplied,
-    unsigned         nRCSeedsApplied,
-    unsigned         mostSeedsContainingAnyParticularBase,
-    unsigned         mostRCSeedsContainingAnyParticularBase,
-    unsigned        &lowestPossibleScoreOfAnyUnseenLocation,
-    unsigned        &lowestPossibleRCScoreOfAnyUnseenLocation,
     Candidate       *candidates,
-    unsigned        &bestScore,
-    unsigned        &bestScoreGenomeLocation,
-    unsigned        &secondBestScore,
-    unsigned        &secondBestScoreGenomeLocation,
-    bool            &secondBestScoreIsRC,
-    unsigned        &scoreLimit,
-    unsigned        &lvScores,
-    unsigned        &lvScoresAfterBestFound,
-    unsigned         maxHitsToGet)
+    unsigned         maxHitsToGet,
+    int             *mapq)
 /*++
 
 Routine Description:
@@ -665,21 +632,9 @@ Arguments:
     result                                  - returns the result if we reach one
     singleHitGenomeLocation                 - returns the location in the genome if we return a single hit
     hitIsRC                                 - if we return a single hit, indicates whether it's on the reverse complement
-    nSeedsApplied                           - how may seeds have we looked up and not ignored in this alignment
-    nRCSeedsApplied                         - how may reverse complement seeds have we looked up and not ignored in this alignment
-    mostSeedsContainingAnyParticularBase    - what's the largest number of seeds we've used that contain any single base from the read?
-    mostRCSeedsContainingAnyParticularBase  - same thing for the reverse complement read
-    lowestPossibleScoreOfAnyUnseenLocation  - in/out the best score that any genome location that we haven't hit could possinly have
-    lowestPossibleRCScoreOfAnyUnseenLocation- same thing for the reverse complement read
     candidates                              - in/out the array of candidates that have hit and possibly been scored
-    bestScore                               - in/out the best score we've seen so far (recall that score is string distance, so best is least).
-    bestScoreGenomeLocation                 - in/out where in the genome was the best score
-    secondBestScore                         - in/out what's the second best score we've seen
-    scoreLimit                              - in/out maximum edit distance we are need to consider for further scores (bigger ones won't help)
-    lvScores                                - in/out how many calls to LandauVishkin have we made (instrumentation)
-    lvScoresAfterBestFound                  - in/out how many calls to LandauVishkin have we made after finding the best score (instrumentation)
-    popularSeedsSkipped                     - how many overly popular seeds we skipped during this alignment
     maxHitsToGet                            - whether the user wants to get multiple non-confident hits in the MultiHit case
+    mapq                                    - returns the map quality if we've reached a final result
 
 Return Value:
 
@@ -711,6 +666,7 @@ Return Value:
         //
         _ASSERT(forceResult);
         *result = MultipleHits;
+        *mapq = 0;
         return true;
     }
 
@@ -762,9 +718,7 @@ Return Value:
                 // answer.
                 //
                 int realConfDiff = confDiff + (popularSeedsSkipped >= adaptiveConfDiffThreshold ? 1 : 0);
-                if (NULL != finalScore) {
-                    *finalScore = bestScore;
-                }
+                *finalScore = bestScore;
                 if (bestScore + realConfDiff <= secondBestScore && bestScore <= maxK) {
                     if (popularSeedsSkipped == 0 && !forceResult) {
                         *result = CertainHit;
@@ -772,14 +726,17 @@ Return Value:
                         *result = SingleHit;
                     }
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate);
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
                     // report it as NotFound
                     *result = (nSeedsApplied == 0 && nRCSeedsApplied == 0) ? MultipleHits : NotFound;
+                    *mapq = 0;
                     return true;
                 } else {
                     *result = MultipleHits;
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate);
                     return true;
                 }
             }
@@ -789,13 +746,12 @@ Return Value:
             forceResult = true;
         } else if (weightListToCheck == 0) {
             if (forceResult) {
-                if (NULL != finalScore) {
-                    *finalScore = bestScore;
-                }
+                *finalScore = bestScore;
                 int realConfDiff = confDiff + (popularSeedsSkipped >= adaptiveConfDiffThreshold ? 1 : 0);
                 if (bestScore + realConfDiff <= secondBestScore && bestScore <= maxK) {
                     *result = SingleHit;
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate);
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
@@ -836,6 +792,7 @@ Return Value:
                 unsigned genomeLocation = elementToScore->baseGenomeLocation + candidateIndexToScore;
     
                 unsigned score = -1;
+                double matchProbability;
                 if (elementToScore->isRC) {
                     const char *data = genome->getSubstring(genomeLocation, rcRead->getDataLength());
                     if (data != NULL) {
@@ -848,8 +805,11 @@ Return Value:
                         }
                         score = landauVishkin->computeEditDistance(
                             data, rcRead->getDataLength(),
-                            rcRead->getData(), rcRead->getDataLength(),
-                            scoreLimit, cacheKey);
+                            rcRead->getData(), rcRead->getQuality(), rcRead->getDataLength(),
+                            scoreLimit, &matchProbability, cacheKey);
+                        if (-1 != score) {
+                            probabilityOfAllCandidates += matchProbability;
+                        }
 #endif
                     }
 #ifdef TRACE_ALIGNER
@@ -865,10 +825,16 @@ Return Value:
                         if (readId != -1) {
                             cacheKey = ((_uint64) readId) << 33 | ((_uint64) elementToScore->isRC) << 32 | genomeLocation;
                         }
+
                         score = landauVishkin->computeEditDistance(
                             data, read->getDataLength(),
-                            read->getData(), read->getDataLength(),
-                            scoreLimit, cacheKey);
+                            read->getData(), read->getQuality(), read->getDataLength(),
+                            scoreLimit, &matchProbability, cacheKey);
+
+                        if (-1 != score) {
+                            probabilityOfAllCandidates += matchProbability;
+                        }
+
 #endif
                     }
 #ifdef TRACE_ALIGNER
@@ -906,11 +872,10 @@ Return Value:
                     // We have a new best score.
                     //
                     bestScore = score;
+                    probabilityOfBestCandidate = matchProbability;
                     bestScoreGenomeLocation = genomeLocation;
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    if (NULL != finalScore) {
-                        *finalScore = bestScore;
-                    }
+                    *finalScore = bestScore;
                     *hitIsRC = elementToScore->isRC;
     
                     lvScoresAfterBestFound = 0;
@@ -929,8 +894,10 @@ Return Value:
                 if (stopOnFirstHit && bestScore <= maxK) {
                     // The user just wanted to find reads that match the database within some distance, but doesn't
                     // care about the best alignment. Stop now but mark the result as MultipleHits because we're not
-                    // confident that it's the best one.
+                    // confident that it's the best one.  We don't support mapq in this secnario, because we haven't
+                    // explored enough to compute it.
                     *result = MultipleHits;
+                    *mapq = 0;
                     return true;
                 }
 
@@ -966,6 +933,7 @@ Return Value:
                 // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
                 // report it as NotFound
                 *result = (nSeedsApplied == 0 && nRCSeedsApplied == 0) ? MultipleHits : NotFound;
+                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate);
                 return true;
             }
 
@@ -973,9 +941,8 @@ Return Value:
             if (bestScore + realConfDiff <= secondBestScore && bestScore <= maxK) {
                 *result = SingleHit;
                 *singleHitGenomeLocation = bestScoreGenomeLocation;
-                if (NULL != finalScore) {
-                    *finalScore = bestScore;
-                }
+                *finalScore = bestScore;
+                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate);
                 return true;
             }
 
@@ -1467,4 +1434,16 @@ BaseAligner::incrementWeight(HashTableElement *element)
     element->weightPrev = weightLists[element->weight].weightPrev;
     element->weightNext->weightPrev = element;
     element->weightPrev->weightNext = element;
+}
+
+    int
+BaseAligner::computeMAPQ(double probabilityOfAllCandidates, double probabilityOfBestCandidate)
+{
+    _ASSERT(probabilityOfAllCandidates >= probabilityOfBestCandidate);
+    _ASSERT(probabilityOfBestCandidate >= 0.0);
+    double correctnessProbability = probabilityOfBestCandidate / probabilityOfAllCandidates;
+    if (correctnessProbability >= 1) {
+        return 70;
+    }
+    return min(70,(int)(-10 * log10(1 - correctnessProbability)));
 }
