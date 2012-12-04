@@ -56,7 +56,7 @@ public:
 private:
     static const int BUCKET_SIZE = 16;
     static const int INFINITE_SCORE = 0x7FFF;
-    static const int MAX_BUCKETS = 16 * 1024;
+    static const int MAX_BUCKETS = 32 * 1024;
     static const int MAX_READ_SIZE = 10000;
     static const int MAX_SEED_SIZE = 32;
     
