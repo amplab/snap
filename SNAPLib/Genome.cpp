@@ -29,7 +29,7 @@ Revision History:
 
 Genome::Genome(unsigned i_maxBases, unsigned nBasesStored) : maxBases(i_maxBases), minOffset(0), maxOffset(i_maxBases)
 {
-    bases = (char *)BigAlloc(nBasesStored);
+    bases = ((char *) BigAlloc(nBasesStored + 2 * N_PADDING)) + N_PADDING;
     if (NULL == bases) {
         fprintf(stderr,"Genome: unable to allocate memory for %llu bases\n",(_int64)maxBases);
         exit(1);
@@ -102,7 +102,7 @@ Genome::startPiece(const char *pieceName)
 
 Genome::~Genome()
 {
-    BigDealloc(bases);
+    BigDealloc(bases - N_PADDING);
     for (int i = 0; i < nPieces; i++) {
         delete [] pieces[i].name;
         pieces[i].name = NULL;

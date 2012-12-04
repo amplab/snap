@@ -837,7 +837,7 @@ Return Value:
     
                 unsigned score = -1;
                 if (elementToScore->isRC) {
-                    const char *data = genome->getSubstring(genomeLocation, rcRead->getDataLength());
+                    const char *data = genome->getSubstring(genomeLocation, rcRead->getDataLength() + MAX_K);
                     if (data != NULL) {
 #ifdef USE_NEW_DISTANCE
                         score = bsd->compute(data, rcRead->getData(), rcRead->getDataLength(), scoreLimit);
@@ -847,7 +847,7 @@ Return Value:
                             cacheKey = ((_uint64) readId) << 33 | ((_uint64) elementToScore->isRC) << 32 | genomeLocation;
                         }
                         score = landauVishkin->computeEditDistance(
-                            data, rcRead->getDataLength(),
+                            data, rcRead->getDataLength() + MAX_K,
                             rcRead->getData(), rcRead->getDataLength(),
                             scoreLimit, cacheKey);
 #endif
@@ -856,7 +856,7 @@ Return Value:
                     printf("Computing distance at %u (RC) with limit %d: %d\n", genomeLocation, scoreLimit, score);
 #endif
                 } else {
-                    const char *data = genome->getSubstring(genomeLocation, read->getDataLength());
+                    const char *data = genome->getSubstring(genomeLocation, read->getDataLength() + MAX_K);
                     if (data != NULL) {
 #ifdef USE_NEW_DISTANCE
                         score = bsd->compute(data, read->getData(), read->getDataLength(), scoreLimit);
@@ -866,7 +866,7 @@ Return Value:
                             cacheKey = ((_uint64) readId) << 33 | ((_uint64) elementToScore->isRC) << 32 | genomeLocation;
                         }
                         score = landauVishkin->computeEditDistance(
-                            data, read->getDataLength(),
+                            data, read->getDataLength() + MAX_K,
                             read->getData(), read->getDataLength(),
                             scoreLimit, cacheKey);
 #endif

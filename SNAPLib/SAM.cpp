@@ -152,11 +152,11 @@ SAMWriter::computeCigarString(
     int *                       editDistance
 )
 {
-    const char *reference = genome->getSubstring(genomeLocation, dataLength);
+    const char *reference = genome->getSubstring(genomeLocation, dataLength + MAX_K);
     if (NULL != reference) {
         *editDistance = lv->computeEditDistance(
-                            genome->getSubstring(genomeLocation, dataLength),
-                            dataLength,
+                            reference,
+                            dataLength + MAX_K,
                             data,
                             dataLength,
                             MAX_K - 1,
