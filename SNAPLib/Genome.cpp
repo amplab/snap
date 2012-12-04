@@ -35,6 +35,10 @@ Genome::Genome(unsigned i_maxBases, unsigned nBasesStored) : maxBases(i_maxBases
         exit(1);
     }
 
+    // Add N's for the N_PADDING bases before and after the genome itself
+    memset(bases - N_PADDING, 'N', N_PADDING);
+    memset(bases + nBasesStored, 'N', N_PADDING);
+
     nBases = 0;
 
     maxPieces = 32; // A power of two that's bigger than the usual number of chromosomes, so we don't have to
