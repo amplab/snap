@@ -51,9 +51,7 @@ int main(int argc, const char **argv)
 {
     printf("Welcome to SNAP version %s.\n\n", SNAP_VERSION);
 
- 
-
-    if (argc < 2) {
+     if (argc < 2) {
         usage();
     } else if (strcmp(argv[1], "index") == 0) {
         GenomeIndex::runIndexer(argc - 2, argv + 2);

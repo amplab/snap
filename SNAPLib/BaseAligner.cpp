@@ -859,7 +859,8 @@ Return Value:
         
 // off until we fix the insert/delete problem            _ASSERT(candidates[candidateToScore].score >= candidates[candidateToScore].minPossibleScore); // Else we messed up minPossibleScore (or LV or something)
     
-                if (bestScore > score) {
+                if (bestScore > score ||
+                    bestScore == score && matchProbability > probabilityOfBestCandidate) {
 		            if ((secondBestScore == UnusedScoreValue || !(secondBestScoreGenomeLocation + maxK > genomeLocation && secondBestScoreGenomeLocation < genomeLocation + maxK)) &&
 		                (bestScore == UnusedScoreValue || !(bestScoreGenomeLocation + maxK > genomeLocation && bestScoreGenomeLocation < genomeLocation + maxK))) 
                     {
@@ -910,9 +911,14 @@ Return Value:
                         // Since secondBestScore already means that our best location so far won't be a SingleHit,
                         // we really just care about finding better locations than that. However, still check for
                         // scores up to bestScore - 1 since those might become a new secondBestScore.
-                        _ASSERT(bestScore >= 1); // Otherwise we would've returned MultipleHits
-                        scoreLimit = bestScore - 1;
+                        if (bestScore == 0) {
+                            scoreLimit = 0;
+                        } else {
+                            scoreLimit = bestScore - 1;
+                        }
                     }
+                    // always search for something at least one worse than the best we found to drive the denominator of the MAPQ computation
+                    scoreLimit = __min(__max(scoreLimit,bestScore+1),maxK); 
                 }
             }   // While candidates exist in the element
         }   // If the element could possibly affect the result

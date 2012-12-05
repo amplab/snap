@@ -127,7 +127,7 @@ done1:
                     // We're done.  Compute the match probability.
                     //
                     int straightMismatches = 0;
-                    for (int i = 0; i < end; i++) {
+                    for (int i = 0; i < end && straightMismatches <= e; i++) { // do this 8 at a time, like in the other loops!
                         if (pattern[i] != text[i]) {
                             straightMismatches++;
                             *matchProbability *= phredToProbability[qualityString[i]];
@@ -140,6 +140,7 @@ done1:
                         // Trace backward to build up the CIGAR string.  We do this by filling in the backtraceAction,
                         // backtraceMatched and backtraceD arrays, then going through them in the forward direction to
                         // figure out our string.
+                        *matchProbability = 1.0;
                         int curD = d;
                         for (int curE = e; curE >= 1; curE--) {
                             backtraceAction[curE] = A[curE][MAX_K+curD];
@@ -593,7 +594,7 @@ LandauVishkin::initializeProbabilitiesToPhredPlus33()
         phredToProbability[i] = mutationRate;  // This isn't a sensible Phred score
     }
     for (int i = 33; i <= 93 + 33; i++) {
-        phredToProbability[i] = 1.0-(1.0 - pow(10.0,-1 * (i - 33) / 10)) * (1.0 - mutationRate);
+         phredToProbability[i] = 1.0-(1.0 - pow(10.0,-1.0 * (i - 33.0) / 10.0)) * (1.0 - mutationRate);
     }
     for (int i = 93 + 33 + 1; i < 256; i++) {
         phredToProbability[i] = mutationRate;   // This isn't a sensible Phred score
