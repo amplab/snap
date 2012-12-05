@@ -121,14 +121,14 @@ int runAllTests();
 #define ASSERT_STREQ(expected, actual) \
     if (strcmp((expected), (actual)) != 0) { \
         std::ostringstream oss; \
-        oss << #actual << " was " << (actual) << ", expected " << (expected); \
+        oss << #actual << " was \"" << (actual) << "\", expected \"" << (expected) << "\""; \
         throw test::TestFailedException(__FILE__, __LINE__, oss.str()); \
     }
 
 #define ASSERT_STRNE(expected, actual) \
     if (strcmp((expected), (actual)) == 0) { \
         std::ostringstream oss; \
-        oss << #actual << " was " << (expected); \
+        oss << #actual << " was \"" << (expected) << "\""; \
         throw test::TestFailedException(__FILE__, __LINE__, oss.str()); \
     }
 
