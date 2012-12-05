@@ -49,5 +49,5 @@ protected:
 
     virtual void writeRead(Read* read, AlignmentResult result, unsigned location, bool isRC, int score, int mapq);
 
-    virtual void updateStats(AlignerStats* stats, Read* read, AlignmentResult result, unsigned location, int score);
+    virtual void updateStats(AlignerStats* stats, Read* read, AlignmentResult result, unsigned location, int score, int mapq);
 };

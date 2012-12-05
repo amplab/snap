@@ -46,6 +46,8 @@ struct AlignerStats : public AbstractStats
     _int64 multiHits;
     _int64 notFound;
     _int64 errors;
+    static const unsigned maxMapq = 70;
+    unsigned mapqHistogram[maxMapq+1];
     AbstractStats* extra;
 
     virtual ~AlignerStats();

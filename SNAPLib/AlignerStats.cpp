@@ -39,6 +39,9 @@ AlignerStats::AlignerStats(AbstractStats* i_extra)
     errors(0),
     extra(i_extra)
 {
+    for (int i = 0; i <= AlignerStats::maxMapq; i++) {
+        mapqHistogram[i] = 0;
+    }
 }
 
 AlignerStats::~AlignerStats()
@@ -71,5 +74,8 @@ AlignerStats::add(
     errors += other->errors;
     if (extra != NULL && other->extra != NULL) {
         extra->add(other->extra);
+    }
+    for (int i = 0; i <= AlignerStats::maxMapq; i++) {
+        mapqHistogram[i] += other->mapqHistogram[i];
     }
 }

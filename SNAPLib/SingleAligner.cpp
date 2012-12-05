@@ -165,7 +165,7 @@ SingleAlignerContext::runIterationThread()
 
             writeRead(&read, result, location, isRC, score, mapq);
 
-            updateStats(stats, &read, result, location, score);
+            updateStats(stats, &read, result, location, score, mapq);
         }
     }
 
@@ -195,7 +195,8 @@ SingleAlignerContext::updateStats(
     Read* read,
     AlignmentResult result,
     unsigned location, 
-    int score)
+    int score,
+    int mapq)
 {
     if (isOneLocation(result)) {
         stats->singleHits++;
@@ -209,5 +210,10 @@ SingleAlignerContext::updateStats(
     } else {
         _ASSERT(result == NotFound);
         stats->notFound++;
+    }
+
+    if (result != NotFound) {
+        _ASSERT(mapq >= 0 && mapq <= AlignerStats::maxMapq);
+        stats->mapqHistogram[mapq]++;
     }
 }

@@ -573,11 +573,11 @@ LandauVishkin::initializeProbabilitiesToPhredPlus33()
     // indel probability is .0001 for any indel (10% of a SNP real difference), and then 10% worse for each longer base.
     //
     _ASSERT(NULL == phredToProbability);
-    phredToProbability = new double[256];
+    phredToProbability = (double *)BigAlloc(sizeof(double) * 256);
 
     static const int maxIndels = 10000; // Way more than we'll see, and in practice enough to result in p=0.0;
     _ASSERT(NULL == indelProbabilities);
-    indelProbabilities = new double[maxIndels];
+    indelProbabilities = (double *)BigAlloc(sizeof(double) * maxIndels);
  
     const double mutationRate = 0.001;
     indelProbabilities = new double[maxIndels+1];

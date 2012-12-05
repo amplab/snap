@@ -243,6 +243,9 @@ AlignerContext::printStats()
             100.0 * stats->notFound / usefulReads,
             errorRate,
             (1000.0 * usefulReads) / max(alignTime, (_int64) 1));
+    for (int i = 0; i<= AlignerStats::maxMapq; i++) {
+        printf("%d\t%d\n",i,stats->mapqHistogram[i]);
+    }
 
     extension->printStats();
 }
