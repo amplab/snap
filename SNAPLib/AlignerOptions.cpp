@@ -48,6 +48,7 @@ AlignerOptions::AlignerOptions(
     explorePopularSeeds(false),
     stopOnFirstHit(false),
 	useM(false),
+    gapPenalty(0),
 	extra(NULL),
     rgLineContents(NULL)
 {
@@ -106,6 +107,7 @@ AlignerOptions::usageMessage()
         "       bases from front and back of read respectively; default: back only (-C-+)\n"
 		"  -M   indicates that CIGAR strings in the generated SAM file should use M (alignment\n"
 		"       match) rather than = and X (sequence (mis-)match)\n"
+        "  -G   specify a gap penalty to use when generating CIGAR strings\n"
 // not written yet        "  -r   Specify the content of the @RG line in the SAM header.\n"
             ,
             commandLine,
@@ -225,6 +227,18 @@ AlignerOptions::parse(
 	} else if (strcmp(argv[n], "-M") == 0) {
 		useM = true;
 		return true;
+	} else if (strcmp(argv[n], "-G") == 0) {
+        if (n + 1 < argc) {
+            gapPenalty = atoi(argv[n+1]);
+            if (gapPenalty < 1) {
+                fprintf(stderr,"Gap penalty must be at least 1.\n");
+                exit(1);
+            }
+            n++;
+            return true;
+        } else {
+            fprintf(stderr,"Must have the gap penalty value after -G\n");
+        }
     } else if (strcmp(argv[n], "-r") == 0) {
 #if 0   // This isn't ready yet.
         if (n + 1 < argc) {

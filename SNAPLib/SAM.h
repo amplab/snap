@@ -24,6 +24,7 @@ Environment:
 #include "PairedEndAligner.h"
 #include "VariableSizeVector.h"
 #include "BufferedAsync.h"
+#include "BoundedStringDistance.h"
 
 /*
  * Output aligned reads in SAM format. See http://samtools.sourceforge.net/SAM1.pdf for details.
@@ -38,7 +39,7 @@ public:
 
     virtual bool close() = 0;
 
-    static SAMWriter* create(const char *fileName, const Genome *genome, bool useM, int argc, const char **argv, const char *version, const char *rgLine);
+    static SAMWriter* create(const char *fileName, const Genome *genome, bool useM, unsigned gapPenalty, int argc, const char **argv, const char *version, const char *rgLine);
 
     static bool generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize, bool sorted, int argc, const char **argv, const char *version, const char *rgLine);
    
@@ -65,6 +66,7 @@ protected:
                         bool                        isMateRC, 
                         const Genome *              genome, 
                         LandauVishkinWithCigar *    lv, 
+                        BoundedStringDistance<true>* bsd,
                         char *                      buffer, 
                         size_t                      bufferSpace, 
                         size_t *                    spaceUsed = NULL,
@@ -76,6 +78,7 @@ private:
     static const char *computeCigarString(
                         const Genome *              genome,
                         LandauVishkinWithCigar *    lv,
+                        BoundedStringDistance<true>* bsd,
                         char *                      cigarBuf,
                         int                         cigarBufLen,
                         char *                      cigarBufWithClipping,
@@ -97,7 +100,7 @@ private:
  */
 class SimpleSAMWriter: public SAMWriter {
 public:
-    SimpleSAMWriter(bool i_useM, int i_argc, const char **i_argv, const char *i_version, const char *i_rgLine);
+    SimpleSAMWriter(bool i_useM, unsigned i_gapPenalty, int i_argc, const char **i_argv, const char *i_version, const char *i_rgLine);
 
     virtual ~SimpleSAMWriter();
 
@@ -127,7 +130,8 @@ private:
     const char  *version;
     const char  *rgLine;
 
-    LandauVishkinWithCigar lv;
+    LandauVishkinWithCigar* lv;
+    BoundedStringDistance<true>* bsd;
 };
 
 //
@@ -141,7 +145,7 @@ private:
 class ThreadSAMWriter : public SAMWriter {
 public:
 
-    ThreadSAMWriter(size_t i_bufferSize, bool i_useM);
+    ThreadSAMWriter(size_t i_bufferSize, bool i_useM, unsigned gapPenalty);
     virtual ~ThreadSAMWriter();
 
     bool initialize(AsyncFile* file, const Genome *i_genome, volatile _int64 *i_nextWriteOffset);
@@ -172,7 +176,8 @@ protected:
     char                           *buffer[2];
     const Genome                   *genome;
 
-    LandauVishkinWithCigar          lv;
+    LandauVishkinWithCigar*         lv;
+    BoundedStringDistance<true>*    bsd;
 
 	bool							useM;
 };
@@ -184,7 +189,7 @@ public:
     ParallelSAMWriter() : writer(NULL), file(NULL), argv(NULL), version(NULL), rgLine(NULL) {}
 
     static ParallelSAMWriter*       create(const char *fileName, const Genome *genome,
-                                        unsigned nThreads, bool sort, size_t sortBufferMemory, bool i_useM,
+                                        unsigned nThreads, bool sort, size_t sortBufferMemory, bool i_useM, unsigned i_gapPenalty,
                                         int argc, const char **argv, const char *version, const char *rgLine);
 
     static const size_t             UnsortedBufferSize = 16 * 1024 * 1024;
@@ -196,9 +201,9 @@ public:
     virtual bool                    close();
 
 protected:
-									ParallelSAMWriter(bool i_useM, int i_argc, const char **i_argv, const char *i_version,
+									ParallelSAMWriter(bool i_useM, unsigned i_gapPenalty, int i_argc, const char **i_argv, const char *i_version,
                                         const char *i_rgLine) : 
-                                        useM(i_useM), argc(i_argc), argv(i_argv), version(i_version), rgLine(i_rgLine), writer(NULL) {}
+                                        useM(i_useM), gapPenalty(i_gapPenalty), argc(i_argc), argv(i_argv), version(i_version), rgLine(i_rgLine), writer(NULL) {}
 
     virtual bool                    createThreadWriters(const Genome* genome);
 
@@ -209,6 +214,7 @@ protected:
     int                             nThreads;
 
 	bool							useM;
+    unsigned                        gapPenalty;
     int                             argc;
     const char                    **argv;
     const char                     *version;
@@ -251,7 +257,7 @@ class SortedThreadSAMWriter : public ThreadSAMWriter
 {
 public:
 
-    SortedThreadSAMWriter(size_t i_bufferSize, bool useM);
+    SortedThreadSAMWriter(size_t i_bufferSize, bool useM, unsigned gapPenalty);
     virtual ~SortedThreadSAMWriter();
 
 
@@ -273,8 +279,8 @@ class SortedParallelSAMWriter : public ParallelSAMWriter
 {
 public:
 
-    SortedParallelSAMWriter(size_t i_totalMemory, bool useM, int argc, const char**argv, const char *version, const char *rgLine) : 
-      ParallelSAMWriter(useM, argc, argv, version, rgLine), totalMemory(i_totalMemory), tempFile(NULL), sortedFile(NULL) {}
+    SortedParallelSAMWriter(size_t i_totalMemory, bool useM, unsigned i_gapPenalty, int argc, const char**argv, const char *version, const char *rgLine) : 
+      ParallelSAMWriter(useM, i_gapPenalty, argc, argv, version, rgLine), totalMemory(i_totalMemory), tempFile(NULL), sortedFile(NULL) {}
 
     virtual ~SortedParallelSAMWriter() {}
     
