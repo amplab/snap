@@ -9,8 +9,8 @@ using std::min;
 LandauVishkin::LandauVishkin(int cacheSize)
 {
     for (int i = 0; i < MAX_K+1; i++) {
-        for (int j = 0; j < 2*MAX_K+1; j++) {
-            L[i][j] = -2;
+        for (int j = -(i+2); j <= i+2; j++) {
+            L(i,j) = -2;
         }
     }
     if (cacheSize > 0) {
@@ -64,15 +64,15 @@ int LandauVishkin::computeEditDistance(
             unsigned long zeroes;
             CountTrailingZeroes(x, zeroes);
             zeroes >>= 3;
-            L[0][MAX_K] = min((int)(p - pattern) + (int)zeroes, end);
+            L(0,0) = min((int)(p - pattern) + (int)zeroes, end);
             goto done1;
         }
         p += 8;
         t += 8;
     }
-    L[0][MAX_K] = end;
+    L(0,0) = end;
 done1:
-    if (L[0][MAX_K] == end) {
+    if (L(0,0) == end) {
         int result = (patternLen > end ? patternLen - end : 0); // Could need some deletions at the end
         if (cache != NULL && cacheKey != 0) {
             cache->put(cacheKey, LVResult(k, result, indelProbabilities[result]));
@@ -82,15 +82,17 @@ done1:
 
     for (int e = 1; e <= k; e++) {
         // Search d's in the order 0, 1, -1, 2, -2, etc to find an alignment with as few indels as possible.
+        // The grody cast and shift is a way to avoid a branch-predictor confusing ? expression.
+//        for (int d = 0; d != e+1; d = -d + (((*((unsigned*)&d) >> 31) | !d))) {
         for (int d = 0; d != e+1; d = (d > 0 ? -d : -d+1)) {
-            int best = L[e-1][MAX_K+d] + 1; // up
+            int best = L(e-1,d) + 1; // up
             A[e][MAX_K+d] = 'X';
-            int left = L[e-1][MAX_K+d-1];
+            int left = L(e-1, d-1);
             if (left > best) {
                 best = left;
                 A[e][MAX_K+d] = 'D';
             }
-            int right = L[e-1][MAX_K+d+1] + 1;
+            int right = L(e-1,d+1) + 1;
             if (right > best) {
                 best = right;
                 A[e][MAX_K+d] = 'I';
@@ -146,13 +148,13 @@ done1:
                             backtraceAction[curE] = A[curE][MAX_K+curD];
                             if (backtraceAction[curE] == 'I') {
                                 backtraceD[curE] = curD + 1;
-                                backtraceMatched[curE] = L[curE][MAX_K+curD] - L[curE-1][MAX_K+curD+1] - 1;
+                                backtraceMatched[curE] = L(curE, curD) - L(curE-1, curD+1) - 1;
                             } else if (backtraceAction[curE] == 'D') {
                                 backtraceD[curE] = curD - 1;
-                                backtraceMatched[curE] = L[curE][MAX_K+curD] - L[curE-1][MAX_K+curD-1];
+                                backtraceMatched[curE] = L(curE, curD) - L(curE-1, curD-1);
                             } else { // backtraceAction[curE] == 'X'
                                 backtraceD[curE] = curD;
-                                backtraceMatched[curE] = L[curE][MAX_K+curD] - L[curE-1][MAX_K+curD] - 1;
+                                backtraceMatched[curE] = L(curE, curD) - L(curE-1, curD) - 1;
                             }
                             curD = backtraceD[curE];
         #ifdef TRACE_LV
@@ -162,7 +164,7 @@ done1:
                         }
 
                         int curE = 1;
-                        int offset = L[0][MAX_K+0];
+                        int offset = L(0, 0);
                         while (curE <= e) {
                             // First write the action, possibly with a repeat if it occurred multiple times with no exact matches
                             char action = backtraceAction[curE];
@@ -203,7 +205,7 @@ done1:
                 return e;
             }
 
-            L[e][MAX_K+d] = best;
+            L(e, d) = best;
         }
     }
 
@@ -569,6 +571,7 @@ LandauVishkin::setProbabilities(double *i_indelProbabilities, double *i_phredToP
     void
 LandauVishkin::initializeProbabilitiesToPhredPlus33()
 {
+
     //
     // indel probability is .0001 for any indel (10% of a SNP real difference), and then 10% worse for each longer base.
     //

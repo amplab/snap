@@ -39,7 +39,14 @@ public:
 
 private:
     // TODO: For long reads, we should include a version that only has L be 2 x (2*MAX_K+1) cells
-    int L[MAX_K+1][2 * MAX_K + 1];
+    short LSpace[(MAX_K+1) * (2 * MAX_K + 1)];
+
+    inline short &L(int e, int d) {
+        int eff_e = e+2;    // We shift everything by two rows, since that makes the math work better at the cost of 4 unused cells
+        _ASSERT(e >= 0 && e <= MAX_K);
+        _ASSERT(d >= -eff_e && d <= eff_e);
+        return LSpace[eff_e * eff_e + eff_e + d];
+    }
     
     // Action we did to get to each position: 'D' = deletion, 'I' = insertion, 'X' = substitution.  This is needed to compute match probability.
     char A[MAX_K+1][2 * MAX_K + 1];
