@@ -9,26 +9,26 @@ struct LandauVishkinTest {
 };
 
 TEST_F(LandauVishkinTest, "equal strings") {
-    ASSERT_EQ(0, lv.computeEditDistance("abcde", 5, "abcde", 5, 2));
+  ASSERT_EQ(0, lv.computeEditDistance("abcde", 5, "abcde", "22222", 5, 2, NULL));
 }
 
 TEST_F(LandauVishkinTest, "prefixes") {
-    ASSERT_EQ(0, lv.computeEditDistance("abcde", 5, "abcd", 4, 2));
-    ASSERT_EQ(0, lv.computeEditDistance("abcde", 5, "abc", 3, 2));
-    ASSERT_EQ(0, lv.computeEditDistance("abcde", 5, "ab", 2, 2));
+    ASSERT_EQ(0, lv.computeEditDistance("abcde", 5, "abcd", "2222", 4, 2, NULL));
+    ASSERT_EQ(0, lv.computeEditDistance("abcde", 5, "abc", "222", 3, 2, NULL));
+    ASSERT_EQ(0, lv.computeEditDistance("abcde", 5, "ab", "22", 2, 2, NULL));
 }
 
 TEST_F(LandauVishkinTest, "non-equal strings") {
-    ASSERT_EQ(1, lv.computeEditDistance("abcde", 5, "abcdX", 5, 2));
-    ASSERT_EQ(1, lv.computeEditDistance("abcde", 5, "abde", 4, 2));
-    ASSERT_EQ(1, lv.computeEditDistance("abcde", 5, "bcde", 4, 2));
-    ASSERT_EQ(1, lv.computeEditDistance("abcde", 5, "abcXde", 6, 2));
-    ASSERT_EQ(2, lv.computeEditDistance("abcde", 5, "abXXe", 5, 2));
-    ASSERT_EQ(2, lv.computeEditDistance("abcde", 5, "abcXXde", 7, 2));
+    ASSERT_EQ(1, lv.computeEditDistance("abcde", 5, "abcdX", "22222", 5, 2, NULL));
+    ASSERT_EQ(1, lv.computeEditDistance("abcde", 5, "abde", "22222", 4, 2, NULL));
+    ASSERT_EQ(1, lv.computeEditDistance("abcde", 5, "bcde", "2222", 4, 2, NULL));
+    ASSERT_EQ(1, lv.computeEditDistance("abcde", 5, "abcXde", "222222", 6, 2, NULL));
+    ASSERT_EQ(2, lv.computeEditDistance("abcde", 5, "abXXe", "22222", 5, 2, NULL));
+    ASSERT_EQ(2, lv.computeEditDistance("abcde", 5, "abcXXde", "2222222", 7, 2, NULL));
 }
 
 TEST_F(LandauVishkinTest, "overly distant strings") {
-    ASSERT_EQ(-1, lv.computeEditDistance("abcde", 5, "XXXXX", 5, 2));
+    ASSERT_EQ(-1, lv.computeEditDistance("abcde", 5, "XXXXX", "22222", 5, 2, NULL));
 }
 
 TEST_F(LandauVishkinTest, "CIGAR strings") {
