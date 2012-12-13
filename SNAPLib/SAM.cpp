@@ -88,7 +88,9 @@ SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBuffe
 	for (int i = 0; i < argc; i++) {
 		commandLineSize += strlen(argv[i]) + 1;	// +1 is either a space or the terminating null
 	}
-	commandLine = new char[commandLineSize];
+    if (0 == commandLineSize) {
+        commandLineSize = 1;    // Space for null terminator in the case of no command line.
+    }	commandLine = new char[commandLineSize];
 	commandLine[0] = '\0';
 	for (int i = 0; i < argc; i++) {
 		strcat(commandLine,argv[i]);

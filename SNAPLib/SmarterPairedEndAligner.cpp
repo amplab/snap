@@ -24,6 +24,7 @@ Revision History:
 #include <math.h>
 #include "SmarterPairedEndAligner.h"
 #include "LandauVishkin.h"
+#include "mapq.h"
 
 using namespace std;
 
@@ -112,14 +113,26 @@ SmarterPairedEndAligner::~SmarterPairedEndAligner()
     delete[] buckets;
 }
 
+volatile _int64 overallTimeInAlign = 0;
+volatile _int64 callsToAlign = 0;
+volatile _int64 timeInSingleAligner = 0;
+volatile _int64 timeInMateAligner = 0;
+volatile _int64 callsToSingleAligner = 0;
+volatile _int64 callsToMateAligner = 0;
+volatile _int64 timeInAlignTogether = 0;
+volatile _int64 callsToAlignTogether = 0;
 
+#define done() {InterlockedAdd64AndReturnNewValue(&overallTimeInAlign, timeInNanos() - startTime); InterlockedAdd64AndReturnNewValue(&callsToAlign,1);}
 void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentResult *result)
 {
+ _int64 startTime = timeInNanos();
+ 
     Read *reads[2] = {read0, read1};
     int numNotFound = 0;
     int numCertainlyNotFound = 0;
     int numIgnoredMulti = 0;  // MultiHits where all seeds returned too many hits
     int numSingleWithNotFound = 0;
+
 
     clearState();
     
@@ -143,6 +156,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
 
     if (read0->getDataLength() < 50 && read1->getDataLength() < 50) {
         TRACE("Reads are both too short -- returning");
+done();
         return;
     }
 
@@ -158,7 +172,10 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
         int mapq0, mapq1;
         AlignmentResult status0, status1;
         singleAligner->setReadId(r);
+_int64 startSingleAlign = timeInNanos();
         status0 = singleAligner->AlignRead(reads[r], &loc0, &rc0, &score0, &mapq0);
+InterlockedAdd64AndReturnNewValue(&timeInSingleAligner,timeInNanos() - startSingleAlign);
+InterlockedAdd64AndReturnNewValue(&callsToSingleAligner,1);
         if (score0 <= (int) (maxK + confDiff)) {
             bestScore[r] = score0;
             bestMapq[r] = mapq0;
@@ -178,11 +195,15 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
                 result->score[r] = score0;
                 result->mapq[r] = mapq0;
                 result->status[1-r] = NotFound;
+done();
                 return;
             }
             mateAligner->setMaxK(maxK - score0 + 1);
             mateAligner->setReadId(1-r);
+_int64 startMateAligner = timeInNanos();
             status1 = mateAligner->AlignRead(reads[1-r], &loc1, &rc1, &score1, &mapq1, maxSpacing, loc0, !rc0);
+InterlockedAdd64AndReturnNewValue(&timeInMateAligner, timeInNanos() - startMateAligner);
+InterlockedAdd64AndReturnNewValue(&callsToMateAligner, 1);
             TRACE("Mate %d returned %s at loc %u-%d\n", 1-r, AlignmentResultToString(status1), loc1, rc1);
             if (/*status1 != MultipleHits &&*/ score0 + score1 <= (int)maxK) {
                 result->status[r] = SingleHit;
@@ -195,6 +216,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
                 result->isRC[1-r] = rc1;
                 result->score[1-r] = score1;
                 result->mapq[1-r] = mapq1;
+done();
                 return;
             } else if(status1 == NotFound) {
                 // We found read r at one location and didn't find the mate nearby. Let's remember because
@@ -215,6 +237,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
     
     if (numNotFound + numIgnoredMulti == 2) {
         // We couldn't find either read even as MultipleHits, so there's no way we'll do the pair.
+done();
         return;
     }
 
@@ -236,6 +259,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
                 result->mapq[r] = bestMapq[r];
             }
         }
+done();
         return;
     }
 
@@ -253,17 +277,20 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
                 result->mapq[r] = bestMapq[r];
             }
         }
+done();
         return;
     }
 
     if (read0->getDataLength() < 50 || read1->getDataLength() < 50) {
         TRACE("Can't go further because one read is too short");
+done();
         return;
     }
 
     if (bestScore[0] != INFINITE_SCORE && bestScore[1] != INFINITE_SCORE &&
             bestScore[0] + bestScore[1] > 1.5 * maxK) {
         TRACE("Best scores in each direction add up to more than 1.5 * maxK; returning");
+done();
         return;
     }
 
@@ -277,6 +304,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
 
     if (lowerBound[0] + lowerBound[1] > (int)maxK) {
         TRACE("Best scores in each direction certainly add up to more than maxK; returning");
+done();
         return;
     }
 
@@ -286,6 +314,9 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
     _int64 start = timeInNanos();
     alignTogether(reads, result, lowerBound);
     _int64 end = timeInNanos();
+InterlockedAdd64AndReturnNewValue(&timeInAlignTogether, end - start);
+InterlockedAdd64AndReturnNewValue(&callsToAlignTogether, 1);
+done();
     TRACE("alignTogether took %lld ns and returned %s %s\n", end - start,
             AlignmentResultToString(result->status[0]),
             AlignmentResultToString(result->status[1]));
@@ -308,6 +339,9 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
     }
     
     int bestScore = INFINITE_SCORE;
+    double probabilityOfBestPair = 0;
+    double probabilityOfAllPairs = 0;
+    double probabilityOfAllSingles = 0;
     int secondBestScore = INFINITE_SCORE;
     
     // Locations of best scoring pair
@@ -316,6 +350,11 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
     int bestIsMulti[2] = {0, 0};
     int bestScores[2] = {INFINITE_SCORE, INFINITE_SCORE};
     int bestMapqs[2] = {0, 0};
+  
+    //
+    // Probabilities for everything measured
+    //
+    double allProbabilities[2] = {0.0, 0.0};
     
     int disjointSeedsUsed[2][2] = {{0, 0}, {0, 0}};   // [read][isRC]
     int popularSeeds[2][2] = {{0, 0}, {0, 0}};        // [read][isRC]
@@ -326,7 +365,6 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
     int wrapCount[2] = {0, 0};       // How many times we've wraped around on each read
 
     int scoreLimit = maxK + confDiff + 1;
-    double totalMatchProbability = 0.0;
 
     unsigned candidatesTried = 0;
 
@@ -392,7 +430,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                 wrapCount[r]++;
                 nextSeed[r] = wrapOffset[wrapCount[r]];
             }
-        }
+        } // for each read
         seedsTried += 1;
         
         // A good lower bound on best possible score is the min number of disjoint seeds used in
@@ -517,14 +555,24 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                     bestMateScore = b0->mateScore;
                 double matchProbability = 0.0;
                 scoreBucket(b0, r0, rc0 != 0, loc0, readData[r0][rc0], quality[r0], readLen[r0], scoreLimit - bestMateScore + 1, &matchProbability);
+                probabilityOfAllSingles += matchProbability;
+
                 if ((int)b0->score > scoreLimit) {
                     continue;
                 }
                 
-                scoreBucketMate(b0, r0, rc0 != 0, loc0, reads[r1], scoreLimit);
+                int mateMapq;
+                scoreBucketMate(b0, r0, rc0 != 0, loc0, reads[r1], scoreLimit, &mateMapq);
                 if (b0->mateStatus == NotFound /*|| b0->mateStatus == MultipleHits*/)
                     continue;
                 
+                //
+                // The match probability is the product of the probabilities of each end, which we get for the
+                // mate by using its mapq (which was computed only within the region).
+                //
+                double pairMatchProbability = matchProbability * mapqToProbability(mateMapq);
+                probabilityOfAllPairs += pairMatchProbability;  
+
                 // If we got here, the bucket has a good score and its mate is also OK.
                 loc0 += b0->bestOffset;
                 unsigned loc1 = b0->mateLocation;
@@ -540,18 +588,20 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                     (dist0 <= maxK /*|| bestIsMulti[r0] && dist0 <= maxSpacing*/) &&
                     (dist1 <= maxK || ((bestIsMulti[r1] || multi1) && dist1 <= (unsigned)maxDist)))
                 {
-                    if (pairScore < bestScore) {
+                    if (pairScore < bestScore || pairScore == bestScore && pairMatchProbability > probabilityOfBestPair) {
                         TRACE("  Updating score of best pair to %d\n", pairScore);
                         bestScore = pairScore;
+                        probabilityOfBestPair = pairMatchProbability;
                         bestScores[0] = b0->score;
                         bestScores[1] = b0->mateScore;
                         bestLoc[r0] = loc0; bestRC[r0] = rc0; bestIsMulti[r0] = 0;
                         bestLoc[r1] = loc1; bestRC[r1] = rc1; bestIsMulti[r1] = multi1;
                     }
                 } else {
-                    if (pairScore < bestScore) {
+                    if (pairScore < bestScore || pairScore == bestScore && pairMatchProbability > probabilityOfBestPair) {
                         secondBestScore = bestScore;
                         bestScore = pairScore;
+                        probabilityOfBestPair = pairMatchProbability;
                         bestScores[0] = b0->score;
                         bestScores[1] = b0->mateScore;
                         bestLoc[r0] = loc0; bestRC[r0] = rc0; bestIsMulti[r0] = 0;
@@ -561,6 +611,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                     }
                 }
                 
+#if     0   // This is no better an idea in the paried end aligner than it was in the single end
                 // Return MultipleHits right away if bestScore and secondBestScore are both too small.
                 if (bestScore < bestPossibleScore + realConfDiff && secondBestScore < bestScore + realConfDiff) {
                     TRACE("Returning 2 * MultipleHits because best and secondBest are both too small\n");
@@ -572,9 +623,11 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                     }
                     return;
                 }
+#endif  // 0
                 
                 // Update scoreLimit.
                 scoreLimit = min(bestScore, (int) maxK) + confDiff + 1;
+#if     0 // Off because we want to compute probabilities for plausible pairs so that we can get a decent mapq estimate
                 if (bestScore != INFINITE_SCORE && secondBestScore < bestScore + realConfDiff) {
                     // Since secondBestScore already means that our best location so far won't be a SingleHit,
                     // we really just care about finding better locations than that. However, still check for
@@ -582,6 +635,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                     _ASSERT(bestScore >= 1); // Otherwise we would've returned MultipleHits
                     scoreLimit = bestScore - 1;
                 }
+#endif  // 0
                 
                 TRACE("  New best: %d, secondBest: %d, realConfDiff: %d, scoreLimit: %d\n", 
                     bestScore, secondBestScore, realConfDiff, scoreLimit);
@@ -611,6 +665,8 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
     
     // Return based on the best and second-best scores so far.
     if ((unsigned)bestScore <= maxK) {
+        result->mapq[0] = result->mapq[1] = computeMAPQ(probabilityOfAllPairs, probabilityOfBestPair);
+
         if (bestScore + realConfDiff <= secondBestScore) {
             for (int i = 0; i < 2; i++) {
                 result->status[i] = bestIsMulti[i] ? MultipleHits : SingleHit;
@@ -634,16 +690,18 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
             unsigned second = INFINITE_SCORE;
             unsigned bestLoc = 0xFFFFFFFF;
             bool bestRC;
+            int bestMapq = 0;
             for (int rc = 0; rc < 2; rc++) {
                 for (int i = 0; i < bucketLocations[r][rc].size(); i++) {
                     unsigned loc = bucketLocations[r][rc][i];
                     Bucket *bucket = getBucket(r, rc, loc);
                     if (bucket->allScored()) {
-                        if (bucket->score < best) {
+                        if (bucket->score < best || bucket->score == best && bucket->matchProbability > mapqToProbability(bestMapq)) {
                             second = best;
                             best = bucket->score;
                             bestLoc = loc + bucket->bestOffset;
                             bestRC = rc != 0;
+                            bestMapq = computeMAPQ(probabilityOfAllSingles, bucket->matchProbability);
                         } else if (bucket->score < second) {
                             second = bucket->score;
                         }
@@ -706,7 +764,7 @@ void SmarterPairedEndAligner::scoreBucket(
 
 
 void SmarterPairedEndAligner::scoreBucketMate(
-    Bucket *bucket, int readId, bool isRC, unsigned location, Read *mate, int scoreLimit)
+    Bucket *bucket, int readId, bool isRC, unsigned location, Read *mate, int scoreLimit, int *mateMapq)
 {
     _ASSERT(scoreLimit >= 0);
     if (bucket->mateStatus == UnknownAlignment) {
@@ -715,7 +773,7 @@ void SmarterPairedEndAligner::scoreBucketMate(
         mateAligner->setReadId(1 - readId);
         bool mateRC;
         bucket->mateStatus = mateAligner->AlignRead(
-            mate, &bucket->mateLocation, &mateRC, &bucket->mateScore, &bucket->mateMapq, maxSpacing + BUCKET_SIZE, location, !isRC);
+            mate, &bucket->mateLocation, &mateRC, &bucket->mateScore, mateMapq, maxSpacing + BUCKET_SIZE, location, !isRC);
         
 /*
         // Search for the mate independently in two intervals, at minSpacing/maxSpacing before

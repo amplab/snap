@@ -311,8 +311,6 @@ private:
     void fillHitsFound(unsigned maxHitsToGet, int *multiHitsFound, 
                        unsigned *multiHitLocations, bool *multiHitRCs, int *multiHitScores);
 
-    static inline int computeMAPQ(double probabilityOfAllCandidates, double probabilityOfBestCandidate);
-
     const Genome *genome;
     GenomeIndex *genomeIndex;
     unsigned seedLen;

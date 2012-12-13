@@ -30,6 +30,7 @@ Revision History:
 #include "Compat.h"
 #include "LandauVishkin.h"
 #include "BigAlloc.h"
+#include "mapq.h"
 
 using std::min;
 
@@ -683,6 +684,7 @@ Return Value:
             __max(lowestPossibleRCScoreOfAnyUnseenLocation, 
                   nRCSeedsApplied / mostRCSeedsContainingAnyParticularBase);
     }
+
 #ifdef TRACE_ALIGNER
     printf("Lowest possible scores for unseen locations: %d (fwd), %d (RC)\n",
         lowestPossibleScoreOfAnyUnseenLocation,
@@ -1440,16 +1442,4 @@ BaseAligner::incrementWeight(HashTableElement *element)
     element->weightPrev = weightLists[element->weight].weightPrev;
     element->weightNext->weightPrev = element;
     element->weightPrev->weightNext = element;
-}
-
-    int
-BaseAligner::computeMAPQ(double probabilityOfAllCandidates, double probabilityOfBestCandidate)
-{
-    _ASSERT(probabilityOfAllCandidates >= probabilityOfBestCandidate);
-    _ASSERT(probabilityOfBestCandidate >= 0.0);
-    double correctnessProbability = probabilityOfBestCandidate / probabilityOfAllCandidates;
-    if (correctnessProbability >= 1) {
-        return 70;
-    }
-    return min(70,(int)(-10 * log10(1 - correctnessProbability)));
 }

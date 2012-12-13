@@ -91,7 +91,6 @@ private:
         unsigned short minPairScore;     // Lower bound on the bucket's pair score (if not known)
         AlignmentResult mateStatus;      // If we've searched for a mate nearby, this is the result
         int mateScore;                   // Score of the mate found nearby, if any
-        int mateMapq;                    // mapping quality of the mate
         unsigned mateLocation;           // Location of the mate found nearby, if any
         
         inline bool allScored() { return scored == found; }
@@ -134,7 +133,7 @@ private:
     void scoreBucket(Bucket *bucket, int readId, bool isRC, unsigned location,
                      const char *readData, const char *qualityString, int readLen, int scoreLimit, double *matchProbability);
 
-    void scoreBucketMate(Bucket *bucket, int readId, bool isRC, unsigned location, Read *mate, int scoreLimit);
+    void scoreBucketMate(Bucket *bucket, int readId, bool isRC, unsigned location, Read *mate, int scoreLimit, int *mateMapq);
     
     // Absolute difference between two unsigned values.
     inline unsigned distance(unsigned a, unsigned b) { return (a > b) ? a - b : b - a; }

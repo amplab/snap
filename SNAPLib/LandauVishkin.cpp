@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "Compat.h"
 #include "LandauVishkin.h"
+#include "mapq.h"
 
 using std::make_pair;
 using std::min;
@@ -599,6 +600,8 @@ LandauVishkin::initializeProbabilitiesToPhredPlus33()
     for (int i = 93 + 33 + 1; i < 256; i++) {
         phredToProbability[i] = mutationRate;   // This isn't a sensible Phred score
     }
+
+    initializeMapqTables();
 }
 
 double *LandauVishkin::phredToProbability = NULL;

@@ -163,6 +163,7 @@
     <ClInclude Include="hybridaligner.h" />
     <ClInclude Include="IntersectingAligner.h" />
     <ClInclude Include="LandauVishkin.h" />
+    <ClInclude Include="mapq.h" />
     <ClInclude Include="Mutation.h" />
     <ClInclude Include="Mutator.h" />
     <ClInclude Include="OldAligner.h" />
@@ -204,6 +205,7 @@
     <ClCompile Include="hybridaligner.cpp" />
     <ClCompile Include="IntersectingAligner.cpp" />
     <ClCompile Include="LandauVishkin.cpp" />
+    <ClCompile Include="mapq.cpp" />
     <ClCompile Include="Mutator.cpp" />
     <ClCompile Include="OldAligner.cpp" />
     <ClCompile Include="PairedAligner.cpp" />
