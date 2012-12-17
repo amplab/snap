@@ -73,12 +73,12 @@ public:
         // Methods to read the genome.
         //
         inline const char *getSubstring(size_t offset, size_t lengthNeeded) const {
-            if (offset > nBases || offset + lengthNeeded > nBases) {
+            if (offset > nBases || offset + lengthNeeded > nBases + N_PADDING) {
                 // The first part of the test is for the unsigned version of a negative offset.
                 return NULL;
             }
 
-            _ASSERT(offset >= minOffset && offset + lengthNeeded <= maxOffset); // If the caller asks for a genome slice, it's only legal to look within it.
+            _ASSERT(offset >= minOffset && offset + lengthNeeded <= maxOffset + N_PADDING); // If the caller asks for a genome slice, it's only legal to look within it.
 
             //
             // See if the substring crosses a piece (chromosome) boundary.  If so, disallow it.
@@ -143,9 +143,11 @@ public:
         Genome *copyGenomeOneSex(bool useY, bool useM) const {return copy(!useY,useY,useM);}
 private:
 
+        static const int N_PADDING = 100; // Padding to add on either end of the genome to allow substring reads past it
+
         //
         // The actual genome.
-        char        *bases;
+        char        *bases;       // Will point to offset N_PADDING in an array of nBases + 2 * N_PADDING
         unsigned     nBases;
         unsigned     maxBases;
 

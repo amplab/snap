@@ -740,11 +740,11 @@ void SmarterPairedEndAligner::scoreBucket(
         while (_BitScanForward64(&offset, unscored)) {
             unscored ^= ((_int64)1 << offset);
             unsigned score = INFINITE_SCORE;
-            const char *refData = index->getGenome()->getSubstring(location + offset, readLen);
+            const char *refData = index->getGenome()->getSubstring(location + offset, readLen + MAX_K);
             if (refData != NULL) {
                 TRACE("  Genome: %.*s\n  Read:   %.*s\n", readLen, refData, readLen, readData);
                 _uint64 cacheKey = ((_uint64) readId) << 33 | ((_uint64) isRC) << 32 | (location + offset);
-                score = lv.computeEditDistance(refData, readLen, readData, qualityString, readLen, scoreLimit, matchProbability, cacheKey);
+                score = lv.computeEditDistance(refData, readLen + MAX_K, readData, qualityString, readLen, scoreLimit, matchProbability, cacheKey);
                 TRACE("  Called LV at %lu with limit %d: %d\n", location + offset, scoreLimit, score);
                 if (score < 0) {
                     score = INFINITE_SCORE;
