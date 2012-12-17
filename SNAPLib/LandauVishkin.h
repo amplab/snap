@@ -65,6 +65,7 @@ private:
 
     static double *indelProbabilities;  // Maps indels by length to probability of occurance.
     static double *phredToProbability;  // Maps ASCII phred character to probability of error, including 
+    static double *perfectMatchProbability; // Probability that a read of this length has no mutations
 };
 
 

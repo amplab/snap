@@ -27,6 +27,8 @@ Revision History:
 #include "Compat.h"
 #include "Tables.h"
 
+const int MaxReadLength = 20000;
+
 class Read;
 
 enum ReadClippingType {NoClipping, ClipFront, ClipBack, ClipFrontAndBack};

@@ -728,7 +728,7 @@ Return Value:
                         *result = SingleHit;
                     }
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate);
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore);
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
@@ -738,7 +738,7 @@ Return Value:
                     return true;
                 } else {
                     *result = MultipleHits;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate);
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore);
                     return true;
                 }
             }
@@ -753,7 +753,7 @@ Return Value:
                 if (bestScore + realConfDiff <= secondBestScore && bestScore <= maxK) {
                     *result = SingleHit;
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate);
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore);
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
@@ -941,7 +941,7 @@ Return Value:
                 // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
                 // report it as NotFound
                 *result = (nSeedsApplied == 0 && nRCSeedsApplied == 0) ? MultipleHits : NotFound;
-                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate);
+                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore);
                 return true;
             }
 
@@ -950,7 +950,7 @@ Return Value:
                 *result = SingleHit;
                 *singleHitGenomeLocation = bestScoreGenomeLocation;
                 *finalScore = bestScore;
-                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate);
+                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore);
                 return true;
             }
 

@@ -665,7 +665,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
     
     // Return based on the best and second-best scores so far.
     if ((unsigned)bestScore <= maxK) {
-        result->mapq[0] = result->mapq[1] = computeMAPQ(probabilityOfAllPairs, probabilityOfBestPair);
+        result->mapq[0] = result->mapq[1] = computeMAPQ(probabilityOfAllPairs, probabilityOfBestPair, bestScore);
 
         if (bestScore + realConfDiff <= secondBestScore) {
             for (int i = 0; i < 2; i++) {
@@ -701,7 +701,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                             best = bucket->score;
                             bestLoc = loc + bucket->bestOffset;
                             bestRC = rc != 0;
-                            bestMapq = computeMAPQ(probabilityOfAllSingles, bucket->matchProbability);
+                            bestMapq = computeMAPQ(probabilityOfAllSingles, bucket->matchProbability, bestScore);
                         } else if (bucket->score < second) {
                             second = bucket->score;
                         }

@@ -2,6 +2,7 @@
 #include "Compat.h"
 #include "LandauVishkin.h"
 #include "mapq.h"
+#include "Read.h"
 
 using std::make_pair;
 using std::min;
@@ -53,7 +54,12 @@ int LandauVishkin::computeEditDistance(
         }
     }
     if (NULL != matchProbability) {
-        *matchProbability = 1.0;    // We'll reduce it as we go.
+        //
+        // Start with the probability that a read actually contains no differences from the
+        // reference.  We'll just use the mutation rate here; we could do base quality, but
+        // that would involve doing a multiplication for each base.  This is close enough.
+        //
+        *matchProbability = perfectMatchProbability[textLen];    // XXX: This depends on read length
     }
     const char* p = pattern;
     const char* t = text;
@@ -123,7 +129,7 @@ done1:
 
             if (best == patternLen) {
                 if (NULL != matchProbability) {
-                    _ASSERT(*matchProbability == 1.0);
+                    _ASSERT(*matchProbability == perfectMatchProbability[textLen]);
                     //
                     // We're done.  Compute the match probability.
                     //
@@ -141,7 +147,7 @@ done1:
                         // Trace backward to build up the CIGAR string.  We do this by filling in the backtraceAction,
                         // backtraceMatched and backtraceD arrays, then going through them in the forward direction to
                         // figure out our string.
-                        *matchProbability = 1.0;
+                        *matchProbability = perfectMatchProbability[textLen];
                         int curD = d;
                         for (int curE = e; curE >= 1; curE--) {
                             backtraceAction[curE] = A[curE][MAX_K+curD];
@@ -190,6 +196,7 @@ done1:
                             curE++;
                         }
                     } // if straightMismatches != e (i.e., the indel case)
+/*BJB - cheezy match probability based on edit distance*/ if (0 == e) *matchProbability = perfectMatchProbability[textLen]; else {*matchProbability = 1.0; for (int i = 0; i < e; i++) *matchProbability *= (1.0 - perfectMatchProbability[textLen]);}
                     if (cache != NULL && cacheKey != 0) {
                         cache->put(cacheKey, LVResult(k, e, *matchProbability));
                     } 
@@ -601,8 +608,16 @@ LandauVishkin::initializeProbabilitiesToPhredPlus33()
         phredToProbability[i] = mutationRate;   // This isn't a sensible Phred score
     }
 
+    _ASSERT(NULL == perfectMatchProbability);
+    perfectMatchProbability = new double[MaxReadLength+1];
+    perfectMatchProbability[0] = 1.0;
+    for (unsigned i = 1; i <= MaxReadLength; i++) {
+        perfectMatchProbability[i] = perfectMatchProbability[i - 1] * (1.0 - mutationRate);
+    }
+
     initializeMapqTables();
 }
 
 double *LandauVishkin::phredToProbability = NULL;
 double *LandauVishkin::indelProbabilities = NULL;
+double *LandauVishkin::perfectMatchProbability = NULL;

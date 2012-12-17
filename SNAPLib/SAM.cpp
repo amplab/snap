@@ -101,7 +101,7 @@ SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBuffe
 
     size_t bytesConsumed = snprintf(header, headerBufferSize, "@HD\tVN:1.4\tSO:%s\n%s\n@PG\tID:SNAP\tPN:SNAP\tCL:%s\tVN:%s\n", 
 		sorted ? "coordinate" : "unsorted",
-        rgLine == NULL ? "@RG\tID:FASTQ\tSM:sample" : rgLine,
+        (rgLine == NULL || !strcmp(rgLine,"")) ? "@RG\tID:FASTQ\tSM:sample" : rgLine,
         commandLine,version);
 
 	delete [] commandLine;
@@ -481,9 +481,9 @@ bool SimpleSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult 
     }
 
     if (result->location[0] > result->location[1]) {
-        write(read1, result->status[1], result->mapq[1], result->location[1], result->isRC[1], true, true,
+        write(read1, result->status[1], result->mapq[1], result->location[1], result->isRC[1], true, false,
               read0, result->status[0], result->location[0], result->isRC[0]);
-        write(read0, result->status[0], result->mapq[0], result->location[0], result->isRC[0], true, false,
+        write(read0, result->status[0], result->mapq[0], result->location[0], result->isRC[0], true, true,
               read1, result->status[1], result->location[1], result->isRC[1]);
     } else {
         write(read0, result->status[0], result->mapq[0], result->location[0], result->isRC[0], true, true,
@@ -660,13 +660,13 @@ ThreadSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *resu
         }
     }
 
-    bool writesFit = generateSAMText(reads[first], result->status[first], result->mapq[first], result->location[first], result->isRC[first], useM, true, true,
+    bool writesFit = generateSAMText(reads[first], result->status[first], result->mapq[first], result->location[first], result->isRC[first], useM, true, first == 0,
                                      reads[second], result->status[second], result->location[second], result->isRC[second],
                         genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace,&sizeUsed[first],
                         idLengths[first]);
 
     if (writesFit) {
-        writesFit = generateSAMText(reads[second], result->status[second], result->mapq[second], result->location[second], result->isRC[second], useM, true, false,
+        writesFit = generateSAMText(reads[second], result->status[second], result->mapq[second], result->location[second], result->isRC[second], useM, true, second == 0,
                                     reads[first], result->status[first], result->location[first], result->isRC[first],
                         genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace + sizeUsed[first],remainingBufferSpace-sizeUsed[first],&sizeUsed[second],
                         idLengths[second]);
@@ -677,11 +677,11 @@ ThreadSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *resu
             return false;
         }
 
-        if (!generateSAMText(reads[first], result->status[first], result->mapq[first], result->location[first], result->isRC[first], useM, true, true,
+        if (!generateSAMText(reads[first], result->status[first], result->mapq[first], result->location[first], result->isRC[first], useM, true, first == 0,
                              reads[second], result->status[second], result->location[second], result->isRC[second],
                 genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace,&sizeUsed[first],
                 idLengths[first]) ||
-            !generateSAMText(reads[second], result->status[second] ,result->mapq[second], result->location[second], result->isRC[second], useM, true, false,
+            !generateSAMText(reads[second], result->status[second] ,result->mapq[second], result->location[second], result->isRC[second], useM, true, second == 0,
                              reads[first], result->status[first], result->location[first], result->isRC[first],
                 genome, &lv, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace + sizeUsed[first],remainingBufferSpace-sizeUsed[first],&sizeUsed[second],
                 idLengths[second])) {
