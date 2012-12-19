@@ -93,7 +93,7 @@ Arguments:
         ownLandauVishkin = false;
     }
 
-    unsigned nCandidates = maxHitsToConsider * (maxReadSize - seedLen + 1) * 2;  // *2 is for reverse complement
+    unsigned nCandidates = __min(maxHitsToConsider * (maxReadSize - seedLen + 1) * 2, 200000);  // *2 is for reverse complement
     candidates = (Candidate *)BigAlloc(sizeof(Candidate) * nCandidates);
     for (unsigned i = 0 ; i < nCandidates; i++) {
         candidates[i].init();
@@ -795,9 +795,32 @@ Return Value:
     
                 unsigned score = -1;
                 double matchProbability;
+                unsigned readDataLength = elementToScore->isRC ? rcRead->getDataLength() : read->getDataLength();
+                unsigned genomeDataLength = readDataLength + MAX_K; // Leave extra space in case the read has deletions
+                const char *data = genome->getSubstring(genomeLocation, genomeDataLength);
+                if (NULL == data) {
+                    //
+                    // We're up against the end of a chromosome.  Reduce the extra space enough that it isn't too
+                    // long.  We're willing to reduce it to less than the length of a read, because the read could
+                    // but up against the end of the chromosome and have insertions in it.
+                    //
+                    const Genome::Piece *piece = genome->getPieceAtLocation(genomeLocation);
+                    const Genome::Piece *nextPiece = genome->getPieceAtLocation(genomeLocation + readDataLength + MAX_K);
+                    _ASSERT(NULL != piece && piece->beginningOffset <= genomeOffset && piece != nextPiece);
+                    unsigned endOffset;
+                    if (NULL != nextPiece) {
+                        endOffset = nextPiece->beginningOffset;
+                    } else {
+                        endOffset = genome->getCountOfBases();
+                    }
+                    genomeDataLength = endOffset - genomeLocation;
+                    if (genomeDataLength >= readDataLength - MAX_K) {
+                        data = genome->getSubstring(genomeLocation, genomeDataLength);
+                        _ASSERT(NULL != data);
+                    }
+                }
                 if (elementToScore->isRC) {
-                    const char *data = genome->getSubstring(genomeLocation, rcRead->getDataLength() + MAX_K);
-                    if (data != NULL) {
+                     if (data != NULL) {
 #ifdef USE_NEW_DISTANCE
                         score = bsd->compute(data, rcRead->getData(), rcRead->getDataLength(), scoreLimit);
 #else
@@ -806,7 +829,7 @@ Return Value:
                             cacheKey = ((_uint64) readId) << 33 | ((_uint64) elementToScore->isRC) << 32 | genomeLocation;
                         }
                         score = landauVishkin->computeEditDistance(
-                            data, rcRead->getDataLength() + MAX_K,
+                            data, genomeDataLength,
                             rcRead->getData(), rcRead->getQuality(), rcRead->getDataLength(),
                             scoreLimit, &matchProbability, cacheKey);
                         if (-1 != score) {
@@ -818,7 +841,6 @@ Return Value:
                     printf("Computing distance at %u (RC) with limit %d: %d\n", genomeLocation, scoreLimit, score);
 #endif
                 } else {
-                    const char *data = genome->getSubstring(genomeLocation, read->getDataLength() + MAX_K);
                     if (data != NULL) {
 #ifdef USE_NEW_DISTANCE
                         score = bsd->compute(data, read->getData(), read->getDataLength(), scoreLimit);
@@ -829,7 +851,7 @@ Return Value:
                         }
 
                         score = landauVishkin->computeEditDistance(
-                            data, read->getDataLength() + MAX_K,
+                            data, genomeDataLength,
                             read->getData(), read->getQuality(), read->getDataLength(),
                             scoreLimit, &matchProbability, cacheKey);
 
@@ -919,8 +941,10 @@ Return Value:
                             scoreLimit = bestScore - 1;
                         }
                     }
+                    // Make sure that the score limit is 
                     // always search for something at least one worse than the best we found to drive the denominator of the MAPQ computation
-                    scoreLimit = __min(__max(scoreLimit,bestScore+1),maxK); 
+                    scoreLimit = __min(__max(scoreLimit,bestScore+2),maxK); 
+
                 }
             }   // While candidates exist in the element
         }   // If the element could possibly affect the result
