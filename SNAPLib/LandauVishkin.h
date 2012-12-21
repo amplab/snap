@@ -28,6 +28,17 @@ public:
             double *matchProbability,
             _uint64 cacheKey = 0);
 
+    // Version that does not requre match probability and quality string
+    inline int computeEditDistance(
+            const char* text,
+            int textLen,
+            const char* pattern,
+            int patternLen,
+            int k)
+    {
+        return computeEditDistance(text, textLen, pattern, NULL, patternLen, k, NULL);
+    }
+
     // Clear the cache of distances computed.
     void clearCache();
 
