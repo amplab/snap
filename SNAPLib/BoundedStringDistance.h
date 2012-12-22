@@ -222,12 +222,12 @@ private:
                 unsigned long zeroes;
                 CountTrailingZeroes(x, zeroes);
                 zeroes >>= 3;
-                return __min((p - pattern) + zeroes, patternEnd - pattern);
+                return (int)(__min((p - pattern) + zeroes, patternEnd - pattern));
             }
             p += 8;
             t += 8;
         }
-        return patternEnd - pattern;
+        return (int)(patternEnd - pattern);
     }
 
     /**
