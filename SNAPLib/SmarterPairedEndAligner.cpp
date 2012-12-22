@@ -363,6 +363,8 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
     
     int nextSeed[2] = {0, 0};        // Which seed to try next on each read
     int wrapCount[2] = {0, 0};       // How many times we've wraped around on each read
+    int firstPassNotSkippedSeeds[2] = {0, 0};
+    unsigned smallestSkippedSeed[2] = {0xffffffff, 0xffffffff};
 
     int scoreLimit = maxK + confDiff + 1;
 
@@ -400,6 +402,9 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                 for (int rc = 0; rc < 2; rc++) {
                     seedHits[r][rc] += nHits[rc];
                     if (nHits[rc] <= maxHits) {
+                        if (wrapCount[rc] == 0) {
+                            firstPassNotSkippedSeeds[rc]++;
+                        }
                         for (unsigned i = 0; i < nHits[rc]; i++) {
                             // Get the true genome location of the read and mark the hit in its bucket.
                             unsigned location = hits[rc][i] - (rc ? (readLen[r] - seedLen - seedPos) : seedPos);
@@ -416,6 +421,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                             disjointSeedsUsed[r][rc]++;
                         }
                     } else {
+                        smallestSkippedSeed[rc] = __min(smallestSkippedSeed[rc], nHits[rc]);
                         popularSeeds[r][rc]++;
                         totalPopularSeeds++;
                     }
@@ -665,7 +671,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
     
     // Return based on the best and second-best scores so far.
     if ((unsigned)bestScore <= maxK) {
-        result->mapq[0] = result->mapq[1] = computeMAPQ(probabilityOfAllPairs, probabilityOfBestPair, bestScore);
+        result->mapq[0] = result->mapq[1] = computeMAPQ(probabilityOfAllPairs, probabilityOfBestPair, bestScore, firstPassNotSkippedSeeds[0], firstPassNotSkippedSeeds[1], smallestSkippedSeed[0], smallestSkippedSeed[0]);
 
         if (bestScore + realConfDiff <= secondBestScore) {
             for (int i = 0; i < 2; i++) {
@@ -701,7 +707,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                             best = bucket->score;
                             bestLoc = loc + bucket->bestOffset;
                             bestRC = rc != 0;
-                            bestMapq = computeMAPQ(probabilityOfAllSingles, bucket->matchProbability, bestScore);
+                            bestMapq = computeMAPQ(probabilityOfAllSingles, bucket->matchProbability, bestScore, firstPassNotSkippedSeeds[0], firstPassNotSkippedSeeds[1], smallestSkippedSeed[0], smallestSkippedSeed[0]);
                         } else if (bucket->score < second) {
                             second = bucket->score;
                         }

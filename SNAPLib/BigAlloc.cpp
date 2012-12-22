@@ -154,7 +154,12 @@ Return Value:
         DWORD assertPrivilegeError = GetLastError();
 
         size_t largePageSizeToAllocate = ((virtualAllocSize + largePageSize - 1) / largePageSize) * largePageSize;
-        allocatedMemory = (BYTE *)VirtualAlloc(0,largePageSizeToAllocate,commitFlag|MEM_RESERVE|MEM_LARGE_PAGES,PAGE_READWRITE);
+#ifdef  _DEBUG
+#define LARGE_PAGE_FLAG 0   // Don't use MEM_LARGE_PAGES in the debug build, because it slows down memory allocation so much.
+#else   // _DEBUG
+#define LARGE_PAGE_FLAG MEM_LARGE_PAGES
+#endif  // _DEBUG
+        allocatedMemory = (BYTE *)VirtualAlloc(0,largePageSizeToAllocate,commitFlag|MEM_RESERVE|LARGE_PAGE_FLAG,PAGE_READWRITE);
 
         if (NULL != allocatedMemory) {
             if (NULL != sizeAllocated) {
