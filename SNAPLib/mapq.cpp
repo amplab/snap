@@ -22,6 +22,7 @@ Revision History:
 --*/
 
 #include "stdafx.h"
+#include "Compat.h"
 #include "mapq.h"
 
 const int maxMAPQ = 70;

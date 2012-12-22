@@ -79,9 +79,11 @@ int LandauVishkin::computeEditDistance(
 done1:
     if (L[0][MAX_K] == end) {
         int result = (patternLen > end ? patternLen - end : 0); // Could need some deletions at the end
-        *matchProbability = perfectMatchProbability[patternLen];    // Becuase the chance of a perfect match is < 1
-        if (cache != NULL && cacheKey != 0) {
-            cache->put(cacheKey, LVResult(k, result, indelProbabilities[result]));
+        if (NULL != matchProbability) {
+            *matchProbability = perfectMatchProbability[patternLen];    // Becuase the chance of a perfect match is < 1
+            if (cache != NULL && cacheKey != 0) {
+                cache->put(cacheKey, LVResult(k, result, indelProbabilities[result]));
+            }
         }
         return result;
     }

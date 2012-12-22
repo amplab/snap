@@ -7,6 +7,7 @@ static const Tables tables;
 const char *COMPLEMENT = tables.getComplement();
 const char *IS_N = tables.getIsN();
 const int  *BASE_VALUE = tables.getBaseValue();
+const int  *BASE_VALUE_NO_N = tables.getBaseValueNoN();
 const char *VALUE_BASE = tables.getValueBase();
 const char *PACKED_BASE_VALUE = tables.getPackedBaseValue();
 const char *PACKED_QUALITY_MASK = tables.getPackedQualityMask();
@@ -42,6 +43,13 @@ Tables::Tables()
     valueBase[2] = 'C';
     valueBase[3] = 'T';
     valueBase[4] = 'N';
+
+    // Version that maps N's value to 0 instead of 4
+    memset(baseValueNoN, 0, sizeof(baseValueNoN));
+    baseValueNoN['A'] = 0;
+    baseValueNoN['G'] = 1;
+    baseValueNoN['C'] = 2;
+    baseValueNoN['T'] = 3;
 
     // packed base tables
     for (int i = 0; i < 256; i++) {
