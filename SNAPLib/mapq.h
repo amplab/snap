@@ -43,10 +43,10 @@ inline int computeMAPQ(double probabilityOfAllCandidates, double probabilityOfBe
     //
 
     double probabilityOfSkippedLocations = 0.0;
-    if (0 != firstPassSeedsNotSkipped && 0xffffffff != smallestSkippedSeed) {
+    if (0xffffffff != smallestSkippedSeed) {
         probabilityOfSkippedLocations = pow(.001, firstPassSeedsNotSkipped) * smallestSkippedSeed;
     }
-    if (0 != firstPassRCSeedsNotSkipped && 0xffffffff != smallestSkippedRCSeed) {
+    if (0xffffffff != smallestSkippedRCSeed) {
         probabilityOfSkippedLocations += pow(.001, firstPassRCSeedsNotSkipped) * smallestSkippedRCSeed;
     }
 
