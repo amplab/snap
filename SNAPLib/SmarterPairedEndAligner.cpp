@@ -215,7 +215,7 @@ InterlockedAdd64AndReturnNewValue(&callsToMateAligner, 1);
                 result->location[1-r] = loc1;
                 result->isRC[1-r] = rc1;
                 result->score[1-r] = score1;
-                result->mapq[1-r] = mapq1;
+                result->mapq[1-r] = __min(mapq1, mapq0);     // Never let the (locally aligned) mate be more confident than the freely aligned end
 done();
                 return;
             } else if(status1 == NotFound) {

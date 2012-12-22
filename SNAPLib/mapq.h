@@ -27,7 +27,15 @@ void initializeMapqTables();
 
 double mapqToProbability(int mapq);
 
-inline int computeMAPQ(double probabilityOfAllCandidates, double probabilityOfBestCandidate, int score, int firstPassSeedsNotSkipped, int firstPassRCSeedsNotSkipped, unsigned smallestSkippedSeed, unsigned smallestSkippedRCSeed)
+inline int computeMAPQ(
+    double      probabilityOfAllCandidates, 
+    double      probabilityOfBestCandidate, 
+    int         score, 
+    int         firstPassSeedsNotSkipped, 
+    int         firstPassRCSeedsNotSkipped, 
+    unsigned    smallestSkippedSeed, 
+    unsigned    smallestSkippedRCSeed
+    )
 {
     _ASSERT(probabilityOfAllCandidates >= probabilityOfBestCandidate);
     _ASSERT(probabilityOfBestCandidate >= 0.0);
@@ -58,14 +66,15 @@ inline int computeMAPQ(double probabilityOfAllCandidates, double probabilityOfBe
         baseMAPQ = __min(70,(int)(-10 * log10(1 - correctnessProbability)));
     }
 
-    return baseMAPQ;
     //
-    // Apply a penalty based on the absolute difference between the read and the place it matched, as expressed
-    // by its score.
+    // If the score is higher than the number of non-skipped seeds in the first pass, then there's a chance
+    // that we didn't find genome locations with a score at least as low as what we found because of just
+    // not having any matching seeds.  Decrement mapq when this happens.
     //
-    if (3 * score >= baseMAPQ) {
-        return 0;
-    } else {
-        return baseMAPQ - 3 * score;
+    if (score > __max(firstPassSeedsNotSkipped, firstPassRCSeedsNotSkipped)) {
+        baseMAPQ = __max(0,baseMAPQ - 10 * (score - __max(firstPassSeedsNotSkipped, firstPassRCSeedsNotSkipped)));
     }
+
+    return baseMAPQ;
+
 }
