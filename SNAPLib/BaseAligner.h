@@ -288,6 +288,10 @@ private:
     unsigned lvScoresAfterBestFound;
     double probabilityOfAllCandidates;
     double probabilityOfBestCandidate;
+    int firstPassSeedsNotSkipped;
+    int firstPassRCSeedsNotSkipped;
+    unsigned smallestSkippedSeed;
+    unsigned smallestSkippedRCSeed;
 
         bool
     score(
