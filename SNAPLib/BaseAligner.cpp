@@ -225,8 +225,10 @@ Return Value:
     //
     int unusedMapq;
     int unusedFinalScore;
-    firstPassSeedsNotSkipped = 0;
-    firstPassRCSeedsNotSkipped = 0;
+    bestPassSeedsNotSkipped = 0;
+    bestPassRCSeedsNotSkipped = 0;
+	thisPassSeedsNotSkipped = 0;
+	thisPassRCSeedsNotSkipped = 0;
     smallestSkippedSeed = 0xffffffff;
     smallestSkippedRCSeed = 0xffffffff;
 
@@ -364,6 +366,11 @@ Return Value:
             // a seed length of 20 we'd want to take 0, 10, 5, 15, 2, 7, 12, 17.  To make the computation
             // fast, we use use a table lookup.
             //
+			bestPassSeedsNotSkipped = __max(bestPassSeedsNotSkipped, thisPassSeedsNotSkipped);
+			bestPassRCSeedsNotSkipped = __max(bestPassRCSeedsNotSkipped, thisPassRCSeedsNotSkipped);
+			thisPassSeedsNotSkipped = 0;
+			thisPassRCSeedsNotSkipped = 0;
+
             wrapCount++;
             if (wrapCount >= seedLen) {
                 //
@@ -476,7 +483,7 @@ Return Value:
                 smallestSkippedSeed = __min(nHits, smallestSkippedSeed);
             } else {
                 if (0 == wrapCount) {
-                    firstPassSeedsNotSkipped++;
+                    thisPassSeedsNotSkipped++;
                 }
                 //
                 // Update the candidates list with any hits from this seed.  If lowest possible score of any unseen location is
@@ -519,7 +526,7 @@ Return Value:
                 smallestSkippedRCSeed = __min(nRCHits, smallestSkippedRCSeed);
             } else {
                 if (0 == wrapCount) {
-                    firstPassRCSeedsNotSkipped++;
+                    thisPassRCSeedsNotSkipped++;
                 }
                 //
                 // The RC seed is at offset ReadSize - SeedSize - seed offset in the RC seed.
@@ -774,7 +781,15 @@ Return Value:
                         *result = SingleHit;
                     }
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed);
+                    *mapq = computeMAPQ(
+								probabilityOfAllCandidates, 
+								probabilityOfBestCandidate, 
+								bestScore, 
+								__max(thisPassSeedsNotSkipped, bestPassSeedsNotSkipped),
+								__max(thisPassRCSeedsNotSkipped,  bestPassRCSeedsNotSkipped),
+								smallestSkippedSeed,  
+								smallestSkippedRCSeed								
+								);
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
@@ -784,7 +799,15 @@ Return Value:
                     return true;
                 } else {
                     *result = MultipleHits;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed);
+					*mapq = computeMAPQ(
+								probabilityOfAllCandidates, 
+								probabilityOfBestCandidate, 
+								bestScore, 
+								__max(thisPassSeedsNotSkipped, bestPassSeedsNotSkipped),
+								__max(thisPassRCSeedsNotSkipped,  bestPassRCSeedsNotSkipped),
+								smallestSkippedSeed,  
+								smallestSkippedRCSeed								
+								);
                     return true;
                 }
             }
@@ -799,7 +822,15 @@ Return Value:
                 if (bestScore + realConfDiff <= secondBestScore && bestScore <= maxK) {
                     *result = SingleHit;
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed);
+                    *mapq = computeMAPQ(
+								probabilityOfAllCandidates, 
+								probabilityOfBestCandidate, 
+								bestScore, 
+								__max(thisPassSeedsNotSkipped, bestPassSeedsNotSkipped),
+								__max(thisPassRCSeedsNotSkipped,  bestPassRCSeedsNotSkipped),
+								smallestSkippedSeed,  
+								smallestSkippedRCSeed								
+								);
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
@@ -1015,7 +1046,15 @@ Return Value:
                 // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
                 // report it as NotFound
                 *result = (nSeedsApplied == 0 && nRCSeedsApplied == 0) ? MultipleHits : NotFound;
-                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed);
+                *mapq = computeMAPQ(
+							probabilityOfAllCandidates, 
+							probabilityOfBestCandidate, 
+							bestScore, 
+							__max(thisPassSeedsNotSkipped, bestPassSeedsNotSkipped),
+							__max(thisPassRCSeedsNotSkipped,  bestPassRCSeedsNotSkipped),
+							smallestSkippedSeed,  
+							smallestSkippedRCSeed								
+							);
                 return true;
             }
 
@@ -1024,7 +1063,15 @@ Return Value:
                 *result = SingleHit;
                 *singleHitGenomeLocation = bestScoreGenomeLocation;
                 *finalScore = bestScore;
-                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed);
+                *mapq = computeMAPQ(
+							probabilityOfAllCandidates, 
+							probabilityOfBestCandidate, 
+							bestScore, 
+							__max(thisPassSeedsNotSkipped, bestPassSeedsNotSkipped),
+							__max(thisPassRCSeedsNotSkipped,  bestPassRCSeedsNotSkipped),
+							smallestSkippedSeed,  
+							smallestSkippedRCSeed								
+							);
                 return true;
             }
 

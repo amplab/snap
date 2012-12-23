@@ -23,16 +23,23 @@ Revision History:
 
 #pragma once
 
+static const double GenericBaseDifferenceProbability = .001;	// The assumed probability of a base differing from the reference, given we don't know it's phred score.
+
 void initializeMapqTables();
 
 double mapqToProbability(int mapq);
+const int maxSeedsForUnseenProbability = 10;	// The chance is effectively 0 by here.
+extern double firstOrderUnseenLocationProbability[];	// Chance that there are exactly nSeeds differences, one in each seed
+
+double factorial(int n);		// Shouldn't this be in the C library?
+
 
 inline int computeMAPQ(
     double      probabilityOfAllCandidates, 
     double      probabilityOfBestCandidate, 
     int         score, 
-    int         firstPassSeedsNotSkipped, 
-    int         firstPassRCSeedsNotSkipped, 
+    int         bestPassSeedsNotSkipped, 
+    int         bestPassRCSeedsNotSkipped, 
     unsigned    smallestSkippedSeed, 
     unsigned    smallestSkippedRCSeed
     )
@@ -52,13 +59,23 @@ inline int computeMAPQ(
 
     double probabilityOfSkippedLocations = 0.0;
     if (0xffffffff != smallestSkippedSeed) {
-        probabilityOfSkippedLocations = pow(.001, firstPassSeedsNotSkipped) * smallestSkippedSeed;
+        probabilityOfSkippedLocations = pow(.001, bestPassSeedsNotSkipped) * smallestSkippedSeed;
     }
     if (0xffffffff != smallestSkippedRCSeed) {
-        probabilityOfSkippedLocations += pow(.001, firstPassRCSeedsNotSkipped) * smallestSkippedRCSeed;
+        probabilityOfSkippedLocations += pow(.001, bestPassRCSeedsNotSkipped) * smallestSkippedRCSeed;
     }
 
-    double correctnessProbability = probabilityOfBestCandidate / (probabilityOfAllCandidates + probabilityOfSkippedLocations);
+	//
+	// Because of the basic SNAP algorithm, there's always a chance that we never saw the correct location
+	// because there's a difference in each seed.  In order for this to happen, there would have to be
+	// exactly nSeeds differences spread perfectly, which has chance 
+	// (difference probability)^nSeeds / ((nSeeds!) / nSeeds^nSeeds).  The term in the denominator comes
+	// from the fact that the first difference can be anywhere, the second one can be in (nSeeds-1)/nSeeds places,
+	// the second in (nSeeds - 2) / nSeeds, etc.  We've precomputed this.
+	// because 
+	double probabilityOfMissedLocations = (firstOrderUnseenLocationProbability[bestPassSeedsNotSkipped] + firstOrderUnseenLocationProbability[bestPassRCSeedsNotSkipped]) / 2;
+
+    double correctnessProbability = probabilityOfBestCandidate / (probabilityOfAllCandidates + probabilityOfSkippedLocations + probabilityOfMissedLocations);
     int baseMAPQ;
     if (correctnessProbability >= 1) {
         baseMAPQ =  70;
@@ -69,10 +86,10 @@ inline int computeMAPQ(
     //
     // If the score is higher than the number of non-skipped seeds in the first pass, then there's a chance
     // that we didn't find genome locations with a score at least as low as what we found because of just
-    // not having any matching seeds.  Decrement mapq when this happens.
+    // not having any matching seeds.
     //
-    if (score > __max(firstPassSeedsNotSkipped, firstPassRCSeedsNotSkipped)) {
-        baseMAPQ = __max(0,baseMAPQ - 10 * (score - __max(firstPassSeedsNotSkipped, firstPassRCSeedsNotSkipped)));
+    if (score > __max(bestPassSeedsNotSkipped, bestPassRCSeedsNotSkipped)) {
+        baseMAPQ = __max(0,baseMAPQ - 10 * (score - __max(bestPassSeedsNotSkipped, bestPassRCSeedsNotSkipped)));
     }
 
     return baseMAPQ;
