@@ -31,6 +31,7 @@ Revision History:
 #include "LandauVishkin.h"
 #include "BoundedStringDistance.h"
 #include "BigAlloc.h"
+#include "SimilarityMap.h"
 
 class BaseAligner: public Aligner {
 public:
@@ -44,7 +45,8 @@ public:
         unsigned        i_maxSeedsToUse,
         unsigned        i_lvCutoff,
         unsigned        i_adaptiveConfDiffThreshold,
-        LandauVishkin  *i_landauVishkin = NULL);
+        LandauVishkin  *i_landauVishkin = NULL,
+        SimilarityMap  *i_similarityMap = NULL);
 
     virtual ~BaseAligner();
 
@@ -317,6 +319,7 @@ private:
 
     const Genome *genome;
     GenomeIndex *genomeIndex;
+    SimilarityMap *similarityMap;
     unsigned seedLen;
     unsigned confDiff;
     unsigned maxHitsToConsider;

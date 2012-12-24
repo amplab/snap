@@ -128,6 +128,18 @@ AlignerContext::initialize()
     printf("%llds.  %u bases, seed size %d\n",
         loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
 
+    if (options->similarityMapFile != NULL) {
+        printf("Loading similarity map from %s... ", options->similarityMapFile);
+        fflush(stdout);
+        similarityMap = SimilarityMap::load(options->similarityMapFile, index->getGenome());
+        if (similarityMap == NULL) {
+            exit(1);
+        }
+        printf("done\n");
+    } else {
+        similarityMap = NULL;
+    }
+
     if (options->samFileTemplate != NULL && (options->maxHits.size() > 1 || options->maxDist.size() > 1 || options->numSeeds.size() > 1
                 || options->confDiff.size() > 1 || options->adaptiveConfDiff.size() > 1)) {
         fprintf(stderr, "WARNING: You gave ranges for some parameters, so SAM files will be overwritten!\n");

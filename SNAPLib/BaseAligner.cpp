@@ -44,11 +44,12 @@ BaseAligner::BaseAligner(
     unsigned        i_maxSeedsToUse,
     unsigned        i_lvCutoff,
     unsigned        i_adaptiveConfDiffThreshold,
-    LandauVishkin  *i_landauVishkin) : 
+    LandauVishkin  *i_landauVishkin,
+    SimilarityMap  *i_similarityMap) : 
         genomeIndex(i_genomeIndex), confDiff(i_confDiff), maxHitsToConsider(i_maxHitsToConsider), maxK(i_maxK), 
         maxReadSize(i_maxReadSize), maxSeedsToUse(i_maxSeedsToUse), lvCutoff(i_lvCutoff), readId(-1),
         adaptiveConfDiffThreshold(i_adaptiveConfDiffThreshold), landauVishkin(i_landauVishkin),
-	explorePopularSeeds(false), stopOnFirstHit(false)
+        similarityMap(i_similarityMap), explorePopularSeeds(false), stopOnFirstHit(false)
 /*++
 
 Routine Description:
@@ -774,7 +775,7 @@ Return Value:
                         *result = SingleHit;
                     }
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed);
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, similarityMap);
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
@@ -784,7 +785,7 @@ Return Value:
                     return true;
                 } else {
                     *result = MultipleHits;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed);
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, similarityMap);
                     return true;
                 }
             }
@@ -799,7 +800,7 @@ Return Value:
                 if (bestScore + realConfDiff <= secondBestScore && bestScore <= maxK) {
                     *result = SingleHit;
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed);
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, similarityMap);
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
@@ -1015,7 +1016,7 @@ Return Value:
                 // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
                 // report it as NotFound
                 *result = (nSeedsApplied == 0 && nRCSeedsApplied == 0) ? MultipleHits : NotFound;
-                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed);
+                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, similarityMap);
                 return true;
             }
 
@@ -1024,7 +1025,7 @@ Return Value:
                 *result = SingleHit;
                 *singleHitGenomeLocation = bestScoreGenomeLocation;
                 *finalScore = bestScore;
-                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed);
+                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, similarityMap);
                 return true;
             }
 

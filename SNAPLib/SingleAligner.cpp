@@ -110,7 +110,9 @@ SingleAlignerContext::runIterationThread()
             maxReadSize,
             numSeeds,
             lvLimit,
-            adaptiveConfDiff);
+            adaptiveConfDiff,
+            NULL,
+            similarityMap);
     if (aligner == NULL) {
         fprintf(stderr, "Failed to create aligner!\n");
         exit(1);

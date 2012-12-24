@@ -32,6 +32,7 @@ AlignerOptions::AlignerOptions(
     :
     commandLine(i_commandLine),
     indexDir(NULL),
+    similarityMapFile(NULL),
     numThreads(1),
     computeError(false),
     bindToProcessors(false),
@@ -102,6 +103,7 @@ AlignerOptions::usageMessage()
         "  -x   explore some hits of overly popular seeds (useful for filtering)\n"
         "  -f   stop on first match within edit distance limit (filtering mode)\n"
         "  -F   filter output (a=aligned only, s=single hit only, u=unaligned only)\n"
+        "  -sim specify a similarity map file for computing map quality\n"
 #if     USE_DEVTEAM_OPTIONS
         "  -I   ignore IDs that don't match in the paired-end aligner\n"
         "  -S   selectivity; randomly choose 1/selectivity of the reads to score\n"
@@ -170,6 +172,12 @@ AlignerOptions::parse(
     } else if (strcmp(argv[n], "-o") == 0) {
         if (n + 1 < argc) {
             samFileTemplate = argv[n+1];
+            n++;
+            return true;
+        }
+    } else if (strcmp(argv[n], "-sim") == 0) {
+        if (n + 1 < argc) {
+            similarityMapFile = argv[n+1];
             n++;
             return true;
         }

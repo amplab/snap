@@ -23,15 +23,26 @@ Revision History:
 
 #pragma once
 
+#include "SimilarityMap.h"
+
 void initializeMapqTables();
 
 double mapqToProbability(int mapq);
 
-inline int computeMAPQ(double probabilityOfAllCandidates, double probabilityOfBestCandidate, int score, int firstPassSeedsNotSkipped, int firstPassRCSeedsNotSkipped, unsigned smallestSkippedSeed, unsigned smallestSkippedRCSeed)
+inline int computeMAPQ(
+    double probabilityOfAllCandidates,
+    double probabilityOfBestCandidate,
+    int score,
+    int firstPassSeedsNotSkipped,
+    int firstPassRCSeedsNotSkipped,
+    unsigned smallestSkippedSeed,
+    unsigned smallestSkippedRCSeed,
+    SimilarityMap *similarityMap)
 {
     _ASSERT(probabilityOfAllCandidates >= probabilityOfBestCandidate);
     _ASSERT(probabilityOfBestCandidate >= 0.0);
 
+    /*
     //
     // Skipped seeds are ones that the aligner didn't look at because they had too many hits during the first
     // pass throygh the read (i.e., they're disjoint).  Any genome location that was ignored because of
@@ -49,6 +60,9 @@ inline int computeMAPQ(double probabilityOfAllCandidates, double probabilityOfBe
     if (0xffffffff != smallestSkippedRCSeed) {
         probabilityOfSkippedLocations += pow(.001, firstPassRCSeedsNotSkipped) * smallestSkippedRCSeed;
     }
+    */
+
+    double probabilityOfSkippedLocations = 0;
 
     double correctnessProbability = probabilityOfBestCandidate / (probabilityOfAllCandidates + probabilityOfSkippedLocations);
     int baseMAPQ;
@@ -58,14 +72,11 @@ inline int computeMAPQ(double probabilityOfAllCandidates, double probabilityOfBe
         baseMAPQ = __min(70,(int)(-10 * log10(1 - correctnessProbability)));
     }
 
-    return baseMAPQ;
+    //return baseMAPQ;
+
     //
     // Apply a penalty based on the absolute difference between the read and the place it matched, as expressed
     // by its score.
     //
-    if (3 * score >= baseMAPQ) {
-        return 0;
-    } else {
-        return baseMAPQ - 3 * score;
-    }
+    return __max(0, baseMAPQ - 2 * score);
 }

@@ -30,6 +30,7 @@ Revision History:
 #include "AlignerOptions.h"
 #include "AlignerStats.h"
 #include "ParallelTask.h"
+#include "SimilarityMap.h"
 
 class AlignerExtension;
 
@@ -88,6 +89,7 @@ protected:
 
     // common state across all threads
     GenomeIndex        *index;
+    SimilarityMap      *similarityMap;
     ParallelSAMWriter  *parallelSamWriter;
     _int64              alignStart;
     _int64              alignTime;

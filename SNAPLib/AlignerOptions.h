@@ -44,6 +44,7 @@ struct AlignerOptions : public AbstractOptions
 
     const char         *commandLine;
     const char         *indexDir;
+    const char         *similarityMapFile;
     int                 numThreads;
     Range               maxDist;
     Range               numSeeds;
