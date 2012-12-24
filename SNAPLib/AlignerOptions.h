@@ -66,6 +66,7 @@ struct AlignerOptions : public AbstractOptions
     bool                stopOnFirstHit;
 	bool				useM;	// Should we generate CIGAR strings using = and X, or using the old-style M?
     unsigned            gapPenalty; // if non-zero use gap penalty aligner
+    unsigned            misalignThreshold; // For error reporting: min distance from real location to mark a read as misaligned
     AbstractOptions    *extra; // extra options
     const char         *rgLineContents;
 

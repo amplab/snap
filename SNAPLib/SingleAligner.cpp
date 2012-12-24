@@ -198,12 +198,14 @@ SingleAlignerContext::updateStats(
     int score,
     int mapq)
 {
+    bool wasError = false;
+    if (result != NotFound) {
+        wasError = wgsimReadMisaligned(read, location, index, options->misalignThreshold);
+    }
     if (isOneLocation(result)) {
         stats->singleHits++;
         if (computeError) {
-            if (wgsimReadMisaligned(read, location, index, maxDist)) {
-                stats->errors++;
-            }
+            stats->errors += wasError ? 1 : 0;
         }
     } else if (result == MultipleHits) {
         stats->multiHits++;
@@ -215,5 +217,6 @@ SingleAlignerContext::updateStats(
     if (result != NotFound) {
         _ASSERT(mapq >= 0 && mapq <= AlignerStats::maxMapq);
         stats->mapqHistogram[mapq]++;
+        stats->mapqErrors[mapq] += wasError ? 1 : 0;
     }
 }
