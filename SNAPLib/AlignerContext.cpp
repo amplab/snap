@@ -251,7 +251,9 @@ AlignerContext::printStats()
         totalErrors += stats->mapqErrors[i];
         double fractionAligned = totalAligned / usefulReads;
         double errorRate = totalErrors / totalAligned;
-        printf("%d\t%d\t%d\t%.3f\t%.2E\n", i, stats->mapqHistogram[i], stats->mapqErrors[i], fractionAligned, errorRate);
+        if (i <= 10 || i % 2 == 0) {
+            printf("%d\t%d\t%d\t%.3f\t%.2E\n", i, stats->mapqHistogram[i], stats->mapqErrors[i], fractionAligned, errorRate);
+        }
     }
 
     extension->printStats();
