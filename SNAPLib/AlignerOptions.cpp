@@ -49,6 +49,7 @@ AlignerOptions::AlignerOptions(
     stopOnFirstHit(false),
 	useM(false),
     gapPenalty(0),
+    misalignThreshold(15),
 	extra(NULL),
     rgLineContents(NULL)
 {
@@ -104,6 +105,7 @@ AlignerOptions::usageMessage()
 #if     USE_DEVTEAM_OPTIONS
         "  -I   ignore IDs that don't match in the paired-end aligner\n"
         "  -S   selectivity; randomly choose 1/selectivity of the reads to score\n"
+        "  -E   misalign threshold (min distance from correct location to count as error)\n"
 #endif  // USE_DEVTEAM_OPTIONS
         "  -Cxx must be followed by two + or - symbols saying whether to clip low-quality\n"
         "       bases from front and back of read respectively; default: back only (-C-+)\n"
@@ -224,6 +226,12 @@ AlignerOptions::parse(
             return true;
         } else {
             fprintf(stderr,"Must have the selectivity value after -S\n");
+        }
+    } else if (strcmp(argv[n], "-E") == 0) {
+        if (n + 1 < argc) {
+            misalignThreshold = atoi(argv[n+1]);
+            n++;
+            return true;
         }
 #endif  // USE_DEVTEAM_OPTIONS
 	} else if (strcmp(argv[n], "-M") == 0) {

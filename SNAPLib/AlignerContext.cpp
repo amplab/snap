@@ -243,8 +243,15 @@ AlignerContext::printStats()
             100.0 * stats->notFound / usefulReads,
             errorRate,
             (1000.0 * usefulReads) / max(alignTime, (_int64) 1));
-    for (int i = 0; i<= AlignerStats::maxMapq; i++) {
-        printf("%d\t%d\n",i,stats->mapqHistogram[i]);
+    // Running counts to compute a ROC curve (with error rate and %aligned above a given MAPQ)
+    double totalAligned = 0;
+    double totalErrors = 0;
+    for (int i = AlignerStats::maxMapq; i >= 0; i--) {
+        totalAligned += stats->mapqHistogram[i];
+        totalErrors += stats->mapqErrors[i];
+        double fractionAligned = totalAligned / usefulReads;
+        double errorRate = totalErrors / totalAligned;
+        printf("%d\t%d\t%d\t%.3f\t%.2E\n", i, stats->mapqHistogram[i], stats->mapqErrors[i], fractionAligned, errorRate);
     }
 
     extension->printStats();
