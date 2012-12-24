@@ -6,23 +6,30 @@
 SimilarityMap::SimilarityMap(unsigned genomeLength_, unsigned numClusters_, int mergeDistance_)
     : genomeLength(genomeLength_), numClusters(numClusters_), mergeDistance(mergeDistance_)
 {
-    clusterInfo = new ClusterInfo[genomeLength];
+    // MATEI: Skipping these for now because they take a lot of memory and we don't use them yet
+    //clusterInfo = new ClusterInfo[genomeLength];
+    //for (unsigned i = 0; i < genomeLength; i++) {
+    //    clusterInfo[i].clusterId = NO_CLUSTER;
+    //    clusterInfo[i].cluster = NULL;
+    //}
 
+    numClusterMembers = new unsigned[genomeLength];
     for (unsigned i = 0; i < genomeLength; i++) {
-        clusterInfo[i].clusterId = NO_CLUSTER;
-        clusterInfo[i].cluster = NULL;
+        numClusterMembers[i] = 1;
     }
 }
 
 
 SimilarityMap::~SimilarityMap()
 {
-    for (unsigned i = 0; i < genomeLength; i++) {
-        if (clusterInfo[i].clusterId == i) {
-            delete clusterInfo[i].cluster;  // Only deletes each cluster once (on its first element)
-        }
-    }
-    delete[] clusterInfo;
+    //for (unsigned i = 0; i < genomeLength; i++) {
+    //    if (clusterInfo[i].clusterId == i) {
+    //        delete clusterInfo[i].cluster;  // Only deletes each cluster once (on its first element)
+    //    }
+    //}
+    //delete[] clusterInfo;
+    
+    delete[] numClusterMembers;
 }
 
 
@@ -53,7 +60,7 @@ SimilarityMap *SimilarityMap::load(const char *filename, const Genome *genome, b
     }
 
     SimilarityMap *simMap = new SimilarityMap(genomeLen, numClusters, mergeDistance);
-    RegionCluster *clusters = new RegionCluster[numClusters];
+    //RegionCluster *clusters = new RegionCluster[numClusters];
 
     for (unsigned clusterNum = 0; clusterNum < numClusters; clusterNum++) {
         unsigned numMembers;
@@ -66,21 +73,33 @@ SimilarityMap *SimilarityMap::load(const char *filename, const Genome *genome, b
             fprintf(stderr, "Could not parse similarity map (EOF in cluster member list)\n");
             return NULL;
         }
-        RegionCluster *cluster = &(clusters[clusterNum]);
-        cluster->initialize(firstMember, numMembers, stringLen);
-        cluster->members.push_back(RegionCluster::Member(firstMember));
+
+        simMap->numClusterMembers[firstMember] = numMembers;
         for (unsigned i = 1; i < numMembers; i++) {
             unsigned member;
             if (fscanf(in, "%u", &member) != 1) {
                 fprintf(stderr, "Could not parse similarity map (EOF in cluster member list)\n");
                 return NULL;
             }
-            cluster->members.push_back(RegionCluster::Member(member));
+            simMap->numClusterMembers[member] = numMembers;
         }
-        if (computeMemberInfo) {
-            cluster->computeMemberInfo(genome);
-        }
-        simMap->addCluster(firstMember, cluster);
+
+        // MATEI: Skip initialization of RegionCluster objects for now
+        //RegionCluster *cluster = &(clusters[clusterNum]);
+        //cluster->initialize(firstMember, numMembers, stringLen);
+        //cluster->members.push_back(RegionCluster::Member(firstMember));
+        //for (unsigned i = 1; i < numMembers; i++) {
+        //    unsigned member;
+        //    if (fscanf(in, "%u", &member) != 1) {
+        //        fprintf(stderr, "Could not parse similarity map (EOF in cluster member list)\n");
+        //        return NULL;
+        //    }
+        //    cluster->members.push_back(RegionCluster::Member(member));
+        //}
+        //if (computeMemberInfo) {
+        //    cluster->computeMemberInfo(genome);
+        //}
+        //simMap->addCluster(firstMember, cluster);
     }
 
     return simMap;

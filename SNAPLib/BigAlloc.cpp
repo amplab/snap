@@ -325,9 +325,9 @@ void *BigAlloc(
 
 #if (defined(MADV_HUGEPAGE) && !defined(USE_HUGETLB))
     // Tell Linux to use huge pages for this range
-    if (madvise(mem, sizeToAllocate, MADV_HUGEPAGE) == -1) {
-        fprintf(stderr, "WARNING: failed to enable huge pages -- your kernel may not support it\n"); 
-    }
+    //if (madvise(mem, sizeToAllocate, MADV_HUGEPAGE) == -1) {
+    //    fprintf(stderr, "WARNING: failed to enable huge pages -- your kernel may not support it\n"); 
+    //}
 #endif
 
     // Remember the size allocated in the first sizeof(size_t) bytes

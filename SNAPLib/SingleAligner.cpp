@@ -165,9 +165,16 @@ SingleAlignerContext::runIterationThread()
             int mapq;
             AlignmentResult result = aligner->AlignRead(&read, &location, &isRC, &score, &mapq);
 
-            writeRead(&read, result, location, isRC, score, mapq);
+            bool wasError = false;
+            if (result != NotFound) {
+                wasError = wgsimReadMisaligned(&read, location, index, options->misalignThreshold);
+            }
 
-            updateStats(stats, &read, result, location, score, mapq);
+            if (wasError) {
+                writeRead(&read, result, location, isRC, score, mapq);
+            }
+
+            updateStats(stats, &read, result, location, score, mapq, wasError);
         }
     }
 
@@ -198,12 +205,9 @@ SingleAlignerContext::updateStats(
     AlignmentResult result,
     unsigned location, 
     int score,
-    int mapq)
+    int mapq,
+    bool wasError)
 {
-    bool wasError = false;
-    if (result != NotFound) {
-        wasError = wgsimReadMisaligned(read, location, index, options->misalignThreshold);
-    }
     if (isOneLocation(result)) {
         stats->singleHits++;
         if (computeError) {

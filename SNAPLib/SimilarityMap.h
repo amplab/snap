@@ -36,6 +36,8 @@ public:
     //
     inline ClusterInfo getClusterInfo(unsigned location) { return clusterInfo[location]; }
 
+    inline unsigned getNumClusterMembers(unsigned location) { return numClusterMembers[location]; }
+
     inline unsigned getNumClusters() { return numClusters; }
 
     inline unsigned getMergeDistance() { return mergeDistance; }
@@ -51,4 +53,5 @@ private:
     int mergeDistance;
 
     ClusterInfo *clusterInfo;         // indexed by genome location
+    unsigned *numClusterMembers;      // indexed by genome location
 };

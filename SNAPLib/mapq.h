@@ -37,6 +37,8 @@ inline int computeMAPQ(
     int firstPassRCSeedsNotSkipped,
     unsigned smallestSkippedSeed,
     unsigned smallestSkippedRCSeed,
+    unsigned location,
+    int popularSeedsSkipped,
     SimilarityMap *similarityMap)
 {
     _ASSERT(probabilityOfAllCandidates >= probabilityOfBestCandidate);
@@ -69,14 +71,42 @@ inline int computeMAPQ(
     if (correctnessProbability >= 1) {
         baseMAPQ =  70;
     } else {
-        baseMAPQ = __min(70,(int)(-10 * log10(1 - correctnessProbability)));
+        baseMAPQ = __min(70, (int)(-10 * log10(1 - correctnessProbability)));
     }
 
-    //return baseMAPQ;
+    if (similarityMap != NULL) {
+        int clusterSize = (int) similarityMap->getNumClusterMembers(location);
+#ifdef TRACE_ALIGNER
+        printf("Cluster size at %u: %d\n", location, clusterSize);
+#endif
+        baseMAPQ = __max(0, baseMAPQ - clusterSize / 2000);
+        //if (clusterSize >= 2000) {
+        //    baseMAPQ -= 20;
+        //}
+        //if (clusterSize >= 10000) {
+        //    baseMAPQ -= 20;
+        //}
+        //if (baseMAPQ < 0) {
+        //    baseMAPQ = 0;
+        //}
+    }
+
+    //baseMAPQ = __max(0, baseMAPQ - popularSeedsSkipped);
+    
+    //if (score + 1 > __max(firstPassSeedsNotSkipped, firstPassRCSeedsNotSkipped)) {
+    //    baseMAPQ = __max(0, baseMAPQ - 4 * (score + 1 - __max(firstPassSeedsNotSkipped, firstPassRCSeedsNotSkipped)));
+    //}
 
     //
     // Apply a penalty based on the absolute difference between the read and the place it matched, as expressed
     // by its score.
     //
-    return __max(0, baseMAPQ - 2 * score);
+    baseMAPQ = __max(0, baseMAPQ - 2 * score);
+
+#ifdef TRACE_ALIGNER
+    printf("computeMAPQ called at %u: score %d, pThis %g, pAll %g, result %d\n",
+            location, score, probabilityOfBestCandidate, probabilityOfAllCandidates, baseMAPQ);
+#endif
+
+    return baseMAPQ;
 }

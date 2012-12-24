@@ -352,7 +352,8 @@ Return Value:
     if (maxHitsToGet > 0) {
         scoreLimit = maxK + 3;
     } else {
-       scoreLimit = maxK + confDiff - 1;
+        scoreLimit = maxK + 2; // For MAPQ computation
+        //scoreLimit = maxK + confDiff - 1;
     }
 
     while (nSeedsApplied + nRCSeedsApplied < maxSeedsToUse) {
@@ -775,7 +776,7 @@ Return Value:
                         *result = SingleHit;
                     }
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, similarityMap);
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap);
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
@@ -785,7 +786,7 @@ Return Value:
                     return true;
                 } else {
                     *result = MultipleHits;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, similarityMap);
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap);
                     return true;
                 }
             }
@@ -800,7 +801,7 @@ Return Value:
                 if (bestScore + realConfDiff <= secondBestScore && bestScore <= maxK) {
                     *result = SingleHit;
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, similarityMap);
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap);
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
@@ -885,7 +886,8 @@ Return Value:
 #endif
                     }
 #ifdef TRACE_ALIGNER
-                    printf("Computing distance at %u (RC) with limit %d: %d\n", genomeLocation, scoreLimit, score);
+                    printf("Computing distance at %u (RC) with limit %d: %d (prob %g)\n",
+                            genomeLocation, scoreLimit, score, matchProbability);
 #endif
                 } else {
                     if (data != NULL) {
@@ -909,7 +911,8 @@ Return Value:
 #endif
                     }
 #ifdef TRACE_ALIGNER
-                    printf("Computing distance at %u (fwd) with limit %d: %d\n", genomeLocation, scoreLimit, score);
+                    printf("Computing distance at %u (fwd) with limit %d: %d (prob %g)\n",
+                            genomeLocation, scoreLimit, score, matchProbability);
 #endif
                 }
 
@@ -981,20 +984,21 @@ Return Value:
                 if (maxHitsToGet > 0) {
                     scoreLimit = min(bestScore, maxK) + 3;
                 } else {
-                    scoreLimit = min(bestScore, maxK) + confDiff - 1 + (popularSeedsSkipped >= adaptiveConfDiffThreshold ? 1 : 0);
-                    if (bestScore != UnusedScoreValue && secondBestScore < bestScore + confDiff) {
-                        // Since secondBestScore already means that our best location so far won't be a SingleHit,
-                        // we really just care about finding better locations than that. However, still check for
-                        // scores up to bestScore - 1 since those might become a new secondBestScore.
-                        if (bestScore == 0) {
-                            scoreLimit = 0;
-                        } else {
-                            scoreLimit = bestScore - 1;
-                        }
-                    }
-                    // Make sure that the score limit is 
-                    // always search for something at least one worse than the best we found to drive the denominator of the MAPQ computation
-                    scoreLimit = __min(__max(scoreLimit,bestScore+2),maxK); 
+                    scoreLimit = min(bestScore, maxK) + 2;
+                    //scoreLimit = min(bestScore, maxK) + confDiff - 1 + (popularSeedsSkipped >= adaptiveConfDiffThreshold ? 1 : 0);
+                    //if (bestScore != UnusedScoreValue && secondBestScore < bestScore + confDiff) {
+                    //    // Since secondBestScore already means that our best location so far won't be a SingleHit,
+                    //    // we really just care about finding better locations than that. However, still check for
+                    //    // scores up to bestScore - 1 since those might become a new secondBestScore.
+                    //    if (bestScore == 0) {
+                    //        scoreLimit = 0;
+                    //    } else {
+                    //        scoreLimit = bestScore - 1;
+                    //    }
+                    //}
+                    //// Make sure that the score limit is 
+                    //// always search for something at least one worse than the best we found to drive the denominator of the MAPQ computation
+                    //scoreLimit = __min(__max(scoreLimit,bestScore+2),maxK); 
 
                 }
             }   // While candidates exist in the element
@@ -1016,7 +1020,7 @@ Return Value:
                 // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
                 // report it as NotFound
                 *result = (nSeedsApplied == 0 && nRCSeedsApplied == 0) ? MultipleHits : NotFound;
-                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, similarityMap);
+                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap);
                 return true;
             }
 
@@ -1025,7 +1029,7 @@ Return Value:
                 *result = SingleHit;
                 *singleHitGenomeLocation = bestScoreGenomeLocation;
                 *finalScore = bestScore;
-                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, similarityMap);
+                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap);
                 return true;
             }
 
