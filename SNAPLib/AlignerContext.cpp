@@ -249,9 +249,11 @@ AlignerContext::printStats()
     for (int i = AlignerStats::maxMapq; i >= 0; i--) {
         totalAligned += stats->mapqHistogram[i];
         totalErrors += stats->mapqErrors[i];
-        double fractionAligned = totalAligned / usefulReads;
-        double errorRate = totalErrors / totalAligned;
-        printf("%d\t%d\t%d\t%.3f\t%.2E\n", i, stats->mapqHistogram[i], stats->mapqErrors[i], fractionAligned, errorRate);
+        double truePositives = (totalAligned - totalErrors) / usefulReads;
+        double falsePositives = totalErrors / totalAligned;
+        if (i <= 10 || i % 2 == 0) {
+            printf("%d\t%d\t%d\t%.3f\t%.2E\n", i, stats->mapqHistogram[i], stats->mapqErrors[i], truePositives, falsePositives);
+        }
     }
 
     extension->printStats();
