@@ -39,7 +39,8 @@ inline int computeMAPQ(
     unsigned smallestSkippedRCSeed,
     unsigned location,
     int popularSeedsSkipped,
-    SimilarityMap *similarityMap)
+    SimilarityMap *similarityMap,
+    unsigned biggestClusterScored)
 {
     _ASSERT(probabilityOfAllCandidates >= probabilityOfBestCandidate);
     _ASSERT(probabilityOfBestCandidate >= 0.0);
@@ -79,16 +80,11 @@ inline int computeMAPQ(
 #ifdef TRACE_ALIGNER
         printf("Cluster size at %u: %d\n", location, clusterSize);
 #endif
-        baseMAPQ = __max(0, baseMAPQ - clusterSize / 2000);
-        //if (clusterSize >= 2000) {
-        //    baseMAPQ -= 20;
+        //baseMAPQ = __max(0, baseMAPQ - clusterSize / 2000);
+        //if (biggestClusterScored > 2 * clusterSize) {
+        //    baseMAPQ = __max(0, baseMAPQ - biggestClusterScored / 2000);
         //}
-        //if (clusterSize >= 10000) {
-        //    baseMAPQ -= 20;
-        //}
-        //if (baseMAPQ < 0) {
-        //    baseMAPQ = 0;
-        //}
+        baseMAPQ = __max(0, baseMAPQ - biggestClusterScored / 4000);
     }
 
     //baseMAPQ = __max(0, baseMAPQ - popularSeedsSkipped);

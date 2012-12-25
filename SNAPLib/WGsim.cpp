@@ -100,9 +100,14 @@ bool wgsimReadMisaligned(Read *read, unsigned genomeLocation, GenomeIndex *index
         return false;
     }
 
-    if (1 != sscanf(secondUnderscoreBeforeColon+1, "%d", &offset2)) {
-        fprintf(stderr,"Failed to parse read id '%s', couldn't parse offset2.\n",id);
-        return false;
+    if (underscoreBeforeColon == secondUnderscoreBeforeColon + 1) {
+        // No second offset given, since this is a single-end read; just use the first offset
+        offset2 = offset1;
+    } else {
+        if (1 != sscanf(secondUnderscoreBeforeColon+1, "%d", &offset2)) {
+            fprintf(stderr,"Failed to parse read id '%s', couldn't parse offset2.\n",id);
+            return false;
+        }
     }
     
     //

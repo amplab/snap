@@ -166,13 +166,13 @@ SingleAlignerContext::runIterationThread()
             AlignmentResult result = aligner->AlignRead(&read, &location, &isRC, &score, &mapq);
 
             bool wasError = false;
-            if (result != NotFound) {
+            if (result != NotFound && computeError) {
                 wasError = wgsimReadMisaligned(&read, location, index, options->misalignThreshold);
             }
 
-            if (wasError) {
+            //if (wasError) {
                 writeRead(&read, result, location, isRC, score, mapq);
-            }
+            //}
 
             updateStats(stats, &read, result, location, score, mapq, wasError);
         }

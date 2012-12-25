@@ -294,6 +294,7 @@ private:
     int firstPassRCSeedsNotSkipped;
     unsigned smallestSkippedSeed;
     unsigned smallestSkippedRCSeed;
+    unsigned biggestClusterScored;
 
         bool
     score(

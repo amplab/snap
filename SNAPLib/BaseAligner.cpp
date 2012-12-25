@@ -34,6 +34,12 @@ Revision History:
 
 using std::min;
 
+#ifdef TRACE_ALIGNER
+#define TRACE printf
+#else
+#define TRACE(...) {}
+#endif
+
 
 BaseAligner::BaseAligner(
     GenomeIndex    *i_genomeIndex, 
@@ -230,6 +236,7 @@ Return Value:
     firstPassRCSeedsNotSkipped = 0;
     smallestSkippedSeed = 0xffffffff;
     smallestSkippedRCSeed = 0xffffffff;
+    biggestClusterScored = 1;
 
     if (NULL == mapq) {
         mapq = &unusedMapq;
@@ -278,6 +285,11 @@ Return Value:
         return NotFound;
     }
 
+#ifdef TRACE_ALIGNER
+    printf("Aligning read '%.*s':\n%.*s\n%.*s\n", read->getIdLength(), read->getId(), read->getDataLength(), read->getData(),
+            read->getDataLength(), read->getQuality());
+#endif
+
 #ifdef  _DEBUG
     if (_DumpAlignments) {
         printf("BaseAligner: aligning read ID '%.*s', data '%.*s'\n", read->getIdLength(), read->getId(), read->getDataLength(), read->getData());
@@ -308,20 +320,20 @@ Return Value:
     //
     // Block off any seeds that would contain an N.
     //
-    if (countOfNs > 0) {
-        int minSeedToConsiderNing = 0; // In English, any word can be verbed. Including, apparently, "N."
-        for (int i = 0; i < (int) readLen; i++) {
-            if (readData[i] == 'N') {
-                int limit = __min(i + seedLen - 1, readLen-1);
-                for (int j = __max(minSeedToConsiderNing, i - (int) seedLen + 1); j <= limit; j++) {
-                    SetSeedUsed(j);
-                }
-                minSeedToConsiderNing = limit+1;
-                if (minSeedToConsiderNing >= (int) readLen)
-                    break;
-            }
-        }
-    }
+    //if (countOfNs > 0) {
+    //    int minSeedToConsiderNing = 0; // In English, any word can be verbed. Including, apparently, "N."
+    //    for (int i = 0; i < (int) readLen; i++) {
+    //        if (readData[i] == 'N') {
+    //            int limit = __min(i + seedLen - 1, readLen-1);
+    //            for (int j = __max(minSeedToConsiderNing, i - (int) seedLen + 1); j <= limit; j++) {
+    //                SetSeedUsed(j);
+    //            }
+    //            minSeedToConsiderNing = limit+1;
+    //            if (minSeedToConsiderNing >= (int) readLen)
+    //                break;
+    //        }
+    //    }
+    //}
 
     Read rcRead[1];
     rcRead->init(NULL, 0, rcReadData, rcReadQuality, readLen);
@@ -333,6 +345,7 @@ Return Value:
     // We have readSize - seeds size + 1 possible seeds.
     //
     unsigned nPossibleSeeds = readLen - seedLen + 1;
+    TRACE("nPossibleSeeds: %d\n", nPossibleSeeds);
 
     unsigned nextSeedToTest = 0;
     unsigned wrapCount = 0;
@@ -413,12 +426,20 @@ Return Value:
             //
             // This seed is already used.  Try the next one.
             //
+            TRACE("Skipping due to IsSeedUsed\n");
             nextSeedToTest++;
         }
         if (nextSeedToTest >= nPossibleSeeds) {
             //
             // Unusable seeds have pushed us past the end of the read.  Go back around the outer loop so we wrap properly.
             //
+            TRACE("Eek, we're past the end of the read\n");
+            continue;
+        }
+
+        SetSeedUsed(nextSeedToTest);
+
+        if (!Seed::DoesTextRepresentASeed(read->getData() + nextSeedToTest, seedLen)) {
             continue;
         }
 
@@ -450,18 +471,21 @@ Return Value:
 #endif  // _DEUBG
 
 #ifdef TRACE_ALIGNER
-        printf("Looked up seed %llx: hits=%u, rchits=%u\n", seed.getBases(), nHits, nRCHits);
-        printf("Hits:");
-        for (int i = 0; i < nHits; i++)
-            printf(" %u", hits[i]);
-        printf("\n");
-        printf("RC hits:");
-        for (int i = 0; i < nRCHits; i++)
-            printf(" %u", rcHits[i]);
-        printf("\n");
+        printf("Looked up seed %.*s (offset %d): hits=%u, rchits=%u\n",
+                seedLen, read->getData() + nextSeedToTest, nextSeedToTest, nHits, nRCHits);
+        if (nHits <= maxHitsToConsider) {
+            printf("Hits:");
+            for (int i = 0; i < nHits; i++)
+                printf(" %u", hits[i]);
+            printf("\n");
+        }
+        if (nRCHits <= maxHitsToConsider) {
+            printf("RC hits:");
+            for (int i = 0; i < nRCHits; i++)
+                printf(" %u", rcHits[i]);
+            printf("\n");
+        }
 #endif
-
-        SetSeedUsed(nextSeedToTest);
 
         bool appliedEitherSeed = false;
 
@@ -694,9 +718,6 @@ Return Value:
 #ifdef TRACE_ALIGNER
     printf("score() called with force=%d nsa=%d nrcsa=%d best=%u bestloc=%u 2nd=%u\n",
         forceResult, nSeedsApplied, nRCSeedsApplied, bestScore, bestScoreGenomeLocation, secondBestScore);
-    printf("Read:\n  ");
-    for (int i = 0; i < read->getDataLength(); i++) printf("%c", read->getData()[i]);
-    printf("\n");
     //printf("Candidates:\n");
     //for (int i = 0; i < nCandidates; i++) {
     //    Candidate* c = candidates + i;
@@ -776,7 +797,7 @@ Return Value:
                         *result = SingleHit;
                     }
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap);
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap, biggestClusterScored);
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
@@ -786,7 +807,7 @@ Return Value:
                     return true;
                 } else {
                     *result = MultipleHits;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap);
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap, biggestClusterScored);
                     return true;
                 }
             }
@@ -801,7 +822,7 @@ Return Value:
                 if (bestScore + realConfDiff <= secondBestScore && bestScore <= maxK) {
                     *result = SingleHit;
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap);
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap, biggestClusterScored);
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
@@ -883,6 +904,9 @@ Return Value:
                         if (-1 != score) {
                             probabilityOfAllCandidates += matchProbability;
                         }
+                        if (similarityMap != NULL && score != -1) {
+                            biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
+                        }
 #endif
                     }
 #ifdef TRACE_ALIGNER
@@ -898,14 +922,15 @@ Return Value:
                         if (readId != -1) {
                             cacheKey = ((_uint64) readId) << 33 | ((_uint64) elementToScore->isRC) << 32 | genomeLocation;
                         }
-
                         score = landauVishkin->computeEditDistance(
                             data, genomeDataLength,
                             read->getData(), read->getQuality(), read->getDataLength(),
                             scoreLimit, &matchProbability, cacheKey);
-
                         if (-1 != score) {
                             probabilityOfAllCandidates += matchProbability;
+                        }
+                        if (similarityMap != NULL && score != -1) {
+                            biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
                         }
 
 #endif
@@ -1020,7 +1045,7 @@ Return Value:
                 // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
                 // report it as NotFound
                 *result = (nSeedsApplied == 0 && nRCSeedsApplied == 0) ? MultipleHits : NotFound;
-                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap);
+                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap, biggestClusterScored);
                 return true;
             }
 
@@ -1029,7 +1054,7 @@ Return Value:
                 *result = SingleHit;
                 *singleHitGenomeLocation = bestScoreGenomeLocation;
                 *finalScore = bestScore;
-                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap);
+                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  firstPassRCSeedsNotSkipped,  smallestSkippedSeed,  smallestSkippedRCSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap, biggestClusterScored);
                 return true;
             }
 
@@ -1313,18 +1338,18 @@ BaseAligner::ComputeHitDistribution(
     //
     // Block off any seeds that would contain an N.
     //
-    if (countOfNs > 0) {
-        int minSeedToConsiderNing = 0; // In English, any word can be verbed. Including, apparently, "N."
-        for (int i = 0; i < readLen; i++) {
-            if (readData[i] == 'N') {
-                int limit = __max(i + (int)seedLen - 1, readLen-1);
-                for (int j = __max(minSeedToConsiderNing, i - (int)seedLen + 1); j <= limit; j++) {
-                    SetSeedUsed(j);
-                }
-                minSeedToConsiderNing = limit+1;
-            }
-        }
-    }
+    //if (countOfNs > 0) {
+    //    int minSeedToConsiderNing = 0; // In English, any word can be verbed. Including, apparently, "N."
+    //    for (int i = 0; i < readLen; i++) {
+    //        if (readData[i] == 'N') {
+    //            int limit = __max(i + (int)seedLen - 1, readLen-1);
+    //            for (int j = __max(minSeedToConsiderNing, i - (int)seedLen + 1); j <= limit; j++) {
+    //                SetSeedUsed(j);
+    //            }
+    //            minSeedToConsiderNing = limit+1;
+    //        }
+    //    }
+    //}
 
     Read rcRead[1];
     rcRead->init(NULL,0,rcReadData,NULL,read->getDataLength());
