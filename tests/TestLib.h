@@ -28,6 +28,7 @@
  *    ASSERT_NE(expected, actualValue)
  *    ASSERT_STREQ(expected, actualValue)   (for C strings)
  *    ASSERT_STRNE(expected, actualValue)
+ *    ASSERT_NEAR(expected, actualValue)    (for floats/doubles)
  *    FAIL(message)
  */
 
@@ -131,6 +132,14 @@ int runAllTests();
         oss << #actual << " was \"" << (expected) << "\""; \
         throw test::TestFailedException(__FILE__, __LINE__, oss.str()); \
     }
+
+#define ASSERT_NEAR(expected, actual) \
+    if ((expected) < 0.99 * (actual) || (expected) > 1.01 * (actual)) { \
+        std::ostringstream oss; \
+        oss << #actual << " was " << (actual) << ", expected near " << (expected); \
+        throw test::TestFailedException(__FILE__, __LINE__, oss.str()); \
+    }
+
 
 #define FAIL(message) \
     throw test::TestFailedException(__FILE__, __LINE__, message);
