@@ -3,8 +3,6 @@
 #include "Compat.h"
 
 
-#define TRACE_PROBABILITY_DISTANCE
-
 #ifdef TRACE_PROBABILITY_DISTANCE
 #define TRACE printf
 #else
