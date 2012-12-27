@@ -131,5 +131,6 @@ int ProbabilityDistance::compute(
         }
     }
     *matchProbability = exp(best);
+    TRACE("Best match probability: %g (log: %.2g)\n", exp(best), best);
     return 5;
 }
