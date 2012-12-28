@@ -80,13 +80,13 @@ inline int computeMAPQ(
 #ifdef TRACE_ALIGNER
         printf("Cluster size at %u: %d\n", location, clusterSize);
 #endif
-        //baseMAPQ = __max(0, baseMAPQ - clusterSize / 2000);
+        baseMAPQ = __max(0, baseMAPQ - clusterSize / 2000);
         //if (biggestClusterScored > 2 * clusterSize) {
         //    baseMAPQ = __max(0, baseMAPQ - biggestClusterScored / 2000);
         //}
 
         // TODO: probably need to use log(biggestClusterScored) since MAPQ is on an exponential scale
-        baseMAPQ = __max(0, baseMAPQ - biggestClusterScored / 4000);
+        //baseMAPQ = __max(0, baseMAPQ - biggestClusterScored / 4000);
     }
 
     //baseMAPQ = __max(0, baseMAPQ - popularSeedsSkipped);

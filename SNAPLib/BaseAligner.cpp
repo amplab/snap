@@ -92,7 +92,7 @@ Arguments:
     seedLen = genomeIndex->getSeedLength();
 
     bsd = new BoundedStringDistance<>(3);
-    probDistance = new ProbabilityDistance(0.001, 0.001, 0.6);  // Match Mason
+    probDistance = new ProbabilityDistance(0.001, 0.001, 0.2);  // Match Mason
 
     if (i_landauVishkin == NULL) {
         landauVishkin = new LandauVishkin;
@@ -906,7 +906,10 @@ Return Value:
                         // Since we're allowing a startShift in ProbabilityDistance, mark nearby locations as scored too
                         elementToScore->candidatesScored |= (candidateBit << 1);
                         elementToScore->candidatesScored |= (candidateBit >> 1);
-                        // TODO: add similarity stuff
+                        // Update the biggest cluster scored if this is a sufficiently likely cluster
+                        //if (similarityMap != NULL && matchProbability >= __max(probabilityOfBestCandidate * 0.01, 1e-30)) {
+                        //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
+                        //}
 #elif defined(USE_BOUNDED_STRING_DISTANCE)
                         score = bsd->compute(data, rcRead->getData(), rcRead->getDataLength(), scoreLimit);
 #else
@@ -934,12 +937,15 @@ Return Value:
                     if (data != NULL) {
 #if defined(USE_PROBABILITY_DISTANCE)
                         score = probDistance->compute(data, read->getData(), read->getQuality(),
-                                read->getDataLength(), 0, scoreLimit+2, &matchProbability);
+                                read->getDataLength(), 1, scoreLimit+2, &matchProbability);
                         probabilityOfAllCandidates += matchProbability;
                         // Since we're allowing a startShift in ProbabilityDistance, mark nearby locations as scored too
                         elementToScore->candidatesScored |= (candidateBit << 1);
                         elementToScore->candidatesScored |= (candidateBit >> 1);
-                        // TODO: Add similarity stuff
+                        // Update the biggest cluster scored if this is a sufficiently likely cluster
+                        //if (similarityMap != NULL && matchProbability >= __max(probabilityOfBestCandidate * 0.01, 1e-30)) {
+                        //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
+                        //}
 #elif defined(USE_BOUNDED_STRING_DISTANCE)
                         score = bsd->compute(data, read->getData(), read->getDataLength(), scoreLimit);
 #else
