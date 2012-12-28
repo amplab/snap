@@ -31,6 +31,7 @@ Revision History:
 #include "LandauVishkin.h"
 #include "BoundedStringDistance.h"
 #include "BigAlloc.h"
+#include "ProbabilityDistance.h"
 #include "SimilarityMap.h"
 
 class BaseAligner: public Aligner {
@@ -150,6 +151,8 @@ private:
     BoundedStringDistance<> *bsd;
     bool ownLandauVishkin;
 
+    ProbabilityDistance *probDistance;
+
     // Maximum distance to merge candidates that differe in indels over.
     // This can't be bigger than 32, else some bitvectors overflow.
     // TODO(matei): this seems to work better when we make it lower; why?
@@ -208,7 +211,8 @@ private:
         //
         HashTableElement    *next;
 
-        _uint64      candidatesUsed;
+        _uint64      candidatesUsed;    // Really candidates we still need to score
+        _uint64      candidatesScored;
 
         unsigned             baseGenomeLocation;
         unsigned             weight;

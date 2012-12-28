@@ -31,6 +31,7 @@ ProbabilityDistance::ProbabilityDistance(double snpProb, double gapOpenProb, dou
     for (int q = 0; q < 256; q++) {
         if (q < 33) {
             matchLogProb[q] = NO_PROB;
+            mismatchLogProb[q] = NO_PROB;
         } else {
             // Probability that we misread this base
             double errorProb = pow(10.0, -(q - 33) / 10.0);

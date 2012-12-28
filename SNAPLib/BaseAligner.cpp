@@ -92,6 +92,7 @@ Arguments:
     seedLen = genomeIndex->getSeedLength();
 
     bsd = new BoundedStringDistance<>(3);
+    probDistance = new ProbabilityDistance(0.001, 0.001, 0.6);  // Match Mason
 
     if (i_landauVishkin == NULL) {
         landauVishkin = new LandauVishkin;
@@ -850,7 +851,15 @@ Return Value:
             unsigned long candidateIndexToScore;
             _uint64 candidatesMask = elementToScore->candidatesUsed;
             while (_BitScanForward64(&candidateIndexToScore,candidatesMask)) {
-                candidatesMask &= ~(_uint64)1 << candidateIndexToScore;
+                _uint64 candidateBit = ((_uint64)1 << candidateIndexToScore);
+                candidatesMask &= ~candidateBit;
+                if ((elementToScore->candidatesScored & candidateBit) != 0) {
+                    // Already scored it, or marked it as scored due to using ProbabilityDistance
+                    continue;
+                }
+                elementToScore->candidatesScored |= candidateBit;
+                //candidatesMask &= ~((_uint64)1 << (candidateIndexToScore+1));
+                //candidatesMask &= ~((_uint64)1 << __max(0, candidateIndexToScore-1));
                 Candidate *candidateToScore = &elementToScore->candidates[candidateIndexToScore];
                 if (candidateToScore->scoredInEpoch == hashTableEpoch) {
                     //
@@ -889,8 +898,16 @@ Return Value:
                     }
                 }
                 if (elementToScore->isRC) {
-                     if (data != NULL) {
-#ifdef USE_NEW_DISTANCE
+                    if (data != NULL) {
+#if defined(USE_PROBABILITY_DISTANCE)
+                        score = probDistance->compute(data, rcRead->getData(), rcRead->getQuality(),
+                                rcRead->getDataLength(), 1, scoreLimit+2, &matchProbability);
+                        probabilityOfAllCandidates += matchProbability;
+                        // Since we're allowing a startShift in ProbabilityDistance, mark nearby locations as scored too
+                        elementToScore->candidatesScored |= (candidateBit << 1);
+                        elementToScore->candidatesScored |= (candidateBit >> 1);
+                        // TODO: add similarity stuff
+#elif defined(USE_BOUNDED_STRING_DISTANCE)
                         score = bsd->compute(data, rcRead->getData(), rcRead->getDataLength(), scoreLimit);
 #else
                         _uint64 cacheKey = 0;
@@ -915,7 +932,15 @@ Return Value:
 #endif
                 } else {
                     if (data != NULL) {
-#ifdef USE_NEW_DISTANCE
+#if defined(USE_PROBABILITY_DISTANCE)
+                        score = probDistance->compute(data, read->getData(), read->getQuality(),
+                                read->getDataLength(), 0, scoreLimit+2, &matchProbability);
+                        probabilityOfAllCandidates += matchProbability;
+                        // Since we're allowing a startShift in ProbabilityDistance, mark nearby locations as scored too
+                        elementToScore->candidatesScored |= (candidateBit << 1);
+                        elementToScore->candidatesScored |= (candidateBit >> 1);
+                        // TODO: Add similarity stuff
+#elif defined(USE_BOUNDED_STRING_DISTANCE)
                         score = bsd->compute(data, read->getData(), read->getDataLength(), scoreLimit);
 #else
                         _uint64 cacheKey = 0;
@@ -1206,6 +1231,7 @@ Return Value:
     anchor->element = element;
 
     element->candidatesUsed = 0;
+    element->candidatesScored = 0;
     element->lowestPossibleScore = lowestPossibleScore;
     element->isRC = isRC;
     element->candidatesUsed = (_uint64)1 << lowOrderGenomeLocation;
@@ -1276,6 +1302,7 @@ Return Value:
     BigDealloc(weightLists);
 
     delete bsd;
+    delete probDistance;
 
     if (ownLandauVishkin) {
         delete landauVishkin;

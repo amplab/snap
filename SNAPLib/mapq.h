@@ -84,6 +84,8 @@ inline int computeMAPQ(
         //if (biggestClusterScored > 2 * clusterSize) {
         //    baseMAPQ = __max(0, baseMAPQ - biggestClusterScored / 2000);
         //}
+
+        // TODO: probably need to use log(biggestClusterScored) since MAPQ is on an exponential scale
         baseMAPQ = __max(0, baseMAPQ - biggestClusterScored / 4000);
     }
 
@@ -97,7 +99,7 @@ inline int computeMAPQ(
     // Apply a penalty based on the absolute difference between the read and the place it matched, as expressed
     // by its score.
     //
-    baseMAPQ = __max(0, baseMAPQ - 2 * score);
+    //baseMAPQ = __max(0, baseMAPQ - 2 * score);
 
 #ifdef TRACE_ALIGNER
     printf("computeMAPQ called at %u: score %d, pThis %g, pAll %g, result %d\n",
