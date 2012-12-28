@@ -92,7 +92,7 @@ Arguments:
     seedLen = genomeIndex->getSeedLength();
 
     bsd = new BoundedStringDistance<>(3);
-    probDistance = new ProbabilityDistance(0.001, 0.001, 0.2);  // Match Mason
+    probDistance = new ProbabilityDistance(0.001, 0.001, 0.5);  // Match Mason
 
     if (i_landauVishkin == NULL) {
         landauVishkin = new LandauVishkin;
@@ -901,11 +901,13 @@ Return Value:
                     if (data != NULL) {
 #if defined(USE_PROBABILITY_DISTANCE)
                         score = probDistance->compute(data, rcRead->getData(), rcRead->getQuality(),
-                                rcRead->getDataLength(), 1, scoreLimit+2, &matchProbability);
+                                rcRead->getDataLength(), 6, 12, &matchProbability);
                         probabilityOfAllCandidates += matchProbability;
                         // Since we're allowing a startShift in ProbabilityDistance, mark nearby locations as scored too
-                        elementToScore->candidatesScored |= (candidateBit << 1);
-                        elementToScore->candidatesScored |= (candidateBit >> 1);
+                        for (int shift = 1; shift <= 6; shift++) {
+                            elementToScore->candidatesScored |= (candidateBit << shift);
+                            elementToScore->candidatesScored |= (candidateBit >> shift);
+                        }
                         // Update the biggest cluster scored if this is a sufficiently likely cluster
                         //if (similarityMap != NULL && matchProbability >= __max(probabilityOfBestCandidate * 0.01, 1e-30)) {
                         //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
@@ -937,11 +939,13 @@ Return Value:
                     if (data != NULL) {
 #if defined(USE_PROBABILITY_DISTANCE)
                         score = probDistance->compute(data, read->getData(), read->getQuality(),
-                                read->getDataLength(), 1, scoreLimit+2, &matchProbability);
+                                read->getDataLength(), 6, 12, &matchProbability);
                         probabilityOfAllCandidates += matchProbability;
                         // Since we're allowing a startShift in ProbabilityDistance, mark nearby locations as scored too
-                        elementToScore->candidatesScored |= (candidateBit << 1);
-                        elementToScore->candidatesScored |= (candidateBit >> 1);
+                        for (int shift = 1; shift <= 6; shift++) {
+                            elementToScore->candidatesScored |= (candidateBit << shift);
+                            elementToScore->candidatesScored |= (candidateBit >> shift);
+                        }
                         // Update the biggest cluster scored if this is a sufficiently likely cluster
                         //if (similarityMap != NULL && matchProbability >= __max(probabilityOfBestCandidate * 0.01, 1e-30)) {
                         //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
