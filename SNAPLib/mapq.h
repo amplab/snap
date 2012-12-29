@@ -80,7 +80,7 @@ inline int computeMAPQ(
 #ifdef TRACE_ALIGNER
         printf("Cluster size at %u: %d\n", location, clusterSize);
 #endif
-        baseMAPQ = __max(0, baseMAPQ - clusterSize / 2000);
+        baseMAPQ = __max(0, baseMAPQ - clusterSize / 4000);
         //if (biggestClusterScored > 2 * clusterSize) {
         //    baseMAPQ = __max(0, baseMAPQ - biggestClusterScored / 2000);
         //}
