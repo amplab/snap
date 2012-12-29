@@ -91,7 +91,7 @@ Arguments:
     genome = genomeIndex->getGenome();
     seedLen = genomeIndex->getSeedLength();
 
-    bsd = new BoundedStringDistance<>(3);
+    bsd = new BoundedStringDistance<>(1, 3);
     probDistance = new ProbabilityDistance(0.001, 0.001, 0.5);  // Match Mason
 
     if (i_landauVishkin == NULL) {

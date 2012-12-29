@@ -23,30 +23,38 @@
  * TODO: Allow making the L array "cyclic" through another template parameter (i.e.
  * so that only the last few rows will be kept) to save cache space for big arrays.
  */
-template<bool COMPUTE_EDIT_STRING=false, int MAX_DISTANCE=50, int MAX_SHIFT=MAX_DISTANCE>
+template<bool COMPUTE_EDIT_STRING=false, bool COMPUTE_MAPQ=false, int MAX_DISTANCE=50, int MAX_SHIFT=MAX_DISTANCE>
 class BoundedStringDistance
 {
 private:
     enum GapStatus { NO_GAP, TEXT_GAP, PATTERN_GAP };
     static const int SHIFT_OFF = MAX_SHIFT + 1;   // For indexing into arrays by shift
+    static const bool COMPUTE_PREV = COMPUTE_EDIT_STRING || COMPUTE_MAPQ;  // Whether we need to backtrack
 
-    int gapOpenPenalty; // We assume that the gap extend penalty is 1.
+    int substitutionPenalty;
+    int gapOpenPenalty;       // We assume that the gap extend penalty is 1
 
     // L[distance][shift][gapStatus] is the largest value x such that the distance
     // between pattern[0..x] and text[0..x+shift] is "distance" and the gap status
     // at the end is "gapStatus".
     int L[MAX_DISTANCE+1][2*MAX_SHIFT+3][3];
 
-    // Editing action in CIGAR fomat (e.g. 'D', 'I') that got us to a specific state in L
-    char editAction[MAX_DISTANCE+1][2*MAX_SHIFT][3];
+    // A state in our search through the strings, i.e. a set of coordinates in the L array
+    // and the edit action (e.g. 'X', 'D') we took to move away from them
+    struct PreviousState { 
+        int distance;
+        int shift;
+        int gapStatus;
+        char action;
+    };
 
-    // Previous coordinates we had in the L array before getting to a particular state
-    int prevDistance[MAX_DISTANCE+1][2*MAX_SHIFT][3];
-    int prevShift[MAX_DISTANCE+1][2*MAX_SHIFT][3];
-    int prevGap[MAX_DISTANCE+1][2*MAX_SHIFT][3];
+    // Previous state we were in before getting to each particular state
+    PreviousState prev[MAX_DISTANCE+1][2*MAX_SHIFT][3];
 
 public:
-    BoundedStringDistance(int gapOpenPenalty_) : gapOpenPenalty(gapOpenPenalty_) {
+    BoundedStringDistance(int substitutionPenalty_, int gapOpenPenalty_)
+            : substitutionPenalty(substitutionPenalty_), gapOpenPenalty(gapOpenPenalty_)
+    {
         // Clear out the L array.
         for (int d = 0; d < MAX_DISTANCE + 1; d++) {
             for (int s = 0; s < 2 * MAX_SHIFT + 3; s++) {
@@ -56,10 +64,10 @@ public:
             }
         }
         // Add a dummy entry in the prevDistance array so we can finish backtracking at d=0
-        prevDistance[0][SHIFT_OFF][NO_GAP] = -1;
-        prevDistance[0][SHIFT_OFF][TEXT_GAP] = -1;
-        prevDistance[0][SHIFT_OFF][PATTERN_GAP] = -1;
-        editAction[0][SHIFT_OFF][NO_GAP] = '=';
+        prev[0][SHIFT_OFF][NO_GAP].distance = -1;
+        prev[0][SHIFT_OFF][TEXT_GAP].distance = -1;
+        prev[0][SHIFT_OFF][PATTERN_GAP].distance = -1;
+        prev[0][SHIFT_OFF][NO_GAP].action = '=';
     }
 
     /**
@@ -96,10 +104,7 @@ public:
             pos += longestPrefix(text+pos, pattern+pos, patternEnd);
             L[d][SHIFT_OFF][NO_GAP] = pos;
             if (COMPUTE_EDIT_STRING && d != 0) {
-                editAction[d][SHIFT_OFF][NO_GAP] = 'X';
-                prevDistance[d][SHIFT_OFF][NO_GAP] = d-1;
-                prevShift[d][SHIFT_OFF][NO_GAP] = SHIFT_OFF;
-                prevGap[d][SHIFT_OFF][NO_GAP] = NO_GAP;
+                prev[d][SHIFT_OFF][NO_GAP] = { d-1, SHIFT_OFF, NO_GAP, 'X' };
             }
             if (pos == patternLen) {
                 if (!writeEditString(d, 0, editStringBuf, editStringBufLen, useM)) {
@@ -122,15 +127,10 @@ public:
 
                 if (COMPUTE_EDIT_STRING) {
                     // Remember how we got there
-                    editAction[d][s][TEXT_GAP] = 'D';
                     if (L[d-gapOpenPenalty][s-1][NO_GAP] >= L[d-1][s-1][TEXT_GAP]) {
-                        prevDistance[d][s][TEXT_GAP] = d-gapOpenPenalty;
-                        prevShift[d][s][TEXT_GAP] = s-1;
-                        prevGap[d][s][TEXT_GAP] = NO_GAP;
+                        prev[d][s][TEXT_GAP] = { d-gapOpenPenalty, s-1, NO_GAP, 'D' };
                     } else {
-                        prevDistance[d][s][TEXT_GAP] = d-1;
-                        prevShift[d][s][TEXT_GAP] = s-1;
-                        prevGap[d][s][TEXT_GAP] = TEXT_GAP;
+                        prev[d][s][TEXT_GAP] = { d-1, s-1, TEXT_GAP, 'D' };
                     }
                 }
 
@@ -144,15 +144,10 @@ public:
 
                 if (COMPUTE_EDIT_STRING) {
                     // Remember how we got there
-                    editAction[d][s][PATTERN_GAP] = 'I';
                     if (L[d-gapOpenPenalty][s+1][NO_GAP] >= L[d-1][s+1][PATTERN_GAP]) {
-                        prevDistance[d][s][PATTERN_GAP] = d-gapOpenPenalty;
-                        prevShift[d][s][PATTERN_GAP] = s+1;
-                        prevGap[d][s][PATTERN_GAP] = NO_GAP;
+                        prev[d][s][PATTERN_GAP] = { d-gapOpenPenalty, s+1, NO_GAP, 'I' };
                     } else {
-                        prevDistance[d][s][PATTERN_GAP] = d-1;
-                        prevShift[d][s][PATTERN_GAP] = s+1;
-                        prevGap[d][s][PATTERN_GAP] = PATTERN_GAP;
+                        prev[d][s][PATTERN_GAP] = { d-1, s+1, PATTERN_GAP, 'I' };
                     }
                 }
 
@@ -179,10 +174,11 @@ public:
                 if (COMPUTE_EDIT_STRING) {
                     // Remember how we got there; if it was by just closing a gap, we'll store an '=',
                     // otherwise we'll store an 'X' because we made a substitution.
-                    editAction[d][s][NO_GAP] = (choice == NO_GAP ? 'X' : '=');
-                    prevDistance[d][s][NO_GAP] = (choice == NO_GAP ? d-1 : d);
-                    prevShift[d][s][NO_GAP] = s;
-                    prevGap[d][s][NO_GAP] = choice;
+                    if (choice == NO_GAP) {
+                        prev[d][s][NO_GAP] = { d-1, s, choice, 'X' };
+                    } else {
+                        prev[d][s][NO_GAP] = { d, s, choice, '=' };
+                    }
                 }
 
                 if (bestNoGap == patternLen) {
@@ -252,11 +248,11 @@ private:
         int g = NO_GAP;
 
         while (d != -1) {
-            int prevD = prevDistance[d][s][g];
-            int prevS = prevShift[d][s][g];
-            int prevG = prevGap[d][s][g];
+            int prevD = prev[d][s][g].distance;
+            int prevS = prev[d][s][g].shift;
+            int prevG = prev[d][s][g].gapStatus;
             int matchCount = L[d][s][g] - (prevD == -1 ? 0 : L[prevD][prevS][prevG]); // Exact matches after this
-            if (editAction[d][s][g] == 'X' || editAction[d][s][g] == 'I') {
+            if (prev[d][s][g].action == 'X' || prev[d][s][g].action == 'I') {
                 matchCount -= 1;
             }
             if (matchCount > 0) {
@@ -265,8 +261,8 @@ private:
                 matchCounts[numActions] = matchCount;
                 numActions++;
             }
-            if (editAction[d][s][g] != '=') {
-                char action = (useM && editAction[d][s][g] == 'X') ? 'M' : editAction[d][s][g];
+            if (prev[d][s][g].action != '=') {
+                char action = (useM && prev[d][s][g].action == 'X') ? 'M' : prev[d][s][g].action;
                 actions[numActions] = action;
                 matchCounts[numActions] = 1;
                 numActions++;

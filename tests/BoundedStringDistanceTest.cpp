@@ -8,7 +8,7 @@ struct BoundedStringDistanceTest {
     BoundedStringDistance<true> dist1Cigar, dist3Cigar;
 
     BoundedStringDistanceTest()
-        : dist1(1), dist3(3), dist5(5), dist1Cigar(1), dist3Cigar(3)
+        : dist1(1, 1), dist3(1, 3), dist5(1, 5), dist1Cigar(1, 1), dist3Cigar(1, 3)
     {}
 };
 
