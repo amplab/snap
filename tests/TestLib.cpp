@@ -8,6 +8,7 @@ using namespace test;
 
 int test::runAllTests(char *filter) {
     const std::vector<TestCase*> &testCases = TestCase::getCases();
+    int tested = 0;
     int passed = 0;
     const char *prevFixture = "";
 
@@ -17,6 +18,7 @@ int test::runAllTests(char *filter) {
             // Test name does not pass filter
             continue;
         }
+        tested++;
         if (strcmp(tc->fixture, prevFixture) != 0) {
             if (strlen(prevFixture) != 0) {
                 cout << endl;
@@ -36,6 +38,6 @@ int test::runAllTests(char *filter) {
         }
     }
     
-    cout << endl << passed << " / " << testCases.size() << " tests passed." << endl;
-    return (passed == testCases.size() ? 0 : 1);
+    cout << endl << passed << " / " << tested << " tests passed." << endl;
+    return (passed == tested ? 0 : 1);
 }
