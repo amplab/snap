@@ -6,13 +6,17 @@
 using namespace std;
 using namespace test;
 
-int test::runAllTests() {
+int test::runAllTests(char *filter) {
     const std::vector<TestCase*> &testCases = TestCase::getCases();
     int passed = 0;
     const char *prevFixture = "";
 
     for (int i = 0; i < testCases.size(); i++) {
         TestCase *tc = testCases[i];
+        if (filter != NULL && strstr(tc->fixture, filter) == NULL && strstr(tc->name, filter) == NULL) {
+            // Test name does not pass filter
+            continue;
+        }
         if (strcmp(tc->fixture, prevFixture) != 0) {
             if (strlen(prevFixture) != 0) {
                 cout << endl;

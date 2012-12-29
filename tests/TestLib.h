@@ -70,7 +70,7 @@ struct TestFailedException {
     std::string message;
 };
 
-int runAllTests();
+int runAllTests(char *filter);
 
 }
 
