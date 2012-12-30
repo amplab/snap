@@ -28,11 +28,21 @@ class BoundedStringDistance
 {
 private:
     enum GapStatus { NO_GAP, TEXT_GAP, PATTERN_GAP };
-    static const int SHIFT_OFF = MAX_SHIFT + 1;   // For indexing into arrays by shift
+
+    static const int MAX_READ = 10000;           // Arbitrary, could easily be bigger
+    static const int SHIFT_OFF = MAX_SHIFT + 1;  // For indexing into arrays by shift
     static const bool COMPUTE_PREV = COMPUTE_EDIT_STRING || COMPUTE_MAPQ;  // Whether we need to backtrack
 
+    // Edit distance penalties for substitutions and gap open; we assume that gap extend is 1
     int substitutionPenalty;
     int gapOpenPenalty;       // We assume that the gap extend penalty is 1
+
+    // MAPQ probabilities for substitutions and indels from the reference genome. We assume
+    // that indels have geometrically distributed lengths once they are open (i.e. the same
+    // probability of extension at each step).
+    double snpProbability;
+    double indelOpenProbability;
+    double indelExtendProbability;
 
     // L[distance][shift][gapStatus] is the largest value x such that the distance
     // between pattern[0..x] and text[0..x+shift] is "distance" and the gap status
@@ -56,17 +66,47 @@ private:
     // Previous state we were in before getting to each particular state
     State prev[MAX_DISTANCE+1][2*MAX_SHIFT][3];
 
+    // Mismatch probability as a function of base quality
+    double mismatchProbability[256];
+
+    // Match probability as a function of number of bases matching (ignores base quality for now)
+    double matchProbability[MAX_READ+1];
+
 public:
-    BoundedStringDistance(int substitutionPenalty_, int gapOpenPenalty_)
-            : substitutionPenalty(substitutionPenalty_), gapOpenPenalty(gapOpenPenalty_)
+    BoundedStringDistance(
+            int substitutionPenalty_,
+            int gapOpenPenalty_,
+            double snpProbability_ = 0.001,
+            double indelOpenProbability_ = 0.001,
+            double indelExtendProbability_ = 0.2)
+        : substitutionPenalty(substitutionPenalty_), gapOpenPenalty(gapOpenPenalty_),
+          snpProbability(snpProbability_), indelOpenProbability(indelOpenProbability_),
+          indelExtendProbability(indelExtendProbability_)
     {
-        // Clear out the L array.
+        // Clear out the L array
         for (int d = 0; d < MAX_DISTANCE + 1; d++) {
             for (int s = 0; s < 2 * MAX_SHIFT + 3; s++) {
                 for (int g = 0; g < 3; g++) {
                     L[d][s][g] = -2;
                 }
             }
+        }
+        
+        // Fill in probability tables for fast computation of MAPQ; assumes Phred+33 qualities
+        for (int q = 0; q < 256; q++) {
+            if (q < 33) {
+                mismatchProbability[q] = 1.0;
+            } else {
+                // A correct match will happen only if we don't read the base incorrectly *and* there's
+                // no SNP, so invert that to get the mismatch probability. (Ignores the possibility that
+                // a SNP actually got misread as the correct base for now.)
+                double baseProb = pow(10.0, -0.1 * (q - 33));
+                mismatchProbability[q] = 1.0 - (1.0 - baseProb) * (1.0 - snpProbability);
+            }
+        }
+        matchProbability[0] = 1.0;
+        for (int len = 1; len <= MAX_READ; len++) {
+            matchProbability[len] = matchProbability[len-1] * (1.0 - snpProbability);
         }
     }
 
@@ -83,16 +123,23 @@ public:
      * - editStringBuf is long enough to hold the edit string, if set. We check that
      *   it's at least 2 * patternLen in case we must make one edit per character.
      */
-    int compute(const char *text, const char *pattern, int patternLen, int limit,
-                char *editStringBuf, int editStringBufLen, bool useM = false)
+    int compute(const char *text, const char *pattern, int patternLen, int limit, double *mapProbability,
+                const char *qualityString, char *editStringBuf, int editStringBufLen, bool useM)
     {
         if (limit < 0 || limit > MAX_DISTANCE) {
             fprintf(stderr, "Invalid distance limit: %d\n", limit);
             exit(1);
         }
-
         if (editStringBuf != NULL && !COMPUTE_EDIT_STRING) {
             fprintf(stderr, "Non-null editStringBuf given but COMPUTE_EDIT_STRING is false\n");
+            exit(1);
+        }
+        if (mapProbability != NULL && !COMPUTE_MAPQ) {
+            fprintf(stderr, "Non-null mapProbability given but COMPUTE_MAPQ is false\n");
+            exit(1);
+        }
+        if (mapProbability != NULL && qualityString == NULL) {
+            fprintf(stderr, "Non-null mapProbability given but qualityString is NULL\n");
             exit(1);
         }
 
@@ -103,13 +150,14 @@ public:
         for (int d = 0; d <= __min(limit, gapOpenPenalty - 1); d += substitutionPenalty) {
             pos += longestPrefix(text+pos, pattern+pos, patternEnd);
             L[d][SHIFT_OFF][NO_GAP] = pos;
-            if (COMPUTE_EDIT_STRING && d != 0) {
+            if (COMPUTE_PREV && d != 0) {
                 prev[d][SHIFT_OFF][NO_GAP] = State(d-substitutionPenalty, SHIFT_OFF, NO_GAP, 'X');
             }
             if (pos == patternLen) {
                 if (!writeEditString(d, 0, editStringBuf, editStringBufLen, useM)) {
                     return -2;
                 }
+                computeMapProbability(d, 0, mapProbability, qualityString);
                 return d;
             } else {
                 pos += 1; // Skip the mismatch so we can go to the next d
@@ -155,6 +203,7 @@ public:
                     if (!writeEditString(d, s - SHIFT_OFF, editStringBuf, editStringBufLen, useM)) {
                       return -2;
                     }
+                    computeMapProbability(d, s - SHIFT_OFF, mapProbability, qualityString);
                     return d;
                 }
             }
@@ -163,8 +212,23 @@ public:
         return -1;
     }
 
+    // Just compute distance, without MAPQ or edit string
     int compute(const char *text, const char *pattern, int patternLen, int limit) {
-        return compute(text, pattern, patternLen, limit, NULL, 0);
+        return compute(text, pattern, patternLen, limit, NULL, NULL, NULL, 0, false);
+    }
+
+    // Compute distance and MAPQ but not edit string
+    int compute(const char *text, const char *pattern, int patternLen, int limit,
+            double *matchProbability, const char *qualityString)
+    {
+        return compute(text, pattern, patternLen, limit, matchProbability, qualityString, NULL, 0, false);
+    }
+
+    // Compute distance and edit string but not MAPQ
+    int compute(const char *text, const char *pattern, int patternLen, int limit,
+                char *editStringBuf, int editStringBufLen, bool useM = false)
+    {
+        return compute(text, pattern, patternLen, limit, NULL, NULL, editStringBuf, editStringBufLen, useM);
     }
 
     // Use BigAlloc when allocating this object in case our arrays are big
@@ -296,7 +360,7 @@ private:
                 matchCounts[numActions] = matchCount;
                 numActions++;
             }
-            if (prev[d][s][g].action != '=') {
+            if (action != '=') {
                 char stringEntry = (useM && action == 'X') ? 'M' : action;
                 actions[numActions] = stringEntry;
                 matchCounts[numActions] = 1;
@@ -325,5 +389,57 @@ private:
         }
         
         return true;
+    }
+
+    /**
+     * Fill in the match probability for a successfully matched pair of strings, given the distance
+     * and shift we ended up at when we matched the end of the pattern. Does nothing if the output
+     * pointer is null or COMPUTE_MAPQ is false.
+     */
+    bool computeMapProbability(int endDistance, int endShift, double *mapProbability, const char *qualityString) {
+        if (!COMPUTE_MAPQ || mapProbability == NULL) {
+            return true;
+        }
+
+        *mapProbability = 1.0;
+
+        // Backtrack through the L and prev arrays, multiplying the map probability as we go along
+        int d = endDistance;
+        int s = SHIFT_OFF + endShift;
+        int g = NO_GAP;
+        char oldAction = '=';   // Used to tell whether we're expanding or starting a gap
+
+        while (d != -1) {
+            int prevD = prev[d][s][g].distance;
+            int prevS = prev[d][s][g].shift;
+            int prevG = prev[d][s][g].gapStatus;
+            char action = prev[d][s][g].action;
+            int matchCount = L[d][s][g] - (prevD == -1 ? 0 : L[prevD][prevS][prevG]); // Exact matches after this
+            if (action == 'X' || action == 'I') {
+                matchCount -= 1;
+            }
+            if (matchCount > 0) {
+                // Multiply in the probability of this many matches after the edit
+                *mapProbability *= matchProbability[matchCount];
+                // Reset oldAction since there's no gap after the edit
+                oldAction = '=';
+            }
+            switch (action) {
+                case 'I':
+                    *mapProbability *= (oldAction == 'I') ? indelExtendProbability : indelOpenProbability;
+                    break;
+                case 'D':
+                    *mapProbability *= (oldAction == 'D') ? indelExtendProbability : indelOpenProbability;
+                    break;
+                case 'X':
+                    *mapProbability *= mismatchProbability[qualityString[L[d][s][g]-1]];
+                    break;
+                default:
+                    // We can also get the '=' action in some cases, but we its probability above
+                    break;
+            }
+            d = prevD; s = prevS; g = prevG;
+            oldAction = action;
+        }
     }
 };
