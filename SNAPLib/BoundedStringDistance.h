@@ -39,17 +39,22 @@ private:
     // at the end is "gapStatus".
     int L[MAX_DISTANCE+1][2*MAX_SHIFT+3][3];
 
-    // A state in our search through the strings, i.e. a set of coordinates in the L array
-    // and the edit action (e.g. 'X', 'D') we took to move away from them
-    struct PreviousState { 
+    // A state in our search through the strings, i.e. a set of coordinates in the L array,
+    // as well as the edit action (e.g. 'X', 'D') we took to move away from them
+    struct State { 
         int distance;
         int shift;
         int gapStatus;
         char action;
+
+        State(): distance(-1), shift(-1), gapStatus(-1), action('=') {}
+
+        State(int distance_, int shift_, int gapStatus_, char action_)
+            : distance(distance_), shift(shift_), gapStatus(gapStatus_), action(action_) {}
     };
 
     // Previous state we were in before getting to each particular state
-    PreviousState prev[MAX_DISTANCE+1][2*MAX_SHIFT][3];
+    State prev[MAX_DISTANCE+1][2*MAX_SHIFT][3];
 
 public:
     BoundedStringDistance(int substitutionPenalty_, int gapOpenPenalty_)
@@ -63,11 +68,6 @@ public:
                 }
             }
         }
-        // Add a dummy entry in the prevDistance array so we can finish backtracking at d=0
-        prev[0][SHIFT_OFF][NO_GAP].distance = -1;
-        prev[0][SHIFT_OFF][TEXT_GAP].distance = -1;
-        prev[0][SHIFT_OFF][PATTERN_GAP].distance = -1;
-        prev[0][SHIFT_OFF][NO_GAP].action = '=';
     }
 
     /**
@@ -100,11 +100,11 @@ public:
 
         // For distances less than gapOpenPenalty, just search for mismatches with shift = 0
         int pos = 0;
-        for (int d = 0; d <= __min(limit, gapOpenPenalty - 1); d++) {
+        for (int d = 0; d <= __min(limit, gapOpenPenalty - 1); d += substitutionPenalty) {
             pos += longestPrefix(text+pos, pattern+pos, patternEnd);
             L[d][SHIFT_OFF][NO_GAP] = pos;
             if (COMPUTE_EDIT_STRING && d != 0) {
-                prev[d][SHIFT_OFF][NO_GAP] = { d-1, SHIFT_OFF, NO_GAP, 'X' };
+                prev[d][SHIFT_OFF][NO_GAP] = State(d-substitutionPenalty, SHIFT_OFF, NO_GAP, 'X');
             }
             if (pos == patternLen) {
                 if (!writeEditString(d, 0, editStringBuf, editStringBufLen, useM)) {
@@ -121,67 +121,36 @@ public:
             int maxShift = __min(d - gapOpenPenalty + 1, MAX_SHIFT);
             for (int s = SHIFT_OFF - maxShift; s <= SHIFT_OFF + maxShift; s++) {
                 // See whether we can start / extend the "text gap" case
-                int bestTextGap = __max(L[d-gapOpenPenalty][s-1][NO_GAP],
-                                        L[d-1][s-1][TEXT_GAP]);
-                L[d][s][TEXT_GAP] = bestTextGap;
-
-                if (COMPUTE_EDIT_STRING) {
-                    // Remember how we got there
-                    if (L[d-gapOpenPenalty][s-1][NO_GAP] >= L[d-1][s-1][TEXT_GAP]) {
-                        prev[d][s][TEXT_GAP] = { d-gapOpenPenalty, s-1, NO_GAP, 'D' };
-                    } else {
-                        prev[d][s][TEXT_GAP] = { d-1, s-1, TEXT_GAP, 'D' };
-                    }
-                }
+                fillBest(d, s, TEXT_GAP,
+                         d-gapOpenPenalty, s-1, NO_GAP, 0, 'D',  // Open a gap from NO_GAP
+                         d-1, s-1, TEXT_GAP, 0, 'D');            // Continue a TEXT_GAP
+                // Note that continuing from a PATTERN_GAP is covered because the NO_GAP
+                // case at d-gapOpenPenalty considered closing the PATTERN_GAP there
 
                 // See whether we can start / extend the "pattern gap" case
-                int bestPatternGap = __max(L[d-gapOpenPenalty][s+1][NO_GAP] + 1,
-                                           L[d-1][s+1][PATTERN_GAP] + 1);
-                if (bestPatternGap < 0) {
-                    bestPatternGap = -2; // Just in case we did a -2 + 1
-                }
-                L[d][s][PATTERN_GAP] = bestPatternGap;
-
-                if (COMPUTE_EDIT_STRING) {
-                    // Remember how we got there
-                    if (L[d-gapOpenPenalty][s+1][NO_GAP] >= L[d-1][s+1][PATTERN_GAP]) {
-                        prev[d][s][PATTERN_GAP] = { d-gapOpenPenalty, s+1, NO_GAP, 'I' };
-                    } else {
-                        prev[d][s][PATTERN_GAP] = { d-1, s+1, PATTERN_GAP, 'I' };
-                    }
-                }
+                fillBest(d, s, PATTERN_GAP,
+                         d-gapOpenPenalty, s+1, NO_GAP, 1, 'I',  // Open a new gap
+                         d-1, s+1, PATTERN_GAP, 1, 'I');         // Continue a PATTERN_GAP
+                // Note that continuing from a TEXT_GAP is covered because the NO_GAP
+                // case at d-gapOpenPenalty considered closing the TEXT_GAP there
 
                 // Find the best way to continue the "neither in gap" case; this could be either
                 // adding a substitution from the previous "neither in gap" state, or closing a
                 // text gap, or a pattern gap. Note that since we compute the best ways to end up
                 // in TEXT_GAP and PATTERN_GAP above, this automatically includes using those as
                 // starting points and just closing the gap that got us to this distance.
-                int bestNoGap = L[d-1][s][NO_GAP] + 1;
-                int choice = NO_GAP;
-                int closeTextGap = L[d][s][TEXT_GAP];
-                if (closeTextGap > bestNoGap) {
-                    bestNoGap = closeTextGap;
-                    choice = TEXT_GAP;
-                }
-                int closePatternGap = L[d][s][PATTERN_GAP];
-                if (closePatternGap > bestNoGap) {
-                    bestNoGap = closePatternGap;
-                    choice = PATTERN_GAP;
-                }
-                bestNoGap += longestPrefix(text+bestNoGap+s-SHIFT_OFF, pattern+bestNoGap, patternEnd);
-                L[d][s][NO_GAP] = bestNoGap;
-
-                if (COMPUTE_EDIT_STRING) {
-                    // Remember how we got there; if it was by just closing a gap, we'll store an '=',
-                    // otherwise we'll store an 'X' because we made a substitution.
-                    if (choice == NO_GAP) {
-                        prev[d][s][NO_GAP] = { d-1, s, choice, 'X' };
-                    } else {
-                        prev[d][s][NO_GAP] = { d, s, choice, '=' };
-                    }
+                fillBest(d, s, NO_GAP,
+                         d-substitutionPenalty, s, NO_GAP, 1, 'X',  // Add subsitution after NO_GAP
+                         d, s, TEXT_GAP, 0, '=',                    // Close a TEXT_GAP and go from there
+                         d, s, PATTERN_GAP, 0, '=');                // Close a PATTERN_GAP
+                // For NO_GAP, also add any string of matching characters after where we end up
+                int location = L[d][s][NO_GAP];
+                if (location >= 0) {
+                    location += longestPrefix(text+location+s-SHIFT_OFF, pattern+location, patternEnd);
+                    L[d][s][NO_GAP] = location;
                 }
 
-                if (bestNoGap == patternLen) {
+                if (location == patternLen) {
                     // Reached end of pattern; we're done!
                     if (!writeEditString(d, s - SHIFT_OFF, editStringBuf, editStringBufLen, useM)) {
                       return -2;
@@ -203,6 +172,71 @@ public:
     void operator delete(void *ptr) {BigDealloc(ptr);}
 
 private:
+    /**
+     * Fill in L[destD][destS][destG] and prev[destD][destS][destG] with the largest of two
+     * choices of states we could've come from. For each state, we get a previous d, previous s,
+     * and previous gapStatus, as well as a delta to add to the length stored in its L entry.
+     * This method saves some repetition that would otherwise happen in compute().
+     */
+    inline void fillBest(
+            int destD, int destS, int destG,
+            int d1, int s1, int g1, int delta1, char action1,
+            int d2, int s2, int g2, int delta2, char action2)
+    {
+        int val1 = (d1 >= 0) ? L[d1][s1][g1] + delta1 : -2;
+        int val2 = (d2 >= 0) ? L[d2][s2][g2] + delta2 : -2;
+        if (val1 >= val2) {
+            L[destD][destS][destG] = (val1 >= 0) ? val1 : -2;
+            if (COMPUTE_PREV) {
+                prev[destD][destS][destG] = State(d1, s1, g1, action1);
+            }
+        } else {
+            L[destD][destS][destG] = (val2 >= 0) ? val2 : -2;
+            if (COMPUTE_PREV) {
+                prev[destD][destS][destG] = State(d2, s2, g2, action2);
+            }
+        }
+    }
+
+    /**
+     * Version of fillBest() for three possible parent states.
+     */
+    inline void fillBest(
+            int destD, int destS, int destG,
+            int d1, int s1, int g1, int delta1, char action1,
+            int d2, int s2, int g2, int delta2, char action2,
+            int d3, int s3, int g3, int delta3, char action3)
+    {
+        int val1 = (d1 >= 0) ? L[d1][s1][g1] + delta1 : -2;
+        int val2 = (d2 >= 0) ? L[d2][s2][g2] + delta2 : -2;
+        int val3 = (d3 >= 0) ? L[d3][s3][g3] + delta3 : -2;
+        if (val1 >= val2) {
+            if (val1 >= val3) {
+                L[destD][destS][destG] = (val1 >= 0) ? val1 : -2;
+                if (COMPUTE_PREV) {
+                    prev[destD][destS][destG] = State(d1, s1, g1, action1);
+                }
+            } else {
+                L[destD][destS][destG] = (val3 >= 0) ? val3 : -2;
+                if (COMPUTE_PREV) {
+                    prev[destD][destS][destG] = State(d3, s3, g3, action3);
+                }
+            }
+        } else {
+            if (val2 >= val3) {
+                L[destD][destS][destG] = (val2 >= 0) ? val2 : -2;
+                if (COMPUTE_PREV) {
+                    prev[destD][destS][destG] = State(d2, s2, g2, action2);
+                }
+            } else {
+                L[destD][destS][destG] = (val3 >= 0) ? val3 : -2;
+                if (COMPUTE_PREV) {
+                    prev[destD][destS][destG] = State(d3, s3, g3, action3);
+                }
+            }
+        }
+    }
+
     /**
      * Find the length of the longest common prefix of two strings; compares 8 bytes at a time
      */
@@ -251,8 +285,9 @@ private:
             int prevD = prev[d][s][g].distance;
             int prevS = prev[d][s][g].shift;
             int prevG = prev[d][s][g].gapStatus;
+            char action = prev[d][s][g].action;
             int matchCount = L[d][s][g] - (prevD == -1 ? 0 : L[prevD][prevS][prevG]); // Exact matches after this
-            if (prev[d][s][g].action == 'X' || prev[d][s][g].action == 'I') {
+            if (action == 'X' || action == 'I') {
                 matchCount -= 1;
             }
             if (matchCount > 0) {
@@ -262,8 +297,8 @@ private:
                 numActions++;
             }
             if (prev[d][s][g].action != '=') {
-                char action = (useM && prev[d][s][g].action == 'X') ? 'M' : prev[d][s][g].action;
-                actions[numActions] = action;
+                char stringEntry = (useM && action == 'X') ? 'M' : action;
+                actions[numActions] = stringEntry;
                 matchCounts[numActions] = 1;
                 numActions++;
             }

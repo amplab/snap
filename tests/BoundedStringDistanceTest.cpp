@@ -4,11 +4,12 @@
 
 // Test fixture for all the Landau-Viskhin Tests
 struct BoundedStringDistanceTest {
-    BoundedStringDistance<> dist1, dist3, dist5;
-    BoundedStringDistance<true> dist1Cigar, dist3Cigar;
+    BoundedStringDistance<> dist1, dist3, dist5, dist23, dist32;
+    BoundedStringDistance<true> dist1Cigar, dist3Cigar, dist23Cigar;
 
     BoundedStringDistanceTest()
-        : dist1(1, 1), dist3(1, 3), dist5(1, 5), dist1Cigar(1, 1), dist3Cigar(1, 3)
+        : dist1(1, 1), dist3(1, 3), dist5(1, 5), dist23(2, 3), dist32(3, 2),
+          dist1Cigar(1, 1), dist3Cigar(1, 3), dist23Cigar(2, 3)
     {}
 };
 
@@ -16,6 +17,8 @@ TEST_F(BoundedStringDistanceTest, "equal strings") {
     ASSERT_EQ(0, dist1.compute("abcde", "abcde", 5, 3));
     ASSERT_EQ(0, dist3.compute("abcde", "abcde", 5, 3));
     ASSERT_EQ(0, dist5.compute("abcde", "abcde", 5, 3));
+    ASSERT_EQ(0, dist23.compute("abcde", "abcde", 5, 3));
+    ASSERT_EQ(0, dist32.compute("abcde", "abcde", 5, 3));
 }
 
 TEST_F(BoundedStringDistanceTest, "prefixes") {
@@ -28,6 +31,12 @@ TEST_F(BoundedStringDistanceTest, "prefixes") {
     ASSERT_EQ(0, dist5.compute("abcde", "abcd", 4, 3));
     ASSERT_EQ(0, dist5.compute("abcde", "abc", 3, 3));
     ASSERT_EQ(0, dist5.compute("abcde", "ab", 2, 3));
+    ASSERT_EQ(0, dist23.compute("abcde", "abcd", 4, 3));
+    ASSERT_EQ(0, dist23.compute("abcde", "abc", 3, 3));
+    ASSERT_EQ(0, dist23.compute("abcde", "ab", 2, 3));
+    ASSERT_EQ(0, dist32.compute("abcde", "abcd", 4, 3));
+    ASSERT_EQ(0, dist32.compute("abcde", "abc", 3, 3));
+    ASSERT_EQ(0, dist32.compute("abcde", "ab", 2, 3));
 }
 
 TEST_F(BoundedStringDistanceTest, "gap open cost 1") {
@@ -52,6 +61,36 @@ TEST_F(BoundedStringDistanceTest, "gap open cost 3") {
     ASSERT_EQ(5, dist3.compute("abcdefg", "abcXXXdefg", 10, 5));
 }
 
+TEST_F(BoundedStringDistanceTest, "sub cost 2, gap open cost 3") {
+    //ASSERT_EQ(2, dist23.compute("abcdefg", "abcdXfg", 7, 3));
+    //ASSERT_EQ(4, dist23.compute("abcdefg", "XbcdXfg", 7, 5));
+    //ASSERT_EQ(3, dist23.compute("abcdefg", "abdefg", 6, 3));
+    //ASSERT_EQ(3, dist23.compute("abcdefg", "bcdefg", 6, 5));
+    //ASSERT_EQ(4, dist23.compute("abcdefg", "cdefg", 5, 5));
+    //ASSERT_EQ(5, dist23.compute("abcdefghi", "aefghi", 6, 5));
+    //ASSERT_EQ(3, dist23.compute("abcdefg", "abcXdefg", 8, 5));
+    //ASSERT_EQ(4, dist23.compute("abcdefg", "abcXXdefg", 9, 5));
+    //ASSERT_EQ(5, dist23.compute("abcdefg", "abcXXXdefg", 10, 5));
+    // On this one it's better to count things as a deletion + insertion than 3 substitutions
+    //ASSERT_EQ(5, dist23.compute("abcdefg", "abcdXYZ", 7, 6));
+    ASSERT_EQ(6, dist23.compute("abcdefghi", "abcdXYZhi", 9, 8));
+}
+
+TEST_F(BoundedStringDistanceTest, "sub cost 3, gap open cost 2") {
+    //ASSERT_EQ(3, dist32.compute("abcdefg", "abcdXfg", 7, 3));
+    //ASSERT_EQ(6, dist32.compute("abcdefg", "XbcdXfg", 7, 6));
+    //ASSERT_EQ(2, dist32.compute("abcdefg", "abdefg", 6, 3));
+    //ASSERT_EQ(2, dist32.compute("abcdefg", "bcdefg", 6, 5));
+    //ASSERT_EQ(3, dist32.compute("abcdefg", "cdefg", 5, 5));
+    //ASSERT_EQ(4, dist32.compute("abcdefghi", "aefghi", 6, 5));
+    //ASSERT_EQ(2, dist32.compute("abcdefg", "abcXdefg", 8, 5));
+    //ASSERT_EQ(3, dist32.compute("abcdefg", "abcXXdefg", 9, 5));
+    //ASSERT_EQ(4, dist32.compute("abcdefg", "abcXXXdefg", 10, 5));
+    // On this one it's better to count things as a deletion + insertion than 3 substitutions
+    //ASSERT_EQ(4, dist32.compute("abcdefg", "abcdXYZ", 7, 6));
+    ASSERT_EQ(8, dist32.compute("abcdefghijkl", "abcdXYZhijkl", 12, 9));
+}
+
 TEST_F(BoundedStringDistanceTest, "overly distant strings") {
     ASSERT_EQ(-1, dist1.compute("abcde", "XXXXX", 5, 2));
     ASSERT_EQ(-1, dist1.compute("abcdef", "def", 3, 2));
@@ -59,6 +98,10 @@ TEST_F(BoundedStringDistanceTest, "overly distant strings") {
     ASSERT_EQ(-1, dist3.compute("abcdef", "XXXXXX", 6, 2));
     ASSERT_EQ(-1, dist3.compute("abcdefghi", "abdefghi", 8, 2));
     ASSERT_EQ(-1, dist5.compute("abcdefghi", "abdefghi", 8, 4));
+    ASSERT_EQ(-1, dist23.compute("abcdefghi", "abdefghi", 8, 2));
+    ASSERT_EQ(-1, dist23.compute("abcdefghi", "abcdXfghi", 9, 1));
+    ASSERT_EQ(-1, dist32.compute("abcdefghi", "abdefghi", 8, 1));
+    ASSERT_EQ(-1, dist32.compute("abcdefghi", "abcdXfghi", 9, 2));
 }
 
 TEST_F(BoundedStringDistanceTest, "CIGAR strings") {
