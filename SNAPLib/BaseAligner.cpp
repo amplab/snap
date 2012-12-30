@@ -91,7 +91,7 @@ Arguments:
     genome = genomeIndex->getGenome();
     seedLen = genomeIndex->getSeedLength();
 
-    bsd = new BoundedStringDistance<>(1, 3);
+    boundedStringDist = new BoundedStringDistance<false, true>(1, 2, 0.001, 0.001, 0.5);
     probDistance = new ProbabilityDistance(0.001, 0.001, 0.5);  // Match Mason
 
     if (i_landauVishkin == NULL) {
@@ -913,7 +913,9 @@ Return Value:
                         //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
                         //}
 #elif defined(USE_BOUNDED_STRING_DISTANCE)
-                        score = bsd->compute(data, rcRead->getData(), rcRead->getDataLength(), scoreLimit);
+                        score = boundedStringDist->compute(data, rcRead->getData(), rcRead->getDataLength(), scoreLimit,
+			                                   &matchProbability, rcRead->getQuality());
+                        probabilityOfAllCandidates += matchProbability;
 #else
                         _uint64 cacheKey = 0;
                         if (readId != -1) {
@@ -951,7 +953,9 @@ Return Value:
                         //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
                         //}
 #elif defined(USE_BOUNDED_STRING_DISTANCE)
-                        score = bsd->compute(data, read->getData(), read->getDataLength(), scoreLimit);
+                        score = boundedStringDist->compute(data, read->getData(), read->getDataLength(), scoreLimit,
+			                                   &matchProbability, read->getQuality());
+                        probabilityOfAllCandidates += matchProbability;
 #else
                         _uint64 cacheKey = 0;
                         if (readId != -1) {
@@ -1311,7 +1315,7 @@ Return Value:
     BigDealloc(candidateHashTable[1]);
     BigDealloc(weightLists);
 
-    delete bsd;
+    delete boundedStringDist;
     delete probDistance;
 
     if (ownLandauVishkin) {

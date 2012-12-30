@@ -148,7 +148,7 @@ public:
 
 private:
     LandauVishkin *landauVishkin;
-    BoundedStringDistance<> *bsd;
+    BoundedStringDistance<false, true> *boundedStringDist;
     bool ownLandauVishkin;
 
     ProbabilityDistance *probDistance;
