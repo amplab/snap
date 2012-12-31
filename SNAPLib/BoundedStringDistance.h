@@ -175,12 +175,7 @@ public:
         // For distances >= gapOpenPenalty, also allow creating gaps in the text or pattern
         for (int d = gapOpenPenalty; d <= limit; d++) {
             int maxShift = __min(d - gapOpenPenalty + 1, MAX_SHIFT);
-            int sign = 1;
-            for (int t = 1; t <= 2 * maxShift + 1; t++) {
-                // Produces the sequence of shifts 0, -1, +1, -2, +2, ... to minimize result shift
-                int s = SHIFT_OFF + sign * (t >> 1);
-                sign = -sign;
-
+            for (int s = SHIFT_OFF-maxShift; s <= SHIFT_OFF+maxShift; s++) {
                 // See whether we can start / extend the "text gap" case
                 fillBest(d, s, TEXT_GAP,
                          d-gapOpenPenalty, s-1, NO_GAP, 0, 'D',  // Open a gap from NO_GAP
