@@ -91,7 +91,7 @@ Arguments:
     genome = genomeIndex->getGenome();
     seedLen = genomeIndex->getSeedLength();
 
-    boundedStringDist = new BoundedStringDistance<false, true>(1, 2, 0.001, 0.001, 0.5);
+    boundedStringDist = new BoundedStringDistance<false, true>(2, 2, 0.001, 0.001, 0.5);
     probDistance = new ProbabilityDistance(0.001, 0.001, 0.5);  // Match Mason
 
     if (i_landauVishkin == NULL) {
@@ -913,8 +913,12 @@ Return Value:
                         //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
                         //}
 #elif defined(USE_BOUNDED_STRING_DISTANCE)
-                        score = boundedStringDist->compute(data, rcRead->getData(), rcRead->getDataLength(), 0, scoreLimit,
+                        score = boundedStringDist->compute(data, rcRead->getData(), rcRead->getDataLength(), 6, scoreLimit,
 			                                   &matchProbability, rcRead->getQuality());
+                        for (int shift = 1; shift <= 6; shift++) {
+                            elementToScore->candidatesScored |= (candidateBit << shift);
+                            elementToScore->candidatesScored |= (candidateBit >> shift);
+                        }
 			if (score != -1) {
 			     probabilityOfAllCandidates += matchProbability;
 			}
@@ -955,8 +959,12 @@ Return Value:
                         //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
                         //}
 #elif defined(USE_BOUNDED_STRING_DISTANCE)
-                        score = boundedStringDist->compute(data, read->getData(), read->getDataLength(), 0, scoreLimit,
+                        score = boundedStringDist->compute(data, read->getData(), read->getDataLength(), 6, scoreLimit,
 			                                   &matchProbability, read->getQuality());
+                        for (int shift = 1; shift <= 6; shift++) {
+                            elementToScore->candidatesScored |= (candidateBit << shift);
+                            elementToScore->candidatesScored |= (candidateBit >> shift);
+                        }
 			if (score != -1) {
 			    probabilityOfAllCandidates += matchProbability;
 			}
