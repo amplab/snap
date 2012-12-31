@@ -167,7 +167,7 @@ SAMWriter::computeCigarString(
                             cigarBuf,
                             cigarBufLen,
 						    useM)
-            : bsd->compute(reference, data, dataLength, MAX_K - 1, cigarBuf, cigarBufLen, useM);
+            : bsd->compute(reference, data, dataLength, 0, MAX_K - 1, cigarBuf, cigarBufLen, useM);
     } else {
         //
         // Fell off the end of the chromosome.

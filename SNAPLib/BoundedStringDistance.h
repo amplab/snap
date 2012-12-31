@@ -125,8 +125,8 @@ public:
      * - editStringBuf is long enough to hold the edit string, if set. We check that
      *   it's at least 2 * patternLen in case we must make one edit per character.
      */
-    int compute(const char *text, const char *pattern, int patternLen, int limit, double *mapProbability,
-                const char *qualityString, char *editStringBuf, int editStringBufLen, bool useM)
+    int compute(const char *text, const char *pattern, int patternLen, int maxStartShift, int limit,
+            double *mapProbability, const char *qualityString, char *editStringBuf, int editStringBufLen, bool useM)
     {
         if (limit < 0 || limit > MAX_DISTANCE) {
             fprintf(stderr, "Invalid distance limit: %d\n", limit);
@@ -148,27 +148,36 @@ public:
         const char *patternEnd = pattern + patternLen;
 
         // For distances less than gapOpenPenalty, just search for mismatches with shift = 0
-        int pos = 0;
-        for (int d = 0; d <= __min(limit, gapOpenPenalty - 1); d += substitutionPenalty) {
-            pos += longestPrefix(text+pos, pattern+pos, patternEnd);
-            L[d][SHIFT_OFF][NO_GAP] = pos;
-            if (COMPUTE_PREV && d != 0) {
-                prevGapStatus[d][SHIFT_OFF][NO_GAP] = NO_GAP;
-            }
-            if (pos == patternLen) {
-                if (!writeEditString(d, 0, editStringBuf, editStringBufLen, useM)) {
-                    return -2;
+        for (int s = SHIFT_OFF-maxStartShift; s <= SHIFT_OFF+maxStartShift; s++) {
+            int pos = 0;
+            for (int d = 0; d <= __min(limit, gapOpenPenalty - 1); d += substitutionPenalty) {
+                pos += longestPrefix(text+pos+s-SHIFT_OFF, pattern+pos, patternEnd);
+                L[d][s][NO_GAP] = pos;
+                if (COMPUTE_PREV && d != 0) {
+                    prevGapStatus[d][s][NO_GAP] = NO_GAP;
                 }
-                computeMapProbability(d, 0, mapProbability, qualityString);
-                return d;
-            } else {
-                pos += 1; // Skip the mismatch so we can go to the next d
+                if (pos == patternLen) {
+                    if (!writeEditString(d, 0, editStringBuf, editStringBufLen, useM)) {
+                        return -2;
+                    }
+                    computeMapProbability(d, 0, mapProbability, qualityString);
+                    return d;
+                } else {
+                    pos += 1; // Skip the mismatch so we can go to the next d
+                }
             }
+        }
+        // Add back sentinel values in case we were called with a bigger maxStartShift earlier
+        for (int d = 0; d <= __min(limit, gapOpenPenalty - 1); d += substitutionPenalty) {
+            L[d][SHIFT_OFF-maxStartShift-1][NO_GAP] = -2 * MAX_DISTANCE;
+            L[d][SHIFT_OFF+maxStartShift+1][NO_GAP] = -2 * MAX_DISTANCE;
         }
 
         // For distances >= gapOpenPenalty, also allow creating gaps in the text or pattern
         for (int d = gapOpenPenalty; d <= limit; d++) {
-            int maxShift = __min(d - gapOpenPenalty + 1, MAX_SHIFT);
+            int maxShift = __min(maxStartShift + d - gapOpenPenalty + 1, MAX_SHIFT);
+            L[d][SHIFT_OFF-maxShift-1][NO_GAP] = -2 * MAX_DISTANCE;
+            L[d][SHIFT_OFF+maxShift+1][NO_GAP] = -2 * MAX_DISTANCE;
             for (int s = SHIFT_OFF-maxShift; s <= SHIFT_OFF+maxShift; s++) {
                 // See whether we can start / extend the "text gap" case
                 fillBest(d, s, TEXT_GAP,
@@ -215,22 +224,22 @@ public:
     }
 
     // Just compute distance, without MAPQ or edit string
-    int compute(const char *text, const char *pattern, int patternLen, int limit) {
-        return compute(text, pattern, patternLen, limit, NULL, NULL, NULL, 0, false);
+    int compute(const char *text, const char *pattern, int patternLen, int maxStartShift, int limit) {
+        return compute(text, pattern, patternLen, maxStartShift, limit, NULL, NULL, NULL, 0, false);
     }
 
     // Compute distance and MAPQ but not edit string
-    int compute(const char *text, const char *pattern, int patternLen, int limit,
-            double *matchProbability, const char *qualityString)
+    int compute(const char *text, const char *pattern, int patternLen, int maxStartShift, int limit,
+            double *matchProb, const char *qualityString)
     {
-        return compute(text, pattern, patternLen, limit, matchProbability, qualityString, NULL, 0, false);
+        return compute(text, pattern, patternLen, maxStartShift, limit, matchProb, qualityString, NULL, 0, false);
     }
 
     // Compute distance and edit string but not MAPQ
-    int compute(const char *text, const char *pattern, int patternLen, int limit,
-                char *editStringBuf, int editStringBufLen, bool useM = false)
+    int compute(const char *text, const char *pattern, int patternLen, int maxStartShift, int limit,
+                char *editStrBuf, int editStrBufLen, bool useM = false)
     {
-        return compute(text, pattern, patternLen, limit, NULL, NULL, editStringBuf, editStringBufLen, useM);
+        return compute(text, pattern, patternLen, maxStartShift, limit, NULL, NULL, editStrBuf, editStrBufLen, useM);
     }
 
     // Use BigAlloc when allocating this object in case our arrays are big

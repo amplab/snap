@@ -913,7 +913,7 @@ Return Value:
                         //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
                         //}
 #elif defined(USE_BOUNDED_STRING_DISTANCE)
-                        score = boundedStringDist->compute(data, rcRead->getData(), rcRead->getDataLength(), scoreLimit,
+                        score = boundedStringDist->compute(data, rcRead->getData(), rcRead->getDataLength(), 0, scoreLimit,
 			                                   &matchProbability, rcRead->getQuality());
 			if (score != -1) {
 			     probabilityOfAllCandidates += matchProbability;
@@ -955,7 +955,7 @@ Return Value:
                         //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
                         //}
 #elif defined(USE_BOUNDED_STRING_DISTANCE)
-                        score = boundedStringDist->compute(data, read->getData(), read->getDataLength(), scoreLimit,
+                        score = boundedStringDist->compute(data, read->getData(), read->getDataLength(), 0, scoreLimit,
 			                                   &matchProbability, read->getQuality());
 			if (score != -1) {
 			    probabilityOfAllCandidates += matchProbability;
