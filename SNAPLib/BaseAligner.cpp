@@ -913,9 +913,10 @@ Return Value:
                         //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
                         //}
 #elif defined(USE_BOUNDED_STRING_DISTANCE)
-                        score = boundedStringDist->compute(data, rcRead->getData(), rcRead->getDataLength(), 6, scoreLimit,
-			                                   &matchProbability, rcRead->getQuality());
-                        for (int shift = 1; shift <= 6; shift++) {
+			int maxStartShift = __min(scoreLimit, 5);
+                        score = boundedStringDist->compute(data, rcRead->getData(), rcRead->getDataLength(),
+			      maxStartShift, scoreLimit, &matchProbability, rcRead->getQuality());
+                        for (int shift = 1; shift <= maxStartShift; shift++) {
                             elementToScore->candidatesScored |= (candidateBit << shift);
                             elementToScore->candidatesScored |= (candidateBit >> shift);
                         }
@@ -959,9 +960,10 @@ Return Value:
                         //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
                         //}
 #elif defined(USE_BOUNDED_STRING_DISTANCE)
-                        score = boundedStringDist->compute(data, read->getData(), read->getDataLength(), 6, scoreLimit,
-			                                   &matchProbability, read->getQuality());
-                        for (int shift = 1; shift <= 6; shift++) {
+			int maxStartShift = __min(scoreLimit, 5);
+                        score = boundedStringDist->compute(data, read->getData(), read->getDataLength(),
+			      maxStartShift, scoreLimit, &matchProbability, read->getQuality());
+                        for (int shift = 1; shift <= maxStartShift; shift++) {
                             elementToScore->candidatesScored |= (candidateBit << shift);
                             elementToScore->candidatesScored |= (candidateBit >> shift);
                         }
