@@ -89,7 +89,7 @@ inline int computeMAPQ(
         //baseMAPQ = __max(0, baseMAPQ - biggestClusterScored / 4000);
     }
 
-    //baseMAPQ = __max(0, baseMAPQ - popularSeedsSkipped);
+    //baseMAPQ = __max(0, baseMAPQ - __max(0, popularSeedsSkipped-10)/2);
     
     //if (score + 1 > __max(firstPassSeedsNotSkipped, firstPassRCSeedsNotSkipped)) {
     //    baseMAPQ = __max(0, baseMAPQ - 4 * (score + 1 - __max(firstPassSeedsNotSkipped, firstPassRCSeedsNotSkipped)));
