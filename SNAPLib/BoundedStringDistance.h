@@ -23,7 +23,7 @@
  * TODO: Allow making the L array "cyclic" through another template parameter (i.e.
  * so that only the last few rows will be kept) to save cache space for big arrays.
  */
-template<bool COMPUTE_EDIT_STRING=false, bool COMPUTE_MAPQ=false, int MAX_DISTANCE=50, int MAX_SHIFT=MAX_DISTANCE>
+template<bool COMPUTE_EDIT_STRING=false, bool COMPUTE_MAPQ=false, int MAX_DISTANCE=31, int MAX_SHIFT=MAX_DISTANCE>
 class BoundedStringDistance
 {
 private:
@@ -46,8 +46,10 @@ private:
 
     // L[distance][shift][gapStatus] is the largest value x such that the distance
     // between pattern[0..x] and text[0..x+shift] is "distance" and the gap status
-    // at the end is "gapStatus".
-    int L[MAX_DISTANCE+1][2*MAX_SHIFT+3][3];
+    // at the end is "gapStatus". To avoid branches, we keep L as a pointer into
+    // a bigger array, padded, with enough space for negative distance indices.
+    int padded[2*MAX_DISTANCE+1][2*MAX_SHIFT+3][3];
+    int (*L)[2*MAX_SHIFT+3][3];
 
     // A state in our search through the strings, i.e. a set of coordinates in the L array,
     // as well as the edit action (e.g. 'X', 'D') we took to move away from them
@@ -83,11 +85,17 @@ public:
           snpProbability(snpProbability_), indelOpenProbability(indelOpenProbability_),
           indelExtendProbability(indelExtendProbability_)
     {
+        _ASSERT(substitutionPenalty <= MAX_DISTANCE);
+        _ASSERT(gapOpenPenalty <= MAX_DISTANCE);
+        L = padded + MAX_DISTANCE;
+
         // Clear out the L array
-        for (int d = 0; d < MAX_DISTANCE + 1; d++) {
+        for (int d = -MAX_DISTANCE; d <= MAX_DISTANCE; d++) {
             for (int s = 0; s < 2 * MAX_SHIFT + 3; s++) {
                 for (int g = 0; g < 3; g++) {
-                    L[d][s][g] = -2;
+                    // Use a very negative value to avoid having to check for when a parent state
+                    // has L = 0 in compute, avoiding expensive branches
+                    L[d][s][g] = -2 * MAX_DISTANCE;
                 }
             }
         }
@@ -167,7 +175,12 @@ public:
         // For distances >= gapOpenPenalty, also allow creating gaps in the text or pattern
         for (int d = gapOpenPenalty; d <= limit; d++) {
             int maxShift = __min(d - gapOpenPenalty + 1, MAX_SHIFT);
-            for (int s = SHIFT_OFF - maxShift; s <= SHIFT_OFF + maxShift; s++) {
+            int sign = 1;
+            for (int t = 1; t <= 2 * maxShift + 1; t++) {
+                // Produces the sequence of shifts 0, -1, +1, -2, +2, ... to minimize result shift
+                int s = SHIFT_OFF + sign * (t >> 1);
+                sign = -sign;
+
                 // See whether we can start / extend the "text gap" case
                 fillBest(d, s, TEXT_GAP,
                          d-gapOpenPenalty, s-1, NO_GAP, 0, 'D',  // Open a gap from NO_GAP
@@ -247,15 +260,15 @@ private:
             int d1, int s1, int g1, int delta1, char action1,
             int d2, int s2, int g2, int delta2, char action2)
     {
-        int val1 = (d1 >= 0) ? L[d1][s1][g1] + delta1 : -2;
-        int val2 = (d2 >= 0) ? L[d2][s2][g2] + delta2 : -2;
+        int val1 = L[d1][s1][g1] + delta1;
+        int val2 = L[d2][s2][g2] + delta2;
         if (val1 >= val2) {
-            L[destD][destS][destG] = (val1 >= 0) ? val1 : -2;
+            L[destD][destS][destG] = val1;
             if (COMPUTE_PREV) {
                 prev[destD][destS][destG] = State(d1, s1, g1, action1);
             }
         } else {
-            L[destD][destS][destG] = (val2 >= 0) ? val2 : -2;
+            L[destD][destS][destG] = val2;
             if (COMPUTE_PREV) {
                 prev[destD][destS][destG] = State(d2, s2, g2, action2);
             }
@@ -271,29 +284,29 @@ private:
             int d2, int s2, int g2, int delta2, char action2,
             int d3, int s3, int g3, int delta3, char action3)
     {
-        int val1 = (d1 >= 0) ? L[d1][s1][g1] + delta1 : -2;
-        int val2 = (d2 >= 0) ? L[d2][s2][g2] + delta2 : -2;
-        int val3 = (d3 >= 0) ? L[d3][s3][g3] + delta3 : -2;
+        int val1 = L[d1][s1][g1] + delta1;
+        int val2 = L[d2][s2][g2] + delta2;
+        int val3 = L[d3][s3][g3] + delta3;
         if (val1 >= val2) {
             if (val1 >= val3) {
-                L[destD][destS][destG] = (val1 >= 0) ? val1 : -2;
+                L[destD][destS][destG] = val1;
                 if (COMPUTE_PREV) {
                     prev[destD][destS][destG] = State(d1, s1, g1, action1);
                 }
             } else {
-                L[destD][destS][destG] = (val3 >= 0) ? val3 : -2;
+                L[destD][destS][destG] = val3;
                 if (COMPUTE_PREV) {
                     prev[destD][destS][destG] = State(d3, s3, g3, action3);
                 }
             }
         } else {
             if (val2 >= val3) {
-                L[destD][destS][destG] = (val2 >= 0) ? val2 : -2;
+                L[destD][destS][destG] = val2;
                 if (COMPUTE_PREV) {
                     prev[destD][destS][destG] = State(d2, s2, g2, action2);
                 }
             } else {
-                L[destD][destS][destG] = (val3 >= 0) ? val3 : -2;
+                L[destD][destS][destG] = val3;
                 if (COMPUTE_PREV) {
                     prev[destD][destS][destG] = State(d3, s3, g3, action3);
                 }
@@ -440,6 +453,11 @@ private:
             }
             d = prevD; s = prevS; g = prevG;
             oldAction = action;
+        }
+
+        if (*mapProbability < 1e-70 || *mapProbability >= 1.0 || isnan(*mapProbability)) {
+            printf("EEK: %f\n", *mapProbability);
+            exit(1);
         }
     }
 };

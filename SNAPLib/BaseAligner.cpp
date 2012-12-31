@@ -915,7 +915,9 @@ Return Value:
 #elif defined(USE_BOUNDED_STRING_DISTANCE)
                         score = boundedStringDist->compute(data, rcRead->getData(), rcRead->getDataLength(), scoreLimit,
 			                                   &matchProbability, rcRead->getQuality());
-                        probabilityOfAllCandidates += matchProbability;
+			if (score != -1) {
+			     probabilityOfAllCandidates += matchProbability;
+			}
 #else
                         _uint64 cacheKey = 0;
                         if (readId != -1) {
@@ -955,7 +957,9 @@ Return Value:
 #elif defined(USE_BOUNDED_STRING_DISTANCE)
                         score = boundedStringDist->compute(data, read->getData(), read->getDataLength(), scoreLimit,
 			                                   &matchProbability, read->getQuality());
-                        probabilityOfAllCandidates += matchProbability;
+			if (score != -1) {
+			    probabilityOfAllCandidates += matchProbability;
+			}
 #else
                         _uint64 cacheKey = 0;
                         if (readId != -1) {
