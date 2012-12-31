@@ -50,23 +50,10 @@ private:
     // a bigger array, padded, with enough space for negative distance indices.
     int padded[2*MAX_DISTANCE+1][2*MAX_SHIFT+3][3];
     int (*L)[2*MAX_SHIFT+3][3];
-
-    // A state in our search through the strings, i.e. a set of coordinates in the L array,
-    // as well as the edit action (e.g. 'X', 'D') we took to move away from them
-    struct State { 
-        int distance;
-        int shift;
-        int gapStatus;
-        char action;
-
-        State(): distance(-1), shift(-1), gapStatus(-1), action('=') {}
-
-        State(int distance_, int shift_, int gapStatus_, char action_)
-            : distance(distance_), shift(shift_), gapStatus(gapStatus_), action(action_) {}
-    };
-
-    // Previous state we were in before getting to each particular state
-    State prev[MAX_DISTANCE+1][2*MAX_SHIFT][3];
+   
+    // Previous gap status we had before getting to each particular state; this is enough
+    // to infer the location we came from and the action we took to get here
+    int prevGapStatus[MAX_DISTANCE+1][2*MAX_SHIFT][3];
 
     // Mismatch probability as a function of base quality
     double mismatchProbability[256];
@@ -97,6 +84,13 @@ public:
                     // has L = 0 in compute, avoiding expensive branches
                     L[d][s][g] = -2 * MAX_DISTANCE;
                 }
+            }
+        }
+        
+        // Add sentinel values for prevGapStatus
+        for (int s = 0; s < 2 * MAX_SHIFT + 3; s++) {
+            for (int g = 0; g < 3; g++) {
+                prevGapStatus[0][s][g] = -1;
             }
         }
         
@@ -159,7 +153,7 @@ public:
             pos += longestPrefix(text+pos, pattern+pos, patternEnd);
             L[d][SHIFT_OFF][NO_GAP] = pos;
             if (COMPUTE_PREV && d != 0) {
-                prev[d][SHIFT_OFF][NO_GAP] = State(d-substitutionPenalty, SHIFT_OFF, NO_GAP, 'X');
+                prevGapStatus[d][SHIFT_OFF][NO_GAP] = NO_GAP;
             }
             if (pos == patternLen) {
                 if (!writeEditString(d, 0, editStringBuf, editStringBufLen, useM)) {
@@ -178,15 +172,15 @@ public:
             for (int s = SHIFT_OFF-maxShift; s <= SHIFT_OFF+maxShift; s++) {
                 // See whether we can start / extend the "text gap" case
                 fillBest(d, s, TEXT_GAP,
-                         d-gapOpenPenalty, s-1, NO_GAP, 0, 'D',  // Open a gap from NO_GAP
-                         d-1, s-1, TEXT_GAP, 0, 'D');            // Continue a TEXT_GAP
+                         d-gapOpenPenalty, s-1, NO_GAP, 0,  // Open a gap from NO_GAP
+                         d-1, s-1, TEXT_GAP, 0);            // Continue a TEXT_GAP
                 // Note that continuing from a PATTERN_GAP is covered because the NO_GAP
                 // case at d-gapOpenPenalty considered closing the PATTERN_GAP there
 
                 // See whether we can start / extend the "pattern gap" case
                 fillBest(d, s, PATTERN_GAP,
-                         d-gapOpenPenalty, s+1, NO_GAP, 1, 'I',  // Open a new gap
-                         d-1, s+1, PATTERN_GAP, 1, 'I');         // Continue a PATTERN_GAP
+                         d-gapOpenPenalty, s+1, NO_GAP, 1,  // Open a new gap
+                         d-1, s+1, PATTERN_GAP, 1);         // Continue a PATTERN_GAP
                 // Note that continuing from a TEXT_GAP is covered because the NO_GAP
                 // case at d-gapOpenPenalty considered closing the TEXT_GAP there
 
@@ -196,9 +190,9 @@ public:
                 // in TEXT_GAP and PATTERN_GAP above, this automatically includes using those as
                 // starting points and just closing the gap that got us to this distance.
                 fillBest(d, s, NO_GAP,
-                         d-substitutionPenalty, s, NO_GAP, 1, 'X',  // Add subsitution after NO_GAP
-                         d, s, TEXT_GAP, 0, '=',                    // Close a TEXT_GAP and go from there
-                         d, s, PATTERN_GAP, 0, '=');                // Close a PATTERN_GAP
+                         d-substitutionPenalty, s, NO_GAP, 1,  // Add subsitution after NO_GAP
+                         d, s, TEXT_GAP, 0,                    // Close a TEXT_GAP and go from there
+                         d, s, PATTERN_GAP, 0);                // Close a PATTERN_GAP
                 // For NO_GAP, also add any string of matching characters after where we end up
                 int location = L[d][s][NO_GAP];
                 if (location >= 0) {
@@ -250,22 +244,21 @@ private:
      * and previous gapStatus, as well as a delta to add to the length stored in its L entry.
      * This method saves some repetition that would otherwise happen in compute().
      */
-    inline void fillBest(
-            int destD, int destS, int destG,
-            int d1, int s1, int g1, int delta1, char action1,
-            int d2, int s2, int g2, int delta2, char action2)
+    inline void fillBest(int destD, int destS, int destG,
+                         int d1, int s1, int g1, int delta1,
+                         int d2, int s2, int g2, int delta2)
     {
         int val1 = L[d1][s1][g1] + delta1;
         int val2 = L[d2][s2][g2] + delta2;
         if (val1 >= val2) {
             L[destD][destS][destG] = val1;
             if (COMPUTE_PREV) {
-                prev[destD][destS][destG] = State(d1, s1, g1, action1);
+                prevGapStatus[destD][destS][destG] = g1;
             }
         } else {
             L[destD][destS][destG] = val2;
             if (COMPUTE_PREV) {
-                prev[destD][destS][destG] = State(d2, s2, g2, action2);
+                prevGapStatus[destD][destS][destG] = g2;
             }
         }
     }
@@ -273,11 +266,10 @@ private:
     /**
      * Version of fillBest() for three possible parent states.
      */
-    inline void fillBest(
-            int destD, int destS, int destG,
-            int d1, int s1, int g1, int delta1, char action1,
-            int d2, int s2, int g2, int delta2, char action2,
-            int d3, int s3, int g3, int delta3, char action3)
+    inline void fillBest(int destD, int destS, int destG,
+                         int d1, int s1, int g1, int delta1,
+                         int d2, int s2, int g2, int delta2,
+                         int d3, int s3, int g3, int delta3)
     {
         int val1 = L[d1][s1][g1] + delta1;
         int val2 = L[d2][s2][g2] + delta2;
@@ -286,24 +278,24 @@ private:
             if (val1 >= val3) {
                 L[destD][destS][destG] = val1;
                 if (COMPUTE_PREV) {
-                    prev[destD][destS][destG] = State(d1, s1, g1, action1);
+                    prevGapStatus[destD][destS][destG] = g1;
                 }
             } else {
                 L[destD][destS][destG] = val3;
                 if (COMPUTE_PREV) {
-                    prev[destD][destS][destG] = State(d3, s3, g3, action3);
+                    prevGapStatus[destD][destS][destG] = g3;
                 }
             }
         } else {
             if (val2 >= val3) {
                 L[destD][destS][destG] = val2;
                 if (COMPUTE_PREV) {
-                    prev[destD][destS][destG] = State(d2, s2, g2, action2);
+                    prevGapStatus[destD][destS][destG] = g2;
                 }
             } else {
                 L[destD][destS][destG] = val3;
                 if (COMPUTE_PREV) {
-                    prev[destD][destS][destG] = State(d3, s3, g3, action3);
+                    prevGapStatus[destD][destS][destG] = g3;
                 }
             }
         }
@@ -353,12 +345,13 @@ private:
         int s = SHIFT_OFF + endShift;
         int g = NO_GAP;
 
-        while (d != -1) {
-            int prevD = prev[d][s][g].distance;
-            int prevS = prev[d][s][g].shift;
-            int prevG = prev[d][s][g].gapStatus;
-            char action = prev[d][s][g].action;
-            int matchCount = L[d][s][g] - (prevD == -1 ? 0 : L[prevD][prevS][prevG]); // Exact matches after this
+        while (g != -1) {
+            // Figure out which action we took to get here, and from which state
+            int prevD, prevS, prevG;
+            char action;
+            getPreviousState(d, s, g, &prevD, &prevS, &prevG, &action);
+            // Figure out how this affects our CIGAR string
+            int matchCount = L[d][s][g] - (prevG == -1 ? 0 : L[prevD][prevS][prevG]); // Exact matches after this
             if (action == 'X' || action == 'I') {
                 matchCount -= 1;
             }
@@ -374,6 +367,7 @@ private:
                 matchCounts[numActions] = 1;
                 numActions++;
             }
+            // Move to the previous state
             d = prevD; s = prevS; g = prevG;
         }
 
@@ -417,12 +411,13 @@ private:
         int g = NO_GAP;
         char oldAction = '=';   // Used to tell whether we're expanding or starting a gap
 
-        while (d != -1) {
-            int prevD = prev[d][s][g].distance;
-            int prevS = prev[d][s][g].shift;
-            int prevG = prev[d][s][g].gapStatus;
-            char action = prev[d][s][g].action;
-            int matchCount = L[d][s][g] - (prevD == -1 ? 0 : L[prevD][prevS][prevG]); // Exact matches after this
+        while (g != -1) {
+            // Figure out which action we took to get here, and from which state
+            int prevD, prevS, prevG;
+            char action;
+            getPreviousState(d, s, g, &prevD, &prevS, &prevG, &action);
+            // Figure out how this affects the map probability
+            int matchCount = L[d][s][g] - (prevG == -1 ? 0 : L[prevD][prevS][prevG]); // Exact matches after this
             if (action == 'X' || action == 'I') {
                 matchCount -= 1;
             }
@@ -446,13 +441,50 @@ private:
                     // We can also get the '=' action in some cases, but we its probability above
                     break;
             }
+            // Move to the previous state
             d = prevD; s = prevS; g = prevG;
             oldAction = action;
         }
+    }
 
-        if (*mapProbability < 1e-70 || *mapProbability >= 1.0 || isnan(*mapProbability)) {
-            printf("EEK: %f\n", *mapProbability);
-            exit(1);
+    // Find the distance / shift / gapStatus state that got us to a current state, as well as the
+    // edit action we took to get there. Uses the prevGapStatus to figure this out.
+    inline void getPreviousState(int curD, int curS, int curG, int *prevD, int *prevS, int *prevG, char *action) {
+        *prevG = prevGapStatus[curD][curS][curG];
+        switch (curG) {
+            case NO_GAP:
+                if (*prevG == NO_GAP) {
+                    *action = 'X';
+                    *prevD = curD - substitutionPenalty;
+                    *prevS = curS;
+                } else { // Came from TEXT_GAP or PATTERN_GAP at the same position
+                    *action = '=';
+                    *prevD = curD;
+                    *prevS = curS;
+                }
+                break;
+            case TEXT_GAP:
+                if (*prevG == TEXT_GAP) {
+                    *action = 'D';
+                    *prevD = curD - 1;
+                    *prevS = curS - 1;
+                } else {  // Came from NO_GAP
+                    *action = 'D';
+                    *prevD = curD - gapOpenPenalty;
+                    *prevS = curS - 1;
+                }
+                break;
+            case PATTERN_GAP:
+                if (*prevG == PATTERN_GAP) {
+                    *action = 'I';
+                    *prevD = curD - 1;
+                    *prevS = curS + 1;
+                } else {  // Came from NO_GAP
+                    *action = 'I';
+                    *prevD = curD - gapOpenPenalty;
+                    *prevS = curS + 1;
+                }
+                break;
         }
     }
 };
