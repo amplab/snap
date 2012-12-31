@@ -913,16 +913,20 @@ Return Value:
                         //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
                         //}
 #elif defined(USE_BOUNDED_STRING_DISTANCE)
-			int maxStartShift = __min(scoreLimit, 5);
+                        int maxStartShift = __min(scoreLimit, 5);
                         score = boundedStringDist->compute(data, rcRead->getData(), rcRead->getDataLength(),
-			      maxStartShift, scoreLimit, &matchProbability, rcRead->getQuality());
+                              maxStartShift, scoreLimit, &matchProbability, rcRead->getQuality());
                         for (int shift = 1; shift <= maxStartShift; shift++) {
                             elementToScore->candidatesScored |= (candidateBit << shift);
                             elementToScore->candidatesScored |= (candidateBit >> shift);
                         }
-			if (score != -1) {
-			     probabilityOfAllCandidates += matchProbability;
-			}
+                        if (score != -1) {
+                            probabilityOfAllCandidates += matchProbability;
+                            if (similarityMap != NULL) {
+                                biggestClusterScored = __max(biggestClusterScored,
+                                      similarityMap->getNumClusterMembers(genomeLocation));
+                            }
+                        }
 #else
                         _uint64 cacheKey = 0;
                         if (readId != -1) {
@@ -960,16 +964,20 @@ Return Value:
                         //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
                         //}
 #elif defined(USE_BOUNDED_STRING_DISTANCE)
-			int maxStartShift = __min(scoreLimit, 5);
+                        int maxStartShift = __min(scoreLimit, 5);
                         score = boundedStringDist->compute(data, read->getData(), read->getDataLength(),
-			      maxStartShift, scoreLimit, &matchProbability, read->getQuality());
+                              maxStartShift, scoreLimit, &matchProbability, read->getQuality());
                         for (int shift = 1; shift <= maxStartShift; shift++) {
                             elementToScore->candidatesScored |= (candidateBit << shift);
                             elementToScore->candidatesScored |= (candidateBit >> shift);
                         }
-			if (score != -1) {
-			    probabilityOfAllCandidates += matchProbability;
-			}
+                        if (score != -1) {
+                            probabilityOfAllCandidates += matchProbability;
+                            if (similarityMap != NULL) {
+                                biggestClusterScored = __max(biggestClusterScored,
+                                      similarityMap->getNumClusterMembers(genomeLocation));
+                            }
+                        }
 #else
                         _uint64 cacheKey = 0;
                         if (readId != -1) {
@@ -1017,8 +1025,8 @@ Return Value:
     
                 if (bestScore > score ||
                     bestScore == score && matchProbability > probabilityOfBestCandidate) {
-		            if ((secondBestScore == UnusedScoreValue || !(secondBestScoreGenomeLocation + maxK > genomeLocation && secondBestScoreGenomeLocation < genomeLocation + maxK)) &&
-		                (bestScore == UnusedScoreValue || !(bestScoreGenomeLocation + maxK > genomeLocation && bestScoreGenomeLocation < genomeLocation + maxK))) 
+                            if ((secondBestScore == UnusedScoreValue || !(secondBestScoreGenomeLocation + maxK > genomeLocation && secondBestScoreGenomeLocation < genomeLocation + maxK)) &&
+                                (bestScore == UnusedScoreValue || !(bestScoreGenomeLocation + maxK > genomeLocation && bestScoreGenomeLocation < genomeLocation + maxK))) 
                     {
                             secondBestScore = bestScore;
                             secondBestScoreGenomeLocation = bestScoreGenomeLocation;
@@ -1114,6 +1122,20 @@ Return Value:
             *result = MultipleHits;
             return true;
         }
+
+	// Check whether we know we'll return MAPQ=0 for this read (NOTE: doesn't work right and doesn't give much speed)
+	//if (bestScore != UnusedScoreValue) {
+	//   double bestPossibleUnseenScore = __min(firstPassSeedsNotSkipped, firstPassRCSeedsNotSkipped);
+	//   double bestPossibleUnseenMatchProb = 0.001 * pow(0.5, __max(0, bestPossibleUnseenScore-1));
+	//   double bestPossibleProb = __max(bestPossibleUnseenMatchProb, probabilityOfBestCandidate);
+	//   if (probabilityOfAllCandidates - probabilityOfBestCandidate > 0.9 * bestPossibleProb) {
+	//       *result = MultipleHits;
+	//       *singleHitGenomeLocation = bestScoreGenomeLocation;
+	//       *finalScore = bestScore;
+	//       *mapq = 0;
+	//       return true;
+	//   }
+	//}
     } while (forceResult);
 
     return false;

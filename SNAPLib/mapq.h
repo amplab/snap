@@ -45,29 +45,31 @@ inline int computeMAPQ(
     _ASSERT(probabilityOfAllCandidates >= probabilityOfBestCandidate);
     _ASSERT(probabilityOfBestCandidate >= 0.0);
 
-    /*
+#ifdef USE_BOUNDED_STRING_DISTANCE
+    score /= 2;   // We count mismatches and gap opens as 2 with BoundedStringDistance
+#endif
+
     //
     // Skipped seeds are ones that the aligner didn't look at because they had too many hits during the first
-    // pass throygh the read (i.e., they're disjoint).  Any genome location that was ignored because of
+    // pass through the read (i.e., they're disjoint).  Any genome location that was ignored because of
     // maxHits could have at least score of this number (because it would have to have a difference in each
     // of them).  Assume that there are as many reads as the smallest of the sets at this edit distance
     // away from the read (i.e., assume the worst case).  Use a probability of .001 for migrating an edit
     // distance (this is, of course, just a guess since it really depends on the base call qualities, etc.,
     // but since we didn't look at the genome locations at all, this will have to do).
     //
-
+    /*
     double probabilityOfSkippedLocations = 0.0;
     if (0xffffffff != smallestSkippedSeed) {
-        probabilityOfSkippedLocations = pow(.001, firstPassSeedsNotSkipped) * smallestSkippedSeed;
+        probabilityOfSkippedLocations = pow(.001, firstPassSeedsNotSkipped) * smallestSkippedSeed / 100000;
     }
     if (0xffffffff != smallestSkippedRCSeed) {
-        probabilityOfSkippedLocations += pow(.001, firstPassRCSeedsNotSkipped) * smallestSkippedRCSeed;
+        probabilityOfSkippedLocations += pow(.001, firstPassRCSeedsNotSkipped) * smallestSkippedRCSeed / 100000;
     }
+    probabilityOfAllCandidates += probabilityOfSkippedLocations;
     */
 
-    double probabilityOfSkippedLocations = 0;
-
-    double correctnessProbability = probabilityOfBestCandidate / (probabilityOfAllCandidates + probabilityOfSkippedLocations);
+    double correctnessProbability = probabilityOfBestCandidate / probabilityOfAllCandidates;
     int baseMAPQ;
     if (correctnessProbability >= 1) {
         baseMAPQ =  70;
@@ -76,30 +78,17 @@ inline int computeMAPQ(
     }
 
     if (similarityMap != NULL) {
-        int clusterSize = (int) similarityMap->getNumClusterMembers(location);
+        //int clusterSize = (int) similarityMap->getNumClusterMembers(location);
 #ifdef TRACE_ALIGNER
-        printf("Cluster size at %u: %d\n", location, clusterSize);
+        //printf("Cluster size at %u: %d\n", location, clusterSize);
 #endif
-        baseMAPQ = __max(0, baseMAPQ - clusterSize / 4000);
-        //if (biggestClusterScored > 2 * clusterSize) {
-        //    baseMAPQ = __max(0, baseMAPQ - biggestClusterScored / 2000);
-        //}
-
-        // TODO: probably need to use log(biggestClusterScored) since MAPQ is on an exponential scale
-        //baseMAPQ = __max(0, baseMAPQ - biggestClusterScored / 4000);
+        baseMAPQ = __max(0, baseMAPQ - log10(biggestClusterScored) * 3);
     }
 
-    //baseMAPQ = __max(0, baseMAPQ - __max(0, popularSeedsSkipped-10)/2);
-    
-    //if (score + 1 > __max(firstPassSeedsNotSkipped, firstPassRCSeedsNotSkipped)) {
-    //    baseMAPQ = __max(0, baseMAPQ - 4 * (score + 1 - __max(firstPassSeedsNotSkipped, firstPassRCSeedsNotSkipped)));
-    //}
-
     //
-    // Apply a penalty based on the absolute difference between the read and the place it matched, as expressed
-    // by its score.
+    // Apply a penalty based on the number of overly popular seeds in the read
     //
-    //baseMAPQ = __max(0, baseMAPQ - 2 * score);
+    baseMAPQ = __max(0, baseMAPQ - __max(0, popularSeedsSkipped-10) / 2);
 
 #ifdef TRACE_ALIGNER
     printf("computeMAPQ called at %u: score %d, pThis %g, pAll %g, result %d\n",
