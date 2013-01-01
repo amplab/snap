@@ -44,6 +44,10 @@ inline int computeMAPQ(
 {
     _ASSERT(probabilityOfAllCandidates >= probabilityOfBestCandidate);
     _ASSERT(probabilityOfBestCandidate >= 0.0);
+    // Special case for MAPQ 70, which we generate only if there is no evidence of a mismatch at all.
+    if (probabilityOfAllCandidates == probabilityOfBestCandidate && popularSeedsSkipped == 0 && score < 5) {
+        return 70;
+    }
 
 #ifdef USE_BOUNDED_STRING_DISTANCE
     score /= 2;   // We count mismatches and gap opens as 2 with BoundedStringDistance
@@ -69,12 +73,17 @@ inline int computeMAPQ(
     probabilityOfAllCandidates += probabilityOfSkippedLocations;
     */
 
+    // Special case for MAPQ 70, which we generate only if there is no evidence of a mismatch at all.
+    if (probabilityOfAllCandidates == probabilityOfBestCandidate && popularSeedsSkipped == 0 && score < 5) {
+        return 70;
+    }
+
     double correctnessProbability = probabilityOfBestCandidate / probabilityOfAllCandidates;
     int baseMAPQ;
     if (correctnessProbability >= 1) {
-        baseMAPQ =  70;
+        baseMAPQ =  69;
     } else {
-        baseMAPQ = __min(70, (int)(-10 * log10(1 - correctnessProbability)));
+        baseMAPQ = __min(69, (int)(-10 * log10(1 - correctnessProbability)));
     }
 
     if (similarityMap != NULL) {
