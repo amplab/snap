@@ -90,7 +90,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>NOMINMAX;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions);USE_BOUNDED_STRING_DISTANCE </PreprocessorDefinitions>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
@@ -127,7 +127,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions);USE_BOUNDED_STRING_DISTANCE </PreprocessorDefinitions>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <AdditionalIncludeDirectories>
       </AdditionalIncludeDirectories>
@@ -171,10 +171,12 @@
     <ClInclude Include="PairedAligner.h" />
     <ClInclude Include="PairedEndAligner.h" />
     <ClInclude Include="ParallelTask.h" />
+    <ClInclude Include="ProbabilityDistance.h" />
     <ClInclude Include="RangeSplitter.h" />
     <ClInclude Include="read.h" />
     <ClInclude Include="sam.h" />
     <ClInclude Include="seed.h" />
+    <ClInclude Include="SimilarityMap.h" />
     <ClInclude Include="SimplePairedEndAligner.h" />
     <ClInclude Include="SingleAligner.h" />
     <ClInclude Include="SmarterPairedEndAligner.h" />
@@ -210,10 +212,12 @@
     <ClCompile Include="OldAligner.cpp" />
     <ClCompile Include="PairedAligner.cpp" />
     <ClCompile Include="PairedEndAligner.cpp" />
+    <ClCompile Include="ProbabilityDistance.cpp" />
     <ClCompile Include="Range.cpp" />
     <ClCompile Include="RangeSplitter.cpp" />
     <ClCompile Include="sam.cpp" />
     <ClCompile Include="seed.cpp" />
+    <ClCompile Include="SimilarityMap.cpp" />
     <ClCompile Include="SimplePairedEndAligner.cpp" />
     <ClCompile Include="SingleAligner.cpp" />
     <ClCompile Include="SmarterPairedEndAligner.cpp" />

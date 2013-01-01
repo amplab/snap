@@ -407,9 +407,9 @@ private:
      * and shift we ended up at when we matched the end of the pattern. Does nothing if the output
      * pointer is null or COMPUTE_MAPQ is false.
      */
-    bool computeMapProbability(int endDistance, int endShift, double *mapProbability, const char *qualityString) {
+    void computeMapProbability(int endDistance, int endShift, double *mapProbability, const char *qualityString) {
         if (!COMPUTE_MAPQ || mapProbability == NULL) {
-            return true;
+            return;
         }
 
         *mapProbability = 1.0;

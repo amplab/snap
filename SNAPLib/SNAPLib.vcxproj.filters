@@ -106,6 +106,12 @@
     <ClCompile Include="mapq.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="SimilarityMap.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ProbabilityDistance.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="aligner.h">
@@ -229,6 +235,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="mapq.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SimilarityMap.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ProbabilityDistance.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

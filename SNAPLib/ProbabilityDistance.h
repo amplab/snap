@@ -32,7 +32,7 @@ private:
     double matchLogProb[256];      // [baseQuality]
     double mismatchLogProb[256];   // [baseQuality]
 
-    static const double NO_PROB = -1000000.0;  // A really negative log probability -- basically zero
+#define NO_PROB  -1000000.0;  // A really negative log probability -- basically zero.  VC compiler won't allow static const double in a class.
 
     enum GapStatus { NO_GAP, READ_GAP, REF_GAP };
 
