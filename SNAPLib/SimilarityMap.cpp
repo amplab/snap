@@ -35,7 +35,7 @@ SimilarityMap::~SimilarityMap()
 
 void SimilarityMap::addCluster(unsigned newClusterId, RegionCluster *cluster)
 {
-    for (unsigned i = 0; i < cluster->members.size(); i++) {
+    for (int i = 0; i < cluster->members.size(); i++) {
         clusterInfo[cluster->members[i].location].clusterId = newClusterId;
         clusterInfo[cluster->members[i].location].cluster = cluster;
     }

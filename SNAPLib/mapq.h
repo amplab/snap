@@ -73,11 +73,6 @@ inline int computeMAPQ(
     probabilityOfAllCandidates += probabilityOfSkippedLocations;
     */
 
-    // Special case for MAPQ 70, which we generate only if there is no evidence of a mismatch at all.
-    if (probabilityOfAllCandidates == probabilityOfBestCandidate && popularSeedsSkipped == 0 && score < 5) {
-        return 70;
-    }
-
     double correctnessProbability = probabilityOfBestCandidate / probabilityOfAllCandidates;
     int baseMAPQ;
     if (correctnessProbability >= 1) {
