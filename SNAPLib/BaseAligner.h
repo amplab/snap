@@ -148,7 +148,7 @@ public:
 
 private:
     LandauVishkin *landauVishkin;
-    BoundedStringDistance<false, true> *boundedStringDist;
+    BoundedStringDistance<> *boundedStringDist;
     bool ownLandauVishkin;
 
     ProbabilityDistance *probDistance;
@@ -339,6 +339,8 @@ private:
 
     char *rcReadData;
     char *rcReadQuality;    // This is allocated along with rcReadData in a single BigAlloc call, so don't free it.
+    char *reversedRead;
+    char *rcReversedRead;   // This will be allocated along with reversedRead, so don't free it separately.
 
     unsigned nTable[256];
 

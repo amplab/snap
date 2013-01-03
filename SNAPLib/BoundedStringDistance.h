@@ -15,7 +15,6 @@
  * doesn't seem common to make them too different from each other.
  *
  * Parameters:
- * - COMPUTE_EDIT_STRING: whether to support computing edit strings (in CIGAR format).
  * - MAX_DISTANCE: maximum distance score supported.
  * - MAX_SHIFT: maximum shift supported. This can be less than MAX_DISTANCE if one
  *   is not expecting huge indels, in order to save computation time.
@@ -23,7 +22,7 @@
  * TODO: Allow making the L array "cyclic" through another template parameter (i.e.
  * so that only the last few rows will be kept) to save cache space for big arrays.
  */
-template<bool COMPUTE_EDIT_STRING=false, bool COMPUTE_MAPQ=false, int MAX_DISTANCE=31, int MAX_SHIFT=MAX_DISTANCE>
+template<int MAX_DISTANCE=31, int MAX_SHIFT=MAX_DISTANCE>
 class BoundedStringDistance
 {
 private:
@@ -31,7 +30,6 @@ private:
 
     static const int MAX_READ = 10000;           // Arbitrary, could easily be bigger
     static const int SHIFT_OFF = MAX_SHIFT + 1;  // For indexing into arrays by shift
-    static const bool COMPUTE_PREV = COMPUTE_EDIT_STRING || COMPUTE_MAPQ;  // Whether we need to backtrack
 
     // Edit distance penalties for substitutions and gap open; we assume that gap extend is 1
     int substitutionPenalty;
@@ -115,8 +113,7 @@ public:
     /**
      * Compute the string distance between text[0...] and pattern[0..patternLen], if
      * it is less than limit, or return -1 if it is greater. Optionally, write the
-     * edit string (in CIGAR format) into editStringBuf if it's not null and if
-     * COMPUTE_EDIT_STRING was set.
+     * edit string (in CIGAR format) into editStringBuf if it's not null.
      *
      * Assumptions:
      * - text is indexable up to patternLen + MAX_SHIFT - 1 (so it's a pointer
@@ -132,14 +129,6 @@ public:
             fprintf(stderr, "Invalid distance limit: %d\n", limit);
             exit(1);
         }
-        if (editStringBuf != NULL && !COMPUTE_EDIT_STRING) {
-            fprintf(stderr, "Non-null editStringBuf given but COMPUTE_EDIT_STRING is false\n");
-            exit(1);
-        }
-        if (mapProbability != NULL && !COMPUTE_MAPQ) {
-            fprintf(stderr, "Non-null mapProbability given but COMPUTE_MAPQ is false\n");
-            exit(1);
-        }
         if (mapProbability != NULL && qualityString == NULL) {
             fprintf(stderr, "Non-null mapProbability given but qualityString is NULL\n");
             exit(1);
@@ -153,7 +142,7 @@ public:
             for (int d = 0; d <= __min(limit, gapOpenPenalty - 1); d += substitutionPenalty) {
                 pos += longestPrefix(text+pos+s-SHIFT_OFF, pattern+pos, patternEnd);
                 L[d][s][NO_GAP] = pos;
-                if (COMPUTE_PREV && d != 0) {
+                if (d > 0) {
                     prevGapStatus[d][s][NO_GAP] = NO_GAP;
                 }
                 if (pos == patternLen) {
@@ -261,14 +250,10 @@ private:
         int val2 = L[d2][s2][g2] + delta2;
         if (val1 >= val2) {
             L[destD][destS][destG] = val1;
-            if (COMPUTE_PREV) {
-                prevGapStatus[destD][destS][destG] = g1;
-            }
+            prevGapStatus[destD][destS][destG] = g1;
         } else {
             L[destD][destS][destG] = val2;
-            if (COMPUTE_PREV) {
-                prevGapStatus[destD][destS][destG] = g2;
-            }
+            prevGapStatus[destD][destS][destG] = g2;
         }
     }
 
@@ -286,26 +271,18 @@ private:
         if (val1 >= val2) {
             if (val1 >= val3) {
                 L[destD][destS][destG] = val1;
-                if (COMPUTE_PREV) {
-                    prevGapStatus[destD][destS][destG] = g1;
-                }
+                prevGapStatus[destD][destS][destG] = g1;
             } else {
                 L[destD][destS][destG] = val3;
-                if (COMPUTE_PREV) {
-                    prevGapStatus[destD][destS][destG] = g3;
-                }
+                prevGapStatus[destD][destS][destG] = g3;
             }
         } else {
             if (val2 >= val3) {
                 L[destD][destS][destG] = val2;
-                if (COMPUTE_PREV) {
-                    prevGapStatus[destD][destS][destG] = g2;
-                }
+                prevGapStatus[destD][destS][destG] = g2;
             } else {
                 L[destD][destS][destG] = val3;
-                if (COMPUTE_PREV) {
-                    prevGapStatus[destD][destS][destG] = g3;
-                }
+                prevGapStatus[destD][destS][destG] = g3;
             }
         }
     }
@@ -340,7 +317,7 @@ private:
      * If useM is set, this will report both 'X' and '=' characters as 'M' for older SAM versions.
      */
     bool writeEditString(int endDistance, int endShift, char *editStringBuf, int editStringBufLen, bool useM) {
-        if (!COMPUTE_EDIT_STRING || editStringBuf == NULL) {
+        if (editStringBuf == NULL) {
             return true;
         }
 
@@ -405,10 +382,10 @@ private:
     /**
      * Fill in the match probability for a successfully matched pair of strings, given the distance
      * and shift we ended up at when we matched the end of the pattern. Does nothing if the output
-     * pointer is null or COMPUTE_MAPQ is false.
+     * pointer is null.
      */
     void computeMapProbability(int endDistance, int endShift, double *mapProbability, const char *qualityString) {
-        if (!COMPUTE_MAPQ || mapProbability == NULL) {
+        if (mapProbability == NULL) {
             return;
         }
 

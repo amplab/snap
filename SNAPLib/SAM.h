@@ -68,7 +68,7 @@ protected:
                         bool                        isMateRC, 
                         const Genome *              genome, 
                         LandauVishkinWithCigar *    lv, 
-                        BoundedStringDistance<true>* bsd,
+                        BoundedStringDistance<> *   bsd,
                         char *                      buffer, 
                         size_t                      bufferSpace, 
                         size_t *                    spaceUsed = NULL,
@@ -80,7 +80,7 @@ private:
     static const char *computeCigarString(
                         const Genome *              genome,
                         LandauVishkinWithCigar *    lv,
-                        BoundedStringDistance<true>* bsd,
+                        BoundedStringDistance<> *   bsd,
                         char *                      cigarBuf,
                         int                         cigarBufLen,
                         char *                      cigarBufWithClipping,
@@ -133,7 +133,7 @@ private:
     const char  *rgLine;
 
     LandauVishkinWithCigar* lv;
-    BoundedStringDistance<true>* bsd;
+    BoundedStringDistance<>* bsd;
 };
 
 //
@@ -179,7 +179,7 @@ protected:
     const Genome                   *genome;
 
     LandauVishkinWithCigar*         lv;
-    BoundedStringDistance<true>*    bsd;
+    BoundedStringDistance<>*        bsd;
 
 	bool							useM;
 };

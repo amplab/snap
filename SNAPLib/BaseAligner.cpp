@@ -91,7 +91,7 @@ Arguments:
     genome = genomeIndex->getGenome();
     seedLen = genomeIndex->getSeedLength();
 
-    boundedStringDist = new BoundedStringDistance<false, true>(2, 2, 0.001, 0.001, 0.5);
+    boundedStringDist = new BoundedStringDistance<>(2, 2, 0.001, 0.001, 0.5);
     probDistance = new ProbabilityDistance(0.001, 0.001, 0.5);  // Match Mason
 
     if (i_landauVishkin == NULL) {
@@ -109,6 +109,9 @@ Arguments:
 
     rcReadData = (char *)BigAlloc(sizeof(char) * maxReadSize * 2); // The *2 is to allocte space for the quality string
     rcReadQuality = rcReadData + maxReadSize;
+
+    reversedRead = (char *)BigAlloc(sizeof(char) * maxReadSize * 2); // Times 2 for both forward and backward directions
+    rcReversedRead = reversedRead + maxReadSize;
 
     rcTranslationTable['A'] = 'T';
     rcTranslationTable['G'] = 'C';
@@ -1123,19 +1126,19 @@ Return Value:
             return true;
         }
 
-	// Check whether we know we'll return MAPQ=0 for this read (NOTE: doesn't work right and doesn't give much speed)
-	//if (bestScore != UnusedScoreValue) {
-	//   double bestPossibleUnseenScore = __min(firstPassSeedsNotSkipped, firstPassRCSeedsNotSkipped);
-	//   double bestPossibleUnseenMatchProb = 0.001 * pow(0.5, __max(0, bestPossibleUnseenScore-1));
-	//   double bestPossibleProb = __max(bestPossibleUnseenMatchProb, probabilityOfBestCandidate);
-	//   if (probabilityOfAllCandidates - probabilityOfBestCandidate > 0.9 * bestPossibleProb) {
-	//       *result = MultipleHits;
-	//       *singleHitGenomeLocation = bestScoreGenomeLocation;
-	//       *finalScore = bestScore;
-	//       *mapq = 0;
-	//       return true;
-	//   }
-	//}
+        // Check whether we know we'll return MAPQ=0 for this read (NOTE: doesn't work right and doesn't give much speed)
+        //if (bestScore != UnusedScoreValue) {
+        //   double bestPossibleUnseenScore = __min(firstPassSeedsNotSkipped, firstPassRCSeedsNotSkipped);
+        //   double bestPossibleUnseenMatchProb = 0.001 * pow(0.5, __max(0, bestPossibleUnseenScore-1));
+        //   double bestPossibleProb = __max(bestPossibleUnseenMatchProb, probabilityOfBestCandidate);
+        //   if (probabilityOfAllCandidates - probabilityOfBestCandidate > 0.9 * bestPossibleProb) {
+        //       *result = MultipleHits;
+        //       *singleHitGenomeLocation = bestScoreGenomeLocation;
+        //       *finalScore = bestScore;
+        //       *mapq = 0;
+        //       return true;
+        //   }
+        //}
     } while (forceResult);
 
     return false;
@@ -1345,6 +1348,7 @@ Return Value:
     
     BigDealloc(candidates);
     BigDealloc(rcReadData);
+    BigDealloc(reversedRead);
 
     BigDealloc(hashTableElementPool);
     BigDealloc(candidateHashTable[0]);
@@ -1399,12 +1403,16 @@ BaseAligner::ComputeHitDistribution(
     //
     memset(seedUsed,0,(read->getDataLength() + 7) / 8);
 
+    // Compute the reversed complement, reversed read, and count of Ns
     int readLen = (int)read->getDataLength();
     const char *readData = read->getData();
     unsigned countOfNs = 0;
     for (int i = 0; i < readLen; i++) {
         char baseByte = readData[i];
-        rcReadData[readLen - i - 1] = rcTranslationTable[baseByte];
+        char complement = rcTranslationTable[baseByte];
+        rcReadData[readLen - i - 1] = complement;
+        reversedRead[readLen - i - 1] = baseByte;
+        rcReversedRead[i] = complement;
         countOfNs += nTable[baseByte];
     }
 

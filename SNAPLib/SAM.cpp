@@ -140,7 +140,7 @@ SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBuffe
 SAMWriter::computeCigarString(
     const Genome *              genome,
     LandauVishkinWithCigar *    lv,
-    BoundedStringDistance<true>* bsd,
+    BoundedStringDistance<> *   bsd,
     char *                      cigarBuf,
     int                         cigarBufLen,
     char *                      cigarBufWithClipping,
@@ -217,7 +217,7 @@ SAMWriter::generateSAMText(
                 bool                        mateIsRC, 
                 const Genome *              genome, 
                 LandauVishkinWithCigar *    lv, 
-                BoundedStringDistance<true>* bsd,
+                BoundedStringDistance<> *   bsd,
                 char *                      buffer, 
                 size_t                      bufferSpace, 
                 size_t *                    spaceUsed,
@@ -421,7 +421,7 @@ SAMWriter::generateSAMText(
 SimpleSAMWriter::SimpleSAMWriter(bool i_useM, unsigned i_gapPenalty, int i_argc, const char **i_argv, const char *i_version, const char *i_rgLine) : 
     useM(i_useM), argc(i_argc), argv(i_argv), version(i_version), rgLine(i_rgLine),
     lv(i_gapPenalty ? NULL : new LandauVishkinWithCigar),
-    bsd(i_gapPenalty ? new BoundedStringDistance<true>(1, i_gapPenalty) : NULL)
+    bsd(i_gapPenalty ? new BoundedStringDistance<>(1, i_gapPenalty) : NULL)
 {
     file = NULL;
 }
@@ -552,7 +552,7 @@ bool SimpleSAMWriter::close()
 ThreadSAMWriter::ThreadSAMWriter(size_t i_bufferSize, bool i_useM, unsigned i_gapPenalty)
     : remainingBufferSpace(i_bufferSize), bufferBeingCreated(0), bufferSize(i_bufferSize), useM(i_useM),
     lv(i_gapPenalty ? NULL : new LandauVishkinWithCigar),
-    bsd(i_gapPenalty ? new BoundedStringDistance<true>(1, i_gapPenalty) : NULL)
+    bsd(i_gapPenalty ? new BoundedStringDistance<>(1, i_gapPenalty) : NULL)
 {
     buffer[0] = NULL;
     buffer[1] = NULL;
