@@ -243,6 +243,9 @@
     <ClInclude Include="ProbabilityDistance.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="BoundedStringDistance.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="ReadMe.txt" />

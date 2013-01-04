@@ -341,7 +341,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
     int bestScore = INFINITE_SCORE;
     double probabilityOfBestPair = 0;
     double probabilityOfAllPairs = 0;
-    double probabilityOfAllSingles = 0;
+    double probabilityOfAllSingles[2] = {0, 0};
     int secondBestScore = INFINITE_SCORE;
     
     // Locations of best scoring pair
@@ -560,8 +560,10 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                 if (b0->mateStatus == SingleHit)
                     bestMateScore = b0->mateScore;
                 double matchProbability = 0.0;
+
                 scoreBucket(b0, r0, rc0 != 0, loc0, readData[r0][rc0], quality[r0], readLen[r0], scoreLimit - bestMateScore + 1, &matchProbability);
-                probabilityOfAllSingles += matchProbability;
+                _ASSERT(matchProbability >= 0);
+                probabilityOfAllSingles[r0] += matchProbability;
 
                 if ((int)b0->score > scoreLimit) {
                     continue;
@@ -632,7 +634,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
 #endif  // 0
                 
                 // Update scoreLimit.
-                scoreLimit = min(bestScore, (int) maxK) + confDiff + 1;
+                scoreLimit = min(bestScore + 2, (int) maxK) + confDiff + 1;
 #if     0 // Off because we want to compute probabilities for plausible pairs so that we can get a decent mapq estimate
                 if (bestScore != INFINITE_SCORE && secondBestScore < bestScore + realConfDiff) {
                     // Since secondBestScore already means that our best location so far won't be a SingleHit,
@@ -707,7 +709,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                             best = bucket->score;
                             bestLoc = loc + bucket->bestOffset;
                             bestRC = rc != 0;
-                            bestMapq = computeMAPQ(probabilityOfAllSingles, bucket->matchProbability, bestScore, firstPassNotSkippedSeeds[0], firstPassNotSkippedSeeds[1], smallestSkippedSeed[0], smallestSkippedSeed[0], bestLoc, 0, NULL, 0);
+                            bestMapq = computeMAPQ(probabilityOfAllSingles[r], bucket->matchProbability, bestScore, firstPassNotSkippedSeeds[0], firstPassNotSkippedSeeds[1], smallestSkippedSeed[0], smallestSkippedSeed[0], bestLoc, 0, NULL, 0);
                         } else if (bucket->score < second) {
                             second = bucket->score;
                         }
@@ -715,10 +717,11 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                 }
             }
             if (best <= 0.6 * maxK && best + realConfDiff + 1 <= second) {
-                result->status[r] = SingleHit;
+                result->status[r] = (best + realConfDiff + 1 <= second) ? SingleHit : MultipleHits;
                 result->location[r] = bestLoc;
                 result->isRC[r] = bestRC;
                 result->score[r] = best;
+                result->mapq[r] = bestMapq;
             } else {
                 result->status[r] = NotFound;   
             }
@@ -746,25 +749,51 @@ void SmarterPairedEndAligner::scoreBucket(
         while (_BitScanForward64(&offset, unscored)) {
             unscored ^= ((_int64)1 << offset);
             unsigned score = INFINITE_SCORE;
+            int genomeDataLength = readLen + MAX_K; // Leave extra space in case the read has deletions 
             const char *refData = index->getGenome()->getSubstring(location + offset, readLen + MAX_K);
+            double localMatchProbability = 0.0;
+
+            if (NULL == refData) {
+                //
+                // We're up against the end of a chromosome.  Reduce the extra space enough that it isn't too
+                // long.  We're willing to reduce it to less than the length of a read, because the read could
+                // but up against the end of the chromosome and have insertions in it.
+                //
+                const Genome::Piece *piece = index->getGenome()->getPieceAtLocation(location + offset);
+                const Genome::Piece *nextPiece = index->getGenome()->getPieceAtLocation(location + offset + readLen + MAX_K);
+                _ASSERT(NULL != piece && piece->beginningOffset <= location + offset && piece != nextPiece);
+                unsigned endOffset;
+                if (NULL != nextPiece) {
+                    endOffset = nextPiece->beginningOffset;
+                } else {
+                    endOffset = index->getGenome()->getCountOfBases();
+                }
+                genomeDataLength = endOffset - location + offset - 1;
+                if (genomeDataLength >= readLen - MAX_K) {
+                    refData = index->getGenome()->getSubstring(location + offset, genomeDataLength);
+                    _ASSERT(NULL != refData);
+                }
+            }
+
             if (refData != NULL) {
                 TRACE("  Genome: %.*s\n  Read:   %.*s\n", readLen, refData, readLen, readData);
                 _uint64 cacheKey = ((_uint64) readId) << 33 | ((_uint64) isRC) << 32 | (location + offset);
-                score = lv.computeEditDistance(refData, readLen + MAX_K, readData, qualityString, readLen, scoreLimit, matchProbability, cacheKey);
+                score = lv.computeEditDistance(refData, genomeDataLength, readData, qualityString, readLen, scoreLimit, &localMatchProbability, cacheKey);
                 TRACE("  Called LV at %lu with limit %d: %d\n", location + offset, scoreLimit, score);
                 if (score < 0) {
                     score = INFINITE_SCORE;
                 }
             }
-            if (score < bucket->score || score == bucket->score && *matchProbability > bucket->matchProbability) {
+            if (score < bucket->score || score == bucket->score && localMatchProbability > bucket->matchProbability) {
                 bucket->score = score;
-                bucket->matchProbability = *matchProbability;
+                bucket->matchProbability = localMatchProbability;
                 bucket->bestOffset = (unsigned short)offset;
             }
         }
         bucket->scored = bucket->found;
         TRACE("Updated score of bucket %u to %d (at %u)\n",
             location, bucket->score, location + bucket->bestOffset);
+        *matchProbability = bucket->matchProbability;
     }
 }
 
@@ -851,6 +880,7 @@ SmarterPairedEndAligner::Bucket *SmarterPairedEndAligner::newBucket()
     b->minPairScore = 0;
     b->score = INFINITE_SCORE;
     b->mateStatus = UnknownAlignment;
+    b->matchProbability = 0;
     return b;
 }
 

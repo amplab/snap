@@ -27,7 +27,7 @@ Revision History:
 
 void initializeMapqTables();
 
-double mapqToProbability(int mapq);
+double mapqToProbability(int mapq); // The probability of a match for the given MAPQ
 
 inline int computeMAPQ(
     double probabilityOfAllCandidates,

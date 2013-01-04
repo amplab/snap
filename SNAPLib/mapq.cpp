@@ -31,9 +31,11 @@ static double mapqToProbabilityTable[maxMAPQ+1];
 
 void initializeMapqTables()
 {
-    for (int i = 0; i <= maxMAPQ; i++) {
-        mapqToProbabilityTable[i] = pow(10.0,((double)i) / -10.0);
+    mapqToProbabilityTable[0] = .1;  // This should technically be 0, but in practice it's a little better than that, so leave some chance here.
+    for (int i = 1; i <= maxMAPQ; i++) {
+        mapqToProbabilityTable[i] = 1- pow(10.0,((double)i) / -10.0);
     }
+
 }
 
 double mapqToProbability(int mapq)
