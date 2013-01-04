@@ -5,10 +5,12 @@
 // Test fixture for all the Landau-Viskhin Tests
 struct BoundedStringDistanceTest {
     BoundedStringDistance<> dist1, dist3, dist5, dist23, dist32;
+    BoundedStringDistance<true> dist3WithShift;
 
     BoundedStringDistanceTest()
         : dist1(1, 1, 0.1, 0.01, 0.2), dist3(1, 3, 0.1, 0.01, 0.2), dist5(1, 5, 0.1, 0.01, 0.2),
-          dist23(2, 3, 0.1, 0.01, 0.2), dist32(3, 2, 0.1, 0.01, 0.2)
+          dist23(2, 3, 0.1, 0.01, 0.2), dist32(3, 2, 0.1, 0.01, 0.2),
+          dist3WithShift(1, 3, 0.1, 0.01, 0.2)
     {}
 };
 
@@ -212,23 +214,23 @@ TEST_F(BoundedStringDistanceTest, "map probability") {
 }
 
 TEST_F(BoundedStringDistanceTest, "start shifts") {
-    ASSERT_EQ(3, dist3.compute("abcdefg", "bcdefg", 6, 0, 5));
-    ASSERT_EQ(0, dist3.compute("abcdefg", "bcdefg", 6, 1, 5));
-    ASSERT_EQ(0, dist3.compute("abcdefg", "bcdefg", 6, 2, 5));
-    ASSERT_EQ(4, dist3.compute("abcdefg", "bcdXfg", 6, 0, 5));
-    ASSERT_EQ(1, dist3.compute("abcdefg", "bcdXfg", 6, 1, 5));
-    ASSERT_EQ(1, dist3.compute("abcdefg", "bcdXfg", 6, 2, 5));
+    ASSERT_EQ(3, dist3WithShift.compute("abcdefg", "bcdefg", 6, 0, 5));
+    ASSERT_EQ(0, dist3WithShift.compute("abcdefg", "bcdefg", 6, 1, 5));
+    ASSERT_EQ(0, dist3WithShift.compute("abcdefg", "bcdefg", 6, 2, 5));
+    ASSERT_EQ(4, dist3WithShift.compute("abcdefg", "bcdXfg", 6, 0, 5));
+    ASSERT_EQ(1, dist3WithShift.compute("abcdefg", "bcdXfg", 6, 1, 5));
+    ASSERT_EQ(1, dist3WithShift.compute("abcdefg", "bcdXfg", 6, 2, 5));
 
-    ASSERT_EQ(3, dist3.compute("abcdefg" + 2, "bcdefg", 6, 0, 5));
-    ASSERT_EQ(0, dist3.compute("abcdefg" + 2, "bcdefg", 6, 1, 5));
-    ASSERT_EQ(0, dist3.compute("abcdefg" + 2, "bcdefg", 6, 2, 5));
-    ASSERT_EQ(4, dist3.compute("abcdefg" + 2, "bcdXfg", 6, 0, 5));
-    ASSERT_EQ(1, dist3.compute("abcdefg" + 2, "bcdXfg", 6, 1, 5));
-    ASSERT_EQ(1, dist3.compute("abcdefg" + 2, "bcdXfg", 6, 2, 5));
+    ASSERT_EQ(3, dist3WithShift.compute("abcdefg" + 2, "bcdefg", 6, 0, 5));
+    ASSERT_EQ(0, dist3WithShift.compute("abcdefg" + 2, "bcdefg", 6, 1, 5));
+    ASSERT_EQ(0, dist3WithShift.compute("abcdefg" + 2, "bcdefg", 6, 2, 5));
+    ASSERT_EQ(4, dist3WithShift.compute("abcdefg" + 2, "bcdXfg", 6, 0, 5));
+    ASSERT_EQ(1, dist3WithShift.compute("abcdefg" + 2, "bcdXfg", 6, 1, 5));
+    ASSERT_EQ(1, dist3WithShift.compute("abcdefg" + 2, "bcdXfg", 6, 2, 5));
 
-    ASSERT_EQ(4, dist3.compute("abcdefg", "cdefg", 5, 0, 5));
-    ASSERT_EQ(3, dist3.compute("abcdefg", "cdefg", 5, 1, 5));
-    ASSERT_EQ(0, dist3.compute("abcdefg", "cdefg", 5, 2, 5));
+    ASSERT_EQ(4, dist3WithShift.compute("abcdefg", "cdefg", 5, 0, 5));
+    ASSERT_EQ(3, dist3WithShift.compute("abcdefg", "cdefg", 5, 1, 5));
+    ASSERT_EQ(0, dist3WithShift.compute("abcdefg", "cdefg", 5, 2, 5));
 }
 
 TEST_F(BoundedStringDistanceTest, "empty strings") {

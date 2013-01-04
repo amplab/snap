@@ -22,7 +22,7 @@
  * TODO: Allow making the L array "cyclic" through another template parameter (i.e.
  * so that only the last few rows will be kept) to save cache space for big arrays.
  */
-template<int MAX_DISTANCE=31, int MAX_SHIFT=MAX_DISTANCE>
+template<bool ALLOW_START_SHIFTS=false, int MAX_DISTANCE=31, int MAX_SHIFT=MAX_DISTANCE>
 class BoundedStringDistance
 {
 private:
@@ -136,6 +136,10 @@ public:
             fprintf(stderr, "Non-null mapProbability given but qualityString is NULL\n");
             exit(1);
         }
+        if (!ALLOW_START_SHIFTS && maxStartShift != 0) {
+            fprintf(stderr, "Non-zero maxStartShift given, but ALLOW_START_SHIFTS is false\n");
+            exit(1);
+        }
 
         const char *patternEnd = pattern + patternLen;
 
@@ -162,33 +166,34 @@ public:
                 }
             }
         }
-        // Add back sentinel values in case we were called with a bigger maxStartShift earlier
-        //for (int d = 0; d <= __min(limit, gapOpenPenalty - 1); d++) {
-        //    for (int g = 0; g < 3; g++) {
-        //        L[d][SHIFT_OFF-maxStartShift-1][g] = -2 * MAX_DISTANCE;
-        //        L[d][SHIFT_OFF-maxStartShift-2][g] = -2 * MAX_DISTANCE;
-        //        L[d][SHIFT_OFF-maxStartShift-3][g] = -2 * MAX_DISTANCE;
-        //        L[d][SHIFT_OFF-maxStartShift-4][g] = -2 * MAX_DISTANCE;
-        //        L[d][SHIFT_OFF+maxStartShift+1][g] = -2 * MAX_DISTANCE;
-        //        L[d][SHIFT_OFF+maxStartShift+2][g] = -2 * MAX_DISTANCE;
-        //        L[d][SHIFT_OFF+maxStartShift+3][g] = -2 * MAX_DISTANCE;
-        //        L[d][SHIFT_OFF+maxStartShift+4][g] = -2 * MAX_DISTANCE;
-        //    }
-        //}
+
+        if (ALLOW_START_SHIFTS) {
+            // Add back sentinel values in case we were called with a bigger maxStartShift earlier
+            for (int d = 0; d <= __min(limit, gapOpenPenalty - 1); d++) {
+                for (int g = 0; g < 3; g++) {
+                    L[d][SHIFT_OFF-maxStartShift-1][g] = -2 * MAX_DISTANCE;
+                    L[d][SHIFT_OFF-maxStartShift-2][g] = -2 * MAX_DISTANCE;
+                    L[d][SHIFT_OFF-maxStartShift-3][g] = -2 * MAX_DISTANCE;
+                    L[d][SHIFT_OFF+maxStartShift+1][g] = -2 * MAX_DISTANCE;
+                    L[d][SHIFT_OFF+maxStartShift+2][g] = -2 * MAX_DISTANCE;
+                    L[d][SHIFT_OFF+maxStartShift+3][g] = -2 * MAX_DISTANCE;
+                }
+            }
+        }
 
         // For distances >= gapOpenPenalty, also allow creating gaps in the text or pattern
         for (int d = gapOpenPenalty; d <= limit; d++) {
             int maxShift = __min(maxStartShift + d - gapOpenPenalty + 1, MAX_SHIFT);
-            //for (int g = 0; g < 3; g++) {
-            //    L[d][SHIFT_OFF-maxShift-1][g] = -2 * MAX_DISTANCE;
-            //    L[d][SHIFT_OFF-maxShift-2][g] = -2 * MAX_DISTANCE;
-            //    L[d][SHIFT_OFF-maxShift-3][g] = -2 * MAX_DISTANCE;
-            //    L[d][SHIFT_OFF-maxShift-4][g] = -2 * MAX_DISTANCE;
-            //    L[d][SHIFT_OFF+maxShift+1][g] = -2 * MAX_DISTANCE;
-            //    L[d][SHIFT_OFF+maxShift+2][g] = -2 * MAX_DISTANCE;
-            //    L[d][SHIFT_OFF+maxShift+3][g] = -2 * MAX_DISTANCE;
-            //    L[d][SHIFT_OFF+maxShift+4][g] = -2 * MAX_DISTANCE;
-            //}
+            if (ALLOW_START_SHIFTS) {
+                for (int g = 0; g < 3; g++) {
+                    L[d][SHIFT_OFF-maxShift-1][g] = -2 * MAX_DISTANCE;
+                    L[d][SHIFT_OFF-maxShift-2][g] = -2 * MAX_DISTANCE;
+                    L[d][SHIFT_OFF-maxShift-3][g] = -2 * MAX_DISTANCE;
+                    L[d][SHIFT_OFF+maxShift+1][g] = -2 * MAX_DISTANCE;
+                    L[d][SHIFT_OFF+maxShift+2][g] = -2 * MAX_DISTANCE;
+                    L[d][SHIFT_OFF+maxShift+3][g] = -2 * MAX_DISTANCE;
+                }
+            }
             for (int s = SHIFT_OFF-maxShift; s <= SHIFT_OFF+maxShift; s++) {
                 // See whether we can start / extend the "text gap" case
                 fillBest(d, s, TEXT_GAP,
