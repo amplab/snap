@@ -230,3 +230,14 @@ TEST_F(BoundedStringDistanceTest, "start shifts") {
     ASSERT_EQ(3, dist3.compute("abcdefg", "cdefg", 5, 1, 5));
     ASSERT_EQ(0, dist3.compute("abcdefg", "cdefg", 5, 2, 5));
 }
+
+TEST_F(BoundedStringDistanceTest, "empty strings") {
+    double prob;
+    ASSERT_EQ(0, dist23.compute("a", "", 0, 0, 3, &prob, "I"));
+    ASSERT_NEAR(1.0, prob);
+
+    char cigarBuf[1024];
+    int bufLen = sizeof(cigarBuf);
+    ASSERT_EQ(0, dist23.compute("abcdefg", "", 0, 0, 3, cigarBuf, bufLen));
+    ASSERT_STREQ("", cigarBuf);
+}

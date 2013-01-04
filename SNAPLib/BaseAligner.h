@@ -194,6 +194,7 @@ private:
 
         _int64          scoredInEpoch;
         unsigned        score;
+        int             seedOffset;
     };
 
     struct HashTableElement {
@@ -273,6 +274,11 @@ private:
 
     static const unsigned UnusedScoreValue = 0xffff;
 
+    // MAPQ parameters, currently set to match Mason
+    static const double SNP_PROB = 0.001;
+    static const double GAP_OPEN_PROB = 0.001;
+    static const double GAP_EXTEND_PROB = 0.5;
+
     //
     // Storage that's used during a call to AlignRead, but that's also needed by the
     // score function.  Since BaseAligner is single threaded, it's easier just to make
@@ -316,7 +322,7 @@ private:
     void clearCandidates();
 
     void findCandidate(unsigned genomeLocation, bool isRC, Candidate **candidate, HashTableElement **hashTableElement);
-    void allocateNewCandidate(unsigned genomeLoation, bool isRC, unsigned lowestPossibleScore, Candidate **candidate, HashTableElement **hashTableElement);
+    void allocateNewCandidate(unsigned genomeLoation, bool isRC, unsigned lowestPossibleScore, int seedOffset, Candidate **candidate, HashTableElement **hashTableElement);
     void incrementWeight(HashTableElement *element);
 
     void fillHitsFound(unsigned maxHitsToGet, int *multiHitsFound, 
@@ -338,9 +344,10 @@ private:
     Candidate *candidates;
 
     char *rcReadData;
-    char *rcReadQuality;    // This is allocated along with rcReadData in a single BigAlloc call, so don't free it.
+    char *rcReadQuality;       // This is allocated along with rcReadData in a single BigAlloc call, so don't free it.
     char *reversedRead;
-    char *rcReversedRead;   // This will be allocated along with reversedRead, so don't free it separately.
+    char *reversedRCRead;      // This will be allocated along with reversedRead, so don't free it separately.
+    char *reversedGenomeData;  // This will also be allocated along with reversedRead
 
     unsigned nTable[256];
 
