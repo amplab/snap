@@ -5,13 +5,12 @@
 // Test fixture for all the Landau-Viskhin Tests
 struct BoundedStringDistanceTest {
     BoundedStringDistance<> dist1, dist3, dist5, dist23, dist32;
-    BoundedStringDistance<true> dist1Cigar, dist3Cigar, dist32Cigar;
-    BoundedStringDistance<false, true> dist23Mapq;
+    BoundedStringDistance<true> dist3WithShift;
 
     BoundedStringDistanceTest()
-        : dist1(1, 1), dist3(1, 3), dist5(1, 5), dist23(2, 3), dist32(3, 2),
-          dist1Cigar(1, 1), dist3Cigar(1, 3), dist32Cigar(3, 2),
-          dist23Mapq(2, 3, 0.1, 0.01, 0.2)
+        : dist1(1, 1, 0.1, 0.01, 0.2), dist3(1, 3, 0.1, 0.01, 0.2), dist5(1, 5, 0.1, 0.01, 0.2),
+          dist23(2, 3, 0.1, 0.01, 0.2), dist32(3, 2, 0.1, 0.01, 0.2),
+          dist3WithShift(1, 3, 0.1, 0.01, 0.2)
     {}
 };
 
@@ -110,62 +109,62 @@ TEST_F(BoundedStringDistanceTest, "CIGAR strings") {
     char cigarBuf[1024];
     int bufLen = sizeof(cigarBuf);
 
-    ASSERT_EQ(0, dist3Cigar.compute("abcdefg", "abcdefg", 7, 0, 3, cigarBuf, bufLen));
+    ASSERT_EQ(0, dist3.compute("abcdefg", "abcdefg", 7, 0, 3, cigarBuf, bufLen));
     ASSERT_STREQ("7=", cigarBuf);
 
-    ASSERT_EQ(1, dist3Cigar.compute("abcdefg", "abcdXfg", 7, 0, 3, cigarBuf, bufLen));
+    ASSERT_EQ(1, dist3.compute("abcdefg", "abcdXfg", 7, 0, 3, cigarBuf, bufLen));
     ASSERT_STREQ("4=1X2=", cigarBuf);
 
-    ASSERT_EQ(1, dist3Cigar.compute("abcdefg", "Xbcdefg", 7, 0, 3, cigarBuf, bufLen));
+    ASSERT_EQ(1, dist3.compute("abcdefg", "Xbcdefg", 7, 0, 3, cigarBuf, bufLen));
     ASSERT_STREQ("1X6=", cigarBuf);
 
-    ASSERT_EQ(1, dist3Cigar.compute("abcdefg", "abcdefG", 7, 0, 3, cigarBuf, bufLen));
+    ASSERT_EQ(1, dist3.compute("abcdefg", "abcdefG", 7, 0, 3, cigarBuf, bufLen));
     ASSERT_STREQ("6=1X", cigarBuf);
 
-    ASSERT_EQ(3, dist3Cigar.compute("abcdefg", "abdefg", 6, 0, 3, cigarBuf, bufLen));
+    ASSERT_EQ(3, dist3.compute("abcdefg", "abdefg", 6, 0, 3, cigarBuf, bufLen));
     ASSERT_STREQ("2=1D4=", cigarBuf);
 
-    ASSERT_EQ(3, dist3Cigar.compute("abcdefg", "bcdefg", 6, 0, 5, cigarBuf, bufLen));
+    ASSERT_EQ(3, dist3.compute("abcdefg", "bcdefg", 6, 0, 5, cigarBuf, bufLen));
     ASSERT_STREQ("1D6=", cigarBuf);
 
-    ASSERT_EQ(4, dist3Cigar.compute("abcdefg", "cdefg", 5, 0, 5, cigarBuf, bufLen));
+    ASSERT_EQ(4, dist3.compute("abcdefg", "cdefg", 5, 0, 5, cigarBuf, bufLen));
     ASSERT_STREQ("2D5=", cigarBuf);
 
-    ASSERT_EQ(5, dist3Cigar.compute("abcdefghi", "aefghi", 6, 0, 5, cigarBuf, bufLen));
+    ASSERT_EQ(5, dist3.compute("abcdefghi", "aefghi", 6, 0, 5, cigarBuf, bufLen));
     ASSERT_STREQ("1=5X", cigarBuf);
 
-    ASSERT_EQ(3, dist3Cigar.compute("abcdefg", "abcXdefg", 8, 0, 5, cigarBuf, bufLen));
+    ASSERT_EQ(3, dist3.compute("abcdefg", "abcXdefg", 8, 0, 5, cigarBuf, bufLen));
     ASSERT_STREQ("3=1I4=", cigarBuf);
 
-    ASSERT_EQ(4, dist3Cigar.compute("abcdefg", "abcXXdefg", 9, 0, 5, cigarBuf, bufLen));
+    ASSERT_EQ(4, dist3.compute("abcdefg", "abcXXdefg", 9, 0, 5, cigarBuf, bufLen));
     ASSERT_STREQ("3=2I4=", cigarBuf);
 
-    ASSERT_EQ(5, dist3Cigar.compute("abcdefg", "abcXXXdefg", 10, 0, 5, cigarBuf, bufLen));
+    ASSERT_EQ(5, dist3.compute("abcdefg", "abcXXXdefg", 10, 0, 5, cigarBuf, bufLen));
     ASSERT_STREQ("3=3I4=", cigarBuf);
 
-    ASSERT_EQ(6, dist3Cigar.compute("abcdefghij", "bcdefgXhij", 10, 0, 6, cigarBuf, bufLen));
+    ASSERT_EQ(6, dist3.compute("abcdefghij", "bcdefgXhij", 10, 0, 6, cigarBuf, bufLen));
     ASSERT_STREQ("1D6=1I3=", cigarBuf);
 
     // Versions with useM = true
 
-    ASSERT_EQ(0, dist3Cigar.compute("abcdefg", "abcdefg", 7, 0, 3, cigarBuf, bufLen, true));
+    ASSERT_EQ(0, dist3.compute("abcdefg", "abcdefg", 7, 0, 3, cigarBuf, bufLen, true));
     ASSERT_STREQ("7M", cigarBuf);
 
-    ASSERT_EQ(1, dist3Cigar.compute("abcdefg", "abcdXfg", 7, 0, 3, cigarBuf, bufLen, true));
+    ASSERT_EQ(1, dist3.compute("abcdefg", "abcdXfg", 7, 0, 3, cigarBuf, bufLen, true));
     ASSERT_STREQ("7M", cigarBuf);
 
-    ASSERT_EQ(6, dist3Cigar.compute("abcdefghij", "bcdefgXhij", 10, 0, 6, cigarBuf, bufLen, true));
+    ASSERT_EQ(6, dist3.compute("abcdefghij", "bcdefgXhij", 10, 0, 6, cigarBuf, bufLen, true));
     ASSERT_STREQ("1D6M1I3M", cigarBuf);
 
     // Versions with substitutionPenalty > 1
     
-    ASSERT_EQ(4, dist32Cigar.compute("abcdefg", "abcdXYZ", 7, 0, 6, cigarBuf, bufLen));
+    ASSERT_EQ(4, dist32.compute("abcdefg", "abcdXYZ", 7, 0, 6, cigarBuf, bufLen));
     ASSERT_STREQ("4=3I", cigarBuf);
 
-    ASSERT_EQ(6, dist32Cigar.compute("abcdefghi", "abcdXYZhi", 9, 0, 6, cigarBuf, bufLen));
+    ASSERT_EQ(6, dist32.compute("abcdefghi", "abcdXYZhi", 9, 0, 6, cigarBuf, bufLen));
     ASSERT_STREQ("4=5I", cigarBuf);
 
-    ASSERT_EQ(8, dist32Cigar.compute("abcdefghijkl", "abcdXYZhijkl", 12, 0, 9, cigarBuf, bufLen));
+    ASSERT_EQ(8, dist32.compute("abcdefghijkl", "abcdXYZhijkl", 12, 0, 9, cigarBuf, bufLen));
     ASSERT_STREQ("4=3I3D5=", cigarBuf);
 }
 
@@ -174,62 +173,73 @@ TEST_F(BoundedStringDistanceTest, "map probability") {
     const char *highQuality = "IIIIIIIIIIIIIIIIII";
     const char quality10[2] = {43, 0};
 
-    ASSERT_EQ(0, dist23Mapq.compute("a", "a", 1, 0, 3, &prob, highQuality));
+    ASSERT_EQ(0, dist23.compute("a", "a", 1, 0, 3, &prob, highQuality));
     ASSERT_NEAR(0.9, prob);
 
-    ASSERT_EQ(2, dist23Mapq.compute("a", "X", 1, 0, 3, &prob, highQuality));
+    ASSERT_EQ(2, dist23.compute("a", "X", 1, 0, 3, &prob, highQuality));
     ASSERT_NEAR(0.1, prob);
 
-    ASSERT_EQ(2, dist23Mapq.compute("a", "X", 1, 0, 3, &prob, quality10));
+    ASSERT_EQ(2, dist23.compute("a", "X", 1, 0, 3, &prob, quality10));
     ASSERT_NEAR(0.19, prob);    // 1 - (1 - 0.9) * (1 - 0.9)
 
-    ASSERT_EQ(0, dist23Mapq.compute("aaaaa", "aaaaa", 5, 0, 3, &prob, highQuality));
+    ASSERT_EQ(0, dist23.compute("aaaaa", "aaaaa", 5, 0, 3, &prob, highQuality));
     ASSERT_NEAR(pow(0.9, 5), prob);
 
-    ASSERT_EQ(2, dist23Mapq.compute("aaaaa", "aaXaa", 5, 0, 3, &prob, highQuality));
+    ASSERT_EQ(2, dist23.compute("aaaaa", "aaXaa", 5, 0, 3, &prob, highQuality));
     ASSERT_NEAR(pow(0.9, 4) * 0.1, prob);
 
-    ASSERT_EQ(3, dist23Mapq.compute("aaaaa", "aaXaaa", 6, 0, 3, &prob, highQuality));
+    ASSERT_EQ(3, dist23.compute("aaaaa", "aaXaaa", 6, 0, 3, &prob, highQuality));
     ASSERT_NEAR(pow(0.9, 5) * 0.01, prob);
 
-    ASSERT_EQ(4, dist23Mapq.compute("aaaaa", "aaXXaaa", 7, 0, 5, &prob, highQuality));
+    ASSERT_EQ(4, dist23.compute("aaaaa", "aaXXaaa", 7, 0, 5, &prob, highQuality));
     ASSERT_NEAR(pow(0.9, 5) * 0.01 * 0.2, prob);
 
-    ASSERT_EQ(3, dist23Mapq.compute("abcdef", "acdef", 5, 0, 3, &prob, highQuality));
+    ASSERT_EQ(3, dist23.compute("abcdef", "acdef", 5, 0, 3, &prob, highQuality));
     ASSERT_NEAR(pow(0.9, 5) * 0.01, prob);
 
-    ASSERT_EQ(4, dist23Mapq.compute("abcdefg", "adefg", 5, 0, 5, &prob, highQuality));
+    ASSERT_EQ(4, dist23.compute("abcdefg", "adefg", 5, 0, 5, &prob, highQuality));
     ASSERT_NEAR(pow(0.9, 5) * 0.01 * 0.2, prob);
 
-    ASSERT_EQ(4, dist23Mapq.compute("abcdefg", "cdefg", 5, 0, 5, &prob, highQuality));
+    ASSERT_EQ(4, dist23.compute("abcdefg", "cdefg", 5, 0, 5, &prob, highQuality));
     ASSERT_NEAR(pow(0.9, 5) * 0.01 * 0.2, prob);
 
-    ASSERT_EQ(5, dist23Mapq.compute("abcdefg", "abcdXYZ", 7, 0, 6, &prob, highQuality));
+    ASSERT_EQ(5, dist23.compute("abcdefg", "abcdXYZ", 7, 0, 6, &prob, highQuality));
     ASSERT_NEAR(pow(0.9, 4) * 0.01 * 0.2 * 0.2, prob);  // This will be counted as one long indel
 
-    ASSERT_EQ(7, dist23Mapq.compute("abcdefg", "XbcdXYZ", 7, 0, 7, &prob, highQuality));
+    ASSERT_EQ(7, dist23.compute("abcdefg", "XbcdXYZ", 7, 0, 7, &prob, highQuality));
     ASSERT_NEAR(pow(0.9, 3) * 0.1 * 0.01 * 0.2 * 0.2, prob);  // Indel plus substitution
 
-    ASSERT_EQ(6, dist23Mapq.compute("abcdefghi", "abcdXYZhi", 9, 0, 8, &prob, highQuality));
+    ASSERT_EQ(6, dist23.compute("abcdefghi", "abcdXYZhi", 9, 0, 8, &prob, highQuality));
     ASSERT_NEAR(pow(0.9, 6) * pow(0.1, 3), prob);
 }
 
 TEST_F(BoundedStringDistanceTest, "start shifts") {
-    ASSERT_EQ(3, dist3.compute("abcdefg", "bcdefg", 6, 0, 5));
-    ASSERT_EQ(0, dist3.compute("abcdefg", "bcdefg", 6, 1, 5));
-    ASSERT_EQ(0, dist3.compute("abcdefg", "bcdefg", 6, 2, 5));
-    ASSERT_EQ(4, dist3.compute("abcdefg", "bcdXfg", 6, 0, 5));
-    ASSERT_EQ(1, dist3.compute("abcdefg", "bcdXfg", 6, 1, 5));
-    ASSERT_EQ(1, dist3.compute("abcdefg", "bcdXfg", 6, 2, 5));
+    ASSERT_EQ(3, dist3WithShift.compute("abcdefg", "bcdefg", 6, 0, 5));
+    ASSERT_EQ(0, dist3WithShift.compute("abcdefg", "bcdefg", 6, 1, 5));
+    ASSERT_EQ(0, dist3WithShift.compute("abcdefg", "bcdefg", 6, 2, 5));
+    ASSERT_EQ(4, dist3WithShift.compute("abcdefg", "bcdXfg", 6, 0, 5));
+    ASSERT_EQ(1, dist3WithShift.compute("abcdefg", "bcdXfg", 6, 1, 5));
+    ASSERT_EQ(1, dist3WithShift.compute("abcdefg", "bcdXfg", 6, 2, 5));
 
-    ASSERT_EQ(3, dist3.compute("abcdefg" + 2, "bcdefg", 6, 0, 5));
-    ASSERT_EQ(0, dist3.compute("abcdefg" + 2, "bcdefg", 6, 1, 5));
-    ASSERT_EQ(0, dist3.compute("abcdefg" + 2, "bcdefg", 6, 2, 5));
-    ASSERT_EQ(4, dist3.compute("abcdefg" + 2, "bcdXfg", 6, 0, 5));
-    ASSERT_EQ(1, dist3.compute("abcdefg" + 2, "bcdXfg", 6, 1, 5));
-    ASSERT_EQ(1, dist3.compute("abcdefg" + 2, "bcdXfg", 6, 2, 5));
+    ASSERT_EQ(3, dist3WithShift.compute("abcdefg" + 2, "bcdefg", 6, 0, 5));
+    ASSERT_EQ(0, dist3WithShift.compute("abcdefg" + 2, "bcdefg", 6, 1, 5));
+    ASSERT_EQ(0, dist3WithShift.compute("abcdefg" + 2, "bcdefg", 6, 2, 5));
+    ASSERT_EQ(4, dist3WithShift.compute("abcdefg" + 2, "bcdXfg", 6, 0, 5));
+    ASSERT_EQ(1, dist3WithShift.compute("abcdefg" + 2, "bcdXfg", 6, 1, 5));
+    ASSERT_EQ(1, dist3WithShift.compute("abcdefg" + 2, "bcdXfg", 6, 2, 5));
 
-    ASSERT_EQ(4, dist3.compute("abcdefg", "cdefg", 5, 0, 5));
-    ASSERT_EQ(3, dist3.compute("abcdefg", "cdefg", 5, 1, 5));
-    ASSERT_EQ(0, dist3.compute("abcdefg", "cdefg", 5, 2, 5));
+    ASSERT_EQ(4, dist3WithShift.compute("abcdefg", "cdefg", 5, 0, 5));
+    ASSERT_EQ(3, dist3WithShift.compute("abcdefg", "cdefg", 5, 1, 5));
+    ASSERT_EQ(0, dist3WithShift.compute("abcdefg", "cdefg", 5, 2, 5));
+}
+
+TEST_F(BoundedStringDistanceTest, "empty strings") {
+    double prob;
+    ASSERT_EQ(0, dist23.compute("a", "", 0, 0, 3, &prob, "I"));
+    ASSERT_NEAR(1.0, prob);
+
+    char cigarBuf[1024];
+    int bufLen = sizeof(cigarBuf);
+    ASSERT_EQ(0, dist23.compute("abcdefg", "", 0, 0, 3, cigarBuf, bufLen));
+    ASSERT_STREQ("", cigarBuf);
 }
