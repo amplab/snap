@@ -274,10 +274,10 @@ private:
 
     static const unsigned UnusedScoreValue = 0xffff;
 
-    // MAPQ parameters, currently set to match Mason
-    static const double SNP_PROB = 0.001;
-    static const double GAP_OPEN_PROB = 0.001;
-    static const double GAP_EXTEND_PROB = 0.5;
+    // MAPQ parameters, currently set to match Mason.  Using #define because VC won't allow static double const.
+#define SNP_PROB  0.001
+#define GAP_OPEN_PROB  0.001
+#define GAP_EXTEND_PROB  0.5
 
     //
     // Storage that's used during a call to AlignRead, but that's also needed by the
