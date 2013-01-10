@@ -163,13 +163,21 @@ SingleAlignerContext::runIterationThread()
             Direction direction;
             int score;
             int mapq;
+#if     0
+            /*BJB*/ const char *readIdInQuestion = "chr15_53820317_53820504_?:282:?_?:?:?_?_?_?_000000145/1";
+            /*BJB*/ if(0 == memcmp(readIdInQuestion, read.getId(), __min(strlen(readIdInQuestion), read.getIdLength()))) {
+                printf("Read in question\n");
+            }
+#endif  // 0
             AlignmentResult result = aligner->AlignRead(&read, &location, &direction, &score, &mapq);
+#if     0
             /*BJB*/ unsigned location2= 0xFFFFFFFF;  Direction direction2; int score2; int mapq2; AlignmentResult result2 = aligner->AlignRead(&read, &location2, &direction2, &score2, &mapq2);
             /*BJB*/ if (location2 != location || score2 != score || mapq2 != mapq || direction2 != direction || result2 != result) {
                 /*BJB*/ unsigned location3= 0xFFFFFFFF;  Direction direction3; int score3; int mapq3; AlignmentResult result3 = aligner->AlignRead(&read, &location3, &direction3, &score3, &mapq3);
                 /*BJB*/ fprintf(stderr,"Nondeterministic read alignment\n");
                 /*BJB*/ unsigned location4= 0xFFFFFFFF;  Direction direction4; int score4; int mapq4; AlignmentResult result4 = aligner->AlignRead(&read, &location3, &direction4, &score4, &mapq4);
             }
+#endif  // 0
 
             bool wasError = false;
             if (result != NotFound && computeError) {

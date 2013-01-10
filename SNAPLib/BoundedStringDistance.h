@@ -51,7 +51,7 @@ private:
    
     // Previous gap status we had before getting to each particular state; this is enough
     // to infer the location we came from and the action we took to get here
-    int prevGapStatus[MAX_DISTANCE+1][2*MAX_SHIFT][3];
+    int prevGapStatus[MAX_DISTANCE+1][2*MAX_SHIFT+3][3];
 
     // Mismatch probability as a function of base quality
     double mismatchProbability[256];
@@ -333,6 +333,7 @@ private:
         if (*p != *t) {
             return 0;
         }
+
         while (p < patternEnd) {
             _uint64 x = *((_uint64*) p) ^ *((_uint64*) t);
             if (x) {

@@ -116,7 +116,7 @@ Arguments:
 
     reversedRead[FORWARD] = (char *)BigAlloc(sizeof(char) * maxReadSize * 4 + 2 * MAX_K); // Times 4 to also hold RC version and genome data (+2MAX_K is for genome data)
     reversedRead[RC] = reversedRead[FORWARD] + maxReadSize;
-    reversedGenomeData = reversedRead[FORWARD] + 3 * maxReadSize;
+    reversedGenomeData = reversedRead[FORWARD] + 3 * maxReadSize + MAX_K;   // WARNING: This buffer extends in both directions from the pointer.
 
     rcTranslationTable['A'] = 'T';
     rcTranslationTable['G'] = 'C';
@@ -898,7 +898,8 @@ Return Value:
                     } else {
                         // The tail of the read matched; now let's reverse the reference genome data and match the head
                         int limitLeft = scoreLimit - score1;
-                        for (int i = -maxStartShift; i <= seedOffset + maxStartShift; i++) {
+ 
+                        for (int i = -MAX_K; i <= seedOffset + MAX_K; i++) {
                             reversedGenomeData[i] = data[seedOffset - 1 - i];
                         }
                         // Note that we use the opposite direction read for the quality, since it's the reverse of our direction's
