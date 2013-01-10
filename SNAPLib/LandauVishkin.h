@@ -17,7 +17,7 @@ public:
 
     // Compute the edit distance between two strings, if it is <= k, or return -1 otherwise.
     // For LandauVishkin instances with a cache, the cacheKey should be a unique identifier for
-    // the text and pattern combination (e.g. (readID << 33) | isRC << 32 | genomeLocation).
+    // the text and pattern combination (e.g. (readID << 33) | direction << 32 | genomeLocation).
     int computeEditDistance(
             const char* text,
             int textLen, 

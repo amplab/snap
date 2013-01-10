@@ -160,10 +160,16 @@ SingleAlignerContext::runIterationThread()
             }
 
             unsigned location = 0xFFFFFFFF;
-            bool isRC;
+            Direction direction;
             int score;
             int mapq;
-            AlignmentResult result = aligner->AlignRead(&read, &location, &isRC, &score, &mapq);
+            AlignmentResult result = aligner->AlignRead(&read, &location, &direction, &score, &mapq);
+            /*BJB*/ unsigned location2= 0xFFFFFFFF;  Direction direction2; int score2; int mapq2; AlignmentResult result2 = aligner->AlignRead(&read, &location2, &direction2, &score2, &mapq2);
+            /*BJB*/ if (location2 != location || score2 != score || mapq2 != mapq || direction2 != direction || result2 != result) {
+                /*BJB*/ unsigned location3= 0xFFFFFFFF;  Direction direction3; int score3; int mapq3; AlignmentResult result3 = aligner->AlignRead(&read, &location3, &direction3, &score3, &mapq3);
+                /*BJB*/ fprintf(stderr,"Nondeterministic read alignment\n");
+                /*BJB*/ unsigned location4= 0xFFFFFFFF;  Direction direction4; int score4; int mapq4; AlignmentResult result4 = aligner->AlignRead(&read, &location3, &direction4, &score4, &mapq4);
+            }
 
             bool wasError = false;
             if (result != NotFound && computeError) {
@@ -171,7 +177,7 @@ SingleAlignerContext::runIterationThread()
             }
 
             //if (wasError) {
-                writeRead(&read, result, location, isRC, score, mapq);
+                writeRead(&read, result, location, direction, score, mapq);
             //}
 
             updateStats(stats, &read, result, location, score, mapq, wasError);
@@ -189,12 +195,12 @@ SingleAlignerContext::writeRead(
     Read* read,
     AlignmentResult result,
     unsigned location,
-    bool isRC,
+    Direction direction,
     int score,
     int mapq)
 {
     if (samWriter != NULL && options->passFilter(read, result)) {
-        samWriter->write(read, result, location, isRC, mapq);
+        samWriter->write(read, result, location, direction, mapq);
     }
 }
 

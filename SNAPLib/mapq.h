@@ -24,6 +24,7 @@ Revision History:
 #pragma once
 
 #include "SimilarityMap.h"
+#include "directions.h"
 
 void initializeMapqTables();
 
@@ -33,10 +34,8 @@ inline int computeMAPQ(
     double probabilityOfAllCandidates,
     double probabilityOfBestCandidate,
     int score,
-    int firstPassSeedsNotSkipped,
-    int firstPassRCSeedsNotSkipped,
-    unsigned smallestSkippedSeed,
-    unsigned smallestSkippedRCSeed,
+    int firstPassSeedsNotSkipped[NUM_DIRECTIONS],
+    unsigned smallestSkippedSeed[NUM_DIRECTIONS],
     unsigned location,
     int popularSeedsSkipped,
     SimilarityMap *similarityMap,

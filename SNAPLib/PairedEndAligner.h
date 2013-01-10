@@ -23,6 +23,7 @@ Revision History:
 #pragma once
 
 #include "Aligner.h"
+#include "directions.h"
 
 struct PairedAlignmentResult {
     AlignmentResult status[2];  // SingleHit or CertainHit if aligned, MultipleHit if matches DB
@@ -30,7 +31,7 @@ struct PairedAlignmentResult {
 
     unsigned location[2];       // Genome location of each read.
     
-    bool isRC[2];               // Did we match the reverse complement? In general the two reads should have
+    Direction direction[2];     // Did we match the reverse complement? In general the two reads should have
                                 // opposite orientations because they're part of the same original fragment,
                                 // but it seems possible for a piece of the genome to get cut cleanly and flip
                                 // in a translocation event, which would cause both ends of a fragment aligning

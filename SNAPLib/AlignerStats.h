@@ -49,6 +49,12 @@ struct AlignerStats : public AbstractStats
     static const unsigned maxMapq = 70;
     unsigned mapqHistogram[maxMapq+1];
     unsigned mapqErrors[maxMapq+1];
+
+    static const unsigned maxMaxHits = 50;
+    unsigned countOfBestHitsByWeightDepth[maxMaxHits];
+    unsigned countOfAllHitsByWeightDepth[maxMaxHits];
+    double probabilityMassByWeightDepth[maxMaxHits];
+
     AbstractStats* extra;
 
     virtual ~AlignerStats();

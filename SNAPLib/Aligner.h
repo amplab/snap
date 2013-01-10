@@ -32,6 +32,7 @@ Revision History:
 #include "Histogram.h"
 #include "Read.h"
 #include "Seed.h"
+#include "directions.h"
 
 enum AlignmentResult {NotFound, CertainHit, SingleHit, MultipleHits, UnknownAlignment}; // BB: Changed Unknown to UnknownAlignment because of a conflict w/Windows headers
 
@@ -62,7 +63,7 @@ class Aligner {
     AlignRead(
         Read        *read,
         unsigned    *genomeLocation,
-        bool        *hitIsRC,
+        Direction   *hitDirection,
         int         *finalScore = NULL,
         int         *mapq = NULL) = 0;
 
@@ -70,11 +71,9 @@ class Aligner {
     ComputeHitDistribution(
         Read        *read,
         unsigned     correctGenomeLocation,
-        bool         correctHitIsRC,
-        unsigned    *hitCountBySeed,
-        unsigned    *rcHitCountBySeed,
-        unsigned    &nSeedsApplied,
-        unsigned    &nRCSeedsApplied,
+        Direction    correctHitDirection,
+        unsigned    *hitCountBySeed[NUM_DIRECTIONS],
+        unsigned    *nSeedsApplied[NUM_DIRECTIONS],
         unsigned    *hitsCountsContainingCorrectLocation) = 0;
 
     virtual _int64 getNHashTableLookups() const = 0;

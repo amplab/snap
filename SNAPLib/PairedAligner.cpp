@@ -433,7 +433,7 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
             stats->mapqErrors[mapq] += wasError ? 1 : 0;
         }
     }
-    if (result->isRC[0] == result->isRC[1]) {
+    if (result->direction[0] == result->direction[1]) {
         stats->sameComplement++;
     }
     if (isOneLocation(result->status[0]) && isOneLocation(result->status[1])) {

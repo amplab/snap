@@ -33,6 +33,8 @@ Revision History:
 #include "BigAlloc.h"
 #include "ProbabilityDistance.h"
 #include "SimilarityMap.h"
+#include "AlignerStats.h"
+#include "directions.h"
 
 class BaseAligner: public Aligner {
 public:
@@ -53,9 +55,9 @@ public:
 
         virtual AlignmentResult
     AlignRead(
-        Read        *read,
+        Read        *inputRead,
         unsigned    *genomeLocation,
-        bool        *hitIsRC,
+        Direction   *hitDirection,
         int         *finalScore = NULL,
         int         *mapq = NULL);
         
@@ -66,14 +68,14 @@ public:
     //
         AlignmentResult
     AlignRead(
-        Read        *read,
+        Read        *inputRead,
         unsigned    *genomeLocation,
-        bool        *hitIsRC,
+        Direction   *hitDirection,
         int         *finalScore,
         int         *mapq,
         unsigned     searchRadius,       // If non-zero, constrain search around searchLocation in direction searchRC.
         unsigned     searchLocation,
-        bool         searchRC);
+        Direction    searchDirection);
         
     //
     // A richer version of AlignRead that allows for searching near a given location, as well as returning
@@ -81,18 +83,18 @@ public:
     //
         AlignmentResult
     AlignRead(
-        Read        *read,
+        Read        *inputRead,
         unsigned    *genomeLocation,
-        bool        *hitIsRC,
+        Direction   *hitDirection,
         int         *finalScore,
         int         *mapq,
         unsigned     searchRadius,       // If non-zero, constrain search around searchLocation in direction searchRC.
         unsigned     searchLocation,
-        bool         searchRC,
+        Direction    searchDirection,
         int          maxHitsToGet,       // If maxHitsToGet > 1, output up to this many hits within confDiff of the best
         int         *multiHitsFound,     // inside multiHitLocations / RCs instead of returning MultipleHits right away.
         unsigned    *multiHitLocations,
-        bool        *multiHitRCs,
+        Direction   *multiHitDirections,
         int         *multiHitScores);
 
     //
@@ -102,12 +104,10 @@ public:
     ComputeHitDistribution(
         Read        *read,
         unsigned     correctGenomeLocation,
-        bool         correctHitIsRC,
-        unsigned    *hitCountBySeed,
-        unsigned    *rcHitCountBySeed,
-        unsigned    &nSeedsApplied,
-        unsigned    &nRCSeedsApplied,
-        unsigned    *hitsCountsContainingCorrectLocation);
+        Direction    correctHitDirection,
+        unsigned    *hitCountBySeed[NUM_DIRECTIONS],
+        unsigned    *nSeedsApplied[NUM_DIRECTIONS],
+        unsigned    *hitsContainingCorrectLocation);
 
     _int64 getNHashTableLookups() const {return nHashTableLookups;}
     _int64 getLocationsScored() const {return nLocationsScored;}
@@ -147,9 +147,12 @@ public:
     inline void setStopOnFirstHit(bool newValue) {stopOnFirstHit = newValue;}
 
 private:
-    LandauVishkin *landauVishkin;
+#if     defined(USE_BOUNDED_STRING_DISTANCE)
     BoundedStringDistance<> *boundedStringDist;
+#else   // ! bsd
+    LandauVishkin *landauVishkin;
     bool ownLandauVishkin;
+#endif  // bsd or LV
 
     ProbabilityDistance *probDistance;
 
@@ -219,7 +222,7 @@ private:
         unsigned             weight;
         unsigned             lowestPossibleScore;
         unsigned             bestScore;
-        bool                 isRC;
+        Direction            direction;
         bool                 allExtantCandidatesScored;
 
         Candidate            candidates[maxMergeDist * 2];
@@ -248,7 +251,7 @@ private:
     const HashTableElement emptyHashTableElement;
 
     unsigned candidateHashTablesSize;
-    HashTableAnchor *candidateHashTable[2]; // 0 is normal, 1 reverse complement
+    HashTableAnchor *candidateHashTable[NUM_DIRECTIONS];
     
     HashTableElement *weightLists;
     unsigned highestUsedWeightList;
@@ -274,7 +277,7 @@ private:
 
     static const unsigned UnusedScoreValue = 0xffff;
 
-    // MAPQ parameters, currently set to match Mason.  Using #define because VC won't allow static double const.
+    // MAPQ parameters, currently set to match Mason.  Using #define because VC won't allow "static const double".
 #define SNP_PROB  0.001
 #define GAP_OPEN_PROB  0.001
 #define GAP_EXTEND_PROB  0.5
@@ -284,49 +287,47 @@ private:
     // score function.  Since BaseAligner is single threaded, it's easier just to make
     // them member variables than to pass them around.
     //
-    unsigned lowestPossibleScoreOfAnyUnseenLocation;
-    unsigned lowestPossibleRCScoreOfAnyUnseenLocation;
-    unsigned mostSeedsContainingAnyParticularBase;
-    unsigned mostRCSeedsContainingAnyParticularBase;
-    unsigned nSeedsApplied;
-    unsigned nRCSeedsApplied;
+    unsigned lowestPossibleScoreOfAnyUnseenLocation[NUM_DIRECTIONS];
+    unsigned mostSeedsContainingAnyParticularBase[NUM_DIRECTIONS];
+    unsigned nSeedsApplied[NUM_DIRECTIONS];
     unsigned bestScore;
     unsigned bestScoreGenomeLocation;
     unsigned secondBestScore;
     unsigned secondBestScoreGenomeLocation;
-    bool     secondBestScoreIsRC;
+    int      secondBestScoreDirection;
     unsigned scoreLimit;
     unsigned lvScores;
     unsigned lvScoresAfterBestFound;
     double probabilityOfAllCandidates;
     double probabilityOfBestCandidate;
-    int firstPassSeedsNotSkipped;
-    int firstPassRCSeedsNotSkipped;
-    unsigned smallestSkippedSeed;
-    unsigned smallestSkippedRCSeed;
+    int firstPassSeedsNotSkipped[NUM_DIRECTIONS];
+    unsigned smallestSkippedSeed[NUM_DIRECTIONS];
     unsigned biggestClusterScored;
+    unsigned highestWeightListChecked;
+
+    double totalProbabilityByDepth[AlignerStats::maxMaxHits];
+    void updateProbabilityMass();
 
         bool
     score(
         bool             forceResult,
-        Read            *read,
-        Read            *rcRead,
+        Read            *read[NUM_DIRECTIONS],
         AlignmentResult *result,
         int             *finalScore,
         unsigned        *singleHitGenomeLocation,
-        bool            *hitIsRC,
+        Direction       *hitDirection,
         Candidate       *candidates,
         unsigned         maxHitsToGet,
         int             *mapq);
     
     void clearCandidates();
 
-    void findCandidate(unsigned genomeLocation, bool isRC, Candidate **candidate, HashTableElement **hashTableElement);
-    void allocateNewCandidate(unsigned genomeLoation, bool isRC, unsigned lowestPossibleScore, int seedOffset, Candidate **candidate, HashTableElement **hashTableElement);
+    void findCandidate(unsigned genomeLocation, Direction direction, Candidate **candidate, HashTableElement **hashTableElement);
+    void allocateNewCandidate(unsigned genomeLoation, Direction direction, unsigned lowestPossibleScore, int seedOffset, Candidate **candidate, HashTableElement **hashTableElement);
     void incrementWeight(HashTableElement *element);
 
     void fillHitsFound(unsigned maxHitsToGet, int *multiHitsFound, 
-                       unsigned *multiHitLocations, bool *multiHitRCs, int *multiHitScores);
+                       unsigned *multiHitLocations, Direction *multiHitDirections, int *multiHitScores);
 
     const Genome *genome;
     GenomeIndex *genomeIndex;
@@ -345,8 +346,7 @@ private:
 
     char *rcReadData;
     char *rcReadQuality;       // This is allocated along with rcReadData in a single BigAlloc call, so don't free it.
-    char *reversedRead;
-    char *reversedRCRead;      // This will be allocated along with reversedRead, so don't free it separately.
+    char *reversedRead[NUM_DIRECTIONS];
     char *reversedGenomeData;  // This will also be allocated along with reversedRead
 
     unsigned nTable[256];
@@ -355,9 +355,9 @@ private:
     
     // Store the best hits at a given edit distance, as well as their number
     static const int MAX_MULTI_HITS_TO_GET = 512;
-    unsigned hitCount[MAX_K];
-    unsigned hitLocations[MAX_K][MAX_MULTI_HITS_TO_GET];
-    bool hitRCs[MAX_K][MAX_MULTI_HITS_TO_GET];
+    unsigned  hitCount[MAX_K];
+    unsigned  hitLocations[MAX_K][MAX_MULTI_HITS_TO_GET];
+    Direction hitDirections[MAX_K][MAX_MULTI_HITS_TO_GET];
 
     // How many overly popular (> maxHits) seeds we skipped this run
     unsigned popularSeedsSkipped;

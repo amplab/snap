@@ -27,6 +27,7 @@ Revision History:
 #include "FixedSizeMap.h"
 #include "FixedSizeVector.h"
 #include "BigAlloc.h"
+#include "directions.h"
 
 
 class SmarterPairedEndAligner : public PairedEndAligner
@@ -78,8 +79,10 @@ private:
     
     BaseAligner *singleAligner;
     BaseAligner *mateAligner;
+
+    BoundedStringDistance <> *boundedStringDist;
     LandauVishkin lv;
-    
+
     struct Bucket {
         unsigned found;                  // Bit vector for sub-locations matched
         unsigned scored;                 // Bit vector for sub-locations scored
@@ -101,13 +104,13 @@ private:
 
     struct Candidate {
         char read;
-        char isRC;
+        Direction direction;
         short seedHits;
         unsigned bucketLoc;
         Bucket *bucket;
 
-        Candidate(char read_, char isRC_, unsigned bucketLoc_, Bucket *bucket_, short seedHits_)
-            : read(read_), isRC(isRC_), bucketLoc(bucketLoc_), bucket(bucket_), seedHits(seedHits_) {}
+        Candidate(char read_, Direction direction_, unsigned bucketLoc_, Bucket *bucket_, short seedHits_)
+            : read(read_), direction(direction_), bucketLoc(bucketLoc_), bucket(bucket_), seedHits(seedHits_) {}
 
         Candidate() {}
     };
@@ -115,8 +118,8 @@ private:
     Bucket *buckets;
     int bucketsUsed;
     
-    FixedSizeMap<unsigned, Bucket*> bucketTable[2][2];     // [read][isRC]
-    FixedSizeVector<unsigned> bucketLocations[2][2];       // [read][isRC]
+    FixedSizeMap<unsigned, Bucket*> bucketTable[2][NUM_DIRECTIONS];     // [read][Direction]
+    FixedSizeVector<unsigned> bucketLocations[2][NUM_DIRECTIONS];       // [read][Direction]
     
     FixedSizeVector<Candidate> candidates;
     
@@ -126,20 +129,20 @@ private:
     
     Bucket *newBucket();
     
-    Bucket *getBucket(int read, int isRC, unsigned location);
+    Bucket *getBucket(int read, Direction direction, unsigned location);
     
     void computeRC(Read *read, char *outputBuf);
     
-    void scoreBucket(Bucket *bucket, int readId, bool isRC, unsigned location,
+    void scoreBucket(Bucket *bucket, int readId, Direction direction, unsigned location,
                      const char *readData, const char *qualityString, int readLen, int scoreLimit, double *matchProbability);
 
-    void scoreBucketMate(Bucket *bucket, int readId, bool isRC, unsigned location, Read *mate, int scoreLimit, int *mateMapq);
+    void scoreBucketMate(Bucket *bucket, int readId, Direction direction, unsigned location, Read *mate, int scoreLimit, int *mateMapq);
     
     // Absolute difference between two unsigned values.
     inline unsigned distance(unsigned a, unsigned b) { return (a > b) ? a - b : b - a; }
     
-    // Get the confDiff value to use given # of popular seeds in each [read][isRC] orientation.
-    int getConfDiff(int seedsTried, int popularSeeds[2][2], int seedHits[2][2]);
+    // Get the confDiff value to use given # of popular seeds in each [read][Direction] orientation.
+    int getConfDiff(int seedsTried, int popularSeeds[2][NUM_DIRECTIONS], int seedHits[2][NUM_DIRECTIONS]);
 
     // Sort candidates in decreasing order of seed hits.
     static inline bool compareCandidates(const Candidate &c1, const Candidate &c2) {

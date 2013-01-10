@@ -188,7 +188,7 @@ done1:
                             }  else {
                                 _ASSERT(action == 'X');
                                 for (int i = 0; i < actionCount; i++) {
-                                    *matchProbability *= phredToProbability[qualityString[offset]];
+                                    *matchProbability *= phredToProbability[qualityString[/*BUGBUG - think about what to do here*/__min(patternLen-1,__max(offset,0))]];
                                     offset++;
                                 }
                             }

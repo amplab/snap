@@ -25,6 +25,7 @@ Environment:
 #include "VariableSizeVector.h"
 #include "BufferedAsync.h"
 #include "BoundedStringDistance.h"
+#include "directions.h"
 
 /*
  * Output aligned reads in SAM format. See http://samtools.sourceforge.net/SAM1.pdf for details.
@@ -33,7 +34,7 @@ class SAMWriter {
 public:
     virtual ~SAMWriter();
 
-    virtual bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, int mapq = -1) = 0;
+    virtual bool write(Read *read, AlignmentResult result, unsigned genomeLocation, Direction direction, int mapq = -1) = 0;
 
     virtual bool writePair(Read *read1, Read *read2, PairedAlignmentResult *result) = 0;
 
@@ -58,14 +59,14 @@ protected:
                         AlignmentResult             result,
                         int                         mapq,
                         unsigned                    genomeLocation, 
-                        bool                        isRC, 
+                        Direction                   direction, 
 						bool						useM,
                         bool                        hasMate, 
                         bool                        firstInPair, 
                         Read *                      mate, 
                         AlignmentResult             mateResult, 
                         unsigned                    mateLocation,
-                        bool                        isMateRC, 
+                        Direction                   mateDirection, 
                         const Genome *              genome, 
                         LandauVishkinWithCigar *    lv, 
                         BoundedStringDistance<> *   bsd,
@@ -90,7 +91,6 @@ private:
                         unsigned                    basesClippedBefore,
                         unsigned                    basesClippedAfter,
                         unsigned                    genomeLocation,
-                        bool                        isRC,
 						bool						useM,
                         int                         *editDistance
                 );
@@ -108,7 +108,7 @@ public:
 
     bool open(const char* fileName, const Genome *genome);
 
-    virtual bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, int mapq = -1);
+    virtual bool write(Read *read, AlignmentResult result, unsigned genomeLocation, Direction direction, int mapq = -1);
 
     virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result);
 
@@ -116,8 +116,8 @@ public:
 
 private:
     // Write one read's result, whether it's from a pair or not.
-    void write(Read *read, AlignmentResult result, int mapq, unsigned genomeLocation, bool isRC, bool hasMate, bool firstInPair,
-               Read *mate, AlignmentResult mateResult, unsigned mateLocation, bool mateIsRC);
+    void write(Read *read, AlignmentResult result, int mapq, unsigned genomeLocation, Direction direction, bool hasMate, bool firstInPair,
+               Read *mate, AlignmentResult mateResult, unsigned mateLocation, Direction mateDirection);
 
     static const int BUFFER_SIZE = 8 * 1024 * 1024;
 
@@ -152,7 +152,7 @@ public:
 
     bool initialize(AsyncFile* file, const Genome *i_genome, volatile _int64 *i_nextWriteOffset);
     
-    bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, int mapq = -1);
+    bool write(Read *read, AlignmentResult result, unsigned genomeLocation, Direction direction, int mapq = -1);
 
     bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result);
 
@@ -331,10 +331,10 @@ public:
 
         virtual bool getNextRead(Read *readToUpdate);
     
-        virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, unsigned *genomeLocation, bool *isRC, unsigned *mapQ,
+        virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, unsigned *genomeLocation, Direction *direction, unsigned *mapQ,
                         unsigned *flag, const char **cigar)
         {
-            return getNextRead(read,alignmentResult,genomeLocation,isRC,mapQ,flag,false,cigar);
+            return getNextRead(read, alignmentResult, genomeLocation, direction, mapQ, flag, false, cigar);
         }
 
         //
@@ -386,10 +386,10 @@ protected:
         static bool parseLine(char *line, char *endOfBuffer, char *result[], size_t *lineLength, size_t fieldLengths[]);
 
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
-                        unsigned *genomeLocation, bool *isRC, unsigned *mapQ, unsigned *flag, bool ignoreEndOfRange, const char **cigar) = 0;
+                        unsigned *genomeLocation, Direction *direction, unsigned *mapQ, unsigned *flag, bool ignoreEndOfRange, const char **cigar) = 0;
 
         static void getReadFromLine(const Genome *genome, char *line, char *endOfBuffer, Read *read, AlignmentResult *alignmentResult,
-                        unsigned *genomeLocation, bool *isRC, unsigned *mapQ, 
+                        unsigned *genomeLocation, Direction *direction, unsigned *mapQ, 
                         size_t *lineLength, unsigned *flag, unsigned **newReferenceCounts, const char **cigar, ReadClippingType clipping);
 };
 
@@ -407,7 +407,7 @@ public:
 protected:
 
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
-                        unsigned *genomeLocation, bool *isRC, unsigned *mapQ, unsigned *flags, bool ignoreEndOfRange, const char **cigar);
+                        unsigned *genomeLocation, Direction *direction, unsigned *mapQ, unsigned *flags, bool ignoreEndOfRange, const char **cigar);
 
 private:
         bool init(const char *fileName, const Genome *i_genome, _int64 startingOffset, _int64 amountOfFileToProcess);
@@ -474,7 +474,7 @@ public:
 
 protected:
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
-                        unsigned *genomeLocation, bool *isRC, unsigned *mapQ, unsigned *flags, bool ignoreEndOfRange, const char **cigar);
+                        unsigned *genomeLocation, Direction *direction, unsigned *mapQ, unsigned *flags, bool ignoreEndOfRange, const char **cigar);
 
 private:
         bool init(const char *fileName, const Genome *i_genome, _int64 startingOffset, _int64 amountOfFileToProcess);

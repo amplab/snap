@@ -90,7 +90,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>NOMINMAX;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions);USE_BOUNDED_STRING_DISTANCE </PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions);USE_BOUNDED_STRING_DISTANCE</PreprocessorDefinitions>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
@@ -153,6 +153,7 @@
     <ClInclude Include="BoundedStringDistance.h" />
     <ClInclude Include="BufferedAsync.h" />
     <ClInclude Include="compat.h" />
+    <ClInclude Include="directions.h" />
     <ClInclude Include="FASTA.h" />
     <ClInclude Include="fastq.h" />
     <ClInclude Include="FixedHashTable.h" />
