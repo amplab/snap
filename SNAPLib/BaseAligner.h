@@ -159,7 +159,7 @@ private:
     // Maximum distance to merge candidates that differe in indels over.
     // This can't be bigger than 32, else some bitvectors overflow.
     // TODO(matei): this seems to work better when we make it lower; why?
-    static const unsigned maxMergeDist = 15; 
+    static const unsigned maxMergeDist = 31; 
 
     char rcTranslationTable[256];
 
@@ -195,7 +195,6 @@ private:
         Candidate() {init();}
         void init();
 
-        _int64          scoredInEpoch;
         unsigned        score;
         int             seedOffset;
     };
@@ -215,8 +214,8 @@ private:
         //
         HashTableElement    *next;
 
-        _uint64      candidatesUsed;    // Really candidates we still need to score
-        _uint64      candidatesScored;
+        _uint64             candidatesUsed;    // Really candidates we still need to score
+        _uint64             candidatesScored;
 
         unsigned             baseGenomeLocation;
         unsigned             weight;
@@ -224,6 +223,7 @@ private:
         unsigned             bestScore;
         Direction            direction;
         bool                 allExtantCandidatesScored;
+        double               matchProbabilityForBestScore;
 
         Candidate            candidates[maxMergeDist * 2];
     };
@@ -277,7 +277,7 @@ private:
 
     static const unsigned UnusedScoreValue = 0xffff;
 
-    // MAPQ parameters, currently set to match Mason.  Using #define because VC won't allow "static const double".
+    // MAPQ parameters, currently not set to match Mason.  Using #define because VC won't allow "static const double".
 #define SNP_PROB  0.001
 #define GAP_OPEN_PROB  0.001
 #define GAP_EXTEND_PROB  0.5

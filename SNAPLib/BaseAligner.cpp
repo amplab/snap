@@ -818,17 +818,21 @@ Return Value:
                     // Already scored it, or marked it as scored due to using ProbabilityDistance
                     continue;
                 }
+
+                bool anyNearbyCandidatesAlreadyScored = elementToScore->candidatesScored != 0;
+
                 elementToScore->candidatesScored |= candidateBit;
                 Candidate *candidateToScore = &elementToScore->candidates[candidateIndexToScore];
-                if (candidateToScore->scoredInEpoch == hashTableEpoch) {
-                    //
-                    // This can happen if we find a candidate, score it, and then hit on an indel
-                    // near it.
-                    //
-                    continue;
-                }
-    
+ 
                 unsigned genomeLocation = elementToScore->baseGenomeLocation + candidateIndexToScore;
+                //
+                // Look up the hash table element that's closest to the genomeLocation but that doesn't
+                // contain it, to check if this location is already scored.
+                //
+                unsigned nearbyGenomeLocation = genomeLocation % (2 * maxMergeDist) >= maxMergeDist ? genomeLocation + maxMergeDist : genomeLocation - maxMergeDist;
+                HashTableElement *nearbyElement;
+                Candidate *unusedCandidate; // We only care about the element, but we have to pass a candidate into findCandidate.
+                findCandidate(nearbyGenomeLocation, elementToScore->direction, &unusedCandidate, &nearbyElement);
     
                 unsigned score = -1;
                 double matchProbability;
@@ -862,7 +866,7 @@ Return Value:
 #if defined(USE_PROBABILITY_DISTANCE)
                     score = probDistance->compute(data, readToBeScored->getData(), readToBeScored->getQuality(),
                             readToBeScored->getDataLength(), 6, 12, &matchProbability);
-                    probabilityOfAllCandidates += matchProbability;
+ 
                     // Since we're allowing a startShift in ProbabilityDistance, mark nearby locations as scored too
                     for (int shift = 1; shift <= 6; shift++) {
                         elementToScore->candidatesScored |= (candidateBit << shift);
@@ -916,11 +920,12 @@ Return Value:
                     }
                         
                     if (score != -1) {
-                        probabilityOfAllCandidates += matchProbability;
                         if (similarityMap != NULL) {
                             biggestClusterScored = __max(biggestClusterScored,
                                     similarityMap->getNumClusterMembers(genomeLocation));
                         }
+                    } else {
+                        matchProbability = 0;
                     }
 #else
                     _uint64 cacheKey = 0;
@@ -933,6 +938,8 @@ Return Value:
                         scoreLimit, &matchProbability, cacheKey);
                     if (-1 != score) {
                         probabilityOfAllCandidates += matchProbability;
+                    } else {
+                        matchProbability = 0;
                     }
                     if (similarityMap != NULL && score != -1) {
                         biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
@@ -957,28 +964,60 @@ Return Value:
                 }
                 
                 candidateToScore->score = score;
-                candidateToScore->scoredInEpoch = hashTableEpoch;
-                elementToScore->bestScore = __min(elementToScore->bestScore, score);
-    
+
                 nLocationsScored++;
                 lvScores++;
                 lvScoresAfterBestFound++;
-        
-// off until we fix the insert/delete problem            _ASSERT(candidates[candidateToScore].score >= candidates[candidateToScore].minPossibleScore); // Else we messed up minPossibleScore (or LV or something)
+
+                //
+                // Handle the special case where we just scored a different offset for a region that's already been scored.  This can happen when
+                // there are indels in the read.  In this case, we want to treat them as a single aignment, not two different ones (which would
+                // cause us to lose confidence in the alignment, since they're probably both pretty good).
+                //
+                if (anyNearbyCandidatesAlreadyScored) { 
+                    if (elementToScore->bestScore < score || elementToScore->bestScore == score && matchProbability <= elementToScore->matchProbabilityForBestScore) {
+                        //
+                        // This is a no better mapping than something nearby that we already tried.  Just ignore it.
+                        //
+                        continue;
+                    }
+                } else {
+                    _ASSERT(elementToScore->matchProbabilityForBestScore == 0.0);
+                }
+
+                if (NULL != nearbyElement) {
+                    if (nearbyElement->bestScore < score || nearbyElement->bestScore == score && nearbyElement->matchProbabilityForBestScore >= matchProbability) {
+                        //
+                        // Again, this no better than something nearby we already tried.  Give up.
+                        //
+                        continue;
+                    }
+                    anyNearbyCandidatesAlreadyScored = true;
+                    probabilityOfAllCandidates -= nearbyElement->matchProbabilityForBestScore;
+                    nearbyElement->matchProbabilityForBestScore = 0;    // keeps us from backing it out twice
+                }
+
+                probabilityOfAllCandidates -= elementToScore->matchProbabilityForBestScore;
+                probabilityOfAllCandidates += matchProbability; // Don't combine this with the previous line, it introduces floating point unhappiness.
+                elementToScore->matchProbabilityForBestScore = matchProbability;
+                elementToScore->bestScore = score;
     
                 if (bestScore > score ||
                     bestScore == score && matchProbability > probabilityOfBestCandidate) {
 
+                    //
+                    // We have a new best score.  The old best score becomes the second best score, unless this is the same as the best or second best score
+                    //                    
+
                     if ((secondBestScore == UnusedScoreValue || !(secondBestScoreGenomeLocation + maxK > genomeLocation && secondBestScoreGenomeLocation < genomeLocation + maxK)) &&
-                        (bestScore == UnusedScoreValue || !(bestScoreGenomeLocation + maxK > genomeLocation && bestScoreGenomeLocation < genomeLocation + maxK))) {
+                        (bestScore == UnusedScoreValue || !(bestScoreGenomeLocation + maxK > genomeLocation && bestScoreGenomeLocation < genomeLocation + maxK)) &&
+                        (!anyNearbyCandidatesAlreadyScored || (bestScoreGenomeLocation / (2 * maxMergeDist) != genomeLocation / (2 * maxMergeDist) &&
+                                                               secondBestScoreGenomeLocation / (2 * maxMergeDist) != genomeLocation / (2 * maxMergeDist)))) {
                             secondBestScore = bestScore;
                             secondBestScoreGenomeLocation = bestScoreGenomeLocation;
                             secondBestScoreDirection = *hitDirection;
                     }
-    
-                    //
-                    // We have a new best score.
-                    //
+  
                     bestScore = score;
                     probabilityOfBestCandidate = matchProbability;
                     bestScoreGenomeLocation = genomeLocation;
@@ -988,9 +1027,7 @@ Return Value:
     
                     lvScoresAfterBestFound = 0;
     
-                } else if (secondBestScore > score && 
-                          (secondBestScore == UnusedScoreValue || !(secondBestScoreGenomeLocation + maxK > genomeLocation && secondBestScoreGenomeLocation < genomeLocation + maxK)) &&
-                          !(bestScoreGenomeLocation + maxK > genomeLocation && bestScoreGenomeLocation < genomeLocation + maxK)) {
+                } else if (secondBestScore > score) {
                     //
                     // A new second best.
                     //
@@ -998,7 +1035,7 @@ Return Value:
                     secondBestScoreGenomeLocation = genomeLocation;
                     secondBestScoreDirection = elementToScore->direction;
                 }
-
+ 
                 if (stopOnFirstHit && bestScore <= maxK) {
                     // The user just wanted to find reads that match the database within some distance, but doesn't
                     // care about the best alignment. Stop now but mark the result as MultipleHits because we're not
@@ -1131,13 +1168,13 @@ BaseAligner::findCandidate(
 
 Routine Description:
 
-    Find a candidate in the hash table.  If it doesn't exist, create, initialize and insert it.
+    Find a candidate in the hash table.
 
 Arguments:
 
     genomeLocation - the location of the candidate we'd like to look up
     candidate - The candidate that was found or created
-    hashTableElement - the hashTableElement for the candidate that was found or created.
+    hashTableElement - the hashTableElement for the candidate that was found.
 
 --*/
 {
@@ -1238,6 +1275,7 @@ Return Value:
     element->baseGenomeLocation = highOrderGenomeLocation;
     element->bestScore = UnusedScoreValue;
     element->allExtantCandidatesScored = false;
+    element->matchProbabilityForBestScore = 0;
 
     //
     // And insert it at the end of weight list 1.
@@ -1488,13 +1526,13 @@ BaseAligner::HashTableElement::init()
     bestScore = UnusedScoreValue;
     direction = FORWARD;
     allExtantCandidatesScored = false;
+    matchProbabilityForBestScore = 0;
 }
 
     void
 BaseAligner::Candidate::init()
 {
     score = UnusedScoreValue;
-    scoredInEpoch = 0;
 }
 
     void 
