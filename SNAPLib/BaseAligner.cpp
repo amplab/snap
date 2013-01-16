@@ -546,7 +546,9 @@ Return Value:
                     if (NULL != hashTableElement) {
                         incrementWeight(hashTableElement);
                         candidate->seedOffset = direction == FORWARD ? nextSeedToTest : rcOffset;
+                        _ASSERT((unsigned)candidate->seedOffset <= readLen - seedLen);
                     } else if (lowestPossibleScoreOfAnyUnseenLocation[direction] <= scoreLimit) {
+                        _ASSERT((direction == FORWARD ? nextSeedToTest : rcOffset) <= readLen - seedLen);
                         allocateNewCandidate(genomeLocationOfThisHit, direction, lowestPossibleScoreOfAnyUnseenLocation[direction],
                                 direction == FORWARD ? nextSeedToTest : rcOffset, &candidate, &hashTableElement);
                     }
@@ -831,8 +833,7 @@ Return Value:
                 //
                 unsigned nearbyGenomeLocation = genomeLocation % (2 * maxMergeDist) >= maxMergeDist ? genomeLocation + maxMergeDist : genomeLocation - maxMergeDist;
                 HashTableElement *nearbyElement;
-                Candidate *unusedCandidate; // We only care about the element, but we have to pass a candidate into findCandidate.
-                findCandidate(nearbyGenomeLocation, elementToScore->direction, &unusedCandidate, &nearbyElement);
+                findElement(nearbyGenomeLocation, elementToScore->direction, &nearbyElement);
     
                 unsigned score = -1;
                 double matchProbability;
@@ -863,6 +864,7 @@ Return Value:
 
                 if (data != NULL) {
                     Read *readToScore = read[elementToScore->direction];
+                    _ASSERT(candidateToScore->seedOffset + seedLen <= readToScore->getDataLength());
 #if defined(USE_PROBABILITY_DISTANCE)
                     score = probDistance->compute(data, readToBeScored->getData(), readToBeScored->getQuality(),
                             readToBeScored->getDataLength(), 6, 12, &matchProbability);
@@ -985,7 +987,7 @@ Return Value:
                     _ASSERT(elementToScore->matchProbabilityForBestScore == 0.0);
                 }
 
-                if (NULL != nearbyElement) {
+                if (NULL != nearbyElement && nearbyElement->candidatesScored != 0) {
                     if (nearbyElement->bestScore < score || nearbyElement->bestScore == score && nearbyElement->matchProbabilityForBestScore >= matchProbability) {
                         //
                         // Again, this no better than something nearby we already tried.  Give up.
@@ -993,11 +995,11 @@ Return Value:
                         continue;
                     }
                     anyNearbyCandidatesAlreadyScored = true;
-                    probabilityOfAllCandidates -= nearbyElement->matchProbabilityForBestScore;
+                    probabilityOfAllCandidates = __max(0.0, probabilityOfAllCandidates - nearbyElement->matchProbabilityForBestScore);
                     nearbyElement->matchProbabilityForBestScore = 0;    // keeps us from backing it out twice
                 }
 
-                probabilityOfAllCandidates -= elementToScore->matchProbabilityForBestScore;
+                probabilityOfAllCandidates = __max(0.0, probabilityOfAllCandidates - elementToScore->matchProbabilityForBestScore); // need the max due to floating point lossage.
                 probabilityOfAllCandidates += matchProbability; // Don't combine this with the previous line, it introduces floating point unhappiness.
                 elementToScore->matchProbabilityForBestScore = matchProbability;
                 elementToScore->bestScore = score;
@@ -1020,6 +1022,7 @@ Return Value:
   
                     bestScore = score;
                     probabilityOfBestCandidate = matchProbability;
+                    _ASSERT(probabilityOfBestCandidate <= probabilityOfAllCandidates);
                     bestScoreGenomeLocation = genomeLocation;
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
                     *finalScore = bestScore;
@@ -1158,25 +1161,11 @@ Routine Description:
     }
 }
 
-    void
-BaseAligner::findCandidate(
+    bool
+BaseAligner::findElement(
     unsigned         genomeLocation, 
     Direction        direction,
-    Candidate        **candidate,
-    HashTableElement **hashTableElement)  
-/*++
-
-Routine Description:
-
-    Find a candidate in the hash table.
-
-Arguments:
-
-    genomeLocation - the location of the candidate we'd like to look up
-    candidate - The candidate that was found or created
-    hashTableElement - the hashTableElement for the candidate that was found.
-
---*/
+    HashTableElement **hashTableElement)
 {
     HashTableAnchor *hashTable = candidateHashTable[direction];
 
@@ -1190,26 +1179,54 @@ Arguments:
         // It's empty.
         //
         *hashTableElement = NULL;
-        *candidate = NULL;
-        return;
+        return false;
     }
 
     HashTableElement *lookedUpElement = anchor->element;
     while (NULL != lookedUpElement && lookedUpElement->baseGenomeLocation != highOrderGenomeLocation) {
         lookedUpElement = lookedUpElement->next;
     }
+    *hashTableElement = lookedUpElement;
+    return lookedUpElement != NULL;
+}
 
-    if (NULL != lookedUpElement) {
-        *hashTableElement = lookedUpElement;
-        *candidate = &lookedUpElement->candidates[lowOrderGenomeLocation];
 
-        _uint64 bitForThisCandidate = (_uint64)1 << lowOrderGenomeLocation;
-        lookedUpElement->allExtantCandidatesScored = lookedUpElement->allExtantCandidatesScored && (lookedUpElement->candidatesUsed & bitForThisCandidate);
-        lookedUpElement->candidatesUsed |= bitForThisCandidate;
-    } else {
+    void
+BaseAligner::findCandidate(
+    unsigned         genomeLocation, 
+    Direction        direction,
+    Candidate        **candidate,
+    HashTableElement **hashTableElement)
+/*++
+
+Routine Description:
+
+    Find a candidate in the hash table, optionally allocating it if it doesn't exist (but the element does).
+
+Arguments:
+
+    genomeLocation - the location of the candidate we'd like to look up
+    candidate - The candidate that was found or created
+    hashTableElement - the hashTableElement for the candidate that was found.
+    allocateNew - if this doesn't already exist, should we allocate it?
+
+--*/
+{
+    unsigned lowOrderGenomeLocation = genomeLocation % (2 * maxMergeDist);
+
+    if (!findElement(genomeLocation, direction, hashTableElement)) {
         *hashTableElement = NULL;
         *candidate = NULL;
+        return;
     }
+
+    _uint64 bitForThisCandidate = (_uint64)1 << lowOrderGenomeLocation;
+
+    *candidate = &(*hashTableElement)->candidates[lowOrderGenomeLocation];
+ 
+    (*hashTableElement)->allExtantCandidatesScored = (*hashTableElement)->allExtantCandidatesScored && ((*hashTableElement)->candidatesUsed & bitForThisCandidate);
+    (*hashTableElement)->candidatesUsed |= bitForThisCandidate;
+
 }
 
 bool doAlignerPrefetch = true;

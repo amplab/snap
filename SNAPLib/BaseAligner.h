@@ -322,6 +322,7 @@ private:
     
     void clearCandidates();
 
+    bool findElement(unsigned genomeLocation, Direction direction, HashTableElement **hashTableElement);
     void findCandidate(unsigned genomeLocation, Direction direction, Candidate **candidate, HashTableElement **hashTableElement);
     void allocateNewCandidate(unsigned genomeLoation, Direction direction, unsigned lowestPossibleScore, int seedOffset, Candidate **candidate, HashTableElement **hashTableElement);
     void incrementWeight(HashTableElement *element);
