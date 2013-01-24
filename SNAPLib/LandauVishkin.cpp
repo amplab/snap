@@ -3,6 +3,7 @@
 #include "LandauVishkin.h"
 #include "mapq.h"
 #include "Read.h"
+#include "BaseAligner.h"
 
 using std::make_pair;
 using std::min;
@@ -588,12 +589,12 @@ LandauVishkin::initializeProbabilitiesToPhredPlus33()
     _ASSERT(NULL == indelProbabilities);
     indelProbabilities = (double *)BigAlloc(sizeof(double) * maxIndels);
  
-    const double mutationRate = 0.001;
+    const double mutationRate = SNP_PROB;
     indelProbabilities = new double[maxIndels+1];
     indelProbabilities[0] = 1.0;
-    indelProbabilities[1] = 0.0001;
+    indelProbabilities[1] = GAP_OPEN_PROB;
     for (int i = 2; i <= maxIndels; i++) {
-        indelProbabilities[i] = indelProbabilities[i-1] * 0.1;
+        indelProbabilities[i] = indelProbabilities[i-1] * GAP_EXTEND_PROB;
     }
 
     //
@@ -613,7 +614,7 @@ LandauVishkin::initializeProbabilitiesToPhredPlus33()
     perfectMatchProbability = new double[MaxReadLength+1];
     perfectMatchProbability[0] = 1.0;
     for (unsigned i = 1; i <= MaxReadLength; i++) {
-        perfectMatchProbability[i] = perfectMatchProbability[i - 1] * (1.0 - mutationRate);
+        perfectMatchProbability[i] = perfectMatchProbability[i - 1] * (1 - SNP_PROB);
     }
 
     initializeMapqTables();

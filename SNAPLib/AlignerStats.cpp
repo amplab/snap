@@ -49,6 +49,17 @@ AlignerStats::AlignerStats(AbstractStats* i_extra)
         countOfAllHitsByWeightDepth[i] = 0;
         probabilityMassByWeightDepth[i] = 0;
     }
+
+#ifdef  TIME_STRING_DISTANCE
+    for (int i = 0; i < 2; i++) {
+        for (int j = 0; j < 2; j++) {
+            nanosTimeInBSD[i][j] = 0;
+            BSDCounts[i][j] = 0;
+        }
+    }
+    hammingCount = 0;
+    hammingNanos = 0;
+#endif  // TIME_STRING_DISSTANCE
 }
 
 AlignerStats::~AlignerStats()
@@ -91,4 +102,16 @@ AlignerStats::add(
         countOfAllHitsByWeightDepth[i] += other->countOfAllHitsByWeightDepth[i];
         probabilityMassByWeightDepth[i] = other->probabilityMassByWeightDepth[i];
     }
+
+#ifdef  TIME_STRING_DISTANCE
+    for (int i = 0; i < 2; i++) {
+        for (int j = 0; j < 2; j++) {
+            nanosTimeInBSD[i][j] += other->nanosTimeInBSD[i][j];
+            BSDCounts[i][j] += other->BSDCounts[i][j];
+        }
+    }
+
+    hammingCount += other->hammingCount;
+    hammingNanos += other->hammingNanos;
+#endif  // TIME_STRING_DISTANCE
 }

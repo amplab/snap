@@ -160,6 +160,7 @@
     <ClInclude Include="genome.h" />
     <ClInclude Include="GenomeIndex.h" />
     <ClInclude Include="GoodRandom.h" />
+    <ClInclude Include="Hamming.h" />
     <ClInclude Include="HashTable.h" />
     <ClInclude Include="histogram.h" />
     <ClInclude Include="hybridaligner.h" />
@@ -204,6 +205,7 @@
     <ClCompile Include="genome.cpp" />
     <ClCompile Include="GenomeIndex.cpp" />
     <ClCompile Include="GoodRandom.cpp" />
+    <ClCompile Include="Hamming.cpp" />
     <ClCompile Include="HashTable.cpp" />
     <ClCompile Include="histogram.cpp" />
     <ClCompile Include="hybridaligner.cpp" />

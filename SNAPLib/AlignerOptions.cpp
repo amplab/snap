@@ -61,9 +61,9 @@ AlignerOptions::AlignerOptions(
         confDiff            = 1;
         adaptiveConfDiff    = 7;
     } else {
-        maxDist             = 8;
+        maxDist             = 14;
         numSeeds            = 25;
-        maxHits             = 250;
+        maxHits             = 300;
         confDiff            = 2;
         adaptiveConfDiff    = 4;
     }

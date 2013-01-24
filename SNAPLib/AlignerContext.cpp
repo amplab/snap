@@ -29,6 +29,8 @@ Revision History:
 #include "AlignerOptions.h"
 #include "AlignerContext.h"
 #include "AlignerStats.h"
+#include "Hamming.h"
+#include "BaseAligner.h"
 
 using std::max;
 using std::min;
@@ -116,6 +118,8 @@ AlignerContext::finishThread(AlignerContext* common)
     void
 AlignerContext::initialize()
 {
+    InitializeHammingDistance(SNP_PROB);
+
     printf("Loading index from directory... ");
     fflush(stdout);
     _int64 loadStart = timeInMillis();
@@ -263,10 +267,18 @@ AlignerContext::printStats()
         totalErrors += stats->mapqErrors[i];
         double truePositives = (totalAligned - totalErrors) / max(stats->totalReads, (_int64) 1);
         double falsePositives = totalErrors / totalAligned;
-        if (i <= 10 || i % 2 == 0) {
+        if (i <= 10 || i % 2 == 0 || i == 69) {
             printf("%d\t%d\t%d\t%.3f\t%.2E\n", i, stats->mapqHistogram[i], stats->mapqErrors[i], truePositives, falsePositives);
         }
     }
+
+#ifdef  TIME_STRING_DISTANCE
+    printf("%llds, %lld calls in BSD noneClose, not -1\n",  stats->nanosTimeInBSD[0][1]/1000000000, stats->BSDCounts[0][1]);
+    printf("%llds, %lld calls in BSD noneClose, -1\n",      stats->nanosTimeInBSD[0][0]/1000000000, stats->BSDCounts[0][0]);
+    printf("%llds, %lld calls in BSD close, not -1\n",      stats->nanosTimeInBSD[1][1]/1000000000, stats->BSDCounts[1][1]);
+    printf("%llds, %lld calls in BSD close, -1\n",          stats->nanosTimeInBSD[1][0]/1000000000, stats->BSDCounts[1][0]);
+    printf("%llds, %lld calls in Hamming\n",                stats->hammingNanos/1000000000,         stats->hammingCount);
+#endif  // TIME_STRING_DISTANCE
 
     extension->printStats();
 }

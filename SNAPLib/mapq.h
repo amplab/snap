@@ -39,12 +39,13 @@ inline int computeMAPQ(
     unsigned location,
     int popularSeedsSkipped,
     SimilarityMap *similarityMap,
-    unsigned biggestClusterScored)
+    unsigned biggestClusterScored,
+    bool usedHamming)
 {
     probabilityOfAllCandidates = __max(probabilityOfAllCandidates, probabilityOfBestCandidate); // You'd think this wouldn't be necessary, but floating point limited precision causes it to be.
     _ASSERT(probabilityOfBestCandidate >= 0.0);
     // Special case for MAPQ 70, which we generate only if there is no evidence of a mismatch at all.
-    if (probabilityOfAllCandidates == probabilityOfBestCandidate && popularSeedsSkipped == 0 && score < 5) {
+    if (probabilityOfAllCandidates == probabilityOfBestCandidate && popularSeedsSkipped == 0 && score < 5 && !usedHamming) {
         return 70;
     }
 
@@ -78,6 +79,15 @@ inline int computeMAPQ(
         baseMAPQ =  69;
     } else {
         baseMAPQ = __min(69, (int)(-10 * log10(1 - correctnessProbability)));
+    }
+
+    // Completely arbitrary penalty for using Hamming distance, which can occasionally cause us to miss alignments.
+    if (usedHamming) {
+        if (baseMAPQ > 26) {
+            baseMAPQ = 26;
+        } else if (baseMAPQ > 10) {
+            baseMAPQ--;
+        }
     }
 
     if (similarityMap != NULL) {

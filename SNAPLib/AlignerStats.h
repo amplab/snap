@@ -35,6 +35,8 @@ struct AbstractStats
     virtual void printHistograms(FILE* out) = 0;
 };
 
+//#define TIME_STRING_DISTANCE    1
+
 struct AlignerStats : public AbstractStats
 {
     AlignerStats(AbstractStats* i_extra = NULL);
@@ -54,6 +56,13 @@ struct AlignerStats : public AbstractStats
     unsigned countOfBestHitsByWeightDepth[maxMaxHits];
     unsigned countOfAllHitsByWeightDepth[maxMaxHits];
     double probabilityMassByWeightDepth[maxMaxHits];
+
+#ifdef  TIME_STRING_DISTANCE
+    _int64 nanosTimeInBSD[2][2]; // [nearby/notNearby][aligned/notAligned]
+    _int64 BSDCounts[2][2]; // same
+    _int64 hammingCount;    // Number of times used Hamming distance rather than BSD/LV
+    _int64 hammingNanos;
+#endif  // TIME_STRING_DISTANCE
 
     AbstractStats* extra;
 

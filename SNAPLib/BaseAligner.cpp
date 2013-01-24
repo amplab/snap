@@ -31,6 +31,7 @@ Revision History:
 #include "LandauVishkin.h"
 #include "BigAlloc.h"
 #include "mapq.h"
+#include "Hamming.h"
 
 using std::min;
 
@@ -51,11 +52,12 @@ BaseAligner::BaseAligner(
     unsigned        i_lvCutoff,
     unsigned        i_adaptiveConfDiffThreshold,
     LandauVishkin  *i_landauVishkin,
-    SimilarityMap  *i_similarityMap) : 
+    SimilarityMap  *i_similarityMap,
+    AlignerStats   *i_stats) : 
         genomeIndex(i_genomeIndex), confDiff(i_confDiff), maxHitsToConsider(i_maxHitsToConsider), maxK(i_maxK), 
         maxReadSize(i_maxReadSize), maxSeedsToUse(i_maxSeedsToUse), lvCutoff(i_lvCutoff), readId(-1),
         adaptiveConfDiffThreshold(i_adaptiveConfDiffThreshold),
-        similarityMap(i_similarityMap), explorePopularSeeds(false), stopOnFirstHit(false)
+        similarityMap(i_similarityMap), explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats)
 /*++
 
 Routine Description:
@@ -95,7 +97,8 @@ Arguments:
 
 #if defined(USE_BOUNDED_STRING_DISTANCE)
     boundedStringDist = new BoundedStringDistance<>(2, 2, SNP_PROB, GAP_OPEN_PROB, GAP_EXTEND_PROB);
-#else   // not bsd
+#endif  // !bsd
+
     if (i_landauVishkin == NULL) {
         landauVishkin = new LandauVishkin;
         ownLandauVishkin = true;
@@ -103,7 +106,7 @@ Arguments:
         landauVishkin = i_landauVishkin;
         ownLandauVishkin = false;
     }
-#endif  // !bsd
+
 
     unsigned nCandidates = __min(maxHitsToConsider * (maxReadSize - seedLen + 1) * 2, 200000);  // *2 is for reverse complement
     candidates = (Candidate *)BigAlloc(sizeof(Candidate) * nCandidates);
@@ -246,6 +249,7 @@ Return Value:
     smallestSkippedSeed[FORWARD] = smallestSkippedSeed[RC] = 0xffffffff;
     biggestClusterScored = 1;
     highestWeightListChecked = 0;
+    usedHammingThisAlignment = false;
 
     if (NULL == mapq) {
         mapq = &unusedMapq;
@@ -539,7 +543,7 @@ Return Value:
                         continue;
                     }
     
-                    Candidate *candidate;
+                    Candidate *candidate = NULL;
                     HashTableElement *hashTableElement;
 
                     findCandidate(genomeLocationOfThisHit, direction, &candidate, &hashTableElement);
@@ -551,6 +555,11 @@ Return Value:
                         _ASSERT((direction == FORWARD ? nextSeedToTest : rcOffset) <= readLen - seedLen);
                         allocateNewCandidate(genomeLocationOfThisHit, direction, lowestPossibleScoreOfAnyUnseenLocation[direction],
                                 direction == FORWARD ? nextSeedToTest : rcOffset, &candidate, &hashTableElement);
+                    }
+
+                    if (NULL != candidate) {
+                        candidate->minOffsetHit = __min(candidate->minOffsetHit, direction == FORWARD ? nextSeedToTest : rcOffset);
+                        candidate->maxOffsetHit = __max(candidate->maxOffsetHit, direction == FORWARD ? nextSeedToTest + seedLen : rcOffset + seedLen);
                     }
                 }
                 nSeedsApplied[direction]++;
@@ -747,7 +756,7 @@ Return Value:
         _ASSERT(weightListToCheck <= maxSeedsToUse);
 
         if (__min(lowestPossibleScoreOfAnyUnseenLocation[FORWARD],lowestPossibleScoreOfAnyUnseenLocation[RC]) > scoreLimit || forceResult) {
-            if (weightListToCheck == 0 /*|| (weightListToCheck  + 2 < highestWeightListChecked && lvScores > 500)*/) {
+            if (weightListToCheck == 0 /*|| weightListToCheck == 1 && forceResult && lvScores > 20*/) {
                 //
                 // We've scored all live candidates and excluded all non-candidates, or we've checked enough that we've hit the cutoff.  We have our
                 // answer.
@@ -761,7 +770,8 @@ Return Value:
                         *result = SingleHit;
                     }
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  smallestSkippedSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap, biggestClusterScored);
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  
+                                            smallestSkippedSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap, biggestClusterScored, usedHammingThisAlignment);
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
@@ -771,7 +781,8 @@ Return Value:
                     return true;
                 } else {
                     *result = MultipleHits;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  smallestSkippedSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap, biggestClusterScored);
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  
+                                        smallestSkippedSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap, biggestClusterScored, usedHammingThisAlignment);
                     return true;
                 }
             }
@@ -786,7 +797,8 @@ Return Value:
                 if (bestScore + realConfDiff <= secondBestScore && bestScore <= maxK) {
                     *result = SingleHit;
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  smallestSkippedSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap, biggestClusterScored);
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  smallestSkippedSeed, 
+                                        bestScoreGenomeLocation, popularSeedsSkipped, similarityMap, biggestClusterScored, usedHammingThisAlignment);
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
@@ -811,9 +823,14 @@ Return Value:
         _ASSERT(elementToScore != &weightLists[weightListToCheck]);
 
         if (elementToScore->lowestPossibleScore <= scoreLimit) {
+
             unsigned long candidateIndexToScore;
             _uint64 candidatesMask = elementToScore->candidatesUsed;
             while (_BitScanForward64(&candidateIndexToScore,candidatesMask)) {
+#ifdef  TIME_STRING_DISTANCE
+                _int64 timeInBSD = 0;
+#endif  // TIME_STRING_DISTANCE
+                bool usedHamming;
                 _uint64 candidateBit = ((_uint64)1 << candidateIndexToScore);
                 candidatesMask &= ~candidateBit;
                 if ((elementToScore->candidatesScored & candidateBit) != 0) {
@@ -864,89 +881,118 @@ Return Value:
 
                 if (data != NULL) {
                     Read *readToScore = read[elementToScore->direction];
-                    _ASSERT(candidateToScore->seedOffset + seedLen <= readToScore->getDataLength());
-#if defined(USE_PROBABILITY_DISTANCE)
-                    score = probDistance->compute(data, readToBeScored->getData(), readToBeScored->getQuality(),
-                            readToBeScored->getDataLength(), 6, 12, &matchProbability);
- 
-                    // Since we're allowing a startShift in ProbabilityDistance, mark nearby locations as scored too
-                    for (int shift = 1; shift <= 6; shift++) {
-                        elementToScore->candidatesScored |= (candidateBit << shift);
-                        elementToScore->candidatesScored |= (candidateBit >> shift);
-                    }
-                    // Update the biggest cluster scored if this is a sufficiently likely cluster
-                    //if (similarityMap != NULL && matchProbability >= __max(probabilityOfBestCandidate * 0.01, 1e-30)) {
-                    //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
-                    //}
-#elif defined(USE_BOUNDED_STRING_DISTANCE)
-                    int maxStartShift = __min(scoreLimit, 7);
-                    for (int shift = 1; shift <= maxStartShift; shift++) {
-                        elementToScore->candidatesScored |= (candidateBit << shift);
-                        elementToScore->candidatesScored |= (candidateBit >> shift);
-                    }
-                    //score = boundedStringDist->compute(data, rcRead->getData(), rcRead->getDataLength(),
-                    //        maxStartShift, scoreLimit, &matchProbability, rcRead->getQuality());
-                        
-                    // Compute the distance separately in the forward and backward directions from the seed, to allow
-                    // arbitrary offsets at both the start and end but not have to pay the cost of exploring all start
-                    // shifts in BoundedStringDistance
-                    double matchProb1, matchProb2;
-                    int score1, score2;
-                    // First, do the forward direction from where the seed aligns to past of it
-                    int readLen = readToScore->getDataLength();
-                    int seedLen = genomeIndex->getSeedLength();
-                    int seedOffset = candidateToScore->seedOffset; // Since the data is reversed
-                    int tailStart = seedOffset + seedLen;
-                    score1 = boundedStringDist->compute(data + tailStart, readToScore->getData() + tailStart,
-                            readLen - tailStart, 0, scoreLimit, &matchProb1, readToScore->getQuality() + tailStart);
-                    if (score1 == -1) {
-                        score = -1;
-                    } else {
-                        // The tail of the read matched; now let's reverse the reference genome data and match the head
-                        int limitLeft = scoreLimit - score1;
- 
-                        for (int i = -MAX_K; i <= seedOffset + MAX_K; i++) {
-                            reversedGenomeData[i] = data[seedOffset - 1 - i];
+
+                    if (false && 0 == candidatesMask && NULL == nearbyElement && forceResult && elementToScore->weight > 1) {
+                        //
+                        // No evidence of indels near here and we're done with hash table lookups.  Use Hamming distance.
+                        //
+#ifdef  TIME_STRING_DISTANCE
+                        _int64 startTime = timeInNanos();
+#endif  // TIME_STRING_DISTANCE
+                        score = ComputeHammingDistance(readToScore->getData(), data, readToScore->getDataLength(), readToScore->getQuality(), scoreLimit, &matchProbability);
+#ifdef  TIME_STRING_DISTANCE
+                        if (NULL != stats) {
+                            stats->hammingNanos += timeInNanos() - startTime;
+                            stats->hammingCount++;
                         }
-                        // Note that we use the opposite direction read for the quality, since it's the reverse of our direction's
-                        score2 = boundedStringDist->compute(reversedGenomeData, reversedRead[elementToScore->direction] + readLen - seedOffset,
-                                seedOffset, 0, limitLeft, &matchProb2, read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset);
-                        // TODO: Use endShift to mark scored candidates more correctly and to report real location in SAM
-                        if (score2 == -1) {
+#endif  // TIME_STRING_DISTANCE
+                        usedHamming = true;
+                        usedHammingThisAlignment = true;
+                    } else {
+                        usedHamming = false;
+                        _ASSERT(candidateToScore->seedOffset + seedLen <= readToScore->getDataLength());
+    #if defined(USE_PROBABILITY_DISTANCE)
+                        score = probDistance->compute(data, readToBeScored->getData(), readToBeScored->getQuality(),
+                                readToBeScored->getDataLength(), 6, 12, &matchProbability);
+ 
+                        // Since we're allowing a startShift in ProbabilityDistance, mark nearby locations as scored too
+                        for (int shift = 1; shift <= 6; shift++) {
+                            elementToScore->candidatesScored |= (candidateBit << shift);
+                            elementToScore->candidatesScored |= (candidateBit >> shift);
+                        }
+                        // Update the biggest cluster scored if this is a sufficiently likely cluster
+                        //if (similarityMap != NULL && matchProbability >= __max(probabilityOfBestCandidate * 0.01, 1e-30)) {
+                        //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
+                        //}
+    #elif defined(USE_BOUNDED_STRING_DISTANCE)
+                        int maxStartShift = __min(scoreLimit, 7);
+                        for (int shift = 1; shift <= maxStartShift; shift++) {
+                            elementToScore->candidatesScored |= (candidateBit << shift);
+                            elementToScore->candidatesScored |= (candidateBit >> shift);
+                        }
+                        //score = boundedStringDist->compute(data, rcRead->getData(), rcRead->getDataLength(),
+                        //        maxStartShift, scoreLimit, &matchProbability, rcRead->getQuality());
+                        
+                        
+                        // Compute the distance separately in the forward and backward directions from the seed, to allow
+                        // arbitrary offsets at both the start and end but not have to pay the cost of exploring all start
+                        // shifts in BoundedStringDistance
+                        double matchProb1, matchProb2;
+                        int score1, score2;
+                        // First, do the forward direction from where the seed aligns to past of it
+                        int readLen = readToScore->getDataLength();
+                        int seedLen = genomeIndex->getSeedLength();
+                        int seedOffset = candidateToScore->seedOffset; // Since the data is reversed
+                        int tailStart = seedOffset + seedLen;
+#ifdef  TIME_STRING_DISTANCE
+                        _int64 bsdStartTime = timeInNanos();
+#endif  // TIME_STRING_DISTANCE
+                        //score1 = boundedStringDist->compute(data + tailStart, readToScore->getData() + tailStart,
+                        //        readLen - tailStart, 0, scoreLimit, &matchProb1, readToScore->getQuality() + tailStart);
+                        score1 = landauVishkin->computeEditDistance(data + tailStart, genomeDataLength - tailStart, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
+                            scoreLimit, &matchProb1);
+                        if (score1 == -1) {
                             score = -1;
                         } else {
-                            score = score1 + score2;
-                            // Map probabilities for substrings can be multiplied, but make sure to count seed too
-                            matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
+                            // The tail of the read matched; now let's reverse the reference genome data and match the head
+                            int limitLeft = scoreLimit - score1;
+ 
+                            for (int i = -MAX_K; i <= seedOffset + MAX_K; i++) {
+                                reversedGenomeData[i] = data[seedOffset - 1 - i];
+                            }
+                            // Note that we use the opposite direction read for the quality, since it's the reverse of our direction's
+                            //score2 = boundedStringDist->compute(reversedGenomeData, reversedRead[elementToScore->direction] + readLen - seedOffset,
+                            //       seedOffset, 0, limitLeft, &matchProb2, read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset);
+                            // TODO: Use endShift to mark scored candidates more correctly and to report real location in SAM
+                            score2 = landauVishkin->computeEditDistance(reversedGenomeData, seedOffset + MAX_K, reversedRead[elementToScore->direction] + readLen - seedOffset,
+                                                        read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset, seedOffset, scoreLimit, &matchProb2);
+                            if (score2 == -1) {
+                                score = -1;
+                            } else {
+                                score = score1 + score2;
+                                // Map probabilities for substrings can be multiplied, but make sure to count seed too
+                                matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
+                            }
                         }
-                    }
+#ifdef  TIME_STRING_DISTANCE
+                        timeInBSD = timeInNanos() - bsdStartTime;
+#endif  // TIME_STRING_DISTANCE
                         
-                    if (score != -1) {
-                        if (similarityMap != NULL) {
-                            biggestClusterScored = __max(biggestClusterScored,
-                                    similarityMap->getNumClusterMembers(genomeLocation));
+                        if (score != -1) {
+                            if (similarityMap != NULL) {
+                                biggestClusterScored = __max(biggestClusterScored,
+                                        similarityMap->getNumClusterMembers(genomeLocation));
+                            }
+                        } else {
+                            matchProbability = 0;
                         }
-                    } else {
-                        matchProbability = 0;
-                    }
-#else
-                    _uint64 cacheKey = 0;
-                    if (readId != -1) {
-                        cacheKey = ((_uint64) readId) << 33 | ((_uint64) elementToScore->direction) << 32 | genomeLocation;
-                    }
-                    score = landauVishkin->computeEditDistance(
-                        data, genomeDataLength,
-                        readToScore->getData(), readToScore->getQuality(), readToScore->getDataLength(),
-                        scoreLimit, &matchProbability, cacheKey);
-                    if (-1 != score) {
-                        probabilityOfAllCandidates += matchProbability;
-                    } else {
-                        matchProbability = 0;
-                    }
-                    if (similarityMap != NULL && score != -1) {
-                        biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
-                    }
-#endif
+    #else
+                        _uint64 cacheKey = 0;
+                        if (readId != -1) {
+                            cacheKey = ((_uint64) readId) << 33 | ((_uint64) elementToScore->direction) << 32 | genomeLocation;
+                        }
+                        score = landauVishkin->computeEditDistance(
+                            data, genomeDataLength,
+                            readToScore->getData(), readToScore->getQuality(), readToScore->getDataLength(),
+                            scoreLimit, &matchProbability, cacheKey);
+                        if (-1 == score) {
+                            matchProbability = 0;
+                        }
+                        if (similarityMap != NULL && score != -1) {
+                            biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
+                        }
+    #endif
+                    } // If we used Hamming
                 } // if we had genome data to compare against
 #ifdef TRACE_ALIGNER
                 printf("Computing distance at %u (RC) with limit %d: %d (prob %g)\n",
@@ -992,6 +1038,12 @@ Return Value:
                         //
                         // Again, this no better than something nearby we already tried.  Give up.
                         //
+#ifdef  TIME_STRING_DISTANCE
+                        if (NULL != stats && !usedHamming) {
+                            stats->nanosTimeInBSD[1][score==-1 ? 0:1] += timeInBSD;
+                            stats->BSDCounts[1][score==-1 ? 0:1]++;
+                        }
+#endif  // TIME_STRING_DISTANCE
                         continue;
                     }
                     anyNearbyCandidatesAlreadyScored = true;
@@ -1003,6 +1055,12 @@ Return Value:
                 probabilityOfAllCandidates += matchProbability; // Don't combine this with the previous line, it introduces floating point unhappiness.
                 elementToScore->matchProbabilityForBestScore = matchProbability;
                 elementToScore->bestScore = score;
+#ifdef  TIME_STRING_DISTANCE
+                if (NULL != stats && !usedHamming) {
+                    stats->nanosTimeInBSD[anyNearbyCandidatesAlreadyScored ? 1 : 0][score==-1 ? 0:1] += timeInBSD;
+                    stats->BSDCounts[anyNearbyCandidatesAlreadyScored ? 1 : 0][score==-1 ? 0:1]++;
+                }
+#endif  // TIME_STRING_DISTANCE
     
                 if (bestScore > score ||
                     bestScore == score && matchProbability > probabilityOfBestCandidate) {
@@ -1089,7 +1147,8 @@ Return Value:
                 // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
                 // report it as NotFound
                 *result = (nSeedsApplied[FORWARD] == 0 && nSeedsApplied[RC] == 0) ? MultipleHits : NotFound;
-                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped, smallestSkippedSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap, biggestClusterScored);
+                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped, smallestSkippedSeed, 
+                                    bestScoreGenomeLocation, popularSeedsSkipped, similarityMap, biggestClusterScored, usedHammingThisAlignment);
                 return true;
             }
 
@@ -1098,7 +1157,8 @@ Return Value:
                 *result = SingleHit;
                 *singleHitGenomeLocation = bestScoreGenomeLocation;
                 *finalScore = bestScore;
-                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped, smallestSkippedSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap, biggestClusterScored);
+                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped, smallestSkippedSeed, 
+                                        bestScoreGenomeLocation, popularSeedsSkipped, similarityMap, biggestClusterScored, usedHammingThisAlignment);
                 return true;
             }
 
@@ -1304,6 +1364,8 @@ Return Value:
 
     *candidate = &element->candidates[lowOrderGenomeLocation];
     (*candidate)->seedOffset = seedOffset;
+    (*candidate)->maxOffsetHit = 0;
+    (*candidate)->minOffsetHit = 200000;
     *hashTableElement = element;
 
     highestUsedWeightList = __max(highestUsedWeightList,(unsigned)1);

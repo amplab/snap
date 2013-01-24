@@ -49,7 +49,8 @@ public:
         unsigned        i_lvCutoff,
         unsigned        i_adaptiveConfDiffThreshold,
         LandauVishkin  *i_landauVishkin = NULL,
-        SimilarityMap  *i_similarityMap = NULL);
+        SimilarityMap  *i_similarityMap = NULL,
+        AlignerStats   *i_stats = NULL);
 
     virtual ~BaseAligner();
 
@@ -149,10 +150,11 @@ public:
 private:
 #if     defined(USE_BOUNDED_STRING_DISTANCE)
     BoundedStringDistance<> *boundedStringDist;
-#else   // ! bsd
+#endif  // bsd or LV
+
     LandauVishkin *landauVishkin;
     bool ownLandauVishkin;
-#endif  // bsd or LV
+
 
     ProbabilityDistance *probDistance;
 
@@ -195,6 +197,8 @@ private:
         Candidate() {init();}
         void init();
 
+        unsigned        minOffsetHit;
+        unsigned        maxOffsetHit;
         unsigned        score;
         int             seedOffset;
     };
@@ -304,6 +308,7 @@ private:
     unsigned smallestSkippedSeed[NUM_DIRECTIONS];
     unsigned biggestClusterScored;
     unsigned highestWeightListChecked;
+    bool usedHammingThisAlignment;
 
     double totalProbabilityByDepth[AlignerStats::maxMaxHits];
     void updateProbabilityMass();
@@ -369,6 +374,8 @@ private:
 
     bool stopOnFirstHit;      // Whether to stop the first time a location matches with less than
                               // maxK edit distance (useful when using SNAP for filtering only).
+
+    AlignerStats *stats;
 
     inline unsigned getWrappedNextSeedToTest(unsigned wrapCount) {
             if (0 == wrapCount) {

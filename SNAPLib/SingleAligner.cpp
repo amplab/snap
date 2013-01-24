@@ -112,7 +112,8 @@ SingleAlignerContext::runIterationThread()
             lvLimit,
             adaptiveConfDiff,
             NULL,
-            similarityMap);
+            similarityMap,
+            stats);
     if (aligner == NULL) {
         fprintf(stderr, "Failed to create aligner!\n");
         exit(1);
@@ -163,6 +164,10 @@ SingleAlignerContext::runIterationThread()
             Direction direction;
             int score;
             int mapq;
+
+            if (!strcmp("chr9_68823678_68823971_?:393:?_?:?:?_?_?_?_000091994/1", read.getId())) {
+                printf("Here\n");
+            }
 
             AlignmentResult result = aligner->AlignRead(&read, &location, &direction, &score, &mapq);
 
