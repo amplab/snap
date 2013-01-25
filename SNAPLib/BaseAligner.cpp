@@ -521,24 +521,30 @@ Return Value:
                 // winner, and we can ignore it.
                 //
 
-                //
-                // The RC seed is at offset ReadSize - SeedSize - seed offset in the RC seed.
-                //
-                // To see why, imagine that you had a read that looked like 0123456 (where the digits
-                // represented some particular bases, and digit' is the base's complement). Then the
-                // RC of that read is 6'5'4'3'2'1'.  So, when we look up the hits for the seed at
-                // offset 0 in the forward read (i.e. 012 assuming a seed size of 3) then the index
-                // will also return the results for the seed's reverse complement, i.e., 3'2'1'.
-                // This happens as the last seed in the RC read.
-                //
-                unsigned rcOffset = readLen - seedLen - nextSeedToTest;
+
+                unsigned offset;
+                if (direction == FORWARD) {
+                    offset = nextSeedToTest;
+                } else {
+                    //
+                    // The RC seed is at offset ReadSize - SeedSize - seed offset in the RC seed.
+                    //
+                    // To see why, imagine that you had a read that looked like 0123456 (where the digits
+                    // represented some particular bases, and digit' is the base's complement). Then the
+                    // RC of that read is 6'5'4'3'2'1'.  So, when we look up the hits for the seed at
+                    // offset 0 in the forward read (i.e. 012 assuming a seed size of 3) then the index
+                    // will also return the results for the seed's reverse complement, i.e., 3'2'1'.
+                    // This happens as the last seed in the RC read.
+                    //
+                    offset = readLen - seedLen - nextSeedToTest;
+                }
 
                 for (unsigned i = 0 ; i < min(nHits[direction], maxHitsToConsider); i++) {
                     //
                     // Find the genome location where the beginning of the read would hit, given a match on this seed.
                     //
 
-                    unsigned genomeLocationOfThisHit = hits[direction][i] - (direction == FORWARD ? nextSeedToTest : rcOffset);
+                    unsigned genomeLocationOfThisHit = hits[direction][i] - offset;
                     if (genomeLocationOfThisHit < minLocation || genomeLocationOfThisHit > maxLocation) {
                         continue;
                     }
@@ -549,17 +555,17 @@ Return Value:
                     findCandidate(genomeLocationOfThisHit, direction, &candidate, &hashTableElement);
                     if (NULL != hashTableElement) {
                         incrementWeight(hashTableElement);
-                        candidate->seedOffset = direction == FORWARD ? nextSeedToTest : rcOffset;
+                        candidate->seedOffset = offset;
                         _ASSERT((unsigned)candidate->seedOffset <= readLen - seedLen);
                     } else if (lowestPossibleScoreOfAnyUnseenLocation[direction] <= scoreLimit) {
-                        _ASSERT((direction == FORWARD ? nextSeedToTest : rcOffset) <= readLen - seedLen);
+                        _ASSERT(offset <= readLen - seedLen);
                         allocateNewCandidate(genomeLocationOfThisHit, direction, lowestPossibleScoreOfAnyUnseenLocation[direction],
-                                direction == FORWARD ? nextSeedToTest : rcOffset, &candidate, &hashTableElement);
+                                offset, &candidate, &hashTableElement);
                     }
 
                     if (NULL != candidate) {
-                        candidate->minOffsetHit = __min(candidate->minOffsetHit, direction == FORWARD ? nextSeedToTest : rcOffset);
-                        candidate->maxOffsetHit = __max(candidate->maxOffsetHit, direction == FORWARD ? nextSeedToTest + seedLen : rcOffset + seedLen);
+                        candidate->minOffsetHit = __min(candidate->minOffsetHit, offset);
+                        candidate->maxOffsetHit = __max(candidate->maxOffsetHit, offset + seedLen);
                     }
                 }
                 nSeedsApplied[direction]++;
@@ -848,7 +854,15 @@ Return Value:
                 // Look up the hash table element that's closest to the genomeLocation but that doesn't
                 // contain it, to check if this location is already scored.
                 //
-                unsigned nearbyGenomeLocation = genomeLocation % (2 * maxMergeDist) >= maxMergeDist ? genomeLocation + maxMergeDist : genomeLocation - maxMergeDist;
+                // We do this computation in a strange way in order to avoid generating a branch instruction that
+                // the processor's branch predictor will get wrong half of the time.  Think about it like this:
+                // The genome location lies in a bucket of size 2 * maxMergeDist.  Its offset in the bucket
+                // is genomeLocation % (2 * maxMergeDist).  If we take that quantity and integer divide it by
+                // maxMergeDist, we get 0 if it's in the first half and 1 if it's in the second.  Double that and subtract
+                // one, and you're at the right place with no branches.
+                //
+                unsigned nearbyGenomeLocation = genomeLocation + (2*(genomeLocation % (2 * maxMergeDist) / maxMergeDist) - 1) * maxMergeDist;
+                _ASSERT((genomeLocation % (2 * maxMergeDist) >= maxMergeDist ? genomeLocation + maxMergeDist : genomeLocation - maxMergeDist) == nearbyGenomeLocation);   // Assert that the logic in the above comment is right.
                 HashTableElement *nearbyElement;
                 findElement(nearbyGenomeLocation, elementToScore->direction, &nearbyElement);
     
