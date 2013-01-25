@@ -562,11 +562,6 @@ Return Value:
                         allocateNewCandidate(genomeLocationOfThisHit, direction, lowestPossibleScoreOfAnyUnseenLocation[direction],
                                 offset, &candidate, &hashTableElement);
                     }
-
-                    if (NULL != candidate) {
-                        candidate->minOffsetHit = __min(candidate->minOffsetHit, offset);
-                        candidate->maxOffsetHit = __max(candidate->maxOffsetHit, offset + seedLen);
-                    }
                 }
                 nSeedsApplied[direction]++;
                 appliedEitherSeed = true;
@@ -850,6 +845,10 @@ Return Value:
                 Candidate *candidateToScore = &elementToScore->candidates[candidateIndexToScore];
  
                 unsigned genomeLocation = elementToScore->baseGenomeLocation + candidateIndexToScore;
+
+                if (doAlignerPrefetch) {
+                    genomeIndex->prefetchGenomeData(genomeLocation);
+                }
                 //
                 // Look up the hash table element that's closest to the genomeLocation but that doesn't
                 // contain it, to check if this location is already scored.
@@ -1332,10 +1331,6 @@ Return Value:
     HashTableAnchor *anchor = &hashTable[hashTableIndex];
     HashTableElement *element;
 
-    if (doAlignerPrefetch) {
-        genomeIndex->prefetchGenomeData(genomeLocation);
-    }
-
 #if     DBG
     element = hashTable[hashTableIndex].element;
 
@@ -1378,8 +1373,6 @@ Return Value:
 
     *candidate = &element->candidates[lowOrderGenomeLocation];
     (*candidate)->seedOffset = seedOffset;
-    (*candidate)->maxOffsetHit = 0;
-    (*candidate)->minOffsetHit = 200000;
     *hashTableElement = element;
 
     highestUsedWeightList = __max(highestUsedWeightList,(unsigned)1);

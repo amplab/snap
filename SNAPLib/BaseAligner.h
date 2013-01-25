@@ -197,8 +197,6 @@ private:
         Candidate() {init();}
         void init();
 
-        unsigned        minOffsetHit;
-        unsigned        maxOffsetHit;
         unsigned        score;
         int             seedOffset;
     };

@@ -232,8 +232,10 @@ public:
 // Macro for counting trailing zeros of a 64-bit value
 //
 #ifdef _MSC_VER
+#define CountLeadingZeroes(x, ans) {_BitScanReverse64(&ans, x);}
 #define CountTrailingZeroes(x, ans) {_BitScanForward64(&ans, x);}
 #else
+#define CountLeadingZeroes(x, ans) {ans = __builtin_clzll(x);}
 #define CountTrailingZeroes(x, ans) {ans = __builtin_ctzll(x);}
 #endif
 
