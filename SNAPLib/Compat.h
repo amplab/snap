@@ -30,6 +30,8 @@ Revision History:
 
 typedef unsigned _int64 _uint64;
 typedef unsigned _int32 _uint32;
+typedef unsigned char _uint8;
+typedef unsigned short _uint16;
 
 // <http://stackoverflow.com/questions/126279/c99-stdint-h-header-and-ms-visual-studio>
 const _int64 INT64_MAX = MAXINT64;

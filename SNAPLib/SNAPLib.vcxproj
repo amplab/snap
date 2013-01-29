@@ -148,6 +148,7 @@
     <ClInclude Include="AlignerOptions.h" />
     <ClInclude Include="AlignerStats.h" />
     <ClInclude Include="ApproximateCounter.h" />
+    <ClInclude Include="Bam.h" />
     <ClInclude Include="BaseAligner.h" />
     <ClInclude Include="bigalloc.h" />
     <ClInclude Include="BoundedStringDistance.h" />
@@ -185,6 +186,7 @@
     <ClCompile Include="AlignerOptions.cpp" />
     <ClCompile Include="AlignerStats.cpp" />
     <ClCompile Include="ApproximateCounter.cpp" />
+    <ClCompile Include="Bam.cpp" />
     <ClCompile Include="BaseAligner.cpp" />
     <ClCompile Include="BiasTables.cpp" />
     <ClCompile Include="bigalloc.cpp" />
