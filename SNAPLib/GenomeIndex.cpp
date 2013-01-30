@@ -628,7 +628,7 @@ Arguments:
     return 0;   // Just to make the compiler happy.
 }
 
-GenomeIndex::GenomeIndex() : nHashTables(0), hashTables(NULL)
+GenomeIndex::GenomeIndex() : nHashTables(0), hashTables(NULL), overflowTable(NULL), genome(NULL)
 {
 }
 
@@ -636,10 +636,6 @@ GenomeIndex::GenomeIndex() : nHashTables(0), hashTables(NULL)
 GenomeIndex::loadFromDirectory(char *directoryName)
 {
     GenomeIndex *index = new GenomeIndex();
-
-    if (NULL == index) {
-        return NULL;
-    }
 
     const unsigned filenameBufferSize = MAX_PATH+1;
     char filenameBuffer[filenameBufferSize];
@@ -669,11 +665,6 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     index->seedLen = seedLen;
 
     index->overflowTable = (unsigned *)BigAlloc(index->overflowTableSize * sizeof(*(index->overflowTable)),&index->overflowTableVirtualAllocSize);
-    if (NULL == index->overflowTable) {
-        fprintf(stderr,"Unable to allocate space for index overflow table\n");
-        delete index;
-        return NULL;
-    }
 
     snprintf(filenameBuffer,filenameBufferSize,"%s%cOverflowTable",directoryName,PATH_SEP);
     FILE* fOverflowTable = fopen(filenameBuffer, "rb");
@@ -697,7 +688,7 @@ GenomeIndex::loadFromDirectory(char *directoryName)
 #endif
         int amountRead = (int)fread(((char*) index->overflowTable) + readOffset, 1, amountToRead, fOverflowTable);   
         if (amountRead < amountToRead) {
-            fprintf(stderr,"GenomeIndex::loadFromDirectory: fread failed, %d\n",errno);
+            fprintf(stderr,"GenomeIndex::loadFromDirectory: fread failed (amountToRead = %d, amountRead = %d, readOffset %lld), %d\n",amountToRead, amountRead, readOffset, errno);
             fclose(fOverflowTable);
             delete index;
             return NULL;
@@ -708,8 +699,9 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     fOverflowTable = NULL;
 
     index->hashTables = new SNAPHashTable*[index->nHashTables];
-    if (NULL == index->hashTables) {
-        return NULL;
+
+    for (unsigned i = 0; i < index->nHashTables; i++) {
+        index->hashTables[i] = NULL; // We need to do this so the destructor doesn't crash if loading a hash table fails.
     }
 
     for (unsigned i = 0; i < index->nHashTables; i++) {
@@ -848,16 +840,20 @@ GenomeIndex::fillInLookedUpResults(
 
 GenomeIndex::~GenomeIndex()
 {
-    for (unsigned i = 0; i < nHashTables; i++) {
-        delete hashTables[i];
-        hashTables[i] = NULL;
+    if (NULL != hashTables) {
+        for (unsigned i = 0; i < nHashTables; i++) {
+            delete hashTables[i];
+            hashTables[i] = NULL;
+        }
     }
 
     delete [] hashTables;
     hashTables = NULL;
 
-    BigDealloc(overflowTable);
-    overflowTable = NULL;
+    if (NULL != overflowTable) {
+        BigDealloc(overflowTable);
+        overflowTable = NULL;
+    }
 
     delete genome;
     genome = NULL;
