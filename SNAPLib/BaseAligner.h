@@ -142,8 +142,8 @@ public:
     void operator delete(void *ptr) {BigDealloc(ptr);}
 
     void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(BaseAligner)); return allocator->allocate(size);}
-    void operator delete(void * ptr, BigAllocator *allocator) {/* do nothing; the owner of the BigAlloctor is responsible for cleanup*/}
-
+    void operator delete(void *ptr, BigAllocator *allocator) {/* do nothing.  Memory gets cleaned up when the allocator is deleted.*/}
+ 
     inline bool getExplorePopularSeeds() {return explorePopularSeeds;}
     inline void setExplorePopularSeeds(bool newValue) {explorePopularSeeds = newValue;}
 

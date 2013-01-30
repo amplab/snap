@@ -1474,7 +1474,19 @@ Return Value:
     delete boundedStringDist;
 #endif  // !bsd   
 
-    if (!hadBigAllocator) {
+    if (hadBigAllocator) {
+        //
+        // Since these got allocated with the alloator rather than new, we want to call
+        // their destructors without freeing their memory (which is the responsibility of
+        // the owner of the alllocator).
+        //
+        if (ownLandauVishkin && NULL != landauVishkin) {
+            landauVishkin->~LandauVishkin();
+        }
+        if (NULL != reverseLandauVishkin) {
+            reverseLandauVishkin->~LandauVishkin();
+        }
+    } else {
 
         if (ownLandauVishkin && NULL != landauVishkin) {
             delete landauVishkin;

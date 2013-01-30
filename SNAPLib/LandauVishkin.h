@@ -291,8 +291,8 @@ public:
     void operator delete(void *ptr) {BigDealloc(ptr);}
 
     void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(LandauVishkin<TEXT_DIRECTION>)); return allocator->allocate(size);}
-    void operator delete(void *ptr, BigAllocator *allocator) {/*Do nothing.  The owner of the allocator is responsible for freeing the memory.*/}
-
+    void operator delete(void *ptr, BigAllocator *allocator) {/*Do nothing.  The memory is freed when the allocator is deleted.*/}
+ 
 private:
     // TODO: For long reads, we should include a version that only has L be 2 x (2*MAX_K+1) cells
     int L[MAX_K+1][2 * MAX_K + 1];

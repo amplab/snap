@@ -186,7 +186,7 @@ SingleAlignerContext::runIterationThread()
     stats->threadEntry->nReads = stats->usefulReads;        // This preserves the total across add()
     stats->threadEntry->lvCalls = aligner->getLocationsScored();
 
-    delete aligner;
+    aligner->~BaseAligner(); // This calls the destructor without calling operator delete, allocator owns the memory.
     if (reader != NULL) {
         delete reader;
     }
