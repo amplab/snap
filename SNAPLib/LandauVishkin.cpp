@@ -2,6 +2,7 @@
 #include "Compat.h"
 #include "LandauVishkin.h"
 #include "mapq.h"
+#include "Read.h"
 
 using std::make_pair;
 using std::min;
@@ -53,7 +54,10 @@ int LandauVishkin::computeEditDistance(
         }
     }
     if (NULL != matchProbability) {
-        *matchProbability = 1.0;    // We'll reduce it as we go.
+        //
+        // Start with perfect match probability and work our way down.
+        //
+        *matchProbability = 1.0;    
     }
     const char* p = pattern;
     const char* t = text;
@@ -75,8 +79,11 @@ int LandauVishkin::computeEditDistance(
 done1:
     if (L[0][MAX_K] == end) {
         int result = (patternLen > end ? patternLen - end : 0); // Could need some deletions at the end
-        if (cache != NULL && cacheKey != 0) {
-            cache->put(cacheKey, LVResult(k, result, indelProbabilities[result]));
+        if (NULL != matchProbability) {
+            *matchProbability = perfectMatchProbability[patternLen];    // Becuase the chance of a perfect match is < 1
+            if (cache != NULL && cacheKey != 0) {
+                cache->put(cacheKey, LVResult(k, result, indelProbabilities[result]));
+            }
         }
         return result;
     }
@@ -193,6 +200,7 @@ done1:
                     if (cache != NULL && cacheKey != 0) {
                         cache->put(cacheKey, LVResult(k, e, *matchProbability));
                     } 
+                    *matchProbability *= perfectMatchProbability[patternLen-e]; // Accounting for the < 1.0 chance of no changes for matching bases
                 } else {
                     //
                     // Not tracking match probability.
@@ -601,8 +609,16 @@ LandauVishkin::initializeProbabilitiesToPhredPlus33()
         phredToProbability[i] = mutationRate;   // This isn't a sensible Phred score
     }
 
+    _ASSERT(NULL == perfectMatchProbability);
+    perfectMatchProbability = new double[MaxReadLength+1];
+    perfectMatchProbability[0] = 1.0;
+    for (unsigned i = 1; i <= MaxReadLength; i++) {
+        perfectMatchProbability[i] = perfectMatchProbability[i - 1] * (1.0 - mutationRate);
+    }
+
     initializeMapqTables();
 }
 
 double *LandauVishkin::phredToProbability = NULL;
 double *LandauVishkin::indelProbabilities = NULL;
+double *LandauVishkin::perfectMatchProbability = NULL;

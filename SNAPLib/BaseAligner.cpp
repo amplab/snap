@@ -93,7 +93,7 @@ Arguments:
         ownLandauVishkin = false;
     }
 
-    unsigned nCandidates = maxHitsToConsider * (maxReadSize - seedLen + 1) * 2;  // *2 is for reverse complement
+    unsigned nCandidates = __min(maxHitsToConsider * (maxReadSize - seedLen + 1) * 2, 200000);  // *2 is for reverse complement
     candidates = (Candidate *)BigAlloc(sizeof(Candidate) * nCandidates);
     for (unsigned i = 0 ; i < nCandidates; i++) {
         candidates[i].init();
@@ -170,6 +170,10 @@ BaseAligner::AlignRead(
         searchRadius, searchLocation, searchRC, 0, NULL, NULL, NULL, NULL);
 }
 
+#ifdef  _DEBUG
+bool _DumpAlignments = false;
+#endif  // _DEBUG
+
     AlignmentResult
 BaseAligner::AlignRead(
     Read      *read,
@@ -221,6 +225,12 @@ Return Value:
     //
     int unusedMapq;
     int unusedFinalScore;
+    bestPassSeedsNotSkipped = 0;
+    bestPassRCSeedsNotSkipped = 0;
+	thisPassSeedsNotSkipped = 0;
+	thisPassRCSeedsNotSkipped = 0;
+    smallestSkippedSeed = 0xffffffff;
+    smallestSkippedRCSeed = 0xffffffff;
 
     if (NULL == mapq) {
         mapq = &unusedMapq;
@@ -268,6 +278,12 @@ Return Value:
         //
         return NotFound;
     }
+
+#ifdef  _DEBUG
+    if (_DumpAlignments) {
+        printf("BaseAligner: aligning read ID '%.*s', data '%.*s'\n", read->getIdLength(), read->getId(), read->getDataLength(), read->getData());
+    }
+#endif  // _DEBUG
 
     //
     // Clear out the seed used array.
@@ -350,6 +366,11 @@ Return Value:
             // a seed length of 20 we'd want to take 0, 10, 5, 15, 2, 7, 12, 17.  To make the computation
             // fast, we use use a table lookup.
             //
+			bestPassSeedsNotSkipped = __max(bestPassSeedsNotSkipped, thisPassSeedsNotSkipped);
+			bestPassRCSeedsNotSkipped = __max(bestPassRCSeedsNotSkipped, thisPassRCSeedsNotSkipped);
+			thisPassSeedsNotSkipped = 0;
+			thisPassRCSeedsNotSkipped = 0;
+
             wrapCount++;
             if (wrapCount >= seedLen) {
                 //
@@ -382,6 +403,9 @@ Return Value:
 
                 fillHitsFound(maxHitsToGet, multiHitsFound,
                               multiHitLocations, multiHitRCs, multiHitScores);
+#ifdef  _DEBUG
+                if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", *finalScore, *mapq, *genomeLocation);
+#endif  // _DEBUG
                 return finalResult;
             }
             nextSeedToTest = getWrappedNextSeedToTest(wrapCount);
@@ -416,6 +440,20 @@ Return Value:
         nHashTableLookups++;
         lookupsThisRun++;
 
+
+#ifdef  _DEBUG
+        if (_DumpAlignments) {
+            printf("\tSeed offset %2d, %4d hits, %4d rcHits.", nextSeedToTest, nHits, nRCHits);
+            for (unsigned i = 0; i < __min(nHits, 5); i++) {
+                printf(" Hit at %9u.", hits[i]);
+            }
+            for (unsigned i = 0; i < __min(nRCHits, 5); i++) {
+                printf(" RC hit at %9u.", rcHits[i]);
+            }
+            printf("\n");
+        }
+#endif  // _DEUBG
+
 #ifdef TRACE_ALIGNER
         printf("Looked up seed %llx: hits=%u, rchits=%u\n", seed.getBases(), nHits, nRCHits);
         printf("Hits:");
@@ -442,7 +480,11 @@ Return Value:
                 //
                 nHitsIgnoredBecauseOfTooHighPopularity++;
                 popularSeedsSkipped++;
+                smallestSkippedSeed = __min(nHits, smallestSkippedSeed);
             } else {
+                if (0 == wrapCount) {
+                    thisPassSeedsNotSkipped++;
+                }
                 //
                 // Update the candidates list with any hits from this seed.  If lowest possible score of any unseen location is
                 // more than best_score + confDiff then we know that if this location is newly seen then its location won't ever be a
@@ -481,7 +523,11 @@ Return Value:
                 //
                 nHitsIgnoredBecauseOfTooHighPopularity++;
                 popularSeedsSkipped++;
+                smallestSkippedRCSeed = __min(nRCHits, smallestSkippedRCSeed);
             } else {
+                if (0 == wrapCount) {
+                    thisPassRCSeedsNotSkipped++;
+                }
                 //
                 // The RC seed is at offset ReadSize - SeedSize - seed offset in the RC seed.
                 //
@@ -553,6 +599,9 @@ Return Value:
 
                 fillHitsFound(maxHitsToGet, multiHitsFound,
                               multiHitLocations, multiHitRCs, multiHitScores);
+#ifdef  _DEBUG
+                if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", *finalScore, *mapq, *genomeLocation);
+#endif  // _DEBUG
                 return finalResult;
             }
         }
@@ -586,6 +635,10 @@ Return Value:
     
     fillHitsFound(maxHitsToGet, multiHitsFound,
                   multiHitLocations, multiHitRCs, multiHitScores);
+#ifdef  _DEBUG
+    if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", *finalScore, *mapq, *genomeLocation);
+#endif  // _DEBUG
+
     return finalResult;
 }
 
@@ -728,7 +781,15 @@ Return Value:
                         *result = SingleHit;
                     }
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate);
+                    *mapq = computeMAPQ(
+								probabilityOfAllCandidates, 
+								probabilityOfBestCandidate, 
+								bestScore, 
+								__max(thisPassSeedsNotSkipped, bestPassSeedsNotSkipped),
+								__max(thisPassRCSeedsNotSkipped,  bestPassRCSeedsNotSkipped),
+								smallestSkippedSeed,  
+								smallestSkippedRCSeed								
+								);
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
@@ -738,7 +799,15 @@ Return Value:
                     return true;
                 } else {
                     *result = MultipleHits;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate);
+					*mapq = computeMAPQ(
+								probabilityOfAllCandidates, 
+								probabilityOfBestCandidate, 
+								bestScore, 
+								__max(thisPassSeedsNotSkipped, bestPassSeedsNotSkipped),
+								__max(thisPassRCSeedsNotSkipped,  bestPassRCSeedsNotSkipped),
+								smallestSkippedSeed,  
+								smallestSkippedRCSeed								
+								);
                     return true;
                 }
             }
@@ -753,7 +822,15 @@ Return Value:
                 if (bestScore + realConfDiff <= secondBestScore && bestScore <= maxK) {
                     *result = SingleHit;
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate);
+                    *mapq = computeMAPQ(
+								probabilityOfAllCandidates, 
+								probabilityOfBestCandidate, 
+								bestScore, 
+								__max(thisPassSeedsNotSkipped, bestPassSeedsNotSkipped),
+								__max(thisPassRCSeedsNotSkipped,  bestPassRCSeedsNotSkipped),
+								smallestSkippedSeed,  
+								smallestSkippedRCSeed								
+								);
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
@@ -795,9 +872,32 @@ Return Value:
     
                 unsigned score = -1;
                 double matchProbability;
+                unsigned readDataLength = elementToScore->isRC ? rcRead->getDataLength() : read->getDataLength();
+                unsigned genomeDataLength = readDataLength + MAX_K; // Leave extra space in case the read has deletions
+                const char *data = genome->getSubstring(genomeLocation, genomeDataLength);
+                if (NULL == data) {
+                    //
+                    // We're up against the end of a chromosome.  Reduce the extra space enough that it isn't too
+                    // long.  We're willing to reduce it to less than the length of a read, because the read could
+                    // but up against the end of the chromosome and have insertions in it.
+                    //
+                    const Genome::Piece *piece = genome->getPieceAtLocation(genomeLocation);
+                    const Genome::Piece *nextPiece = genome->getPieceAtLocation(genomeLocation + readDataLength + MAX_K);
+                    _ASSERT(NULL != piece && piece->beginningOffset <= genomeLocation && piece != nextPiece);
+                    unsigned endOffset;
+                    if (NULL != nextPiece) {
+                        endOffset = nextPiece->beginningOffset;
+                    } else {
+                        endOffset = genome->getCountOfBases();
+                    }
+                    genomeDataLength = endOffset - genomeLocation - 1;
+                    if (genomeDataLength >= readDataLength - MAX_K) {
+                        data = genome->getSubstring(genomeLocation, genomeDataLength);
+                        _ASSERT(NULL != data);
+                    }
+                }
                 if (elementToScore->isRC) {
-                    const char *data = genome->getSubstring(genomeLocation, rcRead->getDataLength());
-                    if (data != NULL) {
+                     if (data != NULL) {
 #ifdef USE_NEW_DISTANCE
                         score = bsd->compute(data, rcRead->getData(), rcRead->getDataLength(), scoreLimit);
 #else
@@ -806,7 +906,7 @@ Return Value:
                             cacheKey = ((_uint64) readId) << 33 | ((_uint64) elementToScore->isRC) << 32 | genomeLocation;
                         }
                         score = landauVishkin->computeEditDistance(
-                            data, rcRead->getDataLength(),
+                            data, genomeDataLength,
                             rcRead->getData(), rcRead->getQuality(), rcRead->getDataLength(),
                             scoreLimit, &matchProbability, cacheKey);
                         if (-1 != score) {
@@ -818,7 +918,6 @@ Return Value:
                     printf("Computing distance at %u (RC) with limit %d: %d\n", genomeLocation, scoreLimit, score);
 #endif
                 } else {
-                    const char *data = genome->getSubstring(genomeLocation, read->getDataLength());
                     if (data != NULL) {
 #ifdef USE_NEW_DISTANCE
                         score = bsd->compute(data, read->getData(), read->getDataLength(), scoreLimit);
@@ -829,7 +928,7 @@ Return Value:
                         }
 
                         score = landauVishkin->computeEditDistance(
-                            data, read->getDataLength(),
+                            data, genomeDataLength,
                             read->getData(), read->getQuality(), read->getDataLength(),
                             scoreLimit, &matchProbability, cacheKey);
 
@@ -843,6 +942,10 @@ Return Value:
                     printf("Computing distance at %u (fwd) with limit %d: %d\n", genomeLocation, scoreLimit, score);
 #endif
                 }
+
+#ifdef  _DEBUG
+                if (_DumpAlignments) printf("Scored %9u weight %2d limit %d, result %2d %s\n", genomeLocation, elementToScore->weight, scoreLimit, score, elementToScore->isRC ? "RC" : "");
+#endif  // _DEBUG
                 
                 if (maxHitsToGet > 0 && score != -1 && hitCount[score] < maxHitsToGet) {
                     // Remember the location of this hit because we don't have enough at this distance
@@ -919,8 +1022,10 @@ Return Value:
                             scoreLimit = bestScore - 1;
                         }
                     }
+                    // Make sure that the score limit is 
                     // always search for something at least one worse than the best we found to drive the denominator of the MAPQ computation
-                    scoreLimit = __min(__max(scoreLimit,bestScore+1),maxK); 
+                    scoreLimit = __min(__max(scoreLimit,bestScore+2),maxK); 
+
                 }
             }   // While candidates exist in the element
         }   // If the element could possibly affect the result
@@ -941,7 +1046,15 @@ Return Value:
                 // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
                 // report it as NotFound
                 *result = (nSeedsApplied == 0 && nRCSeedsApplied == 0) ? MultipleHits : NotFound;
-                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate);
+                *mapq = computeMAPQ(
+							probabilityOfAllCandidates, 
+							probabilityOfBestCandidate, 
+							bestScore, 
+							__max(thisPassSeedsNotSkipped, bestPassSeedsNotSkipped),
+							__max(thisPassRCSeedsNotSkipped,  bestPassRCSeedsNotSkipped),
+							smallestSkippedSeed,  
+							smallestSkippedRCSeed								
+							);
                 return true;
             }
 
@@ -950,7 +1063,15 @@ Return Value:
                 *result = SingleHit;
                 *singleHitGenomeLocation = bestScoreGenomeLocation;
                 *finalScore = bestScore;
-                *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate);
+                *mapq = computeMAPQ(
+							probabilityOfAllCandidates, 
+							probabilityOfBestCandidate, 
+							bestScore, 
+							__max(thisPassSeedsNotSkipped, bestPassSeedsNotSkipped),
+							__max(thisPassRCSeedsNotSkipped,  bestPassRCSeedsNotSkipped),
+							smallestSkippedSeed,  
+							smallestSkippedRCSeed								
+							);
                 return true;
             }
 

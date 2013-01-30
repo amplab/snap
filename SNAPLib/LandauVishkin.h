@@ -28,6 +28,17 @@ public:
             double *matchProbability,
             _uint64 cacheKey = 0);
 
+    // Version that does not requre match probability and quality string
+    inline int computeEditDistance(
+            const char* text,
+            int textLen,
+            const char* pattern,
+            int patternLen,
+            int k)
+    {
+        return computeEditDistance(text, textLen, pattern, NULL, patternLen, k, NULL);
+    }
+
     // Clear the cache of distances computed.
     void clearCache();
 
@@ -65,6 +76,7 @@ private:
 
     static double *indelProbabilities;  // Maps indels by length to probability of occurance.
     static double *phredToProbability;  // Maps ASCII phred character to probability of error, including 
+    static double *perfectMatchProbability; // Probability that a read of this length has no mutations
 };
 
 

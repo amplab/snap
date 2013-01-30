@@ -30,3 +30,6 @@ ipch
 obj
 *.vsp
 
+# Compiled binaries
+/snap
+/unit_tests

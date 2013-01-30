@@ -41,6 +41,7 @@ AlignerStats::AlignerStats(AbstractStats* i_extra)
 {
     for (int i = 0; i <= AlignerStats::maxMapq; i++) {
         mapqHistogram[i] = 0;
+        mapqErrors[i] = 0;
     }
 }
 
@@ -77,5 +78,6 @@ AlignerStats::add(
     }
     for (int i = 0; i <= AlignerStats::maxMapq; i++) {
         mapqHistogram[i] += other->mapqHistogram[i];
+        mapqErrors[i] += other->mapqErrors[i];
     }
 }
