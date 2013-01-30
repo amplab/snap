@@ -37,7 +37,7 @@ int ComputeHammingDistance(const char *text, const char *pattern, size_t len, co
     *mapProbability = 1;
 
     while (t < tend) {
-        unsigned _int64 diff = (*(const unsigned _int64 *)p) ^ (*(const unsigned _int64 *)t);
+        _uint64 diff = (*(const unsigned _int64 *)p) ^ (*(const unsigned _int64 *)t);
         if (diff != 0) {
             int offset = 0;
             size_t offsetForEndOfString = tend - t;

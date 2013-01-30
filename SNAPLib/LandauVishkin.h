@@ -63,7 +63,7 @@ public:
             _uint64 cacheKey = 0)
 {
     _ASSERT(k < MAX_K);
-    k = min(MAX_K - 1, k); // enforce limit even in non-debug builds
+    k = __min(MAX_K - 1, k); // enforce limit even in non-debug builds
     if (NULL == text) {
         // This happens when we're trying to read past the end of the genome.
         if (NULL != matchProbability) {
@@ -91,7 +91,7 @@ public:
     }
     const char* p = pattern;
     const char* t = text;
-    int end = min(patternLen, textLen);
+    int end = __min(patternLen, textLen);
     const char* pend = pattern + end;
     while (p < pend) {
         _uint64 x;
@@ -107,7 +107,7 @@ public:
             unsigned long zeroes;
             CountTrailingZeroes(x, zeroes);
             zeroes >>= 3;
-            L[0][MAX_K] = min((int)(p - pattern) + (int)zeroes, end);
+            L[0][MAX_K] = __min((int)(p - pattern) + (int)zeroes, end);
             goto done1;
         }
         p += 8;
@@ -145,7 +145,7 @@ public:
             const char* p = pattern + best;
             const char* t = (text + d * TEXT_DIRECTION) + best * TEXT_DIRECTION;
             if (*p == *t) {
-                int end = min(patternLen, textLen - d);
+                int end = __min(patternLen, textLen - d);
                 const char* pend = pattern + end;
 
                 while (true) {
@@ -161,7 +161,7 @@ public:
                         unsigned long zeroes;
                         CountTrailingZeroes(x, zeroes);
                         zeroes >>= 3;
-                        best = min((int)(p - pattern) + (int)zeroes, end);
+                        best = __min((int)(p - pattern) + (int)zeroes, end);
                         break;
                     }
                     p += 8;

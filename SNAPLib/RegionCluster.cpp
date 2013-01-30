@@ -31,7 +31,7 @@ RegionCluster::~RegionCluster()
 
 void RegionCluster::computeMemberInfo(const Genome *genome)
 {
-    static LandauVishkin lv; // TODO: Not thread-safe!
+  static LandauVishkin<> lv; // TODO: Not thread-safe!
 
     // Compute the consensus string
     consensusString = new char[stringLength];
