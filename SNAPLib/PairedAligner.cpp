@@ -273,9 +273,9 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
                 break;
         }
 
-        if (stringEndsWith(argv[i],".sam")) {
+        if (stringEndsWith(argv[i],".sam") || stringEndsWith(argv[i],".bam")) {
             _ASSERT(!foundFirstHalfOfFASTQ);
-            options->inputs[whichInput].fileType = SAMFile;
+            options->inputs[whichInput].fileType = stringEndsWith(argv[i],".sam") ? SAMFile : BAMFile;
             options->inputs[whichInput].fileName = argv[i];
             whichInput++;
         } else {

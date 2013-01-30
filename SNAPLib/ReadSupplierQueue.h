@@ -78,7 +78,7 @@ public:
 
     //
     // The version for paired reads that come from a single file but for which RangeSplitter won't
-    // work (BAM or CRAM or maybe SRA).
+    // work (BAM, CRAM, compressed FASTQ, maybe SRA).
     //
     ReadSupplierQueue(PairedReadReader *pairedReader);
     

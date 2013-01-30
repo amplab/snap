@@ -46,7 +46,6 @@ FASTQReader::create(const char *fileName, _int64 startingOffset, _int64 amountOf
 }
 
 
-
 MemMapFASTQReader::MemMapFASTQReader(const char* fileName, _int64 startingOffset, _int64 amountOfFileToProcess, ReadClippingType i_clipping)
 {
     if (!fileMapper.init(fileName)) {
@@ -250,7 +249,6 @@ MemMapFASTQReader::readDoneWithBuffer(unsigned *referenceCount)
 {
     // Do nothing, since file is memory-mapped.
 }
-
 
 #if 0
 

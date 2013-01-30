@@ -30,7 +30,7 @@ Revision History:
 //
 // Here's a brief description of the classes for input in SNAP:
 // Read:
-//      A Read is some data that's come from a NSG machine.  It includes some bases and associated quality score, as well as an ID.
+//      A Read is some data that's come from a NGS machine.  It includes some bases and associated quality score, as well as an ID.
 //      Reads may be clipped (because the sequencing machine was unsure of some bases).  They may be switched between forward and
 //      reverse complement sense.  They may or may not own their own memory for the various fields.
 //

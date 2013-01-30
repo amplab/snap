@@ -110,7 +110,6 @@ private:
         void unmapCurrentRange();
 };
 
-
 class FASTQWriter { 
 public:
         ~FASTQWriter() {fclose(outputFile);};

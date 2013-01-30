@@ -290,7 +290,7 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
     }
     int increment = (NULL == reader) ? 2 : 1;
     int balanceIncrement = params->isSecondReader ? -1 : 1;
-    int firstOrSecond = params->isSecondReader ? 0 : 1;
+    int firstOrSecond = params->isSecondReader ? 1 : 0;
     bool isSingleReader = (NULL == singleReader[1]);
 
     while (!done) {

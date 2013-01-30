@@ -96,7 +96,9 @@ SingleAlignerContext::parseOptions(
 		}
 
 		options->inputs[i-1].fileName = argv[i];
-		options->inputs[i-1].fileType = stringEndsWith(argv[i],".sam") ? SAMFile : FASTQFile;
+		options->inputs[i-1].fileType = stringEndsWith(argv[i],".sam") ? SAMFile :
+            stringEndsWith(argv[i],".bam") ? BAMFile :
+            FASTQFile;
 	}
 
     for (int n = 1 + nInputs; n < argc; n++) {

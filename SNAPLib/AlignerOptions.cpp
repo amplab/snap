@@ -27,6 +27,7 @@ Revision History:
 #include "AlignerOptions.h"
 #include "FASTQ.h"
 #include "SAM.h"
+#include "Bam.h"
 
 AlignerOptions::AlignerOptions(
     const char* i_commandLine,
@@ -313,6 +314,8 @@ SNAPInput::createReadSupplierGenerator(int numThreads, const Genome *genome, Rea
     _ASSERT(secondFileName == NULL);
     if (SAMFile == fileType) {
         return SAMReader::createReadSupplierGenerator(fileName,numThreads,genome,clipping);
+    } else if (BAMFile == fileType) {
+        return BAMReader::createReadSupplierGenerator(fileName,numThreads,genome,clipping);
     } else {
        _ASSERT(FASTQFile == fileType);
        return FASTQReader::createReadSupplierGenerator(fileName,numThreads,clipping);

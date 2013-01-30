@@ -25,6 +25,7 @@ Environment:
 #include "VariableSizeVector.h"
 #include "BufferedAsync.h"
 #include "Read.h"
+#include "SAM.h"
 
 // BAM format layout
 // SAM Format Specification v1.4-r985
@@ -52,9 +53,12 @@ struct BAMHeader
         : magic(BAM_MAGIC), l_text(0)
     {}
 
+    size_t size()
+    { return size(l_text); }
+
     // bytes required for a given text length, not including reference sequence blocks
     static size_t size(_int32 ltext)
-    { return sizeof(_uint32) + 2 * sizeof(_int32) + ltext; }
+    { return sizeof(BAMHeader) + sizeof(_int32)/*n_ref*/ + ltext; }
 };
 
 // header information for each reference sequence record
@@ -72,7 +76,7 @@ struct BAMHeaderRefSeq
     { return (BAMHeaderRefSeq*) (size(l_name) + (char*) this); }
 
     static size_t size(_int32 l_name)
-    { return sizeof(l_name) + sizeof(_int32) + l_name; }
+    { return sizeof(l_name) + sizeof(_int32)/*l_ref*/ + l_name; }
 };
 
 // information for each alignment record
@@ -88,6 +92,7 @@ struct BAMAlignment
     _uint16     n_cigar_op;
     _uint16     FLAG;
     _int32      l_seq;
+    _int32      next_refID;
     _int32      next_pos;
     _int32      tlen;
     
@@ -98,13 +103,19 @@ struct BAMAlignment
     { return (_uint32*) (l_read_name + read_name()); }
     
     _uint8*     seq()
-    { return (_uint8*) ((l_seq + 1) / 2 + cigar()); }
+    { return (_uint8*) (n_cigar_op + cigar()); }
 
     char*       qual()
-    { return (char*) (l_seq + seq()); }
+    { return (char*) ((l_seq + 1) / 2 + seq()); }
 
     BAMAlignAux*    firstAux()
     { return (BAMAlignAux*) (l_seq + qual()); }
+
+    size_t size()
+    { return block_size + sizeof(block_size); }
+
+    static size_t size(unsigned l_read_name, unsigned n_cigar_op, unsigned l_seq)
+    { return sizeof(BAMAlignment) + l_read_name + n_cigar_op * sizeof(_uint32) + (l_seq + 1) / 2 + l_seq; }
 };
 
 #define INT8_VAL_TYPE       'c'
@@ -186,12 +197,12 @@ struct BAMAlignAux
     // compute overall size
 
     size_t      size()
-    { return val_type != ARRAY_VAL_TYPE ? size(val_type) : arraySize(arrayValType(), count()); }
+    { return val_type != ARRAY_VAL_TYPE ? size(val_type) : size(arrayValType(), count()); }
     
     static size_t size(char val_type)
     { return 3 + valueSize(val_type); }
 
-    static size_t arraySize(char array_val_type, _uint32 count)
+    static size_t size(char array_val_type, _uint32 count)
     { return 8 + valueSize(array_val_type) * (size_t) count; }
 
     static size_t valueSize(char val_type)
@@ -221,15 +232,26 @@ struct BAMAlignAux
             return 1;
         }
     }
+
+    BAMAlignAux* next()
+    { return (BAMAlignAux*) (size() + (char*) this); }
 };
 #pragma pack(pop)
 
 
 class BAMReader : public PairedReadReader, public ReadReader {
 public:
+
+        BAMReader(ReadClippingType i_clipping, const Genome* i_genome, bool i_paired);
+
         virtual ~BAMReader();
 
-        virtual bool getNextRead(Read *readToUpdate);
+        bool init(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess);
+
+        virtual bool getNextRead(Read *readToUpdate)
+        {
+            return getNextRead(readToUpdate, NULL, NULL, NULL, NULL, NULL, false, NULL);
+        }
     
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, unsigned *genomeLocation, bool *isRC, unsigned *mapQ,
                         unsigned *flag, const char **cigar)
@@ -245,37 +267,52 @@ public:
         //
         // The PairedReadReader version of getNextReadPair, which throws away the alignment, mapQ and cigar values.
         //
-            bool
-        getNextReadPair(Read *read1, Read *read2) {
-            PairedAlignmentResult pairedAlignmentResult;
-            unsigned mapQ[2];
-
-            return getNextReadPair(read1,read2,&pairedAlignmentResult,mapQ,NULL);
+        bool getNextReadPair(Read *read1, Read *read2)
+        {
+            return getNextReadPair(read1,read2,NULL,NULL,NULL);
         }
 
         virtual void readDoneWithBuffer(unsigned *referenceCount);
 
         static BAMReader* create(const char *fileName, const Genome *genome, _int64 startingOffset, _int64 amountOfFileToProcess, 
-                                 ReadClippingType clipping = ClipBack);
-
-        virtual ReadReader *getReaderToInitializeRead(int whichHalfOfPair) {
-            _ASSERT(0 == whichHalfOfPair || 1 == whichHalfOfPair);
-            return this;
-        }
-
-        static ReadSupplierGenerator *createReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack);
-        static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack);
-protected:
-
-        // result and fieldLengths must be of size nSAMFields
-        static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, size_t *headerSize);
+                                 ReadClippingType clipping = ClipBack, bool paired = false);
         
-        static bool parseLine(char *line, char *endOfBuffer, char *result[], size_t *lineLength, size_t fieldLengths[]);
+        virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
+        
+        static ReadSupplierGenerator *createReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack);
+        
+        static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack);
+
+        static void expandSeq(char* o_sequence, _uint8* nibbles, int bases);
+
+        static void expandQual(char* o_qual, char* quality, int bases);
+
+        static void expandCigar(char* o_sequence, _uint32* cigar, int ops);
+
+        static const int MAX_SEQ_LENGTH = 1024;
+
+        static const int MAX_RECORD_LENGTH = 4096;
+
+protected:
 
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
                         unsigned *genomeLocation, bool *isRC, unsigned *mapQ, unsigned *flag, bool ignoreEndOfRange, const char **cigar);
 
-        static void getReadFromLine(const Genome *genome, char *line, char *endOfBuffer, Read *read, AlignmentResult *alignmentResult,
+        void getReadFromLine(const Genome *genome, char *line, char *endOfBuffer, Read *read, AlignmentResult *alignmentResult,
                         unsigned *genomeLocation, bool *isRC, unsigned *mapQ, 
                         size_t *lineLength, unsigned *flag, const char **cigar, ReadClippingType clipping);
+
+private:
+
+    const Genome*           genome;
+    ReadClippingType        clipping;
+    const bool              paired;
+
+    WindowsOverlappedReader buffers;
+    unsigned                n_ref; // number of reference sequences
+    unsigned*               refOffset; // array mapping ref sequence ID to piece location
+    char                    seqBuffer[2][MAX_SEQ_LENGTH];
+    char                    cigarBuffer[2][MAX_SEQ_LENGTH];
+    char                    qualBuffer[2][MAX_SEQ_LENGTH];
+    char                    overflow[MAX_RECORD_LENGTH];
 };
