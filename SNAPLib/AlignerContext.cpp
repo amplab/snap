@@ -48,13 +48,17 @@ AlignerContext::AlignerContext(int i_argc, const char **i_argv, const char *i_ve
     samWriter(NULL),
     argc(i_argc),
     argv(i_argv),
-    version(i_version)
+    version(i_version),
+    perfFile(NULL)
 {
 }
 
 AlignerContext::~AlignerContext()
 {
     delete extension;
+    if (NULL != perfFile) {
+        fclose(perfFile);
+    }
 }
 
 void AlignerContext::runAlignment(int argc, const char **argv, const char *version)
@@ -154,6 +158,14 @@ AlignerContext::initialize()
     maxDist_ = options->maxDist.start;
     numSeeds_ = options->numSeeds.start;
     adaptiveConfDiff_ = options->adaptiveConfDiff.start;
+
+    if (options->perfFileName != NULL) {
+        perfFile = fopen(options->perfFileName,"a");
+        if (NULL == perfFile) {
+            fprintf(stderr,"Unable to open perf file '%s'\n", options->perfFileName);
+            exit(1);
+        }
+    }
 }
 
     void
@@ -259,6 +271,22 @@ AlignerContext::printStats()
             100.0 * stats->notFound / usefulReads,
             errorRate,
             (1000.0 * usefulReads) / max(alignTime, (_int64) 1));
+    if (NULL != perfFile) {
+        fprintf(perfFile, "%d\t%d\t%d\t%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%.0f\n",
+                confDiff_, maxHits_, maxDist_, numSeeds_, adaptiveConfDiff_,
+                100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
+                100.0 * stats->singleHits / usefulReads,
+                100.0 * stats->multiHits / usefulReads,
+                100.0 * stats->notFound / usefulReads,
+                errorRate,
+                (1000.0 * usefulReads) / max(alignTime, (_int64) 1));
+
+        for (AlignerStats::ThreadPerfEntry *threadEntry = stats->threadEntry; NULL != threadEntry; threadEntry = threadEntry->next) {
+            fprintf(perfFile, "%d\t%d\t%lld\t%lld\t0x%llx\t%llx\t%llx\t%llx\t%llx\n", threadEntry->threadNumber, threadEntry->threadId, threadEntry->nReads, threadEntry->lvCalls, threadEntry->candidateEntries,
+                threadEntry->hashAnchor[0], threadEntry->hashAnchor[1], threadEntry->alignerObject, threadEntry->stackPointer);
+        }
+        fprintf(perfFile,"\n");
+    }
     // Running counts to compute a ROC curve (with error rate and %aligned above a given MAPQ)
     double totalAligned = 0;
     double totalErrors = 0;

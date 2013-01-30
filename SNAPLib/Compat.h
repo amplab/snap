@@ -153,6 +153,11 @@ void* InterlockedCompareExchangePointerAndReturnOldValue(volatile void **valueTo
 typedef void (*ThreadMainFunction) (void *threadMainFunctionParameter);
 bool StartNewThread(ThreadMainFunction threadMainFunction, void *threadMainFunctionParameter);
 void BindThreadToProcessor(unsigned processorNumber); // This hard binds a thread to a processor.  You can no-op it at some perf hit.
+#ifdef  _MSC_VER
+#define GetThreadId() GetCurrentThreadId();
+#else   // _MSC_VER
+#define GetThreadId() 0 // Fill this in later if you ever care.  For now, it's just for debugging/tuning
+#endif  // _MSC_VER
 
 unsigned GetNumberOfProcessors();
 
@@ -234,9 +239,11 @@ public:
 #ifdef _MSC_VER
 #define CountLeadingZeroes(x, ans) {_BitScanReverse64(&ans, x);}
 #define CountTrailingZeroes(x, ans) {_BitScanForward64(&ans, x);}
+#define ByteSwapUI64(x) (_byteswap_uint64(x))
 #else
 #define CountLeadingZeroes(x, ans) {ans = __builtin_clzll(x);}
 #define CountTrailingZeroes(x, ans) {ans = __builtin_ctzll(x);}
+#define ByteSwapUI64(x) (__builtin_bswap64(x))
 #endif
 
 //

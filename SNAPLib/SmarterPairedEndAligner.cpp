@@ -104,9 +104,9 @@ SmarterPairedEndAligner::SmarterPairedEndAligner(
 
     // Create single-end aligners.
     singleAligner = new BaseAligner(index, confDiff + 1, maxHits, maxK, maxReadSize,
-                                    maxSeeds, 1000000 /* lvLimit */, adaptiveConfDiffThreshold);
+                                    maxSeeds, adaptiveConfDiffThreshold);
     mateAligner = new BaseAligner(index, confDiff, maxHits, maxK, maxReadSize,
-                                  maxSeeds, 1000000 /* lvLimit */, adaptiveConfDiffThreshold, &lv);
+                                  maxSeeds, adaptiveConfDiffThreshold, &lv);
 }
 
 

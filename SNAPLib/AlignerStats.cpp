@@ -50,6 +50,12 @@ AlignerStats::AlignerStats(AbstractStats* i_extra)
         probabilityMassByWeightDepth[i] = 0;
     }
 
+    threadEntry = &localThreadEntry;
+    threadEntry->next = NULL;
+    threadEntry->nReads = 0;
+    threadEntry->threadId = 0;
+    threadEntry->lvCalls = 0;
+
 #ifdef  TIME_STRING_DISTANCE
     for (int i = 0; i < 2; i++) {
         for (int j = 0; j < 2; j++) {
@@ -102,6 +108,16 @@ AlignerStats::add(
         countOfAllHitsByWeightDepth[i] += other->countOfAllHitsByWeightDepth[i];
         probabilityMassByWeightDepth[i] = other->probabilityMassByWeightDepth[i];
     }
+
+    // NB: This isn't particularly robust.  It knows that the calling pattern is common->add(perThread)
+    ThreadPerfEntry *newEntry = new ThreadPerfEntry;
+    *newEntry = *other->threadEntry;
+    if (threadEntry->threadId != 0) {
+        _ASSERT(threadEntry->next == NULL);
+        newEntry->next = threadEntry;
+    }
+    threadEntry = newEntry;
+    
 
 #ifdef  TIME_STRING_DISTANCE
     for (int i = 0; i < 2; i++) {

@@ -100,24 +100,28 @@ SingleAlignerContext::runTask()
     void
 SingleAlignerContext::runIterationThread()
 {
+    stats->threadEntry->threadId = GetThreadId();
+    stats->threadEntry->threadNumber = threadNum;
+
     int maxReadSize = 10000;
-    int lvLimit = 1000000;
-    BaseAligner *aligner = new BaseAligner(
+ 
+    BigAllocator *allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, maxHits, maxReadSize, index->getSeedLength(),numSeeds));
+   
+    BaseAligner *aligner = new (allocator) BaseAligner(
             index,
             confDiff,
             maxHits,
             maxDist,
             maxReadSize,
             numSeeds,
-            lvLimit,
             adaptiveConfDiff,
-            NULL,
+            NULL,               // LV (no need to cache in the single aligner)
             similarityMap,
-            stats);
-    if (aligner == NULL) {
-        fprintf(stderr, "Failed to create aligner!\n");
-        exit(1);
-    }
+            stats,
+            allocator);
+
+    allocator->assertAllMemoryUsed();
+
     aligner->setExplorePopularSeeds(options->explorePopularSeeds);
     aligner->setStopOnFirstHit(options->stopOnFirstHit);
 
@@ -165,10 +169,6 @@ SingleAlignerContext::runIterationThread()
             int score;
             int mapq;
 
-            if (!strcmp("chr9_68823678_68823971_?:393:?_?:?:?_?_?_?_000091994/1", read.getId())) {
-                printf("Here\n");
-            }
-
             AlignmentResult result = aligner->AlignRead(&read, &location, &direction, &score, &mapq);
 
             bool wasError = false;
@@ -183,11 +183,15 @@ SingleAlignerContext::runIterationThread()
             updateStats(stats, &read, result, location, score, mapq, wasError);
         }
     }
+    stats->threadEntry->nReads = stats->usefulReads;        // This preserves the total across add()
+    stats->threadEntry->lvCalls = aligner->getLocationsScored();
 
     delete aligner;
     if (reader != NULL) {
         delete reader;
     }
+
+    delete allocator;   // This is what actually frees the memory.
 }
     
     void

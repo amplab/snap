@@ -51,4 +51,23 @@ bool BigCommit(
         void        *memoryToCommit,
         size_t      sizeToCommit);
 
+//
+// This class is used to allocate a group of objects all onto a single set of big pages.  It requires knowing
+// the amount of memory to be allocated when it's created.  It does not support deleting memory other than
+// all at once.
+//
+class BigAllocator {
+public:
+    BigAllocator(size_t i_maxMemory);
+    ~BigAllocator();
+
+    void *allocate(size_t amountToAllocate);
+    void assertAllMemoryUsed();
+private:
+
+    char    *basePointer;
+    char    *allocPointer;
+    size_t  maxMemory;
+};
+
 

@@ -52,7 +52,8 @@ AlignerOptions::AlignerOptions(
     gapPenalty(0),
     misalignThreshold(15),
 	extra(NULL),
-    rgLineContents(NULL)
+    rgLineContents(NULL),
+    perfFileName(NULL)
 {
     if (forPairedEnd) {
         maxDist             = 15;
@@ -68,7 +69,7 @@ AlignerOptions::AlignerOptions(
         adaptiveConfDiff    = 4;
     }
 
-    LandauVishkin::initializeProbabilitiesToPhredPlus33();
+    initializeLVProbabilitiesToPhredPlus33();
 }
 
     void
@@ -114,6 +115,7 @@ AlignerOptions::usageMessage()
 		"  -M   indicates that CIGAR strings in the generated SAM file should use M (alignment\n"
 		"       match) rather than = and X (sequence (mis-)match)\n"
         "  -G   specify a gap penalty to use when generating CIGAR strings\n"
+        "  -pf  specify the name of a file to contain the run speed\n"
 // not written yet        "  -r   Specify the content of the @RG line in the SAM header.\n"
             ,
             commandLine,
@@ -275,6 +277,14 @@ AlignerOptions::parse(
             return true;
         }
 #endif  // 0
+	} else if (strcmp(argv[n], "-pf") == 0) {
+        if (n + 1 < argc) {
+            perfFileName = argv[n+1];
+            n++;
+            return true;
+        } else {
+            fprintf(stderr,"Must specify the name of the perf file after -pf\n");
+        }
     } else if (strlen(argv[n]) >= 2 && '-' == argv[n][0] && 'C' == argv[n][1]) {
         if (strlen(argv[n]) != 4 || '-' != argv[n][2] && '+' != argv[n][2] ||
             '-' != argv[n][3] && '+' != argv[n][3]) {

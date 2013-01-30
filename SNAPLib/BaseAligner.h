@@ -46,11 +46,11 @@ public:
         unsigned        i_maxK,
         unsigned        i_maxReadSize,
         unsigned        i_maxSeedsToUse,
-        unsigned        i_lvCutoff,
         unsigned        i_adaptiveConfDiffThreshold,
-        LandauVishkin  *i_landauVishkin = NULL,
+        LandauVishkin<>*i_landauVishkin = NULL,
         SimilarityMap  *i_similarityMap = NULL,
-        AlignerStats   *i_stats = NULL);
+        AlignerStats   *i_stats = NULL,
+        BigAllocator    *allocator = NULL);
 
     virtual ~BaseAligner();
 
@@ -141,20 +141,28 @@ public:
     void *operator new(size_t size) {return BigAlloc(size);}
     void operator delete(void *ptr) {BigDealloc(ptr);}
 
+    void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(BaseAligner)); return allocator->allocate(size);}
+    void operator delete(void * ptr, BigAllocator *allocator) {/* do nothing; the owner of the BigAlloctor is responsible for cleanup*/}
+
     inline bool getExplorePopularSeeds() {return explorePopularSeeds;}
     inline void setExplorePopularSeeds(bool newValue) {explorePopularSeeds = newValue;}
 
     inline bool getStopOnFirstHit() {return stopOnFirstHit;}
     inline void setStopOnFirstHit(bool newValue) {stopOnFirstHit = newValue;}
 
+    static size_t getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsToUse);
+
 private:
+
+    bool hadBigAllocator;
+
 #if     defined(USE_BOUNDED_STRING_DISTANCE)
     BoundedStringDistance<> *boundedStringDist;
 #endif  // bsd or LV
 
-    LandauVishkin *landauVishkin;
+    LandauVishkin<> *landauVishkin;
+    LandauVishkin<-1> *reverseLandauVishkin;
     bool ownLandauVishkin;
-
 
     ProbabilityDistance *probDistance;
 
@@ -342,7 +350,6 @@ private:
     unsigned maxK;
     unsigned maxReadSize;
     unsigned maxSeedsToUse; // Max number of seeds to look up in the hash table
-    unsigned lvCutoff;
     unsigned adaptiveConfDiffThreshold; // Increase confDiff by 1 if this many seeds are repetitive.
 
     int nCandidates;

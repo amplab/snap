@@ -113,6 +113,7 @@ protected:
     int                 argc;
     const char        **argv;
     const char         *version;
+    FILE               *perfFile;
 
     // iteration variables
     int                 confDiff_;

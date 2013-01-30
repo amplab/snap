@@ -56,6 +56,19 @@ struct AlignerStats : public AbstractStats
     unsigned countOfBestHitsByWeightDepth[maxMaxHits];
     unsigned countOfAllHitsByWeightDepth[maxMaxHits];
     double probabilityMassByWeightDepth[maxMaxHits];
+    struct ThreadPerfEntry {
+        _uint64             nReads;
+        _uint64             lvCalls;
+        int                 threadNumber;
+        int                 threadId;
+        void                *candidateEntries;
+        void                *hashAnchor[2];
+        void                *alignerObject;
+        void                *stackPointer;
+        ThreadPerfEntry     *next;
+    } *threadEntry;
+
+    ThreadPerfEntry localThreadEntry;
 
 #ifdef  TIME_STRING_DISTANCE
     _int64 nanosTimeInBSD[2][2]; // [nearby/notNearby][aligned/notAligned]

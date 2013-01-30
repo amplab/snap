@@ -49,9 +49,7 @@ inline int computeMAPQ(
         return 70;
     }
 
-#ifdef USE_BOUNDED_STRING_DISTANCE
     score /= 2;   // We count mismatches and gap opens as 2 with BoundedStringDistance
-#endif
 
     //
     // Skipped seeds are ones that the aligner didn't look at because they had too many hits during the first

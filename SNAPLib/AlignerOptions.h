@@ -70,6 +70,7 @@ struct AlignerOptions : public AbstractOptions
     unsigned            misalignThreshold; // For error reporting: min distance from real location to mark a read as misaligned
     AbstractOptions    *extra; // extra options
     const char         *rgLineContents;
+    const char         *perfFileName;
 
     void usage();
 

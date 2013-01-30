@@ -200,7 +200,7 @@ Return Value:
     }
 
     if (NULL == allocatedMemory) {
-        fprintf(stderr,"BigAlloc of size %lld failed.\n",sizeToAllocate);
+        fprintf(stderr,"BigAlloc of size %lld failed.\n", sizeToAllocate);
         exit(1);
     }
 
@@ -379,3 +379,29 @@ bool BigCommit(
 
 
 #endif /* _MSC_VER */
+
+BigAllocator::BigAllocator(size_t i_maxMemory) : maxMemory(i_maxMemory)
+{
+    basePointer = (char *)BigAlloc(__max(maxMemory, 2 * 1024 * 1024)); // The 2MB minimum is to assure this lands in a big page
+    allocPointer = basePointer;
+}
+
+BigAllocator::~BigAllocator()
+{
+    BigDealloc(basePointer);
+}
+
+void *
+BigAllocator::allocate(size_t amountToAllocate)
+{
+    _ASSERT(allocPointer + amountToAllocate <= basePointer + maxMemory);
+    void *retVal = allocPointer;
+    allocPointer += amountToAllocate;
+    return retVal;
+}
+    void 
+BigAllocator::assertAllMemoryUsed()
+{
+    _ASSERT(allocPointer == basePointer + maxMemory);
+}
+

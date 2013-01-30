@@ -81,7 +81,7 @@ private:
     BaseAligner *mateAligner;
 
     BoundedStringDistance <> *boundedStringDist;
-    LandauVishkin lv;
+    LandauVishkin<> lv;
 
     struct Bucket {
         unsigned found;                  // Bit vector for sub-locations matched
