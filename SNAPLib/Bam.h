@@ -26,6 +26,7 @@ Environment:
 #include "BufferedAsync.h"
 #include "Read.h"
 #include "SAM.h"
+#include "DataReader.h"
 
 // BAM format layout
 // SAM Format Specification v1.4-r985
@@ -287,7 +288,7 @@ public:
 
         static void expandQual(char* o_qual, char* quality, int bases);
 
-        static void expandCigar(char* o_sequence, _uint32* cigar, int ops);
+        static void expandCigar(char* o_cigar, _uint32* cigar, int ops);
 
         static const int MAX_SEQ_LENGTH = 1024;
 
@@ -304,15 +305,14 @@ protected:
 
 private:
 
-    const Genome*           genome;
-    ReadClippingType        clipping;
-    const bool              paired;
+        char* getExtra(_int64 bytes);
 
-    WindowsOverlappedReader buffers;
-    unsigned                n_ref; // number of reference sequences
-    unsigned*               refOffset; // array mapping ref sequence ID to piece location
-    char                    seqBuffer[2][MAX_SEQ_LENGTH];
-    char                    cigarBuffer[2][MAX_SEQ_LENGTH];
-    char                    qualBuffer[2][MAX_SEQ_LENGTH];
-    char                    overflow[MAX_RECORD_LENGTH];
+        const Genome*       genome;
+        ReadClippingType    clipping;
+        const bool          paired;
+
+        DataReader*         data;
+        unsigned            n_ref; // number of reference sequences
+        unsigned*           refOffset; // array mapping ref sequence ID to piece location
+        _int64              extraOffset; // offset into extra data
 };

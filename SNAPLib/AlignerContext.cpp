@@ -81,8 +81,8 @@ extern _int64 callsToMateAligner;
 extern _int64 nanosInAlignTogether;
 extern _int64 callsToAlignTogether;
 printf("%lld s in %lld calls to single aligner, %lld ns/call.  %lld s in %lld calls to mate aligner, %lld ns/call.  %lld s in %lld s calls to align together, %lld ns/call\n",
-    nanosInSingleAligner/1000000000,callsToSingleAligner,nanosInSingleAligner/callsToSingleAligner,nanosInMateAligner/1000000000,callsToMateAligner,nanosInMateAligner/callsToMateAligner,
-    nanosInAlignTogether/1000000000,callsToAlignTogether,nanosInAlignTogether/callsToAlignTogether);
+    nanosInSingleAligner/1000000000,callsToSingleAligner,nanosInSingleAligner/max(1LL,callsToSingleAligner),nanosInMateAligner/1000000000,callsToMateAligner,nanosInMateAligner/max(1LL,callsToMateAligner),
+    nanosInAlignTogether/1000000000,callsToAlignTogether,nanosInAlignTogether/max(1LL,callsToAlignTogether));
 }
 
     void

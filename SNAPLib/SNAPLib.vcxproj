@@ -97,6 +97,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
       <WholeProgramOptimization>true</WholeProgramOptimization>
+      <AdditionalIncludeDirectories>$(SolutionDir)\import</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -154,6 +155,7 @@
     <ClInclude Include="BoundedStringDistance.h" />
     <ClInclude Include="BufferedAsync.h" />
     <ClInclude Include="compat.h" />
+    <ClInclude Include="DataReader.h" />
     <ClInclude Include="FASTA.h" />
     <ClInclude Include="fastq.h" />
     <ClInclude Include="FixedHashTable.h" />
@@ -192,6 +194,7 @@
     <ClCompile Include="bigalloc.cpp" />
     <ClCompile Include="BufferedAsync.cpp" />
     <ClCompile Include="compat.cpp" />
+    <ClCompile Include="DataReader.cpp" />
     <ClCompile Include="FASTA.cpp" />
     <ClCompile Include="fastq.cpp" />
     <ClCompile Include="genome.cpp" />

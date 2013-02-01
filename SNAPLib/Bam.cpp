@@ -64,11 +64,14 @@ BAMReader::init(
     _int64 startingOffset,
     _int64 amountOfFileToProcess)
 {
-    if (! buffers.init(fileName)) {
+    // todo: integrate supplier models
+    // might need up to 2x extra for expanded sequence + quality + cigar data
+    data = DataSupplier::Gzip->getDataReader(2.5, DataSupplier::WindowsOverlapped);
+    if (! data->init(fileName)) {
         return false;
     }
-    size_t headerSize = 1024 * 1024; // 1M header max
-    char* buffer = buffers.readHeader(&headerSize);
+    _int64 headerSize = 1024 * 1024; // 1M header max
+    char* buffer = data->readHeader(&headerSize);
     BAMHeader* header = (BAMHeader*) buffer;
     if (header->magic != BAMHeader::BAM_MAGIC) {
         fprintf(stderr, "BAMReader: Not a valid BAM file\n");
@@ -89,8 +92,8 @@ BAMReader::init(
             // exit(1); ??
         }
     }
-    _int64 skip = (char*) refSeq - buffer;
-    buffers.reinit(startingOffset + skip, max(0LL, amountOfFileToProcess - skip));
+    data->reinit(data->getFileOffset(), amountOfFileToProcess == 0 ? 0 : amountOfFileToProcess - data->getFileOffset());
+    extraOffset = 0;
     return true;
 }
 
@@ -116,7 +119,8 @@ BAMReader::reinit(
     _int64 startingOffset,
     _int64 amountOfFileToProcess)
 {
-    buffers.reinit(startingOffset, amountOfFileToProcess);
+    data->reinit(startingOffset, amountOfFileToProcess);
+    extraOffset = 0;
 }
 
     ReadSupplierGenerator *
@@ -171,19 +175,19 @@ BAMReader::expandQual(
 
     void
 BAMReader::expandCigar(
-    char* o_sequence,
+    char* o_cigar,
     _uint32* cigar,
     int ops)
 {
     int i = 0;
-    while (ops > 0 && i < MAX_SEQ_LENGTH - 20) {
-        i += sprintf(o_sequence + i, "%u", *cigar >> 4);
+    while (ops > 0 && i < MAX_SEQ_LENGTH - 20) { // 28 bits < 20 decimal digits
+        i += sprintf(o_cigar + i, "%u", *cigar >> 4);
         _ASSERT(*cigar & 0xf <= 8);
-        o_sequence[i++] = "MIDNSHP=X"[*cigar & 0xf];
+        o_cigar[i++] = "MIDNSHP=X"[*cigar & 0xf];
         ops--;
         cigar++;
     }
-    o_sequence[i++] = 0;
+    o_cigar[i++] = 0;
 }
 
     bool
@@ -198,33 +202,37 @@ BAMReader::getNextRead(
     const char **cigar)
 {
     char* buffer;
-    DWORD bytes;
-    if (! buffers.getData(&buffer, &bytes)) {
+    _int64 bytes;
+    if (! data->getData(&buffer, &bytes)) {
         return false;
     }
     BAMAlignment* bam = (BAMAlignment*) buffer;
     if (bytes < sizeof(bam->block_size) || bytes < bam->size()) {
-        if (buffers.isEOF()) {
-            fprintf(stderr, "Unexpected end of BAM file at %lld\n", buffers.getFileOffset());
+        if (data->isEOF()) {
+            fprintf(stderr, "Unexpected end of BAM file at %lld\n", data->getFileOffset());
             exit(1);
         }
-        char* overflow = buffers.useOverflowBuffer();
-        DWORD copied = bytes;
-        memcpy(overflow, buffer, bytes);
-        buffers.nextBuffer();
-        buffers.getData(&buffer, &bytes, ignoreEndOfRange);
+        // allocate overflow buffer (with next batch) and copy remainder (from previous batch) into it
+        _int64 copied = bytes;
+        data->nextBatch();
+        char* overflow = getExtra(MAX_RECORD_LENGTH);
+        memcpy(overflow, buffer, copied);
+        // get next batch and copy entire record into overflow
+        data->getData(&buffer, &bytes); // todo: what about ignoreEndOfRange?
         _ASSERT(buffer != NULL && bytes > 0);
         if (copied < sizeof(bam->block_size)) {
+            // ensure size field is complete
             memcpy(overflow + copied, buffer, sizeof(bam->block_size) - copied);
             _ASSERT(copied < bam->size());
         }
         _ASSERT(bam->size() < MAX_RECORD_LENGTH && bam->size() <= copied + bytes);
         memcpy(overflow + copied, buffer, bam->size() - copied);
-        buffers.addOffset(bam->size() - copied);
+        data->advance(bam->size() - copied);
+        // process overflow buffer instead of data buffer
         buffer = overflow;
-        bytes += bam->size();
+        bytes = bam->size();
     } else {
-        buffers.addOffset(bam->size());
+        data->advance(bam->size());
     }
     size_t lineLength;
     getReadFromLine(genome, buffer, buffer + bytes, read, alignmentResult, genomeLocation,
@@ -257,12 +265,13 @@ BAMReader::getReadFromLine(
             ? refOffset[bam->refID] + bam->pos : 0xffffffff;
     }
 
-    int mateIndex = (bam->FLAG & SAM_MULTI_SEGMENT) && (bam->FLAG && SAM_LAST_SEGMENT) ? 1 : 0;
     if (NULL != read) {
         _ASSERT(bam->l_seq < MAX_SEQ_LENGTH);
-        expandSeq(seqBuffer[mateIndex], bam->seq(), bam->l_seq);
-        expandQual(qualBuffer[mateIndex], bam->qual(), bam->l_seq);
-        read->init(bam->read_name(), bam->l_read_name, seqBuffer[mateIndex], qualBuffer[mateIndex], bam->l_seq);
+        char* seqBuffer = getExtra(bam->l_seq);
+        char* qualBuffer = getExtra(bam->l_seq);
+        expandSeq(seqBuffer, bam->seq(), bam->l_seq);
+        expandQual(qualBuffer, bam->qual(), bam->l_seq);
+        read->init(bam->read_name(), bam->l_read_name, seqBuffer, qualBuffer, bam->l_seq);
         if (bam->FLAG & SAM_REVERSE_COMPLEMENT) {
             read->becomeRC();
         }
@@ -287,7 +296,21 @@ BAMReader::getReadFromLine(
     }
 
     if (NULL != cigar) {
-        expandCigar(cigarBuffer[mateIndex], bam->cigar(), bam->n_cigar_op);
-        *cigar = cigarBuffer[mateIndex];
+        char* cigarBuffer = getExtra(MAX_SEQ_LENGTH);
+        expandCigar(cigarBuffer, bam->cigar(), bam->n_cigar_op);
+        *cigar = cigarBuffer;
     }
+}
+
+    char*
+BAMReader::getExtra(
+    _int64 bytes)
+{
+    char* extra;
+    _int64 limit;
+    data->getExtra(&extra, &limit);
+    _ASSERT(extra != NULL && bytes >= 0 && limit - extraOffset >= 2 * bytes);
+    char* result = extra + extraOffset;
+    extraOffset += max((_int64) 0, bytes);
+    return result;
 }
