@@ -311,7 +311,7 @@ public:
             return getNextReadPair(read1,read2,&pairedAlignmentResult,mapQ,NULL);
         }
 
-        static SAMReader* create(DataSupplier* supplier, const char *fileName, const Genome *genome, _int64 startingOffset, _int64 amountOfFileToProcess, 
+        static SAMReader* create(const DataSupplier* supplier, const char *fileName, const Genome *genome, _int64 startingOffset, _int64 amountOfFileToProcess, 
                                  ReadClippingType clipping = ClipBack);
 
         virtual ReadReader *getReaderToInitializeRead(int whichHalfOfPair) {
@@ -359,67 +359,10 @@ private:
         friend class SAMReader;
 
         DataReader*         data;
-        size_t              headerSize;
+        _int64              headerSize;
         ReadClippingType    clipping;
 
         bool                didInitialSkip;   // Have we skipped to the beginning of the first SAM line?  We may start in the middle of one.
 
         const Genome *      genome;
 };
-
-class WindowsOverlappedSAMReader : public virtual SAMReader {
-public:
-        WindowsOverlappedSAMReader(ReadClippingType i_clipping);
-        virtual ~WindowsOverlappedSAMReader();
-
-        virtual void readDoneWithBuffer(unsigned *referenceCount);
-
-        virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
-
-        virtual bool getsReadsInBatches() {return true;}
-
-protected:
-
-        virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
-                        unsigned *genomeLocation, bool *isRC, unsigned *mapQ, unsigned *flags, bool ignoreEndOfRange, const char **cigar);
-
-};
-
-#if 0
-class MemMapSAMReader : public SAMReader {
-public:
-        MemMapSAMReader(ReadClippingType i_clipping);
-        virtual ~MemMapSAMReader();
-
-        virtual void readDoneWithBuffer(unsigned *referenceCount);
-
-        virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
-
-protected:
-        virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
-                        unsigned *genomeLocation, bool *isRC, unsigned *mapQ, unsigned *flags, bool ignoreEndOfRange, const char **cigar);
-
-private:
-        bool init(const char *fileName, const Genome *i_genome, _int64 startingOffset, _int64 amountOfFileToProcess);
-        friend class SAMReader;
-
-        void unmapCurrentRange();
-        
-        static const int maxReadSizeInBytes = 25000;
-        static const int madviseSize = 4 * 1024 * 1024;
-
-        FileMapper fileMapper;
-
-        ReadClippingType clipping;
-        const Genome *genome;
-
-        size_t fileSize;
-        size_t headerSize;
-
-        char *fileData;
-        size_t offsetMapped;
-        _uint64 pos;             // Current position within the range of the file we mapped
-        _uint64 endPos;          // Where the range we were requested to parse ends; we might look one read past this
-        _uint64 amountMapped;    // Where our current mmap() ends
-};
-#endif  // 0

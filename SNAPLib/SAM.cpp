@@ -1186,14 +1186,14 @@ skipToBeyondNextRunOfSpacesAndTabs(char *str, const char *endOfBuffer, size_t *c
 
     SAMReader *
 SAMReader::create(
-    DataSupplier* supplier,
+    const DataSupplier* supplier,
     const char *fileName,
     const Genome *genome, 
     _int64 startingOffset, 
     _int64 amountOfFileToProcess, 
     ReadClippingType clipping)
 {
-    DataReader* data = supplier->getDataReader();
+    DataReader* data = supplier->getDataReader(0.0, maxLineLen);
     SAMReader *reader = new SAMReader(data, clipping);
 
     if (!reader->init(fileName, genome, startingOffset, amountOfFileToProcess)) {
@@ -1393,7 +1393,7 @@ SAMReader::getReadFromLine(
     unsigned offsetOfPiece;
     if ('*' != pieceName[0] && !genome->getOffsetOfPiece(pieceName,&offsetOfPiece)) {
         fprintf(stderr,"Unable to find piece '%s' in genome.  SAM file malformed.\n",pieceName);
-        exit(1);
+        //exit(1);
     }
 
     if (NULL != genomeLocation) {
@@ -1510,7 +1510,7 @@ SAMReader::init(
     if (! data->init(fileName)) {
         return false;
     }
-    _int64 headerSize = 1024 * 1024; // 1M header max
+    headerSize = 1024 * 1024; // 1M header max
     char* buffer = data->readHeader(&headerSize);
     if (!parseHeader(fileName, buffer, buffer + headerSize, genome, &headerSize)) {
         fprintf(stderr,"SAMReader: failed to parse header on '%s'\n",fileName);
@@ -1527,7 +1527,7 @@ SAMReader::reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
 {
     _ASSERT(0 != headerSize);  // Must call init() before reinit()
     data->reinit(
-        max(headerSize, (size_t) startingOffset) - 1,  // -1 is to point at the previous newline so we don't skip the first line.
+        max(headerSize, startingOffset) - 1,  // -1 is to point at the previous newline so we don't skip the first line.
         startingOffset + amountOfFileToProcess);
     char* buffer;
     _int64 validBytes;
@@ -1596,10 +1596,7 @@ SAMReader::getNextRead(
 
         _int64 extraBytes;
         data->getExtra(&nextLine, &extraBytes);
-        if (extraBytes < maxLineLen) {
-            fprintf(stderr, "SAMReader: not enough overflow line space\n");
-            exit(1);
-        }
+        _ASSERT(extraBytes >= maxLineLen);
         memcpy(nextLine, buffer, bytes);
 
         data->nextBatch();
@@ -1627,147 +1624,6 @@ SAMReader::getNextRead(
 
     return true;
 }
-
-#if 0
-
-MemMapSAMReader::MemMapSAMReader(ReadClippingType i_clipping)
-    : clipping(i_clipping), fileData(NULL)
-{
-}
-
-
-MemMapSAMReader::~MemMapSAMReader()
-{
-}
-
-
-void MemMapSAMReader::unmapCurrentRange()
-{
-    if (fileData != NULL) {
-        fileMapper.unmap();
-        fileData = NULL;
-    }
-}
-
-
-bool MemMapSAMReader::init(
-        const char *fileName,
-        const Genome *i_genome,
-        _int64 startingOffset,
-        _int64 amountOfFileToProcess)
-{
-    genome = i_genome;
-    if (!fileMapper.init(fileName)) {
-        fprintf(stderr,"Unable to create file mapping for '%s'\n", fileName);
-        return false;
-    }
-
-    fileSize = fileMapper.getFileSize();
-
-    char *allData = fileMapper.createMapping(0,fileSize);
-    if (NULL == allData) {
-        fprintf(stderr,"SAM reader: unable to map file '%s' to read header\n", fileName);
-        return false;
-    }
-
-    if (!parseHeader(fileName, allData, allData + fileSize, genome, &headerSize)) {
-        fprintf(stderr, "Failed to parse SAM header from %s\n", fileName);
-        fileMapper.unmap();
-        return false;
-    }
-    //printf("headerSize: %lu\n", headerSize);
-
-    fileMapper.unmap();
-
-    reinit(startingOffset, amountOfFileToProcess);
-    return true;
-}
-
-
-void MemMapSAMReader::reinit(_int64 startingOffset, _int64 amountToProcess)
-{
-    unmapCurrentRange();
- 
-    if (amountToProcess == 0) {
-        // This means to process the whole file.
-        amountToProcess = fileSize - startingOffset;
-    }
-
-    fileData = fileMapper.createMapping(startingOffset,amountToProcess + maxReadSizeInBytes);
-    if (fileData == NULL) {
-        fprintf(stderr, "mmap failed on SAM file\n");
-        exit(1);
-    }
-
-    pos = max((_int64)0, (_int64) (headerSize - 1 - startingOffset));
-    endPos = amountToProcess;
-    offsetMapped = startingOffset;
-    amountMapped = amountToProcess + maxReadSizeInBytes;
-
-    // Read to the first newline after our initial position
-    while (pos < endPos && fileData[pos] != '\n') {
-        pos++;
-    }
-    //printf("First newline is at %llu\n", pos);
-    pos++;
-
-    // If the first read has SAM_MULTI_SEGMENT and not SAM_FIRST_SEGMENT set, then it's part
-    // of a pair that the reader for the range before us will process, so skip it.
-    
-    Read read;
-    AlignmentResult alignmentResult;
-    unsigned genomeLocation;
-    bool isRC;
-    unsigned mapQ;
-    size_t lineLength;
-    unsigned flag;
-
-    getReadFromLine(genome, fileData + pos, fileData + amountMapped, 
-                    &read, &alignmentResult, &genomeLocation, &isRC, &mapQ, &lineLength, 
-                    &flag, NULL, clipping);
-
-    if ((flag & SAM_MULTI_SEGMENT) && !(flag & SAM_FIRST_SEGMENT)) {
-        pos += lineLength;
-        //printf("Increasing pos by lineLength = %llu\n", lineLength);
-    }
-
-    fileMapper.prefetch(pos);
-}
-
-
-bool MemMapSAMReader::getNextRead(
-        Read *read,
-        AlignmentResult *alignmentResult,
-        unsigned *genomeLocation,
-        bool *isRC,
-        unsigned *mapQ,
-        unsigned *flag,
-        bool ignoreEndOfRange,
-        const char **cigar)
-{
-    if (pos >= endPos) {
-        return false;
-    }
-    //printf("getting next read at %llu\n", pos);
-
-    size_t lineLength;
-
-    getReadFromLine(genome, fileData + pos, fileData + amountMapped, read, alignmentResult,
-                    genomeLocation, isRC, mapQ, &lineLength, flag, cigar, clipping);
-    pos += lineLength;
-
-    fileMapper.prefetch(pos);
- 
-    return true;
-}
-
-
-void MemMapSAMReader::readDoneWithBuffer(unsigned *referenceCount)
-{
-    // Ignored because we only unmap the region when the whole reader is closed.
-}
-
-#endif  // 0
 
     ReadSupplierGenerator *
 SAMReader::createReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping)

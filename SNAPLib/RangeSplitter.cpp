@@ -110,8 +110,9 @@ RangeSplittingReadSupplierGenerator::generateNewReadSupplier()
     }
 
     ReadReader *underlyingReader;
+    // todo: implement layered factory model
     if (isSAM) {
-        underlyingReader = SAMReader::create(NULL, fileName, genome, rangeStart, rangeLength, clipping);
+        underlyingReader = SAMReader::create(DataSupplier::WindowsOverlapped, fileName, genome, rangeStart, rangeLength, clipping);
     } else {
         underlyingReader = FASTQReader::create(fileName, rangeStart, rangeLength ,clipping);
     }

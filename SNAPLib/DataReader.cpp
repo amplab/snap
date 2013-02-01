@@ -877,7 +877,7 @@ MemMapDataReader::getData(
     }
     *o_buffer = currentMap + (currentBatch - 1) * batchSize + offset;
     *o_validBytes = validBytes - offset;
-    return true;
+    return *o_validBytes > 0;
 }
 
     void
@@ -955,7 +955,6 @@ MemMapDataReader::getExtra(
         *o_length = batchExtra;
     }
 }
-
 
 class MemMapDataSupplier : public DataSupplier
 {
