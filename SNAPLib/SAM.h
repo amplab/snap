@@ -25,6 +25,7 @@ Environment:
 #include "VariableSizeVector.h"
 #include "BufferedAsync.h"
 #include "Read.h"
+#include "DataReader.h"
 
 /*
  * Output aligned reads in SAM format. See http://samtools.sourceforge.net/SAM1.pdf for details.
@@ -280,9 +281,11 @@ const int SAM_SECONDARY          = 0x100; // Secondary alignment for a read with
 
 class SAMReader : public PairedReadReader, public ReadReader {
 public:
-        virtual ~SAMReader();
+        virtual ~SAMReader() {}
 
-        virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
+        SAMReader(DataReader* i_data, ReadClippingType i_clipping);
+
+        virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
 
         virtual bool getNextRead(Read *readToUpdate);
     
@@ -308,9 +311,7 @@ public:
             return getNextReadPair(read1,read2,&pairedAlignmentResult,mapQ,NULL);
         }
 
-        virtual void readDoneWithBuffer(unsigned *referenceCount) = 0;
-
-        static SAMReader* create(const char *fileName, const Genome *genome, _int64 startingOffset, _int64 amountOfFileToProcess, 
+        static SAMReader* create(DataSupplier* supplier, const char *fileName, const Genome *genome, _int64 startingOffset, _int64 amountOfFileToProcess, 
                                  ReadClippingType clipping = ClipBack);
 
         virtual ReadReader *getReaderToInitializeRead(int whichHalfOfPair) {
@@ -322,7 +323,7 @@ public:
         static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack);
         
         // result and fieldLengths must be of size nSAMFields
-        static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, size_t *headerSize);
+        static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, _int64 *o_headerSize);
         
 protected:
 
@@ -342,99 +343,28 @@ protected:
         static const unsigned  QUAL         = 10;
         static const unsigned  nSAMFields   = 11;
 
+        static const int maxLineLen = 2048;
+
         static bool parseLine(char *line, char *endOfBuffer, char *result[], size_t *lineLength, size_t fieldLengths[]);
 
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
-                        unsigned *genomeLocation, bool *isRC, unsigned *mapQ, unsigned *flag, bool ignoreEndOfRange, const char **cigar) = 0;
+                        unsigned *genomeLocation, bool *isRC, unsigned *mapQ, unsigned *flag, bool ignoreEndOfRange, const char **cigar);
 
         static void getReadFromLine(const Genome *genome, char *line, char *endOfBuffer, Read *read, AlignmentResult *alignmentResult,
                         unsigned *genomeLocation, bool *isRC, unsigned *mapQ, 
                         size_t *lineLength, unsigned *flag, const char **cigar, ReadClippingType clipping);
-};
-
-class WindowsOverlappedReader
-{
-public:
-
-        WindowsOverlappedReader();
-        ~WindowsOverlappedReader();
-
-        bool init(const char* fileName);
-
-        void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
-
-        char* readHeader(size_t* io_headerSize);
-
-        bool getData(char** o_buffer, DWORD* o_validBytes, bool ignoreEndOfRange = false);
-
-        _int64 getFileOffset()
-        { return bufferInfo[nextBufferForConsumer].fileOffset + bufferInfo[nextBufferForConsumer].offset; }
-
-        char* useOverflowBuffer()
-        {
-            BufferInfo* info = &bufferInfo[nextBufferForConsumer];
-            info->state = UsedButReferenced;        // The consumer is no longer using this buffer, but it's still referecned by Read(s)
-            info->referenceCount++;
-            info->offset = info->validBytes;
-            return info->overflowBuffer;
-        }
-
-        void nextBuffer();
-
-        bool isEOF()
-        { return bufferInfo[nextBufferForConsumer].isEOF; }
-
-        void addOffset(unsigned bytes)
-        {
-            BufferInfo* info = &bufferInfo[nextBufferForConsumer];
-            _ASSERT(bytes <= info->validBytes - info->offset);
-            info->offset += bytes;
-        }
-
-        void startIo();
-
-        void waitForBuffer(unsigned bufferNumber);
-
-        void readDoneWithBuffer(unsigned *referenceCount);
-
-        static const int maxReadSizeInBytes = 25000;    // Read as in sequencer read, not read-from-the-filesystem.
-        static const unsigned maxLineLen = maxReadSizeInBytes;
 
 private:
-    
-        const char*         fileName;
-        LARGE_INTEGER       fileSize;
-        HANDLE              hFile;
-  
-        static const unsigned nBuffers = 3;
-        static const unsigned bufferSize = 32 * 1024 * 1024 - 4096;
+        bool init(const char *fileName, const Genome *i_genome, _int64 startingOffset, _int64 amountOfFileToProcess);
+        friend class SAMReader;
 
-        enum BufferState {Empty, Reading, Full, UsedButReferenced};
+        DataReader*         data;
+        size_t              headerSize;
+        ReadClippingType    clipping;
 
-        struct BufferInfo {
-            char            *buffer;
-            BufferState     state;
-            DWORD           validBytes;
-            DWORD           nBytesThatMayBeginARead;
-            unsigned        referenceCount; // How many reads refer to this buffer?
-            //
-            // Some memory to hold a line that's broken over the end of this buffer and the
-            // beginning of the next.
-            //
-            char            overflowBuffer[maxLineLen+1];
-            bool            isEOF;
-            unsigned        offset;     // How far has the consumer gotten?
+        bool                didInitialSkip;   // Have we skipped to the beginning of the first SAM line?  We may start in the middle of one.
 
-            _int64          fileOffset;
-
-            OVERLAPPED      lap;
-        };
-
-        BufferInfo          bufferInfo[nBuffers];
-        LARGE_INTEGER       readOffset;
-        _int64              endingOffset;
-        unsigned            nextBufferForReader;
-        unsigned            nextBufferForConsumer;
+        const Genome *      genome;
 };
 
 class WindowsOverlappedSAMReader : public virtual SAMReader {
@@ -453,17 +383,6 @@ protected:
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
                         unsigned *genomeLocation, bool *isRC, unsigned *mapQ, unsigned *flags, bool ignoreEndOfRange, const char **cigar);
 
-private:
-        bool init(const char *fileName, const Genome *i_genome, _int64 startingOffset, _int64 amountOfFileToProcess);
-        friend class SAMReader;
-
-        WindowsOverlappedReader buffers;
-        size_t              headerSize;
-        ReadClippingType    clipping;
-
-        bool                didInitialSkip;   // Have we skipped to the beginning of the first SAM line?  We may start in the middle of one.
-
-        const Genome *      genome;
 };
 
 #if 0

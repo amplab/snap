@@ -66,7 +66,7 @@ BAMReader::init(
 {
     // todo: integrate supplier models
     // might need up to 2x extra for expanded sequence + quality + cigar data
-    data = DataSupplier::Gzip->getDataReader(2.5, DataSupplier::WindowsOverlapped);
+    data = DataSupplier::Gzip(DataSupplier::MemMap)->getDataReader(2.5);
     if (! data->init(fileName)) {
         return false;
     }
@@ -77,7 +77,7 @@ BAMReader::init(
         fprintf(stderr, "BAMReader: Not a valid BAM file\n");
         return false;
     }
-    size_t textHeaderSize = header->l_text;
+    _int64 textHeaderSize = header->l_text;
     if (!SAMReader::parseHeader(fileName, header->text(), header->text() + textHeaderSize, genome, &textHeaderSize)) {
         fprintf(stderr,"BAMReader: failed to parse header on '%s'\n",fileName);
         return false;

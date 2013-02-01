@@ -1184,15 +1184,17 @@ skipToBeyondNextRunOfSpacesAndTabs(char *str, const char *endOfBuffer, size_t *c
 }
 
 
-SAMReader::~SAMReader()
-{
-}
-
     SAMReader *
-SAMReader::create(const char *fileName, const Genome *genome, _int64 startingOffset, 
-                    _int64 amountOfFileToProcess, ReadClippingType clipping)
+SAMReader::create(
+    DataSupplier* supplier,
+    const char *fileName,
+    const Genome *genome, 
+    _int64 startingOffset, 
+    _int64 amountOfFileToProcess, 
+    ReadClippingType clipping)
 {
-    WindowsOverlappedSAMReader *reader = new WindowsOverlappedSAMReader(clipping);
+    DataReader* data = supplier->getDataReader();
+    SAMReader *reader = new SAMReader(data, clipping);
 
     if (!reader->init(fileName, genome, startingOffset, amountOfFileToProcess)) {
         //
@@ -1203,6 +1205,14 @@ SAMReader::create(const char *fileName, const Genome *genome, _int64 startingOff
     }
     return reader;
 }
+
+SAMReader::SAMReader(
+    DataReader* i_data,
+    ReadClippingType i_clipping)
+    : data(i_data), clipping(i_clipping)
+{
+}
+
 
 //
 // Implement the ReadReader form of getNextRead, which doesn't include the
@@ -1238,7 +1248,12 @@ SAMReader::getNextReadPair(Read *read1, Read *read2, PairedAlignmentResult *alig
 }
 
     bool
-SAMReader::parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, size_t *headerSize)
+SAMReader::parseHeader(
+    const char *fileName, 
+    char *firstLine, 
+    char *endOfBuffer, 
+    const Genome *genome, 
+    _int64 *headerSize)
 {
     char *nextLineToProcess = firstLine;
 
@@ -1480,96 +1495,23 @@ SAMReader::getReadFromLine(
     }
 }
 
-WindowsOverlappedReader::WindowsOverlappedReader()
-{
-    //
-    // Initilize the buffer info struct.
-    //
-    for (unsigned i = 0 ; i < nBuffers; i++) {
-        bufferInfo[i].buffer = (char *)BigAlloc(bufferSize + 1);    // +1 gives us a place to put a terminating null
-        if (NULL == bufferInfo[i].buffer) {
-            fprintf(stderr,"FASTQ Reader: unable to allocate IO buffer\n");
-            exit(1);
-        }
-
-        bufferInfo[i].buffer[bufferSize] = 0;       // The terminating null.
-        
-        bufferInfo[i].lap.hEvent = CreateEvent(NULL,TRUE,FALSE,NULL);
-        if (NULL == bufferInfo[i].lap.hEvent) {
-            fprintf(stderr,"Unable to create event for FASTQ reader\n");
-            exit(1);
-        }
-
-        bufferInfo[i].state = Empty;
-        bufferInfo[i].isEOF = false;
-        bufferInfo[i].offset = 0;
-        bufferInfo[i].referenceCount = 0;
-    }
-    hFile = INVALID_HANDLE_VALUE;
-}
-
     bool
-WindowsOverlappedReader::init(
-    const char* i_fileName)
-{
-    fileName = i_fileName;
-    hFile = CreateFile(fileName,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_FLAG_OVERLAPPED,NULL);
-    if (INVALID_HANDLE_VALUE == hFile) {
-        return false;
-    }
-
-    if (!GetFileSizeEx(hFile,&fileSize)) {
-        fprintf(stderr,"WindowsSAM reader: unable to get file size of '%s', %d\n",fileName,GetLastError());
-        return false;
-    }
-    return true;
-}
-
-    char*
-WindowsOverlappedReader::readHeader(
-    size_t* io_headerSize)
-{
-    BufferInfo *info = &bufferInfo[0];
-    info->lap.Offset = 0;
-    info->lap.OffsetHigh = 0;
-
-    if (!ReadFile(hFile,info->buffer,*io_headerSize,&info->validBytes,&info->lap)) {
-        if (GetLastError() != ERROR_IO_PENDING) {
-            fprintf(stderr,"WindowsOverlappedSAMReader::init: unable to read header of '%s', %d\n",fileName,GetLastError());
-            return false;
-        }
-    }
-
-    if (!GetOverlappedResult(hFile,&info->lap,&info->validBytes,TRUE)) {
-        fprintf(stderr,"WindowsOverlappedSAMReader::init: error reading header of '%s', %d\n",fileName,GetLastError());
-        return false;
-    }
-
-    *io_headerSize = info->validBytes;
-    return info->buffer;
-}
-
-WindowsOverlappedSAMReader::WindowsOverlappedSAMReader(
-    ReadClippingType i_clipping)
-    : buffers()
-{
-    clipping = i_clipping;
-    genome = NULL;
-}
-
-    bool
-WindowsOverlappedSAMReader::init(const char *fileName, const Genome *i_genome, _int64 startingOffset, _int64 amountOfFileToProcess)
+SAMReader::init(
+    const char *fileName,
+    const Genome *i_genome,
+    _int64 startingOffset,
+    _int64 amountOfFileToProcess)
 {
     genome = i_genome;
     
     //
     // Read and parse the header specially.
     //
-    if (! buffers.init(fileName)) {
+    if (! data->init(fileName)) {
         return false;
     }
-    size_t headerSize = 1024 * 1024; // 1M header max
-    char* buffer = buffers.readHeader(&headerSize);
+    _int64 headerSize = 1024 * 1024; // 1M header max
+    char* buffer = data->readHeader(&headerSize);
     if (!parseHeader(fileName, buffer, buffer + headerSize, genome, &headerSize)) {
         fprintf(stderr,"SAMReader: failed to parse header on '%s'\n",fileName);
         return false;
@@ -1581,65 +1523,15 @@ WindowsOverlappedSAMReader::init(const char *fileName, const Genome *i_genome, _
 }
 
     void
-WindowsOverlappedReader::reinit(
-    _int64 i_startingOffset,
-    _int64 amountOfFileToProcess)
-{
-    _ASSERT(INVALID_HANDLE_VALUE != hFile);  // Must call init() before reinit()
-
-    //
-    // First let any pending IO complete.
-    //
-    for (unsigned i = 0; i < nBuffers; i++) {
-        if (bufferInfo[i].state == Reading) {
-            waitForBuffer(i);
-        }
-        bufferInfo[i].state = Empty;
-        bufferInfo[i].isEOF= false;
-        bufferInfo[i].offset = 0;
-        bufferInfo[i].referenceCount = 0;
-    }
-
-    nextBufferForReader = 0;
-    nextBufferForConsumer = 0;    
-
-    readOffset.QuadPart = i_startingOffset;
-    if (amountOfFileToProcess == 0) {
-        //
-        // This means just read the whole file.
-        //
-        endingOffset = fileSize.QuadPart;
-    } else {
-        endingOffset = min(fileSize.QuadPart,i_startingOffset + amountOfFileToProcess);
-    }
-
-    //
-    // Kick off IO, wait for the first buffer to be read and then skip until hitting the first newline.
-    //
-    startIo();
-    waitForBuffer(nextBufferForConsumer);
-}
-    
-WindowsOverlappedReader::~WindowsOverlappedReader()
-{
-    for (unsigned i = 0; i < nBuffers; i++) {
-        BigDealloc(bufferInfo[i].buffer);
-        bufferInfo[i].buffer = NULL;
-        CloseHandle(bufferInfo[i].lap.hEvent);
-    }
-    CloseHandle(hFile);
-}
-
-    void
-WindowsOverlappedSAMReader::reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
+SAMReader::reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
 {
     _ASSERT(0 != headerSize);  // Must call init() before reinit()
-    buffers.reinit(
+    data->reinit(
         max(headerSize, (size_t) startingOffset) - 1,  // -1 is to point at the previous newline so we don't skip the first line.
         startingOffset + amountOfFileToProcess);
     char* buffer;
-    DWORD validBytes;
-    buffers.getData(&buffer, &validBytes);
+    _int64 validBytes;
+    data->getData(&buffer, &validBytes);
     char *firstNewline = strnchr(buffer,'\n',validBytes);
     if (NULL == firstNewline) {
         return;
@@ -1664,71 +1556,26 @@ WindowsOverlappedSAMReader::reinit(_int64 startingOffset, _int64 amountOfFileToP
         //
         // Skip this line.
         //
-        buffers.addOffset((unsigned)(firstNewline + lineLength - buffer + 1)); // +1 skips over the newline.
+        data->advance((unsigned)(firstNewline + lineLength - buffer + 1)); // +1 skips over the newline.
     } else {
-        buffers.addOffset((unsigned)(firstNewline - buffer + 1)); // +1 skips over the newline.
+        data->advance((unsigned)(firstNewline - buffer + 1)); // +1 skips over the newline.
     }
 }
 
     bool
-WindowsOverlappedReader::getData(
-    char** o_buffer,
-    DWORD* o_bytes,
-    bool ignoreEndOfRange)
-{
-    BufferInfo *info = &bufferInfo[nextBufferForConsumer];
-    if (info->isEOF && info->offset >= info->validBytes) {
-        //
-        // EOF.
-        //
-        return false;
-    }
-
-    if (info->offset > info->nBytesThatMayBeginARead && !ignoreEndOfRange) {
-        //
-        // Past the end of our section.
-        //
-        return false;
-    }
-
-    if (info->state != Full) {
-        waitForBuffer(nextBufferForConsumer);
-    }
-    
-    unsigned *referenceCount;
-    referenceCount = &info->referenceCount;
-
-    *o_buffer = info->buffer + info->offset;
-    *o_bytes = info->validBytes - info->offset;
-    return true;
-}
-
-    void
-WindowsOverlappedReader::nextBuffer()
-{
-    const unsigned advance = (nextBufferForConsumer + 1) % nBuffers;
-    if (bufferInfo[advance].state != Full) {
-        waitForBuffer(advance);
-    }
-
-    _ASSERT(bufferInfo[nextBufferForConsumer].fileOffset + bufferInfo[nextBufferForConsumer].validBytes == 
-                bufferInfo[advance].fileOffset);
-        
-    nextBufferForConsumer = advance;
-}
-
-WindowsOverlappedSAMReader::~WindowsOverlappedSAMReader()
-{
-}
-
-    bool
-WindowsOverlappedSAMReader::getNextRead(
-            Read *read, AlignmentResult *alignmentResult, unsigned *genomeLocation, bool *isRC, unsigned *mapQ, 
-            unsigned *flag, bool ignoreEndOfRange, const char **cigar)
+SAMReader::getNextRead(
+    Read *read,
+    AlignmentResult *alignmentResult,
+    unsigned *genomeLocation,
+    bool *isRC,
+    unsigned *mapQ, 
+    unsigned *flag,
+    bool ignoreEndOfRange,
+    const char **cigar)
 {
     char* buffer;
-    DWORD bytes;
-    if (! buffers.getData(&buffer, &bytes)) {
+    _int64 bytes;
+    if (! data->getData(&buffer, &bytes)) {
         return false;
     }
 
@@ -1740,18 +1587,23 @@ WindowsOverlappedSAMReader::getNextRead(
         //
         // There is no newline, so the line crosses the end of the buffer.  Use the overflow buffer
         //
-        if (buffers.isEOF()) {
-            fprintf(stderr,"SAM file doesn't end with a newline!  Failing.  fileOffset = %lld\n", buffers.getFileOffset());
+        if (data->isEOF()) {
+            fprintf(stderr,"SAM file doesn't end with a newline!  Failing.  fileOffset = %lld\n", data->getFileOffset());
             exit(1);
         }
 
         unsigned amountFromOldBuffer = bytes;
 
-        nextLine = buffers.useOverflowBuffer();
+        _int64 extraBytes;
+        data->getExtra(&nextLine, &extraBytes);
+        if (extraBytes < maxLineLen) {
+            fprintf(stderr, "SAMReader: not enough overflow line space\n");
+            exit(1);
+        }
         memcpy(nextLine, buffer, bytes);
 
-        buffers.nextBuffer();
-        buffers.getData(&buffer, &bytes, ignoreEndOfRange);
+        data->nextBatch();
+        data->getData(&buffer, &bytes /* todo: , ignoreEndOfRange */);
         _ASSERT(buffer != NULL && bytes > 0);
         // FIXME: don't split reads across buffers
 //        referenceCounts[1] = &info->referenceCount;
@@ -1759,12 +1611,12 @@ WindowsOverlappedSAMReader::getNextRead(
         newLine = strchr(buffer,'\n');
         _ASSERT(NULL != newLine);
         memcpy(nextLine + amountFromOldBuffer, buffer, newLine - buffer + 1);
-        endOfBuffer = nextLine + WindowsOverlappedReader::maxLineLen + 1;
+        endOfBuffer = nextLine + maxLineLen + 1;
 
-        buffers.addOffset((unsigned)(newLine - buffer + 1));
+        data->advance(newLine - buffer + 1);
     } else {
         nextLine = buffer;
-        buffers.addOffset((unsigned)((newLine + 1) - buffer));
+        data->advance((newLine + 1) - buffer);
         endOfBuffer = buffer + bytes;
     }
 
@@ -1774,134 +1626,6 @@ WindowsOverlappedSAMReader::getNextRead(
     getReadFromLine(genome,nextLine,endOfBuffer,read,alignmentResult,genomeLocation,isRC,mapQ,&lineLength,flag,cigar,clipping);
 
     return true;
-}
-
-    void
-WindowsOverlappedReader::startIo()
-{
-    //
-    // Launch reads on whatever buffers are ready.
-    //
-    while (bufferInfo[nextBufferForReader].state == Empty) {
-        BufferInfo *info = &bufferInfo[nextBufferForReader];
-
-        if (readOffset.QuadPart >= fileSize.QuadPart || readOffset.QuadPart >= endingOffset + maxReadSizeInBytes) {
-            info->validBytes = 0;
-            info->nBytesThatMayBeginARead = 0;
-            info->isEOF = readOffset.QuadPart >= fileSize.QuadPart;
-            info->state = Full;
-            SetEvent(info->lap.hEvent);
-            return;
-        }
-
-        unsigned amountToRead;
-        if (fileSize.QuadPart - readOffset.QuadPart > bufferSize && endingOffset + maxReadSizeInBytes - readOffset.QuadPart > bufferSize) {
-            amountToRead = bufferSize;
-
-            if (readOffset.QuadPart + amountToRead > endingOffset) {
-                info->nBytesThatMayBeginARead = (unsigned)(endingOffset - readOffset.QuadPart);
-            } else {
-                info->nBytesThatMayBeginARead = amountToRead;
-            }
-            info->isEOF = false;
-        } else {
-            amountToRead = (unsigned)__min(fileSize.QuadPart - readOffset.QuadPart,endingOffset+maxReadSizeInBytes - readOffset.QuadPart);
-            if (endingOffset <= readOffset.QuadPart) {
-                //
-                // We're only reading this for overflow buffer.
-                //
-                info->nBytesThatMayBeginARead = 0;
-            } else {
-                info->nBytesThatMayBeginARead = __min(amountToRead,(unsigned)(endingOffset - readOffset.QuadPart));    // Don't begin a read past endingOffset
-            }
-            info->isEOF = readOffset.QuadPart + amountToRead >= fileSize.QuadPart;
-        }
-
-        _ASSERT(amountToRead >= info->nBytesThatMayBeginARead || !info->isEOF || fileSize.QuadPart == readOffset.QuadPart + amountToRead);
-        ResetEvent(info->lap.hEvent);
-        info->lap.Offset = readOffset.LowPart;
-        info->lap.OffsetHigh = readOffset.HighPart;
-        info->fileOffset = readOffset.QuadPart;
-         
-        if (!ReadFile(
-                hFile,
-                info->buffer,
-                amountToRead,
-                &info->validBytes,
-                &info->lap)) {
-
-            if (GetLastError() != ERROR_IO_PENDING) {
-                fprintf(stderr,"FASTQReader::startIo(): readFile failed, %d\n",GetLastError());
-                exit(1);
-            }
-        }
-
-        readOffset.QuadPart += amountToRead;
-        info->state = Reading;
-        info->offset = 0;
-
-        nextBufferForReader = (nextBufferForReader + 1) % nBuffers;
-    }
-}
-
-    void
-WindowsOverlappedReader::waitForBuffer(unsigned bufferNumber)
-{
-    BufferInfo *info = &bufferInfo[bufferNumber];
-
-    if (info->state == Full) {
-        return;
-    }
-
-    if (info->state == UsedButReferenced) {
-        fprintf(stderr,"Overlapped buffer manager: waiting for buffer that's in UsedButReferenced.  Almost certainly a bug.\n");
-        exit(1);
-    }
-
-    if (info->state != Reading) {
-        startIo();
-    }
-
-    if (!GetOverlappedResult(hFile,&info->lap,&info->validBytes,TRUE)) {
-        fprintf(stderr,"Error reading FASTQ file, %d\n",GetLastError());
-        exit(1);
-    }
-
-    info->state = Full;
-    info->buffer[info->validBytes] = 0;
-    ResetEvent(info->lap.hEvent);
-}
-
-    
-    void
-WindowsOverlappedSAMReader::readDoneWithBuffer(
-    unsigned *referenceCount)
-{
-    buffers.readDoneWithBuffer(referenceCount);
-}
-
-    void
-WindowsOverlappedReader::readDoneWithBuffer(unsigned *referenceCount)
-{
-    if (0 != *referenceCount) {
-        return;
-    }
-
-    BufferInfo *info = NULL;
-    for (unsigned i = 0; i < nBuffers; i++) {
-        if (&bufferInfo[i].referenceCount == referenceCount) {
-            info = &bufferInfo[i];
-            break;
-        }
-    }
-
-    _ASSERT(NULL != info);
-
-    if (info->state == UsedButReferenced) {
-        info->state = Empty;
-
-        startIo();
-    }
 }
 
 #if 0

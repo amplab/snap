@@ -36,7 +36,7 @@ class WindowsOverlappedDataReader : public DataReader
 {
 public:
 
-    WindowsOverlappedDataReader(double extraFactor);
+    WindowsOverlappedDataReader(double extraFactor, _int64 extraBytes);
 
     virtual ~WindowsOverlappedDataReader();
     
@@ -101,14 +101,15 @@ private:
     unsigned            nextBufferForConsumer;
 };
 
-WindowsOverlappedDataReader::WindowsOverlappedDataReader(double extraFactor)
+WindowsOverlappedDataReader::WindowsOverlappedDataReader(double extraFactor, _int64 extraBytes)
 {
     //
     // Initialize the buffer info struct.
     //
     
     // allocate all the data in one big block
-    extraBytes = max((_int64) 0, (_int64) (bufferSize * extraFactor));
+    _ASSERT(extraFactor >= 0 && extraBytes >= 0);
+    extraBytes = max(0LL, (_int64) (bufferSize * extraFactor + extraBytes));
     char* allocated = (char*) BigAlloc(nBuffers * (bufferSize + 1 + extraBytes));
     if (NULL == allocated) {
         fprintf(stderr,"WindowsOverlappedDataReader: unable to allocate IO buffer\n");
@@ -435,10 +436,9 @@ WindowsOverlappedDataReader::waitForBuffer(
 class WindowsOverlappedDataSupplier : public DataSupplier
 {
 public:
-    virtual DataReader* getDataReader(double extraFactor, const DataSupplier* inner) const
+    virtual DataReader* getDataReader(double extraFactor, _int64 extraBytes) const
     {
-        _ASSERT(inner == NULL);
-        return new WindowsOverlappedDataReader(extraFactor);
+        return new WindowsOverlappedDataReader(extraFactor, extraBytes);
     }
 };
 
@@ -458,7 +458,7 @@ class GzipDataReader : public DataReader
 {
 public:
 
-    GzipDataReader(double extraFactor, const DataSupplier* innerSupplier);
+    GzipDataReader(DataReader* i_inner, _int64 i_extraBytes);
 
     virtual ~GzipDataReader();
     
@@ -492,12 +492,8 @@ private:
         DecompressMode mode);
 
     void decompressBatch();
-
-    _int64 myExtraBytes(_int64 extraBytes)
-    { return extraBytes * (MAX_FACTOR / totalExtra); }
-
-
-    const double    totalExtra; // total extra bytes asked for
+    
+    const _int64    extraBytes; // extra bytes I have to use
     DataReader*     inner; // inner reader to get data chunks
     z_stream        zstream; // stateful zlib stream
     _int64          validBytes; // valid bytes in extra data
@@ -506,9 +502,9 @@ private:
     bool            continueBlock; // whether to continue a block or start a new one
 };
  
-GzipDataReader::GzipDataReader(double extraFactor, const DataSupplier* innerSupplier)
-    : totalExtra(MAX_FACTOR * (1.0 + extraFactor)),
-    inner(innerSupplier->getDataReader(totalExtra)),
+GzipDataReader::GzipDataReader(DataReader* i_inner, _int64 i_extraBytes)
+    : extraBytes(i_extraBytes),
+    inner(i_inner),
     zstream()
 {
 }
@@ -618,9 +614,8 @@ GzipDataReader::getExtra(
     _int64* o_length)
 {
     inner->getExtra(o_extra, o_length);
-    _int64 mine = myExtraBytes(*o_length);
-    *o_extra += mine;
-    *o_length -= mine;
+    *o_extra += extraBytes;
+    *o_length -= extraBytes;
 }
     
     bool
@@ -677,7 +672,7 @@ GzipDataReader::decompressBatch()
     char* uncompressed;
     _int64 uncompressedBytes;
     inner->getExtra(&uncompressed, &uncompressedBytes);
-    uncompressedBytes = myExtraBytes(uncompressedBytes);
+    uncompressedBytes = extraBytes; // limit to just mine
 
     bool all = decompress(compressed, compressedBytes, NULL, uncompressed, uncompressedBytes, &validBytes,
         continueBlock ? ContinueMultiBlock : StartMultiBlock);
@@ -690,15 +685,294 @@ GzipDataReader::decompressBatch()
     offset = 0;
 }
 
-    
 class GzipDataSupplier : public DataSupplier
 {
 public:
-    virtual DataReader* getDataReader(double extraFactor, const DataSupplier* inner) const
+    GzipDataSupplier(const DataSupplier* i_inner)
+        : inner(i_inner)
+    {}
+
+    virtual DataReader* getDataReader(double extraFactor, _int64 extraBytes) const
     {
-        _ASSERT(inner != NULL);
-        return new GzipDataReader(extraFactor, inner);
+        double totalFactor = MAX_FACTOR * (1.0 + extraFactor);
+        DataReader* data = inner->getDataReader(totalFactor, extraBytes);
+        char* p;
+        _int64 mine;
+        data->getExtra(&p, &mine);
+        mine = (mine - extraBytes) * MAX_FACTOR / totalFactor;
+        return new GzipDataReader(data, mine);
+    }
+
+private:
+    const DataSupplier* inner;
+};
+
+    DataSupplier*
+DataSupplier::Gzip(
+    const DataSupplier* inner)
+{
+    return new GzipDataSupplier(inner);
+}
+
+//
+// MemMap
+//
+
+class MemMapDataReader : public DataReader
+{
+public:
+
+    MemMapDataReader(int i_batchCount, _int64 i_batchSize, _int64 i_batchExtra);
+
+    virtual ~MemMapDataReader();
+    
+    virtual bool init(const char* fileName);
+
+    virtual char* readHeader(_int64* io_headerSize);
+
+    virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
+
+    virtual bool getData(char** o_buffer, _int64* o_validBytes);
+
+    virtual void advance(_int64 bytes);
+
+    virtual void nextBatch(bool dontRelease = false);
+
+    virtual bool isEOF();
+
+    virtual DataBatch getBatch();
+
+    virtual void release(DataBatch batch);
+
+    virtual _int64 getFileOffset();
+
+    virtual void getExtra(char** o_extra, _int64* o_length);
+
+private:
+    
+    void acquireLock()
+    {
+        if (batchCount != 1) {
+            AcquireExclusiveLock(&lock);
+        }
+    }
+
+    void releaseLock()
+    {
+        if (batchCount != 1) {
+            ReleaseExclusiveLock(&lock);
+        }
+    }
+
+    const int       batchCount; // number of batches
+    const _int64    batchSizeParam; // bytes per batch, 0 for entire file
+    _int64          batchSize; // actual batch size for this file
+    const _int64    batchExtra; // extra bytes per batch
+    const char*     fileName; // current file name for diagnostics
+    _int64          fileSize; // total size of current file
+    char*           currentMap; // currently mapped block if non-NULL
+    _int64          currentMapOffset; // current file offset of mapped region
+    _int64          currentMapSize; // current size of mapped region
+    char*           extra; // extra data buffer
+    _int64          offset; // into current batch
+    _uint32         currentBatch; // current batch number starting at 1
+    _int64          validBytes; // in current batch
+    _uint32         releasedBatch; // largest batch number released
+    FileMapper      mapper;
+    SingleWaiterObject waiter; // flow control
+    ExclusiveLock   lock; // lock around flow control members (currentBatch, releasedBatch)
+};
+ 
+
+MemMapDataReader::MemMapDataReader(int i_batchCount, _int64 i_batchSize, _int64 i_batchExtra)
+    : batchCount(i_batchCount),
+        batchSizeParam(i_batchSize),
+        batchExtra(i_batchExtra),
+        currentBatch(1),
+        releasedBatch(0),
+        currentMap(NULL),
+        currentMapOffset(0),
+        currentMapSize(0),
+        mapper()
+{
+    _ASSERT(batchCount > 0 && batchSizeParam >= 0 && batchExtra >= 0);
+    extra = batchExtra > 0 ? (char*) BigAlloc(batchCount * batchExtra) : NULL;
+    if (batchCount != 1) {
+        if (! (CreateSingleWaiterObject(&waiter) && InitializeExclusiveLock(&lock))) {
+            fprintf(stderr, "MemMapDataReader: CreateSingleWaiterObject failed\n");
+            exit(1);
+        }
+    }
+}
+
+MemMapDataReader::~MemMapDataReader()
+{
+    if (extra != NULL) {
+        BigDealloc(extra);
+        extra = NULL;
+    }
+    if (batchCount != 1) {
+        DestroyExclusiveLock(&lock);
+        DestroySingleWaiterObject(&waiter);
+    }
+}
+
+    bool
+MemMapDataReader::init(
+    const char* i_fileName)
+{
+    if (! mapper.init(i_fileName)) {
+        return false;
+    }
+    fileName = i_fileName;
+    fileSize = mapper.getFileSize();
+    batchSize = batchSizeParam == 0 ? fileSize : batchSizeParam;
+    return true;
+}
+
+    char*
+MemMapDataReader::readHeader(
+    _int64* io_headerSize)
+{
+    *io_headerSize = min(*io_headerSize, fileSize);
+    reinit(0, *io_headerSize);
+    return currentMap;
+}
+
+    void
+MemMapDataReader::reinit(
+    _int64 i_startingOffset,
+    _int64 amountOfFileToProcess)
+{
+    _ASSERT(i_startingOffset >= 0 && amountOfFileToProcess >= 0);
+    if (currentMap != NULL) {
+        mapper.unmap();
+    }
+    amountOfFileToProcess = max(0LL, min(amountOfFileToProcess == 0 ? fileSize : amountOfFileToProcess, fileSize - i_startingOffset));
+    currentMap = mapper.createMapping(i_startingOffset, amountOfFileToProcess);
+    if (currentMap == NULL) {
+        fprintf(stderr, "MemMapDataReader: fail to map %s at %lld,%lld\n", fileName, i_startingOffset, amountOfFileToProcess);
+        exit(1);
+    }
+    acquireLock();
+    currentMapOffset = i_startingOffset;
+    currentMapSize = amountOfFileToProcess;
+    offset = 0;
+    validBytes = min(currentMapSize, batchSize);
+    currentBatch = 1;
+    releasedBatch = 0;
+    releaseLock();
+    if (batchCount != 1) {
+        SignalSingleWaiterObject(&waiter);
+    }
+}
+
+    bool
+MemMapDataReader::getData(
+    char** o_buffer,
+    _int64* o_validBytes)
+{
+    if (batchCount != 1 && currentBatch - releasedBatch > batchCount) {
+        WaitForSingleWaiterObject(&waiter);
+    }
+    *o_buffer = currentMap + (currentBatch - 1) * batchSize + offset;
+    *o_validBytes = validBytes - offset;
+    return true;
+}
+
+    void
+MemMapDataReader::advance(
+    _int64 bytes)
+{
+    _ASSERT(bytes >= 0);
+    offset = min(offset + max(0LL, bytes), validBytes);
+}
+
+    void
+MemMapDataReader::nextBatch(bool dontRelease)
+{
+    if (isEOF()) {
+        return;
+    }
+    acquireLock();
+    currentBatch++;
+    if (dontRelease) {
+        _ASSERT(batchCount != 1);
+        if (batchCount != 1 && currentBatch - releasedBatch > batchCount) {
+            ResetSingleWaiterObject(&waiter);
+        }
+    } else {
+        release(DataBatch(currentBatch - 1));
+    }
+    validBytes = min(batchSize, currentMapSize - (currentBatch - 1) * batchSize);
+    releaseLock();
+    _ASSERT(validBytes >= 0);
+}
+
+    bool
+MemMapDataReader::isEOF()
+{
+    return currentBatch * batchSize  >= currentMapSize;
+}
+    
+    DataBatch
+MemMapDataReader::getBatch()
+{
+    return DataBatch(currentBatch);
+}
+
+    void
+MemMapDataReader::release(
+    DataBatch batch)
+{
+    if (batch.batchID > releasedBatch) {
+        acquireLock();
+        if (batchCount != 1 && currentBatch - releasedBatch > batchCount && currentBatch - batch.batchID <= batchCount) {
+            SignalSingleWaiterObject(&waiter);
+        }
+        releasedBatch = min(currentBatch - 1, batch.batchID);
+        releaseLock();
+    }
+}
+
+    _int64
+MemMapDataReader::getFileOffset()
+{
+    return currentMapOffset + (currentBatch - 1) * batchSize + offset;
+}
+
+    void
+MemMapDataReader::getExtra(
+    char** o_extra,
+    _int64* o_length)
+{
+    if (extra == NULL) {
+        *o_extra = NULL;
+        *o_length = 0;
+    } else {
+        int index = (currentBatch - 1) % batchCount;
+        *o_extra = extra + index * batchExtra;
+        *o_length = batchExtra;
+    }
+}
+
+
+class MemMapDataSupplier : public DataSupplier
+{
+public:
+    virtual DataReader* getDataReader(double extraFactor, _int64 extraBytes) const
+    {
+        _ASSERT(extraFactor >= 0 && extraBytes >= 0);
+        if (extraFactor == 0) {
+            // no per-batch expansion factor, so can read entire file as a batch
+            return new MemMapDataReader(1, 0, extraBytes);
+        } else {
+            // break up into 16Mb batches
+            _int64 batch = 16 * 1024 * 1024;
+            _int64 extra = batch * extraFactor + extraBytes;
+            return new MemMapDataReader(3, batch, extra);
+        }
     }
 };
 
-const DataSupplier* DataSupplier::Gzip = new GzipDataSupplier();
+const DataSupplier* DataSupplier::MemMap = new MemMapDataSupplier();

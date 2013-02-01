@@ -25,19 +25,20 @@ Revision History:
 #include "Compat.h"
 
 //
-// This defines a family of composable classes for reading data.
+// This defines a family of composable classes for efficiently reading data with flow control.
 //
 // DataReader
 //      Reads data from one or more files either sequentially, in ranges, or memory-mapped.
-//      A DataReader should be accessed by only one thread at a time.
+//      A DataReader should be accessed by only one thread at a time,
+//      except for release() which may be called from any thread.
 //      Divides data into sequential batches each of which is identified by a file ID and batch ID.
 //      Data in a batch will remain stable until it is released by the consumer.
 //      Consumers should release batches as soon as possible to make buffers free for read-ahead.
 //      Batches may include extra data for higher layers that also remains stable.
-//      Extra data size is defined as a factor of the underlying data size.
+//      Extra data size is defined as a factor of the underlying data size, and/or a fixed number of bytes.
 //
 // DataSupplier
-//      A factory for DataReaders.
+//      A factory for DataReaders, which may be called from multiple threads.
 //
 
 struct DataBatch
@@ -95,6 +96,8 @@ public:
     virtual DataBatch getBatch() = 0;
 
     // release all batches up to and including the given batch
+    // NOTE: this may be called from another thread,
+    // so anything it touches must be thread-safe!
     virtual void release(DataBatch batch) = 0;
 
     // get current offset into file
@@ -110,9 +113,15 @@ public:
     
     virtual ~DataSupplier() {}
 
-    virtual DataReader* getDataReader(double extraFactor = 0.0, const DataSupplier* inner = NULL) const = 0;
+    virtual DataReader* getDataReader(double extraFactor = 0.0, _int64 extraBytes = 0) const = 0;
 
-    static const DataSupplier* Gzip;
+    //
+    // creating specific factories
+    //
+
+    static DataSupplier* Gzip(const DataSupplier* inner);
+
+    static const DataSupplier* MemMap;
 
 #ifdef _MSC_VER
     static const DataSupplier* WindowsOverlapped;
