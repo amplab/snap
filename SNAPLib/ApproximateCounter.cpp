@@ -10,7 +10,6 @@ ApproximateCounter::ApproximateCounter()
     buckets.resize(BUCKETS);
 }
 
-
 void ApproximateCounter::add(_uint64 value)
 {
     _uint64 h = hash(value);
@@ -22,6 +21,7 @@ void ApproximateCounter::add(_uint64 value)
     } else {
         CountTrailingZeroes(rest, firstZero);
     }
+
     buckets[bucket] |= (1LL << firstZero);
 }
 

@@ -27,6 +27,7 @@ Revision History:
 #include "HashTable.h"
 #include "Seed.h"
 #include "Genome.h"
+#include "ApproximateCounter.h"
 
 class GenomeIndex {
 public:
@@ -42,7 +43,8 @@ public:
     // NB: This deletes the Genome that's passed into it.
     //
     static bool BuildIndexToDirectory(const Genome *genome, int seedLen, double slack,
-                                      bool computeBias, const char *directory);
+                                      bool computeBias, const char *directory, _uint64 overflowTableFactor,
+                                      unsigned maxThreads);
 
     bool saveToDirectory(char *directoryName);
     static GenomeIndex *loadFromDirectory(char *directoryName);
@@ -90,7 +92,57 @@ private:
     static double biasTable22[];
     static double biasTable23[];
 
-    static void ComputeBiasTable(const Genome* genome, int seedSize, double* table);
+    static void ComputeBiasTable(const Genome* genome, int seedSize, double* table, unsigned maxThreads);
+
+    struct ComputeBiasTableThreadContext {
+        SingleWaiterObject              *doneObject;
+        volatile int                    *runningThreadCount;
+        unsigned                         genomeChunkStart;
+        unsigned                         genomeChunkEnd;
+        unsigned                         nHashTables;
+        std::vector<ApproximateCounter> *approxCounters;
+        const Genome                    *genome;
+        volatile _int64                 *nBasesProcessed;
+        unsigned                         seedLen;
+        volatile _int64                 *validSeeds;
+
+        ExclusiveLock                   *approximateCounterLocks;
+    };
+
+    static void ComputeBiasTableWorkerThreadMain(void *param);
+
+    struct OverflowEntry;
+    struct OverflowBackpointer;
+
+    struct BuildHashTablesThreadContext {
+        SingleWaiterObject              *doneObject;
+        volatile int                    *runningThreadCount;
+        unsigned                         genomeChunkStart;
+        unsigned                         genomeChunkEnd;
+        const Genome                    *genome;
+        volatile _int64                 *nBasesProcessed;
+        unsigned                         seedLen;
+        volatile _int64                 *noBaseAvailable;
+        volatile _int64                 *nonSeeds;
+        volatile unsigned               *nextOverflowIndex;
+        volatile _int64                 *bothComplementsUsed;
+        GenomeIndex                     *index;
+        unsigned                         nOverflowEntries;
+        OverflowEntry                   *overflowEntries;
+        OverflowBackpointer             *overflowBackpointers;
+        unsigned                         nOverflowBackpointers;
+        volatile unsigned               *nextOverflowBackpointer;
+        volatile _int64                 *countOfDuplicateOverflows;
+
+        ExclusiveLock                   *hashTableLocks;
+        ExclusiveLock                   *overflowTableLock;
+    };
+
+    static void BuildHashTablesWorkerThreadMain(void *param);
+    static void ApplyHashTableUpdate(BuildHashTablesThreadContext *context, unsigned whichHashTable, unsigned genomeLocation, unsigned lowBases, bool usingComplement,
+                    _int64 *bothComplementsUsed, _int64 *countOfDuplicateOverflows);
+
+    static int BackwardsUnsignedCompare(const void *, const void *);
 
     GenomeIndex();
 
@@ -119,13 +171,13 @@ private:
     //
 
     struct OverflowBackpointer {
-        OverflowBackpointer     *next;
+        unsigned                 nextIndex;
         unsigned                 genomeOffset;
     };
 
     struct OverflowEntry {
         unsigned                *hashTableEntry;
-        OverflowBackpointer     *backpointers;
+        unsigned                 backpointerIndex;
         unsigned                 nInstances;
     };
 
@@ -133,7 +185,7 @@ private:
                     OverflowEntry       *overflowEntries, 
                     OverflowBackpointer *overflowBackpointers,
                     unsigned             nOverflowBackpointers,
-                    unsigned            *nextOverflowBackpointer,
+                    volatile unsigned   *nextOverflowBackpointer,
                     unsigned             genomeOffset);
 
     void fillInLookedUpResults(unsigned *subEntry, unsigned minLocation, unsigned maxLocation,
