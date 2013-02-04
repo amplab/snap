@@ -69,18 +69,20 @@ public:
     virtual ~DataReader() {}
     
     // initialize to use a specific filename
-    // extra data is a factor of buffer size
     virtual bool init(const char* fileName) = 0;
 
     // read bytes from the beginning of the file for the header
     virtual char* readHeader(_int64* io_headerSize) = 0;
 
-    // seek to a particular location -- todo: keep?
+    // seek to a particular range in the file
     virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
 
     // get all remaining data in current batch
     // return false if no more data in current batch
-    virtual bool getData(char** o_buffer, _int64* o_validBytes) = 0;
+    // startBytes is data "owned" by this block in which reads may start
+    // validBytes may also include overflow bytes to handle records spanning batches
+    // if you advance() past startBytes, nextBatch() will start offset at that point
+    virtual bool getData(char** o_buffer, _int64* o_validBytes, _int64* o_startBytes = NULL) = 0;
 
     // advance through data in current batch, reducing results from next getData call
     virtual void advance(_int64 bytes) = 0;
@@ -104,6 +106,7 @@ public:
     virtual _int64 getFileOffset() = 0;
 
     // get pointer to extra data area for current batch
+    // todo: allow this to grow dynamically while keeping stable pointers to previous data
     virtual void getExtra(char** o_extra, _int64* o_length) = 0;
 };
 
@@ -113,17 +116,24 @@ public:
     
     virtual ~DataSupplier() {}
 
-    virtual DataReader* getDataReader(double extraFactor = 0.0, _int64 extraBytes = 0) const = 0;
+    virtual DataReader* getDataReader(_int64 overflowBytes = 0, double extraFactor = 0.0) const = 0;
 
     //
     // creating specific factories
     //
 
+    // 
     static DataSupplier* Gzip(const DataSupplier* inner);
 
+    // memmap works on both platforms (but better on Linux)
     static const DataSupplier* MemMap;
 
 #ifdef _MSC_VER
+    // overlapped is only on Windows
     static const DataSupplier* WindowsOverlapped;
 #endif
+
+    // default raw data supplier for platform
+    static const DataSupplier* Default;
+    static const DataSupplier* GzipDefault;
 };

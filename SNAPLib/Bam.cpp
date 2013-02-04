@@ -66,7 +66,7 @@ BAMReader::init(
 {
     // todo: integrate supplier models
     // might need up to 2x extra for expanded sequence + quality + cigar data
-    data = DataSupplier::Gzip(DataSupplier::MemMap)->getDataReader(2.5);
+    data = DataSupplier::GzipDefault->getDataReader(MAX_RECORD_LENGTH, 2.5);
     if (! data->init(fileName)) {
         return false;
     }
@@ -208,32 +208,10 @@ BAMReader::getNextRead(
     }
     BAMAlignment* bam = (BAMAlignment*) buffer;
     if (bytes < sizeof(bam->block_size) || bytes < bam->size()) {
-        if (data->isEOF()) {
-            fprintf(stderr, "Unexpected end of BAM file at %lld\n", data->getFileOffset());
-            exit(1);
-        }
-        // allocate overflow buffer (with next batch) and copy remainder (from previous batch) into it
-        _int64 copied = bytes;
-        data->nextBatch();
-        char* overflow = getExtra(MAX_RECORD_LENGTH);
-        memcpy(overflow, buffer, copied);
-        // get next batch and copy entire record into overflow
-        data->getData(&buffer, &bytes); // todo: what about ignoreEndOfRange?
-        _ASSERT(buffer != NULL && bytes > 0);
-        if (copied < sizeof(bam->block_size)) {
-            // ensure size field is complete
-            memcpy(overflow + copied, buffer, sizeof(bam->block_size) - copied);
-            _ASSERT(copied < bam->size());
-        }
-        _ASSERT(bam->size() < MAX_RECORD_LENGTH && bam->size() <= copied + bytes);
-        memcpy(overflow + copied, buffer, bam->size() - copied);
-        data->advance(bam->size() - copied);
-        // process overflow buffer instead of data buffer
-        buffer = overflow;
-        bytes = bam->size();
-    } else {
-        data->advance(bam->size());
+        fprintf(stderr, "Unexpected end of BAM file at %lld\n", data->getFileOffset());
+        exit(1);
     }
+    data->advance(bam->size());
     size_t lineLength;
     getReadFromLine(genome, buffer, buffer + bytes, read, alignmentResult, genomeLocation,
         isRC, mapQ, &lineLength, flag, cigar, clipping);

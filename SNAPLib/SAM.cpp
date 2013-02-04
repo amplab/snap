@@ -24,45 +24,12 @@ Environment:
 #include "Tables.h"
 #include "RangeSplitter.h"
 #include "ParallelTask.h"
+#include "Util.h"
 
 using std::max;
 using std::min;
+using util::strnchr;
 
-
-//
-// You'd think this would be in the C library.
-// Like strchr, but with a max length so it doesn't
-// run over the end of the buffer.  Basically,
-// strings suck in C.
-//
-
-    char *
-strnchr(char *str, char charToFind, size_t maxLen)
-{
-    for (size_t i = 0; i < maxLen; i++) {
-        if (str[i] == charToFind) {
-            return str + i;
-        }
-        if (str[i] == 0) {
-            return NULL;
-        }
-    }
-    return NULL;
-}
-
-    const char *
-strnchr(const char *str, char charToFind, size_t maxLen)
-{
-    for (size_t i = 0; i < maxLen; i++) {
-        if (str[i] == charToFind) {
-            return str + i;
-        }
-        if (str[i] == 0) {
-            return NULL;
-        }
-    }
-    return NULL;
-}
 
 SAMWriter:: ~SAMWriter()
 {
@@ -1193,7 +1160,7 @@ SAMReader::create(
     _int64 amountOfFileToProcess, 
     ReadClippingType clipping)
 {
-    DataReader* data = supplier->getDataReader(0.0, maxLineLen);
+    DataReader* data = supplier->getDataReader(maxLineLen);
     SAMReader *reader = new SAMReader(data, clipping);
 
     if (!reader->init(fileName, genome, startingOffset, amountOfFileToProcess)) {
@@ -1578,49 +1545,19 @@ SAMReader::getNextRead(
     if (! data->getData(&buffer, &bytes)) {
         return false;
     }
-
-    char *nextLine;
-    char *endOfBuffer;
-
-    char *newLine = strchr(buffer, '\n'); // The buffer is null terminated
+    char *newLine = strnchr(buffer, '\n', bytes);
     if (NULL == newLine) {
         //
-        // There is no newline, so the line crosses the end of the buffer.  Use the overflow buffer
+        // There is no newline, so the line crosses the end of the buffer.
+        // This should never happen since underlying reader manages overflow between chunks.
         //
-        if (data->isEOF()) {
-            fprintf(stderr,"SAM file doesn't end with a newline!  Failing.  fileOffset = %lld\n", data->getFileOffset());
-            exit(1);
-        }
-
-        unsigned amountFromOldBuffer = bytes;
-
-        _int64 extraBytes;
-        data->getExtra(&nextLine, &extraBytes);
-        _ASSERT(extraBytes >= maxLineLen);
-        memcpy(nextLine, buffer, bytes);
-
-        data->nextBatch();
-        data->getData(&buffer, &bytes /* todo: , ignoreEndOfRange */);
-        _ASSERT(buffer != NULL && bytes > 0);
-        // FIXME: don't split reads across buffers
-//        referenceCounts[1] = &info->referenceCount;
-
-        newLine = strchr(buffer,'\n');
-        _ASSERT(NULL != newLine);
-        memcpy(nextLine + amountFromOldBuffer, buffer, newLine - buffer + 1);
-        endOfBuffer = nextLine + maxLineLen + 1;
-
-        data->advance(newLine - buffer + 1);
-    } else {
-        nextLine = buffer;
-        data->advance((newLine + 1) - buffer);
-        endOfBuffer = buffer + bytes;
+        fprintf(stderr,"SAM file has too long a line, or doesn't end with a newline!  Failing.  fileOffset = %lld\n", data->getFileOffset());
+        exit(1);
     }
-
-    // delete? info->referenceCount++;
+    data->advance((newLine + 1) - buffer);
 
     size_t lineLength;
-    getReadFromLine(genome,nextLine,endOfBuffer,read,alignmentResult,genomeLocation,isRC,mapQ,&lineLength,flag,cigar,clipping);
+    getReadFromLine(genome,buffer,buffer + bytes,read,alignmentResult,genomeLocation,isRC,mapQ,&lineLength,flag,cigar,clipping);
 
     return true;
 }
