@@ -49,8 +49,6 @@ inline int computeMAPQ(
         return 70;
     }
 
-    score /= 2;   // We count mismatches and gap opens as 2 with BoundedStringDistance
-
     //
     // Skipped seeds are ones that the aligner didn't look at because they had too many hits during the first
     // pass through the read (i.e., they're disjoint).  Any genome location that was ignored because of

@@ -63,11 +63,26 @@ public:
 
     void *allocate(size_t amountToAllocate);
     void assertAllMemoryUsed();
+
+#if     _DEBUG
+    void checkCanaries();
+#else  // DEBUG
+    void checkCanaries() {}
+#endif  // DEBUG
 private:
 
     char    *basePointer;
     char    *allocPointer;
     size_t  maxMemory;
+
+#if     _DEBUG
+    //
+    // Stick a canary between each allocation and 
+    unsigned    nCanaries;
+    static const unsigned maxCanaries = 100;
+    static const unsigned canaryValue = 0xca4a71e5;
+    unsigned    *canaries[maxCanaries];
+#endif  // DEBUG
 };
 
 

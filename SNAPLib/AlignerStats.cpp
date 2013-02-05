@@ -113,7 +113,7 @@ AlignerStats::add(
     ThreadPerfEntry *newEntry = new ThreadPerfEntry;
     *newEntry = *other->threadEntry;
     if (threadEntry->threadId != 0) {
-        _ASSERT(threadEntry->next == NULL);
+        // This is just broken.  Let it be for now._ASSERT(threadEntry->next == NULL);
         newEntry->next = threadEntry;
     }
     threadEntry = newEntry;

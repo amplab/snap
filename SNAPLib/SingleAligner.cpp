@@ -121,6 +121,7 @@ SingleAlignerContext::runIterationThread()
             allocator);
 
     allocator->assertAllMemoryUsed();
+    allocator->checkCanaries();
 
     aligner->setExplorePopularSeeds(options->explorePopularSeeds);
     aligner->setStopOnFirstHit(options->stopOnFirstHit);
@@ -170,6 +171,8 @@ SingleAlignerContext::runIterationThread()
             int mapq;
 
             AlignmentResult result = aligner->AlignRead(&read, &location, &direction, &score, &mapq);
+
+            allocator->checkCanaries();
 
             bool wasError = false;
             if (result != NotFound && computeError) {

@@ -115,26 +115,13 @@ SmarterPairedEndAligner::~SmarterPairedEndAligner()
     delete[] buckets;
 }
 
-volatile _int64 overallTimeInAlign = 0;
-volatile _int64 callsToAlign = 0;
-volatile _int64 timeInSingleAligner = 0;
-volatile _int64 timeInMateAligner = 0;
-volatile _int64 callsToSingleAligner = 0;
-volatile _int64 callsToMateAligner = 0;
-volatile _int64 timeInAlignTogether = 0;
-volatile _int64 callsToAlignTogether = 0;
-
-#define done() {InterlockedAdd64AndReturnNewValue(&overallTimeInAlign, timeInNanos() - startTime); InterlockedAdd64AndReturnNewValue(&callsToAlign,1);}
 void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentResult *result)
 {
- _int64 startTime = timeInNanos();
- 
     Read *reads[2] = {read0, read1};
     int numNotFound = 0;
     int numCertainlyNotFound = 0;
     int numIgnoredMulti = 0;  // MultiHits where all seeds returned too many hits
     int numSingleWithNotFound = 0;
-
 
     clearState();
     
@@ -158,7 +145,6 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
 
     if (read0->getDataLength() < 50 && read1->getDataLength() < 50) {
         TRACE("Reads are both too short -- returning");
-done();
         return;
     }
 
@@ -173,11 +159,10 @@ done();
         int score0, score1;
         int mapq0, mapq1;
         AlignmentResult status0, status1;
+
         singleAligner->setReadId(r);
-_int64 startSingleAlign = timeInNanos();
         status0 = singleAligner->AlignRead(reads[r], &loc0, &direction0, &score0, &mapq0);
-InterlockedAdd64AndReturnNewValue(&timeInSingleAligner,timeInNanos() - startSingleAlign);
-InterlockedAdd64AndReturnNewValue(&callsToSingleAligner,1);
+
         if (score0 <= (int) (maxK + confDiff)) {
             bestScore[r] = score0;
             bestMapq[r] = mapq0;
@@ -185,8 +170,10 @@ InterlockedAdd64AndReturnNewValue(&callsToSingleAligner,1);
             bestScore[r] = INFINITE_SCORE;
             bestMapq[r] = 0;
         }
+
         bestScoreCertain[r] = singleAligner->checkedAllSeeds();
         TRACE("Read %d returned %s (%d) at loc %u-%d\n", r, AlignmentResultToString(status0), score0, loc0, rc0);
+
         if (isOneLocation(status0)) {
             // Let's just search for the other read nearby.
             if (reads[1-r]->getDataLength() < 50) {
@@ -197,15 +184,14 @@ InterlockedAdd64AndReturnNewValue(&callsToSingleAligner,1);
                 result->score[r] = score0;
                 result->mapq[r] = mapq0;
                 result->status[1-r] = NotFound;
-done();
                 return;
             }
+
             mateAligner->setMaxK(maxK - score0 + 1);
             mateAligner->setReadId(1-r);
-_int64 startMateAligner = timeInNanos();
+
             status1 = mateAligner->AlignRead(reads[1-r], &loc1, &direction1, &score1, &mapq1, maxSpacing, loc0, OppositeDirection(direction0));
-InterlockedAdd64AndReturnNewValue(&timeInMateAligner, timeInNanos() - startMateAligner);
-InterlockedAdd64AndReturnNewValue(&callsToMateAligner, 1);
+
             TRACE("Mate %d returned %s at loc %u-%d\n", 1-r, AlignmentResultToString(status1), loc1, rc1);
             if (/*status1 != MultipleHits &&*/ score0 + score1 <= (int)maxK) {
                 result->status[r] = SingleHit;
@@ -218,7 +204,6 @@ InterlockedAdd64AndReturnNewValue(&callsToMateAligner, 1);
                 result->direction[1-r] = direction1;
                 result->score[1-r] = score1;
                 result->mapq[1-r] = min(mapq0,mapq1);
-done();
                 return;
             } else if(status1 == NotFound) {
                 // We found read r at one location and didn't find the mate nearby. Let's remember because
@@ -239,7 +224,6 @@ done();
     
     if (numNotFound + numIgnoredMulti == 2) {
         // We couldn't find either read even as MultipleHits, so there's no way we'll do the pair.
-done();
         return;
     }
 
@@ -261,7 +245,6 @@ done();
                 result->mapq[r] = bestMapq[r];
             }
         }
-done();
         return;
     }
 
@@ -279,20 +262,17 @@ done();
                 result->mapq[r] = bestMapq[r];
             }
         }
-done();
         return;
     }
 
     if (read0->getDataLength() < 50 || read1->getDataLength() < 50) {
         TRACE("Can't go further because one read is too short");
-done();
         return;
     }
 
     if (bestScore[0] != INFINITE_SCORE && bestScore[1] != INFINITE_SCORE &&
             bestScore[0] + bestScore[1] > 1.5 * maxK) {
         TRACE("Best scores in each direction add up to more than 1.5 * maxK; returning");
-done();
         return;
     }
 
@@ -306,7 +286,6 @@ done();
 
     if (lowerBound[0] + lowerBound[1] > (int)maxK) {
         TRACE("Best scores in each direction certainly add up to more than maxK; returning");
-done();
         return;
     }
 
@@ -316,9 +295,7 @@ done();
     _int64 start = timeInNanos();
     alignTogether(reads, result, lowerBound);
     _int64 end = timeInNanos();
-InterlockedAdd64AndReturnNewValue(&timeInAlignTogether, end - start);
-InterlockedAdd64AndReturnNewValue(&callsToAlignTogether, 1);
-done();
+
     TRACE("alignTogether took %lld ns and returned %s %s\n", end - start,
             AlignmentResultToString(result->status[0]),
             AlignmentResultToString(result->status[1]));
@@ -389,7 +366,11 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                 Seed seed(readData[r][0] + seedPos, seedLen);
                 unsigned nHits[NUM_DIRECTIONS];          // Number of hits in forward and RC directions
                 const unsigned *hits[NUM_DIRECTIONS];    // Actual hit locations in each direction
-                index->lookupSeed(seed, &nHits[0], &hits[0], &nHits[1], &hits[1]);
+
+                //
+                // Find hits for this seed (in both Directions) in the big hash table.
+                //
+                index->lookupSeed(seed, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC]);
                 
 #ifdef TRACE_PAIRED_ALIGNER
                 printf("  %u fwd hits:", nHits[0]);
@@ -563,7 +544,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                     bestMateScore = b0->mateScore;
                 double matchProbability = 0.0;
 
-                scoreBucket(b0, r0, direction0, loc0, readData[r0][direction0], quality[r0], readLen[r0], scoreLimit - bestMateScore + 1, &matchProbability);
+                scoreBucket(b0, r0, direction0, loc0, 0, 0, readData[r0][direction0], quality[r0], readLen[r0], scoreLimit - bestMateScore + 1, &matchProbability);
                 _ASSERT(matchProbability >= 0);
                 probabilityOfAllSingles[r0] += matchProbability;
 
@@ -721,7 +702,17 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
 
 
 void SmarterPairedEndAligner::scoreBucket(
-    Bucket *bucket, int readId, Direction direction, unsigned location, const char *readData, const char *qualityString, int readLen, int scoreLimit, double *matchProbability)
+        Bucket *            bucket, 
+        int                 readId, 
+        Direction           direction, 
+        unsigned            location, 
+        int                 seedOffset,
+        int                 seedLength,
+        const char *        readData, 
+        const char *        qualityString, 
+        int                 readLen, 
+        int                 scoreLimit, 
+        double *            matchProbability)
 {
     //_ASSERT(scoreLimit >= 0);
     if (scoreLimit < 0) {
@@ -766,12 +757,57 @@ void SmarterPairedEndAligner::scoreBucket(
             if (refData != NULL) {
                 TRACE("  Genome: %.*s\n  Read:   %.*s\n", readLen, refData, readLen, readData);
                 _uint64 cacheKey = ((_uint64) readId) << 33 | ((_uint64) direction) << 32 | (location + offset);
+
+                        
+
                 score = lv.computeEditDistance(refData, genomeDataLength, readData, qualityString, readLen, scoreLimit, &localMatchProbability, cacheKey);
                 TRACE("  Called LV at %lu with limit %d: %d\n", location + offset, scoreLimit, score);
+#if     0
+                // Compute the distance separately in the forward and backward directions from the seed, to allow
+                // arbitrary offsets at both the start and end but not have to pay the cost of exploring all start
+                // shifts in BoundedStringDistance
+                double matchProb1, matchProb2;
+                int score1, score2;
+                // First, do the forward direction from where the seed aligns to past of it
+                int readLen = readToScore->getDataLength();
+                int seedLen = genomeIndex->getSeedLength();
+                int seedOffset = candidateToScore->seedOffset; // Since the data is reversed
+                int tailStart = seedOffset + seedLen;
+
+                score1 = landauVishkin->computeEditDistance(data + tailStart, genomeDataLength - tailStart, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
+                    scoreLimit, &matchProb1);
+                if (score1 == -1) {
+                    score = -1;
+                } else {
+                    // The tail of the read matched; now let's reverse the reference genome data and match the head
+                    int limitLeft = scoreLimit - score1;
+                    score2 = reverseLandauVishkin->computeEditDistance(data + seedOffset, seedOffset + MAX_K, reversedRead[elementToScore->direction] + readLen - seedOffset,
+                                                                                read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2);
+
+                    if (score2 == -1) {
+                        score = -1;
+                    } else {
+                        score = score1 + score2;
+                        // Map probabilities for substrings can be multiplied, but make sure to count seed too
+                        matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
+                    }
+                }
+
+                if (score != -1) {
+                    if (similarityMap != NULL) {
+                        biggestClusterScored = __max(biggestClusterScored,
+                                similarityMap->getNumClusterMembers(genomeLocation));
+                    }
+                } else {
+                    matchProbability = 0;
+                }
+                        
                 if (score < 0) {
                     score = INFINITE_SCORE;
                 }
+#endif  // 0
             }
+
             if (score < bucket->score || score == bucket->score && localMatchProbability > bucket->matchProbability) {
                 bucket->score = score;
                 bucket->matchProbability = localMatchProbability;

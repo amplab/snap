@@ -382,8 +382,21 @@ bool BigCommit(
 
 BigAllocator::BigAllocator(size_t i_maxMemory) : maxMemory(i_maxMemory)
 {
+#if     _DEBUG
+    maxMemory += maxCanaries * sizeof(unsigned);
+#endif  // DEBUG
     basePointer = (char *)BigAlloc(__max(maxMemory, 2 * 1024 * 1024)); // The 2MB minimum is to assure this lands in a big page
     allocPointer = basePointer;
+
+#if     _DEBUG
+    //
+    // Stick a canary at the beginning of the array so that we can detect underflows for whatever's allocated first.
+    //
+    canaries[0] = (unsigned *) allocPointer;
+    *canaries[0] = canaryValue;
+    nCanaries = 1;
+    allocPointer += sizeof(unsigned);
+#endif  // _DEBUG
 }
 
 BigAllocator::~BigAllocator()
@@ -397,11 +410,35 @@ BigAllocator::allocate(size_t amountToAllocate)
     _ASSERT(allocPointer + amountToAllocate <= basePointer + maxMemory);
     void *retVal = allocPointer;
     allocPointer += amountToAllocate;
+
+#if     _DEBUG
+    if (nCanaries < maxCanaries) {
+        _ASSERT(allocPointer + sizeof(unsigned) <= basePointer + maxMemory);
+        canaries[nCanaries] = (unsigned *)allocPointer;
+        *canaries[nCanaries] = canaryValue;
+        nCanaries++;
+        allocPointer += sizeof(unsigned);
+    }
+#endif  // DEBUG
     return retVal;
 }
     void 
 BigAllocator::assertAllMemoryUsed()
 {
-    _ASSERT(allocPointer == basePointer + maxMemory);
+    _ASSERT(allocPointer == basePointer + maxMemory - (maxCanaries - nCanaries) * sizeof(unsigned));
 }
 
+#if     _DEBUG
+    void
+BigAllocator::checkCanaries()
+{
+    bool allOK = true;
+    for (unsigned i = 0; i < nCanaries; i++) {
+        if (*canaries[i] != canaryValue) {
+            fprintf(stderr,"Memory corruption detected: canary at 0x%llx has value 0x%llx\n",canaries[i], *canaries[i]);
+            allOK = false;
+        }
+    }
+    _ASSERT(allOK);
+}
+#endif  // DEBUG

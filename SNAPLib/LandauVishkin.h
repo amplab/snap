@@ -1,9 +1,7 @@
 #pragma once
-
 #include "Compat.h"
 #include "FixedSizeMap.h"
 #include "BigAlloc.h"
-
 
 const int MAX_K = 31;
 

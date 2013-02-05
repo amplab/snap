@@ -41,7 +41,6 @@ using std::min;
 #define TRACE(...) {}
 #endif
 
-
 BaseAligner::BaseAligner(
     GenomeIndex    *i_genomeIndex, 
     unsigned        i_confDiff, 
@@ -128,19 +127,9 @@ Arguments:
     }
 #endif  // BSD or LV
 
-    unsigned nCandidates = __min(maxHitsToConsider * (maxReadSize - seedLen + 1) * 2, 200000);  // *2 is for reverse complement
     candidateHashTablesSize = (maxHitsToConsider * maxSeedsToUse * 3)/2;    // *1.5 for hash table slack
     hashTableElementPoolSize = maxHitsToConsider * maxSeedsToUse * 2 ;   // *2 for RC
    
-    if (allocator) {
-        candidates = (Candidate *)allocator->allocate(sizeof(Candidate) * nCandidates);
-    } else {
-        candidates = (Candidate *)BigAlloc(sizeof(Candidate) * nCandidates);
-    }
-    for (unsigned i = 0 ; i < nCandidates; i++) {
-        candidates[i].init();
-    }
-
     if (allocator) {
         rcReadData = (char *)allocator->allocate(sizeof(char) * maxReadSize * 2); // The *2 is to allocte space for the quality string
     } else {
@@ -156,7 +145,10 @@ Arguments:
     }
 
     reversedRead[RC] = reversedRead[FORWARD] + maxReadSize;
+
+#if defined(USE_BOUNDED_STRING_DISTANCE)
     reversedGenomeData = reversedRead[FORWARD] + 3 * maxReadSize + MAX_K;   // WARNING: This buffer extends in both directions from the pointer.
+#endif  // BSD
     
 
     rcTranslationTable['A'] = 'T';
@@ -467,7 +459,6 @@ Return Value:
                     finalScore,
                     genomeLocation,
                     hitDirection,
-                    candidates,
                     maxHitsToGet,
                     mapq);
 #if     MAINTAIN_HISTOGRAMS
@@ -485,6 +476,7 @@ Return Value:
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", *finalScore, *mapq, *genomeLocation);
 #endif  // _DEBUG
+
                 return finalResult;
             }
             nextSeedToTest = getWrappedNextSeedToTest(wrapCount);
@@ -571,12 +563,12 @@ Return Value:
                 if (0 == wrapCount) {
                     firstPassSeedsNotSkipped[direction]++;
                 }
+
                 //
                 // Update the candidates list with any hits from this seed.  If lowest possible score of any unseen location is
                 // more than best_score + confDiff then we know that if this location is newly seen then its location won't ever be a
                 // winner, and we can ignore it.
                 //
-
 
                 unsigned offset;
                 if (direction == FORWARD) {
@@ -639,7 +631,6 @@ Return Value:
                         finalScore,
                         genomeLocation,
                         hitDirection,
-                        candidates,
                         maxHitsToGet,
                         mapq)) {
 #if     MAINTAIN_HISTOGRAMS
@@ -657,6 +648,7 @@ Return Value:
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", *finalScore, *mapq, *genomeLocation);
 #endif  // _DEBUG
+
                 return finalResult;
             }
         }
@@ -674,7 +666,6 @@ Return Value:
             finalScore,
             genomeLocation,
             hitDirection,
-            candidates,
             maxHitsToGet,
             mapq);
 #if     MAINTAIN_HISTOGRAMS
@@ -693,7 +684,7 @@ Return Value:
     if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", *finalScore, *mapq, *genomeLocation);
 #endif  // _DEBUG
 
-    return finalResult;
+        return finalResult;
 }
 
     bool
@@ -704,7 +695,6 @@ BaseAligner::score(
     int             *finalScore,
     unsigned        *singleHitGenomeLocation,
     Direction       *hitDirection,
-    Candidate       *candidates,
     unsigned         maxHitsToGet,
     int             *mapq)
 /*++
@@ -798,8 +788,6 @@ Return Value:
     unsigned weightListToCheck = highestUsedWeightList;
 
     do {
-        HashTableElement *elementToScore;
-
         _ASSERT(weightListToCheck <= maxSeedsToUse);
         //
         // Grab the next element to score, and score it.
@@ -855,7 +843,7 @@ Return Value:
             return false;
         }
 
-        elementToScore = weightLists[weightListToCheck].weightNext;
+        HashTableElement *elementToScore = weightLists[weightListToCheck].weightNext;
         _ASSERT(!elementToScore->allExtantCandidatesScored);
         _ASSERT(elementToScore->candidatesUsed != 0);
         _ASSERT(elementToScore != &weightLists[weightListToCheck]);
@@ -1117,8 +1105,9 @@ Return Value:
                 // one, and you're at the right place with no branches.
                 //
                 HashTableElement *nearbyElement;
+                unsigned nearbyGenomeLocation;
                 if (-1 != score) {
-                    unsigned nearbyGenomeLocation = genomeLocation + (2*(genomeLocation % (2 * maxMergeDist) / maxMergeDist) - 1) * maxMergeDist;
+                    nearbyGenomeLocation = genomeLocation + (2*(genomeLocation % (2 * maxMergeDist) / maxMergeDist) - 1) * maxMergeDist;
                     _ASSERT((genomeLocation % (2 * maxMergeDist) >= maxMergeDist ? genomeLocation + maxMergeDist : genomeLocation - maxMergeDist) == nearbyGenomeLocation);   // Assert that the logic in the above comment is right.
 
                     findElement(nearbyGenomeLocation, elementToScore->direction, &nearbyElement);
@@ -1127,21 +1116,49 @@ Return Value:
                 }
 
                 if (NULL != nearbyElement && nearbyElement->candidatesScored != 0) {
-                    if (nearbyElement->bestScore < score || nearbyElement->bestScore == score && nearbyElement->matchProbabilityForBestScore >= matchProbability) {
+                    //
+                    // Just because there's a "nearby" element doesn't mean it's really within the maxMergeDist.  Check that now.
+                    //
+                    _uint64 mask;
+                    if (nearbyGenomeLocation < genomeLocation) {
                         //
-                        // Again, this no better than something nearby we already tried.  Give up.
+                        // We're in the low half of our bucket.
                         //
-#ifdef  TIME_STRING_DISTANCE
-                        if (NULL != stats && !usedHamming) {
-                            stats->nanosTimeInBSD[1][score==-1 ? 0:1] += timeInBSD;
-                            stats->BSDCounts[1][score==-1 ? 0:1]++;
-                        }
-#endif  // TIME_STRING_DISTANCE
-                        continue;
+                        mask = ((_uint64)-1) << (64 - (maxMergeDist - genomeLocation % (2 * maxMergeDist)));
+                        
+                    } else {
+                        _ASSERT(genomeLocation % (2 * maxMergeDist) >= maxMergeDist);// we're in the upper half of the bucket
+                        //
+                        // We do the strange shift starting with the high bit clear and using 63 as the base to avoid
+                        // problems with sign extension on the shift.
+                        //
+                        mask = ((_uint64)0x7fffffffffffffff) >> (63 - (maxMergeDist - (2 * maxMergeDist - genomeLocation % (2 * maxMergeDist))));
                     }
-                    anyNearbyCandidatesAlreadyScored = true;
-                    probabilityOfAllCandidates = __max(0.0, probabilityOfAllCandidates - nearbyElement->matchProbabilityForBestScore);
-                    nearbyElement->matchProbabilityForBestScore = 0;    // keeps us from backing it out twice
+
+                    if ((mask & nearbyElement->candidatesScored) == 0) {
+                            //
+                            // The closest scored element in the nearby bucket is too far away.  Treat it as separate.
+                            //
+                            nearbyElement = NULL;
+                    }
+                
+                    if (NULL != nearbyElement) {
+                        if (nearbyElement->bestScore < score || nearbyElement->bestScore == score && nearbyElement->matchProbabilityForBestScore >= matchProbability) {
+                            //
+                            // Again, this no better than something nearby we already tried.  Give up.
+                            //
+    #ifdef  TIME_STRING_DISTANCE
+                            if (NULL != stats && !usedHamming) {
+                                stats->nanosTimeInBSD[1][score==-1 ? 0:1] += timeInBSD;
+                                stats->BSDCounts[1][score==-1 ? 0:1]++;
+                            }
+    #endif  // TIME_STRING_DISTANCE
+                            continue;
+                        }
+                        anyNearbyCandidatesAlreadyScored = true;
+                        probabilityOfAllCandidates = __max(0.0, probabilityOfAllCandidates - nearbyElement->matchProbabilityForBestScore);
+                        nearbyElement->matchProbabilityForBestScore = 0;    // keeps us from backing it out twice
+                    }
                 }
 
                 probabilityOfAllCandidates = __max(0.0, probabilityOfAllCandidates - elementToScore->matchProbabilityForBestScore); // need the max due to floating point lossage.
@@ -1405,11 +1422,10 @@ Return Value:
     }
     anchor->element = element;
 
-    element->candidatesUsed = 0;
+    element->candidatesUsed = (_uint64)1 << lowOrderGenomeLocation;
     element->candidatesScored = 0;
     element->lowestPossibleScore = lowestPossibleScore;
     element->direction = direction;
-    element->candidatesUsed = (_uint64)1 << lowOrderGenomeLocation;
     element->weight = 1;
     element->baseGenomeLocation = highOrderGenomeLocation;
     element->bestScore = UnusedScoreValue;
@@ -1495,9 +1511,6 @@ Return Value:
         if (NULL != reverseLandauVishkin) {
             delete reverseLandauVishkin;
         }
-
-        BigDealloc(candidates);
-        candidates = NULL;
 
         BigDealloc(rcReadData);
         rcReadData = NULL;
@@ -1759,7 +1772,6 @@ BaseAligner::incrementWeight(HashTableElement *element)
     size_t
 BaseAligner::getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsToUse)
 {
-    unsigned nCandidates = __min(maxHitsToConsider * (maxReadSize - seedLen + 1) * 2, 200000);  // *2 is for reverse complement
     size_t candidateHashTablesSize = (maxHitsToConsider * maxSeedsToUse * 3)/2;    // *1.5 for hash table slack
     size_t hashTableElementPoolSize = maxHitsToConsider * maxSeedsToUse * 2 ;   // *2 for RC
 
@@ -1768,7 +1780,6 @@ BaseAligner::getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsT
         (ownLandauVishkin ? 
             LandauVishkin<>::getBigAllocatorReservation() +
             LandauVishkin<-1>::getBigAllocatorReservation() : 0)    + // our LandauVishkin objects
-        sizeof(Candidate) * nCandidates                             + // candidates
         sizeof(char) * maxReadSize * 2                              + // rcReadData
         sizeof(char) * maxReadSize * 4 + 2 * MAX_K                  + // reversed read (both)
         sizeof(BYTE) * (maxReadSize + 7 + 128) / 8                  + // seed used

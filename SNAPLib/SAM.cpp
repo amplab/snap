@@ -28,7 +28,6 @@ Environment:
 using std::max;
 using std::min;
 
-
 //
 // You'd think this would be in the C library.
 // Like strchr, but with a max length so it doesn't

@@ -36,6 +36,8 @@ Revision History:
 #include "AlignerStats.h"
 #include "directions.h"
 
+
+
 class BaseAligner: public Aligner {
 public:
 
@@ -158,6 +160,7 @@ private:
 
 #if     defined(USE_BOUNDED_STRING_DISTANCE)
     BoundedStringDistance<> *boundedStringDist;
+    char *reversedGenomeData; 
 #endif  // bsd or LV
 
     LandauVishkin<> *landauVishkin;
@@ -327,7 +330,6 @@ private:
         int             *finalScore,
         unsigned        *singleHitGenomeLocation,
         Direction       *hitDirection,
-        Candidate       *candidates,
         unsigned         maxHitsToGet,
         int             *mapq);
     
@@ -352,13 +354,10 @@ private:
     unsigned maxSeedsToUse; // Max number of seeds to look up in the hash table
     unsigned adaptiveConfDiffThreshold; // Increase confDiff by 1 if this many seeds are repetitive.
 
-    int nCandidates;
-    Candidate *candidates;
-
     char *rcReadData;
-    char *rcReadQuality;       // This is allocated along with rcReadData in a single BigAlloc call, so don't free it.
+    char *rcReadQuality;
     char *reversedRead[NUM_DIRECTIONS];
-    char *reversedGenomeData;  // This will also be allocated along with reversedRead
+
 
     unsigned nTable[256];
 

@@ -54,6 +54,10 @@ public:
     void *operator new(size_t size) {return BigAlloc(size);}
     void operator delete(void *ptr) {BigDealloc(ptr);}
 
+    static size_t getBigAllocatorReservation(unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsToUse);
+    void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(SmarterPairedEndAligner)); return allocator->allocate(size);}
+    void operator delete(void *ptr, BigAllocator *allocator) {/* do nothing, the owner of the allocator is responsible for cleaning up the memory */}
+
 private:
     static const int BUCKET_SIZE = 16;
     static const int INFINITE_SCORE = 0x7FFF;
@@ -81,7 +85,8 @@ private:
     BaseAligner *mateAligner;
 
     BoundedStringDistance <> *boundedStringDist;
-    LandauVishkin<> lv;
+    LandauVishkin<1> lv;
+    LandauVishkin<-1> reverseLV;
 
     struct Bucket {
         unsigned found;                  // Bit vector for sub-locations matched
@@ -133,7 +138,7 @@ private:
     
     void computeRC(Read *read, char *outputBuf);
     
-    void scoreBucket(Bucket *bucket, int readId, Direction direction, unsigned location,
+    void scoreBucket(Bucket *bucket, int readId, Direction direction, unsigned location, int seedOffset, int seedLength,
                      const char *readData, const char *qualityString, int readLen, int scoreLimit, double *matchProbability);
 
     void scoreBucketMate(Bucket *bucket, int readId, Direction direction, unsigned location, Read *mate, int scoreLimit, int *mateMapq);
