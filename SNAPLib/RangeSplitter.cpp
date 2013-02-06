@@ -205,7 +205,7 @@ RangeSplittingPairedReadSupplierGenerator::generateNewPairedReadSupplier()
 
     PairedReadReader *underlyingReader;
     if (isSAM) {
-        underlyingReader = SAMReader::create(DataSupplier::Default, fileName1, genome, rangeStart, rangeLength, clipping); 
+        underlyingReader = SAMReader::createPairedReader(DataSupplier::Default, fileName1, genome, rangeStart, rangeLength, clipping); 
     } else {
         underlyingReader = PairedFASTQReader::create(DataSupplier::Default, fileName1, fileName2, rangeStart, rangeLength, clipping);
     }

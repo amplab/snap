@@ -300,11 +300,21 @@ SNAPInput::createPairedReadSupplierGenerator(int numThreads, const Genome *genom
 {
     _ASSERT(fileType == SAMFile || secondFileName != NULL); // Caller's responsibility to check this
 
-    if (SAMFile == fileType) {
+    switch (fileType) {
+    case SAMFile:
         return SAMReader::createPairedReadSupplierGenerator(fileName, numThreads, genome, clipping);
-    } else {
-        _ASSERT(FASTQFile == fileType);
-        return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, clipping);
+        
+    case BAMFile:
+        return BAMReader::createPairedReadSupplierGenerator(fileName,numThreads,genome,clipping);
+
+    case FASTQFile:
+        return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, clipping, false);
+        
+    case GZipFASTQFile:
+        return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, clipping, true);
+
+    default:
+        _ASSERT(false);
     }
 }
 
@@ -312,12 +322,20 @@ SNAPInput::createPairedReadSupplierGenerator(int numThreads, const Genome *genom
 SNAPInput::createReadSupplierGenerator(int numThreads, const Genome *genome, ReadClippingType clipping)
 {
     _ASSERT(secondFileName == NULL);
-    if (SAMFile == fileType) {
-        return SAMReader::createReadSupplierGenerator(fileName,numThreads,genome,clipping);
-    } else if (BAMFile == fileType) {
+    switch (fileType) {
+    case SAMFile:
+        return SAMReader::createReadSupplierGenerator(fileName, numThreads, genome, clipping);
+        
+    case BAMFile:
         return BAMReader::createReadSupplierGenerator(fileName,numThreads,genome,clipping);
-    } else {
-       _ASSERT(FASTQFile == fileType);
-       return FASTQReader::createReadSupplierGenerator(fileName,numThreads,clipping);
+
+    case FASTQFile:
+        return FASTQReader::createReadSupplierGenerator(fileName, numThreads, clipping, false);
+        
+    case GZipFASTQFile:
+        return FASTQReader::createReadSupplierGenerator(fileName, numThreads, clipping, true);
+
+    default:
+        _ASSERT(false);
     }
 }

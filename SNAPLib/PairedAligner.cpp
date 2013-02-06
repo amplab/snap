@@ -280,7 +280,9 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
             whichInput++;
         } else {
             if (foundFirstHalfOfFASTQ) {
-                options->inputs[whichInput].fileType = FASTQFile;
+                options->inputs[whichInput].fileType =
+                    stringEndsWith(argv[i],".gzip") || stringEndsWith(argv[i], ".gz") // todo: more suffixes?
+                        ? GZipFASTQFile : FASTQFile;
                 options->inputs[whichInput].secondFileName = argv[i];
                 whichInput++;
             } else {

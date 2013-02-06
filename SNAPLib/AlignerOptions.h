@@ -38,7 +38,7 @@ struct AbstractOptions
     virtual bool parse(const char** argv, int argc, int& n) = 0;
 };
 
-enum FileType {UnknownFileType, SAMFile, FASTQFile, BAMFile, CRAMFile};  // As more as needed
+enum FileType {UnknownFileType, SAMFile, FASTQFile, BAMFile, GZipFASTQFile, CRAMFile};  // As more as needed
 
 struct SNAPInput {
     SNAPInput() : fileName(NULL), secondFileName(NULL), fileType(UnknownFileType) {}

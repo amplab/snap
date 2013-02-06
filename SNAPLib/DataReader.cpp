@@ -58,7 +58,7 @@ public:
 
     virtual DataBatch getBatch();
 
-    virtual void release(DataBatch batch);
+    virtual void releaseBefore(DataBatch batch);
 
     virtual _int64 getFileOffset();
 
@@ -279,7 +279,6 @@ WindowsOverlappedDataReader::advance(
 WindowsOverlappedDataReader::nextBatch(bool dontRelease)
 {
     BufferInfo* info = &bufferInfo[nextBufferForConsumer];
-    _uint32 released = info->batchID;
     _uint32 overflow = max((DWORD) info->offset, info->nBytesThatMayBeginARead) - info->nBytesThatMayBeginARead;
     const unsigned advance = (nextBufferForConsumer + 1) % nBuffers;
     printf("nextBatch %d state %d\n", advance, bufferInfo[advance].state);
@@ -294,7 +293,7 @@ WindowsOverlappedDataReader::nextBatch(bool dontRelease)
     nextBufferForConsumer = advance;
     startIo();
     if (! dontRelease) {
-        release(DataBatch(released));
+        releaseBefore(DataBatch(bufferInfo[advance].batchID));
     }
 }
 
@@ -311,12 +310,12 @@ WindowsOverlappedDataReader::getBatch()
 }
 
     void
-WindowsOverlappedDataReader::release(
+WindowsOverlappedDataReader::releaseBefore(
     DataBatch batch)
 {
     for (int i = 0; i < nBuffers; i++) {
         BufferInfo* info = &bufferInfo[i];
-        if (info->batchID <= batch.batchID) {
+        if (info->batchID < batch.batchID) {
             switch (info->state) {
             case Empty:
                 // nothing
@@ -489,7 +488,7 @@ public:
 
     virtual DataBatch getBatch();
 
-    virtual void release(DataBatch batch);
+    virtual void releaseBefore(DataBatch batch);
 
     virtual _int64 getFileOffset();
 
@@ -607,13 +606,12 @@ GzipDataReader::nextBatch(bool dontRelease)
     char* priorData; _int64 n;
     inner->getExtra(&priorData, &n);
     priorData += validBytes - priorBytes;
-    DataBatch priorBatch = inner->getBatch();
     inner->nextBatch(true);
     char* currentData;
     inner->getExtra(&currentData, &n);
     memcpy(currentData, priorData, priorBytes);
     if (! dontRelease) {
-        inner->release(priorBatch);
+        inner->releaseBefore(inner->getBatch());
     }
     offset = 0;
     gotBatchData = false;
@@ -633,10 +631,10 @@ GzipDataReader::getBatch()
 }
 
     void
-GzipDataReader::release(
+GzipDataReader::releaseBefore(
     DataBatch batch)
 {
-    inner->release(batch);
+    inner->releaseBefore(batch);
 }
 
     _int64
@@ -785,7 +783,7 @@ public:
 
     virtual DataBatch getBatch();
 
-    virtual void release(DataBatch batch);
+    virtual void releaseBefore(DataBatch batch);
 
     virtual _int64 getFileOffset();
 
@@ -823,10 +821,10 @@ private:
     _uint32         currentBatch; // current batch number starting at 1
     _int64          startBytes; // in current batch
     _int64          validBytes; // in current batch
-    _uint32         releasedBatch; // largest batch number released
+    _uint32         earliestUnreleasedBatch; // smallest batch number that is unreleased
     FileMapper      mapper;
     SingleWaiterObject waiter; // flow control
-    ExclusiveLock   lock; // lock around flow control members (currentBatch, releasedBatch)
+    ExclusiveLock   lock; // lock around flow control members (currentBatch, earliestUnreleasedBatch)
 };
  
 
@@ -836,7 +834,7 @@ MemMapDataReader::MemMapDataReader(int i_batchCount, _int64 i_batchSize, _int64 
         overflowBytes(i_overflowBytes),
         batchExtra(i_batchExtra),
         currentBatch(1),
-        releasedBatch(0),
+        earliestUnreleasedBatch(1),
         currentMap(NULL),
         currentMapOffset(0),
         currentMapSize(0),
@@ -909,7 +907,7 @@ MemMapDataReader::reinit(
     offset = 0;
     validBytes = min(currentMapSize, batchSize);
     currentBatch = 1;
-    releasedBatch = 0;
+    earliestUnreleasedBatch = 1;
     releaseLock();
     if (batchCount != 1) {
         SignalSingleWaiterObject(&waiter);
@@ -922,7 +920,7 @@ MemMapDataReader::getData(
     _int64* o_validBytes,
     _int64* o_startBytes)
 {
-    if (batchCount != 1 && currentBatch - releasedBatch > batchCount) {
+    if (batchCount != 1 && currentBatch - earliestUnreleasedBatch >= batchCount) {
         WaitForSingleWaiterObject(&waiter);
     }
     if (offset >= startBytes) {
@@ -955,11 +953,11 @@ MemMapDataReader::nextBatch(bool dontRelease)
     currentBatch++;
     if (dontRelease) {
         _ASSERT(batchCount != 1);
-        if (batchCount != 1 && currentBatch - releasedBatch > batchCount) {
+        if (batchCount != 1 && currentBatch - earliestUnreleasedBatch >= batchCount) {
             ResetSingleWaiterObject(&waiter);
         }
     } else {
-        release(DataBatch(currentBatch - 1));
+        releaseBefore(DataBatch(currentBatch));
     }
     startBytes = min(batchSize, currentMapStartSize - (currentBatch - 1) * batchSize);
     validBytes = min(batchSize + overflowBytes, currentMapSize - (currentBatch - 1) * batchSize);
@@ -980,15 +978,15 @@ MemMapDataReader::getBatch()
 }
 
     void
-MemMapDataReader::release(
+MemMapDataReader::releaseBefore(
     DataBatch batch)
 {
-    if (batch.batchID > releasedBatch) {
+    if (batch.batchID > earliestUnreleasedBatch) {
         acquireLock();
-        if (batchCount != 1 && currentBatch - releasedBatch > batchCount && currentBatch - batch.batchID <= batchCount) {
+        if (batchCount != 1 && currentBatch - earliestUnreleasedBatch >= batchCount && currentBatch - batch.batchID < batchCount) {
             SignalSingleWaiterObject(&waiter);
         }
-        releasedBatch = min(currentBatch - 1, batch.batchID);
+        earliestUnreleasedBatch = min(currentBatch, batch.batchID);
         releaseLock();
     }
 }
@@ -1031,6 +1029,46 @@ public:
         }
     }
 };
+
+//
+// BatchTracker
+//
+
+BatchTracker::BatchTracker(int i_capacity)
+    : pending(i_capacity)
+{
+}
+
+    void
+BatchTracker::addRead(
+    DataBatch batch)
+{
+    DataBatch::Key key = batch.asKey();
+    pending.put(key, pending.get(key) + 1);
+}
+
+    bool
+BatchTracker::removeRead(
+    DataBatch removed,
+    DataBatch* release)
+{
+    DataBatch::Key key = removed.asKey();
+    unsigned n = pending.get(key);
+    _ASSERT(n != 0);
+    if (n > 1) {
+        pending.put(key, n - 1);
+        return false;
+    }
+    // removed one, find smallest remaining batch in same file
+    unsigned minBatch = UINT32_MAX;
+    for (BatchMap::iterator i = pending.begin(); i != pending.end(); i = pending.next(i)) {
+        DataBatch k(pending.key(i));
+        if (k.fileID == removed.fileID && k.batchID < minBatch) {
+            minBatch = k.batchID;
+        }
+    }
+    *release = DataBatch(removed.fileID, minBatch);
+}
 
 //
 // public static suppliers

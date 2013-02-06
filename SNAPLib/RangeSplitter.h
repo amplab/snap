@@ -62,6 +62,9 @@ public:
 
     Read *getNextRead();
  
+    virtual void releaseBefore(DataBatch batch)
+    { underlyingReader->releaseBefore(batch); }
+
 private:
     RangeSplitter *splitter;
     ReadReader *underlyingReader;
@@ -91,6 +94,9 @@ public:
 
     virtual bool getNextReadPair(Read **read1, Read **read2);
        
+    virtual void releaseBefore(DataBatch batch)
+    { underlyingReader->releaseBefore(batch); }
+
  private:
     PairedReadReader *underlyingReader;
     RangeSplitter *splitter;

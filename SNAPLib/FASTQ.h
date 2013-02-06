@@ -46,11 +46,14 @@ public:
 
         bool init(const char* i_fileName);
 
-        static ReadSupplierGenerator *createReadSupplierGenerator(const char *fileName, int numThreads, ReadClippingType clipping = ClipBack);
+        static ReadSupplierGenerator *createReadSupplierGenerator(const char *fileName, int numThreads, ReadClippingType clipping = ClipBack, bool gzip = false);
         
         virtual bool getNextRead(Read *readToUpdate);
 
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
+        
+        void releaseBefore(DataBatch batch)
+        { data->releaseBefore(batch); }
 
 private:
     
@@ -69,7 +72,7 @@ private:
         static class _init
         {
         public:
-            void init();
+            _init();
         } _initializer;
 };
 
@@ -95,8 +98,10 @@ public:
             return readers[whichHalfOfPair];
         }
 
-        static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName0, const char *fileName1, int numThreads, ReadClippingType clipping = ClipBack);
+        static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName0, const char *fileName1, int numThreads, ReadClippingType clipping = ClipBack, bool gzip = false);
  
+        void releaseBefore(DataBatch batch)
+        { _ASSERT(false); }
 
 private:
 

@@ -23,7 +23,7 @@ Revision History:
 #pragma once
 
 #include "Compat.h"
-
+#include "FixedSizeMap.h"
 //
 // This defines a family of composable classes for efficiently reading data with flow control.
 //
@@ -43,23 +43,44 @@ Revision History:
 
 struct DataBatch
 {
-    const _uint32   fileID;
-    const _uint32   batchID;
+    _uint32   fileID;
+    _uint32   batchID;
 
-    DataBatch() : fileID(0), batchID(0) {}
+    inline DataBatch() : fileID(0), batchID(0) {}
 
-    DataBatch(_uint32 i_batchID, _uint32 i_fileID = 0) : fileID(i_fileID), batchID(i_batchID) {}
+    inline DataBatch(_uint32 i_batchID, _uint32 i_fileID = 0) : fileID(i_fileID), batchID(i_batchID) {}
 
-    DataBatch(const DataBatch& o) : fileID(o.fileID), batchID(o.fileID) {}
+    inline DataBatch(const DataBatch& o) : fileID(o.fileID), batchID(o.fileID) {}
     
     static bool comparator(const DataBatch& a, const DataBatch& b)
     { return a.fileID < b.fileID || (a.fileID == b.fileID && a.batchID < b.batchID); }
 
-    bool operator<=(const DataBatch& b)
+    inline bool operator<=(const DataBatch& b) const
     { return fileID < b.fileID || (fileID == b.fileID && batchID <= b.batchID); }
     
-    bool operator==(const DataBatch& b)
+    inline bool operator<(const DataBatch& b) const
+    { return fileID < b.fileID || (fileID == b.fileID && batchID < b.batchID); }
+    
+    inline bool operator==(const DataBatch& b) const
     { return fileID == b.fileID && batchID == b.batchID; }
+    
+    inline bool operator!=(const DataBatch& b) const
+    { return batchID != b.batchID || fileID != b.fileID; }
+
+    inline DataBatch min(const DataBatch& b) const
+    { return *this <= b ? *this : b; }
+
+    inline bool isZero() const
+    { return fileID == 0 && batchID == 0; }
+
+    // convert to _int64 for use as a hashtable key
+
+    typedef _int64 Key;
+
+    inline Key asKey()
+    { return (((_int64) fileID) << 32) + (_int64) batchID; }
+
+    inline DataBatch(Key key) : fileID((_uint32) (key >> 32)), batchID((_uint32) key) {}
 };
 
 class DataReader
@@ -97,10 +118,10 @@ public:
     // get current batch identifier
     virtual DataBatch getBatch() = 0;
 
-    // release all batches up to and including the given batch
+    // release all batches up to but not including the given batch
     // NOTE: this may be called from another thread,
     // so anything it touches must be thread-safe!
-    virtual void release(DataBatch batch) = 0;
+    virtual void releaseBefore(DataBatch batch) = 0;
 
     // get current offset into file
     virtual _int64 getFileOffset() = 0;
@@ -136,4 +157,22 @@ public:
     // default raw data supplier for platform
     static const DataSupplier* Default;
     static const DataSupplier* GzipDefault;
+};
+
+// manages lifetime tracking for batches of reads
+class BatchTracker
+{
+public:
+    BatchTracker(int i_capacity);
+
+    // read was added from a batch, increment reference count
+    void addRead(DataBatch batch);
+
+    // read was removed from a batch
+    // returns true if a batch was released, with the batch to release
+    bool removeRead(DataBatch batch, DataBatch* o_release);
+
+private:
+    typedef FixedSizeMap<DataBatch::Key,int> BatchMap;
+    BatchMap pending;
 };

@@ -27,6 +27,7 @@ Revision History:
 #include "ReadSupplierQueue.h"
 
  ReadSupplierQueue::ReadSupplierQueue(ReadReader *reader)
+     : tracker(64)
  {
      commonInit();
 
@@ -34,6 +35,7 @@ Revision History:
  }
 
 ReadSupplierQueue::ReadSupplierQueue(ReadReader *firstHalfReader, ReadReader *secondHalfReader)
+     : tracker(128)
 {
      commonInit();
 
@@ -42,6 +44,7 @@ ReadSupplierQueue::ReadSupplierQueue(ReadReader *firstHalfReader, ReadReader *se
 }
 
 ReadSupplierQueue::ReadSupplierQueue(PairedReadReader *i_pairedReader)
+     : tracker(128)
 {
      commonInit();
     pairedReader = i_pairedReader;
@@ -251,6 +254,18 @@ ReadSupplierQueue::areAnyReadsReady() // must hold the lock to call this.
 ReadSupplierQueue::doneWithElement(ReadQueueElement *element)
 {
     AcquireExclusiveLock(&lock);
+    _ASSERT(element->totalReads > 0);
+    DataBatch release;
+    if (tracker.removeRead(element->reads[0].getBatch(), &release)) {
+        if (singleReader[0] != NULL) {
+            singleReader[0]->releaseBefore(release);
+        } else {
+            pairedReader->releaseBefore(release);
+        }
+    }
+    if (pairedReader != NULL && tracker.removeRead(element->reads[1].getBatch(), &release)) {
+        pairedReader->releaseBefore(release);
+    }
     element->addToTail(emptyQueue);
     AllowEventWaitersToProceed(&emptyBuffersAvailable);
     ReleaseExclusiveLock(&lock);
@@ -267,6 +282,20 @@ ReadSupplierQueue::supplierFinished()
         AllowEventWaitersToProceed(&allReadsConsumed);
     }
     ReleaseExclusiveLock(&lock);
+}
+
+    void
+ReadSupplierQueue::releaseBefore(
+    DataBatch batch)
+{
+    // todo: !! might not work correctly with two readers, batch IDs might collide between them!
+    _ASSERT(singleReader[1] == NULL);
+    if (singleReader[0] != NULL) {
+        singleReader[0]->releaseBefore(batch);
+    }
+    if (pairedReader != NULL) {
+        pairedReader->releaseBefore(batch);
+    }
 }
 
     void
@@ -292,6 +321,8 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
     int balanceIncrement = params->isSecondReader ? -1 : 1;
     int firstOrSecond = params->isSecondReader ? 1 : 0;
     bool isSingleReader = (NULL == singleReader[1]);
+    Read firstReadInNextBatch[2];
+    bool pendingReadInNextBatch;
 
     while (!done) {
         if ((!isSingleReader) && balance * balanceIncrement > MaxImbalance) {
@@ -320,17 +351,52 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
 
         //
         // Now fill in the reads from the reader into the element until it's
-        // full or the reader finishes.
+        // full or the reader finishes or it starts a new batch.
         //
         for (element->totalReads = 0; element->totalReads < element->nReads; element->totalReads += increment) {
             if (NULL != reader) {
-                if (!reader->getNextRead(&element->reads[element->totalReads])) {
+                if (pendingReadInNextBatch) {
+                    element->reads[element->totalReads] = firstReadInNextBatch[0];
+                    pendingReadInNextBatch = false;
+                } else if (!reader->getNextRead(&element->reads[element->totalReads])) {
                    done = true;
                    break;
-                } 
+                }
+                if (element->totalReads == 0) {
+                    // track reference count for new batch, since batches are homogeneous
+                    // could combine with previous lock, but this code is already tricky enough...
+                    AcquireExclusiveLock(&lock);
+                    tracker.addRead(element->reads[0].getBatch());
+                    ReleaseExclusiveLock(&lock);
+                }
+                if (element->totalReads > 0 && element->reads[element->totalReads-1].getBatch() != element->reads[element->totalReads-1].getBatch()) {
+                    firstReadInNextBatch[0] = element->reads[element->totalReads];
+                    pendingReadInNextBatch = true;
+                    break;
+                }
             } else if (NULL != pairedReader) {
-                if (!pairedReader->getNextReadPair(&element->reads[element->totalReads], &element->reads[element->totalReads+1])) {
+                if (pendingReadInNextBatch) {
+                    element->reads[element->totalReads] = firstReadInNextBatch[0];
+                    element->reads[element->totalReads+1] = firstReadInNextBatch[1];
+                    pendingReadInNextBatch = false;
+                } else if (!pairedReader->getNextReadPair(&element->reads[element->totalReads], &element->reads[element->totalReads+1])) {
                     done = true;
+                    break;
+                }
+                if (element->totalReads == 0) {
+                    // track reference count for new batch, since batches are homogeneous
+                    // could combine with previous lock, but this code is already tricky enough...
+                    AcquireExclusiveLock(&lock);
+                    tracker.addRead(element->reads[0].getBatch());
+                    tracker.addRead(element->reads[1].getBatch());
+                    ReleaseExclusiveLock(&lock);
+                }
+                if (element->totalReads > 0 &&
+                    (element->reads[element->totalReads-2].getBatch() != element->reads[element->totalReads].getBatch() ||
+                    element->reads[element->totalReads-1].getBatch() != element->reads[element->totalReads+1].getBatch())) {
+                    firstReadInNextBatch[0] = element->reads[element->totalReads];
+                    firstReadInNextBatch[1] = element->reads[element->totalReads+1];
+                    pendingReadInNextBatch = true;
                     break;
                 }
            }
@@ -374,11 +440,18 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
     ReleaseExclusiveLock(&lock);
 }
 
-ReadSupplierFromQueue::ReadSupplierFromQueue(ReadSupplierQueue *i_queue) : queue(i_queue), outOfReads(false), currentElement(NULL), nextReadIndex(0), done(false)
+ReadSupplierFromQueue::ReadSupplierFromQueue(
+    ReadSupplierQueue *i_queue)
+    :
+    queue(i_queue),
+    outOfReads(false),
+    currentElement(NULL),
+    nextReadIndex(0),
+    done(false)
 {
 }
 
-Read *
+    Read *
 ReadSupplierFromQueue::getNextRead()
 {
     if (done) {
@@ -401,6 +474,13 @@ ReadSupplierFromQueue::getNextRead()
     }
 
     return &currentElement->reads[nextReadIndex++]; // Note the post increment.
+}
+
+    void
+ReadSupplierFromQueue::releaseBefore(
+    DataBatch batch)
+{
+    queue->releaseBefore(batch);
 }
 
 PairedReadSupplierFromQueue::PairedReadSupplierFromQueue(ReadSupplierQueue *i_queue, bool i_twoFiles) : queue(i_queue), twoFiles(i_twoFiles), done(false), 
@@ -461,4 +541,11 @@ PairedReadSupplierFromQueue::getNextReadPair(Read **read0, Read **read1)
     }
 
     return true;
+}
+    
+    void
+PairedReadSupplierFromQueue::releaseBefore(
+    DataBatch batch)
+{
+    queue->releaseBefore(batch);
 }

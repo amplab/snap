@@ -32,11 +32,23 @@ public:
 
     virtual Read *getNextRead();
 
+    virtual void releaseBefore(DataBatch batch);
 
 private:
+
+    // info for a currently active supplier
+    struct ActiveRead
+    {
+        int         index; // index in readSuppliers array
+        DataBatch   lastBatch; // last batch read from this supplier
+        Read*       firstReadInNextBatch;
+    };
+
     int                 nRemainingReadSuppliers;
+    int                 nReadSuppliers;
     int                 nextReadSupplier;
     ReadSupplier        **readSuppliers;
+    ActiveRead          *activeReadSuppliers;
 };
 
 class MultiInputPairedReadSupplier: public PairedReadSupplier {
@@ -46,11 +58,23 @@ public:
 
     virtual bool getNextReadPair(Read **read0, Read **read1);
 
+    virtual void releaseBefore(DataBatch batch);
+
 private:
+    
+    // info for a currently active supplier
+    struct ActiveRead
+    {
+        int         index; // index in readSuppliers array
+        DataBatch   lastBatch[2]; // last batch read from this supplier
+        Read*       firstReadInNextBatch[2];
+    };
 
     int                 nRemainingReadSuppliers;
+    int                 nReadSuppliers;
     int                 nextReadSupplier;
     PairedReadSupplier  **pairedReadSuppliers;
+    ActiveRead          *activeReadSuppliers;
 };
 
 class MultiInputReadSupplierGenerator: public ReadSupplierGenerator

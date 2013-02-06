@@ -52,12 +52,6 @@ BAMReader::getNextReadPair(
     return false;
 }
 
-
-    void
-BAMReader::readDoneWithBuffer(unsigned *referenceCount)
-{
-}
-
     bool
 BAMReader::init(
     const char *fileName,
@@ -85,7 +79,7 @@ BAMReader::init(
     n_ref = header->n_ref();
     refOffset = new unsigned[n_ref];
     BAMHeaderRefSeq* refSeq = header->firstRefSeq();
-    for (int i = 0; i < n_ref; i++, refSeq = refSeq->next()) {
+    for (unsigned i = 0; i < n_ref; i++, refSeq = refSeq->next()) {
         if (! genome->getOffsetOfPiece(refSeq->name(), &refOffset[i])) {
             // fprintf(stderr, "BAMReader: unknown ref seq name %s\n", refSeq->name());
             refOffset[i] = UINT32_MAX;
@@ -141,10 +135,12 @@ BAMReader::createPairedReadSupplierGenerator(
     const char *fileName,
     int numThreads,
     const Genome *genome,
-    ReadClippingType clipping)
+    ReadClippingType clipping,
+    int matchBufferSize)
 {
     BAMReader* reader = create(fileName, genome, 0, 0, clipping);
-    ReadSupplierQueue* queue = new ReadSupplierQueue((PairedReadReader*)reader);
+    PairedReadReader* matcher = PairedReadReader::PairMatcher(5000, reader);
+    ReadSupplierQueue* queue = new ReadSupplierQueue(matcher);
     return queue;
 }
     
@@ -250,6 +246,7 @@ BAMReader::getReadFromLine(
         expandSeq(seqBuffer, bam->seq(), bam->l_seq);
         expandQual(qualBuffer, bam->qual(), bam->l_seq);
         read->init(bam->read_name(), bam->l_read_name, seqBuffer, qualBuffer, bam->l_seq);
+        read->setBatch(data->getBatch());
         if (bam->FLAG & SAM_REVERSE_COMPLEMENT) {
             read->becomeRC();
         }

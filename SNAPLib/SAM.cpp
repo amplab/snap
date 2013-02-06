@@ -25,6 +25,7 @@ Environment:
 #include "RangeSplitter.h"
 #include "ParallelTask.h"
 #include "Util.h"
+#include "ReadSupplierQueue.h"
 
 using std::max;
 using std::min;
@@ -1191,29 +1192,6 @@ SAMReader::getNextRead(Read *readToUpdate)
     return getNextRead(readToUpdate, NULL, NULL, NULL, NULL, NULL, NULL);
 }
 
-
-    bool
-SAMReader::getNextReadPair(Read *read1, Read *read2, PairedAlignmentResult *alignmentResult, 
-            unsigned *mapQ, const char **cigar)
-{
-    unsigned flag[2];
-    if (!getNextRead(read1, &alignmentResult->status[0],&alignmentResult->location[0],
-            &alignmentResult->isRC[0],mapQ ? &mapQ[0] : NULL,&flag[0],false,cigar ? &cigar[0] : NULL)) {
-        return false;
-    }
-
-    if (!getNextRead(read2, &alignmentResult->status[1],&alignmentResult->location[1],
-            &alignmentResult->isRC[1],mapQ ? &mapQ[1] : NULL,&flag[1],true, cigar? &cigar[1] : NULL)) {
-        return false;
-    }
-
-    if (!(flag[0] & SAM_MULTI_SEGMENT) || !(flag[1] & SAM_MULTI_SEGMENT) || !(flag[0] & SAM_FIRST_SEGMENT) || !(flag[1] & SAM_LAST_SEGMENT)) {
-        return false;
-    }
-
-    return true;
-}
-
     bool
 SAMReader::parseHeader(
     const char *fileName, 
@@ -1554,10 +1532,11 @@ SAMReader::getNextRead(
         fprintf(stderr,"SAM file has too long a line, or doesn't end with a newline!  Failing.  fileOffset = %lld\n", data->getFileOffset());
         exit(1);
     }
-    data->advance((newLine + 1) - buffer);
 
     size_t lineLength;
     getReadFromLine(genome,buffer,buffer + bytes,read,alignmentResult,genomeLocation,isRC,mapQ,&lineLength,flag,cigar,clipping);
+    read->setBatch(data->getBatch());
+    data->advance((newLine + 1) - buffer);
 
     return true;
 }
@@ -1566,18 +1545,35 @@ SAMReader::getNextRead(
 SAMReader::createReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping)
 {
     //
-    // SAM files always can be read with the range splitter.
+    // single-ended SAM files always can be read with the range splitter.
     //
     RangeSplitter *splitter = new RangeSplitter(QueryFileSize(fileName), numThreads, 100);
     return new RangeSplittingReadSupplierGenerator(fileName, true, clipping, numThreads, genome);
 }
+    
+    PairedReadReader*
+SAMReader::createPairedReader(
+    const DataSupplier* supplier,
+    const char *fileName,
+    const Genome *genome,
+    _int64 startingOffset,
+    _int64 amountOfFileToProcess, 
+    ReadClippingType clipping)
+{
+    SAMReader* reader = SAMReader::create(DataSupplier::Default, fileName, genome, 0, 0, clipping);
+    return PairedReadReader::PairMatcher(5000, reader);
+}
+
 
     PairedReadSupplierGenerator *
 SAMReader::createPairedReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping)
 {
-   //
-    // SAM files always can be read with the range splitter.
     //
-    RangeSplitter *splitter = new RangeSplitter(QueryFileSize(fileName), numThreads, 100);
-    return new RangeSplittingPairedReadSupplierGenerator(fileName, NULL, true, clipping, numThreads, genome);
+    // need to use a queue so that pairs can be matched
+    //
+
+    ReadSupplierQueue* queue = new ReadSupplierQueue(
+        SAMReader::createPairedReader(DataSupplier::Default, fileName, genome, 0, 0, clipping));
+    queue->startReaders();
+    return queue;
 }

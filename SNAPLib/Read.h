@@ -1,5 +1,6 @@
 /*++
 
+
 Module Name:
 
     Read.h
@@ -26,6 +27,7 @@ Revision History:
 
 #include "Compat.h"
 #include "Tables.h"
+#include "DataReader.h"
 
 //
 // Here's a brief description of the classes for input in SNAP:
@@ -66,20 +68,36 @@ enum ReadClippingType {NoClipping, ClipFront, ClipBack, ClipFrontAndBack};
 class ReadReader {
 public:
         virtual ~ReadReader() {}
+        
+        // reading
+
         virtual bool getNextRead(Read *readToUpdate) = 0;
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
+
+        virtual void releaseBefore(DataBatch batch) = 0;
 };
 
 class PairedReadReader {
 public:
         virtual ~PairedReadReader() {}
+
+        // reading
+
         virtual bool getNextReadPair(Read *read1, Read *read2) = 0;
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
+
+        virtual void releaseBefore(DataBatch batch) = 0;
+
+        // wrap a single read source with a matcher that buffers reads until their mate is found
+        static PairedReadReader* PairMatcher(int bufferSize, ReadReader* single);
 };
 
 class ReadSupplier {
 public:
     virtual Read *getNextRead() = 0;    // This read is valid until you call getNextRead, then it's done.  Don't worry about deallocating it.
+    virtual ~ReadSupplier() {}
+
+    virtual void releaseBefore(DataBatch batch) = 0;
 };
 
 class PairedReadSupplier {
@@ -87,6 +105,8 @@ public:
     // These read are valid until you call getNextRead, then they're done.  Don't worry about deallocating them.
     virtual bool getNextReadPair(Read **read0, Read **read1) = 0;
     virtual ~PairedReadSupplier() {}
+
+    virtual void releaseBefore(DataBatch batch) = 0;
 };
 
 class ReadSupplierGenerator {
@@ -100,7 +120,6 @@ public:
     virtual PairedReadSupplier *generateNewPairedReadSupplier() = 0;
     virtual ~PairedReadSupplierGenerator() {}
 };
-
     
 class Read {
 public:
@@ -158,6 +177,8 @@ public:
         inline unsigned getFrontClippedLength() const {return (unsigned)(data - unclippedData);}    // number of bases clipped from the front of the read
         inline void setUnclippedLength(unsigned length) {unclippedLength = length;}
 		inline ReadClippingType getClippingState() const {return clippingState;}
+        inline DataBatch getBatch() { return batch; }
+        inline void setBatch(DataBatch b) { batch = b; }
 
         void clip(ReadClippingType clipping) {
             if (clipping == clippingState) {
@@ -315,6 +336,9 @@ private:
         //
         const char *originalUnclippedDataBuffer;
         const char *originalUnclippedQualityBuffer;
+
+        // batch for managing lifetime during input
+        DataBatch batch;
 };
 
 //

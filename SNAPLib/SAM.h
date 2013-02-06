@@ -279,7 +279,7 @@ const int SAM_FIRST_SEGMENT      = 0x040; // This is the first segment in the re
 const int SAM_LAST_SEGMENT       = 0x080; // This is the last segment in the read.
 const int SAM_SECONDARY          = 0x100; // Secondary alignment for a read with multiple hits.
 
-class SAMReader : public PairedReadReader, public ReadReader {
+class SAMReader : public ReadReader {
 public:
         virtual ~SAMReader() {}
 
@@ -295,29 +295,14 @@ public:
             return getNextRead(read,alignmentResult,genomeLocation,isRC,mapQ,flag,false,cigar);
         }
 
-        //
-        // In getNextReadPair mapQ points to an array of two unsigneds.
-        //
-        virtual bool getNextReadPair(Read *read1, Read *read2, PairedAlignmentResult *alignmentResult, unsigned *mapQ, const char **cigar);
-
-        //
-        // The PairedReadReader version of getNextReadPair, which throws away the alignment, mapQ and cigar values.
-        //
-            bool
-        getNextReadPair(Read *read1, Read *read2) {
-            PairedAlignmentResult pairedAlignmentResult;
-            unsigned mapQ[2];
-
-            return getNextReadPair(read1,read2,&pairedAlignmentResult,mapQ,NULL);
-        }
+        void releaseBefore(DataBatch batch)
+        { data->releaseBefore(batch); }
 
         static SAMReader* create(const DataSupplier* supplier, const char *fileName, const Genome *genome, _int64 startingOffset, _int64 amountOfFileToProcess, 
                                  ReadClippingType clipping = ClipBack);
-
-        virtual ReadReader *getReaderToInitializeRead(int whichHalfOfPair) {
-            _ASSERT(0 == whichHalfOfPair || 1 == whichHalfOfPair);
-            return this;
-        }
+        
+        static PairedReadReader* createPairedReader(const DataSupplier* supplier, const char *fileName, const Genome *genome, _int64 startingOffset, _int64 amountOfFileToProcess, 
+                                 ReadClippingType clipping = ClipBack);
 
         static ReadSupplierGenerator *createReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack);
         static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack);

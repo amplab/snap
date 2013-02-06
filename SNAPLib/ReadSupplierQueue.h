@@ -94,6 +94,7 @@ public:
     void doneWithElement(ReadQueueElement *element);
     void supplierFinished();
 
+    void releaseBefore(DataBatch batch);
 
 private:
 
@@ -104,6 +105,8 @@ private:
     PairedReadReader    *pairedReader;      // This is filled in iff there are no single readers
 
     ReadQueueElement    readyQueue[2];      // Queue [1] is used only when there are two single end readers
+
+    BatchTracker        tracker;            // track batches used in queues, use refcount per element (not per read)
 
     EventObject         throttle[2];        // Two throttles, one for each of the readers.  At least one must be open at all times.
     int balance;                            // The size of readyQueue[0] - the size of readyQueue[1].  This is used to throttle.
@@ -148,6 +151,8 @@ public:
     ~ReadSupplierFromQueue() {}
 
     Read *getNextRead();
+    
+    void releaseBefore(DataBatch batch);
 
 private:
     bool                done;
@@ -163,6 +168,8 @@ public:
     ~PairedReadSupplierFromQueue();
 
     bool getNextReadPair(Read **read0, Read **read1);
+
+    void releaseBefore(DataBatch batch);
 
 private:
     ReadSupplierQueue   *queue;

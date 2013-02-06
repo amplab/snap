@@ -273,7 +273,8 @@ public:
             return getNextReadPair(read1,read2,NULL,NULL,NULL);
         }
 
-        virtual void readDoneWithBuffer(unsigned *referenceCount);
+        void releaseBefore(DataBatch batch)
+        { data->releaseBefore(batch); }
 
         static BAMReader* create(const char *fileName, const Genome *genome, _int64 startingOffset, _int64 amountOfFileToProcess, 
                                  ReadClippingType clipping = ClipBack, bool paired = false);
@@ -282,7 +283,7 @@ public:
         
         static ReadSupplierGenerator *createReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack);
         
-        static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack);
+        static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack, int matchBufferSize = 5000);
 
         static void expandSeq(char* o_sequence, _uint8* nibbles, int bases);
 
