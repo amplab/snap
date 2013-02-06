@@ -78,7 +78,11 @@ typedef int64_t _int64;
 typedef uint64_t _uint64;
 typedef int32_t _int32;
 typedef uint32_t _uint32;
+typedef uint16_t _uint16;
+typedef int16_t _int16;
 typedef uint8_t BYTE;
+typedef uint8_t _uint8;
+typedef int8_t _int8;
 typedef void *PVOID;
 
 // TODO: check if Linux libs have exp10 function
