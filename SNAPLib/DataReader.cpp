@@ -595,7 +595,7 @@ GzipDataReader::getData(
 GzipDataReader::advance(
     _int64 bytes)
 {
-    offset = min(offset + max(0LL, bytes), validBytes);
+    offset = min(offset + max((_int64) 0, bytes), validBytes);
 }
 
     void
@@ -893,8 +893,8 @@ MemMapDataReader::reinit(
     if (currentMap != NULL) {
         mapper.unmap();
     }
-    _int64 startSize = max(0LL, min(amountOfFileToProcess == 0 ? fileSize : amountOfFileToProcess, fileSize - i_startingOffset));
-    amountOfFileToProcess = max(0LL, min(startSize + overflowBytes, fileSize - i_startingOffset));
+    _int64 startSize = max((_int64)0, min(amountOfFileToProcess == 0 ? fileSize : amountOfFileToProcess, fileSize - i_startingOffset));
+    amountOfFileToProcess = max((_int64)0, min(startSize + overflowBytes, fileSize - i_startingOffset));
     currentMap = mapper.createMapping(i_startingOffset, amountOfFileToProcess);
     if (currentMap == NULL) {
         fprintf(stderr, "MemMapDataReader: fail to map %s at %lld,%lld\n", fileName, i_startingOffset, amountOfFileToProcess);
@@ -929,7 +929,7 @@ MemMapDataReader::getData(
     *o_buffer = currentMap + (currentBatch - 1) * batchSize + offset;
     *o_validBytes = validBytes - offset;
     if (o_startBytes) {
-        *o_startBytes = max(0LL, startBytes - offset);
+        *o_startBytes = max((_int64)0, startBytes - offset);
     }
     return *o_validBytes > 0;
 }
@@ -939,7 +939,7 @@ MemMapDataReader::advance(
     _int64 bytes)
 {
     _ASSERT(bytes >= 0);
-    offset = min(offset + max(0LL, bytes), validBytes);
+    offset = min(offset + max((_int64)0, bytes), validBytes);
 }
 
     void

@@ -115,7 +115,7 @@ class SingleWaiterObjectImpl;
 
 typedef pthread_mutex_t ExclusiveLock;
 typedef SingleWaiterObjectImpl *SingleWaiterObject;
-
+typedef void* EventObject; // todo: implement
 #endif  // _MSC_VER
 
 //

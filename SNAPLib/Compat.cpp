@@ -898,6 +898,31 @@ void ResetSingleWaiterObject(SingleWaiterObject *waiter)
     (*waiter)->init();
 }
 
+void CreateEventObject(EventObject *newEvent)
+{
+    _ASSERT(false); // todo: implement
+}
+
+void DestroyEventObject(EventObject *eventObject)
+{
+    _ASSERT(false); // todo: implement
+}
+
+void AllowEventWaitersToProceed(EventObject *eventObject)
+{
+    _ASSERT(false); // todo: implement
+}
+
+void PreventEventWaitersFromProceeding(EventObject *eventObject)
+{
+    _ASSERT(false); // todo: implement
+}
+
+void WaitForEvent(EventObject *eventObject)
+{
+    _ASSERT(false); // todo: implement
+}
+
 int InterlockedIncrementAndReturnNewValue(volatile int *valueToDecrement)
 {
     return (int) __sync_fetch_and_add((volatile int*) valueToDecrement, 1) + 1;
@@ -1540,17 +1565,17 @@ FileMapper::createMapping(size_t offset, size_t amountToMap)
 
     size_t mapRequestSize = beginRounding + amountToMap;
     _ASSERT(mapRequestSize % pagesize == 0);
-    if (mapRequestSize + liStartingOffset.QuadPart >= fileSize) {
+    if (mapRequestSize + offset >= fileSize) {
         mapRequestSize = 0; // Says to just map the whole thing.
     } 
 
     mappedBase = (char *) mmap(NULL, amountToMap + beginRounding, PROT_READ, MAP_SHARED, fd, offset - beginRounding);
-    if (fileData == MAP_FAILED) {
+    if (mappedBase == MAP_FAILED) {
 	    fprintf(stderr, "mmap failed.\n");
 	    return NULL;
     }
 
-    int r = madvise(fileData, min((size_t) madviseSize, amountToMap + beginRounding), MADV_WILLNEED);
+    int r = madvise(mappedBase, min((size_t) madviseSize, amountToMap + beginRounding), MADV_WILLNEED);
     _ASSERT(r == 0);
     lastPosMadvised = 0;
     amountMapped = amountToMap;
@@ -1563,7 +1588,7 @@ void
 FileMapper::unmap()
 {
     if (NULL != mappedRegion) {
-        munmap(fileData, amountMapped);
+        munmap(mappedBase, amountMapped);
         mappedRegion = NULL;
     }
 }
@@ -1582,16 +1607,28 @@ FileMapper::prefetch(size_t currentRead)
         _uint64 len = (offset > amountMapped ? 0 : min(amountMapped - offset, (_uint64) madviseSize));
         if (len > 0) {
             // Start reading new range
-            int r = madvise(fileData + offset, len, MADV_WILLNEED);
+            int r = madvise(mappedBase + offset, len, MADV_WILLNEED);
             _ASSERT(r == 0);
         }
         if (lastPosMadvised > 0) {
           // Unload the range we had before our current one
-          int r = madvise(fileData + lastPosMadvised - madviseSize, madviseSize, MADV_DONTNEED);
+          int r = madvise(mappedBase + lastPosMadvised - madviseSize, madviseSize, MADV_DONTNEED);
           _ASSERT(r == 0);
         }
         lastPosMadvised = offset;
     }
+}
+
+#include "zlib.h"
+ZEXTERN int ZEXPORT inflate OF((z_streamp strm, int flush))
+{
+  _ASSERT(false); // todo: link Linux version of zlib
+}
+
+ZEXTERN int ZEXPORT inflateInit2_ OF((z_streamp strm, int  windowBits,
+                                      const char *version, int stream_size))
+{
+  _ASSERT(false); // todo: link Linux version of zlib
 }
 
 #endif  // _MSC_VER
