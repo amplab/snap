@@ -1473,10 +1473,12 @@ SAMReader::reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
     _ASSERT(0 != headerSize);  // Must call init() before reinit()
     data->reinit(
         max(headerSize, startingOffset) - 1,  // -1 is to point at the previous newline so we don't skip the first line.
-        startingOffset + amountOfFileToProcess);
+        amountOfFileToProcess);
     char* buffer;
     _int64 validBytes;
-    data->getData(&buffer, &validBytes);
+    if (!data->getData(&buffer, &validBytes)) {
+        return;
+    }
     char *firstNewline = strnchr(buffer,'\n',validBytes);
     if (NULL == firstNewline) {
         return;
