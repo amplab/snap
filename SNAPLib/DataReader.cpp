@@ -1068,6 +1068,7 @@ BatchTracker::removeRead(
         }
     }
     *release = DataBatch(removed.fileID, minBatch);
+    return removed < *release;
 }
 
 //
