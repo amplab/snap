@@ -1577,8 +1577,12 @@ SAMReader::createPairedReadSupplierGenerator(const char *fileName, int numThread
     // need to use a queue so that pairs can be matched
     //
 
-    ReadSupplierQueue* queue = new ReadSupplierQueue(
-        SAMReader::createPairedReader(DataSupplier::Default, fileName, genome, 0, 0, clipping));
+    PairedReadReader* paired = SAMReader::createPairedReader(DataSupplier::Default, fileName, genome, 0, 0, clipping);
+    if (paired == NULL) {
+        fprintf(stderr, "Cannot create reader on %s\n", fileName);
+        exit(1);
+    }
+    ReadSupplierQueue* queue = new ReadSupplierQueue(paired);
     queue->startReaders();
     return queue;
 }

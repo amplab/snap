@@ -310,6 +310,19 @@ public:
             quality = localUnclippedQualityBuffer + frontClippedLength;
         }
 
+        //
+        // todo:
+        // This is a temporary expedient to clear local data when there are multiple
+        // copies of the same Read, to avoid double deletion.
+        // Since there is only one case right now (in PairedReadMatcher) it can be done manually.
+        // It should eventually be fixed by adding a copy constructor & assignment operator.
+        //
+        void clearLocal()
+        {
+            localUnclippedDataBuffer = NULL;
+            localUnclippedQualityBuffer = NULL;
+        }
+
 private:
 
         const char *id;

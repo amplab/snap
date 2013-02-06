@@ -113,7 +113,6 @@ PairedReadMatcher::getNextReadPair(
             idLength -= 2;
         }
         string key(id, idLength);
-
         ReadMap::iterator found = pending.find(key);
         if (found == pending.end()) {
             // no match, remember it for later matching
@@ -123,13 +122,13 @@ PairedReadMatcher::getNextReadPair(
                 // todo: deal with it; ignore for now, let the table grow...
             }
             tracker.addRead(one.getBatch());
-            pending[key] = one;
+            pending[key] = one; one.clearLocal();
             continue;
         }
 
         // found a match, remove it and return it
-        *read1 = one;
-        *read2 = found->second;
+        *read1 = one; one.clearLocal();
+        *read2 = found->second; found->second.clearLocal();
         // update reference counts for removed read batch, release if tracker requires it
         DataBatch release;
         if (tracker.removeRead(found->second.getBatch(), &release) && pendingReleased < release) {

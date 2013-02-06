@@ -50,7 +50,7 @@ struct DataBatch
 
     inline DataBatch(_uint32 i_batchID, _uint32 i_fileID = 0) : fileID(i_fileID), batchID(i_batchID) {}
 
-    inline DataBatch(const DataBatch& o) : fileID(o.fileID), batchID(o.fileID) {}
+    inline DataBatch(const DataBatch& o) : fileID(o.fileID), batchID(o.batchID) {}
     
     static bool comparator(const DataBatch& a, const DataBatch& b)
     { return a.fileID < b.fileID || (a.fileID == b.fileID && a.batchID < b.batchID); }

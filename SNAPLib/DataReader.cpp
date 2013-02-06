@@ -356,7 +356,7 @@ WindowsOverlappedDataReader::startIo()
         BufferInfo *info = &bufferInfo[nextBufferForReader];
         info->batchID = nextBatchID++;
 
-        if (readOffset.QuadPart >= fileSize.QuadPart || readOffset.QuadPart >= endingOffset + overflowBytes) {
+        if (readOffset.QuadPart >= fileSize.QuadPart || readOffset.QuadPart >= endingOffset) {
             info->validBytes = 0;
             info->nBytesThatMayBeginARead = 0;
             info->isEOF = readOffset.QuadPart >= fileSize.QuadPart;
@@ -366,29 +366,13 @@ WindowsOverlappedDataReader::startIo()
         }
 
         unsigned amountToRead;
-        if (fileSize.QuadPart - readOffset.QuadPart > bufferSize && endingOffset + overflowBytes - readOffset.QuadPart > bufferSize) {
-            amountToRead = bufferSize;
+        _int64 finalOffset = min(fileSize.QuadPart, endingOffset + overflowBytes);
+        _int64 finalStartOffset = min(fileSize.QuadPart, endingOffset);
+        amountToRead = min(finalOffset - readOffset.QuadPart, (_int64) bufferSize);
+        info->isEOF = readOffset.QuadPart + amountToRead == finalOffset;
+        info->nBytesThatMayBeginARead = min(bufferSize - overflowBytes, finalStartOffset - readOffset.QuadPart);
 
-            if (readOffset.QuadPart + amountToRead > endingOffset) {
-                info->nBytesThatMayBeginARead = (unsigned)(endingOffset - readOffset.QuadPart);
-            } else {
-                info->nBytesThatMayBeginARead = amountToRead;
-            }
-            info->isEOF = false;
-        } else {
-            amountToRead = (unsigned)__min(fileSize.QuadPart - readOffset.QuadPart,endingOffset+overflowBytes - readOffset.QuadPart);
-            if (endingOffset <= readOffset.QuadPart) {
-                //
-                // We're only reading this for overflow buffer.
-                //
-                info->nBytesThatMayBeginARead = 0;
-            } else {
-                info->nBytesThatMayBeginARead = __min(amountToRead,(unsigned)(endingOffset - readOffset.QuadPart));    // Don't begin a read past endingOffset
-            }
-            info->isEOF = readOffset.QuadPart + amountToRead >= fileSize.QuadPart;
-        }
-
-        _ASSERT(amountToRead >= info->nBytesThatMayBeginARead || !info->isEOF || fileSize.QuadPart == readOffset.QuadPart + amountToRead);
+        _ASSERT(amountToRead >= info->nBytesThatMayBeginARead && (!info->isEOF || fileSize.QuadPart == readOffset.QuadPart + amountToRead));
         ResetEvent(info->lap.hEvent);
         info->lap.Offset = readOffset.LowPart;
         info->lap.OffsetHigh = readOffset.HighPart;
@@ -408,7 +392,7 @@ WindowsOverlappedDataReader::startIo()
             }
         }
 
-        readOffset.QuadPart += amountToRead;
+        readOffset.QuadPart += info->nBytesThatMayBeginARead;
         info->state = Reading;
         info->offset = 0;
 
