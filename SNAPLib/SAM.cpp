@@ -1563,6 +1563,9 @@ SAMReader::createPairedReader(
     ReadClippingType clipping)
 {
     SAMReader* reader = SAMReader::create(DataSupplier::Default, fileName, genome, 0, 0, clipping);
+    if (reader == NULL) {
+        return NULL;
+    }
     return PairedReadReader::PairMatcher(5000, reader);
 }
 

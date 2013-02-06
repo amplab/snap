@@ -1489,7 +1489,7 @@ BaseAligner::incrementWeight(HashTableElement *element)
     void
 BaseAligner::applyLVStats(AlignmentResult finalResult, int finalScore)
 {
-    if (-1 == finalScore) finalScore = MAX_K;
+    if (-1 == finalScore || finalScore > MAX_K) finalScore = MAX_K;
     for (int i = 0; i < MAX_K+1; i++) {
         nanosInLVByFinalScore[finalScore][i] += nanosInLVThisRun[i];
         callsToLVByFinalScore[finalScore][i] += callsToLVThisRun[i];
