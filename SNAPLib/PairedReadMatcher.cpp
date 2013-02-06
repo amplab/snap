@@ -131,7 +131,9 @@ PairedReadMatcher::getNextReadPair(
         *read1 = one;
         *read2 = found->second;
         // update reference counts for removed read batch, release if tracker requires it
-        if (tracker.removeRead(found->second.getBatch(), &pendingReleased)) {
+        DataBatch release;
+        if (tracker.removeRead(found->second.getBatch(), &release) && pendingReleased < release) {
+            pendingReleased = release;
             checkRelease();
         }
         pending.erase(key);
