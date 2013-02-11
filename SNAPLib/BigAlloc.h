@@ -61,8 +61,8 @@ public:
     BigAllocator(size_t i_maxMemory);
     ~BigAllocator();
 
-    void *allocate(size_t amountToAllocate);
-    void assertAllMemoryUsed();
+    virtual void *allocate(size_t amountToAllocate);
+    virtual void assertAllMemoryUsed();
 
 #if     _DEBUG
     void checkCanaries();
@@ -85,4 +85,27 @@ private:
 #endif  // DEBUG
 };
 
+//
+// An allocator that doesn't actually allocate, it just counts how much it would allocate.  The idea is that
+// you can write allocations in a fairly normal looking way, call them with this to see how much would be
+// allocated, then create a real BigAllocator with that amount of memory.  That way, you don't need to
+// keep in sync the actual allocation and the code that knows how much memory will be needed.
+//
+class CountingBigAllocator : public BigAllocator
+{
+public:
+    CountingBigAllocator() :size(0), allocations(NULL), BigAllocator(0) {}
+    ~CountingBigAllocator();
 
+    virtual void *allocate(size_t amountToAllocate);
+    virtual void assertAllMemoryUsed() {}
+    size_t getMemoryUsed() {return size;}
+
+private:
+    size_t  size;
+
+    struct Allocation {
+        void *ptr;
+        Allocation *next;
+    } *allocations;
+};

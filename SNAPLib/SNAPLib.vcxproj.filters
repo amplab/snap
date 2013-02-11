@@ -115,6 +115,9 @@
     <ClCompile Include="Hamming.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ThirdPairedEndAligner.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="aligner.h">
@@ -253,6 +256,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Hamming.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ThirdPairedEndAligner.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SeedSequencer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

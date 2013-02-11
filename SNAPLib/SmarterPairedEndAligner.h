@@ -64,6 +64,7 @@ private:
     static const int MAX_BUCKETS = 32 * 1024;
     static const int MAX_READ_SIZE = 10000;
     static const int MAX_SEED_SIZE = 32;
+    static const int NUM_READS_PER_PAIR = 2;    // This is just to make it clear what the array subscripts are, it doesn't ever make sense to change
     
     char complement[256];
     int wrapOffset[MAX_SEED_SIZE];
@@ -128,7 +129,7 @@ private:
     
     FixedSizeVector<Candidate> candidates;
     
-    void alignTogether(Read *reads[2], PairedAlignmentResult *result, int lowerBound[2]);
+    void alignTogether(Read *reads[NUM_READS_PER_PAIR], PairedAlignmentResult *result, int lowerBound[NUM_READS_PER_PAIR]);
 
     void clearState();
     
@@ -139,7 +140,8 @@ private:
     void computeRC(Read *read, char *outputBuf);
     
     void scoreBucket(Bucket *bucket, int readId, Direction direction, unsigned location, int seedOffset, int seedLength,
-                     const char *readData, const char *qualityString, int readLen, int scoreLimit, double *matchProbability);
+                     const char *readData, const char *reversedReaData, const char *qualityString, const char *reversedQualityString,
+                     int readLen, int scoreLimit, double *matchProbability);
 
     void scoreBucketMate(Bucket *bucket, int readId, Direction direction, unsigned location, Read *mate, int scoreLimit, int *mateMapq);
     
@@ -147,10 +149,15 @@ private:
     inline unsigned distance(unsigned a, unsigned b) { return (a > b) ? a - b : b - a; }
     
     // Get the confDiff value to use given # of popular seeds in each [read][Direction] orientation.
-    int getConfDiff(int seedsTried, int popularSeeds[2][NUM_DIRECTIONS], int seedHits[2][NUM_DIRECTIONS]);
+    int getConfDiff(int seedsTried, int popularSeeds[NUM_READS_PER_PAIR][NUM_DIRECTIONS], int seedHits[2][NUM_DIRECTIONS]);
 
     // Sort candidates in decreasing order of seed hits.
     static inline bool compareCandidates(const Candidate &c1, const Candidate &c2) {
         return c1.seedHits > c2.seedHits;
     }
+
+    char *reversedRead[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
+    char *reversedQuality[NUM_READS_PER_PAIR];
+
+
 };

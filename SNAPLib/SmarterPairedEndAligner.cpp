@@ -25,6 +25,7 @@ Revision History:
 #include "SmarterPairedEndAligner.h"
 #include "LandauVishkin.h"
 #include "mapq.h"
+#include "directions.h"
 
 using namespace std;
 
@@ -107,17 +108,30 @@ SmarterPairedEndAligner::SmarterPairedEndAligner(
                                     maxSeeds, adaptiveConfDiffThreshold);
     mateAligner = new BaseAligner(index, confDiff, maxHits, maxK, maxReadSize,
                                   maxSeeds, adaptiveConfDiffThreshold, &lv);
+
+    //
+    // Allocate these all in one big allocation.
+    //
+    reversedRead[FORWARD][0] = (char *)BigAlloc(maxReadSize * 6);   // 4 for each read and forward/rc + 2 for reverse quality (RC quality == reverse quality)
+    reversedRead[RC][0] = reversedRead[FORWARD][0] + maxReadSize;
+    reversedRead[FORWARD][1] = reversedRead[FORWARD][0] + 2 * maxReadSize;
+    reversedRead[RC][1] = reversedRead[FORWARD][0] + 3 * maxReadSize;
+    reversedQuality[0] = reversedRead[FORWARD][0] + 4 * maxReadSize;
+    reversedQuality[1] = reversedRead[FORWARD][0] + 5 * maxReadSize;
 }
 
 
 SmarterPairedEndAligner::~SmarterPairedEndAligner()
 {
     delete[] buckets;
+    BigDealloc(reversedRead[FORWARD][0]);
+    delete singleAligner;
+    delete mateAligner;
 }
 
 void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentResult *result)
 {
-    Read *reads[2] = {read0, read1};
+    Read *reads[NUM_READS_PER_PAIR] = {read0, read1};
     int numNotFound = 0;
     int numCertainlyNotFound = 0;
     int numIgnoredMulti = 0;  // MultiHits where all seeds returned too many hits
@@ -131,12 +145,12 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
     result->location[0] = 0xFFFFFFFF;
     result->location[1] = 0xFFFFFFFF;
 
-    unsigned bestScore[2] = {INFINITE_SCORE, INFINITE_SCORE};
-    unsigned bestMapq[2] = {0, 0};
-    unsigned singleLoc[2] = {0xFFFFFFFF, 0xFFFFFFFF};
-    Direction singleDirection[2] = {FORWARD, FORWARD};
-    bool certainlyNotFound[2] = {false, false};
-    bool bestScoreCertain[2] = {false, false};
+    unsigned bestScore[NUM_READS_PER_PAIR] = {INFINITE_SCORE, INFINITE_SCORE};
+    unsigned bestMapq[NUM_READS_PER_PAIR] = {0, 0};
+    unsigned singleLoc[NUM_READS_PER_PAIR] = {0xFFFFFFFF, 0xFFFFFFFF};
+    Direction singleDirection[NUM_READS_PER_PAIR] = {FORWARD, FORWARD};
+    bool certainlyNotFound[NUM_READS_PER_PAIR] = {false, false};
+    bool bestScoreCertain[NUM_READS_PER_PAIR] = {false, false};
     
     TRACE("Aligning read pair %.*s:\n%.*s\n%.*s\n",
             reads[0]->getIdLength(), reads[0]->getId(),
@@ -153,7 +167,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
     // First try aligning each end alone and looking for its mate nearby if it was confident.
     // TODO: Guess which end will be faster to search for first based on it seeds?
     // TODO: We'll want to search for chimeras here when the second read is not found.
-    for (int r = 0; r < 2; r++) {
+    for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
         unsigned loc0, loc1;
         Direction direction0, direction1;
         int score0, score1;
@@ -234,7 +248,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
         TRACE("One read is certainly not found: %d %d %d, %d %d %d\n",
                 certainlyNotFound[0], singleLoc[0], bestScore[0],
                 certainlyNotFound[1], singleLoc[1], bestScore[1]);
-        for (int r = 0; r < 2; r++) {
+        for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
             if (certainlyNotFound[r]) {
                 result->status[r] = NotFound;
             } else {
@@ -251,7 +265,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
     if (numSingleWithNotFound == 1 && numNotFound == 1) {
         // One read was Single and the other was NotFound, neither near its mate nor elsewhere.
         TRACE("One read was single and its mate was NotFound either nearby or by itself\n");
-        for (int r = 0; r < 2; r++) {
+        for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
             if (singleLoc[r] == 0xFFFFFFFF) {
                 result->status[r] = NotFound;
             } else {
@@ -276,7 +290,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
         return;
     }
 
-    int lowerBound[2] = {0, 0};
+    int lowerBound[NUM_READS_PER_PAIR] = {0, 0};
     if (bestScoreCertain[0]) {
         lowerBound[0] = bestScore[0] < confDiff + 1 ? 0 : bestScore[0];
     }
@@ -302,7 +316,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
 }
 
 
-void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResult *result, int lowerBound[2])
+void SmarterPairedEndAligner::alignTogether(Read *reads[NUM_READS_PER_PAIR], PairedAlignmentResult *result, int lowerBound[NUM_READS_PER_PAIR])
 {
     int readLen[2];
     const char *readData[2][2];     // [read][direction]
@@ -320,40 +334,54 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
     int bestScore = INFINITE_SCORE;
     double probabilityOfBestPair = 0;
     double probabilityOfAllPairs = 0;
-    double probabilityOfAllSingles[2] = {0, 0};
+    double probabilityOfAllSingles[NUM_READS_PER_PAIR] = {0, 0};
     int secondBestScore = INFINITE_SCORE;
     
     // Locations of best scoring pair
-    int bestLoc[2] = {0xFFFFFFFF, 0xFFFFFFFF};
-    Direction bestDirection[2];
-    int bestIsMulti[2] = {0, 0};
-    int bestScores[2] = {INFINITE_SCORE, INFINITE_SCORE};
-    int bestMapqs[2] = {0, 0};
+    int bestLoc[NUM_READS_PER_PAIR] = {0xFFFFFFFF, 0xFFFFFFFF};
+    Direction bestDirection[NUM_READS_PER_PAIR];
+    int bestIsMulti[NUM_READS_PER_PAIR] = {0, 0};
+    int bestScores[NUM_READS_PER_PAIR] = {INFINITE_SCORE, INFINITE_SCORE};
+    int bestMapqs[NUM_READS_PER_PAIR] = {0, 0};
   
     //
     // Probabilities for everything measured
     //
-    double allProbabilities[2] = {0.0, 0.0};
+    double allProbabilities[NUM_READS_PER_PAIR] = {0.0, 0.0};
     
-    int disjointSeedsUsed[2][NUM_DIRECTIONS] = {{0, 0}, {0, 0}};   // [read][direction]
-    int popularSeeds[2][NUM_DIRECTIONS] = {{0, 0}, {0, 0}};        // [read][direction]
-    int seedHits[2][NUM_DIRECTIONS] = {{0, 0}, {0, 0}};            // [read][direction]
+    int disjointSeedsUsed[NUM_READS_PER_PAIR][NUM_DIRECTIONS] = {{0, 0}, {0, 0}};   // [read][direction]
+    int popularSeeds[NUM_READS_PER_PAIR][NUM_DIRECTIONS] = {{0, 0}, {0, 0}};        // [read][direction]
+    int seedHits[NUM_READS_PER_PAIR][NUM_DIRECTIONS] = {{0, 0}, {0, 0}};            // [read][direction]
     int totalPopularSeeds = 0;
     
-    int nextSeed[2] = {0, 0};        // Which seed to try next on each read
-    int wrapCount[2] = {0, 0};       // How many times we've wraped around on each read
-    int firstPassNotSkippedSeeds[2] = {0, 0};
-    unsigned smallestSkippedSeed[2] = {0xffffffff, 0xffffffff};
+    int nextSeed[NUM_READS_PER_PAIR] = {0, 0};        // Which seed to try next on each read
+    int wrapCount[NUM_READS_PER_PAIR] = {0, 0};       // How many times we've wraped around on each read
+    int firstPassNotSkippedSeeds[NUM_READS_PER_PAIR] = {0, 0};
+    unsigned smallestSkippedSeed[NUM_READS_PER_PAIR] = {0xffffffff, 0xffffffff};
 
     int scoreLimit = maxK + confDiff + 1;
 
     unsigned candidatesTried = 0;
 
+    //
+    // Compute the reversed data.
+    //
+    for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
+        for (Direction dir = FORWARD; dir < NUM_DIRECTIONS; dir++) {
+            for (int i = 0; i < readLen[r]; i++) {
+                reversedRead[r][dir][i] = readData[r][dir][readLen[r] - i - 1];
+            }
+        }
+        for (int i = 0; i < readLen[r]; i++) {
+            reversedQuality[r][i] = quality[r][readLen[r] - i - 1];
+        }
+    }
+
     unsigned seedsTried = 0;
     bool shouldStop = false;
     while (seedsTried < maxSeeds && !shouldStop) {
         // Try one seed from each read just to keep things simple.
-        for (int r = 0; r < 2; r++) {
+        for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
             // TODO: We could stop searching for one of the reads early if we rule it out via confDiff?
             if (wrapCount[r] >= seedLen) {
                 continue;           // We've tried all possible seeds for this read
@@ -362,8 +390,8 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
             // Look up the current seed.
             int seedPos = nextSeed[r];
             TRACE("Trying read %d seed %d: %.*s\n", r, seedPos, seedLen, readData[r][0] + seedPos);
-            if (Seed::DoesTextRepresentASeed(readData[r][0] + seedPos, seedLen)) {
-                Seed seed(readData[r][0] + seedPos, seedLen);
+            if (Seed::DoesTextRepresentASeed(readData[r][FORWARD] + seedPos, seedLen)) {
+                Seed seed(readData[r][FORWARD] + seedPos, seedLen);
                 unsigned nHits[NUM_DIRECTIONS];          // Number of hits in forward and RC directions
                 const unsigned *hits[NUM_DIRECTIONS];    // Actual hit locations in each direction
 
@@ -436,7 +464,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                     seedsTried, finishNow, bestScoreOfAnyUnseenPair);
             
             // First, sort the bucket vectors to let us find viable pairs faster.
-            for (int r = 0; r < 2; r++) {
+            for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
                 for (Direction direction = 0; direction < 2; direction++) {
                     sort(bucketLocations[r][direction].begin(), bucketLocations[r][direction].end());
 #ifdef TRACE_PAIRED_ALIGNER
@@ -457,7 +485,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
             candidates.clear();
             unsigned pairsConsidered = 0;
             int bestPossibleScore = bestScoreOfAnyUnseenPair;
-            for (int r0 = 0; r0 < 2; r0++) {
+            for (int r0 = 0; r0 < NUM_READS_PER_PAIR; r0++) {
                 for (Direction direction0 = 0; direction0 < 2; direction0++) {
                     int r1  = 1 - r0;
                     Direction direction1 = OppositeDirection(direction0);
@@ -544,7 +572,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                     bestMateScore = b0->mateScore;
                 double matchProbability = 0.0;
 
-                scoreBucket(b0, r0, direction0, loc0, 0, 0, readData[r0][direction0], quality[r0], readLen[r0], scoreLimit - bestMateScore + 1, &matchProbability);
+                scoreBucket(b0, r0, direction0, loc0, 0, 0, readData[r0][direction0], reversedRead[r0][direction0], quality[r0], reversedQuality[r0], readLen[r0], scoreLimit - bestMateScore + 1, &matchProbability);
                 _ASSERT(matchProbability >= 0);
                 probabilityOfAllSingles[r0] += matchProbability;
 
@@ -642,10 +670,10 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
     
     // Return based on the best and second-best scores so far.
     if ((unsigned)bestScore <= maxK) {
-        result->mapq[0] = result->mapq[1] = computeMAPQ(probabilityOfAllPairs, probabilityOfBestPair, bestScore, firstPassNotSkippedSeeds, smallestSkippedSeed, bestLoc[0], 0, NULL, 0, false);
+        result->mapq[0] = result->mapq[1] = computeMAPQ(probabilityOfAllPairs, probabilityOfBestPair, bestScore, 0);
 
         if (bestScore + realConfDiff <= secondBestScore) {
-            for (int i = 0; i < 2; i++) {
+            for (int i = 0; i < NUM_READS_PER_PAIR; i++) {
                 result->status[i] = bestIsMulti[i] ? MultipleHits : SingleHit;
                 result->location[i] = bestLoc[i];
                 result->direction[i] = bestDirection[i];
@@ -653,7 +681,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
             }
         } else {
             // There are multiple hits but we should still report the positions of a good one.
-            for (int i = 0; i < 2; i++) {
+            for (int i = 0; i < NUM_READS_PER_PAIR; i++) {
                 result->status[i] = MultipleHits;
                 result->location[i] = bestLoc[i];
                 result->direction[i] = bestDirection[i];
@@ -662,7 +690,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
         }
     } else {
         // We didn't find any viable pair, but let's see whether we have an alignment for at least one end.
-        for (int r = 0; r < 2; r++) {
+        for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
             unsigned best = INFINITE_SCORE;
             unsigned second = INFINITE_SCORE;
             unsigned bestLoc = 0xFFFFFFFF;
@@ -678,7 +706,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[2], PairedAlignmentResul
                             best = bucket->score;
                             bestLoc = loc + bucket->bestOffset;
                             bestDirection = direction;
-                            bestMapq = computeMAPQ(probabilityOfAllSingles[r], bucket->matchProbability, bestScore, firstPassNotSkippedSeeds, smallestSkippedSeed, bestLoc, 0, NULL, 0, false);
+                            bestMapq = computeMAPQ(probabilityOfAllSingles[r], bucket->matchProbability, bestScore, 0);
                         } else if (bucket->score < second) {
                             second = bucket->score;
                         }
@@ -709,7 +737,9 @@ void SmarterPairedEndAligner::scoreBucket(
         int                 seedOffset,
         int                 seedLength,
         const char *        readData, 
+        const char *        reverseReadData,
         const char *        qualityString, 
+        const char *        reverseQualityString,
         int                 readLen, 
         int                 scoreLimit, 
         double *            matchProbability)
@@ -758,54 +788,38 @@ void SmarterPairedEndAligner::scoreBucket(
                 TRACE("  Genome: %.*s\n  Read:   %.*s\n", readLen, refData, readLen, readData);
                 _uint64 cacheKey = ((_uint64) readId) << 33 | ((_uint64) direction) << 32 | (location + offset);
 
-                        
-
-                score = lv.computeEditDistance(refData, genomeDataLength, readData, qualityString, readLen, scoreLimit, &localMatchProbability, cacheKey);
                 TRACE("  Called LV at %lu with limit %d: %d\n", location + offset, scoreLimit, score);
-#if     0
                 // Compute the distance separately in the forward and backward directions from the seed, to allow
                 // arbitrary offsets at both the start and end but not have to pay the cost of exploring all start
                 // shifts in BoundedStringDistance
                 double matchProb1, matchProb2;
                 int score1, score2;
                 // First, do the forward direction from where the seed aligns to past of it
-                int readLen = readToScore->getDataLength();
-                int seedLen = genomeIndex->getSeedLength();
-                int seedOffset = candidateToScore->seedOffset; // Since the data is reversed
+
                 int tailStart = seedOffset + seedLen;
 
-                score1 = landauVishkin->computeEditDistance(data + tailStart, genomeDataLength - tailStart, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
+                score1 = lv.computeEditDistance(refData + tailStart, genomeDataLength - tailStart, readData + tailStart, qualityString + tailStart, readLen - tailStart,
                     scoreLimit, &matchProb1);
                 if (score1 == -1) {
                     score = -1;
                 } else {
                     // The tail of the read matched; now let's reverse the reference genome data and match the head
                     int limitLeft = scoreLimit - score1;
-                    score2 = reverseLandauVishkin->computeEditDistance(data + seedOffset, seedOffset + MAX_K, reversedRead[elementToScore->direction] + readLen - seedOffset,
-                                                                                read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2);
-
+                    score2 = reverseLV.computeEditDistance(refData + seedOffset, seedOffset + MAX_K, reverseReadData + readLen - seedOffset,
+                                                                                reverseQualityString + readLen - seedOffset, seedOffset, limitLeft, &matchProb2);
                     if (score2 == -1) {
                         score = -1;
                     } else {
                         score = score1 + score2;
                         // Map probabilities for substrings can be multiplied, but make sure to count seed too
-                        matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
+                        localMatchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
                     }
                 }
 
-                if (score != -1) {
-                    if (similarityMap != NULL) {
-                        biggestClusterScored = __max(biggestClusterScored,
-                                similarityMap->getNumClusterMembers(genomeLocation));
-                    }
-                } else {
-                    matchProbability = 0;
-                }
-                        
-                if (score < 0) {
+                if (score == -1) {
+                    localMatchProbability = 0;
                     score = INFINITE_SCORE;
                 }
-#endif  // 0
             }
 
             if (score < bucket->score || score == bucket->score && localMatchProbability > bucket->matchProbability) {

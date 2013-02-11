@@ -442,3 +442,26 @@ BigAllocator::checkCanaries()
     _ASSERT(allOK);
 }
 #endif  // DEBUG
+
+
+    void *
+CountingBigAllocator::allocate(size_t sizeToAllocate)
+{
+    size += sizeToAllocate;
+
+    Allocation *allocation = new Allocation;
+    allocation->next = allocations;
+    allocation->ptr = malloc(sizeToAllocate);
+    allocations = allocation;
+    return allocation->ptr;
+}
+
+CountingBigAllocator::~CountingBigAllocator()
+{
+    while (NULL != allocations) {
+        Allocation *allocation = allocations;
+        allocations = allocation->next;
+        free(allocation->ptr);
+        delete allocation;
+    }
+}

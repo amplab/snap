@@ -32,6 +32,7 @@ Revision History:
 #include "BigAlloc.h"
 #include "mapq.h"
 #include "Hamming.h"
+#include "SeedSequencer.h"
 
 using std::min;
 
@@ -335,7 +336,7 @@ Return Value:
     // A bitvector for used seeds, indexed on the starting location of the seed within the read.
     //
     if (inputRead->getDataLength() > maxReadSize) {
-        fprintf(stderr,"BaseAligner:: got too big read (%d > %d)", inputRead->getDataLength(),maxReadSize);
+        fprintf(stderr,"BaseAligner:: got too big read (%d > %d)", inputRead->getDataLength(), maxReadSize);
         exit(1);
     }
 
@@ -479,7 +480,7 @@ Return Value:
 
                 return finalResult;
             }
-            nextSeedToTest = getWrappedNextSeedToTest(wrapCount);
+            nextSeedToTest = GetWrappedNextSeedToTest(seedLen, wrapCount);
 
             mostSeedsContainingAnyParticularBase[FORWARD] = mostSeedsContainingAnyParticularBase[RC] = wrapCount + 1;
         }
@@ -801,7 +802,7 @@ Return Value:
         _ASSERT(weightListToCheck <= maxSeedsToUse);
 
         if (__min(lowestPossibleScoreOfAnyUnseenLocation[FORWARD],lowestPossibleScoreOfAnyUnseenLocation[RC]) > scoreLimit || forceResult) {
-            if (weightListToCheck == 0 /*|| weightListToCheck == 1 && forceResult && lvScores > 20*/) {
+            if (weightListToCheck == 0) {
                 //
                 // We've scored all live candidates and excluded all non-candidates, or we've checked enough that we've hit the cutoff.  We have our
                 // answer.
@@ -815,8 +816,7 @@ Return Value:
                         *result = SingleHit;
                     }
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  
-                                            smallestSkippedSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap, biggestClusterScored, usedHammingThisAlignment);
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, popularSeedsSkipped);
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
@@ -826,8 +826,7 @@ Return Value:
                     return true;
                 } else {
                     *result = MultipleHits;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, firstPassSeedsNotSkipped,  
-                                        smallestSkippedSeed, bestScoreGenomeLocation, popularSeedsSkipped, similarityMap, biggestClusterScored, usedHammingThisAlignment);
+                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, popularSeedsSkipped);
                     return true;
                 }
             }
@@ -836,7 +835,6 @@ Return Value:
             //
             forceResult = true;
         } else if (weightListToCheck == 0) {
-            _ASSERT(!forceResult);  // This assert is here beacause I'm deleting some code that I believe is dead (and that otherwise looked wrong).  --bb
             //
             // No candidates, look for more.
             //
@@ -1629,7 +1627,7 @@ BaseAligner::ComputeHitDistribution(
                 //
                 return;
             }
-            nextSeedToTest = getWrappedNextSeedToTest(wrapCount);
+            nextSeedToTest = GetWrappedNextSeedToTest(seedLen, wrapCount);
         }
 
         while (nextSeedToTest < nPossibleSeeds && IsSeedUsed(nextSeedToTest)) {

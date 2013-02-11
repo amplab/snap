@@ -97,6 +97,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
       <WholeProgramOptimization>true</WholeProgramOptimization>
+      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -131,6 +132,7 @@
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <AdditionalIncludeDirectories>
       </AdditionalIncludeDirectories>
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -179,6 +181,7 @@
     <ClInclude Include="read.h" />
     <ClInclude Include="sam.h" />
     <ClInclude Include="seed.h" />
+    <ClInclude Include="SeedSequencer.h" />
     <ClInclude Include="SimilarityMap.h" />
     <ClInclude Include="SimplePairedEndAligner.h" />
     <ClInclude Include="SingleAligner.h" />
@@ -186,6 +189,7 @@
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="Tables.h" />
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="ThirdPairedEndAligner.h" />
     <ClInclude Include="VariableSizeVector.h" />
     <ClInclude Include="VCF.h" />
     <ClInclude Include="wgsim.h" />
@@ -232,6 +236,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Tables.cpp" />
+    <ClCompile Include="ThirdPairedEndAligner.cpp" />
     <ClCompile Include="VCF.cpp" />
     <ClCompile Include="wgsim.cpp" />
   </ItemGroup>
