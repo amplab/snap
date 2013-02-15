@@ -100,6 +100,15 @@
     <ClCompile Include="PairedReadMatcher.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="DataWriter.cpp">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ReadWriter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ReadReader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="aligner.h">
@@ -214,6 +223,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="DataReader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FileFormat.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DataWriter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

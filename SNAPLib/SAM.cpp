@@ -26,6 +26,7 @@ Environment:
 #include "ParallelTask.h"
 #include "Util.h"
 #include "ReadSupplierQueue.h"
+#include "FileFormat.h"
 
 using std::max;
 using std::min;
@@ -1586,3 +1587,439 @@ SAMReader::createPairedReadSupplierGenerator(const char *fileName, int numThread
     queue->startReaders();
     return queue;
 }
+
+class SAMFormat : public FileFormat
+{
+public:
+    SAMFormat(bool i_useM) : useM(i_useM) {}
+
+    virtual bool isFormatOf(const char* filename) const;
+
+    virtual bool writeHeader(
+        const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize,
+        bool sorted, int argc, const char **argv, const char *version, const char *rgLine) const;
+
+    virtual bool writeRead(
+        const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
+        size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
+        unsigned genomeLocation, bool isRC,
+        bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
+        AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, bool mateIsRC = false) const; 
+
+private:
+    static const char * computeCigarString(const Genome * genome, LandauVishkinWithCigar * lv,
+        char * cigarBuf, int cigarBufLen, char * cigarBufWithClipping, int cigarBufWithClippingLen,
+        const char * data, unsigned dataLength, unsigned basesClippedBefore, unsigned basesClippedAfter,
+        unsigned genomeLocation, bool isRC, bool useM, int * editDistance);
+
+    const bool useM;
+};
+
+const FileFormat* FileFormat::SAM[] = { new SAMFormat(false), new SAMFormat(true) };
+
+    bool
+SAMFormat::isFormatOf(
+    const char* filename) const
+{
+    return util::stringEndsWith(filename, ".sam");
+}
+
+    bool
+SAMFormat::writeHeader(
+    const Genome *genome,
+    char *header,
+    size_t headerBufferSize,
+    size_t *headerActualSize,
+    bool sorted,
+    int argc,
+    const char **argv,
+    const char *version,
+    const char *rgLine)
+    const
+{
+    char *commandLine;
+	size_t commandLineSize = 0;
+	for (int i = 0; i < argc; i++) {
+		commandLineSize += strlen(argv[i]) + 1;	// +1 is either a space or the terminating null
+	}
+	commandLine = new char[commandLineSize];
+	commandLine[0] = '\0';
+	for (int i = 0; i < argc; i++) {
+		strcat(commandLine,argv[i]);
+		if (i != argc-1) {
+			strcat(commandLine," ");
+		}
+	}
+
+    size_t bytesConsumed = snprintf(header, headerBufferSize, "@HD\tVN:1.4\tSO:%s\n%s\n@PG\tID:SNAP\tPN:SNAP\tCL:%s\tVN:%s\n", 
+		sorted ? "coordinate" : "unsorted",
+        rgLine == NULL ? "@RG\tID:FASTQ\tSM:sample" : rgLine,
+        commandLine,version);
+
+	delete [] commandLine;
+	commandLine = NULL;
+    if (bytesConsumed >= headerBufferSize) {
+        fprintf(stderr,"SAMWriter: header buffer too small\n");
+        return false;
+    }
+
+#ifndef SKIP_SQ_LINES
+    // Write an @SQ line for each chromosome / piece in the genome
+    const Genome::Piece *pieces = genome->getPieces();
+    int numPieces = genome->getNumPieces();
+    unsigned genomeLen = genome->getCountOfBases();
+    for (int i = 0; i < numPieces; i++) {
+        unsigned start = pieces[i].beginningOffset;
+        unsigned end = (i + 1 < numPieces) ? pieces[i+1].beginningOffset : genomeLen;
+        bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%u\n", pieces[i].name, end - start);
+
+        if (bytesConsumed >= headerBufferSize) {
+            fprintf(stderr,"SAMWriter: header buffer too small\n");
+            return false;
+        }
+    }
+#endif // SKIP_SQ_LINES
+
+    *headerActualSize = bytesConsumed;
+    return true;
+}
+    
+    bool
+getSAMData(
+    const Genome * genome,
+    LandauVishkinWithCigar * lv,
+    // output data
+    char* data,
+    char* quality,
+    int dataSize,
+    const char*& pieceName,
+    int& pieceIndex,
+    int& flags,
+    unsigned& positionInPiece,
+    int& mapQuality,
+    const char*& matePieceName,
+    unsigned& matePositionInPiece,
+    _int64& templateLength,
+    unsigned& fullLength,
+    const char*& clippedData,
+    unsigned& clippedLength,
+    unsigned& basesClippedBefore,
+    unsigned& basesClippedAfter,
+    // input data
+    size_t& qnameLen,
+    Read * read,
+    AlignmentResult result, 
+    unsigned genomeLocation,
+    bool isRC,
+    bool useM,
+    bool hasMate,
+    bool firstInPair,
+    Read * mate, 
+    AlignmentResult mateResult,
+    unsigned mateLocation,
+    bool mateIsRC)
+{
+    pieceName = "*";
+    positionInPiece = 0;
+    mapQuality = 0;
+    const char *cigar = "*";
+    templateLength = 0;
+    
+    if (0 == qnameLen) {
+         qnameLen = read->getIdLength();
+    }
+
+    //
+    // If the aligner said it didn't find anything, treat it as such.  Sometimes it will emit the
+    // best match that it found, even if it's not within the maximum edit distance limit (but will
+    // then say NotFound).  Here, we force that to be SAM_UNMAPPED.
+    //
+    if (NotFound == result) {
+        genomeLocation = 0xffffffff;
+    }
+
+    // Write the data and quality strings. If the read is reverse complemented, these need to
+    // be backwards from the original read. Also, both need to be unclipped.
+    clippedLength = read->getDataLength();
+    fullLength = read->getUnclippedLength();
+    if (fullLength > dataSize) {
+        return false;
+    }
+    if (isRC) {
+      for (unsigned i = 0; i < fullLength; i++) {
+        data[fullLength - 1 - i] = COMPLEMENT[read->getUnclippedData()[i]];
+        quality[fullLength - 1 - i] = read->getUnclippedQuality()[i];
+      }
+      clippedData = &data[fullLength - clippedLength - read->getFrontClippedLength()];
+      basesClippedBefore = fullLength - clippedLength - read->getFrontClippedLength();
+      basesClippedAfter = read->getFrontClippedLength();
+    } else {
+      memcpy(data, read->getUnclippedData(), read->getUnclippedLength());
+      memcpy(quality, read->getUnclippedQuality(), read->getUnclippedLength());
+      clippedData = read->getData();
+      basesClippedBefore = read->getFrontClippedLength();
+      basesClippedAfter = fullLength - clippedLength - basesClippedBefore;
+    }
+
+    int editDistance = -1;
+    if (genomeLocation != 0xFFFFFFFF) {
+        // This could be either a single hit read or a multiple hit read where we just
+        // returned one location, but either way, let's print that location. We will then
+        // set the quality to 60 if it was single or 0 if it was multiple. These are the
+        // values the SAM FAQ suggests for aligners that don't compute confidence scores.
+        if (isRC) {
+            flags |= SAM_REVERSE_COMPLEMENT;
+        }
+        const Genome::Piece *piece = genome->getPieceAtLocation(genomeLocation);
+        pieceName = piece->name;
+        pieceIndex = piece - genome->getPieces();
+        positionInPiece = genomeLocation - piece->beginningOffset + 1; // SAM is 1-based
+        mapQuality = (result == SingleHit || result == CertainHit) ? 60 : 0;
+    } else {
+        flags |= SAM_UNMAPPED;
+    }
+
+    if (hasMate) {
+        flags |= SAM_MULTI_SEGMENT;
+        flags |= (firstInPair ? SAM_FIRST_SEGMENT : SAM_LAST_SEGMENT);
+        if (mateLocation != 0xFFFFFFFF) {
+            const Genome::Piece *piece = genome->getPieceAtLocation(mateLocation);
+            matePieceName = piece->name;
+            matePositionInPiece = mateLocation - piece->beginningOffset + 1;
+
+            if (mateIsRC) {
+                flags |= SAM_NEXT_REVERSED;
+            }
+
+            if (genomeLocation == 0xFFFFFFFF) {
+                //
+                // The SAM spec says that for paired reads where exactly one end is unmapped that the unmapped
+                // half should just have RNAME and POS copied from the mate.
+                //
+                pieceName = matePieceName;
+                matePieceName = "=";
+                positionInPiece = matePositionInPiece;
+            }
+
+        } else {
+            flags |= SAM_NEXT_UNMAPPED;
+            //
+            // The mate's unmapped, so point it at us.
+            //
+            matePieceName = "=";
+            matePositionInPiece = positionInPiece;
+        }
+
+        if (genomeLocation != 0xffffffff && mateLocation != 0xffffffff) {
+            flags |= SAM_ALL_ALIGNED;
+            // Also compute the length of the whole paired-end string whose ends we saw. This is slightly
+            // tricky because (a) we may have clipped some bases before/after each end and (b) we need to
+            // give a signed result based on whether our read is first or second in the pair.
+            _int64 myStart = genomeLocation - basesClippedBefore;
+            _int64 myEnd = genomeLocation + clippedLength + basesClippedAfter;
+            _int64 mateBasesClippedBefore = mate->getFrontClippedLength();
+            _int64 mateBasesClippedAfter = mate->getUnclippedLength() - mate->getDataLength() - mateBasesClippedBefore;
+            _int64 mateStart = mateLocation - (mateIsRC ? mateBasesClippedAfter : mateBasesClippedBefore);
+            _int64 mateEnd = mateLocation + mate->getDataLength() + (!mateIsRC ? mateBasesClippedAfter : mateBasesClippedBefore);
+			if (pieceName == matePieceName) { // pointer (not value) comparison, but that's OK.
+				if (myStart < mateStart) {
+					templateLength = mateEnd - myStart;
+				} else {
+					templateLength = -(myEnd - mateStart);
+				}
+ 			} // otherwise leave TLEN as zero.
+        }
+
+        if (pieceName == matePieceName) {
+            matePieceName = "=";     // SAM Spec says to do this when they're equal (and not *, which won't happen because this is a pointer, not string, compare)
+        }
+    }
+    return true;
+}
+
+    bool
+SAMFormat::writeRead(
+    const Genome * genome,
+    LandauVishkinWithCigar * lv,
+    char * buffer,
+    size_t bufferSpace, 
+    size_t * spaceUsed,
+    size_t qnameLen,
+    Read * read,
+    AlignmentResult result, 
+    unsigned genomeLocation,
+    bool isRC,
+    bool hasMate,
+    bool firstInPair,
+    Read * mate, 
+    AlignmentResult mateResult,
+    unsigned mateLocation,
+    bool mateIsRC) const
+{
+    const int MAX_READ = 10000;
+    const int cigarBufSize = MAX_READ * 2;
+    char cigarBuf[cigarBufSize];
+
+    const int cigarBufWithClippingSize = MAX_READ * 2 + 32;
+    char cigarBufWithClipping[cigarBufWithClippingSize];
+
+    int flags = 0;
+    const char *pieceName = "*";
+    int pieceIndex = -1;
+    unsigned positionInPiece = 0;
+    int mapQuality = 0;
+    const char *cigar = "*";
+    const char *matePieceName = "*";
+    unsigned matePositionInPiece = 0;
+    _int64 templateLength = 0;
+
+    char data[MAX_READ];
+    char quality[MAX_READ];
+
+    const char* clippedData;
+    unsigned fullLength;
+    unsigned clippedLength;
+    unsigned basesClippedBefore;
+    unsigned basesClippedAfter;
+    int editDistance;
+
+    if (! getSAMData(genome, lv, data, quality, MAX_READ, pieceName, pieceIndex, 
+        flags, positionInPiece, mapQuality, matePieceName, matePositionInPiece, templateLength,
+        fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
+        qnameLen, read, result, genomeLocation, isRC, useM,
+        hasMate, firstInPair, mate, mateResult, mateLocation, mateIsRC))
+    {
+        return false;
+    }
+    if (genomeLocation != 0xFFFFFFFF) {
+        cigar = computeCigarString(genome, lv, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize, 
+                                   clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
+                                   genomeLocation, isRC, useM, &editDistance);
+    }
+
+    // Write the SAM entry, which requires the following fields:
+    //
+    // 1. QNAME: Query name of the read or the read pair
+    // 2. FLAG: Bitwise flag (pairing, strand, mate strand, etc.)
+    // 3. RNAME: Reference sequence name
+    // 4. POS: 1-Based leftmost position of clipped alignment
+    // 5. MAPQ: Mapping quality (Phred-scaled)
+    // 6. CIGAR: Extended CIGAR string (operations: MIDNSHP)
+    // 7. MRNM: Mate reference name (‘=’ if same as RNAME)
+    // 8. MPOS: 1-based leftmost mate position
+    // 9. ISIZE: Inferred insert size
+    // 10. SEQQuery: Sequence on the same strand as the reference
+    // 11. QUAL: Query quality (ASCII-33=Phred base quality)    
+
+    //
+    // Some FASTQ files have spaces in their ID strings, which is illegal in SAM.  Just truncate them at the space.
+    //
+    const char *firstSpace = strnchr(read->getId(),' ',qnameLen);
+    if (NULL != firstSpace) {
+        qnameLen = (unsigned)(firstSpace - read->getId());
+    }
+
+    const int nmStringSize = 30;// Big enough that it won't buffer overflow regardless of the value of editDistance
+    char nmString[nmStringSize];  
+    if (editDistance >= 0) {
+        snprintf(nmString, nmStringSize, "\tNM:i:%d",editDistance);
+    } else {
+        nmString[0] = '\0';
+    }
+
+    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s\tPG:Z:SNAP\tRG:Z:FASTQ%s\n",
+        qnameLen, read->getId(),
+        flags,
+        pieceName,
+        positionInPiece,
+        mapQuality,
+        cigar,
+        matePieceName,
+        matePositionInPiece,
+        templateLength,
+        fullLength, data,
+        fullLength, quality,
+        nmString);
+
+    if (charsInString > bufferSpace) {
+        //
+        // Out of buffer space.
+        //
+        return false;
+    } else if (charsInString == bufferSpace) {
+      buffer[bufferSpace-1] = '\n'; // overwrite trailing null with newline
+    }
+
+
+    if (NULL != spaceUsed) {
+        *spaceUsed = charsInString;
+    }
+    return true;
+}
+
+// Compute the CIGAR edit sequence string for a read against a given genome location.
+// Returns this string if possible or "*" if we fail to compute it (which would likely
+// be a bug due to lack of buffer space). The pointer returned may be to cigarBuf so it
+// will only be valid until computeCigarString is called again.
+    const char *
+SAMFormat::computeCigarString(
+    const Genome *              genome,
+    LandauVishkinWithCigar *    lv,
+    char *                      cigarBuf,
+    int                         cigarBufLen,
+    char *                      cigarBufWithClipping,
+    int                         cigarBufWithClippingLen,
+    const char *                data,
+    unsigned                    dataLength,
+    unsigned                    basesClippedBefore,
+    unsigned                    basesClippedAfter,
+    unsigned                    genomeLocation,
+    bool                        isRC,
+	bool						useM,
+    int *                       editDistance
+)
+{
+    const char *reference = genome->getSubstring(genomeLocation, dataLength);
+    if (NULL != reference) {
+        *editDistance = lv->computeEditDistance(
+                            genome->getSubstring(genomeLocation, dataLength),
+                            dataLength,
+                            data,
+                            dataLength,
+                            MAX_K - 1,
+                            cigarBuf,
+                            cigarBufLen,
+						    useM);
+    } else {
+        //
+        // Fell off the end of the chromosome.
+        //
+        return "*";
+    }
+
+    if (*editDistance == -2) {
+        fprintf(stderr, "WARNING: computeEditDistance returned -2; cigarBuf may be too small\n");
+        return "*";
+    } else if (*editDistance == -1) {
+        static bool warningPrinted = false;
+        if (!warningPrinted) {
+            fprintf(stderr, "WARNING: computeEditDistance returned -1; this shouldn't happen\n");
+            warningPrinted = true;
+        }
+        return "*";
+    } else {
+        // Add some CIGAR instructions for soft-clipping if we've ignored some bases in the read.
+        char clipBefore[16] = {'\0'};
+        char clipAfter[16] = {'\0'};
+        if (basesClippedBefore > 0) {
+            snprintf(clipBefore, sizeof(clipBefore), "%uS", basesClippedBefore);
+        }
+        if (basesClippedAfter > 0) {
+            snprintf(clipAfter, sizeof(clipAfter), "%uS", basesClippedAfter);
+        }
+        snprintf(cigarBufWithClipping, cigarBufWithClippingLen, "%s%s%s", clipBefore, cigarBuf, clipAfter);
+        return cigarBufWithClipping;
+    }
+}
+
+    

@@ -46,8 +46,11 @@ Revision History:
 #include "FASTQ.h"
 #include "PairedAligner.h"
 #include "MultiInputReadSupplier.h"
+#include "Util.h"
 
 using namespace std;
+
+using util::stringEndsWith;
 
 static const int DEFAULT_MIN_SPACING = 100;
 static const int DEFAULT_MAX_SPACING = 1000;
@@ -203,15 +206,6 @@ PairedAlignerContext::PairedAlignerContext(AlignerExtension* i_extension)
 {
 }
 
-// Check whether a string str ends with a given pattern
-static bool stringEndsWith(const char* str, const char* pattern) {
-    if (strlen(str) < strlen(pattern)) {
-        return false;
-    } else {
-        return strcmp(str + (strlen(str) - strlen(pattern)), pattern) == 0;
-    }
-}
-
 AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_argv, const char *i_version)
 {
     argc = i_argc;
@@ -345,7 +339,7 @@ void PairedAlignerContext::runIterationThread()
             maxSpacing,
             adaptiveConfDiff);
 
-    SAMWriter *samWriter = this->samWriter;
+    ReadWriter *readWriter = this->readWriter;
 
     // Align the reads.
     Read *read0;
@@ -387,9 +381,7 @@ void PairedAlignerContext::runIterationThread()
             result.status[1] = NotFound;
             result.location[0] = 0xFFFFFFFF;
             result.location[1] = 0xFFFFFFFF;
-            if (samWriter != NULL && (options->passFilter(read0, result.status[0]) || options->passFilter(read1, result.status[1]))) {
-                samWriter->writePair(read0, read1, &result);
-            }
+            writePair(read0, read1, &result);
             continue;
         } else {
             // Here one the reads might still be hopeless, but maybe we can align the other.
@@ -425,8 +417,8 @@ void PairedAlignerContext::runIterationThread()
 
 void PairedAlignerContext::writePair(Read* read0, Read* read1, PairedAlignmentResult* result)
 {
-    if (samWriter != NULL && (options->passFilter(read0, result->status[0]) || options->passFilter(read1, result->status[1]))) {
-        samWriter->writePair(read0, read1, result);
+    if (readWriter != NULL && (options->passFilter(read0, result->status[0]) || options->passFilter(read1, result->status[1]))) {
+        readWriter->writePair(read0, read1, result);
     }
 }
 

@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "Compat.h"
 #include "LandauVishkin.h"
+#include "Bam.h"
 
 using std::make_pair;
 using std::min;
@@ -145,10 +146,12 @@ LandauVishkinWithCigar::LandauVishkinWithCigar()
 --*/
 bool writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat format)
 {
+    _ASSERT(count >= 0);
     if (count <= 0) {
         return true;
     }
-    if (format == EXPANDED_CIGAR_STRING) {
+    switch (format) {
+    case EXPANDED_CIGAR_STRING: {
         int n = min(*o_buflen, count);
         for (int i = 0; i < n; i++) {
             *(*o_buf)++ = code;
@@ -158,7 +161,8 @@ bool writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat f
             *(*o_buf - 1) = '\0';
         }
         return *o_buflen > 0;
-    } else if (format == COMPACT_CIGAR_STRING) {
+    }
+    case COMPACT_CIGAR_STRING: {
         if (*o_buflen == 0) {
             *(*o_buf - 1) = '\0';
             return false;
@@ -172,7 +176,8 @@ bool writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat f
             *o_buflen -= written;
             return true;
         }
-    } else if (format == COMPACT_CIGAR_BINARY) {
+    }
+    case COMPACT_CIGAR_BINARY:
         // binary format with non-zero count byte followed by char (easier to examine programmatically)
         while (true) {
             if (*o_buflen < 3) {
@@ -187,7 +192,15 @@ bool writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat f
             }
             count -= 255;
         }
-    } else {
+    case BAM_CIGAR_OPS:
+        if (*o_buflen < 4 || count >= (1 << 28)) {
+            return false;
+        }
+        *(_uint32*)*o_buf = (count << 4) | BAMAlignment::CigarToCode[code];
+        *o_buf += 4;
+        *o_buflen -= 4;
+        return true;
+    default:
         printf("invalid cigar format %d\n", format);
         exit(1);
     }
@@ -198,11 +211,12 @@ int LandauVishkinWithCigar::computeEditDistance(
     const char* pattern, int patternLen,
     int k,
     char *cigarBuf, int cigarBufLen, bool useM, 
-    CigarFormat format)
+    CigarFormat format, int* cigarBufUsed)
 {
     _ASSERT(k < MAX_K);
     const char* p = pattern;
     const char* t = text;
+    char* cigarBufStart = cigarBuf;
     if (NULL == text) return -1;            // This happens when we're trying to read past the end of the genome.
 
     int end = min(patternLen, textLen);
@@ -227,6 +241,7 @@ done1:
 			if (! writeCigar(&cigarBuf, &cigarBufLen, patternLen, 'M', format)) {
 				return -2;
 			}
+            // todo: should this also write X's like '=' case? or is 'M' special?
 		} else {
 			if (! writeCigar(&cigarBuf, &cigarBufLen, end, '=', format)) {
 				return -2;
@@ -238,6 +253,10 @@ done1:
 				}
 			}
 		}
+        // todo: should this null-terminate?
+        if (cigarBufUsed != NULL) {
+            *cigarBufUsed = cigarBuf - cigarBufStart;
+        }
         return 0;
     }
 
@@ -339,6 +358,10 @@ done1:
 							}
 						}
 					}
+                    // todo: should this null-terminate?
+                    if (cigarBufUsed != NULL) {
+                        *cigarBufUsed = cigarBuf - cigarBufStart;
+                    }
                     return e;
                 }
                 
@@ -448,7 +471,12 @@ done1:
 						return -2;
 					}
 				}
-                *(cigarBuf - (cigarBufLen == 0 ? 1 : 0)) = '\0'; // terminate string
+                if (format != BAM_CIGAR_OPS) {
+                    *(cigarBuf - (cigarBufLen == 0 ? 1 : 0)) = '\0'; // terminate string
+                }
+                if (cigarBufUsed != NULL) {
+                    *cigarBufUsed = cigarBuf - cigarBufStart;
+                }
                 return e;
             }
         }

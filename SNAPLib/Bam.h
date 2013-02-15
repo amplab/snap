@@ -44,7 +44,7 @@ struct BAMHeader
     char*       text() // not necessarily null terminated
     { return sizeof(magic) + sizeof(l_text) + (char*) this; }
     
-    _int32      n_ref()
+    _int32&     n_ref()
     { return * (_int32*) (l_text + text()); }
 
     BAMHeaderRefSeq* firstRefSeq()
@@ -70,7 +70,7 @@ struct BAMHeaderRefSeq
     char*       name()
     { return 4 + (char*) this; }
 
-    _int32      l_ref()
+    _int32&     l_ref()
     { return * (_int32*) (l_name + name()); }
 
     BAMHeaderRefSeq*    next()
@@ -117,6 +117,31 @@ struct BAMAlignment
 
     static size_t size(unsigned l_read_name, unsigned n_cigar_op, unsigned l_seq)
     { return sizeof(BAMAlignment) + l_read_name + n_cigar_op * sizeof(_uint32) + (l_seq + 1) / 2 + l_seq; }
+
+    // conversions
+
+    static const char* CodeToSeq;
+    static _uint8 SeqToCode[256];
+    static const char* CodeToCigar;
+    static _uint8 CigarToCode[256];
+    
+    static void decodeSeq(char* o_sequence, _uint8* nibbles, int bases);
+    static void decodeQual(char* o_qual, char* quality, int bases);
+    static bool decodeCigar(char* o_cigar, int cigarSize, _uint32* cigar, int ops);
+
+    static void encodeSeq(_uint8* nibbles, char* ascii, int length);
+
+    class _init { public: _init(); };
+    static _init _init_;
+
+    // binning
+
+    /* calculate bin given an alignment covering [beg,end) (zero-based, half-close-half-open) */
+    static int reg2bin(int beg, int end);
+    /* calculate the list of bins that may overlap with region [beg,end) (zero-based) */
+    static const int MAX_BIN = (((1<<18)-1)/7);
+    static int reg2bins(int beg, int end, _uint16* list/*[MAX_BIN]*/);
+
 };
 
 #define INT8_VAL_TYPE       'c'
@@ -284,12 +309,6 @@ public:
         static ReadSupplierGenerator *createReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack);
         
         static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack, int matchBufferSize = 5000);
-
-        static void expandSeq(char* o_sequence, _uint8* nibbles, int bases);
-
-        static void expandQual(char* o_qual, char* quality, int bases);
-
-        static void expandCigar(char* o_cigar, _uint32* cigar, int ops);
 
         static const int MAX_SEQ_LENGTH = 1024;
 

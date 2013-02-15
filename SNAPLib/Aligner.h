@@ -33,8 +33,6 @@ Revision History:
 #include "Read.h"
 #include "Seed.h"
 
-enum AlignmentResult {NotFound, CertainHit, SingleHit, MultipleHits, UnknownAlignment}; // BB: Changed Unknown to UnknownAlignment because of a conflict w/Windows headers
-
 inline const char *AlignmentResultToString(AlignmentResult result) {
     switch (result) {
         case NotFound: return "NotFound";

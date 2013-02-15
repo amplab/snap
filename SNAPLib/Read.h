@@ -28,6 +28,15 @@ Revision History:
 #include "Compat.h"
 #include "Tables.h"
 #include "DataReader.h"
+#include "DataWriter.h"
+
+class FileFormat;
+
+class Genome;
+
+struct PairedAlignmentResult;
+
+enum AlignmentResult {NotFound, CertainHit, SingleHit, MultipleHits, UnknownAlignment}; // BB: Changed Unknown to UnknownAlignment because of a conflict w/Windows headers
 
 //
 // Here's a brief description of the classes for input in SNAP:
@@ -119,6 +128,35 @@ class PairedReadSupplierGenerator {
 public:
     virtual PairedReadSupplier *generateNewPairedReadSupplier() = 0;
     virtual ~PairedReadSupplierGenerator() {}
+};
+
+class ReadWriter {
+public:
+
+    // write out header
+    virtual bool writeHeader(bool sorted, int argc, const char **argv, const char *version, const char *rgLine) = 0;
+
+    // write a single read, return true if successful
+    virtual bool writeRead(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC) = 0;
+
+    // write a pair of reads, return true if successful
+    virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result) = 0;
+
+    // close out this thread
+    virtual void close() = 0;
+};
+
+class DataWriterSupplier;
+
+class ReadWriterSupplier
+{
+public:
+    virtual ReadWriter* getWriter() = 0;
+
+    virtual void close() = 0;
+
+    static ReadWriterSupplier* create(const FileFormat* format, DataWriterSupplier* dataSupplier,
+        const Genome* genome);
 };
     
 class Read {

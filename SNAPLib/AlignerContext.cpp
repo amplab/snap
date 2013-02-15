@@ -29,6 +29,7 @@ Revision History:
 #include "AlignerOptions.h"
 #include "AlignerContext.h"
 #include "AlignerStats.h"
+#include "FileFormat.h"
 
 using std::max;
 using std::min;
@@ -36,11 +37,11 @@ using std::min;
 AlignerContext::AlignerContext(int i_argc, const char **i_argv, const char *i_version, AlignerExtension* i_extension)
     :
     index(NULL),
-    parallelSamWriter(NULL),
+    writerSupplier(NULL),
     options(NULL),
     stats(NULL),
     extension(i_extension != NULL ? i_extension : new AlignerExtension()),
-    samWriter(NULL),
+    readWriter(NULL),
     argc(i_argc),
     argv(i_argv),
     version(i_version)
@@ -90,11 +91,7 @@ AlignerContext::initializeThread()
 {
     stats = newStats(); // separate copy per thread
     stats->extra = extension->extraStats();
-    if (NULL != parallelSamWriter) {
-        samWriter = parallelSamWriter->getWriterForThread(threadNum);
-    } else {
-        samWriter = NULL;
-    }
+    readWriter = writerSupplier != NULL ? writerSupplier->getWriter() : NULL;
     extension = extension->copy();
 }
 
@@ -103,8 +100,9 @@ AlignerContext::runThread()
 {
     extension->beginThread();
     runIterationThread();
-    if (samWriter != NULL) {
-        samWriter->close();
+    if (readWriter != NULL) {
+        readWriter->close();
+        delete readWriter;
     }
     extension->finishThread();
 }
@@ -155,17 +153,26 @@ AlignerContext::printStatsHeader()
     void
 AlignerContext::beginIteration()
 {
-    parallelSamWriter = NULL;
+    writerSupplier = NULL;
     // total mem in Gb if given; default 1 Gb/thread for human genome, scale down for smaller genomes
     size_t totalMemory = options->sortMemory > 0
         ? options->sortMemory * ((size_t) 1 << 30)
         : options->numThreads * max(2 * ParallelSAMWriter::UnsortedBufferSize,
                                     (size_t) index->getGenome()->getCountOfBases() / 3);
     if (NULL != options->outputFileTemplate) {
-        parallelSamWriter = ParallelSAMWriter::create(options->outputFileTemplate,index->getGenome(),
-            options->numThreads, options->sortOutput, totalMemory, options->useM, argc, argv, version, options->rgLineContents);
-        if (NULL == parallelSamWriter) {
-            fprintf(stderr,"Unable to create SAM file writer.  Just aligning for speed, no output will be generated.\n");
+        const FileFormat* format = 
+            FileFormat::SAM[0]->isFormatOf(options->outputFileTemplate) ? FileFormat::SAM[options->useM] :
+            FileFormat::BAM[0]->isFormatOf(options->outputFileTemplate) ? FileFormat::BAM[options->useM] :
+            NULL;
+        if (format != NULL) {
+            writerSupplier = ReadWriterSupplier::create(
+                format, DataWriterSupplier::create(options->outputFileTemplate), index->getGenome());
+            ReadWriter* headerWriter = writerSupplier->getWriter();
+            headerWriter->writeHeader(options->sortOutput, argc, argv, version, options->rgLineContents);
+            headerWriter->close();
+            delete headerWriter;
+        } else {
+            fprintf(stderr, "warning: no output, unable to determine format of output file %s\n", options->outputFileTemplate);
         }
     }
 
@@ -196,10 +203,10 @@ AlignerContext::finishIteration()
 {
     extension->finishIteration();
 
-    if (NULL != parallelSamWriter) {
-        parallelSamWriter->close();
-        delete parallelSamWriter;
-        parallelSamWriter = NULL;
+    if (NULL != writerSupplier) {
+        writerSupplier->close();
+        delete writerSupplier;
+        writerSupplier = NULL;
     }
 
     alignTime = timeInMillis() - alignStart;

@@ -80,6 +80,17 @@ strnchr(const char *str, char charToFind, size_t maxLen)
     }
     return NULL;
 }
+    
+// Check whether a string str ends with a given pattern
+    inline bool
+stringEndsWith(const char* str, const char* pattern)
+{
+    if (strlen(str) < strlen(pattern)) {
+        return false;
+    } else {
+        return stricmp(str + (strlen(str) - strlen(pattern)), pattern) == 0;
+    }
+}
 
 //
 // Read a line, returning whether the read was successful or EOF occurred.

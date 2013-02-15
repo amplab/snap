@@ -93,7 +93,7 @@ protected:
  
     // common state across all threads
     GenomeIndex                         *index;
-    ParallelSAMWriter                   *parallelSamWriter;
+    ReadWriterSupplier                  *writerSupplier;
     _int64                               alignStart;
     _int64                               alignTime;
     AlignerOptions                      *options;
@@ -120,7 +120,7 @@ protected:
     int                 adaptiveConfDiff_;
 
     // Per-thread context state used during alignment process
-    SAMWriter          *samWriter;
+    ReadWriter         *readWriter;
 };
 
 // abstract class for extending base context

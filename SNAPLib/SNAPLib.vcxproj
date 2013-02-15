@@ -156,8 +156,10 @@
     <ClInclude Include="BufferedAsync.h" />
     <ClInclude Include="compat.h" />
     <ClInclude Include="DataReader.h" />
+    <ClInclude Include="DataWriter.h" />
     <ClInclude Include="FASTA.h" />
     <ClInclude Include="fastq.h" />
+    <ClInclude Include="FileFormat.h" />
     <ClInclude Include="FixedHashTable.h" />
     <ClInclude Include="genome.h" />
     <ClInclude Include="GenomeIndex.h" />
@@ -195,6 +197,7 @@
     <ClCompile Include="BufferedAsync.cpp" />
     <ClCompile Include="compat.cpp" />
     <ClCompile Include="DataReader.cpp" />
+    <ClCompile Include="DataWriter.cpp" />
     <ClCompile Include="FASTA.cpp" />
     <ClCompile Include="fastq.cpp" />
     <ClCompile Include="genome.cpp" />
@@ -209,7 +212,9 @@
     <ClCompile Include="PairedReadMatcher.cpp" />
     <ClCompile Include="Range.cpp" />
     <ClCompile Include="RangeSplitter.cpp" />
+    <ClCompile Include="ReadReader.cpp" />
     <ClCompile Include="ReadSupplierQueue.cpp" />
+    <ClCompile Include="ReadWriter.cpp" />
     <ClCompile Include="sam.cpp" />
     <ClCompile Include="seed.cpp" />
     <ClCompile Include="SingleAligner.cpp" />
