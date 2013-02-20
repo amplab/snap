@@ -78,11 +78,14 @@ public:
         int         *mapq,
         unsigned     searchRadius,       // If non-zero, constrain search around searchLocation in direction searchRC.
         unsigned     searchLocation,
-        Direction    searchDirection);
+        Direction    searchDirection,       
+        double      *bestHitProbability,
+        double      *allHitsProbability);
         
     //
     // A richer version of AlignRead that allows for searching near a given location, as well as returning
-    // multiple hits if the best hits are within distance confDiff of each other.
+    // multiple hits if the best hits are within distance confDiff of each other, and also optionally returns
+    // the component probabilities for mapq.
     //
         AlignmentResult
     AlignRead(
@@ -94,6 +97,8 @@ public:
         unsigned     searchRadius,       // If non-zero, constrain search around searchLocation in direction searchRC.
         unsigned     searchLocation,
         Direction    searchDirection,
+        double      *bestHitProbability,
+        double      *allHitsProbability,
         int          maxHitsToGet,       // If maxHitsToGet > 1, output up to this many hits within confDiff of the best
         int         *multiHitsFound,     // inside multiHitLocations / RCs instead of returning MultipleHits right away.
         unsigned    *multiHitLocations,
@@ -341,7 +346,8 @@ private:
     void incrementWeight(HashTableElement *element);
 
     void fillHitsFound(unsigned maxHitsToGet, int *multiHitsFound, 
-                       unsigned *multiHitLocations, Direction *multiHitDirections, int *multiHitScores);
+                       unsigned *multiHitLocations, Direction *multiHitDirections, int *multiHitScores,
+                       double *bestHitsProbability, double *allHitsProbability);
 
     const Genome *genome;
     GenomeIndex *genomeIndex;

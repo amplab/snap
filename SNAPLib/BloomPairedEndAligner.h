@@ -2,11 +2,11 @@
 
 Module Name:
 
-    ThirdPairedEndAligner.h
+    BloomPairedEndAligner.h
 
 Abstract:
 
-    A paired-end aligner that works much like the base aligner.
+    A paired-end aligner that uses a Bloom filter to narrow down possible candidate locations.
 
 Authors:
 
@@ -27,12 +27,11 @@ Revision History:
 #include "BigAlloc.h"
 #include "directions.h"
 #include "LandauVishkin.h"
+#include "BloomFilter.h"
 
-
-class ThirdPairedEndAligner : public PairedEndAligner
+class BloomPairedEndAligner : public PairedEndAligner
 {
-public:
-    ThirdPairedEndAligner(
+    BloomPairedEndAligner(
         GenomeIndex  *index_,
         unsigned      maxReadSize_,
         unsigned      maxHits_,
@@ -42,21 +41,21 @@ public:
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
         BigAllocator  *allocator); 
     
-    virtual ~ThirdPairedEndAligner();
+    virtual ~BloomPairedEndAligner();
     
     virtual void align(
         Read                  *read0,
         Read                  *read1,
         PairedAlignmentResult *result);
 
-    void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(ThirdPairedEndAligner)); return allocator->allocate(size);}
+    void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(BloomPairedEndAligner)); return allocator->allocate(size);}
     void operator delete(void *ptr, BigAllocator *allocator) {/*Do nothing, the owner of the allocator is responsible for freeing memory*/}
 
     static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsToUse);
 
 private:
 
-    ThirdPairedEndAligner() {}  // This is for the counting allocator, it doesn't build a useful object
+    BloomPairedEndAligner() {BigDealloc(bloomFilter);}  // This is for the counting allocator, it doesn't build a useful object
 
     void clearCandidates();
 
@@ -69,6 +68,7 @@ private:
     unsigned        genomeSize;
     unsigned        maxReadSize;
     unsigned        maxHits;
+    unsigned        maxBigHits;
     unsigned        maxK;
     unsigned        maxSeeds;
     unsigned        minSpacing;
@@ -76,6 +76,16 @@ private:
     unsigned        seedLen;
     unsigned        distanceToSearchBeyondBestScore;
 
+    struct HashTableHit {
+        unsigned        nHits[NUM_DIRECTIONS];
+        unsigned        *hits[NUM_DIRECTIONS];
+    };
+
+    HashTableHit    *hashTableHits[NUM_READS_PER_PAIR];
+    unsigned        totalHits[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
+    unsigned        largestHit[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
+
+    BloomFilter     *bloomFilter[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
     char *rcReadData[NUM_READS_PER_PAIR];                   // the reverse complement of the data for each read
     char *rcReadQuality[NUM_READS_PER_PAIR];                // the reversed quality strings for each read
     unsigned readLen[NUM_READS_PER_PAIR];

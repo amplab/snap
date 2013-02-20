@@ -282,7 +282,7 @@ void PairedAlignerContext::runTask()
 void PairedAlignerContext::runIterationThread()
 {
     int maxReadSize = 10000;
-    /*
+    
     SmarterPairedEndAligner *aligner = new SmarterPairedEndAligner(
             index,
             maxReadSize,
@@ -293,10 +293,10 @@ void PairedAlignerContext::runIterationThread()
             minSpacing,
             maxSpacing,
             adaptiveConfDiff);
-            */
-    BigAllocator *allocator = new BigAllocator(ThirdPairedEndAligner::getBigAllocatorReservation(index, maxHits, maxReadSize, index->getSeedLength(), numSeeds));
+            
+    /*BigAllocator *allocator = new BigAllocator(ThirdPairedEndAligner::getBigAllocatorReservation(index, maxHits, maxReadSize, index->getSeedLength(), numSeeds));
     ThirdPairedEndAligner *aligner = new(allocator) ThirdPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, allocator);
-    allocator->assertAllMemoryUsed();
+    allocator->assertAllMemoryUsed();*/
 
     SAMWriter *samWriter = this->samWriter;
 
@@ -403,8 +403,8 @@ void PairedAlignerContext::runIterationThread()
     }
     //printf("Time in s: %lld: thread ran out of work.  Last range was %8lld bytes in %4lldms, starting at %10lld.  Total %4d ranges and %10lld bytes.\n",timeInMillis() / 1000, rangeLength, timeInMillis() - rangeStartTime, rangeStart, totalRanges, totalBytes);
 
-    aligner->~ThirdPairedEndAligner();
-    delete allocator;
+//    aligner->~ThirdPairedEndAligner();
+//    delete allocator;
     delete reader;
 }
 

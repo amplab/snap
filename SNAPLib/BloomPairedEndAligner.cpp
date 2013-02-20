@@ -2,11 +2,11 @@
 
 Module Name:
 
-    ThirdPairedEndAligner.cp
+    BloomPairedEndAligner.cpp
 
 Abstract:
 
-    A paired-end aligner that works much like the base aligner.
+    A Bloom filter based paired-end aligner.
 
 Authors:
 
@@ -21,11 +21,14 @@ Revision History:
 --*/
 
 #include "stdafx.h"
-#include "ThirdPairedEndAligner.h"
+#include "BloomPairedEndAligner.h"
 #include "SeedSequencer.h"
 #include "mapq.h"
+#include "BloomFilter.h"
 
-ThirdPairedEndAligner::ThirdPairedEndAligner(
+#if     0
+
+BloomPairedEndAligner::BloomPairedEndAligner(
         GenomeIndex  *index_,
         unsigned      maxReadSize_,
         unsigned      maxHits_,
@@ -35,7 +38,7 @@ ThirdPairedEndAligner::ThirdPairedEndAligner(
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
         BigAllocator  *allocator) :
     index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), maxSeeds(maxSeeds_), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
-    landauVishkin(NULL), reverseLandauVishkin(NULL)
+    landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(50000)
 {
     allocateDynamicMemory(allocator, maxReadSize, maxHits, maxSeeds);
 
@@ -60,7 +63,7 @@ ThirdPairedEndAligner::ThirdPairedEndAligner(
     distanceToSearchBeyondBestScore = 2;    // If probability goes down by about 1000x per mismatch, then going more than two steps away make an effect of 1 part per billion, which is too small to care about
 }
     
-ThirdPairedEndAligner::~ThirdPairedEndAligner()
+BloomPairedEndAligner::~BloomPairedEndAligner()
 {
     if (landauVishkin) {
         landauVishkin->~LandauVishkin<>();
@@ -76,11 +79,11 @@ ThirdPairedEndAligner::~ThirdPairedEndAligner()
 }
     
     size_t 
-ThirdPairedEndAligner::getBigAllocatorReservation(GenomeIndex * index, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsToUse)
+BloomPairedEndAligner::getBigAllocatorReservation(GenomeIndex * index, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsToUse)
 {
     CountingBigAllocator countingAllocator;
     {
-        ThirdPairedEndAligner aligner; // This has to be in a nested scope so it's destructor is called before that of the countingAllocator
+        BloomPairedEndAligner aligner; // This has to be in a nested scope so it's destructor is called before that of the countingAllocator
         aligner.index = index;
 
         aligner.allocateDynamicMemory(&countingAllocator, maxReadSize, maxHitsToConsider, maxSeedsToUse);
@@ -89,7 +92,7 @@ ThirdPairedEndAligner::getBigAllocatorReservation(GenomeIndex * index, unsigned 
 }
 
     void
-ThirdPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, unsigned maxReadSize, unsigned maxHitsToConsider, unsigned maxSeedsToUse)
+BloomPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, unsigned maxReadSize, unsigned maxHitsToConsider, unsigned maxSeedsToUse)
 {
     seedUsed = (BYTE *) allocator->allocate(index->getSeedLength() + 7 / 8);
 
@@ -112,6 +115,7 @@ ThirdPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, unsigned m
             reversedRead[whichRead][dir] = (char *)allocator->allocate(maxReadSize);
             superGroupHashTable[whichRead][dir] = (SuperGroupHashTableAnchor *)allocator->allocate(sizeof(SuperGroupHashTableAnchor) * superGroupHashTableSize);
             candidateGroupHashTable[whichRead][dir] = (CandidateGroupHashTableAnchor *)allocator->allocate(sizeof(CandidateGroupHashTableAnchor) * candidateGroupHashTableSize);
+            bloomFilter[whichRead][dir] = new BloomFilter(maxBigHits * maxSeeds, maxSpacing - minSpacing);
         }
     }
 
@@ -122,7 +126,7 @@ ThirdPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, unsigned m
 }
 
     void 
-ThirdPairedEndAligner::align(
+BloomPairedEndAligner::align(
         Read                  *read0,
         Read                  *read1,
         PairedAlignmentResult *result)
@@ -155,7 +159,7 @@ ThirdPairedEndAligner::align(
         popularSeedsSkipped[whichRead] = 0;
 
         if (readLen[whichRead] > maxReadSize) {
-            fprintf(stderr,"ThirdPairedEndAligner:: got too big read (%d > %d)", readLen[whichRead], maxReadSize);
+            fprintf(stderr,"BloomPairedEndAligner:: got too big read (%d > %d)", readLen[whichRead], maxReadSize);
             exit(1);
         }
 
@@ -336,7 +340,7 @@ ThirdPairedEndAligner::align(
 }
 
     void
-ThirdPairedEndAligner::alignWithBaseAligner(Read *read0, Read *read1, PairedAlignmentResult *result, int maxMapq)
+BloomPairedEndAligner::alignWithBaseAligner(Read *read0, Read *read1, PairedAlignmentResult *result, int maxMapq)
 {
     //
     // For whatever reason we can't align these reads singly.  Align them individually with the base aligner.
@@ -351,7 +355,7 @@ ThirdPairedEndAligner::alignWithBaseAligner(Read *read0, Read *read1, PairedAlig
 
 
     void
-ThirdPairedEndAligner::clearCandidates()
+BloomPairedEndAligner::clearCandidates()
 {
     if (0 == hashTableEpochNumber) {
         //
@@ -374,7 +378,7 @@ ThirdPairedEndAligner::clearCandidates()
 }
 
     bool 
-ThirdPairedEndAligner::isThereAMateCandidate(unsigned genomeLocation, unsigned whichRead, Direction dir)
+BloomPairedEndAligner::isThereAMateCandidate(unsigned genomeLocation, unsigned whichRead, Direction dir)
 {
     //
     // We need to look in two ranges: below and above the genome location.
@@ -408,7 +412,7 @@ ThirdPairedEndAligner::isThereAMateCandidate(unsigned genomeLocation, unsigned w
 }
 
     bool
-ThirdPairedEndAligner::isThereACandidateInRange(unsigned minLoc, unsigned maxLoc, unsigned whichRead, Direction dir)
+BloomPairedEndAligner::isThereACandidateInRange(unsigned minLoc, unsigned maxLoc, unsigned whichRead, Direction dir)
 {
     for (unsigned baseOffset = minLoc - minLoc % SuperGroupSpan; baseOffset < ((maxLoc + SuperGroupSpan - 1) / SuperGroupSpan * SuperGroupSpan); baseOffset += SuperGroupSpan) {
         SuperGroupHashTableAnchor *anchor = &superGroupHashTable[whichRead][dir][hash(baseOffset / SuperGroupSpan, superGroupHashTableSize)];
@@ -438,7 +442,7 @@ ThirdPairedEndAligner::isThereACandidateInRange(unsigned minLoc, unsigned maxLoc
     return false;
 }
     void 
-ThirdPairedEndAligner::findCandidateAndCreateIfNotExtant(unsigned whichRead, Direction dir, unsigned genomeLocation, CandidateGroup **group, Candidate **candidate, unsigned bestPossibleScoreIfNew)
+BloomPairedEndAligner::findCandidateAndCreateIfNotExtant(unsigned whichRead, Direction dir, unsigned genomeLocation, CandidateGroup **group, Candidate **candidate, unsigned bestPossibleScoreIfNew)
 {
     unsigned baseGenomeLocation = genomeLocation - genomeLocation % GroupSpan;
     unsigned candidateIndex = genomeLocation - baseGenomeLocation;
@@ -461,7 +465,7 @@ ThirdPairedEndAligner::findCandidateAndCreateIfNotExtant(unsigned whichRead, Dir
         // Allocate a new group.
         //
         if (nUsedCandidateGroups >= candidateGroupPoolSize) {
-            fprintf(stderr, "ThirdPairedEndAligner: out of candidate groups (%d).  This shouldn't happen.\n", candidateGroupPoolSize);
+            fprintf(stderr, "BloomPairedEndAligner: out of candidate groups (%d).  This shouldn't happen.\n", candidateGroupPoolSize);
             exit(1);
         }
 
@@ -484,8 +488,8 @@ ThirdPairedEndAligner::findCandidateAndCreateIfNotExtant(unsigned whichRead, Dir
     (*group)->usedCandidates |= (((_uint64)1) << candidateIndex);
 }
 
-    ThirdPairedEndAligner::SuperGroup *
-ThirdPairedEndAligner::findSuperGroupAndCreateIfNotExtant(unsigned whichRead, Direction dir, unsigned genomeLocation)
+    BloomPairedEndAligner::SuperGroup *
+BloomPairedEndAligner::findSuperGroupAndCreateIfNotExtant(unsigned whichRead, Direction dir, unsigned genomeLocation)
 {
     unsigned baseGenomeLocation = genomeLocation - genomeLocation % SuperGroupSpan;
     SuperGroupHashTableAnchor *anchor = &superGroupHashTable[whichRead][dir][hash(genomeLocation/SuperGroupSpan, superGroupHashTableSize)];
@@ -502,7 +506,7 @@ ThirdPairedEndAligner::findSuperGroupAndCreateIfNotExtant(unsigned whichRead, Di
 
     if (NULL == supergroup) {
         if (nUsedSuperGroups >= superGroupPoolSize) {
-            fprintf(stderr, "ThirdPairedEndAligner: out of super groups (%d).  This shouldn't happen.\n", superGroupPoolSize);
+            fprintf(stderr, "BloomPairedEndAligner: out of super groups (%d).  This shouldn't happen.\n", superGroupPoolSize);
             exit(1);
         }
         supergroup = &superGroupPool[nUsedSuperGroups];
@@ -518,7 +522,7 @@ ThirdPairedEndAligner::findSuperGroupAndCreateIfNotExtant(unsigned whichRead, Di
 }
 
     bool 
-ThirdPairedEndAligner::score(
+BloomPairedEndAligner::score(
     bool                     forceResult,
     Read                    *read[NUM_READS_PER_PAIR][NUM_DIRECTIONS],
     PairedAlignmentResult   *result)
@@ -640,7 +644,7 @@ ThirdPairedEndAligner::score(
 }
 
     void 
-ThirdPairedEndAligner::addCandidateGroupsInRangeToScoringList(
+BloomPairedEndAligner::addCandidateGroupsInRangeToScoringList(
     CandidateGroup **       listHead, 
     unsigned                baseGenomeLocation,
     bool                    lookBelow, 
@@ -708,7 +712,7 @@ ThirdPairedEndAligner::addCandidateGroupsInRangeToScoringList(
 }
 
     _uint64 
-ThirdPairedEndAligner::getSupergroupBitMaskForRange(unsigned supergroupBaseOffset, unsigned minLoc, unsigned maxLoc)
+BloomPairedEndAligner::getSupergroupBitMaskForRange(unsigned supergroupBaseOffset, unsigned minLoc, unsigned maxLoc)
 {
     _ASSERT(minLoc <= maxLoc);
     _ASSERT(supergroupBaseOffset % SuperGroupSpan == 0);
@@ -740,8 +744,8 @@ ThirdPairedEndAligner::getSupergroupBitMaskForRange(unsigned supergroupBaseOffse
     return mask;
 }
 
-    ThirdPairedEndAligner::CandidateGroup *
-ThirdPairedEndAligner::lookupCandidateGroup(unsigned genomeOffset, unsigned whichRead, Direction dir)
+    BloomPairedEndAligner::CandidateGroup *
+BloomPairedEndAligner::lookupCandidateGroup(unsigned genomeOffset, unsigned whichRead, Direction dir)
 {
     unsigned groupOffset = genomeOffset - genomeOffset % GroupSpan;
 
@@ -759,7 +763,7 @@ ThirdPairedEndAligner::lookupCandidateGroup(unsigned genomeOffset, unsigned whic
 }
 
     void 
-ThirdPairedEndAligner::scoreGroup(CandidateGroup *group, unsigned whichRead, Direction direction)
+BloomPairedEndAligner::scoreGroup(CandidateGroup *group, unsigned whichRead, Direction direction)
 {
     Read *readToScore = reads[whichRead][direction];
     unsigned long candidateIndexToScore;
@@ -821,3 +825,5 @@ ThirdPairedEndAligner::scoreGroup(CandidateGroup *group, unsigned whichRead, Dir
     }// for each unscored candidate bit
     group->allExtantCandidatesScored = true;
 }
+
+#endif  // 0

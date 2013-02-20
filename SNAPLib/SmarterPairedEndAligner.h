@@ -101,6 +101,7 @@ private:
         AlignmentResult mateStatus;      // If we've searched for a mate nearby, this is the result
         int mateScore;                   // Score of the mate found nearby, if any
         unsigned mateLocation;           // Location of the mate found nearby, if any
+        double mateProbability;          // match probability for the mate
         
         inline bool allScored() { return scored == found; }
 

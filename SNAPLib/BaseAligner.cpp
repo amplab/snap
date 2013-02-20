@@ -221,7 +221,7 @@ Arguments:
     AlignmentResult
 BaseAligner::AlignRead(Read *inputRead, unsigned *genomeLocation, Direction *hitDirection, int *finalScore, int *mapq)
 {
-    return AlignRead(inputRead, genomeLocation, hitDirection, finalScore, mapq, 0, 0, false, 0, NULL, NULL, NULL, NULL);
+    return AlignRead(inputRead, genomeLocation, hitDirection, finalScore, mapq, 0, 0, false, 0, NULL, NULL, NULL, NULL, NULL, NULL);
 }
 
     AlignmentResult
@@ -233,10 +233,12 @@ BaseAligner::AlignRead(
     int       *mapq,
     unsigned   searchRadius,
     unsigned   searchLocation,
-    Direction  searchDirection)
+    Direction  searchDirection,
+    double      *bestHitProbability,
+    double      *allHitsProbability)
 {
     return AlignRead(inputRead, genomeLocation, hitDirection, finalScore, mapq,
-        searchRadius, searchLocation, searchDirection, 0, NULL, NULL, NULL, NULL);
+        searchRadius, searchLocation, searchDirection, bestHitProbability, allHitsProbability, 0, NULL, NULL, NULL, NULL);
 }
 
 #ifdef  _DEBUG
@@ -253,6 +255,8 @@ BaseAligner::AlignRead(
     unsigned   searchRadius,
     unsigned   searchLocation,
     Direction  searchDirection,
+    double    *bestHitProbability,
+    double    *allHitsProbability,
     int        maxHitsToGet,
     int       *multiHitsFound,
     unsigned  *multiHitLocations,
@@ -277,10 +281,15 @@ Arguments:
     searchRadius        - if non-zero, constrain the search to this distance around searchLocation, in orientation searchRC
     searchLocation      - location to search around if searchRadius is given
     searchDirection     - whether to search in forward or reverse complement orientation if searchRadius is given
+    bestHitProbability  - output parameter for the match probability for the best hit found
+    allHitsProbability  - output parameter for the match probability for the all hits found
     maxHitsToGet        - if greater than 0, output up to this many hits within confDiff of the best (if any) in multiHitLocation
                           writing their count in multiHitsFound, instead of returning MultipleHits immediately
     multiHitsFound      - output parameter for number of alternative hits found if maxHitsToGet is true
     multiHitLocations   - output parameter for locations of alternative hits found if maxHitsToGet is true
+    multiHitScores      - output parameter for the scores for each of the multi hits if maxHitsToGet is true
+
+
 
 Return Value:
 
@@ -473,7 +482,8 @@ Return Value:
 #endif  // MAINTAIN_HISTOGRAMS
 
                 fillHitsFound(maxHitsToGet, multiHitsFound,
-                              multiHitLocations, multiHitDirections, multiHitScores);
+                              multiHitLocations, multiHitDirections, multiHitScores,
+                              bestHitProbability, allHitsProbability);
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", *finalScore, *mapq, *genomeLocation);
 #endif  // _DEBUG
@@ -645,7 +655,8 @@ Return Value:
 #endif  // MAINTAIN_HISTOGRAMS
 
                 fillHitsFound(maxHitsToGet, multiHitsFound,
-                              multiHitLocations, multiHitDirections, multiHitScores);
+                              multiHitLocations, multiHitDirections, multiHitScores,
+                              bestHitProbability, allHitsProbability);
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", *finalScore, *mapq, *genomeLocation);
 #endif  // _DEBUG
@@ -680,7 +691,8 @@ Return Value:
 #endif  // MAINTAIN_HISTOGRAMS
     
     fillHitsFound(maxHitsToGet, multiHitsFound,
-                  multiHitLocations, multiHitDirections, multiHitScores);
+                  multiHitLocations, multiHitDirections, multiHitScores,
+                  bestHitProbability, allHitsProbability);
 #ifdef  _DEBUG
     if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", *finalScore, *mapq, *genomeLocation);
 #endif  // _DEBUG
@@ -1271,7 +1283,9 @@ BaseAligner::fillHitsFound(
     int        *multiHitsFound, 
     unsigned   *multiHitLocations,
     Direction  *multiHitDirections,
-    int        *multiHitScores)
+    int        *multiHitScores,
+    double     *bestHitProbability,
+    double     *allHitsProbability)
 /*++
 
 Routine Description:
@@ -1299,6 +1313,14 @@ Routine Description:
                 }
             }
         }
+    }
+
+    if (NULL != bestHitProbability) {
+        *bestHitProbability = probabilityOfBestCandidate;
+    }
+
+    if (NULL != allHitsProbability) {
+        *allHitsProbability = probabilityOfAllCandidates;
     }
 }
 

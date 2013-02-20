@@ -236,7 +236,7 @@ SAMWriter::generateSAMText(
     const char *matePieceName = "*";
     unsigned matePositionInPiece = 0;
     _int64 templateLength = 0;
-    
+
     if (0 == qnameLen) {
          qnameLen = read->getIdLength();
     }

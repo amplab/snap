@@ -54,6 +54,9 @@ typedef HANDLE SingleWaiterObject;      // This is an event in Windows.  It's ju
 #define strncasecmp _strnicmp
 #define atoll(S) _atoi64(S)
 
+#define bit_rotate_right(value, shift) _rotr(value, shift)
+#define bit_rotate_left(value, shift) _rotl(value, shift)
+
 
 #else   // _MSC_VER
 
@@ -105,6 +108,18 @@ class SingleWaiterObjectImpl;
 
 typedef pthread_mutex_t ExclusiveLock;
 typedef SingleWaiterObjectImpl *SingleWaiterObject;
+
+inline unsigned bit_rotate_right(unsigned value, unsigned shift)
+{
+    if (shift%32 == 0) return value;
+    return value >> (shift%32) | (value << (32 - shift%32));
+}
+
+inline unsigned bit_rotate_left(unsigned value, unsigned shift)
+{
+    if (shift%32 == 0) return value;
+    return value << (shift %32) | (value >> (32 - shift%32));
+}
 
 #endif  // _MSC_VER
 

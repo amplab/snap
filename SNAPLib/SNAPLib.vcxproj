@@ -97,7 +97,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
       <WholeProgramOptimization>true</WholeProgramOptimization>
-      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -132,7 +132,7 @@
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <AdditionalIncludeDirectories>
       </AdditionalIncludeDirectories>
-      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -152,6 +152,8 @@
     <ClInclude Include="ApproximateCounter.h" />
     <ClInclude Include="BaseAligner.h" />
     <ClInclude Include="bigalloc.h" />
+    <ClInclude Include="BloomFilter.h" />
+    <ClInclude Include="BloomPairedEndAligner.h" />
     <ClInclude Include="BoundedStringDistance.h" />
     <ClInclude Include="BufferedAsync.h" />
     <ClInclude Include="compat.h" />
@@ -202,6 +204,8 @@
     <ClCompile Include="BaseAligner.cpp" />
     <ClCompile Include="BiasTables.cpp" />
     <ClCompile Include="bigalloc.cpp" />
+    <ClCompile Include="BloomFilter.cpp" />
+    <ClCompile Include="BloomPairedEndAligner.cpp" />
     <ClCompile Include="BufferedAsync.cpp" />
     <ClCompile Include="compat.cpp" />
     <ClCompile Include="FASTA.cpp" />

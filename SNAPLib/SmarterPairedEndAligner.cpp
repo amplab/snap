@@ -36,7 +36,6 @@ using namespace std;
 #define TRACE(...) {}
 #endif
 
-
 SmarterPairedEndAligner::SmarterPairedEndAligner(
          GenomeIndex  *index_,
          unsigned      maxReadSize_,
@@ -61,7 +60,7 @@ SmarterPairedEndAligner::SmarterPairedEndAligner(
         }
     }
     candidates.reserve(MAX_BUCKETS);
-    
+
     // Initialize the complements array.
     memset(complement, 0, sizeof(complement));
     complement['A'] = 'T';
@@ -137,8 +136,6 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
     int numIgnoredMulti = 0;  // MultiHits where all seeds returned too many hits
     int numSingleWithNotFound = 0;
 
-    clearState();
-    
     result->status[0] = NotFound;
     result->status[1] = NotFound;
 
@@ -204,7 +201,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
             mateAligner->setMaxK(maxK - score0 + 1);
             mateAligner->setReadId(1-r);
 
-            status1 = mateAligner->AlignRead(reads[1-r], &loc1, &direction1, &score1, &mapq1, maxSpacing, loc0, OppositeDirection(direction0));
+            status1 = mateAligner->AlignRead(reads[1-r], &loc1, &direction1, &score1, &mapq1, maxSpacing, loc0, OppositeDirection(direction0), NULL, NULL);
 
             TRACE("Mate %d returned %s at loc %u-%d\n", 1-r, AlignmentResultToString(status1), loc1, rc1);
             if (/*status1 != MultipleHits &&*/ score0 + score1 <= (int)maxK) {
@@ -238,6 +235,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
     
     if (numNotFound + numIgnoredMulti == 2) {
         // We couldn't find either read even as MultipleHits, so there's no way we'll do the pair.
+
         return;
     }
 
@@ -259,6 +257,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
                 result->mapq[r] = bestMapq[r];
             }
         }
+
         return;
     }
 
@@ -276,6 +275,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
                 result->mapq[r] = bestMapq[r];
             }
         }
+
         return;
     }
 
@@ -322,7 +322,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[NUM_READS_PER_PAIR], Pai
     const char *readData[2][2];     // [read][direction]
     const char *quality[2];         // [read]
     char rcData[2][MAX_READ_SIZE];
-    
+
     for (int r = 0; r < 2; r++) {
         readLen[r] = reads[r]->getDataLength();
         readData[r][0] = reads[r]->getData();
@@ -336,7 +336,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[NUM_READS_PER_PAIR], Pai
     double probabilityOfAllPairs = 0;
     double probabilityOfAllSingles[NUM_READS_PER_PAIR] = {0, 0};
     int secondBestScore = INFINITE_SCORE;
-    
+
     // Locations of best scoring pair
     int bestLoc[NUM_READS_PER_PAIR] = {0xFFFFFFFF, 0xFFFFFFFF};
     Direction bestDirection[NUM_READS_PER_PAIR];
@@ -589,7 +589,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[NUM_READS_PER_PAIR], Pai
                 // The match probability is the product of the probabilities of each end, which we get for the
                 // mate by using its mapq (which was computed only within the region).
                 //
-                double pairMatchProbability = matchProbability * mapqToProbability(mateMapq);
+                double pairMatchProbability = matchProbability * b0->mateProbability;
                 probabilityOfAllPairs += pairMatchProbability;  
 
                 // If we got here, the bucket has a good score and its mate is also OK.
@@ -631,7 +631,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[NUM_READS_PER_PAIR], Pai
                 }
                 
                 // Update scoreLimit.
-                scoreLimit = min(bestScore + 2, (int) maxK) + confDiff + 1;
+                scoreLimit = min(bestScore + 5, (int) maxK) + confDiff + 1;
 #if     0 // Off because we want to compute probabilities for plausible pairs so that we can get a decent mapq estimate
                 if (bestScore != INFINITE_SCORE && secondBestScore < bestScore + realConfDiff) {
                     // Since secondBestScore already means that our best location so far won't be a SingleHit,
@@ -670,7 +670,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[NUM_READS_PER_PAIR], Pai
     
     // Return based on the best and second-best scores so far.
     if ((unsigned)bestScore <= maxK) {
-        result->mapq[0] = result->mapq[1] = computeMAPQ(probabilityOfAllPairs, probabilityOfBestPair, bestScore, 0);
+        result->mapq[0] = result->mapq[1] = computeMAPQ(probabilityOfAllPairs, probabilityOfBestPair, bestScore, totalPopularSeeds, true);
 
         if (bestScore + realConfDiff <= secondBestScore) {
             for (int i = 0; i < NUM_READS_PER_PAIR; i++) {
@@ -706,7 +706,7 @@ void SmarterPairedEndAligner::alignTogether(Read *reads[NUM_READS_PER_PAIR], Pai
                             best = bucket->score;
                             bestLoc = loc + bucket->bestOffset;
                             bestDirection = direction;
-                            bestMapq = computeMAPQ(probabilityOfAllSingles[r], bucket->matchProbability, bestScore, 0);
+                            bestMapq = computeMAPQ(probabilityOfAllSingles[r], bucket->matchProbability, bestScore, totalPopularSeeds, true);
                         } else if (bucket->score < second) {
                             second = bucket->score;
                         }
@@ -846,7 +846,7 @@ void SmarterPairedEndAligner::scoreBucketMate(
         mateAligner->setReadId(1 - readId);
         Direction mateDirection;
         bucket->mateStatus = mateAligner->AlignRead(
-            mate, &bucket->mateLocation, &mateDirection, &bucket->mateScore, mateMapq, maxSpacing + BUCKET_SIZE, location, OppositeDirection(direction));
+            mate, &bucket->mateLocation, &mateDirection, &bucket->mateScore, mateMapq, maxSpacing + BUCKET_SIZE, location, OppositeDirection(direction), &bucket->mateProbability, NULL);
         
 /*
         // Search for the mate independently in two intervals, at minSpacing/maxSpacing before

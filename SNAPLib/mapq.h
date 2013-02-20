@@ -34,13 +34,14 @@ inline int computeMAPQ(
     double probabilityOfAllCandidates,
     double probabilityOfBestCandidate,
     int score,
-    int popularSeedsSkipped)
+    int popularSeedsSkipped,
+    bool fromAlignTogether = false)
 {
     probabilityOfAllCandidates = __max(probabilityOfAllCandidates, probabilityOfBestCandidate); // You'd think this wouldn't be necessary, but floating point limited precision causes it to be.
     _ASSERT(probabilityOfBestCandidate >= 0.0);
     // Special case for MAPQ 70, which we generate only if there is no evidence of a mismatch at all.
     if (probabilityOfAllCandidates == probabilityOfBestCandidate && popularSeedsSkipped == 0 && score < 5) {
-        return 70;
+        return fromAlignTogether ? 3 : 70;
     }
 
     double correctnessProbability = probabilityOfBestCandidate / probabilityOfAllCandidates;
@@ -55,6 +56,9 @@ inline int computeMAPQ(
     // Apply a penalty based on the number of overly popular seeds in the read
     //
     baseMAPQ = __max(0, baseMAPQ - __max(0, popularSeedsSkipped-10) / 2);
+    if (fromAlignTogether) {
+        baseMAPQ /= 30;  // Yes, alignTogether doesn't work all that well. It's slow, too.
+    }
 
 #ifdef TRACE_ALIGNER
     printf("computeMAPQ called at %u: score %d, pThis %g, pAll %g, result %d\n",
