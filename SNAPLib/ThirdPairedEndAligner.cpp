@@ -25,6 +25,8 @@ Revision History:
 #include "SeedSequencer.h"
 #include "mapq.h"
 
+#if     0
+
 ThirdPairedEndAligner::ThirdPairedEndAligner(
         GenomeIndex  *index_,
         unsigned      maxReadSize_,
@@ -821,3 +823,5 @@ ThirdPairedEndAligner::scoreGroup(CandidateGroup *group, unsigned whichRead, Dir
     }// for each unscored candidate bit
     group->allExtantCandidatesScored = true;
 }
+
+#endif  // 0

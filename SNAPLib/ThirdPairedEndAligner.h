@@ -28,6 +28,8 @@ Revision History:
 #include "directions.h"
 #include "LandauVishkin.h"
 
+#if     0
+
 
 class ThirdPairedEndAligner : public PairedEndAligner
 {
@@ -263,3 +265,5 @@ private:
     CandidateGroup *lookupCandidateGroup(unsigned genomeLocation, unsigned whichRead, Direction dir);
     void scoreGroup(CandidateGroup *group, unsigned whichRead, Direction direction);
 };
+
+#endif  // 0
