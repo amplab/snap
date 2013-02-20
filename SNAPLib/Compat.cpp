@@ -237,6 +237,14 @@ DeleteSingleFile(
     return DeleteFile(filename) ? true : false;
 }
 
+    bool
+MoveSingleFile(
+    const char* oldFileName,
+    const char* newFileName)
+{
+    return MoveFile(oldFileName, newFileName) ? true : false;
+}
+
 class LargeFileHandle
 {
 public:

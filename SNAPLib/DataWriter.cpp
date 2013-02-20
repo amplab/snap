@@ -27,7 +27,7 @@ class AsyncDataWriter : public DataWriter
 {
 public:
 
-    AsyncDataWriter(AsyncFile* i_file, volatile size_t* i_sharedOffset, int i_count, size_t i_bufferSize, Watcher* i_watcher);
+    AsyncDataWriter(AsyncFile* i_file, volatile size_t* i_sharedOffset, int i_count, size_t i_bufferSize, Filter* i_filter);
 
     virtual ~AsyncDataWriter()
     {
@@ -67,9 +67,9 @@ AsyncDataWriter::AsyncDataWriter(
     volatile size_t* i_sharedOffset, 
     int i_count,
     size_t i_bufferSize,
-    Watcher* i_watcher)
+    Filter* i_filter)
     :
-    DataWriter(i_watcher),
+    DataWriter(i_filter),
     sharedOffset(i_sharedOffset),
     count(i_count),
     bufferSize(i_bufferSize),
@@ -106,9 +106,10 @@ AsyncDataWriter::advance(
 {
     _ASSERT(bytes <= bufferSize - batches[current].offset);
     char* data = batches[current].buffer + batches[current].offset;
-    batches[current].offset = min(bufferSize, batches[current].offset + bytes);
-    if (watcher != NULL) {
-        watcher->onAdvance(this, data, bytes, location);
+    size_t batchOffset = batches[current].offset;
+    batches[current].offset = min(bufferSize, batchOffset + bytes);
+    if (filter != NULL) {
+        filter->onAdvance(this, batchOffset, data, bytes, location);
     }
 }
 
@@ -119,10 +120,16 @@ AsyncDataWriter::getBatch(
     size_t* o_size,
     size_t* o_used)
 {
-    int index = (((current + relative) % count) + count) % count; // ensure non-negative
+    if (relative <= -count || relative >= count) {
+        return false;
+    }
+    int index = (current + relative + count) % count; // ensure non-negative
     *o_buffer = batches[index].buffer;
     *o_size = bufferSize;
     *o_used = batches[index].offset;
+    if (relative >= 0) {
+        batches[index].file->waitForCompletion();
+    }
     return true;
 }
 
@@ -130,18 +137,33 @@ AsyncDataWriter::getBatch(
 AsyncDataWriter::nextBatch()
 {
     size_t bytes = batches[current].offset;
-    size_t offset = (size_t) InterlockedAdd64AndReturnNewValue((_int64*)sharedOffset, bytes) - bytes;
-    if (bytes > 0) {
-        if (! batches[current].file->beginWrite(batches[current].buffer, bytes, offset, NULL)) {
-            return false;
+    current = (current + 1) % count;
+    batches[current].offset = 0;
+    size_t offset = 0;
+    bool newSize = filter != NULL && filter->filterType == TransformFilter;
+    bool newBuffer = filter != NULL && 
+        (filter->filterType == CopyFilter || filter->filterType == TransformFilter);
+    if (! newSize) {
+        offset = (size_t) InterlockedAdd64AndReturnNewValue((_int64*)sharedOffset, bytes) - bytes;
+    } else if (filter != NULL) {
+        offset = *sharedOffset; // advisory only
+    }
+    if (filter != NULL) {
+        size_t n = filter->onNextBatch(this, offset, bytes);
+        if (newSize) {
+            bytes = n;
+            offset = (size_t) InterlockedAdd64AndReturnNewValue((_int64*)sharedOffset, bytes) - bytes;
         }
     }
-    current = (current + 1) % count;
-    if (! batches[current].file->waitForCompletion()) {
+    if (newBuffer) {
+        current = (current + 1) % count;
+    }
+    int writeIndex = (current + count - 1) % count;
+    if (! batches[writeIndex].file->beginWrite(batches[writeIndex].buffer, bytes, offset, NULL)) {
         return false;
     }
-    if (watcher != NULL) {
-        watcher->onNextBatch(this, offset, bytes);
+    if (! batches[current].file->waitForCompletion()) {
+        return false;
     }
     return true;
 }
@@ -158,7 +180,7 @@ AsyncDataWriter::close()
 class AsyncDataWriterSupplier : public DataWriterSupplier
 {
 public:
-    AsyncDataWriterSupplier(const char* i_filename, DataWriter::WatcherSupplier* i_watcherSupplier,
+    AsyncDataWriterSupplier(const char* i_filename, DataWriter::FilterSupplier* i_filterSupplier,
         int i_bufferCount, size_t i_bufferSize);
 
     virtual DataWriter* getWriter();
@@ -168,7 +190,7 @@ public:
 private:
     const char* filename;
     AsyncFile* file;
-    DataWriter::WatcherSupplier* watcherSupplier;
+    DataWriter::FilterSupplier* filterSupplier;
     const int bufferCount;
     const size_t bufferSize;
     volatile size_t sharedOffset;
@@ -176,17 +198,21 @@ private:
 
 AsyncDataWriterSupplier::AsyncDataWriterSupplier(
     const char* i_filename,
-    DataWriter::WatcherSupplier* i_watcherSupplier,
+    DataWriter::FilterSupplier* i_filterSupplier,
     int i_bufferCount,
     size_t i_bufferSize)
     :
     filename(i_filename),
-    watcherSupplier(i_watcherSupplier),
+    filterSupplier(i_filterSupplier),
     bufferCount(i_bufferCount),
     bufferSize(i_bufferSize),
     sharedOffset(0)
 {
     file = AsyncFile::open(filename, true);
+    if (file == NULL) {
+        fprintf(stderr, "failed to open %s for write\n", filename);
+        exit(1);
+    }
 }
 
     DataWriter*
@@ -194,24 +220,30 @@ AsyncDataWriterSupplier::getWriter()
 {
     return new AsyncDataWriter(file, &sharedOffset,
         bufferCount, bufferSize,
-        watcherSupplier ? watcherSupplier->getWatcher() : NULL);
+        filterSupplier ? filterSupplier->getFilter() : NULL);
 }
 
     void
 AsyncDataWriterSupplier::close()
 {
+    if (filterSupplier != NULL && filterSupplier->filterType == DataWriter::TransformFilter) {
+        DataWriter* writer = new AsyncDataWriter(file, &sharedOffset, bufferCount, bufferSize, NULL);
+        filterSupplier->onClose(this, writer);
+        writer->close();
+        delete writer;
+    }
     file->close();
-    if (watcherSupplier != NULL) {
-        watcherSupplier->onClose(this);
+    if (filterSupplier != NULL && filterSupplier->filterType != DataWriter::TransformFilter) {
+        filterSupplier->onClose(this, NULL);
     }
 }
 
     DataWriterSupplier*
 DataWriterSupplier::create(
     const char* filename,
-    DataWriter::WatcherSupplier* watcherSupplier,
+    DataWriter::FilterSupplier* filterSupplier,
     int count,
     size_t bufferSize)
 {
-    return new AsyncDataWriterSupplier(filename, watcherSupplier, count, bufferSize);
+    return new AsyncDataWriterSupplier(filename, filterSupplier, count, bufferSize);
 }

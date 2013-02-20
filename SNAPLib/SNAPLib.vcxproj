@@ -219,6 +219,8 @@
     <ClCompile Include="seed.cpp" />
     <ClCompile Include="SingleAligner.cpp" />
     <ClCompile Include="SmarterPairedEndAligner.cpp" />
+    <ClCompile Include="SortedDataWriter.cpp" />
+    <ClCompile Include="GzipDataWriter.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>

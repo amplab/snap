@@ -28,6 +28,7 @@ Revision History:
 #include "Read.h"
 #include "Genome.h"
 #include "LandauVishkin.h"
+#include "AlignerOptions.h"
 
 //
 // abstract class defining format-specific operations
@@ -71,6 +72,8 @@ public:
     //
     // writing
     //
+
+    virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const = 0;
 
     virtual bool writeHeader(
         const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize,

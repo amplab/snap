@@ -184,6 +184,9 @@ _int64 QueryFileSize(const char *fileName);
 // returns true on success
 bool DeleteSingleFile(const char* filename); // DeleteFile is a Windows macro...
 
+// returns true on success
+bool MoveSingleFile(const char* oldFileName, const char* newFileName);
+
 class LargeFileHandle;
 
 // open binary file, supports "r" for read, "w" for rewrite/create, "a" for append

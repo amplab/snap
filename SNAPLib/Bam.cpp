@@ -27,6 +27,7 @@ Environment:
 #include "ReadSupplierQueue.h"
 #include "Util.h"
 #include "FileFormat.h"
+#include "AlignerOptions.h"
 
 using std::max;
 using std::min;
@@ -271,13 +272,17 @@ BAMReader::getNextRead(
     char* buffer;
     _int64 bytes;
     if (! data->getData(&buffer, &bytes)) {
-        return false;
+        data->nextBatch();
+        if (! data->getData(&buffer, &bytes)) {
+            return false;
+        }
     }
     BAMAlignment* bam = (BAMAlignment*) buffer;
     if (bytes < sizeof(bam->block_size) || bytes < bam->size()) {
         fprintf(stderr, "Unexpected end of BAM file at %lld\n", data->getFileOffset());
         exit(1);
     }
+    static size_t lastSize = bam->size();//!!
     data->advance(bam->size());
     size_t lineLength;
     getReadFromLine(genome, buffer, buffer + bytes, read, alignmentResult, genomeLocation,
@@ -370,6 +375,8 @@ public:
     BAMFormat(bool i_useM) : useM(i_useM) {}
 
     virtual bool isFormatOf(const char* filename) const;
+    
+    virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
 
     virtual bool writeHeader(
         const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize,
@@ -399,6 +406,25 @@ BAMFormat::isFormatOf(
     const char* filename) const
 {
     return util::stringEndsWith(filename, ".bam");
+}
+     
+    ReadWriterSupplier*
+BAMFormat::getWriterSupplier(
+    AlignerOptions* options,
+    const Genome* genome) const
+{
+    DataWriterSupplier* dataSupplier;
+    if (options->sortOutput) {
+        int len = strlen(options->outputFileTemplate);
+        // todo: this is going to leak, but there's no easy way to free it, and it's small...
+        char* tempFileName = (char*) malloc(5 + len);
+        strcpy(tempFileName, options->outputFileTemplate);
+        strcpy(tempFileName + len, ".tmp");
+        dataSupplier = DataWriterSupplier::sorted(tempFileName, options->outputFileTemplate, DataWriterSupplier::gzip());
+    } else {
+        dataSupplier = DataWriterSupplier::create(options->outputFileTemplate, DataWriterSupplier::gzip(), 3);
+    }
+    return ReadWriterSupplier::create(this, dataSupplier, genome);
 }
 
     bool
@@ -435,7 +461,7 @@ BAMFormat::writeHeader(
     BAMHeaderRefSeq* refseq = bamHeader->firstRefSeq();
     unsigned genomeLen = genome->getCountOfBases();
     for (int i = 0; i < numPieces; i++) {
-        int len = strlen(pieces[i].name);
+        int len = strlen(pieces[i].name) + 1;
         cursor += BAMHeaderRefSeq::size(len);
         if (cursor > headerBufferSize) {
             return false;
@@ -510,14 +536,14 @@ BAMFormat::writeRead(
     }
 
     // Write the BAM entry
-    size_t bamSize = BAMAlignment::size(qnameLen, cigarOps, fullLength);
+    size_t bamSize = BAMAlignment::size(qnameLen + 1, cigarOps, fullLength);
     if (bamSize > bufferSpace) {
         return false;
     }
     BAMAlignment* bam = (BAMAlignment*) buffer;
-    bam->block_size = bamSize;
+    bam->block_size = bamSize - 4;
     bam->refID = pieceIndex;
-    bam->pos = positionInPiece;
+    bam->pos = positionInPiece - 1;
     bam->l_read_name = qnameLen + 1;
     bam->MAPQ = mapQuality;
     // todo: what is bin for unmapped reads?

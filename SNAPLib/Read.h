@@ -161,10 +161,26 @@ public:
     
 class Read {
 public:
-        Read() :    id(NULL), data(NULL), quality(NULL), 
-                    localUnclippedDataBuffer(NULL), localUnclippedQualityBuffer(NULL), localBufferSize(0),
-                    originalUnclippedDataBuffer(NULL), originalUnclippedQualityBuffer(NULL), clippingState(NoClipping)
+        Read() :    
+            id(NULL), data(NULL), quality(NULL), 
+            localUnclippedDataBuffer(NULL), localUnclippedQualityBuffer(NULL), localBufferSize(0),
+            originalUnclippedDataBuffer(NULL), originalUnclippedQualityBuffer(NULL), clippingState(NoClipping)
+        {}
+
+        Read(Read& other) : 
+            id(other.id), data(other.data), quality(other.quality), 
+            localUnclippedDataBuffer(other.localUnclippedDataBuffer),
+            localUnclippedQualityBuffer(other.localUnclippedQualityBuffer),
+            localBufferSize(other.localBufferSize),
+            originalUnclippedDataBuffer(other.originalUnclippedDataBuffer),
+            originalUnclippedQualityBuffer(other.originalUnclippedQualityBuffer),
+            clippingState(other.clippingState)
         {
+            other.localUnclippedDataBuffer = NULL;
+            other.localUnclippedQualityBuffer = NULL;
+            other.localBufferSize = 0;
+            other.originalUnclippedDataBuffer = NULL;
+            other.originalUnclippedQualityBuffer;
         }
 
         ~Read()
@@ -173,6 +189,23 @@ public:
             delete [] localUnclippedQualityBuffer;
         }
 
+        void operator=(Read& other)
+        {
+            id = other.id;
+            data = other.data;
+            quality = other.quality;
+            localUnclippedDataBuffer = other.localUnclippedDataBuffer;
+            localUnclippedQualityBuffer = other.localUnclippedQualityBuffer;
+            localBufferSize = other.localBufferSize;
+            other.localUnclippedDataBuffer = NULL;
+            other.localUnclippedQualityBuffer = NULL;
+            other.localBufferSize = 0;
+            originalUnclippedDataBuffer = other.originalUnclippedDataBuffer;
+            originalUnclippedQualityBuffer = other.originalUnclippedQualityBuffer;
+            other.originalUnclippedDataBuffer = NULL;
+            other.originalUnclippedQualityBuffer;
+            clippingState = other.clippingState;
+        }
 
         //
         // Initialize the Read.  Reads do NOT take ownership of the memory to which they
@@ -346,19 +379,6 @@ public:
             
             data = localUnclippedDataBuffer + frontClippedLength;
             quality = localUnclippedQualityBuffer + frontClippedLength;
-        }
-
-        //
-        // todo:
-        // This is a temporary expedient to clear local data when there are multiple
-        // copies of the same Read, to avoid double deletion.
-        // Since there is only one case right now (in PairedReadMatcher) it can be done manually.
-        // It should eventually be fixed by adding a copy constructor & assignment operator.
-        //
-        void clearLocal()
-        {
-            localUnclippedDataBuffer = NULL;
-            localUnclippedQualityBuffer = NULL;
         }
 
 private:

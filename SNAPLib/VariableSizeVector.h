@@ -21,7 +21,13 @@ private:
 public:
     VariableSizeVector(int i_capacity = 16)
         : entries(NULL), count(0), capacity(i_capacity)
+    {}
+    
+    VariableSizeVector(VariableSizeVector& other)
+        : entries(other.entries), count(other.count), capacity(other.capacity)
     {
+        other.count = 0;
+        other.entries = NULL;
     }
 
     ~VariableSizeVector()
@@ -42,10 +48,14 @@ public:
         other.count = 0;
     }
 
-    void reserve(int capacity)
+    void reserve(int newCapacity)
     {
+        _ASSERT(newCapacity >= 0);
+        if (newCapacity <= capacity && entries != NULL) {
+            return;
+        }
         V* old = entries;
-        this->capacity = capacity;
+        capacity = std::max(newCapacity, capacity);
         entries = (V*) allocate(capacity * sizeof(V));
         if (old != NULL) {
             memcpy(entries, old, count * sizeof(V));
@@ -83,6 +93,18 @@ public:
         }
         push_back(value);
         return true;
+    }
+
+    inline void erase(int index)
+    {
+        _ASSERT(index >= 0 && index < count);
+        if (index < 0 || index >= count) {
+            return;
+        }
+        if (index < count - 1) {
+            memmove(entries + index, entries + index + 1, (count - index - 1) * sizeof(V));
+        }
+        count--;
     }
 
     inline V& operator[](int index)

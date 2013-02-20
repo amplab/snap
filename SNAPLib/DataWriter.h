@@ -32,31 +32,49 @@ class DataWriter
 {
 public:
     
-    class Watcher
+    enum FilterType
+    {
+        ReadFilter, // reads data but does not modify it
+        ModifyFilter, // modifies data in place
+        CopyFilter, // copies data into new buffer, same size
+        TransformFilter, // copies data into new buffer, possibly different size
+    };
+    class Filter
     {
     public:
-        virtual ~Watcher() {}
+        Filter (FilterType i_filterType) : filterType(i_filterType) {}
+
+        const FilterType filterType;
+
+        virtual ~Filter() {}
 
         // called when a chunk of data has been written into the file
-        virtual void onAdvance(DataWriter* writer, char* data, size_t bytes, unsigned location) = 0;
+        virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, size_t bytes, unsigned location) = 0;
 
         // called when a batch has been completed, after advancing to the next
-        // e.g. so use getBatch(-1, ...) to get the one that was just written
-        virtual void onNextBatch(DataWriter* writer, size_t offset, size_t bytes) = 0;
+        // e.g. so use getBatch(-1, ...) to get the one that was just completed
+        // TransformFilters return #byte of transformed data in current buffer, so we need to advance again
+        // TransformFilters should call getBatch(0) to ensure current buffer has been written before they write into it
+        virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes) = 0;
     };
     
-    class WatcherSupplier
+    class FilterSupplier
     {
     public:
-        virtual ~WatcherSupplier();
+        FilterSupplier (FilterType i_filterType) : filterType(i_filterType) {}
+        
+        const FilterType filterType;
 
-        virtual Watcher* getWatcher() = 0;
+        virtual ~FilterSupplier() {}
 
-        // called when entire file is done, all Watchers destroyed
-        virtual void onClose(DataWriterSupplier* supplier) = 0;
+        virtual Filter* getFilter() = 0;
+
+        // called when entire file is done
+        // TransformFilter will get a writer to append data if it wants
+        virtual void onClose(DataWriterSupplier* supplier, DataWriter* writer) = 0;
     };
 
-    DataWriter(Watcher* i_watcher) : watcher(i_watcher) {}
+    DataWriter(Filter* i_filter) : filter(i_filter) {}
 
     virtual ~DataWriter() {}
 
@@ -68,6 +86,7 @@ public:
     virtual void advance(size_t bytes, unsigned location = 0) = 0;
 
     // get complete data buffer in batch, relative==0 is current, relative==-1 is previous, etc.
+    // if negative gets old data written, else waits for write to complete so you can write into it
     virtual bool getBatch(int relative, char** o_buffer, size_t* o_size, size_t* o_used) = 0;
 
     // advance to next buffer
@@ -77,7 +96,7 @@ public:
     virtual void close() = 0;
 
 protected:
-    Watcher* watcher;
+    Filter* filter;
 };
 
 // creates writers for multiple threads
@@ -88,10 +107,18 @@ public:
 
     virtual DataWriter* getWriter() = 0;
 
-    // call when all threads are done, all watchers destroyed
+    // call when all threads are done, all filters destroyed
     virtual void close() = 0;
     
     static DataWriterSupplier* create(const char* filename,
-        DataWriter::WatcherSupplier* watcherSupplier = NULL,
+        DataWriter::FilterSupplier* filterSupplier = NULL,
         int count = 2, size_t bufferSize = 16 * 1024 * 1024);
+    
+    static DataWriterSupplier* sorted(const char* tempFileName,
+        const char* sortedFileName,
+        DataWriter::FilterSupplier* sortedFilterSuppler = NULL,
+        size_t bufferSize = 16 * 1024 * 1024);
+
+    // defaults follow BAM output spec
+    static DataWriter::FilterSupplier* gzip(bool bamExtra = true, size_t chunkSize = 0x10000, int headerChunks = 1, DataWriter::FilterSupplier* inner = NULL);
 };

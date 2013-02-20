@@ -157,7 +157,7 @@ AlignerContext::beginIteration()
     // total mem in Gb if given; default 1 Gb/thread for human genome, scale down for smaller genomes
     size_t totalMemory = options->sortMemory > 0
         ? options->sortMemory * ((size_t) 1 << 30)
-        : options->numThreads * max(2 * ParallelSAMWriter::UnsortedBufferSize,
+        : options->numThreads * max(2ULL * 16 * 1024 * 1024,
                                     (size_t) index->getGenome()->getCountOfBases() / 3);
     if (NULL != options->outputFileTemplate) {
         const FileFormat* format = 
@@ -165,8 +165,7 @@ AlignerContext::beginIteration()
             FileFormat::BAM[0]->isFormatOf(options->outputFileTemplate) ? FileFormat::BAM[options->useM] :
             NULL;
         if (format != NULL) {
-            writerSupplier = ReadWriterSupplier::create(
-                format, DataWriterSupplier::create(options->outputFileTemplate), index->getGenome());
+            writerSupplier = format->getWriterSupplier(options, index->getGenome());
             ReadWriter* headerWriter = writerSupplier->getWriter();
             headerWriter->writeHeader(options->sortOutput, argc, argv, version, options->rgLineContents);
             headerWriter->close();

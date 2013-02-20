@@ -279,15 +279,20 @@ WindowsOverlappedDataReader::advance(
 WindowsOverlappedDataReader::nextBatch(bool dontRelease)
 {
     BufferInfo* info = &bufferInfo[nextBufferForConsumer];
+    if (info->isEOF) {
+        if (! dontRelease) {
+            releaseBefore(DataBatch(info->batchID + 1));
+        }
+        return;
+    }
     _uint32 overflow = max((DWORD) info->offset, info->nBytesThatMayBeginARead) - info->nBytesThatMayBeginARead;
     const unsigned advance = (nextBufferForConsumer + 1) % nBuffers;
-    printf("nextBatch %d state %d\n", advance, bufferInfo[advance].state);
     if (bufferInfo[advance].state != Full) {
         waitForBuffer(advance);
     }
     bufferInfo[advance].offset = overflow;
 
-    _ASSERT(bufferInfo[nextBufferForConsumer].fileOffset + bufferInfo[nextBufferForConsumer].validBytes == 
+    _ASSERT(bufferInfo[nextBufferForConsumer].fileOffset + bufferInfo[nextBufferForConsumer].nBytesThatMayBeginARead == 
                 bufferInfo[advance].fileOffset);
         
     nextBufferForConsumer = advance;
@@ -378,7 +383,7 @@ WindowsOverlappedDataReader::startIo()
         info->lap.OffsetHigh = readOffset.HighPart;
         info->fileOffset = readOffset.QuadPart;
          
-        printf("startIo on %d at %lld for %uB\n", nextBufferForReader, readOffset, amountToRead);
+        //printf("startIo on %d at %lld for %uB\n", nextBufferForReader, readOffset, amountToRead);
         if (!ReadFile(
                 hFile,
                 info->buffer,
@@ -681,9 +686,15 @@ GzipDataReader::decompress(
     void
 GzipDataReader::decompressBatch()
 {
+    size_t fileOffset = inner->getFileOffset();
     char* compressed;
     _int64 compressedBytes;
     if (! inner->getData(&compressed, &compressedBytes)) {
+        if (inner->isEOF()) {
+            offset = 0;
+            validBytes = startBytes = 0;
+            return;
+        }
         fprintf(stderr, "GzipDataReader:decompressBatch failed getData at %lld\n", inner->getFileOffset());
         exit(1);
     }
