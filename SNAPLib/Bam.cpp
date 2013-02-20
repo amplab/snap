@@ -321,7 +321,7 @@ BAMReader::getReadFromLine(
         char* qualBuffer = getExtra(bam->l_seq);
         BAMAlignment::decodeSeq(seqBuffer, bam->seq(), bam->l_seq);
         BAMAlignment::decodeQual(qualBuffer, bam->qual(), bam->l_seq);
-        read->init(bam->read_name(), bam->l_read_name, seqBuffer, qualBuffer, bam->l_seq);
+        read->init(bam->read_name(), bam->l_read_name - 1, seqBuffer, qualBuffer, bam->l_seq);
         read->setBatch(data->getBatch());
         if (bam->FLAG & SAM_REVERSE_COMPLEMENT) {
             read->becomeRC();
