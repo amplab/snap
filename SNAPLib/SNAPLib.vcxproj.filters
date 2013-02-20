@@ -147,9 +147,6 @@
     <ClInclude Include="fastq.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="FixedHashTable.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="genome.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -274,6 +271,15 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="BloomPairedEndAligner.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FixedSizeMap.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FixedSizeSet.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FixedSizeVector.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

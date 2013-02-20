@@ -36,6 +36,19 @@ using namespace std;
 #define TRACE(...) {}
 #endif
 
+int FirstPowerOf2GreaterThanOrEqualTo(int value)
+{
+    int highestBitSet;
+    for (highestBitSet = 0; highestBitSet <= 30; highestBitSet++) { // Only go to 31, since this is signed
+        if (!(value & ~((1 << highestBitSet) - 1))) {
+            highestBitSet -= 1;
+            break;
+        }
+    }
+    if (1 << highestBitSet == value) return value;
+    return 1 << (highestBitSet + 1);
+}
+
 SmarterPairedEndAligner::SmarterPairedEndAligner(
          GenomeIndex  *index_,
          unsigned      maxReadSize_,
@@ -49,17 +62,17 @@ SmarterPairedEndAligner::SmarterPairedEndAligner(
  :   index(index_), maxReadSize(maxReadSize_), confDiff(confDiff_), maxHits(maxHits_),
      maxK(maxK_), maxSeeds(maxSeeds_), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
      adaptiveConfDiffThreshold(adaptiveConfDiffThreshold_), seedLen(index_->getSeedLength()),
-     lv(2 * MAX_BUCKETS)
+     maxBuckets(FirstPowerOf2GreaterThanOrEqualTo(maxSeeds_ * maxHits_ * 4)), lv(2 * maxBuckets)
 {
     // Initialize the bucket data structures.
-    buckets = new Bucket[MAX_BUCKETS];
+    buckets = new Bucket[maxBuckets];
     for (int r = 0; r < 2; r++) {
         for (int rc = 0; rc < 2; rc++) {
-            bucketLocations[r][rc].reserve(MAX_BUCKETS);
-            bucketTable[r][rc].reserve(2 * MAX_BUCKETS);
+            bucketLocations[r][rc].reserve(maxBuckets);
+            bucketTable[r][rc].reserve(2 * maxBuckets);
         }
     }
-    candidates.reserve(MAX_BUCKETS);
+    candidates.reserve(maxBuckets);
 
     // Initialize the complements array.
     memset(complement, 0, sizeof(complement));
@@ -135,6 +148,8 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
     int numCertainlyNotFound = 0;
     int numIgnoredMulti = 0;  // MultiHits where all seeds returned too many hits
     int numSingleWithNotFound = 0;
+
+    clearState();
 
     result->status[0] = NotFound;
     result->status[1] = NotFound;
@@ -235,7 +250,6 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
     
     if (numNotFound + numIgnoredMulti == 2) {
         // We couldn't find either read even as MultipleHits, so there's no way we'll do the pair.
-
         return;
     }
 
@@ -909,7 +923,7 @@ void SmarterPairedEndAligner::clearState()
 
 SmarterPairedEndAligner::Bucket *SmarterPairedEndAligner::newBucket()
 {
-    _ASSERT(bucketsUsed < MAX_BUCKETS);
+    _ASSERT(bucketsUsed < maxBuckets);
     Bucket *b = &buckets[bucketsUsed++];
     b->found = 0;
     b->scored = 0;

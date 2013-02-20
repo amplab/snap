@@ -40,6 +40,7 @@ inline int computeMAPQ(
     probabilityOfAllCandidates = __max(probabilityOfAllCandidates, probabilityOfBestCandidate); // You'd think this wouldn't be necessary, but floating point limited precision causes it to be.
     _ASSERT(probabilityOfBestCandidate >= 0.0);
     // Special case for MAPQ 70, which we generate only if there is no evidence of a mismatch at all.
+fromAlignTogether = false; // BJB
     if (probabilityOfAllCandidates == probabilityOfBestCandidate && popularSeedsSkipped == 0 && score < 5) {
         return fromAlignTogether ? 3 : 70;
     }

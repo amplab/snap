@@ -160,7 +160,9 @@
     <ClInclude Include="directions.h" />
     <ClInclude Include="FASTA.h" />
     <ClInclude Include="fastq.h" />
-    <ClInclude Include="FixedHashTable.h" />
+    <ClInclude Include="FixedSizeMap.h" />
+    <ClInclude Include="FixedSizeSet.h" />
+    <ClInclude Include="FixedSizeVector.h" />
     <ClInclude Include="genome.h" />
     <ClInclude Include="GenomeIndex.h" />
     <ClInclude Include="GoodRandom.h" />
