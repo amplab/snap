@@ -52,7 +52,7 @@ static void usage()
             "               Larger numbers use more memory but work better with more repetitive genomes.  Smaller numbers reduce the memory\n"
             "               footprint, but may cause the index build to fail.  Making -O larger than necessary will not affect the resuting\n"
             "               index.  Factor must be between 1 and 1000, and the default is 40.\n"
-            " -tMaxThreads  Specify the maximum number of threads to use. Default is the number of cores\n",
+            " -tMaxThreads  Specify the maximum number of threads to use. Default is the number of cores.\n",
             DEFAULT_SEED_SIZE,
             DEFAULT_SLACK);
     exit(1);
