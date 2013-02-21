@@ -377,7 +377,7 @@ WindowsOverlappedDataReader::startIo()
         info->isEOF = readOffset.QuadPart + amountToRead == finalOffset;
         info->nBytesThatMayBeginARead = min(bufferSize - overflowBytes, finalStartOffset - readOffset.QuadPart);
 
-        _ASSERT(amountToRead >= info->nBytesThatMayBeginARead && (!info->isEOF || fileSize.QuadPart == readOffset.QuadPart + amountToRead));
+        _ASSERT(amountToRead >= info->nBytesThatMayBeginARead && (!info->isEOF || finalOffset == readOffset.QuadPart + amountToRead));
         ResetEvent(info->lap.hEvent);
         info->lap.Offset = readOffset.LowPart;
         info->lap.OffsetHigh = readOffset.HighPart;

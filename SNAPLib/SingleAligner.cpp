@@ -206,7 +206,6 @@ SingleAlignerContext::runIterationThread()
 
     aligner->~BaseAligner(); // This calls the destructor without calling operator delete, allocator owns the memory.
  
-    delete aligner;
     if (supplier != NULL) {
         delete supplier;
     }
