@@ -27,6 +27,8 @@ Revision History:
 #pragma once
 
 #include "Compat.h"
+#include "Read.h"
+#include "Genome.h"
 
 //
 // Utility class for letting multiple threads split chunks of a range to process.
@@ -50,3 +52,71 @@ private:
     volatile _int64 position;
     volatile _int64 startTime;
 };
+
+class RangeSplittingReadSupplier : public ReadSupplier {
+public:
+    RangeSplittingReadSupplier(RangeSplitter *i_splitter, ReadReader *i_underlyingReader) : 
+      splitter(i_splitter), underlyingReader(i_underlyingReader), read() {}
+
+    virtual ~RangeSplittingReadSupplier();
+
+    Read *getNextRead();
+ 
+    virtual void releaseBefore(DataBatch batch)
+    { underlyingReader->releaseBefore(batch); }
+
+private:
+    RangeSplitter *splitter;
+    ReadReader *underlyingReader;
+    Read read;
+};
+
+class RangeSplittingReadSupplierGenerator: public ReadSupplierGenerator {
+public:
+    RangeSplittingReadSupplierGenerator(const char *i_fileName, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome);
+    ~RangeSplittingReadSupplierGenerator() {delete splitter; delete [] fileName;}
+
+    ReadSupplier *generateNewReadSupplier();
+
+private:
+    RangeSplitter *splitter;
+    char *fileName;
+    bool isSAM;
+    ReadClippingType clipping;
+    const Genome *genome;
+};
+
+
+class RangeSplittingPairedReadSupplier : public PairedReadSupplier {
+public:
+    RangeSplittingPairedReadSupplier(RangeSplitter *i_splitter, PairedReadReader *i_underlyingReader) : splitter(i_splitter), underlyingReader(i_underlyingReader) {}
+    virtual ~RangeSplittingPairedReadSupplier();
+
+    virtual bool getNextReadPair(Read **read1, Read **read2);
+       
+    virtual void releaseBefore(DataBatch batch)
+    { underlyingReader->releaseBefore(batch); }
+
+ private:
+    PairedReadReader *underlyingReader;
+    RangeSplitter *splitter;
+    Read internalRead1;
+    Read internalRead2;
+ };
+
+class RangeSplittingPairedReadSupplierGenerator: public PairedReadSupplierGenerator {
+public:
+    RangeSplittingPairedReadSupplierGenerator(const char *i_fileName1, const char *i_fileName2, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome);
+    ~RangeSplittingPairedReadSupplierGenerator();
+
+    PairedReadSupplier *generateNewPairedReadSupplier();
+
+private:
+    RangeSplitter *splitter;
+    char *fileName1;
+    char *fileName2;
+    bool isSAM;
+    ReadClippingType clipping;
+    const Genome *genome;
+};
+

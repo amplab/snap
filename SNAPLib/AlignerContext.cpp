@@ -31,6 +31,7 @@ Revision History:
 #include "AlignerStats.h"
 #include "Hamming.h"
 #include "BaseAligner.h"
+#include "FileFormat.h"
 
 using std::max;
 using std::min;
@@ -38,14 +39,11 @@ using std::min;
 AlignerContext::AlignerContext(int i_argc, const char **i_argv, const char *i_version, AlignerExtension* i_extension)
     :
     index(NULL),
-    parallelSamWriter(NULL),
-    fileSplitterState(0, 0),
+    writerSupplier(NULL),
     options(NULL),
     stats(NULL),
     extension(i_extension != NULL ? i_extension : new AlignerExtension()),
-    inputFilename(NULL),
-    fileSplitter(NULL),
-    samWriter(NULL),
+    readWriter(NULL),
     argc(i_argc),
     argv(i_argv),
     version(i_version),
@@ -90,11 +88,7 @@ AlignerContext::initializeThread()
 {
     stats = newStats(); // separate copy per thread
     stats->extra = extension->extraStats();
-    if (NULL != parallelSamWriter) {
-        samWriter = parallelSamWriter->getWriterForThread(threadNum);
-    } else {
-        samWriter = NULL;
-    }
+    readWriter = writerSupplier != NULL ? writerSupplier->getWriter() : NULL;
     extension = extension->copy();
 }
 
@@ -103,8 +97,9 @@ AlignerContext::runThread()
 {
     extension->beginThread();
     runIterationThread();
-    if (samWriter != NULL) {
-        samWriter->close();
+    if (readWriter != NULL) {
+        readWriter->close();
+        delete readWriter;
     }
     extension->finishThread();
 }
@@ -136,19 +131,7 @@ AlignerContext::initialize()
     printf("%llds.  %u bases, seed size %d\n",
         loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
 
-    if (options->similarityMapFile != NULL) {
-        printf("Loading similarity map from %s... ", options->similarityMapFile);
-        fflush(stdout);
-        similarityMap = SimilarityMap::load(options->similarityMapFile, index->getGenome());
-        if (similarityMap == NULL) {
-            exit(1);
-        }
-        printf("done\n");
-    } else {
-        similarityMap = NULL;
-    }
-
-    if (options->samFileTemplate != NULL && (options->maxHits.size() > 1 || options->maxDist.size() > 1 || options->numSeeds.size() > 1
+    if (options->outputFileTemplate != NULL && (options->maxHits.size() > 1 || options->maxDist.size() > 1 || options->numSeeds.size() > 1
                 || options->confDiff.size() > 1 || options->adaptiveConfDiff.size() > 1)) {
         fprintf(stderr, "WARNING: You gave ranges for some parameters, so SAM files will be overwritten!\n");
     }
@@ -177,22 +160,30 @@ AlignerContext::printStatsHeader()
     void
 AlignerContext::beginIteration()
 {
-    parallelSamWriter = NULL;
+    writerSupplier = NULL;
     // total mem in Gb if given; default 1 Gb/thread for human genome, scale down for smaller genomes
     size_t totalMemory = options->sortMemory > 0
         ? options->sortMemory * ((size_t) 1 << 30)
-        : options->numThreads * max(2 * ParallelSAMWriter::UnsortedBufferSize,
+        : options->numThreads * max(2ULL * 16 * 1024 * 1024,
                                     (size_t) index->getGenome()->getCountOfBases() / 3);
-    if (NULL != options->samFileTemplate) {
-        parallelSamWriter = ParallelSAMWriter::create(options->samFileTemplate,index->getGenome(),
-            options->numThreads, options->sortOutput, totalMemory, options->useM, options->gapPenalty, argc, argv, version, options->rgLineContents);
-        if (NULL == parallelSamWriter) {
-            fprintf(stderr,"Unable to create SAM file writer.  Just aligning for speed, no output will be generated.\n");
+
+    if (NULL != options->outputFileTemplate) {
+        const FileFormat* format = 
+            FileFormat::SAM[0]->isFormatOf(options->outputFileTemplate) ? FileFormat::SAM[options->useM] :
+            FileFormat::BAM[0]->isFormatOf(options->outputFileTemplate) ? FileFormat::BAM[options->useM] :
+            NULL;
+        if (format != NULL) {
+            writerSupplier = format->getWriterSupplier(options, index->getGenome());
+            ReadWriter* headerWriter = writerSupplier->getWriter();
+            headerWriter->writeHeader(options->sortOutput, argc, argv, version, options->rgLineContents);
+            headerWriter->close();
+            delete headerWriter;
+        } else {
+            fprintf(stderr, "warning: no output, unable to determine format of output file %s\n", options->outputFileTemplate);
         }
     }
 
     alignStart = timeInMillis();
-    fileSplitterState = RangeSplitter(QueryFileSize(options->inputFilename), options->numThreads, 100);
 
     clipping = options->clipping;
     totalThreads = options->numThreads;
@@ -205,16 +196,13 @@ AlignerContext::beginIteration()
     adaptiveConfDiff = adaptiveConfDiff_;
     selectivity = options->selectivity;
 
-    inputFilename = options->inputFilename;
-    inputFileIsFASTQ = options->inputFileIsFASTQ;
-    fileSplitter = &fileSplitterState;
-
     if (stats != NULL) {
         delete stats;
     }
     stats = newStats();
     stats->extra = extension->extraStats();
     extension->beginIteration();
+    typeSpecificBeginIteration();
 }
 
     void
@@ -222,10 +210,10 @@ AlignerContext::finishIteration()
 {
     extension->finishIteration();
 
-    if (NULL != parallelSamWriter) {
-        parallelSamWriter->close();
-        delete parallelSamWriter;
-        parallelSamWriter = NULL;
+    if (NULL != writerSupplier) {
+        writerSupplier->close();
+        delete writerSupplier;
+        writerSupplier = NULL;
     }
 
     alignTime = timeInMillis() - alignStart;
@@ -234,7 +222,8 @@ AlignerContext::finishIteration()
     bool
 AlignerContext::nextIteration()
 {
-    if ((adaptiveConfDiff_ += options->adaptiveConfDiff.step) > options->adaptiveConfDiff.end) {
+     typeSpecificNextIteration();
+     if ((adaptiveConfDiff_ += options->adaptiveConfDiff.step) > options->adaptiveConfDiff.end) {
         adaptiveConfDiff_ = options->adaptiveConfDiff.start;
         if ((numSeeds_ += options->numSeeds.step) > options->numSeeds.end) {
             numSeeds_ = options->numSeeds.start;
@@ -249,6 +238,7 @@ AlignerContext::nextIteration()
             }
         }
     }
+
     return true;
 }
 

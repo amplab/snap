@@ -47,6 +47,52 @@ inline void dieAtLine(const std::string &epitaph, const std::string &line)
 }
 
 //
+// You'd think this would be in the C library.
+// Like strchr, but with a max length so it doesn't
+// run over the end of the buffer.  Basically,
+// strings suck in C.
+//
+
+    inline char *
+strnchr(char *str, char charToFind, size_t maxLen)
+{
+    for (size_t i = 0; i < maxLen; i++) {
+        if (str[i] == charToFind) {
+            return str + i;
+        }
+        if (str[i] == 0) {
+            return NULL;
+        }
+    }
+    return NULL;
+}
+
+    inline const char *
+strnchr(const char *str, char charToFind, size_t maxLen)
+{
+    for (size_t i = 0; i < maxLen; i++) {
+        if (str[i] == charToFind) {
+            return str + i;
+        }
+        if (str[i] == 0) {
+            return NULL;
+        }
+    }
+    return NULL;
+}
+    
+// Check whether a string str ends with a given pattern
+    inline bool
+stringEndsWith(const char* str, const char* pattern)
+{
+    if (strlen(str) < strlen(pattern)) {
+        return false;
+    } else {
+        return _stricmp(str + (strlen(str) - strlen(pattern)), pattern) == 0;
+    }
+}
+
+//
 // Read a line, returning whether the read was successful or EOF occurred.
 //
 // Die if an error occurred.

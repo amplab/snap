@@ -38,6 +38,18 @@ struct AbstractOptions
     virtual bool parse(const char** argv, int argc, int& n) = 0;
 };
 
+enum FileType {UnknownFileType, SAMFile, FASTQFile, BAMFile, GZipFASTQFile, CRAMFile};  // As more as needed
+
+struct SNAPInput {
+    SNAPInput() : fileName(NULL), secondFileName(NULL), fileType(UnknownFileType) {}
+    const char          *fileName;
+    const char          *secondFileName;
+    FileType             fileType;
+
+    PairedReadSupplierGenerator *createPairedReadSupplierGenerator(int numThreads, const Genome *genome, ReadClippingType clipping);
+    ReadSupplierGenerator *createReadSupplierGenerator(int numThreads, const Genome *genome, ReadClippingType clipping);
+};
+
 struct AlignerOptions : public AbstractOptions
 {
     AlignerOptions(const char* i_commandLine, bool forPairedEnd = false);
@@ -55,10 +67,10 @@ struct AlignerOptions : public AbstractOptions
     bool                bindToProcessors;
     bool                ignoreMismatchedIDs;
     unsigned            selectivity;
-    const char         *samFileTemplate;
+    const char         *outputFileTemplate;
     bool                doAlignerPrefetch;
-    const char         *inputFilename;
-    bool                inputFileIsFASTQ;   // Else SAM
+    int                 nInputs;
+    SNAPInput          *inputs;
     ReadClippingType    clipping;
     bool                sortOutput;
     unsigned            sortMemory; // total output sorting buffer size in Gb

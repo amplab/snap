@@ -22,9 +22,6 @@
     <ClCompile Include="fastq.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="OldAligner.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="genome.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -40,16 +37,7 @@
     <ClCompile Include="histogram.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="hybridaligner.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="IntersectingAligner.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="LandauVishkin.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Mutator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="PairedEndAligner.cpp">
@@ -67,9 +55,6 @@
     <ClCompile Include="seed.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="SimplePairedEndAligner.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="SmarterPairedEndAligner.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -80,9 +65,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="wgsim.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="VCF.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="AlignerContext.cpp">
@@ -106,12 +88,6 @@
     <ClCompile Include="mapq.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="SimilarityMap.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ProbabilityDistance.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Hamming.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -121,7 +97,40 @@
     <ClCompile Include="BloomFilter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ReadSupplierQueue.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MultiInputReadSupplier.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Bam.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DataReader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PairedReadMatcher.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ReadWriter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ReadReader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SortedDataWriter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GzipDataWriter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ProbabilityDistance.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="BloomPairedEndAligner.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DataWriter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -162,22 +171,7 @@
     <ClInclude Include="histogram.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="hybridaligner.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="IntersectingAligner.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="LandauVishkin.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Mutation.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Mutator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="OldAligner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="options.h">
@@ -201,9 +195,6 @@
     <ClInclude Include="seed.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SimplePairedEndAligner.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="SmarterPairedEndAligner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -214,9 +205,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="targetver.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="VCF.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="wgsim.h">
@@ -246,12 +234,6 @@
     <ClInclude Include="mapq.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SimilarityMap.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ProbabilityDistance.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="BoundedStringDistance.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -262,9 +244,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ThirdPairedEndAligner.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="SeedSequencer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="BloomFilter.h">
@@ -279,7 +258,31 @@
     <ClInclude Include="FixedSizeSet.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ReadSupplierQueue.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MultiInputReadSupplier.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Bam.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DataReader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FileFormat.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DataWriter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FixedHashTable.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="FixedSizeVector.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ProbabilityDistance.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

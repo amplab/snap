@@ -525,7 +525,7 @@ GenomeIndex::AddOverflowBackpointer(
     volatile unsigned   *nextOverflowBackpointer,
     unsigned             genomeOffset)
 {
-    unsigned overflowBackpointerIndex = InterlockedIncrementAndReturnNewValue(nextOverflowBackpointer) - 1;
+    unsigned overflowBackpointerIndex = (unsigned)InterlockedIncrementAndReturnNewValue((volatile int *)nextOverflowBackpointer) - 1;
     if (nOverflowBackpointers <= overflowBackpointerIndex) {
         fprintf(stderr,"Ran out of overflow backpointers.  Consider using the -O switch with a larger value to increase space.\n");
         exit(1);
@@ -1276,7 +1276,7 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, unsigne
             //
             // Allocate an overflow table entry.
             //
-            unsigned overflowIndex = InterlockedIncrementAndReturnNewValue(context->nextOverflowIndex) - 1;
+            unsigned overflowIndex = (unsigned)InterlockedIncrementAndReturnNewValue((volatile int *)context->nextOverflowIndex) - 1;
             if (overflowIndex >= context->nOverflowEntries) {
                 if (0xffffffff - overflowIndex < 10) {
                     fprintf(stderr,"You've run out of index overflow address space.  Perhaps a larger seed size will help.\n");

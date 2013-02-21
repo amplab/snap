@@ -141,6 +141,7 @@ SmarterPairedEndAligner::~SmarterPairedEndAligner()
     delete mateAligner;
 }
 
+
 void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentResult *result)
 {
     Read *reads[NUM_READS_PER_PAIR] = {read0, read1};

@@ -98,6 +98,7 @@
       <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
       <WholeProgramOptimization>true</WholeProgramOptimization>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+      <AdditionalIncludeDirectories>$(SolutionDir)\import</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -130,8 +131,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
-      <AdditionalIncludeDirectories>
-      </AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\import</AdditionalIncludeDirectories>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
     </ClCompile>
     <Link>
@@ -150,6 +150,7 @@
     <ClInclude Include="AlignerOptions.h" />
     <ClInclude Include="AlignerStats.h" />
     <ClInclude Include="ApproximateCounter.h" />
+    <ClInclude Include="Bam.h" />
     <ClInclude Include="BaseAligner.h" />
     <ClInclude Include="bigalloc.h" />
     <ClInclude Include="BloomFilter.h" />
@@ -157,25 +158,25 @@
     <ClInclude Include="BoundedStringDistance.h" />
     <ClInclude Include="BufferedAsync.h" />
     <ClInclude Include="compat.h" />
+    <ClInclude Include="DataReader.h" />
+    <ClInclude Include="DataWriter.h" />
     <ClInclude Include="directions.h" />
     <ClInclude Include="FASTA.h" />
     <ClInclude Include="fastq.h" />
+    <ClInclude Include="FileFormat.h" />
     <ClInclude Include="FixedSizeMap.h" />
     <ClInclude Include="FixedSizeSet.h" />
     <ClInclude Include="FixedSizeVector.h" />
+    <ClInclude Include="FixedHashTable.h" />
     <ClInclude Include="genome.h" />
     <ClInclude Include="GenomeIndex.h" />
     <ClInclude Include="GoodRandom.h" />
     <ClInclude Include="Hamming.h" />
     <ClInclude Include="HashTable.h" />
     <ClInclude Include="histogram.h" />
-    <ClInclude Include="hybridaligner.h" />
-    <ClInclude Include="IntersectingAligner.h" />
     <ClInclude Include="LandauVishkin.h" />
     <ClInclude Include="mapq.h" />
-    <ClInclude Include="Mutation.h" />
-    <ClInclude Include="Mutator.h" />
-    <ClInclude Include="OldAligner.h" />
+    <ClInclude Include="MultiInputReadSupplier.h" />
     <ClInclude Include="options.h" />
     <ClInclude Include="PairedAligner.h" />
     <ClInclude Include="PairedEndAligner.h" />
@@ -183,11 +184,9 @@
     <ClInclude Include="ProbabilityDistance.h" />
     <ClInclude Include="RangeSplitter.h" />
     <ClInclude Include="read.h" />
+    <ClInclude Include="ReadSupplierQueue.h" />
     <ClInclude Include="sam.h" />
     <ClInclude Include="seed.h" />
-    <ClInclude Include="SeedSequencer.h" />
-    <ClInclude Include="SimilarityMap.h" />
-    <ClInclude Include="SimplePairedEndAligner.h" />
     <ClInclude Include="SingleAligner.h" />
     <ClInclude Include="SmarterPairedEndAligner.h" />
     <ClInclude Include="stdafx.h" />
@@ -195,7 +194,6 @@
     <ClInclude Include="targetver.h" />
     <ClInclude Include="ThirdPairedEndAligner.h" />
     <ClInclude Include="VariableSizeVector.h" />
-    <ClInclude Include="VCF.h" />
     <ClInclude Include="wgsim.h" />
   </ItemGroup>
   <ItemGroup>
@@ -203,6 +201,7 @@
     <ClCompile Include="AlignerOptions.cpp" />
     <ClCompile Include="AlignerStats.cpp" />
     <ClCompile Include="ApproximateCounter.cpp" />
+    <ClCompile Include="Bam.cpp" />
     <ClCompile Include="BaseAligner.cpp" />
     <ClCompile Include="BiasTables.cpp" />
     <ClCompile Include="bigalloc.cpp" />
@@ -210,6 +209,8 @@
     <ClCompile Include="BloomPairedEndAligner.cpp" />
     <ClCompile Include="BufferedAsync.cpp" />
     <ClCompile Include="compat.cpp" />
+    <ClCompile Include="DataReader.cpp" />
+    <ClCompile Include="DataWriter.cpp" />
     <ClCompile Include="FASTA.cpp" />
     <ClCompile Include="fastq.cpp" />
     <ClCompile Include="genome.cpp" />
@@ -218,23 +219,24 @@
     <ClCompile Include="Hamming.cpp" />
     <ClCompile Include="HashTable.cpp" />
     <ClCompile Include="histogram.cpp" />
-    <ClCompile Include="hybridaligner.cpp" />
-    <ClCompile Include="IntersectingAligner.cpp" />
     <ClCompile Include="LandauVishkin.cpp" />
     <ClCompile Include="mapq.cpp" />
-    <ClCompile Include="Mutator.cpp" />
-    <ClCompile Include="OldAligner.cpp" />
+    <ClCompile Include="MultiInputReadSupplier.cpp" />
     <ClCompile Include="PairedAligner.cpp" />
     <ClCompile Include="PairedEndAligner.cpp" />
+    <ClCompile Include="PairedReadMatcher.cpp" />
     <ClCompile Include="ProbabilityDistance.cpp" />
     <ClCompile Include="Range.cpp" />
     <ClCompile Include="RangeSplitter.cpp" />
+    <ClCompile Include="ReadReader.cpp" />
+    <ClCompile Include="ReadSupplierQueue.cpp" />
+    <ClCompile Include="ReadWriter.cpp" />
     <ClCompile Include="sam.cpp" />
     <ClCompile Include="seed.cpp" />
-    <ClCompile Include="SimilarityMap.cpp" />
-    <ClCompile Include="SimplePairedEndAligner.cpp" />
     <ClCompile Include="SingleAligner.cpp" />
     <ClCompile Include="SmarterPairedEndAligner.cpp" />
+    <ClCompile Include="SortedDataWriter.cpp" />
+    <ClCompile Include="GzipDataWriter.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
@@ -243,7 +245,6 @@
     </ClCompile>
     <ClCompile Include="Tables.cpp" />
     <ClCompile Include="ThirdPairedEndAligner.cpp" />
-    <ClCompile Include="VCF.cpp" />
     <ClCompile Include="wgsim.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

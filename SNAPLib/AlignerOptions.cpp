@@ -25,6 +25,9 @@ Revision History:
 #include "stdafx.h"
 #include "options.h"
 #include "AlignerOptions.h"
+#include "FASTQ.h"
+#include "SAM.h"
+#include "Bam.h"
 
 AlignerOptions::AlignerOptions(
     const char* i_commandLine,
@@ -38,10 +41,8 @@ AlignerOptions::AlignerOptions(
     bindToProcessors(false),
     ignoreMismatchedIDs(false),
     selectivity(1),
-    samFileTemplate(NULL),
+    outputFileTemplate(NULL),
     doAlignerPrefetch(false),
-    inputFilename(NULL),
-    inputFileIsFASTQ(true),
     clipping(ClipBack),
     sortOutput(false),
     sortMemory(0),
@@ -85,10 +86,7 @@ AlignerOptions::usageMessage()
     fprintf(stderr,
         "Usage: %s\n"
         "Options:\n"
-        "  -o   output alignments to a given SAM file\n"
-#ifndef _MSC_VER
-        "       (note: will create one output file per thread)\n"  // Linux guys: you should fix up your SAM writer!
-#endif  // _MSC_VER 
+        "  -o filename  output alignments to filename in SAM format\n"
         "  -d   maximum edit distance allowed per read or pair (default: %d)\n"
         "  -n   number of seeds to use per read (default: %d)\n"
         "  -h   maximum hits to consider per seed (default: %d)\n"
@@ -116,6 +114,7 @@ AlignerOptions::usageMessage()
 		"       match) rather than = and X (sequence (mis-)match)\n"
         "  -G   specify a gap penalty to use when generating CIGAR strings\n"
         "  -pf  specify the name of a file to contain the run speed\n"
+        "  --hp Indicates not to use huge pages (this may speed up index load and slow down alignment)\n"
 // not written yet        "  -r   Specify the content of the @RG line in the SAM header.\n"
             ,
             commandLine,
@@ -173,7 +172,7 @@ AlignerOptions::parse(
         }
     } else if (strcmp(argv[n], "-o") == 0) {
         if (n + 1 < argc) {
-            samFileTemplate = argv[n+1];
+            outputFileTemplate = argv[n+1];
             n++;
             return true;
         }
@@ -285,6 +284,9 @@ AlignerOptions::parse(
         } else {
             fprintf(stderr,"Must specify the name of the perf file after -pf\n");
         }
+    } else if (strcmp(argv[n], "--hp") == 0) {
+        BigAllocUseHugePages = false;
+        return true;
     } else if (strlen(argv[n]) >= 2 && '-' == argv[n][0] && 'C' == argv[n][1]) {
         if (strlen(argv[n]) != 4 || '-' != argv[n][2] && '+' != argv[n][2] ||
             '-' != argv[n][3] && '+' != argv[n][3]) {
@@ -332,5 +334,50 @@ AlignerOptions::passFilter(
         return (filterFlags & FilterMultipleHits) != 0;
     default:
         return false; // shouldn't happen!
+    }
+}
+
+    PairedReadSupplierGenerator *
+SNAPInput::createPairedReadSupplierGenerator(int numThreads, const Genome *genome, ReadClippingType clipping)
+{
+    _ASSERT(fileType == SAMFile || secondFileName != NULL); // Caller's responsibility to check this
+
+    switch (fileType) {
+    case SAMFile:
+        return SAMReader::createPairedReadSupplierGenerator(fileName, numThreads, genome, clipping);
+        
+    case BAMFile:
+        return BAMReader::createPairedReadSupplierGenerator(fileName,numThreads,genome,clipping);
+
+    case FASTQFile:
+        return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, clipping, false);
+        
+    case GZipFASTQFile:
+        return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, clipping, true);
+
+    default:
+        _ASSERT(false);
+    }
+}
+
+    ReadSupplierGenerator *
+SNAPInput::createReadSupplierGenerator(int numThreads, const Genome *genome, ReadClippingType clipping)
+{
+    _ASSERT(secondFileName == NULL);
+    switch (fileType) {
+    case SAMFile:
+        return SAMReader::createReadSupplierGenerator(fileName, numThreads, genome, clipping);
+        
+    case BAMFile:
+        return BAMReader::createReadSupplierGenerator(fileName,numThreads,genome,clipping);
+
+    case FASTQFile:
+        return FASTQReader::createReadSupplierGenerator(fileName, numThreads, clipping, false);
+        
+    case GZipFASTQFile:
+        return FASTQReader::createReadSupplierGenerator(fileName, numThreads, clipping, true);
+
+    default:
+        _ASSERT(false);
     }
 }

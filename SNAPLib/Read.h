@@ -1,5 +1,6 @@
 /*++
 
+
 Module Name:
 
     Read.h
@@ -26,6 +27,49 @@ Revision History:
 
 #include "Compat.h"
 #include "Tables.h"
+#include "DataReader.h"
+#include "DataWriter.h"
+#include "directions.h"
+
+class FileFormat;
+
+class Genome;
+
+struct PairedAlignmentResult;
+
+enum AlignmentResult {NotFound, CertainHit, SingleHit, MultipleHits, UnknownAlignment}; // BB: Changed Unknown to UnknownAlignment because of a conflict w/Windows headers
+
+//
+// Here's a brief description of the classes for input in SNAP:
+// Read:
+//      A Read is some data that's come from a NGS machine.  It includes some bases and associated quality score, as well as an ID.
+//      Reads may be clipped (because the sequencing machine was unsure of some bases).  They may be switched between forward and
+//      reverse complement sense.  They may or may not own their own memory for the various fields.
+//
+// ReadReader:
+//      A ReadReader understands how to generate reads from some input source (i.e., a FASTQ, SAM, BAM or CRAM file, for instance).
+//      It owns the storage for the read's information (i.e., the base string), but does not own the Read object itself.  It is responsible
+//      for assuring that the memory for the read data is valid for the lifetime of the ReadReader (which, in practice, means it needs
+//      to use mapped files).  ReadReaders may assume that they will only be called from one thread.
+//
+// PairedReadReader:
+//      Similar to a ReadReader, except that it gets mate pairs of Reads.
+//
+// ReadSupplier:
+//      A class that supplies reads to a consumer.  It looks similar to a ReadReader, except that it own the storage for the
+//      ReadObject.  The idea here is to allow the supplier to manage the memory that the Read object lives in so that a supplier
+//      can be implemented by a parallel queue with batches of reads in it.  Supplier may, of course, also be implemented in
+//      different ways, such as range splitters.  Like ReadReaders, ReadSuppliers will be called from only one thread.  In
+//      practice, ReadSuppliers will have underlying ReadReaders (which might be behind a shared queue, for example).
+//
+// ReadSupplierGenerator:
+//      A class that creates a ReadSupplier.  This has to be thread safe.  The usual pattern is that the initialization code will
+//      create a read supplier generator, which will then be called on each of the threads to create a supplier, which will supply
+//      the reads to be aligned.
+//
+// PairedReadSupplierGenerator:
+//      The paired version of a ReadSupplier.
+//
 
 const int MaxReadLength = 20000;
 
@@ -36,27 +80,110 @@ enum ReadClippingType {NoClipping, ClipFront, ClipBack, ClipFrontAndBack};
 class ReadReader {
 public:
         virtual ~ReadReader() {}
-        virtual void readDoneWithBuffer(unsigned *referenceCount) = 0;
+        
+        // reading
+
         virtual bool getNextRead(Read *readToUpdate) = 0;
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
+
+        virtual void releaseBefore(DataBatch batch) = 0;
 };
 
 class PairedReadReader {
 public:
         virtual ~PairedReadReader() {}
+
+        // reading
+
         virtual bool getNextReadPair(Read *read1, Read *read2) = 0;
-        virtual ReadReader *getReaderToInitializeRead(int whichHalfOfPair) = 0;
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
+
+        virtual void releaseBefore(DataBatch batch) = 0;
+
+        // wrap a single read source with a matcher that buffers reads until their mate is found
+        static PairedReadReader* PairMatcher(int bufferSize, ReadReader* single);
 };
 
+class ReadSupplier {
+public:
+    virtual Read *getNextRead() = 0;    // This read is valid until you call getNextRead, then it's done.  Don't worry about deallocating it.
+    virtual ~ReadSupplier() {}
+
+    virtual void releaseBefore(DataBatch batch) = 0;
+};
+
+class PairedReadSupplier {
+public:
+    // These read are valid until you call getNextRead, then they're done.  Don't worry about deallocating them.
+    virtual bool getNextReadPair(Read **read0, Read **read1) = 0;
+    virtual ~PairedReadSupplier() {}
+
+    virtual void releaseBefore(DataBatch batch) = 0;
+};
+
+class ReadSupplierGenerator {
+public:
+    virtual ReadSupplier *generateNewReadSupplier() = 0;
+    virtual ~ReadSupplierGenerator() {}
+};
+
+class PairedReadSupplierGenerator {
+public:
+    virtual PairedReadSupplier *generateNewPairedReadSupplier() = 0;
+    virtual ~PairedReadSupplierGenerator() {}
+};
+
+class ReadWriter {
+public:
+
+    // write out header
+    virtual bool writeHeader(bool sorted, int argc, const char **argv, const char *version, const char *rgLine) = 0;
+
+    // write a single read, return true if successful
+    virtual bool writeRead(Read *read, AlignmentResult result, unsigned genomeLocation, Direction direction) = 0;
+
+    // write a pair of reads, return true if successful
+    virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result) = 0;
+
+    // close out this thread
+    virtual void close() = 0;
+};
+
+class DataWriterSupplier;
+
+class ReadWriterSupplier
+{
+public:
+    virtual ReadWriter* getWriter() = 0;
+
+    virtual void close() = 0;
+
+    static ReadWriterSupplier* create(const FileFormat* format, DataWriterSupplier* dataSupplier,
+        const Genome* genome);
+};
     
 class Read {
 public:
-        Read(ReadReader *i_reader = NULL) : reader(i_reader), id(NULL), data(NULL), quality(NULL), 
-                                            localUnclippedDataBuffer(NULL), localUnclippedQualityBuffer(NULL), localBufferSize(0),
-                                            originalUnclippedDataBuffer(NULL), originalUnclippedQualityBuffer(NULL), clippingState(NoClipping)
+        Read() :    
+            id(NULL), data(NULL), quality(NULL), 
+            localUnclippedDataBuffer(NULL), localUnclippedQualityBuffer(NULL), localBufferSize(0),
+            originalUnclippedDataBuffer(NULL), originalUnclippedQualityBuffer(NULL), clippingState(NoClipping)
+        {}
+
+        Read(Read& other) : 
+            id(other.id), data(other.data), quality(other.quality), 
+            localUnclippedDataBuffer(other.localUnclippedDataBuffer),
+            localUnclippedQualityBuffer(other.localUnclippedQualityBuffer),
+            localBufferSize(other.localBufferSize),
+            originalUnclippedDataBuffer(other.originalUnclippedDataBuffer),
+            originalUnclippedQualityBuffer(other.originalUnclippedQualityBuffer),
+            clippingState(other.clippingState)
         {
-            referenceCounts[0] = referenceCounts[1] = NULL;
+            other.localUnclippedDataBuffer = NULL;
+            other.localUnclippedQualityBuffer = NULL;
+            other.localBufferSize = 0;
+            other.originalUnclippedDataBuffer = NULL;
+            other.originalUnclippedQualityBuffer;
         }
 
         ~Read()
@@ -65,6 +192,23 @@ public:
             delete [] localUnclippedQualityBuffer;
         }
 
+        void operator=(Read& other)
+        {
+            id = other.id;
+            data = other.data;
+            quality = other.quality;
+            localUnclippedDataBuffer = other.localUnclippedDataBuffer;
+            localUnclippedQualityBuffer = other.localUnclippedQualityBuffer;
+            localBufferSize = other.localBufferSize;
+            other.localUnclippedDataBuffer = NULL;
+            other.localUnclippedQualityBuffer = NULL;
+            other.localBufferSize = 0;
+            originalUnclippedDataBuffer = other.originalUnclippedDataBuffer;
+            originalUnclippedQualityBuffer = other.originalUnclippedQualityBuffer;
+            other.originalUnclippedDataBuffer = NULL;
+            other.originalUnclippedQualityBuffer;
+            clippingState = other.clippingState;
+        }
 
         //
         // Initialize the Read.  Reads do NOT take ownership of the memory to which they
@@ -79,41 +223,18 @@ public:
                 unsigned i_idLength,
                 const char *i_data, 
                 const char *i_quality, 
-                unsigned i_dataLength, 
-                unsigned **newReferenceCounts)
-        {
-            commonInit(i_id,i_idLength,i_data,i_quality,i_dataLength);
-
-            if (NULL != referenceCounts[0]) {
-                (*referenceCounts[0])--;
-                if (0 == *referenceCounts[0]) {
-                    reader->readDoneWithBuffer(referenceCounts[0]);
-                }
-            }
-
-            if (NULL != referenceCounts[1]) {
-                (*referenceCounts[1])--;
-                if (0 == *referenceCounts[1]) {
-                    reader->readDoneWithBuffer(referenceCounts[1]);
-                }
-            }
-
-            if (NULL != newReferenceCounts) {
-                referenceCounts[0] = newReferenceCounts[0];
-                referenceCounts[1] = newReferenceCounts[1];
-            }
-        }
-
-        void init(
-                const char *i_id, 
-                unsigned i_idLength,
-                const char *i_data, 
-                const char *i_quality, 
                 unsigned i_dataLength)
         {
-            commonInit(i_id,i_idLength,i_data,i_quality,i_dataLength);
-
-            referenceCounts[0] = referenceCounts[1] = NULL;
+            id = i_id;
+            idLength = i_idLength;
+            data = unclippedData = i_data;
+            quality = unclippedQuality = i_quality;
+            dataLength = i_dataLength;
+            unclippedLength = dataLength;
+            frontClippedLength = 0;
+            originalUnclippedDataBuffer = NULL;
+            originalUnclippedQualityBuffer = NULL;
+            clippingState = NoClipping;
         }
 
         // For efficiency, this class holds id, data and quality pointers that are
@@ -130,6 +251,8 @@ public:
         inline unsigned getFrontClippedLength() const {return (unsigned)(data - unclippedData);}    // number of bases clipped from the front of the read
         inline void setUnclippedLength(unsigned length) {unclippedLength = length;}
 		inline ReadClippingType getClippingState() const {return clippingState;}
+        inline DataBatch getBatch() { return batch; }
+        inline void setBatch(DataBatch b) { batch = b; }
 
         void clip(ReadClippingType clipping) {
             if (clipping == clippingState) {
@@ -263,25 +386,6 @@ public:
 
 private:
 
-        void commonInit(
-                const char *i_id, 
-                unsigned i_idLength,
-                const char *i_data, 
-                const char *i_quality, 
-                unsigned i_dataLength)
-        {
-            id = i_id;
-            idLength = i_idLength;
-            data = unclippedData = i_data;
-            quality = unclippedQuality = i_quality;
-            dataLength = i_dataLength;
-            unclippedLength = dataLength;
-            frontClippedLength = 0;
-            originalUnclippedDataBuffer = NULL;
-            originalUnclippedQualityBuffer = NULL;
-            clippingState = NoClipping;
-        }
-
         const char *id;
         const char *data;
         const char *unclippedData;
@@ -292,9 +396,6 @@ private:
         unsigned unclippedLength;
         unsigned frontClippedLength;
         ReadClippingType clippingState;
-
-        ReadReader *reader;
-        unsigned *referenceCounts[2];
 
         //
         // Data stored in the read that's used if we RC ourself.  These are always unclipped.
@@ -309,6 +410,9 @@ private:
         //
         const char *originalUnclippedDataBuffer;
         const char *originalUnclippedQualityBuffer;
+
+        // batch for managing lifetime during input
+        DataBatch batch;
 };
 
 //

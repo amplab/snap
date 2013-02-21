@@ -109,3 +109,5 @@ private:
         Allocation *next;
     } *allocations;
 };
+
+extern bool BigAllocUseHugePages;

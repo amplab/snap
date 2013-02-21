@@ -37,6 +37,7 @@ Revision History:
 #include "AlignerOptions.h"
 #include "FASTQ.h"
 #include "SingleAligner.h"
+#include "MultiInputReadSupplier.h"
 
 using namespace std;
 
@@ -65,17 +66,44 @@ SingleAlignerContext::parseOptions(
     version = i_version;
 
     AlignerOptions* options = new AlignerOptions(
-        "snap single <index-dir> <inputFile> [-o output.sam] [<options>]",false);
+        "snap single <index-dir> <inputFile(s)> [<options>]"
+		"   where <input file(s)> is a list of files to process.\n",false);
     options->extra = extension->extraOptions();
     if (argc < 2) {
         options->usage();
     }
 
     options->indexDir = argv[0];
-    options->inputFilename = argv[1];
-    options->inputFileIsFASTQ = !stringEndsWith(argv[1], ".sam");
 
-    for (int n = 2; n < argc; n++) {
+	int nInputs = 0;
+	for (int i = 1; i < argc; i++) {
+		if (argv[i][0] == '-') {
+			break;
+		}
+		nInputs++;
+	}
+
+	if (0 == nInputs) {
+		options->usage();
+	}
+
+	options->nInputs = nInputs;
+	options->inputs = new SNAPInput[nInputs];
+
+	for (int i = 1; i < argc; i++) {
+		if (argv[i][0] == '-') {
+			break;
+		}
+
+		options->inputs[i-1].fileName = argv[i];
+		options->inputs[i-1].fileType =
+            stringEndsWith(argv[i],".sam") ? SAMFile :
+            stringEndsWith(argv[i],".bam") ? BAMFile :
+            stringEndsWith(argv[i], ".fastq.gz") || stringEndsWith(argv[i], ".fq.gz") ? GZipFASTQFile :
+            FASTQFile;
+	}
+
+    for (int n = 1 + nInputs; n < argc; n++) {
         if (! options->parse(argv, argc, n)) {
             options->usage();
         }
@@ -103,6 +131,14 @@ SingleAlignerContext::runIterationThread()
     stats->threadEntry->threadId = GetThreadId();
     stats->threadEntry->threadNumber = threadNum;
 
+    ReadSupplier *supplier = readSupplierGenerator->generateNewReadSupplier();
+    if (NULL == supplier) {
+        //
+        // No work for this thread to do.
+        //
+        return;
+    }
+
     int maxReadSize = 10000;
  
     BigAllocator *allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, maxHits, maxReadSize, index->getSeedLength(),numSeeds));
@@ -116,7 +152,7 @@ SingleAlignerContext::runIterationThread()
             numSeeds,
             adaptiveConfDiff,
             NULL,               // LV (no need to cache in the single aligner)
-            similarityMap,
+            NULL,
             stats,
             allocator);
 
@@ -126,72 +162,53 @@ SingleAlignerContext::runIterationThread()
     aligner->setExplorePopularSeeds(options->explorePopularSeeds);
     aligner->setStopOnFirstHit(options->stopOnFirstHit);
 
-    // Keep grabbing ranges of the file and processing them.
-    ReadReader *reader = NULL;
-    _int64 rangeStart, rangeLength;
-    while (fileSplitter->getNextRange(&rangeStart, &rangeLength)) {
-        if (NULL == reader) {
-            if (inputFileIsFASTQ) {
-                reader = FASTQReader::create(inputFilename, rangeStart, rangeLength, clipping);
-            } else {
-                reader = SAMReader::create(inputFilename, index->getGenome(), rangeStart, rangeLength, clipping);
+    // Align the reads.
+    Read *read;
+    while (NULL != (read = supplier->getNextRead())) {
+        if (1 != selectivity && GoodFastRandom(selectivity-1) != 0) {
+            //
+            // Skip this read.
+            //
+            continue;
+        }
+        stats->totalReads++;
+
+        // Skip the read if it has too many Ns or trailing 2 quality scores.
+        if (read->getDataLength() < 50 || read->countOfNs() > maxDist) {
+            if (readWriter != NULL && options->passFilter(read, NotFound)) {
+                readWriter->writeRead(read, NotFound, 0xFFFFFFFF, false);
             }
-            if (NULL == reader) {
-                fprintf(stderr, "Failed to create input file reader for %s.\n", inputFilename);
-                exit(1);
-            }
+            continue;
         } else {
-            reader->reinit(rangeStart, rangeLength);
+            stats->usefulReads++;
         }
 
-        // Align the reads.
-        Read read(reader);
-        while (reader->getNextRead(&read)) {
-            if (1 != selectivity && GoodFastRandom(selectivity-1) != 0) {
-                //
-                // Skip this read.
-                //
-                continue;
-            }
-            stats->totalReads++;
+        unsigned location = 0xFFFFFFFF;
+        Direction direction;
+        int score;
+        int mapq;
 
-            // Skip the read if it has too many Ns or trailing 2 quality scores.
-            if (read.getDataLength() < 50 || read.countOfNs() > maxDist) {
-                if (samWriter != NULL && options->passFilter(&read, NotFound)) {
-                    samWriter->write(&read, NotFound, 0xFFFFFFFF, false);
-                }
-                continue;
-            } else {
-                stats->usefulReads++;
-            }
+        AlignmentResult result = aligner->AlignRead(read, &location, &direction, &score, &mapq);
 
-            unsigned location = 0xFFFFFFFF;
-            Direction direction;
-            int score;
-            int mapq;
+        allocator->checkCanaries();
 
-            AlignmentResult result = aligner->AlignRead(&read, &location, &direction, &score, &mapq);
-
-            allocator->checkCanaries();
-
-            bool wasError = false;
-            if (result != NotFound && computeError) {
-                wasError = wgsimReadMisaligned(&read, location, index, options->misalignThreshold);
-            }
-
-            //if (wasError) {
-                writeRead(&read, result, location, direction, score, mapq);
-            //}
-
-            updateStats(stats, &read, result, location, score, mapq, wasError);
+        bool wasError = false;
+        if (result != NotFound && computeError) {
+            wasError = wgsimReadMisaligned(read, location, index, options->misalignThreshold);
         }
+
+        writeRead(read, result, location, direction, score, mapq);
+        
+        updateStats(stats, read, result, location, score, mapq, wasError);
     }
     stats->threadEntry->nReads = stats->usefulReads;        // This preserves the total across add()
     stats->threadEntry->lvCalls = aligner->getLocationsScored();
 
     aligner->~BaseAligner(); // This calls the destructor without calling operator delete, allocator owns the memory.
-    if (reader != NULL) {
-        delete reader;
+ 
+    delete aligner;
+    if (supplier != NULL) {
+        delete supplier;
     }
 
     delete allocator;   // This is what actually frees the memory.
@@ -206,8 +223,8 @@ SingleAlignerContext::writeRead(
     int score,
     int mapq)
 {
-    if (samWriter != NULL && options->passFilter(read, result)) {
-        samWriter->write(read, result, location, direction, mapq);
+    if (readWriter != NULL && options->passFilter(read, result)) {
+        readWriter->writeRead(read, result, location, direction);
     }
 }
 
@@ -238,4 +255,30 @@ SingleAlignerContext::updateStats(
         stats->mapqHistogram[mapq]++;
         stats->mapqErrors[mapq] += wasError ? 1 : 0;
     }
+}
+
+    void 
+SingleAlignerContext::typeSpecificBeginIteration()
+{
+    if (1 == options->nInputs) {
+        //
+        // We've only got one input, so just connect it directly to the consumer.
+        //
+        readSupplierGenerator = options->inputs[0].createReadSupplierGenerator(options->numThreads, index->getGenome(), options->clipping);
+    } else {
+        //
+        // We've got multiple inputs, so use a MultiInputReadSupplier to combine the individual inputs.
+        //
+        ReadSupplierGenerator **generators = new ReadSupplierGenerator *[options->nInputs];
+        for (int i = 0; i < options->nInputs; i++) {
+            generators[i] = options->inputs[i].createReadSupplierGenerator(options->numThreads, index->getGenome(), options->clipping);
+        }
+        readSupplierGenerator = new MultiInputReadSupplierGenerator(options->nInputs,generators);
+    }
+}
+    void 
+SingleAlignerContext::typeSpecificNextIteration()
+{
+    //delete readSupplierGenerator;
+    //readSupplierGenerator = NULL;
 }

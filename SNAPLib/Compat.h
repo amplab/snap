@@ -26,9 +26,12 @@ Revision History:
 #pragma once
 
 #ifdef  _MSC_VER
+#include <Windows.h>
 
 typedef unsigned _int64 _uint64;
 typedef unsigned _int32 _uint32;
+typedef unsigned char _uint8;
+typedef unsigned short _uint16;
 
 // <http://stackoverflow.com/questions/126279/c99-stdint-h-header-and-ms-visual-studio>
 const _int64 INT64_MAX = MAXINT64;
@@ -44,6 +47,7 @@ const void* memmem(const void* data, const size_t dataLength, const void* patter
 
 typedef CRITICAL_SECTION    ExclusiveLock;
 typedef HANDLE SingleWaiterObject;      // This is an event in Windows.  It's just a synchronization object that you can wait for and set.
+typedef HANDLE EventObject;
 
 #define PATH_SEP '\\'
 #define snprintf _snprintf
@@ -57,6 +61,7 @@ typedef HANDLE SingleWaiterObject;      // This is an event in Windows.  It's ju
 #define bit_rotate_right(value, shift) _rotr(value, shift)
 #define bit_rotate_left(value, shift) _rotl(value, shift)
 
+int getpagesize();
 
 #else   // _MSC_VER
 
@@ -75,7 +80,11 @@ typedef int64_t _int64;
 typedef uint64_t _uint64;
 typedef int32_t _int32;
 typedef uint32_t _uint32;
+typedef uint16_t _uint16;
+typedef int16_t _int16;
 typedef uint8_t BYTE;
+typedef uint8_t _uint8;
+typedef int8_t _int8;
 typedef void *PVOID;
 
 // TODO: check if Linux libs have exp10 function
@@ -121,6 +130,7 @@ inline unsigned bit_rotate_left(unsigned value, unsigned shift)
     return value << (shift %32) | (value >> (32 - shift%32));
 }
 
+typedef void* EventObject; // todo: implement
 #endif  // _MSC_VER
 
 //
@@ -151,11 +161,24 @@ void SignalSingleWaiterObject(SingleWaiterObject *singleWaiterObject);
 bool WaitForSingleWaiterObject(SingleWaiterObject *singleWaiterObject);
 void ResetSingleWaiterObject(SingleWaiterObject *singleWaiterObject);
 
+//
+// An Event is a synchronization object that acts as a gateway: it can either be open
+// or closed.  Open events allow all waiters to proceed, while closed ones block all
+// waiters.  Events can be opened and closed multiple times, and can have any number of
+// waiters.
+//
+
+void CreateEventObject(EventObject *newEvent);
+void DestroyEventObject(EventObject *eventObject);
+void AllowEventWaitersToProceed(EventObject *eventObject);
+void PreventEventWaitersFromProceeding(EventObject *eventObject);
+void WaitForEvent(EventObject *eventObject); 
+
 
 //
 // Thread-safe read-modify-write operations
 //
-_uint32 InterlockedIncrementAndReturnNewValue(volatile _uint32 *valueToIncrement);
+int InterlockedIncrementAndReturnNewValue(volatile int *valueToIncrement);
 int InterlockedDecrementAndReturnNewValue(volatile int *valueToDecrement);
 _int64 InterlockedAdd64AndReturnNewValue(volatile _int64 *valueToWhichToAdd, _int64 amountToAdd);
 _uint32 InterlockedCompareExchange32AndReturnOldValue(volatile _uint32 *valueToUpdate, _uint32 replacementValue, _uint32 desiredPreviousValue);
@@ -180,6 +203,9 @@ _int64 QueryFileSize(const char *fileName);
 
 // returns true on success
 bool DeleteSingleFile(const char* filename); // DeleteFile is a Windows macro...
+
+// returns true on success
+bool MoveSingleFile(const char* oldFileName, const char* newFileName);
 
 class LargeFileHandle;
 
@@ -273,3 +299,53 @@ int _fseek64bit(FILE *stream, _int64 offset, int origin);
 #define MAXINT32   ((int32_t)  0x7fffffff)
 
 #endif
+
+// 
+// Class for handling mapped files.  It's got the same interface for both platforms, but different implementations.
+//
+class FileMapper {
+public:
+    FileMapper();
+    ~FileMapper();
+
+    bool init(const char *fileName);
+    const size_t getFileSize() {
+        _ASSERT(initialized);
+        return fileSize;
+    }
+
+    // You only get one of these at a time.  You must call unmap() before making a new mapping
+    char *createMapping(size_t offset, size_t amountToMap); 
+    void unmap();
+
+    void prefetch(size_t currentRead);
+
+private:
+    bool        initialized;
+    size_t      fileSize;
+    char        *mappedBase;    // What we actually mapped, rounded down for alignment
+    char        *mappedRegion;
+    size_t      amountMapped;
+    size_t      pagesize;
+
+#ifdef  _MSC_VER
+    HANDLE      hFile;
+    HANDLE      hFilePrefetch;
+    HANDLE      hMapping;
+
+    OVERLAPPED  lap[1];     // for the prefetch read
+    void        *prefetchBuffer;
+    static const int prefetchBufferSize = 16 * 1024 * 1024;
+    bool        isPrefetchOutstanding;
+    size_t      lastPrefetch;
+    _int64 millisSpentInReadFile;
+    _int64 countOfImmediateCompletions;
+    _int64 countOfDelayedCompletions;
+    _int64 countOfFailures;
+#else   // _MSC_VER
+    static const int madviseSize = 4 * 1024 * 1024;
+
+    int         fd;
+    _uint64     lastPosMadvised;
+#endif  // _MSC_VER
+};

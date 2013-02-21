@@ -24,6 +24,7 @@ Revision History:
 --*/
 #include "stdafx.h"
 #include "Compat.h"
+#include "BigAlloc.h"
 #ifndef _MSC_VER
 #include <fcntl.h>
 #include <aio.h>
@@ -128,6 +129,15 @@ void ResetSingleWaiterObject(SingleWaiterObject *singleWaiterObject) {
     ResetEvent(*singleWaiterObject);
 }
 
+//
+// In Windows, the single waiter objects are already implemented using events.
+//
+void CreateEventObject(EventObject *newEvent) {CreateSingleWaiterObject(newEvent);}
+void DestroyEventObject(EventObject *eventObject) {DestroySingleWaiterObject(eventObject);}
+void AllowEventWaitersToProceed(EventObject *eventObject) {SignalSingleWaiterObject(eventObject);}
+void PreventEventWaitersFromProceeding(EventObject *eventObject) {ResetSingleWaiterObject(eventObject);}
+void WaitForEvent(EventObject *eventObject) {WaitForSingleWaiterObject(eventObject);}
+
 
 void BindThreadToProcessor(unsigned processorNumber) // This hard binds a thread to a processor.  You can no-op it at some perf hit.
 {
@@ -136,7 +146,7 @@ void BindThreadToProcessor(unsigned processorNumber) // This hard binds a thread
     }
 }
 
-_uint32 InterlockedIncrementAndReturnNewValue(volatile _uint32 *valueToIncrement)
+int InterlockedIncrementAndReturnNewValue(volatile int *valueToIncrement)
 {
     return InterlockedIncrement((volatile long *)valueToIncrement);
 }
@@ -225,6 +235,14 @@ DeleteSingleFile(
     const char* filename)
 {
     return DeleteFile(filename) ? true : false;
+}
+
+    bool
+MoveSingleFile(
+    const char* oldFileName,
+    const char* newFileName)
+{
+    return MoveFile(oldFileName, newFileName) ? true : false;
 }
 
 class LargeFileHandle
@@ -564,6 +582,198 @@ int _fseek64bit(FILE *stream, _int64 offset, int origin)
     return _fseeki64(stream,offset,origin);
 }
 
+int getpagesize()
+{
+    SYSTEM_INFO systemInfo;
+    GetSystemInfo(&systemInfo);
+    return systemInfo.dwAllocationGranularity;
+}
+
+FileMapper::FileMapper()
+{
+    hFile = INVALID_HANDLE_VALUE;
+    hFilePrefetch = INVALID_HANDLE_VALUE;
+    hMapping = NULL;
+    mappedRegion = NULL;
+    initialized = false;
+    amountMapped = 0;
+    pagesize = getpagesize();
+    
+    lap->hEvent = NULL;
+    prefetchBuffer = BigAlloc(prefetchBufferSize);
+    isPrefetchOutstanding = false;
+    lastPrefetch = 0;
+
+    millisSpentInReadFile = 0;
+    countOfImmediateCompletions = 0;
+    countOfDelayedCompletions = 0;
+    countOfFailures = 0;
+}
+
+bool
+FileMapper::init(const char *fileName)
+{
+    hFile = CreateFile(fileName, GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN,NULL);
+    if (INVALID_HANDLE_VALUE == hFile) {
+        fprintf(stderr,"Failed to open '%s', error %d\n",fileName, GetLastError());
+        return false;
+    }
+
+    hFilePrefetch = CreateFile(fileName, GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_FLAG_OVERLAPPED,NULL);
+    if (INVALID_HANDLE_VALUE == hFilePrefetch) {
+        fprintf(stderr,"Failed to open '%s' for prefetch, error %d\n",fileName, GetLastError());
+        CloseHandle(hFile);
+        return false;
+    }
+
+    BY_HANDLE_FILE_INFORMATION fileInfo;
+    if (!GetFileInformationByHandle(hFile,&fileInfo)) {
+        fprintf(stderr,"Unable to get file information for '%s', error %d\n", fileName, GetLastError());
+        CloseHandle(hFile);
+        CloseHandle(hFilePrefetch);
+        return false;
+    }
+    LARGE_INTEGER liFileSize;
+    liFileSize.HighPart = fileInfo.nFileSizeHigh;
+    liFileSize.LowPart = fileInfo.nFileSizeLow;
+    fileSize = liFileSize.QuadPart;
+
+    hMapping = CreateFileMapping(hFile,NULL,PAGE_READONLY,0,0,NULL);
+    if (NULL == hMapping) {
+        fprintf(stderr,"Unable to create mapping to file '%s', %d\n", fileName, GetLastError());
+        CloseHandle(hFile);
+        CloseHandle(hFilePrefetch);
+        return false;
+    }
+
+    lap->hEvent = CreateEvent(NULL,FALSE,FALSE,NULL);
+
+    initialized = true;
+
+ 
+    return true;
+}
+
+char *
+FileMapper::createMapping(size_t offset, size_t amountToMap)
+{
+    _ASSERT(NULL == mappedRegion);
+ 
+    size_t beginRounding = offset % pagesize;
+    LARGE_INTEGER liStartingOffset;
+    liStartingOffset.QuadPart = offset - beginRounding;
+
+    size_t endRounding = 0;
+    if ((amountToMap + beginRounding) % pagesize != 0) {
+        endRounding = pagesize - (amountToMap + beginRounding) % pagesize;
+    }
+    size_t mapRequestSize = beginRounding + amountToMap + endRounding;
+    _ASSERT(mapRequestSize % pagesize == 0);
+    if (mapRequestSize + liStartingOffset.QuadPart >= fileSize) {
+        mapRequestSize = 0; // Says to just map the whole thing.
+    }
+
+    mappedBase = (char *)MapViewOfFile(hMapping,FILE_MAP_READ,liStartingOffset.HighPart,liStartingOffset.LowPart, mapRequestSize);
+    if (NULL == mappedBase) {
+        fprintf(stderr,"Unable to map file, %d\n", GetLastError());
+        return NULL;
+    } 
+    mappedRegion = mappedBase + beginRounding;
+
+    amountMapped = amountToMap;
+
+    prefetch(0);
+
+   return mappedRegion;
+}
+
+void
+FileMapper::unmap()
+{
+    if (NULL != mappedBase) {
+        if (!UnmapViewOfFile(mappedBase)) {
+            fprintf(stderr,"Unmap of file failed, %d\n", GetLastError());
+        }
+        mappedRegion = NULL;
+        mappedBase = NULL;
+    }
+}
+
+FileMapper::~FileMapper()
+{
+    unmap();
+    if (isPrefetchOutstanding) {
+        DWORD numberOfBytesTransferred;
+        GetOverlappedResult(hFile,lap,&numberOfBytesTransferred,TRUE);
+    }
+    BigDealloc(prefetchBuffer);
+    prefetchBuffer = NULL;
+    CloseHandle(hMapping);
+    CloseHandle(hFile);
+    CloseHandle(lap->hEvent);
+    CloseHandle(hFilePrefetch);
+    printf("FileMapper: %lld immediate completions, %lld delayed completions, %lld failures, %lld ms in readfile (%lld ms/call)\n",countOfImmediateCompletions, countOfDelayedCompletions, countOfFailures, millisSpentInReadFile, 
+        millisSpentInReadFile/(countOfImmediateCompletions + countOfDelayedCompletions + countOfFailures));
+}
+     
+void
+FileMapper::prefetch(size_t currentRead)
+{
+    if (currentRead + prefetchBufferSize / 2 <= lastPrefetch || lastPrefetch + prefetchBufferSize >= amountMapped) {
+        //
+        // Nothing to do; we're either not ready for more prefetching or we're at the end of our region.
+        //
+        return;
+    }
+
+    if (isPrefetchOutstanding) {
+        //
+        // See if the last prefetch is done.
+        //
+        DWORD numberOfBytesTransferred;
+        if (GetOverlappedResult(hFile,lap,&numberOfBytesTransferred,FALSE)) {
+            isPrefetchOutstanding = false;
+        } else {
+#if     DBG
+            if (GetLastError() != ERROR_IO_PENDING) {
+                fprintf(stderr,"mapped file prefetcher: GetOverlappedResult failed, %d\n", GetLastError());
+            }
+#endif  // DBG
+            return;  // There's still IO on outstanding, we can't start more.
+        }
+    }
+
+    DWORD amountToRead = (DWORD)__min(prefetchBufferSize, amountMapped - lastPrefetch);
+    _ASSERT(amountToRead > 0);  // Else we should have failed the initial check and returned
+    LARGE_INTEGER liReadOffset;
+    lastPrefetch += prefetchBufferSize;
+    liReadOffset.QuadPart = lastPrefetch;
+    lap->OffsetHigh = liReadOffset.HighPart;
+    lap->Offset = liReadOffset.LowPart;
+    DWORD nBytesRead;
+
+    _int64 start = timeInMillis();
+    if (!ReadFile(hFilePrefetch,prefetchBuffer,amountToRead,&nBytesRead,lap)) {
+        if (GetLastError() == ERROR_IO_PENDING) {
+            InterlockedAdd64AndReturnNewValue(&countOfDelayedCompletions,1);
+            isPrefetchOutstanding = true;
+        } else {
+           InterlockedAdd64AndReturnNewValue(&countOfFailures,1);
+#if     DBG
+            if (GetLastError() != ERROR_IO_PENDING) {
+                fprintf(stderr,"mapped file prefetcher: ReadFile failed, %d\n", GetLastError());
+            }
+#endif  // DBG
+            isPrefetchOutstanding = false; // Just ignore it
+        }
+    } else {
+        InterlockedAdd64AndReturnNewValue(&countOfImmediateCompletions,1);
+        isPrefetchOutstanding = false;
+    }
+    InterlockedAdd64AndReturnNewValue(&millisSpentInReadFile,timeInMillis() - start);
+}
+
+
 #else   // _MSC_VER
 
 #if defined(__MACH__)
@@ -696,9 +906,34 @@ void ResetSingleWaiterObject(SingleWaiterObject *waiter)
     (*waiter)->init();
 }
 
-_uint32 InterlockedIncrementAndReturnNewValue(volatile _uint32 *valueToDecrement)
+void CreateEventObject(EventObject *newEvent)
 {
-    return (_uint32) __sync_fetch_and_add((volatile int*) valueToDecrement, 1) + 1;
+    _ASSERT(false); // todo: implement
+}
+
+void DestroyEventObject(EventObject *eventObject)
+{
+    _ASSERT(false); // todo: implement
+}
+
+void AllowEventWaitersToProceed(EventObject *eventObject)
+{
+    _ASSERT(false); // todo: implement
+}
+
+void PreventEventWaitersFromProceeding(EventObject *eventObject)
+{
+    _ASSERT(false); // todo: implement
+}
+
+void WaitForEvent(EventObject *eventObject)
+{
+    _ASSERT(false); // todo: implement
+}
+
+int InterlockedIncrementAndReturnNewValue(volatile int *valueToDecrement)
+{
+    return (int) __sync_fetch_and_add((volatile int*) valueToDecrement, 1) + 1;
 }
 
 int InterlockedDecrementAndReturnNewValue(volatile int *valueToDecrement)
@@ -1296,6 +1531,112 @@ int _fseek64bit(FILE *stream, _int64 offset, int origin)
 #else
     return fseeko64(stream, offset, origin);
 #endif
+}
+
+FileMapper::FileMapper()
+{
+    fd = -1;
+    mappedRegion = NULL;
+    initialized = false;
+    amountMapped = 0;
+    pagesize = getpagesize();
+}
+
+bool
+FileMapper::init(const char *fileName)
+{
+    fd = open(fileName, O_RDONLY);
+    if (fd == -1) {
+	    fprintf(stderr, "Failed to open %s\n", fileName);
+	    return false;
+    }
+
+    struct stat sb;
+    int r = fstat(fd, &sb);
+    if (r == -1) {
+	    fprintf(stderr, "Failed to stat %s\n", fileName);
+	    return false;
+    }
+    fileSize = sb.st_size;
+
+    initialized = true;
+
+    return true;
+}
+
+char *
+FileMapper::createMapping(size_t offset, size_t amountToMap)
+{
+    _ASSERT(NULL == mappedRegion);
+
+    size_t beginRounding = offset % pagesize;
+
+    size_t mapRequestSize = beginRounding + amountToMap;
+    _ASSERT(mapRequestSize % pagesize == 0);
+    if (mapRequestSize + offset >= fileSize) {
+        mapRequestSize = 0; // Says to just map the whole thing.
+    } 
+
+    mappedBase = (char *) mmap(NULL, amountToMap + beginRounding, PROT_READ, MAP_SHARED, fd, offset - beginRounding);
+    if (mappedBase == MAP_FAILED) {
+	    fprintf(stderr, "mmap failed.\n");
+	    return NULL;
+    }
+
+    int r = madvise(mappedBase, min((size_t) madviseSize, amountToMap + beginRounding), MADV_WILLNEED);
+    _ASSERT(r == 0);
+    lastPosMadvised = 0;
+    amountMapped = amountToMap;
+    mappedRegion = mappedBase + beginRounding;
+
+    return mappedRegion;
+}
+
+void
+FileMapper::unmap()
+{
+    if (NULL != mappedRegion) {
+        munmap(mappedBase, amountMapped);
+        mappedRegion = NULL;
+    }
+}
+
+FileMapper::~FileMapper()
+{
+    unmap();
+    close(fd);
+}
+
+void
+FileMapper::prefetch(size_t currentRead)
+{
+    if (currentRead > lastPosMadvised + madviseSize / 2) {
+        _uint64 offset = lastPosMadvised + madviseSize;
+        _uint64 len = (offset > amountMapped ? 0 : min(amountMapped - offset, (_uint64) madviseSize));
+        if (len > 0) {
+            // Start reading new range
+            int r = madvise(mappedBase + offset, len, MADV_WILLNEED);
+            _ASSERT(r == 0);
+        }
+        if (lastPosMadvised > 0) {
+          // Unload the range we had before our current one
+          int r = madvise(mappedBase + lastPosMadvised - madviseSize, madviseSize, MADV_DONTNEED);
+          _ASSERT(r == 0);
+        }
+        lastPosMadvised = offset;
+    }
+}
+
+#include "zlib.h"
+ZEXTERN int ZEXPORT inflate OF((z_streamp strm, int flush))
+{
+  _ASSERT(false); // todo: link Linux version of zlib
+}
+
+ZEXTERN int ZEXPORT inflateInit2_ OF((z_streamp strm, int  windowBits,
+                                      const char *version, int stream_size))
+{
+  _ASSERT(false); // todo: link Linux version of zlib
 }
 
 #endif  // _MSC_VER

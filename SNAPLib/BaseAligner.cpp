@@ -83,6 +83,7 @@ Arguments:
  
  --*/
 {
+
 #if     MAINTAIN_HISTOGRAMS
     lvHistogram = new Histogram(20, true);
     lookupHistogram = new Histogram(20, true);
@@ -487,7 +488,6 @@ Return Value:
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", *finalScore, *mapq, *genomeLocation);
 #endif  // _DEBUG
-
                 return finalResult;
             }
             nextSeedToTest = GetWrappedNextSeedToTest(seedLen, wrapCount);
@@ -660,7 +660,6 @@ Return Value:
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", *finalScore, *mapq, *genomeLocation);
 #endif  // _DEBUG
-
                 return finalResult;
             }
         }
@@ -1060,7 +1059,6 @@ Return Value:
                         } else {
                             matchProbability = 0;
                         }
-
 #endif
                     } // If we used Hamming
                 } // if we had genome data to compare against
@@ -1246,7 +1244,6 @@ Return Value:
                     //// Make sure that the score limit is 
                     //// always search for something at least one worse than the best we found to drive the denominator of the MAPQ computation
                     //scoreLimit = __min(__max(scoreLimit,bestScore+2),maxK); 
-
                 }
             }   // While candidates exist in the element
         }   // If the element could possibly affect the result

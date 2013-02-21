@@ -26,6 +26,8 @@ Revision History:
 
 #include "stdafx.h"
 #include "RangeSplitter.h"
+#include "SAM.h"
+#include "FASTQ.h"
 
 using std::max;
 using std::min;
@@ -90,3 +92,124 @@ bool RangeSplitter::getNextRange(_int64 *rangeStart, _int64 *rangeLength)
     *rangeLength = amountToTake;
     return true;
 }
+
+RangeSplittingReadSupplierGenerator::RangeSplittingReadSupplierGenerator(const char *i_fileName, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome) :
+       isSAM(i_isSAM), clipping(i_clipping), genome(i_genome)
+{
+    fileName = new char[strlen(i_fileName) + 1];
+    strcpy(fileName, i_fileName);
+    splitter = new RangeSplitter(QueryFileSize(fileName),numThreads);
+}
+
+ReadSupplier *
+RangeSplittingReadSupplierGenerator::generateNewReadSupplier()
+{
+    _int64 rangeStart, rangeLength;
+    if (!splitter->getNextRange(&rangeStart, &rangeLength)) {
+        return NULL;
+    }
+
+    ReadReader *underlyingReader;
+    // todo: implement layered factory model
+    if (isSAM) {
+        underlyingReader = SAMReader::create(DataSupplier::Default, fileName, genome, rangeStart, rangeLength, clipping);
+    } else {
+        underlyingReader = FASTQReader::create(DataSupplier::Default, fileName, rangeStart, rangeLength ,clipping);
+    }
+    return new RangeSplittingReadSupplier(splitter,underlyingReader);
+}
+
+RangeSplittingReadSupplier::~RangeSplittingReadSupplier()
+{
+}
+
+
+    Read * 
+RangeSplittingReadSupplier::getNextRead()
+{
+    if (underlyingReader->getNextRead(&read)) {
+        return &read;
+    }
+
+    _int64 rangeStart, rangeLength;
+    if (!splitter->getNextRange(&rangeStart, &rangeLength)) {
+        return NULL;
+    }
+ 
+    underlyingReader->reinit(rangeStart,rangeLength);
+    if (!underlyingReader->getNextRead(&read)) {
+        return NULL;
+    }
+    return &read;
+}
+
+RangeSplittingPairedReadSupplier::~RangeSplittingPairedReadSupplier()
+{
+}
+
+    bool 
+RangeSplittingPairedReadSupplier::getNextReadPair(Read **read1, Read **read2)
+{
+    *read1 = &internalRead1;
+    *read2 = &internalRead2;
+    if (underlyingReader->getNextReadPair(&internalRead1,&internalRead2)) {
+        return true;
+    }
+
+    //
+    // We need to clear out the reads, because they may contain references to the buffers in the readers.
+    // These buffer reference counts get reset to 0 at reinit time, which causes problems when they're
+    // still live in read.
+    //
+
+    _int64 rangeStart, rangeLength;
+    if (!splitter->getNextRange(&rangeStart, &rangeLength)) {
+        return false;
+    }
+ 
+    underlyingReader->reinit(rangeStart,rangeLength);
+    return underlyingReader->getNextReadPair(&internalRead1, &internalRead2);
+}
+
+RangeSplittingPairedReadSupplierGenerator::RangeSplittingPairedReadSupplierGenerator(
+    const char *i_fileName1, const char *i_fileName2, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome) :
+        isSAM(i_isSAM), clipping(i_clipping), genome(i_genome)
+{
+    fileName1 = new char[strlen(i_fileName1) + 1];
+    strcpy(fileName1, i_fileName1); 
+
+    if (!isSAM) {
+        fileName2 = new char[strlen(i_fileName2) + 1];
+        strcpy(fileName2, i_fileName2);
+    } else {
+        fileName2 = NULL;
+    }
+
+    splitter = new RangeSplitter(QueryFileSize(fileName1),numThreads);
+}
+
+RangeSplittingPairedReadSupplierGenerator::~RangeSplittingPairedReadSupplierGenerator()
+{
+    delete [] fileName1;
+    delete [] fileName2;
+    delete splitter;
+}
+
+    PairedReadSupplier *
+RangeSplittingPairedReadSupplierGenerator::generateNewPairedReadSupplier()
+{
+    _int64 rangeStart, rangeLength;
+    if (!splitter->getNextRange(&rangeStart, &rangeLength)) {
+        return NULL;
+    }
+
+    PairedReadReader *underlyingReader;
+    if (isSAM) {
+        underlyingReader = SAMReader::createPairedReader(DataSupplier::Default, fileName1, genome, rangeStart, rangeLength, clipping); 
+    } else {
+        underlyingReader = PairedFASTQReader::create(DataSupplier::Default, fileName1, fileName2, rangeStart, rangeLength, clipping);
+    }
+
+    return new RangeSplittingPairedReadSupplier(splitter,underlyingReader);
+}
+

@@ -25,6 +25,7 @@ Revision History:
 #pragma once
 #include "stdafx.h"
 #include "AlignerContext.h"
+#include "ReadSupplierQueue.h"
 
 struct PairedAlignerStats;
 
@@ -56,6 +57,11 @@ protected:
 
 protected:
 
+    virtual void typeSpecificBeginIteration();
+    virtual void typeSpecificNextIteration();
+
+    PairedReadSupplierGenerator *pairedReadSupplierGenerator;
+ 
     int                 minSpacing;
     int                 maxSpacing;
     const char         *fastqFile1;
@@ -72,5 +78,4 @@ struct PairedAlignerOptions : public AlignerOptions
 
     int minSpacing;
     int maxSpacing;
-    const char* fastqFile1;
 };
