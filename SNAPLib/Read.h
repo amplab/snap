@@ -197,6 +197,12 @@ public:
             id = other.id;
             data = other.data;
             quality = other.quality;
+            idLength = other.idLength;
+            frontClippedLength = other.frontClippedLength;
+            dataLength = other.dataLength;
+            unclippedData = other.unclippedData;
+            unclippedLength = other.unclippedLength;
+            unclippedQuality = other.unclippedQuality;
             localUnclippedDataBuffer = other.localUnclippedDataBuffer;
             localUnclippedQualityBuffer = other.localUnclippedQualityBuffer;
             localBufferSize = other.localBufferSize;
@@ -206,8 +212,9 @@ public:
             originalUnclippedDataBuffer = other.originalUnclippedDataBuffer;
             originalUnclippedQualityBuffer = other.originalUnclippedQualityBuffer;
             other.originalUnclippedDataBuffer = NULL;
-            other.originalUnclippedQualityBuffer;
+            other.originalUnclippedQualityBuffer = NULL;
             clippingState = other.clippingState;
+            batch = other.batch;
         }
 
         //

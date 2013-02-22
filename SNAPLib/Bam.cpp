@@ -282,7 +282,6 @@ BAMReader::getNextRead(
         fprintf(stderr, "Unexpected end of BAM file at %lld\n", data->getFileOffset());
         exit(1);
     }
-    static size_t lastSize = bam->size();//!!
     data->advance(bam->size());
     size_t lineLength;
     getReadFromLine(genome, buffer, buffer + bytes, read, alignmentResult, genomeLocation,

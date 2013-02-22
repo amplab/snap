@@ -121,6 +121,7 @@ PairedReadMatcher::getNextReadPair(
                 fprintf(stderr, "More than %d unmatched pending reads\n", capacity);
                 // todo: deal with it; ignore for now, let the table grow...
             }
+            pending[key] = one;
             tracker.addRead(one.getBatch());
             continue;
         }
@@ -131,6 +132,7 @@ PairedReadMatcher::getNextReadPair(
         // update reference counts for removed read batch, release if tracker requires it
         DataBatch release;
         if (tracker.removeRead(found->second.getBatch(), &release) && pendingReleased < release) {
+            //printf("PairedReadMatcher::getNextReadPair pendingReleased %d\n", release.batchID);
             pendingReleased = release;
             checkRelease();
         }

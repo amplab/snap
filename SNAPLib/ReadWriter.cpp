@@ -153,14 +153,14 @@ SimpleReadWriter::writePair(
         }
     }
 
-    char* buffer;
-    size_t size;
-
-    if (! writer->getBuffer(&buffer, &size)) {
-        return false;
-    }
-
     for (int pass = 0; pass < 2; pass++) {
+        
+        char* buffer;
+        size_t size;
+
+        if (! writer->getBuffer(&buffer, &size)) {
+            return false;
+        }
 
         bool writesFit = format->writeRead(genome, &lvc, buffer, size, &sizeUsed[first],
                             idLengths[first], reads[first], result->status[first], result->location[first], result->direction[first], true, true,
