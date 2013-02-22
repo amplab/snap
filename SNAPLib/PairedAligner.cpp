@@ -342,7 +342,8 @@ void PairedAlignerContext::runIterationThread()
             maxSpacing,
             adaptiveConfDiff);
 #endif  // 0
-    BloomPairedEndAligner *aligner = new BloomPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, NULL);
+    BigAllocator *allocator = new BigAllocator(100 * 1024 * 1024);
+    BloomPairedEndAligner *aligner = new BloomPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, allocator);
             
     /*BigAllocator *allocator = new BigAllocator(ThirdPairedEndAligner::getBigAllocatorReservation(index, maxHits, maxReadSize, index->getSeedLength(), numSeeds));
     ThirdPairedEndAligner *aligner = new(allocator) ThirdPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, allocator);

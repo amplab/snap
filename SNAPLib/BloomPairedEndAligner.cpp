@@ -43,7 +43,7 @@ BloomPairedEndAligner::BloomPairedEndAligner(
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
         BigAllocator  *allocator) :
     index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), maxSeeds(maxSeeds_), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
-    landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(50000)
+    landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(150000)
 {
     allocateDynamicMemory(allocator, maxReadSize, maxHits, maxSeeds);
 
@@ -115,7 +115,8 @@ BloomPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, unsigned m
     for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
         rcReadData[whichRead] = (char *)allocator->allocate(maxReadSize);
         rcReadQuality[whichRead] = (char *)allocator->allocate(maxReadSize);
-        bloomFilter[whichRead] = new BloomFilter(maxBigHits * maxSeeds, maxSpacing - minSpacing);
+        bloomFilter[whichRead] = new BloomFilter(maxBigHits * maxSeeds * BloomBitsPerSeedHit, maxSpacing - minSpacing);
+        hashTableHits[whichRead] = (HashTableHit *)allocator->allocate(maxSeeds * sizeof(HashTableHit));
 
         for (Direction dir = 0; dir < NUM_DIRECTIONS; dir++) {
             reversedRead[whichRead][dir] = (char *)allocator->allocate(maxReadSize);
@@ -236,7 +237,7 @@ BloomPairedEndAligner::align(
         memset(seedUsed, 0, (__max(readLen[0], readLen[1]) + 7) / 8);
     
         while (countOfHashTableLookups[whichRead] < nPossibleSeeds && countOfHashTableLookups[whichRead] < maxSeeds) {
-            if (nextSeedToTest > nPossibleSeeds) {
+            if (nextSeedToTest >= nPossibleSeeds) {
                 wrapCount++;
                 if (wrapCount >= seedLen) {
                     //
@@ -268,6 +269,7 @@ BloomPairedEndAligner::align(
                 //
                 // It's got Ns in it, so just skip it.
                 //
+                nextSeedToTest++;
                 continue;
             }
 
@@ -280,11 +282,13 @@ BloomPairedEndAligner::align(
             index->lookupSeed(seed, 0, genomeSize, &hitRecord->nHits[FORWARD], &hitRecord->hits[FORWARD], &hitRecord->nHits[RC], &hitRecord->hits[RC]);
             countOfHashTableLookups[whichRead]++;
             for (Direction dir = FORWARD; dir < NUM_DIRECTIONS; dir++) {
-                totalHashTableHits[whichRead][dir] += hitRecord->nHits[dir];
-                largestHashTableHit[whichRead][dir] = __max(largestHashTableHit[whichRead][dir], hitRecord->nHits[dir]);
+                if (hitRecord->nHits[dir] < maxBigHits) {
+                    totalHashTableHits[whichRead][dir] += hitRecord->nHits[dir];
+                    largestHashTableHit[whichRead][dir] = __max(largestHashTableHit[whichRead][dir], hitRecord->nHits[dir]);
+                }
             }
 
-            nextSeedToTest++;
+            nextSeedToTest += seedLen;
         } // while we need to lookup seeds for this read
     } // for each read
 
@@ -304,7 +308,7 @@ BloomPairedEndAligner::align(
         // 1/16.  However, in practice many of the hits will be for the same location and so the false
         // positive rate will be much lower.
         //
-        bloomFilter[dir]->init(2, __max(256, 8 * totalHashTableHits[readWithMostHits][dir]));
+        bloomFilter[dir]->init(2, __max(256, BloomBitsPerSeedHit * totalHashTableHits[readWithMostHits][dir]));
 
         for (unsigned whichHit = 0; whichHit < countOfHashTableLookups[readWithMostHits]; whichHit++) {
             unsigned offset;
@@ -314,10 +318,12 @@ BloomPairedEndAligner::align(
             } else {
                 offset = readLen[readWithMostHits] - seedLen - hitRecord->seedOffset;
             }
-            for (unsigned whichSeedHit = 0; whichSeedHit < hitRecord->nHits[dir]; whichSeedHit++) {
-                bloomFilter[dir]->addToSet(hitRecord->hits[dir][readWithMostHits] - offset);
+            if (hitRecord->nHits[dir] < maxBigHits) {
+                for (unsigned whichSeedHit = 0; whichSeedHit < hitRecord->nHits[dir]; whichSeedHit++) {
+                    bloomFilter[dir]->addToSet(hitRecord->hits[dir][readWithMostHits] - offset);
+                }
+                bloomFilterAdds += hitRecord->nHits[dir];
             }
-            bloomFilterAdds += hitRecord->nHits[dir];
         }
     }
 
@@ -344,6 +350,9 @@ BloomPairedEndAligner::align(
                     minRange[0] = maxRange[0] = 0;
                 } else if (hitLocation < maxSpacing) {
                     minRange[0] = 0;
+                    maxRange[0] = hitLocation - minSpacing;
+                } else {
+                    minRange[0] = hitLocation - maxSpacing;
                     maxRange[0] = hitLocation - minSpacing;
                 }
 

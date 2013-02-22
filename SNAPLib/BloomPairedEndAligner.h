@@ -94,6 +94,7 @@ private:
     unsigned        readWithMostHits;
     unsigned        readWithFewestHits;
 
+    static const unsigned BloomBitsPerSeedHit = 8;
     BloomFilter     *bloomFilter[NUM_DIRECTIONS];           // A Bloom filter of hash table hits for the larger direction of each read.
     char *rcReadData[NUM_READS_PER_PAIR];                   // the reverse complement of the data for each read
     char *rcReadQuality[NUM_READS_PER_PAIR];                // the reversed quality strings for each read

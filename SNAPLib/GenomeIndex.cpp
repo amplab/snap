@@ -45,14 +45,15 @@ static void usage()
     fprintf(stderr,
             "Usage: snap index <input.fa> <output-dir> [<options>]\n"
             "Options:\n"
-            "  -s           Seed size (default: %d)\n"
-            "  -h           Hash table slack (default: %.1f)\n"
-            "  -hg19        Use pre-computed table bias for hg19, which results in better speed, balance, and memory footprint but may not work for other references.\n"
-            "  -Ofactor     Specify the size of the overflow space.  This will change the memory footprint, but may be needed for some genomes.\n"
-            "               Larger numbers use more memory but work better with more repetitive genomes.  Smaller numbers reduce the memory\n"
-            "               footprint, but may cause the index build to fail.  Making -O larger than necessary will not affect the resuting\n"
-            "               index.  Factor must be between 1 and 1000, and the default is 40.\n"
-            " -tMaxThreads  Specify the maximum number of threads to use. Default is the number of cores.\n",
+            "  -s               Seed size (default: %d)\n"
+            "  -h               Hash table slack (default: %.1f)\n"
+            "  -hg19            Use pre-computed table bias for hg19, which results in better speed, balance, and memory footprint but may not work for other references.\n"
+            "  -Ofactor         Specify the size of the overflow space.  This will change the memory footprint, but may be needed for some genomes.\n"
+            "                   Larger numbers use more memory but work better with more repetitive genomes.  Smaller numbers reduce the memory\n"
+            "                   footprint, but may cause the index build to fail.  Making -O larger than necessary will not affect the resuting\n"
+            "                   index.  Factor must be between 1 and 1000, and the default is 40.\n"
+            " -tMaxThreads      Specify the maximum number of threads to use. Default is the number of cores.\n"
+            " -HHistogramFile   Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n",
             DEFAULT_SEED_SIZE,
             DEFAULT_SLACK);
     exit(1);
@@ -77,6 +78,7 @@ GenomeIndex::runIndexer(
     double slack = DEFAULT_SLACK;
     bool computeBias = true;
     _uint64 overflowTableFactor = 40;
+    const char *histogramFileName = NULL;
 
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
@@ -96,7 +98,9 @@ GenomeIndex::runIndexer(
         } else if (strcmp(argv[n], "-c") == 0) {
             computeBias = true;
         } else if (strcmp(argv[n], "-hg19") == 0) {
-            computeBias = false;        
+            computeBias = false;
+        } else if (argv[n][0] == '-' && argv[n][1] == 'H') {
+            histogramFileName = argv[n] + 2;
         } else if (argv[n][0] == '-' && argv[n][1] == 'O') {
             overflowTableFactor = atoi(argv[n]+2);
             if (overflowTableFactor < 1 || overflowTableFactor > 1000) {
@@ -131,7 +135,7 @@ GenomeIndex::runIndexer(
     }
     printf("%llds\n", (timeInMillis() + 500 - start) / 1000);
     unsigned nBases = genome->getCountOfBases();
-    if (!GenomeIndex::BuildIndexToDirectory(genome, seedLen, slack, computeBias, outputDir, overflowTableFactor, maxThreads)) {
+    if (!GenomeIndex::BuildIndexToDirectory(genome, seedLen, slack, computeBias, outputDir, overflowTableFactor, maxThreads, histogramFileName)) {
         fprintf(stderr, "Genome index build failed\n");
         exit(1);
     }
@@ -196,8 +200,19 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
 
     bool
 GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double slack, bool computeBias, const char *directoryName, _uint64 overflowTableFactor,
-                                    unsigned maxThreads)
+                                    unsigned maxThreads, const char *histogramFileName)
 {
+    bool buildHistogram = (histogramFileName != NULL);
+    FILE *histogramFile;
+    if (buildHistogram) {
+        histogramFile = fopen(histogramFileName, "w");
+        if (NULL == histogramFile) {
+            fprintf(stderr,"Unable to open histogram file '%s', skipping it.\n", histogramFileName);
+            buildHistogram = false;
+        }
+    }
+
+
     if (mkdir(directoryName, 0777) != 0 && errno != EEXIST) {
         fprintf(stderr,"BuildIndex: failed to create directory %s\n",directoryName);
         return false;
@@ -326,7 +341,9 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     WaitForSingleWaiterObject(&doneObject);
     DestroySingleWaiterObject(&doneObject);
 
+    size_t totalUsedHashTableElements = 0;
     for (unsigned j = 0; j < index->nHashTables; j++) {
+        totalUsedHashTableElements += hashTables[j]->GetUsedElementCount();
         printf("HashTable[%d] has %lld used elements, loading %lld%%\n",j,(_int64)hashTables[j]->GetUsedElementCount(),
                 (_int64)hashTables[j]->GetUsedElementCount() * 100 / (_int64)hashTables[j]->GetTableSize());
     }
@@ -379,6 +396,19 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     unsigned nBackpointersProcessed = 0;
     _int64 lastPrintTime = timeInMillis();
 
+    const unsigned maxHistogramEntry = 500000;
+    unsigned countOfTooBigForHistogram = 0;
+    unsigned sumOfTooBigForHistogram = 0;
+    unsigned largestSeed = 0;
+    unsigned totalNonSingletonSeeds = 0;
+    unsigned *histogram = NULL;
+    if (buildHistogram) {
+        histogram = new unsigned[maxHistogramEntry+1];
+        for (unsigned i = 0; i <= maxHistogramEntry; i++) {
+            histogram[i] = 0;
+        }
+    }
+
     unsigned overflowTableIndex = 0;
     for (unsigned i = 0 ; i < nextOverflowIndex; i++) {
         OverflowEntry *overflowEntry = &overflowEntries[i];
@@ -387,6 +417,20 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         if (timeInMillis() - lastPrintTime > 60 * 1000) {
             printf("%d/%d duplicate seeds, %d/%d backpointers processed\n",i,nextOverflowIndex,nBackpointersProcessed,nextOverflowBackpointer-1);
             lastPrintTime = timeInMillis();
+        }
+
+        //
+        // If we're building a histogram, update it.
+        //
+        if (buildHistogram) {
+            totalNonSingletonSeeds += overflowEntry->nInstances;
+            if (overflowEntry->nInstances > maxHistogramEntry) {
+                countOfTooBigForHistogram++;
+                sumOfTooBigForHistogram += overflowEntry->nInstances;
+            } else {
+                histogram[overflowEntry->nInstances]++;
+            }
+            largestSeed = __max(largestSeed, overflowEntry->nInstances);
         }
 
         //
@@ -426,6 +470,18 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 
     delete [] overflowBackpointers;
     overflowBackpointers = NULL;
+
+    if (buildHistogram) {
+        histogram[1] = (unsigned)(totalUsedHashTableElements - totalNonSingletonSeeds);
+        for (unsigned i = 0; i <= maxHistogramEntry; i++) {
+            if (histogram[i] != 0) {
+                fprintf(histogramFile,"%d\t%d\n", i, histogram[i]);
+            }
+        }
+        fprintf(histogramFile, "%d larger than %d with %d total genome locations, largest seed %d\n", countOfTooBigForHistogram, maxHistogramEntry, sumOfTooBigForHistogram, largestSeed);
+        fclose(histogramFile);
+        delete [] histogram;
+    }
 
     //
     // Now save out the part of the index that's independent of the genome itself.
