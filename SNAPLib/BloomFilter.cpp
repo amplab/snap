@@ -70,3 +70,13 @@ BloomFilter::mightValueBeInSet(unsigned value)
 
     return !anyBitsMissed;
 }
+    bool 
+BloomFilter::mightRangeBeInSet(unsigned rangeMin, unsigned rangeMax)
+{
+    for (unsigned value = rangeMin; value < rangeMax; value += baseDivisor) {
+        if (mightValueBeInSet(value)) {
+            return true;
+        }
+    }
+    return false;
+}

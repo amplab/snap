@@ -81,6 +81,11 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
     }
 
     extension->finishAlignment();
+//BJB
+extern volatile _int64          totalBloomFilterAdds;
+extern volatile _int64          totalBloomFilterLookups;
+extern volatile _int64          totalBloomFilterPasses;
+printf("%lld bloom filter adds, %lld lookups, %lld passes\n", totalBloomFilterAdds, totalBloomFilterLookups, totalBloomFilterPasses);
 }
 
     void

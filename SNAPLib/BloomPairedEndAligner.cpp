@@ -26,7 +26,12 @@ Revision History:
 #include "mapq.h"
 #include "BloomFilter.h"
 
-#if     0
+#ifdef  COMPILE_BLOOM
+
+volatile _int64          totalBloomFilterAdds = 0;
+volatile _int64          totalBloomFilterLookups = 0;
+volatile _int64          totalBloomFilterPasses = 0;
+
 
 BloomPairedEndAligner::BloomPairedEndAligner(
         GenomeIndex  *index_,
@@ -108,14 +113,15 @@ BloomPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, unsigned m
     superGroupPoolSize = maxHitsToConsider * maxSeedsToUse * NUM_READS_PER_PAIR * NUM_DIRECTIONS;
 
     for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
-         rcReadData[whichRead] = (char *)allocator->allocate(maxReadSize);
-         rcReadQuality[whichRead] = (char *)allocator->allocate(maxReadSize);
+        rcReadData[whichRead] = (char *)allocator->allocate(maxReadSize);
+        rcReadQuality[whichRead] = (char *)allocator->allocate(maxReadSize);
+        bloomFilter[whichRead] = new BloomFilter(maxBigHits * maxSeeds, maxSpacing - minSpacing);
 
         for (Direction dir = 0; dir < NUM_DIRECTIONS; dir++) {
             reversedRead[whichRead][dir] = (char *)allocator->allocate(maxReadSize);
             superGroupHashTable[whichRead][dir] = (SuperGroupHashTableAnchor *)allocator->allocate(sizeof(SuperGroupHashTableAnchor) * superGroupHashTableSize);
             candidateGroupHashTable[whichRead][dir] = (CandidateGroupHashTableAnchor *)allocator->allocate(sizeof(CandidateGroupHashTableAnchor) * candidateGroupHashTableSize);
-            bloomFilter[whichRead][dir] = new BloomFilter(maxBigHits * maxSeeds, maxSpacing - minSpacing);
+ 
         }
     }
 
@@ -131,11 +137,13 @@ BloomPairedEndAligner::align(
         Read                  *read1,
         PairedAlignmentResult *result)
 {
-
     Read rcReads[NUM_READS_PER_PAIR];
 
     unsigned nSeedsApplied[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
-    
+
+    _int64 bloomFilterAdds = 0;
+    _int64 bloomFilterLookups = 0;
+    _int64 bloomFilterPasses = 0;    
 
     reads[0][FORWARD] = read0;
     reads[1][FORWARD] = read1;
@@ -157,6 +165,12 @@ BloomPairedEndAligner::align(
         Read *read = reads[whichRead][FORWARD];
         readLen[whichRead] = read->getDataLength();
         popularSeedsSkipped[whichRead] = 0;
+        countOfHashTableLookups[whichRead] = 0;
+
+        for (Direction dir = FORWARD; dir < NUM_DIRECTIONS; dir++) {
+            totalHashTableHits[whichRead][dir] = 0;
+            largestHashTableHit[whichRead][dir] = 0;
+        }
 
         if (readLen[whichRead] > maxReadSize) {
             fprintf(stderr,"BloomPairedEndAligner:: got too big read (%d > %d)", readLen[whichRead], maxReadSize);
@@ -194,8 +208,8 @@ BloomPairedEndAligner::align(
 
     clearCandidates();
 
-    unsigned wrapCount = 0;
-    unsigned nextSeedToTest = 0;
+
+
     unsigned nPossibleSeeds = __max(readLen[0], readLen[1]) - seedLen + 1;
     unsigned thisPassSeedsNotSkipped[NUM_READS_PER_PAIR][NUM_DIRECTIONS] = {{0,0}, {0,0}}; 
 
@@ -210,133 +224,152 @@ BloomPairedEndAligner::align(
     bestPairScore = -1;
     scoreLimit = maxK + distanceToSearchBeyondBestScore;
 
-    memset(seedUsed, 0, (__max(readLen[0], readLen[1]) + 7) / 8);
+
 
     //
-    // Loop around applying seeds and scoring until we've either applied as many seeds as we're allowed, or we run out of seeds, or we have a final
-    // answer.
+    // Phase 1: do the hash table lookups for each of the seeds for each of the reads, and count how many there are.  This will allow us to determine which
+    // read in each direction is larger and so needs to go into the Bloom filter.
     //
-    while (nSeedsApplied[0][FORWARD] + nSeedsApplied[0][RC] < maxSeeds || nSeedsApplied[1][FORWARD] + nSeedsApplied[1][RC] < maxSeeds) {
-        if (nextSeedToTest > nPossibleSeeds) {
-            wrapCount++;
-            thisPassSeedsNotSkipped[0][FORWARD] = thisPassSeedsNotSkipped[1][FORWARD] = 
-                thisPassSeedsNotSkipped[0][RC] = thisPassSeedsNotSkipped[1][RC] = 0;
-            if (wrapCount >= seedLen) {
-                score(true, reads, result);
-                return;
+    for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+        unsigned nextSeedToTest = 0;
+        unsigned wrapCount = 0;
+        memset(seedUsed, 0, (__max(readLen[0], readLen[1]) + 7) / 8);
+    
+        while (countOfHashTableLookups[whichRead] < nPossibleSeeds && countOfHashTableLookups[whichRead] < maxSeeds) {
+            if (nextSeedToTest > nPossibleSeeds) {
+                wrapCount++;
+                if (wrapCount >= seedLen) {
+                    //
+                    // There aren't enough valid seeds in this read to reach our target.
+                    //
+                    break;
+                }
+                nextSeedToTest = GetWrappedNextSeedToTest(seedLen, wrapCount);
             }
 
-            nextSeedToTest = GetWrappedNextSeedToTest(seedLen, wrapCount);
-        }
 
+            while (nextSeedToTest < nPossibleSeeds && IsSeedUsed(nextSeedToTest)) {
+                //
+                // This seed is already used.  Try the next one.
+                //
+                nextSeedToTest++;
+            }
 
-        while (nextSeedToTest < nPossibleSeeds && IsSeedUsed(nextSeedToTest)) {
-            //
-            // This seed is already used.  Try the next one.
-            //
-            nextSeedToTest++;
-        }
+            if (nextSeedToTest >= nPossibleSeeds) {
+                //
+                // Unusable seeds have pushed us past the end of the read.  Go back around the outer loop so we wrap properly.
+                //
+                continue;
+            }
 
-        if (nextSeedToTest >= nPossibleSeeds) {
-            //
-            // Unusable seeds have pushed us past the end of the read.  Go back around the outer loop so we wrap properly.
-            //
-            continue;
-        }
+            SetSeedUsed(nextSeedToTest);
 
-        SetSeedUsed(nextSeedToTest);
-
-        for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
             if (!Seed::DoesTextRepresentASeed(reads[whichRead][FORWARD]->getData() + nextSeedToTest, seedLen)) {
+                //
+                // It's got Ns in it, so just skip it.
+                //
                 continue;
             }
 
             Seed seed(reads[whichRead][FORWARD]->getData() + nextSeedToTest, seedLen);
-
-            unsigned        nHits[NUM_DIRECTIONS];      // Number of times this seed hits in the genome
-            const unsigned  *hits[NUM_DIRECTIONS];      // The actual hits (of size nHits)
-
             //
             // Find all instances of this seed in the genome.
             //
-            index->lookupSeed(seed, 0, genomeSize, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC]);
+            HashTableHit *hitRecord = &hashTableHits[whichRead][countOfHashTableLookups[whichRead]];
+            hitRecord->seedOffset = nextSeedToTest;
+            index->lookupSeed(seed, 0, genomeSize, &hitRecord->nHits[FORWARD], &hitRecord->hits[FORWARD], &hitRecord->nHits[RC], &hitRecord->hits[RC]);
+            countOfHashTableLookups[whichRead]++;
+            for (Direction dir = FORWARD; dir < NUM_DIRECTIONS; dir++) {
+                totalHashTableHits[whichRead][dir] += hitRecord->nHits[dir];
+                largestHashTableHit[whichRead][dir] = __max(largestHashTableHit[whichRead][dir], hitRecord->nHits[dir]);
+            }
 
-            for (Direction dir = 0; dir < NUM_DIRECTIONS; dir++) {
-                if (nHits[dir] > maxHits) {
-                    popularSeedsSkipped[whichRead]++;
-                } else {
-                    for (unsigned whichHit = 0; whichHit < nHits[dir]; whichHit++) {
-                        unsigned offset;
-                        if (dir == FORWARD) {
-                            offset = nextSeedToTest;
-                        } else {
-                            //
-                            // The RC seed is at offset ReadSize - SeedSize - seed offset in the RC seed.
-                            //
-                            // To see why, imagine that you had a read that looked like 0123456 (where the digits
-                            // represented some particular bases, and digit' is the base's complement). Then the
-                            // RC of that read is 6'5'4'3'2'1'.  So, when we look up the hits for the seed at
-                            // offset 0 in the forward read (i.e. 012 assuming a seed size of 3) then the index
-                            // will also return the results for the seed's reverse complement, i.e., 3'2'1'.
-                            // This happens as the last seed in the RC read.
-                            //
-                            offset = readLen[whichRead] - seedLen - nextSeedToTest;
-                        }
+            nextSeedToTest++;
+        } // while we need to lookup seeds for this read
+    } // for each read
 
-                        unsigned genomeLocation = hits[dir][whichHit] - offset;
+    //
+    // Now select which read has the most hits.  This is the read that we'll put into the Bloom filter.
+    //
+    readWithMostHits = totalHashTableHits[0][FORWARD] + totalHashTableHits[0][RC] > totalHashTableHits[1][FORWARD] + totalHashTableHits[1][RC] ? 0 : 1;
+    readWithFewestHits = 1 - readWithMostHits;
 
-                        CandidateGroup *group;
-                        Candidate *candidate;
-                        findCandidateAndCreateIfNotExtant(whichRead, dir, genomeLocation, &group, &candidate, bestPassSeedsNotSkipped[whichRead][dir]);
-                        candidate->seedOffset = nextSeedToTest;
+    //
+    // Phase 2: build the Bloom fiters.
+    //
+    for (Direction dir = FORWARD; dir < NUM_DIRECTIONS; dir++) {
+        //
+        // Set up the Bloom filter with 8 bits per hash table hit.  If all of the hits are unique,
+        // this will result in about a 1/4 of the bits being set and so a false positive rate of
+        // 1/16.  However, in practice many of the hits will be for the same location and so the false
+        // positive rate will be much lower.
+        //
+        bloomFilter[dir]->init(2, __max(256, 8 * totalHashTableHits[readWithMostHits][dir]));
 
-                        group->weight++;
-                        _ASSERT(group->weight <= maxSeeds);
-
-                        if (!group->allExtantCandidatesScored) {
-                            if (!group->hasAKnownMate && isThereAMateCandidate(genomeLocation, 1 - whichRead, OppositeDirection(dir))) {
-                                group->hasAKnownMate = true;
-                            }
-
-                            if (group->hasAKnownMate) {
-                                //
-                                // Only put groups with known mates on the weight list.
-                                // It's OK that this might put only one end of a mate pair on the list (if all of the hits for
-                                // one end come after every hit from the other), because the scorer will find all of the possible
-                                // mates starting from either end.
-                                //
-                                group->removeFromWeightList();
-                                //
-                                // Initialize any weight lists that aren't currently in use.  This is another case of lazy initialization to save work.
-                                //
-                                for (unsigned i = maxWeightListUsed+1; i <= group->weight; i++) {
-                                    weightLists[i].weightListNext = weightLists[i].weightListPrev = &weightLists[i];
-                                }
-                                if (group->weight > maxWeightListUsed) {
-                                    maxWeightListUsed = group->weight;
-                                }
-                                group->weightListNext = &weightLists[group->weight];
-                                group->weightListPrev = weightLists[group->weight].weightListPrev;
-                                group->weightListNext->weightListPrev = group;
-                                group->weightListPrev->weightListNext = group;
-
-                                maxWeightListUsed = __max(maxWeightListUsed, group->weight);
-                                _ASSERT(maxWeightListUsed <= maxSeeds);
-                            }
-                        } // if it's not already scored
-                    } // for each hit
-
-                    thisPassSeedsNotSkipped[whichRead][dir]++;
-                    bestPassSeedsNotSkipped[whichRead][dir] = __max(bestPassSeedsNotSkipped[whichRead][dir], thisPassSeedsNotSkipped[whichRead][dir]);
-                } // if not too many hits
-            } // For each direction
-        } // for each read
-        if (score(false, reads, result)) {
-            return;
+        for (unsigned whichHit = 0; whichHit < countOfHashTableLookups[readWithMostHits]; whichHit++) {
+            unsigned offset;
+            HashTableHit *hitRecord = &hashTableHits[readWithMostHits][whichHit];
+            if (dir == FORWARD) {
+                offset = hitRecord->seedOffset;
+            } else {
+                offset = readLen[readWithMostHits] - seedLen - hitRecord->seedOffset;
+            }
+            for (unsigned whichSeedHit = 0; whichSeedHit < hitRecord->nHits[dir]; whichSeedHit++) {
+                bloomFilter[dir]->addToSet(hitRecord->hits[dir][readWithMostHits] - offset);
+            }
+            bloomFilterAdds += hitRecord->nHits[dir];
         }
-    } // while we have a seed
+    }
 
-    score(true, reads, result);
+    //
+    // Phase 3: build up candidate lists for reads, excluding ones that certainly do not have mates.
+    //
+    for (Direction dir = FORWARD; dir < NUM_DIRECTIONS; dir++) {
+        BloomFilter *ourBloomFilter = bloomFilter[OppositeDirection(dir)];
+        for (unsigned whichHit = 0; whichHit < countOfHashTableLookups[readWithFewestHits]; whichHit++) {
+            unsigned offset;
+            HashTableHit *hitRecord = &hashTableHits[readWithFewestHits][whichHit];
+            if (dir == FORWARD) {
+                offset = hitRecord->seedOffset;
+            } else {
+                offset = readLen[readWithFewestHits] - seedLen - hitRecord->seedOffset;
+            }
+
+            bloomFilterLookups += hitRecord->nHits[dir];
+            for (unsigned whichSeedHit = 0; whichSeedHit < hitRecord->nHits[dir]; whichSeedHit++) {
+                unsigned hitLocation = hitRecord->hits[dir][whichSeedHit] - offset;
+                unsigned minRange[2];
+                unsigned maxRange[2];
+                if (hitLocation < minSpacing) {
+                    minRange[0] = maxRange[0] = 0;
+                } else if (hitLocation < maxSpacing) {
+                    minRange[0] = 0;
+                    maxRange[0] = hitLocation - minSpacing;
+                }
+
+                //
+                // Don't worry about the "above" range wrapping, because there must be some room past the size of the genome for
+                //
+                minRange[1] = hitLocation + minSpacing;
+                maxRange[1] = hitLocation + maxSpacing;
+
+                //
+                // TODO: prevent cross chromosome alignments.
+                //
+                if (ourBloomFilter->mightRangeBeInSet(minRange[0], maxRange[0]) || ourBloomFilter->mightRangeBeInSet(minRange[1], maxRange[1])) {
+                    //
+                    // This might be good.  Enter it in the candidate set.
+                    //
+                    bloomFilterPasses++;
+                }
+            }
+        }
+    }
+
+    InterlockedAdd64AndReturnNewValue(&totalBloomFilterAdds, bloomFilterAdds);
+    InterlockedAdd64AndReturnNewValue(&totalBloomFilterLookups, bloomFilterLookups);
+    InterlockedAdd64AndReturnNewValue(&totalBloomFilterPasses, bloomFilterPasses);
+
 }
 
     void
@@ -826,4 +859,4 @@ BloomPairedEndAligner::scoreGroup(CandidateGroup *group, unsigned whichRead, Dir
     group->allExtantCandidatesScored = true;
 }
 
-#endif  // 0
+#endif  // COMPILE_BLOOM

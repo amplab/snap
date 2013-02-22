@@ -29,8 +29,12 @@ Revision History:
 #include "LandauVishkin.h"
 #include "BloomFilter.h"
 
+#define COMPILE_BLOOM
+#ifdef  COMPILE_BLOOM
+
 class BloomPairedEndAligner : public PairedEndAligner
 {
+public:
     BloomPairedEndAligner(
         GenomeIndex  *index_,
         unsigned      maxReadSize_,
@@ -48,8 +52,8 @@ class BloomPairedEndAligner : public PairedEndAligner
         Read                  *read1,
         PairedAlignmentResult *result);
 
-    void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(BloomPairedEndAligner)); return allocator->allocate(size);}
-    void operator delete(void *ptr, BigAllocator *allocator) {/*Do nothing, the owner of the allocator is responsible for freeing memory*/}
+//    void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(BloomPairedEndAligner)); return allocator->allocate(size);}
+//    void operator delete(void *ptr, BigAllocator *allocator) {/*Do nothing, the owner of the allocator is responsible for freeing memory*/}
 
     static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsToUse);
 
@@ -76,16 +80,21 @@ private:
     unsigned        seedLen;
     unsigned        distanceToSearchBeyondBestScore;
 
+
     struct HashTableHit {
+        unsigned        seedOffset;
         unsigned        nHits[NUM_DIRECTIONS];
-        unsigned        *hits[NUM_DIRECTIONS];
+        const unsigned  *hits[NUM_DIRECTIONS];
     };
 
     HashTableHit    *hashTableHits[NUM_READS_PER_PAIR];
-    unsigned        totalHits[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
-    unsigned        largestHit[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
+    unsigned        countOfHashTableLookups[NUM_READS_PER_PAIR];
+    unsigned        totalHashTableHits[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
+    unsigned        largestHashTableHit[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
+    unsigned        readWithMostHits;
+    unsigned        readWithFewestHits;
 
-    BloomFilter     *bloomFilter[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
+    BloomFilter     *bloomFilter[NUM_DIRECTIONS];           // A Bloom filter of hash table hits for the larger direction of each read.
     char *rcReadData[NUM_READS_PER_PAIR];                   // the reverse complement of the data for each read
     char *rcReadQuality[NUM_READS_PER_PAIR];                // the reversed quality strings for each read
     unsigned readLen[NUM_READS_PER_PAIR];
@@ -273,3 +282,4 @@ private:
     CandidateGroup *lookupCandidateGroup(unsigned genomeLocation, unsigned whichRead, Direction dir);
     void scoreGroup(CandidateGroup *group, unsigned whichRead, Direction direction);
 };
+#endif  // COMPILE_BLOOM

@@ -35,6 +35,8 @@ public:
     void addToSet(unsigned value);
 
     bool mightValueBeInSet(unsigned value);
+    bool mightRangeBeInSet(unsigned rangeMin, unsigned rangeMax);
+
 private:
 
     unsigned        maxBitsEver;
