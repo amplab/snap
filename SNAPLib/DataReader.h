@@ -83,6 +83,8 @@ struct DataBatch
     inline DataBatch(Key key) : fileID((_uint32) (key >> 32)), batchID((_uint32) key) {}
 };
 
+// read data from a file or other source
+// should all be called from a single thread, except for releaseBefore which is thread-safe
 class DataReader
 {
 public:
@@ -110,7 +112,7 @@ public:
 
     // advance to next batch
     // by default automatically releases previous batch
-    virtual void nextBatch(bool dontRelease = false) = 0;
+    virtual void nextBatch(bool dontRelease = true) = 0;
 
     // whether current batch is last in file
     virtual bool isEOF() = 0;

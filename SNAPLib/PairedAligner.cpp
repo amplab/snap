@@ -374,8 +374,11 @@ void PairedAlignerContext::runIterationThread()
             
         // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
         if (!ignoreMismatchedIDs && !readIdsMatch(read0, read1)) {
-            fprintf(stderr, "Unmatched read IDs '%.*s' and '%.*s'.  Use the -I option to ignore this.\n",
-                read0->getIdLength(), read0->getId(), read1->getIdLength(), read1->getId());
+            unsigned n[2] = {min(read0->getIdLength(), 200u), min(read1->getIdLength(), 200u)};
+            char* p[2] = {(char*) alloca(n[0] + 1), (char*) alloca(n[1] + 1)};
+            memcpy(p[0], read0->getId(), n[0]); p[0][n[0]] = 0;
+            memcpy(p[1], read1->getId(), n[1]); p[1][n[1]] = 0;
+            fprintf(stderr, "Unmatched read IDs '%s' and '%s'.  Use the -I option to ignore this.\n", p[0], p[1]);
             exit(1);
         }
 

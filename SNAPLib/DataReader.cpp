@@ -52,7 +52,7 @@ public:
 
     virtual void advance(_int64 bytes);
 
-    virtual void nextBatch(bool dontRelease = false);
+    virtual void nextBatch(bool dontRelease);
 
     virtual bool isEOF();
 
@@ -74,10 +74,10 @@ private:
     LARGE_INTEGER       fileSize;
     HANDLE              hFile;
   
-    static const unsigned nBuffers = 3;
+    static const unsigned nBuffers = 5;
     static const unsigned bufferSize = 32 * 1024 * 1024 - 4096;
 
-    enum BufferState {Empty, Reading, Full};
+    enum BufferState {Empty, Reading, Full, InUse};
 
     struct BufferInfo
     {
@@ -101,6 +101,8 @@ private:
     _uint32             nextBatchID;
     unsigned            nextBufferForReader;
     unsigned            nextBufferForConsumer;
+    HANDLE              releaseEvent;
+    ExclusiveLock       lock;
 };
 
 WindowsOverlappedDataReader::WindowsOverlappedDataReader(_int64 i_overflowBytes, double extraFactor)
@@ -138,6 +140,8 @@ WindowsOverlappedDataReader::WindowsOverlappedDataReader(_int64 i_overflowBytes,
     nextBatchID = 1;
     hFile = INVALID_HANDLE_VALUE;
     nextBufferForConsumer = nextBufferForReader = 0;
+    releaseEvent = CreateEvent(NULL, TRUE, TRUE, NULL);
+    InitializeExclusiveLock(&lock);
 }
 
 WindowsOverlappedDataReader::~WindowsOverlappedDataReader()
@@ -149,6 +153,7 @@ WindowsOverlappedDataReader::~WindowsOverlappedDataReader()
     }
     CloseHandle(hFile);
     hFile = INVALID_HANDLE_VALUE;
+    DestroyExclusiveLock(&lock);
 }
     
     bool
@@ -285,6 +290,7 @@ WindowsOverlappedDataReader::nextBatch(bool dontRelease)
         }
         return;
     }
+    info->state = InUse;
     _uint32 overflow = max((DWORD) info->offset, info->nBytesThatMayBeginARead) - info->nBytesThatMayBeginARead;
     const unsigned advance = (nextBufferForConsumer + 1) % nBuffers;
     if (bufferInfo[advance].state != Full) {
@@ -318,6 +324,7 @@ WindowsOverlappedDataReader::getBatch()
 WindowsOverlappedDataReader::releaseBefore(
     DataBatch batch)
 {
+    bool released = false;
     for (int i = 0; i < nBuffers; i++) {
         BufferInfo* info = &bufferInfo[i];
         if (info->batchID < batch.batchID) {
@@ -325,15 +332,31 @@ WindowsOverlappedDataReader::releaseBefore(
             case Empty:
                 // nothing
                 break;
+
             case Reading:
                 // todo: cancel read operation?
                 _ASSERT(false);
+                break;
+
+            case InUse:
+                released = true;
+                // fall through
             case Full:
+                //printf("releaseBefore batch %d, releasing %s buffer %d\n", batch.batchID, info->state == InUse ? "InUse" : "Full", i);
                 info->state = Empty;
+                break;
+
+            default:
+                fprintf(stderr, "invalid enum\n");
+                exit(1);
             }
         }
     }
     startIo();
+    if (released) {
+        //printf("Signal releaseEvent\n");
+        SetEvent(releaseEvent);
+    }
 }
 
     _int64
@@ -357,6 +380,7 @@ WindowsOverlappedDataReader::startIo()
     //
     // Launch reads on whatever buffers are ready.
     //
+    AcquireExclusiveLock(&lock);
     while (bufferInfo[nextBufferForReader].state == Empty) {
         BufferInfo *info = &bufferInfo[nextBufferForReader];
         info->batchID = nextBatchID++;
@@ -367,6 +391,7 @@ WindowsOverlappedDataReader::startIo()
             info->isEOF = readOffset.QuadPart >= fileSize.QuadPart;
             info->state = Full;
             SetEvent(info->lap.hEvent);
+            ReleaseExclusiveLock(&lock);
             return;
         }
 
@@ -403,6 +428,7 @@ WindowsOverlappedDataReader::startIo()
 
         nextBufferForReader = (nextBufferForReader + 1) % nBuffers;
     }
+    ReleaseExclusiveLock(&lock);
 }
 
     void
@@ -410,6 +436,14 @@ WindowsOverlappedDataReader::waitForBuffer(
     unsigned bufferNumber)
 {
     BufferInfo *info = &bufferInfo[bufferNumber];
+
+    if (info->state == InUse) {
+        do {
+            //printf("WindowsOverlappedDataReader::waitForBuffer %d InUse...\n", bufferNumber);
+            ResetEvent(releaseEvent);
+            WaitForSingleObject(releaseEvent, INFINITE);
+        } while (info->state == InUse);
+    }
 
     if (info->state == Full) {
         return;
@@ -471,7 +505,7 @@ public:
 
     virtual void advance(_int64 bytes);
 
-    virtual void nextBatch(bool dontRelease = false);
+    virtual void nextBatch(bool dontRelease);
 
     virtual bool isEOF();
 
@@ -772,7 +806,7 @@ public:
 
     virtual void advance(_int64 bytes);
 
-    virtual void nextBatch(bool dontRelease = false);
+    virtual void nextBatch(bool dontRelease);
 
     virtual bool isEOF();
 
@@ -1054,15 +1088,22 @@ BatchTracker::removeRead(
         pending.put(key, n - 1);
         return false;
     }
+    pending.erase(key);
     // removed one, find smallest remaining batch in same file
     unsigned minBatch = UINT32_MAX;
     for (BatchMap::iterator i = pending.begin(); i != pending.end(); i = pending.next(i)) {
-        DataBatch k(pending.key(i));
-        if (k.fileID == removed.fileID && k.batchID < minBatch) {
-            minBatch = k.batchID;
+        if (pending.value(i) > 0) {
+            DataBatch k(pending.key(i));
+            if (k.fileID == removed.fileID && k.batchID < minBatch) {
+                minBatch = k.batchID;
+            }
         }
     }
-    *release = DataBatch(removed.fileID, minBatch);
+    if (minBatch == UINT32_MAX) {
+        *release = removed;
+        return true;
+    } 
+    *release = DataBatch(minBatch, removed.fileID);
     return removed < *release;
 }
 

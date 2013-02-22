@@ -23,6 +23,8 @@ public:
 //
 // This class only allows the capacity to be a power of 2.
 //
+// Use epoch + 1 as a tombstone for deleted values
+//
 template< typename K, typename V, typename Hash = NumericHash<K> >
 class FixedSizeMap
 {
@@ -58,7 +60,7 @@ public:
     
     void clear() {
         size = 0;
-        epoch++;
+        epoch += 2;
         if (epoch > 100000000) {
             // Reset the epoch of every bucket to 0 and the current epoch to 1
             for (int i = 0; i < capacity; i++) {
@@ -74,9 +76,9 @@ public:
         unsigned pos = hash(key) & mask;
         int i = 1;
         while (true) {
-            if (entries[pos].epoch != epoch) {
+            if (entries[pos].epoch < epoch) {
                 return V();
-            } else if (entries[pos].key == key) {
+            } else if (entries[pos].key == key && entries[pos].epoch == epoch) {
                 return entries[pos].value;
             } else {
                 pos = (pos + (i <= MaxQuadraticProbes ? i : 1)) & mask;
@@ -101,6 +103,25 @@ public:
                 return;
             } else if (entries[pos].key == key) {
                 entries[pos].value = value;
+                return;
+            } else {
+                pos = (pos + (i <= MaxQuadraticProbes ? i : 1)) & mask;
+                i++;
+                _ASSERT(i <= capacity + MaxQuadraticProbes); // todo: overlow condition?
+            }
+        }
+    }
+
+    inline void erase(K key) {
+        _ASSERT(size <= capacity);
+        unsigned pos = hash(key) & mask;
+        int i = 1;
+        while (true) {
+            if (entries[pos].epoch < epoch) {
+                return;
+            } else if (entries[pos].key == key && entries[pos].epoch == epoch) {
+                entries[pos].epoch = epoch + 1; // mark with tombstone
+                size--;
                 return;
             } else {
                 pos = (pos + (i <= MaxQuadraticProbes ? i : 1)) & mask;

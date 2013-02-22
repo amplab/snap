@@ -167,7 +167,11 @@ Return Value:
 #if     _DEBUG
             DWORD oldProtect;
             if (!VirtualProtect((char *)allocatedMemory + virtualAllocSize, systemInfo->dwPageSize, PAGE_NOACCESS, &oldProtect)) {
-                fprintf(stderr,"VirtualProtect for guard page failed, %d\n", GetLastError());
+                static bool printedVirtualProtectedWarning = false;
+                if (! printedVirtualProtectedWarning) {
+                    fprintf(stderr,"VirtualProtect for guard page failed, %d\n", GetLastError());
+                    printedVirtualProtectedWarning = true;
+                }
             }
             largePageSizeToAllocate -= largePageSize;   // Back out the guard page
 #endif  // DEBUG

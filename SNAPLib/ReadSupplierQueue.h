@@ -24,18 +24,20 @@ Revision History:
 #pragma once
 #include "Read.h"
 #include "Compat.h"
+#include "VariableSizeVector.h"
 
 class ReadSupplierFromQueue;
 class PairedReadSupplierFromQueue;
 
 struct ReadQueueElement {
-    ReadQueueElement() : next(NULL), prev(NULL) {}
+    ReadQueueElement() : next(NULL), prev(NULL), batches(16) {}
 
     static const int nReads = 10000;
     ReadQueueElement    *next;
     ReadQueueElement    *prev;
     int                 totalReads;
     Read                reads[nReads];
+    VariableSizeVector<DataBatch> batches;
 
     void addToTail(ReadQueueElement *queueHead) {
         next = queueHead;
@@ -107,6 +109,7 @@ private:
     ReadQueueElement    readyQueue[2];      // Queue [1] is used only when there are two single end readers
 
     BatchTracker        tracker;            // track batches used in queues, use refcount per element (not per read)
+    BatchTracker        tracker2;
 
     EventObject         throttle[2];        // Two throttles, one for each of the readers.  At least one must be open at all times.
     int balance;                            // The size of readyQueue[0] - the size of readyQueue[1].  This is used to throttle.
