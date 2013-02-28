@@ -133,6 +133,9 @@
     <ClCompile Include="DataWriter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="IntersectingPairedEndAligner.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="aligner.h">
@@ -276,13 +279,13 @@
     <ClInclude Include="DataWriter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="FixedHashTable.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="FixedSizeVector.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ProbabilityDistance.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IntersectingPairedEndAligner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

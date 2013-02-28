@@ -167,13 +167,13 @@
     <ClInclude Include="FixedSizeMap.h" />
     <ClInclude Include="FixedSizeSet.h" />
     <ClInclude Include="FixedSizeVector.h" />
-    <ClInclude Include="FixedHashTable.h" />
     <ClInclude Include="genome.h" />
     <ClInclude Include="GenomeIndex.h" />
     <ClInclude Include="GoodRandom.h" />
     <ClInclude Include="Hamming.h" />
     <ClInclude Include="HashTable.h" />
     <ClInclude Include="histogram.h" />
+    <ClInclude Include="IntersectingPairedEndAligner.h" />
     <ClInclude Include="LandauVishkin.h" />
     <ClInclude Include="mapq.h" />
     <ClInclude Include="MultiInputReadSupplier.h" />
@@ -219,6 +219,7 @@
     <ClCompile Include="Hamming.cpp" />
     <ClCompile Include="HashTable.cpp" />
     <ClCompile Include="histogram.cpp" />
+    <ClCompile Include="IntersectingPairedEndAligner.cpp" />
     <ClCompile Include="LandauVishkin.cpp" />
     <ClCompile Include="mapq.cpp" />
     <ClCompile Include="MultiInputReadSupplier.cpp" />

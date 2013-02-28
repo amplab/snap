@@ -26,6 +26,7 @@ Revision History:
 #include "LandauVishkin.h"
 #include "mapq.h"
 #include "directions.h"
+#include "BigAlloc.h"
 
 using namespace std;
 
@@ -120,6 +121,8 @@ SmarterPairedEndAligner::SmarterPairedEndAligner(
                                     maxSeeds, adaptiveConfDiffThreshold);
     mateAligner = new BaseAligner(index, confDiff, maxHits, maxK, maxReadSize,
                                   maxSeeds, adaptiveConfDiffThreshold, &lv);
+
+    intersectingAligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxK, maxSeeds, minSpacing, maxSpacing, &countingAllocator);
 
     //
     // Allocate these all in one big allocation.
@@ -322,7 +325,8 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
 
     // At least one read was MultipleHits; let's look for them simultaneously.
     _int64 start = timeInNanos();
-    alignTogether(reads, result, lowerBound);
+//BJB   alignTogether(reads, result, lowerBound);
+    intersectingAligner->align(read0, read1, result); // BJB
     _int64 end = timeInNanos();
 
     TRACE("alignTogether took %lld ns and returned %s %s\n", end - start,

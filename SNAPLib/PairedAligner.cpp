@@ -49,6 +49,7 @@ Revision History:
 #include "MultiInputReadSupplier.h"
 #include "Util.h"
 #include "BloomPairedEndAligner.h"
+#include "IntersectingPairedEndAligner.h"
 
 using namespace std;
 
@@ -330,7 +331,7 @@ void PairedAlignerContext::runIterationThread()
     }
 
     int maxReadSize = 10000;
-#if     0
+#if     1
     SmarterPairedEndAligner *aligner = new SmarterPairedEndAligner(
             index,
             maxReadSize,
@@ -343,7 +344,7 @@ void PairedAlignerContext::runIterationThread()
             adaptiveConfDiff);
 #endif  // 0
     BigAllocator *allocator = new BigAllocator(100 * 1024 * 1024);
-    BloomPairedEndAligner *aligner = new BloomPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, allocator);
+//    IntersectingPairedEndAligner *aligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, allocator);
             
     /*BigAllocator *allocator = new BigAllocator(ThirdPairedEndAligner::getBigAllocatorReservation(index, maxHits, maxReadSize, index->getSeedLength(), numSeeds));
     ThirdPairedEndAligner *aligner = new(allocator) ThirdPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, allocator);

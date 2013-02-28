@@ -217,7 +217,7 @@ unsigned GetNumberOfProcessors()
 _int64 QueryFileSize(const char *fileName) {
     HANDLE hFile = CreateFile(fileName,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
     if (INVALID_HANDLE_VALUE == hFile) {
-        fprintf(stderr,"Unable to open file for QueryFileSize, %d\n",GetLastError());
+        fprintf(stderr,"Unable to open file '%s' for QueryFileSize, %d\n", fileName, GetLastError());
         exit(1);
     }
     LARGE_INTEGER fileSize;

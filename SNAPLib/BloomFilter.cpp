@@ -65,7 +65,7 @@ BloomFilter::mightValueBeInSet(unsigned value)
     bool anyBitsMissed = false;
     for (unsigned i = 0; i < nFunctions; i++) {
         unsigned bitToCheck = bit_rotate_right(effectiveValue, i) % maxBits;
-        anyBitsMissed &= (bits[arrayOffsetForBit(bitToCheck)] & (1 << bitOffsetForBit(effectiveValue))) == 0;
+        anyBitsMissed |= (bits[arrayOffsetForBit(bitToCheck)] & (1 << bitOffsetForBit(effectiveValue))) == 0;
     }
 
     return !anyBitsMissed;

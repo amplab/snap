@@ -92,6 +92,7 @@ int LandauVishkinWithCigar::computeEditDistance(
     char *cigarBuf, int cigarBufLen, bool useM, 
     CigarFormat format, int* cigarBufUsed)
 {
+    _ASSERT(patternLen >= 0 && textLen >= 0);
     _ASSERT(k < MAX_K);
     const char* p = pattern;
     const char* t = text;

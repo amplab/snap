@@ -28,9 +28,18 @@ Revision History:
 #include "directions.h"
 #include "LandauVishkin.h"
 #include "BloomFilter.h"
+#include "FixedSizeMap.h"
 
 #define COMPILE_BLOOM
 #ifdef  COMPILE_BLOOM
+
+class SeedNumericHash
+{
+public:
+    inline _uint64 operator() (Seed seed) {
+        return (_uint64) (seed.getBases() * 131);
+    }
+};
 
 class BloomPairedEndAligner : public PairedEndAligner
 {
@@ -85,6 +94,7 @@ private:
         unsigned        seedOffset;
         unsigned        nHits[NUM_DIRECTIONS];
         const unsigned  *hits[NUM_DIRECTIONS];
+        Seed            seed;
     };
 
     HashTableHit    *hashTableHits[NUM_READS_PER_PAIR];
@@ -111,6 +121,8 @@ private:
     unsigned nTable[256];
 
     BaseAligner *baseAligner;
+
+    FixedSizeMap<Seed, BloomFilter *, SeedNumericHash> *bigBloomMap;
 
     BYTE *seedUsed;
 

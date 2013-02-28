@@ -43,7 +43,7 @@ BloomPairedEndAligner::BloomPairedEndAligner(
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
         BigAllocator  *allocator) :
     index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), maxSeeds(maxSeeds_), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
-    landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(150000)
+    landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(2000)
 {
     allocateDynamicMemory(allocator, maxReadSize, maxHits, maxSeeds);
 
@@ -130,6 +130,8 @@ BloomPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, unsigned m
     candidateGroupPool = (CandidateGroup *)allocator->allocate(sizeof(CandidateGroup) * candidateGroupPoolSize);
 
     baseAligner = new(allocator) BaseAligner(index, 1, maxHitsToConsider, maxK/2, maxReadSize, maxSeedsToUse, 4, landauVishkin, NULL, NULL, allocator);
+
+    bigBloomMap = new FixedSizeMap<Seed, BloomFilter *, SeedNumericHash>(32 * 1024);
 }
 
     void 
@@ -209,8 +211,6 @@ BloomPairedEndAligner::align(
 
     clearCandidates();
 
-
-
     unsigned nPossibleSeeds = __max(readLen[0], readLen[1]) - seedLen + 1;
     unsigned thisPassSeedsNotSkipped[NUM_READS_PER_PAIR][NUM_DIRECTIONS] = {{0,0}, {0,0}}; 
 
@@ -224,7 +224,6 @@ BloomPairedEndAligner::align(
     probabilityOfAllPairs = 0;
     bestPairScore = -1;
     scoreLimit = maxK + distanceToSearchBeyondBestScore;
-
 
 
     //
@@ -279,6 +278,7 @@ BloomPairedEndAligner::align(
             //
             HashTableHit *hitRecord = &hashTableHits[whichRead][countOfHashTableLookups[whichRead]];
             hitRecord->seedOffset = nextSeedToTest;
+            hitRecord->seed = seed;
             index->lookupSeed(seed, 0, genomeSize, &hitRecord->nHits[FORWARD], &hitRecord->hits[FORWARD], &hitRecord->nHits[RC], &hitRecord->hits[RC]);
             countOfHashTableLookups[whichRead]++;
             for (Direction dir = FORWARD; dir < NUM_DIRECTIONS; dir++) {
@@ -301,6 +301,9 @@ BloomPairedEndAligner::align(
     //
     // Phase 2: build the Bloom fiters.
     //
+    BloomFilter *bigBloomFilters[NUM_DIRECTIONS][25];
+    unsigned nBigBloomFilters[NUM_DIRECTIONS] = {0, 0};
+
     for (Direction dir = FORWARD; dir < NUM_DIRECTIONS; dir++) {
         //
         // Set up the Bloom filter with 8 bits per hash table hit.  If all of the hits are unique,
@@ -317,12 +320,41 @@ BloomPairedEndAligner::align(
                 offset = hitRecord->seedOffset;
             } else {
                 offset = readLen[readWithMostHits] - seedLen - hitRecord->seedOffset;
-            }
+            }                
+            
+            bloomFilterAdds += hitRecord->nHits[dir];
+
             if (hitRecord->nHits[dir] < maxBigHits) {
                 for (unsigned whichSeedHit = 0; whichSeedHit < hitRecord->nHits[dir]; whichSeedHit++) {
-                    bloomFilter[dir]->addToSet(hitRecord->hits[dir][readWithMostHits] - offset);
+                    bloomFilter[dir]->addToSet(hitRecord->hits[dir][whichSeedHit] - offset);
                 }
-                bloomFilterAdds += hitRecord->nHits[dir];
+
+            } else {
+                Seed seedToUse = hitRecord->seed;
+                if (dir == RC) {
+                    seedToUse = ~seedToUse;
+                }
+                BloomFilter *bigFilter = bigBloomMap->get(hitRecord->seed);
+                if (NULL == bigFilter) {
+                    bigFilter = new BloomFilter(4 * hitRecord->nHits[dir], maxSpacing - minSpacing);
+                    bigFilter->init(2, 4 * hitRecord->nHits[dir]);
+                    for (unsigned whichSeedHit = 0; whichSeedHit < hitRecord->nHits[dir]; whichSeedHit++) {
+                        bigFilter->addToSet(hitRecord->hits[dir][whichSeedHit] - offset);
+                    }
+                    bigBloomMap->put(seedToUse, bigFilter);
+                }
+
+                bool alreadyThere = false;
+                for (unsigned i = 0; i < nBigBloomFilters[dir]; i++) {
+                    if (bigBloomFilters[dir][i] == bigFilter) {
+                        alreadyThere = true;
+                        break;
+                    }
+                }
+                if (!alreadyThere) {
+                    bigBloomFilters[dir][nBigBloomFilters[dir]] = bigFilter;
+                    nBigBloomFilters[dir]++;
+                }
             }
         }
     }
@@ -370,6 +402,13 @@ BloomPairedEndAligner::align(
                     // This might be good.  Enter it in the candidate set.
                     //
                     bloomFilterPasses++;
+                } else {
+                    for (unsigned i = 0; i < nBigBloomFilters[dir]; i++) {
+                        if (bigBloomFilters[dir][i]->mightRangeBeInSet(minRange[0], maxRange[0]) || bigBloomFilters[dir][i]->mightRangeBeInSet(minRange[1], maxRange[1])) {
+                            bloomFilterPasses++;
+                            break;
+                        }
+                    }
                 }
             }
         }

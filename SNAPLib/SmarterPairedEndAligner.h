@@ -28,6 +28,7 @@ Revision History:
 #include "FixedSizeVector.h"
 #include "BigAlloc.h"
 #include "directions.h"
+#include "IntersectingPairedEndAligner.h"
 
 
 class SmarterPairedEndAligner : public PairedEndAligner
@@ -84,6 +85,9 @@ private:
     
     BaseAligner *singleAligner;
     BaseAligner *mateAligner;
+    IntersectingPairedEndAligner *intersectingAligner;
+
+    CountingBigAllocator countingAllocator; // BJB - for the intersecting aligner for now.
 
     BoundedStringDistance <> *boundedStringDist;
     LandauVishkin<1> lv;
