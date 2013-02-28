@@ -42,7 +42,7 @@ public:
 
     virtual bool writeHeader(bool sorted, int argc, const char **argv, const char *version, const char *rgLine);
 
-    virtual bool writeRead(Read *read, AlignmentResult result, unsigned genomeLocation, Direction direction);
+    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, unsigned genomeLocation, Direction direction);
 
     virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result);
 
@@ -84,6 +84,7 @@ SimpleReadWriter::writeHeader(
 SimpleReadWriter::writeRead(
     Read *read,
     AlignmentResult result,
+    int mapQuality,
     unsigned genomeLocation,
     Direction direction)
 {
@@ -94,7 +95,7 @@ SimpleReadWriter::writeRead(
         if (! writer->getBuffer(&buffer, &size)) {
             return false;
         }
-        if (format->writeRead(genome, &lvc, buffer, size, &used, read->getIdLength(), read, result, genomeLocation, direction)) {
+        if (format->writeRead(genome, &lvc, buffer, size, &used, read->getIdLength(), read, result, mapQuality, genomeLocation, direction)) {
             _ASSERT(used <= size);
             writer->advance(used, genomeLocation);
             return true;
@@ -163,13 +164,17 @@ SimpleReadWriter::writePair(
         }
 
         bool writesFit = format->writeRead(genome, &lvc, buffer, size, &sizeUsed[first],
-                            idLengths[first], reads[first], result->status[first], result->location[first], result->direction[first], true, true,
-                            reads[second], result->status[second], result->location[second], result->direction[second]);
+                            idLengths[first], reads[first], result->status[first],
+                            result->mapq[first], result->location[first], result->direction[first],
+                            true, true, reads[second], result->status[second],
+                            result->location[second], result->direction[second]);
 
         if (writesFit) {
             writesFit = format->writeRead(genome, &lvc, buffer + sizeUsed[first], size - sizeUsed[first], &sizeUsed[second],
-                idLengths[second], reads[second], result->status[second], result->location[second], result->direction[second], true, false,
-                reads[first], result->status[first], result->location[first], result->direction[first]);
+                idLengths[second], reads[second], result->status[second],
+                result->mapq[second], result->location[second], result->direction[second],
+                true, false, reads[first], result->status[first],
+                result->location[first], result->direction[first]);
             if (writesFit) {
                 break;
             }
