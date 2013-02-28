@@ -384,7 +384,7 @@ public:
     virtual bool writeRead(
         const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
-        unsigned genomeLocation, Direction direction,
+        int mapQuality, unsigned genomeLocation, Direction direction,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
         AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD) const; 
 
@@ -487,6 +487,7 @@ BAMFormat::writeRead(
     size_t qnameLen,
     Read * read,
     AlignmentResult result, 
+    int mapQuality,
     unsigned genomeLocation,
     Direction direction,
     bool hasMate,
@@ -504,7 +505,6 @@ BAMFormat::writeRead(
     const char *pieceName = "*";
     int pieceIndex = -1;
     unsigned positionInPiece = 0;
-    int mapQuality = 0;
     int cigarOps;
     const char *matePieceName = "*";
     unsigned matePositionInPiece = 0;

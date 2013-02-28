@@ -140,7 +140,7 @@ public:
     virtual bool writeHeader(bool sorted, int argc, const char **argv, const char *version, const char *rgLine) = 0;
 
     // write a single read, return true if successful
-    virtual bool writeRead(Read *read, AlignmentResult result, unsigned genomeLocation, Direction direction) = 0;
+    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, unsigned genomeLocation, Direction direction) = 0;
 
     // write a pair of reads, return true if successful
     virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result) = 0;

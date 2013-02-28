@@ -532,7 +532,7 @@ public:
     virtual bool writeRead(
         const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
-        unsigned genomeLocation, Direction direction,
+        int mapQuality, unsigned genomeLocation, Direction direction,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
         AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD) const; 
 
@@ -670,7 +670,6 @@ getSAMData(
 {
     pieceName = "*";
     positionInPiece = 0;
-    mapQuality = 0;
     const char *cigar = "*";
     templateLength = 0;
     
@@ -723,9 +722,10 @@ getSAMData(
         pieceName = piece->name;
         pieceIndex = piece - genome->getPieces();
         positionInPiece = genomeLocation - piece->beginningOffset + 1; // SAM is 1-based
-        mapQuality = (result == SingleHit || result == CertainHit) ? 60 : 0;
+        mapQuality = max(0, min(70, mapQuality));
     } else {
         flags |= SAM_UNMAPPED;
+        mapQuality = 0;
     }
 
     if (hasMate) {
@@ -796,6 +796,7 @@ SAMFormat::writeRead(
     size_t qnameLen,
     Read * read,
     AlignmentResult result, 
+    int mapQuality,
     unsigned genomeLocation,
     Direction direction,
     bool hasMate,
@@ -816,7 +817,6 @@ SAMFormat::writeRead(
     const char *pieceName = "*";
     int pieceIndex = -1;
     unsigned positionInPiece = 0;
-    int mapQuality = 0;
     const char *cigar = "*";
     const char *matePieceName = "*";
     unsigned matePositionInPiece = 0;
