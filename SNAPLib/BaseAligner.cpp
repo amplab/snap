@@ -99,18 +99,22 @@ Arguments:
     }
 
     rcReadData = (char *)BigAlloc(sizeof(char) * maxReadSize);
+    
+    // treat everything but ACTG like N
+    for (unsigned i = 0; i < 256; i++) {
+        nTable[i] = 1;
+        rcTranslationTable[i] = 'N';
+    }
 
     rcTranslationTable['A'] = 'T';
     rcTranslationTable['G'] = 'C';
     rcTranslationTable['C'] = 'G';
     rcTranslationTable['T'] = 'A';
-    rcTranslationTable['N'] = 'N';
 
-    for (unsigned i = 0; i < 256; i++) {
-        nTable[i] = 0;
-    }
-
-    nTable['N'] = 1;
+    nTable['A'] = 0;
+    nTable['C'] = 0;
+    nTable['T'] = 0;
+    nTable['G'] = 0;
 
     seedUsed = (BYTE *)BigAlloc(sizeof(BYTE) * (maxReadSize + 7 + 128) / 8);    // +128 to make sure it extends at both before and after at least an _int64
 
@@ -277,7 +281,7 @@ Return Value:
     if (countOfNs > 0) {
         int minSeedToConsiderNing = 0; // In English, any word can be verbed. Including, apparently, "N."
         for (int i = 0; i < (int) readLen; i++) {
-            if (readData[i] == 'N') {
+            if (BASE_VALUE[readData[i]] > 3) {
                 int limit = __min(i + seedLen - 1, readLen-1);
                 for (int j = __max(minSeedToConsiderNing, i - (int) seedLen + 1); j <= limit; j++) {
                     SetSeedUsed(j);
@@ -1262,7 +1266,7 @@ BaseAligner::ComputeHitDistribution(
     if (countOfNs > 0) {
         int minSeedToConsiderNing = 0; // In English, any word can be verbed. Including, apparently, "N."
         for (int i = 0; i < readLen; i++) {
-            if (readData[i] == 'N') {
+            if (BASE_VALUE[readData[i]] > 3) {
                 int limit = __max(i + (int)seedLen - 1, readLen-1);
                 for (int j = __max(minSeedToConsiderNing, i - (int)seedLen + 1); j <= limit; j++) {
                     SetSeedUsed(j);
