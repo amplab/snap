@@ -5,6 +5,7 @@
 #include "Read.h"
 #include "BaseAligner.h"
 #include "Bam.h"
+#include "exit.h"
 
 using std::make_pair;
 using std::min;
@@ -81,7 +82,7 @@ bool writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat f
         return true;
     default:
         printf("invalid cigar format %d\n", format);
-        exit(1);
+        soft_exit(1);
     }
 }
 

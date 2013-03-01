@@ -22,6 +22,7 @@ Environment:
 #include "DataWriter.h"
 #include "BufferedAsync.h"
 #include "VariableSizeVector.h"
+#include "exit.h"
 
 #define USE_DEVTEAM_OPTIONS 1
 
@@ -157,7 +158,7 @@ SortedDataFilter::onNextBatch(
         writer->getBatch(0, &toBuffer, &toSize, &toUsed)))
     {
         fprintf(stderr, "SortedDataFilter::onNextBatch getBatch failed\n");
-        exit(1);
+        soft_exit(1);
     }
     size_t target = 0;
     for (VariableSizeVector<SortEntry>::iterator i = locations.entries.begin(); i != locations.entries.end(); i++) {
@@ -194,14 +195,14 @@ SortedDataFilterSupplier::onClose(
         // just rename/move temp file to real file, we're done
         if (! MoveSingleFile(tempFileName, sortedFileName)) {
             fprintf(stderr, "unable to move temp file %s to final sorted file %s\n", tempFileName, sortedFileName);
-            exit(1);
+            soft_exit(1);
         }
         return;
     }
     // merge sort into final file
     if (! mergeSort()) {
         fprintf(stderr, "merge sort failed\n");
-        exit(1);
+        soft_exit(1);
     }
 }
 

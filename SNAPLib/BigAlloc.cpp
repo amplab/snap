@@ -23,6 +23,7 @@ Revision History:
 #include "stdafx.h"
 #include "BigAlloc.h"
 #include "Compat.h"
+#include "exit.h"
 
 bool BigAllocUseHugePages = true;
 
@@ -205,7 +206,7 @@ Return Value:
 
     if (NULL == allocatedMemory) {
         fprintf(stderr,"BigAlloc of size %lld failed.\n", sizeToAllocate);
-        exit(1);
+        soft_exit(1);
     }
 
     return allocatedMemory;
@@ -333,7 +334,7 @@ void *BigAlloc(
     char *mem = (char *) mmap(NULL, sizeToAllocate, PROT_READ|PROT_WRITE, flags, -1, 0);
     if (mem == MAP_FAILED) {
         perror("mmap");
-        exit(1);
+        soft_exit(1);
     }
 
 #if (defined(MADV_HUGEPAGE) && !defined(USE_HUGETLB))
@@ -358,7 +359,7 @@ void BigDealloc(void *memory)
     size_t sizeAllocated = *((size_t *) startAddress);
     if (munmap(startAddress, sizeAllocated) != 0) {
         perror("munmap");
-        exit(1);
+        soft_exit(1);
     }
 }
 

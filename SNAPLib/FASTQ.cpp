@@ -31,6 +31,7 @@ Revision History:
 #include "BigAlloc.h"
 #include "Read.h"
 #include "Util.h"
+#include "exit.h"
 
 using std::min;
 using util::strnchr;
@@ -63,7 +64,7 @@ FASTQReader::create(
     FASTQReader* fastq = new FASTQReader(data, clipping);
     if (! fastq->init(fileName)) {
         fprintf(stderr, "Unable to initialize FASTQReader for file %s\n", fileName);
-        exit(1);
+        soft_exit(1);
     }
     fastq->reinit(startingOffset, amountOfFileToProcess);
     return fastq;
@@ -214,20 +215,20 @@ FASTQReader::getNextRead(Read *readToUpdate)
             if (data->isEOF()) {
                 fprintf(stderr,"FASTQ file doesn't end with a newline!  Failing.  fileOffset = %lld, validBytes = %d\n",
                     data->getFileOffset(),validBytes);
-                exit(1);
+                soft_exit(1);
             }
             fprintf(stderr, "FASTQ record larger than buffer size at %s:%lld\n", fileName, data->getFileOffset());
-            exit(1);
+            soft_exit(1);
         }            //
 
         const size_t lineLen = newLine - scan;
         if (0 == lineLen) {
             fprintf(stderr,"Syntax error in FASTQ file: blank line.\n");
-            exit(1);
+            soft_exit(1);
         }
         if (! isValidStartingCharacterForNextLine[(i + 3) % 4][*scan]) {
             fprintf(stderr, "FASTQ file has invalid starting character at offset %lld", data->getFileOffset());
-            exit(1);
+            soft_exit(1);
         }
         lines[i] = scan;
         lineLengths[i] = (unsigned) lineLen - (scan[lineLen-1] == '\r' ? 1 : 0);
@@ -311,7 +312,7 @@ FASTQWriter::writeRead(Read *read)
     char *buffer = new char [len + 1];
     if (NULL == buffer) {
         fprintf(stderr,"FASTQWriter: out of memory\n");
-        exit(1);
+        soft_exit(1);
     }
 
     memcpy(buffer,read->getId(),read->getIdLength());
@@ -372,7 +373,7 @@ PairedFASTQReader::getNextReadPair(Read *read0, Read *read1)
  
     if (readers[1]->getNextRead(read1) != worked) {
         fprintf(stderr,"PairedFASTQReader: reads of both ends responded differently.  The FASTQ files may not match properly.\n");
-        exit(1);
+        soft_exit(1);
     }
 
     return worked;

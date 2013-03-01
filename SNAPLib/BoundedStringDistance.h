@@ -2,6 +2,7 @@
 
 #include "Compat.h"
 #include "BigAlloc.h"
+#include "exit.h"
 
 /**
  * A generalization of Ukkonen's bounded edit distance algorithm for affine gap penalties.
@@ -130,15 +131,15 @@ public:
     {
         if (limit < 0 || limit > MAX_DISTANCE) {
             fprintf(stderr, "Invalid distance limit: %d\n", limit);
-            exit(1);
+            soft_exit(1);
         }
         if (mapProbability != NULL && qualityString == NULL) {
             fprintf(stderr, "Non-null mapProbability given but qualityString is NULL\n");
-            exit(1);
+            soft_exit(1);
         }
         if (!ALLOW_START_SHIFTS && maxStartShift != 0) {
             fprintf(stderr, "Non-zero maxStartShift given, but ALLOW_START_SHIFTS is false\n");
-            exit(1);
+            soft_exit(1);
         }
 
         const char *patternEnd = pattern + patternLen;

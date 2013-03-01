@@ -5,6 +5,7 @@
 #include "Compat.h"
 #include "GoodRandom.h"
 #include "Tables.h"
+#include "exit.h"
 
 //
 // General utilities.
@@ -31,7 +32,7 @@ inline double ratio(double a, double b=1)
 inline void die(const std::string &epitaph, int code=1)
 {
     fputs((epitaph + '\n').c_str(), stderr);
-    exit(code);
+    soft_exit(code);
 }
 
 const int MAXLINE = 1024;

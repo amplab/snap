@@ -136,6 +136,9 @@
     <ClCompile Include="IntersectingPairedEndAligner.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="exit.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="aligner.h">
@@ -286,6 +289,15 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="IntersectingPairedEndAligner.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="exit.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SeedSequencer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Util.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -25,6 +25,7 @@ Revision History:
 #include "SeedSequencer.h"
 #include "mapq.h"
 #include "BloomFilter.h"
+#include "exit.h"
 
 #ifdef  COMPILE_BLOOM
 
@@ -177,7 +178,7 @@ BloomPairedEndAligner::align(
 
         if (readLen[whichRead] > maxReadSize) {
             fprintf(stderr,"BloomPairedEndAligner:: got too big read (%d > %d)", readLen[whichRead], maxReadSize);
-            exit(1);
+            soft_exit(1);
         }
 
         for (unsigned i = 0; i < reads[whichRead][FORWARD]->getDataLength(); i++) {
@@ -547,7 +548,7 @@ BloomPairedEndAligner::findCandidateAndCreateIfNotExtant(unsigned whichRead, Dir
         //
         if (nUsedCandidateGroups >= candidateGroupPoolSize) {
             fprintf(stderr, "BloomPairedEndAligner: out of candidate groups (%d).  This shouldn't happen.\n", candidateGroupPoolSize);
-            exit(1);
+            soft_exit(1);
         }
 
         *group = &candidateGroupPool[nUsedCandidateGroups];
@@ -588,7 +589,7 @@ BloomPairedEndAligner::findSuperGroupAndCreateIfNotExtant(unsigned whichRead, Di
     if (NULL == supergroup) {
         if (nUsedSuperGroups >= superGroupPoolSize) {
             fprintf(stderr, "BloomPairedEndAligner: out of super groups (%d).  This shouldn't happen.\n", superGroupPoolSize);
-            exit(1);
+            soft_exit(1);
         }
         supergroup = &superGroupPool[nUsedSuperGroups];
         nUsedSuperGroups++;

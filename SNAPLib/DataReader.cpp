@@ -24,6 +24,7 @@ Environment:
 #include "ParallelTask.h"
 #include "DataReader.h"
 #include "zlib.h"
+#include "exit.h"
 
 using std::max;
 using std::min;
@@ -119,7 +120,7 @@ WindowsOverlappedDataReader::WindowsOverlappedDataReader(_int64 i_overflowBytes,
     char* allocated = (char*) BigAlloc(nBuffers * (bufferSize + extraBytes + overflowBytes));
     if (NULL == allocated) {
         fprintf(stderr,"WindowsOverlappedDataReader: unable to allocate IO buffer\n");
-        exit(1);
+        soft_exit(1);
     }
     for (unsigned i = 0 ; i < nBuffers; i++) {
         bufferInfo[i].buffer = allocated;
@@ -130,7 +131,7 @@ WindowsOverlappedDataReader::WindowsOverlappedDataReader(_int64 i_overflowBytes,
         bufferInfo[i].lap.hEvent = CreateEvent(NULL,TRUE,FALSE,NULL);
         if (NULL == bufferInfo[i].lap.hEvent) {
             fprintf(stderr,"WindowsOverlappedDataReader: Unable to create event\n");
-            exit(1);
+            soft_exit(1);
         }
 
         bufferInfo[i].state = Empty;
@@ -348,7 +349,7 @@ WindowsOverlappedDataReader::releaseBefore(
 
             default:
                 fprintf(stderr, "invalid enum\n");
-                exit(1);
+                soft_exit(1);
             }
         }
     }
@@ -418,7 +419,7 @@ WindowsOverlappedDataReader::startIo()
 
             if (GetLastError() != ERROR_IO_PENDING) {
                 fprintf(stderr,"FASTQReader::startIo(): readFile failed, %d\n",GetLastError());
-                exit(1);
+                soft_exit(1);
             }
         }
 
@@ -455,7 +456,7 @@ WindowsOverlappedDataReader::waitForBuffer(
 
     if (!GetOverlappedResult(hFile,&info->lap,&info->validBytes,TRUE)) {
         fprintf(stderr,"Error reading FASTQ file, %d\n",GetLastError());
-        exit(1);
+        soft_exit(1);
     }
 
     info->state = Full;
@@ -704,7 +705,7 @@ GzipDataReader::decompress(
         int status = inflate(&zstream, mode == SingleBlock ? Z_NO_FLUSH : Z_FINISH);
         if (status < 0 && status != Z_BUF_ERROR) {
             fprintf(stderr, "GzipDataReader: inflate failed with %d\n", status);
-            exit(1);
+            soft_exit(1);
         }
         first = false;
     } while (zstream.avail_in != 0 && zstream.avail_out != oldAvail && mode != SingleBlock);
@@ -730,7 +731,7 @@ GzipDataReader::decompressBatch()
             return;
         }
         fprintf(stderr, "GzipDataReader:decompressBatch failed getData at %lld\n", inner->getFileOffset());
-        exit(1);
+        soft_exit(1);
     }
 
     char* uncompressed;
@@ -742,7 +743,7 @@ GzipDataReader::decompressBatch()
     if (! all) {
         // todo: handle this situation!!
         fprintf(stderr, "GzipDataReader:decompressBatch too big at %lld\n", inner->getFileOffset());
-        exit(1);
+        soft_exit(1);
     }
     validBytes += priorBytes; // add back offset
     startBytes = inner->isEOF() ? validBytes : validBytes - overflowBytes ;
@@ -874,7 +875,7 @@ MemMapDataReader::MemMapDataReader(int i_batchCount, _int64 i_batchSize, _int64 
     if (batchCount != 1) {
         if (! (CreateSingleWaiterObject(&waiter) && InitializeExclusiveLock(&lock))) {
             fprintf(stderr, "MemMapDataReader: CreateSingleWaiterObject failed\n");
-            exit(1);
+            soft_exit(1);
         }
     }
 }
@@ -927,7 +928,7 @@ MemMapDataReader::reinit(
     currentMap = mapper.createMapping(i_startingOffset, amountOfFileToProcess);
     if (currentMap == NULL) {
         fprintf(stderr, "MemMapDataReader: fail to map %s at %lld,%lld\n", fileName, i_startingOffset, amountOfFileToProcess);
-        exit(1);
+        soft_exit(1);
     }
     acquireLock();
     currentMapOffset = i_startingOffset;

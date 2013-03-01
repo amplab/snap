@@ -24,6 +24,7 @@ Environment:
 #include "stdafx.h"
 #include "GoodRandom.h"
 #include "mt64.h"
+#include "exit.h"
 
 unsigned MinBytesToStore(_uint64 maxValue)
 {
@@ -70,7 +71,7 @@ _uint64 GoodFastRandom(_uint64 maxValue)
 #ifdef  _MSC_VER
     if (maxValue > 0xffffffffffffff && maxValue != 0xffffffffffffffff) {
         fprintf(stderr,"GoodFastRandom: writeme\n");
-        exit(1);
+        soft_exit(1);
         // This case requires different math in the roundoff error check below, because as written
         // it would use 1 << 64, which isn't representable.  I'm too lazy to write it now.
     }
@@ -99,7 +100,7 @@ _uint64 GoodFastRandom(_uint64 maxValue)
 
         if (!worked) {
             fprintf(stderr,"Unable to get crypt provider, %d\n",GetLastError());
-            exit(1);
+            soft_exit(1);
         }
     }
 #endif   // _MSC_VER
@@ -113,7 +114,7 @@ _uint64 GoodFastRandom(_uint64 maxValue)
         if (g_randomState->bufferUsed + bytesToGet > GFRandomBufferSize) {
             if (!CryptGenRandom(g_hRandomCryptProv,GFRandomBufferSize,(PBYTE)g_randomState->buffer)) {
                 fprintf(stderr,"CryptGenRandom failed, %d\b\n",GetLastError());
-                exit(1);
+                soft_exit(1);
             }
             g_randomState->bufferUsed = 0;
         }
@@ -124,7 +125,7 @@ _uint64 GoodFastRandom(_uint64 maxValue)
         #ifdef RELEASE
         #if RAND_MAX % 0x100 != 0xff
         fprintf(stderr,"Jesse was too lazy to correct random bias on your platform.\n");
-        exit(1);
+        soft_exit(1);
         #endif
         for (unsigned b = 0; b < bytesToGet; ++b) {
             // RAND_MAX could in theory be less than 0xffff.

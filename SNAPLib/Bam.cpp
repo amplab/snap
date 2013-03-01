@@ -28,6 +28,7 @@ Environment:
 #include "Util.h"
 #include "FileFormat.h"
 #include "AlignerOptions.h"
+#include "exit.h"
 
 using std::max;
 using std::min;
@@ -87,7 +88,7 @@ BAMReader::init(
         if (! genome->getOffsetOfPiece(refSeq->name(), &refOffset[i])) {
             // fprintf(stderr, "BAMReader: unknown ref seq name %s\n", refSeq->name());
             refOffset[i] = UINT32_MAX;
-            // exit(1); ??
+            // soft_exit(1); ??
         }
     }
     data->reinit(data->getFileOffset(), amountOfFileToProcess == 0 ? 0 : amountOfFileToProcess - data->getFileOffset());
@@ -280,7 +281,7 @@ BAMReader::getNextRead(
     BAMAlignment* bam = (BAMAlignment*) buffer;
     if ((unsigned _int64)bytes < sizeof(bam->block_size) || (unsigned _int64)bytes < bam->size()) {
         fprintf(stderr, "Unexpected end of BAM file at %lld\n", data->getFileOffset());
-        exit(1);
+        soft_exit(1);
     }
     data->advance(bam->size());
     size_t lineLength;

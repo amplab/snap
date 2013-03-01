@@ -32,6 +32,7 @@ Revision History:
 #include "Hamming.h"
 #include "BaseAligner.h"
 #include "FileFormat.h"
+#include "exit.h"
 
 using std::max;
 using std::min;
@@ -81,11 +82,6 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
     }
 
     extension->finishAlignment();
-//BJB
-extern volatile _int64          totalBloomFilterAdds;
-extern volatile _int64          totalBloomFilterLookups;
-extern volatile _int64          totalBloomFilterPasses;
-printf("%lld bloom filter adds, %lld lookups, %lld passes\n", totalBloomFilterAdds, totalBloomFilterLookups, totalBloomFilterPasses);
 }
 
     void
@@ -130,7 +126,7 @@ AlignerContext::initialize()
     index = GenomeIndex::loadFromDirectory((char*) options->indexDir);
     if (index == NULL) {
         fprintf(stderr, "Index load failed, aborting.\n");
-        exit(1);
+        soft_exit(1);
     }
     _int64 loadTime = timeInMillis() - loadStart;
     printf("%llds.  %u bases, seed size %d\n",
@@ -151,7 +147,7 @@ AlignerContext::initialize()
         perfFile = fopen(options->perfFileName,"a");
         if (NULL == perfFile) {
             fprintf(stderr,"Unable to open perf file '%s'\n", options->perfFileName);
-            exit(1);
+            soft_exit(1);
         }
     }
 }

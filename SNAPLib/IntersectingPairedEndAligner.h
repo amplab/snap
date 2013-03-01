@@ -220,6 +220,11 @@ private:
             return &buffer[tail];
         }
 
+        HitLocation *getTail() {
+            if (head == tail) return NULL;
+            return &buffer[tail];
+        }
+
         HitLocation *getHead() {
             if (head == tail) return NULL;
             //

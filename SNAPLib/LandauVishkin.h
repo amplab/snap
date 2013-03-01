@@ -2,6 +2,7 @@
 #include "Compat.h"
 #include "FixedSizeMap.h"
 #include "BigAlloc.h"
+#include "exit.h"
 
 const int MAX_K = 31;
 
@@ -22,7 +23,7 @@ public:
 {
     if (TEXT_DIRECTION != 1 && TEXT_DIRECTION != -1) {
         printf("You can't possibly be serious.\n");
-        exit(1);
+        soft_exit(1);
     }
 
     for (int i = 0; i < MAX_K+1; i++) {

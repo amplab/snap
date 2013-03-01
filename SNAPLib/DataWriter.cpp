@@ -20,6 +20,7 @@ Environment:
 #include "BigAlloc.h"
 #include "Compat.h"
 #include "DataWriter.h"
+#include "exit.h"
 
 using std::min;
 
@@ -79,7 +80,7 @@ AsyncDataWriter::AsyncDataWriter(
     char* block = (char*) BigAlloc(count * bufferSize);
     if (block == NULL) {
         fprintf(stderr, "Unable to allocate %lld bytes for write buffers\n", count * bufferSize);
-        exit(1);
+        soft_exit(1);
     }
     batches = new Batch[count];
     for (int i = 0; i < count; i++) {
@@ -211,7 +212,7 @@ AsyncDataWriterSupplier::AsyncDataWriterSupplier(
     file = AsyncFile::open(filename, true);
     if (file == NULL) {
         fprintf(stderr, "failed to open %s for write\n", filename);
-        exit(1);
+        soft_exit(1);
     }
 }
 

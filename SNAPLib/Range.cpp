@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "Range.h"
+#include "exit.h"
 
 using namespace std;
 
@@ -13,7 +14,7 @@ Range Range::parse(const char *str)
             colons++;
         } else if (!isdigit(str[i])) {
             fprintf(stderr, "Invalid format: %s\n", str);
-            exit(1);
+            soft_exit(1);
         }
     }
     int start, end, step;
@@ -28,11 +29,11 @@ Range Range::parse(const char *str)
         sscanf(str, "%d:%d:%d", &start, &step, &end);
     } else {
         fprintf(stderr, "Invalid format: %s\n", str);
-        exit(1);
+        soft_exit(1);
     }
     if (step < 1 || end < start) {
         fprintf(stderr, "Invalid range: %s\n", str);
-        exit(1);
+        soft_exit(1);
     }
     return Range(start, end, step);
 }

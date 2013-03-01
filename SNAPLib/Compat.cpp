@@ -31,6 +31,7 @@ Revision History:
 #include <err.h>
 #include <unistd.h>
 #endif
+#include "exit.h"
 
 using std::min;
 using std::max;
@@ -218,12 +219,12 @@ _int64 QueryFileSize(const char *fileName) {
     HANDLE hFile = CreateFile(fileName,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
     if (INVALID_HANDLE_VALUE == hFile) {
         fprintf(stderr,"Unable to open file '%s' for QueryFileSize, %d\n", fileName, GetLastError());
-        exit(1);
+        soft_exit(1);
     }
     LARGE_INTEGER fileSize;
     if (!GetFileSizeEx(hFile,&fileSize)) {
         fprintf(stderr,"GetFileSize failed, %d\n",GetLastError());
-        exit(1);
+        soft_exit(1);
     }
     CloseHandle(hFile);
 
@@ -1217,7 +1218,7 @@ PosixAsyncFile::Writer::Writer(PosixAsyncFile* i_file)
     memset(&aiocb, 0, sizeof(aiocb));
     if (! CreateSingleWaiterObject(&ready)) {
         fprintf(stderr, "PosixAsyncFile: cannot create waiter\n");
-        exit(1);
+        soft_exit(1);
     }
 }
 
@@ -1306,7 +1307,7 @@ PosixAsyncFile::Reader::Reader(
     memset(&aiocb, 0, sizeof(aiocb));
     if (! CreateSingleWaiterObject(&ready)) {
         fprintf(stderr, "PosixAsyncFile cannot create waiter\n");
-        exit(1);
+        soft_exit(1);
     }
 }
 

@@ -24,6 +24,7 @@ Revision History:
 #include "ThirdPairedEndAligner.h"
 #include "SeedSequencer.h"
 #include "mapq.h"
+#include "exit.h"
 
 #if     0
 
@@ -158,7 +159,7 @@ ThirdPairedEndAligner::align(
 
         if (readLen[whichRead] > maxReadSize) {
             fprintf(stderr,"ThirdPairedEndAligner:: got too big read (%d > %d)", readLen[whichRead], maxReadSize);
-            exit(1);
+            soft_exit(1);
         }
 
         for (unsigned i = 0; i < reads[whichRead][FORWARD]->getDataLength(); i++) {
@@ -464,7 +465,7 @@ ThirdPairedEndAligner::findCandidateAndCreateIfNotExtant(unsigned whichRead, Dir
         //
         if (nUsedCandidateGroups >= candidateGroupPoolSize) {
             fprintf(stderr, "ThirdPairedEndAligner: out of candidate groups (%d).  This shouldn't happen.\n", candidateGroupPoolSize);
-            exit(1);
+            soft_exit(1);
         }
 
         *group = &candidateGroupPool[nUsedCandidateGroups];
@@ -505,7 +506,7 @@ ThirdPairedEndAligner::findSuperGroupAndCreateIfNotExtant(unsigned whichRead, Di
     if (NULL == supergroup) {
         if (nUsedSuperGroups >= superGroupPoolSize) {
             fprintf(stderr, "ThirdPairedEndAligner: out of super groups (%d).  This shouldn't happen.\n", superGroupPoolSize);
-            exit(1);
+            soft_exit(1);
         }
         supergroup = &superGroupPool[nUsedSuperGroups];
         nUsedSuperGroups++;

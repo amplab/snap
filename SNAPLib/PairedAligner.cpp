@@ -50,6 +50,7 @@ Revision History:
 #include "Util.h"
 #include "BloomPairedEndAligner.h"
 #include "IntersectingPairedEndAligner.h"
+#include "exit.h"
 
 using namespace std;
 
@@ -241,7 +242,7 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
             if (foundFirstHalfOfFASTQ) {
                 fprintf(stderr,"For the paired aligner, FASTQ files must come in pairs.  I found SAM file '%s' after first half FASTQ file '%s'.\n",
                     argv[i],argv[i-1]);
-                exit(1);
+                soft_exit(1);
             }
             nInputs++;
         } else {
@@ -253,7 +254,7 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
     }
     if (foundFirstHalfOfFASTQ) {
         fprintf(stderr,"For the paired aligner, FASTQ files must come in pairs.  The last one is unmatched.\n");
-        exit(1);
+        soft_exit(1);
     }
     if (0 == nInputs) {
         options->usage();
@@ -380,7 +381,7 @@ void PairedAlignerContext::runIterationThread()
             memcpy(p[0], read0->getId(), n[0]); p[0][n[0]] = 0;
             memcpy(p[1], read1->getId(), n[1]); p[1][n[1]] = 0;
             fprintf(stderr, "Unmatched read IDs '%s' and '%s'.  Use the -I option to ignore this.\n", p[0], p[1]);
-            exit(1);
+            soft_exit(1);
         }
 
         stats->totalReads += 2;

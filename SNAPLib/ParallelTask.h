@@ -23,6 +23,7 @@ Revision History:
 #pragma once
 #include "stdafx.h"
 #include "Compat.h"
+#include "exit.h"
 
 /*++
     Simple class to handle parallelized algorithms.
@@ -98,7 +99,7 @@ ParallelTask<TContext>::run()
     SingleWaiterObject doneWaiter;
     if (!CreateSingleWaiterObject(&doneWaiter)) {
         fprintf(stderr, "Failed to create single waiter object for thread completion.\n");
-        exit(1);
+        soft_exit(1);
     }
     common->doneWaiter = &doneWaiter;
     common->runningThreads = common->totalThreads;
@@ -112,13 +113,13 @@ ParallelTask<TContext>::run()
 
         if (!StartNewThread(ParallelTask<TContext>::threadWorker, &contexts[i])) {
             fprintf(stderr, "Unable to start worker thread.\n");
-            exit(1);
+            soft_exit(1);
         }
     }
 
     if (!WaitForSingleWaiterObject(&doneWaiter)) {
         fprintf(stderr, "Waiting for all threads to finish failed\n");
-        exit(1);
+        soft_exit(1);
     }
     DestroySingleWaiterObject(&doneWaiter);
 

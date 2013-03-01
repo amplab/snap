@@ -27,6 +27,7 @@ Environment:
 #include "Util.h"
 #include "ReadSupplierQueue.h"
 #include "FileFormat.h"
+#include "exit.h"
 
 class SimpleReadWriter : public ReadWriter
 {
@@ -102,7 +103,7 @@ SimpleReadWriter::writeRead(
         }
         if (pass == 1) {
             fprintf(stderr, "Failed to write into fresh buffer\n");
-            exit(1);
+            soft_exit(1);
         }
         if (! writer->nextBatch()) {
             return false;

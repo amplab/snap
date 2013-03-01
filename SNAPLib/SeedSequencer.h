@@ -23,6 +23,7 @@ Revision History:
 --*/
 
 #pragma once
+#include "exit.h"
 
 inline unsigned GetWrappedNextSeedToTest(unsigned seedLen, unsigned wrapCount) 
 {
@@ -222,7 +223,7 @@ inline unsigned GetWrappedNextSeedToTest(unsigned seedLen, unsigned wrapCount)
                 default: _ASSERT(!"NOTREACHED");
             }
         } // inner switch
-        default: fprintf(stderr,"SeedSequencer: Not set up to run with this seed size\n"); exit(1);
+        default: fprintf(stderr,"SeedSequencer: Not set up to run with this seed size\n"); soft_exit(1);
     } // outer switch
     return 0;
 } 

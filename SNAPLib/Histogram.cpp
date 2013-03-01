@@ -26,6 +26,7 @@ Revision History:
 #include "stdafx.h"
 #include "Compat.h"
 #include "Histogram.h"
+#include "exit.h"
 
 Histogram::Histogram(unsigned i_nBuckets, bool i_isExponential) :
     nBuckets(i_nBuckets), isExponential(i_isExponential)
@@ -35,7 +36,7 @@ Histogram::Histogram(unsigned i_nBuckets, bool i_isExponential) :
     buckets = new Bucket[nBuckets];
     if (NULL == buckets) {
         fprintf(stderr,"Histogram: unable to allocate buckets.\n");
-        exit(1);
+        soft_exit(1);
     }
 
     buckets[0].maxValue = 1;

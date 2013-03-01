@@ -29,6 +29,7 @@ Environment:
 #include "FileFormat.h"
 #include "AlignerOptions.h"
 #include "directions.h"
+#include "exit.h"
 
 using std::max;
 using std::min;
@@ -243,7 +244,7 @@ SAMReader::getReadFromLine(
 
     if (!parseLine(line, endOfBuffer, field, lineLength, fieldLength)) {
         fprintf(stderr, "Failed to parse SAM line:\n%.*s\n", lineLength, line);
-        exit(1);
+        soft_exit(1);
     }
 
     //
@@ -255,7 +256,7 @@ SAMReader::getReadFromLine(
 
     if (fieldLength[RNAME] >= pieceNameBufferSize) {  // >= because we need a byte for the \0
         fprintf(stderr,"SAMReader: too long an RNAME.  Can't parse.\n");
-        exit(1);
+        soft_exit(1);
     }
     
     memcpy(pieceName,field[RNAME],fieldLength[RNAME]);
@@ -264,7 +265,7 @@ SAMReader::getReadFromLine(
     unsigned offsetOfPiece = 0;
     if ('*' != pieceName[0] && !genome->getOffsetOfPiece(pieceName,&offsetOfPiece)) {
         //fprintf(stderr,"Unable to find piece '%s' in genome.  SAM file malformed.\n",pieceName);
-        //exit(1);
+        //soft_exit(1);
     }
 
     if (NULL != genomeLocation) {
@@ -280,17 +281,17 @@ SAMReader::getReadFromLine(
             char posBuffer[posBufferSize];
             if (fieldLength[POS] >= posBufferSize) {
                 fprintf(stderr,"SAMReader: POS field too long.\n");
-                exit(1);
+                soft_exit(1);
             }
             memcpy(posBuffer,field[POS],fieldLength[POS]);
             posBuffer[fieldLength[POS]] = '\0';
             if (0 == sscanf(posBuffer,"%d",&oneBasedOffsetWithinPiece)) {
                 fprintf(stderr,"SAMReader: Unable to parse position when it was expected.\n");
-                exit(1);
+                soft_exit(1);
             }
             if (0 == oneBasedOffsetWithinPiece) {
                 fprintf(stderr,"SAMReader: Position parsed as 0 when it was expected.\n");
-                exit(1);
+                soft_exit(1);
             }
             *genomeLocation = offsetOfPiece + oneBasedOffsetWithinPiece - 1; // -1 is because our offset is 0 based, while SAM is 1 based.
         } else {
@@ -300,7 +301,7 @@ SAMReader::getReadFromLine(
 
     if (fieldLength[SEQ] != fieldLength[QUAL]) {
         fprintf(stderr,"SAMReader: QUAL string unequal in length to SEQ string.\n");
-        exit(1);
+        soft_exit(1);
     }
 
     unsigned _flag;
@@ -308,13 +309,13 @@ SAMReader::getReadFromLine(
     char flagBuffer[flagBufferSize];
     if (fieldLength[FLAG] >= flagBufferSize) {
         fprintf(stderr,"SAMReader: flag field is too long.\n");
-        exit(1);
+        soft_exit(1);
     }
     memcpy(flagBuffer,field[FLAG],fieldLength[FLAG]);
     flagBuffer[fieldLength[FLAG]] = '\0';
     if (1 != sscanf(flagBuffer,"%d",&_flag)) {
         fprintf(stderr,"SAMReader: couldn't parse FLAG field.\n");
-        exit(1);
+        soft_exit(1);
     }
 
     if (NULL != read) {
@@ -339,7 +340,7 @@ SAMReader::getReadFromLine(
         } else {
             if ('*' == pieceName[0]) {
                 fprintf(stderr,"SAMReader: mapped read didn't have RNAME filled in.\n");
-                exit(1);
+                soft_exit(1);
             }
             *alignmentResult = SingleHit;   // NB: This isn't quite right, we should look at MAPQ.
         }
@@ -353,7 +354,7 @@ SAMReader::getReadFromLine(
         *mapQ = atoi(field[MAPQ]);
         if (*mapQ > 255) {
             fprintf(stderr,"SAMReader: MAPQ field has bogus value\n");
-            exit(1);
+            soft_exit(1);
         }
     }
 
@@ -461,7 +462,7 @@ SAMReader::getNextRead(
         // This should never happen since underlying reader manages overflow between chunks.
         //
         fprintf(stderr,"SAM file has too long a line, or doesn't end with a newline!  Failing.  fileOffset = %lld\n", data->getFileOffset());
-        exit(1);
+        soft_exit(1);
     }
 
     size_t lineLength;
@@ -509,7 +510,7 @@ SAMReader::createPairedReadSupplierGenerator(const char *fileName, int numThread
     PairedReadReader* paired = SAMReader::createPairedReader(DataSupplier::Default, fileName, genome, 0, 0, clipping);
     if (paired == NULL) {
         fprintf(stderr, "Cannot create reader on %s\n", fileName);
-        exit(1);
+        soft_exit(1);
     }
     ReadSupplierQueue* queue = new ReadSupplierQueue(paired);
     queue->startReaders();

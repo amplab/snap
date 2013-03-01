@@ -25,6 +25,7 @@ Revision History:
 #include "SeedSequencer.h"
 #include "mapq.h"
 #include "BloomFilter.h"
+#include "exit.h"
 
 #ifdef  COMPILE_INTERSECTING
 
@@ -116,6 +117,8 @@ IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, uns
     baseAligner = new(allocator) BaseAligner(index, 1, maxHitsToConsider, maxK/2, maxReadSize, maxSeedsToUse, 4, landauVishkin, NULL, NULL, allocator);
 }
 
+    unsigned BJBMinLoc = 0xffffffff, BJBMaxLoc = 0;
+
     void 
 IntersectingPairedEndAligner::align(
         Read                  *read0,
@@ -162,7 +165,7 @@ IntersectingPairedEndAligner::align(
 
         if (readLen[whichRead] > maxReadSize) {
             fprintf(stderr,"IntersectingPairedEndAligner:: got too big read (%d > %d)", readLen[whichRead], maxReadSize);
-            exit(1);
+            soft_exit(1);
         }
 
         for (unsigned i = 0; i < reads[whichRead][FORWARD]->getDataLength(); i++) {
@@ -322,6 +325,9 @@ IntersectingPairedEndAligner::align(
         // but have not yet inserted it in the ring buffer.
         //
         unsigned smallReadHitGenomeLocation = intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithFewerHits;
+if (smallReadHitGenomeLocation >= BJBMinLoc && smallReadHitGenomeLocation <= BJBMaxLoc) {
+    printf("Here!\n");
+}
 
         //
         // We get here after doing a lookup in the smaller read without checking the larger read for potential mate pairs.
@@ -369,11 +375,17 @@ IntersectingPairedEndAligner::align(
 
         // BUGBUG: don't let mate pairs cross chromosome boundaries.
 
-        if (intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithMoreHits < minLocationToCheck) {
+        if (mateHitLocations[whichSetPairToCheck]->isEmpty() || mateHitLocations[whichSetPairToCheck]->getTail()->genomeLocation < minLocationToCheck) {
             //
             // There's no possible mate pair here.  Look for the next possible hit in the read with fewer hits, and then loop around.
             //
-            if (!setPair[whichSetPairToCheck][readWithFewerHits]->getNextHitLessThanOrEqualTo(intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithMoreHits + maxSpacing,
+            unsigned moreHitsLocation;
+            if (mateHitLocations[whichSetPairToCheck]->isEmpty()) {
+                moreHitsLocation = intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithMoreHits;
+            } else {
+                moreHitsLocation = mateHitLocations[whichSetPairToCheck]->getTail()->genomeLocation;
+            }
+            if (!setPair[whichSetPairToCheck][readWithFewerHits]->getNextHitLessThanOrEqualTo(moreHitsLocation + maxSpacing,
                                                                    &intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithFewerHits,
                                                                    &intersectionState[whichSetPairToCheck].lastSeedOffsetForReadWithFewerHits)) {
                 //
@@ -423,7 +435,7 @@ IntersectingPairedEndAligner::align(
         //
         // Add potential mate pairs to the ring buffer.
         //
-        do {
+        while (intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithMoreHits >= minLocationToCheck) {
             unsigned seedOffset;
             if (!setPair[whichSetPairToCheck][readWithMoreHits]->getNextLowerHit(&intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithMoreHits, &seedOffset)) {
                 //
@@ -433,7 +445,7 @@ IntersectingPairedEndAligner::align(
             }
 
             mateHitLocations[whichSetPairToCheck]->insertHead(intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithMoreHits, seedOffset);
-        } while (intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithMoreHits >= minLocationToCheck);
+        } 
 
         //
         // Run through the saved mate hit locations.  For any that are in the appropriate range to be mate pairs, score them if they haven't already been scored, and

@@ -28,6 +28,7 @@ Revision History:
 #include "FASTQ.h"
 #include "SAM.h"
 #include "Bam.h"
+#include "exit.h"
 
 AlignerOptions::AlignerOptions(
     const char* i_commandLine,
@@ -77,7 +78,7 @@ AlignerOptions::AlignerOptions(
 AlignerOptions::usage()
 {
     usageMessage();
-    exit(1);
+    soft_exit(1);
 }
 
     void
@@ -229,7 +230,7 @@ AlignerOptions::parse(
             selectivity = atoi(argv[n+1]);
             if (selectivity < 2) {
                 fprintf(stderr,"Selectivity must be at least 2.\n");
-                exit(1);
+                soft_exit(1);
             }
             n++;
             return true;
@@ -251,7 +252,7 @@ AlignerOptions::parse(
             gapPenalty = atoi(argv[n+1]);
             if (gapPenalty < 1) {
                 fprintf(stderr,"Gap penalty must be at least 1.\n");
-                exit(1);
+                soft_exit(1);
             }
             n++;
             return true;

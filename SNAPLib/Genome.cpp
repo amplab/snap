@@ -26,13 +26,14 @@ Revision History:
 #include "Genome.h"
 #include "Compat.h"
 #include "BigAlloc.h"
+#include "exit.h"
 
 Genome::Genome(unsigned i_maxBases, unsigned nBasesStored) : maxBases(i_maxBases), minOffset(0), maxOffset(i_maxBases)
 {
     bases = ((char *) BigAlloc(nBasesStored + 2 * N_PADDING)) + N_PADDING;
     if (NULL == bases) {
         fprintf(stderr,"Genome: unable to allocate memory for %llu bases\n",(_int64)maxBases);
-        exit(1);
+        soft_exit(1);
     }
 
     // Add N's for the N_PADDING bases before and after the genome itself
@@ -54,7 +55,7 @@ Genome::addData(const char *data, size_t len)
     if ((size_t)nBases + len > maxBases) {
         fprintf(stderr,"Tried to write beyond allocated genome size (or tried to write into a genome that was loaded from a file).\n");
         fprintf(stderr,"Size = %lld\n",(_int64)maxBases);
-        exit(1);
+        soft_exit(1);
     }
 
     memcpy(bases + nBases,data,len);
@@ -78,7 +79,7 @@ Genome::startPiece(const char *pieceName)
         Piece *newPieces = new Piece[newMaxPieces];
         if (NULL == newPieces) {
             fprintf(stderr,"Genome: unable to reallocate piece array to size %d\n",newMaxPieces);
-            exit(1);
+            soft_exit(1);
         }
         for (int i = 0; i < nPieces; i++) {
             newPieces[i] = pieces[i];
@@ -94,7 +95,7 @@ Genome::startPiece(const char *pieceName)
     pieces[nPieces].name = new char[len];
     if (NULL == pieces[nPieces].name) {
         fprintf(stderr,"Unable to allocate space for piece name\n");
-        exit(1);
+        soft_exit(1);
     }
 
     strncpy(pieces[nPieces].name,pieceName,len);
@@ -239,7 +240,7 @@ Genome::loadFromFile(const char *fileName, unsigned i_minOffset, unsigned length
 
     if (0 != _fseek64bit(loadFile,i_minOffset,SEEK_CUR)) {
         fprintf(stderr,"Genome::loadFromFile: _fseek64bit failed\n");
-        exit(1);
+        soft_exit(1);
     }
 
     if (length != fread(genome->bases,1,length,loadFile)) {

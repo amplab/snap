@@ -22,6 +22,7 @@ Environment:
 #include "DataWriter.h"
 #include "VariableSizeVector.h"
 #include "zlib.h"
+#include "exit.h"
 
 class GzipWriterFilter : public DataWriter::Filter
 {
@@ -151,35 +152,35 @@ GzipWriterFilter::compressChunk(
     status = deflateInit2(&zstream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, windowBits | GZIP_ENCODING, 8, Z_DEFAULT_STRATEGY);
     if (status < 0) {
         fprintf(stderr, "GzipWriterFilter: deflateInit2 failed with %d\n", status);
-        exit(1);
+        soft_exit(1);
     }
     if (bamFormat) {
         status = deflateSetHeader(&zstream, &header);
         if (status != Z_OK) {
             fprintf(stderr, "GzipWriterFilter: defaultSetHeader failed with %d\n", status);
-            exit(1);
+            soft_exit(1);
         }
     }
     oldAvail = zstream.avail_out;
     status = deflate(&zstream, Z_FINISH);
     if (status < 0 && status != Z_BUF_ERROR) {
         fprintf(stderr, "GzipWriterFilter: deflate failed with %d\n", status);
-        exit(1);
+        soft_exit(1);
     }
     
     // make sure it all got written out in a single compressed block
     if (zstream.avail_in != 0) {
         fprintf(stderr, "GzipWriterFilter: default failed to read all input\n");
-        exit(1);
+        soft_exit(1);
     }
     if (zstream.avail_out == oldAvail) {
         fprintf(stderr, "GzipWriterFilter: default failed to write output\n");
-        exit(1);
+        soft_exit(1);
     }
     status = deflateEnd(&zstream);
     if (status < 0) {
         fprintf(stderr, "GzipWriterFilter: deflateEnd failed with %d\n", status);
-        exit(1);
+        soft_exit(1);
     }
 
     size_t oldNextUsed = nextUsed;
@@ -188,7 +189,7 @@ GzipWriterFilter::compressChunk(
         // backpatch compressed block size into gzip header
         if (nextUsed - oldNextUsed >= 0x10000) {
             fprintf(stderr, "exceeded BAM chunk size\n");
-            exit(1);
+            soft_exit(1);
         }
         * (_uint16*) (toBuffer + oldNextUsed + 16) = (_uint16) (nextUsed - oldNextUsed - 1);
     }
@@ -234,7 +235,7 @@ public:
             size_t bytes;
             if (! (writer->getBuffer(&buffer, &bytes) && bytes >= sizeof(eof))) {
                 fprintf(stderr, "no space to write eof marker\n");
-                exit(1);
+                soft_exit(1);
             }
             memcpy(buffer, eof, sizeof(eof));
             writer->advance(sizeof(eof));

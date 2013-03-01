@@ -24,6 +24,7 @@ Revision History:
 
 #include "stdafx.h"
 #include "WGsim.h"
+#include "exit.h"
 
 using namespace std;
 
@@ -48,7 +49,7 @@ bool wgsimReadMisaligned(Read *read, unsigned genomeLocation, GenomeIndex *index
     char id[1024];
     if (read->getIdLength() > sizeof(id) - 1) {
       fprintf(stderr, "Got a read ID that was too long! It starts with %s\n", id);
-      exit(1);
+      soft_exit(1);
     }
     unsigned toCopy = min(read->getIdLength(), (unsigned) sizeof(id) - 1);
     strncpy(id, read->getId(), toCopy);
