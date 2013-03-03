@@ -874,6 +874,7 @@ Return Value:
                 bool anyNearbyCandidatesAlreadyScored = elementToScore->candidatesScored != 0;
 
                 elementToScore->candidatesScored |= candidateBit;
+                _ASSERT(candidateIndexToScore < hashTableElementSize);
                 Candidate *candidateToScore = &elementToScore->candidates[candidateIndexToScore];
  
                 unsigned genomeLocation = elementToScore->baseGenomeLocation + candidateIndexToScore;
@@ -1080,22 +1081,24 @@ Return Value:
                     _ASSERT(elementToScore->matchProbabilityForBestScore == 0.0);
                 }
 
+                elementToScore->bestScoreGenomeLocation = genomeLocation;
+
                 //
                 // Look up the hash table element that's closest to the genomeLocation but that doesn't
                 // contain it, to check if this location is already scored.
                 //
                 // We do this computation in a strange way in order to avoid generating a branch instruction that
                 // the processor's branch predictor will get wrong half of the time.  Think about it like this:
-                // The genome location lies in a bucket of size 2 * maxMergeDist.  Its offset in the bucket
-                // is genomeLocation % (2 * maxMergeDist).  If we take that quantity and integer divide it by
-                // maxMergeDist, we get 0 if it's in the first half and 1 if it's in the second.  Double that and subtract
+                // The genome location lies in a bucket of size hashTableElementSize.  Its offset in the bucket
+                // is genomeLocation % hashTableElementSize.  If we take that quantity and integer divide it by
+                // hashTableElementSize / 2, we get 0 if it's in the first half and 1 if it's in the second.  Double that and subtract
                 // one, and you're at the right place with no branches.
                 //
                 HashTableElement *nearbyElement;
                 unsigned nearbyGenomeLocation;
                 if (-1 != score) {
-                    nearbyGenomeLocation = genomeLocation + (2*(genomeLocation % (2 * maxMergeDist) / maxMergeDist) - 1) * maxMergeDist;
-                    _ASSERT((genomeLocation % (2 * maxMergeDist) >= maxMergeDist ? genomeLocation + maxMergeDist : genomeLocation - maxMergeDist) == nearbyGenomeLocation);   // Assert that the logic in the above comment is right.
+                    nearbyGenomeLocation = genomeLocation + (2*(genomeLocation % hashTableElementSize / (hashTableElementSize/2)) - 1) * (hashTableElementSize/2);
+                    _ASSERT((genomeLocation % hashTableElementSize >= (hashTableElementSize/2) ? genomeLocation + (hashTableElementSize/2) : genomeLocation - (hashTableElementSize/2)) == nearbyGenomeLocation);   // Assert that the logic in the above comment is right.
 
                     findElement(nearbyGenomeLocation, elementToScore->direction, &nearbyElement);
                 } else {
@@ -1106,27 +1109,13 @@ Return Value:
                     //
                     // Just because there's a "nearby" element doesn't mean it's really within the maxMergeDist.  Check that now.
                     //
-                    _uint64 mask;
-                    if (nearbyGenomeLocation < genomeLocation) {
+                    if (!(nearbyElement->baseGenomeLocation > elementToScore->baseGenomeLocation && genomeLocation - nearbyElement->bestScoreGenomeLocation <= maxMergeDist ||
+                        nearbyElement->baseGenomeLocation < elementToScore->baseGenomeLocation && nearbyElement->bestScoreGenomeLocation <= maxMergeDist)) {
+ 
                         //
-                        // We're in the low half of our bucket.
+                        // There's a nearby element, but its best score is too far away to merge.  Forget it.
                         //
-                        mask = ((_uint64)-1) << (64 - (maxMergeDist - genomeLocation % (2 * maxMergeDist)));
-                        
-                    } else {
-                        _ASSERT(genomeLocation % (2 * maxMergeDist) >= maxMergeDist);// we're in the upper half of the bucket
-                        //
-                        // We do the strange shift starting with the high bit clear and using 63 as the base to avoid
-                        // problems with sign extension on the shift.
-                        //
-                        mask = ((_uint64)0x7fffffffffffffff) >> (63 - (maxMergeDist - (2 * maxMergeDist - genomeLocation % (2 * maxMergeDist))));
-                    }
-
-                    if ((mask & nearbyElement->candidatesScored) == 0) {
-                            //
-                            // The closest scored element in the nearby bucket is too far away.  Treat it as separate.
-                            //
-                            nearbyElement = NULL;
+                        nearbyElement = NULL;
                     }
                 
                     if (NULL != nearbyElement) {
@@ -1166,10 +1155,10 @@ Return Value:
                     // We have a new best score.  The old best score becomes the second best score, unless this is the same as the best or second best score
                     //                    
 
-                    if ((secondBestScore == UnusedScoreValue || !(secondBestScoreGenomeLocation + maxK > genomeLocation && secondBestScoreGenomeLocation < genomeLocation + maxK)) &&
-                        (bestScore == UnusedScoreValue || !(bestScoreGenomeLocation + maxK > genomeLocation && bestScoreGenomeLocation < genomeLocation + maxK)) &&
-                        (!anyNearbyCandidatesAlreadyScored || (bestScoreGenomeLocation / (2 * maxMergeDist) != genomeLocation / (2 * maxMergeDist) &&
-                                                               secondBestScoreGenomeLocation / (2 * maxMergeDist) != genomeLocation / (2 * maxMergeDist)))) {
+                    if ((secondBestScore == UnusedScoreValue || !(secondBestScoreGenomeLocation + maxMergeDist > genomeLocation && secondBestScoreGenomeLocation < genomeLocation + maxMergeDist)) &&
+                        (bestScore == UnusedScoreValue || !(bestScoreGenomeLocation + maxMergeDist > genomeLocation && bestScoreGenomeLocation < genomeLocation + maxMergeDist)) &&
+                        (!anyNearbyCandidatesAlreadyScored || (bestScoreGenomeLocation / maxMergeDist != genomeLocation / maxMergeDist &&
+                                                               secondBestScoreGenomeLocation / maxMergeDist != genomeLocation / maxMergeDist))) {
                             secondBestScore = bestScore;
                             secondBestScoreGenomeLocation = bestScoreGenomeLocation;
                             secondBestScoreDirection = *hitDirection;
@@ -1308,7 +1297,7 @@ BaseAligner::findElement(
 {
     HashTableAnchor *hashTable = candidateHashTable[direction];
 
-    unsigned lowOrderGenomeLocation = genomeLocation % (2 * maxMergeDist);
+    unsigned lowOrderGenomeLocation = genomeLocation % hashTableElementSize;
     unsigned highOrderGenomeLocation = genomeLocation - lowOrderGenomeLocation;
 
     unsigned hashTableIndex = hash(highOrderGenomeLocation) % candidateHashTablesSize;
@@ -1351,7 +1340,7 @@ Arguments:
 
 --*/
 {
-    unsigned lowOrderGenomeLocation = genomeLocation % (2 * maxMergeDist);
+    unsigned lowOrderGenomeLocation = genomeLocation % hashTableElementSize;
 
     if (!findElement(genomeLocation, direction, hashTableElement)) {
         *hashTableElement = NULL;
@@ -1390,7 +1379,7 @@ Return Value:
 {
     HashTableAnchor *hashTable = candidateHashTable[direction];
 
-    unsigned lowOrderGenomeLocation = genomeLocation % (2 * maxMergeDist);
+    unsigned lowOrderGenomeLocation = genomeLocation % hashTableElementSize;
     unsigned highOrderGenomeLocation = genomeLocation - lowOrderGenomeLocation;
 
     unsigned hashTableIndex = hash(highOrderGenomeLocation) % candidateHashTablesSize;

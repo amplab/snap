@@ -177,7 +177,7 @@ private:
     // Maximum distance to merge candidates that differe in indels over.
     // This can't be bigger than 32, else some bitvectors overflow.
     // TODO(matei): this seems to work better when we make it lower; why?
-    static const unsigned maxMergeDist = 31; 
+    static const unsigned maxMergeDist = 32; // Must be even and <= 64
 
     char rcTranslationTable[256];
 
@@ -217,6 +217,7 @@ private:
         int             seedOffset;
     };
 
+    static const unsigned hashTableElementSize = maxMergeDist;   // The code depends on this, don't change it
     struct HashTableElement {
         HashTableElement();
         void init();
@@ -239,11 +240,12 @@ private:
         unsigned             weight;
         unsigned             lowestPossibleScore;
         unsigned             bestScore;
+        unsigned             bestScoreGenomeLocation;
         Direction            direction;
         bool                 allExtantCandidatesScored;
         double               matchProbabilityForBestScore;
 
-        Candidate            candidates[maxMergeDist * 2];
+        Candidate            candidates[hashTableElementSize];
     };
 
     //
