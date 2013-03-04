@@ -48,7 +48,6 @@ Revision History:
 #include "ThirdPairedEndAligner.h"
 #include "MultiInputReadSupplier.h"
 #include "Util.h"
-#include "BloomPairedEndAligner.h"
 #include "IntersectingPairedEndAligner.h"
 #include "exit.h"
 

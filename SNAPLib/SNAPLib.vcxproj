@@ -153,8 +153,6 @@
     <ClInclude Include="Bam.h" />
     <ClInclude Include="BaseAligner.h" />
     <ClInclude Include="bigalloc.h" />
-    <ClInclude Include="BloomFilter.h" />
-    <ClInclude Include="BloomPairedEndAligner.h" />
     <ClInclude Include="BoundedStringDistance.h" />
     <ClInclude Include="BufferedAsync.h" />
     <ClInclude Include="compat.h" />
@@ -171,7 +169,6 @@
     <ClInclude Include="genome.h" />
     <ClInclude Include="GenomeIndex.h" />
     <ClInclude Include="GoodRandom.h" />
-    <ClInclude Include="Hamming.h" />
     <ClInclude Include="HashTable.h" />
     <ClInclude Include="histogram.h" />
     <ClInclude Include="IntersectingPairedEndAligner.h" />
@@ -208,8 +205,6 @@
     <ClCompile Include="BaseAligner.cpp" />
     <ClCompile Include="BiasTables.cpp" />
     <ClCompile Include="bigalloc.cpp" />
-    <ClCompile Include="BloomFilter.cpp" />
-    <ClCompile Include="BloomPairedEndAligner.cpp" />
     <ClCompile Include="BufferedAsync.cpp" />
     <ClCompile Include="compat.cpp" />
     <ClCompile Include="DataReader.cpp" />
@@ -220,7 +215,6 @@
     <ClCompile Include="genome.cpp" />
     <ClCompile Include="GenomeIndex.cpp" />
     <ClCompile Include="GoodRandom.cpp" />
-    <ClCompile Include="Hamming.cpp" />
     <ClCompile Include="HashTable.cpp" />
     <ClCompile Include="histogram.cpp" />
     <ClCompile Include="IntersectingPairedEndAligner.cpp" />

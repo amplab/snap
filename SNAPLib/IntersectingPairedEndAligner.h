@@ -27,7 +27,6 @@ Revision History:
 #include "BigAlloc.h"
 #include "directions.h"
 #include "LandauVishkin.h"
-#include "BloomFilter.h"
 #include "FixedSizeMap.h"
 
 #define COMPILE_INTERSECTING

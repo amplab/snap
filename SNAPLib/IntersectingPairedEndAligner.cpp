@@ -24,7 +24,6 @@ Revision History:
 #include "IntersectingPairedEndAligner.h"
 #include "SeedSequencer.h"
 #include "mapq.h"
-#include "BloomFilter.h"
 #include "exit.h"
 
 #ifdef  COMPILE_INTERSECTING

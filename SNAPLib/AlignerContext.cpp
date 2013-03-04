@@ -29,7 +29,6 @@ Revision History:
 #include "AlignerOptions.h"
 #include "AlignerContext.h"
 #include "AlignerStats.h"
-#include "Hamming.h"
 #include "BaseAligner.h"
 #include "FileFormat.h"
 #include "exit.h"
@@ -118,8 +117,6 @@ AlignerContext::finishThread(AlignerContext* common)
     void
 AlignerContext::initialize()
 {
-    InitializeHammingDistance(SNP_PROB);
-
     printf("Loading index from directory... ");
     fflush(stdout);
     _int64 loadStart = timeInMillis();

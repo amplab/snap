@@ -88,13 +88,7 @@
     <ClCompile Include="mapq.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Hamming.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="ThirdPairedEndAligner.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="BloomFilter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ReadSupplierQueue.cpp">
@@ -125,9 +119,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ProbabilityDistance.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="BloomPairedEndAligner.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="DataWriter.cpp">
@@ -246,16 +237,7 @@
     <ClInclude Include="directions.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Hamming.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="ThirdPairedEndAligner.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="BloomFilter.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="BloomPairedEndAligner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="FixedSizeMap.h">
