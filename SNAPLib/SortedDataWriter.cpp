@@ -195,7 +195,7 @@ SortedDataFilterSupplier::onClose(
 {
     if (locations.size() == 1 && sortedFilterSupplier == NULL) {
         // just rename/move temp file to real file, we're done
-        DeleteFile(sortedFileName); // if it exists
+        DeleteSingleFile(sortedFileName); // if it exists
         if (! MoveSingleFile(tempFileName, sortedFileName)) {
             fprintf(stderr, "unable to move temp file %s to final sorted file %s\n", tempFileName, sortedFileName);
             soft_exit(1);

@@ -104,6 +104,12 @@ inline double exp10(double x) { return exp(x * LOG10); }
 
 #define __min(x,y) ((x)<(y) ? (x) : (y))
 #define __max(x,y) ((x)>(y) ? (x) : (y))
+#ifdef max
+#undef max
+#endif
+#ifdef min
+#undef min
+#endif
 #define MAX_PATH 4096
 #define __cdecl __attribute__((__cdecl__))
 

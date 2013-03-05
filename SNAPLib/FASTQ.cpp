@@ -390,7 +390,7 @@ PairedFASTQReader::createPairedReadSupplierGenerator(
     //
     // Decide whether to use the range splitter or a queue based on whether the files are the same size.
     //
-    if (QueryFileSize(fileName0) != QueryFileSize(fileName1) || gzip || 1) {
+    if (QueryFileSize(fileName0) != QueryFileSize(fileName1) || gzip) {
         fprintf(stderr,"FASTQ using supplier queue\n");
         const DataSupplier* dataSupplier = gzip ? DataSupplier::GzipDefault : DataSupplier::Default;
         ReadReader *reader1 = FASTQReader::create(dataSupplier, fileName0,0,QueryFileSize(fileName0),clipping);

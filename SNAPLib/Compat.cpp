@@ -1019,6 +1019,14 @@ DeleteSingleFile(
     return unlink(filename) == 0;
 }
 
+    bool
+MoveSingleFile(
+    const char* from,
+    const char* to)
+{
+    return rename(from, to) == 0;
+}
+
 class LargeFileHandle
 {
 public:
