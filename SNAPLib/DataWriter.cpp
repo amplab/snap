@@ -23,6 +23,7 @@ Environment:
 #include "exit.h"
 
 using std::min;
+using std::max;
 
 class AsyncDataWriterSupplier : public DataWriterSupplier
 {
@@ -308,7 +309,7 @@ class ComposeFilter : public DataWriter::Filter
 {
 public:
     ComposeFilter(DataWriter::Filter* i_a, DataWriter::Filter* i_b) :
-        Filter(std::max(i_a->filterType, i_b->filterType)), a(i_a), b(i_b) {}
+        Filter(max(i_a->filterType, i_b->filterType)), a(i_a), b(i_b) {}
 
     virtual ~ComposeFilter()
     { delete a; delete b; }
@@ -335,7 +336,7 @@ class ComposeFilterSupplier : public DataWriter::FilterSupplier
 {
 public:
     ComposeFilterSupplier(DataWriter::FilterSupplier* i_a, DataWriter::FilterSupplier* i_b) :
-        FilterSupplier(std::max(i_a->filterType, i_b->filterType)), a(i_a), b(i_b) {}
+        FilterSupplier(max(i_a->filterType, i_b->filterType)), a(i_a), b(i_b) {}
 
     virtual ~ComposeFilterSupplier()
     { delete a; delete b; }

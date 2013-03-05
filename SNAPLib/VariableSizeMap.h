@@ -29,6 +29,8 @@ struct VariableSizeMapEntry
 // Allows multi-threaded put, as long as growth=0 (i.e. fixed-size)
 // Shared base class for single- and multi-valued maps
 //
+using std::max;
+using std::min;
 template<
     typename K,
     typename V,
@@ -45,7 +47,7 @@ protected:
     VariableSizeMapBase(int i_capacity = 16)
         : entries(NULL), count(0), capacity(i_capacity)
     {
-        reserve(std::max(16,i_capacity));
+        reserve(max(16,i_capacity));
     }
 
     VariableSizeMapBase(void** data, unsigned i_capacity)
@@ -101,7 +103,7 @@ public:
         clear();
         count = 0;
         // grow before it gets to a certain fraction; always leave 1 slot for empty sentinel
-        limit = growth == 0 ? capacity - 1 : std::min(capacity - 1, (int) (((_int64) capacity * fill) / 100));
+        limit = growth == 0 ? capacity - 1 : min(capacity - 1, (int) (((_int64) capacity * fill) / 100));
         _ASSERT(limit > 0);
         if (old != NULL) {
             for (int i = 0; i < small; i++) {

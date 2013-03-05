@@ -24,6 +24,9 @@ Environment:
 #include "zlib.h"
 #include "exit.h"
 
+using std::min;
+using std::max;
+
 class GzipWriterFilter : public DataWriter::Filter
 {
 public:
@@ -81,7 +84,7 @@ GzipWriterFilter::onNextBatch(
     writer->getBatch(0, &toBuffer, &toSize, &toUsed);
 
     for (size_t chunk = 0; chunk < fromUsed; chunk += chunkSize) {
-        toUsed += compressChunk(toBuffer + toUsed, toSize - toUsed, fromBuffer + chunk, std::min(fromUsed - chunk, chunkSize));
+        toUsed += compressChunk(toBuffer + toUsed, toSize - toUsed, fromBuffer + chunk, min(fromUsed - chunk, chunkSize));
     }
     return toUsed;
 }
