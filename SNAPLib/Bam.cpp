@@ -29,6 +29,8 @@ Environment:
 #include "FileFormat.h"
 #include "AlignerOptions.h"
 #include "exit.h"
+#include "VariableSizeMap.h"
+#include "PairedAligner.h"
 
 using std::max;
 using std::min;
@@ -146,6 +148,7 @@ BAMReader::createPairedReadSupplierGenerator(
     BAMReader* reader = create(fileName, genome, 0, 0, clipping);
     PairedReadReader* matcher = PairedReadReader::PairMatcher(5000, reader);
     ReadSupplierQueue* queue = new ReadSupplierQueue(matcher);
+    queue->startReaders();
     return queue;
 }
     
@@ -277,6 +280,7 @@ BAMReader::getNextRead(
         if (! data->getData(&buffer, &bytes)) {
             return false;
         }
+        extraOffset = 0;
     }
     BAMAlignment* bam = (BAMAlignment*) buffer;
     if ((unsigned _int64)bytes < sizeof(bam->block_size) || (unsigned _int64)bytes < bam->size()) {
@@ -311,8 +315,7 @@ BAMReader::getReadFromLine(
     
     if (NULL != genomeLocation) {
         _ASSERT(-1 <= bam->refID && bam->refID < n_ref);
-        *genomeLocation = bam->refID != -1 && refOffset[bam->refID] != UINT32_MAX
-            ? refOffset[bam->refID] + bam->pos : 0xffffffff;
+        *genomeLocation = bam->getLocation(genome);
     }
 
     if (NULL != read) {
@@ -420,7 +423,11 @@ BAMFormat::getWriterSupplier(
         char* tempFileName = (char*) malloc(5 + len);
         strcpy(tempFileName, options->outputFileTemplate);
         strcpy(tempFileName + len, ".tmp");
-        dataSupplier = DataWriterSupplier::sorted(tempFileName, options->outputFileTemplate, DataWriterSupplier::gzip());
+        // todo: make markDuplicates optional?
+        dataSupplier = DataWriterSupplier::sorted(tempFileName, options->outputFileTemplate,
+            DataWriterSupplier::compose(DataWriterSupplier::markDuplicates(genome),
+                DataWriterSupplier::gzip()),
+            16 * 1024 * 1024, 5);
     } else {
         dataSupplier = DataWriterSupplier::create(options->outputFileTemplate, DataWriterSupplier::gzip(), 3);
     }
@@ -506,8 +513,10 @@ BAMFormat::writeRead(
     const char *pieceName = "*";
     int pieceIndex = -1;
     unsigned positionInPiece = 0;
-    int cigarOps;
+    mapQuality = 0;
+    int cigarOps = 0;
     const char *matePieceName = "*";
+    int matePieceIndex = -1;
     unsigned matePositionInPiece = 0;
     _int64 templateLength = 0;
 
@@ -522,7 +531,7 @@ BAMFormat::writeRead(
     int editDistance;
 
     if (! getSAMData(genome, lv, data, quality, MAX_READ, pieceName, pieceIndex, 
-        flags, positionInPiece, mapQuality, matePieceName, matePositionInPiece, templateLength,
+        flags, positionInPiece, mapQuality, matePieceName, matePieceIndex, matePositionInPiece, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, useM,
         hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection))
@@ -551,15 +560,8 @@ BAMFormat::writeRead(
     bam->n_cigar_op = cigarOps;
     bam->FLAG = flags;
     bam->l_seq = fullLength;
-    if (mateLocation != 0xFFFFFFFF && mateResult != NotFound) {
-        const Genome::Piece* matePiece = genome->getPieceAtLocation(mateLocation);
-        _ASSERT(matePiece != NULL);
-        bam->next_refID = matePiece - genome->getPieces();
-        bam->next_pos = mateLocation - matePiece->beginningOffset;
-    } else {
-        bam->next_refID = -1;
-        bam->next_pos = -1;
-    }
+    bam->next_refID = matePieceIndex;
+    bam->next_pos = matePositionInPiece - 1;
     bam->tlen = templateLength;
     memcpy(bam->read_name(), read->getId(), qnameLen);
     bam->read_name()[qnameLen] = 0;
@@ -635,4 +637,398 @@ BAMFormat::computeCigarOps(
         }
         return used / 4;
     }
+}
+
+class BAMFilter : public DataWriter::Filter
+{
+public:
+    BAMFilter(DataWriter::FilterType i_type) : Filter(i_type), offsets(1000), headerCount(1) {}
+
+    virtual ~BAMFilter() {}
+
+    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, size_t bytes, unsigned location);
+
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
+
+protected:
+    virtual void onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex) = 0;
+
+    BAMAlignment* getRead(size_t fileOffset);
+
+    BAMAlignment* getNextRead(BAMAlignment* read, size_t* o_fileOffset = NULL);
+    
+    BAMAlignment* tryFindRead(size_t offset, size_t endOffset, const char* id, size_t* o_offset);
+
+private:
+    int headerCount;
+    VariableSizeVector<size_t> offsets;
+    DataWriter* currentWriter;
+    char* currentBuffer;
+    size_t currentBufferBytes; // # of valid bytes
+    size_t currentOffset; // logical file offset of beginning of current buffer
+};
+
+    size_t
+BAMFilter::onNextBatch(
+    DataWriter* writer,
+    size_t offset,
+    size_t bytes)
+{
+    bool ok = writer->getBatch(-1, &currentBuffer, NULL, NULL, NULL, &currentBufferBytes, &currentOffset);
+    _ASSERT(ok);
+    currentWriter = writer;
+    int index = 0;
+    for (VariableSizeVector<size_t>::iterator i = offsets.begin(); i != offsets.end(); i++) {
+        onRead((BAMAlignment*) (currentBuffer + *i), currentOffset + *i, index++);
+    }
+    offsets.clear();
+    currentWriter = NULL;
+    currentBuffer = NULL;
+    currentBufferBytes = 0;
+    currentOffset = 0;
+    return bytes;
+}
+    
+    void
+BAMFilter::onAdvance(
+    DataWriter* writer,
+    size_t batchOffset,
+    char* data,
+    size_t bytes,
+    unsigned location)
+{
+    if (headerCount > 0) {
+        headerCount--;
+    } else {
+        offsets.push_back(batchOffset);
+    }
+}
+
+    BAMAlignment*
+BAMFilter::getRead(
+    size_t offset)
+{
+    if (offset >= currentOffset && offset < currentOffset + currentBufferBytes) {
+        return (BAMAlignment*) (currentBuffer + (offset - currentOffset));
+    }
+    for (int i = -2; ; i--) {
+        char* buffer;
+        size_t bufferFileOffset, bufferUsed; // logical
+        if (! currentWriter->getBatch(i, &buffer, NULL, NULL, NULL, &bufferUsed, &bufferFileOffset)) {
+            break;
+        }
+        if (offset >= bufferFileOffset && offset < bufferFileOffset + bufferUsed) {
+            return (BAMAlignment*) (buffer + (offset - bufferFileOffset));
+        }
+    }
+    return NULL;
+}
+
+    BAMAlignment*
+BAMFilter::getNextRead(
+    BAMAlignment* bam,
+    size_t* o_offset)
+{
+    char* p = (char*) bam;
+    if (p >= currentBuffer && p < currentBuffer + currentBufferBytes) {
+        p += bam->size();
+        if (p >= currentBuffer + currentBufferBytes) {
+            return NULL;
+        }
+        if (o_offset != NULL) {
+            *o_offset = currentOffset + (p - currentBuffer);
+        }
+        _ASSERT(((BAMAlignment*)p)->refID >= -1 && ((BAMAlignment*)p)->refID < 100);
+        return (BAMAlignment*) p;
+    }
+    for (int i = -2; ; i--) {
+        char* buffer;
+        size_t bufferOffset, bufferUsed; // logical
+        if (! currentWriter->getBatch(i, &buffer, NULL, NULL, NULL, &bufferUsed, &bufferOffset)) {
+            break;
+        }
+        if (p >= buffer && p < buffer+ bufferUsed) {
+            p += bam->size();
+            size_t offset = bufferOffset + (p - buffer);
+            if (o_offset != NULL) {
+                *o_offset = offset;
+            }
+            return p < buffer + bufferUsed? (BAMAlignment*) p : getRead(offset);
+        }
+    }
+    return NULL;
+}
+
+    BAMAlignment*
+BAMFilter::tryFindRead(
+    size_t offset,
+    size_t endOffset,
+    const char* id,
+    size_t* o_offset)
+{
+    BAMAlignment* bam = getRead(offset);
+    while (offset < endOffset) {
+        if (readIdsMatch(bam->read_name(), id)) {
+            if (o_offset != NULL) {
+                *o_offset = offset;
+            }
+            return bam;
+        }
+        bam = getNextRead(bam, &offset);
+    }
+    return NULL;
+}
+
+struct DuplicateReadKey
+{
+    DuplicateReadKey() { memset(this, 0, sizeof(DuplicateReadKey)); }
+
+    DuplicateReadKey(const BAMAlignment* bam, const Genome* genome)
+    {
+        if (bam == NULL) {
+            locations[0] = locations[1] = UINT32_MAX;
+            isRC[0] = isRC[1] = false;
+        } else {
+            locations[0] = bam->getLocation(genome);
+            locations[1] = bam->getNextLocation(genome);
+            if (locations[0] <= locations[1]) {
+                isRC[0] = (bam->FLAG & SAM_REVERSE_COMPLEMENT) != 0;
+                isRC[1] = (bam->FLAG & SAM_NEXT_REVERSED) != 0;
+            } else {
+                locations[0] ^= locations[1];
+                locations[1] ^= locations[0];
+                locations[0] ^= locations[1];
+                isRC[0] = (bam->FLAG & SAM_NEXT_REVERSED) != 0;
+                isRC[1] = (bam->FLAG & SAM_REVERSE_COMPLEMENT) != 0;
+            }
+        }
+    }
+    
+    bool operator==(const DuplicateReadKey& b) const
+    {
+        return locations[0] == b.locations[0] && locations[1] == b.locations[1] &&
+            isRC[0] == b.isRC[0] && isRC[1] == b.isRC[1];
+    }
+    
+    bool operator!=(const DuplicateReadKey& b) const
+    {
+        return ! ((*this) == b);
+    }
+
+    // required for use as a key in VariableSizeMap template
+    DuplicateReadKey(int x)
+    { locations[0] = locations[1] = x; isRC[0] = isRC[1] = false; }
+    bool operator==(int x) const
+    { return locations[0] == (_uint32) x && locations[1] == (_uint32) x; }
+    bool operator!=(int x) const
+    { return locations[0] != (_uint32) x || locations[1] != (_uint32) x; }
+    operator _uint64()
+    { return ((_uint64) (locations[1] ^ isRC[1])) << 32 | (_uint64) (locations[0] ^ isRC[0]); }
+
+    unsigned locations[2];
+    bool isRC[2];
+};
+
+struct DuplicateMateInfo
+{
+    DuplicateMateInfo() { memset(this, 0, sizeof(DuplicateMateInfo)); }
+
+    size_t firstRunOffset; // first read in duplicate set
+    size_t firstRunEndOffset;
+    size_t bestReadOffset[4]; // file offsets of first/second/new first/old second best reads
+    int bestReadQuality[2]; // total quality of first/both best reads
+    char bestReadId[120];
+
+    void setBestReadId(const char* id) { strncpy(bestReadId, id, sizeof(bestReadId)); }
+    const char* getBestReadId() { return bestReadId; }
+};
+
+class BAMDupMarkFilter : public BAMFilter
+{
+public:
+    BAMDupMarkFilter(const Genome* i_genome) :
+        BAMFilter(DataWriter::ModifyFilter),
+        genome(i_genome), runOffset(0), runLocation(UINT32_MAX), runCount(0), mates(128)
+    {}
+
+    ~BAMDupMarkFilter() {}
+
+    static bool isDuplicate(const BAMAlignment* a, const BAMAlignment* b)
+    { return a->pos == b->pos && a->refID == b->refID &&
+        ((a->FLAG ^ b->FLAG) & (SAM_REVERSE_COMPLEMENT | SAM_NEXT_REVERSED)) == 0; }
+
+protected:
+    virtual void onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex);
+
+private:
+    static int getTotalQuality(BAMAlignment* bam);
+
+    const Genome* genome;
+    size_t runOffset; // offset in file of first read in run
+    _uint32 runLocation; // location in genome
+    int runCount; // number of aligned reads
+    typedef VariableSizeMap<DuplicateReadKey,DuplicateMateInfo,150,MapNumericHash<DuplicateReadKey>,90,0,-2,-3> MateMap;
+    MateMap mates;
+};
+
+    void
+BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
+{
+    unsigned location = lastBam->getLocation(genome);
+    unsigned nextLocation = lastBam->getNextLocation(genome);
+    unsigned logicalLocation = location != UINT32_MAX ? location : nextLocation;
+    if (logicalLocation == UINT32_MAX) {
+        return;
+    } else if (logicalLocation == runLocation) {
+        if (location != UINT32_MAX) {
+            runCount++;
+        }
+    } else {
+        // if there was more than one read with same location, then analyze the run
+        if (runCount > 1) {
+            // partition by duplicate key, find best read in each partition
+            size_t offset = runOffset;
+            BAMAlignment* previous = NULL; // keep previous record for adjacent mates
+            size_t previousOffset;
+            for (BAMAlignment* record = getRead(offset); record != lastBam; record = getNextRead(record, &offset)) {
+                _ASSERT(record->refID >= -1 && record->refID < genome->getNumPieces()); // simple sanity check
+                DuplicateReadKey key(record, genome);
+                DuplicateMateInfo* info = mates.tryFind(key);
+                bool isSecond = (record->FLAG & SAM_LAST_SEGMENT) != 0;
+                if (info == NULL) {
+                    if (isSecond) {
+                        continue; // mate wasn't in a run, so it can't be a duplicate pair
+                    }
+                    bool ok = mates.tryAdd(key, DuplicateMateInfo(), &info);
+                    _ASSERT(ok);
+                    info->firstRunOffset = offset;
+                    info->firstRunEndOffset = lastOffset;
+                }
+                int totalQuality = getTotalQuality(record);
+                size_t mateOffset = 0;
+                BAMAlignment* mate = NULL;
+                if (isSecond) {
+                    // optimize case for half-mapped pairs with adjacent reads
+                    if ((record->FLAG & SAM_UNMAPPED) && previous != NULL &&
+                            readIdsMatch(record->read_name(), previous->read_name())) {
+                        mate = previous;
+                        mateOffset = previousOffset;
+                    } else {
+                        mate = tryFindRead(info->firstRunOffset, info->firstRunEndOffset, info->bestReadId, &mateOffset);
+                    }
+                }
+                if (mate != NULL) {
+                    totalQuality += getTotalQuality(mate);
+                }
+                if (totalQuality > info->bestReadQuality[isSecond]) {
+                    info->bestReadQuality[isSecond] = totalQuality;
+                    info->bestReadOffset[isSecond] = offset;
+                    if (isSecond) {
+                        info->bestReadOffset[2] = mateOffset;
+                    }
+                    info->setBestReadId(record->read_name());
+                }
+                if (isSecond && readIdsMatch(info->getBestReadId(), record->read_name())) {
+                    info->bestReadOffset[3] = offset;
+                }
+
+                previous = record;
+                previousOffset = offset;
+            }
+
+            // go back and adjust flags
+            offset = runOffset;
+            VariableSizeVector<DuplicateMateInfo*>* failedBackpatch = NULL;
+            for (BAMAlignment* record = getRead(offset); record != lastBam; record = getNextRead(record, &offset)) {
+                DuplicateReadKey key(record, genome);
+                DuplicateMateInfo* info = mates.tryFind(key);
+                if (info == NULL) {
+                    continue; // one end in a run, other not
+                }
+                bool pass = info->bestReadQuality[1] != 0; // 1 for second pass, 0 for first pass
+                bool isSecond = (record->FLAG & SAM_LAST_SEGMENT) != 0;
+                static const int index[2][2] = {{0, 3}, {2, 1}};
+                if (offset != info->bestReadOffset[index[pass][isSecond]]) {
+                    // Picard markDuplicates will not mark unmapped reads
+                    if ((record->FLAG & SAM_UNMAPPED) == 0) {
+                        record->FLAG |= SAM_DUPLICATE;
+                    }
+                } else if (pass == 1 && info->bestReadOffset[2] != 0 && info->bestReadOffset[0] != 0 && info->bestReadOffset[2] != info->bestReadOffset[0]) {
+                    // backpatch reads in first matelist if they're still in memory
+                    BAMAlignment* oldBest = getRead(info->bestReadOffset[0]);
+                    BAMAlignment* newBest = getRead(info->bestReadOffset[2]);
+                    if (oldBest != NULL && newBest != NULL) {
+                        oldBest->FLAG &= ~SAM_DUPLICATE;
+                        newBest->FLAG |= SAM_DUPLICATE;
+                    } else {
+                        if (failedBackpatch == NULL) {
+                            failedBackpatch = new VariableSizeVector<DuplicateMateInfo*>();
+                        }
+                        failedBackpatch->push_back(info);
+                    }
+                }
+            }
+
+            // fixup any that failed
+            if (failedBackpatch != NULL) {
+                for (VariableSizeVector<DuplicateMateInfo*>::iterator i = failedBackpatch->begin(); i != failedBackpatch->end(); i++) {
+                    // couldn't go back and patch first set to have correct best for second set
+                    // so patch second set to have same best as first set even though it's not really the best
+                    BAMAlignment* trueBestSecond = getRead((*i)->bestReadOffset[1]);
+                    BAMAlignment* firstBestSecond = getRead((*i)->bestReadOffset[3]);
+                    _ASSERT(trueBestSecond != NULL && firstBestSecond != NULL);
+                    if (trueBestSecond != NULL && firstBestSecond != NULL) {
+                        trueBestSecond->FLAG &= ~SAM_DUPLICATE;
+                        firstBestSecond->FLAG |= ~SAM_DUPLICATE;
+                    }
+                }
+            }
+
+            // clean up
+            offset = runOffset;
+            for (BAMAlignment* record = getRead(offset); record != lastBam; record = getNextRead(record, &offset)) {
+                if (record->FLAG & SAM_LAST_SEGMENT) {
+                    mates.erase(DuplicateReadKey(record, genome));
+                }
+            }
+        }
+        runLocation = logicalLocation;
+        runOffset = lastOffset;
+        runCount = 1;
+    }
+    // todo: preserve this across batches - need to block-copy entire memory for reads
+}
+
+    int
+BAMDupMarkFilter::getTotalQuality(
+    BAMAlignment* bam)
+{
+    int result = 0;
+    _uint8* p = (_uint8*) bam->qual();
+    for (int i = 0; i < bam->l_seq; i++) {
+        int q = *p++;
+        result += (q != 255) * q; // avoid branch?
+    }
+    return result;
+}
+
+class BAMDupMarkSupplier : public DataWriter::FilterSupplier
+{
+public:
+    BAMDupMarkSupplier(const Genome* i_genome) :
+        FilterSupplier(DataWriter::ReadFilter), genome(i_genome) {}
+    
+    virtual DataWriter::Filter* getFilter()
+    { return new BAMDupMarkFilter(genome); }
+
+    virtual void onClose(DataWriterSupplier* supplier, DataWriter* writer) {}
+
+private:
+    const Genome* genome;
+};
+
+    DataWriter::FilterSupplier*
+DataWriterSupplier::markDuplicates(const Genome* genome)
+{
+    return new BAMDupMarkSupplier(genome);
 }

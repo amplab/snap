@@ -29,6 +29,10 @@ Environment:
 #include "Read.h"
 #include "DataReader.h"
 
+bool readIdsMatch(const char* id0, const char* id1);
+
+bool readIdsMatch(Read *read0, Read *read1);
+
 /*
  * Flags for the SAM file format; see http://samtools.sourceforge.net/SAM1.pdf for details.
  */

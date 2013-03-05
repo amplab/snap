@@ -158,23 +158,6 @@ void PairedAlignerStats::printHistograms(FILE* output)
     }
 }
 
-static bool readIdsMatch(Read *read0, Read *read1)
-{
-    if (read0->getIdLength() != read1->getIdLength()) {
-        return false;
-    }
-    for (unsigned i = 0; i < read0->getIdLength(); i++) {
-        char c0 = read0->getId()[i];
-        char c1 = read1->getId()[i];
-
-        if (c0 != c1) return false;
- 
-        // don't parse the read ID after the first space or slash, which can represent metadata (or which half of the mate pair the read is).
-        if (c0 == ' ' || c0 == '/') return true;  
-    }
-    return true;
-}
-
 PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
     : AlignerOptions(i_commandLine, true),
     minSpacing(DEFAULT_MIN_SPACING),
@@ -238,9 +221,9 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
                 break;
         }
         
-        if (stringEndsWith(argv[i],".sam")) {
+        if (stringEndsWith(argv[i],".sam") || stringEndsWith(argv[i],".bam")) {
             if (foundFirstHalfOfFASTQ) {
-                fprintf(stderr,"For the paired aligner, FASTQ files must come in pairs.  I found SAM file '%s' after first half FASTQ file '%s'.\n",
+                fprintf(stderr,"For the paired aligner, FASTQ files must come in pairs.  I found SAM/BAM file '%s' after first half FASTQ file '%s'.\n",
                     argv[i],argv[i-1]);
                 soft_exit(1);
             }

@@ -87,7 +87,8 @@ public:
 
     // get complete data buffer in batch, relative==0 is current, relative==-1 is previous, etc.
     // if negative gets old data written, else waits for write to complete so you can write into it
-    virtual bool getBatch(int relative, char** o_buffer, size_t* o_size, size_t* o_used) = 0;
+    // o_offset gets physical offset (e.g. compressed), o_logical gets data offset (e.g. uncompressed)
+    virtual bool getBatch(int relative, char** o_buffer, size_t* o_size = NULL, size_t* o_used = NULL, size_t* o_offset = NULL, size_t* o_logicalUsed = 0, size_t* o_logicalOffset = NULL) = 0;
 
     // advance to next buffer
     virtual bool nextBatch() = 0;
@@ -95,9 +96,13 @@ public:
     // this thread is complete
     virtual void close() = 0;
 
+    // number of active write buffers
+
 protected:
     Filter* filter;
 };
+
+class Genome;
 
 // creates writers for multiple threads
 class DataWriterSupplier
@@ -117,8 +122,13 @@ public:
     static DataWriterSupplier* sorted(const char* tempFileName,
         const char* sortedFileName,
         DataWriter::FilterSupplier* sortedFilterSuppler = NULL,
-        size_t bufferSize = 16 * 1024 * 1024);
+        size_t bufferSize = 16 * 1024 * 1024,
+        int buffers = 3);
 
     // defaults follow BAM output spec
-    static DataWriter::FilterSupplier* gzip(bool bamExtra = true, size_t chunkSize = 0x10000, int headerChunks = 1, DataWriter::FilterSupplier* inner = NULL);
+    static DataWriter::FilterSupplier* gzip(bool bamFormat = true, size_t chunkSize = 0x10000);
+
+    static DataWriter::FilterSupplier* markDuplicates(const Genome* genome);
+
+    static DataWriter::FilterSupplier* compose(DataWriter::FilterSupplier* a, DataWriter::FilterSupplier* b);
 };

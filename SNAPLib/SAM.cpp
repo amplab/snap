@@ -35,6 +35,37 @@ using std::max;
 using std::min;
 using util::strnchr;
 
+bool readIdsMatch(const char* id0, const char* id1)
+{
+    for (unsigned i = 0; ; i++) {
+        char c0 = id0[i];
+        char c1 = id1[i];
+
+        if (c0 != c1) return false;
+ 
+        // don't parse the read ID after the first space or slash, which can represent metadata (or which half of the mate pair the read is).
+        if (c0 == 0 || c0 == ' ' || c0 == '/') return true;  
+    }
+    return true;
+}
+
+bool readIdsMatch(Read *read0, Read *read1)
+{
+    if (read0->getIdLength() != read1->getIdLength()) {
+        return false;
+    }
+    for (unsigned i = 0; i < read0->getIdLength(); i++) {
+        char c0 = read0->getId()[i];
+        char c1 = read1->getId()[i];
+
+        if (c0 != c1) return false;
+ 
+        // don't parse the read ID after the first space or slash, which can represent metadata (or which half of the mate pair the read is).
+        if (c0 == ' ' || c0 == '/') return true;  
+    }
+    return true;
+}
+
     char *
 strnchrs(char *str, char charToFind, char charToFind2, size_t maxLen) // Hokey version that looks for either of two chars
 {
@@ -411,29 +442,7 @@ SAMReader::reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
         return;
     }
 
-    //
-    // Parse the new first line.  If it's got SAM_MULTI_SEGMENT set and not SAM_FIRST_SEGMENT, then skip it and go with the next one.
-    //
-    Read read;
-    AlignmentResult alignmentResult;
-    unsigned genomeLocation;
-    Direction direction;
-    unsigned mapQ;
-    size_t lineLength;
-    unsigned flag;
- 
-    getReadFromLine(genome, firstNewline+1, buffer + validBytes,
-                    &read, &alignmentResult, &genomeLocation, &direction, &mapQ, &lineLength,
-                    &flag, NULL, clipping);
-
-    if ((flag & SAM_MULTI_SEGMENT) && !(flag & SAM_FIRST_SEGMENT)) {
-        //
-        // Skip this line.
-        //
-        data->advance((unsigned)(firstNewline + lineLength - buffer + 1)); // +1 skips over the newline.
-    } else {
-        data->advance((unsigned)(firstNewline - buffer + 1)); // +1 skips over the newline.
-    }
+    data->advance((unsigned)(firstNewline - buffer + 1)); // +1 skips over the newline.
 }
 
     bool
@@ -648,6 +657,7 @@ getSAMData(
     unsigned& positionInPiece,
     int& mapQuality,
     const char*& matePieceName,
+    int& matePieceIndex,
     unsigned& matePositionInPiece,
     _int64& templateLength,
     unsigned& fullLength,
@@ -733,9 +743,10 @@ getSAMData(
         flags |= SAM_MULTI_SEGMENT;
         flags |= (firstInPair ? SAM_FIRST_SEGMENT : SAM_LAST_SEGMENT);
         if (mateLocation != 0xFFFFFFFF) {
-            const Genome::Piece *piece = genome->getPieceAtLocation(mateLocation);
-            matePieceName = piece->name;
-            matePositionInPiece = mateLocation - piece->beginningOffset + 1;
+            const Genome::Piece *matePiece = genome->getPieceAtLocation(mateLocation);
+            matePieceName = matePiece->name;
+            matePieceIndex = matePiece - genome->getPieces();
+            matePositionInPiece = mateLocation - matePiece->beginningOffset + 1;
 
             if (mateDirection == RC) {
                 flags |= SAM_NEXT_REVERSED;
@@ -747,6 +758,7 @@ getSAMData(
                 // half should just have RNAME and POS copied from the mate.
                 //
                 pieceName = matePieceName;
+                pieceIndex = matePieceIndex;
                 matePieceName = "=";
                 positionInPiece = matePositionInPiece;
             }
@@ -757,6 +769,7 @@ getSAMData(
             // The mate's unmapped, so point it at us.
             //
             matePieceName = "=";
+            matePieceIndex = pieceIndex;
             matePositionInPiece = positionInPiece;
         }
 
@@ -820,6 +833,7 @@ SAMFormat::writeRead(
     unsigned positionInPiece = 0;
     const char *cigar = "*";
     const char *matePieceName = "*";
+    int matePieceIndex = -1;
     unsigned matePositionInPiece = 0;
     _int64 templateLength = 0;
 
@@ -834,7 +848,7 @@ SAMFormat::writeRead(
     int editDistance;
 
     if (! getSAMData(genome, lv, data, quality, MAX_READ, pieceName, pieceIndex, 
-        flags, positionInPiece, mapQuality, matePieceName, matePositionInPiece, templateLength,
+        flags, positionInPiece, mapQuality, matePieceName, matePieceIndex, matePositionInPiece, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, useM,
         hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection))

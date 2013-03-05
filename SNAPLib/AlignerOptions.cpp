@@ -341,7 +341,7 @@ AlignerOptions::passFilter(
     PairedReadSupplierGenerator *
 SNAPInput::createPairedReadSupplierGenerator(int numThreads, const Genome *genome, ReadClippingType clipping)
 {
-    _ASSERT(fileType == SAMFile || secondFileName != NULL); // Caller's responsibility to check this
+    _ASSERT(fileType == SAMFile || fileType == BAMFile || secondFileName != NULL); // Caller's responsibility to check this
 
     switch (fileType) {
     case SAMFile:
