@@ -403,6 +403,9 @@ void PairedAlignerContext::runIterationThread()
         }
 
         PairedAlignmentResult result;
+if (!strncmp(read0->getId(), "chrX_91967445_91967652_?:307:?_?:?:?_?_?_?_002723419", strlen("chrX_91967445_91967652_?:307:?_?:?:?_?_?_?_002723419"))) {
+    printf("Here!");
+}
         aligner->align(read0, read1, &result);
 
         writePair(read0, read1, &result);

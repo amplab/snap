@@ -42,7 +42,7 @@ inline int computeMAPQ(
     // Special case for MAPQ 70, which we generate only if there is no evidence of a mismatch at all.
 
     if (probabilityOfAllCandidates == probabilityOfBestCandidate && popularSeedsSkipped == 0 && score < 5) {
-        return fromAlignTogether ? 3 : 70;
+        return 70;
     }
 
     double correctnessProbability = probabilityOfBestCandidate / probabilityOfAllCandidates;
@@ -58,7 +58,8 @@ inline int computeMAPQ(
     //
     baseMAPQ = __max(0, baseMAPQ - __max(0, popularSeedsSkipped-10) / 2);
     if (fromAlignTogether) {
-        baseMAPQ /= 30;  // Yes, alignTogether doesn't work all that well. It's slow, too.
+        // Scale it down to MAPQ 17-0
+        baseMAPQ /= 4;
     }
 
 #ifdef TRACE_ALIGNER
