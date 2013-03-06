@@ -9,7 +9,7 @@ LDFLAGS += -pthread
 UNAME := $(shell uname)
 
 ifeq ($(UNAME), Linux)
-  LIBS += -lrt
+  LIBS += -lrt -lz
 endif
 
 CXX = g++

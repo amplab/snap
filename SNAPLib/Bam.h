@@ -142,6 +142,13 @@ struct BAMAlignment
     static const int MAX_BIN = (((1<<18)-1)/7);
     static int reg2bins(int beg, int end, _uint16* list/*[MAX_BIN]*/);
 
+    // absoluate genome locations
+
+    _uint32 getLocation(const Genome* genome) const
+    { return pos < 0 || refID < 0 || (FLAG & SAM_UNMAPPED) ? UINT32_MAX : (genome->getPieces()[refID].beginningOffset + pos); }
+
+    _uint32 getNextLocation(const Genome* genome) const
+    { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? UINT32_MAX : (genome->getPieces()[next_refID].beginningOffset + next_pos); }
 };
 
 #define INT8_VAL_TYPE       'c'

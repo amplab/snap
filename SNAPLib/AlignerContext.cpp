@@ -162,7 +162,7 @@ AlignerContext::beginIteration()
     // total mem in Gb if given; default 1 Gb/thread for human genome, scale down for smaller genomes
     size_t totalMemory = options->sortMemory > 0
         ? options->sortMemory * ((size_t) 1 << 30)
-        : options->numThreads * max(2ULL * 16 * 1024 * 1024,
+        : options->numThreads * max((size_t) 2 * 16 * 1024 * 1024,
                                     (size_t) index->getGenome()->getCountOfBases() / 3);
 
     if (NULL != options->outputFileTemplate) {

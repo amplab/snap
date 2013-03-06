@@ -114,6 +114,7 @@ getSAMData(
     unsigned& positionInPiece,
     int& mapQuality,
     const char*& matePieceName,
+    int& matePieceIndex,
     unsigned& matePositionInPiece,
     _int64& templateLength,
     unsigned& fullLength,

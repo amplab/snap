@@ -89,7 +89,11 @@ stringEndsWith(const char* str, const char* pattern)
     if (strlen(str) < strlen(pattern)) {
         return false;
     } else {
+#ifdef _MSC_VER
         return _stricmp(str + (strlen(str) - strlen(pattern)), pattern) == 0;
+#else
+        return strcmp(str + (strlen(str) - strlen(pattern)), pattern) == 0;
+#endif
     }
 }
 

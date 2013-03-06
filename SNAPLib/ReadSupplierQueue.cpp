@@ -188,6 +188,7 @@ ReadSupplierQueue::getElement()
             //
             return NULL;
         }
+        //printf("Thread %u: wait for readsReady in getElement...\n", GetCurrentThreadId());
         WaitForEvent(&readsReady);
         AcquireExclusiveLock(&lock);
     }
@@ -197,6 +198,7 @@ ReadSupplierQueue::getElement()
     element->removeFromQueue();
 
     if (!areAnyReadsReady()) {
+        //printf("Thread %u: block readsReady in getElement...\n", GetCurrentThreadId());
         PreventEventWaitersFromProceeding(&readsReady);
     }
  
@@ -219,6 +221,7 @@ ReadSupplierQueue::getElements(ReadQueueElement **element1, ReadQueueElement **e
             //
             return NULL;
         }
+        //printf("Thread %u: wait for readsReady in getElements...\n", GetCurrentThreadId());
         WaitForEvent(&readsReady);
         AcquireExclusiveLock(&lock);
     }
@@ -229,6 +232,7 @@ ReadSupplierQueue::getElements(ReadQueueElement **element1, ReadQueueElement **e
     (*element2)->removeFromQueue();
 
     if (!areAnyReadsReady()) {
+        //printf("Thread %u: block readsReady in getElements...\n", GetCurrentThreadId());
         PreventEventWaitersFromProceeding(&readsReady);
     }
  
@@ -257,7 +261,7 @@ ReadSupplierQueue::doneWithElement(ReadQueueElement *element)
     _ASSERT(element->totalReads > 0);
     for (VariableSizeVector<DataBatch>::iterator i = element->batches.begin(); i != element->batches.end(); i++) {
         DataBatch release;
-        //printf("ReadSupplierQueue::doneWithElement batch %d:%d\n", i->fileID, i->batchID);
+        //printf("ReadSupplierQueue doneWithElement thread %u batch %d:%d\n", GetCurrentThreadId(), i->fileID, i->batchID);
         if (((singleReader[1] != NULL && (i->fileID % 2)) ? &tracker2 : &tracker)->removeRead(*i, &release)) {
                 releaseBefore(release);
         }
@@ -391,6 +395,12 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
         //printf("ReadSupplierQueue element[%d] with %d reads\n", firstOrSecond, element->totalReads);
         
         AcquireExclusiveLock(&lock);
+        
+        // do this before AllowEventWaitersToProceed to avoid race condition
+        if (done && 1 == nReadersRunning) {
+            //printf("Thread %u: set allReadsQueued in ReaderThread...\n", GetCurrentThreadId());
+            allReadsQueued = true;
+        }
 
         if (element->totalReads > 0) {
             element->addToTail(&readyQueue[firstOrSecond]);
@@ -398,6 +408,7 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
                 //
                 // Signal that an element is ready.
                 //
+                //printf("Thread %u: signal readsReady in ReaderThread...\n", GetCurrentThreadId());
                 AllowEventWaitersToProceed(&readsReady);
             }
 
@@ -423,9 +434,6 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
 
     _ASSERT(nReadersRunning > 0);
     nReadersRunning--;
-    if (0 == nReadersRunning) {
-        allReadsQueued = true;
-    }
     ReleaseExclusiveLock(&lock);
 }
 

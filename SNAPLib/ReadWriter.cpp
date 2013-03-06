@@ -92,6 +92,9 @@ SimpleReadWriter::writeRead(
     char* buffer;
     size_t size;
     size_t used;
+    if (result == NotFound) {
+        genomeLocation = UINT32_MAX;
+    }
     for (int pass = 0; pass < 2; pass++) {
         if (! writer->getBuffer(&buffer, &size)) {
             return false;
@@ -123,18 +126,7 @@ SimpleReadWriter::writePair(
     // some other thread doesn't separate them.  So, try the writes and if either doesn't
     // work start IO and try again.
     //
-    int first, second;
-    Read *reads[2];
-    reads[0] = read0;
-    reads[1] = read1;
-
-    if (result->location[0] <= result->location[1]) {
-        first = 0;
-        second = 1;
-    } else {
-        first = 1;
-        second = 0;
-    }
+    Read *reads[2] = {read0, read1};
     size_t sizeUsed[2];
 
     //
@@ -154,7 +146,11 @@ SimpleReadWriter::writePair(
                 idLengths[1] -= 2;
         }
     }
-
+    unsigned locations[2];
+    locations[0] = result->status[0] != NotFound ? result->location[0] : UINT32_MAX;
+    locations[1] = result->status[1] != NotFound ? result->location[1] : UINT32_MAX;
+    int first = locations[0] > locations[1];
+    int second = 1 - first;
     for (int pass = 0; pass < 2; pass++) {
         
         char* buffer;
@@ -165,17 +161,13 @@ SimpleReadWriter::writePair(
         }
 
         bool writesFit = format->writeRead(genome, &lvc, buffer, size, &sizeUsed[first],
-                            idLengths[first], reads[first], result->status[first],
-                            result->mapq[first], result->location[first], result->direction[first],
-                            true, true, reads[second], result->status[second],
-                            result->location[second], result->direction[second]);
+                            idLengths[first], reads[first], result->status[first], result->mapq[first], locations[first], result->direction[first], true, true,
+                            reads[second], result->status[second], locations[second], result->direction[second]);
 
         if (writesFit) {
             writesFit = format->writeRead(genome, &lvc, buffer + sizeUsed[first], size - sizeUsed[first], &sizeUsed[second],
-                idLengths[second], reads[second], result->status[second],
-                result->mapq[second], result->location[second], result->direction[second],
-                true, false, reads[first], result->status[first],
-                result->location[first], result->direction[first]);
+                idLengths[second], reads[second], result->status[second], result->mapq[second], locations[second], result->direction[second], true, false,
+                reads[first], result->status[first], locations[first], result->direction[first]);
             if (writesFit) {
                 break;
             }
@@ -194,8 +186,10 @@ SimpleReadWriter::writePair(
     //
     // The strange code that determines the sort key (which uses the coordinate of the mate for unmapped reads) is because we list unmapped reads
     // with mapped mates at their mates' location so they sort together.  If both halves are unmapped, then  
-    writer->advance(sizeUsed[first], result->status[first] != NotFound ? result->location[first] : ((result->status[second] != NotFound) ? result->location[second] : UINT32_MAX));
-    writer->advance(sizeUsed[second], result->status[second] != NotFound ? result->location[second] : ((result->status[first] != NotFound) ? result->location[first] : UINT32_MAX));
+    writer->advance(sizeUsed[first],
+        result->status[first] != NotFound ? result->location[first] : locations[second]);
+    writer->advance(sizeUsed[second],
+        result->status[second] != NotFound ? result->location[second] : locations[first]);
     return true;
 }
 

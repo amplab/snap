@@ -93,12 +93,13 @@ class SortedDataFilterSupplier : public DataWriter::FilterSupplier
 public:
 
     SortedDataFilterSupplier(const char* i_tempFileName, const char* i_sortedFileName,
-        DataWriter::FilterSupplier* i_sortedFilterSupplier, size_t i_readBufferSize)
+        DataWriter::FilterSupplier* i_sortedFilterSupplier, int i_readBufferCount, size_t i_readBufferSize)
         :
         FilterSupplier(DataWriter::CopyFilter),
         tempFileName(i_tempFileName),
         sortedFileName(i_sortedFileName),
         sortedFilterSupplier(i_sortedFilterSupplier),
+        readBufferCount(i_readBufferCount),
         readBufferSize(i_readBufferSize),
         locations(i_readBufferSize/300)
     {
@@ -121,8 +122,9 @@ private:
 
     const char*                     tempFileName;
     const char*                     sortedFileName;
+    const int                       readBufferCount;
     const size_t                    readBufferSize;
-    DataWriter::FilterSupplier*    sortedFilterSupplier;
+    DataWriter::FilterSupplier*     sortedFilterSupplier;
     size_t                          headerSize;
     ExclusiveLock                   lock;
     VariableSizeVector<SortBlock>   locations;
@@ -193,6 +195,7 @@ SortedDataFilterSupplier::onClose(
 {
     if (locations.size() == 1 && sortedFilterSupplier == NULL) {
         // just rename/move temp file to real file, we're done
+        DeleteSingleFile(sortedFileName); // if it exists
         if (! MoveSingleFile(tempFileName, sortedFileName)) {
             fprintf(stderr, "unable to move temp file %s to final sorted file %s\n", tempFileName, sortedFileName);
             soft_exit(1);
@@ -272,7 +275,7 @@ SortedDataFilterSupplier::mergeSort()
     }
 
     // set up buffered output
-    DataWriterSupplier* writerSupplier = DataWriterSupplier::create(sortedFileName, sortedFilterSupplier, 3, readBufferSize);
+    DataWriterSupplier* writerSupplier = DataWriterSupplier::create(sortedFileName, sortedFilterSupplier, readBufferCount, readBufferSize);
     DataWriter* writer = writerSupplier->getWriter();
     if (writer == NULL) {
         fprintf(stderr, "open sorted file for write failed\n");
@@ -297,7 +300,7 @@ SortedDataFilterSupplier::mergeSort()
             fprintf(stderr, "read header failed\n");
             return false;
         }
-        writer->advance(headerSize, 0);
+        writer->advance(headerSize);
     }
 
     // merge input blocks into output using pre-sorted list
@@ -316,7 +319,7 @@ SortedDataFilterSupplier::mergeSort()
             fprintf(stderr, "merge sort read failed\n");
             return false;
         }
-        writer->advance(entry->length);
+        writer->advance(entry->length, entry->location);
     }
 
     // close everything
@@ -356,9 +359,10 @@ DataWriterSupplier::sorted(
     const char* tempFileName,
     const char* sortedFileName,
     DataWriter::FilterSupplier* sortedFilterSuppler,
-    size_t bufferSize)
+    size_t bufferSize,
+    int buffers)
 {
     DataWriter::FilterSupplier* filterSupplier =
-        new SortedDataFilterSupplier(tempFileName, sortedFileName, sortedFilterSuppler, bufferSize);
-    return create(tempFileName, filterSupplier, 3, bufferSize);
+        new SortedDataFilterSupplier(tempFileName, sortedFileName, sortedFilterSuppler, buffers, bufferSize);
+    return create(tempFileName, filterSupplier, buffers, bufferSize);
 }

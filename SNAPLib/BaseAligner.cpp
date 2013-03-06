@@ -1504,7 +1504,7 @@ Return Value:
         reversedRead[FORWARD] = NULL;
         reversedRead[RC] = NULL;
 
-        BigDealloc(seedUsed);
+        BigDealloc(seedUsedAsAllocated);
         seedUsed = NULL;
 
         BigDealloc(candidateHashTable[FORWARD]);

@@ -24,18 +24,16 @@ Environment:
 #include "zlib.h"
 #include "exit.h"
 
+using std::min;
+using std::max;
+
 class GzipWriterFilter : public DataWriter::Filter
 {
 public:
-    GzipWriterFilter(bool i_bamFormat, size_t i_chunkSize, int i_headerChunks, DataWriter::Filter* i_inner)
-        :
+    GzipWriterFilter(bool i_bamFormat, size_t i_chunkSize) :
         Filter(DataWriter::TransformFilter),
         bamFormat(i_bamFormat),
-        chunkSize(i_chunkSize),
-        headerChunks(i_headerChunks),
-        chunkStart(0),
-        nextUsed(0),
-        inner(i_inner)
+        chunkSize(i_chunkSize)
     {
         zstream.zalloc = Z_NULL;
         zstream.zfree = Z_NULL;
@@ -51,15 +49,11 @@ public:
     virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
 
 private:
-    void GzipWriterFilter::compressChunk(DataWriter* writer, int relative, size_t ignore);
+    size_t compressChunk(char* toBuffer, size_t toSize, char* fromBuffer, size_t fromUsed);
 
-    int headerChunks;
     const size_t chunkSize;
     const bool bamFormat;
-    size_t chunkStart;
-    size_t nextUsed;
     z_stream zstream;
-    DataWriter::Filter* inner;
 };
 
     void
@@ -70,14 +64,7 @@ GzipWriterFilter::onAdvance(
     size_t bytes,
     unsigned location)
 {
-    if (headerChunks > 0) {
-        headerChunks--;
-        compressChunk(writer, 0, 0);
-        chunkStart = batchOffset + bytes;
-    } else if (batchOffset + bytes - chunkStart > chunkSize) {
-        compressChunk(writer, 0, bytes);
-        chunkStart = batchOffset;
-    }
+    // nothing
 }
 
     size_t
@@ -86,34 +73,34 @@ GzipWriterFilter::onNextBatch(
     size_t offset,
     size_t bytes)
 {
-    compressChunk(writer, -1, 0);
-    size_t result = nextUsed;
-    nextUsed = 0;
-    chunkStart = 0;
-    if (inner != NULL) {
-        inner->onNextBatch(NULL, offset, result);
+    char* fromBuffer;
+    size_t fromSize, fromUsed;
+    writer->getBatch(-1, &fromBuffer, &fromSize, &fromUsed);
+    if (fromUsed == 0) {
+        return 0;
     }
-    return result;
+    char* toBuffer;
+    size_t toSize, toUsed;
+    writer->getBatch(0, &toBuffer, &toSize, &toUsed);
+
+    for (size_t chunk = 0; chunk < fromUsed; chunk += chunkSize) {
+        toUsed += compressChunk(toBuffer + toUsed, toSize - toUsed, fromBuffer + chunk, min(fromUsed - chunk, chunkSize));
+    }
+    return toUsed;
 }
 
 
-    void
+    size_t
 GzipWriterFilter::compressChunk(
-    DataWriter* writer,
-    int relative,
-    size_t ignore)
+    char* toBuffer,
+    size_t toSize,
+    char* fromBuffer,
+    size_t fromUsed)
 {
-    char* fromBuffer;
-    size_t fromSize, fromUsed;
-    writer->getBatch(relative, &fromBuffer, &fromSize, &fromUsed);
-    if (fromUsed - chunkStart <= ignore) {
-        return;
+    if (bamFormat && fromUsed > 0x10000) {
+        fprintf(stderr, "exceeded BAM chunk size\n");
+        exit(1);
     }
-    int count = (int)(fromUsed - chunkStart - ignore);
-    char* toBuffer;
-    size_t toSize, toUsed;
-    writer->getBatch(relative + 1, &toBuffer, &toSize, &toUsed);
-
     // set up BAM header structure
     gz_header header;
     _uint8 bamExtraData[6];
@@ -135,17 +122,17 @@ GzipWriterFilter::compressChunk(
         bamExtraData[1] = 'C';
         bamExtraData[2] = 2;
         bamExtraData[3] = 0;
-        bamExtraData[4] = 0; // will be filled in later
-        bamExtraData[5] = 0; // will be filled in later
+        bamExtraData[4] = 3; // will be filled in later
+        bamExtraData[5] = 7; // will be filled in later
     }
 
     // based on sample code at http://www.lemoda.net/c/zlib-open-write/index.html
     const int windowBits = 15;
     const int GZIP_ENCODING = 16;
-    zstream.next_in = (Bytef*) (fromBuffer + chunkStart);
-    zstream.avail_in = count;
-    zstream.next_out = (Bytef*) (toBuffer + nextUsed);
-    zstream.avail_out = (uInt)(toSize - nextUsed);
+    zstream.next_in = (Bytef*) fromBuffer;
+    zstream.avail_in = fromUsed;
+    zstream.next_out = (Bytef*) toBuffer;
+    zstream.avail_out = toSize;
     uInt oldAvail;
     int status;
 
@@ -183,32 +170,26 @@ GzipWriterFilter::compressChunk(
         soft_exit(1);
     }
 
-    size_t oldNextUsed = nextUsed;
-    nextUsed = toSize - zstream.avail_out;
+    size_t toUsed = toSize - zstream.avail_out;
     if (bamFormat) {
         // backpatch compressed block size into gzip header
-        if (nextUsed - oldNextUsed >= 0x10000) {
+        if (toUsed >= 0x10000) {
             fprintf(stderr, "exceeded BAM chunk size\n");
             soft_exit(1);
         }
-        * (_uint16*) (toBuffer + oldNextUsed + 16) = (_uint16) (nextUsed - oldNextUsed - 1);
+        * (_uint16*) (toBuffer + 16) = (_uint16) (toUsed - 1);
     }
-    if (inner != NULL) {
-        inner->onAdvance(NULL, oldNextUsed, toBuffer + oldNextUsed, nextUsed - oldNextUsed, 0);
-    }
+    return toUsed;
 }
     
 class GzipWriterFilterSupplier : public DataWriter::FilterSupplier
 {
 public:
-    GzipWriterFilterSupplier(bool i_bamFormat, size_t i_chunkSize,
-        int i_headerChunks, DataWriter::FilterSupplier* i_inner)
+    GzipWriterFilterSupplier(bool i_bamFormat, size_t i_chunkSize)
     :
         FilterSupplier(DataWriter::TransformFilter),
         bamFormat(i_bamFormat),
-        chunkSize(i_chunkSize),
-        headerChunks(i_headerChunks),
-        inner(i_inner)
+        chunkSize(i_chunkSize)
     {}
 
     virtual ~GzipWriterFilterSupplier()
@@ -217,9 +198,7 @@ public:
 
     virtual DataWriter::Filter* getFilter()
     {
-        int n = headerChunks;
-        headerChunks = 0;
-        return new GzipWriterFilter(bamFormat, chunkSize, n, inner != NULL ? inner->getFilter() : NULL);
+        return new GzipWriterFilter(bamFormat, chunkSize);
     }
 
     // called when entire file is done, all Filters destroyed
@@ -240,24 +219,17 @@ public:
             memcpy(buffer, eof, sizeof(eof));
             writer->advance(sizeof(eof));
         }
-        if (inner != NULL) {
-            inner->onClose(supplier, writer);
-        }
     }
 
 private:
     const bool bamFormat;
     const size_t chunkSize;
-    int headerChunks;
-    DataWriter::FilterSupplier* inner;
 };
 
     DataWriter::FilterSupplier*
 DataWriterSupplier::gzip(
     bool bamFormat,
-    size_t chunkSize,
-    int headerChunks,
-    DataWriter::FilterSupplier* inner)
+    size_t chunkSize)
 {
-    return new GzipWriterFilterSupplier(bamFormat, chunkSize, headerChunks, inner);
+    return new GzipWriterFilterSupplier(bamFormat, chunkSize);
 }

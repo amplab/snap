@@ -84,6 +84,17 @@ public:
         entries[count++] = value;
     }
     
+    inline void push_back(const V& value)
+    {
+        if (entries == NULL) {
+            reserve(capacity);
+        } else if (count == capacity) {
+            reserve((int) (((_int64) count * grow) / 100));
+        }
+        _ASSERT(count < capacity);
+        entries[count++] = value;
+    }
+    
     inline bool add(const V& value)
     {
         for (int i = 0; i < count; i++) {
