@@ -54,52 +54,45 @@ MultiInputReadSupplier::~MultiInputReadSupplier()
     Read *
 MultiInputReadSupplier::getNextRead()
 {
-    if (0 == nRemainingReadSuppliers) {
-        return NULL;
-    }
+    while (true) {
+        if (0 == nRemainingReadSuppliers) {
+            return NULL;
+        }
+        _ASSERT(nextReadSupplier < nRemainingReadSuppliers);
 
-    _ASSERT(nextReadSupplier < nRemainingReadSuppliers);
+        ActiveRead* active = &activeReadSuppliers[nextReadSupplier];
+        DataBatch last = active->lastBatch;
+        Read *read;
 
-    Read *read = readSuppliers[activeReadSuppliers[nextReadSupplier].index]->getNextRead();
-    bool nextBatch = read != NULL && read->getBatch() != activeReadSuppliers[nextReadSupplier].lastBatch;
-    if (nextBatch) {
-        activeReadSuppliers[nextReadSupplier].firstReadInNextBatch = read;
-        activeReadSuppliers[nextReadSupplier].lastBatch = read->getBatch();
-    }
-    if (read == NULL || nextBatch) {
-        // end of batch from current supplier, round-robin through suppliers
-        while (true) {
-            if (nextBatch) {
-                nextReadSupplier = (nextReadSupplier + 1) % nRemainingReadSuppliers;
-                nextBatch = false;
+        if (active->firstReadInNextBatch != NULL) {
+            read = active->firstReadInNextBatch;
+            active->firstReadInNextBatch = NULL;
+            active->lastBatch = read->getBatch();
+            return read;
+        }
+
+        read = readSuppliers[active->index]->getNextRead();
+        if (read != NULL) {
+            read->setBatch(DataBatch(read->getBatch().batchID,
+                read->getBatch().fileID * nReadSuppliers + active->index));
+            active->lastBatch = read->getBatch();
+            if (read->getBatch() == last || last == DataBatch()) {
+                return read;
             }
-            if (activeReadSuppliers[nextReadSupplier].firstReadInNextBatch != NULL) {
-                read = activeReadSuppliers[nextReadSupplier].firstReadInNextBatch;
-                activeReadSuppliers[nextReadSupplier].firstReadInNextBatch = NULL;
-                break;
-            }
-            read = readSuppliers[activeReadSuppliers[nextReadSupplier].index]->getNextRead();
-            if (read != NULL) {
-                break;
-            }
-            nRemainingReadSuppliers--;
-            if (0 == nRemainingReadSuppliers) {
-                return NULL;
-            }
+            // end of batch from current supplier, round-robin through suppliers
+            active->firstReadInNextBatch = read;
+            nextReadSupplier = (nextReadSupplier + 1) % nRemainingReadSuppliers;
+        } else {
             //
             // This supplier is done.  Update our array to pull the
             // last live read supplier into the slot that we just vacated (this will result
             // in violating a strict round robin, but we don't promise any such thing
             // anyway). Can't delete because it might be retaining read data in use downstream.
             //
+            nRemainingReadSuppliers--;
             activeReadSuppliers[nextReadSupplier] = activeReadSuppliers[nRemainingReadSuppliers];
         }
     }
-    // update batch info
-    activeReadSuppliers[nextReadSupplier].lastBatch = read->getBatch();
-    read->setBatch(DataBatch(1 + activeReadSuppliers[nextReadSupplier].index, read->getBatch().batchID));
-
-    return read;
 }
 
     void
