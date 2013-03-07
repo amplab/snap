@@ -183,7 +183,24 @@ public:
             other.localUnclippedQualityBuffer = NULL;
             other.localBufferSize = 0;
             other.originalUnclippedDataBuffer = NULL;
-            other.originalUnclippedQualityBuffer;
+            other.originalUnclippedQualityBuffer = NULL;
+        }
+
+        Read(const Read& other) : 
+            id(other.id), data(other.data), quality(other.quality), 
+            localUnclippedDataBuffer(other.localUnclippedDataBuffer),
+            localUnclippedQualityBuffer(other.localUnclippedQualityBuffer),
+            localBufferSize(other.localBufferSize),
+            originalUnclippedDataBuffer(other.originalUnclippedDataBuffer),
+            originalUnclippedQualityBuffer(other.originalUnclippedQualityBuffer),
+            clippingState(other.clippingState)
+        {
+	    Read* o = (Read*) &other; // hack!
+            o->localUnclippedDataBuffer = NULL;
+            o->localUnclippedQualityBuffer = NULL;
+            o->localBufferSize = 0;
+            o->originalUnclippedDataBuffer = NULL;
+            o->originalUnclippedQualityBuffer = NULL;
         }
 
         ~Read()

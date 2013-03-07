@@ -1233,6 +1233,7 @@ PosixAsyncFile::Writer::Writer(PosixAsyncFile* i_file)
     bool
 PosixAsyncFile::Writer::close()
 {
+    waitForCompletion();
     DestroySingleWaiterObject(&ready);
     return true;
 }

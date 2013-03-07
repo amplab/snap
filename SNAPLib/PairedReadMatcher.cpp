@@ -121,7 +121,7 @@ PairedReadMatcher::getNextReadPair(
                 fprintf(stderr, "More than %d unmatched pending reads\n", capacity);
                 // todo: deal with it; ignore for now, let the table grow...
             }
-            pending.at(key) = one;
+	    pending[key] = one;
             tracker.addRead(one.getBatch());
             continue;
         }
