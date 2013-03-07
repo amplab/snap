@@ -694,15 +694,16 @@ GzipDataReader::decompress(
     uInt oldAvail;
     bool first = true;
     do {
-        if (mode != ContinueMultiBlock || ! first) {
-            int status = inflateInit2(&zstream, windowBits | ENABLE_ZLIB_GZIP);
+        int status;
+	if (mode != ContinueMultiBlock || ! first) {
+            status = inflateInit2(&zstream, windowBits | ENABLE_ZLIB_GZIP);
             if (status < 0) {
                 fprintf(stderr, "GzipDataReader: inflateInit2 failed with %d\n", status);
                 return false;
             }
         }
         oldAvail = zstream.avail_out;
-        int status = inflate(&zstream, mode == SingleBlock ? Z_NO_FLUSH : Z_FINISH);
+        status = inflate(&zstream, mode == SingleBlock ? Z_NO_FLUSH : Z_FINISH);
         if (status < 0 && status != Z_BUF_ERROR) {
             fprintf(stderr, "GzipDataReader: inflate failed with %d\n", status);
             soft_exit(1);
@@ -725,13 +726,16 @@ GzipDataReader::decompressBatch()
     char* compressed;
     _int64 compressedBytes;
     if (! inner->getData(&compressed, &compressedBytes)) {
-        if (inner->isEOF()) {
-            offset = 0;
-            validBytes = startBytes = 0;
-            return;
-        }
-        fprintf(stderr, "GzipDataReader:decompressBatch failed getData at %lld\n", inner->getFileOffset());
-        soft_exit(1);
+	inner->nextBatch();
+	if (! inner->getData(&compressed, &compressedBytes)) {
+            if (inner->isEOF()) {
+                offset = 0;
+                validBytes = startBytes = 0;
+                return;
+            }
+            fprintf(stderr, "GzipDataReader:decompressBatch failed getData at %lld\n", inner->getFileOffset());
+            soft_exit(1);
+	}
     }
 
     char* uncompressed;
@@ -923,7 +927,9 @@ MemMapDataReader::reinit(
     if (currentMap != NULL) {
         mapper.unmap();
     }
-    _int64 startSize = max((_int64)0, min(amountOfFileToProcess == 0 ? fileSize : amountOfFileToProcess, fileSize - i_startingOffset));
+    _int64 oldAmount = amountOfFileToProcess;
+    _int64 startSize = amountOfFileToProcess == 0 ? fileSize - i_startingOffset
+	: max((_int64) 0, min(fileSize - i_startingOffset, amountOfFileToProcess));
     amountOfFileToProcess = max((_int64)0, min(startSize + overflowBytes, fileSize - i_startingOffset));
     currentMap = mapper.createMapping(i_startingOffset, amountOfFileToProcess);
     if (currentMap == NULL) {
@@ -935,8 +941,9 @@ MemMapDataReader::reinit(
     currentMapStartSize = startSize;
     currentMapSize = amountOfFileToProcess;
     offset = 0;
-    validBytes = min(currentMapSize, batchSize);
     currentBatch = 1;
+    startBytes = min(batchSize, currentMapStartSize - (currentBatch - 1) * batchSize);
+    validBytes = min(batchSize + overflowBytes, currentMapSize - (currentBatch - 1) * batchSize);
     earliestUnreleasedBatch = 1;
     releaseLock();
     if (batchCount != 1) {
@@ -978,8 +985,8 @@ MemMapDataReader::nextBatch(bool dontRelease)
     if (isEOF()) {
         return;
     }
-    _int64 overflow = max(offset, startBytes) - startBytes;
     acquireLock();
+    offset = max(offset, startBytes) - startBytes;
     currentBatch++;
     if (dontRelease) {
         _ASSERT(batchCount != 1);
@@ -1050,7 +1057,7 @@ public:
         _ASSERT(extraFactor >= 0 && overflowBytes >= 0);
         if (extraFactor == 0) {
             // no per-batch expansion factor, so can read entire file as a batch
-            return new MemMapDataReader(1, 0, 0, 0);
+            return new MemMapDataReader(1, 0, overflowBytes, 0);
         } else {
             // break up into 16Mb batches
             _int64 batch = 16 * 1024 * 1024;

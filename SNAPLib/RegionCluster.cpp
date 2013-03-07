@@ -42,7 +42,7 @@ void RegionCluster::computeMemberInfo(const Genome *genome)
         if (str == NULL) {
             fprintf(stderr, "Genome.getSubstring returned NULL on cluster member %u\n",
                     members[i].location);
-            exit(1);
+            soft_exit(1);
         }
         memberStrings.push_back(str);
     }

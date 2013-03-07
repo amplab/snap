@@ -1636,18 +1636,6 @@ FileMapper::prefetch(size_t currentRead)
     }
 }
 
-#include "zlib.h"
-ZEXTERN int ZEXPORT inflate OF((z_streamp strm, int flush))
-{
-  _ASSERT(false); // todo: link Linux version of zlib
-}
-
-ZEXTERN int ZEXPORT inflateInit2_ OF((z_streamp strm, int  windowBits,
-                                      const char *version, int stream_size))
-{
-  _ASSERT(false); // todo: link Linux version of zlib
-}
-
 #endif  // _MSC_VER
 
 AsyncFile* AsyncFile::open(const char* filename, bool write)
