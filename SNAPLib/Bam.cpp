@@ -67,7 +67,7 @@ BAMReader::init(
 {
     // todo: integrate supplier models
     // might need up to 2x extra for expanded sequence + quality + cigar data
-    data = DataSupplier::GzipDefault->getDataReader(MAX_RECORD_LENGTH, 2.5);
+    data = DataSupplier::GzipDefault[false]->getDataReader(MAX_RECORD_LENGTH, 2.5);
     if (! data->init(fileName)) {
         return false;
     }

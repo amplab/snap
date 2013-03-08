@@ -49,7 +49,7 @@ def _ff(names):
     return [_f(x) for x in names]
     
 def runit(args, tag, strict=False, stdout=None, stdin=None):
-    print "runit %s" % args
+    print "> %s" % ' '.join(args)
     fout = _f(("temp/stdout-%s" % tag)) if stdout == None else stdout
     ferr = _f("temp/stderr-%s" % tag)
     retcode = subprocess.call(args, stdout=open(fout, "w"), stderr=open(ferr, "w"))
@@ -96,56 +96,60 @@ runs = 0
 failed = 0
 for input_format in ["fq", "fq.gz", "bam", "sam"]:
     for paired in [0, 1]:
-        for output_format in ["sam", "bam"]:
-            for sorted in [0, 1]:
-                runs += 1
-                temps = [] # temporary files, deleted on success
-                # build & run snap command line
-                args = [snap, ["single", "paired"][paired], _f("temp/^.idx")]
-                args = args + _ff(inputs[input_format][paired]) +  ["-t", "4"]
-                if sorted:
-                    args.append("-so")
-                run = "%s-%s-%s-%s" % (input_format, ["single", "paired"][paired], output_format, ["unsorted", "sorted"][sorted])
-                outfile = _f("temp/output-#." + output_format)
-                args = args + ["-o", outfile]
-                ok = runit(args, "snap-#")
-                temps.append(outfile)
-                if not ok:
-                    failed += 1
-                    continue
-                # validate output
-                ok = runit(["java", "-jar", _f("../bin/ValidateSamFile.jar"), "input=" + outfile, "output=" + _f("temp/validate-#"), "ignore_warnings=true"], "validate-#")
-                temps.append(_f("temp/validate-#"))
-                if not ok:
-                    failed += 1
-                    continue
-                if False:
-                    # todo: need more sophisticated diff
-                    # remove header, convert to SAM if needed
-                    samfile = _f("temp/output-nh-#.sam")
-                    ok = runit([bin + "samtools", "view"] + {"bam":[], "sam":["-S"]}[output_format] + [outfile, "-o", samfile], "samtools-view-#")
-                    temps.append(samfile)
+        test_output_format = ["sam", "bam"] if input_format == "fq" else ["bam"]
+        test_sorted = [0, 1] if input_format == "fq" or input_format == "bam" else [1]
+        for output_format in test_output_format:
+            for sorted in test_sorted:
+                test_threads = ["1", "4"] if input_format == "fq" and output_format == "bam" and sorted == 1 else ["4"]
+                for threads in test_threads:
+                    runs += 1
+                    temps = [] # temporary files, deleted on success
+                    # build & run snap command line
+                    args = [snap, ["single", "paired"][paired], _f("temp/^.idx")]
+                    args = args + _ff(inputs[input_format][paired]) +  ["-t", threads]
+                    if sorted:
+                        args.append("-so")
+                    run = "%s-%s-%s-%s-%s" % (input_format, ["single", "paired"][paired], output_format, ["unsorted", "sorted"][sorted], threads)
+                    outfile = _f("temp/output-#." + output_format)
+                    args = args + ["-o", outfile]
+                    ok = runit(args, "snap-#")
+                    temps.append(outfile)
                     if not ok:
                         failed += 1
                         continue
-                    outfile = samfile
-                    # sort by name if not sorted by coordinate
-                    if sorted == 0:
-                        sortfile = _f("temp/output-namesort-#.sam")
-                        ok = runit([bin + "sort", outfile], "namesort-#", stdout=sortfile)
-                        temps.append(sortfile)
+                    # validate output
+                    ok = runit(["java", "-jar", _f("../bin/ValidateSamFile.jar"), "input=" + outfile, "output=" + _f("temp/validate-#"), "ignore_warnings=true"], "validate-#")
+                    temps.append(_f("temp/validate-#"))
+                    if not ok:
+                        failed += 1
+                        continue
+                    if False:
+                        # todo: need more sophisticated diff
+                        # remove header, convert to SAM if needed
+                        samfile = _f("temp/output-nh-#.sam")
+                        ok = runit([bin + "samtools", "view"] + {"bam":[], "sam":["-S"]}[output_format] + [outfile, "-o", samfile], "samtools-view-#")
+                        temps.append(samfile)
                         if not ok:
                             failed += 1
                             continue
-                        outfile = sortfile
-                    # compare with reference file
-                    use12 = "12" if paired or input_format == "sam" or input_format == "bam" else "1"
-                    reffile = _f("temp/^%s_ref%s.sam" % (["", "_sorted"][sorted], use12))
-                    ok = runit([bin + "diff", outfile, reffile], "diff-#")
-                    if not ok:
-                        failed += 1
-                        continue
-                # delete temp files
-                for f in temps:
-                    os.remove(f)
+                        outfile = samfile
+                        # sort by name if not sorted by coordinate
+                        if sorted == 0:
+                            sortfile = _f("temp/output-namesort-#.sam")
+                            ok = runit([bin + "sort", outfile], "namesort-#", stdout=sortfile)
+                            temps.append(sortfile)
+                            if not ok:
+                                failed += 1
+                                continue
+                            outfile = sortfile
+                        # compare with reference file
+                        use12 = "12" if paired or input_format == "sam" or input_format == "bam" else "1"
+                        reffile = _f("temp/^%s_ref%s.sam" % (["", "_sorted"][sorted], use12))
+                        ok = runit([bin + "diff", outfile, reffile], "diff-#")
+                        if not ok:
+                            failed += 1
+                            continue
+                    # delete temp files
+                    for f in temps:
+                        os.remove(f)
 print "completed %d runs, %d failures" % (runs, failed)

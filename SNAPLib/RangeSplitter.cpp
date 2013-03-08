@@ -112,9 +112,9 @@ RangeSplittingReadSupplierGenerator::generateNewReadSupplier()
     ReadReader *underlyingReader;
     // todo: implement layered factory model
     if (isSAM) {
-        underlyingReader = SAMReader::create(DataSupplier::Default, fileName, genome, rangeStart, rangeLength, clipping);
+        underlyingReader = SAMReader::create(DataSupplier::Default[true], fileName, genome, rangeStart, rangeLength, clipping);
     } else {
-        underlyingReader = FASTQReader::create(DataSupplier::Default, fileName, rangeStart, rangeLength ,clipping);
+        underlyingReader = FASTQReader::create(DataSupplier::Default[true], fileName, rangeStart, rangeLength ,clipping);
     }
     return new RangeSplittingReadSupplier(splitter,underlyingReader);
 }
@@ -205,9 +205,9 @@ RangeSplittingPairedReadSupplierGenerator::generateNewPairedReadSupplier()
 
     PairedReadReader *underlyingReader;
     if (isSAM) {
-        underlyingReader = SAMReader::createPairedReader(DataSupplier::Default, fileName1, genome, rangeStart, rangeLength, clipping); 
+        underlyingReader = SAMReader::createPairedReader(DataSupplier::Default[true], fileName1, genome, rangeStart, rangeLength, clipping); 
     } else {
-        underlyingReader = PairedFASTQReader::create(DataSupplier::Default, fileName1, fileName2, rangeStart, rangeLength, clipping);
+        underlyingReader = PairedFASTQReader::create(DataSupplier::Default[true], fileName1, fileName2, rangeStart, rangeLength, clipping);
     }
 
     return new RangeSplittingPairedReadSupplier(splitter,underlyingReader);
