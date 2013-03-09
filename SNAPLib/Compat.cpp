@@ -1233,6 +1233,7 @@ PosixAsyncFile::Writer::Writer(PosixAsyncFile* i_file)
     bool
 PosixAsyncFile::Writer::close()
 {
+    waitForCompletion();
     DestroySingleWaiterObject(&ready);
     return true;
 }
@@ -1634,18 +1635,6 @@ FileMapper::prefetch(size_t currentRead)
         }
         lastPosMadvised = offset;
     }
-}
-
-#include "zlib.h"
-ZEXTERN int ZEXPORT inflate OF((z_streamp strm, int flush))
-{
-  _ASSERT(false); // todo: link Linux version of zlib
-}
-
-ZEXTERN int ZEXPORT inflateInit2_ OF((z_streamp strm, int  windowBits,
-                                      const char *version, int stream_size))
-{
-  _ASSERT(false); // todo: link Linux version of zlib
 }
 
 #endif  // _MSC_VER

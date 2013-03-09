@@ -99,7 +99,7 @@ GzipWriterFilter::compressChunk(
 {
     if (bamFormat && fromUsed > 0x10000) {
         fprintf(stderr, "exceeded BAM chunk size\n");
-        exit(1);
+        soft_exit(1);
     }
     // set up BAM header structure
     gz_header header;

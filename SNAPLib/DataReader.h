@@ -112,7 +112,7 @@ public:
 
     // advance to next batch
     // by default automatically releases previous batch
-    virtual void nextBatch(bool dontRelease = true) = 0;
+    virtual void nextBatch() = 0;
 
     // whether current batch is last in file
     virtual bool isEOF() = 0;
@@ -131,11 +131,15 @@ public:
     // get pointer to extra data area for current batch
     // todo: allow this to grow dynamically while keeping stable pointers to previous data
     virtual void getExtra(char** o_extra, _int64* o_length) = 0;
+protected:
+    DataReader(bool i_autoRelease) : autoRelease(i_autoRelease) {}
+    const bool autoRelease;
 };
 
 class DataSupplier
 {
 public:
+    DataSupplier(bool i_autoRelease) : autoRelease(i_autoRelease) {}
     
     virtual ~DataSupplier() {}
 
@@ -146,19 +150,21 @@ public:
     //
 
     // 
-    static DataSupplier* Gzip(const DataSupplier* inner);
+    static DataSupplier* Gzip(const DataSupplier* inner, bool autoRelease);
 
     // memmap works on both platforms (but better on Linux)
-    static const DataSupplier* MemMap;
+    static const DataSupplier* MemMap[2];
 
 #ifdef _MSC_VER
     // overlapped is only on Windows
-    static const DataSupplier* WindowsOverlapped;
+    static const DataSupplier* WindowsOverlapped[2];
 #endif
 
     // default raw data supplier for platform
-    static const DataSupplier* Default;
-    static const DataSupplier* GzipDefault;
+    static const DataSupplier* Default[2];
+    static const DataSupplier* GzipDefault[2];
+protected:
+    const bool autoRelease;
 };
 
 // manages lifetime tracking for batches of reads

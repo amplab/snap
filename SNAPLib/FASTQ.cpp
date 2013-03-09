@@ -392,7 +392,7 @@ PairedFASTQReader::createPairedReadSupplierGenerator(
     //
     if (QueryFileSize(fileName0) != QueryFileSize(fileName1) || gzip) {
         fprintf(stderr,"FASTQ using supplier queue\n");
-        const DataSupplier* dataSupplier = gzip ? DataSupplier::GzipDefault : DataSupplier::Default;
+        const DataSupplier* dataSupplier = gzip ? DataSupplier::GzipDefault[false] : DataSupplier::Default[false];
         ReadReader *reader1 = FASTQReader::create(dataSupplier, fileName0,0,QueryFileSize(fileName0),clipping);
         ReadReader *reader2 = FASTQReader::create(dataSupplier, fileName1,0,QueryFileSize(fileName1),clipping);
         if (NULL == reader1 || NULL == reader2) {
@@ -405,7 +405,6 @@ PairedFASTQReader::createPairedReadSupplierGenerator(
         return queue;
     } else {
         fprintf(stderr,"FASTQ using range splitter\n");
-        RangeSplitter *splitter = new RangeSplitter(QueryFileSize(fileName0), numThreads, 100);
         return new RangeSplittingPairedReadSupplierGenerator(fileName0,fileName1,false,clipping,numThreads,NULL /*genome isn't needed for FASTQ files*/);
     }
 }
@@ -421,10 +420,9 @@ FASTQReader::createReadSupplierGenerator(
         //
         // Single ended uncompressed FASTQ files can be handled by a range splitter.
         //
-        RangeSplitter *splitter = new RangeSplitter(QueryFileSize(fileName), numThreads, 100);
         return new RangeSplittingReadSupplierGenerator(fileName, false, clipping, numThreads, NULL /* genome isn't needed for FASTQ files*/);
     } else {
-        ReadReader* fastq = FASTQReader::create(DataSupplier::GzipDefault, fileName, 0, QueryFileSize(fileName), clipping);
+        ReadReader* fastq = FASTQReader::create(DataSupplier::GzipDefault[false], fileName, 0, QueryFileSize(fileName), clipping);
         if (fastq == NULL) {
             delete fastq;
             return NULL;
