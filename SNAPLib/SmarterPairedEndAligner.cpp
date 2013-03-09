@@ -59,11 +59,13 @@ SmarterPairedEndAligner::SmarterPairedEndAligner(
          unsigned      maxSeeds_,
          unsigned      minSpacing_,
          unsigned      maxSpacing_,
-         unsigned      adaptiveConfDiffThreshold_)
+         unsigned      adaptiveConfDiffThreshold_,
+         bool          skipAlignTogether_)
  :   index(index_), maxReadSize(maxReadSize_), confDiff(confDiff_), maxHits(maxHits_),
      maxK(maxK_), maxSeeds(maxSeeds_), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
      adaptiveConfDiffThreshold(adaptiveConfDiffThreshold_), seedLen(index_->getSeedLength()),
-     maxBuckets(FirstPowerOf2GreaterThanOrEqualTo(maxSeeds_ * maxHits_ * 4)), lv(2 * maxBuckets)
+     maxBuckets(FirstPowerOf2GreaterThanOrEqualTo(maxSeeds_ * maxHits_ * 4)), lv(2 * maxBuckets),
+     skipAlignTogether(skipAlignTogether_)
 {
     // Initialize the bucket data structures.
     buckets = new Bucket[maxBuckets];
@@ -323,11 +325,15 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
 
 #endif // SINGLE_FIRST
 
-    // At least one read was MultipleHits; let's look for them simultaneously.
-    _int64 start = timeInNanos();
-//BJB   alignTogether(reads, result, lowerBound);
-    intersectingAligner->align(read0, read1, result); // BJB
-    _int64 end = timeInNanos();
+    if (skipAlignTogether) {
+        return;
+    } else {
+        // At least one read was MultipleHits; let's look for them simultaneously.
+        _int64 start = timeInNanos();
+    //BJB   alignTogether(reads, result, lowerBound);
+        intersectingAligner->align(read0, read1, result); // BJB
+        _int64 end = timeInNanos();
+    }
 
     TRACE("alignTogether took %lld ns and returned %s %s\n", end - start,
             AlignmentResultToString(result->status[0]),

@@ -177,7 +177,7 @@ private:
     // Maximum distance to merge candidates that differe in indels over.
     // This can't be bigger than 32, else some bitvectors overflow.
     // TODO(matei): this seems to work better when we make it lower; why?
-    static const unsigned maxMergeDist = 32; // Must be even and <= 64
+    static const unsigned maxMergeDist = 48; // Must be even and <= 64
 
     char rcTranslationTable[256];
 

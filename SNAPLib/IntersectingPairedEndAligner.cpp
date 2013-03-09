@@ -37,8 +37,8 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         unsigned      minSpacing_,                 // Minimum distance to allow between the two ends.
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
         BigAllocator  *allocator) :
-    index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), maxSeeds(maxSeeds_), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
-    landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(500000), extraScoreLimit(5) /* should be a parameter */, maxMergeDistance(31) /*also should be a parameter*/
+    index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), maxSeeds(__min(10,maxSeeds_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
+    landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(20000), extraScoreLimit(5) /* should be a parameter */, maxMergeDistance(31) /*also should be a parameter*/
 {
     allocateDynamicMemory(allocator, maxReadSize, maxHits, maxSeeds);
 
@@ -324,9 +324,6 @@ IntersectingPairedEndAligner::align(
         // but have not yet inserted it in the ring buffer.
         //
         unsigned smallReadHitGenomeLocation = intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithFewerHits;
-if (smallReadHitGenomeLocation >= BJBMinLoc && smallReadHitGenomeLocation <= BJBMaxLoc) {
-    printf("Here!\n");
-}
 
         //
         // We get here after doing a lookup in the smaller read without checking the larger read for potential mate pairs.
@@ -676,8 +673,13 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(unsig
             unsigned probe = (limit[0] + limit[1]) / 2;
             //
             // Recall that the hit sets are sorted from largest to smallest, so the strange looking logic is actually right.
+            // We're evaluating the expression "lookups[i].hits[probe] <= maxGenomeOffsetToFindThisSeed && (probe == 0 || lookups[i].hits[probe-1] > maxGenomeOffsetToFindThisSeed)"
+            // It's written in this strange way to arrange to have only one conditional branch, so as to increase performance.
             //
-            if (lookups[i].hits[probe] <= maxGenomeOffsetToFindThisSeed && (probe == 0 || lookups[i].hits[probe-1] > maxGenomeOffsetToFindThisSeed)) {
+            unsigned clause1 = lookups[i].hits[probe] <= maxGenomeOffsetToFindThisSeed;
+            unsigned clause2 = probe == 0;
+
+            if (clause1 && (clause2 || lookups[i].hits[probe-1] > maxGenomeOffsetToFindThisSeed)) {
                 anyFound = true;
                 mostRecentLocationReturned = *actualGenomeOffsetFound = bestOffsetFound = __max(lookups[i].hits[probe] - lookups[i].seedOffset, bestOffsetFound);
                 *seedOffsetFound = lookups[i].seedOffset;

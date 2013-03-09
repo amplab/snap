@@ -160,7 +160,8 @@ void PairedAlignerStats::printHistograms(FILE* output)
 PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
     : AlignerOptions(i_commandLine, true),
     minSpacing(DEFAULT_MIN_SPACING),
-    maxSpacing(DEFAULT_MAX_SPACING)
+    maxSpacing(DEFAULT_MAX_SPACING),
+    skipAlignTogether(false)
 {
 }
 
@@ -168,7 +169,8 @@ void PairedAlignerOptions::usageMessage()
 {
     AlignerOptions::usageMessage();
     printf(
-        "  -s   min and max spacing to allow between paired ends (default: %d %d)\n",
+        "  -s   min and max spacing to allow between paired ends (default: %d %d)\n"
+        "  -fast Skip some rare but very expensive cases.  Results in fewer alignments, but they're high quality and very quick.\n",
         DEFAULT_MIN_SPACING,
         DEFAULT_MAX_SPACING);
 }
@@ -183,6 +185,9 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n)
             return true;
         } 
         return false;
+    } else if (strcmp(argv[n], "-fast") == 0) {
+        skipAlignTogether = true;
+        return true;
     }
     return AlignerOptions::parse(argv, argc, n);
 }
@@ -288,6 +293,7 @@ void PairedAlignerContext::initialize()
     PairedAlignerOptions* options2 = (PairedAlignerOptions*) options;
     minSpacing = options2->minSpacing;
     maxSpacing = options2->maxSpacing;
+    skipAlignTogether = options2->skipAlignTogether;
     ignoreMismatchedIDs = options2->ignoreMismatchedIDs;
 }
 
@@ -324,7 +330,8 @@ void PairedAlignerContext::runIterationThread()
             numSeeds,
             minSpacing,
             maxSpacing,
-            adaptiveConfDiff);
+            adaptiveConfDiff,
+            skipAlignTogether);
 #endif  // 0
     BigAllocator *allocator = new BigAllocator(100 * 1024 * 1024);
 //    IntersectingPairedEndAligner *aligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, allocator);
@@ -386,9 +393,7 @@ void PairedAlignerContext::runIterationThread()
         }
 
         PairedAlignmentResult result;
-if (!strncmp(read0->getId(), "chrX_91967445_91967652_?:307:?_?:?:?_?_?_?_002723419", strlen("chrX_91967445_91967652_?:307:?_?:?:?_?_?_?_002723419"))) {
-    printf("Here!");
-}
+
         aligner->align(read0, read1, &result);
 
         writePair(read0, read1, &result);
