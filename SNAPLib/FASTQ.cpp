@@ -166,7 +166,7 @@ MemMapFASTQReader::parseRead(_uint64 pos, Read *readToUpdate, bool exitOnFailure
     }
 
     char *id = fileData + pos + 1; // The '@' is not part of the ID
-    while (pos < amountMapped && fileData[pos] != '\n') {
+    while (pos < amountMapped && fileData[pos] != '\n' && fileData[pos] != '\r') {
         pos++;
     }
     if (pos == amountMapped) {
@@ -179,10 +179,11 @@ MemMapFASTQReader::parseRead(_uint64 pos, Read *readToUpdate, bool exitOnFailure
         }
     }
     unsigned idLen = (unsigned) (fileData + pos - id);
+    pos += fileData[pos] == '\r';
     pos++;
 
     char *data = fileData + pos;
-    while (pos < amountMapped && fileData[pos] != '\n') {
+    while (pos < amountMapped && fileData[pos] != '\n' && fileData[pos] != '\r') {
         pos++;
     }
     if (pos == amountMapped) {
@@ -195,6 +196,7 @@ MemMapFASTQReader::parseRead(_uint64 pos, Read *readToUpdate, bool exitOnFailure
         }
     }
     unsigned dataLen = (unsigned) (fileData + pos - data);
+    pos += fileData[pos] == '\r';
     pos++;
 
     if (pos >= amountMapped || fileData[pos] != '+') {
@@ -208,7 +210,7 @@ MemMapFASTQReader::parseRead(_uint64 pos, Read *readToUpdate, bool exitOnFailure
     }
     pos++;
 
-    while (pos < amountMapped && fileData[pos] != '\n') {
+    while (pos < amountMapped && fileData[pos] != '\n' && fileData[pos] != '\r') {
         pos++;
     }
     if (pos == amountMapped) {
@@ -220,6 +222,7 @@ MemMapFASTQReader::parseRead(_uint64 pos, Read *readToUpdate, bool exitOnFailure
             return 0;
         }
     }
+    pos += fileData[pos] == '\r';
     pos++;
 
     char *quality = fileData + pos;
@@ -234,7 +237,7 @@ MemMapFASTQReader::parseRead(_uint64 pos, Read *readToUpdate, bool exitOnFailure
     } else if (pos + dataLen == amountMapped) {
       pos = amountMapped;
     } else {
-      if (fileData[pos + dataLen] != '\n') {
+      if (fileData[pos + dataLen] != '\n' && fileData[pos + dataLen] != '\r') {
           if (exitOnFailure) {
               fprintf(stderr, "Syntax error in FASTQ file at offset %llu. "
                       "Quality string is of the wrong length.", (_uint64) (pos + offsetMapped));
@@ -243,7 +246,7 @@ MemMapFASTQReader::parseRead(_uint64 pos, Read *readToUpdate, bool exitOnFailure
               return 0;
           }
       }
-      pos += dataLen + 1;
+      pos += dataLen + (fileData[pos + dataLen] == '\r') + 1;
     }
 
     // Call madvise() to (a) start reading more bytes if we're past half our current
