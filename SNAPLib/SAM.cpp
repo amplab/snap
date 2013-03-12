@@ -135,7 +135,7 @@ SAMReader::create(
 SAMReader::SAMReader(
     DataReader* i_data,
     ReadClippingType i_clipping)
-    : data(i_data), clipping(i_clipping)
+    : data(i_data), clipping(i_clipping), headerSize(-1)
 {
 }
 
@@ -428,21 +428,24 @@ SAMReader::init(
     void
 SAMReader::reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
 {
-    _ASSERT(0 != headerSize);  // Must call init() before reinit()
+    _ASSERT(-1 != headerSize);  // Must call init() before reinit()
+    _int64 adjusted = max(headerSize, startingOffset);
     data->reinit(
-        max(headerSize, startingOffset) - 1,  // -1 is to point at the previous newline so we don't skip the first line.
+        max(1LL, adjusted) - 1,  // -1 is to point at the previous newline so we don't skip the first line.
         amountOfFileToProcess);
     char* buffer;
     _int64 validBytes;
     if (!data->getData(&buffer, &validBytes)) {
         return;
     }
-    char *firstNewline = strnchr(buffer,'\n',validBytes);
-    if (NULL == firstNewline) {
-        return;
-    }
+    if (adjusted != 0) {
+        char *firstNewline = strnchr(buffer,'\n',validBytes);
+        if (NULL == firstNewline) {
+            return;
+        }
 
-    data->advance((unsigned)(firstNewline - buffer + 1)); // +1 skips over the newline.
+        data->advance((unsigned)(firstNewline - buffer + 1)); // +1 skips over the newline.
+    }
 }
 
     bool
