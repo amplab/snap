@@ -17,44 +17,28 @@ Environment:
 --*/
 
 #include "stdafx.h"
+#include "GzipDataWriter.h"
 #include "BigAlloc.h"
-#include "Compat.h"
-#include "DataWriter.h"
 #include "VariableSizeVector.h"
 #include "zlib.h"
 #include "exit.h"
 
 using std::min;
 using std::max;
+using std::pair;
 
-class GzipWriterFilter : public DataWriter::Filter
+GzipWriterFilter::GzipWriterFilter(
+    GzipWriterFilterSupplier* i_supplier)
+    :
+    Filter(DataWriter::TransformFilter),
+    supplier(i_supplier),
+    bamFormat(i_supplier->bamFormat),
+    chunkSize(i_supplier->chunkSize)
 {
-public:
-    GzipWriterFilter(bool i_bamFormat, size_t i_chunkSize) :
-        Filter(DataWriter::TransformFilter),
-        bamFormat(i_bamFormat),
-        chunkSize(i_chunkSize)
-    {
-        zstream.zalloc = Z_NULL;
-        zstream.zfree = Z_NULL;
-        zstream.opaque = Z_NULL;
-    }
-    
-    virtual ~GzipWriterFilter()
-    {
-    }
-
-    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, size_t bytes, unsigned location);
-
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
-
-private:
-    size_t compressChunk(char* toBuffer, size_t toSize, char* fromBuffer, size_t fromUsed);
-
-    const size_t chunkSize;
-    const bool bamFormat;
-    z_stream zstream;
-};
+    zstream.zalloc = Z_NULL;
+    zstream.zfree = Z_NULL;
+    zstream.opaque = Z_NULL;
+}
 
     void
 GzipWriterFilter::onAdvance(
@@ -74,8 +58,8 @@ GzipWriterFilter::onNextBatch(
     size_t bytes)
 {
     char* fromBuffer;
-    size_t fromSize, fromUsed;
-    writer->getBatch(-1, &fromBuffer, &fromSize, &fromUsed);
+    size_t fromSize, fromUsed, physicalOffset, logicalOffset;
+    writer->getBatch(-1, &fromBuffer, &fromSize, &fromUsed, &physicalOffset, NULL, &logicalOffset);
     if (fromUsed == 0) {
         return 0;
     }
@@ -84,6 +68,7 @@ GzipWriterFilter::onNextBatch(
     writer->getBatch(0, &toBuffer, &toSize, &toUsed);
 
     for (size_t chunk = 0; chunk < fromUsed; chunk += chunkSize) {
+        supplier->addTranslation(logicalOffset + chunk, physicalOffset + toUsed);
         toUsed += compressChunk(toBuffer + toUsed, toSize - toUsed, fromBuffer + chunk, min(fromUsed - chunk, chunkSize));
     }
     return toUsed;
@@ -136,6 +121,7 @@ GzipWriterFilter::compressChunk(
     uInt oldAvail;
     int status;
 
+
     status = deflateInit2(&zstream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, windowBits | GZIP_ENCODING, 8, Z_DEFAULT_STRATEGY);
     if (status < 0) {
         fprintf(stderr, "GzipWriterFilter: deflateInit2 failed with %d\n", status);
@@ -182,54 +168,64 @@ GzipWriterFilter::compressChunk(
     return toUsed;
 }
     
-class GzipWriterFilterSupplier : public DataWriter::FilterSupplier
-{
-public:
-    GzipWriterFilterSupplier(bool i_bamFormat, size_t i_chunkSize)
-    :
-        FilterSupplier(DataWriter::TransformFilter),
-        bamFormat(i_bamFormat),
-        chunkSize(i_chunkSize)
-    {}
 
-    virtual ~GzipWriterFilterSupplier()
-    {
-    }
-
-    virtual DataWriter::Filter* getFilter()
-    {
-        return new GzipWriterFilter(bamFormat, chunkSize);
-    }
-
-    // called when entire file is done, all Filters destroyed
-    virtual void onClose(DataWriterSupplier* supplier, DataWriter* writer)
-    {
-        if (bamFormat) {
-            // write empty block as BAM end of file marker
-            static _uint8 eof[] = {
-                0x1f, 0x8b, 0x08, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x06, 0x00, 0x42, 0x43,
-                0x02, 0x00, 0x1b, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-            };
-            char* buffer;
-            size_t bytes;
-            if (! (writer->getBuffer(&buffer, &bytes) && bytes >= sizeof(eof))) {
-                fprintf(stderr, "no space to write eof marker\n");
-                soft_exit(1);
-            }
-            memcpy(buffer, eof, sizeof(eof));
-            writer->advance(sizeof(eof));
-        }
-    }
-
-private:
-    const bool bamFormat;
-    const size_t chunkSize;
-};
-
-    DataWriter::FilterSupplier*
+    GzipWriterFilterSupplier*
 DataWriterSupplier::gzip(
     bool bamFormat,
     size_t chunkSize)
 {
     return new GzipWriterFilterSupplier(bamFormat, chunkSize);
 }
+    
+    void
+GzipWriterFilterSupplier::onClose(
+    DataWriterSupplier* supplier,
+    DataWriter* writer)
+{
+    if (bamFormat) {
+        // write empty block as BAM end of file marker
+        static _uint8 eof[] = {
+            0x1f, 0x8b, 0x08, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x06, 0x00, 0x42, 0x43,
+            0x02, 0x00, 0x1b, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        };
+        char* buffer;
+        size_t bytes;
+        if (! (writer->getBuffer(&buffer, &bytes) && bytes >= sizeof(eof))) {
+            fprintf(stderr, "no space to write eof marker\n");
+            soft_exit(1);
+        }
+        memcpy(buffer, eof, sizeof(eof));
+        writer->advance(sizeof(eof));
+    }
+    
+    // sort translations
+    std::sort(translation.begin(), translation.end(), translationComparator);
+}
+
+    bool
+GzipWriterFilterSupplier::translate(
+    _uint64 logical,
+    _uint64* o_physical,
+    _uint64* o_logicalDelta)
+{
+    pair<_uint64,_uint64> value;
+    value.first = logical;
+    value.second = 0; //ignored
+    pair<_uint64,_uint64>* upper = std::upper_bound(translation.begin(), translation.end(), value, translationComparator);
+    if (upper == translation.begin()) {
+        return false;
+    }
+    upper--;
+    *o_physical = upper->second;
+    *o_logicalDelta = logical - upper->first;
+    return true;
+}
+
+    bool
+GzipWriterFilterSupplier::translationComparator(
+    const pair<_uint64,_uint64>& a,
+    const pair<_uint64,_uint64>& b)
+{
+    return a.first < b.first;
+}
+    

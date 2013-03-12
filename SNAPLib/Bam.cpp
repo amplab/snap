@@ -31,6 +31,7 @@ Environment:
 #include "exit.h"
 #include "VariableSizeMap.h"
 #include "PairedAligner.h"
+#include "GzipDataWriter.h"
 
 using std::max;
 using std::min;
@@ -424,10 +425,18 @@ BAMFormat::getWriterSupplier(
         strcpy(tempFileName, options->outputFileTemplate);
         strcpy(tempFileName + len, ".tmp");
         // todo: make markDuplicates optional?
-        dataSupplier = DataWriterSupplier::sorted(tempFileName, options->outputFileTemplate,
-            DataWriterSupplier::compose(DataWriterSupplier::markDuplicates(genome),
-                DataWriterSupplier::gzip()),
-            16 * 1024 * 1024, 5);
+        GzipWriterFilterSupplier* gzipSupplier = DataWriterSupplier::gzip();
+        DataWriter::FilterSupplier* filters = gzipSupplier;
+        if (! options->noDuplicateMarking) {
+            filters = DataWriterSupplier::markDuplicates(genome)->compose(filters);
+        }
+        if (! options->noIndex) {
+            char* indexFileName = (char*) malloc(5 + len);
+            strcpy(indexFileName, options->outputFileTemplate);
+            strcpy(indexFileName + len, ".bai");
+            filters = DataWriterSupplier::bamIndex(indexFileName, genome, gzipSupplier)->compose(filters);
+        }
+        dataSupplier = DataWriterSupplier::sorted(tempFileName, options->outputFileTemplate, filters, 16 * 1024 * 1024, 5);
     } else {
         dataSupplier = DataWriterSupplier::create(options->outputFileTemplate, DataWriterSupplier::gzip(), 3);
     }
@@ -1031,4 +1040,203 @@ private:
 DataWriterSupplier::markDuplicates(const Genome* genome)
 {
     return new BAMDupMarkSupplier(genome);
+}
+
+class BAMIndexSupplier;
+
+class BAMIndexFilter : public BAMFilter
+{
+public:
+    BAMIndexFilter(BAMIndexSupplier* i_supplier)
+        : BAMFilter(DataWriter::CopyFilter), supplier(i_supplier) {}
+
+protected:
+    virtual void onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex);
+
+private:
+    BAMIndexSupplier* supplier;
+};
+
+class BAMIndexSupplier : public DataWriter::FilterSupplier
+{
+public:
+    BAMIndexSupplier(const char* i_indexFileName, const Genome* i_genome, GzipWriterFilterSupplier* i_gzipSupplier) :
+        FilterSupplier(DataWriter::ReadFilter),
+        indexFileName(i_indexFileName),
+        genome(i_genome),
+        gzipSupplier(i_gzipSupplier),
+        lastRefId(-1),
+        lastBin(0), binStart(0), lastBamEnd(0)
+    {
+        refs = new RefInfo[genome->getNumPieces()];
+    }
+    
+    virtual DataWriter::Filter* getFilter()
+    { return new BAMIndexFilter(this); }
+
+    virtual void onClose(DataWriterSupplier* supplier, DataWriter* writer);
+
+private:
+
+    friend class BAMIndexFilter;
+
+    struct BAMChunk {
+        _uint64 start, end;
+    };
+    typedef VariableSizeVector<BAMChunk> ChunkVec;
+    typedef VariableSizeMap<_uint32,ChunkVec> BinMap;
+    typedef VariableSizeVector<_uint64> LinearMap;
+    struct RefInfo {
+        BinMap bins;
+        LinearMap intervals;
+    };
+
+    RefInfo* getRefInfo(int refId);
+
+    void onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex);
+
+    void addChunk(int refId, _uint32 bin, _uint64 start, _uint64 end);
+
+    void addInterval(int refId, int pos, _uint64 fileOffset);
+
+    const char* indexFileName;
+    const Genome* genome;
+    int lastRefId;
+    _uint32 lastBin;
+    _uint64 binStart;
+    _uint64 lastBamEnd;
+    RefInfo* refs;
+    GzipWriterFilterSupplier* gzipSupplier;
+};
+
+    void
+BAMIndexFilter::onRead(
+    BAMAlignment* bam,
+    size_t fileOffset,
+    int batchIndex)
+{
+    supplier->onRead(bam, fileOffset, batchIndex);
+}
+
+    DataWriter::FilterSupplier*
+DataWriterSupplier::bamIndex(
+    const char* indexFileName,
+    const Genome* genome,
+    GzipWriterFilterSupplier* gzipSupplier)
+{
+    return new BAMIndexSupplier(indexFileName, genome, gzipSupplier);
+}
+
+    void
+BAMIndexSupplier::onRead(
+    BAMAlignment* bam,
+    size_t fileOffset,
+    int batchIndex)
+{
+    if (bam->refID != lastRefId || bam->bin != lastBin || lastRefId == -1) {
+        addChunk(lastRefId, lastBin, binStart, fileOffset - 1);
+        lastBin = bam->bin;
+        lastRefId = bam->refID;
+        binStart = fileOffset;
+    }
+    if (bam->pos != -1 && bam->refID != -1) {
+        addInterval(bam->refID, bam->pos, fileOffset);
+    }
+    lastBamEnd = fileOffset + bam->size() - 1;
+}
+
+    void
+BAMIndexSupplier::onClose(
+    DataWriterSupplier* supplier,
+    DataWriter* writer)
+{
+    // add final chunk
+    if (lastRefId != -1) {
+        addChunk(lastRefId, lastBin, binStart, lastBamEnd);
+    }
+
+    // write out index file
+    FILE* index = fopen(indexFileName, "wb");
+    char magic[4] = {'B', 'A', 'I', 1};
+    fwrite(magic, sizeof(magic), 1, index);
+    _int32 n_ref = genome->getNumPieces();
+    fwrite(&n_ref, sizeof(n_ref), 1, index);
+
+    for (int i = 0; i < n_ref; i++) {
+        RefInfo* info = getRefInfo(i);
+        _int32 n_bin, n_intv;
+        if (info == NULL) {
+            n_bin = 0;
+            fwrite(&n_bin, sizeof(n_bin), 1, index);
+            n_intv = 0;
+            fwrite(&n_intv, sizeof(n_intv), 1, index);
+            continue;
+        }
+        n_bin = info->bins.size();
+        fwrite(&n_bin, sizeof(n_bin), 1, index);
+        for (BinMap::iterator j = info->bins.begin(); j != info->bins.end(); j = info->bins.next(j)) {
+            _uint32 bin = j->key;
+            fwrite(&bin, sizeof(bin), 1, index);
+            _int32 n_chunk = j->value.size();
+            fwrite(&n_chunk, sizeof(n_chunk), 1, index);
+            for (ChunkVec::iterator k = j->value.begin(); k != j->value.end(); k++) {
+                _uint64 chunk[2] = {gzipSupplier->toVirtualOffset(k->start), gzipSupplier->toVirtualOffset(k->end)};
+                fwrite(&chunk, sizeof(chunk), 1, index);
+            }
+        }
+        n_intv = info->intervals.size();
+        fwrite(&n_intv, sizeof(n_intv), 1, index);
+        for (LinearMap::iterator m = info->intervals.begin(); m != info->intervals.end(); m++) {
+            _uint64 ioffset = gzipSupplier->toVirtualOffset(*m);
+            fwrite(&ioffset, sizeof(ioffset), 1, index);
+        }
+    }
+    fclose(index);
+}
+
+   BAMIndexSupplier::RefInfo*
+BAMIndexSupplier::getRefInfo(
+    int refId)
+{
+    return refId >= 0 && refId < genome->getNumPieces() ? &refs[refId] : NULL;
+}
+
+    void
+BAMIndexSupplier::addChunk(
+    int refId,
+    _uint32 bin,
+    _uint64 start,
+    _uint64 end)
+{
+    RefInfo* info = getRefInfo(refId);
+    if (info == NULL) {
+        return;
+    }
+    ChunkVec* chunks = info->bins.tryFind(bin);
+    if (chunks == NULL) {
+        info->bins.tryAdd(bin, ChunkVec(), &chunks);
+    }
+    BAMChunk chunk;
+    chunk.start = start;
+    chunk.end = end;
+    chunks->push_back(chunk);
+}
+
+    void
+BAMIndexSupplier::addInterval(
+    int refId,
+    int pos,
+    _uint64 fileOffset)
+{
+    RefInfo* info = getRefInfo(refId);
+    if (info == NULL) {
+        return;
+    }
+    _uint32 slot = (genome->getPieces()[refId].beginningOffset + pos) / 16384;
+    if (slot >= info->intervals.size()) {
+        for (int i = info->intervals.size(); i < slot; i++) {
+            info->intervals.push_back(UINT64_MAX);
+        }
+        info->intervals.push_back(fileOffset);
+    }
 }

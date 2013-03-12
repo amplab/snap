@@ -356,9 +356,8 @@ private:
 };
 
     DataWriter::FilterSupplier*
-DataWriterSupplier::compose(
-    DataWriter::FilterSupplier* a,
-    DataWriter::FilterSupplier* b)
+DataWriter::FilterSupplier::compose(
+    DataWriter::FilterSupplier* other)
 {
-    return new ComposeFilterSupplier(a, b);
+    return new ComposeFilterSupplier(this, other);
 }

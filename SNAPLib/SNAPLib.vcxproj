@@ -171,6 +171,7 @@
     <ClInclude Include="genome.h" />
     <ClInclude Include="GenomeIndex.h" />
     <ClInclude Include="GoodRandom.h" />
+    <ClInclude Include="GzipDataWriter.h" />
     <ClInclude Include="Hamming.h" />
     <ClInclude Include="HashTable.h" />
     <ClInclude Include="histogram.h" />
