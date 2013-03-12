@@ -83,7 +83,7 @@ public:
         _uint64 physical, delta;
         if (logical != UINT64_MAX && translate(logical, &physical, &delta)) {
             if (delta < 65536 && physical < ((_uint64) 1 << 48)) {
-                return (physical << 48) | delta;
+                return (physical << 16) | delta;
             }
             fprintf(stderr, "Invalid virtual file offset, logical=%llu, start=%llu, delta=%llu\n", logical, physical, delta);
         }

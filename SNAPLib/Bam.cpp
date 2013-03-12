@@ -219,6 +219,25 @@ BAMAlignment::encodeSeq(
     }
 }
 
+    int
+BAMAlignment::l_ref()
+{
+    if (FLAG & SAM_UNMAPPED) {
+        return 0;
+    }
+    if (n_cigar_op == 0) {
+        return l_seq;
+    }
+    _uint32* p = cigar();
+    int len = 0;
+    static const int op_ref[16] = {1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0};
+    for (int i = 0; i < n_cigar_op; i++) {
+        _uint32 op = *p++;
+        len += op_ref[(op & 15)] * (op >> 4);
+    }
+    return len;
+}
+
 // static initializer
 BAMAlignment::_init::_init()
 {
@@ -1069,6 +1088,7 @@ public:
         lastBin(0), binStart(0), lastBamEnd(0)
     {
         refs = new RefInfo[genome->getNumPieces()];
+        readCounts[0] = readCounts[1] = 0;
     }
     
     virtual DataWriter::Filter* getFilter()
@@ -1097,14 +1117,16 @@ private:
 
     void addChunk(int refId, _uint32 bin, _uint64 start, _uint64 end);
 
-    void addInterval(int refId, int pos, _uint64 fileOffset);
+    void addInterval(int refId, int begin, int end, _uint64 fileOffset);
 
     const char* indexFileName;
     const Genome* genome;
     int lastRefId;
     _uint32 lastBin;
     _uint64 binStart;
+    _uint64 firstBamStart;
     _uint64 lastBamEnd;
+    _uint64 readCounts[2]; // mapped, unmapped
     RefInfo* refs;
     GzipWriterFilterSupplier* gzipSupplier;
 };
@@ -1133,16 +1155,26 @@ BAMIndexSupplier::onRead(
     size_t fileOffset,
     int batchIndex)
 {
+    if (bam->refID != lastRefId) {
+        if (lastRefId != -1) {
+            addChunk(lastRefId, BAMAlignment::BAM_EXTRA_BIN, firstBamStart, lastBamEnd);
+            addChunk(lastRefId, BAMAlignment::BAM_EXTRA_BIN, readCounts[0], readCounts[1]);
+            readCounts[0] = readCounts[1] = 0;
+        }
+        firstBamStart = fileOffset;
+    }
+    readCounts[(bam->FLAG & SAM_UNMAPPED) ? 1 : 0]++;
     if (bam->refID != lastRefId || bam->bin != lastBin || lastRefId == -1) {
-        addChunk(lastRefId, lastBin, binStart, fileOffset - 1);
+        addChunk(lastRefId, lastBin, binStart, fileOffset);
         lastBin = bam->bin;
         lastRefId = bam->refID;
         binStart = fileOffset;
     }
-    if (bam->pos != -1 && bam->refID != -1) {
-        addInterval(bam->refID, bam->pos, fileOffset);
+    if (! (bam->FLAG & SAM_UNMAPPED)) {
+        _ASSERT(bam->pos != -1 && bam->refID != -1);
+        addInterval(bam->refID, bam->pos, bam->pos + bam->l_ref() - 1, fileOffset);
     }
-    lastBamEnd = fileOffset + bam->size() - 1;
+    lastBamEnd = fileOffset + bam->size();
 }
 
     void
@@ -1153,6 +1185,8 @@ BAMIndexSupplier::onClose(
     // add final chunk
     if (lastRefId != -1) {
         addChunk(lastRefId, lastBin, binStart, lastBamEnd);
+        addChunk(lastRefId, BAMAlignment::BAM_EXTRA_BIN, firstBamStart, lastBamEnd);
+        addChunk(lastRefId, BAMAlignment::BAM_EXTRA_BIN, readCounts[0], readCounts[1]);
     }
     // extend interval indices to length of pices
     for (int i = 0; i < genome->getNumPieces(); i++) {
@@ -1188,8 +1222,16 @@ BAMIndexSupplier::onClose(
             fwrite(&bin, sizeof(bin), 1, index);
             _int32 n_chunk = j->value.size();
             fwrite(&n_chunk, sizeof(n_chunk), 1, index);
-            for (ChunkVec::iterator k = j->value.begin(); k != j->value.end(); k++) {
-                _uint64 chunk[2] = {gzipSupplier->toVirtualOffset(k->start), gzipSupplier->toVirtualOffset(k->end)};
+            if (bin != BAMAlignment::BAM_EXTRA_BIN) {
+                for (ChunkVec::iterator k = j->value.begin(); k != j->value.end(); k++) {
+                    _uint64 chunk[2] = {gzipSupplier->toVirtualOffset(k->start), gzipSupplier->toVirtualOffset(k->end)};
+                    fwrite(&chunk, sizeof(chunk), 1, index);
+                }
+            } else {
+                _uint64 chunk[2] = {gzipSupplier->toVirtualOffset(j->value[0].start), gzipSupplier->toVirtualOffset(j->value[0].end)};
+                fwrite(&chunk, sizeof(chunk), 1, index);
+                chunk[0] = j->value[1].start;
+                chunk[1] = j->value[1].end;
                 fwrite(&chunk, sizeof(chunk), 1, index);
             }
         }
@@ -1234,18 +1276,22 @@ BAMIndexSupplier::addChunk(
     void
 BAMIndexSupplier::addInterval(
     int refId,
-    int pos,
+    int begin,
+    int end,
     _uint64 fileOffset)
 {
     RefInfo* info = getRefInfo(refId);
     if (info == NULL) {
         return;
     }
-    _uint32 slot = (genome->getPieces()[refId].beginningOffset + pos) / 16384;
-    if (slot >= info->intervals.size()) {
+    _uint32 slot = begin <= 0 ? 0 : ((begin - 1) / 16384);
+    //_uint32 slot2 = end <= 0 ? 0 : ((end - 1) / 16384);
+    if (slot/*2*/ >= info->intervals.size()) {
         for (int i = info->intervals.size(); i < slot; i++) {
             info->intervals.push_back(UINT64_MAX);
         }
-        info->intervals.push_back(fileOffset);
+        //for (int i = slot; i <= slot2; i++) {
+            info->intervals.push_back(fileOffset);
+        //}
     }
 }
