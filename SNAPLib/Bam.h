@@ -131,10 +131,14 @@ struct BAMAlignment
 
     static void encodeSeq(_uint8* nibbles, char* ascii, int length);
 
+    int l_ref(); // length of reference aligned to read
+
     class _init { public: _init(); };
     static _init _init_;
 
     // binning
+
+    static const _uint32 BAM_EXTRA_BIN = 37450; // extra bin for metadata
 
     /* calculate bin given an alignment covering [beg,end) (zero-based, half-close-half-open) */
     static int reg2bin(int beg, int end);

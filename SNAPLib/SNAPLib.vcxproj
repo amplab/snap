@@ -169,6 +169,7 @@
     <ClInclude Include="genome.h" />
     <ClInclude Include="GenomeIndex.h" />
     <ClInclude Include="GoodRandom.h" />
+    <ClInclude Include="GzipDataWriter.h" />
     <ClInclude Include="HashTable.h" />
     <ClInclude Include="histogram.h" />
     <ClInclude Include="IntersectingPairedEndAligner.h" />

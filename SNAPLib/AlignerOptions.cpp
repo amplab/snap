@@ -46,6 +46,9 @@ AlignerOptions::AlignerOptions(
     doAlignerPrefetch(false),
     clipping(ClipBack),
     sortOutput(false),
+    noIndex(false),
+    noDuplicateMarking(false),
+    noQualityCalibration(false),
     sortMemory(0),
     filterFlags(0),
     explorePopularSeeds(false),
@@ -105,6 +108,8 @@ AlignerOptions::usageMessage()
         "  -f   stop on first match within edit distance limit (filtering mode)\n"
         "  -F   filter output (a=aligned only, s=single hit only, u=unaligned only)\n"
         "  -sim specify a similarity map file for computing map quality\n"
+        "  -S   suppress additional processing (sorted BAM output only)\n"
+        "       i=index, d=duplicate marking, q=quality recalibration\n"
 #if     USE_DEVTEAM_OPTIONS
         "  -I   ignore IDs that don't match in the paired-end aligner\n"
         "  -S   selectivity; randomly choose 1/selectivity of the reads to score\n"
@@ -200,6 +205,26 @@ AlignerOptions::parse(
     } else if (strcmp(argv[n], "-so") == 0) {
         sortOutput = true;
         return true;
+    } else if (strcmp(argv[n], "-S") == 0) {
+        if (n + 1 < argc) {
+            n++;
+            for (const char* p = argv[n]; *p; p++) {
+                switch (*p) {
+                case 'i':
+                    noIndex = true;
+                    break;
+                case 'd':
+                    noDuplicateMarking = true;
+                    break;
+                case 'q':
+                    noQualityCalibration = true;
+                    break;
+                default:
+                    return false;
+                }
+            }
+            return true;
+        }
     } else if (strcmp(argv[n], "-sm") == 0) {
         if (n + 1 < argc && argv[n+1][0] >= '0' && argv[n+1][0] <= '9') {
             sortMemory = atoi(argv[n+1]);

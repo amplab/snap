@@ -67,6 +67,8 @@ public:
 
         virtual ~FilterSupplier() {}
 
+        FilterSupplier* compose(FilterSupplier* other);
+
         virtual Filter* getFilter() = 0;
 
         // called when entire file is done
@@ -104,6 +106,8 @@ protected:
 
 class Genome;
 
+class GzipWriterFilterSupplier;
+
 // creates writers for multiple threads
 class DataWriterSupplier
 {
@@ -126,9 +130,9 @@ public:
         int buffers = 3);
 
     // defaults follow BAM output spec
-    static DataWriter::FilterSupplier* gzip(bool bamFormat = true, size_t chunkSize = 0x10000);
+    static GzipWriterFilterSupplier* gzip(bool bamFormat = true, size_t chunkSize = 0x10000);
 
     static DataWriter::FilterSupplier* markDuplicates(const Genome* genome);
 
-    static DataWriter::FilterSupplier* compose(DataWriter::FilterSupplier* a, DataWriter::FilterSupplier* b);
+    static DataWriter::FilterSupplier* bamIndex(const char* indexFileName, const Genome* genome, GzipWriterFilterSupplier* gzipSupplier);
 };

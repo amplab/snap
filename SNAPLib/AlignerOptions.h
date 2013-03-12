@@ -73,6 +73,9 @@ struct AlignerOptions : public AbstractOptions
     SNAPInput          *inputs;
     ReadClippingType    clipping;
     bool                sortOutput;
+    bool                noIndex;
+    bool                noDuplicateMarking;
+    bool                noQualityCalibration;
     unsigned            sortMemory; // total output sorting buffer size in Gb
     unsigned            filterFlags;
     bool                explorePopularSeeds;
