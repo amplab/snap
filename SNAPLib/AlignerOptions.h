@@ -83,6 +83,7 @@ struct AlignerOptions : public AbstractOptions
     AbstractOptions    *extra; // extra options
     const char         *rgLineContents;
     const char         *perfFileName;
+    bool                useTimingBarrier;
 
     void usage();
 

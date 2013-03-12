@@ -25,6 +25,7 @@ Revision History:
 #include "SeedSequencer.h"
 #include "mapq.h"
 #include "exit.h"
+#include <xmmintrin.h>
 
 #ifdef  COMPILE_INTERSECTING
 
@@ -36,9 +37,11 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         unsigned      maxSeeds_,
         unsigned      minSpacing_,                 // Minimum distance to allow between the two ends.
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
+        unsigned      lvLimit,
         BigAllocator  *allocator) :
-    index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), maxSeeds(__min(10,maxSeeds_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
-    landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(20000), extraScoreLimit(5) /* should be a parameter */, maxMergeDistance(31) /*also should be a parameter*/
+    index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), maxSeeds(__min(10,__min(MAX_MAX_SEEDS,maxSeeds_))), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
+    landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(20000), extraScoreLimit(5) /* should be a parameter */, maxMergeDistance(31) /*also should be a parameter*/,
+    maxSmallHits(lvLimit), maxLVCalls(lvLimit)
 {
     allocateDynamicMemory(allocator, maxReadSize, maxHits, maxSeeds);
 
@@ -116,14 +119,15 @@ IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, uns
     baseAligner = new(allocator) BaseAligner(index, 1, maxHitsToConsider, maxK/2, maxReadSize, maxSeedsToUse, 4, landauVishkin, NULL, NULL, allocator);
 }
 
-    unsigned BJBMinLoc = 0xffffffff, BJBMaxLoc = 0;
-
     void 
 IntersectingPairedEndAligner::align(
         Read                  *read0,
         Read                  *read1,
         PairedAlignmentResult *result)
 {
+    result->nLVCalls = 0;
+    result->nSmallHits = 0;
+
     Read rcReads[NUM_READS_PER_PAIR];
 
     unsigned bestResultGenomeLocation[NUM_READS_PER_PAIR];
@@ -318,12 +322,22 @@ IntersectingPairedEndAligner::align(
         whichSetPairToCheck = 1;
     }
 
+    bool gaveUpEarly = false;
+
     while (!(setPairDone[0] && setPairDone[1])) {
+        if (result->nLVCalls > maxLVCalls || result->nSmallHits > maxSmallHits) {
+            //
+            // Just give up and call it with what we've got now, and very low MAPQ.
+            //
+            gaveUpEarly = true;
+            goto doneScoring;
+        }
         //
         // Each iteration of this loop considers a single hit possibility on the read with fewer hits.  We've already looked it up,
         // but have not yet inserted it in the ring buffer.
         //
         unsigned smallReadHitGenomeLocation = intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithFewerHits;
+        result->nSmallHits++;
 
         //
         // We get here after doing a lookup in the smaller read without checking the larger read for potential mate pairs.
@@ -403,6 +417,7 @@ IntersectingPairedEndAligner::align(
         unsigned fewerHitScore;
         double fewerHitProbability;
 
+        result->nLVCalls++;
         scoreLocation(readWithFewerHits, setPairDirection[whichSetPairToCheck][readWithFewerHits], smallReadHitGenomeLocation, intersectionState[whichSetPairToCheck].lastSeedOffsetForReadWithFewerHits, 
             scoreLimit, &fewerHitScore, &fewerHitProbability);
 
@@ -457,12 +472,14 @@ IntersectingPairedEndAligner::align(
                 //
                 // This is in a location that makes it a potential mate candidate.
                 //
-                if (!mateHitLocation->isScored) {
+                if (!mateHitLocation->isScored || mateHitLocation->score == -1 && mateHitLocation->maxK < scoreLimit - fewerHitScore) {
                     //
                     // It's not already scored, so score it.
                     //
-                    scoreLocation(readWithMoreHits, setPairDirection[whichSetPairToCheck][readWithMoreHits], mateHitLocation->genomeLocation, mateHitLocation->seedOffset, scoreLimit, &mateHitLocation->score, &mateHitLocation->matchProbability);
+                    result->nLVCalls++;
+                    scoreLocation(readWithMoreHits, setPairDirection[whichSetPairToCheck][readWithMoreHits], mateHitLocation->genomeLocation, mateHitLocation->seedOffset, scoreLimit - fewerHitScore, &mateHitLocation->score, &mateHitLocation->matchProbability);
                     mateHitLocation->isScored = true;
+                    mateHitLocation->maxK = scoreLimit - fewerHitScore;
                 }
 
                 if (mateHitLocation->score != -1) {
@@ -529,6 +546,9 @@ doneScoring:
             result->location[whichRead] = bestResultGenomeLocation[whichRead];
             result->direction[whichRead] = bestResultDirection[whichRead];
             result->mapq[whichRead] = computeMAPQ(probabilityOfAllPairs, probabilityOfBestPair, bestResultScore[whichRead], popularSeedsSkipped[whichRead], true);
+            if (gaveUpEarly) {
+                result->mapq[whichRead] = __min(3, result->mapq[whichRead] / 5);    // Bizarrely arbitrary
+            }
             result->status[whichRead] = result->mapq[whichRead] > 10 ? SingleHit : MultipleHits;
         }
     }
@@ -658,9 +678,102 @@ IntersectingPairedEndAligner::HashTableHitSet::recordLookup(unsigned seedOffset,
     bool    
 IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(unsigned maxGenomeOffsetToFind, unsigned *actualGenomeOffsetFound, unsigned *seedOffsetFound)
 {
+#if     0
     //
-    // Iterate through all of the lookups and search for the best candidate.
+    // Iterate through all of the lookups and search for the best candidate.  Instead of doing the obvious thing and binary searching each hit set in turn,
+    // we interleave them.  This is so that we can do cache prefetches for the index locations and then do computation on the other hit sets while
+    // the prefetches execute.
     //
+    int limit[MAX_MAX_SEEDS][2];
+    bool done[MAX_MAX_SEEDS];
+    unsigned maxGenomeOffsetToFindThisSeed[MAX_MAX_SEEDS];
+    unsigned nRemaining = nLookupsUsed;
+    unsigned liveHitSets[MAX_MAX_SEEDS];
+
+    for (unsigned i = 0; i < nLookupsUsed; i++) {
+        limit[i][0] = (int)lookups[i].currentHitForIntersection;
+        limit[i][1] = (int)lookups[i].nHits - 1;
+        maxGenomeOffsetToFindThisSeed[i] = maxGenomeOffsetToFind - lookups[i].seedOffset;
+        liveHitSets[i] = i;
+
+        if (doAlignerPrefetch && 0) {
+            //
+            // Prefetch the first location we'll look at now.
+            //
+            _mm_prefetch((const char *)&lookups[i].hits[(limit[i][0] + limit[i][1])/2], _MM_HINT_T2);
+        }
+        done[i] = false;
+    }
+
+    bool anyFound = false;
+    unsigned bestOffsetFound = 0;
+    unsigned liveHitSetIndex = 0;
+    while (nRemaining > 0) {    // Actually, we always exit out of the middle of the loop...  This could be for(;;), but the while conveys the idea more clearly.
+        unsigned whichHitSet = liveHitSets[liveHitSetIndex];
+        _ASSERT(!done[whichHitSet]);
+
+        int probe = (limit[whichHitSet][0] + limit[whichHitSet][1]) / 2;
+        //
+        // Recall that the hit sets are sorted from largest to smallest, so the strange looking logic is actually right.
+        // We're evaluating the expression "lookups[i].hits[probe] <= maxGenomeOffsetToFindThisSeed && (probe == 0 || lookups[i].hits[probe-1] > maxGenomeOffsetToFindThisSeed)"
+        // It's written in this strange way just so the profile tool will show us where the time's going.
+        //
+        unsigned clause1 = lookups[whichHitSet].hits[probe] <= maxGenomeOffsetToFindThisSeed[whichHitSet];
+        unsigned clause2 = probe == 0;
+
+        if (clause1 && (clause2 || lookups[whichHitSet].hits[probe-1] > maxGenomeOffsetToFindThisSeed[whichHitSet])) {
+            anyFound = true;
+            mostRecentLocationReturned = *actualGenomeOffsetFound = bestOffsetFound = __max(lookups[whichHitSet].hits[probe] - lookups[whichHitSet].seedOffset, bestOffsetFound);
+            *seedOffsetFound = lookups[whichHitSet].seedOffset;
+            lookups[whichHitSet].currentHitForIntersection = probe;
+            done[whichHitSet] = true;
+            nRemaining--;
+            if (0 == nRemaining) {
+                break;
+            }
+            //
+            // Swap us out of the live hit sets.
+            //
+            liveHitSets[liveHitSetIndex] = liveHitSets[nRemaining]; // Recall that we've already decremented nRemaining.
+            liveHitSetIndex = (liveHitSetIndex + 1)%nRemaining;
+            continue;
+        }
+
+        if (lookups[whichHitSet].hits[probe] > maxGenomeOffsetToFindThisSeed[whichHitSet]) {   // Recode this without the if to avoid the hard-to-predict branch.
+            limit[whichHitSet][0] = probe + 1;
+        } else {
+            limit[whichHitSet][1] = probe - 1;
+        }
+
+        if (limit[whichHitSet][0] > limit[whichHitSet][1]) {
+            lookups[whichHitSet].currentHitForIntersection = lookups[whichHitSet].nHits;    // We're done with this lookup.
+            done[whichHitSet] = true;
+            nRemaining--;
+            if (0 == nRemaining) {
+                break;
+            }
+            //
+            // Swap us out of the live hit sets.
+            //
+            liveHitSets[liveHitSetIndex] = liveHitSets[nRemaining]; // Recall that we've already decremented nRemaining.
+            liveHitSetIndex = (liveHitSetIndex + 1)%nRemaining;
+            continue;
+        }
+        //
+        // Launch a prefetch for the next hit we'll look at in this hit set.
+        //
+        if (doAlignerPrefetch && 0) {
+            _mm_prefetch((const char *)&lookups[whichHitSet].hits[(limit[whichHitSet][0] + limit[whichHitSet][1])/2], _MM_HINT_T2);
+        }
+
+        //
+        // And proceed on to the next hit set.
+        //
+       liveHitSetIndex = (liveHitSetIndex + 1) % nRemaining;
+    }
+
+#else     // The old way
+    int limit[2];
     bool anyFound = false;
     unsigned bestOffsetFound = 0;
     for (unsigned i = 0; i < nLookupsUsed; i++) {
@@ -674,7 +787,7 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(unsig
             //
             // Recall that the hit sets are sorted from largest to smallest, so the strange looking logic is actually right.
             // We're evaluating the expression "lookups[i].hits[probe] <= maxGenomeOffsetToFindThisSeed && (probe == 0 || lookups[i].hits[probe-1] > maxGenomeOffsetToFindThisSeed)"
-            // It's written in this strange way to arrange to have only one conditional branch, so as to increase performance.
+            // It's written in this strange way just so the profile tool will show us where the time's going.
             //
             unsigned clause1 = lookups[i].hits[probe] <= maxGenomeOffsetToFindThisSeed;
             unsigned clause2 = probe == 0;
@@ -698,6 +811,7 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(unsig
             lookups[i].currentHitForIntersection = lookups[i].nHits;    // We're done with this lookup.
         }
     } // For each lookup
+#endif  // 0
 
     return anyFound;
 }

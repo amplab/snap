@@ -44,7 +44,8 @@ public:
         unsigned      minSpacing_,                 // Minimum distance to allow between the two ends.
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
         unsigned      adaptiveConfDiffThreshold_,  // Increase confDiff if this many seeds in the read have multiple hits.
-        bool          skipAlignToegther_);
+        bool          skipAlignToegther_,
+        unsigned      alignTogetherLVLimit_);
     
     virtual ~SmarterPairedEndAligner();
     
@@ -84,6 +85,7 @@ private:
     unsigned adaptiveConfDiffThreshold;
     int maxBuckets;
     bool skipAlignTogether;
+    unsigned alignTogetherLVLimit;
     
     BaseAligner *singleAligner;
     BaseAligner *mateAligner;

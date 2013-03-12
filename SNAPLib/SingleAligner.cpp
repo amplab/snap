@@ -162,6 +162,16 @@ SingleAlignerContext::runIterationThread()
     aligner->setExplorePopularSeeds(options->explorePopularSeeds);
     aligner->setStopOnFirstHit(options->stopOnFirstHit);
 
+#ifdef  _MSC_VER
+    if (options->useTimingBarrier) {
+        if (0 == InterlockedDecrementAndReturnNewValue(nThreadsAllocatingMemory)) {
+            AllowEventWaitersToProceed(memoryAllocationCompleteBarrier);
+        } else {
+            WaitForEvent(memoryAllocationCompleteBarrier);
+        }
+    }
+#endif  // _MSC_VER
+
     // Align the reads.
     Read *read;
     while (NULL != (read = supplier->getNextRead())) {

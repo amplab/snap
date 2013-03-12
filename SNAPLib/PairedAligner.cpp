@@ -57,6 +57,7 @@ using util::stringEndsWith;
 
 static const int DEFAULT_MIN_SPACING = 100;
 static const int DEFAULT_MAX_SPACING = 1000;
+static const unsigned DEFAULT_ALIGN_TOGETHER_LV_LIMIT = 1000000;
 
 struct PairedAlignerStats : public AlignerStats
 {
@@ -68,6 +69,17 @@ struct PairedAlignerStats : public AlignerStats
     _int64* distanceCounts; // histogram of distances
     // TODO: could save a bit of memory & time since this is a triangular matrix
     _int64* scoreCounts; // 2-d histogram of scores for paired ends
+    static const unsigned maxMapq = 70;
+    static const unsigned nTimeBuckets = 32;
+    static const unsigned nHitsBuckets = 32;
+    static const unsigned nLVCallsBuckets = 32;
+
+    _int64 alignTogetherByMapqHistogram[maxMapq+1][nTimeBuckets];
+    _int64 totalTimeByMapqHistogram[maxMapq+1][nTimeBuckets];
+    _int64 nSmallHitsByTimeHistogram[nHitsBuckets][nTimeBuckets];
+    _int64 nLVCallsByTimeHistogram[nLVCallsBuckets][nTimeBuckets];
+    _int64 mapqByNLVCallsHistogram[maxMapq+1][nLVCallsBuckets];
+    _int64 mapqByNSmallHitsHistogram[maxMapq+1][nHitsBuckets];
 
     PairedAlignerStats(AbstractStats* i_extra = NULL);
 
@@ -88,7 +100,45 @@ struct PairedAlignerStats : public AlignerStats
         scoreCounts[s0*(MAX_SCORE+1)+s1]++;
     }
 
-    virtual void add(AbstractStats * other);
+    inline void recordAlignTogetherMapqAndTime(unsigned mapq, _int64 timeInNanos, unsigned nSmallHits, unsigned nLVCalls) {
+        int timeBucket;
+        _int64 dividedTime = timeInNanos;
+        for (timeBucket = 0; timeBucket < nTimeBuckets-1; timeBucket++) {
+            if (dividedTime == 0) break;
+            dividedTime /= 2;
+        }
+
+        alignTogetherByMapqHistogram[mapq][timeBucket]++;
+        totalTimeByMapqHistogram[mapq][timeBucket] += timeInNanos;
+
+        int nHitsBucket;
+        int dividedHits = nSmallHits;
+        for (nHitsBucket = 0; nHitsBucket < nHitsBuckets; nHitsBucket++) {
+            if (0 == dividedHits) break;
+            dividedHits /= 2;
+        }
+        _ASSERT((char *)&nSmallHitsByTimeHistogram[nHitsBucket][timeBucket] < (char *)(this + 1));
+        nSmallHitsByTimeHistogram[nHitsBucket][timeBucket]++;
+
+        int nLVCallsBucket;
+        int dividedLVCalls = nLVCalls;
+        for (nLVCallsBucket = 0; nLVCallsBucket < nLVCallsBuckets; nLVCallsBucket++) {
+            if (dividedLVCalls == 0) break;
+            dividedLVCalls /= 2;
+        }
+        _ASSERT((char *)&nLVCallsByTimeHistogram[nLVCallsBucket][timeBucket] < (char *)(this + 1));
+        nLVCallsByTimeHistogram[nLVCallsBucket][timeBucket]++;
+
+        _ASSERT((char *)&mapqByNLVCallsHistogram[mapq][nLVCallsBucket] < (char *)(this + 1));
+        mapqByNLVCallsHistogram[mapq][nLVCallsBucket]++;
+
+        _ASSERT((char *)&mapqByNSmallHitsHistogram[mapq][nHitsBucket] < (char *)(this + 1));
+        mapqByNSmallHitsHistogram[mapq][nHitsBucket]++;
+    }
+
+
+
+    virtual void add(const AbstractStats * other);
 
     virtual void printHistograms(FILE* output);
 };
@@ -107,6 +157,29 @@ PairedAlignerStats::PairedAlignerStats(AbstractStats* i_extra)
     int ssize = sizeof(_int64) * (MAX_SCORE+1)*(MAX_SCORE+1);
     scoreCounts = (_int64*)BigAlloc(ssize);
     memset(scoreCounts, 0, ssize);
+
+    for (unsigned mapq = 0; mapq <= maxMapq; mapq++) {
+        for (unsigned timeBucket = 0; timeBucket < nTimeBuckets; timeBucket++) {
+            alignTogetherByMapqHistogram[mapq][timeBucket] = 0;
+            totalTimeByMapqHistogram[mapq][timeBucket] = 0;
+        }
+        for (unsigned smallHits = 0; smallHits < nHitsBuckets; smallHits++) {
+            mapqByNSmallHitsHistogram[mapq][smallHits] = 0;
+        }
+        for (unsigned lvCalls = 0; lvCalls < nLVCallsBuckets; lvCalls++) {
+            mapqByNLVCallsHistogram[mapq][lvCalls] = 0;
+        }
+    }
+
+    for (unsigned timeBucket = 0; timeBucket < nTimeBuckets; timeBucket++) {
+        for (unsigned smallHits = 0; smallHits < nHitsBuckets; smallHits++) {
+            nSmallHitsByTimeHistogram[smallHits][timeBucket] = 0;
+        }
+        for (unsigned lvCalls = 0; lvCalls < nLVCallsBuckets; lvCalls++) {
+            nLVCallsByTimeHistogram[lvCalls][timeBucket] = 0;
+        }
+    }
+
 }
 
 PairedAlignerStats::~PairedAlignerStats()
@@ -115,7 +188,7 @@ PairedAlignerStats::~PairedAlignerStats()
     BigDealloc(scoreCounts);
 }
 
-void PairedAlignerStats::add(AbstractStats * i_other)
+void PairedAlignerStats::add(const AbstractStats * i_other)
 {
     AlignerStats::add(i_other);
     PairedAlignerStats* other = (PairedAlignerStats*) i_other;
@@ -125,11 +198,35 @@ void PairedAlignerStats::add(AbstractStats * i_other)
     for (int i = 0; i < (MAX_SCORE + 1) * (MAX_SCORE + 1); i++) {
         scoreCounts[i] += other->scoreCounts[i];
     }
+
+    for (unsigned mapq = 0; mapq <= maxMapq; mapq++) {
+        for (unsigned timeBucket = 0; timeBucket < nTimeBuckets; timeBucket++) {
+            alignTogetherByMapqHistogram[mapq][timeBucket] += other->alignTogetherByMapqHistogram[mapq][timeBucket];
+            totalTimeByMapqHistogram[mapq][timeBucket] += other->totalTimeByMapqHistogram[mapq][timeBucket];
+        }
+        for (unsigned smallHits = 0; smallHits < nHitsBuckets; smallHits++) {
+            mapqByNSmallHitsHistogram[mapq][smallHits] += other->mapqByNSmallHitsHistogram[mapq][smallHits];
+        }
+        for (unsigned lvCalls = 0; lvCalls < nLVCallsBuckets; lvCalls++) {
+            mapqByNLVCallsHistogram[mapq][lvCalls] += other->mapqByNLVCallsHistogram[mapq][lvCalls];
+        }
+    }
+
+    for (unsigned timeBucket = 0; timeBucket < nTimeBuckets; timeBucket++) {
+        for (unsigned smallHits = 0; smallHits < nHitsBuckets; smallHits++) {
+            nSmallHitsByTimeHistogram[smallHits][timeBucket] += other->nSmallHitsByTimeHistogram[smallHits][timeBucket];
+        }
+        for (unsigned lvCalls = 0; lvCalls < nLVCallsBuckets; lvCalls++) {
+            nLVCallsByTimeHistogram[lvCalls][timeBucket] += other->nLVCallsByTimeHistogram[lvCalls][timeBucket];
+        }
+    }
+
 }
 
 void PairedAlignerStats::printHistograms(FILE* output)
 {
     AlignerStats::printHistograms(output);
+#if    0
     // print all non-zeros
     fprintf(output, "\ndistance\tpairs\n");
     for (int i = 0; i <= MAX_DISTANCE; i++) {
@@ -155,13 +252,84 @@ void PairedAlignerStats::printHistograms(FILE* output)
             fprintf(output, "%lld%s", scoreCounts[s0 * (MAX_SCORE + 1) + s1], s0 < s1 ? "\t" : "\n");
         }
     }
+
+    printf("Align together calls by max MAPQ and time\n");
+    printf("MAPQ/time\t0\t1ns\t2ns\t4ns\t8ns\t16ns\t32ns\t64ns\t128ns\t256ns\t512ns\t1us\t2us\t4us\t8us\t16us\t32us\t64us\t128us\t256us\t512us\t1ms\t2ms\t4ms\t8ms\t16ms\t32ms\t64ms\t128ms\t256ms\t512ms\t1s\t2s\n");
+    for (unsigned i = 0; i <= maxMapq; i++) {
+        printf("%d\t",i);
+        for (unsigned j = 0; j < nTimeBuckets; j++) {
+            printf("%lld\t",alignTogetherByMapqHistogram[i][j]);
+        }
+        printf("\n");
+    }
+
+    printf("\nAlign together time by max MAPQ and time\n");
+    printf("MAPQ/time\t0\t1ns\t2ns\t4ns\t8ns\t16ns\t32ns\t64ns\t128ns\t256ns\t512ns\t1us\t2us\t4us\t8us\t16us\t32us\t64us\t128us\t256us\t512us\t1ms\t2ms\t4ms\t8ms\t16ms\t32ms\t64ms\t128ms\t256ms\t512ms\t1s\t2s\n");
+    for (unsigned i = 0; i <= maxMapq; i++) {
+        printf("%d\t",i);
+        for (unsigned j = 0; j < nTimeBuckets; j++) {
+            printf("%lld\t",totalTimeByMapqHistogram[i][j]);
+        }
+        printf("\n");
+    }
+
+    printf("\nAlign together small hits by time\n");
+    printf("nSmallHits/time\t0\t1ns\t2ns\t4ns\t8ns\t16ns\t32ns\t64ns\t128ns\t256ns\t512ns\t1us\t2us\t4us\t8us\t16us\t32us\t64us\t128us\t256us\t512us\t1ms\t2ms\t4ms\t8ms\t16ms\t32ms\t64ms\t128ms\t256ms\t512ms\t1s\t2s\n");
+    for (unsigned smallHits = 0; smallHits < nHitsBuckets; smallHits++) {
+        printf("%u\t", (unsigned) 1 << smallHits);
+        for (unsigned timeBucket = 0; timeBucket < nTimeBuckets; timeBucket++) {
+            printf("%lld\t", nSmallHitsByTimeHistogram[smallHits][timeBucket]);
+        }
+        printf("\n");
+    }
+
+    printf("\nAlign together LV Calls by time\n");
+    printf("nLV Calls/time\t0\t1ns\t2ns\t4ns\t8ns\t16ns\t32ns\t64ns\t128ns\t256ns\t512ns\t1us\t2us\t4us\t8us\t16us\t32us\t64us\t128us\t256us\t512us\t1ms\t2ms\t4ms\t8ms\t16ms\t32ms\t64ms\t128ms\t256ms\t512ms\t1s\t2s\n");
+    for (unsigned lvCalls = 0; lvCalls < nLVCallsBuckets; lvCalls++) {
+        printf("%u\t", (unsigned) 1 << lvCalls);
+        for (unsigned timeBucket = 0; timeBucket < nTimeBuckets; timeBucket++) {
+            printf("%lld\t", nLVCallsByTimeHistogram[lvCalls][timeBucket]);
+        }
+        printf("\n");
+    }
+
+    printf("\nAlign together Small hits by mapq\n");
+    printf("nSmallHits/mapq");
+    for (unsigned mapq = 0; mapq <= maxMapq; mapq++) {
+        printf("\t%d", mapq);
+    }
+    printf("\n");
+    for (unsigned smallHits = 0; smallHits < nHitsBuckets; smallHits++) {
+        printf("%u\t", (unsigned) 1 << smallHits);
+        for (unsigned mapq = 0; mapq <= maxMapq; mapq++) {
+            printf("%lld\t" ,mapqByNSmallHitsHistogram[mapq][smallHits]);
+        }
+        printf("\n");
+    }
+
+    printf("\nAlign together LVCalls hits by mapq\n");
+    printf("nSmallHits/mapq");
+    for (unsigned mapq = 0; mapq <= maxMapq; mapq++) {
+        printf("\t%d", mapq);
+    }
+    printf("\n");
+    for (unsigned lvCalls = 0; lvCalls < nHitsBuckets; lvCalls++) {
+        printf("%u\t", (unsigned) 1 << lvCalls);
+        for (unsigned mapq = 0; mapq <= maxMapq; mapq++) {
+            printf("%lld\t" ,mapqByNLVCallsHistogram[mapq][lvCalls]);
+        }
+        printf("\n");
+    }
+
+#endif  // 0
 }
 
 PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
     : AlignerOptions(i_commandLine, true),
     minSpacing(DEFAULT_MIN_SPACING),
     maxSpacing(DEFAULT_MAX_SPACING),
-    skipAlignTogether(false)
+    skipAlignTogether(false),
+    alignTogetherLVLimit(DEFAULT_ALIGN_TOGETHER_LV_LIMIT)
 {
 }
 
@@ -170,9 +338,11 @@ void PairedAlignerOptions::usageMessage()
     AlignerOptions::usageMessage();
     printf(
         "  -s   min and max spacing to allow between paired ends (default: %d %d)\n"
-        "  -fast Skip some rare but very expensive cases.  Results in fewer alignments, but they're high quality and very quick.\n",
+        "  -fast Skip some rare but very expensive cases.  Results in fewer alignments, but they're high quality and very quick.\n"
+        "  -l   limit for number of candidates scored in align together (default: %d)\n",
         DEFAULT_MIN_SPACING,
-        DEFAULT_MAX_SPACING);
+        DEFAULT_MAX_SPACING,
+        DEFAULT_ALIGN_TOGETHER_LV_LIMIT);
 }
 
 bool PairedAlignerOptions::parse(const char** argv, int argc, int& n)
@@ -182,6 +352,13 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n)
             minSpacing = atoi(argv[n+1]);
             maxSpacing = atoi(argv[n+2]);
             n += 2;
+            return true;
+        } 
+        return false;
+    } else if (strcmp(argv[n], "-l") == 0) {
+        if (n + 1 < argc) {
+            alignTogetherLVLimit = atoi(argv[n+1]);
+            n += 1;
             return true;
         } 
         return false;
@@ -294,6 +471,7 @@ void PairedAlignerContext::initialize()
     minSpacing = options2->minSpacing;
     maxSpacing = options2->maxSpacing;
     skipAlignTogether = options2->skipAlignTogether;
+    alignTogetherLVLimit = options2->alignTogetherLVLimit;
     ignoreMismatchedIDs = options2->ignoreMismatchedIDs;
 }
 
@@ -331,7 +509,8 @@ void PairedAlignerContext::runIterationThread()
             minSpacing,
             maxSpacing,
             adaptiveConfDiff,
-            skipAlignTogether);
+            skipAlignTogether,
+            alignTogetherLVLimit);
 #endif  // 0
     BigAllocator *allocator = new BigAllocator(100 * 1024 * 1024);
 //    IntersectingPairedEndAligner *aligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, allocator);
@@ -341,6 +520,16 @@ void PairedAlignerContext::runIterationThread()
     allocator->assertAllMemoryUsed();*/
 
     ReadWriter *readWriter = this->readWriter;
+
+#ifdef  _MSC_VER
+    if (options->useTimingBarrier) {
+        if (0 == InterlockedDecrementAndReturnNewValue(nThreadsAllocatingMemory)) {
+            AllowEventWaitersToProceed(memoryAllocationCompleteBarrier);
+        } else {
+            WaitForEvent(memoryAllocationCompleteBarrier);
+        }
+    }
+#endif  // _MSC_VER
 
     // Align the reads.
     Read *read0;
@@ -461,6 +650,9 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
     if (isOneLocation(result->status[0]) && isOneLocation(result->status[1])) {
         stats->incrementDistance(abs((int) (result->location[0] - result->location[1])));
         stats->incrementScore(result->score[0], result->score[1]);
+    }
+    if (result->fromAlignTogether) {
+        stats->recordAlignTogetherMapqAndTime(__max(result->mapq[0], result->mapq[1]), result->nanosInAlignTogether, result->nSmallHits, result->nLVCalls);
     }
 }
 

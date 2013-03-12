@@ -60,12 +60,13 @@ SmarterPairedEndAligner::SmarterPairedEndAligner(
          unsigned      minSpacing_,
          unsigned      maxSpacing_,
          unsigned      adaptiveConfDiffThreshold_,
-         bool          skipAlignTogether_)
+         bool          skipAlignTogether_,
+         unsigned      alignTogetherLVLimit_)
  :   index(index_), maxReadSize(maxReadSize_), confDiff(confDiff_), maxHits(maxHits_),
      maxK(maxK_), maxSeeds(maxSeeds_), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
      adaptiveConfDiffThreshold(adaptiveConfDiffThreshold_), seedLen(index_->getSeedLength()),
      maxBuckets(FirstPowerOf2GreaterThanOrEqualTo(maxSeeds_ * maxHits_ * 4)), lv(2 * maxBuckets),
-     skipAlignTogether(skipAlignTogether_)
+     skipAlignTogether(skipAlignTogether_), alignTogetherLVLimit(alignTogetherLVLimit_)
 {
     // Initialize the bucket data structures.
     buckets = new Bucket[maxBuckets];
@@ -124,7 +125,7 @@ SmarterPairedEndAligner::SmarterPairedEndAligner(
     mateAligner = new BaseAligner(index, confDiff, maxHits, maxK, maxReadSize,
                                   maxSeeds, adaptiveConfDiffThreshold, &lv);
 
-    intersectingAligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxK, maxSeeds, minSpacing, maxSpacing, &countingAllocator);
+    intersectingAligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxK, maxSeeds, minSpacing, maxSpacing, alignTogetherLVLimit, &countingAllocator);
 
     //
     // Allocate these all in one big allocation.
@@ -163,12 +164,16 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
     result->location[0] = 0xFFFFFFFF;
     result->location[1] = 0xFFFFFFFF;
 
+    result->fromAlignTogether = false;
+    result->nanosInAlignTogether = 0;
+
     unsigned bestScore[NUM_READS_PER_PAIR] = {INFINITE_SCORE, INFINITE_SCORE};
     unsigned bestMapq[NUM_READS_PER_PAIR] = {0, 0};
     unsigned singleLoc[NUM_READS_PER_PAIR] = {0xFFFFFFFF, 0xFFFFFFFF};
     Direction singleDirection[NUM_READS_PER_PAIR] = {FORWARD, FORWARD};
     bool certainlyNotFound[NUM_READS_PER_PAIR] = {false, false};
     bool bestScoreCertain[NUM_READS_PER_PAIR] = {false, false};
+    AlignmentResult singleStatus[NUM_READS_PER_PAIR] = {NotFound, NotFound};
     
     TRACE("Aligning read pair %.*s:\n%.*s\n%.*s\n",
             reads[0]->getIdLength(), reads[0]->getId(),
@@ -198,6 +203,9 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
         if (score0 <= (int) (maxK + confDiff)) {
             bestScore[r] = score0;
             bestMapq[r] = mapq0;
+            singleLoc[r] = loc0;
+            singleDirection[r] = direction0;
+            singleStatus[r] = status0;
         } else {
             bestScore[r] = INFINITE_SCORE;
             bestMapq[r] = 0;
@@ -240,8 +248,7 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
             } else if(status1 == NotFound) {
                 // We found read r at one location and didn't find the mate nearby. Let's remember because
                 // if the mate is not found anywhere else, we can just return a location for read r.
-                singleLoc[r] = loc0;
-                singleDirection[r] = direction0;
+
                 numSingleWithNotFound++;
             }
         } else if (status0 == NotFound) {
@@ -327,12 +334,29 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
 
     if (skipAlignTogether) {
         return;
-    } else {
-        // At least one read was MultipleHits; let's look for them simultaneously.
-        _int64 start = timeInNanos();
-    //BJB   alignTogether(reads, result, lowerBound);
-        intersectingAligner->align(read0, read1, result); // BJB
-        _int64 end = timeInNanos();
+    } 
+    // At least one read was MultipleHits; let's look for them simultaneously.
+    _int64 start = timeInNanos();
+    intersectingAligner->align(read0, read1, result); 
+    _int64 end = timeInNanos();
+
+    result->nanosInAlignTogether = end - start;
+    result->fromAlignTogether = true;
+
+    //
+    // If the intersecting aligner didn't find an alignment for these reads, maybe we've got
+    // something strange like reads around a structural variation of some kind.  Just use the
+    // results of the single aligner, but with MAPQ reduced significantly.
+    //
+    for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
+        if (result->status[r] == NotFound) {
+            result->fromAlignTogether = false;
+            result->location[r] = singleLoc[r];
+            result->direction[r] = singleDirection[r];
+            result->mapq[r] = bestMapq[r] / 4;
+            result->score[r] = bestScore[r];
+            result->status[r] = singleStatus[r];
+        }
     }
 
     TRACE("alignTogether took %lld ns and returned %s %s\n", end - start,

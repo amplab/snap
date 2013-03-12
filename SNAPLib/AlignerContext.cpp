@@ -214,7 +214,7 @@ AlignerContext::finishIteration()
         writerSupplier = NULL;
     }
 
-    alignTime = timeInMillis() - alignStart;
+    alignTime = /*timeInMillis() - alignStart -- use the time from ParallelTask.h, that may exclude memory allocation time*/ time;
 }
 
     bool
@@ -251,14 +251,14 @@ AlignerContext::printStats()
     } else {
         snprintf(errorRate, sizeof(errorRate), "-");
     }
-    printf("%d\t%d\t%d\t%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%.0f\n",
+    printf("%d\t%d\t%d\t%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%.0f (at: %lld)\n",
             confDiff_, maxHits_, maxDist_, numSeeds_, adaptiveConfDiff_,
             100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
             100.0 * stats->singleHits / usefulReads,
             100.0 * stats->multiHits / usefulReads,
             100.0 * stats->notFound / usefulReads,
             errorRate,
-            (1000.0 * usefulReads) / max(alignTime, (_int64) 1));
+            (1000.0 * usefulReads) / max(alignTime, (_int64) 1), alignTime);
     if (NULL != perfFile) {
         fprintf(perfFile, "%d\t%d\t%d\t%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%.0f\n",
                 confDiff_, maxHits_, maxDist_, numSeeds_, adaptiveConfDiff_,
@@ -287,6 +287,8 @@ AlignerContext::printStats()
             printf("%d\t%d\t%d\t%.3f\t%.2E\n", i, stats->mapqHistogram[i], stats->mapqErrors[i], truePositives, falsePositives);
         }
     }
+
+    stats->printHistograms(stdout);
 
 #ifdef  TIME_STRING_DISTANCE
     printf("%llds, %lld calls in BSD noneClose, not -1\n",  stats->nanosTimeInBSD[0][1]/1000000000, stats->BSDCounts[0][1]);

@@ -192,7 +192,7 @@ FASTQReader::getNextRead(Read *readToUpdate)
     char* buffer;
     _int64 validBytes;
     if (! data->getData(&buffer, &validBytes)) {
-        data->nextBatch(/*false BJB - bug workaround for simple case*/);
+        data->nextBatch();
         if (! data->getData(&buffer, &validBytes)) {
             return false;
         }

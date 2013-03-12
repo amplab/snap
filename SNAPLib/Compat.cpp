@@ -909,27 +909,27 @@ void ResetSingleWaiterObject(SingleWaiterObject *waiter)
 
 void CreateEventObject(EventObject *newEvent)
 {
-    _ASSERT(false); // todo: implement
+    soft_exit(1);
 }
 
 void DestroyEventObject(EventObject *eventObject)
 {
-    _ASSERT(false); // todo: implement
+   soft_exit(1);
 }
 
 void AllowEventWaitersToProceed(EventObject *eventObject)
 {
-    _ASSERT(false); // todo: implement
+   soft_exit(1);
 }
 
 void PreventEventWaitersFromProceeding(EventObject *eventObject)
 {
-    _ASSERT(false); // todo: implement
+   soft_exit(1);
 }
 
 void WaitForEvent(EventObject *eventObject)
 {
-    _ASSERT(false); // todo: implement
+   soft_exit(1);
 }
 
 int InterlockedIncrementAndReturnNewValue(volatile int *valueToDecrement)

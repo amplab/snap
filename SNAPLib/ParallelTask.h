@@ -79,6 +79,8 @@ struct TaskContextBase
     SingleWaiterObject *doneWaiter;       // Gets notified when the last thread ends.
     volatile int        runningThreads;
     volatile int       *pRunningThreads;
+    volatile int                        *nThreadsAllocatingMemory;
+    EventObject                         *memoryAllocationCompleteBarrier;
 };
 
 
@@ -101,6 +103,15 @@ ParallelTask<TContext>::run()
         fprintf(stderr, "Failed to create single waiter object for thread completion.\n");
         soft_exit(1);
     }
+
+#ifdef  _MSC_VER
+    int nThreadsAllocatingMemory = common->totalThreads;
+    EventObject memoryAllocationCompleteBarrier;
+    CreateEventObject(&memoryAllocationCompleteBarrier);
+#endif  // _MSC_VER
+
+    common->nThreadsAllocatingMemory = &nThreadsAllocatingMemory;
+    common->memoryAllocationCompleteBarrier = &memoryAllocationCompleteBarrier;
     common->doneWaiter = &doneWaiter;
     common->runningThreads = common->totalThreads;
     common->pRunningThreads = &common->runningThreads;
@@ -117,11 +128,19 @@ ParallelTask<TContext>::run()
         }
     }
 
+#ifdef  _MSC_VER
+    if (common->options->useTimingBarrier) {
+        WaitForEvent(&memoryAllocationCompleteBarrier);
+        start = timeInMillis();
+    }
+#endif  // _MSC_VER
+
     if (!WaitForSingleWaiterObject(&doneWaiter)) {
         fprintf(stderr, "Waiting for all threads to finish failed\n");
         soft_exit(1);
     }
     DestroySingleWaiterObject(&doneWaiter);
+    DestroyEventObject(&memoryAllocationCompleteBarrier);
 
     for (int i = 0; i < common->totalThreads; i++) {
         contexts[i].finishThread(common);

@@ -57,8 +57,6 @@ public:
 
     void finishThread(AlignerContext* common);
 
-protected:
-    
     void printStatsHeader();
     
     void printStats();
@@ -113,6 +111,7 @@ protected:
     const char                         **argv;
     const char                          *version;
     FILE                                *perfFile;
+
 
     // iteration variables
     int                 confDiff_;

@@ -55,7 +55,8 @@ AlignerOptions::AlignerOptions(
     misalignThreshold(15),
 	extra(NULL),
     rgLineContents(NULL),
-    perfFileName(NULL)
+    perfFileName(NULL),
+    useTimingBarrier(false)
 {
     if (forPairedEnd) {
         maxDist             = 15;
@@ -108,6 +109,9 @@ AlignerOptions::usageMessage()
         "  -I   ignore IDs that don't match in the paired-end aligner\n"
         "  -S   selectivity; randomly choose 1/selectivity of the reads to score\n"
         "  -E   misalign threshold (min distance from correct location to count as error)\n"
+#ifdef  _MSC_VER    // Only need this on Windows, since memory allocation is fast on Linux
+        "  -B   Insert barrier after per-thread memory allocation to improve timing accuracy\n"
+#endif  // _MSC_VER
 #endif  // USE_DEVTEAM_OPTIONS
         "  -Cxx must be followed by two + or - symbols saying whether to clip low-quality\n"
         "       bases from front and back of read respectively; default: back only (-C-+)\n"
@@ -116,6 +120,7 @@ AlignerOptions::usageMessage()
         "  -G   specify a gap penalty to use when generating CIGAR strings\n"
         "  -pf  specify the name of a file to contain the run speed\n"
         "  --hp Indicates not to use huge pages (this may speed up index load and slow down alignment)\n"
+
 // not written yet        "  -r   Specify the content of the @RG line in the SAM header.\n"
             ,
             commandLine,
@@ -243,6 +248,11 @@ AlignerOptions::parse(
             n++;
             return true;
         }
+#ifdef  _MSC_VER
+    } else if (strcmp(argv[n], "-B") == 0) {
+        useTimingBarrier = true;
+        return true;
+#endif  // _MSC_VER
 #endif  // USE_DEVTEAM_OPTIONS
 	} else if (strcmp(argv[n], "-M") == 0) {
 		useM = true;

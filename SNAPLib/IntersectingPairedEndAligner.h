@@ -43,6 +43,7 @@ public:
         unsigned      maxSeeds_,
         unsigned      minSpacing_,                 // Minimum distance to allow between the two ends.
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
+        unsigned      lvLimit,                     // limit on number of calls to LV
         BigAllocator  *allocator); 
     
     virtual ~IntersectingPairedEndAligner();
@@ -75,11 +76,14 @@ private:
     unsigned        maxK;
     unsigned        extraScoreLimit;    // How far beyond out best hit to look to improve MAPQ accuracy
     unsigned        maxSeeds;
+    static const unsigned MAX_MAX_SEEDS = 30;
     unsigned        minSpacing;
     unsigned        maxSpacing;
     unsigned        seedLen;
     unsigned        distanceToSearchBeyondBestScore;
     unsigned        maxMergeDistance;
+    unsigned        maxSmallHits;
+    unsigned        maxLVCalls;
 
     struct HashTableLookup {
         unsigned        seedOffset;
@@ -149,6 +153,7 @@ private:
         unsigned        seedOffset;
         bool            isScored;           // Mate pairs are sometimes not scored when they're inserted, because they
         unsigned        score;
+        unsigned        maxK;               // The maxK that this was scored with (we may need to rescore if we need a higher maxK and score is -1)
         double          matchProbability;
 
         //
