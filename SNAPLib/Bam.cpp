@@ -1154,6 +1154,15 @@ BAMIndexSupplier::onClose(
     if (lastRefId != -1) {
         addChunk(lastRefId, lastBin, binStart, lastBamEnd);
     }
+    // extend interval indices to length of pices
+    for (int i = 0; i < genome->getNumPieces(); i++) {
+        RefInfo* ref = getRefInfo(i);
+        int end = i + 1 < genome->getNumPieces() ? genome->getPieces()[i + 1].beginningOffset : genome->getCountOfBases();
+        int last = (end - genome->getPieces()[i].beginningOffset - 1) / 16384;
+        for (int j = ref->intervals.size(); j <= last; j++) {
+            ref->intervals.push_back(0);
+        }
+    }
 
     // write out index file
     FILE* index = fopen(indexFileName, "wb");

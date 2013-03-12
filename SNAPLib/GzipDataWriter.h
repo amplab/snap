@@ -87,7 +87,7 @@ public:
             }
             fprintf(stderr, "Invalid virtual file offset, logical=%llu, start=%llu, delta=%llu\n", logical, physical, delta);
         }
-        return UINT64_MAX;
+        return 0;
     }
 
 private:
