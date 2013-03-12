@@ -429,9 +429,9 @@ SAMReader::init(
 SAMReader::reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
 {
     _ASSERT(-1 != headerSize);  // Must call init() before reinit()
-    _int64 adjusted = max(headerSize, startingOffset);
+    _int64 adjusted = max((_int64) headerSize, startingOffset);
     data->reinit(
-        max(1LL, adjusted) - 1,  // -1 is to point at the previous newline so we don't skip the first line.
+	max((_int64) 1, adjusted) - 1,  // -1 is to point at the previous newline so we don't skip the first line.
         amountOfFileToProcess);
     char* buffer;
     _int64 validBytes;

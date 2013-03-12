@@ -30,6 +30,12 @@ public:
         other.entries = NULL;
     }
 
+    VariableSizeVector(const VariableSizeVector& other)
+        : entries(other.entries), count(other.count), capacity(other.capacity)
+    {
+      _ASSERT(other.count == 0 && other.entries == NULL);
+    }
+
     ~VariableSizeVector()
     {
         if (entries != NULL) {

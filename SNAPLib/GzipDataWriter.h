@@ -100,5 +100,5 @@ private:
 
     const bool bamFormat;
     const size_t chunkSize;
-    VariableSizeVector<pair<_uint64,_uint64>> translation;
+    VariableSizeVector< pair<_uint64,_uint64> > translation;
 };
