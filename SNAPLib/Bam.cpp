@@ -1101,6 +1101,10 @@ private:
     friend class BAMIndexFilter;
 
     struct BAMChunk {
+        BAMChunk() : start(0), end(0) {}
+        BAMChunk(BAMChunk& a) : start(a.start), end(a.end) {}
+        BAMChunk(const BAMChunk& a) : start(a.start), end(a.end) {}
+
         _uint64 start, end;
     };
     typedef VariableSizeVector<BAMChunk> ChunkVec;
