@@ -64,7 +64,7 @@ AlignerOptions::AlignerOptions(
     if (forPairedEnd) {
         maxDist             = 15;
         numSeeds            = 25;
-        maxHits             = 250;
+        maxHits             = 2000;
         confDiff            = 1;
         adaptiveConfDiff    = 7;
     } else {

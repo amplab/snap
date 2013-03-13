@@ -55,7 +55,7 @@ using namespace std;
 
 using util::stringEndsWith;
 
-static const int DEFAULT_MIN_SPACING = 100;
+static const int DEFAULT_MIN_SPACING = 50;
 static const int DEFAULT_MAX_SPACING = 1000;
 static const unsigned DEFAULT_ALIGN_TOGETHER_LV_LIMIT = 1000000;
 
