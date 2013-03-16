@@ -43,6 +43,7 @@ public:
         unsigned      maxSeeds_,
         unsigned      minSpacing_,                 // Minimum distance to allow between the two ends.
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
+        bool          forceSpacing_,
         unsigned      adaptiveConfDiffThreshold_,  // Increase confDiff if this many seeds in the read have multiple hits.
         bool          skipAlignToegther_,
         unsigned      alignTogetherLVLimit_);
@@ -82,6 +83,7 @@ private:
     unsigned maxSeeds;
     unsigned minSpacing;
     unsigned maxSpacing;
+    bool forceSpacing;
     unsigned adaptiveConfDiffThreshold;
     int maxBuckets;
     bool skipAlignTogether;

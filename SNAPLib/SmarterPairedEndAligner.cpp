@@ -59,11 +59,12 @@ SmarterPairedEndAligner::SmarterPairedEndAligner(
          unsigned      maxSeeds_,
          unsigned      minSpacing_,
          unsigned      maxSpacing_,
+         bool          forceSpacing_,
          unsigned      adaptiveConfDiffThreshold_,
          bool          skipAlignTogether_,
          unsigned      alignTogetherLVLimit_)
  :   index(index_), maxReadSize(maxReadSize_), confDiff(confDiff_), maxHits(maxHits_),
-     maxK(maxK_), maxSeeds(maxSeeds_), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
+     maxK(maxK_), maxSeeds(maxSeeds_), minSpacing(minSpacing_), maxSpacing(maxSpacing_), forceSpacing(forceSpacing_),
      adaptiveConfDiffThreshold(adaptiveConfDiffThreshold_), seedLen(index_->getSeedLength()),
      maxBuckets(FirstPowerOf2GreaterThanOrEqualTo(maxSeeds_ * maxHits_ * 4)), lv(2 * maxBuckets),
      skipAlignTogether(skipAlignTogether_), alignTogetherLVLimit(alignTogetherLVLimit_)
@@ -342,6 +343,10 @@ void SmarterPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRes
 
     result->nanosInAlignTogether = end - start;
     result->fromAlignTogether = true;
+
+    if (forceSpacing) {
+        return;
+    }
 
     //
     // If the intersecting aligner didn't find an alignment for these reads, maybe we've got

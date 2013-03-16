@@ -329,6 +329,7 @@ PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
     minSpacing(DEFAULT_MIN_SPACING),
     maxSpacing(DEFAULT_MAX_SPACING),
     skipAlignTogether(false),
+    forceSpacing(false),
     alignTogetherLVLimit(DEFAULT_ALIGN_TOGETHER_LV_LIMIT)
 {
 }
@@ -338,6 +339,7 @@ void PairedAlignerOptions::usageMessage()
     AlignerOptions::usageMessage();
     printf(
         "  -s   min and max spacing to allow between paired ends (default: %d %d)\n"
+        "  -fs  force spacing to lie between min and max\n"
         "  -fast Skip some rare but very expensive cases.  Results in fewer alignments, but they're high quality and very quick.\n"
         "  -l   limit for number of candidates scored in align together (default: %d)\n",
         DEFAULT_MIN_SPACING,
@@ -362,6 +364,9 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n)
             return true;
         } 
         return false;
+    } else if (strcmp(argv[n], "-fs") == 0) {
+        forceSpacing = true;
+        return true;
     } else if (strcmp(argv[n], "-fast") == 0) {
         skipAlignTogether = true;
         return true;
@@ -470,6 +475,7 @@ void PairedAlignerContext::initialize()
     PairedAlignerOptions* options2 = (PairedAlignerOptions*) options;
     minSpacing = options2->minSpacing;
     maxSpacing = options2->maxSpacing;
+    forceSpacing = options2->forceSpacing;
     skipAlignTogether = options2->skipAlignTogether;
     alignTogetherLVLimit = options2->alignTogetherLVLimit;
     ignoreMismatchedIDs = options2->ignoreMismatchedIDs;
@@ -508,6 +514,7 @@ void PairedAlignerContext::runIterationThread()
             numSeeds,
             minSpacing,
             maxSpacing,
+            forceSpacing,
             adaptiveConfDiff,
             skipAlignTogether,
             alignTogetherLVLimit);
@@ -584,6 +591,12 @@ void PairedAlignerContext::runIterationThread()
         PairedAlignmentResult result;
 
         aligner->align(read0, read1, &result);
+
+        if (forceSpacing && isOneLocation(result.status[0]) != isOneLocation(result.status[1])) {
+            // either both align or neither do
+            result.status[0] = result.status[1] = NotFound;
+            result.location[0] = result.location[1] = 0xFFFFFFFF;
+        }
 
         writePair(read0, read1, &result);
 

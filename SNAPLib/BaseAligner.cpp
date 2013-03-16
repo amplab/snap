@@ -603,7 +603,9 @@ Return Value:
                     //
 
                     unsigned genomeLocationOfThisHit = hits[direction][i] - offset;
-                    if (genomeLocationOfThisHit < minLocation || genomeLocationOfThisHit > maxLocation) {
+                    if (genomeLocationOfThisHit < minLocation ||
+                            genomeLocationOfThisHit > maxLocation ||
+                            hits[direction][i] < offset) { 
                         continue;
                     }
     
