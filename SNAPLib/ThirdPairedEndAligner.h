@@ -62,8 +62,6 @@ private:
 
     void clearCandidates();
 
-    static const int NUM_READS_PER_PAIR = 2;    // This is just to make it clear what the array subscripts are, it doesn't ever make sense to change
-
     void allocateDynamicMemory(BigAllocator *allocator, unsigned maxReadSize, unsigned maxHitsToConsider, unsigned maxSeedsToUse);
 
     GenomeIndex *   index;

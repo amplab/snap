@@ -98,7 +98,9 @@ int LandauVishkinWithCigar::computeEditDistance(
     const char* p = pattern;
     const char* t = text;
     char* cigarBufStart = cigarBuf;
-    if (NULL == text) return -1;            // This happens when we're trying to read past the end of the genome.
+    if (NULL == text) {
+        return -1;            // This happens when we're trying to read past the end of the genome.
+    }
 
     int end = min(patternLen, textLen);
     const char* pend = pattern + end;

@@ -43,9 +43,8 @@ public:
         unsigned      maxSeeds_,
         unsigned      minSpacing_,                 // Minimum distance to allow between the two ends.
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
-        bool          forceSpacing_,
         unsigned      adaptiveConfDiffThreshold_,  // Increase confDiff if this many seeds in the read have multiple hits.
-        bool          skipAlignToegther_,
+        bool          skipAlignTogether_,
         unsigned      alignTogetherLVLimit_);
     
     virtual ~SmarterPairedEndAligner();
@@ -67,8 +66,7 @@ private:
     static const int INFINITE_SCORE = 0x7FFF;
     static const int MAX_READ_SIZE = 10000;
     static const int MAX_SEED_SIZE = 32;
-    static const int NUM_READS_PER_PAIR = 2;    // This is just to make it clear what the array subscripts are, it doesn't ever make sense to change
-    
+
     char complement[256];
     int wrapOffset[MAX_SEED_SIZE];
     
@@ -83,19 +81,13 @@ private:
     unsigned maxSeeds;
     unsigned minSpacing;
     unsigned maxSpacing;
-    bool forceSpacing;
     unsigned adaptiveConfDiffThreshold;
     int maxBuckets;
     bool skipAlignTogether;
     unsigned alignTogetherLVLimit;
-    
-    BaseAligner *singleAligner;
+
     BaseAligner *mateAligner;
-    IntersectingPairedEndAligner *intersectingAligner;
-
-    CountingBigAllocator countingAllocator; // BJB - for the intersecting aligner for now.
-
-    BoundedStringDistance <> *boundedStringDist;
+    
     LandauVishkin<1> lv;
     LandauVishkin<-1> reverseLV;
 

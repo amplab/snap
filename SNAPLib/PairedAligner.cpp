@@ -36,7 +36,7 @@ Revision History:
 #include "GenomeIndex.h"
 #include "Range.h"
 #include "SAM.h"
-#include "SmarterPairedEndAligner.h"
+#include "SingleFirstPairedEndAligner.h"
 #include "Tables.h"
 #include "WGsim.h"
 #include "GoodRandom.h"
@@ -504,27 +504,25 @@ void PairedAlignerContext::runIterationThread()
     }
 
     int maxReadSize = 10000;
-#if     1
-    SmarterPairedEndAligner *aligner = new SmarterPairedEndAligner(
-            index,
-            maxReadSize,
-            confDiff,
-            maxHits,
-            maxDist,
-            numSeeds,
-            minSpacing,
-            maxSpacing,
-            forceSpacing,
-            adaptiveConfDiff,
-            skipAlignTogether,
-            alignTogetherLVLimit);
-#endif  // 0
     BigAllocator *allocator = new BigAllocator(100 * 1024 * 1024);
-//    IntersectingPairedEndAligner *aligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, allocator);
-            
-    /*BigAllocator *allocator = new BigAllocator(ThirdPairedEndAligner::getBigAllocatorReservation(index, maxHits, maxReadSize, index->getSeedLength(), numSeeds));
-    ThirdPairedEndAligner *aligner = new(allocator) ThirdPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, allocator);
-    allocator->assertAllMemoryUsed();*/
+    
+    IntersectingPairedEndAligner *intersectingAligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, alignTogetherLVLimit, allocator);
+
+    SingleFirstPairedEndAligner *aligner = new SingleFirstPairedEndAligner(
+        index,
+        maxReadSize,
+        confDiff,
+        maxHits,
+        maxDist,
+        numSeeds,
+        minSpacing,
+        maxSpacing,
+        forceSpacing,
+        maxReadSize,
+        adaptiveConfDiff,
+        skipAlignTogether,
+        alignTogetherLVLimit,
+        intersectingAligner);
 
     ReadWriter *readWriter = this->readWriter;
 

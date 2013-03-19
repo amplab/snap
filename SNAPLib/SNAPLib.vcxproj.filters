@@ -130,6 +130,12 @@
     <ClCompile Include="exit.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="SingleFirstPairedEndAligner.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Util.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="aligner.h">
@@ -283,6 +289,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="GzipDataWriter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SingleFirstPairedEndAligner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

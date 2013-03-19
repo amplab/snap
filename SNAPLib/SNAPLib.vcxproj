@@ -188,6 +188,7 @@
     <ClInclude Include="seed.h" />
     <ClInclude Include="SeedSequencer.h" />
     <ClInclude Include="SingleAligner.h" />
+    <ClInclude Include="SingleFirstPairedEndAligner.h" />
     <ClInclude Include="SmarterPairedEndAligner.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="Tables.h" />
@@ -234,6 +235,7 @@
     <ClCompile Include="sam.cpp" />
     <ClCompile Include="seed.cpp" />
     <ClCompile Include="SingleAligner.cpp" />
+    <ClCompile Include="SingleFirstPairedEndAligner.cpp" />
     <ClCompile Include="SmarterPairedEndAligner.cpp" />
     <ClCompile Include="SortedDataWriter.cpp" />
     <ClCompile Include="GzipDataWriter.cpp" />
@@ -245,6 +247,7 @@
     </ClCompile>
     <ClCompile Include="Tables.cpp" />
     <ClCompile Include="ThirdPairedEndAligner.cpp" />
+    <ClCompile Include="Util.cpp" />
     <ClCompile Include="wgsim.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

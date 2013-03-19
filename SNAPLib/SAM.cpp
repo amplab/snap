@@ -848,7 +848,7 @@ SAMFormat::writeRead(
     unsigned clippedLength;
     unsigned basesClippedBefore;
     unsigned basesClippedAfter;
-    int editDistance;
+    int editDistance = -1;
 
     if (! getSAMData(genome, lv, data, quality, MAX_READ, pieceName, pieceIndex, 
         flags, positionInPiece, mapQuality, matePieceName, matePieceIndex, matePositionInPiece, templateLength,

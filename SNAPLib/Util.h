@@ -232,3 +232,5 @@ log10bucket(
 }
 
 } // namespace util
+
+int FirstPowerOf2GreaterThanOrEqualTo(int value);

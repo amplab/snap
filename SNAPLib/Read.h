@@ -170,22 +170,6 @@ public:
             originalUnclippedDataBuffer(NULL), originalUnclippedQualityBuffer(NULL), clippingState(NoClipping)
         {}
 
-        Read(Read& other) : 
-            id(other.id), data(other.data), quality(other.quality), 
-            localUnclippedDataBuffer(other.localUnclippedDataBuffer),
-            localUnclippedQualityBuffer(other.localUnclippedQualityBuffer),
-            localBufferSize(other.localBufferSize),
-            originalUnclippedDataBuffer(other.originalUnclippedDataBuffer),
-            originalUnclippedQualityBuffer(other.originalUnclippedQualityBuffer),
-            clippingState(other.clippingState)
-        {
-            other.localUnclippedDataBuffer = NULL;
-            other.localUnclippedQualityBuffer = NULL;
-            other.localBufferSize = 0;
-            other.originalUnclippedDataBuffer = NULL;
-            other.originalUnclippedQualityBuffer = NULL;
-        }
-
         Read(const Read& other) : 
             id(other.id), data(other.data), quality(other.quality), 
             localUnclippedDataBuffer(other.localUnclippedDataBuffer),
