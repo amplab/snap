@@ -184,6 +184,7 @@
     <ClInclude Include="RangeSplitter.h" />
     <ClInclude Include="read.h" />
     <ClInclude Include="ReadSupplierQueue.h" />
+    <ClInclude Include="Realign.h" />
     <ClInclude Include="sam.h" />
     <ClInclude Include="seed.h" />
     <ClInclude Include="SeedSequencer.h" />
@@ -232,6 +233,7 @@
     <ClCompile Include="ReadReader.cpp" />
     <ClCompile Include="ReadSupplierQueue.cpp" />
     <ClCompile Include="ReadWriter.cpp" />
+    <ClCompile Include="Realign.cpp" />
     <ClCompile Include="sam.cpp" />
     <ClCompile Include="seed.cpp" />
     <ClCompile Include="SingleAligner.cpp" />

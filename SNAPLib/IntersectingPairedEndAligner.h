@@ -149,6 +149,7 @@ private:
     //
     struct HitLocation {
         unsigned        genomeLocation;
+        int             genomeLocationOffset;   // This is needed because we might get an offset back from scoring (because it's really scoring a range).
         unsigned        seedOffset;
         bool            isScored;           // Mate pairs are sometimes not scored when they're inserted, because they
         unsigned        score;
@@ -308,7 +309,8 @@ private:
             unsigned             seedOffset,
             unsigned             scoreLimit,
             unsigned            *score,
-            double              *matchProbability
+            double              *matchProbability,
+            int                 *genomeLocationOffset   // The computed offset for genomeLocation (which is needed because we scan several different possible starting locations)
     );
 
 };

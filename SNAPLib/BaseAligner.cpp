@@ -485,7 +485,7 @@ Return Value:
                               multiHitLocations, multiHitDirections, multiHitScores,
                               bestHitProbability, allHitsProbability);
 #ifdef  _DEBUG
-                if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", *finalScore, *mapq, *genomeLocation);
+                if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates)  at %u\n", *finalScore, *mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, *genomeLocation);
 #endif  // _DEBUG
                 return finalResult;
             }
@@ -694,7 +694,7 @@ Return Value:
                   multiHitLocations, multiHitDirections, multiHitScores,
                   bestHitProbability, allHitsProbability);
 #ifdef  _DEBUG
-    if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", *finalScore, *mapq, *genomeLocation);
+    if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates) at %u\n", *finalScore, *mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, *genomeLocation);
 #endif  // _DEBUG
 
         return finalResult;
@@ -1014,6 +1014,8 @@ Return Value:
                     int seedLen = genomeIndex->getSeedLength();
                     int seedOffset = candidateToScore->seedOffset; // Since the data is reversed
                     int tailStart = seedOffset + seedLen;
+
+                    _ASSERT(!memcmp(data+seedOffset, readToScore->getData() + seedOffset, seedLen));
 
                     score1 = landauVishkin->computeEditDistance(data + tailStart, genomeDataLength - tailStart, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
                         scoreLimit, &matchProb1);

@@ -59,7 +59,8 @@ public:
             int patternLen,
             int k,
             double *matchProbability,
-            _uint64 cacheKey = 0)
+            _uint64 cacheKey = 0,
+            int *netIndel = NULL)   // the net of insertions and deletions in the alignment.  Negative for insertions, positive for deleteions (and 0 if there are non in net).  Filled in only if matchProbability is non-NULL
 {
     _ASSERT(k < MAX_K);
     k = __min(MAX_K - 1, k); // enforce limit even in non-debug builds
@@ -76,6 +77,7 @@ public:
             if (NULL != matchProbability) {
                 *matchProbability = old.matchProbability;
             }
+            _ASSERT(old.result <= k);
             return old.result;
         }
     }
@@ -121,6 +123,12 @@ public:
             if (cache != NULL && cacheKey != 0) {
                 cache->put(cacheKey, LVResult(k, result, lv_indelProbabilities[result]));
             }
+        }
+        if (result > k) {
+            //
+            // The deletions at the end pushed us oevr the score limit.
+            //
+            return -1;
         }
         return result;
     }
@@ -174,6 +182,14 @@ public:
 
             if (best == patternLen) {
                 if (NULL != matchProbability) {
+                    int localNetIndel;
+                    if (NULL == netIndel) {
+                        //
+                        // If the user doesn't want netIndel, just use a stack local to avoid
+                        // having to check it all the time.
+                        //
+                        netIndel = &localNetIndel;
+                    }
                     _ASSERT(*matchProbability == 1.0);
                     //
                     // We're done.  Compute the match probability.
@@ -215,6 +231,7 @@ public:
 
                         int curE = 1;
                         int offset = L[0][MAX_K+0];
+                        *netIndel = 0;
                         while (curE <= e) {
                             // First write the action, possibly with a repeat if it occurred multiple times with no exact matches
                             char action = backtraceAction[curE];
@@ -225,10 +242,12 @@ public:
                             }
                             if (action == 'I') {
                                 *matchProbability *= lv_indelProbabilities[actionCount];
-                                offset += actionCount; 
+                                offset += actionCount;
+                                *netIndel += actionCount;
                             } else if (action =='D') {
                                 *matchProbability *= lv_indelProbabilities[actionCount];
                                 offset -= actionCount;
+                                *netIndel -= actionCount;
                             }  else {
                                 _ASSERT(action == 'X');
                                 for (int i = 0; i < actionCount; i++) {
@@ -253,6 +272,7 @@ public:
                         cache->put(cacheKey, LVResult(k, e, -1.0));
                     }
                 }
+                _ASSERT(e <= k);
                 return e;
             }
 
