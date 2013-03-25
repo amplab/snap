@@ -195,13 +195,15 @@ public:
                     // We're done.  Compute the match probability.
                     //
                     int straightMismatches = 0;
-                    for (int i = 0; i < end && straightMismatches <= e; i++) { // do this 8 at a time, like in the other loops!
+#if     0   // It's faster to just use the backtracker, because it doesn't look at every base, only the changed ones.
+                    for (int i = L[0][MAX_K]; i < end && straightMismatches <= e; i++) { // do this 8 at a time, like in the other loops!
                         if (pattern[i] != text[i * TEXT_DIRECTION]) {
                             straightMismatches++;
                             *matchProbability *= lv_phredToProbability[qualityString[i]];
                         }
                     }
-
+#endif  // 0
+ 
                     if (straightMismatches != e) {
                         //
                         // There are indels.  

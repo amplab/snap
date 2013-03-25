@@ -181,13 +181,14 @@ ReadSupplierQueue::getElement()
     _ASSERT(singleReader[1] == NULL);   // i.e., we're doing file (but possibly single or paired end) reads
     AcquireExclusiveLock(&lock);
     while (!areAnyReadsReady()) {
-        ReleaseExclusiveLock(&lock);
         if (allReadsQueued) {
             //
             // Everything's queued and the queue is empty.  No more work.
             //
+            ReleaseExclusiveLock(&lock);
             return NULL;
         }
+        ReleaseExclusiveLock(&lock);
         //printf("Thread %u: wait for readsReady in getElement...\n", GetCurrentThreadId());
         WaitForEvent(&readsReady);
         AcquireExclusiveLock(&lock);
@@ -197,7 +198,7 @@ ReadSupplierQueue::getElement()
     _ASSERT(element != &readyQueue[0]);
     element->removeFromQueue();
 
-    if (!areAnyReadsReady()) {
+    if (!areAnyReadsReady() && !allReadsQueued) {
         //printf("Thread %u: block readsReady in getElement...\n", GetCurrentThreadId());
         PreventEventWaitersFromProceeding(&readsReady);
     }
@@ -400,6 +401,7 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
         if (done && 1 == nReadersRunning) {
             //printf("Thread %u: set allReadsQueued in ReaderThread...\n", GetCurrentThreadId());
             allReadsQueued = true;
+            AllowEventWaitersToProceed(&readsReady);    // Even if we have nothing to queue, allow the consumers to wake up so they can exit
         }
 
         if (element->totalReads > 0) {
