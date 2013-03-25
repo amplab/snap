@@ -222,7 +222,7 @@ Arguments:
     AlignmentResult
 BaseAligner::AlignRead(Read *inputRead, unsigned *genomeLocation, Direction *hitDirection, int *finalScore, int *mapq)
 {
-    return AlignRead(inputRead, genomeLocation, hitDirection, finalScore, mapq, 0, 0, false, 0, NULL, NULL, NULL, NULL, NULL, NULL);
+    return AlignRead(inputRead, genomeLocation, hitDirection, finalScore, mapq, 0, 0, false, 0, NULL, 0, NULL, NULL, NULL, NULL);
 }
 
     AlignmentResult
