@@ -110,7 +110,6 @@ protected:
 
 private:
         bool init(const char *fileName, const Genome *i_genome, _int64 startingOffset, _int64 amountOfFileToProcess);
-        friend class SAMReader;
 
         DataReader*         data;
         _int64              headerSize;
