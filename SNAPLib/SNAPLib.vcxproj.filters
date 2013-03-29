@@ -55,9 +55,6 @@
     <ClCompile Include="seed.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="SmarterPairedEndAligner.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="stdafx.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -196,9 +193,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="seed.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="SmarterPairedEndAligner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="stdafx.h">

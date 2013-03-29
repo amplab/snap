@@ -10,7 +10,7 @@
 using std::make_pair;
 using std::min;
 
-
+ 
 LandauVishkinWithCigar::LandauVishkinWithCigar()
 {
     for (int i = 0; i < MAX_K+1; i++) {

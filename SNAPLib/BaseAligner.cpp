@@ -50,7 +50,8 @@ BaseAligner::BaseAligner(
     unsigned        i_maxReadSize,
     unsigned        i_maxSeedsToUse,
     unsigned        i_adaptiveConfDiffThreshold,
-    LandauVishkin<>*i_landauVishkin,
+    LandauVishkin<1>*i_landauVishkin,
+    LandauVishkin<-1>*i_reverseLandauVishkin,
     SimilarityMap  *i_similarityMap,
     AlignerStats   *i_stats,
     BigAllocator   *allocator) : 
@@ -76,6 +77,7 @@ Arguments:
                           hits).  Once we've looked up this many seeds, we just score what we've got.
     i_adaptiveConfDiffThreshold - the number of hash table hits larger than maxHitsToConsider beyond which we effectively increase confDiff
     i_landauVishkin     - an externally supplied LandauVishkin string edit distance object.  This is useful if we're expecting repeated computations and use the LV cache.
+    i_reverseLandauVishkin - the same for the reverse direction.
     i_similarityMap     - a similarity map used to handle repetitive regions.  Optional.
     i_stats             - an object into which we report out statistics
     allocator           - an allocator that's used to allocate our local memory.  This is useful for TLB optimization.  If this is supplied, the caller
@@ -110,22 +112,24 @@ Arguments:
     reverseLandauVishkin = NULL;
 #else // Landau-Vishkin
 
+    if ((i_landauVishkin == NULL) != (i_reverseLandauVishkin == NULL)) {
+        fprintf(stderr,"Must supply both or neither of forward & reverse Landau-Vishkin objects.  You tried exactly one.\n");
+        soft_exit(1);
+    }
+
     if (i_landauVishkin == NULL) {
         if (allocator) {
             landauVishkin = new (allocator) LandauVishkin<>;
+            reverseLandauVishkin = new (allocator) LandauVishkin<-1>;
         } else {
             landauVishkin = new LandauVishkin<>;
+            reverseLandauVishkin = new LandauVishkin<-1>;
         }
         ownLandauVishkin = true;
     } else {
         landauVishkin = i_landauVishkin;
+        reverseLandauVishkin = i_reverseLandauVishkin;
         ownLandauVishkin = false;
-    }
-
-    if (allocator) {
-        reverseLandauVishkin = new (allocator) LandauVishkin<-1>;
-    } else {
-        reverseLandauVishkin = new LandauVishkin<-1>;
     }
 #endif  // BSD or LV
 
@@ -858,6 +862,14 @@ Return Value:
         _ASSERT(elementToScore->candidatesUsed != 0);
         _ASSERT(elementToScore != &weightLists[weightListToCheck]);
 
+        if (doAlignerPrefetch) {
+            //
+            // Our prefetch pipeline is one loop out we get the genome data for the next loop, and two loops out we get the element to score.
+            //
+            _mm_prefetch((const char *)(elementToScore->weightNext->weightNext), _MM_HINT_T2);   // prefetch the next element, it's likely to be the next thing we score.
+            genome->prefetchData(elementToScore->weightNext->baseGenomeLocation);
+        }
+
         if (elementToScore->lowestPossibleScore <= scoreLimit) {
 
             unsigned long candidateIndexToScore;
@@ -1017,15 +1029,18 @@ Return Value:
 
                     _ASSERT(!memcmp(data+seedOffset, readToScore->getData() + seedOffset, seedLen));
 
+                    // NB: This cacheKey computation MUST match the one in IntersectingPairedReadAligner or all hell will break loose.
+                    _uint64 cacheKey = (genomeLocation + tailStart) | (((_uint64) elementToScore->direction) << 32) | (((_uint64) readId) << 33) | (((_uint64)tailStart) << 34);
+
                     score1 = landauVishkin->computeEditDistance(data + tailStart, genomeDataLength - tailStart, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
-                        scoreLimit, &matchProb1);
+                        scoreLimit, &matchProb1, cacheKey);
                     if (score1 == -1) {
                         score = -1;
                     } else {
                         // The tail of the read matched; now let's reverse the reference genome data and match the head
                         int limitLeft = scoreLimit - score1;
                         score2 = reverseLandauVishkin->computeEditDistance(data + seedOffset, seedOffset + MAX_K, reversedRead[elementToScore->direction] + readLen - seedOffset,
-                                                                                    read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2);
+                                                                                    read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2, cacheKey);
 
                         if (score2 == -1) {
                             score = -1;
@@ -1387,7 +1402,11 @@ Return Value:
     unsigned highOrderGenomeLocation = genomeLocation - lowOrderGenomeLocation;
 
     unsigned hashTableIndex = hash(highOrderGenomeLocation) % candidateHashTablesSize;
+
     HashTableAnchor *anchor = &hashTable[hashTableIndex];
+    if (doAlignerPrefetch) {
+        _mm_prefetch((const char *)anchor, _MM_HINT_T2);    // Prefetch our anchor.  We don't have enough computation to completely hide the prefetch, but at least we get some for free here.
+    }
     HashTableElement *element;
 
 #if     DBG
@@ -1403,13 +1422,12 @@ Return Value:
     element = &hashTableElementPool[nUsedHashTableElements];
     nUsedHashTableElements++;
 
-    if (anchor->epoch == hashTableEpoch) {
-        element->next = anchor->element;
-    } else {
-        anchor->epoch = hashTableEpoch;
-        element->next = NULL;
+    if (doAlignerPrefetch) {
+        //
+        // Fetch the next candidate so we don't cache miss next time around.
+        //
+        _mm_prefetch((const char *)&hashTableElementPool[nUsedHashTableElements], _MM_HINT_T2);
     }
-    anchor->element = element;
 
     element->candidatesUsed = (_uint64)1 << lowOrderGenomeLocation;
     element->candidatesScored = 0;
@@ -1434,6 +1452,15 @@ Return Value:
     *hashTableElement = element;
 
     highestUsedWeightList = __max(highestUsedWeightList,(unsigned)1);
+
+    if (anchor->epoch == hashTableEpoch) {
+        element->next = anchor->element;
+    } else {
+        anchor->epoch = hashTableEpoch;
+        element->next = NULL;
+    }
+    anchor->element = element;
+
 }
 
 #if     DBG
@@ -1483,22 +1510,26 @@ Return Value:
         //
         // Since these got allocated with the alloator rather than new, we want to call
         // their destructors without freeing their memory (which is the responsibility of
-        // the owner of the alllocator).
+        // the owner of the allocator).
         //
-        if (ownLandauVishkin && NULL != landauVishkin) {
-            landauVishkin->~LandauVishkin();
-        }
-        if (NULL != reverseLandauVishkin) {
-            reverseLandauVishkin->~LandauVishkin();
+        if (ownLandauVishkin) {
+            if (NULL != landauVishkin) {
+                landauVishkin->~LandauVishkin();
+            }
+            if (NULL != reverseLandauVishkin) {
+                reverseLandauVishkin->~LandauVishkin();
+            }
         }
     } else {
 
-        if (ownLandauVishkin && NULL != landauVishkin) {
-            delete landauVishkin;
-        }
+        if (ownLandauVishkin) {
+            if (NULL != landauVishkin) {
+                delete landauVishkin;
+            }
 
-        if (NULL != reverseLandauVishkin) {
-            delete reverseLandauVishkin;
+            if (NULL != reverseLandauVishkin) {
+                delete reverseLandauVishkin;
+            }
         }
 
         BigDealloc(rcReadData);

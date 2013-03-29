@@ -152,6 +152,7 @@ SingleAlignerContext::runIterationThread()
             numSeeds,
             adaptiveConfDiff,
             NULL,               // LV (no need to cache in the single aligner)
+            NULL,               // reverse LV
             NULL,
             stats,
             allocator);

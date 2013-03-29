@@ -51,19 +51,21 @@ SingleFirstPairedEndAligner::SingleFirstPairedEndAligner(
         unsigned            maxReadSize,
         unsigned            adaptiveConfDiffThreshold,  // Increase confDiff if this many seeds in the read have multiple hits.
         bool                skipAlignTogether_,
-        unsigned            alignTogetherLVLimit_,
         PairedEndAligner    *underlyingPairedEndAligner_)
  :   minSpacing(minSpacing_), maxSpacing(maxSpacing_), forceSpacing(forceSpacing_), 
-     skipAlignTogether(skipAlignTogether_), alignTogetherLVLimit(alignTogetherLVLimit_),
-     underlyingPairedEndAligner(underlyingPairedEndAligner_), lv(2 * FirstPowerOf2GreaterThanOrEqualTo(maxSeeds * maxHits * 4)),
+     skipAlignTogether(skipAlignTogether_), 
+     underlyingPairedEndAligner(underlyingPairedEndAligner_), lv(0/*2 * FirstPowerOf2GreaterThanOrEqualTo(maxSeeds * maxHits * 4)*/),
+     reverseLV(0/*2 * FirstPowerOf2GreaterThanOrEqualTo(maxSeeds * maxHits * 4)*/),
      confDiff(confDiff_), maxK(maxK_)
 {
     // Create single-end aligners.
     singleAligner = new BaseAligner(index, confDiff + 1, maxHits, maxK, maxReadSize,
-                                    maxSeeds, adaptiveConfDiffThreshold);
+                                    maxSeeds, adaptiveConfDiffThreshold, &lv, &reverseLV);
 
     mateAligner = new BaseAligner(index, confDiff, maxHits, maxK, maxReadSize,
-                                  maxSeeds, adaptiveConfDiffThreshold, &lv);
+                                  maxSeeds, adaptiveConfDiffThreshold, &lv, &reverseLV);
+
+    underlyingPairedEndAligner->setLandauVishkin(&lv, &reverseLV);
 }
 
 
@@ -108,6 +110,9 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
         TRACE("Reads are both too short -- returning");
         return;
     }
+    
+    lv.clearCache();
+    reverseLV.clearCache();
 
     // First try aligning each end alone and looking for its mate nearby if it was confident.
     // TODO: Guess which end will be faster to search for first based on it seeds?
@@ -254,9 +259,15 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
 
     if (skipAlignTogether) {
         return;
-    } 
+    }
+
     // At least one read was MultipleHits; let's look for them simultaneously.
     _int64 start = timeInNanos();
+    //
+    // Let the LVs use the cache that we built up.
+    //
+    lv.enterCacheLookupPhase();
+    reverseLV.enterCacheLookupPhase();
     underlyingPairedEndAligner->align(read0, read1, result); 
     _int64 end = timeInNanos();
 

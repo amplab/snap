@@ -133,6 +133,7 @@ ParallelTask<TContext>::run()
 #ifdef  _MSC_VER
     if (common->options->useTimingBarrier) {
         WaitForEvent(&memoryAllocationCompleteBarrier);
+        printf("Cleared timing barrier.\n");
         start = timeInMillis();
     }
 #endif  // _MSC_VER

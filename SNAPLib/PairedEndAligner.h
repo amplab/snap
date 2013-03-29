@@ -24,6 +24,7 @@ Revision History:
 
 #include "Aligner.h"
 #include "directions.h"
+#include "LandauVishkin.h"
 
 const int NUM_READS_PER_PAIR = 2;    // This is just to make it clear what the array subscripts are, it doesn't ever make sense to change
 
@@ -61,4 +62,10 @@ public:
         Read                  *read0,
         Read                  *read1,
         PairedAlignmentResult *result) = 0;
+
+    virtual void setLandauVishkin(
+        LandauVishkin<1>        *landauVishkin,
+        LandauVishkin<-1>       *reverseLandauVishkin)
+    {
+    }
 };

@@ -64,7 +64,7 @@ AlignerOptions::AlignerOptions(
     if (forPairedEnd) {
         maxDist             = 15;
         numSeeds            = 25;
-        maxHits             = 2000;
+        maxHits             = 100;
         confDiff            = 1;
         adaptiveConfDiff    = 7;
     } else {
@@ -415,5 +415,6 @@ SNAPInput::createReadSupplierGenerator(int numThreads, const Genome *genome, Rea
 
     default:
         _ASSERT(false);
+        return NULL;
     }
 }

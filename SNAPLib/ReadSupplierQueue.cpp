@@ -202,7 +202,6 @@ ReadSupplierQueue::getElement()
         //printf("Thread %u: block readsReady in getElement...\n", GetCurrentThreadId());
         PreventEventWaitersFromProceeding(&readsReady);
     }
- 
     ReleaseExclusiveLock(&lock);
 
     return element;

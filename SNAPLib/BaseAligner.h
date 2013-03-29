@@ -49,7 +49,8 @@ public:
         unsigned        i_maxReadSize,
         unsigned        i_maxSeedsToUse,
         unsigned        i_adaptiveConfDiffThreshold,
-        LandauVishkin<>*i_landauVishkin = NULL,
+        LandauVishkin<1>*i_landauVishkin = NULL,
+        LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
         SimilarityMap  *i_similarityMap = NULL,
         AlignerStats   *i_stats = NULL,
         BigAllocator    *allocator = NULL);

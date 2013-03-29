@@ -32,6 +32,8 @@ Revision History:
 #define COMPILE_INTERSECTING
 #ifdef  COMPILE_INTERSECTING
 
+const unsigned DEFAULT_INTERSECTING_ALIGNER_MAX_HITS = 10000;
+
 class IntersectingPairedEndAligner : public PairedEndAligner
 {
 public:
@@ -43,8 +45,16 @@ public:
         unsigned      maxSeeds_,
         unsigned      minSpacing_,                 // Minimum distance to allow between the two ends.
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
-        unsigned      lvLimit,                     // limit on number of calls to LV
-        BigAllocator  *allocator); 
+        unsigned      maxBigHits_,
+        BigAllocator  *allocator);
+
+    void setLandauVishkin(
+        LandauVishkin<1> *landauVishkin_,
+        LandauVishkin<-1> *reverseLandauVishkin_) 
+    {
+        landauVishkin = landauVishkin_;
+        reverseLandauVishkin = reverseLandauVishkin_;
+    }
     
     virtual ~IntersectingPairedEndAligner();
     
@@ -81,8 +91,6 @@ private:
     unsigned        seedLen;
     unsigned        distanceToSearchBeyondBestScore;
     unsigned        maxMergeDistance;
-    unsigned        maxSmallHits;
-    unsigned        maxLVCalls;
 
     struct HashTableLookup {
         unsigned        seedOffset;

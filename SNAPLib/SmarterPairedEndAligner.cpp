@@ -49,13 +49,12 @@ SmarterPairedEndAligner::SmarterPairedEndAligner(
          unsigned      minSpacing_,
          unsigned      maxSpacing_,
          unsigned      adaptiveConfDiffThreshold_,
-         bool          skipAlignTogether_,
-         unsigned      alignTogetherLVLimit_)
+         bool          skipAlignTogether_)
  :   index(index_), maxReadSize(maxReadSize_), confDiff(confDiff_), maxHits(maxHits_),
      maxK(maxK_), maxSeeds(maxSeeds_), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
      adaptiveConfDiffThreshold(adaptiveConfDiffThreshold_), seedLen(index_->getSeedLength()),
      maxBuckets(FirstPowerOf2GreaterThanOrEqualTo(maxSeeds_ * maxHits_ * 4)), lv(2 * maxBuckets),
-     skipAlignTogether(skipAlignTogether_), alignTogetherLVLimit(alignTogetherLVLimit_)
+     skipAlignTogether(skipAlignTogether_)
 {
     // Initialize the bucket data structures.
     buckets = new Bucket[maxBuckets];

@@ -30,9 +30,10 @@ Revision History:
 #include "SingleAligner.h"
 #include "PairedAligner.h"
 
+
 using namespace std;
 
-const char *SNAP_VERSION = "0.16alpha.3";
+const char *SNAP_VERSION = "0.16alpha.4";
 
 static void usage()
 {

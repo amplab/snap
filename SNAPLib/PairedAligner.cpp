@@ -57,7 +57,6 @@ using util::stringEndsWith;
 
 static const int DEFAULT_MIN_SPACING = 50;
 static const int DEFAULT_MAX_SPACING = 1000;
-static const unsigned DEFAULT_ALIGN_TOGETHER_LV_LIMIT = 1000000;
 
 struct PairedAlignerStats : public AlignerStats
 {
@@ -330,7 +329,7 @@ PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
     maxSpacing(DEFAULT_MAX_SPACING),
     skipAlignTogether(false),
     forceSpacing(false),
-    alignTogetherLVLimit(DEFAULT_ALIGN_TOGETHER_LV_LIMIT)
+    intersectingAlignerMaxHits(DEFAULT_INTERSECTING_ALIGNER_MAX_HITS)
 {
 }
 
@@ -341,10 +340,10 @@ void PairedAlignerOptions::usageMessage()
         "  -s   min and max spacing to allow between paired ends (default: %d %d)\n"
         "  -fs  force spacing to lie between min and max\n"
         "  -fast Skip some rare but very expensive cases.  Results in fewer alignments, but they're high quality and very quick.\n"
-        "  -l   limit for number of candidates scored in align together (default: %d)\n",
+        "  -H   max hits for intersecting aligner (default: %d)\n",
         DEFAULT_MIN_SPACING,
         DEFAULT_MAX_SPACING,
-        DEFAULT_ALIGN_TOGETHER_LV_LIMIT);
+        DEFAULT_INTERSECTING_ALIGNER_MAX_HITS);
 }
 
 bool PairedAlignerOptions::parse(const char** argv, int argc, int& n)
@@ -357,9 +356,9 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n)
             return true;
         } 
         return false;
-    } else if (strcmp(argv[n], "-l") == 0) {
+    } else if (strcmp(argv[n], "-H") == 0) {
         if (n + 1 < argc) {
-            alignTogetherLVLimit = atoi(argv[n+1]);
+            intersectingAlignerMaxHits = atoi(argv[n+1]);
             n += 1;
             return true;
         } 
@@ -477,7 +476,7 @@ void PairedAlignerContext::initialize()
     maxSpacing = options2->maxSpacing;
     forceSpacing = options2->forceSpacing;
     skipAlignTogether = options2->skipAlignTogether;
-    alignTogetherLVLimit = options2->alignTogetherLVLimit;
+    intersectingAlignerMaxHits = options2->intersectingAlignerMaxHits;
     ignoreMismatchedIDs = options2->ignoreMismatchedIDs;
 }
 
@@ -506,7 +505,7 @@ void PairedAlignerContext::runIterationThread()
     int maxReadSize = 10000;
     BigAllocator *allocator = new BigAllocator(100 * 1024 * 1024);
     
-    IntersectingPairedEndAligner *intersectingAligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, alignTogetherLVLimit, allocator);
+    IntersectingPairedEndAligner *intersectingAligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, intersectingAlignerMaxHits, allocator);
 
     SingleFirstPairedEndAligner *aligner = new SingleFirstPairedEndAligner(
         index,
@@ -521,7 +520,6 @@ void PairedAlignerContext::runIterationThread()
         maxReadSize,
         adaptiveConfDiff,
         skipAlignTogether,
-        alignTogetherLVLimit,
         intersectingAligner);
 
     ReadWriter *readWriter = this->readWriter;

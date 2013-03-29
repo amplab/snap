@@ -14,6 +14,133 @@ extern double *lv_indelProbabilities;  // Maps indels by length to probability o
 extern double *lv_phredToProbability;  // Maps ASCII phred character to probability of error, including 
 extern double *lv_perfectMatchProbability; // Probability that a read of this length has no mutations
 
+struct LVResult {
+    short k;
+    short result;
+    short netIndel;
+    double matchProbability;
+
+    LVResult() { k = -1; result = -1; netIndel = 0;}
+
+    LVResult(short k_, short result_, short netIndel_, double matchProbability_) { 
+        k = k_; 
+        result = result_; 
+        netIndel = netIndel_; 
+        matchProbability = matchProbability_;
+    }
+
+    inline bool isValid() { return k != -1; }
+};
+
+//
+// A cache that operates in two phases: loading and looking up.  During loading,
+// it remembers the cache entries but doesn't actually put them in the cache.
+// During look-up phase, it checks the cache for entries, but doesn't add more.
+// The idea is to load during the single-end phase of paired-end alignments,
+// and to look-up during alignTogether, when we're likely to be computing many
+// of the same LV scores that we did in single-end.  
+//
+// The idea behind using two phases (rather than the more obvious design where the
+// cache is loaded and looked-up simultaneously) is to optimize cache performance.
+// Becuase some alignments will do lots of LV calls, the size of the hash table
+// in the FixedSizeMap is big, which in turn means that roughly every reference to 
+// it (both inserting and looking up) is a cache miss, which if left unchecked would
+// result in essentially no benefit from the cache.  Doing it in two phases, however
+// means that in the ordinary case where alignTogether isn't called, we do very little
+// work.  In the case where it is called, we can size the hash table appropriately
+// in order to avoid making it too big, and so reduce cache missing.  We can also
+// prefetch the hash table buckets so as to reduce the time wasted on cache missing
+// during the load-in to the cache.
+//
+
+class LandauVishkinCache {
+public:
+    LandauVishkinCache(unsigned cacheSize_) : cacheSize(cacheSize_)
+    {
+        map = new FixedSizeMap<_uint64, LVResult>();
+        map->reserve(cacheSize);
+
+        inLoadPhase = true;
+        toBeInserted = new LVResultKeyPair[cacheSize];
+    }
+
+    ~LandauVishkinCache()
+    {
+        delete map;
+        delete [] toBeInserted;
+    }
+
+    inline void put(_uint64 cacheKey, LVResult result)
+    {
+        if (!inLoadPhase) {
+            return;
+        }
+
+        _ASSERT(countToBeInserted < cacheSize);
+
+        toBeInserted[countToBeInserted].cacheKey = cacheKey;
+        toBeInserted[countToBeInserted].result = result;
+        countToBeInserted++;
+
+        // Should we prefetch the next location in toBeInserted here??
+    }
+    
+    inline void clear()
+    {
+        inLoadPhase = true;
+        countToBeInserted = 0;
+        //
+        // Don't bother clearing the map.  That happens when (if) we switch phases.
+        //
+    }
+
+    inline void enterLookupPhase()
+    {
+        _ASSERT(inLoadPhase);
+
+        map->clear();
+
+        map->resize(countToBeInserted);
+
+        //
+        // maybe we should work this loop in such a way that we're prefetching several
+        // ahead of where we're inserting in the map.
+        //
+        for (unsigned i = 0; i < countToBeInserted; i++) {
+            map->put(toBeInserted[i].cacheKey, toBeInserted[i].result);
+        }
+
+        inLoadPhase = false;
+    }
+
+    inline LVResult get(_uint64 cacheKey)
+    {
+        if (inLoadPhase) {
+            return LVResult();
+        }
+
+        LVResult result =  map->get(cacheKey);
+
+        return result;
+    }
+
+private:
+    unsigned cacheSize;
+    bool inLoadPhase;
+
+    unsigned countToBeInserted;
+
+    struct LVResultKeyPair {
+        _uint64     cacheKey;
+        LVResult    result;
+    };
+    LVResultKeyPair *toBeInserted;
+
+    FixedSizeMap<_uint64, LVResult> *map;
+
+};
+
+
 
 // Computes the edit distance between two strings without returning the edits themselves.
 // Set TEXT_DIRECTION to -1 to run backwards through the text.
@@ -31,13 +158,28 @@ public:
         L[i][j] = -2;
         }
     }
+
     if (cacheSize > 0) {
-        cache = new FixedSizeMap<_uint64, LVResult>();
-        cache->reserve(cacheSize);
-    } else {
+        cache = new LandauVishkinCache(cacheSize);
+     } else {
         cache = NULL;
     }
+
+    //
+    // Initialize dTable, which is used to avoid a branch misprediction in our inner loop.
+    // The d values are 0, -1, 1, -2, 2, etc.
+    //
+    for (int i = 0, d = 0; i < 2 * (MAX_K + 1) + 1; i++, d = (d > 0 ? -d : -d+1)) {
+        dTable[i] = d;
+    }
 }
+
+    void pushBackCacheStats()
+    {
+        if (NULL != cache) {
+            cache->pushBackCacheStats();
+        }
+    }
 
     static size_t getBigAllocatorReservation() {return sizeof(LandauVishkin<TEXT_DIRECTION>);} // maybe we should worry about allocating the cache with a BigAllocator, but not for now.
 
@@ -47,6 +189,13 @@ public:
         delete cache;
     }
 }
+
+    void enterCacheLookupPhase()
+    {
+        if (NULL != cache) {
+            cache->enterLookupPhase();
+        }
+    }
 
     // Compute the edit distance between two strings, if it is <= k, or return -1 otherwise.
     // For LandauVishkin instances with a cache, the cacheKey should be a unique identifier for
@@ -62,7 +211,18 @@ public:
             _uint64 cacheKey = 0,
             int *netIndel = NULL)   // the net of insertions and deletions in the alignment.  Negative for insertions, positive for deleteions (and 0 if there are non in net).  Filled in only if matchProbability is non-NULL
 {
+    int localNetIndel;
+    if (NULL == netIndel) {
+        //
+        // If the user doesn't want netIndel, just use a stack local to avoid
+        // having to check it all the time.
+        //
+        netIndel = &localNetIndel;
+    }
     _ASSERT(k < MAX_K);
+
+    *netIndel = 0;
+
     k = __min(MAX_K - 1, k); // enforce limit even in non-debug builds
     if (NULL == text) {
         // This happens when we're trying to read past the end of the genome.
@@ -77,7 +237,10 @@ public:
             if (NULL != matchProbability) {
                 *matchProbability = old.matchProbability;
             }
-            _ASSERT(old.result <= k);
+            *netIndel = old.netIndel;
+            if (old.result > k) {
+                return -1;  // When we checked this before we fuond the answer, but it's bigger than k, so just pretend we don't know.
+            }
             return old.result;
         }
     }
@@ -121,7 +284,7 @@ public:
         if (NULL != matchProbability) {
             *matchProbability = lv_perfectMatchProbability[patternLen];    // Becuase the chance of a perfect match is < 1
             if (cache != NULL && cacheKey != 0) {
-                cache->put(cacheKey, LVResult(k, result, lv_indelProbabilities[result]));
+                cache->put(cacheKey, LVResult(k, result, *netIndel, *matchProbability));
             }
         }
         if (result > k) {
@@ -135,7 +298,9 @@ public:
 
     for (int e = 1; e <= k; e++) {
         // Search d's in the order 0, 1, -1, 2, -2, etc to find an alignment with as few indels as possible.
-        for (int d = 0; d != e+1; d = (d > 0 ? -d : -d+1)) {
+        // dTable is just precomputed d = (d > 0 ? -d : -d+1) to save the branch misprediction from (d > 0)
+        int i =0;
+        for (int d = 0; d != e+1; i++, d = dTable[i]) {
             int best = L[e-1][MAX_K+d] + 1; // up
             A[e][MAX_K+d] = 'X';
             int left = L[e-1][MAX_K+d-1];
@@ -182,14 +347,7 @@ public:
 
             if (best == patternLen) {
                 if (NULL != matchProbability) {
-                    int localNetIndel;
-                    if (NULL == netIndel) {
-                        //
-                        // If the user doesn't want netIndel, just use a stack local to avoid
-                        // having to check it all the time.
-                        //
-                        netIndel = &localNetIndel;
-                    }
+
                     _ASSERT(*matchProbability == 1.0);
                     //
                     // We're done.  Compute the match probability.
@@ -233,7 +391,7 @@ public:
 
                         int curE = 1;
                         int offset = L[0][MAX_K+0];
-                        *netIndel = 0;
+                        _ASSERT(*netIndel == 0);
                         while (curE <= e) {
                             // First write the action, possibly with a repeat if it occurred multiple times with no exact matches
                             char action = backtraceAction[curE];
@@ -262,28 +420,28 @@ public:
                             curE++;
                         }
                     } // if straightMismatches != e (i.e., the indel case)
-                    if (cache != NULL && cacheKey != 0) {
-                        cache->put(cacheKey, LVResult(k, e, *matchProbability));
-                    } 
                     *matchProbability *= lv_perfectMatchProbability[patternLen-e]; // Accounting for the < 1.0 chance of no changes for matching bases
+                    if (cache != NULL && cacheKey != 0) {
+                        cache->put(cacheKey, LVResult(k, e, *netIndel, *matchProbability));
+                    } 
                 } else {
                     //
                     // Not tracking match probability.
                     //
                     if (cache != NULL && cacheKey != 0) {
-                        cache->put(cacheKey, LVResult(k, e, -1.0));
+                        cache->put(cacheKey, LVResult(k, e, *netIndel, -1.0));
                     }
                 }
                 _ASSERT(e <= k);
                 return e;
-            }
+            } // if best == patternLen (i.e., we're done)
 
             L[e][MAX_K+d] = best;
         }
     }
 
     if (cache != NULL && cacheKey != 0) {
-        cache->put(cacheKey, LVResult(k, -1, 0.0));
+        cache->put(cacheKey, LVResult(k, -1, *netIndel, 0.0));
     }
     return -1;
 }
@@ -317,6 +475,12 @@ public:
 private:
     // TODO: For long reads, we should include a version that only has L be 2 x (2*MAX_K+1) cells
     int L[MAX_K+1][2 * MAX_K + 1];
+
+    //
+    // Table of d values for the inner loop in computeEditDistance.  This allows us to avoid the line d = (d > 0 ? -d : -d+1), which causes
+    // a branch misprediction every time.
+    //
+    int dTable[2 * (MAX_K + 1) + 1];
     
     // Action we did to get to each position: 'D' = deletion, 'I' = insertion, 'X' = substitution.  This is needed to compute match probability.
     char A[MAX_K+1][2 * MAX_K + 1];
@@ -326,19 +490,7 @@ private:
     int  backtraceMatched[MAX_K+1];
     int  backtraceD[MAX_K+1];
 
-    struct LVResult {
-        int k;
-        int result;
-        double matchProbability;
-
-        LVResult() { k = -1; result = -1; }
-
-        LVResult(int k_, int result_, double matchProbability_) { k = k_; result = result_; matchProbability = matchProbability_;}
-
-        inline bool isValid() { return k != -1; }
-    };
-
-    FixedSizeMap<_uint64, LVResult> *cache;
+    LandauVishkinCache *cache;
 };
 
 void setLVProbabilities(double *i_indelProbabilities, double *i_phredToProbability, double mutationProbability);
