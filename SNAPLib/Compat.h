@@ -356,3 +356,4 @@ private:
     _uint64     lastPosMadvised;
 #endif  // _MSC_VER
 };
+

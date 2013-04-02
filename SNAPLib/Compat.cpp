@@ -773,8 +773,6 @@ FileMapper::prefetch(size_t currentRead)
     }
     InterlockedAdd64AndReturnNewValue(&millisSpentInReadFile,timeInMillis() - start);
 }
-
-
 #else   // _MSC_VER
 
 #if defined(__MACH__)
@@ -1636,7 +1634,6 @@ FileMapper::prefetch(size_t currentRead)
         lastPosMadvised = offset;
     }
 }
-
 #endif  // _MSC_VER
 
 AsyncFile* AsyncFile::open(const char* filename, bool write)

@@ -24,7 +24,6 @@ Environment:
 #include "PairedEndAligner.h"
 #include "VariableSizeVector.h"
 #include "BufferedAsync.h"
-#include "BoundedStringDistance.h"
 #include "directions.h"
 #include "Read.h"
 #include "DataReader.h"

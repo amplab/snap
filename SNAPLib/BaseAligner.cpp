@@ -106,12 +106,6 @@ Arguments:
 
     probDistance = new ProbabilityDistance(SNP_PROB, GAP_OPEN_PROB, GAP_EXTEND_PROB);  // Match Mason
 
-#if defined(USE_BOUNDED_STRING_DISTANCE)
-    boundedStringDist = new BoundedStringDistance<>(2, 2, SNP_PROB, GAP_OPEN_PROB, GAP_EXTEND_PROB);
-    landauVishkin = NULL;
-    reverseLandauVishkin = NULL;
-#else // Landau-Vishkin
-
     if ((i_landauVishkin == NULL) != (i_reverseLandauVishkin == NULL)) {
         fprintf(stderr,"Must supply both or neither of forward & reverse Landau-Vishkin objects.  You tried exactly one.\n");
         soft_exit(1);
@@ -131,7 +125,6 @@ Arguments:
         reverseLandauVishkin = i_reverseLandauVishkin;
         ownLandauVishkin = false;
     }
-#endif  // BSD or LV
 
     candidateHashTablesSize = (maxHitsToConsider * maxSeedsToUse * 3)/2;    // *1.5 for hash table slack
     hashTableElementPoolSize = maxHitsToConsider * maxSeedsToUse * 2 ;   // *2 for RC
@@ -151,11 +144,6 @@ Arguments:
     }
 
     reversedRead[RC] = reversedRead[FORWARD] + maxReadSize;
-
-#if defined(USE_BOUNDED_STRING_DISTANCE)
-    reversedGenomeData = reversedRead[FORWARD] + 3 * maxReadSize + MAX_K;   // WARNING: This buffer extends in both directions from the pointer.
-#endif  // BSD
-    
 
     rcTranslationTable['A'] = 'T';
     rcTranslationTable['G'] = 'C';
@@ -601,30 +589,45 @@ Return Value:
                     offset = readLen - seedLen - nextSeedToTest;
                 }
 
-                for (unsigned i = 0 ; i < min(nHits[direction], maxHitsToConsider); i++) {
+                const unsigned prefetchDepth = 30;
+                unsigned limit = min(nHits[direction], maxHitsToConsider) + prefetchDepth;
+                for (unsigned iBase = 0 ; iBase < limit; iBase += prefetchDepth) {
                     //
-                    // Find the genome location where the beginning of the read would hit, given a match on this seed.
+                    // This works in two phases: we launch prefetches for a group of hash table lines,
+                    // then we do all of the inserts, and then repeat.
                     //
 
-                    unsigned genomeLocationOfThisHit = hits[direction][i] - offset;
-                    if (genomeLocationOfThisHit < minLocation ||
-                            genomeLocationOfThisHit > maxLocation ||
-                            hits[direction][i] < offset) { 
-                        continue;
+                    unsigned innerLimit = min(iBase + prefetchDepth, min(nHits[direction], maxHitsToConsider));
+                    if (doAlignerPrefetch) {
+                        for (unsigned i = iBase; i < innerLimit; i++) {
+                            prefetchHashTableBucket(hits[direction][i] - offset, direction);
+                        }
                     }
-    
-                    Candidate *candidate = NULL;
-                    HashTableElement *hashTableElement;
 
-                    findCandidate(genomeLocationOfThisHit, direction, &candidate, &hashTableElement);
-                    if (NULL != hashTableElement) {
-                        incrementWeight(hashTableElement);
-                        candidate->seedOffset = offset;
-                        _ASSERT((unsigned)candidate->seedOffset <= readLen - seedLen);
-                    } else if (lowestPossibleScoreOfAnyUnseenLocation[direction] <= scoreLimit) {
-                        _ASSERT(offset <= readLen - seedLen);
-                        allocateNewCandidate(genomeLocationOfThisHit, direction, lowestPossibleScoreOfAnyUnseenLocation[direction],
-                                offset, &candidate, &hashTableElement);
+                    for (unsigned i = iBase; i < innerLimit; i++) {
+                        //
+                        // Find the genome location where the beginning of the read would hit, given a match on this seed.
+                        //
+                        unsigned genomeLocationOfThisHit = hits[direction][i] - offset;
+                        if (genomeLocationOfThisHit < minLocation ||
+                                genomeLocationOfThisHit > maxLocation ||
+                                hits[direction][i] < offset) { 
+                            continue;
+                        }
+    
+                        Candidate *candidate = NULL;
+                        HashTableElement *hashTableElement;
+
+                        findCandidate(genomeLocationOfThisHit, direction, &candidate, &hashTableElement);
+                        if (NULL != hashTableElement) {
+                            incrementWeight(hashTableElement);
+                            candidate->seedOffset = offset;
+                            _ASSERT((unsigned)candidate->seedOffset <= readLen - seedLen);
+                        } else if (lowestPossibleScoreOfAnyUnseenLocation[direction] <= scoreLimit) {
+                            _ASSERT(offset <= readLen - seedLen);
+                            allocateNewCandidate(genomeLocationOfThisHit, direction, lowestPossibleScoreOfAnyUnseenLocation[direction],
+                                    offset, &candidate, &hashTableElement);
+                        }
                     }
                 }
                 nSeedsApplied[direction]++;
@@ -948,77 +951,17 @@ Return Value:
                     //if (similarityMap != NULL && matchProbability >= __max(probabilityOfBestCandidate * 0.01, 1e-30)) {
                     //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
                     //}
-#elif defined(USE_BOUNDED_STRING_DISTANCE)
-                    int maxStartShift = __min(scoreLimit, 7);
-                    for (int shift = 1; shift <= maxStartShift; shift++) {
-                        elementToScore->candidatesScored |= (candidateBit << shift);
-                        elementToScore->candidatesScored |= (candidateBit >> shift);
-                    }
-                    //score = boundedStringDist->compute(data, rcRead->getData(), rcRead->getDataLength(),
-                    //        maxStartShift, scoreLimit, &matchProbability, rcRead->getQuality());
-                        
-                        
-                    // Compute the distance separately in the forward and backward directions from the seed, to allow
-                    // arbitrary offsets at both the start and end but not have to pay the cost of exploring all start
-                    // shifts in BoundedStringDistance
-                    double matchProb1, matchProb2;
-                    int score1, score2;
-                    // First, do the forward direction from where the seed aligns to past of it
-                    int readLen = readToScore->getDataLength();
-                    int seedLen = genomeIndex->getSeedLength();
-                    int seedOffset = candidateToScore->seedOffset; // Since the data is reversed
-                    int tailStart = seedOffset + seedLen;
-#ifdef  TIME_STRING_DISTANCE
-                    _int64 bsdStartTime = timeInNanos();
-#endif  // TIME_STRING_DISTANCE
-                    score1 = boundedStringDist->compute(data + tailStart, readToScore->getData() + tailStart,
-                            readLen - tailStart, 0, scoreLimit, &matchProb1, readToScore->getQuality() + tailStart);
-
-                    if (score1 == -1) {
-                        score = -1;
-                    } else {
-                        // The tail of the read matched; now let's reverse the reference genome data and match the head
-                        int limitLeft = scoreLimit - score1;
-
-                        for (int i = -MAX_K; i <= seedOffset + MAX_K; i++) {
-                            reversedGenomeData[i] = data[seedOffset - 1 - i];
-                        }
- 
-                        // Note that we use the opposite direction read for the quality, since it's the reverse of our direction's
-                        score2 = boundedStringDist->compute(reversedGenomeData, reversedRead[elementToScore->direction] + readLen - seedOffset,
-                                seedOffset, 0, limitLeft, &matchProb2, read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset);
-                        // TODO: Use endShift to mark scored candidates more correctly and to report real location in SAM
-
-                        if (score2 == -1) {
-                            score = -1;
-                        } else {
-                            score = score1 + score2;
-                            // Map probabilities for substrings can be multiplied, but make sure to count seed too
-                            matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
-                        }
-                    }
-#ifdef  TIME_STRING_DISTANCE
-                    timeInBSD = timeInNanos() - bsdStartTime;
-#endif  // TIME_STRING_DISTANCE
-                        
-                    if (score != -1) {
-                        if (similarityMap != NULL) {
-                            biggestClusterScored = __max(biggestClusterScored,
-                                    similarityMap->getNumClusterMembers(genomeLocation));
-                        }
-                    } else {
-                        matchProbability = 0;
-                    }
 #else   // Landau-Vishkin
                     int maxStartShift = __min(scoreLimit, 7);
                     for (int shift = 1; shift <= maxStartShift; shift++) {
                         elementToScore->candidatesScored |= (candidateBit << shift);
                         elementToScore->candidatesScored |= (candidateBit >> shift);
                     }
-                        
+                      
+                    //
                     // Compute the distance separately in the forward and backward directions from the seed, to allow
-                    // arbitrary offsets at both the start and end but not have to pay the cost of exploring all start
-                    // shifts in BoundedStringDistance
+                    // arbitrary offsets at both the start and end.
+                    //
                     double matchProb1, matchProb2;
                     int score1, score2;
                     // First, do the forward direction from where the seed aligns to past of it
@@ -1308,6 +1251,19 @@ Routine Description:
     }
 }
 
+    void
+BaseAligner::prefetchHashTableBucket(unsigned genomeLocation, Direction direction)
+{
+    HashTableAnchor *hashTable = candidateHashTable[direction];
+
+    unsigned lowOrderGenomeLocation = genomeLocation % hashTableElementSize;
+    unsigned highOrderGenomeLocation = genomeLocation - lowOrderGenomeLocation;
+
+    unsigned hashTableIndex = hash(highOrderGenomeLocation) % candidateHashTablesSize;
+
+    _mm_prefetch((const char *)&hashTable[hashTableIndex], _MM_HINT_T2);
+}
+
     bool
 BaseAligner::findElement(
     unsigned         genomeLocation, 
@@ -1501,10 +1457,6 @@ Return Value:
 #endif  // MAINTAIN_HISTOGRAMS
 
     delete probDistance;
-
-#if     defined(USE_BOUNDED_STRING_DISTANCE)
-    delete boundedStringDist;
-#endif  // !bsd   
 
     if (hadBigAllocator) {
         //

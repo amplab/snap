@@ -231,9 +231,6 @@
     <ClInclude Include="mapq.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="BoundedStringDistance.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="directions.h">
       <Filter>Header Files</Filter>
     </ClInclude>

@@ -153,7 +153,6 @@
     <ClInclude Include="Bam.h" />
     <ClInclude Include="BaseAligner.h" />
     <ClInclude Include="bigalloc.h" />
-    <ClInclude Include="BoundedStringDistance.h" />
     <ClInclude Include="BufferedAsync.h" />
     <ClInclude Include="compat.h" />
     <ClInclude Include="DataReader.h" />
