@@ -32,7 +32,7 @@ public:
 
     virtual Read *getNextRead();
 
-    virtual void releaseBefore(DataBatch batch);
+    virtual void releaseBatch(DataBatch batch);
 
 private:
 
@@ -58,7 +58,7 @@ public:
 
     virtual bool getNextReadPair(Read **read0, Read **read1);
 
-    virtual void releaseBefore(DataBatch batch);
+    virtual void releaseBatch(DataBatch batch);
 
 private:
     

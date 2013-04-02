@@ -79,29 +79,29 @@ enum ReadClippingType {NoClipping, ClipFront, ClipBack, ClipFrontAndBack};
 
 class ReadReader {
 public:
-        virtual ~ReadReader() {}
+    virtual ~ReadReader() {}
         
-        // reading
+    // reading
 
-        virtual bool getNextRead(Read *readToUpdate) = 0;
-        virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
+    virtual bool getNextRead(Read *readToUpdate) = 0;
+    virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
 
-        virtual void releaseBefore(DataBatch batch) = 0;
+    virtual void releaseBatch(DataBatch batch) = 0;
 };
 
 class PairedReadReader {
 public:
-        virtual ~PairedReadReader() {}
+    virtual ~PairedReadReader() {}
 
-        // reading
+    // reading
 
-        virtual bool getNextReadPair(Read *read1, Read *read2) = 0;
-        virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
+    virtual bool getNextReadPair(Read *read1, Read *read2) = 0;
+    virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
 
-        virtual void releaseBefore(DataBatch batch) = 0;
+    virtual void releaseBatch(DataBatch batch) = 0;
 
-        // wrap a single read source with a matcher that buffers reads until their mate is found
-        static PairedReadReader* PairMatcher(int bufferSize, ReadReader* single);
+    // wrap a single read source with a matcher that buffers reads until their mate is found
+    static PairedReadReader* PairMatcher(ReadReader* single, bool autoRelease);
 };
 
 class ReadSupplier {
@@ -109,7 +109,7 @@ public:
     virtual Read *getNextRead() = 0;    // This read is valid until you call getNextRead, then it's done.  Don't worry about deallocating it.
     virtual ~ReadSupplier() {}
 
-    virtual void releaseBefore(DataBatch batch) = 0;
+    virtual void releaseBatch(DataBatch batch) = 0;
 };
 
 class PairedReadSupplier {
@@ -118,7 +118,7 @@ public:
     virtual bool getNextReadPair(Read **read0, Read **read1) = 0;
     virtual ~PairedReadSupplier() {}
 
-    virtual void releaseBefore(DataBatch batch) = 0;
+    virtual void releaseBatch(DataBatch batch) = 0;
 };
 
 class ReadSupplierGenerator {

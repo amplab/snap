@@ -84,7 +84,7 @@ struct DataBatch
 };
 
 // read data from a file or other source
-// should all be called from a single thread, except for releaseBefore which is thread-safe
+// should all be called from a single thread, except for releaseBatch which is thread-safe
 class DataReader
 {
 public:
@@ -120,10 +120,10 @@ public:
     // get current batch identifier
     virtual DataBatch getBatch() = 0;
 
-    // release all batches up to but not including the given batch
+    // release buffers associated with this batch for reuse
     // NOTE: this may be called from another thread,
     // so anything it touches must be thread-safe!
-    virtual void releaseBefore(DataBatch batch) = 0;
+    virtual void releaseBatch(DataBatch batch) = 0;
 
     // get current offset into file
     virtual _int64 getFileOffset() = 0;
@@ -177,8 +177,8 @@ public:
     void addRead(DataBatch batch);
 
     // read was removed from a batch
-    // returns true if a batch was released, with the batch to release
-    bool removeRead(DataBatch batch, DataBatch* o_release);
+    // returns true if the batch was released
+    bool removeRead(DataBatch batch);
 
 private:
     typedef FixedSizeMap<DataBatch::Key,int> BatchMap;

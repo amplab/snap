@@ -27,26 +27,26 @@ Revision History:
 #include "ReadSupplierQueue.h"
 
  ReadSupplierQueue::ReadSupplierQueue(ReadReader *reader)
-     : tracker(64), tracker2(16)
- {
-     commonInit();
+     : tracker(64)
+{
+    commonInit();
 
-     singleReader[0] = reader;
+    singleReader[0] = reader;
  }
 
 ReadSupplierQueue::ReadSupplierQueue(ReadReader *firstHalfReader, ReadReader *secondHalfReader)
-     : tracker(64), tracker2(64)
+     : tracker(64)
 {
-     commonInit();
+    commonInit();
 
-     singleReader[0] = firstHalfReader;
-     singleReader[1] = secondHalfReader;
+    singleReader[0] = firstHalfReader;
+    singleReader[1] = secondHalfReader;
 }
 
 ReadSupplierQueue::ReadSupplierQueue(PairedReadReader *i_pairedReader)
-     : tracker(128), tracker2(16)
+     : tracker(128)
 {
-     commonInit();
+    commonInit();
     pairedReader = i_pairedReader;
 }
 
@@ -84,6 +84,7 @@ ReadSupplierQueue::commonInit()
         singleReader[i] = NULL;
     }
     pairedReader = NULL;
+    batch[0] = batch[1] = DataBatch();
 }
 
 ReadSupplierQueue::~ReadSupplierQueue()
@@ -259,18 +260,15 @@ ReadSupplierQueue::doneWithElement(ReadQueueElement *element)
 {
     AcquireExclusiveLock(&lock);
     _ASSERT(element->totalReads > 0);
-    for (VariableSizeVector<DataBatch>::iterator i = element->batches.begin(); i != element->batches.end(); i++) {
-        DataBatch release;
-        //printf("ReadSupplierQueue doneWithElement thread %u batch %d:%d\n", GetCurrentThreadId(), i->fileID, i->batchID);
-        if (((singleReader[1] != NULL && (i->fileID % 2)) ? &tracker2 : &tracker)->removeRead(*i, &release)) {
-                releaseBefore(release);
-        }
+    for (VariableSizeVector<DataBatch>::iterator b = element->batches.begin(); b != element->batches.end(); b++) {
+        releaseBatch(*b);
     }
     element->batches.clear();
     element->addToTail(emptyQueue);
     AllowEventWaitersToProceed(&emptyBuffersAvailable);
     ReleaseExclusiveLock(&lock);
 }
+
     void 
 ReadSupplierQueue::supplierFinished()
 {
@@ -285,16 +283,22 @@ ReadSupplierQueue::supplierFinished()
 }
 
     void
-ReadSupplierQueue::releaseBefore(
+ReadSupplierQueue::releaseBatch(
     DataBatch batch)
 {
-    //printf("ReadSupplierQueue releaseBefore %d:%d\n", batch.fileID, batch.batchID);
-    if (singleReader[1] != NULL) {
-        singleReader[batch.fileID % 2]->releaseBefore(DataBatch(batch.batchID, batch.fileID / 2));
-    } else if (singleReader[0] != NULL) {
-        singleReader[0]->releaseBefore(batch);
-    } else if (pairedReader != NULL) {
-        pairedReader->releaseBefore(batch);
+    //printf("ReadSupplierQueue releaseBatch %d:%d\n", batch.fileID, batch.batchID);
+    AcquireExclusiveLock(&lock);
+    bool removed = tracker.removeRead(batch);
+    ReleaseExclusiveLock(&lock);
+
+    if (removed) {
+        if (pairedReader != NULL) {
+            pairedReader->releaseBatch(batch);
+        } else if (singleReader[1] == NULL) {
+            singleReader[0]->releaseBatch(batch);
+        } else {
+            singleReader[batch.fileID % 2]->releaseBatch(DataBatch(batch.batchID, batch.fileID / 2));
+        }
     }
 }
 
@@ -321,7 +325,6 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
     int balanceIncrement = params->isSecondReader ? -1 : 1;
     int firstOrSecond = params->isSecondReader ? 1 : 0;
     bool isSingleReader = (NULL == singleReader[1]);
-    BatchTracker* trackers[2] = {&tracker, &tracker2};
 
     while (!done) {
         if ((!isSingleReader) && balance * balanceIncrement > MaxImbalance) {
@@ -367,7 +370,7 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
                     element->batches.push_back(read->getBatch());
                     //printf("ReadSupplierQueue::ReaderThread[%d] batch %d:%d\n", firstOrSecond, read->getBatch().fileID, read->getBatch().batchID);
                     AcquireExclusiveLock(&lock);
-                    trackers[firstOrSecond]->addRead(read->getBatch());
+                    tracker.addRead(read->getBatch());
                     ReleaseExclusiveLock(&lock);
                 }
             } else if (NULL != pairedReader) {
@@ -474,10 +477,10 @@ ReadSupplierFromQueue::getNextRead()
 }
 
     void
-ReadSupplierFromQueue::releaseBefore(
+ReadSupplierFromQueue::releaseBatch(
     DataBatch batch)
 {
-    queue->releaseBefore(batch);
+    queue->releaseBatch(batch);
 }
 
 PairedReadSupplierFromQueue::PairedReadSupplierFromQueue(ReadSupplierQueue *i_queue, bool i_twoFiles) :
@@ -543,8 +546,8 @@ PairedReadSupplierFromQueue::getNextReadPair(Read **read0, Read **read1)
 }
     
     void
-PairedReadSupplierFromQueue::releaseBefore(
+PairedReadSupplierFromQueue::releaseBatch(
     DataBatch batch)
 {
-    queue->releaseBefore(batch);
+    queue->releaseBatch(batch);
 }

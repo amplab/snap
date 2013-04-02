@@ -25,18 +25,33 @@ Revision History:
 #include "Read.h"
 #include "Compat.h"
 #include "VariableSizeVector.h"
+#include "VariableSizeMap.h"
+
+using std::pair;
 
 class ReadSupplierFromQueue;
 class PairedReadSupplierFromQueue;
 
 struct ReadQueueElement {
-    ReadQueueElement() : next(NULL), prev(NULL), batches(16) {}
+    ReadQueueElement()
+        : next(NULL), prev(NULL)
+    {
+        reads = (Read*) BigAlloc(nReads * sizeof(Read));
+    }
 
-    static const int nReads = 10000;
+    ~ReadQueueElement()
+    {
+        BigDealloc(reads);
+        reads = NULL;
+    }
+
+    // note this should be about read buffer size for input reads
+    // todo: make this variable (e.g. SAM vs. BAM vs. FASTQ have different read sizes, we might want to vary buffer size
+    static const int    nReads = 100000; 
     ReadQueueElement    *next;
     ReadQueueElement    *prev;
     int                 totalReads;
-    Read                reads[nReads];
+    Read*               reads;
     VariableSizeVector<DataBatch> batches;
 
     void addToTail(ReadQueueElement *queueHead) {
@@ -96,45 +111,50 @@ public:
     void doneWithElement(ReadQueueElement *element);
     void supplierFinished();
 
-    void releaseBefore(DataBatch batch);
+    void releaseBatch(DataBatch batch);
 
 private:
 
     void commonInit();
-
 
     ReadReader          *singleReader[2];   // Only [0] is filled in for single ended reads
     PairedReadReader    *pairedReader;      // This is filled in iff there are no single readers
 
     ReadQueueElement    readyQueue[2];      // Queue [1] is used only when there are two single end readers
 
+    DataBatch           batch[2];           // batch of each read in pair currently, 0.asKey <= 1.asKey
+    // used when paired:
+    // creates own unique batch ID for each combination of input batch IDs
     BatchTracker        tracker;            // track batches used in queues, use refcount per element (not per read)
-    BatchTracker        tracker2;
+    unsigned            nextBatch;          // allocate my own ids for pairs
+    typedef pair<DataBatch,DataBatch> BatchPair;
+    typedef VariableSizeMap<DataBatch::Key,BatchPair> BatchPairMap;
+    BatchPairMap        batchMap;
 
     EventObject         throttle[2];        // Two throttles, one for each of the readers.  At least one must be open at all times.
     int balance;                            // The size of readyQueue[0] - the size of readyQueue[1].  This is used to throttle.
     static const int MaxImbalance = 5;      // Engage the throttle when |balance| > MaxImbalance
  
-    int nReadersRunning;
-    int nSuppliersRunning;
-    bool allReadsQueued;
+    int                 nReadersRunning;
+    int                 nSuppliersRunning;
+    bool                allReadsQueued;
 
     bool areAnyReadsReady(); // must hold the lock to call this.
 
     //
     // Empty buffers waiting for the readers.
     //
-    ReadQueueElement emptyQueue[1];
+    ReadQueueElement    emptyQueue[1];
   
     //
     // Just one lock for all of the shared objects (the queues and Waiter objects, and counts of
     // readers and suppliers running, as well as allReadsQueued).
     //
-    ExclusiveLock   lock;
-    EventObject     readsReady;
-    EventObject     emptyBuffersAvailable;
+    ExclusiveLock       lock;
+    EventObject         readsReady;
+    EventObject         emptyBuffersAvailable;
 
-    EventObject     allReadsConsumed;
+    EventObject         allReadsConsumed;
 
     struct ReaderThreadParams {
         ReadSupplierQueue       *queue;
@@ -155,7 +175,7 @@ public:
 
     Read *getNextRead();
     
-    void releaseBefore(DataBatch batch);
+    void releaseBatch(DataBatch batch);
 
 private:
     bool                done;
@@ -172,7 +192,7 @@ public:
 
     bool getNextReadPair(Read **read0, Read **read1);
 
-    void releaseBefore(DataBatch batch);
+    void releaseBatch(DataBatch batch);
 
 private:
     ReadSupplierQueue   *queue;

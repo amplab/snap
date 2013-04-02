@@ -27,7 +27,7 @@ Revision History:
 #include "Compat.h"
 #include "Read.h"
 #include "DataReader.h"
-#include "FixedSizeMap.h"
+#include "VariableSizeMap.h"
 
 using std::pair;
 using std::map;
@@ -36,61 +36,54 @@ using std::string;
 class PairedReadMatcher: public PairedReadReader
 {
 public:
-    PairedReadMatcher(int i_capacity, ReadReader* i_single);
+    PairedReadMatcher(ReadReader* i_single, bool i_autoRelease);
 
     // PairedReadReader
 
-    virtual ~PairedReadMatcher()
-    { delete single; }
+    virtual ~PairedReadMatcher();
 
     virtual bool getNextReadPair(Read *read1, Read *read2);
     
     virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
     { single->reinit(startingOffset, amountOfFileToProcess); }
 
-    void releaseBefore(DataBatch batch)
-    {
-        if (outerReleased < batch) {
-            outerReleased = batch;
-            checkRelease();
-        }
-    }
+    void releaseBatch(DataBatch batch);
 
 private:
-
-    void checkRelease()
-    {
-        // get min of pending, outer
-        DataBatch release = pendingReleased < outerReleased ? pendingReleased : outerReleased;
-        if (innerReleased < release) {
-            innerReleased = release;
-            single->releaseBefore(release);
-        }
-    }
-
+    
+    const bool autoRelease;
+    ReadReader* single; // reader for single reads
     typedef map<string,Read> ReadMap;
-    ReadMap pending;
-    BatchTracker tracker;
-    ReadReader* single;
-    const int capacity;
-    bool capacityExceeded;
-    DataBatch pendingReleased; // max batch that I have released from the buffer
-    DataBatch outerReleased; // max batch that has been released by others calling releaseBefore
-    DataBatch innerReleased; // max batch sent to single->releaseBefore() = min(pendingReleased, outerReleased)
+    DataBatch batch[2]; // 0 = current, 1 = previous
+    ReadMap unmatched[2]; // read id -> Read
+    // used only if ! autoRelease:
+    bool dependents; // true if pairs from 0->1
+    ExclusiveLock lock; // exclusive access to forward/backward
+    typedef VariableSizeMap<DataBatch::Key,DataBatch> BatchMap;
+    BatchMap forward; // dependencies from older batch (was unmatched) -> newer batch
+    BatchMap backward; // newer batch -> older batch
 };
 
 PairedReadMatcher::PairedReadMatcher(
-    int i_capacity,
-    ReadReader* i_single)
+    ReadReader* i_single,
+    bool i_autoRelease)
     : single(i_single),
-    pending(),
-    tracker(128),
-    capacity(i_capacity),
-    capacityExceeded(false),
-    pendingReleased(),
-    outerReleased(),
-    innerReleased()
+    forward(),
+    backward(),
+    dependents(false),
+    autoRelease(i_autoRelease)
 {
+    if (! autoRelease) {
+        InitializeExclusiveLock(&lock);
+    }
+}
+    
+PairedReadMatcher::~PairedReadMatcher()
+{
+    if (! autoRelease) {
+        DestroyExclusiveLock(&lock);
+    }
+    delete single;
 }
 
     bool
@@ -101,8 +94,9 @@ PairedReadMatcher::getNextReadPair(
     while (true) {
         Read one;
         if (! single->getNextRead(&one)) {
-            if (pending.size() > 0) {
-                fprintf(stderr, "PairedReadMatcher warning: %d unmated reads in file\n", pending.size());
+            int n = unmatched[0].size() + unmatched[1].size();
+            if (n > 0) {
+                fprintf(stderr, " warning: PairedReadMatcher%d discarding unpaired reads at eof\n", n);
             }
             return false;
         }
@@ -113,40 +107,92 @@ PairedReadMatcher::getNextReadPair(
             idLength -= 2;
         }
         string key(id, idLength);
-        ReadMap::iterator found = pending.find(key);
-        if (found == pending.end()) {
-            // no match, remember it for later matching
-            if (pending.size() >= capacity && ! capacityExceeded) {
-                capacityExceeded = true;
-                fprintf(stderr, "More than %d unmatched pending reads\n", capacity);
-                // todo: deal with it; ignore for now, let the table grow...
+        if (one.getBatch() != batch[0]) {
+            // roll over batches
+            if (unmatched[1].size() > 0) {
+                fprintf(stderr, "warning: PairedReadMatcher discarding %d unpaired reads\n", unmatched[1].size());
             }
-	    pending[key] = one;
-            tracker.addRead(one.getBatch());
-            continue;
+            unmatched[1] = unmatched[0];
+            unmatched[0].clear();
+            if (autoRelease) {
+                single->releaseBatch(batch[1]);
+            }
+            batch[1] = batch[0];
+            batch[0] = one.getBatch();
+            dependents = false;
+        }
+        ReadMap::iterator found = unmatched[0].find(key);
+        if (found != unmatched[0].end()) {
+            *read2 = found->second;
+            unmatched[0].erase(found);
+        } else {
+            // try previous batch
+            found = unmatched[1].find(key);
+            if (found == unmatched[1].end()) {
+                // no match, remember it for later matching
+	            unmatched[0][key] = one;
+                continue;
+            }
+            // found, remember dependency
+            if (autoRelease && ! dependents) {
+                dependents = true;
+                AcquireExclusiveLock(&lock);
+                forward.put(batch[1].asKey(), batch[0]);
+                backward.put(batch[0].asKey(), batch[1]);
+                ReleaseExclusiveLock(&lock);
+            }
+            *read2 = found->second;
+            read2->setBatch(batch[0]); // overwrite batch so both reads have same batch, will track deps instead
+            unmatched[1].erase(found);
         }
 
-        // found a match, remove it and return it
+        // found a match
         *read1 = one;
-        *read2 = found->second;
-        // update reference counts for removed read batch, release if tracker requires it
-        DataBatch release;
-        if (tracker.removeRead(found->second.getBatch(), &release) && pendingReleased < release) {
-            //printf("PairedReadMatcher::getNextReadPair pendingReleased %d\n", release.batchID);
-            pendingReleased = release;
-            checkRelease();
-        }
-        pending.erase(key);
         return true;
     }
+}
+
+    void
+PairedReadMatcher::releaseBatch(
+    DataBatch batch)
+{
+    if (autoRelease) {
+        return;
+    }
+    // only release when both forward & backward dependent batches have been released
+    AcquireExclusiveLock(&lock);
+    DataBatch::Key key = batch.asKey();
+    DataBatch* f = forward.tryFind(key);
+    bool keep = false;
+    if (f != NULL) {
+        DataBatch* fb = backward.tryFind(f->asKey());
+        keep = fb != NULL;
+        if (fb == NULL) {
+            single->releaseBatch(*f);
+        }
+        forward.erase(key);
+    }
+    DataBatch* b = backward.tryFind(key);
+    if (b != NULL) {
+        DataBatch* bf = forward.tryFind(b->asKey());
+        keep |= bf != NULL;
+        if (bf == NULL) {
+            single->releaseBatch(*b);
+        }
+        backward.erase(key);
+    }
+    if (! keep) {
+        single->releaseBatch(batch);
+    }
+    ReleaseExclusiveLock(&lock);
 }
 
 // define static factory function
 
     PairedReadReader*
 PairedReadReader::PairMatcher(
-    int bufferSize,
-    ReadReader* single)
+    ReadReader* single,
+    bool autoRelease)
 {
-    return new PairedReadMatcher(bufferSize, single);
+    return new PairedReadMatcher(single, autoRelease);
 }

@@ -52,8 +52,8 @@ public:
 
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
         
-        void releaseBefore(DataBatch batch)
-        { data->releaseBefore(batch); }
+        void releaseBatch(DataBatch batch)
+        { data->releaseBatch(batch); }
 
 private:
     
@@ -100,8 +100,8 @@ public:
 
         static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName0, const char *fileName1, int numThreads, ReadClippingType clipping = ClipBack, bool gzip = false);
  
-        void releaseBefore(DataBatch batch)
-        { _ASSERT(false); }
+        void releaseBatch(DataBatch batch)
+        { _ASSERT(false); /* not supported */ }
 
 private:
 

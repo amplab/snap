@@ -147,7 +147,7 @@ BAMReader::createPairedReadSupplierGenerator(
     int matchBufferSize)
 {
     BAMReader* reader = create(fileName, genome, 0, 0, clipping);
-    PairedReadReader* matcher = PairedReadReader::PairMatcher(5000, reader);
+    PairedReadReader* matcher = PairedReadReader::PairMatcher(reader, false);
     ReadSupplierQueue* queue = new ReadSupplierQueue(matcher);
     queue->startReaders();
     return queue;

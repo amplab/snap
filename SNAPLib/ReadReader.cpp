@@ -43,8 +43,8 @@ public:
         // return getNextRead(read,alignmentResult,genomeLocation,isRC,mapQ,flag,false,cigar);
     }
 
-    void releaseBefore(DataBatch batch)
-    { data->releaseBefore(batch); }
+    void releaseBatch(DataBatch batch)
+    { data->releaseBatch(batch); }
 
 
 private:

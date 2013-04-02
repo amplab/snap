@@ -502,13 +502,14 @@ SAMReader::createPairedReader(
     const Genome *genome,
     _int64 startingOffset,
     _int64 amountOfFileToProcess, 
+    bool autoRelease,
     ReadClippingType clipping)
 {
     SAMReader* reader = SAMReader::create(DataSupplier::Default[false], fileName, genome, 0, 0, clipping);
     if (reader == NULL) {
         return NULL;
     }
-    return PairedReadReader::PairMatcher(5000, reader);
+    return PairedReadReader::PairMatcher(reader, autoRelease);
 }
 
 

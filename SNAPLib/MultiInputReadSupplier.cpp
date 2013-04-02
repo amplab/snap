@@ -96,12 +96,12 @@ MultiInputReadSupplier::getNextRead()
 }
 
     void
-MultiInputReadSupplier::releaseBefore(
+MultiInputReadSupplier::releaseBatch(
     DataBatch batch)
 {
-    int index = batch.fileID - 1;
+    int index = batch.fileID % nReadSuppliers;
     _ASSERT(index >= 0 && index < nReadSuppliers);
-    readSuppliers[index]->releaseBefore(DataBatch(batch.batchID));
+    readSuppliers[index]->releaseBatch(DataBatch(batch.batchID, batch.fileID / nReadSuppliers));
 }
 
 MultiInputPairedReadSupplier::MultiInputPairedReadSupplier(int i_nReadSuppliers, PairedReadSupplier **i_pairedReadSuppliers)
@@ -176,20 +176,20 @@ MultiInputPairedReadSupplier::getNextReadPair(Read **read0, Read **read1)
         }
     }
     active->lastBatch[0] = (*read0)->getBatch();
-    (*read0)->setBatch(DataBatch(active->index + 1, active->lastBatch[0].batchID));
+    (*read0)->setBatch(DataBatch(active->lastBatch[0].fileID * nReadSuppliers + active->index, active->lastBatch[0].batchID));
     active->lastBatch[1] = (*read1)->getBatch();
-    (*read1)->setBatch(DataBatch(active->index + 1, active->lastBatch[1].batchID));
+    (*read1)->setBatch(DataBatch(active->lastBatch[1].fileID * nReadSuppliers + active->index, active->lastBatch[1].batchID));
 
     return true;
 }
 
     void
-MultiInputPairedReadSupplier::releaseBefore(
+MultiInputPairedReadSupplier::releaseBatch(
     DataBatch batch)
 {
-    int index = batch.fileID - 1;
+    int index = batch.fileID % nReadSuppliers;
     _ASSERT(index >= 0 && index < nReadSuppliers);
-    pairedReadSuppliers[index]->releaseBefore(DataBatch(batch.batchID));
+    pairedReadSuppliers[index]->releaseBatch(DataBatch(batch.batchID, batch.fileID / nReadSuppliers));
 }
 
 

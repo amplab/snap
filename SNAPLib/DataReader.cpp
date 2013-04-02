@@ -59,7 +59,7 @@ public:
 
     virtual DataBatch getBatch();
 
-    virtual void releaseBefore(DataBatch batch);
+    virtual void releaseBatch(DataBatch batch);
 
     virtual _int64 getFileOffset();
 
@@ -94,6 +94,7 @@ private:
         _uint32         batchID;
         OVERLAPPED      lap;
         char*           extra;
+        int             next, previous; // index of next/previous in free/ready list, -1 if end
     };
 
     _int64              extraBytes;
@@ -102,8 +103,9 @@ private:
     LARGE_INTEGER       readOffset;
     _int64              endingOffset;
     _uint32             nextBatchID;
-    unsigned            nextBufferForReader;
-    unsigned            nextBufferForConsumer;
+    int                 nextBufferForReader; // list head (singly linked), -1 if empty
+    int                 nextBufferForConsumer; // list head (doubly linked), -1 if empty
+    int                 lastBufferForConsumer; // list tail, -1 if empty
     HANDLE              releaseEvent;
     ExclusiveLock       lock;
 };
@@ -127,7 +129,7 @@ WindowsOverlappedDataReader::WindowsOverlappedDataReader(
         fprintf(stderr,"WindowsOverlappedDataReader: unable to allocate IO buffer\n");
         soft_exit(1);
     }
-    for (unsigned i = 0 ; i < nBuffers; i++) {
+    for (int i = 0 ; i < nBuffers; i++) {
         bufferInfo[i].buffer = allocated;
         allocated += bufferSize + overflowBytes;
         bufferInfo[i].extra = extraBytes > 0 ? allocated : NULL;
@@ -142,10 +144,14 @@ WindowsOverlappedDataReader::WindowsOverlappedDataReader(
         bufferInfo[i].state = Empty;
         bufferInfo[i].isEOF = false;
         bufferInfo[i].offset = 0;
+        bufferInfo[i].next = i != 0 && i < nBuffers - 1 ? i + 1 : -1;
+        bufferInfo[i].previous = i > 1 ? i - 1 : -1;
     }
     nextBatchID = 1;
     hFile = INVALID_HANDLE_VALUE;
-    nextBufferForConsumer = nextBufferForReader = 0;
+    nextBufferForConsumer = 0;
+    lastBufferForConsumer = 0;
+    nextBufferForReader = 1;
     releaseEvent = CreateEvent(NULL, TRUE, TRUE, NULL);
     InitializeExclusiveLock(&lock);
 }
@@ -224,10 +230,13 @@ WindowsOverlappedDataReader::reinit(
         bufferInfo[i].state = Empty;
         bufferInfo[i].isEOF= false;
         bufferInfo[i].offset = 0;
+        bufferInfo[i].next = i != 0 && i < nBuffers - 1 ? i + 1 : -1;
+        bufferInfo[i].previous = i > 1 ? i - 1 : -1;
     }
 
-    nextBufferForReader = 0;
-    nextBufferForConsumer = 0;    
+    nextBufferForReader = 1;
+    nextBufferForConsumer = 0; 
+    lastBufferForConsumer = 0;
 
     readOffset.QuadPart = i_startingOffset;
     if (amountOfFileToProcess == 0) {
@@ -240,7 +249,7 @@ WindowsOverlappedDataReader::reinit(
     }
 
     //
-    // Kick off IO, wait for the first buffer to be read and then skip until hitting the first newline.
+    // Kick off IO, wait for the first buffer to be read
     //
     startIo();
     waitForBuffer(nextBufferForConsumer);
@@ -298,31 +307,38 @@ WindowsOverlappedDataReader::nextBatch()
     BufferInfo* info = &bufferInfo[nextBufferForConsumer];
     if (info->isEOF) {
         if (autoRelease) {
-            releaseBefore(DataBatch(info->batchID + 1));
+            releaseBatch(DataBatch(info->batchID));
         }
         return;
     }
+    DataBatch priorBatch = DataBatch(info->batchID);
 
     AcquireExclusiveLock(&lock);
 
     info->state = InUse;
     _uint32 overflow = max((DWORD) info->offset, info->nBytesThatMayBeginARead) - info->nBytesThatMayBeginARead;
-    const unsigned advance = (nextBufferForConsumer + 1) % nBuffers;
-    if (bufferInfo[advance].state != Full) {
-        waitForBuffer(advance);
+    _int64 nextStart = info->fileOffset + info->nBytesThatMayBeginARead;
+    nextBufferForConsumer = info->next;
+    if (nextBufferForConsumer == -1) {
+        startIo();
+        if (nextBufferForConsumer == -1) {
+            _ASSERT(false); // should not happen - maybe wierd EOF condition?
+            return;
+        }
     }
-    bufferInfo[advance].offset = overflow;
+    if (bufferInfo[nextBufferForConsumer].state != Full) {
+        waitForBuffer(nextBufferForConsumer);
+    }
+    bufferInfo[nextBufferForConsumer].offset = overflow;
 
-    _ASSERT(bufferInfo[nextBufferForConsumer].fileOffset + bufferInfo[nextBufferForConsumer].nBytesThatMayBeginARead == 
-                bufferInfo[advance].fileOffset);
+    _ASSERT(nextStart == bufferInfo[nextBufferForConsumer].fileOffset);
         
-    nextBufferForConsumer = advance;
     startIo();
 
     ReleaseExclusiveLock(&lock);
 
     if (autoRelease) {
-        releaseBefore(DataBatch(bufferInfo[advance].batchID));
+        releaseBatch(priorBatch);
     }
 }
 
@@ -339,7 +355,7 @@ WindowsOverlappedDataReader::getBatch()
 }
 
     void
-WindowsOverlappedDataReader::releaseBefore(
+WindowsOverlappedDataReader::releaseBatch(
     DataBatch batch)
 {
     AcquireExclusiveLock(&lock);
@@ -347,7 +363,7 @@ WindowsOverlappedDataReader::releaseBefore(
     bool released = false;
     for (int i = 0; i < nBuffers; i++) {
         BufferInfo* info = &bufferInfo[i];
-        if (info->batchID < batch.batchID) {
+        if (info->batchID == batch.batchID) {
             switch (info->state) {
             case Empty:
                 // nothing
@@ -362,8 +378,24 @@ WindowsOverlappedDataReader::releaseBefore(
                 released = true;
                 // fall through
             case Full:
-                //printf("releaseBefore batch %d, releasing %s buffer %d\n", batch.batchID, info->state == InUse ? "InUse" : "Full", i);
+                //printf("releaseBatch batch %d, releasing %s buffer %d\n", batch.batchID, info->state == InUse ? "InUse" : "Full", i);
                 info->state = Empty;
+                // remove from ready list
+                if (i == nextBufferForConsumer) {
+                    nextBufferForConsumer = info->next;
+                }
+                if (i == lastBufferForConsumer) {
+                    lastBufferForConsumer = info->previous;
+                }
+                if (info->next != -1) {
+                    bufferInfo[info->next].previous = info->previous;
+                }
+                if (info->previous != -1) {
+                    bufferInfo[info->previous].next = info->next;
+                }
+                // add to head of free list
+                info->next = nextBufferForReader;
+                nextBufferForReader = i;
                 break;
 
             default:
@@ -404,9 +436,21 @@ WindowsOverlappedDataReader::startIo()
     //
     // Launch reads on whatever buffers are ready.
     //
-    while (bufferInfo[nextBufferForReader].state == Empty) {
-        BufferInfo *info = &bufferInfo[nextBufferForReader];
+    while (nextBufferForReader != -1) {
+        // remove from free list
+        BufferInfo* info = &bufferInfo[nextBufferForReader];
+        _ASSERT(info->state == Empty);
+        int index = nextBufferForReader;
+        nextBufferForReader = info->next;
         info->batchID = nextBatchID++;
+        // add to end of consumer list
+        if (lastBufferForConsumer != -1) {
+            _ASSERT(bufferInfo[lastBufferForConsumer].next == -1);
+            bufferInfo[lastBufferForConsumer].next = index;
+        }
+        info->next = -1;
+        info->previous = lastBufferForConsumer;
+        lastBufferForConsumer = index;
 
         if (readOffset.QuadPart >= fileSize.QuadPart || readOffset.QuadPart >= endingOffset) {
             info->validBytes = 0;
@@ -447,8 +491,6 @@ WindowsOverlappedDataReader::startIo()
         readOffset.QuadPart += info->nBytesThatMayBeginARead;
         info->state = Reading;
         info->offset = 0;
-
-        nextBufferForReader = (nextBufferForReader + 1) % nBuffers;
     }
 }
 
@@ -536,7 +578,7 @@ public:
 
     virtual DataBatch getBatch();
 
-    virtual void releaseBefore(DataBatch batch);
+    virtual void releaseBatch(DataBatch batch);
 
     virtual _int64 getFileOffset();
 
@@ -654,12 +696,13 @@ GzipDataReader::nextBatch()
     char* priorData; _int64 n;
     inner->getExtra(&priorData, &n);
     priorData += validBytes - priorBytes;
+    DataBatch innerBatch = inner->getBatch();
     inner->nextBatch();
     char* currentData;
     inner->getExtra(&currentData, &n);
     memcpy(currentData, priorData, priorBytes);
     if (autoRelease) {
-        inner->releaseBefore(inner->getBatch());
+        inner->releaseBatch(innerBatch);
     }
     offset = 0;
     gotBatchData = false;
@@ -679,10 +722,10 @@ GzipDataReader::getBatch()
 }
 
     void
-GzipDataReader::releaseBefore(
+GzipDataReader::releaseBatch(
     DataBatch batch)
 {
-    inner->releaseBefore(batch);
+    inner->releaseBatch(batch);
 }
 
     _int64
@@ -842,7 +885,7 @@ public:
 
     virtual DataBatch getBatch();
 
-    virtual void releaseBefore(DataBatch batch);
+    virtual void releaseBatch(DataBatch batch);
 
     virtual _int64 getFileOffset();
 
@@ -876,14 +919,16 @@ private:
     _int64          currentMapStartSize; // start size of mapped region (not incl overflow)
     _int64          currentMapSize; // total valid size of mapped region (incl overflow)
     char*           extra; // extra data buffer
+    int             extraUsed; // number of extra data buffers in use
+    DataBatch*      extraBatches; // non-zero for each extra buffer that is in use
+    int             currentExtraIndex; // index of extra block for current batch
     _int64          offset; // into current batch
     _uint32         currentBatch; // current batch number starting at 1
     _int64          startBytes; // in current batch
     _int64          validBytes; // in current batch
-    _uint32         earliestUnreleasedBatch; // smallest batch number that is unreleased
     FileMapper      mapper;
     SingleWaiterObject waiter; // flow control
-    ExclusiveLock   lock; // lock around flow control members (currentBatch, earliestUnreleasedBatch)
+    ExclusiveLock   lock; // lock around flow control members (currentBatch, extraUsed, etc.)
 };
  
 
@@ -894,20 +939,29 @@ MemMapDataReader::MemMapDataReader(int i_batchCount, _int64 i_batchSize, _int64 
         overflowBytes(i_overflowBytes),
         batchExtra(i_batchExtra),
         currentBatch(1),
-        earliestUnreleasedBatch(1),
+        extraUsed(0),
         currentMap(NULL),
         currentMapOffset(0),
         currentMapSize(0),
+        currentExtraIndex(0),
         mapper()
 {
     _ASSERT(batchCount > 0 && batchSizeParam >= 0 && batchExtra >= 0);
-    extra = batchExtra > 0 ? (char*) BigAlloc(batchCount * batchExtra) : NULL;
+    if (batchExtra > 0) {
+        extra = (char*) BigAlloc(batchCount * batchExtra);
+        extraBatches = new DataBatch[batchCount];
+        memset(extraBatches, 0, sizeof(DataBatch));
+    } else {
+        extra = NULL;
+        extraBatches = NULL;
+    }
     if (batchCount != 1) {
         if (! (CreateSingleWaiterObject(&waiter) && InitializeExclusiveLock(&lock))) {
             fprintf(stderr, "MemMapDataReader: CreateSingleWaiterObject failed\n");
             soft_exit(1);
         }
     }
+    
 }
 
 MemMapDataReader::~MemMapDataReader()
@@ -915,6 +969,9 @@ MemMapDataReader::~MemMapDataReader()
     if (extra != NULL) {
         BigDealloc(extra);
         extra = NULL;
+    }
+    if (extraBatches != NULL) {
+        delete [] extraBatches;
     }
     if (batchCount != 1) {
         DestroyExclusiveLock(&lock);
@@ -970,7 +1027,11 @@ MemMapDataReader::reinit(
     currentBatch = 1;
     startBytes = min(batchSize, currentMapStartSize - (currentBatch - 1) * batchSize);
     validBytes = min(batchSize + overflowBytes, currentMapSize - (currentBatch - 1) * batchSize);
-    earliestUnreleasedBatch = 1;
+    extraUsed = 0;
+    if (extraBatches != NULL) {
+        memset(extraBatches, 0, sizeof(DataBatch) * batchCount);
+    }
+    currentExtraIndex = 0;
     releaseLock();
     if (batchCount != 1) {
         SignalSingleWaiterObject(&waiter);
@@ -983,9 +1044,6 @@ MemMapDataReader::getData(
     _int64* o_validBytes,
     _int64* o_startBytes)
 {
-    if (batchCount != 1 && currentBatch - earliestUnreleasedBatch >= batchCount) {
-        WaitForSingleWaiterObject(&waiter);
-    }
     if (offset >= startBytes) {
         return false;
     }
@@ -1011,21 +1069,35 @@ MemMapDataReader::nextBatch()
     if (isEOF()) {
         return;
     }
-    acquireLock();
-    offset = max(offset, startBytes) - startBytes;
-    currentBatch++;
-    if (! autoRelease) {
-        _ASSERT(batchCount != 1);
-        if (batchCount != 1 && currentBatch - earliestUnreleasedBatch >= batchCount) {
-            ResetSingleWaiterObject(&waiter);
+    while (true) {
+        acquireLock();
+        if (extraBatches == NULL || extraUsed < batchCount) {
+            if (extraBatches != NULL) {
+                currentBatch++;
+                bool found = false;
+                for (int i = 0; i < batchCount; i++) {
+                    if (extraBatches[i].batchID == 0) {
+                        extraBatches[i].batchID = currentBatch;
+                        currentExtraIndex = i;
+                        found = true;
+                        break;
+                    }
+                }
+                _ASSERT(found);
+                extraUsed++;
+                if (extraUsed == batchCount) {
+                    ResetSingleWaiterObject(&waiter);
+                }
+            }
+            releaseLock();
+            startBytes = min(batchSize, currentMapStartSize - (currentBatch - 1) * batchSize);
+            validBytes = min(batchSize + overflowBytes, currentMapSize - (currentBatch - 1) * batchSize);
+            _ASSERT(validBytes >= 0);
+            return;
         }
-    } else {
-        releaseBefore(DataBatch(currentBatch));
+        releaseLock();
+        WaitForSingleWaiterObject(&waiter);
     }
-    startBytes = min(batchSize, currentMapStartSize - (currentBatch - 1) * batchSize);
-    validBytes = min(batchSize + overflowBytes, currentMapSize - (currentBatch - 1) * batchSize);
-    releaseLock();
-    _ASSERT(validBytes >= 0);
 }
 
     bool
@@ -1041,17 +1113,25 @@ MemMapDataReader::getBatch()
 }
 
     void
-MemMapDataReader::releaseBefore(
+MemMapDataReader::releaseBatch(
     DataBatch batch)
 {
-    if (batch.batchID > earliestUnreleasedBatch) {
-        acquireLock();
-        if (batchCount != 1 && currentBatch - earliestUnreleasedBatch >= batchCount && currentBatch - batch.batchID < batchCount) {
-            SignalSingleWaiterObject(&waiter);
-        }
-        earliestUnreleasedBatch = min(currentBatch, batch.batchID);
-        releaseLock();
+    if (extraBatches == NULL) {
+        return;
     }
+    acquireLock();
+    for (int i = 0; i < batchCount; i++) {
+        if (extraBatches[i] == batch) {
+            extraBatches[i].batchID = 0;
+            _ASSERT(extraUsed > 0);
+            extraUsed--;
+            if (extraUsed == batchCount - 1) {
+                SignalSingleWaiterObject(&waiter);
+            }
+            break;
+        }
+    }
+    releaseLock();
 }
 
     _int64
@@ -1069,8 +1149,7 @@ MemMapDataReader::getExtra(
         *o_extra = NULL;
         *o_length = 0;
     } else {
-        int index = (currentBatch - 1) % batchCount;
-        *o_extra = extra + index * batchExtra;
+        *o_extra = extra + currentExtraIndex * batchExtra;
         *o_length = batchExtra;
     }
 }
@@ -1113,8 +1192,7 @@ BatchTracker::addRead(
 
     bool
 BatchTracker::removeRead(
-    DataBatch removed,
-    DataBatch* release)
+    DataBatch removed)
 {
     DataBatch::Key key = removed.asKey();
     unsigned n = pending.get(key);
@@ -1124,22 +1202,7 @@ BatchTracker::removeRead(
         return false;
     }
     pending.erase(key);
-    // removed one, find smallest remaining batch in same file
-    unsigned minBatch = UINT32_MAX;
-    for (BatchMap::iterator i = pending.begin(); i != pending.end(); i = pending.next(i)) {
-        if (pending.value(i) > 0) {
-            DataBatch k(pending.key(i));
-            if (k.fileID == removed.fileID && k.batchID < minBatch) {
-                minBatch = k.batchID;
-            }
-        }
-    }
-    if (minBatch == UINT32_MAX) {
-        *release = removed;
-        return true;
-    } 
-    *release = DataBatch(minBatch, removed.fileID);
-    return removed < *release;
+    return true;
 }
 
 //

@@ -64,14 +64,14 @@ public:
             return getNextRead(read, alignmentResult, genomeLocation, direction, mapQ, flag, false, cigar);
         }
 
-        void releaseBefore(DataBatch batch)
-        { data->releaseBefore(batch); }
+        void releaseBatch(DataBatch batch)
+        { data->releaseBatch(batch); }
 
         static SAMReader* create(const DataSupplier* supplier, const char *fileName, const Genome *genome, _int64 startingOffset, _int64 amountOfFileToProcess, 
                                  ReadClippingType clipping = ClipBack);
         
         static PairedReadReader* createPairedReader(const DataSupplier* supplier, const char *fileName, const Genome *genome, _int64 startingOffset, _int64 amountOfFileToProcess, 
-                                 ReadClippingType clipping = ClipBack);
+                                 bool autoRelease, ReadClippingType clipping = ClipBack);
 
         static ReadSupplierGenerator *createReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack);
         static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack);

@@ -309,8 +309,8 @@ public:
             return getNextReadPair(read1,read2,NULL,NULL,NULL);
         }
 
-        void releaseBefore(DataBatch batch)
-        { data->releaseBefore(batch); }
+        void releaseBatch(DataBatch batch)
+        { data->releaseBatch(batch); }
 
         static BAMReader* create(const char *fileName, const Genome *genome, _int64 startingOffset, _int64 amountOfFileToProcess, 
                                  ReadClippingType clipping = ClipBack, bool paired = false);
