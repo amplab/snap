@@ -1,0 +1,138 @@
+1.  Files snap/apps/snap/Main.cpp and test/snap/apps/snap/Main.cpp differ
+
+Added in new command line option 'rnaseq' to SNAP in addition to 'single', 'paired', and 'index'.
+
+2. Files snap/SNAPLib/AlignerContext.cpp and test/snap/SNAPLib/AlignerContext.cpp differ
+   Files snap/SNAPLib/AlignerContext.h and test/snap/SNAPLib/AlignerContext.h differ
+
+Create 'transcriptome' as a new GenomeIndex object.
+Create 'gtf' as a new GTFReader object
+
+Pass transcriptome as a parameter to ParallelSamWriter
+
+3. Files snap/SNAPLib/AlignerOptions.h and test/snap/SNAPLib/AlignerOptions.h differ
+
+Define 'transcriptomeDir' and 'annotation' character strings for input filenames
+
+4. Only in snap/SNAPLib: AlignmentFilter.cpp
+   Only in snap/SNAPLib: AlignmentFilter.h
+
+New class to combine identical RNASeq alignments aligned to genome and transcriptome using map.
+All valid paired end alignments are identified and sorted by mismatches.  Unique alignments
+returned, otherwise the number of mismatches is used to choose high or low quality alignments.
+
+5. Files snap/SNAPLib/BaseAligner.cpp and test/snap/SNAPLib/BaseAligner.cpp differ
+   Files snap/SNAPLib/BaseAligner.h and test/snap/SNAPLib/BaseAligner.h differ
+
+This is the only place the new getSubstring amountRemaining variable is actually
+used.  If getSubstring() returns NULL, I update the amount remaining and call again.  
+This is to fix the issue with CIGAR generation on alignments less than MAX_K from the
+end of the chromosome (or transcript).  Described in more detail below (Genome.h).
+
+6. Files snap/SNAPLib/FASTA.cpp and test/snap/SNAPLib/FASTA.cpp differ
+
+Modified getSubstring call to pass in amountRemaining (explained below).
+
+7. Files snap/SNAPLib/Genome.cpp and test/snap/SNAPLib/Genome.cpp differ
+   Files snap/SNAPLib/Genome.h and test/snap/SNAPLib/Genome.h differ
+   
+Modified getSubstring() function in Genome.h.  My understanding of this function
+is to return a pointer to the genome at the requested location and offset, or 
+to return NULL if the location+offset exceeds the genome length. This introduces a
+small issue during CIGAR generation.  If the read is aligned within MAX_K of the end of
+the chromosome (not really relevant during genome alignments but very relevant 
+during transcriptome alignments) then requesting alignment_position + MAX_K will return NULL. 
+To address this, I return the amountRemaining in the chromosome via the reference 
+variable, and if getSubstring returns NULL I re-call getSubstring using
+amountRemaining instead of MAX_K.  I had to update several classes that call getSubstring,
+though none of them actually use the amountRemaining variable except for BaseAligner class.
+   
+8. Files snap/SNAPLib/GenomeIndex.cpp and test/snap/SNAPLib/GenomeIndex.cpp differ
+
+Just a bunch of amountRemaining/getSubstring calls as described above.
+
+9. Files snap/SNAPLib/GenomeIndex.h and test/snap/SNAPLib/GenomeIndex.h differ
+
+I had to make GenomeIndex() constructor public in order to create the 
+transcriptome GenomeIndex.
+
+10. Only in snap/SNAPLib: GTFReader.cpp
+    Only in snap/SNAPLib: GTFReader.h
+
+New class to parse the GTF annotation and put it in a big hash table using transcript names
+as keys. On my TODO list: Expand this class to read GFF files as well as GTF files.  Also, 
+I need to add functionality to build a transcriptome using the genome fasta file and 
+the annotation.  Right now I build my transcriptomes using a python file. Should also
+add functionality to build the SNAP index automatically. 
+
+11. Files snap/SNAPLib/IntersectingAligner.cpp and test/snap/SNAPLib/IntersectingAligner.cpp differ
+
+More getSubstring calls
+
+12. Files snap/SNAPLib/LandauVishkin.cpp and test/snap/SNAPLib/LandauVishkin.cpp differ
+    Files snap/SNAPLib/LandauVishkin.h and test/snap/SNAPLib/LandauVishkin.h differ
+
+I'm sorry for how I massacred your excellent function here by including a vector 'tokens'.  
+In order to insert splice junctions in alignments I need a list of cigar tokens. I can either
+use a slow tokenizer in the SAM class to split the built CIGAR string apart using regular
+expressions, or have LandauVishkin return a list of tokens.  There is probably a better
+way to do this.
+
+13. Files snap/SNAPLib/Mutation.h and test/snap/SNAPLib/Mutation.h differ
+    Files snap/SNAPLib/Mutator.cpp and test/snap/SNAPLib/Mutator.cpp differ
+
+More getSubstring calls
+
+14. Files snap/SNAPLib/OldAligner.cpp and test/snap/SNAPLib/OldAligner.cpp differ
+
+More getSubstring calls
+
+15. Files snap/SNAPLib/PairedAligner.cpp and test/snap/SNAPLib/PairedAligner.cpp differ
+
+The PairedAlignmentResult struct now contains one additional field, isTranscriptome, 
+a Boolean variable that tells the SAM class if the alignment is to the transcriptome
+or to the genome and thus should we search for splice junctions. This just makes 
+sure those variables are set to false by default for each alignment.  
+
+16. Files snap/SNAPLib/PairedEndAligner.h and test/snap/SNAPLib/PairedEndAligner.h differ
+
+Added new array variable to PairedAlignmentResult struct (isTranscriptome). Explained above.
+
+17. Only in snap/SNAPLib: RNASeqAligner.cpp
+    Only in snap/SNAPLib: RNASeqAligner.h
+
+New class RNASeqAligner, basically a copy of PairedAligner.cpp, with new command line options.
+Also adds code to load in the Transcriptome from the transcriptome index and the annotation
+from the GTF file in initialize().
+
+18. Only in snap/SNAPLib: RNASeqPairedEndAligner.cpp
+    Only in snap/SNAPLib: RNASeqPairedEndAligner.h
+
+New class RNASeqPairedEndAligner. Basically a copy of SmarterPairedEndAligner with lots
+of unused code. Some hardcoded options in here too (explorePopularSeeds and maxHitsToGet) 
+which should be defined on the command line/have default options. Uses multiHit capability
+of BaseAligner to transcriptome and genome index.  All results are passed into the
+AlignmentFilter class to be sorted and scored.  
+
+19. Files snap/SNAPLib/SAM.cpp and test/snap/SNAPLib/SAM.cpp differ
+    Files snap/SNAPLib/SAM.h and test/snap/SNAPLib/SAM.h differ
+
+Lots of changes in this class.  Major change: new function to add in splice junctions
+for transcriptome alignments.  Also lots of little changes to all SAMWriters to allow
+the isTranscriptome bool variable to be passed in.  Lots of other little changes that 
+are too numerous to list involving transcriptome alignments.  I hope they will be 
+self-explanatory.
+
+20. Files snap/SNAPLib/SingleAligner.cpp and test/snap/SNAPLib/SingleAligner.cpp differ
+
+Since this calls the SAMWriter directly in 'single' mode, made a few changes to pass in 
+False for all alignments to indicate they are all genomic alignments.
+
+21. Files snap/SNAPLib/SmarterPairedEndAligner.cpp and test/snap/SNAPLib/SmarterPairedEndAligner.cpp differ
+
+More getSubstring calls.
+
+22.  Files snap/tests/LandauVishkinTest.cpp and test/snap/tests/LandauVishkinTest.cpp differ
+
+Since this uses the LandauViskin class, had to modify the test class so the program would compile.
+Passes in vector, though never uses it.
