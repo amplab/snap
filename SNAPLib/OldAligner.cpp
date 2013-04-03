@@ -714,15 +714,17 @@ if (candidates[i].scored) {
             //
             unsigned score;
             if (candidateToScore->isRC) {
+                unsigned amountRemaining = 0;
                 score = candidateToScore->score = landauVishkin.computeEditDistance(
-                    genome->getSubstring(candidateToScore->genomeLocation,rcRead->getDataLength()),
+                    genome->getSubstring(candidateToScore->genomeLocation,rcRead->getDataLength(),amountRemaining),
                     rcRead->getDataLength(),
                     rcRead->getData(),
                     rcRead->getDataLength(),
                     __min(maxK,bestScore)+confDiff-1);
             } else {
+                unsigned amountRemaining = 0;
                 score = candidateToScore->score = landauVishkin.computeEditDistance(
-                    genome->getSubstring(candidateToScore->genomeLocation,read->getDataLength()),
+                    genome->getSubstring(candidateToScore->genomeLocation,read->getDataLength(),amountRemaining),
                     read->getDataLength(),
                     read->getData(),
                     read->getDataLength(),

@@ -25,6 +25,7 @@ Environment:
 #include "VariableSizeVector.h"
 #include "BufferedAsync.h"
 #include "BoundedStringDistance.h"
+#include "GTFReader.h"
 
 /*
  * Output aligned reads in SAM format. See http://samtools.sourceforge.net/SAM1.pdf for details.
@@ -33,13 +34,13 @@ class SAMWriter {
 public:
     virtual ~SAMWriter();
 
-    virtual bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC) = 0;
+    virtual bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, bool isTranscriptome) = 0;
 
     virtual bool writePair(Read *read1, Read *read2, PairedAlignmentResult *result) = 0;
 
     virtual bool close() = 0;
 
-    static SAMWriter* create(const char *fileName, const Genome *genome, bool useM, unsigned gapPenalty, int argc, const char **argv, const char *version, const char *rgLine);
+    static SAMWriter* create(const char *fileName, const Genome *genome, const Genome *transcriptome, bool useM, unsigned gapPenalty, int argc, const char **argv, const char *version, const char *rgLine, GTFReader* gtf);
 
     static bool generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize, bool sorted, int argc, const char **argv, const char *version, const char *rgLine);
    
@@ -57,15 +58,19 @@ protected:
                         AlignmentResult             result, 
                         unsigned                    genomeLocation, 
                         bool                        isRC, 
+                        bool                        isTranscriptome,
 						bool						useM,
                         bool                        hasMate, 
                         bool                        firstInPair, 
                         Read *                      mate, 
                         AlignmentResult             mateResult, 
                         unsigned                    mateLocation,
-                        bool                        isMateRC, 
+                        bool                        mateIsRC, 
+                        bool                        mateIsTranscriptome,
                         const Genome *              genome, 
-                        LandauVishkinWithCigar *    lv, 
+                        const Genome *              transcriptome,
+                        GTFReader *                 gtf,
+                        LandauVishkinWithCigar *    lv,
                         BoundedStringDistance<true>* bsd,
                         char *                      buffer, 
                         size_t                      bufferSpace, 
@@ -90,8 +95,15 @@ private:
                         unsigned                    genomeLocation,
                         bool                        isRC,
 						bool						useM,
-                        int                         *editDistance
+                        int                         *editDistance,
+                        std::vector<unsigned>       &tokens
                 );
+                
+    static const char *convertTranscriptomeToGenome(
+                        GTFReader *gtf,
+                        std::vector<unsigned> &tokens,
+                        std::string transcript_id,
+                        unsigned pos);
 
 };
 
@@ -100,13 +112,13 @@ private:
  */
 class SimpleSAMWriter: public SAMWriter {
 public:
-    SimpleSAMWriter(bool i_useM, unsigned i_gapPenalty, int i_argc, const char **i_argv, const char *i_version, const char *i_rgLine);
+    SimpleSAMWriter(bool i_useM, unsigned i_gapPenalty, int i_argc, const char **i_argv, const char *i_version, const char *i_rgLine, GTFReader *i_gtf);
 
     virtual ~SimpleSAMWriter();
 
-    bool open(const char* fileName, const Genome *genome);
+    bool open(const char* fileName, const Genome *genome, const Genome *transcriptome);
 
-    virtual bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC);
+    virtual bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, bool isTranscriptome);
 
     virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result);
 
@@ -114,8 +126,8 @@ public:
 
 private:
     // Write one read's result, whether it's from a pair or not.
-    void write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, bool hasMate, bool firstInPair,
-               Read *mate, AlignmentResult mateResult, unsigned mateLocation, bool mateIsRC);
+    void write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, bool isTranscriptome,  bool hasMate, bool firstInPair,
+               Read *mate, AlignmentResult mateResult, unsigned mateLocation, bool mateIsRC, bool mateIsTranscriptome);
 
     static const int BUFFER_SIZE = 8 * 1024 * 1024;
 
@@ -123,6 +135,8 @@ private:
     char *buffer; // For setvbuf
 
     const Genome *genome;
+    const Genome *transcriptome;
+    GTFReader *gtf;
 
 	bool        useM;
 	int         argc;
@@ -148,9 +162,9 @@ public:
     ThreadSAMWriter(size_t i_bufferSize, bool i_useM, unsigned gapPenalty);
     virtual ~ThreadSAMWriter();
 
-    bool initialize(AsyncFile* file, const Genome *i_genome, volatile _int64 *i_nextWriteOffset);
+    bool initialize(AsyncFile* file, const Genome *i_genome, const Genome *i_transcriptome, volatile _int64 *i_nextWriteOffset, GTFReader *i_gtf = NULL);
     
-    bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC);
+    bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, bool isTranscriptome);
 
     bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result);
 
@@ -175,6 +189,8 @@ protected:
     AsyncFile::Writer              *writer[2];
     char                           *buffer[2];
     const Genome                   *genome;
+    const Genome                   *transcriptome;
+    GTFReader                      *gtf;
 
     LandauVishkinWithCigar*         lv;
     BoundedStringDistance<true>*    bsd;
@@ -188,13 +204,13 @@ public:
 
     ParallelSAMWriter() : writer(NULL), file(NULL), argv(NULL), version(NULL), rgLine(NULL) {}
 
-    static ParallelSAMWriter*       create(const char *fileName, const Genome *genome,
+    static ParallelSAMWriter*       create(const char *fileName, const Genome *genome, const Genome *transcriptome, 
                                         unsigned nThreads, bool sort, size_t sortBufferMemory, bool i_useM, unsigned i_gapPenalty,
-                                        int argc, const char **argv, const char *version, const char *rgLine);
+                                        int argc, const char **argv, const char *version, const char *rgLine, GTFReader *gtf);
 
     static const size_t             UnsortedBufferSize = 16 * 1024 * 1024;
 
-    virtual bool                    initialize(const char *fileName, const Genome *genome, unsigned nThreads, bool sorted);
+    virtual bool                    initialize(const char *fileName, const Genome *genome, const Genome *transcriptome, unsigned nThreads, bool sorted, GTFReader *gtf);
 
     SAMWriter *                     getWriterForThread(int whichThread);
 
@@ -205,7 +221,7 @@ protected:
                                         const char *i_rgLine) : 
                                         useM(i_useM), gapPenalty(i_gapPenalty), argc(i_argc), argv(i_argv), version(i_version), rgLine(i_rgLine), writer(NULL) {}
 
-    virtual bool                    createThreadWriters(const Genome* genome);
+    virtual bool                    createThreadWriters(const Genome* genome, const Genome* transcriptome, GTFReader *gtf);
 
     AsyncFile                      *file;
     volatile _int64                 nextWriteOffset;
@@ -261,7 +277,7 @@ public:
     virtual ~SortedThreadSAMWriter();
 
 
-    bool                            initialize(SortedParallelSAMWriter* i_parent, const Genome* i_genome);
+    bool                            initialize(SortedParallelSAMWriter* i_parent, const Genome* i_genome, const Genome* i_transcriptome, GTFReader *gtf);
 
 protected:
     
@@ -284,13 +300,13 @@ public:
 
     virtual ~SortedParallelSAMWriter() {}
     
-    virtual bool                    initialize(const char *fileName, const Genome *genome, unsigned nThreads, bool sorted);
+    virtual bool                    initialize(const char *fileName, const Genome *genome, const Genome *transcriptome, unsigned nThreads, bool sorted, GTFReader *gtf);
 
     bool                            close();
 
 protected:
     
-    virtual bool                    createThreadWriters(const Genome* genome);
+    virtual bool                    createThreadWriters(const Genome* genome, const Genome* transcriptome, GTFReader *gtf);
 
 private:
     

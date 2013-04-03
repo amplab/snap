@@ -72,7 +72,10 @@ public:
         //
         // Methods to read the genome.
         //
-        inline const char *getSubstring(size_t offset, size_t lengthNeeded) const {
+        inline const char *getSubstring(size_t offset, size_t lengthNeeded, unsigned &amountRemaining) const {
+        
+            //printf("In Substring: %d %d %\n", offset, lengthNeeded);
+        
             if (offset > nBases || offset + lengthNeeded > nBases + N_PADDING) {
                 // The first part of the test is for the unsigned version of a negative offset.
                 return NULL;
@@ -94,7 +97,7 @@ public:
                 //
                 return bases + (offset-minOffset);
             }
-    
+            
             int min = 0;
             int max = nPieces - 2;
             while (min <= max) {
@@ -102,6 +105,9 @@ public:
                 if (pieces[i].beginningOffset <= offset) {
                     if (pieces[i+1].beginningOffset > offset) {
                         if (pieces[i+1].beginningOffset <= offset + lengthNeeded) {
+                            //Set amount remaining 
+                            //printf("Returning NULL because %d <= %d\n", pieces[i+1].beginningOffset, offset+lengthNeeded);
+                            amountRemaining = lengthNeeded - (pieces[i+1].beginningOffset - offset) + 1;
                             return NULL;    // This crosses a piece boundary.
                         } else {
                             return bases + (offset-minOffset);

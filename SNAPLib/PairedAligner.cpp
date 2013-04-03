@@ -360,6 +360,8 @@ void PairedAlignerContext::runIterationThread()
             bool useful1 = read1.getDataLength() >= 50 && (int)read1.countOfNs() <= maxDist;
             if (!useful0 && !useful1) {
                 PairedAlignmentResult result;
+                result.isTranscriptome[0] = false;
+                result.isTranscriptome[1] = false;
                 result.status[0] = NotFound;
                 result.status[1] = NotFound;
                 result.location[0] = 0xFFFFFFFF;
@@ -374,6 +376,8 @@ void PairedAlignerContext::runIterationThread()
             }
 
             PairedAlignmentResult result;
+            result.isTranscriptome[0] = false;
+            result.isTranscriptome[1] = false;
             aligner->align(&read0, &read1, &result);
 
             writePair(&read0, &read1, &result);

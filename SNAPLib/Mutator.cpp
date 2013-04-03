@@ -116,7 +116,8 @@ Mutator::mutate(const Genome &genome) const
         unsigned start = piece.beginningOffset;
         unsigned end = i + 1 < nPieces ? pieces[i + 1].beginningOffset : genome.getCountOfBases();
         unsigned size = end - start;
-        const Base *bases = genome.getSubstring(start, size);
+        unsigned amountRemaining = 0;
+        const Base *bases = genome.getSubstring(start, size, amountRemaining);
         const char *name = piece.name;
         // printf("DEBUG: mutating %s of size %u, from %u to %u\n", name, size, start, end);
         newGenome->startPiece(name);

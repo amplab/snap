@@ -219,4 +219,3 @@ BufferedAsyncWriter::close()
     BigDealloc(buffer[1]);
     return ok;
 }
-    

@@ -37,6 +37,9 @@ struct PairedAlignmentResult {
                                 // there to be in the same orientation w.r.t. the reference genome.
 
     int score[2];               // score of each end if matched
+    
+    bool isTranscriptome[2];    //True if the read is a transcriptome read, false otherwise
+    
 };
 
 /**
@@ -52,3 +55,4 @@ public:
         Read                  *read1,
         PairedAlignmentResult *result) = 0;
 };
+

@@ -408,7 +408,8 @@ Genome::copy(bool copyX, bool copyY, bool copyM) const
             amountToCopy = getCountOfBases() - offsetInReference;
         }
 
-        memcpy(dataBuffer,getSubstring(offsetInReference,amountToCopy), amountToCopy);
+        unsigned amountRemaining = 0;
+        memcpy(dataBuffer,getSubstring(offsetInReference,amountToCopy,amountRemaining), amountToCopy);
         dataBuffer[amountToCopy] = '\0';
 
         newCopy->addData(dataBuffer);

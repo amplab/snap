@@ -44,6 +44,8 @@ struct AlignerOptions : public AbstractOptions
 
     const char         *commandLine;
     const char         *indexDir;
+    const char         *transcriptomeDir;
+    const char         *annotation;
     int                 numThreads;
     Range               maxDist;
     Range               numSeeds;
