@@ -31,14 +31,15 @@ import os
 import shutil
 import subprocess
 
-if (len(sys.argv) != 5):
-    print "usage: %s data_dir file_base snap bin_dir" % sys.argv[0]
+if (len(sys.argv) < 5 or len(sys.argv) > 6):
+    print "usage: %s data_dir file_base snap bin_dir [-quick]" % sys.argv[0]
     exit(1)
 
 data = sys.argv[1]
 template = sys.argv[2]
 snap = sys.argv[3]
 bin = sys.argv[4]
+quick = len(sys.argv) == 6
 
 run = "" # declare global
 
@@ -65,25 +66,25 @@ def runit(args, tag, strict=False, stdout=None, stdin=None):
 # setup data & temp directories with all needed input files
 
 temp = os.path.normpath(data + "/temp")
-if os.path.exists(temp):
-    shutil.rmtree(temp)
-os.mkdir(temp)
+if not quick:
+	if os.path.exists(temp):
+		shutil.rmtree(temp)
+	os.mkdir(temp)
 
-runit([bin + "gzip", "-d", "-c", _f("^.fa.gz")], "gunzip-ref", strict=True, stdout=_f("temp/^.fa"))
-runit([bin + "gzip", "-d", "-c", _f("^_in1.fq.gz")], "gunzip1", strict=True, stdout=_f("temp/^_in1.fq"))
-runit([bin + "gzip", "-d", "-c", _f("^_in2.fq.gz")], "gunzip2", strict=True, stdout=_f("temp/^_in2.fq"))
-runit([bin + "samtools", "view", "-h", _f("^_in12.bam"), "-o", _f("temp/^_in12.sam")], "samtools1", strict=True)
-runit([bin + "samtools", "view", _f("^_ref1.bam"), "-o", _f("temp/^_ref1u.sam")], "samtools2", strict=True)
-runit([bin + "sort", _f("temp/^_ref1u.sam")], "namesort-ref1", stdout=_f("temp/^_ref1.sam"), strict=True)
-os.remove(_f("temp/^_ref1u.sam"))
-runit([bin + "samtools", "view", _f("^_sorted_ref1.bam"), "-o", _f("temp/^_sorted_ref1.sam")], "samtools3", strict=True)
-runit([bin + "samtools", "view", _f("^_ref12.bam"), "-o", _f("temp/^_ref12u.sam")], "samtools4", strict=True)
-runit([bin + "sort", _f("temp/^_ref12u.sam")], "namesort-ref12", stdout=_f("temp/^_ref12.sam"), strict=True)
-os.remove(_f("temp/^_ref12u.sam"))
-runit([bin + "samtools", "view", _f("^_sorted_ref12.bam"), "-o", _f("temp/^_sorted_ref12.sam")], "samtools5", strict=True)
-
-# create index
-runit([snap, "index", _f("temp/^.fa"), _f("temp/^.idx"), "-c"], "snap-index", strict=True)
+	runit([bin + "gzip", "-d", "-c", _f("^.fa.gz")], "gunzip-ref", strict=True, stdout=_f("temp/^.fa"))
+	runit([bin + "gzip", "-d", "-c", _f("^_in1.fq.gz")], "gunzip1", strict=True, stdout=_f("temp/^_in1.fq"))
+	runit([bin + "gzip", "-d", "-c", _f("^_in2.fq.gz")], "gunzip2", strict=True, stdout=_f("temp/^_in2.fq"))
+	runit([bin + "samtools", "view", "-h", _f("^_in12.bam"), "-o", _f("temp/^_in12.sam")], "samtools1", strict=True)
+	runit([bin + "samtools", "view", _f("^_ref1.bam"), "-o", _f("temp/^_ref1u.sam")], "samtools2", strict=True)
+	runit([bin + "sort", _f("temp/^_ref1u.sam")], "namesort-ref1", stdout=_f("temp/^_ref1.sam"), strict=True)
+	os.remove(_f("temp/^_ref1u.sam"))
+	runit([bin + "samtools", "view", _f("^_sorted_ref1.bam"), "-o", _f("temp/^_sorted_ref1.sam")], "samtools3", strict=True)
+	runit([bin + "samtools", "view", _f("^_ref12.bam"), "-o", _f("temp/^_ref12u.sam")], "samtools4", strict=True)
+	runit([bin + "sort", _f("temp/^_ref12u.sam")], "namesort-ref12", stdout=_f("temp/^_ref12.sam"), strict=True)
+	os.remove(_f("temp/^_ref12u.sam"))
+	runit([bin + "samtools", "view", _f("^_sorted_ref12.bam"), "-o", _f("temp/^_sorted_ref12.sam")], "samtools5", strict=True)
+	# create index
+	runit([snap, "index", _f("temp/^.fa"), _f("temp/^.idx"), "-c"], "snap-index", strict=True)
 
 inputs = {
     "fq": [["temp/^_in1.fq"], ["temp/^_in1.fq", "temp/^_in2.fq"]],

@@ -23,7 +23,7 @@ Revision History:
 #pragma once
 
 #include "Compat.h"
-#include "FixedSizeMap.h"
+#include "VariableSizeMap.h"
 //
 // This defines a family of composable classes for efficiently reading data with flow control.
 //
@@ -163,6 +163,10 @@ public:
     // default raw data supplier for platform
     static const DataSupplier* Default[2];
     static const DataSupplier* GzipDefault[2];
+
+    // hack: must be set to communicate thread count into suppliers
+    static int ThreadCount;
+
 protected:
     const bool autoRelease;
 };
@@ -181,6 +185,6 @@ public:
     bool removeRead(DataBatch batch);
 
 private:
-    typedef FixedSizeMap<DataBatch::Key,int> BatchMap;
+    typedef VariableSizeMap<DataBatch::Key,unsigned> BatchMap;
     BatchMap pending;
 };

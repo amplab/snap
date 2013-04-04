@@ -1108,7 +1108,7 @@ private:
         _uint64 start, end;
     };
     typedef VariableSizeVector<BAMChunk> ChunkVec;
-    typedef VariableSizeMap<_uint32,ChunkVec> BinMap;
+    typedef VariableSizeMap<_uint32,ChunkVec,150,MapNumericHash<_uint32>,90,-1,-2,-3> BinMap;
     typedef VariableSizeVector<_uint64> LinearMap;
     struct RefInfo {
         BinMap bins;

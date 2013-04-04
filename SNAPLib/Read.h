@@ -172,12 +172,15 @@ public:
 
         Read(const Read& other) : 
             id(other.id), data(other.data), quality(other.quality), 
+            idLength(other.idLength), frontClippedLength(other.frontClippedLength), dataLength(other.dataLength),
+            unclippedData(other.unclippedData), unclippedLength(other.unclippedLength), unclippedQuality(other.unclippedQuality),
             localUnclippedDataBuffer(other.localUnclippedDataBuffer),
             localUnclippedQualityBuffer(other.localUnclippedQualityBuffer),
             localBufferSize(other.localBufferSize),
             originalUnclippedDataBuffer(other.originalUnclippedDataBuffer),
             originalUnclippedQualityBuffer(other.originalUnclippedQualityBuffer),
-            clippingState(other.clippingState)
+            clippingState(other.clippingState),
+            batch(other.batch)
         {
 	    Read* o = (Read*) &other; // hack!
             o->localUnclippedDataBuffer = NULL;

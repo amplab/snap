@@ -39,7 +39,7 @@ class WindowsOverlappedDataReader : public DataReader
 {
 public:
 
-    WindowsOverlappedDataReader(_int64 i_overflowBytes, double extraFactor, bool autoRelease);
+    WindowsOverlappedDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor, bool autoRelease);
 
     virtual ~WindowsOverlappedDataReader();
     
@@ -77,7 +77,6 @@ private:
     LARGE_INTEGER       fileSize;
     HANDLE              hFile;
   
-    static const unsigned nBuffers = 5;
     static const unsigned bufferSize = 32 * 1024 * 1024 - 4096;
 
     enum BufferState {Empty, Reading, Full, InUse};
@@ -97,9 +96,10 @@ private:
         int             next, previous; // index of next/previous in free/ready list, -1 if end
     };
 
+    const unsigned      nBuffers;
     _int64              extraBytes;
     _int64              overflowBytes;
-    BufferInfo          bufferInfo[nBuffers];
+    BufferInfo*         bufferInfo;
     LARGE_INTEGER       readOffset;
     _int64              endingOffset;
     _uint32             nextBatchID;
@@ -111,10 +111,11 @@ private:
 };
 
 WindowsOverlappedDataReader::WindowsOverlappedDataReader(
+    unsigned i_nBuffers,
     _int64 i_overflowBytes,
     double extraFactor,
     bool autoRelease)
-    : DataReader(autoRelease), overflowBytes(i_overflowBytes)
+    : DataReader(autoRelease), nBuffers(i_nBuffers), overflowBytes(i_overflowBytes)
 {
     //
     // Initialize the buffer info struct.
@@ -122,7 +123,8 @@ WindowsOverlappedDataReader::WindowsOverlappedDataReader(
     
     // allocate all the data in one big block
     // NOTE: buffers are not null-terminated (since memmap version can't do it)
-    _ASSERT(extraFactor >= 0);
+    _ASSERT(extraFactor >= 0 && i_nBuffers > 0);
+    bufferInfo = new BufferInfo[nBuffers];
     extraBytes = max(0LL, (_int64) ((bufferSize + overflowBytes) * extraFactor));
     char* allocated = (char*) BigAlloc(nBuffers * (bufferSize + extraBytes + overflowBytes));
     if (NULL == allocated) {
@@ -144,14 +146,14 @@ WindowsOverlappedDataReader::WindowsOverlappedDataReader(
         bufferInfo[i].state = Empty;
         bufferInfo[i].isEOF = false;
         bufferInfo[i].offset = 0;
-        bufferInfo[i].next = i != 0 && i < nBuffers - 1 ? i + 1 : -1;
-        bufferInfo[i].previous = i > 1 ? i - 1 : -1;
+        bufferInfo[i].next = i < nBuffers - 1 ? i + 1 : -1;
+        bufferInfo[i].previous = i > 0 ? i - 1 : -1;
     }
     nextBatchID = 1;
     hFile = INVALID_HANDLE_VALUE;
-    nextBufferForConsumer = 0;
-    lastBufferForConsumer = 0;
-    nextBufferForReader = 1;
+    nextBufferForConsumer = -1;
+    lastBufferForConsumer = -1;
+    nextBufferForReader = 0;
     releaseEvent = CreateEvent(NULL, TRUE, TRUE, NULL);
     InitializeExclusiveLock(&lock);
 }
@@ -194,6 +196,10 @@ WindowsOverlappedDataReader::readHeader(
     info->offset = 0;
     info->lap.Offset = 0;
     info->lap.OffsetHigh = 0;
+    _ASSERT(nextBufferForReader == 0 && nextBufferForConsumer == -1 && lastBufferForConsumer == -1 && info->next == 1 && info->previous == -1);
+    nextBufferForReader = 1;
+    nextBufferForConsumer = lastBufferForConsumer = 0;
+    info->next = info->previous = -1;
 
     if (!ReadFile(hFile,info->buffer,*io_headerSize,&info->validBytes,&info->lap)) {
         if (GetLastError() != ERROR_IO_PENDING) {
@@ -230,13 +236,13 @@ WindowsOverlappedDataReader::reinit(
         bufferInfo[i].state = Empty;
         bufferInfo[i].isEOF= false;
         bufferInfo[i].offset = 0;
-        bufferInfo[i].next = i != 0 && i < nBuffers - 1 ? i + 1 : -1;
-        bufferInfo[i].previous = i > 1 ? i - 1 : -1;
+        bufferInfo[i].next = i < nBuffers - 1 ? i + 1 : -1;
+        bufferInfo[i].previous = i > 0 ? i - 1 : -1;
     }
 
-    nextBufferForReader = 1;
-    nextBufferForConsumer = 0; 
-    lastBufferForConsumer = 0;
+    nextBufferForConsumer = -1; 
+    lastBufferForConsumer = -1;
+    nextBufferForReader = 0;
 
     readOffset.QuadPart = i_startingOffset;
     if (amountOfFileToProcess == 0) {
@@ -313,27 +319,31 @@ WindowsOverlappedDataReader::nextBatch()
     }
     DataBatch priorBatch = DataBatch(info->batchID);
 
-    AcquireExclusiveLock(&lock);
-
     info->state = InUse;
     _uint32 overflow = max((DWORD) info->offset, info->nBytesThatMayBeginARead) - info->nBytesThatMayBeginARead;
     _int64 nextStart = info->fileOffset + info->nBytesThatMayBeginARead;
+
+    AcquireExclusiveLock(&lock);
+
     nextBufferForConsumer = info->next;
-    if (nextBufferForConsumer == -1) {
-        startIo();
-        if (nextBufferForConsumer == -1) {
-            _ASSERT(false); // should not happen - maybe wierd EOF condition?
-            return;
+
+    bool first = true;
+    while (nextBufferForConsumer == -1) {
+        ReleaseExclusiveLock(&lock);
+        if (! first) {
+            //printf("WindowsOverlappedDataReader::nextBatch thread %d wait for release\n", GetCurrentThreadId());
+            WaitForSingleObject(releaseEvent, INFINITE);
+            //printf("WindowsOverlappedDataReader::nextBatch thread %d released\n", GetCurrentThreadId());
         }
+        first = false;
+        startIo();
+        AcquireExclusiveLock(&lock);
     }
     if (bufferInfo[nextBufferForConsumer].state != Full) {
         waitForBuffer(nextBufferForConsumer);
     }
     bufferInfo[nextBufferForConsumer].offset = overflow;
-
     _ASSERT(nextStart == bufferInfo[nextBufferForConsumer].fileOffset);
-        
-    startIo();
 
     ReleaseExclusiveLock(&lock);
 
@@ -408,7 +418,7 @@ WindowsOverlappedDataReader::releaseBatch(
     startIo();
 
     if (released) {
-        //printf("Signal releaseEvent\n");
+        //printf("releaseBatch set releaseEvent\n");
         SetEvent(releaseEvent);
     }
 
@@ -426,7 +436,8 @@ WindowsOverlappedDataReader::getExtra(
     char** o_extra,
     _int64* o_length)
 {
-    *o_extra = bufferInfo[nextBufferForConsumer].extra;
+    // hack: return valid buffer even when no consumer buffers - this may happen when reading header
+    *o_extra = bufferInfo[max(0,nextBufferForConsumer)].extra;
     *o_length = extraBytes;
 }
     
@@ -451,6 +462,9 @@ WindowsOverlappedDataReader::startIo()
         info->next = -1;
         info->previous = lastBufferForConsumer;
         lastBufferForConsumer = index;
+		if (nextBufferForConsumer == -1) {
+			nextBufferForConsumer = index;
+		}
 
         if (readOffset.QuadPart >= fileSize.QuadPart || readOffset.QuadPart >= endingOffset) {
             info->validBytes = 0;
@@ -474,7 +488,7 @@ WindowsOverlappedDataReader::startIo()
         info->lap.OffsetHigh = readOffset.HighPart;
         info->fileOffset = readOffset.QuadPart;
          
-        //printf("startIo on %d at %lld for %uB\n", nextBufferForReader, readOffset, amountToRead);
+        //printf("startIo on %d at %lld for %uB\n", index, readOffset, amountToRead);
         if (!ReadFile(
                 hFile,
                 info->buffer,
@@ -492,22 +506,29 @@ WindowsOverlappedDataReader::startIo()
         info->state = Reading;
         info->offset = 0;
     }
+    if (nextBufferForConsumer == -1) {
+        AcquireExclusiveLock(&lock);
+        if (nextBufferForConsumer == -1) {
+            //printf("startIo thread %x reset releaseEvent\n", GetCurrentThreadId());
+            ResetEvent(releaseEvent);
+        }
+        ReleaseExclusiveLock(&lock);
+    }
 }
 
     void
 WindowsOverlappedDataReader::waitForBuffer(
     unsigned bufferNumber)
 {
+    _ASSERT(bufferNumber >= 0 && bufferNumber < nBuffers);
     BufferInfo *info = &bufferInfo[bufferNumber];
 
-    if (info->state == InUse) {
-        do {
-            //printf("WindowsOverlappedDataReader::waitForBuffer %d InUse...\n", bufferNumber);
-            // must already have lock to call, release & wait & reacquire
-            ReleaseExclusiveLock(&lock);
-            WaitForSingleObject(releaseEvent, INFINITE);
-            AcquireExclusiveLock(&lock);
-        } while (info->state == InUse);
+    while (info->state == InUse) {
+        //printf("WindowsOverlappedDataReader::waitForBuffer %d InUse...\n", bufferNumber);
+        // must already have lock to call, release & wait & reacquire
+        ReleaseExclusiveLock(&lock);
+        WaitForSingleObject(releaseEvent, INFINITE);
+        AcquireExclusiveLock(&lock);
     }
 
     if (info->state == Full) {
@@ -535,7 +556,7 @@ public:
     WindowsOverlappedDataSupplier(bool autoRelease) : DataSupplier(autoRelease) {}
     virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0) const
     {
-        return new WindowsOverlappedDataReader(overflowBytes, extraFactor, autoRelease);
+        return new WindowsOverlappedDataReader(ThreadCount + 4, overflowBytes, extraFactor, autoRelease);
     }
 };
 
@@ -1187,7 +1208,8 @@ BatchTracker::addRead(
     DataBatch batch)
 {
     DataBatch::Key key = batch.asKey();
-    pending.put(key, pending.get(key) + 1);
+    unsigned* p = pending.tryFind(key);
+    pending.put(key, p == NULL ? 1 : *p + 1);
 }
 
     bool
@@ -1195,13 +1217,15 @@ BatchTracker::removeRead(
     DataBatch removed)
 {
     DataBatch::Key key = removed.asKey();
-    unsigned n = pending.get(key);
-    _ASSERT(n != 0);
-    if (n > 1) {
-        pending.put(key, n - 1);
-        return false;
+    unsigned* p = pending.tryFind(key);
+    _ASSERT(p != NULL && *p > 0);
+    if (p != NULL) {
+        if (*p > 1) {
+            pending.put(key, *p - 1);
+            return false;
+        }
+        pending.erase(key);
     }
-    pending.erase(key);
     return true;
 }
 
@@ -1222,3 +1246,5 @@ const DataSupplier* DataSupplier::Default[2] =
 
 const DataSupplier* DataSupplier::GzipDefault[2] =
 { DataSupplier::Gzip(DataSupplier::Default[false], false), DataSupplier::Gzip(DataSupplier::Default[true], true) };
+
+int DataSupplier::ThreadCount = 1;

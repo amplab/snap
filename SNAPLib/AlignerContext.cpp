@@ -147,6 +147,8 @@ AlignerContext::initialize()
             soft_exit(1);
         }
     }
+
+    DataSupplier::ThreadCount = options->numThreads;
 }
 
     void
