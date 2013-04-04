@@ -404,7 +404,7 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
     int nInputs = 0;
     bool foundFirstHalfOfFASTQ = false;
     for (int i = 1; i < argc; i++) {
-        if (argv[i][0] == '-') {
+        if (argv[i][0] == '-' || argv[i][0] == ',' && argv[i][1] == '\0') {
                 break;
         }
         
@@ -467,6 +467,7 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
             options->usage();
         }
         if (done) {
+            i++;    // For the ',' arg
             break;
         }
     }

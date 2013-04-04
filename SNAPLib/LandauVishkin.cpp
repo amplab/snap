@@ -388,6 +388,12 @@ setLVProbabilities(double *i_indelProbabilities, double *i_phredToProbability, d
     void
 initializeLVProbabilitiesToPhredPlus33()
 {
+    static bool alreadyInitialized = false;
+    if (alreadyInitialized) {
+        return;
+    }
+    alreadyInitialized = true;
+
     //
     // indel probability is .0001 for any indel (10% of a SNP real difference), and then 10% worse for each longer base.
     //

@@ -40,7 +40,7 @@ using std::min;
 // Save the index & index directory globally so that we don't need to reload them on multiple runs.
 //
 GenomeIndex *g_index = NULL;
-const char *g_indexDirectory = NULL;
+char *g_indexDirectory = NULL;
 
 AlignerContext::AlignerContext(int i_argc, const char **i_argv, const char *i_version, AlignerExtension* i_extension)
     :
@@ -123,9 +123,12 @@ AlignerContext::finishThread(AlignerContext* common)
     void
 AlignerContext::initialize()
 {
-    if (g_indexDirectory != options->indexDir) {
+    if (g_indexDirectory == NULL || strcmp(g_indexDirectory, options->indexDir) != 0) {
         delete g_index;
         g_index = NULL;
+        delete g_indexDirectory;
+        g_indexDirectory = new char [strlen(options->indexDir) + 1];
+        strcpy(g_indexDirectory, options->indexDir);
 
         printf("Loading index from directory... ");
         fflush(stdout);
@@ -136,12 +139,12 @@ AlignerContext::initialize()
             soft_exit(1);
         }
         g_index = index;
-        g_indexDirectory = options->indexDir;
+
         _int64 loadTime = timeInMillis() - loadStart;
         printf("%llds.  %u bases, seed size %d\n",
             loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
     } else {
-        g_index = index;
+        index = g_index;
     }
 
     if (options->outputFileTemplate != NULL && (options->maxHits.size() > 1 || options->maxDist.size() > 1 || options->numSeeds.size() > 1

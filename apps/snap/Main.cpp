@@ -33,7 +33,7 @@ Revision History:
 
 using namespace std;
 
-const char *SNAP_VERSION = "0.16alpha.4";
+const char *SNAP_VERSION = "0.16alpha.5";
 
 static void usage()
 {
@@ -57,17 +57,20 @@ int main(int argc, const char **argv)
     } else if (strcmp(argv[1], "index") == 0) {
         GenomeIndex::runIndexer(argc - 2, argv + 2);
     } else if (strcmp(argv[1], "single") == 0 || strcmp(argv[1], "paired") == 0) {
-        for (unsigned i = 1; i < argc; i++) {
+        for (unsigned i = 1; i < argc; /* i is increased below */) {
             unsigned nArgsConsumed;
-            if (strcmp(argv[1], "single") == 0) {
+            if (strcmp(argv[i], "single") == 0) {
                 SingleAlignerContext single;
-                single.runAlignment(argc - 2, argv + 2, SNAP_VERSION, &nArgsConsumed);
-            } else if (strcmp(argv[1], "paired") == 0) {
+                single.runAlignment(argc - (i + 1), argv + i + 1, SNAP_VERSION, &nArgsConsumed);
+            } else if (strcmp(argv[i], "paired") == 0) {
                 PairedAlignerContext paired;
-                paired.runAlignment(argc - 2, argv + 2, SNAP_VERSION, &nArgsConsumed);
+                paired.runAlignment(argc - (i + 1), argv + i + 1, SNAP_VERSION, &nArgsConsumed);
+            } else {
+                fprintf(stderr, "Invalid command: %s\n\n", argv[i]);
+                usage();
             }
             _ASSERT(nArgsConsumed > 0);
-            i += nArgsConsumed;
+            i += nArgsConsumed + 1;  // +1 for single or paired
         }
     } else {
         fprintf(stderr, "Invalid command: %s\n\n", argv[1]);

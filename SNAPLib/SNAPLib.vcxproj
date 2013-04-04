@@ -19,7 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{B45893DD-1E81-411D-9138-1C8551036CFD}</ProjectGuid>
+    <ProjectGuid>{E620DC13-195C-41EF-B33B-8FE7DE9F8ADC}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>SNAPLib</RootNamespace>
   </PropertyGroup>
@@ -27,28 +27,28 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <CharacterSet>MultiByte</CharacterSet>
     <PlatformToolset>v110</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <CharacterSet>MultiByte</CharacterSet>
     <PlatformToolset>v110</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v110</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v110</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v110</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v110</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -66,23 +66,33 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>$(SolutionDir)\obj\lib\$(Configuration)\$(Platform)\</OutDir>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>$(SolutionDir)obj\lib\$(Configuration)\$(Platform)\</OutDir>
     <IntDir>$(SolutionDir)obj\obj\snaplib\$(Configuration)\$(Platform)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(SolutionDir)obj\lib\$(Configuration)\$(Platform)\</OutDir>
     <IntDir>$(SolutionDir)obj\obj\snaplib\$(Configuration)\$(Platform)\</IntDir>
-    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>$(SolutionDir)obj\lib\$(Configuration)\$(Platform)\</OutDir>
+    <IntDir>$(SolutionDir)obj\obj\snaplib\$(Configuration)\$(Platform)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(SolutionDir)obj\lib\$(Configuration)\$(Platform)\</OutDir>
+    <IntDir>$(SolutionDir)obj\obj\snaplib\$(Configuration)\$(Platform)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <Optimization>Disabled</Optimization>
+      <Optimization>Full</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <WholeProgramOptimization>true</WholeProgramOptimization>
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <AdditionalIncludeDirectories>..\import\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -94,15 +104,12 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>NOMINMAX;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
-      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
-      <IntrinsicFunctions>true</IntrinsicFunctions>
-      <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
       <WholeProgramOptimization>true</WholeProgramOptimization>
-      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
-      <AdditionalIncludeDirectories>$(SolutionDir)\import</AdditionalIncludeDirectories>
+      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <AdditionalIncludeDirectories>..\import\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -113,11 +120,13 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <PrecompiledHeader>Use</PrecompiledHeader>
-      <Optimization>MaxSpeed</Optimization>
+      <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+      <AdditionalIncludeDirectories>..\import\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -130,13 +139,13 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <PrecompiledHeader>Use</PrecompiledHeader>
-      <Optimization>MaxSpeed</Optimization>
+      <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
-      <AdditionalIncludeDirectories>$(SolutionDir)\import</AdditionalIncludeDirectories>
-      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <AdditionalIncludeDirectories>..\import\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -146,59 +155,64 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <None Include="ReadMe.txt" />
+    <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="aligner.h" />
+    <ClInclude Include="Aligner.h" />
     <ClInclude Include="AlignerContext.h" />
     <ClInclude Include="AlignerOptions.h" />
     <ClInclude Include="AlignerStats.h" />
     <ClInclude Include="ApproximateCounter.h" />
     <ClInclude Include="Bam.h" />
     <ClInclude Include="BaseAligner.h" />
-    <ClInclude Include="bigalloc.h" />
+    <ClInclude Include="BigAlloc.h" />
     <ClInclude Include="BufferedAsync.h" />
-    <ClInclude Include="compat.h" />
+    <ClInclude Include="Compat.h" />
     <ClInclude Include="DataReader.h" />
     <ClInclude Include="DataWriter.h" />
     <ClInclude Include="directions.h" />
     <ClInclude Include="exit.h" />
     <ClInclude Include="FASTA.h" />
-    <ClInclude Include="fastq.h" />
+    <ClInclude Include="FASTQ.h" />
     <ClInclude Include="FileFormat.h" />
     <ClInclude Include="FixedSizeMap.h" />
     <ClInclude Include="FixedSizeSet.h" />
     <ClInclude Include="FixedSizeVector.h" />
-    <ClInclude Include="genome.h" />
+    <ClInclude Include="Genome.h" />
     <ClInclude Include="GenomeIndex.h" />
     <ClInclude Include="GoodRandom.h" />
     <ClInclude Include="GzipDataWriter.h" />
     <ClInclude Include="HashTable.h" />
-    <ClInclude Include="histogram.h" />
+    <ClInclude Include="Histogram.h" />
     <ClInclude Include="IntersectingPairedEndAligner.h" />
     <ClInclude Include="LandauVishkin.h" />
     <ClInclude Include="mapq.h" />
+    <ClInclude Include="mt64.h" />
     <ClInclude Include="MultiInputReadSupplier.h" />
     <ClInclude Include="options.h" />
     <ClInclude Include="PairedAligner.h" />
     <ClInclude Include="PairedEndAligner.h" />
     <ClInclude Include="ParallelTask.h" />
     <ClInclude Include="ProbabilityDistance.h" />
+    <ClInclude Include="Range.h" />
     <ClInclude Include="RangeSplitter.h" />
-    <ClInclude Include="read.h" />
+    <ClInclude Include="Read.h" />
     <ClInclude Include="ReadSupplierQueue.h" />
-    <ClInclude Include="sam.h" />
-    <ClInclude Include="seed.h" />
+    <ClInclude Include="RegionCluster.h" />
+    <ClInclude Include="SAM.h" />
+    <ClInclude Include="Seed.h" />
     <ClInclude Include="SeedSequencer.h" />
+    <ClInclude Include="SimilarityMap.h" />
     <ClInclude Include="SingleAligner.h" />
     <ClInclude Include="SingleFirstPairedEndAligner.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="Tables.h" />
     <ClInclude Include="targetver.h" />
-    <ClInclude Include="ThirdPairedEndAligner.h" />
     <ClInclude Include="Util.h" />
+    <ClInclude Include="VariableSizeMap.h" />
     <ClInclude Include="VariableSizeVector.h" />
-    <ClInclude Include="wgsim.h" />
+    <ClInclude Include="WGsim.h" />
+    <ClInclude Include="WindowsFileMapper.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AlignerContext.cpp" />
@@ -208,19 +222,20 @@
     <ClCompile Include="Bam.cpp" />
     <ClCompile Include="BaseAligner.cpp" />
     <ClCompile Include="BiasTables.cpp" />
-    <ClCompile Include="bigalloc.cpp" />
+    <ClCompile Include="BigAlloc.cpp" />
     <ClCompile Include="BufferedAsync.cpp" />
-    <ClCompile Include="compat.cpp" />
+    <ClCompile Include="Compat.cpp" />
     <ClCompile Include="DataReader.cpp" />
     <ClCompile Include="DataWriter.cpp" />
     <ClCompile Include="exit.cpp" />
     <ClCompile Include="FASTA.cpp" />
-    <ClCompile Include="fastq.cpp" />
-    <ClCompile Include="genome.cpp" />
+    <ClCompile Include="FASTQ.cpp" />
+    <ClCompile Include="Genome.cpp" />
     <ClCompile Include="GenomeIndex.cpp" />
     <ClCompile Include="GoodRandom.cpp" />
+    <ClCompile Include="GzipDataWriter.cpp" />
     <ClCompile Include="HashTable.cpp" />
-    <ClCompile Include="histogram.cpp" />
+    <ClCompile Include="Histogram.cpp" />
     <ClCompile Include="IntersectingPairedEndAligner.cpp" />
     <ClCompile Include="LandauVishkin.cpp" />
     <ClCompile Include="mapq.cpp" />
@@ -234,12 +249,13 @@
     <ClCompile Include="ReadReader.cpp" />
     <ClCompile Include="ReadSupplierQueue.cpp" />
     <ClCompile Include="ReadWriter.cpp" />
-    <ClCompile Include="sam.cpp" />
-    <ClCompile Include="seed.cpp" />
+    <ClCompile Include="RegionCluster.cpp" />
+    <ClCompile Include="SAM.cpp" />
+    <ClCompile Include="Seed.cpp" />
+    <ClCompile Include="SimilarityMap.cpp" />
     <ClCompile Include="SingleAligner.cpp" />
     <ClCompile Include="SingleFirstPairedEndAligner.cpp" />
     <ClCompile Include="SortedDataWriter.cpp" />
-    <ClCompile Include="GzipDataWriter.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
@@ -249,7 +265,7 @@
     <ClCompile Include="Tables.cpp" />
     <ClCompile Include="ThirdPairedEndAligner.cpp" />
     <ClCompile Include="Util.cpp" />
-    <ClCompile Include="wgsim.cpp" />
+    <ClCompile Include="WGsim.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

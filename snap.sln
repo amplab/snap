@@ -1,56 +1,27 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2012
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SNAPLib", "SNAPLib\SNAPLib.vcxproj", "{B45893DD-1E81-411D-9138-1C8551036CFD}"
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "snap", "apps\snap\snap.vcxproj", "{9AA0754E-94CE-40C1-83E8-ED79B2A275E9}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "snap", "apps\snap\snap.vcxproj", "{76E127A5-2247-4A10-9DC8-59518C7C6636}"
 	ProjectSection(ProjectDependencies) = postProject
-		{B45893DD-1E81-411D-9138-1C8551036CFD} = {B45893DD-1E81-411D-9138-1C8551036CFD}
+		{E620DC13-195C-41EF-B33B-8FE7DE9F8ADC} = {E620DC13-195C-41EF-B33B-8FE7DE9F8ADC}
 	EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{70B6ADB0-E0DC-4B06-95D0-B530C3DC8BE5}"
-	ProjectSection(SolutionItems) = preProject
-		Performance1.psess = Performance1.psess
-	EndProjectSection
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SNAPLib", "SNAPLib\SNAPLib.vcxproj", "{E620DC13-195C-41EF-B33B-8FE7DE9F8ADC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		Debug|Mixed Platforms = Debug|Mixed Platforms
 		Debug|Win32 = Debug|Win32
-		Debug|x64 = Debug|x64
-		Debug|x86 = Debug|x86
-		Release|Mixed Platforms = Release|Mixed Platforms
 		Release|Win32 = Release|Win32
-		Release|x64 = Release|x64
-		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{B45893DD-1E81-411D-9138-1C8551036CFD}.Debug|Mixed Platforms.ActiveCfg = Debug|x64
-		{B45893DD-1E81-411D-9138-1C8551036CFD}.Debug|Mixed Platforms.Build.0 = Debug|x64
-		{B45893DD-1E81-411D-9138-1C8551036CFD}.Debug|Win32.ActiveCfg = Debug|x64
-		{B45893DD-1E81-411D-9138-1C8551036CFD}.Debug|Win32.Build.0 = Debug|x64
-		{B45893DD-1E81-411D-9138-1C8551036CFD}.Debug|x64.ActiveCfg = Debug|x64
-		{B45893DD-1E81-411D-9138-1C8551036CFD}.Debug|x64.Build.0 = Debug|x64
-		{B45893DD-1E81-411D-9138-1C8551036CFD}.Debug|x86.ActiveCfg = Debug|x64
-		{B45893DD-1E81-411D-9138-1C8551036CFD}.Release|Mixed Platforms.ActiveCfg = Release|x64
-		{B45893DD-1E81-411D-9138-1C8551036CFD}.Release|Mixed Platforms.Build.0 = Release|x64
-		{B45893DD-1E81-411D-9138-1C8551036CFD}.Release|Win32.ActiveCfg = Release|Win32
-		{B45893DD-1E81-411D-9138-1C8551036CFD}.Release|Win32.Build.0 = Release|Win32
-		{B45893DD-1E81-411D-9138-1C8551036CFD}.Release|x64.ActiveCfg = Release|x64
-		{B45893DD-1E81-411D-9138-1C8551036CFD}.Release|x64.Build.0 = Release|x64
-		{B45893DD-1E81-411D-9138-1C8551036CFD}.Release|x86.ActiveCfg = Release|x64
-		{9AA0754E-94CE-40C1-83E8-ED79B2A275E9}.Debug|Mixed Platforms.ActiveCfg = Debug|x64
-		{9AA0754E-94CE-40C1-83E8-ED79B2A275E9}.Debug|Mixed Platforms.Build.0 = Debug|x64
-		{9AA0754E-94CE-40C1-83E8-ED79B2A275E9}.Debug|Win32.ActiveCfg = Debug|Win32
-		{9AA0754E-94CE-40C1-83E8-ED79B2A275E9}.Debug|x64.ActiveCfg = Debug|x64
-		{9AA0754E-94CE-40C1-83E8-ED79B2A275E9}.Debug|x64.Build.0 = Debug|x64
-		{9AA0754E-94CE-40C1-83E8-ED79B2A275E9}.Debug|x86.ActiveCfg = Debug|x64
-		{9AA0754E-94CE-40C1-83E8-ED79B2A275E9}.Release|Mixed Platforms.ActiveCfg = Release|x64
-		{9AA0754E-94CE-40C1-83E8-ED79B2A275E9}.Release|Mixed Platforms.Build.0 = Release|x64
-		{9AA0754E-94CE-40C1-83E8-ED79B2A275E9}.Release|Win32.ActiveCfg = Release|Win32
-		{9AA0754E-94CE-40C1-83E8-ED79B2A275E9}.Release|x64.ActiveCfg = Release|x64
-		{9AA0754E-94CE-40C1-83E8-ED79B2A275E9}.Release|x64.Build.0 = Release|x64
-		{9AA0754E-94CE-40C1-83E8-ED79B2A275E9}.Release|x86.ActiveCfg = Release|x64
+		{76E127A5-2247-4A10-9DC8-59518C7C6636}.Debug|Win32.ActiveCfg = Debug|x64
+		{76E127A5-2247-4A10-9DC8-59518C7C6636}.Debug|Win32.Build.0 = Debug|x64
+		{76E127A5-2247-4A10-9DC8-59518C7C6636}.Release|Win32.ActiveCfg = Release|x64
+		{76E127A5-2247-4A10-9DC8-59518C7C6636}.Release|Win32.Build.0 = Release|x64
+		{E620DC13-195C-41EF-B33B-8FE7DE9F8ADC}.Debug|Win32.ActiveCfg = Debug|x64
+		{E620DC13-195C-41EF-B33B-8FE7DE9F8ADC}.Debug|Win32.Build.0 = Debug|x64
+		{E620DC13-195C-41EF-B33B-8FE7DE9F8ADC}.Release|Win32.ActiveCfg = Release|x64
+		{E620DC13-195C-41EF-B33B-8FE7DE9F8ADC}.Release|Win32.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
