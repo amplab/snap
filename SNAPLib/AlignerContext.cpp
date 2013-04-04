@@ -36,6 +36,12 @@ Revision History:
 using std::max;
 using std::min;
 
+//
+// Save the index & index directory globally so that we don't need to reload them on multiple runs.
+//
+GenomeIndex *g_index = NULL;
+const char *g_indexDirectory = NULL;
+
 AlignerContext::AlignerContext(int i_argc, const char **i_argv, const char *i_version, AlignerExtension* i_extension)
     :
     index(NULL),
@@ -59,9 +65,9 @@ AlignerContext::~AlignerContext()
     }
 }
 
-void AlignerContext::runAlignment(int argc, const char **argv, const char *version)
+void AlignerContext::runAlignment(int argc, const char **argv, const char *version, unsigned *argsConsumed)
 {
-    options = parseOptions(argc, argv, version);
+    options = parseOptions(argc, argv, version, argsConsumed);
     initialize();
     extension->initialize();
     
@@ -117,17 +123,26 @@ AlignerContext::finishThread(AlignerContext* common)
     void
 AlignerContext::initialize()
 {
-    printf("Loading index from directory... ");
-    fflush(stdout);
-    _int64 loadStart = timeInMillis();
-    index = GenomeIndex::loadFromDirectory((char*) options->indexDir);
-    if (index == NULL) {
-        fprintf(stderr, "Index load failed, aborting.\n");
-        soft_exit(1);
+    if (g_indexDirectory != options->indexDir) {
+        delete g_index;
+        g_index = NULL;
+
+        printf("Loading index from directory... ");
+        fflush(stdout);
+        _int64 loadStart = timeInMillis();
+        index = GenomeIndex::loadFromDirectory((char*) options->indexDir);
+        if (index == NULL) {
+            fprintf(stderr, "Index load failed, aborting.\n");
+            soft_exit(1);
+        }
+        g_index = index;
+        g_indexDirectory = options->indexDir;
+        _int64 loadTime = timeInMillis() - loadStart;
+        printf("%llds.  %u bases, seed size %d\n",
+            loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
+    } else {
+        g_index = index;
     }
-    _int64 loadTime = timeInMillis() - loadStart;
-    printf("%llds.  %u bases, seed size %d\n",
-        loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
 
     if (options->outputFileTemplate != NULL && (options->maxHits.size() > 1 || options->maxDist.size() > 1 || options->numSeeds.size() > 1
                 || options->confDiff.size() > 1 || options->adaptiveConfDiff.size() > 1)) {

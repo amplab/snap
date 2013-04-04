@@ -56,12 +56,19 @@ int main(int argc, const char **argv)
         usage();
     } else if (strcmp(argv[1], "index") == 0) {
         GenomeIndex::runIndexer(argc - 2, argv + 2);
-    } else if (strcmp(argv[1], "single") == 0) {
-        SingleAlignerContext single;
-        single.runAlignment(argc - 2, argv + 2, SNAP_VERSION);
-    } else if (strcmp(argv[1], "paired") == 0) {
-        PairedAlignerContext paired;
-        paired.runAlignment(argc - 2, argv + 2, SNAP_VERSION);
+    } else if (strcmp(argv[1], "single") == 0 || strcmp(argv[1], "paired") == 0) {
+        for (unsigned i = 1; i < argc; i++) {
+            unsigned nArgsConsumed;
+            if (strcmp(argv[1], "single") == 0) {
+                SingleAlignerContext single;
+                single.runAlignment(argc - 2, argv + 2, SNAP_VERSION, &nArgsConsumed);
+            } else if (strcmp(argv[1], "paired") == 0) {
+                PairedAlignerContext paired;
+                paired.runAlignment(argc - 2, argv + 2, SNAP_VERSION, &nArgsConsumed);
+            }
+            _ASSERT(nArgsConsumed > 0);
+            i += nArgsConsumed;
+        }
     } else {
         fprintf(stderr, "Invalid command: %s\n\n", argv[1]);
         usage();

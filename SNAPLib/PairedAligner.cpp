@@ -346,8 +346,10 @@ void PairedAlignerOptions::usageMessage()
         DEFAULT_INTERSECTING_ALIGNER_MAX_HITS);
 }
 
-bool PairedAlignerOptions::parse(const char** argv, int argc, int& n)
+bool PairedAlignerOptions::parse(const char** argv, int argc, unsigned& n, bool *done)
 {
+    *done = false;
+
     if (strcmp(argv[n], "-s") == 0) {
         if (n + 2 < argc) {
             minSpacing = atoi(argv[n+1]);
@@ -370,7 +372,7 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n)
         skipAlignTogether = true;
         return true;
     }
-    return AlignerOptions::parse(argv, argc, n);
+    return AlignerOptions::parse(argv, argc, n, done);
 }
 
 PairedAlignerContext::PairedAlignerContext(AlignerExtension* i_extension)
@@ -378,7 +380,7 @@ PairedAlignerContext::PairedAlignerContext(AlignerExtension* i_extension)
 {
 }
 
-AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_argv, const char *i_version)
+AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_argv, const char *i_version, unsigned *argsConsumed)
 {
     argc = i_argc;
     argv = i_argv;
@@ -432,7 +434,7 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
     //
     options->nInputs = nInputs;
     options->inputs = new SNAPInput[nInputs];
-    int i;
+    unsigned i;
     int whichInput = 0;
     for (i = 1; i < argc; i++) {
         if (argv[i][0] == '-') {
@@ -460,11 +462,16 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
     _ASSERT(whichInput == nInputs);
 
     for (/* i initialized by previous loop*/; i < argc; i++) {
-        if (!options->parse(argv, argc, i)) {
+        bool done;
+        if (!options->parse(argv, argc, i, &done)) {
             options->usage();
+        }
+        if (done) {
+            break;
         }
     }
 
+    *argsConsumed = i;
     return options;
 }
 

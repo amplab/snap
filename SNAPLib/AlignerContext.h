@@ -34,6 +34,7 @@ Revision History:
 
 class AlignerExtension;
 
+
 /*++
     Common context state shared across threads during alignment process
 --*/
@@ -47,7 +48,7 @@ public:
 
     // running alignment
 
-    void runAlignment(int argc, const char **argv, const char *version);
+    void runAlignment(int argc, const char **argv, const char *version, unsigned *nArgsConsumed);
     
     // ParallelTask template
 
@@ -71,7 +72,7 @@ public:
     // overrideable by concrete single/paired alignment subclasses
     
     // parse options from the command line
-    virtual AlignerOptions* parseOptions(int argc, const char **argv, const char *version) = 0;
+    virtual AlignerOptions* parseOptions(int argc, const char **argv, const char *version, unsigned *argsConsumed) = 0;
     
     // initialize from options
     virtual void initialize();

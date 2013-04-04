@@ -59,7 +59,8 @@ SingleAlignerContext::SingleAlignerContext(AlignerExtension* i_extension)
 SingleAlignerContext::parseOptions(
     int i_argc,
     const char **i_argv,
-    const char *i_version)
+    const char *i_version,
+    unsigned *argsConsumed)
 {
     argc = i_argc;
     argv = i_argv;
@@ -103,12 +104,19 @@ SingleAlignerContext::parseOptions(
             FASTQFile;
 	}
 
-    for (int n = 1 + nInputs; n < argc; n++) {
-        if (! options->parse(argv, argc, n)) {
+    unsigned n;
+    for (n = 1 + nInputs; n < argc; n++) {
+        bool done;
+        if (! options->parse(argv, argc, n, &done)) {
             options->usage();
+        }
+
+        if (done) {
+            break;
         }
     }
     
+    *argsConsumed = n;
     return options;
 }
 

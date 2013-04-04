@@ -137,14 +137,29 @@ AlignerOptions::usageMessage()
     if (extra != NULL) {
         extra->usageMessage();
     }
+
+    fprintf(stderr, "\n\n"
+                "You may process more than one alignment without restarting SNAP, and if possible without reloading\n"
+                "the index.  In order to do this, list on the command line all of the parameters for the first\n"
+                "alignment, followed by a comma (separated by a space from the other parameters) followed by the\n"
+                "parameters for the next alignment (including single or paired).  You may have as many of these\n"
+                "as you please.  If two consecutive alignments use the same index, it will not be reloaded.\n"
+                "So, for example, you could do 'snap single hg19-20 foo.fq -o foo.sam , paired hg19-20 end1.fq end2.fq -o paired.sam'\n"
+                "and it would not reload the index between the single and paired alignments.\n",
+                "SNAP doesn't parse the options for later runs until the earlier ones have completed, so if you make\n"
+                "an error in one, it may take a while for you to notice.  So, be careful (or check back shortly after\n"
+                "you think each run will have completed).\n");
 }
 
     bool
 AlignerOptions::parse(
     const char** argv,
     int argc,
-    int& n)
+    unsigned& n,
+    bool *done)
 {
+    *done = false;
+
     if (strcmp(argv[n], "-d") == 0) {
         if (n + 1 < argc) {
             maxDist = Range::parse(argv[n+1]);
@@ -345,8 +360,14 @@ AlignerOptions::parse(
             }
         }
         return true;
+    } else if (strcmp(argv[n], ",") == 0) {
+        //
+        // End of args for this run.
+        //
+        *done = true;
+        return true;
     } else if (extra != NULL) {
-        return extra->parse(argv, argc, n);
+        return extra->parse(argv, argc, n, done);
     }
     return false;
 }
