@@ -10,7 +10,7 @@
 using std::make_pair;
 using std::min;
 
-
+ 
 LandauVishkinWithCigar::LandauVishkinWithCigar()
 {
     for (int i = 0; i < MAX_K+1; i++) {
@@ -388,6 +388,12 @@ setLVProbabilities(double *i_indelProbabilities, double *i_phredToProbability, d
     void
 initializeLVProbabilitiesToPhredPlus33()
 {
+    static bool alreadyInitialized = false;
+    if (alreadyInitialized) {
+        return;
+    }
+    alreadyInitialized = true;
+
     //
     // indel probability is .0001 for any indel (10% of a SNP real difference), and then 10% worse for each longer base.
     //

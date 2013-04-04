@@ -59,7 +59,8 @@ SingleAlignerContext::SingleAlignerContext(AlignerExtension* i_extension)
 SingleAlignerContext::parseOptions(
     int i_argc,
     const char **i_argv,
-    const char *i_version)
+    const char *i_version,
+    unsigned *argsConsumed)
 {
     argc = i_argc;
     argv = i_argv;
@@ -77,7 +78,7 @@ SingleAlignerContext::parseOptions(
 
 	int nInputs = 0;
 	for (int i = 1; i < argc; i++) {
-		if (argv[i][0] == '-') {
+		if (argv[i][0] == '-' || argv[i][0] == ',' && argv[i][1] == '\0') {
 			break;
 		}
 		nInputs++;
@@ -91,7 +92,7 @@ SingleAlignerContext::parseOptions(
 	options->inputs = new SNAPInput[nInputs];
 
 	for (int i = 1; i < argc; i++) {
-		if (argv[i][0] == '-') {
+		if (argv[i][0] == '-' || argv[i][0] == ',' && argv[i][1] == '\0') {
 			break;
 		}
 
@@ -103,12 +104,20 @@ SingleAlignerContext::parseOptions(
             FASTQFile;
 	}
 
-    for (int n = 1 + nInputs; n < argc; n++) {
-        if (! options->parse(argv, argc, n)) {
+    unsigned n;
+    for (n = 1 + nInputs; n < argc; n++) {
+        bool done;
+        if (! options->parse(argv, argc, n, &done)) {
             options->usage();
+        }
+
+        if (done) {
+            n++;    // for the ',' arg
+            break;
         }
     }
     
+    *argsConsumed = n;
     return options;
 }
 
@@ -152,6 +161,7 @@ SingleAlignerContext::runIterationThread()
             numSeeds,
             adaptiveConfDiff,
             NULL,               // LV (no need to cache in the single aligner)
+            NULL,               // reverse LV
             NULL,
             stats,
             allocator);
@@ -288,6 +298,6 @@ SingleAlignerContext::typeSpecificBeginIteration()
     void 
 SingleAlignerContext::typeSpecificNextIteration()
 {
-    //delete readSupplierGenerator;
-    //readSupplierGenerator = NULL;
+     delete readSupplierGenerator;
+     readSupplierGenerator = NULL;
 }

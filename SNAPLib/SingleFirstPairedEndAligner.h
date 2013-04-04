@@ -43,7 +43,6 @@ public:
         unsigned            maxReadSize,
         unsigned            adaptiveConfDiffThreshold,  // Increase confDiff if this many seeds in the read have multiple hits.
         bool                skipAlignToegther_,
-        unsigned            alignTogetherLVLimit_,
         PairedEndAligner    *underlyingPairedEndAligner_);
     
     virtual ~SingleFirstPairedEndAligner();
@@ -69,11 +68,11 @@ private:
     unsigned maxSpacing;
     bool forceSpacing;
     bool skipAlignTogether;
-    unsigned alignTogetherLVLimit;
     
     BaseAligner *singleAligner;
     BaseAligner *mateAligner;
     PairedEndAligner *underlyingPairedEndAligner;
 
     LandauVishkin<1> lv;
+    LandauVishkin<-1> reverseLV;
 };

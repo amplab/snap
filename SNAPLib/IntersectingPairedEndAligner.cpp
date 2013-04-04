@@ -41,11 +41,10 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         unsigned      maxSeeds_,
         unsigned      minSpacing_,                 // Minimum distance to allow between the two ends.
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
-        unsigned      lvLimit,
+        unsigned      maxBigHits_,
         BigAllocator  *allocator) :
     index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), maxSeeds(__min(10,__min(MAX_MAX_SEEDS,maxSeeds_))), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
-    landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(20000), extraScoreLimit(5) /* should be a parameter */, maxMergeDistance(31) /*also should be a parameter*/,
-    maxSmallHits(lvLimit), maxLVCalls(lvLimit)
+    landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), extraScoreLimit(5) /* should be a parameter */, maxMergeDistance(31) /*also should be a parameter*/
 {
     allocateDynamicMemory(allocator, maxReadSize, maxHits, maxSeeds);
 
@@ -71,14 +70,6 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
     
 IntersectingPairedEndAligner::~IntersectingPairedEndAligner()
 {
-    if (landauVishkin) {
-        landauVishkin->~LandauVishkin<>();
-    }
-
-    if (reverseLandauVishkin) {
-        reverseLandauVishkin->~LandauVishkin<-1>();
-    }
-
     if (NULL != baseAligner) {
         baseAligner->~BaseAligner();
     }
@@ -102,9 +93,6 @@ IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, uns
 {
     seedUsed = (BYTE *) allocator->allocate(index->getSeedLength() + 7 / 8);
 
-    landauVishkin = new(allocator) LandauVishkin<>();
-    reverseLandauVishkin = new(allocator) LandauVishkin<-1>();
-
     for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
         rcReadData[whichRead] = (char *)allocator->allocate(maxReadSize);
         rcReadQuality[whichRead] = (char *)allocator->allocate(maxReadSize);
@@ -120,7 +108,7 @@ IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, uns
         mateHitLocations[i] = new HitLocationRingBuffer(2 * (maxSpacing + 1) + 2);  // Likewise.
     }
 
-    baseAligner = new(allocator) BaseAligner(index, 1, maxHitsToConsider, maxK/2, maxReadSize, maxSeedsToUse, 4, landauVishkin, NULL, NULL, allocator);
+    baseAligner = new(allocator) BaseAligner(index, 1, maxHitsToConsider, maxK/2, maxReadSize, maxSeedsToUse, 4, landauVishkin, reverseLandauVishkin, NULL, NULL, allocator);
 }
 
     void 
@@ -341,13 +329,6 @@ IntersectingPairedEndAligner::align(
     bool gaveUpEarly = false;
 
     while (!(setPairDone[0] && setPairDone[1])) {
-        if (result->nLVCalls > maxLVCalls || result->nSmallHits > maxSmallHits) {
-            //
-            // Just give up and call it with what we've got now, and very low MAPQ.
-            //
-            gaveUpEarly = true;
-            goto doneScoring;
-        }
         //
         // Each iteration of this loop considers a single hit possibility on the read with fewer hits.  We've already looked it up,
         // but have not yet inserted it in the ring buffer.
@@ -672,15 +653,18 @@ IntersectingPairedEndAligner::scoreLocation(
 
     _ASSERT(!memcmp(data+seedOffset, readToScore->getData() + seedOffset, seedLen));    // that the seed actually matches
 
+    // NB: This cacheKey computation MUST match the one in BaseAligner or all hell will break loose.
+    _uint64 cacheKey = (genomeLocation + tailStart) | (((_uint64) direction) << 32) | (((_uint64) whichRead) << 33) | (((_uint64)tailStart) << 34);
+
     score1 = landauVishkin->computeEditDistance(data + tailStart, genomeDataLength - tailStart, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
-        scoreLimit, &matchProb1);
+        scoreLimit, &matchProb1, cacheKey);
     if (score1 == -1) {
         *score = -1;
     } else {
         // The tail of the read matched; now let's reverse the reference genome data and match the head
         int limitLeft = scoreLimit - score1;
         score2 = reverseLandauVishkin->computeEditDistance(data + seedOffset, seedOffset + MAX_K, reversedRead[whichRead][direction] + readLen - seedOffset,
-                                                                    reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2, 0, genomeLocationOffset);
+                                                                    reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2, cacheKey, genomeLocationOffset);
 
         if (score2 == -1) {
             *score = -1;

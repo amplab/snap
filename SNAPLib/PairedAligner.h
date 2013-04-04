@@ -39,7 +39,7 @@ protected:
 
     // AlignerContext
     
-    virtual AlignerOptions* parseOptions(int argc, const char **argv, const char *version);
+    virtual AlignerOptions* parseOptions(int argc, const char **argv, const char *version, unsigned *argsConsumed);
 
     virtual void initialize();
 
@@ -66,7 +66,7 @@ protected:
     int                 maxSpacing;
     bool                forceSpacing;
     bool                skipAlignTogether;
-    unsigned            alignTogetherLVLimit;
+    unsigned            intersectingAlignerMaxHits;
     const char         *fastqFile1;
     bool                ignoreMismatchedIDs;
 };
@@ -77,11 +77,11 @@ struct PairedAlignerOptions : public AlignerOptions
 
     virtual void usageMessage();
 
-    virtual bool parse(const char** argv, int argc, int& n);
+    virtual bool parse(const char** argv, int argc, unsigned& n, bool *done);
 
     int minSpacing;
     int maxSpacing;
     bool forceSpacing;
     bool skipAlignTogether;
-    unsigned alignTogetherLVLimit;
+    unsigned intersectingAlignerMaxHits;
 };

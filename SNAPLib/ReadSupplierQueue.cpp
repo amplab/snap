@@ -184,14 +184,15 @@ ReadSupplierQueue::getElement()
     AcquireExclusiveLock(&lock);
     //printf("Thread %u: getElement acquired lock\n", GetCurrentThreadId());
     while (!areAnyReadsReady()) {
-        ReleaseExclusiveLock(&lock);
-        //printf("Thread %u: getElement loop released lock\n", GetCurrentThreadId());
         if (allReadsQueued) {
             //
             // Everything's queued and the queue is empty.  No more work.
             //
+            ReleaseExclusiveLock(&lock);
             return NULL;
         }
+        ReleaseExclusiveLock(&lock);
+        //printf("Thread %u: getElement loop released lock\n", GetCurrentThreadId());
         //printf("Thread %u: getElement loop wait readsReady\n", GetCurrentThreadId());
         WaitForEvent(&readsReady);
         //printf("Thread %u: getElement loop wait acquire lock\n", GetCurrentThreadId());
@@ -203,11 +204,10 @@ ReadSupplierQueue::getElement()
     _ASSERT(element != &readyQueue[0]);
     element->removeFromQueue();
 
-    if (!areAnyReadsReady()) {
+    if (!areAnyReadsReady() && !allReadsQueued) {
         //printf("Thread %u: getElement block readsReady\n", GetCurrentThreadId());
         PreventEventWaitersFromProceeding(&readsReady);
     }
- 
     ReleaseExclusiveLock(&lock);
     //printf("Thread %u: getElement released lock\n", GetCurrentThreadId());
 
@@ -348,13 +348,28 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
     int firstOrSecond = params->isSecondReader ? 1 : 0;
     bool isSingleReader = (NULL == singleReader[1]);
 
+    _int64 balanceTime = 0;
+    _int64 bufferWaitTime = 0;
+    _int64 processingTime = 0;
+    _int64 startTime = timeInNanos();
+
     while (!done) {
         if ((!isSingleReader) && balance * balanceIncrement > MaxImbalance) {
             //
             // We're over full.  Wait to get back in balance.
             //
             ReleaseExclusiveLock(&lock);
+
+            _int64 now = timeInNanos();
+            processingTime += now - startTime;
+            startTime = now;
+
             WaitForEvent(&throttle[firstOrSecond]);
+
+            now = timeInNanos();
+            balanceTime += now - startTime;
+            startTime = now;
+
             AcquireExclusiveLock(&lock);
             _ASSERT(balance * balanceIncrement <= MaxImbalance);
         }
@@ -362,7 +377,17 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
         while (emptyQueue->next == emptyQueue) {
             // Wait for a buffer.
             ReleaseExclusiveLock(&lock);
+
+            _int64 now = timeInNanos();
+            processingTime += now - startTime;
+            startTime = now;
+
             WaitForEvent(&emptyBuffersAvailable);
+
+            now = timeInNanos();
+            bufferWaitTime += now - startTime;
+            startTime = now;
+
             AcquireExclusiveLock(&lock);
         }
 
@@ -429,6 +454,7 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
         if (done && 1 == nReadersRunning) {
             //printf("Thread %u: set allReadsQueued (%d) in ReaderThread...\n", GetCurrentThreadId(), element->totalReads);
             allReadsQueued = true;
+            AllowEventWaitersToProceed(&readsReady);    // Even if we have nothing to queue, allow the consumers to wake up so they can exit
         }
 
         if (element->totalReads > 0) {
@@ -463,6 +489,10 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
         }
 
     } // While ! done
+
+    processingTime += timeInNanos() - startTime;
+
+//    printf("ReadSupplier: %llds processing, %llds waiting for balance, %llds waiting for buffer\n", processingTime / 1000000000, balanceTime / 1000000000, bufferWaitTime / 1000000000);
 
     _ASSERT(nReadersRunning > 0);
     nReadersRunning--;

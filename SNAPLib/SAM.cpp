@@ -701,6 +701,14 @@ getSAMData(
         genomeLocation = 0xffffffff;
     }
 
+    if (0xffffffff == genomeLocation) {
+        //
+        // If it's unmapped, then always emit it in the forward direction.  This is necessary because we don't even include
+        // the SAM_REVERSE_COMPLEMENT flag for unmapped reads, so there's no way to tell that we reversed it.
+        //
+        direction = FORWARD;
+    }
+
     // Write the data and quality strings. If the read is reverse complemented, these need to
     // be backwards from the original read. Also, both need to be unclipped.
     clippedLength = read->getDataLength();

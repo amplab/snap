@@ -29,10 +29,12 @@ Revision History:
 #include "GenomeIndex.h"
 #include "SingleAligner.h"
 #include "PairedAligner.h"
+#include "exit.h"
+
 
 using namespace std;
 
-const char *SNAP_VERSION = "0.16alpha.3";
+const char *SNAP_VERSION = "0.16alpha.5";
 
 static void usage()
 {
@@ -43,7 +45,7 @@ static void usage()
             "   single   align single-end reads\n"
             "   paired   align paired-end reads\n"
             "Type a command without arguments to see its help.\n");
-    exit(1);
+    soft_exit(1);
 }
 
 
@@ -55,12 +57,22 @@ int main(int argc, const char **argv)
         usage();
     } else if (strcmp(argv[1], "index") == 0) {
         GenomeIndex::runIndexer(argc - 2, argv + 2);
-    } else if (strcmp(argv[1], "single") == 0) {
-        SingleAlignerContext single;
-        single.runAlignment(argc - 2, argv + 2, SNAP_VERSION);
-    } else if (strcmp(argv[1], "paired") == 0) {
-        PairedAlignerContext paired;
-        paired.runAlignment(argc - 2, argv + 2, SNAP_VERSION);
+    } else if (strcmp(argv[1], "single") == 0 || strcmp(argv[1], "paired") == 0) {
+        for (unsigned i = 1; i < argc; /* i is increased below */) {
+            unsigned nArgsConsumed;
+            if (strcmp(argv[i], "single") == 0) {
+                SingleAlignerContext single;
+                single.runAlignment(argc - (i + 1), argv + i + 1, SNAP_VERSION, &nArgsConsumed);
+            } else if (strcmp(argv[i], "paired") == 0) {
+                PairedAlignerContext paired;
+                paired.runAlignment(argc - (i + 1), argv + i + 1, SNAP_VERSION, &nArgsConsumed);
+            } else {
+                fprintf(stderr, "Invalid command: %s\n\n", argv[i]);
+                usage();
+            }
+            _ASSERT(nArgsConsumed > 0);
+            i += nArgsConsumed + 1;  // +1 for single or paired
+        }
     } else {
         fprintf(stderr, "Invalid command: %s\n\n", argv[1]);
         usage();

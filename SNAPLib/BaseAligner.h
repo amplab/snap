@@ -29,7 +29,6 @@ Revision History:
 
 #include "Aligner.h"
 #include "LandauVishkin.h"
-#include "BoundedStringDistance.h"
 #include "BigAlloc.h"
 #include "ProbabilityDistance.h"
 #include "SimilarityMap.h"
@@ -49,7 +48,8 @@ public:
         unsigned        i_maxReadSize,
         unsigned        i_maxSeedsToUse,
         unsigned        i_adaptiveConfDiffThreshold,
-        LandauVishkin<>*i_landauVishkin = NULL,
+        LandauVishkin<1>*i_landauVishkin = NULL,
+        LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
         SimilarityMap  *i_similarityMap = NULL,
         AlignerStats   *i_stats = NULL,
         BigAllocator    *allocator = NULL);
@@ -162,11 +162,6 @@ public:
 private:
 
     bool hadBigAllocator;
-
-#if     defined(USE_BOUNDED_STRING_DISTANCE)
-    BoundedStringDistance<> *boundedStringDist;
-    char *reversedGenomeData; 
-#endif  // bsd or LV
 
     LandauVishkin<> *landauVishkin;
     LandauVishkin<-1> *reverseLandauVishkin;
@@ -346,6 +341,7 @@ private:
     void findCandidate(unsigned genomeLocation, Direction direction, Candidate **candidate, HashTableElement **hashTableElement);
     void allocateNewCandidate(unsigned genomeLoation, Direction direction, unsigned lowestPossibleScore, int seedOffset, Candidate **candidate, HashTableElement **hashTableElement);
     void incrementWeight(HashTableElement *element);
+    void prefetchHashTableBucket(unsigned genomeLocation, Direction direction);
 
     void fillHitsFound(unsigned maxHitsToGet, int *multiHitsFound, 
                        unsigned *multiHitLocations, Direction *multiHitDirections, int *multiHitScores,

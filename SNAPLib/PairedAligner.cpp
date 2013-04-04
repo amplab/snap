@@ -57,7 +57,6 @@ using util::stringEndsWith;
 
 static const int DEFAULT_MIN_SPACING = 50;
 static const int DEFAULT_MAX_SPACING = 1000;
-static const unsigned DEFAULT_ALIGN_TOGETHER_LV_LIMIT = 1000000;
 
 struct PairedAlignerStats : public AlignerStats
 {
@@ -330,7 +329,7 @@ PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
     maxSpacing(DEFAULT_MAX_SPACING),
     skipAlignTogether(false),
     forceSpacing(false),
-    alignTogetherLVLimit(DEFAULT_ALIGN_TOGETHER_LV_LIMIT)
+    intersectingAlignerMaxHits(DEFAULT_INTERSECTING_ALIGNER_MAX_HITS)
 {
 }
 
@@ -341,14 +340,16 @@ void PairedAlignerOptions::usageMessage()
         "  -s   min and max spacing to allow between paired ends (default: %d %d)\n"
         "  -fs  force spacing to lie between min and max\n"
         "  -fast Skip some rare but very expensive cases.  Results in fewer alignments, but they're high quality and very quick.\n"
-        "  -l   limit for number of candidates scored in align together (default: %d)\n",
+        "  -H   max hits for intersecting aligner (default: %d)\n",
         DEFAULT_MIN_SPACING,
         DEFAULT_MAX_SPACING,
-        DEFAULT_ALIGN_TOGETHER_LV_LIMIT);
+        DEFAULT_INTERSECTING_ALIGNER_MAX_HITS);
 }
 
-bool PairedAlignerOptions::parse(const char** argv, int argc, int& n)
+bool PairedAlignerOptions::parse(const char** argv, int argc, unsigned& n, bool *done)
 {
+    *done = false;
+
     if (strcmp(argv[n], "-s") == 0) {
         if (n + 2 < argc) {
             minSpacing = atoi(argv[n+1]);
@@ -357,9 +358,9 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n)
             return true;
         } 
         return false;
-    } else if (strcmp(argv[n], "-l") == 0) {
+    } else if (strcmp(argv[n], "-H") == 0) {
         if (n + 1 < argc) {
-            alignTogetherLVLimit = atoi(argv[n+1]);
+            intersectingAlignerMaxHits = atoi(argv[n+1]);
             n += 1;
             return true;
         } 
@@ -371,7 +372,7 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n)
         skipAlignTogether = true;
         return true;
     }
-    return AlignerOptions::parse(argv, argc, n);
+    return AlignerOptions::parse(argv, argc, n, done);
 }
 
 PairedAlignerContext::PairedAlignerContext(AlignerExtension* i_extension)
@@ -379,7 +380,7 @@ PairedAlignerContext::PairedAlignerContext(AlignerExtension* i_extension)
 {
 }
 
-AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_argv, const char *i_version)
+AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_argv, const char *i_version, unsigned *argsConsumed)
 {
     argc = i_argc;
     argv = i_argv;
@@ -403,7 +404,7 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
     int nInputs = 0;
     bool foundFirstHalfOfFASTQ = false;
     for (int i = 1; i < argc; i++) {
-        if (argv[i][0] == '-') {
+        if (argv[i][0] == '-' || argv[i][0] == ',' && argv[i][1] == '\0') {
                 break;
         }
         
@@ -433,7 +434,7 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
     //
     options->nInputs = nInputs;
     options->inputs = new SNAPInput[nInputs];
-    int i;
+    unsigned i;
     int whichInput = 0;
     for (i = 1; i < argc; i++) {
         if (argv[i][0] == '-') {
@@ -458,14 +459,19 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
             foundFirstHalfOfFASTQ = !foundFirstHalfOfFASTQ;
         }
     }
-    _ASSERT(whichInput == nInputs);
 
     for (/* i initialized by previous loop*/; i < argc; i++) {
-        if (!options->parse(argv, argc, i)) {
+        bool done;
+        if (!options->parse(argv, argc, i, &done)) {
             options->usage();
+        }
+        if (done) {
+            i++;    // For the ',' arg
+            break;
         }
     }
 
+    *argsConsumed = i;
     return options;
 }
 
@@ -477,7 +483,7 @@ void PairedAlignerContext::initialize()
     maxSpacing = options2->maxSpacing;
     forceSpacing = options2->forceSpacing;
     skipAlignTogether = options2->skipAlignTogether;
-    alignTogetherLVLimit = options2->alignTogetherLVLimit;
+    intersectingAlignerMaxHits = options2->intersectingAlignerMaxHits;
     ignoreMismatchedIDs = options2->ignoreMismatchedIDs;
 }
 
@@ -506,7 +512,7 @@ void PairedAlignerContext::runIterationThread()
     int maxReadSize = 10000;
     BigAllocator *allocator = new BigAllocator(100 * 1024 * 1024);
     
-    IntersectingPairedEndAligner *intersectingAligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, alignTogetherLVLimit, allocator);
+    IntersectingPairedEndAligner *intersectingAligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, intersectingAlignerMaxHits, allocator);
 
     SingleFirstPairedEndAligner *aligner = new SingleFirstPairedEndAligner(
         index,
@@ -521,7 +527,6 @@ void PairedAlignerContext::runIterationThread()
         maxReadSize,
         adaptiveConfDiff,
         skipAlignTogether,
-        alignTogetherLVLimit,
         intersectingAligner);
 
     ReadWriter *readWriter = this->readWriter;
@@ -616,11 +621,11 @@ void PairedAlignerContext::runIterationThread()
     }
     //printf("Time in s: %lld: thread ran out of work.  Last range was %8lld bytes in %4lldms, starting at %10lld.  Total %4d ranges and %10lld bytes.\n",timeInMillis() / 1000, rangeLength, timeInMillis() - rangeStartTime, rangeStart, totalRanges, totalBytes);
 
-//    aligner->~ThirdPairedEndAligner();
-//    delete allocator;
-
     delete aligner;
     delete supplier;
+
+    intersectingAligner->~IntersectingPairedEndAligner();
+    delete allocator;
 }
 
 void PairedAlignerContext::writePair(Read* read0, Read* read1, PairedAlignmentResult* result)
