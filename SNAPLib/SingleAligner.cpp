@@ -298,6 +298,6 @@ SingleAlignerContext::typeSpecificBeginIteration()
     void 
 SingleAlignerContext::typeSpecificNextIteration()
 {
-    //delete readSupplierGenerator;
-    //readSupplierGenerator = NULL;
+     delete readSupplierGenerator;
+     readSupplierGenerator = NULL;
 }

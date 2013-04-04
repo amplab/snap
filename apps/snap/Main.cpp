@@ -29,6 +29,7 @@ Revision History:
 #include "GenomeIndex.h"
 #include "SingleAligner.h"
 #include "PairedAligner.h"
+#include "exit.h"
 
 
 using namespace std;
@@ -44,7 +45,7 @@ static void usage()
             "   single   align single-end reads\n"
             "   paired   align paired-end reads\n"
             "Type a command without arguments to see its help.\n");
-    exit(1);
+    soft_exit(1);
 }
 
 

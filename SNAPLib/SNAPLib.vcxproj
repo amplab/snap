@@ -155,9 +155,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <Text Include="ReadMe.txt" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="Aligner.h" />
     <ClInclude Include="AlignerContext.h" />
     <ClInclude Include="AlignerOptions.h" />

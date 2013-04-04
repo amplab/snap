@@ -459,7 +459,6 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
             foundFirstHalfOfFASTQ = !foundFirstHalfOfFASTQ;
         }
     }
-    _ASSERT(whichInput == nInputs);
 
     for (/* i initialized by previous loop*/; i < argc; i++) {
         bool done;
@@ -622,11 +621,11 @@ void PairedAlignerContext::runIterationThread()
     }
     //printf("Time in s: %lld: thread ran out of work.  Last range was %8lld bytes in %4lldms, starting at %10lld.  Total %4d ranges and %10lld bytes.\n",timeInMillis() / 1000, rangeLength, timeInMillis() - rangeStartTime, rangeStart, totalRanges, totalBytes);
 
-//    aligner->~ThirdPairedEndAligner();
-//    delete allocator;
-
     delete aligner;
     delete supplier;
+
+    intersectingAligner->~IntersectingPairedEndAligner();
+    delete allocator;
 }
 
 void PairedAlignerContext::writePair(Read* read0, Read* read1, PairedAlignmentResult* result)
