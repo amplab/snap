@@ -438,7 +438,7 @@ BAMFormat::getWriterSupplier(
 {
     DataWriterSupplier* dataSupplier;
     if (options->sortOutput) {
-        int len = strlen(options->outputFileTemplate);
+        size_t len = strlen(options->outputFileTemplate);
         // todo: this is going to leak, but there's no easy way to free it, and it's small...
         char* tempFileName = (char*) malloc(5 + len);
         strcpy(tempFileName, options->outputFileTemplate);
@@ -486,8 +486,8 @@ BAMFormat::writeHeader(
     if (! ok) {
         return false;
     }
-    bamHeader->l_text = samHeaderSize;
-    cursor = BAMHeader::size(samHeaderSize);
+    bamHeader->l_text = (int)samHeaderSize;
+    cursor = BAMHeader::size((int)samHeaderSize);
 
     // Write a RefSeq record for each chromosome / piece in the genome
     const Genome::Piece *pieces = genome->getPieces();
@@ -496,7 +496,7 @@ BAMFormat::writeHeader(
     BAMHeaderRefSeq* refseq = bamHeader->firstRefSeq();
     unsigned genomeLen = genome->getCountOfBases();
     for (int i = 0; i < numPieces; i++) {
-        int len = strlen(pieces[i].name) + 1;
+        int len = (int)strlen(pieces[i].name) + 1;
         cursor += BAMHeaderRefSeq::size(len);
         if (cursor > headerBufferSize) {
             return false;
@@ -569,19 +569,24 @@ BAMFormat::writeRead(
     if (genomeLocation != 0xFFFFFFFF) {
         cigarOps = computeCigarOps(genome, lv, cigarBuf, cigarBufSize,
                                    clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
-                                   genomeLocation, direction, useM, &editDistance);
+                                   genomeLocation, direction == RC, useM, &editDistance);
     }
 
     // Write the BAM entry
-    size_t bamSize = BAMAlignment::size(qnameLen + 1, cigarOps, fullLength);
+    size_t bamSize = BAMAlignment::size((unsigned)qnameLen + 1, cigarOps, fullLength);
     if (bamSize > bufferSpace) {
         return false;
     }
     BAMAlignment* bam = (BAMAlignment*) buffer;
-    bam->block_size = bamSize - 4;
+    bam->block_size = (int)bamSize - 4;
     bam->refID = pieceIndex;
     bam->pos = positionInPiece - 1;
-    bam->l_read_name = qnameLen + 1;
+
+    if (qnameLen > 254) {
+        fprintf(stderr, "BAM forbat: QNAME field must be less than 254 characters long, instead it's %lld\n", qnameLen);
+        soft_exit(1);
+    }
+    bam->l_read_name = (_uint8)qnameLen + 1;
     bam->MAPQ = mapQuality;
     // todo: what is bin for unmapped reads?
     bam->bin = genomeLocation != 0xFFFFFFFF ? BAMAlignment::reg2bin(genomeLocation, genomeLocation + fullLength) : 0;
@@ -590,12 +595,12 @@ BAMFormat::writeRead(
     bam->l_seq = fullLength;
     bam->next_refID = matePieceIndex;
     bam->next_pos = matePositionInPiece - 1;
-    bam->tlen = templateLength;
+    bam->tlen = (int)templateLength;
     memcpy(bam->read_name(), read->getId(), qnameLen);
     bam->read_name()[qnameLen] = 0;
     memcpy(bam->cigar(), cigarBuf, cigarOps * 4);
     BAMAlignment::encodeSeq(bam->seq(), data, fullLength);
-    for (int i = 0; i < fullLength; i++) {
+    for (unsigned i = 0; i < fullLength; i++) {
         quality[i] -= '!';
     }
     memcpy(bam->qual(), quality, fullLength);
@@ -851,7 +856,7 @@ struct DuplicateReadKey
     bool operator!=(int x) const
     { return locations[0] != (_uint32) x || locations[1] != (_uint32) x; }
     operator _uint64()
-    { return ((_uint64) (locations[1] ^ isRC[1])) << 32 | (_uint64) (locations[0] ^ isRC[0]); }
+    { return ((_uint64) (locations[1] ^ (isRC[1] ? 1 : 0))) << 32 | (_uint64) (locations[0] ^ (isRC[0] ? 1 : 0)); }
 
     unsigned locations[2];
     bool isRC[2];
@@ -1102,7 +1107,6 @@ private:
 
     struct BAMChunk {
         BAMChunk() : start(0), end(0) {}
-        BAMChunk(BAMChunk& a) : start(a.start), end(a.end) {}
         BAMChunk(const BAMChunk& a) : start(a.start), end(a.end) {}
 
         _uint64 start, end;
@@ -1288,7 +1292,7 @@ BAMIndexSupplier::addInterval(
     if (info == NULL) {
         return;
     }
-    _uint32 slot = begin <= 0 ? 0 : ((begin - 1) / 16384);
+    int slot = begin <= 0 ? 0 : ((begin - 1) / 16384);
     //_uint32 slot2 = end <= 0 ? 0 : ((end - 1) / 16384);
     if (slot/*2*/ >= info->intervals.size()) {
         for (int i = info->intervals.size(); i < slot; i++) {

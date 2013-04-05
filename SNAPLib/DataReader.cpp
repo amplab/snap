@@ -189,7 +189,12 @@ WindowsOverlappedDataReader::readHeader(
     info->lap.Offset = 0;
     info->lap.OffsetHigh = 0;
 
-    if (!ReadFile(hFile,info->buffer,*io_headerSize,&info->validBytes,&info->lap)) {
+    if (*io_headerSize > 0xffffffff) {
+        fprintf(stderr,"WindowsOverlappedDataReader: trying to read too many bytes at once: %lld\n", *io_headerSize);
+        soft_exit(1);
+    }
+
+    if (!ReadFile(hFile,info->buffer,(DWORD)*io_headerSize,&info->validBytes,&info->lap)) {
         if (GetLastError() != ERROR_IO_PENDING) {
             fprintf(stderr,"WindowsOverlappedSAMReader::init: unable to read header of '%s', %d\n",fileName,GetLastError());
             return false;
@@ -289,7 +294,7 @@ WindowsOverlappedDataReader::advance(
 {
     BufferInfo* info = &bufferInfo[nextBufferForConsumer];
     _ASSERT(info->validBytes >= info->offset && bytes >= 0 && bytes <= info->validBytes - info->offset);
-    info->offset += min((_int64) info->validBytes - info->offset, max((_int64) 0, bytes));
+    info->offset += min(info->validBytes - info->offset, (unsigned)max(0, bytes));
 }
 
     void
@@ -420,9 +425,9 @@ WindowsOverlappedDataReader::startIo()
         unsigned amountToRead;
         _int64 finalOffset = min(fileSize.QuadPart, endingOffset + overflowBytes);
         _int64 finalStartOffset = min(fileSize.QuadPart, endingOffset);
-        amountToRead = min(finalOffset - readOffset.QuadPart, (_int64) bufferSize);
+        amountToRead = (unsigned)min(finalOffset - readOffset.QuadPart, (_int64) bufferSize);   // Cast OK because can't be longer than unsigned bufferSize
         info->isEOF = readOffset.QuadPart + amountToRead == finalOffset;
-        info->nBytesThatMayBeginARead = min(bufferSize - overflowBytes, finalStartOffset - readOffset.QuadPart);
+        info->nBytesThatMayBeginARead = (unsigned)min(bufferSize - overflowBytes, finalStartOffset - readOffset.QuadPart);
 
         _ASSERT(amountToRead >= info->nBytesThatMayBeginARead && (!info->isEOF || finalOffset == readOffset.QuadPart + amountToRead));
         ResetEvent(info->lap.hEvent);
@@ -593,7 +598,7 @@ GzipDataReader::init(
 GzipDataReader::readHeader(
     _int64* io_headerSize)
 {
-    _int64 compressedBytes = *io_headerSize / MIN_FACTOR;
+    _int64 compressedBytes = (_int64)(*io_headerSize / MIN_FACTOR);
     char* compressed = inner->readHeader(&compressedBytes);
     char* header;
     _int64 extraBytes;

@@ -155,7 +155,7 @@ AlignerOptions::usageMessage()
 AlignerOptions::parse(
     const char** argv,
     int argc,
-    unsigned& n,
+    int& n,
     bool *done)
 {
     *done = false;

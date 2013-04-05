@@ -91,6 +91,7 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
     result->location[1] = 0xFFFFFFFF;
 
     result->fromAlignTogether = false;
+    result->alignedAsPair = false;
     result->nanosInAlignTogether = 0;
 
     unsigned bestScore[NUM_READS_PER_PAIR] = {INFINITE_SCORE, INFINITE_SCORE};
@@ -157,7 +158,7 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
             mateAligner->setMaxK(maxK - score0 + 1);
             mateAligner->setReadId(1-r);
 
-            status1 = mateAligner->AlignRead(reads[1-r], &loc1, &direction1, &score1, &mapq1, maxSpacing, loc0, OppositeDirection(direction0), NULL, NULL);
+            status1 = mateAligner->AlignRead(reads[1-r], &loc1, &direction1, &score1, &mapq1, maxSpacing, loc0, OppositeDirection(direction0));
 
             TRACE("Mate %d returned %s at loc %u-%d\n", 1-r, AlignmentResultToString(status1), loc1, rc1);
             if (/*status1 != MultipleHits &&*/ score0 + score1 <= (int)maxK) {
@@ -171,6 +172,7 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
                 result->direction[1-r] = direction1;
                 result->score[1-r] = score1;
                 result->mapq[1-r] = min(mapq0,mapq1);
+                result->alignedAsPair = true;
                 return;
             } else if(status1 == NotFound) {
                 // We found read r at one location and didn't find the mate nearby. Let's remember because
@@ -273,8 +275,14 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
 
     result->nanosInAlignTogether = end - start;
     result->fromAlignTogether = true;
+    result->alignedAsPair = true;
 
     if (forceSpacing) {
+        if (result->status[0] == NotFound) {
+            result->fromAlignTogether = false;
+        } else {
+            _ASSERT(result->status[1] != NotFound); // If one's not found, so is the other
+        }
         return;
     }
 
@@ -291,6 +299,7 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
             result->mapq[r] = bestMapq[r] / 4;
             result->score[r] = bestScore[r];
             result->status[r] = singleStatus[r];
+            result->alignedAsPair = false;
         }
     }
 

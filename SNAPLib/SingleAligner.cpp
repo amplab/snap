@@ -104,7 +104,7 @@ SingleAlignerContext::parseOptions(
             FASTQFile;
 	}
 
-    unsigned n;
+    int n;
     for (n = 1 + nInputs; n < argc; n++) {
         bool done;
         if (! options->parse(argv, argc, n, &done)) {

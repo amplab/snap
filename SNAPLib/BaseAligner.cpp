@@ -85,14 +85,6 @@ Arguments:
  
  --*/
 {
-
-#if     MAINTAIN_HISTOGRAMS
-    lvHistogram = new Histogram(20, true);
-    lookupHistogram = new Histogram(20, true);
-    lvHistogramForMulti = new Histogram(20, true);
-    lvCountWhenBestFound = new Histogram(maxHitsToConsider*4,false);
-#endif  // MAINTAIN_HISTOGRAMS
-
     hadBigAllocator = allocator != NULL;
 
     nHashTableLookups = 0;
@@ -168,13 +160,6 @@ Arguments:
 
     nUsedHashTableElements = 0;
 
-    /*
-    if (maxK*2 > 64) {
-        fprintf(stderr,"The HashTableElement struct uses a 64 bit bitvector for used candidates.  As a result, you can't 
-        soft_exit(1);
-    }
-    */
-
     if (allocator) {
         candidateHashTable[FORWARD] = (HashTableAnchor *)allocator->allocate(sizeof(HashTableAnchor) * candidateHashTablesSize);
         candidateHashTable[RC] = (HashTableAnchor *)allocator->allocate(sizeof(HashTableAnchor) * candidateHashTablesSize);
@@ -214,25 +199,9 @@ Arguments:
     AlignmentResult
 BaseAligner::AlignRead(Read *inputRead, unsigned *genomeLocation, Direction *hitDirection, int *finalScore, int *mapq)
 {
-    return AlignRead(inputRead, genomeLocation, hitDirection, finalScore, mapq, 0, 0, false, 0, NULL, 0, NULL, NULL, NULL, NULL);
+    return AlignRead(inputRead, genomeLocation, hitDirection, finalScore, mapq, 0, 0, FORWARD /*This is ignored when searchRadius = 0*/);
 }
 
-    AlignmentResult
-BaseAligner::AlignRead(
-    Read      *inputRead,
-    unsigned  *genomeLocation,
-    Direction *hitDirection,
-    int       *finalScore,
-    int       *mapq,
-    unsigned   searchRadius,
-    unsigned   searchLocation,
-    Direction  searchDirection,
-    double      *bestHitProbability,
-    double      *allHitsProbability)
-{
-    return AlignRead(inputRead, genomeLocation, hitDirection, finalScore, mapq,
-        searchRadius, searchLocation, searchDirection, bestHitProbability, allHitsProbability, 0, NULL, NULL, NULL, NULL);
-}
 
 #ifdef  _DEBUG
 bool _DumpAlignments = false;
@@ -247,14 +216,7 @@ BaseAligner::AlignRead(
     int       *mapq,
     unsigned   searchRadius,
     unsigned   searchLocation,
-    Direction  searchDirection,
-    double    *bestHitProbability,
-    double    *allHitsProbability,
-    int        maxHitsToGet,
-    int       *multiHitsFound,
-    unsigned  *multiHitLocations,
-    Direction *multiHitDirections,
-    int       *multiHitScores)  
+    Direction  searchDirection)  
 /*++
 
 Routine Description:
@@ -274,15 +236,6 @@ Arguments:
     searchRadius        - if non-zero, constrain the search to this distance around searchLocation, in orientation searchRC
     searchLocation      - location to search around if searchRadius is given
     searchDirection     - whether to search in forward or reverse complement orientation if searchRadius is given
-    bestHitProbability  - output parameter for the match probability for the best hit found
-    allHitsProbability  - output parameter for the match probability for the all hits found
-    maxHitsToGet        - if greater than 0, output up to this many hits within confDiff of the best (if any) in multiHitLocation
-                          writing their count in multiHitsFound, instead of returning MultipleHits immediately
-    multiHitsFound      - output parameter for number of alternative hits found if maxHitsToGet is true
-    multiHitLocations   - output parameter for locations of alternative hits found if maxHitsToGet is true
-    multiHitScores      - output parameter for the scores for each of the multi hits if maxHitsToGet is true
-
-
 
 Return Value:
 
@@ -323,12 +276,6 @@ Return Value:
     if (searchRadius != 0) {
         minLocation = (searchLocation > searchRadius) ? searchLocation - searchRadius : 0;
         maxLocation = (searchLocation < 0xFFFFFFFF - searchRadius) ? searchLocation + searchRadius : 0xFFFFFFFF;
-    }
-
-    // If asked to return the locations of multiple hits, make sure we get sensible counts and results
-    if (maxHitsToGet > 0) {
-        memset(hitCount, 0, MAX_K * sizeof(unsigned));
-        *multiHitsFound = 0;
     }
 
     AlignmentResult finalResult;
@@ -383,24 +330,6 @@ Return Value:
         return NotFound;
     }
 
-    //
-    // Block off any seeds that would contain an N.
-    //
-    //if (countOfNs > 0) {
-    //    int minSeedToConsiderNing = 0; // In English, any word can be verbed. Including, apparently, "N."
-    //    for (int i = 0; i < (int) readLen; i++) {
-    //        if (readData[i] == 'N') {
-    //            int limit = __min(i + seedLen - 1, readLen-1);
-    //            for (int j = __max(minSeedToConsiderNing, i - (int) seedLen + 1); j <= limit; j++) {
-    //                SetSeedUsed(j);
-    //            }
-    //            minSeedToConsiderNing = limit+1;
-    //            if (minSeedToConsiderNing >= (int) readLen)
-    //                break;
-    //        }
-    //    }
-    //}
-
     Read reverseComplimentRead;
     Read *read[NUM_DIRECTIONS];
     read[FORWARD] = inputRead;
@@ -428,12 +357,7 @@ Return Value:
     probabilityOfAllCandidates = 0.0;
     probabilityOfBestCandidate = 0.0;
 
-    if (maxHitsToGet > 0) {
-        scoreLimit = maxK + 3;
-    } else {
-        scoreLimit = maxK + 2; // For MAPQ computation
-        //scoreLimit = maxK + confDiff - 1;
-    }
+    scoreLimit = maxK + 2; // For MAPQ computation
 
     while (nSeedsApplied[FORWARD] + nSeedsApplied[RC] < maxSeedsToUse) {
         //
@@ -461,21 +385,8 @@ Return Value:
                     finalScore,
                     genomeLocation,
                     hitDirection,
-                    maxHitsToGet,
                     mapq);
-#if     MAINTAIN_HISTOGRAMS
-                lvHistogram->addToCount(lvScores,lvScores);
-                lookupHistogram->addToCount(lookupsThisRun,lookupsThisRun);
-                if (MultipleHits == finalResult) {
-                    lvHistogramForMulti->addToCount(lvScores,lvScores);
-                } else if (SingleHit == finalResult) {
-                    lvCountWhenBestFound->addToCount(lvScores-lvScoresAfterBestFound);
-                }
-#endif  // MAINTAIN_HISTOGRAMS
 
-                fillHitsFound(maxHitsToGet, multiHitsFound,
-                              multiHitLocations, multiHitDirections, multiHitScores,
-                              bestHitProbability, allHitsProbability);
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates)  at %u\n", *finalScore, *mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, *genomeLocation);
 #endif  // _DEBUG
@@ -650,21 +561,8 @@ Return Value:
                         finalScore,
                         genomeLocation,
                         hitDirection,
-                        maxHitsToGet,
                         mapq)) {
-#if     MAINTAIN_HISTOGRAMS
-                lvHistogram->addToCount(lvScores,lvScores);
-                lookupHistogram->addToCount(lookupsThisRun,lookupsThisRun);
-                if (MultipleHits == finalResult) {
-                    lvHistogramForMulti->addToCount(lvScores,lvScores);
-                } else if (SingleHit == finalResult) {
-                    lvCountWhenBestFound->addToCount(lvScores-lvScoresAfterBestFound);
-                }
-#endif  // MAINTAIN_HISTOGRAMS
 
-                fillHitsFound(maxHitsToGet, multiHitsFound,
-                              multiHitLocations, multiHitDirections, multiHitScores,
-                              bestHitProbability, allHitsProbability);
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", *finalScore, *mapq, *genomeLocation);
 #endif  // _DEBUG
@@ -685,21 +583,8 @@ Return Value:
             finalScore,
             genomeLocation,
             hitDirection,
-            maxHitsToGet,
             mapq);
-#if     MAINTAIN_HISTOGRAMS
-        lvHistogram->addToCount(lvScores,lvScores);
-        lookupHistogram->addToCount(lookupsThisRun,lookupsThisRun);
-        if (MultipleHits == finalResult) {
-            lvHistogramForMulti->addToCount(lvScores,lvScores);
-        } else if (SingleHit == finalResult) {
-            lvCountWhenBestFound->addToCount(lvScores-lvScoresAfterBestFound);
-        }
-#endif  // MAINTAIN_HISTOGRAMS
-    
-    fillHitsFound(maxHitsToGet, multiHitsFound,
-                  multiHitLocations, multiHitDirections, multiHitScores,
-                  bestHitProbability, allHitsProbability);
+
 #ifdef  _DEBUG
     if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates) at %u\n", *finalScore, *mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, *genomeLocation);
 #endif  // _DEBUG
@@ -715,7 +600,6 @@ BaseAligner::score(
     int             *finalScore,
     unsigned        *singleHitGenomeLocation,
     Direction       *hitDirection,
-    unsigned         maxHitsToGet,
     int             *mapq)
 /*++
 
@@ -749,7 +633,6 @@ Arguments:
     singleHitGenomeLocation                 - returns the location in the genome if we return a single hit
     hitDirection                            - if we return a single hit, indicates its direction
     candidates                              - in/out the array of candidates that have hit and possibly been scored
-    maxHitsToGet                            - whether the user wants to get multiple non-confident hits in the MultiHit case
     mapq                                    - returns the map quality if we've reached a final result
 
 Return Value:
@@ -799,11 +682,6 @@ Return Value:
         lowestPossibleScoreOfAnyUnseenLocation[FORWARD],
         lowestPossibleScoreOfAnyUnseenLocation[RC]);
 #endif
-
-    // Return early if we haven't tried enough seeds
-    //if (__max(nSeedsApplied, nRCSeedsApplied) < 4 && !forceResult) {
-    //    return false;
-    //}
 
     unsigned weightListToCheck = highestUsedWeightList;
 
@@ -878,9 +756,6 @@ Return Value:
             unsigned long candidateIndexToScore;
             _uint64 candidatesMask = elementToScore->candidatesUsed;
             while (_BitScanForward64(&candidateIndexToScore,candidatesMask)) {
-#ifdef  TIME_STRING_DISTANCE
-                _int64 timeInBSD = 0;
-#endif  // TIME_STRING_DISTANCE
                 _uint64 candidateBit = ((_uint64)1 << candidateIndexToScore);
                 candidatesMask &= ~candidateBit;
                 if ((elementToScore->candidatesScored & candidateBit) != 0) {
@@ -938,20 +813,7 @@ Return Value:
                     Read *readToScore = read[elementToScore->direction];
 
                     _ASSERT(candidateToScore->seedOffset + seedLen <= readToScore->getDataLength());
-#if defined(USE_PROBABILITY_DISTANCE)
-                    score = probDistance->compute(data, readToBeScored->getData(), readToBeScored->getQuality(),
-                            readToBeScored->getDataLength(), 6, 12, &matchProbability);
- 
-                    // Since we're allowing a startShift in ProbabilityDistance, mark nearby locations as scored too
-                    for (int shift = 1; shift <= 6; shift++) {
-                        elementToScore->candidatesScored |= (candidateBit << shift);
-                        elementToScore->candidatesScored |= (candidateBit >> shift);
-                    }
-                    // Update the biggest cluster scored if this is a sufficiently likely cluster
-                    //if (similarityMap != NULL && matchProbability >= __max(probabilityOfBestCandidate * 0.01, 1e-30)) {
-                    //    biggestClusterScored = __max(biggestClusterScored, similarityMap->getNumClusterMembers(genomeLocation));
-                    //}
-#else   // Landau-Vishkin
+
                     int maxStartShift = __min(scoreLimit, 7);
                     for (int shift = 1; shift <= maxStartShift; shift++) {
                         elementToScore->candidatesScored |= (candidateBit << shift);
@@ -1002,7 +864,6 @@ Return Value:
                     } else {
                         matchProbability = 0;
                     }
-#endif
                 } // if we had genome data to compare against
 #ifdef TRACE_ALIGNER
                 printf("Computing distance at %u (RC) with limit %d: %d (prob %g)\n",
@@ -1013,13 +874,6 @@ Return Value:
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("Scored %9u weight %2d limit %d, result %2d %s\n", genomeLocation, elementToScore->weight, scoreLimit, score, elementToScore->direction ? "RC" : "");
 #endif  // _DEBUG
-                
-                if (maxHitsToGet > 0 && score != -1 && hitCount[score] < maxHitsToGet) {
-                    // Remember the location of this hit because we don't have enough at this distance
-                    hitLocations[score][hitCount[score]] = genomeLocation;
-                    hitDirections[score][hitCount[score]] = elementToScore->direction;
-                    hitCount[score]++;
-                }
                 
                 candidateToScore->score = score;
 
@@ -1085,12 +939,6 @@ Return Value:
                             //
                             // Again, this no better than something nearby we already tried.  Give up.
                             //
-    #ifdef  TIME_STRING_DISTANCE
-                            if (NULL != stats) {
-                                stats->nanosTimeInBSD[1][score==-1 ? 0:1] += timeInBSD;
-                                stats->BSDCounts[1][score==-1 ? 0:1]++;
-                            }
-    #endif  // TIME_STRING_DISTANCE
                             continue;
                         }
                         anyNearbyCandidatesAlreadyScored = true;
@@ -1103,12 +951,6 @@ Return Value:
                 probabilityOfAllCandidates += matchProbability; // Don't combine this with the previous line, it introduces floating point unhappiness.
                 elementToScore->matchProbabilityForBestScore = matchProbability;
                 elementToScore->bestScore = score;
-#ifdef  TIME_STRING_DISTANCE
-                if (NULL != stats) {
-                    stats->nanosTimeInBSD[anyNearbyCandidatesAlreadyScored ? 1 : 0][score==-1 ? 0:1] += timeInBSD;
-                    stats->BSDCounts[anyNearbyCandidatesAlreadyScored ? 1 : 0][score==-1 ? 0:1]++;
-                }
-#endif  // TIME_STRING_DISTANCE
     
                 if (bestScore > score ||
                     bestScore == score && matchProbability > probabilityOfBestCandidate) {
@@ -1156,25 +998,7 @@ Return Value:
                 }
 
                 // Update scoreLimit since we may have improved bestScore or secondBestScore
-                if (maxHitsToGet > 0) {
-                    scoreLimit = min(bestScore, maxK) + 3;
-                } else {
-                    scoreLimit = min(bestScore, maxK) + 2;
-                    //scoreLimit = min(bestScore, maxK) + confDiff - 1 + (popularSeedsSkipped >= adaptiveConfDiffThreshold ? 1 : 0);
-                    //if (bestScore != UnusedScoreValue && secondBestScore < bestScore + confDiff) {
-                    //    // Since secondBestScore already means that our best location so far won't be a SingleHit,
-                    //    // we really just care about finding better locations than that. However, still check for
-                    //    // scores up to bestScore - 1 since those might become a new secondBestScore.
-                    //    if (bestScore == 0) {
-                    //        scoreLimit = 0;
-                    //    } else {
-                    //        scoreLimit = bestScore - 1;
-                    //    }
-                    //}
-                    //// Make sure that the score limit is 
-                    //// always search for something at least one worse than the best we found to drive the denominator of the MAPQ computation
-                    //scoreLimit = __min(__max(scoreLimit,bestScore+2),maxK); 
-                }
+                scoreLimit = min(bestScore, maxK) + 2;
             }   // While candidates exist in the element
         }   // If the element could possibly affect the result
 
@@ -1186,70 +1010,11 @@ Return Value:
         elementToScore->weightPrev->weightNext = elementToScore->weightNext;
         elementToScore->weightNext = elementToScore->weightPrev = elementToScore;
         
-        // Check whether we know we'll return MAPQ=0 for this read (NOTE: doesn't work right and doesn't give much speed)
-        //if (bestScore != UnusedScoreValue) {
-        //   double bestPossibleUnseenScore = __min(firstPassSeedsNotSkipped, firstPassRCSeedsNotSkipped);
-        //   double bestPossibleUnseenMatchProb = 0.001 * pow(0.5, __max(0, bestPossibleUnseenScore-1));
-        //   double bestPossibleProb = __max(bestPossibleUnseenMatchProb, probabilityOfBestCandidate);
-        //   if (probabilityOfAllCandidates - probabilityOfBestCandidate > 0.9 * bestPossibleProb) {
-        //       *result = MultipleHits;
-        //       *singleHitGenomeLocation = bestScoreGenomeLocation;
-        //       *finalScore = bestScore;
-        //       *mapq = 0;
-        //       return true;
-        //   }
-        //}
     } while (forceResult);
 
     return false;
 }
 
-    void 
-BaseAligner::fillHitsFound(
-    unsigned    maxHitsToGet, 
-    int        *multiHitsFound, 
-    unsigned   *multiHitLocations,
-    Direction  *multiHitDirections,
-    int        *multiHitScores,
-    double     *bestHitProbability,
-    double     *allHitsProbability)
-/*++
-
-Routine Description:
-
-    Return up to maxHitsToGet best hits found for the user in the given array and count parameters, as long
-    as maxHitsToGet >= 1. We also need the popularSeedsSkipped parameter to set confDiff adaptively.
-
---*/
-{
-    if (maxHitsToGet > 0) {
-        unsigned realConfDiff = confDiff + (popularSeedsSkipped > adaptiveConfDiffThreshold ? 1 : 0);
-        *multiHitsFound = 0;
-        int firstDist = 0; // Distance of the best hit
-        while (firstDist < MAX_K && hitCount[firstDist] == 0) {
-            firstDist++;
-        }
-        for (int dist = firstDist; dist < min(firstDist + 4, MAX_K); dist++) {
-            for (unsigned i = 0; i < hitCount[dist]; i++) {
-                multiHitLocations[*multiHitsFound] = hitLocations[dist][i];
-                multiHitDirections[*multiHitsFound] = hitDirections[dist][i];
-                multiHitScores[*multiHitsFound] = dist;
-                *multiHitsFound += 1;
-                if (*multiHitsFound == maxHitsToGet) {
-                    return;
-                }
-            }
-        }
-    }
-
-    if (NULL != bestHitProbability) {
-        *bestHitProbability = probabilityOfBestCandidate;
-    }
-
-    if (NULL != allHitsProbability) {
-        *allHitsProbability = probabilityOfAllCandidates;
-    }
-}
 
     void
 BaseAligner::prefetchHashTableBucket(unsigned genomeLocation, Direction direction)
@@ -1449,13 +1214,6 @@ Return Value:
 
 --*/
 {
-#if     MAINTAIN_HISTOGRAMS
-    delete lvHistogram;
-    delete lookupHistogram;
-    delete lvHistogramForMulti;
-    delete lvCountWhenBestFound;
-#endif  // MAINTAIN_HISTOGRAMS
-
     delete probDistance;
 
     if (hadBigAllocator) {
@@ -1506,162 +1264,6 @@ Return Value:
         BigDealloc(hashTableElementPool);
         hashTableElementPool = NULL;
     }
-}
-
-    void
-BaseAligner::ComputeHitDistribution(
-        Read        *read,
-        unsigned     correctGenomeLocation,
-        Direction    correctHitDirection,
-        unsigned    *hitCountBySeed[NUM_DIRECTIONS],
-        unsigned    *nSeedsApplied[NUM_DIRECTIONS],
-        unsigned    *hitsContainingCorrectLocation)
-{
-    nSeedsApplied[FORWARD] = nSeedsApplied[RC] = 0;
- 
-    for (unsigned i = 0; i < maxSeedsToUse; i++) {
-        hitCountBySeed[FORWARD][i] = hitCountBySeed[RC][i] = 0;
-        hitsContainingCorrectLocation[i] = 0;
-    }
-
-    //
-    // A bitvector for used seeds, indexed on the starting location of the seed within the read.
-    //
-    if (read->getDataLength() > maxReadSize) {
-        fprintf(stderr,"BaseAligner:: got too big read (%d > %d)", read->getDataLength(),maxReadSize);
-        soft_exit(1);
-    }
-
-    if (read->getDataLength() < seedLen) {
-        //
-        // Too short to have any seeds, it's hopeless.
-        //
-        return;
-    }
-
-    //
-    // Clear out the seed used array.
-    //
-    memset(seedUsed,0,(read->getDataLength() + 7) / 8);
-
-    // Compute the reversed complement and count of Ns
-    int readLen = (int)read->getDataLength();
-    const char *readData = read->getData();
-    unsigned countOfNs = 0;
-    for (int i = 0; i < readLen; i++) {
-        char baseByte = readData[i];
-        char complement = rcTranslationTable[baseByte];
-        rcReadData[readLen - i - 1] = complement;
-        countOfNs += nTable[baseByte];
-    }
-
-    if (countOfNs > maxK) {
-        return;
-    }
-
-    //
-    // Block off any seeds that would contain an N.
-    //
-    //if (countOfNs > 0) {
-    //    int minSeedToConsiderNing = 0; // In English, any word can be verbed. Including, apparently, "N."
-    //    for (int i = 0; i < readLen; i++) {
-    //        if (readData[i] == 'N') {
-    //            int limit = __max(i + (int)seedLen - 1, readLen-1);
-    //            for (int j = __max(minSeedToConsiderNing, i - (int)seedLen + 1); j <= limit; j++) {
-    //                SetSeedUsed(j);
-    //            }
-    //            minSeedToConsiderNing = limit+1;
-    //        }
-    //    }
-    //}
-
-    Read rcRead[1];
-    rcRead->init(NULL,0,rcReadData,NULL,read->getDataLength());
-
-    unsigned nPossibleSeeds = read->getDataLength() - seedLen + 1;
-
-    unsigned nextSeedToTest = 0;
-    unsigned wrapCount = 0;
-
-    while (*nSeedsApplied[FORWARD] + *nSeedsApplied[RC] < maxSeedsToUse) {
-        //
-        // Choose the next seed to use.  Choose the first one that isn't used
-        //
-        if (nextSeedToTest >= nPossibleSeeds) {
-            //
-            // We're wrapping.  We want to space the seeds out as much as possible, so if we had
-            // a seed length of 20 we'd want to take 0, 10, 5, 15, 2, 7, 12, 17.  To make the computation
-            // fast, we use use a table lookup.
-            //
-            wrapCount++;
-            if (wrapCount >= seedLen) {
-                //
-                // We tried all possible seeds without matching or even getting enough seeds to
-                // exceed our seed count.  Do the best we can with what we have.
-                //
-                return;
-            }
-            nextSeedToTest = GetWrappedNextSeedToTest(seedLen, wrapCount);
-        }
-
-        while (nextSeedToTest < nPossibleSeeds && IsSeedUsed(nextSeedToTest)) {
-            //
-            // This seed is already used.  Try the next one.
-            //
-            nextSeedToTest++;
-        }
-        if (nextSeedToTest >= nPossibleSeeds) {
-            //
-            // Unusable seeds have pushed us past the end of the read.  Go back around the outer loop so we wrap properly.
-            //
-            continue;
-        }
-
-        Seed seed(read->getData() + nextSeedToTest, seedLen);
-
-        const unsigned  *hits[NUM_DIRECTIONS];         // The actual hits (of size nHits)
-    
-        genomeIndex->lookupSeed(seed, &hitCountBySeed[FORWARD][*nSeedsApplied[FORWARD]], &hits[FORWARD], &hitCountBySeed[RC][*nSeedsApplied[RC]], &hits[RC]);
-
-        SetSeedUsed(nextSeedToTest);
-
-        for (Direction direction = 0; direction < NUM_DIRECTIONS; direction++) {
-            if (hitCountBySeed[direction][*nSeedsApplied[direction]] <= maxHitsToConsider) {
-                if (correctHitDirection == direction) {
-                    //
-                    // See if the correct answer is in this hit.
-                    //
-                    _int64 min = 0;
-                    _int64 max = ((_int64)hitCountBySeed[direction][*nSeedsApplied[direction]]) - 1;
-
-                    while (min <= max) {
-                        _int64 probe = (min + max) / 2;
-                        _ASSERT(probe >= min && probe <= max);
-
-                        if (hits[direction][probe] == correctGenomeLocation + nextSeedToTest) {
-                            hitsContainingCorrectLocation[*nSeedsApplied[direction]] = hitCountBySeed[direction][*nSeedsApplied[direction]];
-                            break;
-                        }
-
-                        //
-                        // Slice off half of the region.  Recall that the hits in the table are sorted backwards, with
-                        // hits[0] > hits[1], etc.
-                        //
-                        if (hits[direction][probe] > correctGenomeLocation) {
-                            min = probe+1;
-                        } else {
-                            max = probe-1;
-                        }
-                    }
-                }
-                nSeedsApplied++;
-            }
-        } // for each direction
-
-        nextSeedToTest += seedLen;
-    }
-
-    return;
 }
 
 BaseAligner::HashTableElement::HashTableElement()

@@ -33,7 +33,7 @@ template< typename K, typename V, typename Hash = NumericHash<K> >
 class FixedSizeMap
 {
 public:
-    FixedSizeMap(int capacity_ = 16): entries(NULL), size(0) {
+    FixedSizeMap(unsigned capacity_ = 16): entries(NULL), size(0) {
         reserve(capacity_);
     }
 
@@ -41,7 +41,7 @@ public:
         delete[] entries;
     }
     
-    void reserve(int capacity) {
+    void reserve(unsigned capacity) {
         if (!isPowerOf2(capacity)) {
             fprintf(stderr, "FixedSizeMap capacity must be a power of 2\n");
             soft_exit(1);
@@ -56,7 +56,7 @@ public:
         this->capacity = capacity;
         this->mask = capacity - 1;
         entries = new Entry[capacity];
-        for (int i = 0; i < capacity; i++) {
+        for (unsigned i = 0; i < capacity; i++) {
             entries[i].epoch = 0;
         }
         epoch = 1;
@@ -69,7 +69,7 @@ public:
         epoch += 2;
         if (epoch > 100000000) {
             // Reset the epoch of every bucket to 0 and the current epoch to 1
-            for (int i = 0; i < capacity; i++) {
+            for (unsigned i = 0; i < capacity; i++) {
                 entries[i].epoch = 0;
             }
             epoch = 1;
@@ -84,7 +84,7 @@ public:
         _ASSERT(size <= capacity);
     }
 
-    static const int MaxQuadraticProbes = 4;
+    static const unsigned MaxQuadraticProbes = 4;
 
     inline V get(K key) {
         unsigned pos = hash(key) & mask;
@@ -105,7 +105,7 @@ public:
         }
 #endif  // 0
 
-        int i = 1;
+        unsigned i = 1;
         while (true) {
             if (entries[pos].epoch < epoch) {
                 return V();
@@ -126,7 +126,7 @@ public:
 //        addToBloomFilter(key);
 
         unsigned pos = hash(key) & mask;
-        int i = 1;
+        unsigned i = 1;
 
         while (true) {
             if (entries[pos].epoch != epoch) {
@@ -149,7 +149,7 @@ public:
     inline void erase(K key) {
         _ASSERT(size <= capacity);
         unsigned pos = hash(key) & mask;
-        int i = 1;
+        unsigned i = 1;
         while (true) {
             if (entries[pos].epoch < epoch) {
                 return;
@@ -272,8 +272,8 @@ private:
     };
     
     Entry *entries;
-    int capacity;
-    int size;
+    unsigned capacity;
+    unsigned size;
     int mask;
     int epoch;
     Hash hash;

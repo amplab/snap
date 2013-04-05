@@ -77,7 +77,7 @@ struct PairedAlignerOptions : public AlignerOptions
 
     virtual void usageMessage();
 
-    virtual bool parse(const char** argv, int argc, unsigned& n, bool *done);
+    virtual bool parse(const char** argv, int argc, int& n, bool *done);
 
     int minSpacing;
     int maxSpacing;

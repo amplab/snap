@@ -34,7 +34,7 @@ Revision History:
 
 using namespace std;
 
-const char *SNAP_VERSION = "0.16alpha.5";
+const char *SNAP_VERSION = "0.16alpha.6";
 
 static void usage()
 {
@@ -58,7 +58,7 @@ int main(int argc, const char **argv)
     } else if (strcmp(argv[1], "index") == 0) {
         GenomeIndex::runIndexer(argc - 2, argv + 2);
     } else if (strcmp(argv[1], "single") == 0 || strcmp(argv[1], "paired") == 0) {
-        for (unsigned i = 1; i < argc; /* i is increased below */) {
+        for (int i = 1; i < argc; /* i is increased below */) {
             unsigned nArgsConsumed;
             if (strcmp(argv[i], "single") == 0) {
                 SingleAlignerContext single;
