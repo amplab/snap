@@ -716,10 +716,14 @@ GzipDataReader::decompress(
     _int64* o_outputWritten,
     DecompressMode mode)
 {
+    if (inputBytes > 0xffffffff || outputBytes > 0xffffffff) {
+        fprintf(stderr,"GzipDataReader: inputBytes or outputBytes > max unsigned int\n");
+        soft_exit(1);
+    }
     zstream.next_in = (Bytef*) input;
-    zstream.avail_in = inputBytes;
+    zstream.avail_in = (uInt)inputBytes;
     zstream.next_out = (Bytef*) output;
-    zstream.avail_out = outputBytes;
+    zstream.avail_out = (uInt)outputBytes;
     uInt oldAvail;
     bool first = true;
     do {
@@ -801,7 +805,7 @@ public:
         char* p;
         _int64 mine;
         data->getExtra(&p, &mine);
-        mine = mine * MAX_FACTOR / totalFactor;
+        mine = (_int64)(mine * MAX_FACTOR / totalFactor);
         // create new reader, telling it how many bytes it owns
         // it will subtract overflow off the end of each batch
         return new GzipDataReader(overflowBytes, mine, data, autoRelease);
@@ -988,7 +992,7 @@ MemMapDataReader::getData(
     _int64* o_validBytes,
     _int64* o_startBytes)
 {
-    if (batchCount != 1 && currentBatch - earliestUnreleasedBatch >= batchCount) {
+    if (batchCount != 1 && (int)(currentBatch - earliestUnreleasedBatch) >= batchCount) {
         WaitForSingleWaiterObject(&waiter);
     }
     if (offset >= startBytes) {
@@ -1021,7 +1025,7 @@ MemMapDataReader::nextBatch()
     currentBatch++;
     if (! autoRelease) {
         _ASSERT(batchCount != 1);
-        if (batchCount != 1 && currentBatch - earliestUnreleasedBatch >= batchCount) {
+        if (batchCount != 1 && (int)(currentBatch - earliestUnreleasedBatch) >= batchCount) {
             ResetSingleWaiterObject(&waiter);
         }
     } else {
@@ -1051,7 +1055,7 @@ MemMapDataReader::releaseBefore(
 {
     if (batch.batchID > earliestUnreleasedBatch) {
         acquireLock();
-        if (batchCount != 1 && currentBatch - earliestUnreleasedBatch >= batchCount && currentBatch - batch.batchID < batchCount) {
+        if (batchCount != 1 && (int)(currentBatch - earliestUnreleasedBatch) >= batchCount && (int)(currentBatch - batch.batchID) < batchCount) {
             SignalSingleWaiterObject(&waiter);
         }
         earliestUnreleasedBatch = min(currentBatch, batch.batchID);
@@ -1093,7 +1097,7 @@ public:
         } else {
             // break up into 16Mb batches
             _int64 batch = 16 * 1024 * 1024;
-            _int64 extra = batch * extraFactor;
+            _int64 extra = (_int64)(batch * extraFactor);
             return new MemMapDataReader(3, batch, overflowBytes, extra, autoRelease);
         }
     }

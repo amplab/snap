@@ -66,7 +66,6 @@ struct AlignerOptions : public AbstractOptions
     bool                computeError;
     bool                bindToProcessors;
     bool                ignoreMismatchedIDs;
-    unsigned            selectivity;
     const char         *outputFileTemplate;
     bool                doAlignerPrefetch;
     int                 nInputs;

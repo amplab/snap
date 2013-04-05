@@ -210,7 +210,6 @@ AlignerContext::beginIteration()
     numSeeds = numSeeds_;
     confDiff = confDiff_;
     adaptiveConfDiff = adaptiveConfDiff_;
-    selectivity = options->selectivity;
 
     if (stats != NULL) {
         delete stats;

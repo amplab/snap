@@ -31,7 +31,6 @@ Revision History:
 #include "LandauVishkin.h"
 #include "BigAlloc.h"
 #include "ProbabilityDistance.h"
-#include "SimilarityMap.h"
 #include "AlignerStats.h"
 #include "directions.h"
 
@@ -50,7 +49,6 @@ public:
         unsigned        i_adaptiveConfDiffThreshold,
         LandauVishkin<1>*i_landauVishkin = NULL,
         LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
-        SimilarityMap  *i_similarityMap = NULL,
         AlignerStats   *i_stats = NULL,
         BigAllocator    *allocator = NULL);
 
@@ -255,7 +253,6 @@ private:
     double probabilityOfBestCandidate;
     int firstPassSeedsNotSkipped[NUM_DIRECTIONS];
     unsigned smallestSkippedSeed[NUM_DIRECTIONS];
-    unsigned biggestClusterScored;
     unsigned highestWeightListChecked;
     bool usedHammingThisAlignment;
 
@@ -282,7 +279,6 @@ private:
 
     const Genome *genome;
     GenomeIndex *genomeIndex;
-    SimilarityMap *similarityMap;
     unsigned seedLen;
     unsigned confDiff;
     unsigned maxHitsToConsider;

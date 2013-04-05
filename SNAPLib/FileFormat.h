@@ -107,7 +107,7 @@ getSAMData(
     // output data
     char* data,
     char* quality,
-    int dataSize,
+    unsigned dataSize,
     const char*& pieceName,
     int& pieceIndex,
     int& flags,

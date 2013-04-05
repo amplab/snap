@@ -41,7 +41,6 @@ AlignerOptions::AlignerOptions(
     computeError(false),
     bindToProcessors(false),
     ignoreMismatchedIDs(false),
-    selectivity(1),
     outputFileTemplate(NULL),
     doAlignerPrefetch(false),
     clipping(ClipBack),
@@ -107,12 +106,10 @@ AlignerOptions::usageMessage()
         "  -x   explore some hits of overly popular seeds (useful for filtering)\n"
         "  -f   stop on first match within edit distance limit (filtering mode)\n"
         "  -F   filter output (a=aligned only, s=single hit only, u=unaligned only)\n"
-        "  -sim specify a similarity map file for computing map quality\n"
         "  -S   suppress additional processing (sorted BAM output only)\n"
-        "       i=index, d=duplicate marking, q=quality recalibration\n"
+        "       i=index, d=duplicate marking\n"
 #if     USE_DEVTEAM_OPTIONS
         "  -I   ignore IDs that don't match in the paired-end aligner\n"
-        "  -S   selectivity; randomly choose 1/selectivity of the reads to score\n"
         "  -E   misalign threshold (min distance from correct location to count as error)\n"
 #ifdef  _MSC_VER    // Only need this on Windows, since memory allocation is fast on Linux
         "  -B   Insert barrier after per-thread memory allocation to improve timing accuracy\n"
@@ -202,12 +199,6 @@ AlignerOptions::parse(
             n++;
             return true;
         }
-    } else if (strcmp(argv[n], "-sim") == 0) {
-        if (n + 1 < argc) {
-            similarityMapFile = argv[n+1];
-            n++;
-            return true;
-        }
     } else if (strcmp(argv[n], "-e") == 0) {
         computeError = true;
         return true;
@@ -270,18 +261,6 @@ AlignerOptions::parse(
     } else if (strcmp(argv[n], "-I") == 0) {
         ignoreMismatchedIDs = true;
         return true;
-    } else if (strcmp(argv[n], "-S") == 0) {
-        if (n + 1 < argc) {
-            selectivity = atoi(argv[n+1]);
-            if (selectivity < 2) {
-                fprintf(stderr,"Selectivity must be at least 2.\n");
-                soft_exit(1);
-            }
-            n++;
-            return true;
-        } else {
-            fprintf(stderr,"Must have the selectivity value after -S\n");
-        }
     } else if (strcmp(argv[n], "-E") == 0) {
         if (n + 1 < argc) {
             misalignThreshold = atoi(argv[n+1]);
@@ -414,6 +393,7 @@ SNAPInput::createPairedReadSupplierGenerator(int numThreads, const Genome *genom
 
     default:
         _ASSERT(false);
+        return NULL;
     }
 }
 

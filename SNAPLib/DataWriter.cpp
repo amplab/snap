@@ -66,7 +66,7 @@ public:
 
     virtual bool getBuffer(char** o_buffer, size_t* o_size);
 
-    virtual void advance(size_t bytes, unsigned location = 0);
+    virtual void advance(unsigned bytes, unsigned location = 0);
 
     virtual bool getBatch(int relative, char** o_buffer, size_t* o_size, size_t* o_used, size_t* o_offset, size_t* o_logicalUsed = 0, size_t* o_logicalOffset = NULL);
 
@@ -133,7 +133,7 @@ AsyncDataWriter::getBuffer(
 
     void
 AsyncDataWriter::advance(
-    size_t bytes,
+    unsigned bytes,
     unsigned location)
 {
     _ASSERT(bytes <= bufferSize - batches[current].used);
@@ -314,7 +314,7 @@ public:
     virtual ~ComposeFilter()
     { delete a; delete b; }
     
-    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, size_t bytes, unsigned location)
+    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location)
     {
         a->onAdvance(writer, batchOffset, data, bytes, location);
         b->onAdvance(writer, batchOffset, data, bytes, location);

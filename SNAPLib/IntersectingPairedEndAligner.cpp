@@ -108,7 +108,7 @@ IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, uns
         mateHitLocations[i] = new HitLocationRingBuffer(2 * (maxSpacing + 1) + 2);  // Likewise.
     }
 
-    baseAligner = new(allocator) BaseAligner(index, 1, maxHitsToConsider, maxK/2, maxReadSize, maxSeedsToUse, 4, landauVishkin, reverseLandauVishkin, NULL, NULL, allocator);
+    baseAligner = new(allocator) BaseAligner(index, 1, maxHitsToConsider, maxK/2, maxReadSize, maxSeedsToUse, 4, landauVishkin, reverseLandauVishkin, NULL, allocator);
 }
 
     void 

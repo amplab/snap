@@ -39,7 +39,6 @@ Revision History:
 #include "SingleFirstPairedEndAligner.h"
 #include "Tables.h"
 #include "WGsim.h"
-#include "GoodRandom.h"
 #include "AlignerOptions.h"
 #include "AlignerContext.h"
 #include "AlignerStats.h"
@@ -448,24 +447,7 @@ void PairedAlignerContext::runIterationThread()
     // Align the reads.
     Read *read0;
     Read *read1;
-    _int64 readNum = 0;
     while (supplier->getNextReadPair(&read0,&read1)) {
-        if (1 != selectivity && GoodFastRandom(selectivity-1) != 0) {
-            //
-            // Skip this read.
-            //
-            continue;
-        }
-
-#ifdef PROFILE
-        readNum++;
-        bool record = (readNum % 1000 == 0);
-        _int64 start;
-        if (record) {
-            start = timeInNanos();
-        }
-#endif
-            
         // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
         if (!ignoreMismatchedIDs && !readIdsMatch(read0, read1)) {
             unsigned n[2] = {min(read0->getIdLength(), 200u), min(read1->getIdLength(), 200u)};
@@ -508,22 +490,7 @@ void PairedAlignerContext::runIterationThread()
         writePair(read0, read1, &result);
 
         updateStats((PairedAlignerStats*) stats, read0, read1, &result);
-
-#ifdef PROFILE
-        if (record) {
-            _int64 end = timeInNanos();
-            printf("%d %lld %.*s %s %s %lld\n",
-                context->threadNum,
-                readNum,
-                read0.getIdLength(), read0.getId(),
-                AlignmentResultToString(result.status[0]),
-                AlignmentResultToString(result.status[1]),
-                end - start);
-        }
-#endif
-
     }
-    //printf("Time in s: %lld: thread ran out of work.  Last range was %8lld bytes in %4lldms, starting at %10lld.  Total %4d ranges and %10lld bytes.\n",timeInMillis() / 1000, rangeLength, timeInMillis() - rangeStartTime, rangeStart, totalRanges, totalBytes);
 
     delete aligner;
     delete supplier;

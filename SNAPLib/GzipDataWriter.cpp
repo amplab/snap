@@ -45,7 +45,7 @@ GzipWriterFilter::onAdvance(
     DataWriter* writer,
     size_t batchOffset,
     char* data,
-    size_t bytes,
+    unsigned bytes,
     unsigned location)
 {
     // nothing
@@ -111,13 +111,18 @@ GzipWriterFilter::compressChunk(
         bamExtraData[5] = 7; // will be filled in later
     }
 
+    if (fromUsed > 0xffffffff || toSize > 0xffffffff) {
+        fprintf(stderr,"GZipDataWriter: fromUsed or toSize too big\n");
+        soft_exit(1);
+    }
+
     // based on sample code at http://www.lemoda.net/c/zlib-open-write/index.html
     const int windowBits = 15;
     const int GZIP_ENCODING = 16;
     zstream.next_in = (Bytef*) fromBuffer;
-    zstream.avail_in = fromUsed;
+    zstream.avail_in = (uInt)fromUsed;
     zstream.next_out = (Bytef*) toBuffer;
-    zstream.avail_out = toSize;
+    zstream.avail_out = (uInt)toSize;
     uInt oldAvail;
     int status;
 

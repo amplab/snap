@@ -23,7 +23,6 @@ Revision History:
 
 #pragma once
 
-#include "SimilarityMap.h"
 #include "directions.h"
 
 void initializeMapqTables();

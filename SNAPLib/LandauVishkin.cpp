@@ -83,7 +83,8 @@ bool writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat f
     default:
         printf("invalid cigar format %d\n", format);
         soft_exit(1);
-    }
+        return false;        // Not reached.  This is just here to suppress a compiler warning.
+    } // switch
 }
 
 int LandauVishkinWithCigar::computeEditDistance(
@@ -138,7 +139,7 @@ done1:
 		}
         // todo: should this null-terminate?
         if (cigarBufUsed != NULL) {
-            *cigarBufUsed = cigarBuf - cigarBufStart;
+            *cigarBufUsed = (int)(cigarBuf - cigarBufStart);
         }
         return 0;
     }
@@ -243,7 +244,7 @@ done1:
 					}
                     // todo: should this null-terminate?
                     if (cigarBufUsed != NULL) {
-                        *cigarBufUsed = cigarBuf - cigarBufStart;
+                        *cigarBufUsed = (int)(cigarBuf - cigarBufStart);
                     }
                     return e;
                 }
@@ -358,7 +359,7 @@ done1:
                     *(cigarBuf - (cigarBufLen == 0 ? 1 : 0)) = '\0'; // terminate string
                 }
                 if (cigarBufUsed != NULL) {
-                    *cigarBufUsed = cigarBuf - cigarBufStart;
+                    *cigarBufUsed = (int)(cigarBuf - cigarBufStart);
                 }
                 return e;
             }

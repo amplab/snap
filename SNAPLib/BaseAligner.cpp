@@ -52,13 +52,12 @@ BaseAligner::BaseAligner(
     unsigned        i_adaptiveConfDiffThreshold,
     LandauVishkin<1>*i_landauVishkin,
     LandauVishkin<-1>*i_reverseLandauVishkin,
-    SimilarityMap  *i_similarityMap,
     AlignerStats   *i_stats,
     BigAllocator   *allocator) : 
         genomeIndex(i_genomeIndex), confDiff(i_confDiff), maxHitsToConsider(i_maxHitsToConsider), maxK(i_maxK), 
         maxReadSize(i_maxReadSize), maxSeedsToUse(i_maxSeedsToUse), readId(-1),
         adaptiveConfDiffThreshold(i_adaptiveConfDiffThreshold),
-        similarityMap(i_similarityMap), explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats)
+        explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats)
 /*++
 
 Routine Description:
@@ -78,7 +77,6 @@ Arguments:
     i_adaptiveConfDiffThreshold - the number of hash table hits larger than maxHitsToConsider beyond which we effectively increase confDiff
     i_landauVishkin     - an externally supplied LandauVishkin string edit distance object.  This is useful if we're expecting repeated computations and use the LV cache.
     i_reverseLandauVishkin - the same for the reverse direction.
-    i_similarityMap     - a similarity map used to handle repetitive regions.  Optional.
     i_stats             - an object into which we report out statistics
     allocator           - an allocator that's used to allocate our local memory.  This is useful for TLB optimization.  If this is supplied, the caller
                           is responsible for deallocation, we'll not deallocate any dynamic memory in our destructor.
@@ -251,7 +249,6 @@ Return Value:
     int unusedFinalScore;
     firstPassSeedsNotSkipped[FORWARD] = firstPassSeedsNotSkipped[RC] = 0;
     smallestSkippedSeed[FORWARD] = smallestSkippedSeed[RC] = 0xffffffff;
-    biggestClusterScored = 1;
     highestWeightListChecked = 0;
 
     if (NULL == mapq) {
@@ -781,7 +778,7 @@ Return Value:
 
     
                 unsigned score = -1;
-                double matchProbability;
+                double matchProbability = 0;
                 unsigned readDataLength = read[elementToScore->direction]->getDataLength();
                 unsigned genomeDataLength = readDataLength + MAX_K; // Leave extra space in case the read has deletions
                 const char *data = genome->getSubstring(genomeLocation, genomeDataLength);
@@ -855,16 +852,9 @@ Return Value:
                             matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
                         }
                     }
-
-                    if (score != -1) {
-                        if (similarityMap != NULL) {
-                            biggestClusterScored = __max(biggestClusterScored,
-                                    similarityMap->getNumClusterMembers(genomeLocation));
-                        }
-                    } else {
-                        matchProbability = 0;
-                    }
-                } // if we had genome data to compare against
+                } else { // if we had genome data to compare against
+                    matchProbability = 0;
+                }
 #ifdef TRACE_ALIGNER
                 printf("Computing distance at %u (RC) with limit %d: %d (prob %g)\n",
                         genomeLocation, scoreLimit, score, matchProbability);

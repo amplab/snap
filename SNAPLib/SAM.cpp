@@ -574,7 +574,7 @@ SAMFormat::getWriterSupplier(
 {
     DataWriterSupplier* dataSupplier;
     if (options->sortOutput) {
-        int len = strlen(options->outputFileTemplate);
+        size_t len = strlen(options->outputFileTemplate);
         // todo: this is going to leak, but there's no easy way to free it, and it's small...
         char* tempFileName = (char*) malloc(5 + len);
         strcpy(tempFileName, options->outputFileTemplate);
@@ -653,7 +653,7 @@ getSAMData(
     // output data
     char* data,
     char* quality,
-    int dataSize,
+    unsigned dataSize,
     const char*& pieceName,
     int& pieceIndex,
     int& flags,
@@ -711,7 +711,7 @@ getSAMData(
     // Write the data and quality strings. If the read is reverse complemented, these need to
     // be backwards from the original read. Also, both need to be unclipped.
     clippedLength = read->getDataLength();
-    fullLength = (int)read->getUnclippedLength();
+    fullLength = read->getUnclippedLength();
     if (fullLength > dataSize) {
         return false;
     }
@@ -742,7 +742,7 @@ getSAMData(
         }
         const Genome::Piece *piece = genome->getPieceAtLocation(genomeLocation);
         pieceName = piece->name;
-        pieceIndex = piece - genome->getPieces();
+        pieceIndex = (int)(piece - genome->getPieces());
         positionInPiece = genomeLocation - piece->beginningOffset + 1; // SAM is 1-based
         mapQuality = max(0, min(70, mapQuality));
     } else {
@@ -756,7 +756,7 @@ getSAMData(
         if (mateLocation != 0xFFFFFFFF) {
             const Genome::Piece *matePiece = genome->getPieceAtLocation(mateLocation);
             matePieceName = matePiece->name;
-            matePieceIndex = matePiece - genome->getPieces();
+            matePieceIndex = (int)(matePiece - genome->getPieces());
             matePositionInPiece = mateLocation - matePiece->beginningOffset + 1;
 
             if (mateDirection == RC) {

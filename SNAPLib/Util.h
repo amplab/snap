@@ -3,7 +3,6 @@
 #include <map>
 #include "stdafx.h"
 #include "Compat.h"
-#include "GoodRandom.h"
 #include "Tables.h"
 #include "exit.h"
 
@@ -14,15 +13,6 @@
 namespace util {
 
 #define BEGEND(container) (container).begin(), (container).end()
-
-//
-// Sample from the Bernoulli distribution corresponding to 'probability'.
-// 
-inline bool sampleBernoulli(double probability, _uint64 resolution=0xffffffff)
-{
-    _ASSERT(0 <= probability && probability <= 1);
-    return GoodFastRandom(resolution) / (double)resolution < probability;
-}
 
 inline double ratio(double a, double b=1)
 {

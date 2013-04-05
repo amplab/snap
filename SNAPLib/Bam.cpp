@@ -331,10 +331,10 @@ BAMReader::getReadFromLine(
 {
     _ASSERT(endOfBuffer - line >= sizeof(BAMHeader));
     BAMAlignment* bam = (BAMAlignment*) line;
-    _ASSERT(endOfBuffer - line >= bam->size());
+    _ASSERT((size_t)(endOfBuffer - line) >= bam->size());
     
     if (NULL != genomeLocation) {
-        _ASSERT(-1 <= bam->refID && bam->refID < n_ref);
+        _ASSERT(-1 <= bam->refID && bam->refID < (int)n_ref);
         *genomeLocation = bam->getLocation(genome);
     }
 
@@ -679,7 +679,7 @@ public:
 
     virtual ~BAMFilter() {}
 
-    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, size_t bytes, unsigned location);
+    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location);
 
     virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
 
@@ -727,7 +727,7 @@ BAMFilter::onAdvance(
     DataWriter* writer,
     size_t batchOffset,
     char* data,
-    size_t bytes,
+    unsigned bytes,
     unsigned location)
 {
     if (headerCount > 0) {

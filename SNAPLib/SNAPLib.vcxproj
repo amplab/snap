@@ -177,14 +177,12 @@
     <ClInclude Include="FixedSizeVector.h" />
     <ClInclude Include="Genome.h" />
     <ClInclude Include="GenomeIndex.h" />
-    <ClInclude Include="GoodRandom.h" />
     <ClInclude Include="GzipDataWriter.h" />
     <ClInclude Include="HashTable.h" />
     <ClInclude Include="Histogram.h" />
     <ClInclude Include="IntersectingPairedEndAligner.h" />
     <ClInclude Include="LandauVishkin.h" />
     <ClInclude Include="mapq.h" />
-    <ClInclude Include="mt64.h" />
     <ClInclude Include="MultiInputReadSupplier.h" />
     <ClInclude Include="options.h" />
     <ClInclude Include="PairedAligner.h" />
@@ -195,11 +193,9 @@
     <ClInclude Include="RangeSplitter.h" />
     <ClInclude Include="Read.h" />
     <ClInclude Include="ReadSupplierQueue.h" />
-    <ClInclude Include="RegionCluster.h" />
     <ClInclude Include="SAM.h" />
     <ClInclude Include="Seed.h" />
     <ClInclude Include="SeedSequencer.h" />
-    <ClInclude Include="SimilarityMap.h" />
     <ClInclude Include="SingleAligner.h" />
     <ClInclude Include="SingleFirstPairedEndAligner.h" />
     <ClInclude Include="stdafx.h" />
@@ -229,7 +225,6 @@
     <ClCompile Include="FASTQ.cpp" />
     <ClCompile Include="Genome.cpp" />
     <ClCompile Include="GenomeIndex.cpp" />
-    <ClCompile Include="GoodRandom.cpp" />
     <ClCompile Include="GzipDataWriter.cpp" />
     <ClCompile Include="HashTable.cpp" />
     <ClCompile Include="Histogram.cpp" />
@@ -246,10 +241,8 @@
     <ClCompile Include="ReadReader.cpp" />
     <ClCompile Include="ReadSupplierQueue.cpp" />
     <ClCompile Include="ReadWriter.cpp" />
-    <ClCompile Include="RegionCluster.cpp" />
     <ClCompile Include="SAM.cpp" />
     <ClCompile Include="Seed.cpp" />
-    <ClCompile Include="SimilarityMap.cpp" />
     <ClCompile Include="SingleAligner.cpp" />
     <ClCompile Include="SingleFirstPairedEndAligner.cpp" />
     <ClCompile Include="SortedDataWriter.cpp" />
