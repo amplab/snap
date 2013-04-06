@@ -44,7 +44,7 @@ public:
     //
     static bool BuildIndexToDirectory(const Genome *genome, int seedLen, double slack,
                                       bool computeBias, const char *directory, _uint64 overflowTableFactor,
-                                      unsigned maxThreads, const char *histogramFileName = NULL);
+                                      unsigned maxThreads, unsigned selectivity, const char *histogramFileName = NULL);
 
     bool saveToDirectory(char *directoryName);
     static GenomeIndex *loadFromDirectory(char *directoryName);
@@ -133,6 +133,7 @@ private:
         unsigned                         nOverflowBackpointers;
         volatile unsigned               *nextOverflowBackpointer;
         volatile _int64                 *countOfDuplicateOverflows;
+		unsigned						 selectivity;
 
         ExclusiveLock                   *hashTableLocks;
         ExclusiveLock                   *overflowTableLock;
@@ -146,6 +147,7 @@ private:
 
     GenomeIndex();
 
+	int selectivity;
     int seedLen;
     unsigned nHashTables;
     SNAPHashTable **hashTables;

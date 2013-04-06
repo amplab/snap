@@ -54,7 +54,8 @@ static void usage()
             "                   footprint, but may cause the index build to fail.  Making -O larger than necessary will not affect the resuting\n"
             "                   index.  Factor must be between 1 and 1000, and the default is 40.\n"
             " -tMaxThreads      Specify the maximum number of threads to use. Default is the number of cores.\n"
-            " -HHistogramFile   Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n",
+            " -HHistogramFile   Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n"
+			" -SSelectivity		Index only every Selectivity bases (default = 1, which indexes the entire genome\n",
             DEFAULT_SEED_SIZE,
             DEFAULT_SLACK);
     soft_exit(1);
@@ -80,6 +81,7 @@ GenomeIndex::runIndexer(
     bool computeBias = true;
     _uint64 overflowTableFactor = 40;
     const char *histogramFileName = NULL;
+	unsigned selectivity = 1;
 
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
@@ -113,6 +115,12 @@ GenomeIndex::runIndexer(
             if (maxThreads < 1 || maxThreads > 100) {
                 fprintf(stderr,"maxThreads must be between 1 and 100 inclusive (and you need to not leave a space after '-t')\n");
                 soft_exit(1);
+            }        
+		} else if (argv[n][0] == '-' && argv[n][1] == 'S') {
+            selectivity = atoi(argv[n]+2);
+            if (selectivity < 1) {
+                fprintf(stderr,"selectivity must be at least 1 (and you need to not leave a space after '-S')\n");
+                soft_exit(1);
             }
         } else {
             fprintf(stderr, "Invalid argument: %s\n\n", argv[n]);
@@ -136,7 +144,7 @@ GenomeIndex::runIndexer(
     }
     printf("%llds\n", (timeInMillis() + 500 - start) / 1000);
     unsigned nBases = genome->getCountOfBases();
-    if (!GenomeIndex::BuildIndexToDirectory(genome, seedLen, slack, computeBias, outputDir, overflowTableFactor, maxThreads, histogramFileName)) {
+    if (!GenomeIndex::BuildIndexToDirectory(genome, seedLen, slack, computeBias, outputDir, overflowTableFactor, maxThreads, selectivity, histogramFileName)) {
         fprintf(stderr, "Genome index build failed\n");
         soft_exit(1);
     }
@@ -201,7 +209,7 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
 
     bool
 GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double slack, bool computeBias, const char *directoryName, _uint64 overflowTableFactor,
-                                    unsigned maxThreads, const char *histogramFileName)
+                                    unsigned maxThreads, unsigned selectivity, const char *histogramFileName)
 {
     bool buildHistogram = (histogramFileName != NULL);
     FILE *histogramFile;
@@ -240,7 +248,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     _int64 start = timeInMillis();
     unsigned nHashTables;
     SNAPHashTable** hashTables = index->hashTables =
-        allocateHashTables(&nHashTables, countOfBases, slack, seedLen, biasTable);
+        allocateHashTables(&nHashTables, countOfBases/selectivity, slack, seedLen, biasTable);
     index->nHashTables = nHashTables;
 
     //
@@ -335,6 +343,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         threadContexts[i].nextOverflowBackpointer = &nextOverflowBackpointer;
         threadContexts[i].countOfDuplicateOverflows = &countOfDuplicateOverflows;
         threadContexts[i].hashTableLocks = hashTableLocks;
+		threadContexts[i].selectivity = selectivity;
 
         StartNewThread(BuildHashTablesWorkerThreadMain, &threadContexts[i]);
     }
@@ -1209,6 +1218,10 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
     _uint64 unrecordedSkippedSeeds = 0;
 
     for (unsigned genomeLocation = context->genomeChunkStart; genomeLocation < context->genomeChunkEnd; genomeLocation++) {
+
+		if (genomeLocation % context->selectivity != 0) {
+			continue;
+		}
 
         const char *bases = genome->getSubstring(genomeLocation, seedLen);
         //
