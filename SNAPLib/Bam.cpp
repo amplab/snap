@@ -455,7 +455,12 @@ BAMFormat::getWriterSupplier(
             strcpy(indexFileName + len, ".bai");
             filters = DataWriterSupplier::bamIndex(indexFileName, genome, gzipSupplier)->compose(filters);
         }
-        dataSupplier = DataWriterSupplier::sorted(tempFileName, options->outputFileTemplate, filters, 16 * 1024 * 1024, 5);
+        // total mem in Gb if given; default 1 Gb/thread for human genome, scale down for smaller genomes
+        const int bufferCount = 6;
+        const size_t bufferSize = options->sortMemory > 0
+            ? (options->sortMemory * ((size_t) 1 << 30)) / (bufferCount * options->numThreads)
+            : max((size_t) 16 * 1024 * 1024, ((size_t) genome->getCountOfBases() / 3) / bufferCount);
+        dataSupplier = DataWriterSupplier::sorted(tempFileName, options->outputFileTemplate, filters, bufferSize, bufferCount, options->numThreads);
     } else {
         dataSupplier = DataWriterSupplier::create(options->outputFileTemplate, DataWriterSupplier::gzip(), 3);
     }
@@ -800,7 +805,7 @@ BAMFilter::tryFindRead(
     size_t* o_offset)
 {
     BAMAlignment* bam = getRead(offset);
-    while (offset < endOffset) {
+    while (bam != NULL && offset < endOffset) {
         if (readIdsMatch(bam->read_name(), id)) {
             if (o_offset != NULL) {
                 *o_offset = offset;

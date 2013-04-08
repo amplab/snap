@@ -93,7 +93,8 @@ class SortedDataFilterSupplier : public DataWriter::FilterSupplier
 public:
 
     SortedDataFilterSupplier(const char* i_tempFileName, const char* i_sortedFileName,
-        DataWriter::FilterSupplier* i_sortedFilterSupplier, int i_readBufferCount, size_t i_readBufferSize)
+        DataWriter::FilterSupplier* i_sortedFilterSupplier, int i_readBufferCount,
+        size_t i_readBufferSize, int i_numThreads)
         :
         FilterSupplier(DataWriter::CopyFilter),
         tempFileName(i_tempFileName),
@@ -101,7 +102,8 @@ public:
         sortedFilterSupplier(i_sortedFilterSupplier),
         readBufferCount(i_readBufferCount),
         readBufferSize(i_readBufferSize),
-        locations((int)(i_readBufferSize/300))
+        locations((int)(i_readBufferSize/300)),
+        numThreads(i_numThreads)
     {
         if (readBufferSize / 300 > 0x7fffffff) {
             fprintf(stderr,"SortedDataFilterSupplier: readBufferSize too big.\n");
@@ -128,6 +130,7 @@ private:
     const char*                     sortedFileName;
     const int                       readBufferCount;
     const size_t                    readBufferSize;
+    const int                       numThreads;
     DataWriter::FilterSupplier*     sortedFilterSupplier;
     size_t                          headerSize;
     ExclusiveLock                   lock;
@@ -255,31 +258,29 @@ SortedDataFilterSupplier::mergeSort()
         offset += n;
     }
     std::stable_sort(entries, entries + total, SortEntry::comparator);
+    size_t mergeReadMemory = readBufferCount * readBufferSize * max(1, numThreads - 1) / (numThreads == 1 ? 2 : 1);
+    size_t mergeReadBufferSize = mergeReadMemory / (2 * locations.size());
 #if USE_DEVTEAM_OPTIONS
-    printf(" %ld s\nwriting sorted reads...", (timeInMillis() - start) / 1000);
+    printf(" %ld s\nwriting sorted reads, merge %d buffers of %lld MB = %lld MB...",
+        (timeInMillis() - start) / 1000, locations.size(),
+        mergeReadBufferSize / (1024 * 1024), mergeReadMemory / (1024 * 1024));
     start = timeInMillis();
 #endif
 
     // setup - open all files, read first block, begin read for second
     AsyncFile* temp = AsyncFile::open(tempFileName, false);
-    char* buffers = (char*) BigAlloc(readBufferSize * 2 * locations.size());
+    char* buffers = (char*) BigAlloc(mergeReadMemory);
     unsigned j = 0;
-#if USE_DEVTEAM_OPTIONS
-    if (timeInMillis() - start > 1000) {
-        printf(" (allocated %lld Mb in %lld s)",
-            readBufferSize * 2 * locations.size() / (2 << 20), (timeInMillis() - start) / 1000);
-    }
-#endif
     for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++, j++) {
-        i->reader.open(temp, i->fileOffset, i->fileBytes, readBufferSize, true,
-            buffers + j * 2 * readBufferSize, buffers + (j * 2 + 1) * readBufferSize);
+        i->reader.open(temp, i->fileOffset, i->fileBytes, mergeReadBufferSize, true,
+            buffers + j * 2 * mergeReadBufferSize, buffers + (j * 2 + 1) * mergeReadBufferSize);
     }
     for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++) {
         i->reader.endOpen();
     }
 
     // set up buffered output
-    DataWriterSupplier* writerSupplier = DataWriterSupplier::create(sortedFileName, sortedFilterSupplier, readBufferCount, readBufferSize);
+    DataWriterSupplier* writerSupplier = DataWriterSupplier::create(sortedFileName, sortedFilterSupplier, readBufferCount, readBufferSize / (numThreads == 1 ? 2 : 1));
     DataWriter* writer = writerSupplier->getWriter();
     if (writer == NULL) {
         fprintf(stderr, "open sorted file for write failed\n");
@@ -374,9 +375,10 @@ DataWriterSupplier::sorted(
     const char* sortedFileName,
     DataWriter::FilterSupplier* sortedFilterSuppler,
     size_t bufferSize,
-    int buffers)
+    int buffers,
+    int numThreads)
 {
     DataWriter::FilterSupplier* filterSupplier =
-        new SortedDataFilterSupplier(tempFileName, sortedFileName, sortedFilterSuppler, buffers, bufferSize);
+        new SortedDataFilterSupplier(tempFileName, sortedFileName, sortedFilterSuppler, buffers, bufferSize, numThreads);
     return create(tempFileName, filterSupplier, buffers, bufferSize);
 }

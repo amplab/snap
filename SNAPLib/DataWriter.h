@@ -127,7 +127,8 @@ public:
         const char* sortedFileName,
         DataWriter::FilterSupplier* sortedFilterSuppler = NULL,
         size_t bufferSize = 16 * 1024 * 1024,
-        int buffers = 3);
+        int buffers = 3,
+        int numThreads = 1);
 
     // defaults follow BAM output spec
     static GzipWriterFilterSupplier* gzip(bool bamFormat = true, size_t chunkSize = 0x10000);
