@@ -31,7 +31,6 @@ Revision History:
 #include "LandauVishkin.h"
 #include "BigAlloc.h"
 #include "ProbabilityDistance.h"
-#include "SimilarityMap.h"
 #include "AlignerStats.h"
 #include "directions.h"
 
@@ -50,7 +49,6 @@ public:
         unsigned        i_adaptiveConfDiffThreshold,
         LandauVishkin<1>*i_landauVishkin = NULL,
         LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
-        SimilarityMap  *i_similarityMap = NULL,
         AlignerStats   *i_stats = NULL,
         BigAllocator    *allocator = NULL);
 
@@ -78,44 +76,11 @@ public:
         int         *mapq,
         unsigned     searchRadius,       // If non-zero, constrain search around searchLocation in direction searchRC.
         unsigned     searchLocation,
-        Direction    searchDirection,       
-        double      *bestHitProbability,
-        double      *allHitsProbability);
+        Direction    searchDirection);
         
-    //
-    // A richer version of AlignRead that allows for searching near a given location, as well as returning
-    // multiple hits if the best hits are within distance confDiff of each other, and also optionally returns
-    // the component probabilities for mapq.
-    //
-        AlignmentResult
-    AlignRead(
-        Read        *inputRead,
-        unsigned    *genomeLocation,
-        Direction   *hitDirection,
-        int         *finalScore,
-        int         *mapq,
-        unsigned     searchRadius,       // If non-zero, constrain search around searchLocation in direction searchRC.
-        unsigned     searchLocation,
-        Direction    searchDirection,
-        double      *bestHitProbability,
-        double      *allHitsProbability,
-        int          maxHitsToGet,       // If maxHitsToGet > 1, output up to this many hits within confDiff of the best
-        int         *multiHitsFound,     // inside multiHitLocations / RCs instead of returning MultipleHits right away.
-        unsigned    *multiHitLocations,
-        Direction   *multiHitDirections,
-        int         *multiHitScores);
-
     //
     // Statistics gathering.
     //
-        void
-    ComputeHitDistribution(
-        Read        *read,
-        unsigned     correctGenomeLocation,
-        Direction    correctHitDirection,
-        unsigned    *hitCountBySeed[NUM_DIRECTIONS],
-        unsigned    *nSeedsApplied[NUM_DIRECTIONS],
-        unsigned    *hitsContainingCorrectLocation);
 
     _int64 getNHashTableLookups() const {return nHashTableLookups;}
     _int64 getLocationsScored() const {return nLocationsScored;}
@@ -123,14 +88,6 @@ public:
     _int64 getNReadsIgnoredBecauseOfTooManyNs() const {return nReadsIgnoredBecauseOfTooManyNs;}
     _int64 getNIndelsMerged() const {return nIndelsMerged;}
     void addIgnoredReads(_int64 newlyIgnoredReads) {nReadsIgnoredBecauseOfTooManyNs += newlyIgnoredReads;}
-
-#if     MAINTAIN_HISTOGRAMS
-    const Histogram *getLVHistogram() const {return lvHistogram;}
-    const Histogram *getLookupHistogram() const {return lookupHistogram;}
-    const Histogram *getLVHistogramForMulti() const {return lvHistogramForMulti;}
-    const Histogram *getLVHistogramWhenBestFound() const {return lvCountWhenBestFound;}
-#endif  // MAINTAIN_HISTOGRAMS
-
 
     const char *getRCTranslationTable() const {return rcTranslationTable;}
 
@@ -175,13 +132,6 @@ private:
     static const unsigned maxMergeDist = 48; // Must be even and <= 64
 
     char rcTranslationTable[256];
-
-#if     MAINTAIN_HISTOGRAMS
-    Histogram   *lvHistogram;
-    Histogram   *lookupHistogram;
-    Histogram   *lvHistogramForMulti;
-    Histogram   *lvCountWhenBestFound;
-#endif  // MAINTAIN_HISTOGRAMS
 
     _int64 nHashTableLookups;
     _int64 nLocationsScored;
@@ -272,23 +222,9 @@ private:
     unsigned highestUsedWeightList;
 
     static inline unsigned hash(unsigned key) {
-#if     1
         key = key * 131;    // Believe it or not, we spend a long time computing the hash, so we're better off with more table entries and a dopey function.
-#else   // 1
-        //
-        // Hash the key.  Use the hash finalizer from the 64 bit MurmurHash3, http://code.google.com/p/smhasher/wiki/MurmurHash3,
-        // which is public domain code.
-        //
-    
-        key ^= key >> 16; 
-        key *= 0x85ebca6b; 
-        key ^= key >> 13; 
-        key *= 0xc2b2ae35; 
-        key ^= key >> 16;
-#endif  // 1
         return key;
     }
-
 
     static const unsigned UnusedScoreValue = 0xffff;
 
@@ -317,7 +253,6 @@ private:
     double probabilityOfBestCandidate;
     int firstPassSeedsNotSkipped[NUM_DIRECTIONS];
     unsigned smallestSkippedSeed[NUM_DIRECTIONS];
-    unsigned biggestClusterScored;
     unsigned highestWeightListChecked;
     bool usedHammingThisAlignment;
 
@@ -332,7 +267,6 @@ private:
         int             *finalScore,
         unsigned        *singleHitGenomeLocation,
         Direction       *hitDirection,
-        unsigned         maxHitsToGet,
         int             *mapq);
     
     void clearCandidates();
@@ -343,13 +277,8 @@ private:
     void incrementWeight(HashTableElement *element);
     void prefetchHashTableBucket(unsigned genomeLocation, Direction direction);
 
-    void fillHitsFound(unsigned maxHitsToGet, int *multiHitsFound, 
-                       unsigned *multiHitLocations, Direction *multiHitDirections, int *multiHitScores,
-                       double *bestHitsProbability, double *allHitsProbability);
-
     const Genome *genome;
     GenomeIndex *genomeIndex;
-    SimilarityMap *similarityMap;
     unsigned seedLen;
     unsigned confDiff;
     unsigned maxHitsToConsider;
@@ -362,17 +291,10 @@ private:
     char *rcReadQuality;
     char *reversedRead[NUM_DIRECTIONS];
 
-
     unsigned nTable[256];
 
     int readId;
     
-    // Store the best hits at a given edit distance, as well as their number
-    static const int MAX_MULTI_HITS_TO_GET = 512;
-    unsigned  hitCount[MAX_K];
-    unsigned  hitLocations[MAX_K][MAX_MULTI_HITS_TO_GET];
-    Direction hitDirections[MAX_K][MAX_MULTI_HITS_TO_GET];
-
     // How many overly popular (> maxHits) seeds we skipped this run
     unsigned popularSeedsSkipped;
 

@@ -87,9 +87,6 @@
     <ClInclude Include="GenomeIndex.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GoodRandom.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="GzipDataWriter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -106,9 +103,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="mapq.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="mt64.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="MultiInputReadSupplier.h">
@@ -141,9 +135,6 @@
     <ClInclude Include="ReadSupplierQueue.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="RegionCluster.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="SAM.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -151,9 +142,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="SeedSequencer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="SimilarityMap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="SingleAligner.h">
@@ -236,9 +224,6 @@
     <ClCompile Include="GenomeIndex.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GoodRandom.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="GzipDataWriter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -287,16 +272,10 @@
     <ClCompile Include="ReadWriter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="RegionCluster.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="SAM.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Seed.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="SimilarityMap.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="SingleAligner.cpp">

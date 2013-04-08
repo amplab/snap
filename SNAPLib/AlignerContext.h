@@ -30,7 +30,6 @@ Revision History:
 #include "AlignerOptions.h"
 #include "AlignerStats.h"
 #include "ParallelTask.h"
-#include "SimilarityMap.h"
 
 class AlignerExtension;
 
@@ -105,7 +104,6 @@ public:
     int                                  confDiff;
     int                                  adaptiveConfDiff;
     bool                                 computeError;
-    unsigned                             selectivity;
     bool                                 detailedStats;
     ReadClippingType                     clipping;
     int                                  argc;

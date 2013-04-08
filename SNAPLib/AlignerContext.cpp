@@ -172,7 +172,7 @@ AlignerContext::initialize()
     void
 AlignerContext::printStatsHeader()
 {
-    printf("ConfDif\tMaxHits\tMaxDist\tMaxSeed\tConfAd\t%%Used\t%%Unique\t%%Multi\t%%!Found\t%%Error\tReads/s\n");
+    printf("ConfDif\tMaxHits\tMaxDist\tMaxSeed\tConfAd\t%%Used\t%%Unique\t%%Multi\t%%!Found\t%%Error\t%%Pairs\tReads/s\n");
 }
 
     void
@@ -212,7 +212,6 @@ AlignerContext::beginIteration()
     numSeeds = numSeeds_;
     confDiff = confDiff_;
     adaptiveConfDiff = adaptiveConfDiff_;
-    selectivity = options->selectivity;
 
     if (stats != NULL) {
         delete stats;
@@ -271,22 +270,24 @@ AlignerContext::printStats()
     } else {
         snprintf(errorRate, sizeof(errorRate), "-");
     }
-    printf("%d\t%d\t%d\t%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%.0f (at: %lld)\n",
+    printf("%d\t%d\t%d\t%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%.0f (at: %lld)\n",
             confDiff_, maxHits_, maxDist_, numSeeds_, adaptiveConfDiff_,
             100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
             100.0 * stats->singleHits / usefulReads,
             100.0 * stats->multiHits / usefulReads,
             100.0 * stats->notFound / usefulReads,
             errorRate,
+            100.0 * stats->alignedAsPairs / usefulReads,
             (1000.0 * usefulReads) / max(alignTime, (_int64) 1), alignTime);
     if (NULL != perfFile) {
-        fprintf(perfFile, "%d\t%d\t%d\t%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%.0f\n",
+        fprintf(perfFile, "%d\t%d\t%d\t%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%.0f\n",
                 confDiff_, maxHits_, maxDist_, numSeeds_, adaptiveConfDiff_,
                 100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
                 100.0 * stats->singleHits / usefulReads,
                 100.0 * stats->multiHits / usefulReads,
                 100.0 * stats->notFound / usefulReads,
                 errorRate,
+                100.0 * stats->alignedAsPairs / usefulReads,
                 (1000.0 * usefulReads) / max(alignTime, (_int64) 1));
 
         for (AlignerStats::ThreadPerfEntry *threadEntry = stats->threadEntry; NULL != threadEntry; threadEntry = threadEntry->next) {

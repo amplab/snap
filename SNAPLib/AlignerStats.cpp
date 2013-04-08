@@ -37,6 +37,7 @@ AlignerStats::AlignerStats(AbstractStats* i_extra)
     multiHits(0),
     notFound(0),
     errors(0),
+    alignedAsPairs(0),
     extra(i_extra)
 {
     for (int i = 0; i <= AlignerStats::maxMapq; i++) {
@@ -55,17 +56,6 @@ AlignerStats::AlignerStats(AbstractStats* i_extra)
     threadEntry->nReads = 0;
     threadEntry->threadId = 0;
     threadEntry->lvCalls = 0;
-
-#ifdef  TIME_STRING_DISTANCE
-    for (int i = 0; i < 2; i++) {
-        for (int j = 0; j < 2; j++) {
-            nanosTimeInBSD[i][j] = 0;
-            BSDCounts[i][j] = 0;
-        }
-    }
-    hammingCount = 0;
-    hammingNanos = 0;
-#endif  // TIME_STRING_DISSTANCE
 }
 
 AlignerStats::~AlignerStats()
@@ -96,9 +86,12 @@ AlignerStats::add(
     multiHits += other->multiHits;
     notFound += other->notFound;
     errors += other->errors;
+    alignedAsPairs += other->alignedAsPairs;
+
     if (extra != NULL && other->extra != NULL) {
         extra->add(other->extra);
     }
+
     for (int i = 0; i <= AlignerStats::maxMapq; i++) {
         mapqHistogram[i] += other->mapqHistogram[i];
         mapqErrors[i] += other->mapqErrors[i];
@@ -117,17 +110,4 @@ AlignerStats::add(
         newEntry->next = threadEntry;
     }
     threadEntry = newEntry;
-    
-
-#ifdef  TIME_STRING_DISTANCE
-    for (int i = 0; i < 2; i++) {
-        for (int j = 0; j < 2; j++) {
-            nanosTimeInBSD[i][j] += other->nanosTimeInBSD[i][j];
-            BSDCounts[i][j] += other->BSDCounts[i][j];
-        }
-    }
-
-    hammingCount += other->hammingCount;
-    hammingNanos += other->hammingNanos;
-#endif  // TIME_STRING_DISTANCE
 }

@@ -39,7 +39,6 @@ Revision History:
 #include "SingleFirstPairedEndAligner.h"
 #include "Tables.h"
 #include "WGsim.h"
-#include "GoodRandom.h"
 #include "AlignerOptions.h"
 #include "AlignerContext.h"
 #include "AlignerStats.h"
@@ -225,102 +224,6 @@ void PairedAlignerStats::add(const AbstractStats * i_other)
 void PairedAlignerStats::printHistograms(FILE* output)
 {
     AlignerStats::printHistograms(output);
-#if    0
-    // print all non-zeros
-    fprintf(output, "\ndistance\tpairs\n");
-    for (int i = 0; i <= MAX_DISTANCE; i++) {
-        if (distanceCounts[i] != 0) {
-            fprintf(output, "%d\t%lld\n", i, distanceCounts[i]);
-        }
-    }
-
-    fprintf(output, "\nscores\n");
-    int max1 = MAX_SCORE;
-    bool found = false;
-    while (max1 > 0) {
-        for (int i = 0; i <= max1 && !found; i++) {
-            found = scoreCounts[i * (MAX_SCORE + 1) + max1] != 0;
-        }
-        if (found) {
-            break;
-        }
-        max1--;
-    }
-    for (int s1 = 0; s1 <= max1; s1++) {
-        for (int s0 = 0; s0 <= s1; s0++) {
-            fprintf(output, "%lld%s", scoreCounts[s0 * (MAX_SCORE + 1) + s1], s0 < s1 ? "\t" : "\n");
-        }
-    }
-
-    printf("Align together calls by max MAPQ and time\n");
-    printf("MAPQ/time\t0\t1ns\t2ns\t4ns\t8ns\t16ns\t32ns\t64ns\t128ns\t256ns\t512ns\t1us\t2us\t4us\t8us\t16us\t32us\t64us\t128us\t256us\t512us\t1ms\t2ms\t4ms\t8ms\t16ms\t32ms\t64ms\t128ms\t256ms\t512ms\t1s\t2s\n");
-    for (unsigned i = 0; i <= maxMapq; i++) {
-        printf("%d\t",i);
-        for (unsigned j = 0; j < nTimeBuckets; j++) {
-            printf("%lld\t",alignTogetherByMapqHistogram[i][j]);
-        }
-        printf("\n");
-    }
-
-    printf("\nAlign together time by max MAPQ and time\n");
-    printf("MAPQ/time\t0\t1ns\t2ns\t4ns\t8ns\t16ns\t32ns\t64ns\t128ns\t256ns\t512ns\t1us\t2us\t4us\t8us\t16us\t32us\t64us\t128us\t256us\t512us\t1ms\t2ms\t4ms\t8ms\t16ms\t32ms\t64ms\t128ms\t256ms\t512ms\t1s\t2s\n");
-    for (unsigned i = 0; i <= maxMapq; i++) {
-        printf("%d\t",i);
-        for (unsigned j = 0; j < nTimeBuckets; j++) {
-            printf("%lld\t",totalTimeByMapqHistogram[i][j]);
-        }
-        printf("\n");
-    }
-
-    printf("\nAlign together small hits by time\n");
-    printf("nSmallHits/time\t0\t1ns\t2ns\t4ns\t8ns\t16ns\t32ns\t64ns\t128ns\t256ns\t512ns\t1us\t2us\t4us\t8us\t16us\t32us\t64us\t128us\t256us\t512us\t1ms\t2ms\t4ms\t8ms\t16ms\t32ms\t64ms\t128ms\t256ms\t512ms\t1s\t2s\n");
-    for (unsigned smallHits = 0; smallHits < nHitsBuckets; smallHits++) {
-        printf("%u\t", (unsigned) 1 << smallHits);
-        for (unsigned timeBucket = 0; timeBucket < nTimeBuckets; timeBucket++) {
-            printf("%lld\t", nSmallHitsByTimeHistogram[smallHits][timeBucket]);
-        }
-        printf("\n");
-    }
-
-    printf("\nAlign together LV Calls by time\n");
-    printf("nLV Calls/time\t0\t1ns\t2ns\t4ns\t8ns\t16ns\t32ns\t64ns\t128ns\t256ns\t512ns\t1us\t2us\t4us\t8us\t16us\t32us\t64us\t128us\t256us\t512us\t1ms\t2ms\t4ms\t8ms\t16ms\t32ms\t64ms\t128ms\t256ms\t512ms\t1s\t2s\n");
-    for (unsigned lvCalls = 0; lvCalls < nLVCallsBuckets; lvCalls++) {
-        printf("%u\t", (unsigned) 1 << lvCalls);
-        for (unsigned timeBucket = 0; timeBucket < nTimeBuckets; timeBucket++) {
-            printf("%lld\t", nLVCallsByTimeHistogram[lvCalls][timeBucket]);
-        }
-        printf("\n");
-    }
-
-    printf("\nAlign together Small hits by mapq\n");
-    printf("nSmallHits/mapq");
-    for (unsigned mapq = 0; mapq <= maxMapq; mapq++) {
-        printf("\t%d", mapq);
-    }
-    printf("\n");
-    for (unsigned smallHits = 0; smallHits < nHitsBuckets; smallHits++) {
-        printf("%u\t", (unsigned) 1 << smallHits);
-        for (unsigned mapq = 0; mapq <= maxMapq; mapq++) {
-            printf("%lld\t" ,mapqByNSmallHitsHistogram[mapq][smallHits]);
-        }
-        printf("\n");
-    }
-
-    printf("\nAlign together LVCalls hits by mapq\n");
-    printf("nSmallHits/mapq");
-    for (unsigned mapq = 0; mapq <= maxMapq; mapq++) {
-        printf("\t%d", mapq);
-    }
-    printf("\n");
-    for (unsigned lvCalls = 0; lvCalls < nHitsBuckets; lvCalls++) {
-        printf("%u\t", (unsigned) 1 << lvCalls);
-        for (unsigned mapq = 0; mapq <= maxMapq; mapq++) {
-            printf("%lld\t" ,mapqByNLVCallsHistogram[mapq][lvCalls]);
-        }
-        printf("\n");
-    }
-
-#endif  // 0
 }
 
 PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
@@ -346,7 +249,7 @@ void PairedAlignerOptions::usageMessage()
         DEFAULT_INTERSECTING_ALIGNER_MAX_HITS);
 }
 
-bool PairedAlignerOptions::parse(const char** argv, int argc, unsigned& n, bool *done)
+bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done)
 {
     *done = false;
 
@@ -434,7 +337,7 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
     //
     options->nInputs = nInputs;
     options->inputs = new SNAPInput[nInputs];
-    unsigned i;
+    int i;
     int whichInput = 0;
     for (i = 1; i < argc; i++) {
         if (argv[i][0] == '-') {
@@ -544,24 +447,7 @@ void PairedAlignerContext::runIterationThread()
     // Align the reads.
     Read *read0;
     Read *read1;
-    _int64 readNum = 0;
     while (supplier->getNextReadPair(&read0,&read1)) {
-        if (1 != selectivity && GoodFastRandom(selectivity-1) != 0) {
-            //
-            // Skip this read.
-            //
-            continue;
-        }
-
-#ifdef PROFILE
-        readNum++;
-        bool record = (readNum % 1000 == 0);
-        _int64 start;
-        if (record) {
-            start = timeInNanos();
-        }
-#endif
-            
         // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
         if (!ignoreMismatchedIDs && !readIdsMatch(read0, read1)) {
             unsigned n[2] = {min(read0->getIdLength(), 200u), min(read1->getIdLength(), 200u)};
@@ -604,22 +490,7 @@ void PairedAlignerContext::runIterationThread()
         writePair(read0, read1, &result);
 
         updateStats((PairedAlignerStats*) stats, read0, read1, &result);
-
-#ifdef PROFILE
-        if (record) {
-            _int64 end = timeInNanos();
-            printf("%d %lld %.*s %s %s %lld\n",
-                context->threadNum,
-                readNum,
-                read0.getIdLength(), read0.getId(),
-                AlignmentResultToString(result.status[0]),
-                AlignmentResultToString(result.status[1]),
-                end - start);
-        }
-#endif
-
     }
-    //printf("Time in s: %lld: thread ran out of work.  Last range was %8lld bytes in %4lldms, starting at %10lld.  Total %4d ranges and %10lld bytes.\n",timeInMillis() / 1000, rangeLength, timeInMillis() - rangeStartTime, rangeStart, totalRanges, totalBytes);
 
     delete aligner;
     delete supplier;
@@ -660,15 +531,22 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
             stats->mapqErrors[mapq] += wasError ? 1 : 0;
         }
     }
+
     if (result->direction[0] == result->direction[1]) {
         stats->sameComplement++;
     }
+
     if (isOneLocation(result->status[0]) && isOneLocation(result->status[1])) {
         stats->incrementDistance(abs((int) (result->location[0] - result->location[1])));
         stats->incrementScore(result->score[0], result->score[1]);
     }
+
     if (result->fromAlignTogether) {
         stats->recordAlignTogetherMapqAndTime(__max(result->mapq[0], result->mapq[1]), result->nanosInAlignTogether, result->nSmallHits, result->nLVCalls);
+    }
+
+    if (result->alignedAsPair) {
+        stats->alignedAsPairs += 2; // They are a pair, after all.  Hence, +2.
     }
 }
 

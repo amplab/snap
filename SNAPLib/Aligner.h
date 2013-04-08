@@ -65,15 +65,6 @@ class Aligner {
         int         *finalScore = NULL,
         int         *mapq = NULL) = 0;
 
-        virtual void
-    ComputeHitDistribution(
-        Read        *read,
-        unsigned     correctGenomeLocation,
-        Direction    correctHitDirection,
-        unsigned    *hitCountBySeed[NUM_DIRECTIONS],
-        unsigned    *nSeedsApplied[NUM_DIRECTIONS],
-        unsigned    *hitsCountsContainingCorrectLocation) = 0;
-
     virtual _int64 getNHashTableLookups() const = 0;
     virtual _int64 getLocationsScored() const  = 0;
     virtual _int64 getNHitsIgnoredBecauseOfTooHighPopularity() const = 0;
@@ -81,14 +72,6 @@ class Aligner {
     virtual _int64 getNIndelsMerged() const = 0;
 
     virtual void addIgnoredReads(_int64 newlyIgnoredReads) = 0;
-
-#if     MAINTAIN_HISTOGRAMS
-    virtual const Histogram *getLVHistogram() const  = 0;
-    virtual const Histogram *getLookupHistogram() const = 0;
-    virtual const Histogram *getLVHistogramForMulti() const = 0;
-    virtual const Histogram *getLVHistogramWhenBestFound() const = 0;
-#endif  // MAINTAIN_HISTOGRAMS
-
 
     virtual const char *getRCTranslationTable() const = 0;
 

@@ -78,7 +78,7 @@ public:
 
     virtual ~SortedDataFilter() {}
 
-    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, size_t bytes, unsigned location);
+    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location);
 
     virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
 
@@ -101,8 +101,12 @@ public:
         sortedFilterSupplier(i_sortedFilterSupplier),
         readBufferCount(i_readBufferCount),
         readBufferSize(i_readBufferSize),
-        locations(i_readBufferSize/300)
+        locations((int)(i_readBufferSize/300))
     {
+        if (readBufferSize / 300 > 0x7fffffff) {
+            fprintf(stderr,"SortedDataFilterSupplier: readBufferSize too big.\n");
+            soft_exit(1);
+        }
         InitializeExclusiveLock(&lock);
     }
 
@@ -135,7 +139,7 @@ SortedDataFilter::onAdvance(
     DataWriter* writer,
     size_t batchOffset,
     char* data,
-    size_t bytes,
+    unsigned bytes,
     unsigned location)
 {
     SortEntry entry(batchOffset, bytes, location);
@@ -300,7 +304,11 @@ SortedDataFilterSupplier::mergeSort()
             fprintf(stderr, "read header failed\n");
             return false;
         }
-        writer->advance(headerSize);
+        if (headerSize > 0xffffffff) {
+            fprintf(stderr,"SortedDataFilterSupplier: headerSize too big\n");
+            soft_exit(1);
+        }
+        writer->advance((unsigned)headerSize);
     }
 
     // merge input blocks into output using pre-sorted list
@@ -315,7 +323,13 @@ SortedDataFilterSupplier::mergeSort()
                 return false;
             }
         }
-        if (! locations[entry->offset].reader.read(buffer, entry->length)) {
+
+        if (entry->offset > 0x7fffffff) {
+            fprintf(stderr,"SortedDataFilterSupplier::mergeSort: entry->offset too big\n");
+            soft_exit(1);
+        }
+
+        if (! locations[(int)entry->offset].reader.read(buffer, entry->length)) {
             fprintf(stderr, "merge sort read failed\n");
             return false;
         }

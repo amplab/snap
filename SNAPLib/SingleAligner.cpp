@@ -32,7 +32,6 @@ Revision History:
 #include "SAM.h"
 #include "Tables.h"
 #include "WGsim.h"
-#include "GoodRandom.h"
 #include "AlignerContext.h"
 #include "AlignerOptions.h"
 #include "FASTQ.h"
@@ -104,7 +103,7 @@ SingleAlignerContext::parseOptions(
             FASTQFile;
 	}
 
-    unsigned n;
+    int n;
     for (n = 1 + nInputs; n < argc; n++) {
         bool done;
         if (! options->parse(argv, argc, n, &done)) {
@@ -162,7 +161,6 @@ SingleAlignerContext::runIterationThread()
             adaptiveConfDiff,
             NULL,               // LV (no need to cache in the single aligner)
             NULL,               // reverse LV
-            NULL,
             stats,
             allocator);
 
@@ -185,12 +183,6 @@ SingleAlignerContext::runIterationThread()
     // Align the reads.
     Read *read;
     while (NULL != (read = supplier->getNextRead())) {
-        if (1 != selectivity && GoodFastRandom(selectivity-1) != 0) {
-            //
-            // Skip this read.
-            //
-            continue;
-        }
         stats->totalReads++;
 
         // Skip the read if it has too many Ns or trailing 2 quality scores.

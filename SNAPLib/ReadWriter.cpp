@@ -77,7 +77,8 @@ SimpleReadWriter::writeHeader(
         return false;
     }
 
-    writer->advance(used, 0);
+
+    writer->advance((unsigned)used, 0);
     return true;
 }
 
@@ -101,7 +102,13 @@ SimpleReadWriter::writeRead(
         }
         if (format->writeRead(genome, &lvc, buffer, size, &used, read->getIdLength(), read, result, mapQuality, genomeLocation, direction)) {
             _ASSERT(used <= size);
-            writer->advance(used, genomeLocation);
+
+        if (used > 0xffffffff) {
+            fprintf(stderr,"SimpleReadWriter:writeRead: used too big\n");
+            soft_exit(1);
+        }
+
+        writer->advance((unsigned)used, genomeLocation);
             return true;
         }
         if (pass == 1) {
@@ -183,12 +190,18 @@ SimpleReadWriter::writePair(
         }
     }
 
+    if (sizeUsed[0] > 0xffffffff || sizeUsed[1] > 0xffffffff) {
+        fprintf(stderr,"SimpleReadWriter::writePair: one or the other (or both) sizeUsed too big\n");
+        soft_exit(1);
+    }
+
     //
     // The strange code that determines the sort key (which uses the coordinate of the mate for unmapped reads) is because we list unmapped reads
     // with mapped mates at their mates' location so they sort together.  If both halves are unmapped, then  
-    writer->advance(sizeUsed[first],
+    writer->advance((unsigned)sizeUsed[first],
         result->status[first] != NotFound ? result->location[first] : locations[second]);
-    writer->advance(sizeUsed[second],
+
+    writer->advance((unsigned)sizeUsed[second],
         result->status[second] != NotFound ? result->location[second] : locations[first]);
     return true;
 }

@@ -48,6 +48,7 @@ struct AlignerStats : public AbstractStats
     _int64 multiHits;
     _int64 notFound;
     _int64 errors;
+    _int64 alignedAsPairs;
     static const unsigned maxMapq = 70;
     unsigned mapqHistogram[maxMapq+1];
     unsigned mapqErrors[maxMapq+1];
@@ -69,13 +70,6 @@ struct AlignerStats : public AbstractStats
     } *threadEntry;
 
     ThreadPerfEntry localThreadEntry;
-
-#ifdef  TIME_STRING_DISTANCE
-    _int64 nanosTimeInBSD[2][2]; // [nearby/notNearby][aligned/notAligned]
-    _int64 BSDCounts[2][2]; // same
-    _int64 hammingCount;    // Number of times used Hamming distance rather than BSD/LV
-    _int64 hammingNanos;
-#endif  // TIME_STRING_DISTANCE
 
     AbstractStats* extra;
 

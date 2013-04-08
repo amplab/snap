@@ -35,7 +35,7 @@ struct AbstractOptions
 {
     virtual void usageMessage() = 0;
 
-    virtual bool parse(const char** argv, int argc, unsigned& n, bool *done) = 0;
+    virtual bool parse(const char** argv, int argc, int& n, bool *done) = 0;
 };
 
 enum FileType {UnknownFileType, SAMFile, FASTQFile, BAMFile, GZipFASTQFile, CRAMFile};  // As more as needed
@@ -66,7 +66,6 @@ struct AlignerOptions : public AbstractOptions
     bool                computeError;
     bool                bindToProcessors;
     bool                ignoreMismatchedIDs;
-    unsigned            selectivity;
     const char         *outputFileTemplate;
     bool                doAlignerPrefetch;
     int                 nInputs;
@@ -92,7 +91,7 @@ struct AlignerOptions : public AbstractOptions
 
     virtual void usageMessage();
 
-    virtual bool parse(const char** argv, int argc, unsigned& n, bool *done);
+    virtual bool parse(const char** argv, int argc, int& n, bool *done);
 
     enum FilterFlags
     {

@@ -45,6 +45,7 @@ struct PairedAlignmentResult {
     int mapq[NUM_READS_PER_PAIR];               // mapping quality of each end, encoded like a Phred score (but as an integer, not ASCII Phred + 33).
 
     bool fromAlignTogether;                     // Was this alignment created by aligning both reads together, rather than from some combination of single-end aligners?
+    bool alignedAsPair;                         // Were the reads aligned as a pair, or separately?
     _int64 nanosInAlignTogether;
     unsigned nLVCalls;
     unsigned nSmallHits;

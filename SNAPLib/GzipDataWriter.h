@@ -41,7 +41,7 @@ public:
     
     virtual ~GzipWriterFilter() {}
 
-    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, size_t bytes, unsigned location);
+    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location);
 
     virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
 

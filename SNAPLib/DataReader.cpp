@@ -201,7 +201,12 @@ WindowsOverlappedDataReader::readHeader(
     nextBufferForConsumer = lastBufferForConsumer = 0;
     info->next = info->previous = -1;
 
-    if (!ReadFile(hFile,info->buffer,*io_headerSize,&info->validBytes,&info->lap)) {
+    if (*io_headerSize > 0xffffffff) {
+        fprintf(stderr,"WindowsOverlappedDataReader: trying to read too many bytes at once: %lld\n", *io_headerSize);
+        soft_exit(1);
+    }
+
+    if (!ReadFile(hFile,info->buffer,(DWORD)*io_headerSize,&info->validBytes,&info->lap)) {
         if (GetLastError() != ERROR_IO_PENDING) {
             fprintf(stderr,"WindowsOverlappedSAMReader::init: unable to read header of '%s', %d\n",fileName,GetLastError());
             return false;
@@ -304,7 +309,7 @@ WindowsOverlappedDataReader::advance(
 {
     BufferInfo* info = &bufferInfo[nextBufferForConsumer];
     _ASSERT(info->validBytes >= info->offset && bytes >= 0 && bytes <= info->validBytes - info->offset);
-    info->offset += min((_int64) info->validBytes - info->offset, max((_int64) 0, bytes));
+    info->offset += min(info->validBytes - info->offset, (unsigned)max(0, bytes));
 }
 
     void
@@ -479,9 +484,9 @@ WindowsOverlappedDataReader::startIo()
         unsigned amountToRead;
         _int64 finalOffset = min(fileSize.QuadPart, endingOffset + overflowBytes);
         _int64 finalStartOffset = min(fileSize.QuadPart, endingOffset);
-        amountToRead = min(finalOffset - readOffset.QuadPart, (_int64) bufferSize);
+        amountToRead = (unsigned)min(finalOffset - readOffset.QuadPart, (_int64) bufferSize);   // Cast OK because can't be longer than unsigned bufferSize
         info->isEOF = readOffset.QuadPart + amountToRead == finalOffset;
-        info->nBytesThatMayBeginARead = min(bufferSize - overflowBytes, finalStartOffset - readOffset.QuadPart);
+        info->nBytesThatMayBeginARead = (unsigned)min(bufferSize - overflowBytes, finalStartOffset - readOffset.QuadPart);
 
         _ASSERT(amountToRead >= info->nBytesThatMayBeginARead && (!info->isEOF || finalOffset == readOffset.QuadPart + amountToRead));
         ResetEvent(info->lap.hEvent);
@@ -657,7 +662,7 @@ GzipDataReader::init(
 GzipDataReader::readHeader(
     _int64* io_headerSize)
 {
-    _int64 compressedBytes = *io_headerSize / MIN_FACTOR;
+    _int64 compressedBytes = (_int64)(*io_headerSize / MIN_FACTOR);
     char* compressed = inner->readHeader(&compressedBytes);
     char* header;
     _int64 extraBytes;
@@ -776,10 +781,14 @@ GzipDataReader::decompress(
     _int64* o_outputWritten,
     DecompressMode mode)
 {
+    if (inputBytes > 0xffffffff || outputBytes > 0xffffffff) {
+        fprintf(stderr,"GzipDataReader: inputBytes or outputBytes > max unsigned int\n");
+        soft_exit(1);
+    }
     zstream.next_in = (Bytef*) input;
-    zstream.avail_in = inputBytes;
+    zstream.avail_in = (uInt)inputBytes;
     zstream.next_out = (Bytef*) output;
-    zstream.avail_out = outputBytes;
+    zstream.avail_out = (uInt)outputBytes;
     uInt oldAvail;
     bool first = true;
     do {
@@ -861,7 +870,7 @@ public:
         char* p;
         _int64 mine;
         data->getExtra(&p, &mine);
-        mine = mine * MAX_FACTOR / totalFactor;
+        mine = (_int64)(mine * MAX_FACTOR / totalFactor);
         // create new reader, telling it how many bytes it owns
         // it will subtract overflow off the end of each batch
         return new GzipDataReader(overflowBytes, mine, data, autoRelease);
@@ -1189,7 +1198,7 @@ public:
         } else {
             // break up into 16Mb batches
             _int64 batch = 16 * 1024 * 1024;
-            _int64 extra = batch * extraFactor;
+            _int64 extra = (_int64)(batch * extraFactor);
             return new MemMapDataReader(3, batch, overflowBytes, extra, autoRelease);
         }
     }
