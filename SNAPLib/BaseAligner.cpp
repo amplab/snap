@@ -906,7 +906,7 @@ Return Value:
 
     
                 unsigned score = -1;
-                double matchProbability;
+                double matchProbability = 0.0;
                 unsigned readDataLength = read[elementToScore->direction]->getDataLength();
                 unsigned genomeDataLength = readDataLength + MAX_K; // Leave extra space in case the read has deletions
                 const char *data = genome->getSubstring(genomeLocation, genomeDataLength);

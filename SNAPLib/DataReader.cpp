@@ -310,8 +310,11 @@ WindowsOverlappedDataReader::advance(
     void
 WindowsOverlappedDataReader::nextBatch()
 {
+    AcquireExclusiveLock(&lock);
+
     BufferInfo* info = &bufferInfo[nextBufferForConsumer];
     if (info->isEOF) {
+        ReleaseExclusiveLock(&lock);
         if (autoRelease) {
             releaseBatch(DataBatch(info->batchID));
         }
@@ -322,8 +325,6 @@ WindowsOverlappedDataReader::nextBatch()
     info->state = InUse;
     _uint32 overflow = max((DWORD) info->offset, info->nBytesThatMayBeginARead) - info->nBytesThatMayBeginARead;
     _int64 nextStart = info->fileOffset + info->nBytesThatMayBeginARead;
-
-    AcquireExclusiveLock(&lock);
 
     nextBufferForConsumer = info->next;
 
@@ -1209,7 +1210,15 @@ BatchTracker::addRead(
 {
     DataBatch::Key key = batch.asKey();
     unsigned* p = pending.tryFind(key);
-    pending.put(key, p == NULL ? 1 : *p + 1);
+    int n = 1;
+    if (p != NULL) {
+        n = ++(*p);
+    } else {
+        pending.put(key, 1);
+    }
+    //_ASSERT(pending.tryFind(DataBatch(batch.batchID, 1^batch.fileID).asKey) != p);
+    //unsigned* q = pending.tryFind(key); _ASSERT(q && (p == NULL || p == q) && *q == n);
+    //printf("thread %d tracker %lx addRead %u:%u = %d\n", GetCurrentThreadId(), this, batch.fileID, batch.batchID, n);
 }
 
     bool
@@ -1218,10 +1227,13 @@ BatchTracker::removeRead(
 {
     DataBatch::Key key = removed.asKey();
     unsigned* p = pending.tryFind(key);
+    //printf("thread %d tracker %lx removeRead %u:%u = %d\n", GetCurrentThreadId(), this, removed.fileID, removed.batchID, p ? *p - 1 : -1);
     _ASSERT(p != NULL && *p > 0);
     if (p != NULL) {
         if (*p > 1) {
             pending.put(key, *p - 1);
+            //unsigned* q = pending.tryFind(key); _ASSERT(q == p);
+            //_ASSERT(pending.tryFind(DataBatch(removed.batchID, 1^removed.fileID).asKey) != p);
             return false;
         }
         pending.erase(key);

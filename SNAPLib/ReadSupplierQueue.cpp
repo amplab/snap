@@ -492,7 +492,7 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
 
     processingTime += timeInNanos() - startTime;
 
-//    printf("ReadSupplier: %llds processing, %llds waiting for balance, %llds waiting for buffer\n", processingTime / 1000000000, balanceTime / 1000000000, bufferWaitTime / 1000000000);
+    //printf("ReadSupplier: %llds processing, %llds waiting for balance, %llds waiting for buffer\n", processingTime / 1000000000, balanceTime / 1000000000, bufferWaitTime / 1000000000);
 
     _ASSERT(nReadersRunning > 0);
     nReadersRunning--;
