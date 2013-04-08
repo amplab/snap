@@ -533,7 +533,7 @@ Return Value:
                             _ASSERT((unsigned)candidate->seedOffset <= readLen - seedLen);
                         } else if (lowestPossibleScoreOfAnyUnseenLocation[direction] <= scoreLimit) {
                             _ASSERT(offset <= readLen - seedLen);
-                            allocateNewCandidate(genomeLocationOfThisHit, direction, 0/*lowestPossibleScoreOfAnyUnseenLocation[direction] thindex*/,
+                            allocateNewCandidate(genomeLocationOfThisHit, direction, lowestPossibleScoreOfAnyUnseenLocation[direction],
                                     offset, &candidate, &hashTableElement);
                         }
                     }
@@ -668,9 +668,9 @@ Return Value:
     //
     for (Direction direction = 0; direction < 2; direction++) {
         if (0 != mostSeedsContainingAnyParticularBase[direction]) {
-            lowestPossibleScoreOfAnyUnseenLocation[direction] = 
-                __max(lowestPossibleScoreOfAnyUnseenLocation[direction], 
-                      nSeedsApplied[direction] / mostSeedsContainingAnyParticularBase[direction]);
+            lowestPossibleScoreOfAnyUnseenLocation[direction] = 0; // thindex
+                /*__max(lowestPossibleScoreOfAnyUnseenLocation[direction], 
+                      nSeedsApplied[direction] / mostSeedsContainingAnyParticularBase[direction]);*/
         }
     }
 
@@ -695,7 +695,7 @@ Return Value:
 
         _ASSERT(weightListToCheck <= maxSeedsToUse);
 
-        if (/*__min(lowestPossibleScoreOfAnyUnseenLocation[FORWARD],lowestPossibleScoreOfAnyUnseenLocation[RC]) > scoreLimit || thindex */ forceResult) {
+        if (__min(lowestPossibleScoreOfAnyUnseenLocation[FORWARD],lowestPossibleScoreOfAnyUnseenLocation[RC]) > scoreLimit || forceResult) {
             if (weightListToCheck == 0) {
                 //
                 // We've scored all live candidates and excluded all non-candidates, or we've checked enough that we've hit the cutoff.  We have our
