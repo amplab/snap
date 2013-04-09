@@ -329,12 +329,13 @@ WindowsOverlappedDataReader::nextBatch()
 
     info->state = InUse;
     _uint32 overflow = max((DWORD) info->offset, info->nBytesThatMayBeginARead) - info->nBytesThatMayBeginARead;
-    _int64 nextStart = info->fileOffset + info->nBytesThatMayBeginARead;
+    _int64 nextStart = info->fileOffset + info->nBytesThatMayBeginARead; // for validation
 
     nextBufferForConsumer = info->next;
 
     bool first = true;
     while (nextBufferForConsumer == -1) {
+        nextStart = 0; // can no longer count on getting sequential buffers from file
         ReleaseExclusiveLock(&lock);
         if (! first) {
             //printf("WindowsOverlappedDataReader::nextBatch thread %d wait for release\n", GetCurrentThreadId());
@@ -349,7 +350,7 @@ WindowsOverlappedDataReader::nextBatch()
         waitForBuffer(nextBufferForConsumer);
     }
     bufferInfo[nextBufferForConsumer].offset = overflow;
-    _ASSERT(nextStart == bufferInfo[nextBufferForConsumer].fileOffset);
+    _ASSERT(nextStart == 0 || nextStart == bufferInfo[nextBufferForConsumer].fileOffset);
 
     ReleaseExclusiveLock(&lock);
 
@@ -453,6 +454,7 @@ WindowsOverlappedDataReader::startIo()
     //
     // Launch reads on whatever buffers are ready.
     //
+    AcquireExclusiveLock(&lock);
     while (nextBufferForReader != -1) {
         // remove from free list
         BufferInfo* info = &bufferInfo[nextBufferForReader];
@@ -478,6 +480,7 @@ WindowsOverlappedDataReader::startIo()
             info->isEOF = readOffset.QuadPart >= fileSize.QuadPart;
             info->state = Full;
             SetEvent(info->lap.hEvent);
+            ReleaseExclusiveLock(&lock);
             return;
         }
 
@@ -513,13 +516,12 @@ WindowsOverlappedDataReader::startIo()
         info->offset = 0;
     }
     if (nextBufferForConsumer == -1) {
-        AcquireExclusiveLock(&lock);
         if (nextBufferForConsumer == -1) {
             //printf("startIo thread %x reset releaseEvent\n", GetCurrentThreadId());
             ResetEvent(releaseEvent);
         }
-        ReleaseExclusiveLock(&lock);
     }
+    ReleaseExclusiveLock(&lock);
 }
 
     void
