@@ -51,6 +51,9 @@ public:
     // run all threads until completion, gather results in common
     void run();
 
+    // run all tasks on a separate thread
+    void fork();
+
 private:
 
     // initial & final context
@@ -60,6 +63,8 @@ private:
     TContext*   contexts;
 
     static void threadWorker(void* threadContext);
+
+    static void forkWorker(void* threadContext);
 };
 
 /*++
@@ -82,6 +87,7 @@ struct TaskContextBase
 #ifdef  _MSC_VER
     volatile int       *nThreadsAllocatingMemory;
     EventObject        *memoryAllocationCompleteBarrier;
+    bool                useTimingBarrier;
 #endif  // _MSC_VER
 };
 
@@ -131,7 +137,7 @@ ParallelTask<TContext>::run()
     }
 
 #ifdef  _MSC_VER
-    if (common->options->useTimingBarrier) {
+    if (common->useTimingBarrier) {
         WaitForEvent(&memoryAllocationCompleteBarrier);
         printf("Cleared timing barrier.\n");
         start = timeInMillis();
@@ -152,6 +158,24 @@ ParallelTask<TContext>::run()
     }
 
     common->time = timeInMillis() - start;
+}
+
+    template <class TContext>
+    void
+ParallelTask<TContext>::fork()
+{
+    if (!StartNewThread(ParallelTask<TContext>::forkWorker, this)) {
+        fprintf(stderr, "Unable to fork task thread.\n");
+        soft_exit(1);
+    }
+}
+
+    template <class TContext>
+    void
+ParallelTask<TContext>::forkWorker(
+    void* forkArg)
+{
+    ((ParallelTask<TContext>*) forkArg)->run();
 }
 
     template <class TContext>

@@ -118,6 +118,15 @@ public:
         count--;
     }
 
+    inline void extend(int size)
+    {
+        if (count < size) {
+            reserve(size);
+            memset(((V*)entries) + count, 0, sizeof(V) * (size - count));
+            count = size;
+        }
+    }
+
     inline V& operator[](int index)
     {
         _ASSERT(index >= 0 && index < count);

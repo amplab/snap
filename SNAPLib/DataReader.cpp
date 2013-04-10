@@ -131,7 +131,7 @@ WindowsOverlappedDataReader::WindowsOverlappedDataReader(
         fprintf(stderr,"WindowsOverlappedDataReader: unable to allocate IO buffer\n");
         soft_exit(1);
     }
-    for (int i = 0 ; i < nBuffers; i++) {
+    for (unsigned i = 0 ; i < nBuffers; i++) {
         bufferInfo[i].buffer = allocated;
         allocated += bufferSize + overflowBytes;
         bufferInfo[i].extra = extraBytes > 0 ? allocated : NULL;
@@ -378,7 +378,7 @@ WindowsOverlappedDataReader::releaseBatch(
     AcquireExclusiveLock(&lock);
 
     bool released = false;
-    for (int i = 0; i < nBuffers; i++) {
+    for (unsigned i = 0; i < nBuffers; i++) {
         BufferInfo* info = &bufferInfo[i];
         if (info->batchID == batch.batchID) {
             switch (info->state) {

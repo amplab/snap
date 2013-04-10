@@ -437,6 +437,7 @@ BAMFormat::getWriterSupplier(
     const Genome* genome) const
 {
     DataWriterSupplier* dataSupplier;
+    GzipWriterFilterSupplier* gzipSupplier = DataWriterSupplier::gzip(true, 0x10000, options->numThreads, options->bindToProcessors);
     if (options->sortOutput) {
         size_t len = strlen(options->outputFileTemplate);
         // todo: this is going to leak, but there's no easy way to free it, and it's small...
@@ -444,7 +445,6 @@ BAMFormat::getWriterSupplier(
         strcpy(tempFileName, options->outputFileTemplate);
         strcpy(tempFileName + len, ".tmp");
         // todo: make markDuplicates optional?
-        GzipWriterFilterSupplier* gzipSupplier = DataWriterSupplier::gzip();
         DataWriter::FilterSupplier* filters = gzipSupplier;
         if (! options->noDuplicateMarking) {
             filters = DataWriterSupplier::markDuplicates(genome)->compose(filters);
@@ -462,7 +462,7 @@ BAMFormat::getWriterSupplier(
             : max((size_t) 16 * 1024 * 1024, ((size_t) genome->getCountOfBases() / 3) / bufferCount);
         dataSupplier = DataWriterSupplier::sorted(tempFileName, options->outputFileTemplate, filters, bufferSize, bufferCount, options->numThreads);
     } else {
-        dataSupplier = DataWriterSupplier::create(options->outputFileTemplate, DataWriterSupplier::gzip(), 3);
+        dataSupplier = DataWriterSupplier::create(options->outputFileTemplate, gzipSupplier, 3);
     }
     return ReadWriterSupplier::create(this, dataSupplier, genome);
 }

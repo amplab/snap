@@ -32,46 +32,23 @@ Revision History:
 
 using std::pair;
 
-class GzipWriterFilterSupplier;
-
-class GzipWriterFilter : public DataWriter::Filter
-{
-public:
-    GzipWriterFilter(GzipWriterFilterSupplier* i_supplier);
-    
-    virtual ~GzipWriterFilter() {}
-
-    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location);
-
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
-
-private:
-    size_t compressChunk(char* toBuffer, size_t toSize, char* fromBuffer, size_t fromUsed);
-
-    GzipWriterFilterSupplier* supplier;
-    const size_t chunkSize;
-    const bool bamFormat;
-    z_stream zstream;
-};
-
 class GzipWriterFilterSupplier : public DataWriter::FilterSupplier
 {
 public:
-    GzipWriterFilterSupplier(bool i_bamFormat, size_t i_chunkSize)
+    GzipWriterFilterSupplier(bool i_bamFormat, size_t i_chunkSize, int i_numThreads, bool i_bindToProcessors)
     :
         FilterSupplier(DataWriter::TransformFilter),
         bamFormat(i_bamFormat),
-        chunkSize(i_chunkSize)
+        chunkSize(i_chunkSize),
+        numThreads(i_numThreads),
+        bindToProcessors(i_bindToProcessors)
     {}
 
     virtual ~GzipWriterFilterSupplier()
     {
     }
 
-    virtual DataWriter::Filter* getFilter()
-    {
-        return new GzipWriterFilter(this);
-    }
+    virtual DataWriter::Filter* getFilter();
 
     virtual void onClose(DataWriterSupplier* supplier, DataWriter* writer);
     
@@ -100,5 +77,7 @@ private:
 
     const bool bamFormat;
     const size_t chunkSize;
+    const int numThreads;
+    const bool bindToProcessors;
     VariableSizeVector< pair<_uint64,_uint64> > translation;
 };
