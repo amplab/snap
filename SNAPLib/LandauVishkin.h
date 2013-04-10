@@ -173,14 +173,14 @@ public:
         dTable[i] = d;
     }
 }
-
+/*
     void pushBackCacheStats()
     {
         if (NULL != cache) {
             cache->pushBackCacheStats();
         }
     }
-
+*/
     static size_t getBigAllocatorReservation() {return sizeof(LandauVishkin<TEXT_DIRECTION>);} // maybe we should worry about allocating the cache with a BigAllocator, but not for now.
 
     ~LandauVishkin()

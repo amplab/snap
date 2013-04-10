@@ -34,7 +34,7 @@ typedef unsigned char _uint8;
 typedef unsigned short _uint16;
 
 // <http://stackoverflow.com/questions/126279/c99-stdint-h-header-and-ms-visual-studio>
-const _int64 UINT64_MAX = MAXUINT64;
+const _uint64 UINT64_MAX = MAXUINT64;
 const _int64 INT64_MAX = MAXINT64;
 const _int64 INT64_MIN = MININT64;
 const _uint32 UINT32_MAX = MAXUINT32;

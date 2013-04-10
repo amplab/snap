@@ -211,7 +211,7 @@ private:
     //
     static const unsigned bloomFilterFeatureSizeInBits = 9; // Must be >=3.  Using 9 results in 64 bytes of Bloom Filter, which is cache-line sized (though not necessarily aligned)
     static const unsigned bloomFilterSizeInChar = (1 << (bloomFilterFeatureSizeInBits - 3));
-    static const unsigned _int64 bloomFilterFeatureMask = (1 << bloomFilterFeatureSizeInBits) - 1;
+    static const _uint64 bloomFilterFeatureMask = (1 << bloomFilterFeatureSizeInBits) - 1;
 
     unsigned char bloomFilter[bloomFilterSizeInChar];
 
@@ -220,7 +220,7 @@ private:
         //
         // We know the bloom filter is 2^bloomFilterFeatureSizeInBits bits wide.  Use alternating bloomFilterFeatureSizeInBits bit chunks from the key to build up each of the features.
         //
-        unsigned _int64 feature[2] = {0, 0};
+        _uint64 feature[2] = {0, 0};
  
         for (int i = 0; i < sizeof(K) * 8; i += bloomFilterFeatureSizeInBits * 2) {
             feature[0] ^= ((key >> i) & bloomFilterFeatureMask);

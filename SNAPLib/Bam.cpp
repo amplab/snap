@@ -1278,7 +1278,8 @@ BAMIndexSupplier::addChunk(
     }
     ChunkVec* chunks = info->bins.tryFind(bin);
     if (chunks == NULL) {
-        info->bins.tryAdd(bin, ChunkVec(), &chunks);
+        ChunkVec empty;
+        info->bins.tryAdd(bin, empty, &chunks);
     }
     BAMChunk chunk;
     chunk.start = start;
