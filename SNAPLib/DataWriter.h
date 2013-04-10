@@ -73,7 +73,7 @@ public:
 
         // called when entire file is done
         // TransformFilter will get a writer to append data if it wants
-        virtual void onClose(DataWriterSupplier* supplier, DataWriter* writer) = 0;
+        virtual void onClose(DataWriterSupplier* supplier) = 0;
     };
 
     DataWriter(Filter* i_filter) : filter(i_filter) {}

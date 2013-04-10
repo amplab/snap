@@ -1059,7 +1059,7 @@ public:
     virtual DataWriter::Filter* getFilter()
     { return new BAMDupMarkFilter(genome); }
 
-    virtual void onClose(DataWriterSupplier* supplier, DataWriter* writer) {}
+    virtual void onClose(DataWriterSupplier* supplier) {}
 
 private:
     const Genome* genome;
@@ -1104,7 +1104,7 @@ public:
     virtual DataWriter::Filter* getFilter()
     { return new BAMIndexFilter(this); }
 
-    virtual void onClose(DataWriterSupplier* supplier, DataWriter* writer);
+    virtual void onClose(DataWriterSupplier* supplier);
 
 private:
 
@@ -1192,8 +1192,7 @@ BAMIndexSupplier::onRead(
 
     void
 BAMIndexSupplier::onClose(
-    DataWriterSupplier* supplier,
-    DataWriter* writer)
+    DataWriterSupplier* supplier)
 {
     // add final chunk
     if (lastRefId != -1) {

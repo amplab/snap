@@ -136,6 +136,8 @@ public:
 class ReadWriter {
 public:
 
+    virtual ~ReadWriter() {}
+
     // write out header
     virtual bool writeHeader(bool sorted, int argc, const char **argv, const char *version, const char *rgLine) = 0;
 

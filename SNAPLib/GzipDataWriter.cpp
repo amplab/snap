@@ -328,10 +328,10 @@ GzipWriterFilterSupplier::getFilter()
 
     void
 GzipWriterFilterSupplier::onClose(
-    DataWriterSupplier* supplier,
-    DataWriter* writer)
+    DataWriterSupplier* supplier)
 {
     if (bamFormat) {
+        DataWriter* writer = supplier->getWriter();
         // write empty block as BAM end of file marker
         static _uint8 eof[] = {
             0x1f, 0x8b, 0x08, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x06, 0x00, 0x42, 0x43,
@@ -345,6 +345,8 @@ GzipWriterFilterSupplier::onClose(
         }
         memcpy(buffer, eof, sizeof(eof));
         writer->advance(sizeof(eof));
+        writer->close();
+        delete writer;
     }
     
     // sort translations

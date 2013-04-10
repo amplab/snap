@@ -68,6 +68,15 @@ public:
         count = 0;
     }
 
+    inline void clean()
+    {
+        if (entries != NULL) {
+            deallocate(entries);
+            entries = NULL;
+            count = 0;
+        }
+    }
+
     inline int size()
     {
         return count;

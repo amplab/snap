@@ -119,7 +119,7 @@ public:
 
     virtual DataWriter::Filter* getFilter();
 
-    virtual void onClose(DataWriterSupplier* supplier, DataWriter* writer);
+    virtual void onClose(DataWriterSupplier* supplier);
 
     void addLocations(SortBlock& block);
 
@@ -134,7 +134,8 @@ private:
     DataWriter::FilterSupplier*     sortedFilterSupplier;
     size_t                          headerSize;
     ExclusiveLock                   lock;
-    VariableSizeVector<SortBlock>   locations;
+    typedef VariableSizeVector<SortBlock,150,true> SortBlockVector;
+    SortBlockVector                 locations;
 };
 
     void
@@ -197,8 +198,7 @@ SortedDataFilterSupplier::getFilter()
 
     void
 SortedDataFilterSupplier::onClose(
-    DataWriterSupplier* supplier,
-    DataWriter* writer)
+    DataWriterSupplier* supplier)
 {
     if (locations.size() == 1 && sortedFilterSupplier == NULL) {
         // just rename/move temp file to real file, we're done
@@ -243,12 +243,12 @@ SortedDataFilterSupplier::mergeSort()
 
     // first replace offset in entries with block index, and sort them all in one large array
     size_t total = 0;
-    for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++) {
+    for (SortBlockVector::iterator i = locations.begin(); i != locations.end(); i++) {
         total += i->entries.size();
     }
     SortEntry* entries = (SortEntry*) BigAlloc(total * sizeof(SortEntry));
     size_t offset = 0;
-    for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++) {
+    for (SortBlockVector::iterator i = locations.begin(); i != locations.end(); i++) {
         unsigned n = i->entries.size();
         size_t blockIndex = i - locations.begin();
         memcpy(entries + offset, i->entries.begin(), n * (size_t) sizeof(SortEntry));
@@ -256,6 +256,7 @@ SortedDataFilterSupplier::mergeSort()
             entries[offset + j].offset = blockIndex;
         }
         offset += n;
+        i->entries.clean();
     }
     std::stable_sort(entries, entries + total, SortEntry::comparator);
     size_t mergeReadMemory = readBufferCount * readBufferSize * max(1, numThreads - 1) / (numThreads == 1 ? 2 : 1);
@@ -271,11 +272,11 @@ SortedDataFilterSupplier::mergeSort()
     AsyncFile* temp = AsyncFile::open(tempFileName, false);
     char* buffers = (char*) BigAlloc(mergeReadMemory);
     unsigned j = 0;
-    for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++, j++) {
+    for (SortBlockVector::iterator i = locations.begin(); i != locations.end(); i++, j++) {
         i->reader.open(temp, i->fileOffset, i->fileBytes, mergeReadBufferSize, true,
             buffers + j * 2 * mergeReadBufferSize, buffers + (j * 2 + 1) * mergeReadBufferSize);
     }
-    for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++) {
+    for (SortBlockVector::iterator i = locations.begin(); i != locations.end(); i++) {
         i->reader.endOpen();
     }
 
@@ -345,7 +346,7 @@ SortedDataFilterSupplier::mergeSort()
     BigDealloc(entries);
     bool ok = true;
     _int64 readWait = 0;
-    for (VariableSizeVector<SortBlock>::iterator i = locations.begin(); i != locations.end(); i++) {
+    for (SortBlockVector::iterator i = locations.begin(); i != locations.end(); i++) {
         ok &= i->reader.close();
         readWait += i->reader.getWaitTimeInMillis();
     }

@@ -269,14 +269,11 @@ AsyncDataWriterSupplier::getWriter()
 AsyncDataWriterSupplier::close()
 {
     if (filterSupplier != NULL && filterSupplier->filterType == DataWriter::TransformFilter) {
-        DataWriter* writer = new AsyncDataWriter(file, this, bufferCount, bufferSize, NULL);
-        filterSupplier->onClose(this, writer);
-        writer->close();
-        delete writer;
+        filterSupplier->onClose(this);
     }
     file->close();
     if (filterSupplier != NULL && filterSupplier->filterType != DataWriter::TransformFilter) {
-        filterSupplier->onClose(this, NULL);
+        filterSupplier->onClose(this);
     }
     DestroyExclusiveLock(&lock);
 }
@@ -344,10 +341,10 @@ public:
     virtual DataWriter::Filter* getFilter()
     { return new ComposeFilter(a->getFilter(), b->getFilter()); }
 
-    virtual void onClose(DataWriterSupplier* supplier, DataWriter* writer)
+    virtual void onClose(DataWriterSupplier* supplier)
     {
-        a->onClose(supplier, writer);
-        b->onClose(supplier, writer);
+        a->onClose(supplier);
+        b->onClose(supplier);
     }
 
 private:

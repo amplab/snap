@@ -50,7 +50,7 @@ public:
 
     virtual DataWriter::Filter* getFilter();
 
-    virtual void onClose(DataWriterSupplier* supplier, DataWriter* writer);
+    virtual void onClose(DataWriterSupplier* supplier);
     
     bool translate(_uint64 logical, _uint64* o_physical, _uint64* delta);
 

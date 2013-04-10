@@ -36,7 +36,7 @@ public:
         : format(i_format), writer(i_writer), genome(i_genome)
     {}
 
-    ~SimpleReadWriter()
+    virtual ~SimpleReadWriter()
     {
         delete writer;
     }
