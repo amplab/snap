@@ -88,6 +88,8 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
     }
 
     extension->finishAlignment();
+    PrintBigAllocProfile();
+    PrintWaitProfile();
 }
 
     void

@@ -146,11 +146,21 @@ typedef void* EventObject; // todo: implement
 _int64 timeInMillis();
 _int64 timeInNanos();
 
+//#define PROFILE_WAIT
+
+void PrintWaitProfile();
+
+
 //
 // Exclusive locks.  These have the obvious semantics: At most one thread can acquire one at any time, the others block
 // until the first one releases it.
 //
+#ifdef PROFILE_WAIT
+#define AcquireExclusiveLock(lock) AcquireExclusiveLockProfile((lock), __FUNCTION__, __LINE__)
+void AcquireExclusiveLockProfile(ExclusiveLock *lock, char* fn, int line);
+#else
 void AcquireExclusiveLock(ExclusiveLock *lock);
+#endif
 void ReleaseExclusiveLock(ExclusiveLock *lock);
 bool InitializeExclusiveLock(ExclusiveLock *lock);
 bool DestroyExclusiveLock(ExclusiveLock *lock);
@@ -165,7 +175,12 @@ bool DestroyExclusiveLock(ExclusiveLock *lock);
 bool CreateSingleWaiterObject(SingleWaiterObject *newWaiter);
 void DestroySingleWaiterObject(SingleWaiterObject *waiter);
 void SignalSingleWaiterObject(SingleWaiterObject *singleWaiterObject);
+#ifdef PROFILE_WAIT
+#define WaitForSingleWaiterObject(o) WaitForSingleWaiterObjectProfile((o), __FUNCTION__, __LINE__)
+bool WaitForSingleWaiterObjectProfile(SingleWaiterObject *singleWaiterObject, char* fn, int line);
+#else
 bool WaitForSingleWaiterObject(SingleWaiterObject *singleWaiterObject);
+#endif
 void ResetSingleWaiterObject(SingleWaiterObject *singleWaiterObject);
 
 //
@@ -179,7 +194,12 @@ void CreateEventObject(EventObject *newEvent);
 void DestroyEventObject(EventObject *eventObject);
 void AllowEventWaitersToProceed(EventObject *eventObject);
 void PreventEventWaitersFromProceeding(EventObject *eventObject);
+#ifdef PROFILE_WAIT
+#define WaitForEvent(o) WaitForEventProfile((o), __FUNCTION__, __LINE__)
+void WaitForEventProfile(EventObject *eventObject, char* fn, int line); 
+#else
 void WaitForEvent(EventObject *eventObject); 
+#endif
 
 
 //

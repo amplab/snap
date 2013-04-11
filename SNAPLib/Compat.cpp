@@ -32,9 +32,70 @@ Revision History:
 #include <unistd.h>
 #endif
 #include "exit.h"
+#ifdef PROFILE_WAIT
+#include <map>
+#endif
 
 using std::min;
 using std::max;
+
+#ifdef PROFILE_WAIT
+
+#undef AcquireExclusiveLock
+#undef WaitForSingleWaiterObject
+#undef WaitForEvent
+
+void AcquireExclusiveLock(ExclusiveLock *lock);
+bool WaitForSingleWaiterObject(SingleWaiterObject *singleWaiterObject);
+void WaitForEvent(EventObject *eventObject); 
+
+using std::map;
+using std::string;
+static map<string,_int64> times;
+
+void addTime(char* fn, int line, _int64 time)
+{
+    if (time > 0) {
+        char s[20];
+        sprintf(s, ":%d", time);
+        string key = string(fn) + string(s);
+        times[key] += time;
+    }
+}
+
+void AcquireExclusiveLockProfile(ExclusiveLock *lock, char* fn, int line)
+{
+    _int64 start = timeInMillis();
+    AcquireExclusiveLock(lock);
+    addTime(fn, line, timeInMillis() - start);
+}
+
+bool WaitForSingleWaiterObjectProfile(SingleWaiterObject *singleWaiterObject, char* fn, int line)
+{
+    _int64 start = timeInMillis();
+    bool result = WaitForSingleWaiterObject(singleWaiterObject);
+    addTime(fn, line, timeInMillis() - start);
+    return result;
+}
+
+void WaitForEventProfile(EventObject *eventObject, char* fn, int line)
+{
+    _int64 start = timeInMillis();
+    WaitForEvent(eventObject); 
+    addTime(fn, line, timeInMillis() - start);
+}
+
+#endif
+
+void PrintWaitProfile()
+{
+#ifdef PROFILE_WAIT
+    printf("function:line    wait_time (s)\n");
+    for (map<string,_int64>::iterator lt = times.begin(); lt != times.end(); lt++) {
+        printf("%s %.3f\n", lt->first.data(), lt->second * 0.0001);
+    }
+#endif
+}
 
 #ifdef  _MSC_VER
 

@@ -564,7 +564,7 @@ public:
     WindowsOverlappedDataSupplier(bool autoRelease) : DataSupplier(autoRelease) {}
     virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0) const
     {
-        return new WindowsOverlappedDataReader(ThreadCount + 4, overflowBytes, extraFactor, autoRelease);
+        return new WindowsOverlappedDataReader(ThreadCount + 16, overflowBytes, extraFactor, autoRelease);
     }
 };
 

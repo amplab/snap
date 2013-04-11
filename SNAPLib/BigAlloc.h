@@ -32,13 +32,13 @@ void *BigAllocProfile(
         size_t      *sizeAllocated = NULL,
         char*       caller = NULL);
 
-void PrintAllocProfile();
-
 #else
 void *BigAlloc(
         size_t      sizeToAllocate,
         size_t      *sizeAllocated = NULL);
 #endif
+
+void PrintBigAllocProfile();
 
 void BigDealloc(void *memory);
 

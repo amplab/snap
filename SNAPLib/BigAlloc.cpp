@@ -255,15 +255,6 @@ void *BigAllocProfile(
     return BigAllocInternal(sizeToAllocate, sizeAllocated);
 }
 
-void PrintAllocProfile()
-{
-    printf("BigAlloc usage\n");
-    for (int i = 0; i < NCallers; i++) {
-        printf("%7.1f Mb %7lld %s\n", 
-            AllocProfile[i].total * 1e-6, AllocProfile[i].count, AllocProfile[i].caller);
-    }
-}
-
 #else
 void *BigAlloc(
         size_t      sizeToAllocate,
@@ -272,6 +263,17 @@ void *BigAlloc(
     return BigAllocInternal(sizeToAllocate, sizeAllocated);
 }
 #endif
+
+void PrintBigAllocProfile()
+{
+#ifdef PROFILE_BIGALLOC
+    printf("BigAlloc usage\n");
+    for (int i = 0; i < NCallers; i++) {
+        printf("%7.1f Mb %7lld %s\n", 
+            AllocProfile[i].total * 1e-6, AllocProfile[i].count, AllocProfile[i].caller);
+    }
+#endif
+}
 
 void BigDealloc(void *memory)
 /*++
