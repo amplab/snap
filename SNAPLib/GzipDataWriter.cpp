@@ -51,8 +51,11 @@ public:
         input = i_input;
         output = i_output;
         PreventEventWaitersFromProceeding(&finish);
+        //printf("start zip task\n");
         AllowEventWaitersToProceed(&begin);
+        //printf("waiting for zip task\n");
         WaitForEvent(&finish);
+        //printf("cont after zip task\n");
         return sizes.begin();
     }
 
@@ -77,6 +80,12 @@ public:
 
 struct GzipContext : public TaskContextBase
 {
+    GzipContext()
+    {
+#ifdef  _MSC_VER
+        useTimingBarrier = false;
+#endif
+    }
     GzipSharedContext* shared;
     void initializeThread() {}
     void runThread();
@@ -118,12 +127,16 @@ GzipContext::runThread()
 {
     z_stream zstream;
     while (true) {
+        //printf("zip task thread %d waiting to begin\n", GetCurrentThreadId());
         WaitForEvent(&shared->begin);
         if (shared->stop) {
             return;
         }
+        //printf("zip task thread %d begin\n", GetCurrentThreadId());
+        _int64 start = timeInMillis();
         _int64 begin, length;
         while (shared->range.getNextRange(&begin, &length)) {
+            //printf("zip task thread %d range %lld + %lld\n", GetCurrentThreadId(), begin, length);
             for (int i = (int) begin; i < (int) (begin + length); i++) {
                 shared->sizes[i] = GzipWriterFilter::compressChunk(zstream, shared->bam,
                     shared->output + i * shared->chunkSize, shared->chunkSize, 
@@ -131,7 +144,9 @@ GzipContext::runThread()
             }
         }
         PreventEventWaitersFromProceeding(&shared->begin);
+        //printf("zip task thread %d done %lld ms\n", GetCurrentThreadId(), timeInMillis() - start);
         if (InterlockedDecrementAndReturnNewValue(&shared->running) == 0) {
+            //printf("zip task thread %d all threads done\n", GetCurrentThreadId());
             AllowEventWaitersToProceed(&shared->finish);
         }
     }
@@ -179,7 +194,7 @@ GzipWriterFilter::onNextBatch(
     char* toBuffer;
     size_t toSize, toUsed;
     writer->getBatch(0, &toBuffer, &toSize, &toUsed);
-    if (toSize - toUsed < fromSize - fromUsed) {
+    if (toSize - toUsed < fromSize) {
         fprintf(stderr, "GzipWriterFilter: not enough space for compression buffers\n");
         soft_exit(1);
     }
@@ -188,7 +203,8 @@ GzipWriterFilter::onNextBatch(
     size_t extra = fromUsed - chunkSize * nChunks;
     size_t extraUsed = 0;
     if (extra > 0) {
-        extraUsed = compressChunk(zstream, supplier->bamFormat, toBuffer + toUsed + nChunks * chunkSize, chunkSize,
+        extraUsed = compressChunk(zstream, supplier->bamFormat,
+            toBuffer + toUsed + nChunks * chunkSize, extra,
             fromBuffer + nChunks * chunkSize, extra);
     }
     for (int i = 0; i < nChunks; i++) {

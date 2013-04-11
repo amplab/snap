@@ -1,0 +1,101 @@
+ERROR: Read name ..\snaptests\test.bam, BAM file has defective last gzip block
+WARNING: Read name test1M.fq.000112497, A record is missing a read group
+WARNING: Record 1, Read name test1M.fq.000112497, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000854841, A record is missing a read group
+WARNING: Record 2, Read name test1M.fq.000854841, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000853397, A record is missing a read group
+WARNING: Record 3, Read name test1M.fq.000853397, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000215574, A record is missing a read group
+WARNING: Record 4, Read name test1M.fq.000215574, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000229667, A record is missing a read group
+WARNING: Record 5, Read name test1M.fq.000229667, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000940729, A record is missing a read group
+WARNING: Record 6, Read name test1M.fq.000940729, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000877584, A record is missing a read group
+WARNING: Record 7, Read name test1M.fq.000877584, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000049487, A record is missing a read group
+WARNING: Record 8, Read name test1M.fq.000049487, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000060250, A record is missing a read group
+WARNING: Record 9, Read name test1M.fq.000060250, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000601415, A record is missing a read group
+WARNING: Record 10, Read name test1M.fq.000601415, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000576888, A record is missing a read group
+WARNING: Record 11, Read name test1M.fq.000576888, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000577692, A record is missing a read group
+WARNING: Record 12, Read name test1M.fq.000577692, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000123299, A record is missing a read group
+WARNING: Record 13, Read name test1M.fq.000123299, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000684285, A record is missing a read group
+WARNING: Record 14, Read name test1M.fq.000684285, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000905029, A record is missing a read group
+WARNING: Record 15, Read name test1M.fq.000905029, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000289004, A record is missing a read group
+WARNING: Record 16, Read name test1M.fq.000289004, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000665169, A record is missing a read group
+WARNING: Record 17, Read name test1M.fq.000665169, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000450129, A record is missing a read group
+WARNING: Record 18, Read name test1M.fq.000450129, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000470520, A record is missing a read group
+WARNING: Record 19, Read name test1M.fq.000470520, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000106983, A record is missing a read group
+WARNING: Record 20, Read name test1M.fq.000106983, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000390669, A record is missing a read group
+WARNING: Record 21, Read name test1M.fq.000390669, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000899283, A record is missing a read group
+WARNING: Record 22, Read name test1M.fq.000899283, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000020011, A record is missing a read group
+WARNING: Record 23, Read name test1M.fq.000020011, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000931556, A record is missing a read group
+WARNING: Record 24, Read name test1M.fq.000931556, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000485170, A record is missing a read group
+WARNING: Record 25, Read name test1M.fq.000485170, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000623771, A record is missing a read group
+WARNING: Record 26, Read name test1M.fq.000623771, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000533919, A record is missing a read group
+WARNING: Record 27, Read name test1M.fq.000533919, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000916835, A record is missing a read group
+WARNING: Record 28, Read name test1M.fq.000916835, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000910079, A record is missing a read group
+WARNING: Record 29, Read name test1M.fq.000910079, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000621513, A record is missing a read group
+WARNING: Record 30, Read name test1M.fq.000621513, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000121367, A record is missing a read group
+WARNING: Record 31, Read name test1M.fq.000121367, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000717361, A record is missing a read group
+WARNING: Record 32, Read name test1M.fq.000717361, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000018574, A record is missing a read group
+WARNING: Record 33, Read name test1M.fq.000018574, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000774237, A record is missing a read group
+WARNING: Record 34, Read name test1M.fq.000774237, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000904898, A record is missing a read group
+WARNING: Record 35, Read name test1M.fq.000904898, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000764145, A record is missing a read group
+WARNING: Record 36, Read name test1M.fq.000764145, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000047455, A record is missing a read group
+WARNING: Record 37, Read name test1M.fq.000047455, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000601025, A record is missing a read group
+WARNING: Record 38, Read name test1M.fq.000601025, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000681798, A record is missing a read group
+WARNING: Record 39, Read name test1M.fq.000681798, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000633627, A record is missing a read group
+WARNING: Record 40, Read name test1M.fq.000633627, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000640415, A record is missing a read group
+WARNING: Record 41, Read name test1M.fq.000640415, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000837145, A record is missing a read group
+WARNING: Record 42, Read name test1M.fq.000837145, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000759714, A record is missing a read group
+WARNING: Record 43, Read name test1M.fq.000759714, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000302946, A record is missing a read group
+WARNING: Record 44, Read name test1M.fq.000302946, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000099420, A record is missing a read group
+WARNING: Record 45, Read name test1M.fq.000099420, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000743074, A record is missing a read group
+WARNING: Record 46, Read name test1M.fq.000743074, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000859737, A record is missing a read group
+WARNING: Record 47, Read name test1M.fq.000859737, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000432847, A record is missing a read group
+WARNING: Record 48, Read name test1M.fq.000432847, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000525067, A record is missing a read group
+WARNING: Record 49, Read name test1M.fq.000525067, NM tag (nucleotide differences) is missing
+WARNING: Read name test1M.fq.000234589, A record is missing a read group
+Maximum output of [100] errors reached.

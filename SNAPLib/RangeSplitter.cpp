@@ -60,6 +60,9 @@ bool RangeSplitter::getNextRange(_int64 *rangeStart, _int64 *rangeLength)
     }
 
     _int64 amountLeft = rangeEnd - position;
+    if (amountLeft == 0) {
+        return false;
+    }
 
     _int64 amountToTake;
     if (numThreads == 1) {
