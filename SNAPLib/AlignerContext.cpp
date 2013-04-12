@@ -68,7 +68,9 @@ AlignerContext::~AlignerContext()
 void AlignerContext::runAlignment(int argc, const char **argv, const char *version, unsigned *argsConsumed)
 {
     options = parseOptions(argc, argv, version, argsConsumed);
+#ifdef _MSC_VER
     useTimingBarrier = options->useTimingBarrier;
+#endif
     initialize();
     extension->initialize();
     
