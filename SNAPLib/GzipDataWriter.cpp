@@ -246,7 +246,7 @@ validateZipBlock(
     size_t bytes,
     unsigned uncompressedBytes)
 {
-    _ASSERT(*(_uint32*)start == 0x04088b1f && *(_uint32*)(start+bytes-4) == uncompressedBytes);
+    //_ASSERT(*(_uint32*)start == 0x04088b1f && *(_uint32*)(start+bytes-4) == uncompressedBytes);
 }
 
     size_t
