@@ -57,7 +57,7 @@ void addTime(char* fn, int line, _int64 time)
 {
     if (time > 0) {
         char s[20];
-        sprintf(s, ":%d", time);
+        sprintf(s, ":%d", line);
         string key = string(fn) + string(s);
         times[key] += time;
     }

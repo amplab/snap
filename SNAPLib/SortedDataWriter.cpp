@@ -262,9 +262,10 @@ SortedDataFilterSupplier::mergeSort()
     size_t mergeReadMemory = readBufferCount * readBufferSize * max(1, numThreads - 1) / (numThreads == 1 ? 2 : 1);
     size_t mergeReadBufferSize = mergeReadMemory / (2 * locations.size());
 #if USE_DEVTEAM_OPTIONS
-    printf(" %ld s\nwriting sorted reads, merge %d buffers of %lld MB = %lld MB...",
-        (timeInMillis() - start) / 1000, locations.size(),
-        mergeReadBufferSize / (1024 * 1024), mergeReadMemory / (1024 * 1024));
+    printf(" %ld s\nwriting sorted reads, merge %d buffers of %lld MB = %lld MB  + in-memory sort of %lld MB\n",
+        (timeInMillis() - start) / 1000, 2 * locations.size(),
+        mergeReadBufferSize / (1024 * 1024), mergeReadMemory / (1024 * 1024),
+        total * sizeof(SortEntry) / (1024 * 1024));
     start = timeInMillis();
 #endif
 
@@ -361,7 +362,7 @@ SortedDataFilterSupplier::mergeSort()
     }
 
 #if USE_DEVTEAM_OPTIONS
-    printf(" %u reads in %u blocks, %lld s (%lld s read wait)\n",
+    printf("sorted %u reads in %u blocks, %lld s (%lld s read wait)\n",
         total, locations.size(), (timeInMillis() - start)/1000, readWait/1000);
 #endif
     return true;

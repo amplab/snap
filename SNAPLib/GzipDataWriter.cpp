@@ -51,11 +51,11 @@ public:
         input = i_input;
         output = i_output;
         PreventEventWaitersFromProceeding(&finish);
-        //printf("start zip task\n");
+        //printf("thread %d start zip task\n", GetCurrentThreadId());
         AllowEventWaitersToProceed(&begin);
-        //printf("waiting for zip task\n");
+        //printf("thread %d waiting for zip task\n", GetCurrentThreadId());
         WaitForEvent(&finish);
-        //printf("cont after zip task\n");
+        //printf("thread %d cont after zip task\n", GetCurrentThreadId());
         return sizes.begin();
     }
 
@@ -122,10 +122,66 @@ private:
     ParallelTask<GzipContext>* task;
 };
 
+// trivial per-thread heap for use in zalloc
+struct ThreadHeap
+{
+    char* start;
+    char* end;
+    char* next;
+    ThreadHeap(size_t bytes)
+    {
+        next = start = (char*) BigAlloc(bytes);
+        end = start + bytes;
+    }
+    void* alloc(size_t bytes)
+    {
+        if (next + bytes <= end) {
+            void* result = next;
+            next += bytes;
+            return result;
+        }
+        return NULL;
+    }
+    bool free(void* p)
+    {
+        return (char*)p >= start && (char*) p <= end;
+    }
+    void reset()
+    {
+        next = start;
+    }
+    ~ThreadHeap()
+    {
+        BigDealloc(start);
+    }
+};
+
+static void* zalloc(void* opaque, unsigned items, unsigned size)
+{
+    size_t bytes = items * (size_t) size;
+    void* result = ((ThreadHeap*) opaque)->alloc(bytes);
+    static int printed = 0;
+    if ((! result) && printed++ < 10) {
+        printf("warning: zalloc using malloc for %lld bytes\n", bytes);
+    }
+    return result ? result : malloc(bytes);
+}
+
+static void zfree(void* opaque, void* p)
+{
+    if (! ((ThreadHeap*) opaque)->free(p)) {
+        free(p);
+    }
+}
+
     void
 GzipContext::runThread()
 {
+    ThreadHeap heap(shared->chunkSize * 5); // seems to use 4x chunk size per run
     z_stream zstream;
+    zstream.zalloc = zalloc;
+    zstream.zfree = zfree;
+    zstream.opaque = &heap;
     while (true) {
         //printf("zip task thread %d waiting to begin\n", GetCurrentThreadId());
         WaitForEvent(&shared->begin);
@@ -143,11 +199,13 @@ GzipContext::runThread()
                     shared->input + i * shared->chunkSize, shared->chunkSize);
             }
         }
-        PreventEventWaitersFromProceeding(&shared->begin);
         //printf("zip task thread %d done %lld ms\n", GetCurrentThreadId(), timeInMillis() - start);
         if (InterlockedDecrementAndReturnNewValue(&shared->running) == 0) {
             //printf("zip task thread %d all threads done\n", GetCurrentThreadId());
+            PreventEventWaitersFromProceeding(&shared->begin);
             AllowEventWaitersToProceed(&shared->finish);
+        } else {
+            WaitForEvent(&shared->finish);
         }
     }
 }
@@ -161,6 +219,9 @@ GzipWriterFilter::GzipWriterFilter(
     chunkSize(i_supplier->chunkSize),
     shared(i_supplier->bamFormat, i_supplier->chunkSize, i_supplier->numThreads, i_supplier->bindToProcessors)
 {
+    zstream.zalloc = NULL;
+    zstream.zfree = NULL;
+    zstream.opaque = NULL;
     context.totalThreads = i_supplier->numThreads;
     context.bindToProcessors = i_supplier->bindToProcessors;
     context.shared = &shared;
@@ -232,7 +293,6 @@ GzipWriterFilter::onNextBatch(
     return toUsed;
 }
 
-
     size_t
 GzipWriterFilter::compressChunk(
     z_stream& zstream,
@@ -246,9 +306,9 @@ GzipWriterFilter::compressChunk(
         fprintf(stderr, "exceeded BAM chunk size\n");
         soft_exit(1);
     }
-    zstream.zalloc = Z_NULL;
-    zstream.zfree = Z_NULL;
-    zstream.opaque = Z_NULL;
+    if (zstream.opaque != NULL) {
+        ((ThreadHeap*)zstream.opaque)->reset();
+    }
     // set up BAM header structure
     gz_header header;
     _uint8 bamExtraData[6];
