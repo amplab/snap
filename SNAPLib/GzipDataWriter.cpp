@@ -179,6 +179,15 @@ GzipWriterFilter::onAdvance(
     // nothing
 }
 
+    static void
+validateZipBlock(
+    char* start,
+    size_t bytes,
+    unsigned uncompressedBytes)
+{
+    _ASSERT(*(_uint32*)start == 0x04088b1f && *(_uint32*)(start+bytes-4) == uncompressedBytes);
+}
+
     size_t
 GzipWriterFilter::onNextBatch(
     DataWriter* writer,
@@ -210,11 +219,13 @@ GzipWriterFilter::onNextBatch(
     for (int i = 0; i < nChunks; i++) {
         supplier->addTranslation(logicalOffset, physicalOffset + toUsed);
         logicalOffset += chunkSize;
+        validateZipBlock(toBuffer + i * chunkSize, sizes[i], chunkSize);
         memmove(toBuffer + toUsed, toBuffer + i * chunkSize, sizes[i]);
         toUsed += sizes[i];
     }
     if (extra > 0) {
         supplier->addTranslation(logicalOffset, physicalOffset + toUsed);
+        validateZipBlock(toBuffer + nChunks * chunkSize, extraUsed, extra);
         memmove(toBuffer + toUsed, toBuffer + nChunks * chunkSize, extraUsed);
         toUsed += extraUsed;
     }

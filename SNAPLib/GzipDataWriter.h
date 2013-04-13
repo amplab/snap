@@ -42,10 +42,13 @@ public:
         chunkSize(i_chunkSize),
         numThreads(i_numThreads),
         bindToProcessors(i_bindToProcessors)
-    {}
+    {
+        InitializeExclusiveLock(&lock);
+    }
 
     virtual ~GzipWriterFilterSupplier()
     {
+        DestroyExclusiveLock(&lock);
     }
 
     virtual DataWriter::Filter* getFilter();
@@ -71,7 +74,11 @@ private:
     friend class GzipWriterFilter;
 
     void addTranslation(_uint64 logical, _uint64 physical)
-    { translation.push_back(pair<_uint64,_uint64>(logical, physical)); }
+    {
+        AcquireExclusiveLock(&lock);
+        translation.push_back(pair<_uint64,_uint64>(logical, physical));
+        ReleaseExclusiveLock(&lock);
+    }
 
     static bool translationComparator(const pair<_uint64,_uint64>& a, const pair<_uint64,_uint64>& b);
 
@@ -79,5 +86,6 @@ private:
     const size_t chunkSize;
     const int numThreads;
     const bool bindToProcessors;
+    ExclusiveLock lock;
     VariableSizeVector< pair<_uint64,_uint64> > translation;
 };
