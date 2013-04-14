@@ -92,36 +92,6 @@ struct GzipContext : public TaskContextBase
     void finishThread(GzipContext* common) {}
 };
 
-class GzipWriterFilterSupplier;
-
-class GzipWriterFilter : public DataWriter::Filter
-{
-public:
-    GzipWriterFilter(GzipWriterFilterSupplier* i_supplier);
-    
-    virtual ~GzipWriterFilter()
-    {
-        shared.done();
-        delete task;
-    }
-
-    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location);
-
-    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
-
-    static size_t compressChunk(z_stream& zstream, bool bamFormat, char* toBuffer, size_t toSize, char* fromBuffer, size_t fromUsed);
-
-private:
-
-    GzipWriterFilterSupplier* supplier;
-    const size_t chunkSize;
-    const bool bamFormat;
-    z_stream zstream;
-    GzipSharedContext shared;
-    GzipContext context;
-    ParallelTask<GzipContext>* task;
-};
-
 // trivial per-thread heap for use in zalloc
 struct ThreadHeap
 {
@@ -154,6 +124,37 @@ struct ThreadHeap
     {
         BigDealloc(start);
     }
+};
+
+class GzipWriterFilterSupplier;
+
+class GzipWriterFilter : public DataWriter::Filter
+{
+public:
+    GzipWriterFilter(GzipWriterFilterSupplier* i_supplier);
+    
+    virtual ~GzipWriterFilter()
+    {
+        shared.done();
+        delete task;
+    }
+
+    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location);
+
+    virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
+
+    static size_t compressChunk(z_stream& zstream, bool bamFormat, char* toBuffer, size_t toSize, char* fromBuffer, size_t fromUsed);
+
+private:
+
+    GzipWriterFilterSupplier* supplier;
+    const size_t chunkSize;
+    const bool bamFormat;
+    z_stream zstream;
+    ThreadHeap heap;
+    GzipSharedContext shared;
+    GzipContext context;
+    ParallelTask<GzipContext>* task;
 };
 
 static void* zalloc(void* opaque, unsigned items, unsigned size)
@@ -217,11 +218,12 @@ GzipWriterFilter::GzipWriterFilter(
     supplier(i_supplier),
     bamFormat(i_supplier->bamFormat),
     chunkSize(i_supplier->chunkSize),
-    shared(i_supplier->bamFormat, i_supplier->chunkSize, i_supplier->numThreads, i_supplier->bindToProcessors)
+    shared(i_supplier->bamFormat, i_supplier->chunkSize, i_supplier->numThreads, i_supplier->bindToProcessors),
+    heap(i_supplier->chunkSize * 5)
 {
-    zstream.zalloc = NULL;
-    zstream.zfree = NULL;
-    zstream.opaque = NULL;
+    zstream.zalloc = zalloc;
+    zstream.zfree = zfree;
+    zstream.opaque = &heap;
     context.totalThreads = i_supplier->numThreads;
     context.bindToProcessors = i_supplier->bindToProcessors;
     context.shared = &shared;
@@ -269,26 +271,35 @@ GzipWriterFilter::onNextBatch(
         soft_exit(1);
     }
     int nChunks = (int) (fromUsed / chunkSize);
-    size_t* sizes = shared.run(nChunks, fromBuffer, toBuffer + toUsed);
     size_t extra = fromUsed - chunkSize * nChunks;
-    size_t extraUsed = 0;
-    if (extra > 0) {
-        extraUsed = compressChunk(zstream, supplier->bamFormat,
-            toBuffer + toUsed + nChunks * chunkSize, max(extra, 1024),
-            fromBuffer + nChunks * chunkSize, extra);
-    }
-    for (int i = 0; i < nChunks; i++) {
-        supplier->addTranslation(logicalOffset, physicalOffset + toUsed);
-        logicalOffset += chunkSize;
-        validateZipBlock(toBuffer + i * chunkSize, sizes[i], chunkSize);
-        memmove(toBuffer + toUsed, toBuffer + i * chunkSize, sizes[i]);
-        toUsed += sizes[i];
-    }
-    if (extra > 0) {
-        supplier->addTranslation(logicalOffset, physicalOffset + toUsed);
-        validateZipBlock(toBuffer + nChunks * chunkSize, extraUsed, extra);
-        memmove(toBuffer + toUsed, toBuffer + nChunks * chunkSize, extraUsed);
-        toUsed += extraUsed;
+    if (supplier->multiThreaded) {
+        size_t* sizes = shared.run(nChunks, fromBuffer, toBuffer + toUsed);
+        size_t extraUsed = 0;
+        if (extra > 0) {
+            extraUsed = compressChunk(zstream, supplier->bamFormat,
+                toBuffer + toUsed + nChunks * chunkSize, max(extra, 1024),
+                fromBuffer + nChunks * chunkSize, extra);
+        }
+        for (int i = 0; i < nChunks; i++) {
+            supplier->addTranslation(logicalOffset, physicalOffset + toUsed);
+            logicalOffset += chunkSize;
+            validateZipBlock(toBuffer + i * chunkSize, sizes[i], (unsigned) chunkSize);
+            memmove(toBuffer + toUsed, toBuffer + i * chunkSize, sizes[i]);
+            toUsed += sizes[i];
+        }
+        if (extra > 0) {
+            supplier->addTranslation(logicalOffset, physicalOffset + toUsed);
+            validateZipBlock(toBuffer + nChunks * chunkSize, extraUsed, (unsigned) extra);
+            memmove(toBuffer + toUsed, toBuffer + nChunks * chunkSize, extraUsed);
+            toUsed += extraUsed;
+        }
+    } else {
+        for (size_t chunk = 0; chunk < fromUsed; chunk += chunkSize) {
+            supplier->addTranslation(logicalOffset + chunk, physicalOffset + toUsed);
+            toUsed += compressChunk(zstream, supplier->bamFormat,
+                toBuffer + toUsed, toSize - toUsed, 
+                fromBuffer + chunk, min(fromUsed - chunk, chunkSize));
+        }
     }
     return toUsed;
 }
@@ -402,9 +413,10 @@ DataWriterSupplier::gzip(
     bool bamFormat,
     size_t chunkSize,
     int numThreads,
-    bool bindToProcessors)
+    bool bindToProcessors,
+    bool multiThreaded)
 {
-    return new GzipWriterFilterSupplier(bamFormat, chunkSize, numThreads, bindToProcessors);
+    return new GzipWriterFilterSupplier(bamFormat, chunkSize, numThreads, bindToProcessors, multiThreaded);
 }
     
     DataWriter::Filter*

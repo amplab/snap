@@ -131,7 +131,7 @@ public:
         int numThreads = 1);
 
     // defaults follow BAM output spec
-    static GzipWriterFilterSupplier* gzip(bool bamFormat, size_t chunkSize, int numThreads, bool bindToProcessors);
+    static GzipWriterFilterSupplier* gzip(bool bamFormat, size_t chunkSize, int numThreads, bool bindToProcessors, bool multiThreaded);
 
     static DataWriter::FilterSupplier* markDuplicates(const Genome* genome);
 

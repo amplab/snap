@@ -35,13 +35,14 @@ using std::pair;
 class GzipWriterFilterSupplier : public DataWriter::FilterSupplier
 {
 public:
-    GzipWriterFilterSupplier(bool i_bamFormat, size_t i_chunkSize, int i_numThreads, bool i_bindToProcessors)
+    GzipWriterFilterSupplier(bool i_bamFormat, size_t i_chunkSize, int i_numThreads, bool i_bindToProcessors, bool i_multiThreaded)
     :
         FilterSupplier(DataWriter::TransformFilter),
         bamFormat(i_bamFormat),
         chunkSize(i_chunkSize),
         numThreads(i_numThreads),
-        bindToProcessors(i_bindToProcessors)
+        bindToProcessors(i_bindToProcessors),
+        multiThreaded(i_multiThreaded)
     {
         InitializeExclusiveLock(&lock);
     }
@@ -50,6 +51,8 @@ public:
     {
         DestroyExclusiveLock(&lock);
     }
+
+    const bool multiThreaded;
 
     virtual DataWriter::Filter* getFilter();
 
