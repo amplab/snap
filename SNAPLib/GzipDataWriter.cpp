@@ -246,7 +246,7 @@ validateZipBlock(
     size_t bytes,
     unsigned uncompressedBytes)
 {
-    //_ASSERT(*(_uint32*)start == 0x04088b1f && *(_uint32*)(start+bytes-4) == uncompressedBytes);
+    _ASSERT(*(_uint32*)start == 0x04088b1f && *(_uint32*)(start+bytes-4) == uncompressedBytes);
 }
 
     size_t
@@ -274,7 +274,7 @@ GzipWriterFilter::onNextBatch(
     size_t extraUsed = 0;
     if (extra > 0) {
         extraUsed = compressChunk(zstream, supplier->bamFormat,
-            toBuffer + toUsed + nChunks * chunkSize, extra,
+            toBuffer + toUsed + nChunks * chunkSize, max(extra, 1024),
             fromBuffer + nChunks * chunkSize, extra);
     }
     for (int i = 0; i < nChunks; i++) {
