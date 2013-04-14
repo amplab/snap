@@ -270,6 +270,11 @@ GzipWriterFilter::onNextBatch(
         fprintf(stderr, "GzipWriterFilter: not enough space for compression buffers\n");
         soft_exit(1);
     }
+    if (supplier->closing) {
+        _ASSERT(toSize - toUsed >= fromUsed);
+        memcpy(toBuffer + toUsed, fromBuffer, fromUsed);
+        return toUsed + fromUsed;
+    }
     int nChunks = (int) (fromUsed / chunkSize);
     size_t extra = fromUsed - chunkSize * nChunks;
     if (supplier->multiThreaded) {
@@ -430,6 +435,7 @@ GzipWriterFilterSupplier::onClose(
     DataWriterSupplier* supplier)
 {
     if (bamFormat) {
+        closing = true;
         DataWriter* writer = supplier->getWriter();
         // write empty block as BAM end of file marker
         static _uint8 eof[] = {

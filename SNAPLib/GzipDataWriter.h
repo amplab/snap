@@ -42,7 +42,8 @@ public:
         chunkSize(i_chunkSize),
         numThreads(i_numThreads),
         bindToProcessors(i_bindToProcessors),
-        multiThreaded(i_multiThreaded)
+        multiThreaded(i_multiThreaded),
+        closing(false)
     {
         InitializeExclusiveLock(&lock);
     }
@@ -91,4 +92,5 @@ private:
     const bool bindToProcessors;
     ExclusiveLock lock;
     VariableSizeVector< pair<_uint64,_uint64> > translation;
+    bool closing;
 };
