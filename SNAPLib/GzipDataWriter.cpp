@@ -282,7 +282,7 @@ GzipWriterFilter::onNextBatch(
         size_t extraUsed = 0;
         if (extra > 0) {
             extraUsed = compressChunk(zstream, supplier->bamFormat,
-                toBuffer + toUsed + nChunks * chunkSize, max(extra, 1024),
+				      toBuffer + toUsed + nChunks * chunkSize, max(extra, (size_t)1024),
                 fromBuffer + nChunks * chunkSize, extra);
         }
         for (int i = 0; i < nChunks; i++) {
