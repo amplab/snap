@@ -399,6 +399,8 @@ public:
 
     virtual bool isFormatOf(const char* filename) const;
     
+    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* location, unsigned* readBytes);
+    
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
 
     virtual bool writeHeader(
@@ -431,6 +433,24 @@ BAMFormat::isFormatOf(
     return util::stringEndsWith(filename, ".bam");
 }
      
+    void
+BAMFormat::getSortInfo(
+    const Genome* genome,
+    char* buffer,
+    _int64 bytes,
+    unsigned* location,
+    unsigned* readBytes)
+{
+    BAMAlignment* bam = (BAMAlignment*) buffer;
+    _ASSERT(bytes >= sizeof(BAMAlignment) && bam->size() <= bytes && bam->refID < genome->getNumPieces());
+    if (bam->refID < 0 || bam->refID >= genome->getNumPieces() || bam->pos < 0) {
+        *location = UINT32_MAX;
+    } else {
+        *location = genome->getPieces()[bam->refID].beginningOffset + bam->pos;
+    }
+    *readBytes = bam->size();
+}
+
     ReadWriterSupplier*
 BAMFormat::getWriterSupplier(
     AlignerOptions* options,
@@ -455,14 +475,11 @@ BAMFormat::getWriterSupplier(
             strcpy(indexFileName + len, ".bai");
             filters = DataWriterSupplier::bamIndex(indexFileName, genome, gzipSupplier)->compose(filters);
         }
-        // total mem in Gb if given; default 1 Gb/thread for human genome, scale down for smaller genomes
-        const int bufferCount = 6;
-        const size_t bufferSize = options->sortMemory > 0
-            ? (options->sortMemory * ((size_t) 1 << 30)) / (bufferCount * options->numThreads)
-            : max((size_t) 16 * 1024 * 1024, ((size_t) genome->getCountOfBases() / 3) / bufferCount);
-        dataSupplier = DataWriterSupplier::sorted(tempFileName, options->outputFileTemplate, filters, bufferSize, bufferCount, options->numThreads);
+        // total mem in Gb if given; default 0.5 Gb/thread for human genome, scale down for smaller genomes
+        dataSupplier = DataWriterSupplier::sorted(genome, tempFileName, options->sortMemory * (1ULL << 30),
+            options->numThreads, options->outputFileTemplate, filters);
     } else {
-        dataSupplier = DataWriterSupplier::create(options->outputFileTemplate, gzipSupplier, 3);
+        dataSupplier = DataWriterSupplier::create(options->outputFileTemplate, gzipSupplier);
     }
     return ReadWriterSupplier::create(this, dataSupplier, genome);
 }

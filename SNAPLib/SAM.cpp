@@ -284,50 +284,11 @@ SAMReader::getReadFromLine(
     //
     const size_t pieceNameBufferSize = 512;
     char pieceName[pieceNameBufferSize];
-
-    if (fieldLength[RNAME] >= pieceNameBufferSize) {  // >= because we need a byte for the \0
-        fprintf(stderr,"SAMReader: too long an RNAME.  Can't parse.\n");
-        soft_exit(1);
-    }
-    
-    memcpy(pieceName,field[RNAME],fieldLength[RNAME]);
-    pieceName[fieldLength[RNAME]] = '\0';
-
-    unsigned offsetOfPiece = 0;
-    if ('*' != pieceName[0] && !genome->getOffsetOfPiece(pieceName,&offsetOfPiece)) {
-        //fprintf(stderr,"Unable to find piece '%s' in genome.  SAM file malformed.\n",pieceName);
-        //soft_exit(1);
-    }
+    unsigned offsetOfPiece;
+    parsePieceName(genome, pieceName, pieceNameBufferSize, &offsetOfPiece, field, fieldLength);
 
     if (NULL != genomeLocation) {
-        unsigned oneBasedOffsetWithinPiece = 0;
-        if ('*' != pieceName[0]) {
-            //
-            // We can't call sscanf directly into the mapped file, becuase it reads to the end of the
-            // string even when it's satisfied all of its fields.  Since this can be gigabytes, it's not
-            // really good for perf.  Instead, copy the POS field into a local buffer and null terminate it.
-            //
-
-            const unsigned posBufferSize = 20;
-            char posBuffer[posBufferSize];
-            if (fieldLength[POS] >= posBufferSize) {
-                fprintf(stderr,"SAMReader: POS field too long.\n");
-                soft_exit(1);
-            }
-            memcpy(posBuffer,field[POS],fieldLength[POS]);
-            posBuffer[fieldLength[POS]] = '\0';
-            if (0 == sscanf(posBuffer,"%d",&oneBasedOffsetWithinPiece)) {
-                fprintf(stderr,"SAMReader: Unable to parse position when it was expected.\n");
-                soft_exit(1);
-            }
-            if (0 == oneBasedOffsetWithinPiece) {
-                fprintf(stderr,"SAMReader: Position parsed as 0 when it was expected.\n");
-                soft_exit(1);
-            }
-            *genomeLocation = offsetOfPiece + oneBasedOffsetWithinPiece - 1; // -1 is because our offset is 0 based, while SAM is 1 based.
-        } else {
-            *genomeLocation = 0xffffffff;
-        }
+        *genomeLocation = parseLocation(offsetOfPiece, field, fieldLength);
     }
 
     if (fieldLength[SEQ] != fieldLength[QUAL]) {
@@ -398,6 +359,65 @@ SAMReader::getReadFromLine(
     }
 }
 
+    void
+SAMReader::parsePieceName(
+    const Genome* genome,
+    char* pieceName,
+    size_t pieceNameBufferSize,
+    unsigned* o_offsetOfPiece,
+    char* field[],
+    size_t fieldLength[])
+{
+    if (fieldLength[RNAME] >= pieceNameBufferSize) {  // >= because we need a byte for the \0
+        fprintf(stderr,"SAMReader: too long an RNAME.  Can't parse.\n");
+        soft_exit(1);
+    }
+    
+    memcpy(pieceName,field[RNAME],fieldLength[RNAME]);
+    pieceName[fieldLength[RNAME]] = '\0';
+
+    *o_offsetOfPiece = 0;
+    if ('*' != pieceName[0] && !genome->getOffsetOfPiece(pieceName,o_offsetOfPiece)) {
+        //fprintf(stderr,"Unable to find piece '%s' in genome.  SAM file malformed.\n",pieceName);
+        //soft_exit(1);
+    }
+}
+
+    unsigned
+SAMReader::parseLocation(
+    unsigned offsetOfPiece,
+    char* field[],
+    size_t fieldLength[])
+{
+    unsigned oneBasedOffsetWithinPiece = 0;
+    if ('*' != field[RNAME][0] && '*' != field[POS][0]) {
+        //
+        // We can't call sscanf directly into the mapped file, becuase it reads to the end of the
+        // string even when it's satisfied all of its fields.  Since this can be gigabytes, it's not
+        // really good for perf.  Instead, copy the POS field into a local buffer and null terminate it.
+        //
+
+        const unsigned posBufferSize = 20;
+        char posBuffer[posBufferSize];
+        if (fieldLength[POS] >= posBufferSize) {
+            fprintf(stderr,"SAMReader: POS field too long.\n");
+            soft_exit(1);
+        }
+        memcpy(posBuffer,field[POS],fieldLength[POS]);
+        posBuffer[fieldLength[POS]] = '\0';
+        if (0 == sscanf(posBuffer,"%d",&oneBasedOffsetWithinPiece)) {
+            fprintf(stderr,"SAMReader: Unable to parse position when it was expected.\n");
+            soft_exit(1);
+        }
+        if (0 == oneBasedOffsetWithinPiece) {
+            fprintf(stderr,"SAMReader: Position parsed as 0 when it was expected.\n");
+            soft_exit(1);
+        }
+        return oneBasedOffsetWithinPiece - 1; // -1 is because our offset is 0 based, while SAM is 1 based.
+    } else {
+        return 0xffffffff;
+    }
+}
     bool
 SAMReader::init(
     const char *fileName,
@@ -537,6 +557,8 @@ public:
 
     virtual bool isFormatOf(const char* filename) const;
     
+    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* location, unsigned* readBytes);
+
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
 
     virtual bool writeHeader(
@@ -568,6 +590,31 @@ SAMFormat::isFormatOf(
     return util::stringEndsWith(filename, ".sam");
 }
     
+    void
+SAMFormat::getSortInfo(
+    const Genome* genome,
+    char* buffer,
+    _int64 bytes,
+    unsigned* o_location,
+    unsigned* o_readBytes)
+{
+    char* fields[SAMReader::nSAMFields];
+    size_t lengths[SAMReader::nSAMFields];
+    size_t lineLength;
+    SAMReader::parseLine(buffer, buffer + bytes, fields, &lineLength, lengths);
+    _ASSERT(lineLength < UINT32_MAX);
+    *o_readBytes = lineLength;
+    if (lengths[SAMReader::POS] == 0 || fields[SAMReader::POS][0] == '*') {
+        *o_location = UINT32_MAX;
+    } else {
+        const size_t pieceNameBufferSize = 512;
+        char pieceName[pieceNameBufferSize];
+        unsigned offsetOfPiece;
+        SAMReader::parsePieceName(genome, pieceName, pieceNameBufferSize, &offsetOfPiece, fields, lengths);
+        *o_location = SAMReader::parseLocation(offsetOfPiece, fields, lengths);
+    }
+}
+
     ReadWriterSupplier*
 SAMFormat::getWriterSupplier(
     AlignerOptions* options,
@@ -580,7 +627,8 @@ SAMFormat::getWriterSupplier(
         char* tempFileName = (char*) malloc(5 + len);
         strcpy(tempFileName, options->outputFileTemplate);
         strcpy(tempFileName + len, ".tmp");
-        dataSupplier = DataWriterSupplier::sorted(tempFileName, options->outputFileTemplate);
+        dataSupplier = DataWriterSupplier::sorted(genome, tempFileName, options->sortMemory * (1ULL << 30),
+            options->numThreads, options->outputFileTemplate, NULL);
     } else {
         dataSupplier = DataWriterSupplier::create(options->outputFileTemplate);
     }

@@ -98,7 +98,14 @@ protected:
 
         static const int maxLineLen = 2048;
 
-        static bool parseLine(char *line, char *endOfBuffer, char *result[], size_t *lineLength, size_t fieldLengths[]);
+        static bool parseLine(char *line, char *endOfBuffer, char *result[],
+            size_t *lineLength, size_t fieldLengths[]);
+
+        static void parsePieceName(const Genome* genome, char* pieceName,
+            size_t pieceNameBufferSize, unsigned* o_offsetOfPiece,
+            char* field[], size_t fieldLength[]);
+
+        static unsigned parseLocation(unsigned offsetOfPiece, char* field[], size_t fieldLength[]);
 
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
                         unsigned *genomeLocation, Direction *direction, unsigned *mapQ, unsigned *flag, bool ignoreEndOfRange, const char **cigar);
@@ -117,5 +124,7 @@ private:
         bool                didInitialSkip;   // Have we skipped to the beginning of the first SAM line?  We may start in the middle of one.
 
         const Genome *      genome;
+
+        friend class SAMFormat;
 };
 

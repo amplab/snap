@@ -47,6 +47,8 @@ public:
     // reading
     //
 
+    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* location, unsigned* readBytes) = 0;
+
     /*
 
     virtual ReadReader* createReader(const DataSupplier* supplier, const char *fileName,

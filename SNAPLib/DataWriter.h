@@ -119,16 +119,18 @@ public:
     // call when all threads are done, all filters destroyed
     virtual void close() = 0;
     
-    static DataWriterSupplier* create(const char* filename,
+    static DataWriterSupplier* create(
+        const char* filename,
         DataWriter::FilterSupplier* filterSupplier = NULL,
-        int count = 2, size_t bufferSize = 16 * 1024 * 1024);
+        int count = 4, size_t bufferSize = 16 * 1024 * 1024);
     
-    static DataWriterSupplier* sorted(const char* tempFileName,
+    static DataWriterSupplier* sorted(
+        const Genome* genome,
+        const char* tempFileName,
+        size_t tempBufferMemory,
+        int numThreads,
         const char* sortedFileName,
-        DataWriter::FilterSupplier* sortedFilterSuppler = NULL,
-        size_t bufferSize = 16 * 1024 * 1024,
-        int buffers = 3,
-        int numThreads = 1);
+        DataWriter::FilterSupplier* sortedFilterSupplier);
 
     // defaults follow BAM output spec
     static GzipWriterFilterSupplier* gzip(bool bamFormat, size_t chunkSize, int numThreads, bool bindToProcessors, bool multiThreaded);

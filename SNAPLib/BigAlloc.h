@@ -22,7 +22,7 @@ Revision History:
 
 #pragma once
 
-//#define PROFILE_BIGALLOC
+#define PROFILE_BIGALLOC
 
 #ifdef PROFILE_BIGALLOC
 #define BigAlloc(s) BigAllocProfile((s), NULL, __FUNCTION__)

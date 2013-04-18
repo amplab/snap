@@ -22,6 +22,7 @@ Environment:
 #include "DataWriter.h"
 #include "BufferedAsync.h"
 #include "VariableSizeVector.h"
+#include "FileFormat.h"
 #include "exit.h"
 
 #define USE_DEVTEAM_OPTIONS 1
@@ -42,38 +43,43 @@ struct SortEntry
 };
 #pragma pack(pop)
 
+typedef VariableSizeVector<SortEntry> SortVector;
+
 struct SortBlock
 {
-    SortBlock() : entries(), fileOffset(0), fileBytes(0), index(0), reader() {}
-    SortBlock(int capacity) : entries(capacity), fileOffset(0), fileBytes(0), index(0), reader() {}
+    SortBlock() : start(0), bytes(0), location(0), length(0), reader(NULL) {}
     SortBlock(SortBlock& other) { *this = other; }
     void operator=(SortBlock& other);
 
-    VariableSizeVector<SortEntry>   entries;
-    size_t                          fileOffset;
-    size_t                          fileBytes;
-    unsigned                        index;
-    BufferedAsyncReader             reader; // for reading phase
+    size_t      start;
+    size_t      bytes;
+    // for mergesort phase
+    DataReader* reader;
+    unsigned    location; // genome location of current read
+    char*       data; // read data in read buffer
+    unsigned    length; // length in bytes
 };
 
     void
 SortBlock::operator=(
     SortBlock& other)
 {
-    entries = other.entries;
-    fileOffset = other.fileOffset;
-    fileBytes = other.fileBytes;
-    index = other.index;
+    start = other.start;
+    bytes = other.bytes;
+    location = other.location;
+    length = other.length;
     reader = other.reader;
 }
 
+typedef VariableSizeVector<SortBlock> SortBlockVector;
+    
 class SortedDataFilterSupplier;
 
 class SortedDataFilter : public DataWriter::Filter
 {
 public:
     SortedDataFilter(SortedDataFilterSupplier* i_parent)
-        : Filter(DataWriter::CopyFilter), parent(i_parent), largest(0)
+        : Filter(DataWriter::CopyFilter), parent(i_parent), locations()
     {}
 
     virtual ~SortedDataFilter() {}
@@ -83,32 +89,27 @@ public:
     virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
 
 private:
-    SortedDataFilterSupplier*  parent;
-    int                         largest; // largest location count so far
-    SortBlock                   locations;
+    SortedDataFilterSupplier*   parent;
+    SortVector                  locations;
 };
 
 class SortedDataFilterSupplier : public DataWriter::FilterSupplier
 {
 public:
 
-    SortedDataFilterSupplier(const char* i_tempFileName, const char* i_sortedFileName,
-        DataWriter::FilterSupplier* i_sortedFilterSupplier, int i_readBufferCount,
-        size_t i_readBufferSize, int i_numThreads)
+    SortedDataFilterSupplier(
+        const Genome* i_genome,
+        const char* i_tempFileName,
+        const char* i_sortedFileName,
+        DataWriter::FilterSupplier* i_sortedFilterSupplier)
         :
+        genome(i_genome),
         FilterSupplier(DataWriter::CopyFilter),
         tempFileName(i_tempFileName),
         sortedFileName(i_sortedFileName),
         sortedFilterSupplier(i_sortedFilterSupplier),
-        readBufferCount(i_readBufferCount),
-        readBufferSize(i_readBufferSize),
-        locations((int)(i_readBufferSize/300)),
-        numThreads(i_numThreads)
+        blocks()
     {
-        if (readBufferSize / 300 > 0x7fffffff) {
-            fprintf(stderr,"SortedDataFilterSupplier: readBufferSize too big.\n");
-            soft_exit(1);
-        }
         InitializeExclusiveLock(&lock);
     }
 
@@ -121,21 +122,21 @@ public:
 
     virtual void onClose(DataWriterSupplier* supplier);
 
-    void addLocations(SortBlock& block);
+    void setHeaderSize(size_t bytes)
+    { headerSize = bytes; }
+
+    void addBlock(size_t start, size_t bytes);
 
 private:
     bool mergeSort();
 
+    const Genome*                   genome;
     const char*                     tempFileName;
     const char*                     sortedFileName;
-    const int                       readBufferCount;
-    const size_t                    readBufferSize;
-    const int                       numThreads;
     DataWriter::FilterSupplier*     sortedFilterSupplier;
     size_t                          headerSize;
-    ExclusiveLock                   lock;
-    typedef VariableSizeVector<SortBlock,150,true> SortBlockVector;
-    SortBlockVector                 locations;
+    ExclusiveLock                   lock; // for adding blocks
+    SortBlockVector                 blocks;
 };
 
     void
@@ -147,7 +148,7 @@ SortedDataFilter::onAdvance(
     unsigned location)
 {
     SortEntry entry(batchOffset, bytes, location);
-    locations.entries.push_back(entry);
+    locations.push_back(entry);
 }
 
     size_t
@@ -157,7 +158,7 @@ SortedDataFilter::onNextBatch(
     size_t bytes)
 {
     // sort buffered reads by location for later merge sort
-    std::stable_sort(locations.entries.begin(), locations.entries.end(), SortEntry::comparator);
+    std::stable_sort(locations.begin(), locations.end(), SortEntry::comparator);
     
     // copy from previous buffer into current in sorted order
     char* fromBuffer;
@@ -171,21 +172,21 @@ SortedDataFilter::onNextBatch(
         soft_exit(1);
     }
     size_t target = 0;
-    for (VariableSizeVector<SortEntry>::iterator i = locations.entries.begin(); i != locations.entries.end(); i++) {
+    for (VariableSizeVector<SortEntry>::iterator i = locations.begin(); i != locations.end(); i++) {
         memcpy(toBuffer + target, fromBuffer + i->offset, i->length);
         i->offset = offset + target; // set correct file offset
         target += i->length;
     }
     
-    // remember offsets for full-file sort, get a new vector of appropriate size
-    locations.fileOffset = offset;
-    locations.fileBytes = bytes;
-    parent->addLocations(locations);
-    if (locations.entries.size() > largest) {
-        largest = (locations.entries.size() * 6) / 5; // grow by 20% if it exceeds prior max
+    // remember block extent for later merge sort
+    SortBlock block;
+    // handle header specially
+    size_t header = offset > 0 ? 0 : locations[0].length;
+    if (header > 0) {
+        parent->setHeaderSize(header);
     }
-    locations.entries.clear();
-    locations.entries.reserve(largest);
+    parent->addBlock(offset + header, bytes - header);
+    locations.clear();
 
     return target;
 }
@@ -200,7 +201,7 @@ SortedDataFilterSupplier::getFilter()
 SortedDataFilterSupplier::onClose(
     DataWriterSupplier* supplier)
 {
-    if (locations.size() == 1 && sortedFilterSupplier == NULL) {
+    if (blocks.size() == 1 && sortedFilterSupplier == NULL) {
         // just rename/move temp file to real file, we're done
         DeleteSingleFile(sortedFileName); // if it exists
         if (! MoveSingleFile(tempFileName, sortedFileName)) {
@@ -217,92 +218,58 @@ SortedDataFilterSupplier::onClose(
 }
 
     void
-SortedDataFilterSupplier::addLocations(
-    SortBlock& added)
+SortedDataFilterSupplier::addBlock(
+    size_t start,
+    size_t bytes)
 {
-    AcquireExclusiveLock(&lock);
-    if (added.fileOffset == 0) {
-        _ASSERT(added.entries.size() > 0 && added.entries[0].offset == 0);
-        headerSize = added.entries[0].length;
-        added.entries.erase(0);
+    if (bytes > 0) {
+        AcquireExclusiveLock(&lock);
+        SortBlock block;
+        block.start = start;
+        block.bytes = bytes;
+        blocks.push_back(block);
+        ReleaseExclusiveLock(&lock);
     }
-    if (added.entries.size() > 0) {
-        locations.push_back(added);
-    }
-    ReleaseExclusiveLock(&lock);
 }
 
     bool
 SortedDataFilterSupplier::mergeSort()
 {
     // merge sort from temp file into sorted file
+    FileFormat* format;
 #if USE_DEVTEAM_OPTIONS
     printf("sorting...");
     _int64 start = timeInMillis();
 #endif
 
-    // first replace offset in entries with block index, and sort them all in one large array
-    size_t total = 0;
-    for (SortBlockVector::iterator i = locations.begin(); i != locations.end(); i++) {
-        total += i->entries.size();
-    }
-    SortEntry* entries = (SortEntry*) BigAlloc(total * sizeof(SortEntry));
-    size_t offset = 0;
-    for (SortBlockVector::iterator i = locations.begin(); i != locations.end(); i++) {
-        unsigned n = i->entries.size();
-        size_t blockIndex = i - locations.begin();
-        memcpy(entries + offset, i->entries.begin(), n * (size_t) sizeof(SortEntry));
-        for (unsigned j = 0; j < n; j++) {
-            entries[offset + j].offset = blockIndex;
-        }
-        offset += n;
-        i->entries.clean();
-    }
-    std::stable_sort(entries, entries + total, SortEntry::comparator);
-    size_t mergeReadMemory = readBufferCount * readBufferSize * max(1, numThreads - 1) / (numThreads == 1 ? 2 : 1);
-    size_t mergeReadBufferSize = mergeReadMemory / (2 * locations.size());
-#if USE_DEVTEAM_OPTIONS
-    printf(" %ld s\nwriting sorted reads, merge %d buffers of %lld MB = %lld MB  + in-memory sort of %lld MB\n",
-        (timeInMillis() - start) / 1000, 2 * locations.size(),
-        mergeReadBufferSize / (1024 * 1024), mergeReadMemory / (1024 * 1024),
-        total * sizeof(SortEntry) / (1024 * 1024));
-    start = timeInMillis();
-#endif
-
-    // setup - open all files, read first block, begin read for second
-    AsyncFile* temp = AsyncFile::open(tempFileName, false);
-    char* buffers = (char*) BigAlloc(mergeReadMemory);
-    unsigned j = 0;
-    for (SortBlockVector::iterator i = locations.begin(); i != locations.end(); i++, j++) {
-        i->reader.open(temp, i->fileOffset, i->fileBytes, mergeReadBufferSize, true,
-            buffers + j * 2 * mergeReadBufferSize, buffers + (j * 2 + 1) * mergeReadBufferSize);
-    }
-    for (SortBlockVector::iterator i = locations.begin(); i != locations.end(); i++) {
-        i->reader.endOpen();
-    }
-
     // set up buffered output
-    DataWriterSupplier* writerSupplier = DataWriterSupplier::create(sortedFileName, sortedFilterSupplier, readBufferCount, readBufferSize / (numThreads == 1 ? 2 : 1));
+    DataWriterSupplier* writerSupplier = DataWriterSupplier::create(sortedFileName, sortedFilterSupplier);
     DataWriter* writer = writerSupplier->getWriter();
     if (writer == NULL) {
         fprintf(stderr, "open sorted file for write failed\n");
         return false;
+    }
+    const DataSupplier* readerSupplier = DataSupplier::Default[true]; // autorelease
+    // setup - open all files, read first block, begin read for second
+    for (SortBlockVector::iterator i = blocks.begin(); i != blocks.end(); i++) {
+        i->reader = readerSupplier->getDataReader(8192); // todo: parameterize max read len
+        i->reader->init(tempFileName);
+        i->reader->reinit(i->start, i->length);
     }
 
     // write out header
     char* buffer;
     size_t bytes;
     if (headerSize > 0) {
-        AsyncFile::Reader* hread = NULL;
-        bool ok = writer->getBuffer(&buffer, &bytes) &&
-            bytes >= headerSize &&
-            (hread = temp->getReader()) != NULL &&
-            hread->beginRead(buffer, headerSize, 0, NULL) &&
-            hread->waitForCompletion() &&
-            hread->close();
-        if (hread != NULL) {
-            delete hread;
-        }
+        blocks[0].reader->reinit(0, headerSize);
+        char* rbuffer;
+        _int64 rbytes;
+        char* wbuffer;
+        size_t wbytes;
+        bool ok = blocks[0].reader->getData(&rbuffer, &rbytes) &&
+            rbytes >= headerSize &&
+            writer->getBuffer(&wbuffer, &wbytes) &&
+            wbytes >= headerSize;
         if (! ok ) {
             fprintf(stderr, "read header failed\n");
             return false;
@@ -311,73 +278,97 @@ SortedDataFilterSupplier::mergeSort()
             fprintf(stderr,"SortedDataFilterSupplier: headerSize too big\n");
             soft_exit(1);
         }
+        memcpy(wbuffer, rbuffer, headerSize);
         writer->advance((unsigned)headerSize);
+        blocks[0].reader->reinit(blocks[0].start, blocks[0].bytes);
     }
 
-    // merge input blocks into output using pre-sorted list
-    for (size_t i = 0; i < total; i++) {
-        SortEntry* entry = &entries[i];
-        writer->getBuffer(&buffer, &bytes);
-        if (bytes < entry->length) {
-            writer->nextBatch();
-            writer->getBuffer(&buffer, &bytes);
-            if (bytes < entry->length) {
-                fprintf(stderr, "mergeSort: buffer size too small\n");
-                return false;
+    // merge temp blocks into output
+    _int64 total = 0;
+    // get initial merge sort data
+    for (SortBlockVector::iterator b = blocks.begin(); b != blocks.end(); b++) {
+        _int64 bytes;
+        b->reader->getData(&b->data, &bytes);
+        format->getSortInfo(genome, b->data, bytes, &b->location, &b->length);
+    }
+    while (true) {
+        int smallest = -1, second = -1;
+        for (int i = 0; i < blocks.size(); i++) {
+            SortBlock* b = &blocks[i];
+            if (b->reader == NULL) {
+                continue;
+            }
+            if (smallest == -1 || b->location < blocks[smallest].location) {
+                second = smallest;
+                smallest = i;
+            } else if (second == -1 || b->location < blocks[second].location) {
+                second = i;
             }
         }
-
-        if (entry->offset > 0x7fffffff) {
-            fprintf(stderr,"SortedDataFilterSupplier::mergeSort: entry->offset too big\n");
-            soft_exit(1);
+        if (smallest == -1) {
+            break;
         }
-
-        if (! locations[(int)entry->offset].reader.read(buffer, entry->length)) {
-            fprintf(stderr, "merge sort read failed\n");
-            return false;
+        unsigned limit = second != -1 ? blocks[second].location : UINT32_MAX;
+        SortBlock* b = &blocks[smallest];
+        char* writeBuffer;
+        size_t writeBytes;
+        writer->getBuffer(&writeBuffer, &writeBytes);
+        while (b->location <= limit) {
+            if (writeBytes < b->length) {
+                writer->nextBatch();
+                writer->getBuffer(&writeBuffer, &writeBytes);
+                if (writeBytes < b->length) {
+                    fprintf(stderr, "mergeSort: buffer size too small\n");
+                    return false;
+                }
+            }
+            memcpy(writeBuffer, b->data, b->length);
+            writer->advance(b->length);
+            b->reader->advance(b->length);
+            _int64 readBytes;
+            if (! b->reader->getData(&b->data, &readBytes)) {
+                b->reader->nextBatch();
+                if (! b->reader->getData(&b->data, &readBytes)) {
+                    _ASSERT(b->reader->isEOF());
+                    delete b->reader;
+                    b->reader = NULL;
+                }
+            }
+            format->getSortInfo(genome, b->data, readBytes, &b->location, &b->length);
+            _ASSERT(b->length <= readBytes);
         }
-        writer->advance(entry->length, entry->location);
     }
-
+    
     // close everything
     writer->close();
     delete writer;
     writerSupplier->close();
     delete writerSupplier;
-    BigDealloc(entries);
-    bool ok = true;
-    _int64 readWait = 0;
-    for (SortBlockVector::iterator i = locations.begin(); i != locations.end(); i++) {
-        ok &= i->reader.close();
-        readWait += i->reader.getWaitTimeInMillis();
-    }
-    ok &= temp->close();
-    delete temp;
-    BigDealloc(buffers);
-    if (! ok) {
-        printf("files did not close properly\n");
-    }
     if (! DeleteSingleFile(tempFileName)) {
         printf("warning: failure deleting temp file %s\n", tempFileName);
     }
 
 #if USE_DEVTEAM_OPTIONS
-    printf("sorted %u reads in %u blocks, %lld s (%lld s read wait)\n",
-        total, locations.size(), (timeInMillis() - start)/1000, readWait/1000);
+    printf("sorted %lld reads in %u blocks, %lld s\n",
+        total, blocks.size(), (timeInMillis() - start)/1000);
 #endif
     return true;
 }
 
     DataWriterSupplier*
 DataWriterSupplier::sorted(
+    const Genome* genome,
     const char* tempFileName,
+    size_t tempBufferMemory,
+    int numThreads,
     const char* sortedFileName,
-    DataWriter::FilterSupplier* sortedFilterSuppler,
-    size_t bufferSize,
-    int buffers,
-    int numThreads)
+    DataWriter::FilterSupplier* sortedFilterSuppler)
 {
+    const int bufferCount = 3;
+    const size_t bufferSize = tempBufferMemory > 0
+        ? tempBufferMemory / (bufferCount * numThreads)
+        : max((size_t) 16 * 1024 * 1024, ((size_t) genome->getCountOfBases() / 3) / bufferCount);
     DataWriter::FilterSupplier* filterSupplier =
-        new SortedDataFilterSupplier(tempFileName, sortedFileName, sortedFilterSuppler, buffers, bufferSize, numThreads);
-    return create(tempFileName, filterSupplier, buffers, bufferSize);
+        new SortedDataFilterSupplier(genome, tempFileName, sortedFileName, sortedFilterSuppler);
+    return DataWriterSupplier::create(tempFileName, filterSupplier, bufferCount, bufferSize);
 }
