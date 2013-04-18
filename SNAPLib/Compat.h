@@ -125,6 +125,9 @@ class SingleWaiterObjectImpl;
 typedef pthread_mutex_t ExclusiveLock;
 typedef SingleWaiterObjectImpl *SingleWaiterObject;
 
+class EventObjectImpl;
+typedef EventObjectImpl *EventObject;
+
 inline unsigned bit_rotate_right(unsigned value, unsigned shift)
 {
     if (shift%32 == 0) return value;
@@ -137,7 +140,6 @@ inline unsigned bit_rotate_left(unsigned value, unsigned shift)
     return value << (shift %32) | (value >> (32 - shift%32));
 }
 
-typedef void* EventObject; // todo: implement
 #endif  // _MSC_VER
 
 //

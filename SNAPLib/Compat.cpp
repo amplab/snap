@@ -892,6 +892,7 @@ bool DestroyExclusiveLock(ExclusiveLock *lock)
 }
 
 class SingleWaiterObjectImpl {
+protected:
     pthread_mutex_t lock;
     pthread_cond_t cond;
     bool set;
@@ -966,29 +967,56 @@ void ResetSingleWaiterObject(SingleWaiterObject *waiter)
     (*waiter)->init();
 }
 
+class EventObjectImpl : public SingleWaiterObjectImpl
+{
+public:
+    void signalAll()
+    {
+        pthread_mutex_lock(&lock);
+        set = true;
+        pthread_cond_broadcast(&cond);
+        pthread_mutex_unlock(&lock);
+    }
+    void blockAll()
+    {
+        pthread_mutex_lock(&lock);
+	set = false;
+        pthread_mutex_unlock(&lock);
+    }
+};
+
 void CreateEventObject(EventObject *newEvent)
 {
-    soft_exit(1);
+    EventObjectImpl* obj = new EventObjectImpl();
+    if (obj == NULL) {
+        return;
+    }
+    if (!obj->init()) {
+        delete obj;
+        return;
+    }
+    *newEvent = obj;
 }
 
 void DestroyEventObject(EventObject *eventObject)
 {
-   soft_exit(1);
+    (*eventObject)->destroy();
+    delete *eventObject;
 }
 
 void AllowEventWaitersToProceed(EventObject *eventObject)
 {
-   soft_exit(1);
+    (*eventObject)->signalAll();
 }
 
 void PreventEventWaitersFromProceeding(EventObject *eventObject)
 {
-   soft_exit(1);
+  (*eventObject)->blockAll();
 }
 
 void WaitForEvent(EventObject *eventObject)
 {
-   soft_exit(1);
+  (*eventObject)->wait();
 }
 
 int InterlockedIncrementAndReturnNewValue(volatile int *valueToDecrement)

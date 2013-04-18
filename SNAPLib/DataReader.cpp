@@ -1057,14 +1057,15 @@ MemMapDataReader::reinit(
     currentMapStartSize = startSize;
     currentMapSize = amountOfFileToProcess;
     offset = 0;
-    currentBatch = 1;
     startBytes = min(batchSize, currentMapStartSize - (currentBatch - 1) * batchSize);
     validBytes = min(batchSize + overflowBytes, currentMapSize - (currentBatch - 1) * batchSize);
-    extraUsed = 0;
+    currentBatch = 1;
+    extraUsed = 1;
+    currentExtraIndex = 0;
     if (extraBatches != NULL) {
         memset(extraBatches, 0, sizeof(DataBatch) * batchCount);
+        extraBatches[currentExtraIndex] = currentBatch;
     }
-    currentExtraIndex = 0;
     releaseLock();
     if (batchCount != 1) {
         SignalSingleWaiterObject(&waiter);
@@ -1105,8 +1106,8 @@ MemMapDataReader::nextBatch()
     while (true) {
         acquireLock();
         if (extraBatches == NULL || extraUsed < batchCount) {
+            currentBatch++;
             if (extraBatches != NULL) {
-                currentBatch++;
                 bool found = false;
                 for (int i = 0; i < batchCount; i++) {
                     if (extraBatches[i].batchID == 0) {
@@ -1118,11 +1119,13 @@ MemMapDataReader::nextBatch()
                 }
                 _ASSERT(found);
                 extraUsed++;
+                //printf("MemMap nextBatch %d:%d = index %d used %d of %d\n", 0, currentBatch, currentExtraIndex, extraUsed, batchCount); 
                 if (extraUsed == batchCount) {
                     ResetSingleWaiterObject(&waiter);
                 }
             }
             releaseLock();
+	    offset = max(offset, startBytes) - startBytes;
             startBytes = min(batchSize, currentMapStartSize - (currentBatch - 1) * batchSize);
             validBytes = min(batchSize + overflowBytes, currentMapSize - (currentBatch - 1) * batchSize);
             _ASSERT(validBytes >= 0);
@@ -1158,6 +1161,7 @@ MemMapDataReader::releaseBatch(
             extraBatches[i].batchID = 0;
             _ASSERT(extraUsed > 0);
             extraUsed--;
+	    //printf("MemMap: releaseBatch %d:%d = index %d now using %d of %d\n", batch.fileID, batch.batchID, i, extraUsed, batchCount);
             if (extraUsed == batchCount - 1) {
                 SignalSingleWaiterObject(&waiter);
             }
