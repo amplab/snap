@@ -339,7 +339,9 @@ WindowsOverlappedDataReader::nextBatch()
         ReleaseExclusiveLock(&lock);
         if (! first) {
             //printf("WindowsOverlappedDataReader::nextBatch thread %d wait for release\n", GetCurrentThreadId());
+            _int64 start = timeInNanos();
             WaitForSingleObject(releaseEvent, INFINITE);
+            InterlockedAdd64AndReturnNewValue(&ReleaseWaitTime, timeInNanos() - start);
             //printf("WindowsOverlappedDataReader::nextBatch thread %d released\n", GetCurrentThreadId());
         }
         first = false;
@@ -477,7 +479,7 @@ WindowsOverlappedDataReader::startIo()
         if (readOffset.QuadPart >= fileSize.QuadPart || readOffset.QuadPart >= endingOffset) {
             info->validBytes = 0;
             info->nBytesThatMayBeginARead = 0;
-            info->isEOF = readOffset.QuadPart >= fileSize.QuadPart;
+            info->isEOF = true;
             info->state = Full;
             SetEvent(info->lap.hEvent);
             ReleaseExclusiveLock(&lock);
@@ -535,7 +537,9 @@ WindowsOverlappedDataReader::waitForBuffer(
         //printf("WindowsOverlappedDataReader::waitForBuffer %d InUse...\n", bufferNumber);
         // must already have lock to call, release & wait & reacquire
         ReleaseExclusiveLock(&lock);
+        _int64 start = timeInNanos();
         WaitForSingleObject(releaseEvent, INFINITE);
+        InterlockedAdd64AndReturnNewValue(&ReleaseWaitTime, timeInNanos() - start);
         AcquireExclusiveLock(&lock);
     }
 
@@ -547,10 +551,12 @@ WindowsOverlappedDataReader::waitForBuffer(
         startIo();
     }
 
+    _int64 start = timeInNanos();
     if (!GetOverlappedResult(hFile,&info->lap,&info->validBytes,TRUE)) {
         fprintf(stderr,"Error reading FASTQ file, %d\n",GetLastError());
         soft_exit(1);
     }
+    InterlockedAdd64AndReturnNewValue(&ReadWaitTime, timeInNanos() - start);
 
     info->state = Full;
     info->buffer[info->validBytes] = 0;
@@ -565,7 +571,7 @@ public:
     virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0) const
     {
         int buffers = autoRelease ? 3 : (ThreadCount + max(ThreadCount / 2, 4));
-        return new WindowsOverlappedDataReader(ThreadCount + 16, overflowBytes, extraFactor, autoRelease);
+        return new WindowsOverlappedDataReader(buffers, overflowBytes, extraFactor, autoRelease);
     }
 };
 
@@ -1276,3 +1282,6 @@ const DataSupplier* DataSupplier::GzipDefault[2] =
 { DataSupplier::Gzip(DataSupplier::Default[false], false), DataSupplier::Gzip(DataSupplier::Default[true], true) };
 
 int DataSupplier::ThreadCount = 1;
+
+volatile _int64 DataReader::ReadWaitTime = 0;
+volatile _int64 DataReader::ReleaseWaitTime = 0;

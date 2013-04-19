@@ -399,7 +399,7 @@ public:
 
     virtual bool isFormatOf(const char* filename) const;
     
-    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* location, unsigned* readBytes);
+    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* location, unsigned* readBytes) const;
     
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
 
@@ -439,7 +439,7 @@ BAMFormat::getSortInfo(
     char* buffer,
     _int64 bytes,
     unsigned* location,
-    unsigned* readBytes)
+    unsigned* readBytes) const
 {
     BAMAlignment* bam = (BAMAlignment*) buffer;
     _ASSERT(bytes >= sizeof(BAMAlignment) && bam->size() <= bytes && bam->refID < genome->getNumPieces());
@@ -475,8 +475,7 @@ BAMFormat::getWriterSupplier(
             strcpy(indexFileName + len, ".bai");
             filters = DataWriterSupplier::bamIndex(indexFileName, genome, gzipSupplier)->compose(filters);
         }
-        // total mem in Gb if given; default 0.5 Gb/thread for human genome, scale down for smaller genomes
-        dataSupplier = DataWriterSupplier::sorted(genome, tempFileName, options->sortMemory * (1ULL << 30),
+        dataSupplier = DataWriterSupplier::sorted(this, genome, tempFileName, options->sortMemory * (1ULL << 30),
             options->numThreads, options->outputFileTemplate, filters);
     } else {
         dataSupplier = DataWriterSupplier::create(options->outputFileTemplate, gzipSupplier);

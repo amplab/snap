@@ -141,7 +141,9 @@ AsyncDataWriter::advance(
     size_t batchOffset = batches[current].used;
     batches[current].used = min(bufferSize, batchOffset + bytes);
     if (filter != NULL) {
+        //_int64 start = timeInNanos();
         filter->onAdvance(this, batchOffset, data, bytes, location);
+        //InterlockedAdd64AndReturnNewValue(&FilterTime, timeInNanos() - start);
     }
 }
 
@@ -185,6 +187,7 @@ AsyncDataWriter::getBatch(
     bool
 AsyncDataWriter::nextBatch()
 {
+    _int64 start = timeInNanos();
     int written = current;
     Batch* write = &batches[written];
     write->logicalUsed = write->used;
@@ -219,12 +222,15 @@ AsyncDataWriter::nextBatch()
             batches[current].logicalUsed = 0;
         }
     }
+    _int64 start2 = timeInNanos();
+    InterlockedAdd64AndReturnNewValue(&FilterTime, start2 - start);
     if (! write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
         return false;
     }
     if (! batches[current].file->waitForCompletion()) {
         return false;
     }
+    InterlockedAdd64AndReturnNewValue(&WaitTime, timeInNanos() - start2);
     return true;
 }
 
@@ -358,3 +364,6 @@ DataWriter::FilterSupplier::compose(
 {
     return new ComposeFilterSupplier(this, other);
 }
+
+volatile _int64 DataWriter::WaitTime = 0;
+volatile _int64 DataWriter::FilterTime = 0;

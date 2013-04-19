@@ -413,7 +413,7 @@ SAMReader::parseLocation(
             fprintf(stderr,"SAMReader: Position parsed as 0 when it was expected.\n");
             soft_exit(1);
         }
-        return oneBasedOffsetWithinPiece - 1; // -1 is because our offset is 0 based, while SAM is 1 based.
+        return offsetOfPiece + oneBasedOffsetWithinPiece - 1; // -1 is because our offset is 0 based, while SAM is 1 based.
     } else {
         return 0xffffffff;
     }
@@ -557,7 +557,7 @@ public:
 
     virtual bool isFormatOf(const char* filename) const;
     
-    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* location, unsigned* readBytes);
+    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* location, unsigned* readBytes) const;
 
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
 
@@ -596,7 +596,7 @@ SAMFormat::getSortInfo(
     char* buffer,
     _int64 bytes,
     unsigned* o_location,
-    unsigned* o_readBytes)
+    unsigned* o_readBytes) const
 {
     char* fields[SAMReader::nSAMFields];
     size_t lengths[SAMReader::nSAMFields];
@@ -627,7 +627,7 @@ SAMFormat::getWriterSupplier(
         char* tempFileName = (char*) malloc(5 + len);
         strcpy(tempFileName, options->outputFileTemplate);
         strcpy(tempFileName + len, ".tmp");
-        dataSupplier = DataWriterSupplier::sorted(genome, tempFileName, options->sortMemory * (1ULL << 30),
+        dataSupplier = DataWriterSupplier::sorted(this, genome, tempFileName, options->sortMemory * (1ULL << 30),
             options->numThreads, options->outputFileTemplate, NULL);
     } else {
         dataSupplier = DataWriterSupplier::create(options->outputFileTemplate);

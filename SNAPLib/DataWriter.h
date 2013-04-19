@@ -98,14 +98,16 @@ public:
     // this thread is complete
     virtual void close() = 0;
 
-    // number of active write buffers
+    // nanosecond timers
+    static volatile _int64 FilterTime;
+    static volatile _int64 WaitTime;
 
 protected:
     Filter* filter;
 };
 
+class FileFormat;
 class Genome;
-
 class GzipWriterFilterSupplier;
 
 // creates writers for multiple threads
@@ -125,6 +127,7 @@ public:
         int count = 4, size_t bufferSize = 16 * 1024 * 1024);
     
     static DataWriterSupplier* sorted(
+        const FileFormat* format,
         const Genome* genome,
         const char* tempFileName,
         size_t tempBufferMemory,

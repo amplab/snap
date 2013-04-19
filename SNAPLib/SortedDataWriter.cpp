@@ -98,11 +98,13 @@ class SortedDataFilterSupplier : public DataWriter::FilterSupplier
 public:
 
     SortedDataFilterSupplier(
+        const FileFormat* i_fileFormat,
         const Genome* i_genome,
         const char* i_tempFileName,
         const char* i_sortedFileName,
         DataWriter::FilterSupplier* i_sortedFilterSupplier)
         :
+        format(i_fileFormat),
         genome(i_genome),
         FilterSupplier(DataWriter::CopyFilter),
         tempFileName(i_tempFileName),
@@ -131,6 +133,7 @@ private:
     bool mergeSort();
 
     const Genome*                   genome;
+    const FileFormat*               format;
     const char*                     tempFileName;
     const char*                     sortedFileName;
     DataWriter::FilterSupplier*     sortedFilterSupplier;
@@ -174,7 +177,6 @@ SortedDataFilter::onNextBatch(
     size_t target = 0;
     for (VariableSizeVector<SortEntry>::iterator i = locations.begin(); i != locations.end(); i++) {
         memcpy(toBuffer + target, fromBuffer + i->offset, i->length);
-        i->offset = offset + target; // set correct file offset
         target += i->length;
     }
     
@@ -236,10 +238,13 @@ SortedDataFilterSupplier::addBlock(
 SortedDataFilterSupplier::mergeSort()
 {
     // merge sort from temp file into sorted file
-    FileFormat* format;
 #if USE_DEVTEAM_OPTIONS
     printf("sorting...");
     _int64 start = timeInMillis();
+    _int64 startReadWaitTime = DataReader::ReadWaitTime;
+    _int64 startReleaseWaitTime = DataReader::ReleaseWaitTime;
+    _int64 startWriteWaitTime = DataWriter::WaitTime;
+    _int64 startWriteFilterTime = DataWriter::FilterTime;
 #endif
 
     // set up buffered output
@@ -254,7 +259,7 @@ SortedDataFilterSupplier::mergeSort()
     for (SortBlockVector::iterator i = blocks.begin(); i != blocks.end(); i++) {
         i->reader = readerSupplier->getDataReader(8192); // todo: parameterize max read len
         i->reader->init(tempFileName);
-        i->reader->reinit(i->start, i->length);
+        i->reader->reinit(i->start, i->bytes);
     }
 
     // write out header
@@ -291,6 +296,7 @@ SortedDataFilterSupplier::mergeSort()
         b->reader->getData(&b->data, &bytes);
         format->getSortInfo(genome, b->data, bytes, &b->location, &b->length);
     }
+    unsigned current = 0; // current location for validation
     while (true) {
         int smallest = -1, second = -1;
         for (int i = 0; i < blocks.size(); i++) {
@@ -298,6 +304,7 @@ SortedDataFilterSupplier::mergeSort()
             if (b->reader == NULL) {
                 continue;
             }
+            _ASSERT(b->location >= current);
             if (smallest == -1 || b->location < blocks[smallest].location) {
                 second = smallest;
                 smallest = i;
@@ -323,8 +330,13 @@ SortedDataFilterSupplier::mergeSort()
                 }
             }
             memcpy(writeBuffer, b->data, b->length);
+            total++;
             writer->advance(b->length);
+            writeBytes -= b->length;
+            writeBuffer += b->length;
             b->reader->advance(b->length);
+            _ASSERT(b->location >= current);
+            current = b->location;
             _int64 readBytes;
             if (! b->reader->getData(&b->data, &readBytes)) {
                 b->reader->nextBatch();
@@ -332,10 +344,12 @@ SortedDataFilterSupplier::mergeSort()
                     _ASSERT(b->reader->isEOF());
                     delete b->reader;
                     b->reader = NULL;
+                    break;
                 }
             }
+            unsigned previous = b->location;
             format->getSortInfo(genome, b->data, readBytes, &b->location, &b->length);
-            _ASSERT(b->length <= readBytes);
+            _ASSERT(b->length <= readBytes && b->location >= previous);
         }
     }
     
@@ -349,14 +363,21 @@ SortedDataFilterSupplier::mergeSort()
     }
 
 #if USE_DEVTEAM_OPTIONS
-    printf("sorted %lld reads in %u blocks, %lld s\n",
-        total, blocks.size(), (timeInMillis() - start)/1000);
+    printf("sorted %lld reads in %u blocks, %lld s\n"
+        "read wait align %.3f s + merge %.3f s, read release align %.3f s + merge %.3f s\n"
+        "write wait %.3f s align + %.3f s merge, write filter %.3f s align + %.3f s merge\n",
+        total, blocks.size(), (timeInMillis() - start)/1000,
+        startReadWaitTime * 1e-9, (DataReader::ReadWaitTime - startReadWaitTime) * 1e-9,
+        startReleaseWaitTime * 1e-9, (DataReader::ReleaseWaitTime - startReleaseWaitTime) * 1e-9,
+        startWriteWaitTime * 1e-9, (DataWriter::WaitTime - startWriteWaitTime) * 1e-9,
+        startWriteFilterTime * 1e-9, (DataWriter::FilterTime - startWriteFilterTime) * 1e-9);
 #endif
     return true;
 }
 
     DataWriterSupplier*
 DataWriterSupplier::sorted(
+    const FileFormat* format,
     const Genome* genome,
     const char* tempFileName,
     size_t tempBufferMemory,
@@ -369,6 +390,6 @@ DataWriterSupplier::sorted(
         ? tempBufferMemory / (bufferCount * numThreads)
         : max((size_t) 16 * 1024 * 1024, ((size_t) genome->getCountOfBases() / 3) / bufferCount);
     DataWriter::FilterSupplier* filterSupplier =
-        new SortedDataFilterSupplier(genome, tempFileName, sortedFileName, sortedFilterSuppler);
+        new SortedDataFilterSupplier(format, genome, tempFileName, sortedFileName, sortedFilterSuppler);
     return DataWriterSupplier::create(tempFileName, filterSupplier, bufferCount, bufferSize);
 }

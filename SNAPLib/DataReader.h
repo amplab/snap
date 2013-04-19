@@ -131,6 +131,11 @@ public:
     // get pointer to extra data area for current batch
     // todo: allow this to grow dynamically while keeping stable pointers to previous data
     virtual void getExtra(char** o_extra, _int64* o_length) = 0;
+
+    // timing for performance tuning (in nanos)
+    static volatile _int64 ReadWaitTime;
+    static volatile _int64 ReleaseWaitTime;
+
 protected:
     DataReader(bool i_autoRelease) : autoRelease(i_autoRelease) {}
     const bool autoRelease;
