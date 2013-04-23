@@ -187,6 +187,7 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
         } else if (status0 == MultipleHits && loc0 == 0xFFFFFFFF) {
             numIgnoredMulti++;
             result->status[r] = MultipleHits;
+            result->mapq[r] = 0;
         }
     }
     
