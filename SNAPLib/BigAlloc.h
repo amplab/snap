@@ -30,7 +30,7 @@ Revision History:
 void *BigAllocProfile(
         size_t      sizeToAllocate,
         size_t      *sizeAllocated = NULL,
-        char*       caller = NULL);
+        const char* caller = NULL);
 
 #else
 void *BigAlloc(

@@ -53,7 +53,7 @@ using std::map;
 using std::string;
 static map<string,_int64> times;
 
-void addTime(char* fn, int line, _int64 time)
+void addTime(const char* fn, int line, _int64 time)
 {
     if (time > 0) {
         char s[20];
@@ -63,14 +63,14 @@ void addTime(char* fn, int line, _int64 time)
     }
 }
 
-void AcquireExclusiveLockProfile(ExclusiveLock *lock, char* fn, int line)
+void AcquireExclusiveLockProfile(ExclusiveLock *lock, const char* fn, int line)
 {
     _int64 start = timeInMillis();
     AcquireExclusiveLock(lock);
     addTime(fn, line, timeInMillis() - start);
 }
 
-bool WaitForSingleWaiterObjectProfile(SingleWaiterObject *singleWaiterObject, char* fn, int line)
+bool WaitForSingleWaiterObjectProfile(SingleWaiterObject *singleWaiterObject, const char* fn, int line)
 {
     _int64 start = timeInMillis();
     bool result = WaitForSingleWaiterObject(singleWaiterObject);
@@ -78,7 +78,7 @@ bool WaitForSingleWaiterObjectProfile(SingleWaiterObject *singleWaiterObject, ch
     return result;
 }
 
-void WaitForEventProfile(EventObject *eventObject, char* fn, int line)
+void WaitForEventProfile(EventObject *eventObject, const char* fn, int line)
 {
     _int64 start = timeInMillis();
     WaitForEvent(eventObject); 
@@ -1680,7 +1680,7 @@ FileMapper::createMapping(size_t offset, size_t amountToMap)
 	    return NULL;
     }
 
-    int r = madvise(mappedBase, min((size_t) madviseSize, amountToMap + beginRounding), MADV_WILLNEED);
+    int r = madvise(mappedBase, min((size_t) madviseSize, amountToMap + beginRounding), MADV_WILLNEED | MADV_SEQUENTIAL);
     _ASSERT(r == 0);
     lastPosMadvised = 0;
     amountMapped = amountToMap;

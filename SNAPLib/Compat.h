@@ -159,7 +159,7 @@ void PrintWaitProfile();
 //
 #ifdef PROFILE_WAIT
 #define AcquireExclusiveLock(lock) AcquireExclusiveLockProfile((lock), __FUNCTION__, __LINE__)
-void AcquireExclusiveLockProfile(ExclusiveLock *lock, char* fn, int line);
+void AcquireExclusiveLockProfile(ExclusiveLock *lock, const char* fn, int line);
 #else
 void AcquireExclusiveLock(ExclusiveLock *lock);
 #endif
@@ -179,7 +179,7 @@ void DestroySingleWaiterObject(SingleWaiterObject *waiter);
 void SignalSingleWaiterObject(SingleWaiterObject *singleWaiterObject);
 #ifdef PROFILE_WAIT
 #define WaitForSingleWaiterObject(o) WaitForSingleWaiterObjectProfile((o), __FUNCTION__, __LINE__)
-bool WaitForSingleWaiterObjectProfile(SingleWaiterObject *singleWaiterObject, char* fn, int line);
+bool WaitForSingleWaiterObjectProfile(SingleWaiterObject *singleWaiterObject, const char* fn, int line);
 #else
 bool WaitForSingleWaiterObject(SingleWaiterObject *singleWaiterObject);
 #endif
@@ -198,7 +198,7 @@ void AllowEventWaitersToProceed(EventObject *eventObject);
 void PreventEventWaitersFromProceeding(EventObject *eventObject);
 #ifdef PROFILE_WAIT
 #define WaitForEvent(o) WaitForEventProfile((o), __FUNCTION__, __LINE__)
-void WaitForEventProfile(EventObject *eventObject, char* fn, int line); 
+void WaitForEventProfile(EventObject *eventObject, const char* fn, int line); 
 #else
 void WaitForEvent(EventObject *eventObject); 
 #endif

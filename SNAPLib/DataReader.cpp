@@ -1209,10 +1209,11 @@ public:
             // no per-batch expansion factor, so can read entire file as a batch
             return new MemMapDataReader(1, 0, overflowBytes, 0, autoRelease);
         } else {
-            // break up into 16Mb batches
-            _int64 batch = 16 * 1024 * 1024;
+            // break up into 4Mb batches
+            _int64 batch = 4 * 1024 * 1024;
             _int64 extra = (_int64)(batch * extraFactor);
-            return new MemMapDataReader(3, batch, overflowBytes, extra, autoRelease);
+            int buffers = autoRelease ? 3 : (ThreadCount + max(ThreadCount / 2, 4));
+            return new MemMapDataReader(buffers, batch, overflowBytes, extra, autoRelease);
         }
     }
 };
