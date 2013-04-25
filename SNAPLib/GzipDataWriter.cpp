@@ -34,7 +34,7 @@ class GzipSharedContext
 public:
     GzipSharedContext(bool i_bam, size_t i_chunkSize, int i_numThreads, bool i_bindToProcessors)
         : stop(false), bam(i_bam), numThreads(i_numThreads), running(0), 
-        range(1, 1, 5, 0, 200, 10), chunkSize(i_chunkSize), bindToProcessors(i_bindToProcessors)
+        nChunks(0), chunkSize(i_chunkSize), bindToProcessors(i_bindToProcessors)
     {
         CreateEventObject(&begin);
         PreventEventWaitersFromProceeding(&begin);
@@ -42,9 +42,9 @@ public:
         PreventEventWaitersFromProceeding(&finish);
     }
 
-    size_t* run(int nChunks, char* i_input, char* i_output)
+    size_t* run(int i_nChunks, char* i_input, char* i_output)
     {
-        range = RangeSplitter(nChunks, numThreads, 5, 0, 200, 10);
+        nChunks = i_nChunks;
         sizes.clear();
         sizes.extend(nChunks);
         running = numThreads;
@@ -68,7 +68,7 @@ public:
     bool stop;
     EventObject begin, finish; // start / finish chunk of compression
     VariableSizeVector<size_t> sizes;
-    RangeSplitter range;
+    int nChunks;
     const size_t chunkSize;
     const bool bam;
     volatile int running;
@@ -191,14 +191,13 @@ GzipContext::runThread()
         }
         //printf("zip task thread %d begin\n", GetCurrentThreadId());
         _int64 start = timeInMillis();
-        _int64 begin, length;
-        while (shared->range.getNextRange(&begin, &length)) {
-            //printf("zip task thread %d range %lld + %lld\n", GetCurrentThreadId(), begin, length);
-            for (int i = (int) begin; i < (int) (begin + length); i++) {
-                shared->sizes[i] = GzipWriterFilter::compressChunk(zstream, shared->bam,
-                    shared->output + i * shared->chunkSize, shared->chunkSize, 
-                    shared->input + i * shared->chunkSize, shared->chunkSize);
-            }
+        int n = (shared->nChunks + shared->numThreads - 1) / shared->numThreads;
+        int begin = threadNum * n;
+        int end = min(begin + n, shared->nChunks);
+        for (int i = begin; i < end; i++) {
+            shared->sizes[i] = GzipWriterFilter::compressChunk(zstream, shared->bam,
+                shared->output + i * shared->chunkSize, shared->chunkSize, 
+                shared->input + i * shared->chunkSize, shared->chunkSize);
         }
         //printf("zip task thread %d done %lld ms\n", GetCurrentThreadId(), timeInMillis() - start);
         if (InterlockedDecrementAndReturnNewValue(&shared->running) == 0) {
@@ -224,11 +223,13 @@ GzipWriterFilter::GzipWriterFilter(
     zstream.zalloc = zalloc;
     zstream.zfree = zfree;
     zstream.opaque = &heap;
-    context.totalThreads = i_supplier->numThreads;
-    context.bindToProcessors = i_supplier->bindToProcessors;
-    context.shared = &shared;
-    task = new ParallelTask<GzipContext>(&context);
-    task->fork();
+    if (i_supplier->multiThreaded) {
+        context.totalThreads = i_supplier->numThreads;
+        context.bindToProcessors = i_supplier->bindToProcessors;
+        context.shared = &shared;
+        task = new ParallelTask<GzipContext>(&context);
+        task->fork();
+    }
 }
 
     void

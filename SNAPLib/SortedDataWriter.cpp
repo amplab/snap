@@ -23,6 +23,7 @@ Environment:
 #include "BufferedAsync.h"
 #include "VariableSizeVector.h"
 #include "FileFormat.h"
+#include "PriorityQueue.h"
 #include "exit.h"
 
 #define USE_DEVTEAM_OPTIONS 1
@@ -291,32 +292,22 @@ SortedDataFilterSupplier::mergeSort()
     // merge temp blocks into output
     _int64 total = 0;
     // get initial merge sort data
+    // queue using complement of location since priority queue is largest first
+    typedef PriorityQueue<unsigned,int,-3> BlockQueue;
+    BlockQueue queue;
     for (SortBlockVector::iterator b = blocks.begin(); b != blocks.end(); b++) {
         _int64 bytes;
         b->reader->getData(&b->data, &bytes);
         format->getSortInfo(genome, b->data, bytes, &b->location, &b->length);
+        queue.put(b - blocks.begin(), ~b->location); 
     }
     unsigned current = 0; // current location for validation
-    while (true) {
-        int smallest = -1, second = -1;
-        for (int i = 0; i < blocks.size(); i++) {
-            SortBlock* b = &blocks[i];
-            if (b->reader == NULL) {
-                continue;
-            }
-            _ASSERT(b->location >= current);
-            if (smallest == -1 || b->location < blocks[smallest].location) {
-                second = smallest;
-                smallest = i;
-            } else if (second == -1 || b->location < blocks[second].location) {
-                second = i;
-            }
-        }
-        if (smallest == -1) {
-            break;
-        }
-        unsigned limit = second != -1 ? blocks[second].location : UINT32_MAX;
-        SortBlock* b = &blocks[smallest];
+    while (queue.size() > 0) {
+        unsigned secondLocation;
+        int smallestIndex = queue.pop();
+        int secondIndex = queue.size() > 0 ? queue.peek(&secondLocation) : -1;
+        unsigned limit = secondIndex != -1 ? ~secondLocation : UINT32_MAX;
+        SortBlock* b = &blocks[smallestIndex];
         char* writeBuffer;
         size_t writeBytes;
         writer->getBuffer(&writeBuffer, &writeBytes);
@@ -350,6 +341,9 @@ SortedDataFilterSupplier::mergeSort()
             unsigned previous = b->location;
             format->getSortInfo(genome, b->data, readBytes, &b->location, &b->length);
             _ASSERT(b->length <= readBytes && b->location >= previous);
+        }
+        if (b->reader != NULL) {
+            queue.put(smallestIndex, ~b->location);
         }
     }
     

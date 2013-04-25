@@ -28,6 +28,52 @@ Revision History:
 bool BigAllocUseHugePages = true;
 
 
+#ifdef PROFILE_BIGALLOC
+
+struct ProfileEntry
+{
+    const char*   caller;
+    size_t  total;
+    size_t  count;
+};
+
+static const int MaxCallers = 1000;
+static int NCallers = 0;
+static int LastCaller = 0;
+static ProfileEntry AllocProfile[1000];
+
+void* BigAllocInternal(size_t, size_t*);
+
+void *BigAllocProfile(
+        size_t      sizeToAllocate,
+        size_t      *sizeAllocated,
+        const char  *caller)
+{
+    if (caller) {
+        if (LastCaller >= NCallers || strcmp(AllocProfile[LastCaller].caller, caller)) {
+            LastCaller = NCallers;
+            for (int i = 0; i < NCallers; i++) {
+                if (0 == strcmp(AllocProfile[i].caller, caller)) {
+                    LastCaller = i;
+                    break;
+                }
+            }
+            if (LastCaller == NCallers && NCallers < MaxCallers) {
+                NCallers++;
+                AllocProfile[LastCaller].caller = caller;
+                AllocProfile[LastCaller].total = AllocProfile[LastCaller].count = 0;
+            }
+        }
+        if (LastCaller < MaxCallers) {
+            AllocProfile[LastCaller].count++;
+            AllocProfile[LastCaller].total += sizeToAllocate;
+        }
+    }
+    return BigAllocInternal(sizeToAllocate, sizeAllocated);
+}
+
+#endif
+
 #ifdef _MSC_VER
 
 //
@@ -213,49 +259,7 @@ Return Value:
 
 }
 
-#ifdef PROFILE_BIGALLOC
-
-struct ProfileEntry
-{
-    char*   caller;
-    size_t  total;
-    size_t  count;
-};
-
-static const int MaxCallers = 1000;
-static int NCallers = 0;
-static int LastCaller = 0;
-static ProfileEntry AllocProfile[1000];
-
-void *BigAllocProfile(
-        size_t      sizeToAllocate,
-        size_t      *sizeAllocated,
-        char        *caller)
-{
-    if (caller) {
-        if (LastCaller >= NCallers || strcmp(AllocProfile[LastCaller].caller, caller)) {
-            LastCaller = NCallers;
-            for (int i = 0; i < NCallers; i++) {
-                if (0 == strcmp(AllocProfile[i].caller, caller)) {
-                    LastCaller = i;
-                    break;
-                }
-            }
-            if (LastCaller == NCallers && NCallers < MaxCallers) {
-                NCallers++;
-                AllocProfile[LastCaller].caller = caller;
-                AllocProfile[LastCaller].total = AllocProfile[LastCaller].count = 0;
-            }
-        }
-        if (LastCaller < MaxCallers) {
-            AllocProfile[LastCaller].count++;
-            AllocProfile[LastCaller].total += sizeToAllocate;
-        }
-    }
-    return BigAllocInternal(sizeToAllocate, sizeAllocated);
-}
-
-#else
+#ifndef BIGALLOC_PROFILE
 void *BigAlloc(
         size_t      sizeToAllocate,
         size_t      *sizeAllocated)
@@ -302,7 +306,11 @@ bool BigCommit(
 
 #else /* no _MSC_VER */
 
+#ifdef PROFILE_BIGALLOC
+void *BigAllocInternal(
+#else
 void *BigAlloc(
+#endif
         size_t      sizeToAllocate,
         size_t      *sizeAllocated)
 {
@@ -363,7 +371,11 @@ void *BigReserve(
     if (pageSize != NULL) {
         *pageSize = 4096;
     }
+#ifdef PROFILE_BIGALLOC
+    return BigAllocInternal(sizeToReserve, sizeReserved);
+#else
     return BigAlloc(sizeToReserve, sizeReserved);
+#endif
 }
 
 bool BigCommit(
