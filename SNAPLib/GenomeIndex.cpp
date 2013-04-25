@@ -52,7 +52,13 @@ static void usage()
             "               Larger numbers use more memory but work better with more repetitive genomes.  Smaller numbers reduce the memory\n"
             "               footprint, but may cause the index build to fail.  Making -O larger than necessary will not affect the resuting\n"
             "               index.  Factor must be between 1 and 1000, and the default is 40.\n"
-            " -tMaxThreads  Specify the maximum number of threads to use. Default is the number of cores\n",
+            " -tMaxThreads  Specify the maximum number of threads to use. Default is the number of cores\n"
+            " -B<chars>     Specify characters to use as chromosome name terminators in the FASTA header line; these characters and anything after are\n"
+            "               not part of the chromosome name.  You must specify all characters on a single -B switch.  So, for example, with -B_|,\n"
+            "               the FASTA header line '>chr1|Chromosome 1' would generate a chromosome named 'chr1'.  There's a separate flag for\n"
+            "               indicating that a space is a terminator.\n"
+            " -bSpace       Indicates that the space character is a terminator for chromosome names (see -B above).  This may be used in addition\n"
+            "               to other terminators specified by -B.  -B and -bSpace are case sensitive.\n",
             DEFAULT_SEED_SIZE,
             DEFAULT_SLACK);
     exit(1);
@@ -77,6 +83,8 @@ GenomeIndex::runIndexer(
     double slack = DEFAULT_SLACK;
     bool computeBias = true;
     _uint64 overflowTableFactor = 40;
+    const char *pieceNameTerminatorCharacters = NULL;
+    bool spaceIsAPieceNameTerminator = false;
 
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
@@ -109,6 +117,10 @@ GenomeIndex::runIndexer(
                 fprintf(stderr,"maxThreads must be between 1 and 100 inclusive (and you need to not leave a space after '-t')\n");
                 exit(1);
             }
+        } else if (argv[n][0] == '-' && argv[n][1] == 'B') {
+            pieceNameTerminatorCharacters = argv[n] + 2;
+        } else if (!strcmp(argv[n], "-bSpace")) {
+            spaceIsAPieceNameTerminator = true;
         } else {
             fprintf(stderr, "Invalid argument: %s\n\n", argv[n]);
             usage();
@@ -124,7 +136,7 @@ GenomeIndex::runIndexer(
 
     printf("Hash table slack %lf\nLoading FASTA file '%s' into memory...", slack, fastaFile);
     _int64 start = timeInMillis();
-    const Genome *genome = ReadFASTAGenome(fastaFile);
+    const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator);
     if (NULL == genome) {
         fprintf(stderr, "Unable to read FASTA file\n");
         exit(1);

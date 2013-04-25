@@ -71,7 +71,7 @@ _uint64 getFileSize(const char *fileName)
 
 
     const Genome *
-ReadFASTAGenome(const char *fileName)
+ReadFASTAGenome(const char *fileName, const char *pieceNameTerminatorCharacters, bool spaceIsAPieceNameTerminator)
 {
     //
     // We need to know a bound on the size of the genome before we create the Genome object.
@@ -100,6 +100,20 @@ ReadFASTAGenome(const char *fileName)
     while (NULL != fgets(lineBuffer,lineBufferSize,fastaFile)) {
         if (lineBuffer[0] == '>') {
             lineBuffer[strlen(lineBuffer) - 1] = '\0';   // Remove the trailing newline from fgets
+            if (NULL != pieceNameTerminatorCharacters) {
+                for (int i = 0; i < strlen(pieceNameTerminatorCharacters); i++) {
+                    char *terminator = strchr(lineBuffer+1, pieceNameTerminatorCharacters[i]);
+                    if (NULL != terminator) {
+                        *terminator = '\0';
+                    }
+                }
+            }
+            if (spaceIsAPieceNameTerminator) {
+                char *terminator = strchr(lineBuffer, ' ');
+                if (NULL != terminator) {
+                    *terminator = '\0';
+                }
+            }
             genome->startPiece(lineBuffer+1);
         } else {
             //

@@ -27,7 +27,7 @@ Revision History:
 #include "Genome.h"
 
     const Genome *
-ReadFASTAGenome(const char *fileName);
+ReadFASTAGenome(const char *fileName, const char *pieceNameTerminatorCharacters, bool spaceIsAPieceNameTerminator);
 
 //
 // The FASTA appending functions return whether the write was successful.
