@@ -36,7 +36,7 @@ struct ReadQueueElement {
     ReadQueueElement()
         : next(NULL), prev(NULL)
     {
-        reads = (Read*) BigAlloc(nReads * sizeof(Read));
+        reads = (Read*) BigAlloc(MaxReadsPerElement * sizeof(Read));
     }
 
     ~ReadQueueElement()
@@ -46,8 +46,7 @@ struct ReadQueueElement {
     }
 
     // note this should be about read buffer size for input reads
-    // todo: make this variable (e.g. SAM vs. BAM vs. FASTQ have different read sizes, we might want to vary buffer size
-    static const int    nReads = 100000; 
+    static const int    MaxReadsPerElement = 40000; 
     ReadQueueElement    *next;
     ReadQueueElement    *prev;
     int                 totalReads;
@@ -122,18 +121,13 @@ private:
 
     ReadQueueElement    readyQueue[2];      // Queue [1] is used only when there are two single end readers
 
-    DataBatch           batch[2];           // batch of each read in pair currently, 0.asKey <= 1.asKey
-    // used when paired:
-    // creates own unique batch ID for each combination of input batch IDs
     BatchTracker        tracker;            // track batches used in queues, use refcount per element (not per read)
-    unsigned            nextBatch;          // allocate my own ids for pairs
-    typedef pair<DataBatch,DataBatch> BatchPair;
-    typedef VariableSizeMap<DataBatch::Key,BatchPair> BatchPairMap;
-    BatchPairMap        batchMap;
 
     EventObject         throttle[2];        // Two throttles, one for each of the readers.  At least one must be open at all times.
     int balance;                            // The size of readyQueue[0] - the size of readyQueue[1].  This is used to throttle.
     static const int MaxImbalance = 5;      // Engage the throttle when |balance| > MaxImbalance
+
+    volatile unsigned   elementSize;        // reads per element, used to ensure paired single readers use same size that is ~ buffer size
  
     int                 nReadersRunning;
     int                 nSuppliersRunning;

@@ -188,6 +188,7 @@
     <ClInclude Include="PairedAligner.h" />
     <ClInclude Include="PairedEndAligner.h" />
     <ClInclude Include="ParallelTask.h" />
+    <ClInclude Include="PriorityQueue.h" />
     <ClInclude Include="ProbabilityDistance.h" />
     <ClInclude Include="Range.h" />
     <ClInclude Include="RangeSplitter.h" />

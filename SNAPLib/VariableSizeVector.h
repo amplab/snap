@@ -38,7 +38,18 @@ public:
             count = 0;
         }
     }
+    
+private:
+    inline void increase()
+    {
+        if (entries == NULL) {
+            reserve(capacity);
+        } else if (count == capacity) {
+            reserve((int) (((_int64) count * grow) / 100));
+        }
+    }
 
+public:
     void operator=(VariableSizeVector<V>& other)
     {
         entries = other.entries;
@@ -77,7 +88,7 @@ public:
         }
     }
 
-    inline int size()
+    inline int size() const
     {
         return count;
     }
@@ -95,15 +106,36 @@ public:
     
     inline void push_back(const V& value)
     {
-        if (entries == NULL) {
-            reserve(capacity);
-        } else if (count == capacity) {
-            reserve((int) (((_int64) count * grow) / 100));
-        }
+        increase();
         _ASSERT(count < capacity);
         entries[count++] = value;
     }
     
+    typedef bool comparator(const V& a, const V& b);
+
+    inline int insertionIndex(const V& value, comparator compare, bool before = false)
+    {
+        V* p = before ? std::lower_bound(entries, entries + count, value, compare)
+            : std::upper_bound(entries, entries + count, value, compare);
+        int index = p - entries;
+        _ASSERT(index >= 0 && index <= count);
+        return index;
+    }
+    
+    // insert into sorted list, AFTER existing elements with same value
+    inline int insert(const V& value, comparator compare, bool before = false)
+    {
+        int index = insertionIndex( value, compare, before);
+        increase(); // todo: could fold memmove into new array copy to save time...
+        _ASSERT(count < capacity);
+        if (index < count) {
+            memmove(entries + (index + 1), entries + index, (count - index) * sizeof(V));
+        }
+        entries[index] = value;
+        count++;
+        return index;
+    }
+
     inline bool add(const V& value)
     {
         for (int i = 0; i < count; i++) {
@@ -136,7 +168,7 @@ public:
         }
     }
 
-    inline V& operator[](int index)
+    inline V& operator[](int index) const
     {
         _ASSERT(index >= 0 && index < count);
         return entries[index];
@@ -152,6 +184,15 @@ public:
     iterator end()
     {
         return &entries[count];
+    }
+    
+    inline void remove(iterator p)
+    {
+        _ASSERT(p >= entries && p < entries + count);
+        if (p < entries + count - 1) {
+            memmove(p, p + 1, (count - (p - entries) - 1) * sizeof(V));
+        }
+        count--;
     }
 
 private:

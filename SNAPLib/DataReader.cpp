@@ -77,7 +77,7 @@ private:
     LARGE_INTEGER       fileSize;
     HANDLE              hFile;
   
-    static const unsigned bufferSize = 32 * 1024 * 1024 - 4096;
+    static const unsigned bufferSize = 4 * 1024 * 1024 - 4096;
 
     enum BufferState {Empty, Reading, Full, InUse};
 
@@ -498,8 +498,13 @@ WindowsOverlappedDataReader::startIo()
         info->lap.Offset = readOffset.LowPart;
         info->lap.OffsetHigh = readOffset.HighPart;
         info->fileOffset = readOffset.QuadPart;
+
+        readOffset.QuadPart += info->nBytesThatMayBeginARead;
+        info->state = Reading;
+        info->offset = 0;
          
         //printf("startIo on %d at %lld for %uB\n", index, readOffset, amountToRead);
+        ReleaseExclusiveLock(&lock);
         if (!ReadFile(
                 hFile,
                 info->buffer,
@@ -512,10 +517,7 @@ WindowsOverlappedDataReader::startIo()
                 soft_exit(1);
             }
         }
-
-        readOffset.QuadPart += info->nBytesThatMayBeginARead;
-        info->state = Reading;
-        info->offset = 0;
+        AcquireExclusiveLock(&lock);
     }
     if (nextBufferForConsumer == -1) {
         if (nextBufferForConsumer == -1) {
@@ -570,7 +572,7 @@ public:
     WindowsOverlappedDataSupplier(bool autoRelease) : DataSupplier(autoRelease) {}
     virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0) const
     {
-        int buffers = autoRelease ? 3 : (ThreadCount + max(ThreadCount / 2, 4));
+        int buffers = autoRelease ? 2 : (ThreadCount + max(ThreadCount * 3 / 4, 3));
         return new WindowsOverlappedDataReader(buffers, overflowBytes, extraFactor, autoRelease);
     }
 };
@@ -1212,8 +1214,7 @@ public:
             // break up into 4Mb batches
             _int64 batch = 4 * 1024 * 1024;
             _int64 extra = (_int64)(batch * extraFactor);
-            int buffers = autoRelease ? 3 : (ThreadCount + max(ThreadCount / 2, 4));
-            return new MemMapDataReader(buffers, batch, overflowBytes, extra, autoRelease);
+            return new MemMapDataReader(autoRelease ? 2 : ThreadCount + min(ThreadCount * 3 / 4, 3), batch, overflowBytes, extra, autoRelease);
         }
     }
 };
