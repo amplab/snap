@@ -419,7 +419,7 @@ read_loop: // might return here once with goto to ensure both threads have same 
             if (NULL != reader) {
                 Read* read = &element->reads[element->totalReads];
                 if (extraReadCount > 0) {
-                    int copy = min(extraReadCount, elementSize - element->totalReads);
+                    int copy = min((unsigned) extraReadCount, elementSize - element->totalReads);
                     memcpy(read, extraReads, copy * sizeof(Read));
                     if (copy < extraReadCount) {
                         memmove(extraReads, extraReads + copy, (extraReadCount - copy) * sizeof(Read));

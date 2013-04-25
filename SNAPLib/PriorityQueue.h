@@ -40,7 +40,7 @@ public:
             // find where it is in the queue
             P old = *p;
             Entry e(value, old);
-            EntryVector::iterator i = std::lower_bound(queue.begin(), queue.end(), e, Entry::comparator);
+            typename EntryVector::iterator i = std::lower_bound(queue.begin(), queue.end(), e, Entry::comparator);
             _ASSERT(i != queue.end());
             while (i->value != value) {
                 i++;
@@ -56,7 +56,7 @@ public:
                 *j = e2;
             } else {
                 // move towards back
-                EntryVector::iterator j = std::lower_bound(i, queue.end(), e2, Entry::comparator);
+                typename EntryVector::iterator j = std::lower_bound(i, queue.end(), e2, Entry::comparator);
                 if (j == queue.end()) {
                     _ASSERT(i == j - 1);
                     j = i;
