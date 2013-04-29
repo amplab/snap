@@ -880,17 +880,21 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextLowerHit(unsigned *genomeL
     // Run through the lookups pushing up any that are at the most recently returned 
     //
     for (unsigned i = 0; i < nLookupsUsed; i++) {
-        _ASSERT(lookups[i].currentHitForIntersection == lookups[i].nHits || lookups[i].hits[lookups[i].currentHitForIntersection] - lookups[i].seedOffset <= mostRecentLocationReturned);
+        _ASSERT(lookups[i].currentHitForIntersection == lookups[i].nHits || lookups[i].hits[lookups[i].currentHitForIntersection] - lookups[i].seedOffset <= mostRecentLocationReturned || 
+            lookups[i].hits[lookups[i].currentHitForIntersection] < lookups[i].seedOffset);
+
         if (lookups[i].currentHitForIntersection != lookups[i].nHits && lookups[i].hits[lookups[i].currentHitForIntersection] - lookups[i].seedOffset == mostRecentLocationReturned) {
             lookups[i].currentHitForIntersection++;
         }
 
         if (lookups[i].currentHitForIntersection != lookups[i].nHits) {
-            if (foundLocation < lookups[i].hits[lookups[i].currentHitForIntersection] - lookups[i].seedOffset) {
+            if (foundLocation < lookups[i].hits[lookups[i].currentHitForIntersection] - lookups[i].seedOffset && // found location is OK
+                lookups[i].hits[lookups[i].currentHitForIntersection] >= lookups[i].seedOffset) // found location isn't too small to push us before the beginning of the genome
+            { 
                 *genomeLocation = foundLocation = lookups[i].hits[lookups[i].currentHitForIntersection] - lookups[i].seedOffset;
                 *seedOffsetFound = lookups[i].seedOffset;
+                anyFound = true;
             }
-            anyFound = true;
         }
     }
  
