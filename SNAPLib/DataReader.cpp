@@ -73,6 +73,9 @@ private:
     // must hold the lock to call
     void waitForBuffer(unsigned bufferNumber);
 
+    // must hold the lock to call
+    void addBuffer();
+
     const char*         fileName;
     LARGE_INTEGER       fileSize;
     HANDLE              hFile;
@@ -96,7 +99,8 @@ private:
         int             next, previous; // index of next/previous in free/ready list, -1 if end
     };
 
-    const unsigned      nBuffers;
+    unsigned            nBuffers;
+    const unsigned      maxBuffers;
     _int64              extraBytes;
     _int64              overflowBytes;
     BufferInfo*         bufferInfo;
@@ -107,6 +111,7 @@ private:
     int                 nextBufferForConsumer; // list head (doubly linked), -1 if empty
     int                 lastBufferForConsumer; // list tail, -1 if empty
     HANDLE              releaseEvent;
+    DWORD               releaseWait;
     ExclusiveLock       lock;
 };
 
@@ -115,7 +120,7 @@ WindowsOverlappedDataReader::WindowsOverlappedDataReader(
     _int64 i_overflowBytes,
     double extraFactor,
     bool autoRelease)
-    : DataReader(autoRelease), nBuffers(i_nBuffers), overflowBytes(i_overflowBytes)
+    : DataReader(autoRelease), nBuffers(i_nBuffers), overflowBytes(i_overflowBytes), maxBuffers(4 * i_nBuffers)
 {
     //
     // Initialize the buffer info struct.
@@ -124,11 +129,15 @@ WindowsOverlappedDataReader::WindowsOverlappedDataReader(
     // allocate all the data in one big block
     // NOTE: buffers are not null-terminated (since memmap version can't do it)
     _ASSERT(extraFactor >= 0 && i_nBuffers > 0);
-    bufferInfo = new BufferInfo[nBuffers];
+    bufferInfo = new BufferInfo[maxBuffers];
     extraBytes = max(0LL, (_int64) ((bufferSize + overflowBytes) * extraFactor));
-    char* allocated = (char*) BigAlloc(nBuffers * (bufferSize + extraBytes + overflowBytes));
+    char* allocated = (char*) BigReserve(maxBuffers * (bufferSize + extraBytes + overflowBytes));
     if (NULL == allocated) {
         fprintf(stderr,"WindowsOverlappedDataReader: unable to allocate IO buffer\n");
+        soft_exit(1);
+    }
+    if (! BigCommit(allocated, nBuffers * (bufferSize + extraBytes + overflowBytes))) {
+        fprintf(stderr, "WindowsOverlappedDataReader: ubable to commit IO  buffer\n");
         soft_exit(1);
     }
     for (unsigned i = 0 ; i < nBuffers; i++) {
@@ -155,6 +164,7 @@ WindowsOverlappedDataReader::WindowsOverlappedDataReader(
     lastBufferForConsumer = -1;
     nextBufferForReader = 0;
     releaseEvent = CreateEvent(NULL, TRUE, TRUE, NULL);
+    releaseWait = 5; // wait up to 5 ms before allocating a new buffer
     InitializeExclusiveLock(&lock);
 }
 
@@ -290,6 +300,7 @@ WindowsOverlappedDataReader::getData(
     }
 
     if (info->state != Full) {
+        _ASSERT(info->state != InUse);
         AcquireExclusiveLock(&lock);
         waitForBuffer(nextBufferForConsumer);
         ReleaseExclusiveLock(&lock);
@@ -340,9 +351,14 @@ WindowsOverlappedDataReader::nextBatch()
         if (! first) {
             //printf("WindowsOverlappedDataReader::nextBatch thread %d wait for release\n", GetCurrentThreadId());
             _int64 start = timeInNanos();
-            WaitForSingleObject(releaseEvent, INFINITE);
+            DWORD result = WaitForSingleObject(releaseEvent, releaseWait);
             InterlockedAdd64AndReturnNewValue(&ReleaseWaitTime, timeInNanos() - start);
             //printf("WindowsOverlappedDataReader::nextBatch thread %d released\n", GetCurrentThreadId());
+            if (result == WAIT_TIMEOUT) {
+                AcquireExclusiveLock(&lock);
+                addBuffer();
+                ReleaseExclusiveLock(&lock);
+            }
         }
         first = false;
         startIo();
@@ -540,9 +556,13 @@ WindowsOverlappedDataReader::waitForBuffer(
         // must already have lock to call, release & wait & reacquire
         ReleaseExclusiveLock(&lock);
         _int64 start = timeInNanos();
-        WaitForSingleObject(releaseEvent, INFINITE);
+        DWORD result = WaitForSingleObject(releaseEvent, releaseWait);
         InterlockedAdd64AndReturnNewValue(&ReleaseWaitTime, timeInNanos() - start);
         AcquireExclusiveLock(&lock);
+        if (result == WAIT_TIMEOUT) {
+            // this isn't going to directly make this buffer available, but will reduce pressure
+            addBuffer();
+        }
     }
 
     if (info->state == Full) {
@@ -565,6 +585,41 @@ WindowsOverlappedDataReader::waitForBuffer(
     ResetEvent(info->lap.hEvent);
 }
 
+    void
+WindowsOverlappedDataReader::addBuffer()
+{
+    if (nBuffers == maxBuffers) {
+        //printf("WindowsOverlappedDataReader: addBuffer at limit\n");
+        return;
+    }
+    _ASSERT(nBuffers < maxBuffers);
+    //printf("WindowsOverlappedDataReader: addBuffer %d of %d\n", nBuffers, maxBuffers);
+    size_t bytes = bufferSize + extraBytes + overflowBytes;
+    bufferInfo[nBuffers].buffer = bufferInfo[nBuffers-1].buffer + bytes;
+    if (! BigCommit(bufferInfo[nBuffers].buffer, bytes)) {
+        fprintf(stderr, "WindowsOverlappedDataReader: unable to commit IO buffer\n");
+        soft_exit(1);
+    }
+    bufferInfo[nBuffers].extra = extraBytes > 0 ? bufferInfo[nBuffers].buffer + bytes - extraBytes : NULL;
+
+    bufferInfo[nBuffers].lap.hEvent = CreateEvent(NULL,TRUE,FALSE,NULL);
+    if (NULL == bufferInfo[nBuffers].lap.hEvent) {
+        fprintf(stderr,"WindowsOverlappedDataReader: Unable to create event\n");
+        soft_exit(1);
+    }
+
+    bufferInfo[nBuffers].state = Empty;
+    bufferInfo[nBuffers].isEOF= false;
+    bufferInfo[nBuffers].offset = 0;
+    bufferInfo[nBuffers].next = nextBufferForReader;
+    bufferInfo[nBuffers].previous = -1;
+    nextBufferForReader = nBuffers;
+    nBuffers++;
+    _ASSERT(nBuffers <= maxBuffers);
+    if (nBuffers == maxBuffers) {
+        releaseWait = INFINITE;
+    }
+}
     
 class WindowsOverlappedDataSupplier : public DataSupplier
 {
