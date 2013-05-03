@@ -42,9 +42,11 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         unsigned      minSpacing_,                 // Minimum distance to allow between the two ends.
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
         unsigned      maxBigHits_,
+        unsigned      extraSearchDepth_,
         BigAllocator  *allocator) :
     index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), maxSeeds(__min(10,__min(MAX_MAX_SEEDS,maxSeeds_))), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
-    landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), extraScoreLimit(5) /* should be a parameter */, maxMergeDistance(31) /*also should be a parameter*/
+    landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), maxMergeDistance(31) /*also should be a parameter*/,
+    extraSearchDepth(extraSearchDepth_)
 {
     allocateDynamicMemory(allocator, maxReadSize, maxHits, maxSeeds);
 
@@ -64,8 +66,6 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
 
     genome = index->getGenome();
     genomeSize = genome->getCountOfBases();
-
-    distanceToSearchBeyondBestScore = 2;    // If probability goes down by about 1000x per mismatch, then going more than two steps away make an effect of 1 part per billion, which is too small to care about
 }
     
 IntersectingPairedEndAligner::~IntersectingPairedEndAligner()
@@ -108,7 +108,7 @@ IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, uns
         mateHitLocations[i] = new HitLocationRingBuffer(2 * (maxSpacing + 1) + 2);  // Likewise.
     }
 
-    baseAligner = new(allocator) BaseAligner(index, 1, maxHitsToConsider, maxK/2, maxReadSize, maxSeedsToUse, 4, landauVishkin, reverseLandauVishkin, NULL, allocator);
+    baseAligner = new(allocator) BaseAligner(index, 1, maxHitsToConsider, maxK/2, maxReadSize, maxSeedsToUse, extraSearchDepth, 4, landauVishkin, reverseLandauVishkin, NULL, allocator);
 }
 
     void 
@@ -200,14 +200,14 @@ IntersectingPairedEndAligner::align(
 
     //
     // Initialize the member variables that are effectively stack locals, but are in the object
-    // to aviod having to pass them to score.
+    // to avoid having to pass them to score.
     //
     double probabilityOfBestPair = 0;
     localBestPairProbability[0] = 0;
     localBestPairProbability[1] = 0;
     double probabilityOfAllPairs = 0;
     unsigned bestPairScore = 65536;
-    unsigned scoreLimit = maxK + distanceToSearchBeyondBestScore;
+    unsigned scoreLimit = maxK + extraSearchDepth;
 
     //
     // Phase 1: do the hash table lookups for each of the seeds for each of the reads and add them to the hit sets.
@@ -299,7 +299,7 @@ IntersectingPairedEndAligner::align(
     // possibilities for the pair.  We interleave steps between read0 FORWARD/read1 RC and vice versa as a way of pushing score limit down more quickly.
     //
 
-    scoreLimit = maxK + extraScoreLimit;
+    scoreLimit = maxK + extraSearchDepth;
     struct IntersectionState {
         unsigned            lastSeedOffsetForReadWithFewerHits;
         unsigned            lastGenomeLocationForReadWithFewerHits;
@@ -514,7 +514,7 @@ IntersectingPairedEndAligner::align(
                         bestResultDirection[readWithFewerHits] = setPairDirection[whichSetPairToCheck][readWithFewerHits];
                         bestResultDirection[readWithMoreHits] = setPairDirection[whichSetPairToCheck][readWithMoreHits];
 
-                        scoreLimit = bestPairScore + distanceToSearchBeyondBestScore;
+                        scoreLimit = bestPairScore + extraSearchDepth;
                     }
 
                     probabilityOfAllPairs += pairProbability;

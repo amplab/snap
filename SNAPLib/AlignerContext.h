@@ -106,6 +106,7 @@ public:
     bool                                 computeError;
     bool                                 detailedStats;
     ReadClippingType                     clipping;
+    unsigned                             extraSearchDepth;
     int                                  argc;
     const char                         **argv;
     const char                          *version;

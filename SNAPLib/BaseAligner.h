@@ -47,6 +47,7 @@ public:
         unsigned        i_maxReadSize,
         unsigned        i_maxSeedsToUse,
         unsigned        i_adaptiveConfDiffThreshold,
+        unsigned        i_extraSearchDepth,
         LandauVishkin<1>*i_landauVishkin = NULL,
         LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
         AlignerStats   *i_stats = NULL,
@@ -126,9 +127,7 @@ private:
 
     ProbabilityDistance *probDistance;
 
-    // Maximum distance to merge candidates that differe in indels over.
-    // This can't be bigger than 32, else some bitvectors overflow.
-    // TODO(matei): this seems to work better when we make it lower; why?
+    // Maximum distance to merge candidates that differ in indels over.
     static const unsigned maxMergeDist = 48; // Must be even and <= 64
 
     char rcTranslationTable[256];
@@ -286,6 +285,7 @@ private:
     unsigned maxReadSize;
     unsigned maxSeedsToUse; // Max number of seeds to look up in the hash table
     unsigned adaptiveConfDiffThreshold; // Increase confDiff by 1 if this many seeds are repetitive.
+    unsigned extraSearchDepth;
 
     char *rcReadData;
     char *rcReadQuality;

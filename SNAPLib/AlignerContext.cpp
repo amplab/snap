@@ -162,6 +162,7 @@ AlignerContext::initialize()
     maxDist_ = options->maxDist.start;
     numSeeds_ = options->numSeeds.start;
     adaptiveConfDiff_ = options->adaptiveConfDiff.start;
+    extraSearchDepth = options->extraSearchDepth;
 
     if (options->perfFileName != NULL) {
         perfFile = fopen(options->perfFileName,"a");

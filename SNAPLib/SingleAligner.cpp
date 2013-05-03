@@ -159,6 +159,7 @@ SingleAlignerContext::runIterationThread()
             maxReadSize,
             numSeeds,
             adaptiveConfDiff,
+            extraSearchDepth,
             NULL,               // LV (no need to cache in the single aligner)
             NULL,               // reverse LV
             stats,

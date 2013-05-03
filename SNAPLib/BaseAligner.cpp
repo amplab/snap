@@ -50,13 +50,14 @@ BaseAligner::BaseAligner(
     unsigned        i_maxReadSize,
     unsigned        i_maxSeedsToUse,
     unsigned        i_adaptiveConfDiffThreshold,
+    unsigned        i_extraSearchDepth,
     LandauVishkin<1>*i_landauVishkin,
     LandauVishkin<-1>*i_reverseLandauVishkin,
     AlignerStats   *i_stats,
     BigAllocator   *allocator) : 
         genomeIndex(i_genomeIndex), confDiff(i_confDiff), maxHitsToConsider(i_maxHitsToConsider), maxK(i_maxK), 
         maxReadSize(i_maxReadSize), maxSeedsToUse(i_maxSeedsToUse), readId(-1),
-        adaptiveConfDiffThreshold(i_adaptiveConfDiffThreshold),
+        adaptiveConfDiffThreshold(i_adaptiveConfDiffThreshold), extraSearchDepth(i_extraSearchDepth),
         explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats)
 /*++
 
@@ -75,6 +76,7 @@ Arguments:
     i_maxSeedsToUse     - The maximum number of seeds to use when aligning any read (not counting ones ignored because they resulted in too many
                           hits).  Once we've looked up this many seeds, we just score what we've got.
     i_adaptiveConfDiffThreshold - the number of hash table hits larger than maxHitsToConsider beyond which we effectively increase confDiff
+    i_extraSearchDepth  - How deeply beyond bestScore do we search?
     i_landauVishkin     - an externally supplied LandauVishkin string edit distance object.  This is useful if we're expecting repeated computations and use the LV cache.
     i_reverseLandauVishkin - the same for the reverse direction.
     i_stats             - an object into which we report out statistics
@@ -354,7 +356,7 @@ Return Value:
     probabilityOfAllCandidates = 0.0;
     probabilityOfBestCandidate = 0.0;
 
-    scoreLimit = maxK + 2; // For MAPQ computation
+    scoreLimit = maxK + extraSearchDepth; // For MAPQ computation
 
     while (nSeedsApplied[FORWARD] + nSeedsApplied[RC] < maxSeedsToUse) {
         //
@@ -988,7 +990,7 @@ Return Value:
                 }
 
                 // Update scoreLimit since we may have improved bestScore or secondBestScore
-                scoreLimit = min(bestScore, maxK) + 2;
+                scoreLimit = min(bestScore, maxK) + extraSearchDepth;
             }   // While candidates exist in the element
         }   // If the element could possibly affect the result
 

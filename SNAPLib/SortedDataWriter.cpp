@@ -264,7 +264,6 @@ SortedDataFilterSupplier::mergeSort()
     }
 
     // write out header
-    char* buffer;
     size_t bytes;
     if (headerSize > 0) {
         blocks[0].reader->reinit(0, headerSize);

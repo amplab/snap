@@ -46,6 +46,7 @@ public:
         unsigned      minSpacing_,                 // Minimum distance to allow between the two ends.
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
         unsigned      maxBigHits_,
+        unsigned      extraSearchDepth_,
         BigAllocator  *allocator);
 
     void setLandauVishkin(
@@ -82,14 +83,13 @@ private:
     unsigned        maxReadSize;
     unsigned        maxHits;
     unsigned        maxBigHits;
+    unsigned        extraSearchDepth;
     unsigned        maxK;
-    unsigned        extraScoreLimit;    // How far beyond out best hit to look to improve MAPQ accuracy
     unsigned        maxSeeds;
     static const unsigned MAX_MAX_SEEDS = 30;
     unsigned        minSpacing;
     unsigned        maxSpacing;
     unsigned        seedLen;
-    unsigned        distanceToSearchBeyondBestScore;
     unsigned        maxMergeDistance;
 
     struct HashTableLookup {

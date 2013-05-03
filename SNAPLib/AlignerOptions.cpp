@@ -58,7 +58,8 @@ AlignerOptions::AlignerOptions(
 	extra(NULL),
     rgLineContents(NULL),
     perfFileName(NULL),
-    useTimingBarrier(false)
+    useTimingBarrier(false),
+    extraSearchDepth(2)
 {
     if (forPairedEnd) {
         maxDist             = 15;
@@ -122,6 +123,7 @@ AlignerOptions::usageMessage()
         "  -G   specify a gap penalty to use when generating CIGAR strings\n"
         "  -pf  specify the name of a file to contain the run speed\n"
         "  --hp Indicates not to use huge pages (this may speed up index load and slow down alignment)\n"
+        "  -D   Specifies the extra search depth (the edit distance beyond the best hit that SNAP uses to compute MAPQ).  Default 2\n"
 
 // not written yet        "  -r   Specify the content of the @RG line in the SAM header.\n"
             ,
@@ -317,6 +319,14 @@ AlignerOptions::parse(
     } else if (strcmp(argv[n], "--hp") == 0) {
         BigAllocUseHugePages = false;
         return true;
+	} else if (strcmp(argv[n], "-D") == 0) {
+        if (n + 1 < argc) {
+            extraSearchDepth = atoi(argv[n+1]);
+            n++;
+            return true;
+        } else {
+            fprintf(stderr,"Must specify the desired extra search depth after -D\n");
+        }
     } else if (strlen(argv[n]) >= 2 && '-' == argv[n][0] && 'C' == argv[n][1]) {
         if (strlen(argv[n]) != 4 || '-' != argv[n][2] && '+' != argv[n][2] ||
             '-' != argv[n][3] && '+' != argv[n][3]) {
