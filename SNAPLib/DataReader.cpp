@@ -645,7 +645,7 @@ static const int windowBits = 15;
 static const int ENABLE_ZLIB_GZIP = 32;
 
 static const double MIN_FACTOR = 1.2;
-static const double MAX_FACTOR = 4.0;
+static const double MAX_FACTOR = 4.5;
 
 class GzipDataReader : public DataReader
 {
@@ -856,10 +856,13 @@ GzipDataReader::decompress(
     zstream.next_out = (Bytef*) output;
     zstream.avail_out = (uInt)outputBytes;
     uInt oldAvail;
-    bool first = true;
+    int block = 0;
+    int status;
+    Bytef *lastIn, *lastOut;
     do {
-        int status;
-	if (mode != ContinueMultiBlock || ! first) {
+        lastIn = zstream.next_in;
+        lastOut = zstream.next_out;
+	    if (mode != ContinueMultiBlock || block != 0) {
             status = inflateInit2(&zstream, windowBits | ENABLE_ZLIB_GZIP);
             if (status < 0) {
                 fprintf(stderr, "GzipDataReader: inflateInit2 failed with %d\n", status);
@@ -868,12 +871,18 @@ GzipDataReader::decompress(
         }
         oldAvail = zstream.avail_out;
         status = inflate(&zstream, mode == SingleBlock ? Z_NO_FLUSH : Z_FINISH);
+        //printf("decompress block #%d %lld -> %lld = %d\n", block, zstream.next_in - lastIn, zstream.next_out - lastOut, status);
+        block++;
         if (status < 0 && status != Z_BUF_ERROR) {
             fprintf(stderr, "GzipDataReader: inflate failed with %d\n", status);
             soft_exit(1);
         }
-        first = false;
+        if (status < 0 && zstream.avail_out == 0 && zstream.avail_in > 0) {
+            fprintf(stderr, "GzipDataReader: insufficient decompression buffer space\n");
+            soft_exit(1);
+        }
     } while (zstream.avail_in != 0 && zstream.avail_out != oldAvail && mode != SingleBlock);
+    //printf("end decompress status=%d, avail_in=%lld, last block=%lld->%lld, avail_out=%lld\n", status, zstream.avail_in, zstream.next_in - lastIn, zstream.next_out - lastOut, zstream.avail_out);
     if (o_inputRead) {
         *o_inputRead = inputBytes - zstream.avail_in;
     }
@@ -890,16 +899,16 @@ GzipDataReader::decompressBatch()
     char* compressed;
     _int64 compressedBytes;
     if (! inner->getData(&compressed, &compressedBytes)) {
-	inner->nextBatch();
-	if (! inner->getData(&compressed, &compressedBytes)) {
+	    inner->nextBatch();
+	    if (! inner->getData(&compressed, &compressedBytes)) {
             if (inner->isEOF()) {
                 offset = 0;
                 validBytes = startBytes = 0;
                 return;
             }
-            fprintf(stderr, "GzipDataReader:decompressBatch failed getData at %lld\n", inner->getFileOffset());
+            fprintf(stderr, "GzipDataReader:decompressBatch failed getData at %lld\n", fileOffset);
             soft_exit(1);
-	}
+	    }
     }
 
     char* uncompressed;
@@ -910,10 +919,11 @@ GzipDataReader::decompressBatch()
         continueBlock ? ContinueMultiBlock : StartMultiBlock);
     if (! all) {
         // todo: handle this situation!!
-        fprintf(stderr, "GzipDataReader:decompressBatch too big at %lld\n", inner->getFileOffset());
+        fprintf(stderr, "GzipDataReader:decompressBatch too big at %lld\n", fileOffset);
         soft_exit(1);
     }
     validBytes += priorBytes; // add back offset
+    //printf("file offset %lld decompress %lld -> %lld bytes, carry over %lld\n", fileOffset, compressedBytes, validBytes - priorBytes, priorBytes);
     startBytes = inner->isEOF() ? validBytes : validBytes - overflowBytes ;
     inner->advance(compressedBytes);
     offset = 0;
