@@ -91,6 +91,7 @@ MultiInputReadSupplier::getNextRead()
             //
             nRemainingReadSuppliers--;
             activeReadSuppliers[nextReadSupplier] = activeReadSuppliers[nRemainingReadSuppliers];
+            nextReadSupplier = 0;   // (Bluntly) handles the case where nextReadSupplier is the last one.
         }
     }
 }
