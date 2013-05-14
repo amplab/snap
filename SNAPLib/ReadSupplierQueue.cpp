@@ -414,7 +414,7 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
         ReleaseExclusiveLock(&lock);
         element->totalReads = 0;
 read_loop: // might return here once with goto to ensure both threads have same #reads per element
-        for (; element->totalReads <= elementSize - increment + 100 * (firstOrSecond && ! fixedElementSize); element->totalReads += increment) {
+        for (; element->totalReads <= elementSize - increment; element->totalReads += increment) {
             
             if (NULL != reader) {
                 Read* read = &element->reads[element->totalReads];

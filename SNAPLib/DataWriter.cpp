@@ -225,10 +225,12 @@ AsyncDataWriter::nextBatch()
     _int64 start2 = timeInNanos();
     InterlockedAdd64AndReturnNewValue(&FilterTime, start2 - start);
     if (! write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
-        return false;
+        fprintf(stderr, "error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
+        soft_exit(1);
     }
     if (! batches[current].file->waitForCompletion()) {
-        return false;
+        fprintf(stderr, "error: file write failed\n");
+        soft_exit(1);
     }
     InterlockedAdd64AndReturnNewValue(&WaitTime, timeInNanos() - start2);
     return true;
