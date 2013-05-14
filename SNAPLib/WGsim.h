@@ -30,8 +30,13 @@ Revision History:
 // Is a wgsim-generated read mapped to a given location misaligned, given the source
 // location encoded into its ID and a maximum edit distance maxK?
 // Also optionally outputs the low and high location encoded in the wgsim read's ID.
+
+bool wgsimReadMisaligned(Read *read, unsigned location, const Genome* genome, int maxK,
+                         unsigned *lowOut = NULL, unsigned *highOut = NULL);
+
 bool wgsimReadMisaligned(Read *read, unsigned location, GenomeIndex *index, int maxK,
                          unsigned *lowOut = NULL, unsigned *highOut = NULL);
+
 
 // Write a wgsim-style id string.
 // Convert from 0-based to 1-based coordinates.  If you're curious about the distinction, see:
