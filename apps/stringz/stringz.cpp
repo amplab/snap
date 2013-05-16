@@ -194,7 +194,7 @@ void main(int argc, char* argv[])
     for (unsigned i = 0; i <= smallStringSize; i++) {
         probByEditDistance[i] = 1.0;
         for (unsigned j = 0; j < i; j++) {
-            probByEditDistance[i] *= differenceProb;
+            probByEditDistance[i] *= differenceProb/(alphabetSize - 1);
         }
         for (unsigned j = i+1; j <= smallStringSize; j++) {
             probByEditDistance[i] *= (1 - differenceProb);
