@@ -300,7 +300,7 @@ public:
         // Search d's in the order 0, 1, -1, 2, -2, etc to find an alignment with as few indels as possible.
         // dTable is just precomputed d = (d > 0 ? -d : -d+1) to save the branch misprediction from (d > 0)
         int i =0;
-        for (int d = 0; d != e+1; i++, d = dTable[i]) {
+        for (int d = 0; d != e+1 /*BJB &&  d == 0 /*BJB - no indels*/; i++, d = dTable[i]) {
             int best = L[e-1][MAX_K+d] + 1; // up
             A[e][MAX_K+d] = 'X';
             int left = L[e-1][MAX_K+d-1];

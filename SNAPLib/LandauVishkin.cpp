@@ -147,7 +147,7 @@ done1:
     for (int e = 1; e <= k; e++) {
         // Go through the offsets, d, in the order 0, -1, 1, -2, 2, etc, in order to find CIGAR strings
         // with few indels first if possible.
-        for (int d = 0; d != -(e+1); d = (d >= 0 ? -(d+1) : -d)) {
+        for (int d = 0; d != -(e+1) /*BJB && d == 0 /*BJB - no indels*/; d = (d >= 0 ? -(d+1) : -d)) {
             int best = L[e-1][MAX_K+d] + 1; // up
             A[e][MAX_K+d] = 'X';
             int left = L[e-1][MAX_K+d-1];

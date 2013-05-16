@@ -42,6 +42,7 @@ public:
         bool                forceSpacing_,
         unsigned            maxReadSize,
         unsigned            adaptiveConfDiffThreshold,  // Increase confDiff if this many seeds in the read have multiple hits.
+        unsigned            extraSearchDepth,
         bool                skipAlignToegther_,
         PairedEndAligner    *underlyingPairedEndAligner_);
     

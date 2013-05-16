@@ -31,7 +31,13 @@ using namespace std;
 // Is a wgsim-generated read mapped to a given location misaligned, given the source
 // location encoded into its ID and a maximum edit distance maxK?
 // Also optionally outputs the low and high location encoded in the wgsim read's ID.
-bool wgsimReadMisaligned(Read *read, unsigned genomeLocation, GenomeIndex *index, int maxK,
+bool wgsimReadMisaligned(Read *read, unsigned location, GenomeIndex *index, int maxK,
+                         unsigned *lowOut, unsigned *highOut)
+{
+    return wgsimReadMisaligned(read, location, index->getGenome(), maxK, lowOut, highOut);
+}
+
+bool wgsimReadMisaligned(Read *read, unsigned genomeLocation, const Genome *genome, int maxK,
                          unsigned *lowOut, unsigned *highOut)
 {
     //
@@ -131,7 +137,7 @@ bool wgsimReadMisaligned(Read *read, unsigned genomeLocation, GenomeIndex *index
     pieceName[pieceNameLen] = '\0';
 
     unsigned offsetOfPiece;
-    if (!index->getGenome()->getOffsetOfPiece(pieceName,&offsetOfPiece)) {
+    if (!genome->getOffsetOfPiece(pieceName,&offsetOfPiece)) {
         fprintf(stderr, "Couldn't find piece name '%s' in the genome.\n",pieceName);
         return false;
     }

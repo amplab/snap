@@ -50,6 +50,7 @@ SingleFirstPairedEndAligner::SingleFirstPairedEndAligner(
         bool                forceSpacing_,
         unsigned            maxReadSize,
         unsigned            adaptiveConfDiffThreshold,  // Increase confDiff if this many seeds in the read have multiple hits.
+        unsigned            extraSearchDepth,
         bool                skipAlignTogether_,
         PairedEndAligner    *underlyingPairedEndAligner_)
  :   minSpacing(minSpacing_), maxSpacing(maxSpacing_), forceSpacing(forceSpacing_), 
@@ -60,10 +61,10 @@ SingleFirstPairedEndAligner::SingleFirstPairedEndAligner(
 {
     // Create single-end aligners.
     singleAligner = new BaseAligner(index, confDiff + 1, maxHits, maxK, maxReadSize,
-                                    maxSeeds, adaptiveConfDiffThreshold, &lv, &reverseLV);
+                                    maxSeeds, adaptiveConfDiffThreshold, extraSearchDepth, &lv, &reverseLV);
 
     mateAligner = new BaseAligner(index, confDiff, maxHits, maxK, maxReadSize,
-                                  maxSeeds, adaptiveConfDiffThreshold, &lv, &reverseLV);
+                                  maxSeeds, adaptiveConfDiffThreshold, extraSearchDepth, &lv, &reverseLV);
 
     underlyingPairedEndAligner->setLandauVishkin(&lv, &reverseLV);
 }

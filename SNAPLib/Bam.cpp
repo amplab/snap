@@ -94,8 +94,12 @@ BAMReader::init(
             // soft_exit(1); ??
         }
     }
-    data->reinit(data->getFileOffset(), amountOfFileToProcess == 0 ? 0 : amountOfFileToProcess - data->getFileOffset());
-    extraOffset = 0;
+    reinit(startingOffset, amountOfFileToProcess);
+    _int64 ignore;
+    if (! data->getData(&buffer, &ignore)) {
+        fprintf(stderr, "BAMReader: error after reading header\n");
+    }
+    data->advance((char*) refSeq - buffer);
     return true;
 }
 
