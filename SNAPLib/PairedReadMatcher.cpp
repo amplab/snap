@@ -94,7 +94,7 @@ PairedReadMatcher::getNextReadPair(
     while (true) {
         Read one;
         if (! single->getNextRead(&one)) {
-            int n = unmatched[0].size() + unmatched[1].size();
+            size_t n = unmatched[0].size() + unmatched[1].size();
             if (n > 0) {
                 fprintf(stderr, " warning: PairedReadMatcher%d discarding unpaired reads at eof\n", n);
             }
