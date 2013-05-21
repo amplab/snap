@@ -603,7 +603,7 @@ SAMFormat::getSortInfo(
     size_t lineLength;
     SAMReader::parseLine(buffer, buffer + bytes, fields, &lineLength, lengths);
     _ASSERT(lineLength < UINT32_MAX);
-    *o_readBytes = lineLength;
+    *o_readBytes = (unsigned) lineLength;
     if (lengths[SAMReader::POS] == 0 || fields[SAMReader::POS][0] == '*') {
         *o_location = UINT32_MAX;
     } else {
