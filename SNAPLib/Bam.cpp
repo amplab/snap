@@ -872,6 +872,16 @@ struct DuplicateReadKey
     {
         return ! ((*this) == b);
     }
+    
+    bool operator<(const DuplicateReadKey& b) const
+    {
+        return locations[0] < b.locations[0] ||
+            (locations[0] == b.locations[0] &&
+                (locations[1] < b.locations[1] ||
+                    (locations[1] == b.locations[1] &&
+                        isRC[0] * 2 + isRC[1] <  b.isRC[0] *2 + b.isRC[1])));
+    }
+    
 
     // required for use as a key in VariableSizeMap template
     DuplicateReadKey(int x)
@@ -906,7 +916,7 @@ class BAMDupMarkFilter : public BAMFilter
 public:
     BAMDupMarkFilter(const Genome* i_genome) :
         BAMFilter(DataWriter::ModifyFilter),
-        genome(i_genome), runOffset(0), runLocation(UINT32_MAX), runCount(0), mates(128)
+        genome(i_genome), runOffset(0), runLocation(UINT32_MAX), runCount(0), mates()
     {}
 
     ~BAMDupMarkFilter() {}
@@ -925,7 +935,8 @@ private:
     size_t runOffset; // offset in file of first read in run
     _uint32 runLocation; // location in genome
     int runCount; // number of aligned reads
-    typedef VariableSizeMap<DuplicateReadKey,DuplicateMateInfo,150,MapNumericHash<DuplicateReadKey>,90,0,-2,-3> MateMap;
+    //typedef VariableSizeMap<DuplicateReadKey,DuplicateMateInfo,150,MapNumericHash<DuplicateReadKey>,90,0,-2,-3> MateMap;
+    typedef std::map<DuplicateReadKey,DuplicateMateInfo> MateMap;
     MateMap mates;
 };
 
@@ -951,14 +962,16 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
             for (BAMAlignment* record = getRead(offset); record != lastBam; record = getNextRead(record, &offset)) {
                 _ASSERT(record->refID >= -1 && record->refID < genome->getNumPieces()); // simple sanity check
                 DuplicateReadKey key(record, genome);
-                DuplicateMateInfo* info = mates.tryFind(key);
+                MateMap::iterator i = mates.find(key);
                 bool isSecond = (record->FLAG & SAM_LAST_SEGMENT) != 0;
-                if (info == NULL) {
+                DuplicateMateInfo* info;
+                if (i != mates.end()) {
+                    info = &i->second;
+                } else {
                     if (isSecond) {
                         continue; // mate wasn't in a run, so it can't be a duplicate pair
                     }
-                    bool ok = mates.tryAdd(key, DuplicateMateInfo(), &info);
-                    _ASSERT(ok);
+                    info = &mates[key];
                     info->firstRunOffset = offset;
                     info->firstRunEndOffset = lastOffset;
                 }
@@ -999,10 +1012,11 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
             VariableSizeVector<DuplicateMateInfo*>* failedBackpatch = NULL;
             for (BAMAlignment* record = getRead(offset); record != lastBam; record = getNextRead(record, &offset)) {
                 DuplicateReadKey key(record, genome);
-                DuplicateMateInfo* info = mates.tryFind(key);
-                if (info == NULL) {
+                MateMap::iterator i = mates.find(key);
+                if (i == mates.end()) {
                     continue; // one end in a run, other not
                 }
+                DuplicateMateInfo* info = &i->second;
                 bool pass = info->bestReadQuality[1] != 0; // 1 for second pass, 0 for first pass
                 bool isSecond = (record->FLAG & SAM_LAST_SEGMENT) != 0;
                 static const int index[2][2] = {{0, 3}, {2, 1}};
