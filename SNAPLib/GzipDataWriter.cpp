@@ -33,13 +33,27 @@ class GzipSharedContext
 {
 public:
     GzipSharedContext(bool i_bam, size_t i_chunkSize, int i_numThreads, bool i_bindToProcessors)
-        : stop(false), bam(i_bam), numThreads(i_numThreads), running(0), 
+        : stop(false), bam(i_bam), numThreads(i_numThreads),
         nChunks(0), chunkSize(i_chunkSize), bindToProcessors(i_bindToProcessors)
     {
-        CreateEventObject(&begin);
-        PreventEventWaitersFromProceeding(&begin);
-        CreateEventObject(&finish);
-        PreventEventWaitersFromProceeding(&finish);
+        workReady = new EventObject[numThreads];
+        workDone = new EventObject[numThreads];
+        for (int i = 0; i < numThreads; i++) {
+            CreateEventObject(&workReady[i]);
+            PreventEventWaitersFromProceeding(&workReady[i]);
+            CreateEventObject(&workDone[i]);
+            PreventEventWaitersFromProceeding(&workDone[i]);
+        }
+    }
+
+    ~GzipSharedContext()
+    {
+        for (int i = 0; i < numThreads; i++) {
+            DestroyEventObject(&workReady[i]);
+            DestroyEventObject(&workDone[i]);
+        }
+        delete [] workReady;
+        delete [] workDone;
     }
 
     size_t* run(int i_nChunks, char* i_input, char* i_output)
@@ -47,31 +61,41 @@ public:
         nChunks = i_nChunks;
         sizes.clear();
         sizes.extend(nChunks);
-        running = numThreads;
+ 
         input = i_input;
         output = i_output;
-        PreventEventWaitersFromProceeding(&finish);
-        //printf("thread %d start zip task\n", GetCurrentThreadId());
-        AllowEventWaitersToProceed(&begin);
-        //printf("thread %d waiting for zip task\n", GetCurrentThreadId());
-        WaitForEvent(&finish);
-        //printf("thread %d cont after zip task\n", GetCurrentThreadId());
+        for (int i = 0; i < numThreads; i++) {
+            PreventEventWaitersFromProceeding(&workDone[i]);
+            AllowEventWaitersToProceed(&workReady[i]);
+        }
+
+        //
+        // Let the workers run and wait for them all to finish.
+        //
+
+        for (int i = 0; i < numThreads; i++) {
+            WaitForEvent(&workDone[i]);
+        }
+
         return sizes.begin();
     }
 
     void done()
     {
         stop = true;
-        AllowEventWaitersToProceed(&begin);
+        for (int i = 0; i < numThreads; i++) {
+            AllowEventWaitersToProceed(&workReady[i]);
+        }
     }
 
-    bool stop;
-    EventObject begin, finish; // start / finish chunk of compression
+
+    EventObject *workReady; // One per worker thread
+    EventObject *workDone;  // One per worker thread
+    volatile bool stop;
     VariableSizeVector<size_t> sizes;
-    int nChunks;
+    volatile int nChunks;
     const size_t chunkSize;
     const bool bam;
-    volatile int running;
     const int numThreads;
     const bool bindToProcessors;
     char* input;
@@ -185,7 +209,8 @@ GzipContext::runThread()
     zstream.opaque = &heap;
     while (true) {
         //printf("zip task thread %d waiting to begin\n", GetCurrentThreadId());
-        WaitForEvent(&shared->begin);
+        WaitForEvent(&shared->workReady[threadNum]);
+        PreventEventWaitersFromProceeding(&shared->workReady[threadNum]);
         if (shared->stop) {
             return;
         }
@@ -193,20 +218,14 @@ GzipContext::runThread()
         _int64 start = timeInMillis();
         int n = (shared->nChunks + shared->numThreads - 1) / shared->numThreads;
         int begin = threadNum * n;
-        int end = min(begin + n, shared->nChunks);
+        int end = min(begin + n, (int) shared->nChunks);
         for (int i = begin; i < end; i++) {
             shared->sizes[i] = GzipWriterFilter::compressChunk(zstream, shared->bam,
                 shared->output + i * shared->chunkSize, shared->chunkSize, 
                 shared->input + i * shared->chunkSize, shared->chunkSize);
         }
         //printf("zip task thread %d done %lld ms\n", GetCurrentThreadId(), timeInMillis() - start);
-        if (InterlockedDecrementAndReturnNewValue(&shared->running) == 0) {
-            //printf("zip task thread %d all threads done\n", GetCurrentThreadId());
-            PreventEventWaitersFromProceeding(&shared->begin);
-            AllowEventWaitersToProceed(&shared->finish);
-        } else {
-            WaitForEvent(&shared->finish);
-        }
+        AllowEventWaitersToProceed(&shared->workDone[threadNum]);
     }
 }
 
