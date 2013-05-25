@@ -107,7 +107,7 @@ for input_format in ["fq", "fq.gz", "bam", "sam"]:
                     temps = [] # temporary files, deleted on success
                     # build & run snap command line
                     args = [snap, ["single", "paired"][paired], _f("temp/^.idx")]
-                    args = args + _ff(inputs[input_format][paired]) +  ["-t", threads]
+                    args = args + _ff(inputs[input_format][paired]) +  ["-t", threads, "-b"]
                     if sorted:
                         args.append("-so")
                     run = "%s-%s-%s-%s-%s" % (input_format, ["single", "paired"][paired], output_format, ["unsorted", "sorted"][sorted], threads)

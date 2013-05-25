@@ -218,7 +218,7 @@ GzipContext::runThread()
         _int64 start = timeInMillis();
         int n = (shared->nChunks + shared->numThreads - 1) / shared->numThreads;
         int begin = threadNum * n;
-        int end = min(begin + n, shared->nChunks);
+        int end = min(begin + n, (int) shared->nChunks);
         for (int i = begin; i < end; i++) {
             shared->sizes[i] = GzipWriterFilter::compressChunk(zstream, shared->bam,
                 shared->output + i * shared->chunkSize, shared->chunkSize, 
