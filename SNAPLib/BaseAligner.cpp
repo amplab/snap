@@ -784,8 +784,7 @@ Return Value:
                 if (doAlignerPrefetch) {
                     genomeIndex->prefetchGenomeData(genomeLocation);
                 }
-
-    
+ 
                 unsigned score = -1;
                 double matchProbability = 0;
                 unsigned readDataLength = read[elementToScore->direction]->getDataLength();
@@ -1165,7 +1164,6 @@ Return Value:
     element->bestScore = UnusedScoreValue;
     element->allExtantCandidatesScored = false;
     element->matchProbabilityForBestScore = 0;
-    element->mergeAnchor = InvalidGenomeLocation;
 
     //
     // And insert it at the end of weight list 1.

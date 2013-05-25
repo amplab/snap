@@ -189,7 +189,6 @@ private:
         Direction            direction;
         bool                 allExtantCandidatesScored;
         double               matchProbabilityForBestScore;
-        unsigned             mergeAnchor;       // Location against which we're merging alignments.  This may be in this or an adjascent element.
 
         Candidate            candidates[hashTableElementSize];
     };

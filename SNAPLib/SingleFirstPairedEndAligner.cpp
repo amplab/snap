@@ -76,38 +76,6 @@ SingleFirstPairedEndAligner::~SingleFirstPairedEndAligner()
     delete mateAligner;
 }
 
-void SingleFirstPairedEndAligner::align2(Read *read0, Read *read1, PairedAlignmentResult *result)
-{
-    PairedAlignmentResult results[2];
-    align2(read0, read1, &results[0]);
-    align2(read1, read0, &results[1]);
-
-    //
-    // Because we reversed the order of the reads for results[1], we need to reverse the order of the result as well.
-    //
-    PairedAlignmentResult reversed;
-    for (int r = 0; r < 2; r++) {
-        reversed.direction[r] = results[1].direction[1-r];
-        reversed.location[r] = results[1].location[1-r];
-        reversed.mapq[r] = results[1].mapq[1-r];
-        reversed.score[r] = results[1].score[1-r];
-        reversed.status[r] = results[1].status[1-r];
-    }
-    reversed.alignedAsPair = results[1].alignedAsPair;
-    reversed.fromAlignTogether = results[1].fromAlignTogether;
-    reversed.nanosInAlignTogether = results[1].nanosInAlignTogether;
-    reversed.nLVCalls = results[1].nLVCalls;
-    reversed.nSmallHits = results[1].nSmallHits;
-    
-    results[1] = reversed;
-
-    if (results[0].mapq[0] + results[0].mapq[1] >= results[1].mapq[0] + results[1].mapq[1]) {
-        *result = results[0];
-    } else {
-        *result = results[1];
-    }
-}
-
 
 void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentResult *result)
 {
