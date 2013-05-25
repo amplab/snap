@@ -20,6 +20,7 @@ Environment:
 #include "HashTable.h"
 #include "BigAlloc.h"
 #include "exit.h"
+#include "Genome.h"
 
 SNAPHashTable::SNAPHashTable(
     unsigned i_tableSize,
@@ -65,13 +66,13 @@ Arguments:
 
 
     //
-    // Run through the table and set all of the value1s to 0xffffffff, which means
+    // Run through the table and set all of the value1s to InvalidGenomeLocation, which means
     // unused.
     //
 
     for (unsigned i = 0; i < tableSize; i++) {
         table[i].key = 0;
-        table[i].value1 = 0xffffffff;
+        table[i].value1 = InvalidGenomeLocation;
     }
 }
 
@@ -255,7 +256,7 @@ SNAPHashTable::getEntryForKey(__in unsigned key) const
     //
     // Chain through the table until we hit either a match on the key or an unused element
     //
-    while (table[tableIndex].key != key && table[tableIndex].value1 != 0xffffffff) {
+    while (table[tableIndex].key != key && table[tableIndex].value1 != InvalidGenomeLocation) {
         nProbesInGetEntryForKey++;
 
         if (nProbes < QUADRATIC_CHAINING_DEPTH) {
@@ -283,7 +284,7 @@ SNAPHashTable::getEntryForKey(__in unsigned key) const
 bool
 SNAPHashTable::Insert(unsigned key, const unsigned *data)
 {
-    _ASSERT(data[0] != 0xffffffff); // This is the unused value that represents an empty hash table.  You can't use it.
+    _ASSERT(data[0] != InvalidGenomeLocation); // This is the unused value that represents an empty hash table.  You can't use it.
 
     Entry *entry = getEntryForKey(key);
     if (NULL == entry) {
@@ -313,7 +314,7 @@ SNAPHashTable::SlowLookup(unsigned key)
 {
     Entry *entry = getEntryForKey(key);
 
-    if (NULL == entry || entry->value1 == 0xffffffff) {
+    if (NULL == entry || entry->value1 == InvalidGenomeLocation) {
         return NULL;
     }
 

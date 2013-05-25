@@ -302,5 +302,8 @@
     <ClCompile Include="WGsim.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Read.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

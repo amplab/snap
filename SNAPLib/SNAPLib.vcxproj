@@ -239,6 +239,7 @@
     <ClCompile Include="ProbabilityDistance.cpp" />
     <ClCompile Include="Range.cpp" />
     <ClCompile Include="RangeSplitter.cpp" />
+    <ClCompile Include="Read.cpp" />
     <ClCompile Include="ReadReader.cpp" />
     <ClCompile Include="ReadSupplierQueue.cpp" />
     <ClCompile Include="ReadWriter.cpp" />

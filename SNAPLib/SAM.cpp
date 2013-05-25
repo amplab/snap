@@ -415,7 +415,7 @@ SAMReader::parseLocation(
         }
         return offsetOfPiece + oneBasedOffsetWithinPiece - 1; // -1 is because our offset is 0 based, while SAM is 1 based.
     } else {
-        return 0xffffffff;
+        return InvalidGenomeLocation;
     }
 }
     bool
@@ -746,10 +746,10 @@ getSAMData(
     // then say NotFound).  Here, we force that to be SAM_UNMAPPED.
     //
     if (NotFound == result) {
-        genomeLocation = 0xffffffff;
+        genomeLocation = InvalidGenomeLocation;
     }
 
-    if (0xffffffff == genomeLocation) {
+    if (InvalidGenomeLocation == genomeLocation) {
         //
         // If it's unmapped, then always emit it in the forward direction.  This is necessary because we don't even include
         // the SAM_REVERSE_COMPLEMENT flag for unmapped reads, so there's no way to tell that we reversed it.
@@ -781,7 +781,7 @@ getSAMData(
     }
 
     int editDistance = -1;
-    if (genomeLocation != 0xFFFFFFFF) {
+    if (genomeLocation != InvalidGenomeLocation) {
         // This could be either a single hit read or a multiple hit read where we just
         // returned one location, but either way, let's print that location. We will then
         // set the quality to 60 if it was single or 0 if it was multiple. These are the
@@ -802,7 +802,7 @@ getSAMData(
     if (hasMate) {
         flags |= SAM_MULTI_SEGMENT;
         flags |= (firstInPair ? SAM_FIRST_SEGMENT : SAM_LAST_SEGMENT);
-        if (mateLocation != 0xFFFFFFFF) {
+        if (mateLocation != InvalidGenomeLocation) {
             const Genome::Piece *matePiece = genome->getPieceAtLocation(mateLocation);
             matePieceName = matePiece->name;
             matePieceIndex = (int)(matePiece - genome->getPieces());
@@ -812,7 +812,7 @@ getSAMData(
                 flags |= SAM_NEXT_REVERSED;
             }
 
-            if (genomeLocation == 0xFFFFFFFF) {
+            if (genomeLocation == InvalidGenomeLocation) {
                 //
                 // The SAM spec says that for paired reads where exactly one end is unmapped that the unmapped
                 // half should just have RNAME and POS copied from the mate.
@@ -833,7 +833,7 @@ getSAMData(
             matePositionInPiece = positionInPiece;
         }
 
-        if (genomeLocation != 0xffffffff && mateLocation != 0xffffffff) {
+        if (genomeLocation != InvalidGenomeLocation && mateLocation != InvalidGenomeLocation) {
             flags |= SAM_ALL_ALIGNED;
             // Also compute the length of the whole paired-end string whose ends we saw. This is slightly
             // tricky because (a) we may have clipped some bases before/after each end and (b) we need to
@@ -915,7 +915,7 @@ SAMFormat::writeRead(
     {
         return false;
     }
-    if (genomeLocation != 0xFFFFFFFF) {
+    if (genomeLocation != InvalidGenomeLocation) {
         cigar = computeCigarString(genome, lv, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize, 
                                    clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
                                    genomeLocation, direction, useM, &editDistance);

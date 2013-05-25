@@ -197,9 +197,16 @@ void main(int argc, char* argv[])
             probByEditDistance[i] *= differenceProb;
         }
         for (unsigned j = i+1; j <= smallStringSize; j++) {
-            probByEditDistance[i] *= (1 - differenceProb);
+            probByEditDistance[i] *= (1 - differenceProb)/*/(alphabetSize - 1)*/;
         }
     }
+
+#ifdef _MSC_VER
+    if (!SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS)) {
+        fprintf(stderr,"SetPriorityClass failed, %d\n", GetLastError());
+    }
+#endif // _MSC_VER
+
 
 	GenerateBigString();
 

@@ -76,6 +76,38 @@ SingleFirstPairedEndAligner::~SingleFirstPairedEndAligner()
     delete mateAligner;
 }
 
+void SingleFirstPairedEndAligner::align2(Read *read0, Read *read1, PairedAlignmentResult *result)
+{
+    PairedAlignmentResult results[2];
+    align2(read0, read1, &results[0]);
+    align2(read1, read0, &results[1]);
+
+    //
+    // Because we reversed the order of the reads for results[1], we need to reverse the order of the result as well.
+    //
+    PairedAlignmentResult reversed;
+    for (int r = 0; r < 2; r++) {
+        reversed.direction[r] = results[1].direction[1-r];
+        reversed.location[r] = results[1].location[1-r];
+        reversed.mapq[r] = results[1].mapq[1-r];
+        reversed.score[r] = results[1].score[1-r];
+        reversed.status[r] = results[1].status[1-r];
+    }
+    reversed.alignedAsPair = results[1].alignedAsPair;
+    reversed.fromAlignTogether = results[1].fromAlignTogether;
+    reversed.nanosInAlignTogether = results[1].nanosInAlignTogether;
+    reversed.nLVCalls = results[1].nLVCalls;
+    reversed.nSmallHits = results[1].nSmallHits;
+    
+    results[1] = reversed;
+
+    if (results[0].mapq[0] + results[0].mapq[1] >= results[1].mapq[0] + results[1].mapq[1]) {
+        *result = results[0];
+    } else {
+        *result = results[1];
+    }
+}
+
 
 void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentResult *result)
 {
@@ -88,20 +120,25 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
     result->status[0] = NotFound;
     result->status[1] = NotFound;
 
-    result->location[0] = 0xFFFFFFFF;
-    result->location[1] = 0xFFFFFFFF;
+    result->location[0] = InvalidGenomeLocation;
+    result->location[1] = InvalidGenomeLocation;
 
     result->fromAlignTogether = false;
     result->alignedAsPair = false;
     result->nanosInAlignTogether = 0;
 
     unsigned bestScore[NUM_READS_PER_PAIR] = {INFINITE_SCORE, INFINITE_SCORE};
+    unsigned mateScore[NUM_READS_PER_PAIR] = {INFINITE_SCORE, INFINITE_SCORE};
     unsigned bestMapq[NUM_READS_PER_PAIR] = {0, 0};
-    unsigned singleLoc[NUM_READS_PER_PAIR] = {0xFFFFFFFF, 0xFFFFFFFF};
+    unsigned mateMapq[NUM_READS_PER_PAIR] = {0, 0};
+    unsigned singleLoc[NUM_READS_PER_PAIR] = {InvalidGenomeLocation, InvalidGenomeLocation};
+    unsigned mateLoc[NUM_READS_PER_PAIR] = {InvalidGenomeLocation, InvalidGenomeLocation};
     Direction singleDirection[NUM_READS_PER_PAIR] = {FORWARD, FORWARD};
+    Direction mateDirection[NUM_READS_PER_PAIR] = {FORWARD, FORWARD};
     bool certainlyNotFound[NUM_READS_PER_PAIR] = {false, false};
     bool bestScoreCertain[NUM_READS_PER_PAIR] = {false, false};
     AlignmentResult singleStatus[NUM_READS_PER_PAIR] = {NotFound, NotFound};
+    AlignmentResult mateStatus[NUM_READS_PER_PAIR] = {NotFound, NotFound};
     
     TRACE("Aligning read pair %.*s:\n%.*s\n%.*s\n",
             reads[0]->getIdLength(), reads[0]->getId(),
@@ -163,19 +200,27 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
 
             TRACE("Mate %d returned %s at loc %u-%d\n", 1-r, AlignmentResultToString(status1), loc1, rc1);
             if (/*status1 != MultipleHits &&*/ score0 + score1 <= (int)maxK) {
-                result->status[r] = SingleHit;
-                result->location[r] = loc0;
-                result->direction[r] = direction0;
-                result->score[r] = score0;
-                result->mapq[r] = mapq0;
-                result->status[1-r] = isOneLocation(status1) ? SingleHit : status1;
-                result->location[1-r] = loc1;
-                result->direction[1-r] = direction1;
-                result->score[1-r] = score1;
-                result->mapq[1-r] = min(mapq0,mapq1);
-                result->alignedAsPair = true;
-                return;
-            } else if(status1 == NotFound) {
+                if (mapq0 >= 70 && mapq1 >= 70) {
+                    result->status[r] = SingleHit;
+                    result->location[r] = loc0;
+                    result->direction[r] = direction0;
+                    result->score[r] = score0;
+                    result->mapq[r] = mapq0;
+                    result->status[1-r] = isOneLocation(status1) ? SingleHit : status1;
+                    result->location[1-r] = loc1;
+                    result->direction[1-r] = direction1;
+                    result->score[1-r] = score1;
+                    result->mapq[1-r] = min(mapq0,mapq1);
+                    result->alignedAsPair = true;
+                    return;
+                }
+
+                mateStatus[1-r] = status1;
+                mateLoc[1-r] = loc1;
+                mateMapq[1-r] = min(mapq0,mapq1);
+                mateDirection[1-r] = direction1;
+                mateScore[1-r] = score1;
+           } else if(status1 == NotFound) {
                 // We found read r at one location and didn't find the mate nearby. Let's remember because
                 // if the mate is not found anywhere else, we can just return a location for read r.
 
@@ -185,12 +230,14 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
             numNotFound++;
             certainlyNotFound[r] = singleAligner->checkedAllSeeds();
             numCertainlyNotFound += certainlyNotFound[r] ? 1 : 0;
-        } else if (status0 == MultipleHits && loc0 == 0xFFFFFFFF) {
+        } else if (status0 == MultipleHits && loc0 == InvalidGenomeLocation) {
             numIgnoredMulti++;
             result->status[r] = MultipleHits;
             result->mapq[r] = 0;
         }
     }
+
+
     
     if (numNotFound + numIgnoredMulti == 2) {
         // We couldn't find either read even as MultipleHits, so there's no way we'll do the pair.
@@ -208,7 +255,7 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
             if (certainlyNotFound[r]) {
                 result->status[r] = NotFound;
             } else {
-                result->status[r] = (singleLoc[r] != 0xFFFFFFFF && bestScore[r] <= 0.6 * maxK) ? SingleHit : NotFound;
+                result->status[r] = (singleLoc[r] != InvalidGenomeLocation && bestScore[r] <= 0.6 * maxK) ? SingleHit : NotFound;
                 result->location[r] = singleLoc[r];
                 result->direction[r] = singleDirection[r];
                 result->score[r] = bestScore[r];
@@ -223,11 +270,11 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
         // One read was Single and the other was NotFound, neither near its mate nor elsewhere.
         TRACE("One read was single and its mate was NotFound either nearby or by itself\n");
         for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
-            if (singleLoc[r] == 0xFFFFFFFF) {
+            if (singleLoc[r] == InvalidGenomeLocation) {
                 result->status[r] = NotFound;
             } else {
                 result->status[r] = (bestScore[r] <= 0.6 * maxK ? SingleHit : NotFound);
-                result->location[r] = (bestScore[r] <= 0.6 * maxK ? singleLoc[r] : 0xFFFFFFFF);
+                result->location[r] = (bestScore[r] <= 0.6 * maxK ? singleLoc[r] : InvalidGenomeLocation);
                 result->direction[r] = singleDirection[r];
                 result->score[r] = bestScore[r];
                 result->mapq[r] = bestMapq[r];
@@ -258,6 +305,32 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
 
     if (lowerBound[0] + lowerBound[1] > (int)maxK) {
         TRACE("Best scores in each direction certainly add up to more than maxK; returning");
+        return;
+    }
+
+    if (isOneLocation(singleStatus[0]) && bestScore[0] + mateScore[1] <= (int)maxK || isOneLocation(singleStatus[1]) && bestScore[1] + mateScore[0] <= (int)maxK) {
+        //
+        // Good enough to quit.  Take the best one.
+        //
+        int r;
+        if (bestMapq[0] + mateMapq[1] >= bestMapq[1] + mateMapq[0]) {
+            r = 0;
+        } else {
+            r = 1;
+        }
+
+        result->status[r] = SingleHit;
+        result->location[r] = singleLoc[r];
+        result->direction[r] = singleDirection[r];
+        result->score[r] = bestScore[r];
+        result->mapq[r] = bestMapq[r];
+        result->status[1-r] = isOneLocation(mateStatus[1-r]) ? SingleHit : mateStatus[1-r];
+        result->location[1-r] = mateLoc[1-r];
+        result->direction[1-r] = mateDirection[1-r];
+        result->score[1-r] = mateScore[1-r];
+        result->mapq[1-r] = mateMapq[1-r];
+        result->alignedAsPair = true;
+
         return;
     }
 

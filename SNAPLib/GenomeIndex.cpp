@@ -258,10 +258,10 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     // what is a free entry.  We provide that here: -1 key and -1 in each integer.  (Well, they're unsigned, but you
     // get the idea).
     //
-    unsigned unusedKeyValue = 0xffffffff;
+    unsigned unusedKeyValue = InvalidGenomeLocation;
     unsigned unusedDataValue[2];
-    unusedDataValue[0] = 0xffffffff;
-    unusedDataValue[1] = 0xffffffff;
+    unusedDataValue[0] = InvalidGenomeLocation;
+    unusedDataValue[1] = InvalidGenomeLocation;
 
     // Don't create *too* many overflow entries because they consume significant memory.
     // It would be good to grow these dynamically instead of living with a fixed-size array.

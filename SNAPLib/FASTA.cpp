@@ -110,25 +110,3 @@ bool AppendFASTAGenome(const Genome *genome, FILE *fasta, const char *prefix="")
     }
     return !ferror(fasta);
 }
-
-    bool
-AppendFASTADiploidGenome(const DiploidGenome *diploidGenome, FILE *fasta)
-{
-	return AppendFASTAGenome(diploidGenome->getGenome(true), fasta, diploidFASTASexPrefix(false)) &&
-		AppendFASTAGenome(diploidGenome->getGenome(false), fasta, diploidFASTASexPrefix(true));			// getGenome takes isFemale, diploidFASTAPrefix isMale.
-}
-
-// 
-// TODO: Factor out this boilerplate, to take a function object.
-// 
-bool WriteFASTADiploidGenome(const DiploidGenome *diploidGenome, const char *fileName)
-{
-    FILE *file = fopen(fileName, "wb");
-    if (!file) {
-        fprintf(stderr, "Can't write FASTA file '%s'\n", fileName);
-        return false;
-    }
-    bool ok = AppendFASTADiploidGenome(diploidGenome, file);
-    fclose(file);
-    return ok;
-}

@@ -53,6 +53,11 @@ public:
         Read                  *read1,
         PairedAlignmentResult *result);
 
+    virtual void align2(
+        Read                  *read0,
+        Read                  *read1,
+        PairedAlignmentResult *result);
+
     void *operator new(size_t size) {return BigAlloc(size);}
     void operator delete(void *ptr) {BigDealloc(ptr);}
 

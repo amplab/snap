@@ -552,7 +552,7 @@ doneScoring:
         // Found nothing.
         //
         for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
-            result->location[whichRead] = 0xffffffff;
+            result->location[whichRead] = InvalidGenomeLocation;
             result->mapq[whichRead] = 0;
             result->score[whichRead] = -1;
             result->status[whichRead] = NotFound;

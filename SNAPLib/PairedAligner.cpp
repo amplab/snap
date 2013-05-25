@@ -469,8 +469,8 @@ void PairedAlignerContext::runIterationThread()
             PairedAlignmentResult result;
             result.status[0] = NotFound;
             result.status[1] = NotFound;
-            result.location[0] = 0xFFFFFFFF;
-            result.location[1] = 0xFFFFFFFF;
+            result.location[0] = InvalidGenomeLocation;
+            result.location[1] = InvalidGenomeLocation;
             writePair(read0, read1, &result);
             continue;
         } else {
@@ -485,7 +485,7 @@ void PairedAlignerContext::runIterationThread()
         if (forceSpacing && isOneLocation(result.status[0]) != isOneLocation(result.status[1])) {
             // either both align or neither do
             result.status[0] = result.status[1] = NotFound;
-            result.location[0] = result.location[1] = 0xFFFFFFFF;
+            result.location[0] = result.location[1] = InvalidGenomeLocation;
         }
 
         writePair(read0, read1, &result);

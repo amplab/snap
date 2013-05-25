@@ -21,6 +21,7 @@ Environment:
 #pragma once
 
 #include "Compat.h"
+#include "Genome.h"
 
 
 class SNAPHashTable {
@@ -68,7 +69,7 @@ class SNAPHashTable {
 
         inline unsigned *Lookup(unsigned key) const {
             unsigned tableIndex = hash(key) % tableSize;
-            if (table[tableIndex].key == key && table[tableIndex].value1 != 0xffffffff) {
+            if (table[tableIndex].key == key && table[tableIndex].value1 != InvalidGenomeLocation) {
                 return &(table[tableIndex].value1);
             } else {
                 unsigned nProbes = 0;
@@ -86,12 +87,12 @@ class SNAPHashTable {
                     }
                     entry = &table[tableIndex];
                     value1 = entry->value1;
-                } while (entry->key != key && value1 != 0xffffffff);
+                } while (entry->key != key && value1 != InvalidGenomeLocation);
 
                 extern _int64 nProbesInGetEntryForKey;
                 nProbesInGetEntryForKey += nProbes;
 
-                if (value1 == 0xffffffff) {
+                if (value1 == InvalidGenomeLocation) {
                     return NULL;
                 } else {
                     return &(entry->value1);
@@ -115,7 +116,7 @@ private:
             unsigned        value2;
         };
 
-        // Free Entries have value1 == 0xffffffff
+        // Free Entries have value1 == InvalidGenomeLocation
 
 
         Entry *table;

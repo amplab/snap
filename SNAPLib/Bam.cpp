@@ -591,7 +591,7 @@ BAMFormat::writeRead(
     {
         return false;
     }
-    if (genomeLocation != 0xFFFFFFFF) {
+    if (genomeLocation != InvalidGenomeLocation) {
         cigarOps = computeCigarOps(genome, lv, cigarBuf, cigarBufSize,
                                    clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
                                    genomeLocation, direction == RC, useM, &editDistance);
@@ -614,7 +614,7 @@ BAMFormat::writeRead(
     bam->l_read_name = (_uint8)qnameLen + 1;
     bam->MAPQ = mapQuality;
     // todo: what is bin for unmapped reads?
-    bam->bin = genomeLocation != 0xFFFFFFFF ? BAMAlignment::reg2bin(genomeLocation, genomeLocation + fullLength) : 0;
+    bam->bin = genomeLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(genomeLocation, genomeLocation + fullLength) : 0;
     bam->n_cigar_op = cigarOps;
     bam->FLAG = flags;
     bam->l_seq = fullLength;

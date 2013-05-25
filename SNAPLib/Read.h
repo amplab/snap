@@ -39,6 +39,8 @@ struct PairedAlignmentResult;
 
 enum AlignmentResult {NotFound, CertainHit, SingleHit, MultipleHits, UnknownAlignment}; // BB: Changed Unknown to UnknownAlignment because of a conflict w/Windows headers
 
+bool isAValidAlignmentResult(AlignmentResult result);
+
 //
 // Here's a brief description of the classes for input in SNAP:
 // Read:

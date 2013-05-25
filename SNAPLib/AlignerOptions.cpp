@@ -37,7 +37,7 @@ AlignerOptions::AlignerOptions(
     commandLine(i_commandLine),
     indexDir(NULL),
     similarityMapFile(NULL),
-    numThreads(1),
+    numThreads(GetNumberOfProcessors()),
     computeError(false),
     bindToProcessors(false),
     ignoreMismatchedIDs(false),
@@ -97,7 +97,7 @@ AlignerOptions::usageMessage()
         "  -h   maximum hits to consider per seed (default: %d)\n"
         "  -c   confidence threshold (default: %d)\n"
         "  -a   confidence adaptation threshold (default: %d)\n"
-        "  -t   number of threads\n"
+        "  -t   number of threads (default is one per core)\n"
         "  -b   bind each thread to its processor (off by default)\n"
         "  -e   compute error rate assuming wgsim-generated reads\n"
         "  -P   disables cache prefetching in the genome; may be helpful for machines\n"

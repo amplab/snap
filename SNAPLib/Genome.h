@@ -26,6 +26,8 @@ Revision History:
 #include <xmmintrin.h>
 #include "Compat.h"
 
+const unsigned InvalidGenomeLocation = 0xffffffff;
+
 class Genome {
 public:
         //
@@ -167,53 +169,4 @@ private:
 
         static bool openFileAndGetSizes(const char *filename, FILE **file, unsigned *nBases, unsigned *nPieces);
 
-};
-
-class DiploidGenome {
-public:
-        static DiploidGenome *Factory(const Genome *referenceGenome, bool isMale);
-        static DiploidGenome *Factory(const Genome *motherReference, const Genome *fatherReference,
-                                      bool isMale);
-
-        //
-        // This version of Factory just takes references to the parent Genomes, and it's
-        // the caller's responsibility to make sure they continue to exist.
-        //        
-        static DiploidGenome *Factory(const Genome *motherReference, const Genome *fatherReference);
-
-        //
-        // The copying factory makes copies of the underlying genomes.
-        //
-        static DiploidGenome *CopyingFactory(const Genome *motherReference,
-                                             const Genome *fatherReference);
-
-        static DiploidGenome *loadFromDirectory(const char *directoryName);
-
-
-        bool saveToDirectory(const char *directoryName) const;
-        const Genome *getGenome(bool fromMother) const;
-        const unsigned getCountOfBases(bool fromMother) const {
-            return fromMother ? motherGenome->getCountOfBases() : fatherGenome->getCountOfBases();
-        }
-        const _int64 getCountOfBasesBothHalves() const {
-            return (_int64)motherGenome->getCountOfBases() +
-                (_int64)fatherGenome->getCountOfBases();
-        }
-
-        ~DiploidGenome();
-private:
-
-        DiploidGenome(const Genome *i_motherGenome, const Genome *i_fatherGenome,
-                      bool i_ownsGenomes) : 
-            motherGenome(i_motherGenome), fatherGenome(i_fatherGenome),
-            ownsGenomes(i_ownsGenomes) {} 
-
-        const Genome *motherGenome;
-        const Genome *fatherGenome;
-
-        bool ownsGenomes;
-
-        static Genome *copyGenomeOneSex(const Genome *referenceGenome, bool useY);
-
-        static const char *FilenameBase;
 };

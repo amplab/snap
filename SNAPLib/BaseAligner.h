@@ -162,7 +162,8 @@ private:
     };
 
     static const unsigned hashTableElementSize = maxMergeDist;   // The code depends on this, don't change it
-    struct HashTableElement {
+
+     struct HashTableElement {
         HashTableElement();
         void init();
 
@@ -188,6 +189,7 @@ private:
         Direction            direction;
         bool                 allExtantCandidatesScored;
         double               matchProbabilityForBestScore;
+        unsigned             mergeAnchor;       // Location against which we're merging alignments.  This may be in this or an adjascent element.
 
         Candidate            candidates[hashTableElementSize];
     };

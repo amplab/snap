@@ -250,8 +250,14 @@ Return Value:
     int unusedMapq;
     int unusedFinalScore;
     firstPassSeedsNotSkipped[FORWARD] = firstPassSeedsNotSkipped[RC] = 0;
-    smallestSkippedSeed[FORWARD] = smallestSkippedSeed[RC] = 0xffffffff;
+    smallestSkippedSeed[FORWARD] = smallestSkippedSeed[RC] = InvalidGenomeLocation;
     highestWeightListChecked = 0;
+
+    Direction localHitDirection; // This is just a place to write into if the caller didn't want to know the direction
+
+    if (NULL == hitDirection) {
+        hitDirection = &localHitDirection;
+    }
 
     if (NULL == mapq) {
         mapq = &unusedMapq;
@@ -261,7 +267,7 @@ Return Value:
         finalScore = &unusedFinalScore;
     }
 
-    *genomeLocation = 0xFFFFFFFF; // Value to return if we don't find a location.
+    *genomeLocation = InvalidGenomeLocation; // Value to return if we don't find a location.
     *hitDirection = FORWARD;             // So we deterministically print the read forward in this case.
     *finalScore = UnusedScoreValue;
 
@@ -769,9 +775,10 @@ Return Value:
                 Candidate *candidateToScore = &elementToScore->candidates[candidateIndexToScore];
  
                 unsigned genomeLocation = elementToScore->baseGenomeLocation + candidateIndexToScore;
+                unsigned elementGenomeLocation = genomeLocation;    // This is the genome location prior to any adjustments for indels
 
                 //
-                // We're about to run edit distance computations on the genome.  Launch a prefetch for it
+                // We're about to run edit distance computation on the genome.  Launch a prefetch for it
                 // so that it's in cache when we do (or at least on the way).
                 //
                 if (doAlignerPrefetch) {
@@ -788,7 +795,7 @@ Return Value:
                     //
                     // We're up against the end of a chromosome.  Reduce the extra space enough that it isn't too
                     // long.  We're willing to reduce it to less than the length of a read, because the read could
-                    // but up against the end of the chromosome and have insertions in it.
+                    // butt up against the end of the chromosome and have insertions in it.
                     //
                     const Genome::Piece *piece = genome->getPieceAtLocation(genomeLocation);
                     
@@ -812,13 +819,7 @@ Return Value:
                     Read *readToScore = read[elementToScore->direction];
 
                     _ASSERT(candidateToScore->seedOffset + seedLen <= readToScore->getDataLength());
-
-                    int maxStartShift = __min(scoreLimit, 7);
-                    for (int shift = 1; shift <= maxStartShift; shift++) {
-                        elementToScore->candidatesScored |= (candidateBit << shift);
-                        elementToScore->candidatesScored |= (candidateBit >> shift);
-                    }
-                      
+      
                     //
                     // Compute the distance separately in the forward and backward directions from the seed, to allow
                     // arbitrary offsets at both the start and end.
@@ -833,18 +834,21 @@ Return Value:
 
                     _ASSERT(!memcmp(data+seedOffset, readToScore->getData() + seedOffset, seedLen));
 
-                    // NB: This cacheKey computation MUST match the one in IntersectingPairedReadAligner or all hell will break loose.
+                    // NB: This cacheKey computation MUST match the one in IntersectingPairedEndAligner or all hell will break loose.
                     _uint64 cacheKey = (genomeLocation + tailStart) | (((_uint64) elementToScore->direction) << 32) | (((_uint64) readId) << 33) | (((_uint64)tailStart) << 34);
 
                     score1 = landauVishkin->computeEditDistance(data + tailStart, genomeDataLength - tailStart, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
                         scoreLimit, &matchProb1, cacheKey);
+
                     if (score1 == -1) {
                         score = -1;
                     } else {
                         // The tail of the read matched; now let's reverse the reference genome data and match the head
                         int limitLeft = scoreLimit - score1;
+                        int genomeLocationOffset;
                         score2 = reverseLandauVishkin->computeEditDistance(data + seedOffset, seedOffset + MAX_K, reversedRead[elementToScore->direction] + readLen - seedOffset,
-                                                                                    read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2, cacheKey);
+                                                                                    read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2, cacheKey,
+                                                                                    &genomeLocationOffset);
 
                         if (score2 == -1) {
                             score = -1;
@@ -852,6 +856,16 @@ Return Value:
                             score = score1 + score2;
                             // Map probabilities for substrings can be multiplied, but make sure to count seed too
                             matchProbability = matchProb1 * matchProb2 * pow(1 - SNP_PROB, seedLen);
+
+                            //
+                            // Adjust the genome location based on any indels that we found.
+                            //
+                            genomeLocation += genomeLocationOffset;
+
+                            //
+                            // We could mark as scored anything in between the old and new genome offsets, but it's probably not worth the effort since this is
+                            // so rare and all it would do is same time.
+                            //
                         }
                     }
                 } else { // if we had genome data to compare against
@@ -905,8 +919,8 @@ Return Value:
                 HashTableElement *nearbyElement;
                 unsigned nearbyGenomeLocation;
                 if (-1 != score) {
-                    nearbyGenomeLocation = genomeLocation + (2*(genomeLocation % hashTableElementSize / (hashTableElementSize/2)) - 1) * (hashTableElementSize/2);
-                    _ASSERT((genomeLocation % hashTableElementSize >= (hashTableElementSize/2) ? genomeLocation + (hashTableElementSize/2) : genomeLocation - (hashTableElementSize/2)) == nearbyGenomeLocation);   // Assert that the logic in the above comment is right.
+                    nearbyGenomeLocation = elementGenomeLocation + (2*(elementGenomeLocation % hashTableElementSize / (hashTableElementSize/2)) - 1) * (hashTableElementSize/2);
+                    _ASSERT((elementGenomeLocation % hashTableElementSize >= (hashTableElementSize/2) ? elementGenomeLocation + (hashTableElementSize/2) : elementGenomeLocation - (hashTableElementSize/2)) == nearbyGenomeLocation);   // Assert that the logic in the above comment is right.
 
                     findElement(nearbyGenomeLocation, elementToScore->direction, &nearbyElement);
                 } else {
@@ -1151,6 +1165,7 @@ Return Value:
     element->bestScore = UnusedScoreValue;
     element->allExtantCandidatesScored = false;
     element->matchProbabilityForBestScore = 0;
+    element->mergeAnchor = InvalidGenomeLocation;
 
     //
     // And insert it at the end of weight list 1.
