@@ -117,9 +117,10 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
         TRACE("Reads are both too short -- returning");
         return;
     }
-    
+   
     lv.clearCache();
     reverseLV.clearCache();
+#if 1
 
     // First try aligning each end alone and looking for its mate nearby if it was confident.
     // TODO: Guess which end will be faster to search for first based on it seeds?
@@ -257,25 +258,7 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
         return;
     }
 
-    if (bestScore[0] != INFINITE_SCORE && bestScore[1] != INFINITE_SCORE &&
-            bestScore[0] + bestScore[1] > 1.5 * maxK) {
-        TRACE("Best scores in each direction add up to more than 1.5 * maxK; returning");
-        return;
-    }
-
-    int lowerBound[NUM_READS_PER_PAIR] = {0, 0};
-    if (bestScoreCertain[0]) {
-        lowerBound[0] = bestScore[0] < confDiff + 1 ? 0 : bestScore[0];
-    }
-    if (bestScoreCertain[1]) {
-        lowerBound[1] = bestScore[1] < confDiff + 1 ? 0 : bestScore[1];
-    }
-
-    if (lowerBound[0] + lowerBound[1] > (int)maxK) {
-        TRACE("Best scores in each direction certainly add up to more than maxK; returning");
-        return;
-    }
-
+ 
     if (isOneLocation(singleStatus[0]) && bestScore[0] + mateScore[1] <= (int)maxK || isOneLocation(singleStatus[1]) && bestScore[1] + mateScore[0] <= (int)maxK) {
         //
         // Good enough to quit.  Take the best one.
@@ -305,6 +288,8 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
     if (skipAlignTogether) {
         return;
     }
+
+#endif // 0
 
     // At least one read was MultipleHits; let's look for them simultaneously.
     _int64 start = timeInNanos();

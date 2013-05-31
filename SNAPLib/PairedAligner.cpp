@@ -487,6 +487,17 @@ void PairedAlignerContext::runIterationThread()
             result.status[0] = result.status[1] = NotFound;
             result.location[0] = result.location[1] = InvalidGenomeLocation;
         }
+#if 1       // cheese
+        if (result.score[0] + result.score[1] >= 5) {
+            double divisor = __max(1,((result.score[0] + result.score[1]) *2.0) / 5.0);
+            if (result.mapq[0] < 50) {
+                result.mapq[0] /= 2;
+            }
+            if (result.mapq[1] < 50) {
+                result.mapq[1] /= 2;
+            }
+        }
+#endif // 0
 
         writePair(read0, read1, &result);
 
