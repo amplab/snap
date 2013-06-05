@@ -328,6 +328,57 @@ IntersectingPairedEndAligner::align(
 
     bool gaveUpEarly = false;
 
+    struct MergeAnchor {
+        unsigned    locationForReadWithMoreHits;
+        unsigned    locationForReadWithFewerHits;
+        double      matchProbability;
+        int         pairScore;
+
+        MergeAnchor() : locationForReadWithMoreHits(InvalidGenomeLocation), locationForReadWithFewerHits(InvalidGenomeLocation), 
+            matchProbability(0), pairScore(0) {}
+
+        //
+        // Returns true and sets oldMatchProbability if this should be eliminated due to a match.
+        //
+        bool checkMerge(unsigned newMoreHitLocation, unsigned newFewerHitLocation, double newMatchProbability, int newPairScore, 
+                        double *oldMatchProbability) {
+
+            unsigned deltaMore = DistanceBetweenGenomeLocations(locationForReadWithMoreHits, newMoreHitLocation);
+            unsigned deltaFewer = DistanceBetweenGenomeLocations(locationForReadWithFewerHits, newFewerHitLocation);
+
+            if (locationForReadWithMoreHits == InvalidGenomeLocation || deltaMore > 50 || deltaFewer > 50) {
+                //
+                // No merge.  Remember the new one.
+                //
+                locationForReadWithMoreHits = newMoreHitLocation;
+                locationForReadWithFewerHits = newFewerHitLocation;
+                matchProbability = newMatchProbability;
+                pairScore = newPairScore;
+                *oldMatchProbability = 0.0;
+                return false;
+            }  else {
+                //
+                // Within merge distance.  Keep the better score (or if they're tied the better match probability).
+                //
+                if (newPairScore < pairScore || newPairScore == pairScore && newMatchProbability > matchProbability) {
+                    *oldMatchProbability = matchProbability;
+                    matchProbability = newMatchProbability;
+                    pairScore = newPairScore;
+                    return false;
+                } else {
+                    //
+                    // The new one should just be ignored.
+                    //
+                    return true;
+                }
+            }
+
+            _ASSERT(!"NOTREACHED");
+        }
+    };
+
+    MergeAnchor mergeAnchor[NUM_SET_PAIRS];
+
     while (!(setPairDone[0] && setPairDone[1])) {
         //
         // Each iteration of this loop considers a single hit possibility on the read with fewer hits.  We've already looked it up,
@@ -501,29 +552,45 @@ IntersectingPairedEndAligner::align(
                 if (mateHitLocation->score != -1) {
                     double pairProbability = mateHitLocation->matchProbability * fewerHitProbability;
                     unsigned pairScore = mateHitLocation->score + fewerHitScore;
-                    if (pairScore <= maxK && (pairScore < bestPairScore || pairScore == bestPairScore && pairProbability > probabilityOfBestPair)) {
+                    //
+                    // See if this should be ignored as a merge, or if we need to back out a previously scored location
+                    // because it's a worse version of this location.
+                    //
+                    double oldPairProbability;
+                    if (!mergeAnchor[whichSetPairToCheck].checkMerge(smallReadHitGenomeLocation + genomeLocationOffset, 
+                                                                    mateHitLocation->genomeLocation + mateHitLocation->genomeLocationOffset, pairProbability,
+                                                                    pairScore, &oldPairProbability)) {
                         //
-                        // A new best hit.
+                        // Back out the probability of the old match that we're merged with, if any.  The max
+                        // is necessary because a + b - b is not necessarily a in floating point.  If there
+                        // was no merge, the oldPairProbability is 0.
                         //
-                        bestPairScore = pairScore;
-                        probabilityOfBestPair = pairProbability;
-                        bestResultGenomeLocation[readWithFewerHits] = smallReadHitGenomeLocation + genomeLocationOffset;
-                        bestResultGenomeLocation[readWithMoreHits] = mateHitLocation->genomeLocation + mateHitLocation->genomeLocationOffset;
-                        bestResultScore[readWithFewerHits] = fewerHitScore;
-                        bestResultScore[readWithMoreHits] = mateHitLocation->score;
-                        bestResultDirection[readWithFewerHits] = setPairDirection[whichSetPairToCheck][readWithFewerHits];
-                        bestResultDirection[readWithMoreHits] = setPairDirection[whichSetPairToCheck][readWithMoreHits];
+                        probabilityOfAllPairs = __max(0, probabilityOfAllPairs - oldPairProbability);
 
-                        scoreLimit = bestPairScore + extraSearchDepth;
-                    }
+                        if (pairScore <= maxK && (pairScore < bestPairScore || pairScore == bestPairScore && pairProbability > probabilityOfBestPair)) {
+                            //
+                            // A new best hit.
+                            //
+                            bestPairScore = pairScore;
+                            probabilityOfBestPair = pairProbability;
+                            bestResultGenomeLocation[readWithFewerHits] = smallReadHitGenomeLocation + genomeLocationOffset;
+                            bestResultGenomeLocation[readWithMoreHits] = mateHitLocation->genomeLocation + mateHitLocation->genomeLocationOffset;
+                            bestResultScore[readWithFewerHits] = fewerHitScore;
+                            bestResultScore[readWithMoreHits] = mateHitLocation->score;
+                            bestResultDirection[readWithFewerHits] = setPairDirection[whichSetPairToCheck][readWithFewerHits];
+                            bestResultDirection[readWithMoreHits] = setPairDirection[whichSetPairToCheck][readWithMoreHits];
 
-                    probabilityOfAllPairs += pairProbability;
+                            scoreLimit = bestPairScore + extraSearchDepth;
+                        }
 
-                    if (probabilityOfAllPairs >= 4.9) {
-                        //
-                        // Nothing will rescue us from a 0 MAPQ, so just stop looking.
-                        //
-                        goto doneScoring;
+                        probabilityOfAllPairs += pairProbability;
+
+                        if (probabilityOfAllPairs >= 4.9) {
+                            //
+                            // Nothing will rescue us from a 0 MAPQ, so just stop looking.
+                            //
+                            goto doneScoring;
+                        }
                     }
                 } // If the mate candidate had a non -1 score
             }

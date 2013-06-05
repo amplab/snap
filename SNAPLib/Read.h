@@ -171,7 +171,8 @@ public:
         Read() :    
             id(NULL), data(NULL), quality(NULL), 
             localUnclippedDataBuffer(NULL), localUnclippedQualityBuffer(NULL), localBufferSize(0),
-            originalUnclippedDataBuffer(NULL), originalUnclippedQualityBuffer(NULL), clippingState(NoClipping)
+            originalUnclippedDataBuffer(NULL), originalUnclippedQualityBuffer(NULL), clippingState(NoClipping),
+            upperCaseDataBuffer(NULL), upperCaseDataBufferLength(0)
         {}
 
         Read(const Read& other) : 
@@ -184,20 +185,24 @@ public:
             originalUnclippedDataBuffer(other.originalUnclippedDataBuffer),
             originalUnclippedQualityBuffer(other.originalUnclippedQualityBuffer),
             clippingState(other.clippingState),
-            batch(other.batch)
+            batch(other.batch), 
+            upperCaseDataBuffer(other.upperCaseDataBuffer), upperCaseDataBufferLength(other.upperCaseDataBufferLength)
         {
-	    Read* o = (Read*) &other; // hack!
+	        Read* o = (Read*) &other; // hack!
             o->localUnclippedDataBuffer = NULL;
             o->localUnclippedQualityBuffer = NULL;
             o->localBufferSize = 0;
             o->originalUnclippedDataBuffer = NULL;
             o->originalUnclippedQualityBuffer = NULL;
+            o->upperCaseDataBuffer = NULL;
+            o->upperCaseDataBufferLength = 0;
         }
 
         ~Read()
         {
             delete [] localUnclippedDataBuffer;
             delete [] localUnclippedQualityBuffer;
+            BigDealloc(upperCaseDataBuffer);
         }
 
         void operator=(Read& other)
@@ -211,6 +216,7 @@ public:
             unclippedData = other.unclippedData;
             unclippedLength = other.unclippedLength;
             unclippedQuality = other.unclippedQuality;
+            delete [] localUnclippedDataBuffer;
             localUnclippedDataBuffer = other.localUnclippedDataBuffer;
             localUnclippedQualityBuffer = other.localUnclippedQualityBuffer;
             localBufferSize = other.localBufferSize;
@@ -223,6 +229,11 @@ public:
             other.originalUnclippedQualityBuffer = NULL;
             clippingState = other.clippingState;
             batch = other.batch;
+            BigDealloc(upperCaseDataBuffer);
+            upperCaseDataBuffer = other.upperCaseDataBuffer;
+            upperCaseDataBufferLength = other.upperCaseDataBufferLength;
+            other.upperCaseDataBuffer = NULL;
+            other.upperCaseDataBufferLength = 0;
         }
 
         //
@@ -250,6 +261,28 @@ public:
             originalUnclippedDataBuffer = NULL;
             originalUnclippedQualityBuffer = NULL;
             clippingState = NoClipping;
+
+            //
+            // Check for lower case letters in the data, and convert to upper case if there are any.
+            //
+            unsigned anyLowerCase = 0;
+            for (unsigned i = 0; i < dataLength; i++) {
+                anyLowerCase |= IS_LOWER_CASE[data[i]];
+            }
+
+            if (anyLowerCase) {
+                if (upperCaseDataBufferLength < dataLength) {
+                    BigDealloc(upperCaseDataBuffer);
+                    upperCaseDataBuffer = (char *)BigAlloc(dataLength);
+                    upperCaseDataBufferLength = dataLength;
+                }
+
+                for (unsigned i = 0; i < dataLength; i++) {
+                    upperCaseDataBuffer[i] = TO_UPPER_CASE[data[i]];
+                }
+
+                unclippedData = data = upperCaseDataBuffer;
+            }
         }
 
         // For efficiency, this class holds id, data and quality pointers that are
@@ -428,6 +461,13 @@ private:
 
         // batch for managing lifetime during input
         DataBatch batch;
+
+        //
+        // If the read comes in with lower case letters, we need to convert it to upper case.  This buffer is used to store that
+        // data.
+        //
+        char *upperCaseDataBuffer;
+        unsigned upperCaseDataBufferLength;
 };
 
 //

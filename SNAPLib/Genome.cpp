@@ -420,3 +420,10 @@ Genome::copy(bool copyX, bool copyY, bool copyM) const
     return newCopy;
 }
 
+unsigned DistanceBetweenGenomeLocations(unsigned locationA, unsigned locationB) 
+{
+    unsigned largerGenomeOffset = __max(locationA, locationB);
+    unsigned smallerGenomeOffset = __min(locationA, locationB);
+
+    return largerGenomeOffset - smallerGenomeOffset;
+}

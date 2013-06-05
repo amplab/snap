@@ -282,6 +282,7 @@ Arguments:
 
 --*/
 {
+    if (NULL == memory) return;
     VirtualFree(memory,0,MEM_RELEASE);
 }
 
@@ -353,6 +354,7 @@ void *BigAlloc(
 
 void BigDealloc(void *memory)
 {
+    if (NULL == memory) return;
     // Figure out the size we had allocated
     char *startAddress = ((char *) memory) - sizeof(size_t);
     size_t sizeAllocated = *((size_t *) startAddress);
