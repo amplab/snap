@@ -56,6 +56,9 @@ private:
     typedef map<string,Read> ReadMap;
     DataBatch batch[2]; // 0 = current, 1 = previous
     ReadMap unmatched[2]; // read id -> Read
+    typedef map<string,ReadWithOwnMemory> OverflowMap;
+    OverflowMap overflow; // read id -> Read
+    _int64 overflowMatched;
     // used only if ! autoRelease:
     bool dependents; // true if pairs from 0->1
     ExclusiveLock lock; // exclusive access to forward/backward
@@ -71,7 +74,8 @@ PairedReadMatcher::PairedReadMatcher(
     forward(),
     backward(),
     dependents(false),
-    autoRelease(i_autoRelease)
+    autoRelease(i_autoRelease),
+    overflowMatched(0)
 {
     if (! autoRelease) {
         InitializeExclusiveLock(&lock);
@@ -94,9 +98,10 @@ PairedReadMatcher::getNextReadPair(
     while (true) {
         Read one;
         if (! single->getNextRead(&one)) {
-            size_t n = unmatched[0].size() + unmatched[1].size();
-            if (n > 0) {
-                fprintf(stderr, " warning: PairedReadMatcher%d discarding unpaired reads at eof\n", n);
+            int n = unmatched[0].size() + unmatched[1].size();
+            int n2 = overflow.size() - overflowMatched;
+            if (n + n2 > 0) {
+                fprintf(stderr, " warning: PairedReadMatcher discarding %d+%d unpaired reads at eof\n", n, n2);
             }
             return false;
         }
@@ -110,8 +115,20 @@ PairedReadMatcher::getNextReadPair(
         if (one.getBatch() != batch[0]) {
             // roll over batches
             if (unmatched[1].size() > 0) {
-                fprintf(stderr, "warning: PairedReadMatcher discarding %d unpaired reads\n", unmatched[1].size());
+                //printf("warning: PairedReadMatcher overflow %d unpaired reads from %d:%d\n", unmatched[1].size(), batch[1].fileID, batch[1].batchID); //!!
+                char* buf = (char*) alloca(500);
+                for (ReadMap::iterator r = unmatched[1].begin(); r != unmatched[1].end(); r++) {
+                    overflow[r->first].set(r->second);
+                    memcpy(buf, r->second.getId(), r->second.getIdLength());
+                    buf[r->second.getIdLength()] = 0;
+                    //printf("overflow add %d:%d %s\n", batch[1].fileID, batch[1].batchID, buf);
+                }
             }
+
+            for (ReadMap::iterator i = unmatched[1].begin(); i != unmatched[1].end(); i++) {
+                i->second.dispose();
+            }
+            unmatched[1].clear();
             unmatched[1] = unmatched[0];
             unmatched[0].clear();
             if (autoRelease) {
@@ -124,26 +141,40 @@ PairedReadMatcher::getNextReadPair(
         ReadMap::iterator found = unmatched[0].find(key);
         if (found != unmatched[0].end()) {
             *read2 = found->second;
+            //printf("current matched %d:%d->%d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, batch[0].fileID, batch[0].batchID, key.data()); //!!
             unmatched[0].erase(found);
         } else {
             // try previous batch
             found = unmatched[1].find(key);
             if (found == unmatched[1].end()) {
-                // no match, remember it for later matching
-	            unmatched[0][key] = one;
-                continue;
+                // try overflow
+                OverflowMap::iterator found2 = overflow.find(key);
+                if (found2 == overflow.end()) {
+                    // no match, remember it for later matching
+	                unmatched[0][key] = one;
+                    //printf("unmatched add %d:%d %s\n", batch[0].fileID, batch[0].batchID, key.data()); //!!
+                    continue;
+                } else {
+                    // copy data into read, keep in overflow table indefinitely to preserve memory
+                    *read2 = * (Read*) &found2->second;
+                    overflowMatched++;
+                    //printf("overflow matched %d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, key.data()); //!!
+                    read2->setBatch(batch[0]); // overwrite batch so both reads have same batch, will track deps instead
+                }
+            } else {
+                // found, remember dependency
+                if ((! autoRelease) && (! dependents)) {
+                    dependents = true;
+                    AcquireExclusiveLock(&lock);
+                    forward.put(batch[1].asKey(), batch[0]);
+                    backward.put(batch[0].asKey(), batch[1]);
+                    ReleaseExclusiveLock(&lock);
+                }
+                *read2 = found->second;
+                //printf("prior matched %d:%d->%d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, batch[0].fileID, batch[0].batchID, key.data()); //!!
+                read2->setBatch(batch[0]); // overwrite batch so both reads have same batch, will track deps instead
+                unmatched[1].erase(found);
             }
-            // found, remember dependency
-            if (autoRelease && ! dependents) {
-                dependents = true;
-                AcquireExclusiveLock(&lock);
-                forward.put(batch[1].asKey(), batch[0]);
-                backward.put(batch[0].asKey(), batch[1]);
-                ReleaseExclusiveLock(&lock);
-            }
-            *read2 = found->second;
-            read2->setBatch(batch[0]); // overwrite batch so both reads have same batch, will track deps instead
-            unmatched[1].erase(found);
         }
 
         // found a match
@@ -168,6 +199,7 @@ PairedReadMatcher::releaseBatch(
         DataBatch* fb = backward.tryFind(f->asKey());
         keep = fb != NULL;
         if (fb == NULL) {
+            //printf("release forward/backward batch reference %d:%d->%d:%d\n", batch.fileID, batch.batchID, f->fileID, f->batchID);
             single->releaseBatch(*f);
         }
         forward.erase(key);
@@ -177,10 +209,12 @@ PairedReadMatcher::releaseBatch(
         DataBatch* bf = forward.tryFind(b->asKey());
         keep |= bf != NULL;
         if (bf == NULL) {
+            //printf("release backward/forward batch reference %d:%d->%d:%d\n", batch.fileID, batch.batchID, b->fileID, b->batchID);
             single->releaseBatch(*b);
         }
         backward.erase(key);
     }
+    //printf("%s dependent batch %d:%d\n", keep ? "keep" : "release", batch.fileID, batch.batchID);
     if (! keep) {
         single->releaseBatch(batch);
     }

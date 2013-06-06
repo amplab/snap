@@ -186,7 +186,7 @@ public:
             clippingState(other.clippingState),
             batch(other.batch)
         {
-	    Read* o = (Read*) &other; // hack!
+            Read* o = (Read*) &other; // hack!
             o->localUnclippedDataBuffer = NULL;
             o->localUnclippedQualityBuffer = NULL;
             o->localBufferSize = 0;
@@ -198,6 +198,18 @@ public:
         {
             delete [] localUnclippedDataBuffer;
             delete [] localUnclippedQualityBuffer;
+        }
+
+        void dispose()
+        {
+            if (localUnclippedDataBuffer != NULL) {
+                delete [] localUnclippedDataBuffer;
+                localUnclippedDataBuffer = NULL;
+            }
+            if (localUnclippedQualityBuffer != NULL) {
+                delete [] localUnclippedQualityBuffer;
+                localUnclippedQualityBuffer = NULL;
+            }
         }
 
         void operator=(Read& other)
@@ -437,7 +449,9 @@ private:
 //
 class ReadWithOwnMemory : public Read {
 public:
-        ReadWithOwnMemory(const Read &baseRead) {
+        ReadWithOwnMemory() : Read(), dataBuffer(NULL), idBuffer(NULL), qualityBuffer(NULL) {}
+
+        void set(const Read &baseRead) {
             idBuffer = new char[baseRead.getIdLength()+1];
             dataBuffer = new char[baseRead.getUnclippedLength()+1];
             qualityBuffer = new char[baseRead.getUnclippedLength() + 1];
@@ -453,6 +467,10 @@ public:
     
             init(idBuffer,baseRead.getIdLength(),dataBuffer,qualityBuffer,baseRead.getUnclippedLength());
 			clip(baseRead.getClippingState());
+        }
+        
+        ReadWithOwnMemory(const Read &baseRead) {
+            set(baseRead);
         }
 
         ~ReadWithOwnMemory() {
