@@ -36,7 +36,7 @@ Revision History:
 #include "GenomeIndex.h"
 #include "Range.h"
 #include "SAM.h"
-#include "SingleFirstPairedEndAligner.h"
+#include "ChimericPairedEndAligner.h"
 #include "Tables.h"
 #include "WGsim.h"
 #include "AlignerOptions.h"
@@ -230,7 +230,6 @@ PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
     : AlignerOptions(i_commandLine, true),
     minSpacing(DEFAULT_MIN_SPACING),
     maxSpacing(DEFAULT_MAX_SPACING),
-    skipAlignTogether(false),
     forceSpacing(false),
     intersectingAlignerMaxHits(DEFAULT_INTERSECTING_ALIGNER_MAX_HITS)
 {
@@ -242,7 +241,6 @@ void PairedAlignerOptions::usageMessage()
     printf(
         "  -s   min and max spacing to allow between paired ends (default: %d %d)\n"
         "  -fs  force spacing to lie between min and max\n"
-        "  -fast Skip some rare but very expensive cases.  Results in fewer alignments, but they're high quality and very quick.\n"
         "  -H   max hits for intersecting aligner (default: %d)\n",
         DEFAULT_MIN_SPACING,
         DEFAULT_MAX_SPACING,
@@ -270,9 +268,6 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
         return false;
     } else if (strcmp(argv[n], "-fs") == 0) {
         forceSpacing = true;
-        return true;
-    } else if (strcmp(argv[n], "-fast") == 0) {
-        skipAlignTogether = true;
         return true;
     }
     return AlignerOptions::parse(argv, argc, n, done);
@@ -385,7 +380,6 @@ void PairedAlignerContext::initialize()
     minSpacing = options2->minSpacing;
     maxSpacing = options2->maxSpacing;
     forceSpacing = options2->forceSpacing;
-    skipAlignTogether = options2->skipAlignTogether;
     intersectingAlignerMaxHits = options2->intersectingAlignerMaxHits;
     ignoreMismatchedIDs = options2->ignoreMismatchedIDs;
 }
@@ -417,7 +411,7 @@ void PairedAlignerContext::runIterationThread()
     
     IntersectingPairedEndAligner *intersectingAligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, allocator);
 
-    SingleFirstPairedEndAligner *aligner = new SingleFirstPairedEndAligner(
+    ChimericPairedEndAligner *aligner = new ChimericPairedEndAligner(
         index,
         maxReadSize,
         confDiff,
@@ -427,10 +421,8 @@ void PairedAlignerContext::runIterationThread()
         minSpacing,
         maxSpacing,
         forceSpacing,
-        maxReadSize,
         adaptiveConfDiff,
         extraSearchDepth,
-        skipAlignTogether,
         intersectingAligner);
 
     ReadWriter *readWriter = this->readWriter;

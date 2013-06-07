@@ -12,6 +12,9 @@ const char *VALUE_BASE = tables.getValueBase();
 const char *PACKED_BASE_VALUE = tables.getPackedBaseValue();
 const char *PACKED_QUALITY_MASK = tables.getPackedQualityMask();
 const char *PACKED_VALUE_BASE = tables.getPackedValueBase();
+const unsigned *IS_LOWER_CASE = tables.getIsLowerCase();
+extern const char *TO_UPPER_CASE = tables.getToUpperCase();
+
 
 Tables::Tables()
 {
@@ -64,4 +67,13 @@ Tables::Tables()
     
     memset(packedQualityMask, 0, 4);
     memset(packedQualityMask + 4, 0x3f, sizeof(packedQualityMask) - 4);
+
+    for (unsigned i = 0; i < 256; i++) {
+        isLowerCase[i] = 0;
+        toUpperCase[i] = i;
+    }
+    for (unsigned i = 0x61; i <= 0x7a; i++) {
+        isLowerCase[i] = 1;
+        toUpperCase[i] = i - 0x20;
+    }
 }

@@ -170,3 +170,5 @@ private:
         static bool openFileAndGetSizes(const char *filename, FILE **file, unsigned *nBases, unsigned *nPieces);
 
 };
+
+unsigned DistanceBetweenGenomeLocations(unsigned locationA, unsigned locationB);

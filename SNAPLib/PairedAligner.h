@@ -65,7 +65,6 @@ protected:
     int                 minSpacing;
     int                 maxSpacing;
     bool                forceSpacing;
-    bool                skipAlignTogether;
     unsigned            intersectingAlignerMaxHits;
     const char         *fastqFile1;
     bool                ignoreMismatchedIDs;
@@ -82,6 +81,5 @@ struct PairedAlignerOptions : public AlignerOptions
     int minSpacing;
     int maxSpacing;
     bool forceSpacing;
-    bool skipAlignTogether;
     unsigned intersectingAlignerMaxHits;
 };

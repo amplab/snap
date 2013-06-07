@@ -164,6 +164,7 @@
     <ClInclude Include="BaseAligner.h" />
     <ClInclude Include="BigAlloc.h" />
     <ClInclude Include="BufferedAsync.h" />
+    <ClInclude Include="ChimericPairedEndAligner.h" />
     <ClInclude Include="Compat.h" />
     <ClInclude Include="DataReader.h" />
     <ClInclude Include="DataWriter.h" />
@@ -218,6 +219,7 @@
     <ClCompile Include="BiasTables.cpp" />
     <ClCompile Include="BigAlloc.cpp" />
     <ClCompile Include="BufferedAsync.cpp" />
+    <ClCompile Include="ChimericPairedEndAligner.cpp" />
     <ClCompile Include="Compat.cpp" />
     <ClCompile Include="DataReader.cpp" />
     <ClCompile Include="DataWriter.cpp" />

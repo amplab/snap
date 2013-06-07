@@ -87,7 +87,7 @@ WorkerThreadMain(void *param)
     SAMReader *samReader = NULL;
     while (rangeSplitter->getNextRange(&rangeStart, &rangeLength)) {
         if (NULL == samReader) {
-            samReader = SAMReader::create(DataSupplier::Default[false], inputFileName, genome, rangeStart, rangeLength);
+            samReader = SAMReader::create(DataSupplier::Default[true], inputFileName, genome, rangeStart, rangeLength);
         } else {
             ((ReadReader *)samReader)->reinit(rangeStart, rangeLength);
         }
@@ -111,6 +111,10 @@ WorkerThreadMain(void *param)
             if (0xffffffff == genomeLocation) {
                 context->nUnaligned++;
             } else {
+                if (flag & SAM_REVERSE_COMPLEMENT) {
+                    read.becomeRC();
+                }
+                            
                 const Genome::Piece *piece = genome->getPieceAtLocation(genomeLocation);
                 if (NULL == piece) {
                     fprintf(stderr,"couldn't find genome piece for offset %u\n",genomeLocation);
@@ -176,7 +180,8 @@ WorkerThreadMain(void *param)
                             }
                             beginningOfFirstNumber++; // Again, we went one too far.
 
-                            offsetB = -1;
+                           offsetA = -1;
+                           offsetB = -1;
 
                             if (*(beginningOfFirstNumber - 1) == '_' && 1 == sscanf(beginningOfFirstNumber,"%u",&offsetA) &&
                                 ('_' == *beginningOfSecondNumber || 1 == sscanf(beginningOfSecondNumber,"%u", &offsetB))) {
@@ -203,16 +208,14 @@ WorkerThreadMain(void *param)
                         exit(1);
                     }
 
-                    offsetB = -1;
+ 
                     bool match0 = false;
                     bool match1 = false;
-                    if (strncmp(piece->name, idBuffer, __min(read.getIdLength(), chrNameLen))) {
+                    if (-1 == offsetA || -1 == offsetB) {
                         matched = false;
-                    } else if (!(('_' == *beginningOfSecondNumber && 1 == sscanf(idBuffer + strlen(piece->name), "_%u", &offsetA) || 
-                                (2 == sscanf(idBuffer + strlen(piece->name),"_%u_%u",&offsetA,&offsetB))))) {
+                    }  else if(strncmp(piece->name, idBuffer, __min(read.getIdLength(), chrNameLen))) {
                         matched = false;
                     } else {
-#if 1
                         if (isWithin(offsetA, genomeLocation - piece->beginningOffset, 50)) {
                             matched = true;
                             match0 = true;
@@ -227,27 +230,6 @@ WorkerThreadMain(void *param)
                                 match1 = true;
                             }
                         }
-#else   // 1
-
-                        if (matchBothWays || flag & SAM_NEXT_UNMAPPED) {
-                            match0 = true;
-                            match1 = true;
-                        } else if (flag & SAM_FIRST_SEGMENT) {
-                            match0 = true;
-                        } else if (flag & SAM_LAST_SEGMENT) {
-                            match1 = true;
-                        } else {
-                            //
-                            // Neither first nor last segement.  
-                            match0 = true;
-                            match1 = true;
-                        }
-
-                       matched = match0 && isWithin(offsetA, genomeLocation - piece->beginningOffset, 50) || match1 && isWithin(offsetB, genomeLocation - piece->beginningOffset, 50);
-
-#endif // 1
-
-
                     }
 
                     context->countOfReads[mapQ]++;
@@ -258,22 +240,50 @@ WorkerThreadMain(void *param)
                         context->countOfMisalignmentsByEditDistance[mapQ][editDistance]++;
 
                         if (70 == mapQ || 69 == mapQ) {
-                           if (flag & SAM_REVERSE_COMPLEMENT) {
-                                read.becomeRC();
+
+                            //
+                            // We don't know which offset is correct, because neither one matched.  Just take the one with the lower edit distance.
+                            //
+                            unsigned correctLocationA = offsetOfCorrectChromosome + offsetA;
+                            unsigned correctLocationB = offsetOfCorrectChromosome + offsetB;
+
+                            unsigned correctLocation = 0;
+                            const char *correctData = NULL;
+
+                            const char *dataA = genome->getSubstring(correctLocationA, 1);
+                            const char *dataB = genome->getSubstring(correctLocationB, 1);
+                            int distanceA, distanceB;
+                            char cigarA[cigarBufLen];
+                            char cigarB[cigarBufLen];
+
+                            cigarA[0] = '*'; cigarA[1] = '\0';
+                            cigarB[0] = '*'; cigarB[1] = '\0';
+
+                            if (dataA == NULL) {
+                                distanceA = -1;
+                            } else {
+                                distanceA = lv.computeEditDistance(dataA, read.getDataLength() + 20, read.getData(), read.getDataLength(), 30, cigarA, cigarBufLen, false);
                             }
-                            
-                            unsigned correctLocation = (match0 ? offsetA : offsetB) + offsetOfCorrectChromosome;
- 
-                            char cigarForCorrect[cigarBufLen];
 
+                            if (dataB == NULL) {
+                                distanceB = -1;
+                            } else {
+                                distanceB = lv.computeEditDistance(dataB, read.getDataLength() + 20, read.getData(), read.getDataLength(), 30, cigarB, cigarBufLen, false);
+                            }
 
-                            const char *correctGenomeData = genome->getSubstring(correctLocation, 1);
+                            const char *correctGenomeData;
+                            char *cigarForCorrect;
+
+                            if (distanceA != -1 && distanceA <= distanceB || distanceB == -1) {
+                                correctGenomeData = dataA;
+                                correctLocation = correctLocationA;
+                                cigarForCorrect = cigarA;
+                            } else {
+                                correctGenomeData = dataB;
+                                correctLocation = correctLocationB;
+                                cigarForCorrect = cigarB;
+                            }
                            
-                            bool foo = isWithin(offsetA, genomeLocation - piece->beginningOffset, 50) || match1 && isWithin(offsetB, genomeLocation - piece->beginningOffset, 50);
-
-                            lv.computeEditDistance(correctGenomeData, read.getDataLength() + 20, read.getData(), read.getDataLength(), 30, cigarForCorrect, cigarBufLen, false);
-
- 
                             printf("%s\t%d\t%s\t%u\t%d\t%s\t*\t*\t100\t%.*s\t%.*s\tAlignedGenomeLocation:%u\tCorrectGenomeLocation: %u\tCigarForCorrect: %s\tCorrectData: %.*s\tAlignedData: %.*s\n", 
                                 idBuffer, flag, piece->name, genomeLocation - piece->beginningOffset, mapQ, cigarForAligned, read.getDataLength(), read.getData(), 
                                 read.getDataLength(), read.getQuality(),  genomeLocation, correctLocation, cigarForCorrect, read.getDataLength(),
@@ -321,15 +331,23 @@ int main(int argc, char * argv[])
 
     inputFileName = argv[2];
 
-    nRunningThreads = GetNumberOfProcessors();
+    unsigned nThreads;
+#ifdef _DEBUG
+    nThreads = 1;
+#else   // _DEBUG
+    nThreads = GetNumberOfProcessors();
+#endif // _DEBUG
+
+
+    nRunningThreads = nThreads;
 
     _int64 fileSize = QueryFileSize(argv[2]);
-    rangeSplitter = new RangeSplitter(fileSize, GetNumberOfProcessors());
+    rangeSplitter = new RangeSplitter(fileSize, nThreads);
     
     CreateSingleWaiterObject(&allThreadsDone);
-    ThreadContext *contexts = new ThreadContext[GetNumberOfProcessors()];
+    ThreadContext *contexts = new ThreadContext[nThreads];
 
-    for (unsigned i = 0; i < GetNumberOfProcessors(); i++) {
+    for (unsigned i = 0; i < nThreads; i++) {
         contexts[i].whichThread = i;
 
         StartNewThread(WorkerThreadMain, &contexts[i]);
@@ -338,7 +356,7 @@ int main(int argc, char * argv[])
     WaitForSingleWaiterObject(&allThreadsDone);
 
     _int64 nUnaligned = 0;
-    for (unsigned i = 0; i < GetNumberOfProcessors(); i++) {
+    for (unsigned i = 0; i < nThreads; i++) {
         nUnaligned += contexts[i].nUnaligned;
     }
     printf("%lld total unaligned\nMAPQ\tnReads\tnMisaligned\n",nUnaligned);
@@ -346,7 +364,7 @@ int main(int argc, char * argv[])
     for (int i = 0; i <= MaxMAPQ; i++) {
         _int64 nReads = 0;
         _int64 nMisaligned = 0;
-        for (unsigned j = 0; j < GetNumberOfProcessors(); j++) {
+        for (unsigned j = 0; j < nThreads; j++) {
             nReads += contexts[j].countOfReads[i];
             nMisaligned += contexts[j].countOfMisalignments[i];
         }
@@ -354,7 +372,7 @@ int main(int argc, char * argv[])
     }
 
     int maxEditDistanceSeen = 0;
-    for (int i = 0; i < GetNumberOfProcessors(); i++) {
+    for (int i = 0; i < nThreads; i++) {
     }
 
 	return 0;

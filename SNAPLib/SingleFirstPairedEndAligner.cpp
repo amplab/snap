@@ -76,6 +76,10 @@ SingleFirstPairedEndAligner::~SingleFirstPairedEndAligner()
     delete mateAligner;
 }
 
+#ifdef _DEBUG
+extern bool _DumpAlignments;
+#endif // _DEBUG
+
 
 void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentResult *result)
 {
@@ -120,7 +124,7 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
    
     lv.clearCache();
     reverseLV.clearCache();
-#if 1
+#if 0
 
     // First try aligning each end alone and looking for its mate nearby if it was confident.
     // TODO: Guess which end will be faster to search for first based on it seeds?
@@ -181,6 +185,12 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
                     result->score[1-r] = score1;
                     result->mapq[1-r] = min(mapq0,mapq1);
                     result->alignedAsPair = true;
+#ifdef _DEBUG
+                    if (_DumpAlignments) {
+                        printf("SingleFirstPairedEndAligner: too good to pass up (%u, %u) score (%d, %d), MAPQ (%d, %d)\n\n\n",result->location[0], result->location[1],
+                            result->score[0], result->score[1], result->mapq[0], result->mapq[1]);
+                    }
+#endif // _DEBUG
                     return;
                 }
 
@@ -282,6 +292,13 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
         result->mapq[1-r] = mateMapq[1-r];
         result->alignedAsPair = true;
 
+#ifdef _DEBUG
+                    if (_DumpAlignments) {
+                        printf("SingleFirstPairedEndAligner: single was good enough (%u, %u) score (%d, %d), MAPQ (%d, %d)\n\n\n",result->location[0], result->location[1],
+                            result->score[0], result->score[1], result->mapq[0], result->mapq[1]);
+                    }
+#endif // _DEBUG
+
         return;
     }
 
@@ -331,7 +348,14 @@ void SingleFirstPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmen
         }
     }
 
+#ifdef _DEBUG
+    if (_DumpAlignments) {
+        printf("SingleFirstPairedEndAligner: from align together/chimeric (%u, %u) score (%d, %d), MAPQ (%d, %d)\n\n\n",result->location[0], result->location[1],
+            result->score[0], result->score[1], result->mapq[0], result->mapq[1]);
+    }
+#endif // _DEBUG
+                    
     TRACE("alignTogether took %lld ns and returned %s %s\n", end - start,
-            AlignmentResultToString(result->status[0]),
-            AlignmentResultToString(result->status[1]));
+        AlignmentResultToString(result->status[0]),
+        AlignmentResultToString(result->status[1]));
 }
