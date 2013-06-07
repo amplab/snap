@@ -33,6 +33,30 @@ using std::pair;
 using std::map;
 using std::string;
 
+#if 0
+void _Debug_TestReadMap(Read* sample, int millions)
+{
+    char buf[100];
+    map<string,Read> reads;
+    for (int i = 0; i < millions * 1000; i++) {
+        for (int j = 0; j < 1000; j++) {
+            Read r;
+            sprintf(buf, "id-%d-%d", i, j);
+            r.init(buf, strlen(buf), sample->getData(), sample->getQuality(), sample->getDataLength());
+            r.becomeRC();
+            string key(buf);
+            reads[key] = r;
+        }
+        for (int j = 0; j < 1000; j++) {
+            sprintf(buf, "id-%d-%d", i, j);
+            string key(buf);
+            reads.erase(reads.find(key));
+        }
+        printf(".");
+    }
+}
+#endif
+
 class PairedReadMatcher: public PairedReadReader
 {
 public:
@@ -116,11 +140,11 @@ PairedReadMatcher::getNextReadPair(
             // roll over batches
             if (unmatched[1].size() > 0) {
                 //printf("warning: PairedReadMatcher overflow %d unpaired reads from %d:%d\n", unmatched[1].size(), batch[1].fileID, batch[1].batchID); //!!
-                char* buf = (char*) alloca(500);
+                //char* buf = (char*) alloca(500);
                 for (ReadMap::iterator r = unmatched[1].begin(); r != unmatched[1].end(); r++) {
                     overflow[r->first].set(r->second);
-                    memcpy(buf, r->second.getId(), r->second.getIdLength());
-                    buf[r->second.getIdLength()] = 0;
+                    //memcpy(buf, r->second.getId(), r->second.getIdLength());
+                    //buf[r->second.getIdLength()] = 0;
                     //printf("overflow add %d:%d %s\n", batch[1].fileID, batch[1].batchID, buf);
                 }
             }
