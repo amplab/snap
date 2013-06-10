@@ -143,9 +143,7 @@ Arguments:
     rcTranslationTable['T'] = 'A';
     rcTranslationTable['N'] = 'N';
 
-    for (unsigned i = 0; i < 256; i++) {
-        nTable[i] = 0;
-    }
+    memset(nTable, 0, sizeof(nTable));
 
     nTable['N'] = 1;
 
