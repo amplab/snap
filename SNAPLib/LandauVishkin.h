@@ -140,7 +140,17 @@ private:
 
 };
 
-
+static inline void memsetint(int* p, int value, int count)
+{
+// this is required to get around a GCC optimization bug
+#ifndef _MSC_VER
+  volatile
+#endif
+    int * q = p;
+  for (int i = 0; i < count; i++) {
+    q[i] = value;
+  }
+}
 
 // Computes the edit distance between two strings without returning the edits themselves.
 // Set TEXT_DIRECTION to -1 to run backwards through the text.
@@ -153,11 +163,7 @@ public:
         soft_exit(1);
     }
 
-    for (int i = 0; i < MAX_K+1; i++) {
-        for (int j = 0; j < 2*MAX_K+1; j++) {
-        L[i][j] = -2;
-        }
-    }
+    memsetint(L[0], -2, (MAX_K+1)*(2*MAX_K+1));
 
     if (cacheSize > 0) {
         cache = new LandauVishkinCache(cacheSize);

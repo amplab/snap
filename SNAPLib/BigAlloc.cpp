@@ -42,7 +42,11 @@ static int NCallers = 0;
 static int LastCaller = 0;
 static ProfileEntry AllocProfile[1000];
 
-void* BigAllocInternal(size_t, size_t*);
+void *BigAllocInternal(
+        size_t      sizeToAllocate,
+        size_t      *sizeAllocated,
+        bool        reserveOnly = FALSE,
+        size_t      *pageSize = NULL);
 
 void *BigAllocProfile(
         size_t      sizeToAllocate,
@@ -145,8 +149,8 @@ AssertPrivilege(
 void *BigAllocInternal(
         size_t      sizeToAllocate,
         size_t      *sizeAllocated,
-        bool        reserveOnly = FALSE,
-        size_t      *pageSize = NULL)
+        bool        reserveOnly,
+        size_t      *pageSize)
 /*++
 
 Routine Description:
@@ -259,12 +263,12 @@ Return Value:
 
 }
 
-#ifndef BIGALLOC_PROFILE
+#ifndef PROFILE_BIGALLOC
 void *BigAlloc(
         size_t      sizeToAllocate,
         size_t      *sizeAllocated)
 {
-    return BigAllocInternal(sizeToAllocate, sizeAllocated);
+    return BigAllocInternal(sizeToAllocate, sizeAllocated, FALSE, NULL);
 }
 #endif
 

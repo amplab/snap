@@ -645,7 +645,7 @@ static const int windowBits = 15;
 static const int ENABLE_ZLIB_GZIP = 32;
 
 static const double MIN_FACTOR = 1.2;
-static const double MAX_FACTOR = 4.5;
+static const double MAX_FACTOR = 8.0;
 
 class GzipDataReader : public DataReader
 {
@@ -855,13 +855,10 @@ GzipDataReader::decompress(
     zstream.avail_in = (uInt)inputBytes;
     zstream.next_out = (Bytef*) output;
     zstream.avail_out = (uInt)outputBytes;
-    uInt oldAvail;
+    uInt oldAvailOut, oldAvailIn;
     int block = 0;
     int status;
-    Bytef *lastIn, *lastOut;
     do {
-        lastIn = zstream.next_in;
-        lastOut = zstream.next_out;
 	    if (mode != ContinueMultiBlock || block != 0) {
             status = inflateInit2(&zstream, windowBits | ENABLE_ZLIB_GZIP);
             if (status < 0) {
@@ -869,7 +866,8 @@ GzipDataReader::decompress(
                 return false;
             }
         }
-        oldAvail = zstream.avail_out;
+        oldAvailOut = zstream.avail_out;
+        oldAvailIn = zstream.avail_out;
         status = inflate(&zstream, mode == SingleBlock ? Z_NO_FLUSH : Z_FINISH);
         //printf("decompress block #%d %lld -> %lld = %d\n", block, zstream.next_in - lastIn, zstream.next_out - lastOut, status);
         block++;
@@ -881,7 +879,7 @@ GzipDataReader::decompress(
             fprintf(stderr, "GzipDataReader: insufficient decompression buffer space\n");
             soft_exit(1);
         }
-    } while (zstream.avail_in != 0 && zstream.avail_out != oldAvail && mode != SingleBlock);
+    } while (zstream.avail_in != 0 && (zstream.avail_out != oldAvailOut || zstream.avail_in != oldAvailIn) && mode != SingleBlock);
     //printf("end decompress status=%d, avail_in=%lld, last block=%lld->%lld, avail_out=%lld\n", status, zstream.avail_in, zstream.next_in - lastIn, zstream.next_out - lastOut, zstream.avail_out);
     if (o_inputRead) {
         *o_inputRead = inputBytes - zstream.avail_in;
@@ -1062,13 +1060,10 @@ MemMapDataReader::MemMapDataReader(int i_batchCount, _int64 i_batchSize, _int64 
         extra = NULL;
         extraBatches = NULL;
     }
-    if (batchCount != 1) {
-        if (! (CreateSingleWaiterObject(&waiter) && InitializeExclusiveLock(&lock))) {
-            fprintf(stderr, "MemMapDataReader: CreateSingleWaiterObject failed\n");
-            soft_exit(1);
-        }
+    if (! (CreateSingleWaiterObject(&waiter) && InitializeExclusiveLock(&lock))) {
+        fprintf(stderr, "MemMapDataReader: CreateSingleWaiterObject failed\n");
+        soft_exit(1);
     }
-    
 }
 
 MemMapDataReader::~MemMapDataReader()
@@ -1080,10 +1075,8 @@ MemMapDataReader::~MemMapDataReader()
     if (extraBatches != NULL) {
         delete [] extraBatches;
     }
-    if (batchCount != 1) {
-        DestroyExclusiveLock(&lock);
-        DestroySingleWaiterObject(&waiter);
-    }
+    DestroyExclusiveLock(&lock);
+    DestroySingleWaiterObject(&waiter);
 }
 
     bool

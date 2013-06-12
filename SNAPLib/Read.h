@@ -188,7 +188,7 @@ public:
             batch(other.batch), 
             upperCaseDataBuffer(other.upperCaseDataBuffer), upperCaseDataBufferLength(other.upperCaseDataBufferLength)
         {
-	        Read* o = (Read*) &other; // hack!
+            Read* o = (Read*) &other; // hack!
             o->localUnclippedDataBuffer = NULL;
             o->localUnclippedQualityBuffer = NULL;
             o->localBufferSize = 0;
@@ -205,6 +205,16 @@ public:
             BigDealloc(upperCaseDataBuffer);
         }
 
+        void dispose()
+        {
+            delete [] localUnclippedDataBuffer;
+            localUnclippedDataBuffer = NULL;
+            delete [] localUnclippedQualityBuffer;
+            localUnclippedQualityBuffer = NULL;
+            BigDealloc(upperCaseDataBuffer);
+            upperCaseDataBuffer = NULL;
+        }
+
         void operator=(Read& other)
         {
             id = other.id;
@@ -218,6 +228,7 @@ public:
             unclippedQuality = other.unclippedQuality;
             delete [] localUnclippedDataBuffer;
             localUnclippedDataBuffer = other.localUnclippedDataBuffer;
+            delete [] localUnclippedQualityBuffer;
             localUnclippedQualityBuffer = other.localUnclippedQualityBuffer;
             localBufferSize = other.localBufferSize;
             other.localUnclippedDataBuffer = NULL;
@@ -477,7 +488,9 @@ private:
 //
 class ReadWithOwnMemory : public Read {
 public:
-        ReadWithOwnMemory(const Read &baseRead) {
+        ReadWithOwnMemory() : Read(), dataBuffer(NULL), idBuffer(NULL), qualityBuffer(NULL) {}
+
+        void set(const Read &baseRead) {
             idBuffer = new char[baseRead.getIdLength()+1];
             dataBuffer = new char[baseRead.getUnclippedLength()+1];
             qualityBuffer = new char[baseRead.getUnclippedLength() + 1];
@@ -493,6 +506,10 @@ public:
     
             init(idBuffer,baseRead.getIdLength(),dataBuffer,qualityBuffer,baseRead.getUnclippedLength());
 			clip(baseRead.getClippingState());
+        }
+        
+        ReadWithOwnMemory(const Read &baseRead) {
+            set(baseRead);
         }
 
         ~ReadWithOwnMemory() {
