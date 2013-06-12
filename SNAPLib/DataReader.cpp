@@ -645,7 +645,7 @@ static const int windowBits = 15;
 static const int ENABLE_ZLIB_GZIP = 32;
 
 static const double MIN_FACTOR = 1.2;
-static const double MAX_FACTOR = 8.0;
+static const double MAX_FACTOR = 10.0;
 
 class GzipDataReader : public DataReader
 {
@@ -696,13 +696,15 @@ private:
     _int64          priorBytes; // bytes copied from end of prior buffer
     bool            gotBatchData; // whether data has been read & decompressed for current batch
     bool            continueBlock; // whether to continue a block or start a new one
+    ThreadHeap      heap;
 };
  
 GzipDataReader::GzipDataReader(_int64 i_overflowBytes, _int64 i_extraBytes, DataReader* i_inner, bool autoRelease)
     : DataReader(autoRelease), overflowBytes(i_overflowBytes),
     extraBytes(i_extraBytes),
     inner(i_inner),
-    zstream()
+    zstream(),
+    heap(65536)
 {
 }
 
@@ -718,9 +720,9 @@ GzipDataReader::init(
     if (! inner->init(i_fileName)) {
         return false;
     }
-    zstream.zalloc = Z_NULL;
-    zstream.zfree = Z_NULL;
-    zstream.opaque = Z_NULL;
+    zstream.zalloc = zalloc;
+    zstream.zfree = zfree;
+    zstream.opaque = &heap;
     return true;
 }
 
@@ -860,6 +862,7 @@ GzipDataReader::decompress(
     int status;
     do {
 	    if (mode != ContinueMultiBlock || block != 0) {
+            heap.reset();
             status = inflateInit2(&zstream, windowBits | ENABLE_ZLIB_GZIP);
             if (status < 0) {
                 fprintf(stderr, "GzipDataReader: inflateInit2 failed with %d\n", status);

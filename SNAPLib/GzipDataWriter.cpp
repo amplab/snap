@@ -116,40 +116,6 @@ struct GzipContext : public TaskContextBase
     void finishThread(GzipContext* common) {}
 };
 
-// trivial per-thread heap for use in zalloc
-struct ThreadHeap
-{
-    char* start;
-    char* end;
-    char* next;
-    ThreadHeap(size_t bytes)
-    {
-        next = start = (char*) BigAlloc(bytes);
-        end = start + bytes;
-    }
-    void* alloc(size_t bytes)
-    {
-        if (next + bytes <= end) {
-            void* result = next;
-            next += bytes;
-            return result;
-        }
-        return NULL;
-    }
-    bool free(void* p)
-    {
-        return (char*)p >= start && (char*) p <= end;
-    }
-    void reset()
-    {
-        next = start;
-    }
-    ~ThreadHeap()
-    {
-        BigDealloc(start);
-    }
-};
-
 class GzipWriterFilterSupplier;
 
 class GzipWriterFilter : public DataWriter::Filter
@@ -180,24 +146,6 @@ private:
     GzipContext context;
     ParallelTask<GzipContext>* task;
 };
-
-static void* zalloc(void* opaque, unsigned items, unsigned size)
-{
-    size_t bytes = items * (size_t) size;
-    void* result = ((ThreadHeap*) opaque)->alloc(bytes);
-    static int printed = 0;
-    if ((! result) && printed++ < 10) {
-        printf("warning: zalloc using malloc for %lld bytes\n", bytes);
-    }
-    return result ? result : malloc(bytes);
-}
-
-static void zfree(void* opaque, void* p)
-{
-    if (! ((ThreadHeap*) opaque)->free(p)) {
-        free(p);
-    }
-}
 
     void
 GzipContext::runThread()

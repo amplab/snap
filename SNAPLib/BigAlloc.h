@@ -111,3 +111,42 @@ private:
 };
 
 extern bool BigAllocUseHugePages;
+
+
+// trivial per-thread heap for use in zalloc
+struct ThreadHeap
+{
+    char* start;
+    char* end;
+    char* next;
+    ThreadHeap(size_t bytes)
+    {
+        next = start = (char*) BigAlloc(bytes);
+        end = start + bytes;
+    }
+    void* alloc(size_t bytes)
+    {
+        if (next + bytes <= end) {
+            void* result = next;
+            next += bytes;
+            return result;
+        }
+        return NULL;
+    }
+    bool free(void* p)
+    {
+        return (char*)p >= start && (char*) p <= end;
+    }
+    void reset()
+    {
+        next = start;
+    }
+    ~ThreadHeap()
+    {
+        BigDealloc(start);
+    }
+};
+
+void* zalloc(void* opaque, unsigned items, unsigned size);
+
+void zfree(void* opaque, void* p);
