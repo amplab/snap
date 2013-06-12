@@ -91,7 +91,7 @@ IntersectingPairedEndAligner::getBigAllocatorReservation(GenomeIndex * index, un
     void
 IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, unsigned maxReadSize, unsigned maxHitsToConsider, unsigned maxSeedsToUse)
 {
-    seedUsed = (BYTE *) allocator->allocate((maxReadSize + 7) / 8);
+    seedUsed = (BYTE *) allocator->allocate(index->getSeedLength() + 7 / 8);
 
     for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
         rcReadData[whichRead] = (char *)allocator->allocate(maxReadSize);
@@ -633,7 +633,7 @@ doneScoring:
         for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
             result->location[whichRead] = bestResultGenomeLocation[whichRead];
             result->direction[whichRead] = bestResultDirection[whichRead];
-            result->mapq[whichRead] = computeMAPQ(probabilityOfAllPairs, probabilityOfBestPair, bestResultScore[whichRead], popularSeedsSkipped[whichRead], false /* turn on for cheese true*/);
+            result->mapq[whichRead] = computeMAPQ(probabilityOfAllPairs, probabilityOfBestPair, bestResultScore[whichRead], popularSeedsSkipped[0] + popularSeedsSkipped[1], false /* turn on for cheese true*/);
             if (gaveUpEarly) {
                 result->mapq[whichRead] = __min(3, result->mapq[whichRead] / 5);    // Bizarrely arbitrary
             }

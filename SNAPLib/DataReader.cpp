@@ -1063,13 +1063,10 @@ MemMapDataReader::MemMapDataReader(int i_batchCount, _int64 i_batchSize, _int64 
         extra = NULL;
         extraBatches = NULL;
     }
-    if (batchCount != 1) {
-        if (! (CreateSingleWaiterObject(&waiter) && InitializeExclusiveLock(&lock))) {
-            fprintf(stderr, "MemMapDataReader: CreateSingleWaiterObject failed\n");
-            soft_exit(1);
-        }
+    if (! (CreateSingleWaiterObject(&waiter) && InitializeExclusiveLock(&lock))) {
+        fprintf(stderr, "MemMapDataReader: CreateSingleWaiterObject failed\n");
+        soft_exit(1);
     }
-    
 }
 
 MemMapDataReader::~MemMapDataReader()
@@ -1081,10 +1078,8 @@ MemMapDataReader::~MemMapDataReader()
     if (extraBatches != NULL) {
         delete [] extraBatches;
     }
-    if (batchCount != 1) {
-        DestroyExclusiveLock(&lock);
-        DestroySingleWaiterObject(&waiter);
-    }
+    DestroyExclusiveLock(&lock);
+    DestroySingleWaiterObject(&waiter);
 }
 
     bool

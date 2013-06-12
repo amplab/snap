@@ -143,9 +143,7 @@ Arguments:
     rcTranslationTable['T'] = 'A';
     rcTranslationTable['N'] = 'N';
 
-    for (unsigned i = 0; i < 256; i++) {
-        nTable[i] = 0;
-    }
+    memset(nTable, 0, sizeof(nTable));
 
     nTable['N'] = 1;
 
@@ -431,6 +429,7 @@ Return Value:
         unsigned minSeedLoc = (minLocation < readLen ? 0 : minLocation - readLen);
         unsigned maxSeedLoc = (maxLocation > 0xFFFFFFFF - readLen ? 0xFFFFFFFF : maxLocation + readLen);
         genomeIndex->lookupSeed(seed, minSeedLoc, maxSeedLoc, &nHits[0], &hits[0], &nHits[1], &hits[1]);
+
         nHashTableLookups++;
         lookupsThisRun++;
 
