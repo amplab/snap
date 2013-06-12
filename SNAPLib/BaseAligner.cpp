@@ -431,6 +431,7 @@ Return Value:
         unsigned minSeedLoc = (minLocation < readLen ? 0 : minLocation - readLen);
         unsigned maxSeedLoc = (maxLocation > 0xFFFFFFFF - readLen ? 0xFFFFFFFF : maxLocation + readLen);
         genomeIndex->lookupSeed(seed, minSeedLoc, maxSeedLoc, &nHits[0], &hits[0], &nHits[1], &hits[1]);
+
         nHashTableLookups++;
         lookupsThisRun++;
 

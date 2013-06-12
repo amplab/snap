@@ -275,12 +275,13 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         soft_exit(1);
     }
 
-   OverflowBackpointer *overflowBackpointers = new OverflowBackpointer[nOverflowBackpointers];
+    OverflowBackpointer *overflowBackpointers = new OverflowBackpointer[nOverflowBackpointers];
     if (NULL == overflowBackpointers) {
         fprintf(stderr,"Unable to allocate overflow backpointers\n");
         soft_exit(1);
     }
-  printf("%llds\n%d nOverflowEntries, %lld bytes, %d nOverflowBackpointers, %lld bytes\nBuilding hash tables.\n", 
+  
+    printf("%llds\n%d nOverflowEntries, %lld bytes, %d nOverflowBackpointers, %lld bytes\nBuilding hash tables.\n", 
         (timeInMillis() + 500 - start) / 1000,
         nOverflowEntries, (_int64)nOverflowEntries * sizeof(OverflowEntry), nOverflowBackpointers, (_int64) nOverflowBackpointers * sizeof(OverflowBackpointer));
   
@@ -341,6 +342,11 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 
     WaitForSingleWaiterObject(&doneObject);
     DestroySingleWaiterObject(&doneObject);
+
+    if ((_int64)nextOverflowIndex * 3 + (_int64)countOfDuplicateOverflows + (_int64)genome->getCountOfBases() > 0xfffffff0) {
+        fprintf(stderr,"Ran out of overflow table namespace. This genome cannot be indexed with this seed size.  Try a larger one.\n");
+        exit(1);
+    }
 
     size_t totalUsedHashTableElements = 0;
     for (unsigned j = 0; j < index->nHashTables; j++) {
@@ -413,6 +419,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     unsigned overflowTableIndex = 0;
     for (unsigned i = 0 ; i < nextOverflowIndex; i++) {
         OverflowEntry *overflowEntry = &overflowEntries[i];
+
         _ASSERT(overflowEntry->nInstances >= 2);
 
         if (timeInMillis() - lastPrintTime > 60 * 1000) {
@@ -768,6 +775,16 @@ GenomeIndex::loadFromDirectory(char *directoryName)
         return NULL;
     }
 
+    if ((_int64)index->genome->getCountOfBases() + (_int64)index->overflowTableSize > 0xfffffff0) {
+        fprintf(stderr,"\nThis index has too many overflow entries to be valid.  Some early versions of SNAP\n"
+                        "allowed building indices with too small of a seed size, and this appears to be such\n"
+                        "an index.  You can no longer build indices like this, and you also can't use them\n"
+                        "because they are corrupt and would produce incorrect results.  Please use an index\n"
+                        "built with a larger seed size.  For hg19, the seed size must be in the range of 19-23.\n"
+                        "For other reference genomes this quantity will vary.\n");
+        soft_exit(1);
+    }
+
     return index;
 }
 
@@ -1086,6 +1103,7 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
     _uint64 unrecordedSkippedSeeds = 0;
 
     for (unsigned i = context->genomeChunkStart; i < context->genomeChunkEnd; i++) {
+
             const char *bases = context->genome->getSubstring(i, context->seedLen);
             //
             // Check it for NULL, because Genome won't return strings that cross piece (chromosome) boundaries.
@@ -1209,7 +1227,6 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
     _uint64 unrecordedSkippedSeeds = 0;
 
     for (unsigned genomeLocation = context->genomeChunkStart; genomeLocation < context->genomeChunkEnd; genomeLocation++) {
-
         const char *bases = genome->getSubstring(genomeLocation, seedLen);
         //
         // Check it for NULL, because Genome won't return strings that cross piece (chromosome) boundaries.
@@ -1347,6 +1364,7 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, unsigne
             // for the index we're processing now.
             //
             OverflowEntry *overflowEntry = &context->overflowEntries[overflowIndex];
+
             overflowEntry->hashTableEntry = entry + entryIndex;
             overflowEntry->nInstances = 0;
             overflowEntry->backpointerIndex = -1;
