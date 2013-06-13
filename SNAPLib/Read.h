@@ -488,38 +488,40 @@ private:
 //
 class ReadWithOwnMemory : public Read {
 public:
-        ReadWithOwnMemory() : Read(), dataBuffer(NULL), idBuffer(NULL), qualityBuffer(NULL) {}
+    ReadWithOwnMemory() : Read(), dataBuffer(NULL), idBuffer(NULL), qualityBuffer(NULL) {}
 
-        void set(const Read &baseRead) {
-            idBuffer = new char[baseRead.getIdLength()+1];
-            dataBuffer = new char[baseRead.getUnclippedLength()+1];
-            qualityBuffer = new char[baseRead.getUnclippedLength() + 1];
-
-            memcpy(idBuffer,baseRead.getId(),baseRead.getIdLength());
-            idBuffer[baseRead.getIdLength()] = '\0';    // Even though it doesn't need to be null terminated, it seems like a good idea.
-
-            memcpy(dataBuffer,baseRead.getUnclippedData(),baseRead.getUnclippedLength());
-            dataBuffer[baseRead.getUnclippedLength()] = '\0';
-
-            memcpy(qualityBuffer,baseRead.getUnclippedQuality(),baseRead.getUnclippedLength());
-            qualityBuffer[baseRead.getUnclippedLength()] = '\0';
+    ReadWithOwnMemory(const Read &baseRead) {
+        set(baseRead);
+    }
     
-            init(idBuffer,baseRead.getIdLength(),dataBuffer,qualityBuffer,baseRead.getUnclippedLength());
-			clip(baseRead.getClippingState());
-        }
-        
-        ReadWithOwnMemory(const Read &baseRead) {
-            set(baseRead);
-        }
-
-        ~ReadWithOwnMemory() {
-            delete [] dataBuffer;
-            delete [] idBuffer;
-            delete [] qualityBuffer;
-        }
+    // must manually call destructor!
+    void dispose() {
+        delete [] dataBuffer;
+        delete [] idBuffer;
+        delete [] qualityBuffer;
+    }
 
 private:
 
+    void set(const Read &baseRead)
+    {
+        idBuffer = new char[baseRead.getIdLength()+1];
+        dataBuffer = new char[baseRead.getUnclippedLength()+1];
+        qualityBuffer = new char[baseRead.getUnclippedLength() + 1];
+
+        memcpy(idBuffer,baseRead.getId(),baseRead.getIdLength());
+        idBuffer[baseRead.getIdLength()] = '\0';    // Even though it doesn't need to be null terminated, it seems like a good idea.
+
+        memcpy(dataBuffer,baseRead.getUnclippedData(),baseRead.getUnclippedLength());
+        dataBuffer[baseRead.getUnclippedLength()] = '\0';
+
+        memcpy(qualityBuffer,baseRead.getUnclippedQuality(),baseRead.getUnclippedLength());
+        qualityBuffer[baseRead.getUnclippedLength()] = '\0';
+    
+        init(idBuffer,baseRead.getIdLength(),dataBuffer,qualityBuffer,baseRead.getUnclippedLength());
+		clip(baseRead.getClippingState());
+    }
+        
     char *idBuffer;
     char *dataBuffer;
     char *qualityBuffer;

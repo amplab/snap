@@ -91,7 +91,7 @@ IntersectingPairedEndAligner::getBigAllocatorReservation(GenomeIndex * index, un
     void
 IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, unsigned maxReadSize, unsigned maxHitsToConsider, unsigned maxSeedsToUse)
 {
-    seedUsed = (BYTE *) allocator->allocate(index->getSeedLength() + 7 / 8);
+    seedUsed = (BYTE *) allocator->allocate(100 + (maxReadSize + 7) / 8);
 
     for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
         rcReadData[whichRead] = (char *)allocator->allocate(maxReadSize);
