@@ -29,9 +29,6 @@ Revision History:
 #include "LandauVishkin.h"
 #include "FixedSizeMap.h"
 
-#define COMPILE_INTERSECTING
-#ifdef  COMPILE_INTERSECTING
-
 const unsigned DEFAULT_INTERSECTING_ALIGNER_MAX_HITS = 10000;
 
 class IntersectingPairedEndAligner : public PairedEndAligner
@@ -69,6 +66,10 @@ public:
 
     static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsToUse);
 
+     virtual _int64 getLocationsScored() const {
+         return nLocationsScored;
+     }
+
 private:
 
     IntersectingPairedEndAligner() {}  // This is for the counting allocator, it doesn't build a useful object
@@ -91,11 +92,14 @@ private:
     unsigned        maxSpacing;
     unsigned        seedLen;
     unsigned        maxMergeDistance;
+    __int64         nLocationsScored;
+
 
     struct HashTableLookup {
         unsigned        seedOffset;
         unsigned        nHits;
         const unsigned  *hits;
+		bool			beginsDisjointHitSet;
 
         unsigned        currentHitForIntersection;
      };
@@ -105,7 +109,7 @@ private:
     //
     class HashTableHitSet {
     public:
-        HashTableHitSet(unsigned maxSeeds_);
+        HashTableHitSet(unsigned maxSeeds_, unsigned maxMergeDistance_);
 
         //
         // Reset to empty state.
@@ -114,27 +118,32 @@ private:
 
         //
         // Record a hash table lookup.  All recording must be done before any
-        // calls to getNextHitLessThanOrEqualTo.
+        // calls to getNextHitLessThanOrEqualTo.  A disjoint hit set is a set of hits
+		// that don't share any bases in the read.  This is interesting because the edit
+		// distance of a read must be at least the number of seeds that didn't hit for
+		// any disjoint hit set (because there must be a difference in the read within a
+		// seed for it not to hit, and since the reads are disjoint there can't be a case
+		// where the same difference caused two seeds to miss).
         //
-        void recordLookup(unsigned seedOffset, unsigned nHits, const unsigned *hits);
+        void recordLookup(unsigned seedOffset, unsigned nHits, const unsigned *hits, bool beginsDisjointHitSet);
 
         //
         // This efficiently works through the set looking for the next hit at or below this address.
         // A HashTableHitSet only allows a single iteration through its address space per call to
         // init().
         //
-        bool    getNextHitLessThanOrEqualTo(unsigned maxGenomeOffsetToFind, unsigned *actualGenomeOffsetFound, unsigned *seedOffsetFound);
+        bool    getNextHitLessThanOrEqualTo(unsigned maxGenomeOffsetToFind, unsigned *actualGenomeOffsetFound, unsigned *seedOffsetFound, unsigned *bestPossibleScore);
 
         //
         // Walk down just one step, don't binary search.
         //
-        bool getNextLowerHit(unsigned *genomeLocation, unsigned *seedOffsetFound);
+        bool getNextLowerHit(unsigned *genomeLocation, unsigned *seedOffsetFound, unsigned *bestPossibleScore);
 
 
         //
         // Find the highest genome address.
         //
-        bool    getFirstHit(unsigned *genomeLocation, unsigned *seedOffsetFound);
+        bool    getFirstHit(unsigned *genomeLocation, unsigned *seedOffsetFound, unsigned *bestPossibleScore);
 
     private:
 
@@ -142,6 +151,14 @@ private:
         unsigned        maxSeeds;
         unsigned        nLookupsUsed;
         unsigned        mostRecentLocationReturned;
+		unsigned		maxMergeDistance;
+
+		static inline bool isWithin(unsigned a, unsigned b, unsigned distance)
+		{
+			return a <= b && a+distance >= b || a >= b && a <= b + distance;
+		}
+
+		unsigned computeBestPossibleScoreForCurrentHit();
     };
 
     HashTableHitSet *hashTableHitSets[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
@@ -163,6 +180,7 @@ private:
         unsigned        score;
         unsigned        maxK;               // The maxK that this was scored with (we may need to rescore if we need a higher maxK and score is -1)
         double          matchProbability;
+		unsigned		bestPossibleScore;
 
         //
         // We have to be careful in the case where lots of offsets in a row match well against the read (think
@@ -193,7 +211,7 @@ private:
 
         bool isEmpty() {return head == tail;}
 
-        void insertHead(unsigned genomeLocation, unsigned seedOffset) 
+        void insertHead(unsigned genomeLocation, unsigned seedOffset, unsigned bestPossibleScore) 
         {
             _ASSERT((head + 1 ) % bufferSize != tail);  // Not overflowing
             _ASSERT(head == tail || genomeLocation < buffer[(head + bufferSize - 1)%bufferSize].genomeLocation);  // Inserting in strictly descending order
@@ -202,12 +220,13 @@ private:
             buffer[head].seedOffset = seedOffset;
             buffer[head].isScored = false;
             buffer[head].genomeLocationOfNearestMatchedCandidate = 0xffffffff;
+			buffer[head].bestPossibleScore = bestPossibleScore;
            head = (head + 1) % bufferSize;
         }
 
         void insertHead(unsigned genomeLocation, unsigned seedOffset, unsigned score, double matchProbability)
         {
-            insertHead(genomeLocation, seedOffset);
+            insertHead(genomeLocation, seedOffset, score);
             HitLocation *insertedLocation = &buffer[(head + bufferSize - 1)%bufferSize];
             insertedLocation->isScored = true;
             insertedLocation->score = score;
@@ -321,5 +340,20 @@ private:
             int                 *genomeLocationOffset   // The computed offset for genomeLocation (which is needed because we scan several different possible starting locations)
     );
 
+    struct MergeAnchor {
+        unsigned    locationForReadWithMoreHits;
+        unsigned    locationForReadWithFewerHits;
+        double      matchProbability;
+        int         pairScore;
+
+        MergeAnchor() : locationForReadWithMoreHits(InvalidGenomeLocation), locationForReadWithFewerHits(InvalidGenomeLocation), 
+            matchProbability(0), pairScore(0) {}
+
+        //
+        // Returns true and sets oldMatchProbability if this should be eliminated due to a match.
+        //
+        bool checkMerge(unsigned newMoreHitLocation, unsigned newFewerHitLocation, double newMatchProbability, int newPairScore, 
+                        double *oldMatchProbability); 
+    };
+
 };
-#endif  // COMPILE_INTERSECTING

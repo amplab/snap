@@ -178,7 +178,7 @@ AlignerContext::initialize()
     void
 AlignerContext::printStatsHeader()
 {
-    printf("ConfDif\tMaxHits\tMaxDist\tMaxSeed\tConfAd\t%%Used\t%%Unique\t%%Multi\t%%!Found\t%%Error\t%%Pairs\tReads/s\n");
+    printf("MaxHits\tMaxDist\tMaxSeed\t%%Used\t%%Unique\t%%Multi\t%%!Found\t%%Error\t%%Pairs\tlvCalls\tReads/s\n");
 }
 
     void
@@ -270,30 +270,28 @@ AlignerContext::printStats()
     } else {
         snprintf(errorRate, sizeof(errorRate), "-");
     }
-    printf("%d\t%d\t%d\t%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%.0f (at: %lld)\n",
-            confDiff_, maxHits_, maxDist_, numSeeds_, adaptiveConfDiff_,
+    printf("%d\t%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%lld\t%.0f (at: %lld)\n",
+            maxHits_, maxDist_, numSeeds_, 
             100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
             100.0 * stats->singleHits / usefulReads,
             100.0 * stats->multiHits / usefulReads,
             100.0 * stats->notFound / usefulReads,
             errorRate,
             100.0 * stats->alignedAsPairs / usefulReads,
+            stats->lvCalls,
             (1000.0 * usefulReads) / max(alignTime, (_int64) 1), alignTime);
     if (NULL != perfFile) {
-        fprintf(perfFile, "%d\t%d\t%d\t%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%.0f\n",
-                confDiff_, maxHits_, maxDist_, numSeeds_, adaptiveConfDiff_,
+        fprintf(perfFile, "%d\t%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%lld\tt%.0f\n",
+                maxHits_, maxDist_, numSeeds_, 
                 100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
                 100.0 * stats->singleHits / usefulReads,
                 100.0 * stats->multiHits / usefulReads,
                 100.0 * stats->notFound / usefulReads,
+                stats->lvCalls,
                 errorRate,
                 100.0 * stats->alignedAsPairs / usefulReads,
                 (1000.0 * usefulReads) / max(alignTime, (_int64) 1));
 
-        for (AlignerStats::ThreadPerfEntry *threadEntry = stats->threadEntry; NULL != threadEntry; threadEntry = threadEntry->next) {
-            fprintf(perfFile, "%d\t%d\t%lld\t%lld\t0x%llx\t%llx\t%llx\t%llx\t%llx\n", threadEntry->threadNumber, threadEntry->threadId, threadEntry->nReads, threadEntry->lvCalls, threadEntry->candidateEntries,
-                threadEntry->hashAnchor[0], threadEntry->hashAnchor[1], threadEntry->alignerObject, threadEntry->stackPointer);
-        }
         fprintf(perfFile,"\n");
     }
     // Running counts to compute a ROC curve (with error rate and %aligned above a given MAPQ)

@@ -44,7 +44,6 @@ Revision History:
 #include "AlignerStats.h"
 #include "FASTQ.h"
 #include "PairedAligner.h"
-#include "ThirdPairedEndAligner.h"
 #include "MultiInputReadSupplier.h"
 #include "Util.h"
 #include "IntersectingPairedEndAligner.h"
@@ -495,6 +494,8 @@ void PairedAlignerContext::runIterationThread()
 
         updateStats((PairedAlignerStats*) stats, read0, read1, &result);
     }
+
+    stats->lvCalls = aligner->getLocationsScored();
 
     delete aligner;
     delete supplier;

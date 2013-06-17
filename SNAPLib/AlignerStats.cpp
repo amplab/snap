@@ -38,7 +38,8 @@ AlignerStats::AlignerStats(AbstractStats* i_extra)
     notFound(0),
     errors(0),
     alignedAsPairs(0),
-    extra(i_extra)
+    extra(i_extra),
+    lvCalls(0)
 {
     for (int i = 0; i <= AlignerStats::maxMapq; i++) {
         mapqHistogram[i] = 0;
@@ -51,11 +52,6 @@ AlignerStats::AlignerStats(AbstractStats* i_extra)
         probabilityMassByWeightDepth[i] = 0;
     }
 
-    threadEntry = &localThreadEntry;
-    threadEntry->next = NULL;
-    threadEntry->nReads = 0;
-    threadEntry->threadId = 0;
-    threadEntry->lvCalls = 0;
 }
 
 AlignerStats::~AlignerStats()
@@ -87,6 +83,7 @@ AlignerStats::add(
     notFound += other->notFound;
     errors += other->errors;
     alignedAsPairs += other->alignedAsPairs;
+    lvCalls += other->lvCalls;
 
     if (extra != NULL && other->extra != NULL) {
         extra->add(other->extra);
@@ -102,12 +99,4 @@ AlignerStats::add(
         probabilityMassByWeightDepth[i] = other->probabilityMassByWeightDepth[i];
     }
 
-    // NB: This isn't particularly robust.  It knows that the calling pattern is common->add(perThread)
-    ThreadPerfEntry *newEntry = new ThreadPerfEntry;
-    *newEntry = *other->threadEntry;
-    if (threadEntry->threadId != 0) {
-        // This is just broken.  Let it be for now._ASSERT(threadEntry->next == NULL);
-        newEntry->next = threadEntry;
-    }
-    threadEntry = newEntry;
 }

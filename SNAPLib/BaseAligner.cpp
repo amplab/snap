@@ -170,15 +170,6 @@ Arguments:
         hashTableElementPool = (HashTableElement *)BigAlloc(sizeof(HashTableElement) * hashTableElementPoolSize);
     }
 
-      if (NULL != stats) {
-        int onTheStack = 42;
-        stats->threadEntry->candidateEntries = hashTableElementPool;
-        stats->threadEntry->alignerObject = this;
-        stats->threadEntry->hashAnchor[0] = candidateHashTable[0];
-        stats->threadEntry->hashAnchor[1] = candidateHashTable[1];
-        stats->threadEntry->stackPointer = &onTheStack;
-    }
-
 
     for (unsigned i = 0; i < hashTableElementPoolSize; i++) {
         hashTableElementPool[i].init();

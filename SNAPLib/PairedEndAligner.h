@@ -69,4 +69,6 @@ public:
         LandauVishkin<-1>       *reverseLandauVishkin)
     {
     }
+
+    virtual _int64 getLocationsScored() const  = 0;
 };
