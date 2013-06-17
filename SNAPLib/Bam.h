@@ -112,11 +112,14 @@ struct BAMAlignment
     BAMAlignAux*    firstAux()
     { return (BAMAlignAux*) (l_seq + qual()); }
 
+    unsigned    auxLen()
+    { return size() - ((char*) firstAux() - (char*) this); }
+
     size_t size()
     { return block_size + sizeof(block_size); }
 
-    static size_t size(unsigned l_read_name, unsigned n_cigar_op, unsigned l_seq)
-    { return sizeof(BAMAlignment) + l_read_name + n_cigar_op * sizeof(_uint32) + (l_seq + 1) / 2 + l_seq; }
+    static size_t size(unsigned l_read_name, unsigned n_cigar_op, unsigned l_seq, unsigned l_aux)
+    { return sizeof(BAMAlignment) + l_read_name + n_cigar_op * sizeof(_uint32) + (l_seq + 1) / 2 + l_seq + l_aux; }
 
     // conversions
 

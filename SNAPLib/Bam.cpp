@@ -315,6 +315,10 @@ BAMReader::getNextRead(
     size_t lineLength;
     getReadFromLine(genome, buffer, buffer + bytes, read, alignmentResult, genomeLocation,
         isRC, mapQ, &lineLength, flag, cigar, clipping);
+    unsigned auxLen = bam->auxLen();
+    if (auxLen > 0) {
+        read->setAuxiliaryData((char*) bam->firstAux(), auxLen);
+    }
     return true;
 }
 
@@ -598,7 +602,9 @@ BAMFormat::writeRead(
     }
 
     // Write the BAM entry
-    size_t bamSize = BAMAlignment::size((unsigned)qnameLen + 1, cigarOps, fullLength);
+    unsigned auxLen;
+    char* aux = read->getAuxiliaryData(&auxLen);
+    size_t bamSize = BAMAlignment::size((unsigned)qnameLen + 1, cigarOps, fullLength, auxLen);
     if (bamSize > bufferSpace) {
         return false;
     }
@@ -629,6 +635,7 @@ BAMFormat::writeRead(
         quality[i] -= '!';
     }
     memcpy(bam->qual(), quality, fullLength);
+    memcpy(bam->firstAux(), aux, auxLen);
 
     if (NULL != spaceUsed) {
         *spaceUsed = bamSize;
@@ -974,7 +981,7 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
             size_t offset = runOffset;
             run.clear();
             // sort run by other coordinate & RC flags to get sub-runs
-            for (BAMAlignment* record = getRead(offset); record != lastBam; record = getNextRead(record, &offset)) {
+            for (BAMAlignment* record = getRead(offset); record != NULL && record != lastBam; record = getNextRead(record, &offset)) {
                 // use opposite of logical location to sort records
                 _uint64 entry = record->getLocation(genome) == UINT32_MAX
                     ? (((_uint64) UINT32_MAX) << 32) | 
@@ -986,6 +993,9 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                 entry |= (_uint64) ((offset - runOffset) & RunOffset);
                 _ASSERT(offset - runOffset <= RunOffset);
                 run.push_back(entry);
+            }
+            if (run.size() == 0) {
+                goto done;
             }
             // ensure that adjacent half-mapped pairs stay together
             std::stable_sort(run.begin(), run.end());
