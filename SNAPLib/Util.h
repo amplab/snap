@@ -228,6 +228,10 @@ log10bucket(
 #define ROTL64(x,y)     _rotl64(x,y)
 #define BIG_CONSTANT(x) (x)
 #else
+    inline _uint64 rotl64 ( _uint64 x, _int8 r )
+    {
+      return (x << r) | (x >> (64 - r));
+    }
 #define ROTL32(x,y)     rotl32(x,y)
 #define ROTL64(x,y)     rotl64(x,y)
 #define BIG_CONSTANT(x) (x##LLU)
