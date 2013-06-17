@@ -92,7 +92,7 @@ private:
     unsigned        maxSpacing;
     unsigned        seedLen;
     unsigned        maxMergeDistance;
-    __int64         nLocationsScored;
+    _int64         nLocationsScored;
 
 
     struct HashTableLookup {
