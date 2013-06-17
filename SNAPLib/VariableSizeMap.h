@@ -61,6 +61,9 @@ protected:
     
     inline void assign(VariableSizeMapBase<K,V>* other)
     {
+        if (entries != NULL) {
+            delete [] entries;
+        }
         entries = other->entries;
         capacity = other->capacity;
         count = other->count;
@@ -179,11 +182,15 @@ protected:
     
     static const int MaxQuadraticProbes = 3;
 
-    void init(unsigned& pos, int& i, K key) const
+    void init(unsigned& pos, int& i, K key)
     {
         _ASSERT(key != _empty && key != _tombstone && key != _busy);
         pos = hash(key) % capacity;
         i = 1;
+        if (entries == NULL) {
+            entries = new Entry[capacity];
+            clear();
+        }
     }
 
     bool advance(unsigned& pos, int& i, K key) const
@@ -239,9 +246,9 @@ public:
         : VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,_busy,false>(i_capacity)
     {}
 
-    VariableSizeMap(VariableSizeMap<K,V>& other)
+    VariableSizeMap(const VariableSizeMap<K,V>& other)
     {
-        assign(&other);
+        assign((VariableSizeMapBase<K,V>*)&other);
     }
 
     VariableSizeMap(void** data, unsigned i_capacity)
@@ -251,9 +258,9 @@ public:
 
     typedef VariableSizeMapEntry<K,V> Entry;
 
-    inline void operator=(VariableSizeMap<K,V> other)
+    inline void operator=(const VariableSizeMap<K,V>& other)
     {
-        assign(&other);
+        assign((VariableSizeMapBase<K,V>*)&other);
     }
 
     ~VariableSizeMap()
@@ -299,13 +306,12 @@ public:
         return p->value;
     }
 
-    inline V& put(K key, V value)
+    inline void put(K key, V value)
     {
         V* p;
         if (! tryAdd(key, value, &p)) {
             *p = value;
         }
-        return *p;
     }
 
     inline bool tryAdd(K key, V value, V** o_pvalue)

@@ -277,6 +277,10 @@ ReadSupplierQueue::doneWithElement(ReadQueueElement *element)
     AcquireExclusiveLock(&lock);
     //printf("Thread %u: doneWithElement acquired lock\n", GetCurrentThreadId());
     _ASSERT(element->totalReads > 0 && element->batches.size() > 0);
+    /*
+    for (int i = 0; i < element->totalReads; i++) {
+        element->reads[i].dispose();
+    }*/
     VariableSizeVector<DataBatch> batches = element->batches;
     element->batches.clear();
     element->addToTail(emptyQueue);

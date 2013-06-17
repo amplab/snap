@@ -25,37 +25,12 @@ Revision History:
 #include "stdafx.h"
 #include <map>
 #include "Compat.h"
+#include "Util.h"
 #include "Read.h"
 #include "DataReader.h"
 #include "VariableSizeMap.h"
 
 using std::pair;
-using std::map;
-using std::string;
-
-#if 0
-void _Debug_TestReadMap(Read* sample, int millions)
-{
-    char buf[100];
-    map<string,Read> reads;
-    for (int i = 0; i < millions * 1000; i++) {
-        for (int j = 0; j < 1000; j++) {
-            Read r;
-            sprintf(buf, "id-%d-%d", i, j);
-            r.init(buf, strlen(buf), sample->getData(), sample->getQuality(), sample->getDataLength());
-            r.becomeRC();
-            string key(buf);
-            reads[key] = r;
-        }
-        for (int j = 0; j < 1000; j++) {
-            sprintf(buf, "id-%d-%d", i, j);
-            string key(buf);
-            reads.erase(reads.find(key));
-        }
-        printf(".");
-    }
-}
-#endif
 
 class PairedReadMatcher: public PairedReadReader
 {
@@ -77,10 +52,11 @@ private:
     
     const bool autoRelease;
     ReadReader* single; // reader for single reads
-    typedef map<string,Read> ReadMap;
+    typedef _uint64 StringHash;
+    typedef VariableSizeMap<StringHash,Read> ReadMap;
     DataBatch batch[2]; // 0 = current, 1 = previous
     ReadMap unmatched[2]; // read id -> Read
-    typedef map<string,ReadWithOwnMemory> OverflowMap;
+    typedef VariableSizeMap<StringHash,ReadWithOwnMemory> OverflowMap;
     OverflowMap overflow; // read id -> Read
     _int64 overflowMatched;
     // used only if ! autoRelease:
@@ -101,6 +77,8 @@ PairedReadMatcher::PairedReadMatcher(
     autoRelease(i_autoRelease),
     overflowMatched(0)
 {
+    unmatched[0] = VariableSizeMap<_uint64,Read>(10000);
+    unmatched[1] = VariableSizeMap<_uint64,Read>(10000);
     if (! autoRelease) {
         InitializeExclusiveLock(&lock);
     }
@@ -135,22 +113,22 @@ PairedReadMatcher::getNextReadPair(
         if (idLength > 2 && id[idLength-2] == '/' && (id[idLength-1] == '1' || id[idLength-1] == '2')) {
             idLength -= 2;
         }
-        string key(id, idLength);
+        StringHash key = util::hash64(id, idLength);
         if (one.getBatch() != batch[0]) {
             // roll over batches
             if (unmatched[1].size() > 0) {
                 //printf("warning: PairedReadMatcher overflow %d unpaired reads from %d:%d\n", unmatched[1].size(), batch[1].fileID, batch[1].batchID); //!!
                 //char* buf = (char*) alloca(500);
-                for (ReadMap::iterator r = unmatched[1].begin(); r != unmatched[1].end(); r++) {
-                    overflow[r->first].set(r->second);
+                for (ReadMap::iterator r = unmatched[1].begin(); r != unmatched[1].end(); r = unmatched[1].next(r)) {
+                    overflow.put(r->key, ReadWithOwnMemory(r->value));
                     //memcpy(buf, r->second.getId(), r->second.getIdLength());
                     //buf[r->second.getIdLength()] = 0;
                     //printf("overflow add %d:%d %s\n", batch[1].fileID, batch[1].batchID, buf);
                 }
             }
 
-            for (ReadMap::iterator i = unmatched[1].begin(); i != unmatched[1].end(); i++) {
-                i->second.dispose();
+            for (ReadMap::iterator i = unmatched[1].begin(); i != unmatched[1].end(); i = unmatched[1].next(i)) {
+                i->value.dispose();
             }
             unmatched[1].clear();
             unmatched[1] = unmatched[0];
@@ -164,9 +142,9 @@ PairedReadMatcher::getNextReadPair(
         }
         ReadMap::iterator found = unmatched[0].find(key);
         if (found != unmatched[0].end()) {
-            *read2 = found->second;
-            //printf("current matched %d:%d->%d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, batch[0].fileID, batch[0].batchID, key.data()); //!!
-            unmatched[0].erase(found);
+            *read2 = found->value;
+            //printf("current matched %d:%d->%d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, batch[0].fileID, batch[0].batchID, read2->getId()); //!!
+            unmatched[0].erase(found->key);
         } else {
             // try previous batch
             found = unmatched[1].find(key);
@@ -175,14 +153,15 @@ PairedReadMatcher::getNextReadPair(
                 OverflowMap::iterator found2 = overflow.find(key);
                 if (found2 == overflow.end()) {
                     // no match, remember it for later matching
-	                unmatched[0][key] = one;
+	                unmatched[0].put(key, one);
                     //printf("unmatched add %d:%d %s\n", batch[0].fileID, batch[0].batchID, key.data()); //!!
                     continue;
                 } else {
                     // copy data into read, keep in overflow table indefinitely to preserve memory
-                    *read2 = * (Read*) &found2->second;
+                    *read2 = * (Read*) &found2->value;
+                    _ASSERT(read2->getData()[0]);
                     overflowMatched++;
-                    //printf("overflow matched %d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, key.data()); //!!
+                    //printf("overflow matched %d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, read2->getId()); //!!
                     read2->setBatch(batch[0]); // overwrite batch so both reads have same batch, will track deps instead
                 }
             } else {
@@ -194,10 +173,10 @@ PairedReadMatcher::getNextReadPair(
                     backward.put(batch[0].asKey(), batch[1]);
                     ReleaseExclusiveLock(&lock);
                 }
-                *read2 = found->second;
-                //printf("prior matched %d:%d->%d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, batch[0].fileID, batch[0].batchID, key.data()); //!!
+                *read2 = found->value;
+                //printf("prior matched %d:%d->%d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, batch[0].fileID, batch[0].batchID, read2->getId()); //!!
                 read2->setBatch(batch[0]); // overwrite batch so both reads have same batch, will track deps instead
-                unmatched[1].erase(found);
+                unmatched[1].erase(found->key);
             }
         }
 

@@ -493,3 +493,20 @@ void PrintBigAllocProfile()
 #endif
 }
 
+void* zalloc(void* opaque, unsigned items, unsigned size)
+{
+    size_t bytes = items * (size_t) size;
+    void* result = ((ThreadHeap*) opaque)->alloc(bytes);
+    static int printed = 0;
+    if ((! result) && printed++ < 10) {
+        printf("warning: zalloc using malloc for %lld bytes\n", bytes);
+    }
+    return result ? result : malloc(bytes);
+}
+
+void zfree(void* opaque, void* p)
+{
+    if (! ((ThreadHeap*) opaque)->free(p)) {
+        free(p);
+    }
+}
