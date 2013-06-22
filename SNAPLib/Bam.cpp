@@ -570,7 +570,6 @@ BAMFormat::writeRead(
     const char *pieceName = "*";
     int pieceIndex = -1;
     unsigned positionInPiece = 0;
-    mapQuality = 0;
     int cigarOps = 0;
     const char *matePieceName = "*";
     int matePieceIndex = -1;
@@ -665,7 +664,7 @@ BAMFormat::computeCigarOps(
     int used;
     if (NULL != reference) {
         *editDistance = lv->computeEditDistance(
-                            genome->getSubstring(genomeLocation, dataLength),
+                            reference,
                             dataLength,
                             data,
                             dataLength,
