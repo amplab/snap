@@ -869,7 +869,7 @@ GenomeIndex::fillInLookedUpResults(
         _ASSERT(hitCount >= 2);
         _ASSERT(hitCount + overflowTableOffset < overflowTableSize);
 
-        if (minLocation == 0 && maxLocation == 0xFFFFFFFF) {
+        if (minLocation == 0 && maxLocation == InvalidGenomeLocation) {
             // Return all the hits
             *nHits = hitCount;
             *hits = &overflowTable[overflowTableOffset + 1];
