@@ -77,8 +77,8 @@ PairedReadMatcher::PairedReadMatcher(
     autoRelease(i_autoRelease),
     overflowMatched(0)
 {
-    unmatched[0] = ReadMap(10000);
-    unmatched[1] = ReadMap(10000);
+    unmatched[0] = VariableSizeMap<_uint64,Read>(10000);
+    unmatched[1] = VariableSizeMap<_uint64,Read>(10000);
     if (! autoRelease) {
         InitializeExclusiveLock(&lock);
     }

@@ -27,6 +27,7 @@ Environment:
 #include "exit.h"
 
 #define USE_DEVTEAM_OPTIONS 1
+//#define VALIDATE_SORT 1
 
 #pragma pack(push, 4)
 struct SortEntry
@@ -48,12 +49,19 @@ typedef VariableSizeVector<SortEntry> SortVector;
 
 struct SortBlock
 {
+#ifdef VALIDATE_SORT
+    SortBlock() : start(0), bytes(0), location(0), length(0), reader(NULL), minLocation(0), maxLocation(0) {}
+#else
     SortBlock() : start(0), bytes(0), location(0), length(0), reader(NULL) {}
-    SortBlock(SortBlock& other) { *this = other; }
-    void operator=(SortBlock& other);
+#endif
+	SortBlock(const SortBlock& other) { *this = other; }
+    void operator=(const SortBlock& other);
 
     size_t      start;
     size_t      bytes;
+#ifdef VALIDATE_SORT
+	unsigned	minLocation, maxLocation;
+#endif
     // for mergesort phase
     DataReader* reader;
     unsigned    location; // genome location of current read
@@ -63,13 +71,17 @@ struct SortBlock
 
     void
 SortBlock::operator=(
-    SortBlock& other)
+    const SortBlock& other)
 {
     start = other.start;
     bytes = other.bytes;
     location = other.location;
     length = other.length;
     reader = other.reader;
+#ifdef VALIDATE_SORT
+	minLocation = other.minLocation;
+	maxLocation = other.maxLocation;
+#endif
 }
 
 typedef VariableSizeVector<SortBlock> SortBlockVector;
@@ -128,7 +140,11 @@ public:
     void setHeaderSize(size_t bytes)
     { headerSize = bytes; }
 
-    void addBlock(size_t start, size_t bytes);
+#ifndef VALIDATE_SORT
+	void addBlock(size_t start, size_t bytes);
+#else
+    void addBlock(size_t start, size_t bytes, unsigned minLocation, unsigned maxLocation);
+#endif
 
 private:
     bool mergeSort();
@@ -141,6 +157,8 @@ private:
     size_t                          headerSize;
     ExclusiveLock                   lock; // for adding blocks
     SortBlockVector                 blocks;
+
+	friend class SortedDataFilter;
 };
 
     void
@@ -152,6 +170,13 @@ SortedDataFilter::onAdvance(
     unsigned location)
 {
     SortEntry entry(batchOffset, bytes, location);
+#ifdef VALIDATE_SORT
+		if (memcmp(data, "BAM", 3) != 0 && memcmp(data, "@HD", 3) != 0) { // skip header block
+			unsigned loc, len;
+			parent->format->getSortInfo(parent->genome, data, bytes, &loc, &len);
+			_ASSERT(loc == location);
+		}
+#endif
     locations.push_back(entry);
 }
 
@@ -176,7 +201,16 @@ SortedDataFilter::onNextBatch(
         soft_exit(1);
     }
     size_t target = 0;
+	unsigned previous = 0;
     for (VariableSizeVector<SortEntry>::iterator i = locations.begin(); i != locations.end(); i++) {
+#ifdef VALIDATE_SORT
+		if (locations.size() > 1) { // skip header block
+			unsigned loc, len;
+			parent->format->getSortInfo(parent->genome, fromBuffer + i->offset, i->length, &loc, &len);
+			_ASSERT(loc >= previous);
+			previous = loc;
+		}
+#endif
         memcpy(toBuffer + target, fromBuffer + i->offset, i->length);
         target += i->length;
     }
@@ -188,7 +222,14 @@ SortedDataFilter::onNextBatch(
     if (header > 0) {
         parent->setHeaderSize(header);
     }
+	int first = offset == 0;
+#ifdef VALIDATE_SORT
+	unsigned minLocation = locations.size() > first ? locations[first].location : 0;
+	unsigned maxLocation = locations.size() > first ? locations[locations.size()-1].location : UINT32_MAX;
+    parent->addBlock(offset + header, bytes - header, minLocation, maxLocation);
+#else
     parent->addBlock(offset + header, bytes - header);
+#endif
     locations.clear();
 
     return target;
@@ -223,13 +264,27 @@ SortedDataFilterSupplier::onClose(
     void
 SortedDataFilterSupplier::addBlock(
     size_t start,
-    size_t bytes)
+    size_t bytes
+#ifdef VALIDATE_SORT
+	, unsigned minLocation
+	, unsigned maxLocation
+#endif
+	)
 {
     if (bytes > 0) {
         AcquireExclusiveLock(&lock);
+#if VALIDATE_SORT
+		for (SortBlockVector::iterator i = blocks.begin(); i != blocks.end(); i++) {
+			_ASSERT(i->start + i->length <= start || start + bytes <= i->start);
+		}
+#endif
         SortBlock block;
         block.start = start;
         block.bytes = bytes;
+#if VALIDATE_SORT
+		block.minLocation = minLocation;
+		block.maxLocation = maxLocation;
+#endif
         blocks.push_back(block);
         ReleaseExclusiveLock(&lock);
     }
@@ -300,7 +355,13 @@ SortedDataFilterSupplier::mergeSort()
         queue.put(b - blocks.begin(), ~b->location); 
     }
     unsigned current = 0; // current location for validation
+	int lastRefID = -1, lastPos = 0;
     while (queue.size() > 0) {
+#if VALIDATE_SORT
+		unsigned check;
+		queue.peek(&check);
+		_ASSERT(~check >= current);
+#endif
         unsigned secondLocation;
         int smallestIndex = queue.pop();
         int secondIndex = queue.size() > 0 ? queue.peek(&secondLocation) : -1;
@@ -310,6 +371,9 @@ SortedDataFilterSupplier::mergeSort()
         size_t writeBytes;
         writer->getBuffer(&writeBuffer, &writeBytes);
         while (b->location <= limit) {
+#if VALIDATE_SORT
+			_ASSERT(b->location >= b->minLocation && b->location <= b->maxLocation);
+#endif
             if (writeBytes < b->length) {
                 writer->nextBatch();
                 writer->getBuffer(&writeBuffer, &writeBytes);
@@ -319,7 +383,16 @@ SortedDataFilterSupplier::mergeSort()
                 }
             }
             memcpy(writeBuffer, b->data, b->length);
-            total++;
+#if VALIDATE_SORT
+			int refID, pos;
+			format->getSortInfo(genome, b->data, b->length, NULL, NULL, &refID, &pos);
+			_ASSERT(refID == -1 || refID > lastRefID || (refID == lastRefID && pos >= lastPos));
+			if (refID != -1) {
+				lastRefID = refID;
+				lastPos = pos;
+			}
+#endif
+			total++;
             writer->advance(b->length);
             writeBytes -= b->length;
             writeBuffer += b->length;

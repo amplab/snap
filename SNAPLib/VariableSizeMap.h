@@ -246,9 +246,9 @@ public:
         : VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,_busy,false>(i_capacity)
     {}
 
-    VariableSizeMap(VariableSizeMap<K,V>& other)
+    VariableSizeMap(const VariableSizeMap<K,V>& other)
     {
-        assign(&other);
+        assign((VariableSizeMapBase<K,V>*)&other);
     }
 
     VariableSizeMap(void** data, unsigned i_capacity)
@@ -258,9 +258,9 @@ public:
 
     typedef VariableSizeMapEntry<K,V> Entry;
 
-    inline void operator=(VariableSizeMap<K,V> other)
+    inline void operator=(const VariableSizeMap<K,V>& other)
     {
-        assign(&other);
+        assign((VariableSizeMapBase<K,V>*)&other);
     }
 
     ~VariableSizeMap()

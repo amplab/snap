@@ -136,9 +136,6 @@ SingleAlignerContext::runTask()
     void
 SingleAlignerContext::runIterationThread()
 {
-    stats->threadEntry->threadId = GetThreadId();
-    stats->threadEntry->threadNumber = threadNum;
-
     ReadSupplier *supplier = readSupplierGenerator->generateNewReadSupplier();
     if (NULL == supplier) {
         //
@@ -214,8 +211,6 @@ SingleAlignerContext::runIterationThread()
         
         updateStats(stats, read, result, location, score, mapq, wasError);
     }
-    stats->threadEntry->nReads = stats->usefulReads;        // This preserves the total across add()
-    stats->threadEntry->lvCalls = aligner->getLocationsScored();
 
     aligner->~BaseAligner(); // This calls the destructor without calling operator delete, allocator owns the memory.
  

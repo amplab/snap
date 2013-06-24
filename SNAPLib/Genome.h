@@ -122,7 +122,7 @@ public:
 
         inline unsigned getCountOfBases() const {return nBases;}
 
-        bool getOffsetOfPiece(const char *pieceName, unsigned *offset) const;
+        bool getOffsetOfPiece(const char *pieceName, unsigned *offset, int* index = NULL) const;
 
         inline void prefetchData(unsigned genomeOffset) const {
             _mm_prefetch(bases + genomeOffset,_MM_HINT_T2);

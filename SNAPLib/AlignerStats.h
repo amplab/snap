@@ -49,6 +49,7 @@ struct AlignerStats : public AbstractStats
     _int64 notFound;
     _int64 errors;
     _int64 alignedAsPairs;
+    _int64 lvCalls;
     static const unsigned maxMapq = 70;
     unsigned mapqHistogram[maxMapq+1];
     unsigned mapqErrors[maxMapq+1];
@@ -57,19 +58,6 @@ struct AlignerStats : public AbstractStats
     unsigned countOfBestHitsByWeightDepth[maxMaxHits];
     unsigned countOfAllHitsByWeightDepth[maxMaxHits];
     double probabilityMassByWeightDepth[maxMaxHits];
-    struct ThreadPerfEntry {
-        _uint64             nReads;
-        _uint64             lvCalls;
-        int                 threadNumber;
-        int                 threadId;
-        void                *candidateEntries;
-        void                *hashAnchor[2];
-        void                *alignerObject;
-        void                *stackPointer;
-        ThreadPerfEntry     *next;
-    } *threadEntry;
-
-    ThreadPerfEntry localThreadEntry;
 
     AbstractStats* extra;
 
