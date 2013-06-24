@@ -81,43 +81,64 @@ public:
             }
 
             _ASSERT(offset >= minOffset && offset + lengthNeeded <= maxOffset + N_PADDING); // If the caller asks for a genome slice, it's only legal to look within it.
+            if (lengthNeeded == 0) {
+                return bases + offset - minOffset;
+            }
 
             //
             // See if the substring crosses a piece (chromosome) boundary.  If so, disallow it.
             //
 
-            //
-            // Start by special casing the last piece (it makes the rest of the code easier).
-            //
-            if (pieces[nPieces - 1].beginningOffset <= offset) {
+            if (nPieces > 100) {
                 //
-                // Because it starts in the last piece, it's OK because we already checked overflow
+                // Start by special casing the last piece (it makes the rest of the code easier).
+                //
+                if (pieces[nPieces - 1].beginningOffset <= offset) {
+                    //
+                    // Because it starts in the last piece, it's OK because we already checked overflow
                 // of the whole genome.
                 //
                 return bases + (offset-minOffset);
             }
     
-            int min = 0;
-            int max = nPieces - 2;
-            while (min <= max) {
-                int i = (min + max) / 2;
-                if (pieces[i].beginningOffset <= offset) {
-                    if (pieces[i+1].beginningOffset > offset) {
-                        if (pieces[i+1].beginningOffset <= offset + lengthNeeded) {
-                            return NULL;    // This crosses a piece boundary.
+                int min = 0;
+                int max = nPieces - 2;
+                while (min <= max) {
+                    int i = (min + max) / 2;
+                    if (pieces[i].beginningOffset <= offset) {
+                        if (pieces[i+1].beginningOffset > offset) {
+                            if (pieces[i+1].beginningOffset <= offset + lengthNeeded - 1) {
+                                return NULL;    // This crosses a piece boundary.
+                            } else {
+                                return bases + (offset-minOffset);
+                            }
+                        } else {
+                            min = i+1;
+                    }
+                } else {
+                        max = i-1;
+                    }
+                }
+    
+                _ASSERT(false && "NOTREACHED");
+                return NULL;
+            } else {
+                //
+                // Use linear rather than binary search for small numbers of pieces, because binary search
+                // confuses the branch predictor, and so is slower even though it uses many fewer instructions.
+                //
+                for (int i = 0 ; i < nPieces; i++) {
+                    if (offset + lengthNeeded - 1 >= pieces[i].beginningOffset) {
+                        if (offset < pieces[i].beginningOffset) {
+                            return NULL;        // crosses a piece boundary.
                         } else {
                             return bases + (offset-minOffset);
                         }
-                    } else {
-                        min = i+1;
                     }
-                } else {
-                    max = i-1;
                 }
+                _ASSERT(false && "NOTREACHED");
+                return NULL;
             }
-    
-            _ASSERT(false && "NOTREACHED");
-            return NULL;
         } 
 
         inline unsigned getCountOfBases() const {return nBases;}
@@ -165,10 +186,12 @@ private:
 
         Piece       *pieces;    // This is always in order (it's not possible to express it otherwise in FASTA).
 
+        Piece       *piecesByName;
         Genome *copy(bool copyX, bool copyY, bool copyM) const;
 
         static bool openFileAndGetSizes(const char *filename, FILE **file, unsigned *nBases, unsigned *nPieces);
 
+        void sortPiecesByName();
 };
 
 unsigned DistanceBetweenGenomeLocations(unsigned locationA, unsigned locationB);

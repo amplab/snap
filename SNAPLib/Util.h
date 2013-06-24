@@ -5,6 +5,8 @@
 #include "Compat.h"
 #include "Tables.h"
 #include "exit.h"
+using std::max;
+using std::min;
 
 //
 // General utilities.
@@ -208,7 +210,45 @@ toComplement(
     }
 }
 
-    
+    inline void
+diffSequence(
+    char* io_sequence,
+    int length,
+    const char* reference,
+    int refLength,
+    int offset) // offset of sequence from reference
+{
+    int overlap = min(offset + length, refLength) - max(offset, 0); // # bases offset
+    int start = max(-offset, 0); // index in sequence
+    int last = 0;
+    for (int i = 0; i < overlap; i++) {
+        int is = start + i;
+        int ir = start + i + offset;
+        int found = 0;
+        for (int j = 0; j < 3; j++) {
+            int delta = j == 0 ? last :
+                j == 1 ? (last ? 0 : -1) :
+                (last ? -last : +1);
+            if (ir + delta >= 0 && ir + delta < refLength && toupper(reference[ir + delta]) == toupper(io_sequence[is])) {
+                io_sequence[is] = (islower(io_sequence[is]) ? "-,+" : "-.+")[1 + delta];
+                found = delta;
+                break;
+            }
+        }
+        last = found;
+    }
+}
+
+    inline void
+toLower(
+    char* buffer,
+    int length)
+{
+    for (int i = 0; i < length; i++) {
+        buffer[i] = tolower(buffer[i]);
+    }
+}
+
     inline unsigned
 log10bucket(
     unsigned n)
@@ -329,6 +369,68 @@ hash64(
 
     return h2;
 }
+    inline _int64
+log10bucket(
+    _int64 n)
+{
+    _int64 factor = 1;
+    while (abs(n) >= 10) {
+        n /= 10;
+        factor *= 10;
+    }
+    return n * factor;
+}
+
+struct IdPair
+{
+    unsigned id, value;
+    bool operator==(const IdPair& b) const
+    {
+        return id == b.id && value == b.value;
+    }
+    static bool comparator(const IdPair& a, const IdPair& b)
+    {
+        return a.id < b.id || (a.id == b.id && a.value < b.value);
+    }
+    static bool valueComparator(const IdPair& a, const IdPair& b)
+    {
+        return a.value < b.value;
+    }
+    static bool valueComparatorDescending(const IdPair& a, const IdPair& b)
+    {
+        return a.value > b.value;
+    }
+    IdPair()
+        : id(0), value(0)
+    {}
+    IdPair(unsigned i_id, unsigned i_value)
+        : id(i_id), value(i_value)
+    {}
+};
+    
+struct IdIntPair
+{
+    unsigned id;
+    int value;
+    bool operator==(const IdIntPair& b) const
+    {
+        return id == b.id && value == b.value;
+    }
+    static bool comparator(const IdIntPair& a, const IdIntPair& b)
+    {
+        return a.id < b.id || (a.id == b.id && a.value < b.value);
+    }
+    static bool valueComparator(const IdIntPair& a, const IdIntPair& b)
+    {
+        return a.value < b.value;
+    }
+    IdIntPair()
+        : id(0), value(0)
+    {}
+    IdIntPair(unsigned i_id, int i_value)
+        : id(i_id), value(i_value)
+    {}
+};
 
 } // namespace util
 

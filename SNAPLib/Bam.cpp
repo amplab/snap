@@ -446,13 +446,13 @@ BAMFormat::getSortInfo(
     unsigned* readBytes) const
 {
     BAMAlignment* bam = (BAMAlignment*) buffer;
-    _ASSERT(bytes >= sizeof(BAMAlignment) && bam->size() <= bytes && bam->refID < genome->getNumPieces());
+    _ASSERT((size_t) bytes >= sizeof(BAMAlignment) && bam->size() <= (size_t) bytes && bam->refID < genome->getNumPieces());
     if (bam->refID < 0 || bam->refID >= genome->getNumPieces() || bam->pos < 0) {
         *location = UINT32_MAX;
     } else {
         *location = genome->getPieces()[bam->refID].beginningOffset + bam->pos;
     }
-    *readBytes = bam->size();
+    *readBytes = (unsigned) bam->size();
 }
 
     ReadWriterSupplier*
@@ -851,7 +851,7 @@ struct DuplicateReadKey
             locations[1] = bam->getNextLocation(genome);
             isRC[0] = (bam->FLAG & SAM_REVERSE_COMPLEMENT) != 0;
             isRC[1] = (bam->FLAG & SAM_NEXT_REVERSED) != 0;
-            if (((((_uint64) locations[0]) << 1) | isRC[0]) > ((((_uint64) locations[1]) << 1) | isRC[1])) {
+            if (((((_uint64) locations[0]) << 1) | (isRC[0] ? 1 : 0)) > ((((_uint64) locations[1]) << 1) | (isRC[1] ? 1 : 0))) {
                 const unsigned t = locations[1];
                 locations[1] = locations[0];
                 locations[0] = t;

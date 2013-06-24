@@ -2,7 +2,7 @@
 
 #include "Compat.h"
 #include "BigAlloc.h"
-
+#include "VariableSizeVector.h"
 
 //
 // A hash function for numeric types.
@@ -136,6 +136,7 @@ public:
                 }
             }
         }
+        count = 0;
     }
     
     typedef VariableSizeMapEntry<K,V> Entry;
@@ -182,7 +183,7 @@ protected:
     
     static const int MaxQuadraticProbes = 3;
 
-    void init(unsigned& pos, int& i, K key)
+    void init(int& pos, int& i, K key)
     {
         _ASSERT(key != _empty && key != _tombstone && key != _busy);
         pos = hash(key) % capacity;
@@ -193,9 +194,10 @@ protected:
         }
     }
 
-    bool advance(unsigned& pos, int& i, K key) const
+    bool advance(int& pos, int& i, K key) const
     {
         if (i >= capacity + MaxQuadraticProbes) {
+            pos = capacity;
             return false;
         }
         pos = (pos + (i <= MaxQuadraticProbes ? i : 1)) % capacity;
@@ -205,9 +207,12 @@ protected:
 
     Entry* scan(K key, bool add)
     {
-        unsigned pos;
+        int pos;
         int i;
         init(pos, i, key);
+        if (pos == capacity) {
+            return NULL;
+        }
         while (true) {
             Entry* p = &entries[pos];
             while (growth == 0 && p->key == _busy) {
@@ -314,11 +319,24 @@ public:
         }
     }
 
+    inline V* getOrAdd(K key)
+    {
+        V* p = tryFind(key);
+        if (p == NULL) {
+            tryAdd(key, V(), &p);
+        }
+        return p;
+    }
+
     inline bool tryAdd(K key, V value, V** o_pvalue)
     {
         while (true) {
             Entry* p = scan(key, true);
-            _ASSERT(p != NULL);
+            if (p == NULL) {
+                this->grow();
+                p = scan(key, true);
+                _ASSERT(p != NULL);
+            }
             K prior = p->key;
             if (prior == key) {
                 *o_pvalue = &p->value;
@@ -362,7 +380,7 @@ public:
                     InsertWriteBarrier();
 #endif
                     p->key = key;
-                    int incremented = (int) InterlockedIncrementAndReturnNewValue(&this->count);
+                    int incremented = (int) InterlockedIncrementAndReturnNewValue((volatile int*) &this->count);
                     _ASSERT(incremented <= limit);
                     *o_pvalue = &p->value;
                     return true;
@@ -372,6 +390,8 @@ public:
     }
 };
 
+typedef VariableSizeMap<unsigned,unsigned> IdMap;
+typedef VariableSizeMap<unsigned,int> IdIntMap;
 // 
 // Single-valued map
 //
@@ -409,13 +429,13 @@ public:
     {
     public:
         bool hasValue()
-        { return map->entries[pos].key != empty; }
+        { return pos < map->capacity && map->entries[pos].key != empty; }
 
         Entry* operator*() const
-        { return &map->entries[pos]; }
+        { _ASSERT(pos < map->capacity); return &map->entries[pos]; }
         
         Entry* operator->() const
-        { return &map->entries[pos]; }
+        { _ASSERT(pos < map->capacity); return &map->entries[pos]; }
         
         void next()
         {
@@ -451,7 +471,7 @@ public:
             : map(i_map), key(i_key)
         {
             map->init(pos, i, key);
-            K k = map->entries[pos];
+            K k = map->entries[pos].key;
             if (k != key && k != empty) {
                 next(); // skip tombstones & other keys
             }
@@ -460,7 +480,7 @@ public:
         friend class VariableSizeMultiMap;
 
         VariableSizeMultiMap* map;
-        unsigned pos;
+        int pos;
         int i;
         K key;
     };
@@ -494,7 +514,12 @@ public:
             this->grow();
         }
         Entry* p = this->scan(key, true);
-        _ASSERT(p != NULL);
+        if (p == NULL) {
+            // full of tombstones
+            this->grow();
+            p = this->scan(key, true);
+            _ASSERT(p != NULL);
+        }
         p->key = key;
         p->value = value;
         this->count++;
@@ -503,23 +528,41 @@ public:
     // if key-value exists, return false; else add & return true
     inline bool put(K key, V value)
     {
-        valueIterator i = getAll(key);
-        for (; i.hasValue(); i.next()) {
-            if (i->value == value) {
-                return false;
+        int pos; int i;
+        init(pos, i, key);
+        if (pos == this->capacity) {
+            add(key, value);
+            return true;
+        }
+        Entry* slot = NULL;
+        while (pos != this->capacity) {
+            Entry* p = &this->entries[pos];
+            if (p->key == key) {
+                if (p->value == value) {
+                    return false;
+                }
+            } else if (p->key == tombstone && slot == NULL) {
+                slot = p; // remember in case we don't find a match
+            } else if (p->key == empty) {
+                slot = p; // got to end with no match, use this slot
+                break;
+            }
+            if (! this->advance(pos, i, key)) {
+                break;
             }
         }
-	// hack!! to get around gcc bug
-	int c = this->count;
-	int l = this->limit;
-        if (c < l) {
-            _ASSERT(i->key == empty);
-            i->key = key;
-            i->value = value;
+	    // hack!! to get around gcc bug
+	    int c = this->count;
+	    int l = this->limit;
+        if (slot != NULL && c < l) {
+            _ASSERT(slot->key == empty || slot->key == tombstone);
+            slot->key = key;
+            slot->value = value;
             this->count++;
         } else {
-            add(key, value);
+            this->add(key, value);
         }
+        _ASSERT(this->contains(key, value));
         return true;
     }
 
@@ -545,4 +588,34 @@ public:
         }
         return n;
     }
+
+    // whether a's values are a subset of b's values
+    inline bool isSubset(K a, K b)
+    {
+        for (valueIterator i = getAll(a); i.hasValue(); i.next()) {
+            if (! contains(b, i->value)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    inline bool intersects(K a, K b)
+    {
+        for (valueIterator i = getAll(a); i.hasValue(); i.next()) {
+            if (contains(b, i->value)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    inline void getAll(K key, VariableSizeVector<K>& o_result)
+    {
+        for (valueIterator i = getAll(key); i.hasValue(); i.next()) {
+            o_result.push_back(i->value);
+        }
+    }
 };
+
+typedef VariableSizeMultiMap<unsigned,unsigned> IdMultiMap;

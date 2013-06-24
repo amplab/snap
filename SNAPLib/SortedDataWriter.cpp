@@ -271,7 +271,7 @@ SortedDataFilterSupplier::mergeSort()
         char* wbuffer;
         size_t wbytes;
         bool ok = blocks[0].reader->getData(&rbuffer, &rbytes) &&
-            rbytes >= headerSize &&
+            rbytes >= 0 && (size_t) rbytes >= headerSize &&
             writer->getBuffer(&wbuffer, &wbytes) &&
             wbytes >= headerSize;
         if (! ok ) {
@@ -297,7 +297,7 @@ SortedDataFilterSupplier::mergeSort()
         _int64 bytes;
         b->reader->getData(&b->data, &bytes);
         format->getSortInfo(genome, b->data, bytes, &b->location, &b->length);
-        queue.put(b - blocks.begin(), ~b->location); 
+        queue.put((_uint32) (b - blocks.begin()), ~b->location); 
     }
     unsigned current = 0; // current location for validation
     while (queue.size() > 0) {

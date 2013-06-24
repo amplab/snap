@@ -405,7 +405,7 @@ void PairedAlignerContext::runIterationThread()
         return;
     }
 
-    int maxReadSize = 10000;
+    int maxReadSize = MAX_READ_LENGTH;
     BigAllocator *allocator = new BigAllocator(100 * 1024 * 1024);
     
     IntersectingPairedEndAligner *intersectingAligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, allocator);

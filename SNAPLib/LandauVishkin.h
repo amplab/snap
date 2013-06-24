@@ -513,6 +513,23 @@ enum CigarFormat
     BAM_CIGAR_OPS = 3,
 };
 
+// express cigar as 2 byte per reference base summarizing the changes
+// at that location; may lose information for longer inserts
+enum LinearCigarFlags
+{
+    CigarInsertFlags = 0xfff8,  // 13 bits for insert
+    CigarInsertCShift= 3,       // shift to get count
+    CigarInsertCount = 0x7,     // after shifting, mask to get # insertions
+    CigarInsertBShift= 6,       // shift to get bases
+    CigarInsertBases = 0xffc0,   // up to 5 inserted bases, low-order bits first
+    CigarInsertNBases= 5,       
+
+    CigarOpcode      = 0x07,    // opcode for ref base
+    CigarNoop        = 0x00,    // no change
+    CigarReplace     = 0x01,    // base is n-1
+    CigarDelete      = 0x05,    // delete
+};
+
 class LandauVishkinWithCigar {
 public:
     LandauVishkinWithCigar();
@@ -522,6 +539,14 @@ public:
     int computeEditDistance(const char* text, int textLen, const char* pattern, int patternLen, int k,
                             char* cigarBuf, int cigarBufLen, bool useM,
                             CigarFormat format = COMPACT_CIGAR_STRING, int* cigarBufUsed = NULL);
+    // take a compact cigar binary format and turn it into one byte per reference base
+    // describing the difference from the reference at that location
+    // might lose information for large inserts
+    // returns number of bytes in result
+    static int linearizeCompactBinary(_uint16* o_linear, int referenceSize,
+        char* cigar, int cigarSize, char* sample, int sampleSize);
+
+    static void printLinear(char* buffer, int bufferSize, unsigned variant);
 private:
     int L[MAX_K+1][2 * MAX_K + 1];
     

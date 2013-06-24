@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Util.h"
+
 //
 // A variable-size vector that does not perform any memory allocation except to grow.
 //
@@ -93,6 +95,11 @@ public:
         return count;
     }
 
+    void truncate(int newCount)
+    {
+        count = min(count, newCount);
+    }
+    
     inline void push_back(V& value)
     {
         if (entries == NULL) {
@@ -117,7 +124,7 @@ public:
     {
         V* p = before ? std::lower_bound(entries, entries + count, value, compare)
             : std::upper_bound(entries, entries + count, value, compare);
-        int index = p - entries;
+        int index = (int) (p - entries);
         _ASSERT(index >= 0 && index <= count);
         return index;
     }
@@ -176,6 +183,22 @@ public:
 
     typedef V* iterator;
 
+    inline iterator findRange(const V& low, const V& high, comparator compare, iterator* o_end)
+    {
+        *o_end = entries + insertionIndex(high, compare, true);
+        return entries + insertionIndex(low, compare, true);
+    }
+    
+    // unsorted search
+    inline iterator search(const V& value)
+    {
+        for (iterator i = begin(); i != end(); i++) {
+            if (*i == value) {
+                return i;
+            }
+        }
+        return end();
+    }
     iterator begin()
     {
         return entries;
@@ -200,3 +223,10 @@ private:
     int capacity;
     int count;
 };
+
+typedef VariableSizeVector<unsigned> IdVector;
+typedef VariableSizeVector<int> IntVector;
+using util::IdPair;
+using util::IdIntPair;
+typedef VariableSizeVector<IdPair> IdPairVector;
+typedef VariableSizeVector<IdIntPair> IdIntPairVector;

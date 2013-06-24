@@ -102,4 +102,6 @@ struct AlignerOptions : public AbstractOptions
     };
 
     bool passFilter(Read* read, AlignmentResult result);
+    
+    virtual bool isPaired() { return false; }
 };

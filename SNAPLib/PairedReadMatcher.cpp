@@ -101,7 +101,7 @@ PairedReadMatcher::getNextReadPair(
         Read one;
         if (! single->getNextRead(&one)) {
             int n = unmatched[0].size() + unmatched[1].size();
-            int n2 = overflow.size() - overflowMatched;
+            int n2 = (int) (overflow.size() - overflowMatched);
             if (n + n2 > 0) {
                 fprintf(stderr, " warning: PairedReadMatcher discarding %d+%d unpaired reads at eof\n", n, n2);
             }

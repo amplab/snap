@@ -144,7 +144,7 @@ SingleAlignerContext::runIterationThread()
         return;
     }
 
-    int maxReadSize = 10000;
+    int maxReadSize = MAX_READ_LENGTH;
  
     BigAllocator *allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, maxHits, maxReadSize, index->getSeedLength(),numSeeds));
    

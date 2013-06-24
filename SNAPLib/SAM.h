@@ -96,7 +96,7 @@ protected:
         static const unsigned  QUAL         = 10;
         static const unsigned  nSAMFields   = 11;
 
-        static const int maxLineLen = 2048;
+        static const int maxLineLen = MAX_READ_LENGTH;
 
         static bool parseLine(char *line, char *endOfBuffer, char *result[],
             size_t *lineLength, size_t fieldLengths[]);
