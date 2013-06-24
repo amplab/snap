@@ -176,7 +176,7 @@ public:
             id(NULL), data(NULL), quality(NULL), 
             localUnclippedDataBuffer(NULL), localUnclippedQualityBuffer(NULL), localBufferSize(0),
             originalUnclippedDataBuffer(NULL), originalUnclippedQualityBuffer(NULL), clippingState(NoClipping),
-            upperCaseDataBuffer(NULL), upperCaseDataBufferLength(0)
+            upperCaseDataBuffer(NULL), upperCaseDataBufferLength(0), auxiliaryData(NULL), auxiliaryDataLength(0)
         {}
 
         Read(const Read& other) : 
@@ -190,7 +190,8 @@ public:
             originalUnclippedQualityBuffer(other.originalUnclippedQualityBuffer),
             clippingState(other.clippingState),
             batch(other.batch), 
-            upperCaseDataBuffer(other.upperCaseDataBuffer), upperCaseDataBufferLength(other.upperCaseDataBufferLength)
+            upperCaseDataBuffer(other.upperCaseDataBuffer), upperCaseDataBufferLength(other.upperCaseDataBufferLength),
+            auxiliaryData(other.auxiliaryData), auxiliaryDataLength(other.auxiliaryDataLength)
         {
             Read* o = (Read*) &other; // hack!
             o->localUnclippedDataBuffer = NULL;
@@ -249,6 +250,8 @@ public:
             upperCaseDataBufferLength = other.upperCaseDataBufferLength;
             other.upperCaseDataBuffer = NULL;
             other.upperCaseDataBufferLength = 0;
+            auxiliaryData = other.auxiliaryData;
+            auxiliaryDataLength = other.auxiliaryDataLength;
         }
 
         //
@@ -316,6 +319,10 @@ public:
 		inline ReadClippingType getClippingState() const {return clippingState;}
         inline DataBatch getBatch() { return batch; }
         inline void setBatch(DataBatch b) { batch = b; }
+        inline char* getAuxiliaryData(unsigned* o_length)
+        { *o_length = auxiliaryDataLength; return auxiliaryData; }
+        inline void setAuxiliaryData(char* data, unsigned len)
+        { auxiliaryData = data; auxiliaryDataLength = len; }
 
         void clip(ReadClippingType clipping) {
             if (clipping == clippingState) {
@@ -483,6 +490,10 @@ private:
         //
         char *upperCaseDataBuffer;
         unsigned upperCaseDataBufferLength;
+
+        // auxiliary data in BAM format, if available
+        char* auxiliaryData;
+        unsigned auxiliaryDataLength;
 };
 
 //

@@ -199,10 +199,10 @@ SimpleReadWriter::writePair(
     // The strange code that determines the sort key (which uses the coordinate of the mate for unmapped reads) is because we list unmapped reads
     // with mapped mates at their mates' location so they sort together.  If both halves are unmapped, then  
     writer->advance((unsigned)sizeUsed[first],
-        result->status[first] != NotFound ? result->location[first] : locations[second]);
+        locations[first] != UINT32_MAX ? locations[first] : locations[second]);
 
     writer->advance((unsigned)sizeUsed[second],
-        result->status[second] != NotFound ? result->location[second] : locations[first]);
+        locations[second] != UINT32_MAX ? locations[second] : locations[first]);
     return true;
 }
 

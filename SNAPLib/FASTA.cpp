@@ -55,7 +55,13 @@ ReadFASTAGenome(const char *fileName)
 
     while (NULL != fgets(lineBuffer,lineBufferSize,fastaFile)) {
         if (lineBuffer[0] == '>') {
-            lineBuffer[strlen(lineBuffer) - 1] = '\0';   // Remove the trailing newline from fgets
+            char* space = strchr(lineBuffer, ' ');
+            char* tab = strchr(lineBuffer, '\t');
+            char* end = space !=NULL ? (tab != NULL ? min(space, tab) : space)
+                : tab != NULL ? tab : NULL;
+            // Go up to blank, or remove the trailing newline from fgets
+            end = end != NULL ? end : (lineBuffer + strlen(lineBuffer) - 1);
+            *end = '\0';
             genome->startPiece(lineBuffer+1);
         } else {
             //
