@@ -26,6 +26,8 @@ Revision History:
 #include "Compat.h"
 #include "FASTA.h"
 
+using namespace std;
+
     const Genome *
 ReadFASTAGenome(const char *fileName)
 {
@@ -98,7 +100,7 @@ ReadFASTAGenome(const char *fileName)
 
 //
 // TODO: Reduce code duplication with the mutator.
-// 
+//
 bool AppendFASTAGenome(const Genome *genome, FILE *fasta, const char *prefix="")
 {
     int nPieces = genome->getNumPieces();
@@ -109,7 +111,7 @@ bool AppendFASTAGenome(const Genome *genome, FILE *fasta, const char *prefix="")
         unsigned end = i + 1 < nPieces ? pieces[i + 1].beginningOffset : genome->getCountOfBases();
         unsigned size = end - start;
         const char *bases = genome->getSubstring(start, size);
-        
+
         fprintf(fasta, ">%s%s\n", prefix, piece.name);
         fwrite(bases, 1, size, fasta);
         fputc('\n', fasta);
