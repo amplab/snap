@@ -29,7 +29,7 @@ Revision History:
 #include "LandauVishkin.h"
 #include "FixedSizeMap.h"
 
-const unsigned DEFAULT_INTERSECTING_ALIGNER_MAX_HITS = 10000;
+const unsigned DEFAULT_INTERSECTING_ALIGNER_MAX_HITS = 16000;
 
 class IntersectingPairedEndAligner : public PairedEndAligner
 {

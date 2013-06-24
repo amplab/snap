@@ -262,7 +262,7 @@ IntersectingPairedEndAligner::align(
             unsigned nHits[NUM_DIRECTIONS];
             const unsigned *hits[NUM_DIRECTIONS];
 
-            index->lookupSeed(seed, 0, genomeSize, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC]);
+            index->lookupSeed(seed, 0, InvalidGenomeLocation, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC]);
 
             countOfHashTableLookups[whichRead]++;
             for (Direction dir = FORWARD; dir < NUM_DIRECTIONS; dir++) {
