@@ -19,6 +19,9 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "stringz", "apps\stringz\str
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ComputeROC", "apps\ComputeROC\ComputeROC.vcxproj", "{EB694CE8-E805-41A0-9D08-C8BEED857166}"
+	ProjectSection(ProjectDependencies) = postProject
+		{E620DC13-195C-41EF-B33B-8FE7DE9F8ADC} = {E620DC13-195C-41EF-B33B-8FE7DE9F8ADC}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -52,15 +55,16 @@ Global
 		{A587E829-823D-4CA9-9CD4-C563A4617474}.Debug|x64.ActiveCfg = Debug|x64
 		{A587E829-823D-4CA9-9CD4-C563A4617474}.Release|Win32.ActiveCfg = Release|x64
 		{A587E829-823D-4CA9-9CD4-C563A4617474}.Release|x64.ActiveCfg = Release|x64
-		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Debug|Win32.ActiveCfg = Debug|Win32
+		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Debug|Win32.ActiveCfg = Debug|x64
+		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Debug|Win32.Build.0 = Debug|x64
 		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Debug|x64.ActiveCfg = Debug|x64
-		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Release|Win32.ActiveCfg = Release|Win32
+		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Debug|x64.Build.0 = Debug|x64
+		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Release|Win32.ActiveCfg = Release|x64
+		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Release|Win32.Build.0 = Release|x64
 		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Release|x64.ActiveCfg = Release|x64
+		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
-	EndGlobalSection
-	GlobalSection(Performance) = preSolution
-		HasPerformanceSessions = true
 	EndGlobalSection
 EndGlobal
