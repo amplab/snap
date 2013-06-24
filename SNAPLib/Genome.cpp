@@ -289,12 +289,15 @@ Genome::getSizeFromFile(const char *fileName, unsigned *nBases, unsigned *nPiece
 
 
     bool
-Genome::getOffsetOfPiece(const char *pieceName, unsigned *offset) const
+Genome::getOffsetOfPiece(const char *pieceName, unsigned *offset, int * index) const
 {
     for (int i = 0; i < nPieces; i++) {
         if (!strcmp(pieceName,pieces[i].name)) {
             if (NULL != offset) {
                 *offset = pieces[i].beginningOffset;
+				if (index != NULL) {
+					*index = i;
+				}
             }
             return true;
         }

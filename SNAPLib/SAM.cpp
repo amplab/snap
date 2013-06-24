@@ -285,7 +285,7 @@ SAMReader::getReadFromLine(
     const size_t pieceNameBufferSize = 512;
     char pieceName[pieceNameBufferSize];
     unsigned offsetOfPiece;
-    parsePieceName(genome, pieceName, pieceNameBufferSize, &offsetOfPiece, field, fieldLength);
+    parsePieceName(genome, pieceName, pieceNameBufferSize, &offsetOfPiece, NULL, field, fieldLength);
 
     if (NULL != genomeLocation) {
         *genomeLocation = parseLocation(offsetOfPiece, field, fieldLength);
@@ -365,19 +365,21 @@ SAMReader::parsePieceName(
     char* pieceName,
     size_t pieceNameBufferSize,
     unsigned* o_offsetOfPiece,
+	int* o_indexOfPiece,
     char* field[],
-    size_t fieldLength[])
+    size_t fieldLength[],
+	unsigned rfield)
 {
-    if (fieldLength[RNAME] >= pieceNameBufferSize) {  // >= because we need a byte for the \0
+    if (fieldLength[rfield] >= pieceNameBufferSize) {  // >= because we need a byte for the \0
         fprintf(stderr,"SAMReader: too long an RNAME.  Can't parse.\n");
         soft_exit(1);
     }
     
-    memcpy(pieceName,field[RNAME],fieldLength[RNAME]);
-    pieceName[fieldLength[RNAME]] = '\0';
+    memcpy(pieceName,field[rfield],fieldLength[rfield]);
+    pieceName[fieldLength[rfield]] = '\0';
 
     *o_offsetOfPiece = 0;
-    if ('*' != pieceName[0] && !genome->getOffsetOfPiece(pieceName,o_offsetOfPiece)) {
+    if ('*' != pieceName[0] && !genome->getOffsetOfPiece(pieceName,o_offsetOfPiece, o_indexOfPiece)) {
         //fprintf(stderr,"Unable to find piece '%s' in genome.  SAM file malformed.\n",pieceName);
         //soft_exit(1);
     }
@@ -387,10 +389,12 @@ SAMReader::parsePieceName(
 SAMReader::parseLocation(
     unsigned offsetOfPiece,
     char* field[],
-    size_t fieldLength[])
+    size_t fieldLength[],
+	unsigned rfield,
+	unsigned posfield)
 {
     unsigned oneBasedOffsetWithinPiece = 0;
-    if ('*' != field[RNAME][0] && '*' != field[POS][0]) {
+    if ('*' != field[rfield][0] && '*' != field[posfield][0]) {
         //
         // We can't call sscanf directly into the mapped file, becuase it reads to the end of the
         // string even when it's satisfied all of its fields.  Since this can be gigabytes, it's not
@@ -399,12 +403,12 @@ SAMReader::parseLocation(
 
         const unsigned posBufferSize = 20;
         char posBuffer[posBufferSize];
-        if (fieldLength[POS] >= posBufferSize) {
+        if (fieldLength[posfield] >= posBufferSize) {
             fprintf(stderr,"SAMReader: POS field too long.\n");
             soft_exit(1);
         }
-        memcpy(posBuffer,field[POS],fieldLength[POS]);
-        posBuffer[fieldLength[POS]] = '\0';
+        memcpy(posBuffer,field[posfield],fieldLength[posfield]);
+        posBuffer[fieldLength[posfield]] = '\0';
         if (0 == sscanf(posBuffer,"%d",&oneBasedOffsetWithinPiece)) {
             fprintf(stderr,"SAMReader: Unable to parse position when it was expected.\n");
             soft_exit(1);
@@ -557,7 +561,7 @@ public:
 
     virtual bool isFormatOf(const char* filename) const;
     
-    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* location, unsigned* readBytes) const;
+    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* o_location, unsigned* o_readBytes, int* o_refID, int* o_pos) const;
 
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
 
@@ -595,23 +599,47 @@ SAMFormat::getSortInfo(
     const Genome* genome,
     char* buffer,
     _int64 bytes,
-    unsigned* o_location,
-    unsigned* o_readBytes) const
+	unsigned* o_location,
+	unsigned* o_readBytes,
+	int* o_refID,
+	int* o_pos) const
 {
     char* fields[SAMReader::nSAMFields];
     size_t lengths[SAMReader::nSAMFields];
     size_t lineLength;
     SAMReader::parseLine(buffer, buffer + bytes, fields, &lineLength, lengths);
     _ASSERT(lineLength < UINT32_MAX);
-    *o_readBytes = (unsigned) lineLength;
+	if (o_readBytes != NULL) {
+		*o_readBytes = (unsigned) lineLength;
+	}
     if (lengths[SAMReader::POS] == 0 || fields[SAMReader::POS][0] == '*') {
-        *o_location = UINT32_MAX;
+		if (lengths[SAMReader::PNEXT] == 0 || fields[SAMReader::PNEXT][0] == '*') {
+			if (o_location != NULL) {
+				*o_location = UINT32_MAX;
+			}
+			if (o_refID != NULL) {
+				*o_refID = -1;
+			}
+			if (o_pos != NULL) {
+				*o_pos = 0;
+			}
+		} else {
+			const size_t pieceNameBufferSize = 512;
+			char pieceName[pieceNameBufferSize];
+			unsigned offsetOfPiece;
+			SAMReader::parsePieceName(genome, pieceName, pieceNameBufferSize, &offsetOfPiece, o_refID, fields, lengths, SAMReader::RNEXT);
+			if (o_location != NULL) {
+				*o_location = SAMReader::parseLocation(offsetOfPiece, fields, lengths, SAMReader::RNEXT, SAMReader::PNEXT);
+			}
+		}
     } else {
         const size_t pieceNameBufferSize = 512;
         char pieceName[pieceNameBufferSize];
         unsigned offsetOfPiece;
-        SAMReader::parsePieceName(genome, pieceName, pieceNameBufferSize, &offsetOfPiece, fields, lengths);
-        *o_location = SAMReader::parseLocation(offsetOfPiece, fields, lengths);
+        SAMReader::parsePieceName(genome, pieceName, pieceNameBufferSize, &offsetOfPiece, o_refID, fields, lengths);
+		if (o_location != NULL) {
+	        *o_location = SAMReader::parseLocation(offsetOfPiece, fields, lengths);
+		}
     }
 }
 
