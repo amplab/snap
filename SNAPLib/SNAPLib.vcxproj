@@ -257,7 +257,6 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Tables.cpp" />
-    <ClCompile Include="ThirdPairedEndAligner.cpp" />
     <ClCompile Include="Util.cpp" />
     <ClCompile Include="WGsim.cpp" />
   </ItemGroup>

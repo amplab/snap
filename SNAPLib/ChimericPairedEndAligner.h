@@ -27,7 +27,7 @@ Revision History:
 #include "PairedEndAligner.h"
 #include "BaseAligner.h"
 
-class ChimericPairedEndAligner {
+class ChimericPairedEndAligner : public PairedEndAligner {
 public:
     ChimericPairedEndAligner(
         GenomeIndex         *index,
@@ -56,6 +56,10 @@ public:
     static size_t getBigAllocatorReservation(unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsToUse);
     void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(ChimericPairedEndAligner)); return allocator->allocate(size);}
     void operator delete(void *ptr, BigAllocator *allocator) {/* do nothing, the owner of the allocator is responsible for cleaning up the memory */}
+
+    virtual _int64 getLocationsScored() const {
+        return underlyingPairedEndAligner->getLocationsScored() + singleAligner->getLocationsScored();
+    }
 
 private:
    
