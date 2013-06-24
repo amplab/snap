@@ -289,18 +289,12 @@ log10bucket(
     return n * factor;
 }
     // from MurmurHash3, public domain, http://code.google.com/p/smhasher/wiki/MurmurHash3
+#define ROTL32(x,y)     bit_rotate_left(x,y)
+#define ROTL64(x,y)     bit_rotate_left64(x,y)
 
 #ifdef _MSC_VER
-#define ROTL32(x,y)     _rotl(x,y)
-#define ROTL64(x,y)     _rotl64(x,y)
 #define BIG_CONSTANT(x) (x)
 #else
-    inline _uint64 rotl64 ( _uint64 x, _int8 r )
-    {
-      return (x << r) | (x >> (64 - r));
-    }
-#define ROTL32(x,y)     rotl32(x,y)
-#define ROTL64(x,y)     rotl64(x,y)
 #define BIG_CONSTANT(x) (x##LLU)
 #endif
 
