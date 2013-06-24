@@ -403,7 +403,7 @@ public:
 
     virtual bool isFormatOf(const char* filename) const;
     
-    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* location, unsigned* readBytes) const;
+    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* o_location, unsigned* o_readBytes, int* o_refID, int* o_pos) const;
     
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
 
@@ -442,17 +442,33 @@ BAMFormat::getSortInfo(
     const Genome* genome,
     char* buffer,
     _int64 bytes,
-    unsigned* location,
-    unsigned* readBytes) const
+    unsigned* o_location,
+	unsigned* o_readBytes,
+	int* o_refID,
+	int* o_pos) const
 {
     BAMAlignment* bam = (BAMAlignment*) buffer;
     _ASSERT(bytes >= sizeof(BAMAlignment) && bam->size() <= bytes && bam->refID < genome->getNumPieces());
-    if (bam->refID < 0 || bam->refID >= genome->getNumPieces() || bam->pos < 0) {
-        *location = UINT32_MAX;
-    } else {
-        *location = genome->getPieces()[bam->refID].beginningOffset + bam->pos;
-    }
-    *readBytes = bam->size();
+	if (o_location != NULL) {
+		if (bam->refID < 0 || bam->refID >= genome->getNumPieces() || bam->pos < 0) {
+			if (bam->next_refID < 0 || bam->next_refID > genome->getNumPieces() || bam->next_pos < 0) {
+				*o_location = UINT32_MAX;
+			} else {
+				*o_location = genome->getPieces()[bam->next_refID].beginningOffset + bam->next_pos;
+			}
+		} else {
+			*o_location = genome->getPieces()[bam->refID].beginningOffset + bam->pos;
+		}
+	}
+	if (o_readBytes != NULL) {
+		*o_readBytes = bam->size();
+	}
+	if (o_refID != NULL) {
+		*o_refID = bam->refID;
+	}
+	if (o_pos != NULL) {
+		*o_pos = bam->pos;
+	}
 }
 
     ReadWriterSupplier*
@@ -974,7 +990,7 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
             size_t offset = runOffset;
             run.clear();
             // sort run by other coordinate & RC flags to get sub-runs
-            for (BAMAlignment* record = getRead(offset); record != lastBam; record = getNextRead(record, &offset)) {
+            for (BAMAlignment* record = getRead(offset); record != NULL && record != lastBam; record = getNextRead(record, &offset)) {
                 // use opposite of logical location to sort records
                 _uint64 entry = record->getLocation(genome) == UINT32_MAX
                     ? (((_uint64) UINT32_MAX) << 32) | 
@@ -987,6 +1003,9 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                 _ASSERT(offset - runOffset <= RunOffset);
                 run.push_back(entry);
             }
+			if (run.size() == 0) {
+				goto done; // todo: handle runs > n buffers (but should be rare!)
+			}
             // ensure that adjacent half-mapped pairs stay together
             std::stable_sort(run.begin(), run.end());
             bool foundRun = false;
