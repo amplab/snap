@@ -14,6 +14,7 @@ const char *PACKED_QUALITY_MASK = tables.getPackedQualityMask();
 const char *PACKED_VALUE_BASE = tables.getPackedValueBase();
 const unsigned *IS_LOWER_CASE = tables.getIsLowerCase();
 extern const char *TO_UPPER_CASE = tables.getToUpperCase();
+const char *PACKED_VALUE_BASE_RC = tables.getPackedValueBaseRC();
 
 
 Tables::Tables()
@@ -57,6 +58,7 @@ Tables::Tables()
     // packed base tables
     for (int i = 0; i < 256; i++) {
         packedValueBase[i] = i < 4 ? 'N' : "AGCT"[i >> 6];
+        packedValueBaseRC[i] = i < 4 ? 'N' : "TCGA"[i >> 6];
     }
 
     memset(packedBaseValue, 0, sizeof(packedBaseValue));

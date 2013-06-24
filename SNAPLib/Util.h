@@ -261,6 +261,33 @@ log10bucket(
     return n * factor;
 }
     
+    inline int
+log10bucket(
+    int n)
+{
+    unsigned factor = 1;
+    if (n < 0) {
+        n = -n;
+        factor = -1;
+    }
+    while (n >= 10) {
+        n /= 10;
+        factor *= 10;
+    }
+    return n * factor;
+}
+    
+    inline _int64
+log10bucket(
+    _int64 n)
+{
+    _int64 factor = 1;
+    while (abs(n) >= 10) {
+        n /= 10;
+        factor *= 10;
+    }
+    return n * factor;
+}
     // from MurmurHash3, public domain, http://code.google.com/p/smhasher/wiki/MurmurHash3
 
 #ifdef _MSC_VER
@@ -277,6 +304,18 @@ log10bucket(
 #define BIG_CONSTANT(x) (x##LLU)
 #endif
 
+    inline _uint32
+fmix32(
+    _uint32 h)
+{
+  h ^= h >> 16;
+  h *= 0x85ebca6b;
+  h ^= h >> 13;
+  h *= 0xc2b2ae35;
+  h ^= h >> 16;
+  return h;
+}
+
     inline _uint64
 fmix64(
     _uint64 k)
@@ -289,7 +328,66 @@ fmix64(
   k ^= k >> 33;
   return k;
 }
+    inline _uint32
+hash(
+    const void* key,
+    int len)
+{
+    const _uint8* data = (const _uint8*) key;
+    const int nblocks = len / 4;
+ 
+    _uint32 h1 = 0x811f6d67; // seed, const from a random guid for now
+ 
+    const _uint32 c1 = 0xcc9e2d51;
+    const _uint32 c2 = 0x1b873593;
+ 
+    //----------
+    // body
+ 
+    const _uint32 * blocks = (const _uint32 *)(data + nblocks*4);
+ 
+    for(int i = -nblocks; i; i++)
+    {
+        _uint32 k1 = blocks[i];
+ 
+        k1 *= c1;
+        k1 = ROTL32(k1,15);
+        k1 *= c2;
     
+        h1 ^= k1;
+        h1 = ROTL32(h1,13); 
+        h1 = h1*5+0xe6546b64;
+    }
+ 
+    //----------
+    // tail
+ 
+    const _uint32 * tail = (const _uint32*)(data + nblocks*4);
+    _uint32 k1 = 0;
+ 
+    switch(len & 3)
+    {
+        case 3: k1 ^= tail[2] << 16;
+        case 2: k1 ^= tail[1] << 8;
+        case 1: k1 ^= tail[0];
+                k1 *= c1; k1 = ROTL32(k1,15); k1 *= c2; h1 ^= k1;
+    };
+ 
+    //----------
+    // finalization
+ 
+    h1 ^= len;
+    h1 = fmix32(h1);
+    return h1;
+}
+    
+    inline _uint64
+hash64(
+    _uint64 x)
+{
+    return fmix64(x);
+}
+
     inline _uint64
 hash64(
     const void* key,
@@ -368,17 +466,6 @@ hash64(
     h2 += h1;
 
     return h2;
-}
-    inline _int64
-log10bucket(
-    _int64 n)
-{
-    _int64 factor = 1;
-    while (abs(n) >= 10) {
-        n /= 10;
-        factor *= 10;
-    }
-    return n * factor;
 }
 
 struct IdPair
