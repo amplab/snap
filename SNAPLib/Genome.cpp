@@ -47,6 +47,7 @@ Genome::Genome(unsigned i_maxBases, unsigned nBasesStored) : maxBases(i_maxBases
 
     nPieces = 0;
     pieces = new Piece[maxPieces];
+    piecesByName = NULL;
 }
 
     void
@@ -114,6 +115,9 @@ Genome::~Genome()
     }
 
     delete [] pieces;
+    if (piecesByName) {
+        delete [] piecesByName;
+    }
     pieces = NULL;
 }
 
@@ -251,7 +255,27 @@ Genome::loadFromFile(const char *fileName, unsigned i_minOffset, unsigned length
     }
 
     fclose(loadFile);
+    genome->sortPiecesByName();
     return genome;
+}
+
+    bool
+pieceComparator(
+    const Genome::Piece& a,
+    const Genome::Piece& b)
+{
+    return strcmp(a.name, b.name) < 0;
+}
+
+    void
+Genome::sortPiecesByName()
+{
+    if (piecesByName) {
+        delete [] piecesByName;
+    }
+    piecesByName = new Piece[nPieces];
+    memcpy(piecesByName, pieces, nPieces * sizeof(Piece));
+    std::sort(piecesByName, piecesByName + nPieces, pieceComparator);
 }
 
     bool
@@ -289,12 +313,32 @@ Genome::getSizeFromFile(const char *fileName, unsigned *nBases, unsigned *nPiece
 
 
     bool
-Genome::getOffsetOfPiece(const char *pieceName, unsigned *offset) const
+Genome::getOffsetOfPiece(const char *pieceName, unsigned *offset, int * index) const
 {
+    if (piecesByName) {
+        int low = 0;
+        int high = nPieces - 1;
+        while (low <= high) {
+            int mid = (low + high) / 2;
+            int c = strcmp(piecesByName[mid].name, pieceName);
+            if (c == 0) {
+                *offset = piecesByName[mid].beginningOffset;
+                return true;
+            } else if (c < 0) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+        return false;
+    }
     for (int i = 0; i < nPieces; i++) {
         if (!strcmp(pieceName,pieces[i].name)) {
             if (NULL != offset) {
                 *offset = pieces[i].beginningOffset;
+				if (index != NULL) {
+					*index = i;
+				}
             }
             return true;
         }

@@ -78,6 +78,8 @@ struct PairedAlignerOptions : public AlignerOptions
 
     virtual bool parse(const char** argv, int argc, int& n, bool *done);
 
+    virtual bool isPaired() { return true; }
+
     int minSpacing;
     int maxSpacing;
     bool forceSpacing;

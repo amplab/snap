@@ -96,16 +96,16 @@ protected:
         static const unsigned  QUAL         = 10;
         static const unsigned  nSAMFields   = 11;
 
-        static const int maxLineLen = 2048;
+        static const int maxLineLen = MAX_READ_LENGTH;
 
         static bool parseLine(char *line, char *endOfBuffer, char *result[],
             size_t *lineLength, size_t fieldLengths[]);
 
         static void parsePieceName(const Genome* genome, char* pieceName,
-            size_t pieceNameBufferSize, unsigned* o_offsetOfPiece,
-            char* field[], size_t fieldLength[]);
+            size_t pieceNameBufferSize, unsigned* o_offsetOfPiece, int* o_indexOfPiece,
+            char* field[], size_t fieldLength[], unsigned rfield = RNAME);
 
-        static unsigned parseLocation(unsigned offsetOfPiece, char* field[], size_t fieldLength[]);
+        static unsigned parseLocation(unsigned offsetOfPiece, char* field[], size_t fieldLength[], unsigned rfield = RNAME, unsigned posfield = POS);
 
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
                         unsigned *genomeLocation, Direction *direction, unsigned *mapQ, unsigned *flag, bool ignoreEndOfRange, const char **cigar);

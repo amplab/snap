@@ -63,9 +63,9 @@ private:
         const char*         fileName;
         ReadClippingType    clipping;
 
-        static const int maxReadSizeInBytes = 25000;    // Read as in sequencer read, not read-from-the-filesystem.
+        static const int maxReadSizeInBytes = MAX_READ_LENGTH * 2 + 1000;    // Read as in sequencer read, not read-from-the-filesystem.
 
-        static const unsigned maxLineLen = 10000;
+        static const unsigned maxLineLen = MAX_READ_LENGTH + 500;
         static const unsigned nLinesPerFastqQuery = 4;
 
         static bool isValidStartingCharacterForNextLine[nLinesPerFastqQuery][256];

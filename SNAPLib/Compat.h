@@ -40,6 +40,9 @@ const _int64 INT64_MIN = MININT64;
 const _uint32 UINT32_MAX = MAXUINT32;
 const _int32 INT32_MIN = MININT32;
 const _int32 INT32_MAX = MAXINT32;
+const _uint16 UINT16_MAX = MAXUINT16;
+const _int16 INT16_MAX = MAXINT16;
+const _int16 INT16_MIN = MININT16;
 
 static const double LOG10 = log(10.0);
 inline double exp10(double x) { return exp(x * LOG10); }

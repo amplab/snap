@@ -12,6 +12,10 @@ ifeq ($(UNAME), Linux)
   LIBS += -lrt -lz
 endif
 
+ifeq ($(UNAME), Darwin)
+  LIBS += -lz
+endif
+
 CXX = g++
 
 LIB_SRC = $(wildcard SNAPLib/*.cpp)

@@ -372,7 +372,7 @@ int main(int argc, char * argv[])
     }
 
     int maxEditDistanceSeen = 0;
-    for (int i = 0; i < nThreads; i++) {
+    for (unsigned i = 0; i < nThreads; i++) {
     }
 
 	return 0;

@@ -68,6 +68,10 @@ struct Seed {
         return bases;
     }
 
+    inline _int64 getRCBases() const {
+        return reverseComplement;
+    }
+
     inline Seed operator~() const
     //
     // Compute the reverse complement of this.  We just copy it from when our constructor ran.

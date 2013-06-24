@@ -87,6 +87,31 @@ bool writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat f
     } // switch
 }
 
+    void
+LandauVishkinWithCigar::printLinear(
+    char* buffer,
+    int bufferSize,
+    unsigned variant)
+{
+    _ASSERT(bufferSize >= 12);
+    int inserts = (variant >> CigarInsertCShift) & CigarInsertCount;
+    if (inserts > 0) {
+        *buffer++ = '0' + inserts;
+        *buffer++ = 'I';
+        for (int i = 0; i < inserts; i++) {
+            *buffer++ = VALUE_BASE[(variant >> (CigarInsertBShift + 2 * i)) & 3];
+        }
+    }
+    unsigned op = variant & CigarOpcode;
+    if (op >= CigarReplace && op < CigarDelete) {
+        *buffer++ = 'X';
+        *buffer++ = VALUE_BASE[op - CigarReplace];
+    } else if (op == CigarDelete) {
+        *buffer++ = 'D';
+    }
+    *buffer++ = 0;
+}
+
 int LandauVishkinWithCigar::computeEditDistance(
     const char* text, int textLen,
     const char* pattern, int patternLen,
@@ -242,7 +267,7 @@ done1:
 							}
 						}
 					}
-                    // todo: should this null-terminate?
+                    *(cigarBuf - (cigarBufLen == 0 ? 1 : 0)) = '\0'; // terminate string
                     if (cigarBufUsed != NULL) {
                         *cigarBufUsed = (int)(cigarBuf - cigarBufStart);
                     }
@@ -369,6 +394,55 @@ done1:
     // Could not align strings with at most K edits
     *(cigarBuf - (cigarBufLen == 0 ? 1 : 0)) = '\0'; // terminate string
     return -1;
+}
+
+    int
+LandauVishkinWithCigar::linearizeCompactBinary(
+    _uint16* o_linear,
+    int referenceSize,
+    char* cigar,
+    int cigarSize,
+    char* sample,
+    int sampleSize)
+{
+    memset(o_linear, 0, referenceSize * 2); // zero-init
+    int ic = 0, ir = 0, is = 0; // index into cigar, linear/reference, and sample
+    while (ic < cigarSize) {
+        char n = cigar[ic++];
+        char code = cigar[ic++];
+        int ii, base;
+        for (int i = 0; i < n; i++) {
+            if ((code != 'I' && ir >= referenceSize) || (code != 'D' && is >= sampleSize)) {
+                return ir;
+            }
+            if (code != 'D') {
+                base = sample[is] != 'N' ? BASE_VALUE[sample[is]] : 0;
+                is++;
+            }
+            switch (code) {
+            case '=':
+                ir++;
+                break;
+            case 'X':
+                o_linear[ir++] |= CigarReplace + base;
+                break;
+            case 'D':
+                o_linear[ir++] |= CigarDelete;
+                break;
+            case 'I':
+                ii = (o_linear[ir] >> CigarInsertCShift) & CigarInsertCount;
+                if (ii < 4) {
+                    o_linear[ir] = (base << (2 * ii + CigarInsertBShift)) | ((ii + 1) << CigarInsertCShift);
+                } else if (ii < 7) {
+                    o_linear[ir] = (o_linear[ir] & CigarInsertBases) | ((ii + 1) << CigarInsertCShift);
+                }
+                break;
+            default:
+                _ASSERT(false);
+            }
+        }
+    }
+    return ir;
 }
 
     void 

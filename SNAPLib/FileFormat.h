@@ -47,7 +47,7 @@ public:
     // reading
     //
 
-    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* location, unsigned* readBytes) const = 0;
+    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* o_location, unsigned* o_readBytes, int* o_refID = NULL, int* o_pos = NULL) const = 0;
 
     /*
 

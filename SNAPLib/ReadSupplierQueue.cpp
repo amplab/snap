@@ -418,7 +418,7 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
         ReleaseExclusiveLock(&lock);
         element->totalReads = 0;
 read_loop: // might return here once with goto to ensure both threads have same #reads per element
-        for (; element->totalReads <= elementSize - increment; element->totalReads += increment) {
+        for (; element->totalReads <= (int) elementSize - increment; element->totalReads += increment) {
             
             if (NULL != reader) {
                 Read* read = &element->reads[element->totalReads];
@@ -507,7 +507,7 @@ read_loop: // might return here once with goto to ensure both threads have same 
             unsigned n = InterlockedCompareExchange32AndReturnOldValue(&elementSize, element->totalReads, ReadQueueElement::MaxReadsPerElement);
             if (n != ReadQueueElement::MaxReadsPerElement && element->totalReads != n) {
                 // other thread updated it, ensure I produce elements of same size
-                if (element->totalReads < n) {
+                if (element->totalReads < (int) n) {
                     // go back and fill in more reads
                     fixedElementSize = true;
                     goto read_loop;
