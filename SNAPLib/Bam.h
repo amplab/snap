@@ -113,7 +113,7 @@ struct BAMAlignment
     { return (BAMAlignAux*) (l_seq + qual()); }
 
     unsigned    auxLen()
-    { return size() - ((char*) firstAux() - (char*) this); }
+    { return (unsigned) (size() - ((char*) firstAux() - (char*) this)); }
 
     size_t size()
     { return block_size + sizeof(block_size); }
