@@ -348,7 +348,7 @@ BAMReader::getReadFromLine(
 
     if (NULL != read) {
         _ASSERT(bam->l_seq < MAX_SEQ_LENGTH);
-        char* seqBuffer = getExtra(bam->l_seq);
+		char* seqBuffer = getExtra(bam->l_seq);
         char* qualBuffer = getExtra(bam->l_seq);
         BAMAlignment::decodeSeq(seqBuffer, bam->seq(), bam->l_seq);
         BAMAlignment::decodeQual(qualBuffer, bam->qual(), bam->l_seq);
@@ -634,8 +634,11 @@ BAMFormat::writeRead(
     }
     bam->l_read_name = (_uint8)qnameLen + 1;
     bam->MAPQ = mapQuality;
-    // todo: what is bin for unmapped reads?
-    bam->bin = genomeLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(genomeLocation, genomeLocation + fullLength) : 0;
+    bam->bin = genomeLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(genomeLocation, genomeLocation + fullLength) :
+		// unmapped is at mate's position, length 1
+		mateLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(mateLocation, mateLocation + 1) :
+		// otherwise at -1, length 1
+		BAMAlignment::reg2bin(-1, 0);
     bam->n_cigar_op = cigarOps;
     bam->FLAG = flags;
     bam->l_seq = fullLength;
