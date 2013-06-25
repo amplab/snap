@@ -26,6 +26,7 @@ Revision History:
 
 #include "Compat.h"
 #include "Tables.h"
+#include "Util.h"
 
 
 struct Seed {
@@ -142,16 +143,41 @@ struct Seed {
         }
     }
 
-    inline static Seed fromBases(_int64 bases, int seedLength) {
-        _int64 rc = 0;
-        _int64 b = bases;
-        for (int i = 0; i < seedLength; i++) {
-            rc = (rc << 2) | ((b & 3) ^ 3);
-            b = b >> 2;
-        }
-        return Seed(bases, rc);
+    static Seed fromBases(_int64 bases, int seedLength);
+
+    inline _uint64 hash64()
+    {
+        return util::hash64(1 + min(bases, reverseComplement));
+    }
+    
+    inline unsigned hash()
+    {
+        return (unsigned) hash64();
     }
 
+    static _uint64 hash64(const char* sequence, int length)
+    {
+        if (length <= MaxBases) {
+            Seed s(sequence, length);
+            return s.hash64();
+        } else {
+            // string compare seq & reverse, hash smallest one
+            for (int i = 0; i < length / 2; i++) {
+                char c = sequence[i];
+                char r = COMPLEMENT[sequence[length - 1 - i]];
+                if (c < r) {
+                    return util::hash(sequence, length);
+                } else if (r < c) {
+                    char* rc = (char*) alloca(length);
+                    util::toComplement(rc, sequence, length);
+                    return util::hash64(rc, length);
+                }
+            }
+            return util::hash(sequence, length); // rc palindrome
+        }
+    }
+
+    static const int MaxBases = 32;
 private:
 
     _int64   bases;

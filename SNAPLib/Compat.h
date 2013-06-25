@@ -64,6 +64,8 @@ typedef HANDLE EventObject;
 
 #define bit_rotate_right(value, shift) _rotr(value, shift)
 #define bit_rotate_left(value, shift) _rotl(value, shift)
+#define bit_rotate_right64(value, shift) _rotr64(value, shift)
+#define bit_rotate_left64(value, shift) _rotl64(value, shift)
 
 int getpagesize();
 
@@ -141,6 +143,18 @@ inline unsigned bit_rotate_left(unsigned value, unsigned shift)
 {
     if (shift%32 == 0) return value;
     return value << (shift %32) | (value >> (32 - shift%32));
+}
+
+inline _uint64 bit_rotate_right64(_uint64 value, unsigned shift)
+{
+    if (shift%64 == 0) return value;
+    return value >> (shift%64) | (value << (64 - shift%64));
+}
+
+inline _uint64 bit_rotate_left64(_uint64 value, unsigned shift)
+{
+    if (shift%64 == 0) return value;
+    return value << (shift %64) | (value >> (64 - shift%64));
 }
 
 #endif  // _MSC_VER
