@@ -1,0 +1,40 @@
+Ok, I have uploaded the latest version of the files to my GitHub
+account. You can download them here:
+
+https://github.com/andrewmagis/snap
+
+Alternatively, you can clone the repository with:
+
+git clone http://github.com/andrewmagis/snap
+
+SNAP RNA-seq requires you to build the SNAP index from the
+transcriptome of the genome assembly, and it also requires the GTF
+file that describes the exon boundaries.  Normally, the transcriptome
+fasta file is extracted from the genome file, but the software
+currently does not have the ability to do this.  Therefore, I have
+included these files in the 'transcriptome' directory. You will need
+to extract these gzipped files before using them.
+
+Download the GRCh37 reference genome from Ensembl. Right now this will
+only work with the Ensembl GRCh37 assembly (but it is a very high
+quality assembly, equivalent to hg19 but with slightly different
+chromosome names):
+
+ftp://ftp.ensembl.org/pub/release-68/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.68.dna.toplevel.fa.gz
+
+At this point you extract this file and build the genome index:
+
+snap index Homo_sapiens.GRCh37.68.dna.toplevel.fa genome20
+
+Also you need to extract the transcriptome file (provided) and build
+the transcriptome index:
+
+snap index Homo_sapiens.GRCh37.68.transcriptome.fa transcriptome20
+
+Finally, you can perform the alignments using the following line
+(using paired-end FASTQ files reads_1.fastq and reads_2.fastq as well
+as the extracted GTF file provided):
+
+snap rnaseq genome20 transcriptome20 Homo_sapiens.GRCh37.68.gtf
+reads_1.fastq reads_2.fastq -x -c 2 -t 8 -b -o output.sam -s 0 1000000
+-M -C++
