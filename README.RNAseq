@@ -20,7 +20,7 @@ only work with the Ensembl GRCh37 assembly (but it is a very high
 quality assembly, equivalent to hg19 but with slightly different
 chromosome names):
 
-ftp://ftp.ensembl.org/pub/release-68/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.68.dna.toplevel.fa.gz
+ftp://ftp.ensembl.org/pub/release-68/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.68.dna.primary_assembly.fa.gz
 
 At this point you extract this file and build the genome index:
 
