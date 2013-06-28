@@ -358,8 +358,9 @@ Return Value:
         }
         
         for (unsigned j = 0; j < intersectionResults[i].nHits; j++) {
+            unsigned amountRemaining = 0;
             int score = landauVishkin.computeEditDistance(
-                            genome->getSubstring(intersectionResults[i].hits[j],read->getDataLength()),
+                            genome->getSubstring(intersectionResults[i].hits[j],read->getDataLength(),amountRemaining),
                             read->getDataLength(),
                             read->getData(),
                             read->getDataLength(),
@@ -390,8 +391,9 @@ Return Value:
         } // For each hit
 
         for (unsigned j = 0; j < rcIntersectionResults[i].nHits; j++) {
+            unsigned amountRemaining = 0;
             int score = landauVishkin.computeEditDistance(
-                            genome->getSubstring(rcIntersectionResults[i].hits[j],rcRead->getDataLength()),
+                            genome->getSubstring(rcIntersectionResults[i].hits[j],rcRead->getDataLength(),amountRemaining),
                             rcRead->getDataLength(),
                             rcRead->getData(),
                             rcRead->getDataLength(),

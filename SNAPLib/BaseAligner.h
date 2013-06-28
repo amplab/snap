@@ -87,7 +87,8 @@ public:
         int         *multiHitsFound,     // inside multiHitLocations / RCs instead of returning MultipleHits right away.
         unsigned    *multiHitLocations,
         bool        *multiHitRCs,
-        int         *multiHitScores);
+        int         *multiHitScores,
+        bool        debug=false);
 
     //
     // Statistics gathering.

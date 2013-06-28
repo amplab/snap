@@ -36,6 +36,8 @@ using std::min;
 AlignerContext::AlignerContext(int i_argc, const char **i_argv, const char *i_version, AlignerExtension* i_extension)
     :
     index(NULL),
+    transcriptome(NULL),
+    gtf(NULL),
     parallelSamWriter(NULL),
     fileSplitterState(0, 0),
     options(NULL),
@@ -53,6 +55,9 @@ AlignerContext::AlignerContext(int i_argc, const char **i_argv, const char *i_ve
 AlignerContext::~AlignerContext()
 {
     delete extension;
+    if (gtf != NULL) {
+        delete gtf;
+    }
 }
 
 void AlignerContext::runAlignment(int argc, const char **argv, const char *version)
@@ -124,9 +129,16 @@ AlignerContext::initialize()
         fprintf(stderr, "Index load failed, aborting.\n");
         exit(1);
     }
+        
     _int64 loadTime = timeInMillis() - loadStart;
     printf("%llds.  %u bases, seed size %d\n",
         loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
+
+    //Create GenomeIndex for transcriptome, but do not load it
+    transcriptome = new GenomeIndex();
+
+    //Create GTF
+    gtf = new GTFReader();
 
     if (options->samFileTemplate != NULL && (options->maxHits.size() > 1 || options->maxDist.size() > 1 || options->numSeeds.size() > 1
                 || options->confDiff.size() > 1 || options->adaptiveConfDiff.size() > 1)) {
@@ -156,8 +168,8 @@ AlignerContext::beginIteration()
         : options->numThreads * max(2 * ParallelSAMWriter::UnsortedBufferSize,
                                     (size_t) index->getGenome()->getCountOfBases() / 3);
     if (NULL != options->samFileTemplate) {
-        parallelSamWriter = ParallelSAMWriter::create(options->samFileTemplate,index->getGenome(),
-            options->numThreads, options->sortOutput, totalMemory, options->useM, options->gapPenalty, argc, argv, version, options->rgLineContents);
+        parallelSamWriter = ParallelSAMWriter::create(options->samFileTemplate,index->getGenome(), transcriptome->getGenome(),
+            options->numThreads, options->sortOutput, totalMemory, options->useM, options->gapPenalty, argc, argv, version, options->rgLineContents, gtf);
         if (NULL == parallelSamWriter) {
             fprintf(stderr,"Unable to create SAM file writer.  Just aligning for speed, no output will be generated.\n");
         }

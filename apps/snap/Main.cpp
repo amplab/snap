@@ -29,6 +29,7 @@ Revision History:
 #include "GenomeIndex.h"
 #include "SingleAligner.h"
 #include "PairedAligner.h"
+#include "RNASeqAligner.h"
 
 using namespace std;
 
@@ -42,6 +43,7 @@ static void usage()
             "   index    build a genome index\n"
             "   single   align single-end reads\n"
             "   paired   align paired-end reads\n"
+            "   rnaseq   align paired-end RNA-seq data\n"
             "Type a command without arguments to see its help.\n");
     exit(1);
 }
@@ -61,6 +63,9 @@ int main(int argc, const char **argv)
     } else if (strcmp(argv[1], "paired") == 0) {
         PairedAlignerContext paired;
         paired.runAlignment(argc - 2, argv + 2, SNAP_VERSION);
+    } else if (strcmp(argv[1], "rnaseq") == 0) {
+        RNASeqAlignerContext rnaseq;
+        rnaseq.runAlignment(argc - 2, argv + 2, SNAP_VERSION);
     } else {
         fprintf(stderr, "Invalid command: %s\n\n", argv[1]);
         usage();

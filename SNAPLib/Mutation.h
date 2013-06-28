@@ -142,7 +142,8 @@ public:
     }
     static AlleleChange trivial(const Locus &locus, const Genome &genome) {
         unsigned offset = getOffset(locus, genome);
-        Allele refBase(genome.getSubstring(offset, 1), 1);
+        unsigned amountRemaining = 0;
+        Allele refBase(genome.getSubstring(offset, 1, amountRemaining), 1);
         return AlleleChange(refBase, refBase);
     }
 private:
@@ -174,7 +175,8 @@ public:
     }
     static DiploidAlleleChange trivial(const Locus &locus, const Genome &genome) {
         unsigned offset = getOffset(locus, genome);
-        Allele refBase(genome.getSubstring(offset, 1), 1);
+        unsigned amountRemaining = 0;
+        Allele refBase(genome.getSubstring(offset, 1, amountRemaining), 1);
         return DiploidAlleleChange(refBase, Gtype::homozygousFactory(refBase));
     }
 private:

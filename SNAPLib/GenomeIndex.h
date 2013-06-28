@@ -71,7 +71,8 @@ public:
     }
 
     inline int getSeedLength() const { return seedLen; }
-
+    
+    GenomeIndex();
     ~GenomeIndex();
 
     //
@@ -143,8 +144,6 @@ private:
                     _int64 *bothComplementsUsed, _int64 *countOfDuplicateOverflows);
 
     static int BackwardsUnsignedCompare(const void *, const void *);
-
-    GenomeIndex();
 
     int seedLen;
     unsigned nHashTables;

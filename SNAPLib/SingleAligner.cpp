@@ -150,7 +150,7 @@ SingleAlignerContext::runIterationThread()
             // Skip the read if it has too many Ns or trailing 2 quality scores.
             if (read.getDataLength() < 50 || read.countOfNs() > maxDist) {
                 if (samWriter != NULL && options->passFilter(&read, NotFound)) {
-                    samWriter->write(&read, NotFound, 0xFFFFFFFF, false);
+                    samWriter->write(&read, NotFound, 0xFFFFFFFF, false, false);
                 }
                 continue;
             } else {
@@ -183,7 +183,7 @@ SingleAlignerContext::writeRead(
     int score)
 {
     if (samWriter != NULL && options->passFilter(read, result)) {
-        samWriter->write(read, result, location, isRC);
+        samWriter->write(read, result, location, isRC, false);
     }
 }
 

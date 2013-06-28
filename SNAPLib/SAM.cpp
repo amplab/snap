@@ -69,10 +69,10 @@ SAMWriter:: ~SAMWriter()
 }
 
 
-SAMWriter* SAMWriter::create(const char *fileName, const Genome *genome, bool useM, unsigned gapPenalty, int argc, const char **argv, const char *version, const char *rgLine)
+SAMWriter* SAMWriter::create(const char *fileName, const Genome *genome, const Genome *transcriptome, bool useM, unsigned gapPenalty, int argc, const char **argv, const char *version, const char *rgLine, GTFReader* gtf)
 {
-    SimpleSAMWriter *writer = new SimpleSAMWriter(useM, gapPenalty, argc, argv, version, rgLine);
-    if (!writer->open(fileName, genome)) {
+    SimpleSAMWriter *writer = new SimpleSAMWriter(useM, gapPenalty, argc, argv, version, rgLine, gtf);
+    if (!writer->open(fileName, genome, transcriptome)) {
         delete writer;
         return NULL;
     } else {
@@ -136,7 +136,7 @@ SAMWriter::generateHeader(const Genome *genome, char *header, size_t headerBuffe
 // will only be valid until computeCigarString is called again.
     const char *
 SAMWriter::computeCigarString(
-    const Genome *              genome,
+    const Genome *              genome,           
     LandauVishkinWithCigar *    lv,
     BoundedStringDistance<true>* bsd,
     char *                      cigarBuf,
@@ -150,10 +150,19 @@ SAMWriter::computeCigarString(
     unsigned                    genomeLocation,
     bool                        isRC,
 	bool						useM,
-    int *                       editDistance
+    int *                       editDistance,
+    std::vector<unsigned>       &tokens
 )
 {
-    const char *reference = genome->getSubstring(genomeLocation, dataLength + MAX_K);
+   
+    unsigned amountExceeded = 0;
+    const char *reference = genome->getSubstring(genomeLocation, dataLength + MAX_K, amountExceeded);
+    
+    //Retry with an updated request
+    if (reference==NULL) {
+        reference = genome->getSubstring(genomeLocation, dataLength + MAX_K - amountExceeded, amountExceeded);
+    }         
+    
     if (NULL != reference) {
         *editDistance = 
             lv ? lv->computeEditDistance(
@@ -164,7 +173,8 @@ SAMWriter::computeCigarString(
                             MAX_K - 1,
                             cigarBuf,
                             cigarBufLen,
-						    useM)
+						    useM, 
+						    tokens)
             : bsd->compute(reference, data, dataLength, MAX_K - 1, cigarBuf, cigarBufLen, useM);
     } else {
         //
@@ -172,7 +182,7 @@ SAMWriter::computeCigarString(
         //
         return "*";
     }
-
+    
     if (*editDistance == -2) {
         fprintf(stderr, "WARNING: computeEditDistance returned -2; cigarBuf may be too small\n");
         return "*";
@@ -198,6 +208,125 @@ SAMWriter::computeCigarString(
     }
 }
 
+inline std::string ToString(const int& arg)
+{
+  char buffer[65];
+  sprintf(buffer, "%d", arg) ;
+  return std::string(buffer);
+}
+
+const char* SAMWriter::convertTranscriptomeToGenome(
+    GTFReader *                 gtf, 
+    std::vector<unsigned> &     tokens, 
+    std::string                 transcript_id, 
+    unsigned                    pos,
+    char *                      cigarBufWithClipping,
+    int                         cigarBufWithClippingLen
+) 
+{
+
+    //If the length of tokens is odd, something is wrong
+    if (tokens.size() % 2 != 0) {
+        fprintf(stderr, "Error: Size of CIGAR tokens is odd (%d)\n", tokens.size());
+        exit(1);
+    }
+
+    //printf("%d %s %u\n", gtf->Size(), transcript_id.c_str(), pos);  
+    unsigned prev = pos;
+    unsigned current = pos;
+    std::string new_cigar;
+
+    //Loop over all the operators
+    for (std::vector<unsigned>::iterator it = tokens.begin(); it != tokens.end(); it+=2) {
+       
+        //Get the size of the operator and the operator character
+        unsigned length = *it;
+        char op = *(it+1);
+   
+        //printf("%u %c\n", length, op);
+   
+        if (op == 'I') {
+            new_cigar += ToString(length);
+            new_cigar += op;
+        }
+        
+        else {
+      
+            //Get the end of this operator
+            current += length-1;
+            
+            //Get the junctions
+            //printf("Querying with pos: %d length: %d\n", prev, length);
+            std::vector<junction> junctions = gtf->GetTranscript(transcript_id).Junctions(prev, length);
+        
+            //If this operator crosses a splice junction, we must add it into the CIGAR operator
+            if (junctions.size() > 0) {
+            
+                //printf("Junctions: %d Remainder: %d\n", junctions.size(), length);
+            
+                // Add any junctions to the CIGAR operator
+                unsigned remainder = length;
+                          
+                //Iterate over the junctions
+                for (std::vector<junction>::iterator jit = junctions.begin(); jit != junctions.end(); ++jit) {
+                                    
+                    // Special case 1: the read begins right on the splice
+                    // junction: in this case we do not insert the junction
+                    if (jit->first == pos) {
+                        continue;
+                    }
+                                            
+                    // Junction[0] is the position in transcript space where the
+                    // splice junction begins (end of exon + 1)
+                    int step = jit->first - prev;
+                    remainder = remainder - step;
+                    
+                    //printf("%u %u %u %d %u\n", jit->first, jit->second, prev, step, remainder);
+                              
+                    // Add in portion of operator
+                    if (step > 0) {
+                        new_cigar += ToString(step);
+                        new_cigar += op;
+                    }   
+                                                
+                    // Add in splice junction spacer only if this is not the first operator
+                    new_cigar += ToString(jit->second);
+                    new_cigar += 'N';
+                                               
+                    // Increment the amount we move through the transcript
+                    prev = prev + step;  
+                    
+                }                      
+                        
+                // Add in remainder of current operator
+                if (remainder > 0) {
+                    new_cigar += ToString(remainder);
+                    new_cigar += op;
+                }
+
+        
+            // If there are no splice junctions, just print the operator as-is
+            } else {
+                new_cigar += ToString(length);
+                new_cigar += op; 
+            }
+            
+            // We begin at the next position for the next operator
+            current = current + 1;           
+            prev = current;
+        }
+    }
+
+    //New Cigar now contains the new CIGAR string
+    //Verify its length will fit into the cigarBuf
+    if (new_cigar.size() > cigarBufWithClippingLen) {
+        printf("Warning, CIGAR string (%d) will not fit in buffer of size %d\n", new_cigar.size(), cigarBufWithClippingLen);
+        return "*";
+    }
+    
+    snprintf(cigarBufWithClipping, cigarBufWithClippingLen, "%s", new_cigar.c_str());
+    return cigarBufWithClipping;
+}
 
     bool
 SAMWriter::generateSAMText(
@@ -205,6 +334,7 @@ SAMWriter::generateSAMText(
                 AlignmentResult             result, 
                 unsigned                    genomeLocation, 
                 bool                        isRC, 
+                bool                        isTranscriptome,
 				bool						useM,
                 bool                        hasMate, 
                 bool                        firstInPair, 
@@ -212,17 +342,23 @@ SAMWriter::generateSAMText(
                 AlignmentResult             mateResult, 
                 unsigned                    mateLocation,
                 bool                        mateIsRC, 
+                bool                        mateIsTranscriptome,
                 const Genome *              genome, 
+                const Genome *              transcriptome,
+                GTFReader *                 gtf,
                 LandauVishkinWithCigar *    lv, 
                 BoundedStringDistance<true>* bsd,
                 char *                      buffer, 
                 size_t                      bufferSpace, 
                 size_t *                    spaceUsed,
-                size_t                      qnameLen)
+                size_t                      qnameLen
+                )
  {
     const int MAX_READ = 10000;
     const int cigarBufSize = MAX_READ * 2;
     char cigarBuf[cigarBufSize];
+
+    //printf("%u %d %d %u %d %d\n", genomeLocation, isRC, isTranscriptome, mateLocation, mateIsRC, mateIsTranscriptome);
 
     const int cigarBufWithClippingSize = MAX_READ * 2 + 32;
     char cigarBufWithClipping[cigarBufWithClippingSize];
@@ -283,13 +419,40 @@ SAMWriter::generateSAMText(
         if (isRC) {
             flags |= SAM_REVERSE_COMPLEMENT;
         }
-        const Genome::Piece *piece = genome->getPieceAtLocation(genomeLocation);
-        pieceName = piece->name;
-        positionInPiece = genomeLocation - piece->beginningOffset + 1; // SAM is 1-based
-        cigar = computeCigarString(genome, lv, bsd, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize, 
-                                   clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
-                                   genomeLocation, isRC, useM, &editDistance);
+        
+        //Vector of tokens from CIGAR string for Transcriptome conversion
+        std::vector<unsigned> tokens;
+        
+        //If the read is a genome read, do standard CIGAR creation
+        if (!isTranscriptome) {
+        
+            const Genome::Piece *piece = genome->getPieceAtLocation(genomeLocation);
+            pieceName = piece->name;
+            positionInPiece = genomeLocation - piece->beginningOffset + 1; // SAM is 1-based
+                        
+            cigar = computeCigarString(genome, lv, bsd, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize, 
+                                       clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
+                                       genomeLocation, isRC, useM, &editDistance, tokens);  
+                                   
+        //If the read is a transcriptome read, convert to genomic coordinates
+        } else {
+        
+            const Genome::Piece *piece = transcriptome->getPieceAtLocation(genomeLocation);
+            pieceName = piece->name;
+            positionInPiece = genomeLocation - piece->beginningOffset + 1; // SAM is 1-based
+                        
+            cigar = computeCigarString(transcriptome, lv, bsd, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize, 
+                                       clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
+                                       genomeLocation, isRC, useM, &editDistance, tokens); 
+                                    
+            cigar = convertTranscriptomeToGenome(gtf, tokens, pieceName, positionInPiece, cigarBufWithClipping, cigarBufWithClippingSize);
+            positionInPiece = gtf->GetTranscript(pieceName).GenomicPosition(positionInPiece);
+            pieceName = gtf->GetTranscript(pieceName).Chr().c_str();
+        }
+        
+        //Set mapping quality to be 0 if multiple hit                                                            
         mapQuality = (result == SingleHit || result == CertainHit) ? 60 : 0;
+        
     } else {
         flags |= SAM_UNMAPPED;
     }
@@ -298,9 +461,22 @@ SAMWriter::generateSAMText(
         flags |= SAM_MULTI_SEGMENT;
         flags |= (firstInPair ? SAM_FIRST_SEGMENT : SAM_LAST_SEGMENT);
         if (mateLocation != 0xFFFFFFFF) {
-            const Genome::Piece *piece = genome->getPieceAtLocation(mateLocation);
-            matePieceName = piece->name;
-            matePositionInPiece = mateLocation - piece->beginningOffset + 1;
+           
+            if (!mateIsTranscriptome) {
+           
+                const Genome::Piece *piece = genome->getPieceAtLocation(mateLocation);
+                matePieceName = piece->name;
+                matePositionInPiece = mateLocation - piece->beginningOffset + 1;
+            
+            } else {
+            
+                const Genome::Piece *piece = transcriptome->getPieceAtLocation(mateLocation);
+                matePieceName = piece->name;
+                matePositionInPiece = mateLocation - piece->beginningOffset + 1;
+                matePositionInPiece = gtf->GetTranscript(matePieceName).GenomicPosition(matePositionInPiece);
+                matePieceName = gtf->GetTranscript(matePieceName).Chr().c_str();
+                
+            }
 
             if (mateIsRC) {
                 flags |= SAM_NEXT_REVERSED;
@@ -310,10 +486,11 @@ SAMWriter::generateSAMText(
                 //
                 // The SAM spec says that for paired reads where exactly one end is unmapped that the unmapped
                 // half should just have RNAME and POS copied from the mate.
-                //
+                //       
                 pieceName = matePieceName;
                 matePieceName = "=";
                 positionInPiece = matePositionInPiece;
+ 
             }
 
         } else {
@@ -336,15 +513,38 @@ SAMWriter::generateSAMText(
             _int64 mateBasesClippedAfter = mate->getUnclippedLength() - mate->getDataLength() - mateBasesClippedBefore;
             _int64 mateStart = mateLocation - (mateIsRC ? mateBasesClippedAfter : mateBasesClippedBefore);
             _int64 mateEnd = mateLocation + mate->getDataLength() + (!mateIsRC ? mateBasesClippedAfter : mateBasesClippedBefore);
+			
 			if (pieceName == matePieceName) { // pointer (not value) comparison, but that's OK.
+			
 				if (myStart < mateStart) {
 					templateLength = mateEnd - myStart;
 				} else {
 					templateLength = -(myEnd - mateStart);
-				}
+				}				
  			} // otherwise leave TLEN as zero.
+			
+			//TODO: This is not really correct anymore, because reads can be spliced.  
+			if (isTranscriptome) {
+                myStart = positionInPiece - basesClippedBefore;
+                myEnd = positionInPiece + clippedLength + basesClippedAfter;			
+			}
+			
+			if (mateIsTranscriptome) {
+                mateStart = matePositionInPiece - (mateIsRC ? mateBasesClippedAfter : mateBasesClippedBefore);  
+                mateEnd = matePositionInPiece + mate->getDataLength() + (!mateIsRC ? mateBasesClippedAfter : mateBasesClippedBefore);
+			}
+			
+            if (isTranscriptome || mateIsTranscriptome) {
+                            
+				if (myStart < mateStart) {
+					templateLength = mateEnd - myStart;
+				} else {
+					templateLength = -(myEnd - mateStart);
+				}				
+            }		
+ 			
         }
-
+        
         if (pieceName == matePieceName) {
             matePieceName = "=";     // SAM Spec says to do this when they're equal (and not *, which won't happen because this is a pointer, not string, compare)
         }
@@ -403,22 +603,19 @@ SAMWriter::generateSAMText(
       buffer[bufferSpace-1] = '\n'; // overwrite trailing null with newline
     }
 
-
     if (NULL != spaceUsed) {
         *spaceUsed = charsInString;
     }
     return true;
 }
 
-
-SimpleSAMWriter::SimpleSAMWriter(bool i_useM, unsigned i_gapPenalty, int i_argc, const char **i_argv, const char *i_version, const char *i_rgLine) : 
+SimpleSAMWriter::SimpleSAMWriter(bool i_useM, unsigned i_gapPenalty, int i_argc, const char **i_argv, const char *i_version, const char *i_rgLine, GTFReader *i_gtf) : 
     useM(i_useM), argc(i_argc), argv(i_argv), version(i_version), rgLine(i_rgLine),
     lv(i_gapPenalty ? NULL : new LandauVishkinWithCigar),
-    bsd(i_gapPenalty ? new BoundedStringDistance<true>(i_gapPenalty) : NULL)
+    bsd(i_gapPenalty ? new BoundedStringDistance<true>(i_gapPenalty) : NULL), gtf(i_gtf)
 {
     file = NULL;
 }
-
 
 SimpleSAMWriter::~SimpleSAMWriter()
 {
@@ -433,8 +630,7 @@ SimpleSAMWriter::~SimpleSAMWriter()
     }
 }
 
-
-bool SimpleSAMWriter::open(const char* fileName, const Genome *genome)
+bool SimpleSAMWriter::open(const char* fileName, const Genome *genome, const Genome *transcriptome)
 {
     buffer = (char *) BigAlloc(BUFFER_SIZE);
     if (buffer == NULL) {
@@ -448,6 +644,7 @@ bool SimpleSAMWriter::open(const char* fileName, const Genome *genome)
     }
     setvbuf(file, buffer, _IOFBF, BUFFER_SIZE);
     this->genome = genome;
+    this->transcriptome = transcriptome;
 
     // Write out SAM header
     char *headerBuffer = new char[HEADER_BUFFER_SIZE];
@@ -463,13 +660,13 @@ bool SimpleSAMWriter::open(const char* fileName, const Genome *genome)
 }
 
 
-bool SimpleSAMWriter::write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC)
+bool SimpleSAMWriter::write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, bool isTranscriptome)
 {
     if (file == NULL) {
         return false;
     }
 
-    write(read, result, genomeLocation, isRC, false, false, NULL, NotFound, 0, false);
+    write(read, result, genomeLocation, isRC, isTranscriptome, false, false, NULL, NotFound, 0, false, false);
     return true;
 }
 
@@ -481,42 +678,43 @@ bool SimpleSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult 
     }
 
     if (result->location[0] > result->location[1]) {
-        write(read1, result->status[1], result->location[1], result->isRC[1], true, true,
-              read0, result->status[0], result->location[0], result->isRC[0]);
-        write(read0, result->status[0], result->location[0], result->isRC[0], true, false,
-              read1, result->status[1], result->location[1], result->isRC[1]);
+        write(read1, result->status[1], result->location[1], result->isRC[1], result->isTranscriptome[1], true, true,
+              read0, result->status[0], result->location[0], result->isRC[0], result->isTranscriptome[0]);
+        write(read0, result->status[0], result->location[0], result->isRC[0], result->isTranscriptome[0], true, false,
+              read1, result->status[1], result->location[1], result->isRC[1], result->isTranscriptome[1]);
     } else {
-        write(read0, result->status[0], result->location[0], result->isRC[0], true, true,
-              read1, result->status[1], result->location[1], result->isRC[1]);
-        write(read1, result->status[1], result->location[1], result->isRC[1], true, false,
-              read0, result->status[0], result->location[0], result->isRC[0]);
+        write(read0, result->status[0], result->location[0], result->isRC[0], result->isTranscriptome[0], true, true,
+              read1, result->status[1], result->location[1], result->isRC[1], result->isTranscriptome[1]);
+        write(read1, result->status[1], result->location[1], result->isRC[1], result->isTranscriptome[1], true, false,
+              read0, result->status[0], result->location[0], result->isRC[0], result->isTranscriptome[0]);
     }
     return true;
 }
-
 
 void SimpleSAMWriter::write(
         Read *read,
         AlignmentResult result,
         unsigned genomeLocation,
         bool isRC,
+        bool isTranscriptome,
         bool hasMate,
         bool firstInPair,
         Read *mate,
         AlignmentResult mateResult,
         unsigned mateLocation,
-        bool mateIsRC)
+        bool mateIsRC,
+        bool mateIsTranscriptome)
 {
     const unsigned maxLineLength = 25000;
     char outputBuffer[maxLineLength];
     size_t outputBufferUsed;
 
-    if (!generateSAMText(read, result, genomeLocation, isRC, useM, hasMate, firstInPair, mate, mateResult,
-            mateLocation,mateIsRC, genome, lv, bsd, outputBuffer, maxLineLength,&outputBufferUsed)) {
+    if (!generateSAMText(read, result, genomeLocation, isRC, isTranscriptome, useM, hasMate, firstInPair, mate, mateResult,
+            mateLocation, mateIsRC, mateIsTranscriptome, genome, transcriptome, gtf, lv, bsd, outputBuffer, maxLineLength,&outputBufferUsed)) {
         fprintf(stderr,"SimpleSAMWriter: tried to generate too long of a SAM line (> %d)\n",maxLineLength);
         exit(1);
     }
-    
+       
     if (1 != fwrite(outputBuffer,outputBufferUsed,1,file)) {
         fprintf(stderr,"Unable to write to SAM file.\n");
         exit(1);
@@ -550,9 +748,11 @@ ThreadSAMWriter::ThreadSAMWriter(size_t i_bufferSize, bool i_useM, unsigned i_ga
 }
 
     bool
-ThreadSAMWriter::initialize(AsyncFile* file, const Genome *i_genome, volatile _int64 *i_nextWriteOffset)
+ThreadSAMWriter::initialize(AsyncFile* file, const Genome *i_genome, const Genome *i_transcriptome, volatile _int64 *i_nextWriteOffset, GTFReader *i_gtf)
 {
     genome = i_genome;
+    transcriptome = i_transcriptome;
+    gtf = i_gtf;
     nextWriteOffset = i_nextWriteOffset;
     buffer[0] = (char *)BigAlloc(bufferSize);
     buffer[1] = (char *)BigAlloc(bufferSize);
@@ -604,17 +804,17 @@ ThreadSAMWriter::close()
 }
     
     bool
-ThreadSAMWriter::write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC)
+ThreadSAMWriter::write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, bool isTranscriptome)
 {
     size_t sizeUsed;
-    if (!generateSAMText(read, result, genomeLocation, isRC, useM, false, true, NULL, UnknownAlignment, 0, false, genome, lv, bsd,
+    if (!generateSAMText(read, result, genomeLocation, isRC, isTranscriptome, useM, false, true, NULL, UnknownAlignment, 0, false, false, genome, transcriptome, gtf, lv, bsd,
             buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace, remainingBufferSpace, &sizeUsed)) {
 
         if (!startIo()) {
             return false;
         }
 
-        if (!generateSAMText(read, result, genomeLocation, isRC, useM, false, true, NULL, UnknownAlignment, 0, false, genome, lv, bsd,
+        if (!generateSAMText(read, result, genomeLocation, isRC, isTranscriptome, useM, false, true, NULL, UnknownAlignment, 0, false, false, genome, transcriptome, gtf, lv, bsd,
                 buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace, &sizeUsed)) {
 
             fprintf(stderr,"WindowsSAMWriter: create SAM string into fresh buffer failed\n");
@@ -623,7 +823,7 @@ ThreadSAMWriter::write(Read *read, AlignmentResult result, unsigned genomeLocati
     }
     size_t bufferOffset = bufferSize - remainingBufferSpace;
     remainingBufferSpace -= sizeUsed;
-    afterWrite(result != NotFound ? genomeLocation : UINT32_MAX, bufferOffset, (unsigned)sizeUsed);
+    afterWrite(result != NotFound ? genomeLocation : UINT_MAX, bufferOffset, (unsigned)sizeUsed);
     return true;
 }
 
@@ -667,16 +867,16 @@ ThreadSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *resu
         }
     }
 
-    bool writesFit = generateSAMText(reads[first], result->status[first], result->location[first], result->isRC[first], useM, true, true,
-                                     reads[second], result->status[second], result->location[second], result->isRC[second],
-                        genome, lv, bsd, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace,&sizeUsed[first],
-                        idLengths[first]);
+    bool writesFit = generateSAMText(reads[first], result->status[first], result->location[first], result->isRC[first], result->isTranscriptome[first], useM, true, true,
+                                     reads[second], result->status[second], result->location[second], result->isRC[second], result->isTranscriptome[second],
+                                     genome, transcriptome, gtf, lv, bsd, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace,&sizeUsed[first],
+                                     idLengths[first]);
 
     if (writesFit) {
-        writesFit = generateSAMText(reads[second], result->status[second], result->location[second], result->isRC[second], useM, true, false,
-                                    reads[first], result->status[first], result->location[first], result->isRC[first],
-                        genome, lv, bsd, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace + sizeUsed[first],remainingBufferSpace-sizeUsed[first],&sizeUsed[second],
-                        idLengths[second]);
+        writesFit = generateSAMText(reads[second], result->status[second], result->location[second], result->isRC[second], result->isTranscriptome[second], useM, true, false,
+                                    reads[first], result->status[first], result->location[first], result->isRC[first], result->isTranscriptome[first],
+                                    genome, transcriptome, gtf, lv, bsd, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace + sizeUsed[first],remainingBufferSpace-sizeUsed[first],&sizeUsed[second],
+                                    idLengths[second]);
     }
 
     if (!writesFit) {
@@ -684,14 +884,14 @@ ThreadSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *resu
             return false;
         }
 
-        if (!generateSAMText(reads[first], result->status[first], result->location[first], result->isRC[first], useM, true, true,
-                             reads[second], result->status[second], result->location[second], result->isRC[second],
-                genome, lv, bsd, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace,&sizeUsed[first],
-                idLengths[first]) ||
-            !generateSAMText(reads[second], result->status[second] ,result->location[second], result->isRC[second], useM, true, false,
-                             reads[first], result->status[first], result->location[first], result->isRC[first],
-                genome, lv, bsd, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace + sizeUsed[first],remainingBufferSpace-sizeUsed[first],&sizeUsed[second],
-                idLengths[second])) {
+        if (!generateSAMText(reads[first], result->status[first], result->location[first], result->isRC[first], result->isTranscriptome[first], useM, true, true,
+                             reads[second], result->status[second], result->location[second], result->isRC[second], result->isTranscriptome[second],
+                             genome, transcriptome, gtf, lv, bsd, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace,remainingBufferSpace,&sizeUsed[first],
+                             idLengths[first]) ||
+            !generateSAMText(reads[second], result->status[second] ,result->location[second], result->isRC[second], result->isTranscriptome[second], useM, true, false,
+                             reads[first], result->status[first], result->location[first], result->isRC[first], result->isTranscriptome[first],
+                             genome, transcriptome, gtf, lv, bsd, buffer[bufferBeingCreated] + bufferSize - remainingBufferSpace + sizeUsed[first],remainingBufferSpace-sizeUsed[first],&sizeUsed[second],
+                             idLengths[second])) {
 
 
             fprintf(stderr,"WindowsSAMWriter: create SAM string into fresh buffer failed\n");
@@ -704,8 +904,8 @@ ThreadSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *resu
     //
     // The strange code that determines the sort key (which uses the coordinate of the mate for unmapped reads) is because we list unmapped reads
     // with mapped mates at their mates' location so they sort together.  If both halves are unmapped, then  
-    afterWrite(result->status[first] != NotFound ? result->location[first] : ((result->status[second] != NotFound) ? result->location[second] : UINT32_MAX), bufferOffset[0], (unsigned)sizeUsed[first]);
-    afterWrite(result->status[second] != NotFound ? result->location[second] : ((result->status[first] != NotFound) ? result->location[first] : UINT32_MAX), bufferOffset[1], (unsigned)sizeUsed[second]);
+    afterWrite(result->status[first] != NotFound ? result->location[first] : ((result->status[second] != NotFound) ? result->location[second] : UINT_MAX), bufferOffset[0], (unsigned)sizeUsed[first]);
+    afterWrite(result->status[second] != NotFound ? result->location[second] : ((result->status[first] != NotFound) ? result->location[first] : UINT_MAX), bufferOffset[1], (unsigned)sizeUsed[second]);
     return true;
 }
 
@@ -713,6 +913,7 @@ ThreadSAMWriter::writePair(Read *read0, Read *read1, PairedAlignmentResult *resu
 ParallelSAMWriter::create(
     const char		*fileName,
     const Genome	*genome,
+    const Genome    *transcriptome,
     unsigned		 nThreads,
     bool			 sort,
     size_t			 sortBufferMemory,
@@ -721,12 +922,13 @@ ParallelSAMWriter::create(
     int              argc,
     const char     **argv,
     const char      *version,
-    const char      *rgLine) 
+    const char      *rgLine,
+    GTFReader       *gtf) 
 {
     ParallelSAMWriter *parallelWriter = sort
         ? new SortedParallelSAMWriter(sortBufferMemory, useM, gapPenalty, argc, argv, version, rgLine)
         : new ParallelSAMWriter(useM,gapPenalty,argc,argv,version, rgLine);
-    if (!parallelWriter->initialize(fileName, genome, nThreads, sort)) {
+    if (!parallelWriter->initialize(fileName, genome, transcriptome, nThreads, sort, gtf)) {
         fprintf(stderr, "unable to initialize parallel SAM writer\n");
         delete parallelWriter;
         return NULL;
@@ -736,7 +938,7 @@ ParallelSAMWriter::create(
 
     bool
 
-ParallelSAMWriter::initialize(const char *fileName, const Genome *genome, unsigned i_nThreads, bool sorted)
+ParallelSAMWriter::initialize(const char *fileName, const Genome *genome, const Genome *transcriptome, unsigned i_nThreads, bool sorted, GTFReader *gtf)
 {
     file = AsyncFile::open(fileName, true);
     if (NULL == file) {
@@ -784,7 +986,7 @@ ParallelSAMWriter::initialize(const char *fileName, const Genome *genome, unsign
     nThreads = i_nThreads;
     writer = new ThreadSAMWriter *[nThreads];
 
-    if (!createThreadWriters(genome)) {
+    if (!createThreadWriters(genome, transcriptome, gtf)) {
         fprintf(stderr,"Unable to create SAM writer.\n");
         return false;
     }
@@ -793,12 +995,12 @@ ParallelSAMWriter::initialize(const char *fileName, const Genome *genome, unsign
 }
 
     bool
-ParallelSAMWriter::createThreadWriters(const Genome* genome)
+ParallelSAMWriter::createThreadWriters(const Genome* genome, const Genome* transcriptome, GTFReader *gtf)
 {
     bool worked = true;
     for (int i = 0; i < nThreads; i++) {
         writer[i] = new ThreadSAMWriter(UnsortedBufferSize, useM, gapPenalty);
-        worked &= writer[i]->initialize(file, genome, &nextWriteOffset);
+        worked &= writer[i]->initialize(file, genome, transcriptome, &nextWriteOffset, gtf);
     }
     return worked;
 }
@@ -914,10 +1116,12 @@ SortedThreadSAMWriter::~SortedThreadSAMWriter()
     bool
 SortedThreadSAMWriter::initialize(
     SortedParallelSAMWriter* i_parent,
-    const Genome* i_genome)
+    const Genome* i_genome,
+    const Genome* i_transcriptome,
+    GTFReader *i_gtf)
 {
     parent = i_parent;
-    return ThreadSAMWriter::initialize(parent->file, i_genome, &parent->nextWriteOffset);
+    return ThreadSAMWriter::initialize(parent->file, i_genome, i_transcriptome, &parent->nextWriteOffset, i_gtf);
 }
 
     void
@@ -967,28 +1171,30 @@ SortedThreadSAMWriter::beforeFlush(_int64 fileOffset, _int64 length)
 SortedParallelSAMWriter::initialize(
     const char *fileName,
     const Genome *genome,
+    const Genome *transcriptome,
     unsigned i_nThreads,
-    bool sorted)
+    bool sorted, 
+    GTFReader *gtf)
 {
     InitializeExclusiveLock(&lock);
     sortedFile = fileName;
     tempFile = (char*) malloc(strlen(fileName) + 5);
     strcpy(tempFile, fileName);
     strcat(tempFile, ".tmp");
-    bool ok = ParallelSAMWriter::initialize(tempFile, genome, i_nThreads, sorted);
+    bool ok = ParallelSAMWriter::initialize(tempFile, genome, transcriptome, i_nThreads, sorted, gtf);
     headerSize = nextWriteOffset;
     return ok;
 }
     
     bool
-SortedParallelSAMWriter::createThreadWriters(const Genome* genome)
+SortedParallelSAMWriter::createThreadWriters(const Genome* genome, const Genome* transcriptome, GTFReader *gtf)
 {
     size_t bufferSize = totalMemory / nThreads / 2;
     bool worked = true;
     for (int i = 0; i < nThreads; i++) {
         SortedThreadSAMWriter* w = new SortedThreadSAMWriter(bufferSize, useM, gapPenalty);
         writer[i] = w;
-        worked &= w->initialize(this, genome);
+        worked &= w->initialize(this, genome, transcriptome, gtf);
     }
     return worked;
 }

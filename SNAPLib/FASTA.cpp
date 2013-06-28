@@ -160,7 +160,8 @@ bool AppendFASTAGenome(const Genome *genome, FILE *fasta, const char *prefix="")
         unsigned start = piece.beginningOffset;
         unsigned end = i + 1 < nPieces ? pieces[i + 1].beginningOffset : genome->getCountOfBases();
         unsigned size = end - start;
-        const char *bases = genome->getSubstring(start, size);
+        unsigned amountRemaining=0;
+        const char *bases = genome->getSubstring(start, size, amountRemaining);
         
         fprintf(fasta, ">%s%s\n", prefix, piece.name);
         fwrite(bases, 1, size, fasta);

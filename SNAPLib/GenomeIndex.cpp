@@ -893,7 +893,8 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
             if (i % 1000000 == 0) {
                 printf("Bias computation: %lld / %lld\n",(_int64)i, (_int64)countOfBases);
             }
-            const char *bases = genome->getSubstring(i,seedLen);
+            unsigned amountRemaining = 0;
+            const char *bases = genome->getSubstring(i,seedLen,amountRemaining);
             //
             // Check it for NULL, because Genome won't return strings that cross piece (chromosome) boundaries.
             //
@@ -1041,7 +1042,8 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
     _uint64 unrecordedSkippedSeeds = 0;
 
     for (unsigned i = context->genomeChunkStart; i < context->genomeChunkEnd; i++) {
-            const char *bases = context->genome->getSubstring(i, context->seedLen);
+            unsigned amountRemaining = 0;
+            const char *bases = context->genome->getSubstring(i, context->seedLen, amountRemaining);
             //
             // Check it for NULL, because Genome won't return strings that cross piece (chromosome) boundaries.
             //
@@ -1164,8 +1166,9 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
     _uint64 unrecordedSkippedSeeds = 0;
 
     for (unsigned genomeLocation = context->genomeChunkStart; genomeLocation < context->genomeChunkEnd; genomeLocation++) {
-
-        const char *bases = genome->getSubstring(genomeLocation, seedLen);
+    
+        unsigned amountRemaining = 0;
+        const char *bases = genome->getSubstring(genomeLocation, seedLen, amountRemaining);
         //
         // Check it for NULL, because Genome won't return strings that cross piece (chromosome) boundaries.
         //

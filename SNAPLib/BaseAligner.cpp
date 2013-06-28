@@ -184,7 +184,8 @@ BaseAligner::AlignRead(
     int       *multiHitsFound,
     unsigned  *multiHitLocations,
     bool      *multiHitRCs,
-    int       *multiHitScores)  
+    int       *multiHitScores,
+    bool      debug)  
 /*++
 
 Routine Description:
@@ -445,7 +446,7 @@ Return Value:
                 // more than best_score + confDiff then we know that if this location is newly seen then its location won't ever be a
                 // winner, and we can ignore it.
                 //
-                for (unsigned i = 0 ; i < min(nHits, maxHitsToConsider); i++) {
+                for (unsigned i = 0 ; i < min(nHits, maxHitsToConsider); i++) {           
                     //
                     // Find the genome location where the beginning of the read would hit, given a match on this seed.
                     //
@@ -496,21 +497,21 @@ Return Value:
                 // more than best_score + confDiff then we know that if this location is newly seen then its location won't ever be a
                 // winner, and we can ignore it.
                 //
-                for (unsigned i = 0 ; i < min(nRCHits, maxHitsToConsider); i++) {
+                for (unsigned i = 0 ; i < min(nRCHits, maxHitsToConsider); i++) {         
                     //
                     // Find the genome location where the beginning of the read would hit, given a match on this seed.
                     //
                     unsigned genomeLocationOfThisHit = rcHits[i] - rcOffset;
                     if (genomeLocationOfThisHit < minLocation || genomeLocationOfThisHit > maxLocation)
                         continue;
-    
+                           
                     Candidate *candidate;
                     HashTableElement *hashTableElement;
 
                     findCandidate(genomeLocationOfThisHit,true,&candidate,&hashTableElement);
                     if (NULL != hashTableElement) {
                         incrementWeight(hashTableElement);
-                    } else if (lowestPossibleRCScoreOfAnyUnseenLocation <= scoreLimit) {
+                    } else if (lowestPossibleRCScoreOfAnyUnseenLocation <= scoreLimit) {      
                         allocateNewCandidate(genomeLocationOfThisHit, true, lowestPossibleRCScoreOfAnyUnseenLocation, &candidate, &hashTableElement);
                     }
                 }
@@ -838,11 +839,20 @@ Return Value:
                 }
     
                 unsigned genomeLocation = elementToScore->baseGenomeLocation + candidateIndexToScore;
-    
+                   
                 unsigned score = -1;
                 if (elementToScore->isRC) {
-                    const char *data = genome->getSubstring(genomeLocation, rcRead->getDataLength() + MAX_K);
-                    if (data != NULL) {
+                                
+                    unsigned amountExceeded = 0;
+                    const char *data = genome->getSubstring(genomeLocation, rcRead->getDataLength() + MAX_K, amountExceeded);
+
+                    //Retry with an updated request
+                    if (data==NULL) {
+                        data = genome->getSubstring(genomeLocation, rcRead->getDataLength() + MAX_K - amountExceeded, amountExceeded);
+                    }      
+                               
+                    if (data != NULL) {              
+                    
 #ifdef USE_NEW_DISTANCE
                         score = bsd->compute(data, rcRead->getData(), rcRead->getDataLength(), scoreLimit);
 #else
@@ -850,6 +860,7 @@ Return Value:
                         if (readId != -1) {
                             cacheKey = ((_uint64) readId) << 33 | ((_uint64) elementToScore->isRC) << 32 | genomeLocation;
                         }
+                        
                         score = landauVishkin->computeEditDistance(
                             data, rcRead->getDataLength() + MAX_K,
                             rcRead->getData(), rcRead->getDataLength(),
@@ -860,7 +871,15 @@ Return Value:
                     printf("Computing distance at %u (RC) with limit %d: %d\n", genomeLocation, scoreLimit, score);
 #endif
                 } else {
-                    const char *data = genome->getSubstring(genomeLocation, read->getDataLength() + MAX_K);
+                    
+                    unsigned amountExceeded = 0;
+                    const char *data = genome->getSubstring(genomeLocation, read->getDataLength() + MAX_K, amountExceeded);
+                                                            
+                    //Retry with an updated request
+                    if (data==NULL) {
+                        data = genome->getSubstring(genomeLocation, read->getDataLength() + MAX_K - amountExceeded, amountExceeded);
+                    }      
+                          
                     if (data != NULL) {
 #ifdef USE_NEW_DISTANCE
                         score = bsd->compute(data, read->getData(), read->getDataLength(), scoreLimit);
@@ -881,12 +900,13 @@ Return Value:
                 }
                 
                 if (maxHitsToGet > 0 && score != -1 && hitCount[score] < maxHitsToGet) {
+                                    
                     // Remember the location of this hit because we don't have enough at this distance
                     hitLocations[score][hitCount[score]] = genomeLocation;
                     hitRCs[score][hitCount[score]] = elementToScore->isRC;
                     hitCount[score]++;
                 }
-                
+                             
                 candidateToScore->score = score;
                 candidateToScore->scoredInEpoch = hashTableEpoch;
                 elementToScore->bestScore = __min(elementToScore->bestScore, score);

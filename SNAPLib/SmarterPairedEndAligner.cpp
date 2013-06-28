@@ -664,7 +664,8 @@ void SmarterPairedEndAligner::scoreBucket(
         while (_BitScanForward64(&offset, unscored)) {
             unscored ^= ((_int64)1 << offset);
             unsigned score = INFINITE_SCORE;
-            const char *refData = index->getGenome()->getSubstring(location + offset, readLen + MAX_K);
+            unsigned amountRemaining = 0;
+            const char *refData = index->getGenome()->getSubstring(location + offset, readLen + MAX_K, amountRemaining);
             if (refData != NULL) {
                 TRACE("  Genome: %.*s\n  Read:   %.*s\n", readLen, refData, readLen, readData);
                 _uint64 cacheKey = ((_uint64) readId) << 33 | ((_uint64) isRC) << 32 | (location + offset);
