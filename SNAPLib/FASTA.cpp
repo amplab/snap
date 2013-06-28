@@ -103,7 +103,7 @@ ReadFASTAGenome(const char *fileName)
             bool found = false;
             
             //Add line terminator at first space
-            for (int i = 0; i < strlen(lineBuffer)-1; ++i) {
+            for (int i = 0; i < strlen(lineBuffer); ++i) {
                 if (lineBuffer[i] == ' ') {
                     lineBuffer[i] = '\0';
                     found = true;
