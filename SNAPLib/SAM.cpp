@@ -215,7 +215,15 @@ inline std::string ToString(const int& arg)
   return std::string(buffer);
 }
 
-const char* SAMWriter::convertTranscriptomeToGenome(GTFReader *gtf, std::vector<unsigned> &tokens, std::string transcript_id, unsigned pos) {
+const char* SAMWriter::convertTranscriptomeToGenome(
+    GTFReader *                 gtf, 
+    std::vector<unsigned> &     tokens, 
+    std::string                 transcript_id, 
+    unsigned                    pos,
+    char *                      cigarBufWithClipping,
+    int                         cigarBufWithClippingLen
+) 
+{
 
     //If the length of tokens is odd, something is wrong
     if (tokens.size() % 2 != 0) {
@@ -308,7 +316,16 @@ const char* SAMWriter::convertTranscriptomeToGenome(GTFReader *gtf, std::vector<
             prev = current;
         }
     }
-    return new_cigar.c_str();
+
+    //New Cigar now contains the new CIGAR string
+    //Verify its length will fit into the cigarBuf
+    if (new_cigar.size() > cigarBufWithClippingLen) {
+        printf("Warning, CIGAR string (%d) will not fit in buffer of size %d\n", new_cigar.size(), cigarBufWithClippingLen);
+        return "*";
+    }
+    
+    snprintf(cigarBufWithClipping, cigarBufWithClippingLen, "%s", new_cigar.c_str());
+    return cigarBufWithClipping;
 }
 
     bool
@@ -428,7 +445,7 @@ SAMWriter::generateSAMText(
                                        clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
                                        genomeLocation, isRC, useM, &editDistance, tokens); 
                                     
-            cigar = convertTranscriptomeToGenome(gtf, tokens, pieceName, positionInPiece);
+            cigar = convertTranscriptomeToGenome(gtf, tokens, pieceName, positionInPiece, cigarBufWithClipping, cigarBufWithClippingSize);
             positionInPiece = gtf->GetTranscript(pieceName).GenomicPosition(positionInPiece);
             pieceName = gtf->GetTranscript(pieceName).Chr().c_str();
         }

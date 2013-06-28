@@ -100,10 +100,12 @@ private:
                 );
                 
     static const char *convertTranscriptomeToGenome(
-                        GTFReader *gtf,
-                        std::vector<unsigned> &tokens,
-                        std::string transcript_id,
-                        unsigned pos);
+                        GTFReader *                 gtf,
+                        std::vector<unsigned> &     tokens,
+                        std::string                 transcript_id,
+                        unsigned                    pos,
+                        char *                      cigarBufWithClipping,
+                        int                         cigarBufWithClippingLen);
 
 };
 
