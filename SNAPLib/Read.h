@@ -26,6 +26,7 @@ Revision History:
 
 #include "Compat.h"
 #include "Tables.h"
+#include <string.h>
 
 class Read;
 

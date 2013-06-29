@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <vector>
 #include <map>
+#include <algorithm>
 
 #include "PairedEndAligner.h"
 #include "Genome.h"
