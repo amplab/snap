@@ -24,6 +24,7 @@ Environment:
 #include "Tables.h"
 #include "RangeSplitter.h"
 #include "ParallelTask.h"
+#include <climits>
 
 using std::max;
 using std::min;
