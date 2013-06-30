@@ -104,7 +104,7 @@ void GTFTranscript::Process() {
     }
 
     //Sort the exons by start and end
-    std::sort(exons.begin(), exons.end());
+    sort(exons.begin(), exons.end());
     
 }
 

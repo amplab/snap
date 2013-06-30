@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <algorithm>
 
 #define GTF_MAX_READ_SIZE 4096
 
