@@ -346,10 +346,10 @@ SortedDataFilterSupplier::mergeSort()
 				}
 			}
 			size_t xfer = min(left, min((size_t) rbytes, wbytes));
-			_ASSERT(xfer > 0);
+			_ASSERT(xfer > 0 && xfer <= UINT32_MAX);
 			memcpy(wbuffer, rbuffer, xfer);
 			blocks[0].reader->advance(xfer);
-			writer->advance(xfer);
+			writer->advance((unsigned) xfer);
 			left -= xfer;
 		}
         blocks[0].reader->reinit(blocks[0].start, blocks[0].bytes);

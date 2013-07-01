@@ -71,7 +71,7 @@ void workerThreadMain(void *context)
 
     ReadSupplier *readSupplier = readSupplierGenerator->generateNewReadSupplier();
 
-    const unsigned maxReadLen = 20000;
+    const unsigned maxReadLen = MAX_READ_LENGTH;
     char *rcBuffer = new char[maxReadLen];
 
     Read *read;

@@ -792,7 +792,7 @@ Return Value:
                     if (genomeLocation + readDataLength + MAX_K >= genome->getCountOfBases()) {
                         endOffset = genome->getCountOfBases();
                     } else {
-                        const Genome::Piece *nextPiece = genome->getPieceAtLocation(genomeLocation + readDataLength + MAX_K);
+                        const Genome::Piece *nextPiece = genome->getNextPieceAfterLocation(genomeLocation);
                         _ASSERT(NULL != piece && piece->beginningOffset <= genomeLocation && piece != nextPiece);
 
                         endOffset = nextPiece->beginningOffset;

@@ -77,7 +77,7 @@ bool isAValidAlignmentResult(AlignmentResult result);
 //      The paired version of a ReadSupplier.
 //
 
-const int MaxReadLength = 20000;
+const int MaxReadLength = MAX_READ_LENGTH;
 
 class Read;
 

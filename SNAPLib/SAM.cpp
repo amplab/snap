@@ -908,7 +908,7 @@ SAMFormat::writeRead(
     unsigned mateLocation,
     Direction mateDirection) const
 {
-    const int MAX_READ = 10000;
+    const int MAX_READ = MAX_READ_LENGTH;
     const int cigarBufSize = MAX_READ * 2;
     char cigarBuf[cigarBufSize];
 

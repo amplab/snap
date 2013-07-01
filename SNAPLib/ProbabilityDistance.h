@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Read.h"
+
 //
 // Similar to BoundedStringDistance and LandauVishkin, but computes the probability of a read
 // string being generated from a reference sequence given an error model, mutation model and
@@ -10,7 +12,7 @@
 //
 class ProbabilityDistance {
 public:
-    static const int MAX_READ = 128;
+    static const int MAX_READ = MAX_READ_LENGTH;
     static const int MAX_SHIFT = 20;
 
     ProbabilityDistance(double snpProb, double gapOpenProb, double gapExtensionProb);
