@@ -60,15 +60,15 @@ bool RangeSplitter::getNextRange(_int64 *rangeStart, _int64 *rangeLength)
     }
 
     _int64 amountLeft = rangeEnd - position;
-    if (amountLeft == 0) {
+    if (amountLeft <= 0) {
         return false;
     }
 
     _int64 amountToTake;
     if (numThreads == 1) {
         amountToTake = rangeEnd;
-    } else if (amountLeft >= rangeEnd / divisionSize) {
-        amountToTake = rangeEnd / divisionSize / numThreads;
+    } else if (amountLeft >= (rangeEnd - rangeBegin) / divisionSize) {
+        amountToTake = (rangeEnd - rangeBegin) / divisionSize / numThreads;
 	    if (amountToTake == 0) {
 	      amountToTake = amountLeft;
 	    }
@@ -80,8 +80,9 @@ bool RangeSplitter::getNextRange(_int64 *rangeStart, _int64 *rangeLength)
     }
 
     _ASSERT(amountToTake > 0);
-
+	_int64 oldPosition = position; // for debugging
     _int64 startOffset = InterlockedAdd64AndReturnNewValue(&position, amountToTake) - amountToTake;
+	_ASSERT(position >= rangeBegin);
     if (startOffset >= rangeEnd) {
         // No work left to allocate.
         return false;
@@ -93,6 +94,7 @@ bool RangeSplitter::getNextRange(_int64 *rangeStart, _int64 *rangeLength)
 
     *rangeStart = startOffset;
     *rangeLength = amountToTake;
+	_ASSERT(startOffset >= rangeBegin && startOffset + amountToTake <= rangeEnd);
     return true;
 }
 

@@ -68,6 +68,7 @@ SimpleReadWriter::writeHeader(
     size_t size;
     size_t used;
 
+	writer->inHeader(true);
     if (! writer->getBuffer(&buffer, &size)) {
         return false;
     }
@@ -77,8 +78,9 @@ SimpleReadWriter::writeHeader(
         return false;
     }
 
-
     writer->advance((unsigned)used, 0);
+	writer->nextBatch();
+	writer->inHeader(false);
     return true;
 }
 

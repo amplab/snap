@@ -319,6 +319,12 @@ public:
     virtual ~ComposeFilter()
     { delete a; delete b; }
     
+	virtual void inHeader(bool flag)
+	{
+		a->inHeader(flag);
+		b->inHeader(flag);
+	}
+
     virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location)
     {
         a->onAdvance(writer, batchOffset, data, bytes, location);

@@ -319,27 +319,42 @@ SortedDataFilterSupplier::mergeSort()
     }
 
     // write out header
+    if (headerSize > 0xffffffff) {
+        fprintf(stderr,"SortedDataFilterSupplier: headerSize too big\n");
+        soft_exit(1);
+    }
     if (headerSize > 0) {
         blocks[0].reader->reinit(0, headerSize);
+		writer->inHeader(true);
         char* rbuffer;
         _int64 rbytes;
         char* wbuffer;
         size_t wbytes;
-        bool ok = blocks[0].reader->getData(&rbuffer, &rbytes) &&
-            rbytes >= 0 && (size_t) rbytes >= headerSize &&
-            writer->getBuffer(&wbuffer, &wbytes) &&
-            wbytes >= headerSize;
-        if (! ok ) {
-            fprintf(stderr, "read header failed\n");
-            return false;
-        }
-        if (headerSize > 0xffffffff) {
-            fprintf(stderr,"SortedDataFilterSupplier: headerSize too big\n");
-            soft_exit(1);
-        }
-        memcpy(wbuffer, rbuffer, headerSize);
-        writer->advance((unsigned)headerSize);
+		for (size_t left = headerSize; left > 0; ) {
+			if ((! blocks[0].reader->getData(&rbuffer, &rbytes)) || rbytes == 0) {
+				blocks[0].reader->nextBatch();
+				if (! blocks[0].reader->getData(&rbuffer, &rbytes)) {
+					fprintf(stderr, "read header failed\n");
+					soft_exit(1);
+				}
+			}
+			if ((! writer->getBuffer(&wbuffer, &wbytes)) || wbytes == 0) {
+				writer->nextBatch();
+				if (! writer->getBuffer(&wbuffer, &wbytes)) {
+					fprintf(stderr, "write header failed\n");
+					soft_exit(1);
+				}
+			}
+			size_t xfer = min(left, min((size_t) rbytes, wbytes));
+			_ASSERT(xfer > 0);
+			memcpy(wbuffer, rbuffer, xfer);
+			blocks[0].reader->advance(xfer);
+			writer->advance(xfer);
+			left -= xfer;
+		}
         blocks[0].reader->reinit(blocks[0].start, blocks[0].bytes);
+		writer->nextBatch();
+		writer->inHeader(false);
     }
 
     // merge temp blocks into output

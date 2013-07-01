@@ -48,6 +48,9 @@ public:
 
         virtual ~Filter() {}
 
+		// called to set whether we're writing a header vs. individual reads
+		virtual void inHeader(bool flag) {} // default do nothing
+
         // called when a chunk of data has been written into the file
         virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location) = 0;
 
@@ -79,6 +82,9 @@ public:
     DataWriter(Filter* i_filter) : filter(i_filter) {}
 
     virtual ~DataWriter() {}
+
+	void inHeader(bool flag)
+	{ if (filter != NULL) { filter->inHeader(flag); } }
 
     // get remaining space in current buffer for writing
     virtual bool getBuffer(char** o_buffer, size_t* o_size) = 0;

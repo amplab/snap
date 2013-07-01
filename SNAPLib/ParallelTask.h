@@ -193,5 +193,5 @@ ParallelTask<TContext>::threadWorker(
     // Decrement the running thread count and wake up the waiter if it hits 0.
     if (0 == InterlockedDecrementAndReturnNewValue(context->pRunningThreads)) {
         SignalSingleWaiterObject(context->doneWaiter);
-    }
+	}
 }
