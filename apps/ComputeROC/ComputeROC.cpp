@@ -68,11 +68,6 @@ struct ThreadContext {
 
 };
 
-inline bool isWithin(unsigned a, unsigned b, unsigned distance)
-{
-    return a <= b && a+distance >= b || a >= b && a <= b + distance;
-}
-
 bool inline isADigit(char x) {
     return x >= '0' && x <= '9';
 }

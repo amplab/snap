@@ -406,7 +406,9 @@ void PairedAlignerContext::runIterationThread()
     }
 
     int maxReadSize = MAX_READ_LENGTH;
-    BigAllocator *allocator = new BigAllocator(100 * 1024 * 1024);
+    size_t memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), numSeeds, maxDist, extraSearchDepth);
+
+    BigAllocator *allocator = new BigAllocator(memoryPoolSize);
     
     IntersectingPairedEndAligner *intersectingAligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, allocator);
 

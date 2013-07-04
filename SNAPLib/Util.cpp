@@ -38,6 +38,3 @@ int FirstPowerOf2GreaterThanOrEqualTo(int value)
     if (1 << highestBitSet == value) return value;
     return 1 << (highestBitSet + 1);
 }
-
-
-   
