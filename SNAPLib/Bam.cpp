@@ -629,7 +629,7 @@ BAMFormat::writeRead(
     bam->pos = positionInPiece - 1;
 
     if (qnameLen > 254) {
-        fprintf(stderr, "BAM forbat: QNAME field must be less than 254 characters long, instead it's %lld\n", qnameLen);
+        fprintf(stderr, "BAM format: QNAME field must be less than 254 characters long, instead it's %lld\n", qnameLen);
         soft_exit(1);
     }
     bam->l_read_name = (_uint8)qnameLen + 1;
