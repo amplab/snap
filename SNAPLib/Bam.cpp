@@ -634,9 +634,9 @@ BAMFormat::writeRead(
     }
     bam->l_read_name = (_uint8)qnameLen + 1;
     bam->MAPQ = mapQuality;
-    bam->bin = genomeLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(genomeLocation, genomeLocation + fullLength) :
+    bam->bin = genomeLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(positionInPiece-1, positionInPiece-1 + fullLength) :
 		// unmapped is at mate's position, length 1
-		mateLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(mateLocation, mateLocation + 1) :
+		mateLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(matePositionInPiece-1, matePositionInPiece) :
 		// otherwise at -1, length 1
 		BAMAlignment::reg2bin(-1, 0);
     bam->n_cigar_op = cigarOps;
