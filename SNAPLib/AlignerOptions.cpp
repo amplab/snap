@@ -59,7 +59,8 @@ AlignerOptions::AlignerOptions(
     rgLineContents(NULL),
     perfFileName(NULL),
     useTimingBarrier(false),
-    extraSearchDepth(2)
+    extraSearchDepth(2),
+    defaultReadGroup("snap")
 {
     if (forPairedEnd) {
         maxDist             = 15;
@@ -124,6 +125,7 @@ AlignerOptions::usageMessage()
         "  -pf  specify the name of a file to contain the run speed\n"
         "  --hp Indicates not to use huge pages (this may speed up index load and slow down alignment)\n"
         "  -D   Specifies the extra search depth (the edit distance beyond the best hit that SNAP uses to compute MAPQ).  Default 2\n"
+        "  -rg  Specify the default read group if it is not specified in the input file\n"
 
 // not written yet        "  -r   Specify the content of the @RG line in the SAM header.\n"
             ,
@@ -316,6 +318,14 @@ AlignerOptions::parse(
         } else {
             fprintf(stderr,"Must specify the name of the perf file after -pf\n");
         }
+	} else if (strcmp(argv[n], "-rg") == 0) {
+        if (n + 1 < argc) {
+            defaultReadGroup = argv[n+1];
+            n++;
+            return true;
+        } else {
+            fprintf(stderr,"Must specify the default read group after -rg\n");
+        }
     } else if (strcmp(argv[n], "--hp") == 0) {
         BigAllocUseHugePages = false;
         return true;
@@ -384,22 +394,22 @@ AlignerOptions::passFilter(
 }
 
     PairedReadSupplierGenerator *
-SNAPInput::createPairedReadSupplierGenerator(int numThreads, const Genome *genome, ReadClippingType clipping)
+SNAPInput::createPairedReadSupplierGenerator(int numThreads, const ReaderContext& context)
 {
     _ASSERT(fileType == SAMFile || fileType == BAMFile || secondFileName != NULL); // Caller's responsibility to check this
 
     switch (fileType) {
     case SAMFile:
-        return SAMReader::createPairedReadSupplierGenerator(fileName, numThreads, genome, clipping);
+        return SAMReader::createPairedReadSupplierGenerator(fileName, numThreads, context);
         
     case BAMFile:
-        return BAMReader::createPairedReadSupplierGenerator(fileName,numThreads,genome,clipping);
+        return BAMReader::createPairedReadSupplierGenerator(fileName,numThreads,context);
 
     case FASTQFile:
-        return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, clipping, false);
+        return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, context);
         
     case GZipFASTQFile:
-        return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, clipping, true);
+        return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, context);
 
     default:
         _ASSERT(false);
@@ -408,21 +418,21 @@ SNAPInput::createPairedReadSupplierGenerator(int numThreads, const Genome *genom
 }
 
     ReadSupplierGenerator *
-SNAPInput::createReadSupplierGenerator(int numThreads, const Genome *genome, ReadClippingType clipping)
+SNAPInput::createReadSupplierGenerator(int numThreads, const ReaderContext& context)
 {
     _ASSERT(secondFileName == NULL);
     switch (fileType) {
     case SAMFile:
-        return SAMReader::createReadSupplierGenerator(fileName, numThreads, genome, clipping);
+        return SAMReader::createReadSupplierGenerator(fileName, numThreads, context);
         
     case BAMFile:
-        return BAMReader::createReadSupplierGenerator(fileName,numThreads,genome,clipping);
+        return BAMReader::createReadSupplierGenerator(fileName,numThreads, context);
 
     case FASTQFile:
-        return FASTQReader::createReadSupplierGenerator(fileName, numThreads, clipping, false);
+        return FASTQReader::createReadSupplierGenerator(fileName, numThreads, context);
         
     case GZipFASTQFile:
-        return FASTQReader::createReadSupplierGenerator(fileName, numThreads, clipping, true);
+        return FASTQReader::createReadSupplierGenerator(fileName, numThreads, context);
 
     default:
         _ASSERT(false);

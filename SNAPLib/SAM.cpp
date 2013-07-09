@@ -21,6 +21,7 @@ Environment:
 #include "Compat.h"
 #include "Read.h"
 #include "SAM.h"
+#include "Bam.h"
 #include "Tables.h"
 #include "RangeSplitter.h"
 #include "ParallelTask.h"
@@ -81,7 +82,7 @@ strnchrs(char *str, char charToFind, char charToFind2, size_t maxLen) // Hokey v
 }
 
     char *
-skipToBeyondNextRunOfSpacesAndTabs(char *str, const char *endOfBuffer, size_t *charsUntilFirstSpaceOrTab = NULL)
+SAMReader::skipToBeyondNextRunOfSpacesAndTabs(char *str, const char *endOfBuffer, size_t *charsUntilFirstSpaceOrTab)
 {
     if (NULL == str) return NULL;
 
@@ -114,15 +115,14 @@ skipToBeyondNextRunOfSpacesAndTabs(char *str, const char *endOfBuffer, size_t *c
 SAMReader::create(
     const DataSupplier* supplier,
     const char *fileName,
-    const Genome *genome, 
+    const ReaderContext& context,
     _int64 startingOffset, 
-    _int64 amountOfFileToProcess, 
-    ReadClippingType clipping)
+    _int64 amountOfFileToProcess)
 {
     DataReader* data = supplier->getDataReader(maxLineLen);
-    SAMReader *reader = new SAMReader(data, clipping);
+    SAMReader *reader = new SAMReader(data, context);
 
-    if (!reader->init(fileName, genome, startingOffset, amountOfFileToProcess)) {
+    if (!reader->init(fileName, startingOffset, amountOfFileToProcess)) {
         //
         // Probably couldn't open the file.
         //
@@ -134,8 +134,8 @@ SAMReader::create(
 
 SAMReader::SAMReader(
     DataReader* i_data,
-    ReadClippingType i_clipping)
-    : data(i_data), clipping(i_clipping), headerSize(-1)
+    const ReaderContext& i_context)
+    : ReadReader(i_context), data(i_data), headerSize(-1)
 {
 }
 
@@ -239,13 +239,24 @@ SAMReader::parseLine(char *line, char *endOfBuffer, char *result[], size_t *line
 
     for (unsigned i = 0; i < nSAMFields; i++) {
         if (NULL == next || next >= endOfLine) {
-            //
-            // Too few fields.
-            //
-            return false;
+            if (i == OPT) {
+                // no optional fields
+                result[OPT] = NULL;
+                break;
+            } else {
+                //
+                // Too few fields.
+                //
+                return false;
+            }
         }
 
         result[i] = next;
+        if (i == OPT) {
+            // OPT field is actually all fields until end of line
+            fieldLengths[OPT] = endOfLine - next;
+            break;
+        }
 
         next = skipToBeyondNextRunOfSpacesAndTabs(next,endOfLine,&fieldLengths[i]);
     }
@@ -324,6 +335,16 @@ SAMReader::getReadFromLine(
             read->becomeRC();
         }
         read->clip(clipping);
+
+        if (field[OPT] != NULL) {
+            read->setAuxiliaryData(field[OPT], (unsigned) fieldLength[OPT]);
+            for (char* p = field[OPT]; p != NULL && p < field[OPT] + fieldLength[OPT]; p = SAMReader::skipToBeyondNextRunOfSpacesAndTabs(p, field[OPT] + fieldLength[OPT])) {
+                if (strncmp(p, "RG:Z:", 5) == 0) {
+                    read->setReadGroup(READ_GROUP_FROM_AUX);
+                    break;
+                }
+            }
+        }
     }
 
     if (NULL != alignmentResult) {
@@ -425,12 +446,9 @@ SAMReader::parseLocation(
     bool
 SAMReader::init(
     const char *fileName,
-    const Genome *i_genome,
     _int64 startingOffset,
     _int64 amountOfFileToProcess)
 {
-    genome = i_genome;
-    
     //
     // Read and parse the header specially.
     //
@@ -439,7 +457,7 @@ SAMReader::init(
     }
     headerSize = 1024 * 1024; // 1M header max
     char* buffer = data->readHeader(&headerSize);
-    if (!parseHeader(fileName, buffer, buffer + headerSize, genome, &headerSize)) {
+    if (!parseHeader(fileName, buffer, buffer + headerSize, context.genome, &headerSize)) {
         fprintf(stderr,"SAMReader: failed to parse header on '%s'\n",fileName);
         return false;
     }
@@ -502,7 +520,8 @@ SAMReader::getNextRead(
     }
 
     size_t lineLength;
-    getReadFromLine(genome, buffer,buffer + bytes, read, alignmentResult, genomeLocation, direction, mapQ, &lineLength, flag, cigar, clipping);
+    read->setReadGroup(context.defaultReadGroup);
+    getReadFromLine(context.genome, buffer,buffer + bytes, read, alignmentResult, genomeLocation, direction, mapQ, &lineLength, flag, cigar, clipping);
     read->setBatch(data->getBatch());
     data->advance((newLine + 1) - buffer);
 
@@ -510,26 +529,29 @@ SAMReader::getNextRead(
 }
 
     ReadSupplierGenerator *
-SAMReader::createReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping)
+SAMReader::createReadSupplierGenerator(
+    const char *fileName,
+    int numThreads,
+    const ReaderContext& context)
 {
     //
     // single-ended SAM files always can be read with the range splitter.
     //
     RangeSplitter *splitter = new RangeSplitter(QueryFileSize(fileName), numThreads, 100);
-    return new RangeSplittingReadSupplierGenerator(fileName, true, clipping, numThreads, genome);
+    return new RangeSplittingReadSupplierGenerator(fileName, true, numThreads, context);
 }
     
     PairedReadReader*
 SAMReader::createPairedReader(
     const DataSupplier* supplier,
     const char *fileName,
-    const Genome *genome,
     _int64 startingOffset,
     _int64 amountOfFileToProcess, 
     bool autoRelease,
-    ReadClippingType clipping)
+    const ReaderContext& context)
 {
-    SAMReader* reader = SAMReader::create(DataSupplier::Default[false], fileName, genome, 0, 0, clipping);
+
+    SAMReader* reader = SAMReader::create(DataSupplier::Default[false], fileName, context, 0, 0);
     if (reader == NULL) {
         return NULL;
     }
@@ -538,13 +560,16 @@ SAMReader::createPairedReader(
 
 
     PairedReadSupplierGenerator *
-SAMReader::createPairedReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping)
+SAMReader::createPairedReadSupplierGenerator(
+    const char *fileName,
+    int numThreads,
+    const ReaderContext& context)
 {
     //
     // need to use a queue so that pairs can be matched
     //
 
-    PairedReadReader* paired = SAMReader::createPairedReader(DataSupplier::Default[false], fileName, genome, 0, 0, false, clipping);
+    PairedReadReader* paired = SAMReader::createPairedReader(DataSupplier::Default[false], fileName, 0, 0, false, context);
     if (paired == NULL) {
         fprintf(stderr, "Cannot create reader on %s\n", fileName);
         soft_exit(1);
@@ -979,7 +1004,34 @@ SAMFormat::writeRead(
         nmString[0] = '\0';
     }
 
-    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s\tPG:Z:SNAP\tRG:Z:FASTQ%s\n",
+    unsigned auxLen;
+    bool auxSAM;
+    char* aux = read->getAuxiliaryData(&auxLen, &auxSAM);
+    static bool warningPrinted = false;
+    const char* readGroupSeparator = "";
+    const char* readGroupString = "";
+    if (aux != NULL && (! auxSAM)) {
+        if (! warningPrinted) {
+            fprintf(stderr, "warning: translating optional fields from BAM->SAM not yet implemented, optional fields will not be included in output\n");
+            warningPrinted = true;
+        }
+        if (read->getReadGroup() == READ_GROUP_FROM_AUX) {
+            for (BAMAlignAux* bamAux = (BAMAlignAux*) aux; (char*) bamAux < aux + auxLen; bamAux = bamAux->next()) {
+                if (bamAux->tag[0] == 'R' && bamAux->tag[1] == 'G' && bamAux->val_type == 'Z') {
+                    readGroupSeparator = "\tRG:Z:";
+                    readGroupString = (char*) bamAux->value();
+                    break;
+                }
+            }
+        }
+        aux = NULL;
+        auxLen = 0;
+    }
+    if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
+        readGroupSeparator = "\tRG:Z:";
+        readGroupString = read->getReadGroup();
+    }
+    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s\tPG:Z:SNAP%s%s%s%s%.*s\n",
         qnameLen, read->getId(),
         flags,
         pieceName,
@@ -991,7 +1043,9 @@ SAMFormat::writeRead(
         templateLength,
         fullLength, data,
         fullLength, quality,
-        nmString);
+        nmString,
+        readGroupSeparator, readGroupString,
+        aux != NULL ? "\t" : "", auxLen, aux != NULL ? aux : "");
 
     if (charsInString > bufferSpace) {
         //

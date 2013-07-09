@@ -51,7 +51,7 @@ class SAMReader : public ReadReader {
 public:
         virtual ~SAMReader() {}
 
-        SAMReader(DataReader* i_data, ReadClippingType i_clipping);
+        SAMReader(DataReader* i_data, const ReaderContext& i_context);
 
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
 
@@ -66,18 +66,24 @@ public:
         void releaseBatch(DataBatch batch)
         { data->releaseBatch(batch); }
 
-        static SAMReader* create(const DataSupplier* supplier, const char *fileName, const Genome *genome, _int64 startingOffset, _int64 amountOfFileToProcess, 
-                                 ReadClippingType clipping = ClipBack);
+        static SAMReader* create(const DataSupplier* supplier, const char *fileName,
+                const ReaderContext& i_context,
+                _int64 startingOffset, _int64 amountOfFileToProcess);
         
-        static PairedReadReader* createPairedReader(const DataSupplier* supplier, const char *fileName, const Genome *genome, _int64 startingOffset, _int64 amountOfFileToProcess, 
-                                 bool autoRelease, ReadClippingType clipping = ClipBack);
+        static PairedReadReader* createPairedReader(const DataSupplier* supplier,
+                const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess, 
+                bool autoRelease, const ReaderContext& context);
 
-        static ReadSupplierGenerator *createReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack);
-        static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack);
+        static ReadSupplierGenerator *createReadSupplierGenerator(
+            const char *fileName, int numThreads, const ReaderContext& context);
+        static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(
+            const char *fileName, int numThreads, const ReaderContext& context);
         
         // result and fieldLengths must be of size nSAMFields
         static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, _int64 *o_headerSize);
         
+        static char* skipToBeyondNextRunOfSpacesAndTabs(char *str, const char *endOfBuffer, size_t *charsUntilFirstSpaceOrTab = NULL);
+
 protected:
 
         //
@@ -94,7 +100,8 @@ protected:
         static const unsigned  TLEN         = 8;
         static const unsigned  SEQ          = 9;
         static const unsigned  QUAL         = 10;
-        static const unsigned  nSAMFields   = 11;
+        static const unsigned  OPT          = 11;
+        static const unsigned  nSAMFields   = 12;
 
         static const int maxLineLen = MAX_READ_LENGTH * 5;
 
@@ -115,15 +122,13 @@ protected:
                         size_t *lineLength, unsigned *flag, const char **cigar, ReadClippingType clipping);
 
 private:
-        bool init(const char *fileName, const Genome *i_genome, _int64 startingOffset, _int64 amountOfFileToProcess);
+        bool init(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess);
 
         DataReader*         data;
         _int64              headerSize;
         ReadClippingType    clipping;
 
         bool                didInitialSkip;   // Have we skipped to the beginning of the first SAM line?  We may start in the middle of one.
-
-        const Genome *      genome;
 
         friend class SAMFormat;
 };

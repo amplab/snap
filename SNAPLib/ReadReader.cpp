@@ -24,8 +24,8 @@ Environment:
 class SimpleReadReader : public ReadReader
 {
 public:
-    SimpleReadReader(const FileFormat* i_format, DataReader* i_data, ReadClippingType i_clipping) 
-        : format(i_format), data(i_data), clipping(i_clipping)
+    SimpleReadReader(const FileFormat* i_format, DataReader* i_data, const ReaderContext& i_context)
+        : ReadReader(i_context), format(i_format), data(i_data), headerSize(0)
     {}
 
     virtual ~SimpleReadReader()
@@ -51,6 +51,4 @@ private:
     const FileFormat* format;
     DataReader* data;
     _int64 headerSize;
-    const ReadClippingType clipping;
-    const Genome* genome;
 };

@@ -36,17 +36,17 @@ Revision History:
 class   FASTQReader : public ReadReader {
 public:
 
-        FASTQReader(DataReader* data, ReadClippingType clipping);
+        FASTQReader(DataReader* data, const ReaderContext& i_context);
 
         virtual ~FASTQReader();
 
 
         static FASTQReader* create(const DataSupplier* supplier, const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess,
-                                   ReadClippingType clipping = ClipBack);
+                                   const ReaderContext& i_context);
 
         bool init(const char* i_fileName);
 
-        static ReadSupplierGenerator *createReadSupplierGenerator(const char *fileName, int numThreads, ReadClippingType clipping = ClipBack, bool gzip = false);
+        static ReadSupplierGenerator *createReadSupplierGenerator(const char *fileName, int numThreads, const ReaderContext& context, bool gzip = false);
         
         virtual bool getNextRead(Read *readToUpdate);
 
@@ -61,7 +61,6 @@ private:
 
         DataReader*         data;
         const char*         fileName;
-        ReadClippingType    clipping;
 
         static const int maxReadSizeInBytes = MAX_READ_LENGTH * 2 + 1000;    // Read as in sequencer read, not read-from-the-filesystem.
 
@@ -82,7 +81,7 @@ public:
 
 
         static PairedFASTQReader* create(const DataSupplier* supplier, const char *fileName0, const char *fileName1, _int64 startingOffset, 
-                                         _int64 amountOfFileToProcess, ReadClippingType clipping = ClipBack);
+                                         _int64 amountOfFileToProcess, const ReaderContext& context);
 
         virtual bool getNextReadPair(Read *read0, Read *read1);
 
@@ -98,7 +97,7 @@ public:
             return readers[whichHalfOfPair];
         }
 
-        static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName0, const char *fileName1, int numThreads, ReadClippingType clipping = ClipBack, bool gzip = false);
+        static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName0, const char *fileName1, int numThreads, const ReaderContext& context, bool gzip = false);
  
         void releaseBatch(DataBatch batch)
         { _ASSERT(false); /* not supported */ }

@@ -37,11 +37,7 @@ using std::max;
 using std::min;
 using util::strnchr;
 
-BAMReader::BAMReader(
-    ReadClippingType i_clipping,
-    const Genome* i_genome,
-    bool i_paired)
-    : clipping(i_clipping), genome(i_genome), paired(i_paired)
+BAMReader::BAMReader(const ReaderContext& i_context) : ReadReader(i_context)
 {
 }
 
@@ -80,7 +76,7 @@ BAMReader::init(
         return false;
     }
     _int64 textHeaderSize = header->l_text;
-    if (!SAMReader::parseHeader(fileName, header->text(), header->text() + textHeaderSize, genome, &textHeaderSize)) {
+    if (!SAMReader::parseHeader(fileName, header->text(), header->text() + textHeaderSize, context.genome, &textHeaderSize)) {
         fprintf(stderr,"BAMReader: failed to parse header on '%s'\n",fileName);
         return false;
     }
@@ -88,7 +84,7 @@ BAMReader::init(
     refOffset = new unsigned[n_ref];
     BAMHeaderRefSeq* refSeq = header->firstRefSeq();
     for (unsigned i = 0; i < n_ref; i++, refSeq = refSeq->next()) {
-        if (! genome->getOffsetOfPiece(refSeq->name(), &refOffset[i])) {
+        if (! context.genome->getOffsetOfPiece(refSeq->name(), &refOffset[i])) {
             // fprintf(stderr, "BAMReader: unknown ref seq name %s\n", refSeq->name());
             refOffset[i] = UINT32_MAX;
             // soft_exit(1); ??
@@ -106,13 +102,11 @@ BAMReader::init(
     BAMReader*
 BAMReader::create(
     const char *fileName,
-    const Genome *genome,
     _int64 startingOffset,
     _int64 amountOfFileToProcess,
-    ReadClippingType clipping,
-    bool paired)
+    const ReaderContext& context)
 {
-    BAMReader* reader = new BAMReader(clipping, genome, paired);
+    BAMReader* reader = new BAMReader(context);
     if (! reader->init(fileName, startingOffset, amountOfFileToProcess)) {
         delete reader;
         return NULL;
@@ -133,10 +127,9 @@ BAMReader::reinit(
 BAMReader::createReadSupplierGenerator(
     const char *fileName,
     int numThreads,
-    const Genome *genome,
-    ReadClippingType clipping)
+    const ReaderContext& context)
 {
-    BAMReader* reader = create(fileName, genome, 0, 0, clipping);
+    BAMReader* reader = create(fileName, 0, 0, context);
     ReadSupplierQueue* queue = new ReadSupplierQueue((ReadReader*)reader);
     queue->startReaders();
     return queue;
@@ -146,11 +139,10 @@ BAMReader::createReadSupplierGenerator(
 BAMReader::createPairedReadSupplierGenerator(
     const char *fileName,
     int numThreads,
-    const Genome *genome,
-    ReadClippingType clipping,
+    const ReaderContext& context,
     int matchBufferSize)
 {
-    BAMReader* reader = create(fileName, genome, 0, 0, clipping);
+    BAMReader* reader = create(fileName, 0, 0, context);
     PairedReadReader* matcher = PairedReadReader::PairMatcher(reader, false);
     ReadSupplierQueue* queue = new ReadSupplierQueue(matcher);
     queue->startReaders();
@@ -313,11 +305,18 @@ BAMReader::getNextRead(
     }
     data->advance(bam->size());
     size_t lineLength;
-    getReadFromLine(genome, buffer, buffer + bytes, read, alignmentResult, genomeLocation,
-        isRC, mapQ, &lineLength, flag, cigar, clipping);
+    getReadFromLine(context.genome, buffer, buffer + bytes, read, alignmentResult, genomeLocation,
+        isRC, mapQ, &lineLength, flag, cigar, context.clipping);
     unsigned auxLen = bam->auxLen();
+    read->setReadGroup(context.defaultReadGroup);
     if (auxLen > 0) {
         read->setAuxiliaryData((char*) bam->firstAux(), auxLen);
+        for (BAMAlignAux* aux = bam->firstAux(); aux < bam->endAux(); aux = aux->next()) {
+            if (aux->val_type == 'Z' && aux->tag[0] == 'R' && aux->tag[1] == 'G') {
+                read->setReadGroup(READ_GROUP_FROM_AUX);
+                break;
+            }
+        }
     }
     return true;
 }
@@ -618,8 +617,39 @@ BAMFormat::writeRead(
 
     // Write the BAM entry
     unsigned auxLen;
-    char* aux = read->getAuxiliaryData(&auxLen);
+    bool auxSAM;
+    char* aux = read->getAuxiliaryData(&auxLen, &auxSAM);
+    static bool warningPrinted = false;
+    bool translateReadGroupFromSAM = false;
+    if (aux != NULL && auxSAM) {
+        if (! warningPrinted) {
+            warningPrinted = true;
+            fprintf(stderr, "warning: translating optional data from SAM->BAM is not yet implemented, optional data will not appear in BAM\n");
+        }
+        if (read->getReadGroup() == READ_GROUP_FROM_AUX) {
+            for (char* p = aux; p != NULL && p < aux + auxLen; p = SAMReader::skipToBeyondNextRunOfSpacesAndTabs(p, aux + auxLen)) {
+                if (strncmp(p, "RG:Z:", 5) == 0) {
+                    size_t fieldLen;
+                    SAMReader::skipToBeyondNextRunOfSpacesAndTabs(p, aux + auxLen, &fieldLen);
+                    aux = p;
+                    auxLen = (unsigned) fieldLen - 1;
+                    translateReadGroupFromSAM = true;
+                    break;
+                }
+            }
+        }
+        if (! translateReadGroupFromSAM) {
+            aux = NULL;
+            auxLen = 0;
+        }
+    }
     size_t bamSize = BAMAlignment::size((unsigned)qnameLen + 1, cigarOps, fullLength, auxLen);
+    if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
+        bamSize += 4 + strlen(read->getReadGroup());
+    }
+    if (editDistance > 0) {
+        bamSize += 3 + sizeof(_int32);
+    }
     if (bamSize > bufferSpace) {
         return false;
     }
@@ -653,7 +683,31 @@ BAMFormat::writeRead(
         quality[i] -= '!';
     }
     memcpy(bam->qual(), quality, fullLength);
-    memcpy(bam->firstAux(), aux, auxLen);
+    if (aux != NULL && auxLen > 0) {
+        if (! translateReadGroupFromSAM) {
+            memcpy(bam->firstAux(), aux, auxLen);
+        } else {
+            // hack, build just RG field from SAM opt field
+            BAMAlignAux* auxData = bam->firstAux();
+            auxData->tag[0] = 'R';
+            auxData->tag[1] = 'G';
+            auxData->val_type = 'Z';
+            memcpy(auxData->value(), aux + 5, auxLen - 4);
+            ((char*)auxData->value())[auxLen-1] = 0;
+        }
+    }
+    if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
+        BAMAlignAux* rg = (BAMAlignAux*) (auxLen + (char*) bam->firstAux());
+        rg->tag[0] = 'R'; rg->tag[1] = 'G'; rg->val_type = 'Z';
+        strcpy((char*) rg->value(), read->getReadGroup());
+        auxLen += rg->size();
+    }
+    if (editDistance > 0) {
+        BAMAlignAux* nm = (BAMAlignAux*) (auxLen + (char*) bam->firstAux());
+        nm->tag[0] = 'N'; nm->tag[1] = 'M'; nm->val_type = 'i';
+        *(_int32*)nm->value() = editDistance;
+        auxLen += nm->size();
+    }
 
     if (NULL != spaceUsed) {
         *spaceUsed = bamSize;

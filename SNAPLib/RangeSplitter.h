@@ -73,7 +73,7 @@ private:
 
 class RangeSplittingReadSupplierGenerator: public ReadSupplierGenerator {
 public:
-    RangeSplittingReadSupplierGenerator(const char *i_fileName, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome);
+    RangeSplittingReadSupplierGenerator(const char *i_fileName, bool i_isSAM, unsigned numThreads, const ReaderContext& context);
     ~RangeSplittingReadSupplierGenerator() {delete splitter; delete [] fileName;}
 
     ReadSupplier *generateNewReadSupplier();
@@ -82,8 +82,7 @@ private:
     RangeSplitter *splitter;
     char *fileName;
     bool isSAM;
-    ReadClippingType clipping;
-    const Genome *genome;
+    ReaderContext context;
 };
 
 
@@ -106,7 +105,7 @@ public:
 
 class RangeSplittingPairedReadSupplierGenerator: public PairedReadSupplierGenerator {
 public:
-    RangeSplittingPairedReadSupplierGenerator(const char *i_fileName1, const char *i_fileName2, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome);
+    RangeSplittingPairedReadSupplierGenerator(const char *i_fileName1, const char *i_fileName2, bool i_isSAM, unsigned numThreads, const ReaderContext& context);
     ~RangeSplittingPairedReadSupplierGenerator();
 
     PairedReadSupplier *generateNewPairedReadSupplier();
@@ -116,7 +115,6 @@ private:
     char *fileName1;
     char *fileName2;
     bool isSAM;
-    ReadClippingType clipping;
-    const Genome *genome;
+    ReaderContext context;
 };
 

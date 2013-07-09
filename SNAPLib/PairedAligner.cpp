@@ -558,18 +558,24 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
     void 
 PairedAlignerContext::typeSpecificBeginIteration()
 {
+    ReaderContext context;
+    context.clipping = options->clipping;
+    context.defaultReadGroup = options->defaultReadGroup;
+    context.genome = index->getGenome();
+    context.paired = true;
+
     if (1 == options->nInputs) {
         //
         // We've only got one input, so just connect it directly to the consumer.
         //
-        pairedReadSupplierGenerator = options->inputs[0].createPairedReadSupplierGenerator(options->numThreads, index->getGenome(), options->clipping);
+        pairedReadSupplierGenerator = options->inputs[0].createPairedReadSupplierGenerator(options->numThreads, context);
     } else {
         //
         // We've got multiple inputs, so use a MultiInputReadSupplier to combine the individual inputs.
         //
         PairedReadSupplierGenerator **generators = new PairedReadSupplierGenerator *[options->nInputs];
         for (int i = 0; i < options->nInputs; i++) {
-            generators[i] = options->inputs[i].createPairedReadSupplierGenerator(options->numThreads, index->getGenome(), options->clipping);
+            generators[i] = options->inputs[i].createPairedReadSupplierGenerator(options->numThreads, context);
         }
         pairedReadSupplierGenerator = new MultiInputPairedReadSupplierGenerator(options->nInputs,generators);
     }

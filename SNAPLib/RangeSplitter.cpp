@@ -98,8 +98,12 @@ bool RangeSplitter::getNextRange(_int64 *rangeStart, _int64 *rangeLength)
     return true;
 }
 
-RangeSplittingReadSupplierGenerator::RangeSplittingReadSupplierGenerator(const char *i_fileName, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome) :
-       isSAM(i_isSAM), clipping(i_clipping), genome(i_genome)
+RangeSplittingReadSupplierGenerator::RangeSplittingReadSupplierGenerator(
+    const char *i_fileName,
+    bool i_isSAM, 
+    unsigned numThreads,
+    const ReaderContext& i_context)
+    : isSAM(i_isSAM), context(i_context)
 {
     fileName = new char[strlen(i_fileName) + 1];
     strcpy(fileName, i_fileName);
@@ -117,9 +121,9 @@ RangeSplittingReadSupplierGenerator::generateNewReadSupplier()
     ReadReader *underlyingReader;
     // todo: implement layered factory model
     if (isSAM) {
-        underlyingReader = SAMReader::create(DataSupplier::Default[true], fileName, genome, rangeStart, rangeLength, clipping);
+        underlyingReader = SAMReader::create(DataSupplier::Default[true], fileName, context, rangeStart, rangeLength);
     } else {
-        underlyingReader = FASTQReader::create(DataSupplier::Default[true], fileName, rangeStart, rangeLength ,clipping);
+        underlyingReader = FASTQReader::create(DataSupplier::Default[true], fileName, rangeStart, rangeLength, context);
     }
     return new RangeSplittingReadSupplier(splitter,underlyingReader);
 }
@@ -177,8 +181,8 @@ RangeSplittingPairedReadSupplier::getNextReadPair(Read **read1, Read **read2)
 }
 
 RangeSplittingPairedReadSupplierGenerator::RangeSplittingPairedReadSupplierGenerator(
-    const char *i_fileName1, const char *i_fileName2, bool i_isSAM, ReadClippingType i_clipping, unsigned numThreads, const Genome *i_genome) :
-        isSAM(i_isSAM), clipping(i_clipping), genome(i_genome)
+    const char *i_fileName1, const char *i_fileName2, bool i_isSAM, unsigned numThreads, const ReaderContext& i_context) :
+        isSAM(i_isSAM), context(i_context)
 {
     fileName1 = new char[strlen(i_fileName1) + 1];
     strcpy(fileName1, i_fileName1); 
@@ -210,9 +214,9 @@ RangeSplittingPairedReadSupplierGenerator::generateNewPairedReadSupplier()
 
     PairedReadReader *underlyingReader;
     if (isSAM) {
-        underlyingReader = SAMReader::createPairedReader(DataSupplier::Default[true], fileName1, genome, rangeStart, rangeLength, true, clipping); 
+        underlyingReader = SAMReader::createPairedReader(DataSupplier::Default[true], fileName1, rangeStart, rangeLength, true, context); 
     } else {
-        underlyingReader = PairedFASTQReader::create(DataSupplier::Default[true], fileName1, fileName2, rangeStart, rangeLength, clipping);
+        underlyingReader = PairedFASTQReader::create(DataSupplier::Default[true], fileName1, fileName2, rangeStart, rangeLength, context);
     }
 
     return new RangeSplittingPairedReadSupplier(splitter,underlyingReader);
