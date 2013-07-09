@@ -60,7 +60,7 @@ AlignerOptions::AlignerOptions(
     perfFileName(NULL),
     useTimingBarrier(false),
     extraSearchDepth(2),
-    defaultReadGroup("snap")
+    defaultReadGroup("FASTQ")
 {
     if (forPairedEnd) {
         maxDist             = 15;
@@ -322,6 +322,9 @@ AlignerOptions::parse(
         if (n + 1 < argc) {
             defaultReadGroup = argv[n+1];
             n++;
+            char* s = new char[1 + strlen(defaultReadGroup) + strlen("@RG\tID:\tSM:sample")];
+            sprintf(s, "@RG\tID:%s\tSM:sample", defaultReadGroup);
+            rgLineContents = s;
             return true;
         } else {
             fprintf(stderr,"Must specify the default read group after -rg\n");
