@@ -74,6 +74,7 @@ extern bool _DumpAlignments;
 
 void ChimericPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentResult *result)
 {
+	result->status[0] = result->status[1] = NotFound;
      if (read0->getDataLength() < 50 && read1->getDataLength() < 50) {
         TRACE("Reads are both too short -- returning");
         return;

@@ -35,19 +35,12 @@ Revision History:
 #include "AlignerContext.h"
 #include "AlignerOptions.h"
 #include "FASTQ.h"
+#include "Util.h"
 #include "SingleAligner.h"
 #include "MultiInputReadSupplier.h"
 
 using namespace std;
-
-// Check whether a string str ends with a given pattern
-static bool stringEndsWith(const char* str, const char* pattern) {
-    if (strlen(str) < strlen(pattern)) {
-        return false;
-    } else {
-        return strcmp(str + (strlen(str) - strlen(pattern)), pattern) == 0;
-    }
-}
+using util::stringEndsWith;
 
 SingleAlignerContext::SingleAlignerContext(AlignerExtension* i_extension)
     : AlignerContext(0, NULL, NULL, i_extension)
@@ -141,6 +134,16 @@ SingleAlignerContext::runIterationThread()
         //
         // No work for this thread to do.
         //
+        return;
+    }
+    if (index == NULL) {
+        // no alignment, just input/output
+        Read *read;
+        while (NULL != (read = supplier->getNextRead())) {
+            stats->totalReads++;
+            writeRead(read, NotFound, InvalidGenomeLocation, FORWARD, 0, 0);
+        }
+        delete supplier;
         return;
     }
 
@@ -278,7 +281,7 @@ SingleAlignerContext::typeSpecificBeginIteration()
         //
         ReadSupplierGenerator **generators = new ReadSupplierGenerator *[options->nInputs];
         for (int i = 0; i < options->nInputs; i++) {
-            generators[i] = options->inputs[i].createReadSupplierGenerator(options->numThreads, index->getGenome(), options->clipping);
+            generators[i] = options->inputs[i].createReadSupplierGenerator(options->numThreads, index ? index->getGenome() : NULL, options->clipping);
         }
         readSupplierGenerator = new MultiInputReadSupplierGenerator(options->nInputs,generators);
     }

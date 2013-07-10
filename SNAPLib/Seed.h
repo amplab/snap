@@ -134,7 +134,7 @@ struct Seed {
     inline void shiftIn(int b, int seedLen) {
         int shift = (seedLen - 1) * 2;
         bases = ((bases << 2) & ~((_uint64) 3 << (shift + 2))) | (b & 3);
-        reverseComplement = (reverseComplement >> 2) | (((_uint64) (b ^ 3) & 3) << shift);
+        reverseComplement = ((_uint64) reverseComplement >> 2) | (((_uint64) (b ^ 3) & 3) << shift);
     }
 
     inline void toString(char* o_bases, int seedLength) {
@@ -147,7 +147,7 @@ struct Seed {
 
     inline _uint64 hash64()
     {
-        return util::hash64(1 + min(bases, reverseComplement));
+        return util::hash64(2 + min(bases, reverseComplement));
     }
     
     inline unsigned hash()

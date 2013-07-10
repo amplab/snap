@@ -135,19 +135,23 @@ AlignerContext::initialize()
         g_indexDirectory = new char [strlen(options->indexDir) + 1];
         strcpy(g_indexDirectory, options->indexDir);
 
-        printf("Loading index from directory... ");
-        fflush(stdout);
-        _int64 loadStart = timeInMillis();
-        index = GenomeIndex::loadFromDirectory((char*) options->indexDir);
-        if (index == NULL) {
-            fprintf(stderr, "Index load failed, aborting.\n");
-            soft_exit(1);
-        }
-        g_index = index;
+        if (strcmp(options->indexDir, "-") != 0) {
+            printf("Loading index from directory... ");
+            fflush(stdout);
+            _int64 loadStart = timeInMillis();
+            index = GenomeIndex::loadFromDirectory((char*) options->indexDir);
+            if (index == NULL) {
+                fprintf(stderr, "Index load failed, aborting.\n");
+                soft_exit(1);
+            }
+            g_index = index;
 
-        _int64 loadTime = timeInMillis() - loadStart;
-        printf("%llds.  %u bases, seed size %d\n",
-            loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
+            _int64 loadTime = timeInMillis() - loadStart;
+            printf("%llds.  %u bases, seed size %d\n",
+                loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
+        } else {
+            printf("no alignment, input/output only\n");
+        }
     } else {
         index = g_index;
     }

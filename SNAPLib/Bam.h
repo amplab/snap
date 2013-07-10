@@ -324,9 +324,9 @@ public:
         
         static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack, int matchBufferSize = 5000);
 
-        static const int MAX_SEQ_LENGTH = 1024;
+        static const int MAX_SEQ_LENGTH = MAX_READ_LENGTH;
 
-        static const int MAX_RECORD_LENGTH = 4096;
+        static const int MAX_RECORD_LENGTH = MAX_READ_LENGTH * 4;
 
 protected:
 

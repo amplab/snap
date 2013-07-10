@@ -187,7 +187,7 @@ toComplement(
             rc[length] = '\0';
         }
     }
-    if (bases != NULL) {
+    if (bases != NULL && bases != rc) {
         if (! toLower) {
             for (int i = 0; i < length; i++) {
                 rc[i] = COMPLEMENT[bases[length - i - 1]];

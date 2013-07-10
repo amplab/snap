@@ -88,7 +88,7 @@ BAMReader::init(
     refOffset = new unsigned[n_ref];
     BAMHeaderRefSeq* refSeq = header->firstRefSeq();
     for (unsigned i = 0; i < n_ref; i++, refSeq = refSeq->next()) {
-        if (! genome->getOffsetOfPiece(refSeq->name(), &refOffset[i])) {
+        if (genome == NULL || ! genome->getOffsetOfPiece(refSeq->name(), &refOffset[i])) {
             // fprintf(stderr, "BAMReader: unknown ref seq name %s\n", refSeq->name());
             refOffset[i] = UINT32_MAX;
             // soft_exit(1); ??
