@@ -83,8 +83,18 @@ class Read;
 
 enum ReadClippingType {NoClipping, ClipFront, ClipBack, ClipFrontAndBack};
 
+struct ReaderContext
+{
+    const Genome*       genome;
+    const char*         defaultReadGroup;
+    ReadClippingType    clipping;
+    bool                paired;
+};
+
 class ReadReader {
 public:
+    ReadReader(const ReaderContext& i_context) : context(i_context) {}
+
     virtual ~ReadReader() {}
         
     // reading
@@ -93,6 +103,9 @@ public:
     virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
 
     virtual void releaseBatch(DataBatch batch) = 0;
+
+protected:
+    ReaderContext context;
 };
 
 class PairedReadReader {
@@ -169,6 +182,8 @@ public:
     static ReadWriterSupplier* create(const FileFormat* format, DataWriterSupplier* dataSupplier,
         const Genome* genome);
 };
+
+#define READ_GROUP_FROM_AUX     ((const char*) -1)
     
 class Read {
 public:
@@ -176,7 +191,8 @@ public:
             id(NULL), data(NULL), quality(NULL), 
             localUnclippedDataBuffer(NULL), localUnclippedQualityBuffer(NULL), localBufferSize(0),
             originalUnclippedDataBuffer(NULL), originalUnclippedQualityBuffer(NULL), clippingState(NoClipping),
-            upperCaseDataBuffer(NULL), upperCaseDataBufferLength(0), auxiliaryData(NULL), auxiliaryDataLength(0)
+            upperCaseDataBuffer(NULL), upperCaseDataBufferLength(0), auxiliaryData(NULL), auxiliaryDataLength(0),
+            readGroup(NULL)
         {}
 
         Read(const Read& other) : 
@@ -191,7 +207,7 @@ public:
             clippingState(other.clippingState),
             batch(other.batch), 
             upperCaseDataBuffer(other.upperCaseDataBuffer), upperCaseDataBufferLength(other.upperCaseDataBufferLength),
-            auxiliaryData(other.auxiliaryData), auxiliaryDataLength(other.auxiliaryDataLength)
+            auxiliaryData(other.auxiliaryData), auxiliaryDataLength(other.auxiliaryDataLength), readGroup(other.readGroup)
         {
             Read* o = (Read*) &other; // hack!
             o->localUnclippedDataBuffer = NULL;
@@ -250,6 +266,7 @@ public:
             upperCaseDataBufferLength = other.upperCaseDataBufferLength;
             other.upperCaseDataBuffer = NULL;
             other.upperCaseDataBufferLength = 0;
+            readGroup = other.readGroup;
             auxiliaryData = other.auxiliaryData;
             auxiliaryDataLength = other.auxiliaryDataLength;
         }
@@ -319,8 +336,14 @@ public:
 		inline ReadClippingType getClippingState() const {return clippingState;}
         inline DataBatch getBatch() { return batch; }
         inline void setBatch(DataBatch b) { batch = b; }
-        inline char* getAuxiliaryData(unsigned* o_length)
-        { *o_length = auxiliaryDataLength; return auxiliaryData; }
+        inline const char* getReadGroup() { return readGroup; }
+        inline void setReadGroup(const char* rg) { readGroup = rg; }
+        inline char* getAuxiliaryData(unsigned* o_length, bool * o_isSAM)
+        {
+            *o_length = auxiliaryDataLength;
+            *o_isSAM = auxiliaryData && auxiliaryDataLength >= 5 && auxiliaryData[2] == ':';
+            return auxiliaryData;
+        }
         inline void setAuxiliaryData(char* data, unsigned len)
         { auxiliaryData = data; auxiliaryDataLength = len; }
 
@@ -461,6 +484,7 @@ private:
         const char *unclippedData;
         const char *unclippedQuality;
         const char *quality;
+        const char *readGroup;
         unsigned idLength;
         unsigned dataLength;
         unsigned unclippedLength;
@@ -491,7 +515,7 @@ private:
         char *upperCaseDataBuffer;
         unsigned upperCaseDataBufferLength;
 
-        // auxiliary data in BAM format, if available
+        // auxiliary data in BAM or SAM format (can tell by looking at 3rd byte), if available
         char* auxiliaryData;
         unsigned auxiliaryDataLength;
 };

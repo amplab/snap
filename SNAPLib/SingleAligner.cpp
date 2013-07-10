@@ -270,18 +270,24 @@ SingleAlignerContext::updateStats(
     void 
 SingleAlignerContext::typeSpecificBeginIteration()
 {
+    ReaderContext context;
+    context.clipping = options->clipping;
+    context.defaultReadGroup = options->defaultReadGroup;
+    context.genome = index != NULL ? index->getGenome() : NULL;
+    context.paired = false;
+
     if (1 == options->nInputs) {
         //
         // We've only got one input, so just connect it directly to the consumer.
         //
-        readSupplierGenerator = options->inputs[0].createReadSupplierGenerator(options->numThreads, index->getGenome(), options->clipping);
+        readSupplierGenerator = options->inputs[0].createReadSupplierGenerator(options->numThreads, context);
     } else {
         //
         // We've got multiple inputs, so use a MultiInputReadSupplier to combine the individual inputs.
         //
         ReadSupplierGenerator **generators = new ReadSupplierGenerator *[options->nInputs];
         for (int i = 0; i < options->nInputs; i++) {
-            generators[i] = options->inputs[i].createReadSupplierGenerator(options->numThreads, index ? index->getGenome() : NULL, options->clipping);
+            generators[i] = options->inputs[i].createReadSupplierGenerator(options->numThreads, context);
         }
         readSupplierGenerator = new MultiInputReadSupplierGenerator(options->nInputs,generators);
     }

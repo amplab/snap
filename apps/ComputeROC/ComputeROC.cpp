@@ -85,9 +85,14 @@ WorkerThreadMain(void *param)
     _int64 rangeStart, rangeLength;
 
     SAMReader *samReader = NULL;
+    ReaderContext rcontext;
+    rcontext.clipping = NoClipping;
+    rcontext.genome = genome;
+    rcontext.paired = false;
+    rcontext.defaultReadGroup = "";
     while (rangeSplitter->getNextRange(&rangeStart, &rangeLength)) {
         if (NULL == samReader) {
-            samReader = SAMReader::create(DataSupplier::Default[true], inputFileName, genome, rangeStart, rangeLength);
+            samReader = SAMReader::create(DataSupplier::Default[true], inputFileName, rcontext, rangeStart, rangeLength);
         } else {
             ((ReadReader *)samReader)->reinit(rangeStart, rangeLength);
         }

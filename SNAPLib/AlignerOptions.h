@@ -46,8 +46,8 @@ struct SNAPInput {
     const char          *secondFileName;
     FileType             fileType;
 
-    PairedReadSupplierGenerator *createPairedReadSupplierGenerator(int numThreads, const Genome *genome, ReadClippingType clipping);
-    ReadSupplierGenerator *createReadSupplierGenerator(int numThreads, const Genome *genome, ReadClippingType clipping);
+    PairedReadSupplierGenerator *createPairedReadSupplierGenerator(int numThreads, const ReaderContext& context);
+    ReadSupplierGenerator *createReadSupplierGenerator(int numThreads, const ReaderContext& context);
 };
 
 struct AlignerOptions : public AbstractOptions
@@ -87,6 +87,7 @@ struct AlignerOptions : public AbstractOptions
     const char         *perfFileName;
     bool                useTimingBarrier;
     unsigned            extraSearchDepth;
+    const char         *defaultReadGroup; // if not specified in input
 
     void usage();
 

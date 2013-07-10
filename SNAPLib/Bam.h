@@ -115,6 +115,9 @@ struct BAMAlignment
     unsigned    auxLen()
     { return (unsigned) (size() - ((char*) firstAux() - (char*) this)); }
 
+    BAMAlignAux*    endAux()
+    { return (BAMAlignAux*) (auxLen() + (char*) firstAux()); }
+
     size_t size()
     { return block_size + sizeof(block_size); }
 
@@ -237,7 +240,11 @@ struct BAMAlignAux
     // compute overall size
 
     size_t      size()
-    { return val_type != ARRAY_VAL_TYPE ? size(val_type) : size(arrayValType(), count()); }
+    {
+        return val_type == STRING_VAL_TYPE ? strlen((const char*) value()) + 4
+            : val_type == ARRAY_VAL_TYPE ? size(arrayValType(), count())
+            : size(val_type);
+    }
     
     static size_t size(char val_type)
     { return 3 + valueSize(val_type); }
@@ -282,7 +289,7 @@ struct BAMAlignAux
 class BAMReader : public PairedReadReader, public ReadReader {
 public:
 
-        BAMReader(ReadClippingType i_clipping, const Genome* i_genome, bool i_paired);
+        BAMReader(const ReaderContext& i_context);
 
         virtual ~BAMReader();
 
@@ -315,14 +322,14 @@ public:
         void releaseBatch(DataBatch batch)
         { data->releaseBatch(batch); }
 
-        static BAMReader* create(const char *fileName, const Genome *genome, _int64 startingOffset, _int64 amountOfFileToProcess, 
-                                 ReadClippingType clipping = ClipBack, bool paired = false);
+        static BAMReader* create(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess, 
+                                 const ReaderContext& context);
         
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
         
-        static ReadSupplierGenerator *createReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack);
+        static ReadSupplierGenerator *createReadSupplierGenerator(const char *fileName, int numThreads, const ReaderContext& context);
         
-        static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName, int numThreads, const Genome *genome, ReadClippingType clipping = ClipBack, int matchBufferSize = 5000);
+        static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName, int numThreads, const ReaderContext& context, int matchBufferSize = 5000);
 
         static const int MAX_SEQ_LENGTH = MAX_READ_LENGTH;
 
@@ -340,10 +347,6 @@ protected:
 private:
 
         char* getExtra(_int64 bytes);
-
-        const Genome*       genome;
-        ReadClippingType    clipping;
-        const bool          paired;
 
         DataReader*         data;
         unsigned            n_ref; // number of reference sequences
