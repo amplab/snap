@@ -119,7 +119,7 @@ for input_format in ["fq", "fq.gz", "bam", "sam"]:
                         failed += 1
                         continue
                     # validate output
-                    ok = runit(["java", "-jar", _f("ValidateSamFile.jar"), "input=" + outfile, "output=" + _f("temp/validate-#"), "ignore_warnings=true", "ignore=INVALID_INDEXING_BIN"], "validate-#")
+                    ok = runit(["java", "-jar", _f("ValidateSamFile.jar"), "input=" + outfile, "output=" + _f("temp/validate-#")], "validate-#")
                     temps.append(_f("temp/validate-#"))
                     if not ok:
                         failed += 1

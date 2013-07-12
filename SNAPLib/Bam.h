@@ -130,6 +130,7 @@ struct BAMAlignment
     static _uint8 SeqToCode[256];
     static const char* CodeToCigar;
     static _uint8 CigarToCode[256];
+    static _uint8 CigarCodeToRefBase[9];
     
     static void decodeSeq(char* o_sequence, _uint8* nibbles, int bases);
     static void decodeQual(char* o_qual, char* quality, int bases);
