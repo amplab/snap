@@ -322,7 +322,12 @@ Genome::getOffsetOfPiece(const char *pieceName, unsigned *offset, int * index) c
             int mid = (low + high) / 2;
             int c = strcmp(piecesByName[mid].name, pieceName);
             if (c == 0) {
-                *offset = piecesByName[mid].beginningOffset;
+                if (offset != NULL) {
+                    *offset = piecesByName[mid].beginningOffset;
+                }
+                if (index != NULL) {
+                    *index = mid;
+                }
                 return true;
             } else if (c < 0) {
                 low = mid + 1;
@@ -336,10 +341,10 @@ Genome::getOffsetOfPiece(const char *pieceName, unsigned *offset, int * index) c
         if (!strcmp(pieceName,pieces[i].name)) {
             if (NULL != offset) {
                 *offset = pieces[i].beginningOffset;
-				if (index != NULL) {
-					*index = i;
-				}
             }
+			if (index != NULL) {
+				*index = i;
+			}
             return true;
         }
     }

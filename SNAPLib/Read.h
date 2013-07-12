@@ -89,6 +89,10 @@ struct ReaderContext
     const char*         defaultReadGroup;
     ReadClippingType    clipping;
     bool                paired;
+    const char*         header; // allocated buffer for header
+    size_t              headerLength; // length of string
+    size_t              headerBytes; // bytes used for header in file
+    bool                headerMatchesIndex; // header refseq matches current index
 };
 
 class ReadReader {
@@ -158,7 +162,7 @@ public:
     virtual ~ReadWriter() {}
 
     // write out header
-    virtual bool writeHeader(bool sorted, int argc, const char **argv, const char *version, const char *rgLine) = 0;
+    virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine) = 0;
 
     // write a single read, return true if successful
     virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, unsigned genomeLocation, Direction direction) = 0;

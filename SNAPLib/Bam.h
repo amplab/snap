@@ -130,6 +130,7 @@ struct BAMAlignment
     static _uint8 SeqToCode[256];
     static const char* CodeToCigar;
     static _uint8 CigarToCode[256];
+    static _uint8 CigarCodeToRefBase[9];
     
     static void decodeSeq(char* o_sequence, _uint8* nibbles, int bases);
     static void decodeQual(char* o_qual, char* quality, int bases);
@@ -155,7 +156,8 @@ struct BAMAlignment
     // absoluate genome locations
 
     _uint32 getLocation(const Genome* genome) const
-    { return pos < 0 || refID < 0 || (FLAG & SAM_UNMAPPED) ? UINT32_MAX : (genome->getPieces()[refID].beginningOffset + pos); }
+    { return pos < 0 || refID < 0 || refID >= genome->getNumPieces() || (FLAG & SAM_UNMAPPED)
+        ? UINT32_MAX : (genome->getPieces()[refID].beginningOffset + pos); }
 
     _uint32 getNextLocation(const Genome* genome) const
     { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? UINT32_MAX : (genome->getPieces()[next_refID].beginningOffset + next_pos); }
@@ -293,7 +295,7 @@ public:
 
         virtual ~BAMReader();
 
-        bool init(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess);
+        void init(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess);
 
         virtual bool getNextRead(Read *readToUpdate)
         {
@@ -322,6 +324,8 @@ public:
         void releaseBatch(DataBatch batch)
         { data->releaseBatch(batch); }
 
+        static void readHeader(const char* fileName, ReaderContext& i_context);
+
         static BAMReader* create(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess, 
                                  const ReaderContext& context);
         
@@ -349,7 +353,7 @@ private:
         char* getExtra(_int64 bytes);
 
         DataReader*         data;
-        unsigned            n_ref; // number of reference sequences
-        unsigned*           refOffset; // array mapping ref sequence ID to piece location
+        //unsigned            n_ref; // number of reference sequences
+        //unsigned*           refOffset; // array mapping ref sequence ID to piece location
         _int64              extraOffset; // offset into extra data
 };

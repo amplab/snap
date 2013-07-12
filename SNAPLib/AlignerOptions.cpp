@@ -396,6 +396,28 @@ AlignerOptions::passFilter(
     }
 }
 
+    void
+SNAPInput::readHeader(ReaderContext& context)
+{
+    _ASSERT(secondFileName == NULL);
+    switch (fileType) {
+    case SAMFile:
+        return SAMReader::readHeader(fileName, context);
+        
+    case BAMFile:
+        return BAMReader::readHeader(fileName, context);
+
+    case FASTQFile:
+        return FASTQReader::readHeader(fileName,  context);
+        
+    case GZipFASTQFile:
+        return FASTQReader::readHeader(fileName,  context);
+
+    default:
+        _ASSERT(false);
+    }
+}
+
     PairedReadSupplierGenerator *
 SNAPInput::createPairedReadSupplierGenerator(int numThreads, const ReaderContext& context)
 {

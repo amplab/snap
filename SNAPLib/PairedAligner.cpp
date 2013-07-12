@@ -587,6 +587,7 @@ PairedAlignerContext::typeSpecificBeginIteration()
     context.defaultReadGroup = options->defaultReadGroup;
     context.genome = index->getGenome();
     context.paired = true;
+    context.header = NULL;
 
     if (1 == options->nInputs) {
         //

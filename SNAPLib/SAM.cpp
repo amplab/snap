@@ -121,15 +121,34 @@ SAMReader::create(
 {
     DataReader* data = supplier->getDataReader(maxLineLen);
     SAMReader *reader = new SAMReader(data, context);
-
-    if (!reader->init(fileName, startingOffset, amountOfFileToProcess)) {
-        //
-        // Probably couldn't open the file.
-        //
-        delete reader;
-        return NULL;
-    }
+    reader->init(fileName, startingOffset, amountOfFileToProcess);
     return reader;
+}
+
+    void
+SAMReader::readHeader(
+    const char* fileName,
+    ReaderContext& context)
+{
+    DataReader* data = DataSupplier::Default[false]->getDataReader(maxLineLen);
+    if (! data->init(fileName)) {
+        fprintf(stderr, "Unable to read file %s\n", fileName);
+        soft_exit(1);
+    }
+    // todo: allow for larger headers
+    _int64 headerSize = 1024 * 1024; // 1M header max
+    char* buffer = data->readHeader(&headerSize);
+    if (!parseHeader(fileName, buffer, buffer + headerSize, context.genome, &headerSize, &context.headerMatchesIndex)) {
+        fprintf(stderr,"SAMReader: failed to parse header on '%s'\n",fileName);
+        soft_exit(1);
+    }
+    _ASSERT(context.header == NULL);
+    char* p = new char[headerSize + 1];
+    memcpy(p, buffer, headerSize);
+    p[headerSize] = 0;
+    context.header = p;
+    context.headerBytes = context.headerLength = headerSize;
+    delete data;
 }
 
 SAMReader::SAMReader(
@@ -156,10 +175,12 @@ SAMReader::parseHeader(
     char *firstLine, 
     char *endOfBuffer, 
     const Genome *genome, 
-    _int64 *headerSize)
+    _int64 *o_headerSize,
+    bool *o_headerMatchesIndex)
 {
     char *nextLineToProcess = firstLine;
-
+    *o_headerMatchesIndex = true;
+    int numSQLines = 0;
     while (NULL != nextLineToProcess && nextLineToProcess < endOfBuffer && '@' == *nextLineToProcess) {
         if (!strncmp("@SQ",nextLineToProcess,3)) {
             //
@@ -171,7 +192,7 @@ SAMReader::parseHeader(
             //
             // Verify that they actually match what's in our reference genome.
             //
-
+            numSQLines++;
             if (nextLineToProcess + 3 >= endOfBuffer || ' ' != nextLineToProcess[3] && '\t' != nextLineToProcess[3]) {
                 fprintf(stderr,"Malformed SAM file '%s' has @SQ without a following space or tab.\n",fileName);
                 return false;
@@ -198,11 +219,9 @@ SAMReader::parseHeader(
             }
             pieceName[pieceNameBufferSize - 1] = '\0';
 
-            //if (!genome->getOffsetOfPiece(pieceName,NULL)) {
-            //    fprintf(stderr,"SAM file '%s' contains sequence name '%s' that isn't in the reference genome.\n",
-            //                fileName,pieceName);
-            //    return false;
-            //}
+            if (genome == NULL || !genome->getOffsetOfPiece(pieceName,NULL)) {
+                *o_headerMatchesIndex = false;
+            }
         } else if (!strncmp("@HD",nextLineToProcess,3) || !strncmp("@RG",nextLineToProcess,3) || !strncmp("@PG",nextLineToProcess,3) ||
             !strncmp("@CO",nextLineToProcess,3)) {
             //
@@ -215,7 +234,8 @@ SAMReader::parseHeader(
         nextLineToProcess = strnchr(nextLineToProcess,'\n',endOfBuffer-nextLineToProcess) + 1;
     }
 
-    *headerSize = nextLineToProcess - firstLine;
+    *o_headerMatchesIndex &= genome != NULL && numSQLines == genome->getNumPieces();
+    *o_headerSize = nextLineToProcess - firstLine;
     return true;
 }
 
@@ -443,44 +463,34 @@ SAMReader::parseLocation(
         return InvalidGenomeLocation;
     }
 }
-    bool
+    
+    void
 SAMReader::init(
     const char *fileName,
     _int64 startingOffset,
     _int64 amountOfFileToProcess)
 {
-    //
-    // Read and parse the header specially.
-    //
     if (! data->init(fileName)) {
-        return false;
+        fprintf(stderr, "Unable to read file %s\n", fileName);
+        soft_exit(1);
     }
-    headerSize = 1024 * 1024; // 1M header max
-    char* buffer = data->readHeader(&headerSize);
-    if (!parseHeader(fileName, buffer, buffer + headerSize, context.genome, &headerSize)) {
-        fprintf(stderr,"SAMReader: failed to parse header on '%s'\n",fileName);
-        return false;
-    }
-
-    reinit(startingOffset,amountOfFileToProcess);
-
-    return true;
+    headerSize = context.headerBytes;
+    reinit(max(startingOffset, (_int64) context.headerBytes),
+        amountOfFileToProcess == 0 || startingOffset >= (_int64) context.headerBytes ? amountOfFileToProcess
+            : amountOfFileToProcess - (context.headerBytes - startingOffset));
 }
 
     void
 SAMReader::reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
 {
-    _ASSERT(-1 != headerSize);  // Must call init() before reinit()
-    _int64 adjusted = max((_int64) headerSize, startingOffset);
-    data->reinit(
-	max((_int64) 1, adjusted) - 1,  // -1 is to point at the previous newline so we don't skip the first line.
-        amountOfFileToProcess);
+    _ASSERT(-1 != headerSize && startingOffset >= headerSize);  // Must call init() before reinit()
+    data->reinit(startingOffset, amountOfFileToProcess);
     char* buffer;
     _int64 validBytes;
     if (!data->getData(&buffer, &validBytes)) {
         return;
     }
-    if (adjusted != 0) {
+    if (startingOffset != headerSize) {
         char *firstNewline = strnchr(buffer,'\n',validBytes);
         if (NULL == firstNewline) {
             return;
@@ -591,7 +601,7 @@ public:
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
 
     virtual bool writeHeader(
-        const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize,
+        const ReaderContext& context, char *header, size_t headerBufferSize, size_t *headerActualSize,
         bool sorted, int argc, const char **argv, const char *version, const char *rgLine) const;
 
     virtual bool writeRead(
@@ -690,7 +700,7 @@ SAMFormat::getWriterSupplier(
 
     bool
 SAMFormat::writeHeader(
-    const Genome *genome,
+    const ReaderContext& context,
     char *header,
     size_t headerBufferSize,
     size_t *headerActualSize,
@@ -715,9 +725,10 @@ SAMFormat::writeHeader(
 		}
 	}
 
-    size_t bytesConsumed = snprintf(header, headerBufferSize, "@HD\tVN:1.4\tSO:%s\n%s\n@PG\tID:SNAP\tPN:SNAP\tCL:%s\tVN:%s\n", 
+    size_t bytesConsumed = snprintf(header, headerBufferSize, "@HD\tVN:1.4\tSO:%s\n%s%s@PG\tID:SNAP\tPN:SNAP\tCL:%s\tVN:%s\n", 
 		sorted ? "coordinate" : "unsorted",
-        rgLine == NULL ? "@RG\tID:FASTQ\tSM:sample" : rgLine,
+        context.header == NULL ? (rgLine == NULL ? "@RG\tID:FASTQ\tSM:sample" : rgLine) : "",
+        context.header == NULL ? "\n" : "",
         commandLine,version);
 
 	delete [] commandLine;
@@ -727,19 +738,41 @@ SAMFormat::writeHeader(
         return false;
     }
 
+    if (context.header != NULL) {
+        for (const char* p = context.header; p < context.header + context.headerLength; ) {
+            const char* newline = strnchr(p, '\n', (context.header + context.headerLength) - p);
+            if (newline == NULL) {
+                newline = context.header + context.headerLength;
+            }
+            _ASSERT(newline - p >= 3);
+            // skip @HD lines, and also @SQ lines if header does not match index
+            if (strncmp(p, "@HD", 3) != 0 && (context.headerMatchesIndex || strncmp(p, "@SQ", 3) != 0)) {
+                if (bytesConsumed + (newline - p) + 1 >= headerBufferSize) {
+                    fprintf(stderr,"SAMWriter: header buffer too small\n");
+                    return false;
+                }
+                memcpy(header + bytesConsumed, p, (newline - p));
+                * (header + bytesConsumed + (newline - p)) = '\n';
+                bytesConsumed += (newline - p) + 1;
+            }
+            p = newline + 1;
+        }
+    }
 #ifndef SKIP_SQ_LINES
-    // Write an @SQ line for each chromosome / piece in the genome
-    const Genome::Piece *pieces = genome->getPieces();
-    int numPieces = genome->getNumPieces();
-    unsigned genomeLen = genome->getCountOfBases();
-    for (int i = 0; i < numPieces; i++) {
-        unsigned start = pieces[i].beginningOffset;
-        unsigned end = (i + 1 < numPieces) ? pieces[i+1].beginningOffset : genomeLen;
-        bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%u\n", pieces[i].name, end - start);
+    if (context.header == NULL || ! context.headerMatchesIndex) {
+        // Write an @SQ line for each chromosome / piece in the genome
+        const Genome::Piece *pieces = context.genome->getPieces();
+        int numPieces = context.genome->getNumPieces();
+        unsigned genomeLen = context.genome->getCountOfBases();
+        for (int i = 0; i < numPieces; i++) {
+            unsigned start = pieces[i].beginningOffset;
+            unsigned end = (i + 1 < numPieces) ? pieces[i+1].beginningOffset : genomeLen;
+            bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%u\n", pieces[i].name, end - start);
 
-        if (bytesConsumed >= headerBufferSize) {
-            fprintf(stderr,"SAMWriter: header buffer too small\n");
-            return false;
+            if (bytesConsumed >= headerBufferSize) {
+                fprintf(stderr,"SAMWriter: header buffer too small\n");
+                return false;
+            }
         }
     }
 #endif // SKIP_SQ_LINES
@@ -998,11 +1031,7 @@ SAMFormat::writeRead(
 
     const int nmStringSize = 30;// Big enough that it won't buffer overflow regardless of the value of editDistance
     char nmString[nmStringSize];  
-    if (editDistance >= 0) {
-        snprintf(nmString, nmStringSize, "\tNM:i:%d",editDistance);
-    } else {
-        nmString[0] = '\0';
-    }
+    snprintf(nmString, nmStringSize, "\tNM:i:%d",editDistance);
 
     unsigned auxLen;
     bool auxSAM;

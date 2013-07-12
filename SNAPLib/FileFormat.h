@@ -78,7 +78,7 @@ public:
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const = 0;
 
     virtual bool writeHeader(
-        const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize,
+        const ReaderContext& context, char *header, size_t headerBufferSize, size_t *headerActualSize,
         bool sorted, int argc, const char **argv, const char *version, const char *rgLine) const = 0;
 
     virtual bool writeRead(

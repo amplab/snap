@@ -56,7 +56,7 @@ BAMReader::getNextReadPair(
     return false;
 }
 
-    bool
+    void
 BAMReader::init(
     const char *fileName,
     _int64 startingOffset,
@@ -66,37 +66,52 @@ BAMReader::init(
     // might need up to 2x extra for expanded sequence + quality + cigar data
     data = DataSupplier::GzipDefault[false]->getDataReader(MAX_RECORD_LENGTH, 2.5);
     if (! data->init(fileName)) {
-        return false;
+        fprintf(stderr, "Unable to read file %s\n", fileName);
+        soft_exit(1);
+    }
+    _ASSERT(context.headerBytes > 0);
+    reinit(max(startingOffset, (_int64) context.headerBytes),
+        amountOfFileToProcess == 0 || startingOffset >= (_int64) context.headerBytes ? amountOfFileToProcess
+            : amountOfFileToProcess - (context.headerBytes - startingOffset));
+}
+
+    void
+BAMReader::readHeader(
+    const char* fileName,
+    ReaderContext& context)
+{
+    _ASSERT(context.header == NULL);
+    DataReader* data = DataSupplier::GzipDefault[false]->getDataReader(MAX_RECORD_LENGTH, 2.5);
+    if (! data->init(fileName)) {
+        fprintf(stderr, "Unable to read file %s\n", fileName);
+        soft_exit(1);
     }
     _int64 headerSize = 1024 * 1024; // 1M header max
     char* buffer = data->readHeader(&headerSize);
     BAMHeader* header = (BAMHeader*) buffer;
     if (header->magic != BAMHeader::BAM_MAGIC) {
         fprintf(stderr, "BAMReader: Not a valid BAM file\n");
-        return false;
+        soft_exit(1);
     }
     _int64 textHeaderSize = header->l_text;
-    if (!SAMReader::parseHeader(fileName, header->text(), header->text() + textHeaderSize, context.genome, &textHeaderSize)) {
+    if (!SAMReader::parseHeader(fileName, header->text(), header->text() + textHeaderSize, context.genome, &textHeaderSize, &context.headerMatchesIndex)) {
         fprintf(stderr,"BAMReader: failed to parse header on '%s'\n",fileName);
-        return false;
+        soft_exit(1);
     }
-    n_ref = header->n_ref();
-    refOffset = new unsigned[n_ref];
+    int n_ref = header->n_ref();
     BAMHeaderRefSeq* refSeq = header->firstRefSeq();
-    for (unsigned i = 0; i < n_ref; i++, refSeq = refSeq->next()) {
-        if (context.genome == NULL || ! context.genome->getOffsetOfPiece(refSeq->name(), &refOffset[i])) {
-            // fprintf(stderr, "BAMReader: unknown ref seq name %s\n", refSeq->name());
-            refOffset[i] = UINT32_MAX;
-            // soft_exit(1); ??
-        }
+    for (int i = 0; i < n_ref; i++, refSeq = refSeq->next()) {
+        // just advance
     }
-    reinit(startingOffset, amountOfFileToProcess);
-    _int64 ignore;
-    if (! data->getData(&buffer, &ignore)) {
-        fprintf(stderr, "BAMReader: error after reading header\n");
-    }
-    data->advance((char*) refSeq - buffer);
-    return true;
+
+    char* p = new char[textHeaderSize + 1];
+    memcpy(p, header->text(), textHeaderSize);
+    p[textHeaderSize + 1] = 0;
+    context.header = p;
+    context.headerLength = textHeaderSize;
+    context.headerBytes = (char*) refSeq - buffer;
+
+    delete data;
 }
 
     BAMReader*
@@ -107,10 +122,7 @@ BAMReader::create(
     const ReaderContext& context)
 {
     BAMReader* reader = new BAMReader(context);
-    if (! reader->init(fileName, startingOffset, amountOfFileToProcess)) {
-        delete reader;
-        return NULL;
-    }
+    reader->init(fileName, startingOffset, amountOfFileToProcess);
     return reader;
 }
     
@@ -153,6 +165,7 @@ const char* BAMAlignment::CodeToSeq = "=ACMGRSVTWYHKDBN";
 _uint8 BAMAlignment::SeqToCode[256];
 const char* BAMAlignment::CodeToCigar = "MIDNSHP=X";
 _uint8 BAMAlignment::CigarToCode[256];
+_uint8 BAMAlignment::CigarCodeToRefBase[9] = {1, 0, 1, 1, 0, 0, 1, 1, 1};
 
 BAMAlignment::_init BAMAlignment::_init_;
 
@@ -341,7 +354,7 @@ BAMReader::getReadFromLine(
     _ASSERT((size_t)(endOfBuffer - line) >= bam->size());
     
     if (NULL != genomeLocation) {
-        _ASSERT(-1 <= bam->refID && bam->refID < (int)n_ref);
+        _ASSERT(-1 <= bam->refID && bam->refID < (int)genome->getNumPieces());
         *genomeLocation = bam->getLocation(genome);
     }
 
@@ -411,7 +424,7 @@ public:
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
 
     virtual bool writeHeader(
-        const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize,
+        const ReaderContext& context, char *header, size_t headerBufferSize, size_t *headerActualSize,
         bool sorted, int argc, const char **argv, const char *version, const char *rgLine) const;
 
     virtual bool writeRead(
@@ -508,7 +521,7 @@ BAMFormat::getWriterSupplier(
 
     bool
 BAMFormat::writeHeader(
-    const Genome *genome,
+    const ReaderContext& context,
     char *header,
     size_t headerBufferSize,
     size_t *headerActualSize,
@@ -525,7 +538,7 @@ BAMFormat::writeHeader(
     BAMHeader* bamHeader = (BAMHeader*) header;
     bamHeader->magic = BAMHeader::BAM_MAGIC;
     size_t samHeaderSize;
-    bool ok = FileFormat::SAM[0]->writeHeader(genome, bamHeader->text(), headerBufferSize - BAMHeader::size(0), &samHeaderSize,
+    bool ok = FileFormat::SAM[0]->writeHeader(context, bamHeader->text(), headerBufferSize - BAMHeader::size(0), &samHeaderSize,
         sorted, argc, argv, version, rgLine);
     if (! ok) {
         return false;
@@ -534,11 +547,12 @@ BAMFormat::writeHeader(
     cursor = BAMHeader::size((int)samHeaderSize);
 
     // Write a RefSeq record for each chromosome / piece in the genome
-    const Genome::Piece *pieces = genome->getPieces();
-    int numPieces = genome->getNumPieces();
+    // todo: handle null genome index case - reparse header & translate into BAM
+    const Genome::Piece *pieces = context.genome->getPieces();
+    int numPieces = context.genome->getNumPieces();
     bamHeader->n_ref() = numPieces;
     BAMHeaderRefSeq* refseq = bamHeader->firstRefSeq();
-    unsigned genomeLen = genome->getCountOfBases();
+    unsigned genomeLen = context.genome->getCountOfBases();
     for (int i = 0; i < numPieces; i++) {
         int len = (int)strlen(pieces[i].name) + 1;
         cursor += BAMHeaderRefSeq::size(len);
@@ -664,7 +678,11 @@ BAMFormat::writeRead(
     }
     bam->l_read_name = (_uint8)qnameLen + 1;
     bam->MAPQ = mapQuality;
-    bam->bin = genomeLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(positionInPiece-1, positionInPiece-1 + fullLength) :
+    int refLength = bam->n_cigar_op > 0 ? 0 : fullLength;
+    for (int i = 0; i < bam->n_cigar_op; i++) {
+        refLength += BAMAlignment::CigarCodeToRefBase[bam->cigar()[i] & 0xf];
+    }
+    bam->bin = genomeLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(positionInPiece-1, positionInPiece-1 + refLength) :
 		// unmapped is at mate's position, length 1
 		mateLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(matePositionInPiece-1, matePositionInPiece) :
 		// otherwise at -1, length 1

@@ -41,7 +41,7 @@ public:
         delete writer;
     }
 
-    virtual bool writeHeader(bool sorted, int argc, const char **argv, const char *version, const char *rgLine);
+    virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine);
 
     virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, unsigned genomeLocation, Direction direction);
 
@@ -58,6 +58,7 @@ private:
 
     bool
 SimpleReadWriter::writeHeader(
+    const ReaderContext& context,
     bool sorted,
     int argc,
     const char **argv,
@@ -73,7 +74,7 @@ SimpleReadWriter::writeHeader(
         return false;
     }
 
-    if (! format->writeHeader(genome, buffer, size, &used, sorted, argc, argv, version, rgLine)) {
+    if (! format->writeHeader(context, buffer, size, &used, sorted, argc, argv, version, rgLine)) {
         fprintf(stderr, "Failed to write header into fresh buffer\n");
         return false;
     }

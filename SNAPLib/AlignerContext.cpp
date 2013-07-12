@@ -189,24 +189,7 @@ AlignerContext::printStatsHeader()
 AlignerContext::beginIteration()
 {
     writerSupplier = NULL;
-    if (NULL != options->outputFileTemplate) {
-        const FileFormat* format = 
-            FileFormat::SAM[0]->isFormatOf(options->outputFileTemplate) ? FileFormat::SAM[options->useM] :
-            FileFormat::BAM[0]->isFormatOf(options->outputFileTemplate) ? FileFormat::BAM[options->useM] :
-            NULL;
-        if (format != NULL) {
-            writerSupplier = format->getWriterSupplier(options, index->getGenome());
-            ReadWriter* headerWriter = writerSupplier->getWriter();
-            headerWriter->writeHeader(options->sortOutput, argc, argv, version, options->rgLineContents);
-            headerWriter->close();
-            delete headerWriter;
-        } else {
-            fprintf(stderr, "warning: no output, unable to determine format of output file %s\n", options->outputFileTemplate);
-        }
-    }
-
     alignStart = timeInMillis();
-
     clipping = options->clipping;
     totalThreads = options->numThreads;
     computeError = options->computeError;
@@ -223,7 +206,29 @@ AlignerContext::beginIteration()
     stats = newStats();
     stats->extra = extension->extraStats();
     extension->beginIteration();
+    
+    readerContext.clipping = options->clipping;
+    readerContext.defaultReadGroup = options->defaultReadGroup;
+    readerContext.genome = index != NULL ? index->getGenome() : NULL;
+    readerContext.paired = false;
+
     typeSpecificBeginIteration();
+
+    if (NULL != options->outputFileTemplate) {
+        const FileFormat* format = 
+            FileFormat::SAM[0]->isFormatOf(options->outputFileTemplate) ? FileFormat::SAM[options->useM] :
+            FileFormat::BAM[0]->isFormatOf(options->outputFileTemplate) ? FileFormat::BAM[options->useM] :
+            NULL;
+        if (format != NULL) {
+            writerSupplier = format->getWriterSupplier(options, readerContext.genome);
+            ReadWriter* headerWriter = writerSupplier->getWriter();
+            headerWriter->writeHeader(readerContext, options->sortOutput, argc, argv, version, options->rgLineContents);
+            headerWriter->close();
+            delete headerWriter;
+        } else {
+            fprintf(stderr, "warning: no output, unable to determine format of output file %s\n", options->outputFileTemplate);
+        }
+    }
 }
 
     void

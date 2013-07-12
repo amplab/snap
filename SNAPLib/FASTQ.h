@@ -44,6 +44,8 @@ public:
         static FASTQReader* create(const DataSupplier* supplier, const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess,
                                    const ReaderContext& i_context);
 
+        static void readHeader(const char* fileName, ReaderContext& i_context);
+
         bool init(const char* i_fileName);
 
         static ReadSupplierGenerator *createReadSupplierGenerator(const char *fileName, int numThreads, const ReaderContext& context, bool gzip = false);

@@ -70,6 +70,15 @@ FASTQReader::create(
     return fastq;
 }
 
+    void
+FASTQReader::readHeader(
+    const char* fileName,
+    ReaderContext& context)
+{
+    // no header in FQ files
+    context.header = NULL;
+    context.headerLength = context.headerBytes = 0;
+}
 
     bool
 FASTQReader::init(

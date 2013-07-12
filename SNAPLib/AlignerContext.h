@@ -93,6 +93,7 @@ public:
     // common state across all threads
     GenomeIndex                         *index;
     ReadWriterSupplier                  *writerSupplier;
+    ReaderContext                        readerContext;
     _int64                               alignStart;
     _int64                               alignTime;
     AlignerOptions                      *options;

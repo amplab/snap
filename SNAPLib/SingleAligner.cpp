@@ -270,31 +270,33 @@ SingleAlignerContext::updateStats(
     void 
 SingleAlignerContext::typeSpecificBeginIteration()
 {
-    ReaderContext context;
-    context.clipping = options->clipping;
-    context.defaultReadGroup = options->defaultReadGroup;
-    context.genome = index != NULL ? index->getGenome() : NULL;
-    context.paired = false;
+    readerContext.header = NULL;
+    options->inputs[0].readHeader(readerContext);
 
     if (1 == options->nInputs) {
         //
         // We've only got one input, so just connect it directly to the consumer.
         //
-        readSupplierGenerator = options->inputs[0].createReadSupplierGenerator(options->numThreads, context);
+        readSupplierGenerator = options->inputs[0].createReadSupplierGenerator(options->numThreads, readerContext);
     } else {
         //
         // We've got multiple inputs, so use a MultiInputReadSupplier to combine the individual inputs.
         //
         ReadSupplierGenerator **generators = new ReadSupplierGenerator *[options->nInputs];
         for (int i = 0; i < options->nInputs; i++) {
-            generators[i] = options->inputs[i].createReadSupplierGenerator(options->numThreads, context);
+            generators[i] = options->inputs[i].createReadSupplierGenerator(options->numThreads, readerContext);
         }
         readSupplierGenerator = new MultiInputReadSupplierGenerator(options->nInputs,generators);
     }
 }
     void 
 SingleAlignerContext::typeSpecificNextIteration()
-{
-     delete readSupplierGenerator;
-     readSupplierGenerator = NULL;
+    {
+    if (readerContext.header != NULL) {
+        delete [] readerContext.header;
+        readerContext.header = NULL;
+        readerContext.headerLength = readerContext.headerBytes = 0;
+    }
+    delete readSupplierGenerator;
+    readSupplierGenerator = NULL;
 }

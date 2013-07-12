@@ -66,6 +66,8 @@ public:
         void releaseBatch(DataBatch batch)
         { data->releaseBatch(batch); }
 
+        static void readHeader(const char* fileName, ReaderContext& i_context);
+
         static SAMReader* create(const DataSupplier* supplier, const char *fileName,
                 const ReaderContext& i_context,
                 _int64 startingOffset, _int64 amountOfFileToProcess);
@@ -76,11 +78,12 @@ public:
 
         static ReadSupplierGenerator *createReadSupplierGenerator(
             const char *fileName, int numThreads, const ReaderContext& context);
+
         static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(
             const char *fileName, int numThreads, const ReaderContext& context);
         
         // result and fieldLengths must be of size nSAMFields
-        static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, _int64 *o_headerSize);
+        static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, _int64 *o_headerSize, bool* o_headerMatchesIndex);
         
         static char* skipToBeyondNextRunOfSpacesAndTabs(char *str, const char *endOfBuffer, size_t *charsUntilFirstSpaceOrTab = NULL);
 
@@ -122,7 +125,7 @@ protected:
                         size_t *lineLength, unsigned *flag, const char **cigar, ReadClippingType clipping);
 
 private:
-        bool init(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess);
+        void init(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess);
 
         DataReader*         data;
         _int64              headerSize;
