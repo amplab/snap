@@ -408,7 +408,7 @@ LandauVishkinWithCigar::linearizeCompactBinary(
     memset(o_linear, 0, referenceSize * 2); // zero-init
     int ic = 0, ir = 0, is = 0; // index into cigar, linear/reference, and sample
     while (ic < cigarSize) {
-        char n = cigar[ic++];
+        int n = (unsigned char) cigar[ic++];
         char code = cigar[ic++];
         int ii, base;
         for (int i = 0; i < n; i++) {

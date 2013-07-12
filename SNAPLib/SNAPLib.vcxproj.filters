@@ -147,9 +147,6 @@
     <ClInclude Include="SingleAligner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SingleFirstPairedEndAligner.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Tables.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -285,9 +282,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="SingleAligner.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="SingleFirstPairedEndAligner.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="SortedDataWriter.cpp">

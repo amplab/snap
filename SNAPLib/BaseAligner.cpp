@@ -33,6 +33,7 @@ Revision History:
 #include "mapq.h"
 #include "SeedSequencer.h"
 #include "exit.h"
+#include "AlignerOptions.h"
 
 using std::min;
 
@@ -44,20 +45,19 @@ using std::min;
 
 BaseAligner::BaseAligner(
     GenomeIndex    *i_genomeIndex, 
-    unsigned        i_confDiff, 
     unsigned        i_maxHitsToConsider, 
     unsigned        i_maxK,
     unsigned        i_maxReadSize,
-    unsigned        i_maxSeedsToUse,
-    unsigned        i_adaptiveConfDiffThreshold,
+    unsigned        i_maxSeedsToUseFromCommandLine,
+    double          i_maxSeedCoverage,
     unsigned        i_extraSearchDepth,
     LandauVishkin<1>*i_landauVishkin,
     LandauVishkin<-1>*i_reverseLandauVishkin,
     AlignerStats   *i_stats,
     BigAllocator   *allocator) : 
-        genomeIndex(i_genomeIndex), confDiff(i_confDiff), maxHitsToConsider(i_maxHitsToConsider), maxK(i_maxK), 
-        maxReadSize(i_maxReadSize), maxSeedsToUse(i_maxSeedsToUse), readId(-1),
-        adaptiveConfDiffThreshold(i_adaptiveConfDiffThreshold), extraSearchDepth(i_extraSearchDepth),
+        genomeIndex(i_genomeIndex), maxHitsToConsider(i_maxHitsToConsider), maxK(i_maxK), 
+        maxReadSize(i_maxReadSize), maxSeedsToUseFromCommandLine(i_maxSeedsToUseFromCommandLine), 
+        maxSeedCoverage(i_maxSeedCoverage), readId(-1), extraSearchDepth(i_extraSearchDepth),
         explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats)
 /*++
 
@@ -68,14 +68,13 @@ Routine Description:
 Arguments:
 
     i_genomeIndex       - The index against which to do the alignments
-    i_confDiff          - The string difference between two matches necessary to believe they're really different
     i_maxHitsToConsider - The maximum number of hits to use from a seed lookup.  Any lookups that return more
                           than this are ignored.
     i_maxK              - The largest string difference to consider for any comparison.
     i_maxReadSize       - Bound on the number of bases in any read.  There's no reason to make it tight, it just affects a little memory allocation.
     i_maxSeedsToUse     - The maximum number of seeds to use when aligning any read (not counting ones ignored because they resulted in too many
                           hits).  Once we've looked up this many seeds, we just score what we've got.
-    i_adaptiveConfDiffThreshold - the number of hash table hits larger than maxHitsToConsider beyond which we effectively increase confDiff
+    i_maxSeedCoverage   - The maximum number of seeds to use expressed as readSize/seedSize
     i_extraSearchDepth  - How deeply beyond bestScore do we search?
     i_landauVishkin     - an externally supplied LandauVishkin string edit distance object.  This is useful if we're expecting repeated computations and use the LV cache.
     i_reverseLandauVishkin - the same for the reverse direction.
@@ -117,6 +116,15 @@ Arguments:
         reverseLandauVishkin = i_reverseLandauVishkin;
         ownLandauVishkin = false;
     }
+
+    unsigned maxSeedsToUse;
+    if (0 != maxSeedsToUseFromCommandLine) {
+        maxSeedsToUse = maxSeedsToUseFromCommandLine;
+    } else {
+        maxSeedsToUse = (int)(maxSeedCoverage * maxReadSize / genomeIndex->getSeedLength());
+    }
+
+    numWeightLists = maxSeedsToUse + 1;
 
     candidateHashTablesSize = (maxHitsToConsider * maxSeedsToUse * 3)/2;    // *1.5 for hash table slack
     hashTableElementPoolSize = maxHitsToConsider * maxSeedsToUse * 2 ;   // *2 for RC
@@ -161,12 +169,12 @@ Arguments:
     if (allocator) {
         candidateHashTable[FORWARD] = (HashTableAnchor *)allocator->allocate(sizeof(HashTableAnchor) * candidateHashTablesSize);
         candidateHashTable[RC] = (HashTableAnchor *)allocator->allocate(sizeof(HashTableAnchor) * candidateHashTablesSize);
-        weightLists = (HashTableElement *)allocator->allocate(sizeof(HashTableElement) * (maxSeedsToUse + 1));
+        weightLists = (HashTableElement *)allocator->allocate(sizeof(HashTableElement) * numWeightLists);
         hashTableElementPool = (HashTableElement *)allocator->allocate(sizeof(HashTableElement) * hashTableElementPoolSize); // Allocte last, because it's biggest and usually unused.  This puts all of the commonly used stuff into one large page.
     } else {
         candidateHashTable[FORWARD] = (HashTableAnchor *)BigAlloc(sizeof(HashTableAnchor) * candidateHashTablesSize);
         candidateHashTable[RC] = (HashTableAnchor *)BigAlloc(sizeof(HashTableAnchor) * candidateHashTablesSize);
-        weightLists = (HashTableElement *)BigAlloc(sizeof(HashTableElement) * (maxSeedsToUse + 1));
+        weightLists = (HashTableElement *)BigAlloc(sizeof(HashTableElement) * numWeightLists);
         hashTableElementPool = (HashTableElement *)BigAlloc(sizeof(HashTableElement) * hashTableElementPoolSize);
     }
 
@@ -243,6 +251,13 @@ Return Value:
     highestWeightListChecked = 0;
 
     Direction localHitDirection; // This is just a place to write into if the caller didn't want to know the direction
+
+    unsigned maxSeedsToUse;
+    if (0 != maxSeedsToUseFromCommandLine) {
+        maxSeedsToUse = maxSeedsToUseFromCommandLine;
+    } else {
+        maxSeedsToUse = (int)(maxSeedCoverage * inputRead->getDataLength() / genomeIndex->getSeedLength());
+    }
 
     if (NULL == hitDirection) {
         hitDirection = &localHitDirection;
@@ -681,7 +696,6 @@ Return Value:
     unsigned weightListToCheck = highestUsedWeightList;
 
     do {
-        _ASSERT(weightListToCheck <= maxSeedsToUse);
         //
         // Grab the next element to score, and score it.
         //
@@ -691,34 +705,27 @@ Return Value:
             highestUsedWeightList = weightListToCheck;
         }
 
-        _ASSERT(weightListToCheck <= maxSeedsToUse);
-
         if (__min(lowestPossibleScoreOfAnyUnseenLocation[FORWARD],lowestPossibleScoreOfAnyUnseenLocation[RC]) > scoreLimit || forceResult) {
             if (weightListToCheck == 0) {
                 //
                 // We've scored all live candidates and excluded all non-candidates, or we've checked enough that we've hit the cutoff.  We have our
                 // answer.
                 //
-                int realConfDiff = confDiff + (popularSeedsSkipped >= adaptiveConfDiffThreshold ? 1 : 0);
                 *finalScore = bestScore;
-                if (bestScore + realConfDiff <= secondBestScore && bestScore <= maxK) {
-                    if (popularSeedsSkipped == 0 && !forceResult) {
-                        *result = CertainHit;
-                    } else {
-                        *result = SingleHit;
-                    }
+                if (bestScore <= maxK) {
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
                     *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, popularSeedsSkipped);
+                    if (*mapq >= MAPQ_LIMIT_FOR_SINGLE_HIT) {
+                        *result = SingleHit;
+                    } else {
+                        *result = MultipleHits;
+                    }
                     return true;
                 } else if (bestScore > maxK) {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
                     // report it as NotFound
                     *result = (nSeedsApplied[FORWARD] == 0 && nSeedsApplied[RC] == 0) ? MultipleHits : NotFound;
                     *mapq = 0;
-                    return true;
-                } else {
-                    *result = MultipleHits;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, popularSeedsSkipped);
                     return true;
                 }
             }
@@ -1293,7 +1300,7 @@ BaseAligner::clearCandidates() {
     hashTableEpoch++;
     nUsedHashTableElements = 0;
     highestUsedWeightList = 0;
-    for (unsigned i = 1; i <= maxSeedsToUse; i++) {
+    for (unsigned i = 1; i < numWeightLists; i++) {
         weightLists[i].weightNext = weightLists[i].weightPrev = &weightLists[i];
     }
 }
@@ -1316,7 +1323,7 @@ BaseAligner::incrementWeight(HashTableElement *element)
     // match the appropriate seed at offset 0, 2, 4, etc.)  If that happens,
     // just don't let the weight get too big.
     //
-    if (element->weight >= maxSeedsToUse) {
+    if (element->weight >= numWeightLists - 1) {
         return;
     }
 
@@ -1339,8 +1346,15 @@ BaseAligner::incrementWeight(HashTableElement *element)
 }
 
     size_t
-BaseAligner::getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsToUse)
+BaseAligner::getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize, 
+                unsigned seedLen, unsigned numSeedsFromCommandLine, double seedCoverage)
 {
+    unsigned maxSeedsToUse;
+    if (0 != numSeedsFromCommandLine) {
+        maxSeedsToUse = numSeedsFromCommandLine;
+    } else {
+        maxSeedsToUse = (unsigned)(maxReadSize * seedCoverage / seedLen);
+    }
     size_t candidateHashTablesSize = (maxHitsToConsider * maxSeedsToUse * 3)/2;    // *1.5 for hash table slack
     size_t hashTableElementPoolSize = maxHitsToConsider * maxSeedsToUse * 2 ;   // *2 for RC
 

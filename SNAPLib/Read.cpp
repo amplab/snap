@@ -25,4 +25,4 @@ Revision History:
 #include "Read.h"
 
 
-bool isAValidAlignmentResult(AlignmentResult result) {return result == NotFound || result == CertainHit || result == SingleHit || result == MultipleHits || result == UnknownAlignment;}
+bool isAValidAlignmentResult(AlignmentResult result) {return result == NotFound || result == SingleHit || result == MultipleHits || result == UnknownAlignment;}

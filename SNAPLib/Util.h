@@ -516,3 +516,12 @@ struct IdIntPair
 } // namespace util
 
 int FirstPowerOf2GreaterThanOrEqualTo(int value);
+
+//
+// Check if a is within distance of b, coping properly with the varagies of unsigneds.
+//
+inline bool isWithin(unsigned a, unsigned b, unsigned distance)
+    {
+	return a <= b && a+distance >= b || a >= b && a <= b + distance;
+}
+

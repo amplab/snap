@@ -70,9 +70,13 @@ BAMReader::init(
         soft_exit(1);
     }
     _ASSERT(context.headerBytes > 0);
-    reinit(max(startingOffset, (_int64) context.headerBytes),
-        amountOfFileToProcess == 0 || startingOffset >= (_int64) context.headerBytes ? amountOfFileToProcess
-            : amountOfFileToProcess - (context.headerBytes - startingOffset));
+    reinit(startingOffset, amountOfFileToProcess);
+    if (startingOffset < context.headerBytes) {
+        char* p;
+        _int64 n;
+        data->getData(&p, &n);
+        data->advance(context.headerBytes - startingOffset);
+    }
 }
 
     void
@@ -106,7 +110,7 @@ BAMReader::readHeader(
 
     char* p = new char[textHeaderSize + 1];
     memcpy(p, header->text(), textHeaderSize);
-    p[textHeaderSize + 1] = 0;
+    p[textHeaderSize] = 0;
     context.header = p;
     context.headerLength = textHeaderSize;
     context.headerBytes = (char*) refSeq - buffer;
@@ -592,8 +596,8 @@ BAMFormat::writeRead(
     Direction mateDirection) const
 {
     const int MAX_READ = MAX_READ_LENGTH;
-    const int cigarBufSize = MAX_READ * 2;
-    char cigarBuf[cigarBufSize];
+    const int cigarBufSize = MAX_READ;
+    _uint32 cigarBuf[cigarBufSize];
 
     int flags = 0;
     const char *pieceName = "*";
@@ -624,7 +628,7 @@ BAMFormat::writeRead(
         return false;
     }
     if (genomeLocation != InvalidGenomeLocation) {
-        cigarOps = computeCigarOps(genome, lv, cigarBuf, cigarBufSize,
+        cigarOps = computeCigarOps(genome, lv, (char*) cigarBuf, cigarBufSize * sizeof(_uint32),
                                    clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
                                    genomeLocation, direction == RC, useM, &editDistance);
     }
@@ -661,9 +665,7 @@ BAMFormat::writeRead(
     if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
         bamSize += 4 + strlen(read->getReadGroup());
     }
-    if (editDistance > 0) {
-        bamSize += 3 + sizeof(_int32);
-    }
+    bamSize += 3 + sizeof(_int32); // NM field
     if (bamSize > bufferSpace) {
         return false;
     }
@@ -678,9 +680,9 @@ BAMFormat::writeRead(
     }
     bam->l_read_name = (_uint8)qnameLen + 1;
     bam->MAPQ = mapQuality;
-    int refLength = bam->n_cigar_op > 0 ? 0 : fullLength;
-    for (int i = 0; i < bam->n_cigar_op; i++) {
-        refLength += BAMAlignment::CigarCodeToRefBase[bam->cigar()[i] & 0xf];
+    int refLength = cigarOps > 0 ? 0 : fullLength;
+    for (int i = 0; i < cigarOps; i++) {
+        refLength += BAMAlignment::CigarCodeToRefBase[cigarBuf[i] & 0xf] * (cigarBuf[i] >> 4);
     }
     bam->bin = genomeLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(positionInPiece-1, positionInPiece-1 + refLength) :
 		// unmapped is at mate's position, length 1
@@ -720,12 +722,10 @@ BAMFormat::writeRead(
         strcpy((char*) rg->value(), read->getReadGroup());
         auxLen += (unsigned) rg->size();
     }
-    if (editDistance > 0) {
-        BAMAlignAux* nm = (BAMAlignAux*) (auxLen + (char*) bam->firstAux());
-        nm->tag[0] = 'N'; nm->tag[1] = 'M'; nm->val_type = 'i';
-        *(_int32*)nm->value() = editDistance;
-        auxLen += (unsigned) nm->size();
-    }
+    BAMAlignAux* nm = (BAMAlignAux*) (auxLen + (char*) bam->firstAux());
+    nm->tag[0] = 'N'; nm->tag[1] = 'M'; nm->val_type = 'i';
+    *(_int32*)nm->value() = editDistance;
+    auxLen += (unsigned) nm->size();
 
     if (NULL != spaceUsed) {
         *spaceUsed = bamSize;

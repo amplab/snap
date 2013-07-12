@@ -74,7 +74,7 @@ for input_format in ["fq", "bam", "sam"]:
             temps = [] # temporary files, deleted on success
             # build & run snap command line
             outfile = _f("temp/%s-%s.%s" % (input_format, index, output_format))
-            args = [snap, "single", _f("temp/%s.idx" % index), _f("datatest." + input_format), "-t", "1", "-o", outfile]
+            args = [snap, "single", _f("temp/%s.idx" % index), _f("datatest." + input_format), "-t", "1", "-rg", "group1", "-o", outfile]
             run = "%s-%s-%s" % (input_format, index, output_format)
             ok = runit(args, "snap-#")
             temps.append(outfile)
@@ -87,7 +87,7 @@ for input_format in ["fq", "bam", "sam"]:
             check_output = outfile
             if output_format == "bam":
                 check_output = outfile + ".sam"
-                ok = runit([bin + "samtools", "view", "-h", outfile, "-o", check_output])
+                ok = runit([bin + "samtools", "view", "-h", outfile, "-o", check_output], "bam2sam-#")
                 temps.append(check_output)
                 if not ok: continue
             # compare with reference file

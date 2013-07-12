@@ -31,6 +31,8 @@ Revision History:
 #include "SAM.h"
 #include "RangeSplitter.h"
 
+#define MAPQ_LIMIT_FOR_SINGLE_HIT 10
+
 struct AbstractOptions
 {
     virtual void usageMessage() = 0;
@@ -60,10 +62,10 @@ struct AlignerOptions : public AbstractOptions
     const char         *similarityMapFile;
     int                 numThreads;
     Range               maxDist;
-    Range               numSeeds;
+    unsigned            numSeedsFromCommandLine;
+    double              seedCoverage;       // Exclusive with numSeeds; this is readSize/seedSize
+    bool                seedCountSpecified; // Has either -n or -sc been specified?  This bool is used to make sure they're not both specified on the command line
     Range               maxHits;
-    Range               confDiff;
-    Range               adaptiveConfDiff;
     bool                computeError;
     bool                bindToProcessors;
     bool                ignoreMismatchedIDs;

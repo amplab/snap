@@ -147,7 +147,7 @@ struct Seed {
 
     inline _uint64 hash64()
     {
-        return util::hash64(2 + min(bases, reverseComplement));
+        return 1+util::hash64(min(bases, reverseComplement));
     }
     
     inline unsigned hash()

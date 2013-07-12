@@ -100,10 +100,9 @@ public:
     AlignerStats                        *stats;
     AlignerExtension                    *extension;
     unsigned                             maxDist;
-    int                                  numSeeds;
+    unsigned                             numSeedsFromCommandLine;
+    double                               seedCoverage;
     int                                  maxHits;
-    int                                  confDiff;
-    int                                  adaptiveConfDiff;
     bool                                 computeError;
     bool                                 detailedStats;
     ReadClippingType                     clipping;
@@ -115,11 +114,8 @@ public:
 
 
     // iteration variables
-    int                 confDiff_;
     int                 maxHits_;
     int                 maxDist_;
-    int                 numSeeds_;
-    int                 adaptiveConfDiff_;
 
     // Per-thread context state used during alignment process
     ReadWriter         *readWriter;
