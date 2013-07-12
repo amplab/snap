@@ -91,9 +91,16 @@ for input_format in ["fq", "bam", "sam"]:
                 temps.append(check_output)
                 if not ok: continue
             # compare with reference file
-            reffile = _f("correct-%s-%s.sam" % ((input_format if input_format != "bam" else "sam"), index))
-            ok = True # runit([bin + "diff", check_output, reffile], "diff-#")
-            if not ok: continue
+            # don't yet translate attrs from bam<->sam
+            if input_format == "fq" or input_format == output_format:
+                # remove @PG line from output file
+                checkfile = _f("temp/nopg-#.sam")
+                temps.append(checkfile)
+                ok = runit([bin + "grep", "-v", "@PG", check_output],"grep-#", stdout=checkfile)
+                if not ok: continue
+                reffile = _f("correct-%s-%s.sam" % ((input_format if input_format != "bam" else "sam"), index))
+                ok = runit([bin + "diff", checkfile, reffile], "diff-#")
+                if not ok: continue
             # delete temp files
             for f in temps:
                 os.remove(f)

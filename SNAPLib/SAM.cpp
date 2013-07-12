@@ -357,7 +357,11 @@ SAMReader::getReadFromLine(
         read->clip(clipping);
 
         if (field[OPT] != NULL) {
-            read->setAuxiliaryData(field[OPT], (unsigned) fieldLength[OPT]);
+            unsigned n = (unsigned) fieldLength[OPT];
+            while (n > 0 && (field[OPT][n-1] == '\n' || field[OPT][n-1] == '\r')) {
+                n--;
+            }
+            read->setAuxiliaryData(field[OPT], n);
             for (char* p = field[OPT]; p != NULL && p < field[OPT] + fieldLength[OPT]; p = SAMReader::skipToBeyondNextRunOfSpacesAndTabs(p, field[OPT] + fieldLength[OPT])) {
                 if (strncmp(p, "RG:Z:", 5) == 0) {
                     read->setReadGroup(READ_GROUP_FROM_AUX);
@@ -1060,7 +1064,7 @@ SAMFormat::writeRead(
         readGroupSeparator = "\tRG:Z:";
         readGroupString = read->getReadGroup();
     }
-    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s\tPG:Z:SNAP%s%s%s%s%.*s\n",
+    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s\n",
         qnameLen, read->getId(),
         flags,
         pieceName,
@@ -1072,9 +1076,9 @@ SAMFormat::writeRead(
         templateLength,
         fullLength, data,
         fullLength, quality,
-        nmString,
+        aux != NULL ? "\t" : "", auxLen, aux != NULL ? aux : "",
         readGroupSeparator, readGroupString,
-        aux != NULL ? "\t" : "", auxLen, aux != NULL ? aux : "");
+        nmString);
 
     if (charsInString > bufferSpace) {
         //

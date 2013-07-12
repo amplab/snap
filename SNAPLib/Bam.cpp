@@ -666,6 +666,7 @@ BAMFormat::writeRead(
         bamSize += 4 + strlen(read->getReadGroup());
     }
     bamSize += 3 + sizeof(_int32); // NM field
+    bamSize += strlen("PGZSNAP") + 1; // PG field
     if (bamSize > bufferSpace) {
         return false;
     }
@@ -716,12 +717,19 @@ BAMFormat::writeRead(
             ((char*)auxData->value())[auxLen-1] = 0;
         }
     }
+    // RG
     if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
         BAMAlignAux* rg = (BAMAlignAux*) (auxLen + (char*) bam->firstAux());
         rg->tag[0] = 'R'; rg->tag[1] = 'G'; rg->val_type = 'Z';
         strcpy((char*) rg->value(), read->getReadGroup());
         auxLen += (unsigned) rg->size();
     }
+    // PG
+    BAMAlignAux* pg = (BAMAlignAux*) (auxLen + (char*) bam->firstAux());
+    pg->tag[0] = 'P'; pg->tag[1] = 'G'; pg->val_type = 'Z';
+    strcpy((char*) pg->value(), "SNAP");
+    auxLen += (unsigned) pg->size();
+    // NM
     BAMAlignAux* nm = (BAMAlignAux*) (auxLen + (char*) bam->firstAux());
     nm->tag[0] = 'N'; nm->tag[1] = 'M'; nm->val_type = 'i';
     *(_int32*)nm->value() = editDistance;
