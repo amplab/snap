@@ -149,16 +149,15 @@ SingleAlignerContext::runIterationThread()
 
     int maxReadSize = MAX_READ_LENGTH;
  
-    BigAllocator *allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, maxHits, maxReadSize, index->getSeedLength(),numSeeds));
+    BigAllocator *allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, maxHits, maxReadSize, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage));
    
     BaseAligner *aligner = new (allocator) BaseAligner(
             index,
-            confDiff,
             maxHits,
             maxDist,
             maxReadSize,
-            numSeeds,
-            adaptiveConfDiff,
+            numSeedsFromCommandLine,
+            seedCoverage,
             extraSearchDepth,
             NULL,               // LV (no need to cache in the single aligner)
             NULL,               // reverse LV

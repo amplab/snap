@@ -39,7 +39,8 @@ public:
         unsigned      maxReadSize_,
         unsigned      maxHits_,
         unsigned      maxK_,
-        unsigned      maxSeeds_,
+        unsigned      maxSeedsFromCommandLine_,
+        double        seedCoverage_,
         unsigned      minSpacing_,                 // Minimum distance to allow between the two ends.
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
         unsigned      maxBigHits_,
@@ -61,10 +62,8 @@ public:
         Read                  *read1,
         PairedAlignmentResult *result);
 
-//    void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(IntersectingPairedEndAligner)); return allocator->allocate(size);}
-//    void operator delete(void *ptr, BigAllocator *allocator) {/*Do nothing, the owner of the allocator is responsible for freeing memory*/}
-
-    static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsToUse);
+    static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxBigHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsFromCommandLine, 
+                                             double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth);
 
      virtual _int64 getLocationsScored() const {
          return nLocationsScored;
@@ -76,7 +75,8 @@ private:
 
     static const int NUM_SET_PAIRS = 2;         // A "set pair" is read0 FORWARD + read1 RC, or read0 RC + read1 FORWARD.  Again, it doesn't make sense to change this.
 
-    void allocateDynamicMemory(BigAllocator *allocator, unsigned maxReadSize, unsigned maxHitsToConsider, unsigned maxSeedsToUse);
+    void allocateDynamicMemory(BigAllocator *allocator, unsigned maxReadSize, unsigned maxBigHitsToConsider, unsigned maxSeedsToUse, 
+                               unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth);
 
     GenomeIndex *   index;
     const Genome *  genome;
@@ -86,13 +86,14 @@ private:
     unsigned        maxBigHits;
     unsigned        extraSearchDepth;
     unsigned        maxK;
-    unsigned        maxSeeds;
+    unsigned        numSeedsFromCommandLine;
+    double          seedCoverage;
     static const unsigned MAX_MAX_SEEDS = 30;
     unsigned        minSpacing;
     unsigned        maxSpacing;
     unsigned        seedLen;
     unsigned        maxMergeDistance;
-    _int64         nLocationsScored;
+    _int64          nLocationsScored;
 
 
     struct HashTableLookup {
@@ -109,7 +110,8 @@ private:
     //
     class HashTableHitSet {
     public:
-        HashTableHitSet(unsigned maxSeeds_, unsigned maxMergeDistance_);
+        HashTableHitSet() {}
+        void firstInit(unsigned maxSeeds_, unsigned maxMergeDistance_);
 
         //
         // Reset to empty state.
@@ -153,10 +155,6 @@ private:
         unsigned        mostRecentLocationReturned;
 		unsigned		maxMergeDistance;
 
-		static inline bool isWithin(unsigned a, unsigned b, unsigned distance)
-		{
-			return a <= b && a+distance >= b || a >= b && a <= b + distance;
-		}
 
 		unsigned computeBestPossibleScoreForCurrentHit();
     };
@@ -280,6 +278,8 @@ private:
         HitLocation     *buffer;
     };
 
+#if 0
+
     //
     // Ring buffers to keep track of the recent hits in the smaller and mate reads.  The buffer for the smaller read is just used to
     // check for hits to merge (i.e., places close enough together that we assume that they're just offsets caused by indels in the read
@@ -289,6 +289,8 @@ private:
 
     HitLocationRingBuffer    *hitLocations[NUM_SET_PAIRS];
     HitLocationRingBuffer    *mateHitLocations[NUM_SET_PAIRS];
+
+#endif // 0
 
  
     char *rcReadData[NUM_READS_PER_PAIR];                   // the reverse complement of the data for each read
@@ -306,8 +308,6 @@ private:
     char rcTranslationTable[256];
     unsigned nTable[256];
 
-    BaseAligner *baseAligner;
-
     BYTE *seedUsed;
 
     inline bool IsSeedUsed(unsigned indexInRead) const {
@@ -317,8 +317,6 @@ private:
     inline void SetSeedUsed(unsigned indexInRead) {
         seedUsed[indexInRead / 8] |= (1 << (indexInRead % 8));
     }
-
-    void alignWithBaseAligner(Read *read0, Read *read1, PairedAlignmentResult *result, int maxMapq);
 
     //
     // "Local probability" means the probability that each end is correct given that the pair itself is correct.
@@ -340,14 +338,33 @@ private:
             int                 *genomeLocationOffset   // The computed offset for genomeLocation (which is needed because we scan several different possible starting locations)
     );
 
+    //
+    // These are used to keep track of places where we should merge together candidate locations for MAPQ purposes, because they're sufficiently
+    // close in the genome.
+    //
     struct MergeAnchor {
+        double      matchProbability;
         unsigned    locationForReadWithMoreHits;
         unsigned    locationForReadWithFewerHits;
-        double      matchProbability;
         int         pairScore;
 
-        MergeAnchor() : locationForReadWithMoreHits(InvalidGenomeLocation), locationForReadWithFewerHits(InvalidGenomeLocation), 
-            matchProbability(0), pairScore(0) {}
+        void init(unsigned locationForReadWithMoreHits_, unsigned locationForReadWithFewerHits_, double matchProbability_, int pairScore_) {
+            locationForReadWithMoreHits = locationForReadWithMoreHits_;
+            locationForReadWithFewerHits = locationForReadWithFewerHits_;
+            matchProbability = matchProbability_;
+            pairScore = pairScore_;
+        }
+
+        //
+        // Returns whether this candidate is a match for this merge anchor.
+        //
+        bool doesRangeMatch(unsigned newMoreHitLocation, unsigned newFewerHitLocation) {
+            unsigned deltaMore = DistanceBetweenGenomeLocations(locationForReadWithMoreHits, newMoreHitLocation);
+            unsigned deltaFewer = DistanceBetweenGenomeLocations(locationForReadWithFewerHits, newFewerHitLocation);
+
+            return deltaMore < 50 && deltaFewer < 50;
+        }
+
 
         //
         // Returns true and sets oldMatchProbability if this should be eliminated due to a match.
@@ -356,4 +373,86 @@ private:
                         double *oldMatchProbability); 
     };
 
+    //
+    // We keep track of pairs of locations to score using two structs, one for each end.  The ends for the read with fewer hits points into
+    // a list of structs for the end with more hits, so that we don't need one stuct for each pair, just one for each end, and also so that 
+    // we don't need to score the mates more than once if they could be paired with more than one location from the end with fewer hits.
+    //
+
+    struct ScoringMateCandidate {
+        //
+        // These are kept in arrays in decreasing genome order, one for each set pair, so you can find the next largest location by just looking one
+        // index lower, and vice versa.
+        //
+        double                  matchProbability;
+        unsigned                readWithMoreHitsGenomeLocation;
+        unsigned                bestPossibleScore;
+        unsigned                score;
+        unsigned                scoreLimit;             // The scoreLimit with which score was computed
+        unsigned                seedOffset;
+        int                     genomeOffset;
+
+        void init(unsigned readWithMoreHitsGenomeLocation_, unsigned bestPossibleScore_, unsigned seedOffset_) {
+            readWithMoreHitsGenomeLocation = readWithMoreHitsGenomeLocation_;
+            bestPossibleScore = bestPossibleScore_;
+            seedOffset = seedOffset_;
+            score = -2;
+            scoreLimit = -1;
+            matchProbability = 0;
+            genomeOffset = 0;
+        }
+    };
+
+    struct ScoringCandidate {
+        ScoringCandidate *      scoreListNext;              // This is a singly-linked list
+        MergeAnchor *           mergeAnchor;
+        unsigned                scoringMateCandidateIndex;  // Index into the array of scoring mate candidates where we should look 
+        unsigned                readWithFewerHitsGenomeLocation;
+        unsigned                whichSetPair;
+        unsigned                seedOffset;
+
+        unsigned                bestPossibleScore;
+
+        void init(unsigned readWithFewerHitsGenomeLocation_, unsigned whichSetPair_, unsigned scoringMateCandidateIndex_, unsigned seedOffset_,
+                  unsigned bestPossibleScore_, ScoringCandidate *scoreListNext_)
+        {
+            readWithFewerHitsGenomeLocation = readWithFewerHitsGenomeLocation_;
+            whichSetPair = whichSetPair_;
+            _ASSERT(whichSetPair < NUM_SET_PAIRS);  // You wouldn't think this would be necessary, but...
+            scoringMateCandidateIndex = scoringMateCandidateIndex_;
+            seedOffset = seedOffset_;
+            bestPossibleScore = bestPossibleScore_;
+            scoreListNext = scoreListNext_;
+            mergeAnchor = NULL;
+         }
+    };
+
+    //
+    // A pool of scoring candidates.  For each alignment call, we free them all by resetting lowestFreeScoringCandidatePoolEntry to 0,
+    // and then fill in the content when they're initialized.  This means that for alignments with few candidates we'll be using the same
+    // entries over and over, so they're likely to be in the cache.  We have maxK * maxSeeds * 2 of these in the pool, so we can't possibly run
+    // out.  We rely on their being allocated in descending genome order within a set pair.
+    //
+    ScoringCandidate *scoringCandidatePool;
+    unsigned scoringCandidatePoolSize;
+    unsigned lowestFreeScoringCandidatePoolEntry;
+
+    //
+    // maxK + 1 lists of Scoring Candidates.  The lists correspond to bestPossibleScore for the candidate and its best mate.
+    //
+
+    ScoringCandidate    **scoringCandidates;
+
+    //
+    // The scoring mates.  The each set scoringCandidatePoolSize / 2.
+    //
+    ScoringMateCandidate * scoringMateCandidates[NUM_SET_PAIRS];
+    unsigned lowestFreeScoringMateCandidate[NUM_SET_PAIRS];
+
+    //
+    // Merge anchors.  Again, we allocate an upper bound number of them, which is the same as the number of scoring candidates.
+    //
+    MergeAnchor *mergeAnchorPool;
+    unsigned firstFreeMergeAnchor;
+    unsigned mergeAnchorPoolSize;
 };

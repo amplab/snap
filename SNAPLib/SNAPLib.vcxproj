@@ -199,7 +199,6 @@
     <ClInclude Include="Seed.h" />
     <ClInclude Include="SeedSequencer.h" />
     <ClInclude Include="SingleAligner.h" />
-    <ClInclude Include="SingleFirstPairedEndAligner.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="Tables.h" />
     <ClInclude Include="targetver.h" />
@@ -248,7 +247,6 @@
     <ClCompile Include="SAM.cpp" />
     <ClCompile Include="Seed.cpp" />
     <ClCompile Include="SingleAligner.cpp" />
-    <ClCompile Include="SingleFirstPairedEndAligner.cpp" />
     <ClCompile Include="SortedDataWriter.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>

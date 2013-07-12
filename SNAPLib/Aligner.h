@@ -37,7 +37,6 @@ Revision History:
 inline const char *AlignmentResultToString(AlignmentResult result) {
     switch (result) {
         case NotFound: return "NotFound";
-        case CertainHit: return "SingleHit";    // Just for now
         case SingleHit: return "SingleHit";
         case MultipleHits: return "MultipleHits";
         case UnknownAlignment: return "Unknown";
@@ -47,7 +46,7 @@ inline const char *AlignmentResultToString(AlignmentResult result) {
 
 // Does an AlignmentResult represent a single location?
 inline bool isOneLocation(AlignmentResult result) {
-    return result == SingleHit || result == CertainHit;
+    return result == SingleHit;
 }
 
 extern bool doAlignerPrefetch;
@@ -76,7 +75,6 @@ class Aligner {
     virtual const char *getRCTranslationTable() const = 0;
 
     virtual int getMaxK() const = 0;
-    virtual int getConfDiff() const = 0;
 
     virtual const char *getName() const = 0;
 

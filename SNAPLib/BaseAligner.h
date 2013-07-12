@@ -41,12 +41,11 @@ public:
 
     BaseAligner(
         GenomeIndex    *i_genomeIndex, 
-        unsigned        i_confDiff, 
         unsigned        i_maxHitsToConsider, 
         unsigned        i_maxK,
         unsigned        i_maxReadSize,
         unsigned        i_maxSeedsToUse,
-        unsigned        i_adaptiveConfDiffThreshold,
+        double          i_maxSeedCoverage,
         unsigned        i_extraSearchDepth,
         LandauVishkin<1>*i_landauVishkin = NULL,
         LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
@@ -93,7 +92,6 @@ public:
     const char *getRCTranslationTable() const {return rcTranslationTable;}
 
     inline int getMaxK() const {return maxK;}
-    inline int getConfDiff() const {return confDiff;}
 
     inline void setMaxK(int maxK_) {maxK = maxK_;}
 
@@ -115,7 +113,7 @@ public:
     inline bool getStopOnFirstHit() {return stopOnFirstHit;}
     inline void setStopOnFirstHit(bool newValue) {stopOnFirstHit = newValue;}
 
-    static size_t getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsToUse);
+    static size_t getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned numSeedsFromCommandLine, double seedCoverage);
 
 private:
 
@@ -280,13 +278,13 @@ private:
     const Genome *genome;
     GenomeIndex *genomeIndex;
     unsigned seedLen;
-    unsigned confDiff;
     unsigned maxHitsToConsider;
     unsigned maxK;
     unsigned maxReadSize;
-    unsigned maxSeedsToUse; // Max number of seeds to look up in the hash table
-    unsigned adaptiveConfDiffThreshold; // Increase confDiff by 1 if this many seeds are repetitive.
+    unsigned maxSeedsToUseFromCommandLine; // Max number of seeds to look up in the hash table
+    double   maxSeedCoverage;  // Max seeds to used expressed as readSize/seedSize this is mutually exclusive with maxSeedsToUseFromCommandLine
     unsigned extraSearchDepth;
+    unsigned numWeightLists;
 
     char *rcReadData;
     char *rcReadQuality;
