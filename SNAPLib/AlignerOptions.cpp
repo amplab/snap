@@ -59,20 +59,18 @@ AlignerOptions::AlignerOptions(
     rgLineContents(NULL),
     perfFileName(NULL),
     useTimingBarrier(false),
-    extraSearchDepth(2)
+    extraSearchDepth(2),
+    seedCountSpecified(false),
+    numSeedsFromCommandLine(0)
 {
     if (forPairedEnd) {
         maxDist             = 15;
-        numSeeds            = 25;
+        seedCoverage        = 2.0;
         maxHits             = 100;
-        confDiff            = 1;
-        adaptiveConfDiff    = 7;
-    } else {
+     } else {
         maxDist             = 14;
-        numSeeds            = 25;
+        seedCoverage        = 2.0;
         maxHits             = 300;
-        confDiff            = 2;
-        adaptiveConfDiff    = 4;
     }
 
     initializeLVProbabilitiesToPhredPlus33();
@@ -93,10 +91,11 @@ AlignerOptions::usageMessage()
         "Options:\n"
         "  -o filename  output alignments to filename in SAM format\n"
         "  -d   maximum edit distance allowed per read or pair (default: %d)\n"
-        "  -n   number of seeds to use per read (default: %d)\n"
+        "  -n   number of seeds to use per read\n"
+        "  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default: %lf)\n",
         "  -h   maximum hits to consider per seed (default: %d)\n"
-        "  -c   confidence threshold (default: %d)\n"
-        "  -a   confidence adaptation threshold (default: %d)\n"
+        "  -c   Deprecated parameter; this is ignored.  Consumes one extra arg.\n"
+        "  -a   Deprecated parameter; this is ignored.  Consumes one extra arg.\n"
         "  -t   number of threads (default is one per core)\n"
         "  -b   bind each thread to its processor (off by default)\n"
         "  -e   compute error rate assuming wgsim-generated reads\n"
@@ -129,10 +128,9 @@ AlignerOptions::usageMessage()
             ,
             commandLine,
             maxDist.start,
-            numSeeds.start,
-            maxHits.start,
-            confDiff.start,
-            adaptiveConfDiff.start);
+            seedCoverage,
+            maxHits.start);
+
     if (extra != NULL) {
         extra->usageMessage();
     }
@@ -167,7 +165,23 @@ AlignerOptions::parse(
         }
     } else if (strcmp(argv[n], "-n") == 0) {
         if (n + 1 < argc) {
-            numSeeds = Range::parse(argv[n+1]);
+            if (seedCountSpecified) {
+                fprintf(stderr,"-sc and -n are mutually exclusive.  Please use only one.\n");
+                soft_exit(1);
+            }
+            seedCountSpecified = true;
+            numSeedsFromCommandLine = atoi(argv[n+1]);
+            n++;
+            return true;
+        }
+    } else if (strcmp(argv[n], "-sc") == 0) {
+        if (n + 1 < argc) {
+            if (seedCountSpecified) {
+                fprintf(stderr,"-sc and -n are mutually exclusive.  Please use only one.\n");
+                soft_exit(1);
+            }
+            seedCountSpecified = true;
+            seedCoverage = atof(argv[n+1]);
             n++;
             return true;
         }
@@ -177,15 +191,13 @@ AlignerOptions::parse(
             n++;
             return true;
         }
-    } else if (strcmp(argv[n], "-c") == 0) {
+    } else if (strcmp(argv[n], "-c") == 0) { // conf diff is deprecated, but we just ignore it rather than throwing an error.
         if (n + 1 < argc) {
-            confDiff = Range::parse(argv[n+1]);
             n++;
             return true;
         }
-    } else if (strcmp(argv[n], "-a") == 0) {
+    } else if (strcmp(argv[n], "-a") == 0) { // adaptive conf diff is deprecated, but we just ignore it rather than throwing an error.
         if (n + 1 < argc) {
-            adaptiveConfDiff = Range::parse(argv[n+1]);
             n++;
             return true;
         }
@@ -374,7 +386,6 @@ AlignerOptions::passFilter(
     case UnknownAlignment:
         return (filterFlags & FilterUnaligned) != 0;
     case SingleHit:
-    case CertainHit:
         return (filterFlags & FilterSingleHit) != 0;
     case MultipleHits:
         return (filterFlags & FilterMultipleHits) != 0;

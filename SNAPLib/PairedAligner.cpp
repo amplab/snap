@@ -406,23 +406,24 @@ void PairedAlignerContext::runIterationThread()
     }
 
     int maxReadSize = MAX_READ_LENGTH;
-    size_t memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), numSeeds, maxDist, extraSearchDepth);
+    size_t memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), 
+                                                                numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth);
 
     BigAllocator *allocator = new BigAllocator(memoryPoolSize);
     
-    IntersectingPairedEndAligner *intersectingAligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeeds, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, allocator);
+    IntersectingPairedEndAligner *intersectingAligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
+                                                                seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, allocator);
 
     ChimericPairedEndAligner *aligner = new ChimericPairedEndAligner(
         index,
         maxReadSize,
-        confDiff,
         maxHits,
         maxDist,
-        numSeeds,
+        numSeedsFromCommandLine,
+        seedCoverage,
         minSpacing,
         maxSpacing,
         forceSpacing,
-        adaptiveConfDiff,
         extraSearchDepth,
         intersectingAligner);
 

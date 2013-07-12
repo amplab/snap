@@ -41,22 +41,21 @@ using namespace std;
 ChimericPairedEndAligner::ChimericPairedEndAligner(
         GenomeIndex         *index,
         unsigned            maxReadSize,
-        unsigned            confDiff,
         unsigned            maxHits,
         unsigned            maxK,
-        unsigned            maxSeeds,
+        unsigned            maxSeedsFromCommandLine,
+        double              maxSeedCoverage,
         unsigned            minSpacing,                // Minimum distance to allow between the two ends.
         unsigned            maxSpacing,                // Maximum distance to allow between the two ends.
         bool                forceSpacing_,
-        unsigned            adaptiveConfDiffThreshold,  // Increase confDiff if this many seeds in the read have multiple hits.
         unsigned            extraSearchDepth,
         PairedEndAligner    *underlyingPairedEndAligner_)
  :  underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_),
     lv(0), reverseLV(0)
 {
     // Create single-end aligners.
-    singleAligner = new BaseAligner(index, confDiff + 1, maxHits, maxK, maxReadSize,
-                                    maxSeeds, adaptiveConfDiffThreshold, extraSearchDepth, &lv, &reverseLV);
+    singleAligner = new BaseAligner(index, maxHits, maxK, maxReadSize,
+                                    maxSeedsFromCommandLine,  maxSeedCoverage, extraSearchDepth, &lv, &reverseLV);
 
     underlyingPairedEndAligner->setLandauVishkin(&lv, &reverseLV);
 }
@@ -83,7 +82,7 @@ void ChimericPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRe
     //
     // Let the LVs use the cache that we built up.
     //
-   underlyingPairedEndAligner->align(read0, read1, result); 
+    underlyingPairedEndAligner->align(read0, read1, result); 
     _int64 end = timeInNanos();
 
     result->nanosInAlignTogether = end - start;

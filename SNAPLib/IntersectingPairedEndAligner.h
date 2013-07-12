@@ -39,7 +39,8 @@ public:
         unsigned      maxReadSize_,
         unsigned      maxHits_,
         unsigned      maxK_,
-        unsigned      maxSeeds_,
+        unsigned      maxSeedsFromCommandLine_,
+        double        seedCoverage_,
         unsigned      minSpacing_,                 // Minimum distance to allow between the two ends.
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
         unsigned      maxBigHits_,
@@ -61,8 +62,8 @@ public:
         Read                  *read1,
         PairedAlignmentResult *result);
 
-    static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxBigHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsToUse, 
-                                             unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth);
+    static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxBigHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsFromCommandLine, 
+                                             double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth);
 
      virtual _int64 getLocationsScored() const {
          return nLocationsScored;
@@ -85,13 +86,14 @@ private:
     unsigned        maxBigHits;
     unsigned        extraSearchDepth;
     unsigned        maxK;
-    unsigned        maxSeeds;
+    unsigned        numSeedsFromCommandLine;
+    double          seedCoverage;
     static const unsigned MAX_MAX_SEEDS = 30;
     unsigned        minSpacing;
     unsigned        maxSpacing;
     unsigned        seedLen;
     unsigned        maxMergeDistance;
-    _int64         nLocationsScored;
+    _int64          nLocationsScored;
 
 
     struct HashTableLookup {
@@ -416,6 +418,7 @@ private:
         {
             readWithFewerHitsGenomeLocation = readWithFewerHitsGenomeLocation_;
             whichSetPair = whichSetPair_;
+            _ASSERT(whichSetPair < NUM_SET_PAIRS);  // You wouldn't think this would be necessary, but...
             scoringMateCandidateIndex = scoringMateCandidateIndex_;
             seedOffset = seedOffset_;
             bestPossibleScore = bestPossibleScore_;

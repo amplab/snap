@@ -32,14 +32,13 @@ public:
     ChimericPairedEndAligner(
         GenomeIndex         *index,
         unsigned            maxReadSize,
-        unsigned            confDiff,
         unsigned            maxHits,
         unsigned            maxK,
-        unsigned            maxSeeds,
+        unsigned            maxSeedsFromCommandLine,
+        double              seedCoverage,
         unsigned            minSpacing,                // Minimum distance to allow between the two ends.
         unsigned            maxSpacing,                // Maximum distance to allow between the two ends.
         bool                forceSpacing,
-        unsigned            adaptiveConfDiffThreshold,  // Increase confDiff if this many seeds in the read have multiple hits.
         unsigned            extraSearchDepth,
         PairedEndAligner    *underlyingPairedEndAligner_);
     

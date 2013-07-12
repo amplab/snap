@@ -152,16 +152,12 @@ AlignerContext::initialize()
         index = g_index;
     }
 
-    if (options->outputFileTemplate != NULL && (options->maxHits.size() > 1 || options->maxDist.size() > 1 || options->numSeeds.size() > 1
-                || options->confDiff.size() > 1 || options->adaptiveConfDiff.size() > 1)) {
+    if (options->outputFileTemplate != NULL && (options->maxHits.size() > 1 || options->maxDist.size() > 1)) {
         fprintf(stderr, "WARNING: You gave ranges for some parameters, so SAM files will be overwritten!\n");
     }
 
-    confDiff_ = options->confDiff.start;
     maxHits_ = options->maxHits.start;
     maxDist_ = options->maxDist.start;
-    numSeeds_ = options->numSeeds.start;
-    adaptiveConfDiff_ = options->adaptiveConfDiff.start;
     extraSearchDepth = options->extraSearchDepth;
 
     if (options->perfFileName != NULL) {
@@ -178,7 +174,7 @@ AlignerContext::initialize()
     void
 AlignerContext::printStatsHeader()
 {
-    printf("MaxHits\tMaxDist\tMaxSeed\t%%Used\t%%Unique\t%%Multi\t%%!Found\t%%Error\t%%Pairs\tlvCalls\tReads/s\n");
+    printf("MaxHits\tMaxDist\t%%Used\t%%Unique\t%%Multi\t%%!Found\t%%Error\t%%Pairs\tlvCalls\tReads/s\n");
 }
 
     void
@@ -209,10 +205,8 @@ AlignerContext::beginIteration()
     bindToProcessors = options->bindToProcessors;
     maxDist = maxDist_;
     maxHits = maxHits_;
-    numSeeds = numSeeds_;
-    confDiff = confDiff_;
-    adaptiveConfDiff = adaptiveConfDiff_;
-
+    numSeedsFromCommandLine = options->numSeedsFromCommandLine;
+    seedCoverage = options->seedCoverage;
     if (stats != NULL) {
         delete stats;
     }
@@ -239,20 +233,11 @@ AlignerContext::finishIteration()
     bool
 AlignerContext::nextIteration()
 {
-     typeSpecificNextIteration();
-     if ((adaptiveConfDiff_ += options->adaptiveConfDiff.step) > options->adaptiveConfDiff.end) {
-        adaptiveConfDiff_ = options->adaptiveConfDiff.start;
-        if ((numSeeds_ += options->numSeeds.step) > options->numSeeds.end) {
-            numSeeds_ = options->numSeeds.start;
-            if ((maxDist_ += options->maxDist.step) > options->maxDist.end) {
-                maxDist_ = options->maxDist.start;
-                if ((maxHits_ += options->maxHits.step) > options->maxHits.end) {
-                    maxHits_ = options->maxHits.start;
-                    if ((confDiff_ += options->confDiff.step) > options->confDiff.end) {
-                        return false;
-                    }
-                }
-            }
+    typeSpecificNextIteration();
+    if ((maxDist_ += options->maxDist.step) > options->maxDist.end) {
+        maxDist_ = options->maxDist.start;
+        if ((maxHits_ += options->maxHits.step) > options->maxHits.end) {
+            return false;
         }
     }
 
@@ -270,8 +255,8 @@ AlignerContext::printStats()
     } else {
         snprintf(errorRate, sizeof(errorRate), "-");
     }
-    printf("%d\t%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%lld\t%.0f (at: %lld)\n",
-            maxHits_, maxDist_, numSeeds_, 
+    printf("%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%lld\t%.0f (at: %lld)\n",
+            maxHits_, maxDist_, 
             100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
             100.0 * stats->singleHits / usefulReads,
             100.0 * stats->multiHits / usefulReads,
@@ -281,8 +266,8 @@ AlignerContext::printStats()
             stats->lvCalls,
             (1000.0 * usefulReads) / max(alignTime, (_int64) 1), alignTime);
     if (NULL != perfFile) {
-        fprintf(perfFile, "%d\t%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%lld\tt%.0f\n",
-                maxHits_, maxDist_, numSeeds_, 
+        fprintf(perfFile, "%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%lld\tt%.0f\n",
+                maxHits_, maxDist_, 
                 100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
                 100.0 * stats->singleHits / usefulReads,
                 100.0 * stats->multiHits / usefulReads,
