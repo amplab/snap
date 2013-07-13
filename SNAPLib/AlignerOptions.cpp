@@ -410,7 +410,6 @@ AlignerOptions::passFilter(
     void
 SNAPInput::readHeader(ReaderContext& context)
 {
-    _ASSERT(secondFileName == NULL);
     switch (fileType) {
     case SAMFile:
         return SAMReader::readHeader(fileName, context);
