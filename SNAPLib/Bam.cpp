@@ -73,9 +73,19 @@ BAMReader::init(
     reinit(startingOffset, amountOfFileToProcess);
     if (startingOffset < context.headerBytes) {
         char* p;
-        _int64 n;
-        data->getData(&p, &n);
-        data->advance(context.headerBytes - startingOffset);
+        _int64 valid, start;
+        bool ok = data->getData(&p, &valid, &start);
+        if (! ok) {
+            fprintf(stderr, "failure reading file %s\n", fileName);
+            soft_exit(1);
+        }
+        _int64 skip = context.headerBytes - startingOffset;
+        _ASSERT(skip < valid);
+        data->advance(skip);
+        if (skip > start) {
+            data->nextBatch();
+            data->getData(&p, &valid, &start);
+        }
     }
 }
 

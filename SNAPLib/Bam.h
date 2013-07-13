@@ -337,7 +337,7 @@ public:
 
         static const int MAX_SEQ_LENGTH = MAX_READ_LENGTH;
 
-        static const int MAX_RECORD_LENGTH = MAX_READ_LENGTH * 4;
+        static const int MAX_RECORD_LENGTH = MAX_READ_LENGTH * 8;
 
 protected:
 
