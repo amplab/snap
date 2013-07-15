@@ -339,328 +339,6 @@ IntersectingPairedEndAligner::align(
         
     Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = {{FORWARD, RC}, {RC, FORWARD}};
 
-#if 0    // Old code that scored inline with finding candidates
-    //
-    // Phase 2: intersect the sets to find pairs, which we add to the candidate list.  The basic strategy is to look for seed hits in the read with fewer hits that also have
-    // hits on the other read in the appropriate range.  We put all of the possible candidates for teh 
-    //
-
-    scoreLimit = maxK + extraSearchDepth;
-    struct IntersectionState {
-        unsigned            lastSeedOffsetForReadWithFewerHits;
-        unsigned            lastGenomeLocationForReadWithFewerHits;
-        unsigned            lastGenomeLocationForReadWithMoreHits;
-		unsigned			bestPossibleScoreForReadWithFewerHits;
-    } intersectionState[NUM_SET_PAIRS]; // One for each set pair
- 
-    bool setPairDone[NUM_SET_PAIRS] = {false, false};
-    unsigned whichSetPairToCheck = 0;
-    HashTableHitSet *setPair[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = {{hashTableHitSets[0][FORWARD], hashTableHitSets[1][RC]}, {hashTableHitSets[0][RC], hashTableHitSets[1][FORWARD]}};
-
-
-    //
-    // Seed the intersection state by doing a first lookup for each pair.
-    //
-    for (unsigned i = 0; i < 2; i++) {
-        setPairDone[i] = !setPair[i][readWithFewerHits]->getFirstHit(&intersectionState[i].lastGenomeLocationForReadWithFewerHits,
-			&intersectionState[i].lastSeedOffsetForReadWithFewerHits, &intersectionState[i].bestPossibleScoreForReadWithFewerHits);
-        intersectionState[i].lastGenomeLocationForReadWithMoreHits = 0xffffffff;
-    }
-
-    if (setPairDone[0]) {
-        whichSetPairToCheck = 1;
-    }
-
-    MergeAnchor mergeAnchor[NUM_SET_PAIRS];
-
-    while (!(setPairDone[0] && setPairDone[1])) {
-        //
-        // Each iteration of this loop considers a single hit possibility on the read with fewer hits.  We've already looked it up,
-        // but have not yet inserted it in the ring buffer.
-        //
-        unsigned smallReadHitGenomeLocation = intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithFewerHits;
-        result->nSmallHits++;
-
-        //
-        // We get here after doing a lookup in the smaller read without checking the larger read for potential mate pairs.
-        // Do that now.  We may already have one.  If not, then look.
-        //
-        if (intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithMoreHits > smallReadHitGenomeLocation + maxSpacing) {
-            //
-            // The last lookup for the big read is too high in the genome to be a mate pair for the new small read lookup.  Move it to the next hit that's in range.
-            // We can dump the scored mate pairs wholesale here, too, since they're clearly all out of range now.
-            //
-            _ASSERT(mateHitLocations[whichSetPairToCheck]->isEmpty() || mateHitLocations[whichSetPairToCheck]->getHead()->genomeLocation > 
-                         intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithFewerHits + maxSpacing);
-
-            mateHitLocations[whichSetPairToCheck]->clear();
-
-            unsigned seedOffset;
-			unsigned bestPossibleScoreForMate;
-            if (!setPair[whichSetPairToCheck][readWithMoreHits]->getNextHitLessThanOrEqualTo(smallReadHitGenomeLocation + maxSpacing,
-                                                                    &intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithMoreHits, &seedOffset,
-																	&bestPossibleScoreForMate)) {
-                //
-                // There's nothing left for the mate, and we know that there's no mates already found.  We're done with this set pair.
-                //
-                setPairDone[whichSetPairToCheck] = true;
-                whichSetPairToCheck = 1 - whichSetPairToCheck;
-                continue;
-            }
-
-            //
-            // Insert this mate location into the scoring list (even if we don't need it for this small read hit, it might be necessary for a later one, and the
-            // invariant is that the looked up mate locations are in the ring buffer).
-            //
-            mateHitLocations[whichSetPairToCheck]->insertHead(intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithMoreHits, seedOffset,
-				bestPossibleScoreForMate);
-        } else {
-            //
-            // Get rid of any remembered mate hits that are too high to be possible mate pairs.
-            //
-            mateHitLocations[whichSetPairToCheck]->trimAboveLocation(smallReadHitGenomeLocation + maxSpacing);
-        }
-
-        unsigned minLocationToCheck;
-        if (smallReadHitGenomeLocation >= maxSpacing) {
-            minLocationToCheck = smallReadHitGenomeLocation - maxSpacing;
-        } else {
-            minLocationToCheck = 0;
-        }
-
-        // BUGBUG: don't let mate pairs cross chromosome boundaries.
-
-        if (mateHitLocations[whichSetPairToCheck]->isEmpty() || mateHitLocations[whichSetPairToCheck]->getTail()->genomeLocation < minLocationToCheck || 
-			intersectionState[whichSetPairToCheck].bestPossibleScoreForReadWithFewerHits > scoreLimit) {
-
-            //
-            // There's no possible mate pair here.  Look for the next possible hit in the read with fewer hits, and then loop around.
-			// Or, the hit for the read with more hits has too high of a best possible score (in that case, we still looked up mates
-			// because they might go with a later lookup in the read with fewer hits).
-            //
-            unsigned maxLocation;
-            if (mateHitLocations[whichSetPairToCheck]->isEmpty()) {
-                maxLocation = intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithMoreHits + maxSpacing;
-            } else {
-                maxLocation = mateHitLocations[whichSetPairToCheck]->getTail()->genomeLocation + maxSpacing;
-            }
-           
-            //
-            // Make sure maxLocation is lower than the current location.  This can happen when we found a place that's ruled out because
-            // of too high of a best possible score.
-            //
-            if (maxLocation >= intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithFewerHits) {
-               _ASSERT(intersectionState[whichSetPairToCheck].bestPossibleScoreForReadWithFewerHits > scoreLimit); // Otherwise we shouldn't be here
-
-                if (intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithFewerHits == 0) {
-#ifdef _DEBUG
-                    if (_DumpAlignments) {
-                        printf("Gave up on set pair %d, since trying to look below 0 for fewer hits read\n", whichSetPairToCheck);
-                    }
-#endif // _DEBUG
-                    setPairDone[whichSetPairToCheck] = true;
-                    whichSetPairToCheck = 1 - whichSetPairToCheck;
-                    continue;
-                }
-
-                maxLocation = intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithFewerHits - 1;
-            }
-
-
-
-            if (!setPair[whichSetPairToCheck][readWithFewerHits]->getNextHitLessThanOrEqualTo(maxLocation,
-                                                                   &intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithFewerHits,
-                                                                   &intersectionState[whichSetPairToCheck].lastSeedOffsetForReadWithFewerHits,
-																   &intersectionState[whichSetPairToCheck].bestPossibleScoreForReadWithFewerHits)) {
-                //
-                // Out of candidates on the read with fewer hits.  Stop looking at this set pair.
-                //
-                setPairDone[whichSetPairToCheck] = true;
-                whichSetPairToCheck = 1 - whichSetPairToCheck;
-            } else {
-                if (!setPairDone[1 - whichSetPairToCheck]) {
-                    whichSetPairToCheck = 1 - whichSetPairToCheck;
-                }
-            }
-#ifdef _DEBUG
-            if (_DumpAlignments) {
-                printf("Skipped ahead read with fewer hits to %u (ml %u)\n", intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithFewerHits, maxLocation);
-            }
-#endif // _DEBUG
-            continue;
-        }
-
-        //
-        // We've got two hits close enough to be mate pairs.  Score the hit on the read with fewer hits.
-        //
-        unsigned fewerHitScore;
-        double fewerHitProbability;
-        int genomeLocationOffset = 0;
-
-        result->nLVCalls++;
-        scoreLocation(readWithFewerHits, setPairDirection[whichSetPairToCheck][readWithFewerHits], smallReadHitGenomeLocation, 
-            intersectionState[whichSetPairToCheck].lastSeedOffsetForReadWithFewerHits, 
-            scoreLimit, &fewerHitScore, &fewerHitProbability, &genomeLocationOffset);
-
-        _ASSERT(fewerHitScore == -1 || fewerHitScore >= intersectionState[whichSetPairToCheck].bestPossibleScoreForReadWithFewerHits);
-
-#ifdef  _DEBUG
-        if (_DumpAlignments) {
-            printf("Set pair %d, possible mates at %u ( + %d) (scored %d with limit %d) and %u\n", whichSetPairToCheck, smallReadHitGenomeLocation, genomeLocationOffset,
-                fewerHitScore, scoreLimit, intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithMoreHits);
-        }
-#endif  // _DEBUG
-
-        if (-1 == fewerHitScore) {
-            //
-            // This location was too far off to be useful.  Skip to the next lower location, which might match the current set pair.
-            //
-            if (!setPair[whichSetPairToCheck][readWithFewerHits]->getNextLowerHit(&intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithFewerHits,
-                &intersectionState[whichSetPairToCheck].lastSeedOffsetForReadWithFewerHits, &intersectionState[whichSetPairToCheck].bestPossibleScoreForReadWithFewerHits)) {
-                //
-                // Out of candidates on the read with fewer hits.  Stop looking at this set pair.
-                //
-                setPairDone[whichSetPairToCheck] = true;
-                whichSetPairToCheck = 1 - whichSetPairToCheck;
-            } else {
-                if (!setPairDone[1 - whichSetPairToCheck]) {
-                    whichSetPairToCheck = 1 - whichSetPairToCheck;
-                }
-            }
-            continue;
-        } // If the location had a -1 score
-
-        hitLocations[whichSetPairToCheck]->trimAboveLocation(smallReadHitGenomeLocation + maxMergeDistance);
-        hitLocations[whichSetPairToCheck]->insertHead(smallReadHitGenomeLocation, intersectionState[whichSetPairToCheck].lastSeedOffsetForReadWithFewerHits, fewerHitScore, fewerHitProbability);
-
-        //
-        // Add potential mate pairs to the ring buffer.
-        //
-        while (intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithMoreHits >= minLocationToCheck) {
-            unsigned seedOffset;
-			unsigned bestPossibleScoreForReadWithMoreHits;
-            if (!setPair[whichSetPairToCheck][readWithMoreHits]->getNextLowerHit(&intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithMoreHits, &seedOffset,
-																				&bestPossibleScoreForReadWithMoreHits)) {
-                //
-                // We're out of hits for the mate pair candidate, but we still need to score what we've got.
-                //
-                break;
-            }
-
-            mateHitLocations[whichSetPairToCheck]->insertHead(intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithMoreHits, seedOffset, 
-				bestPossibleScoreForReadWithMoreHits);
-        } 
-
-        //
-        // Run through the saved mate hit locations.  For any that are in the appropriate range to be mate pairs, score them if they haven't already been scored, and
-        // consider them as match candidates.
-        //
-        unsigned index;
-        for (HitLocation *mateHitLocation = mateHitLocations[whichSetPairToCheck]->getTail(&index); NULL != mateHitLocation && mateHitLocation->genomeLocation >= minLocationToCheck; mateHitLocation = mateHitLocations[whichSetPairToCheck]->getNext(&index)) {
-            unsigned largerGenomeOffset = __max(mateHitLocation->genomeLocation, smallReadHitGenomeLocation);
-            unsigned smallerGenomeOffset = __min(mateHitLocation->genomeLocation, smallReadHitGenomeLocation);
-
-            unsigned delta = largerGenomeOffset - smallerGenomeOffset;
-            if (delta <= maxSpacing && delta >= minSpacing) {
-                //
-                // This is in a location that makes it a potential mate candidate.
-                //
-                if ((!mateHitLocation->isScored || mateHitLocation->score == -1 && mateHitLocation->maxK < scoreLimit - fewerHitScore) &&
-					mateHitLocation->bestPossibleScore <= scoreLimit - fewerHitScore) {
-                    //
-                    // It's not already scored (or scored -1 with too small of a score limit), and we can't rule out that
-					// it might have a low enough score, so score it.
-                    //
-                    result->nLVCalls++;
-                    mateHitLocation->genomeLocationOffset = 0;
-
-                    scoreLocation(readWithMoreHits, setPairDirection[whichSetPairToCheck][readWithMoreHits], mateHitLocation->genomeLocation, 
-                        mateHitLocation->seedOffset, scoreLimit - fewerHitScore, &mateHitLocation->score, &mateHitLocation->matchProbability,
-                        &mateHitLocation->genomeLocationOffset);
-
-                    mateHitLocation->isScored = true;
-                    mateHitLocation->maxK = scoreLimit - fewerHitScore;
-
-                    _ASSERT(mateHitLocation->score == -1 || mateHitLocation->score <= scoreLimit - fewerHitScore);
-                    _ASSERT(mateHitLocation->score == -1 || mateHitLocation->score >= mateHitLocation->bestPossibleScore);
-#ifdef  _DEBUG
-                    if (_DumpAlignments) {
-                        printf("Mate location at %u (+ %d) scored %d with score limit %d, total score %d, match probability %e, probability of all pairs %e, probability of best pair %e\n", 
-                            mateHitLocation->genomeLocation, mateHitLocation->genomeLocationOffset, mateHitLocation->score, scoreLimit - fewerHitScore, (mateHitLocation->score == -1) ? -1 : mateHitLocation->score + fewerHitScore,
-                            mateHitLocation->matchProbability, probabilityOfAllPairs, probabilityOfBestPair);
-                    }
-#endif  // _DEBUG
-                }
-
-                if (mateHitLocation->isScored && mateHitLocation->score != -1) {
-                    double pairProbability = mateHitLocation->matchProbability * fewerHitProbability;
-                    unsigned pairScore = mateHitLocation->score + fewerHitScore;
-                    //
-                    // See if this should be ignored as a merge, or if we need to back out a previously scored location
-                    // because it's a worse version of this location.
-                    //
-                    double oldPairProbability;
-                    if (!mergeAnchor[whichSetPairToCheck].checkMerge(smallReadHitGenomeLocation + genomeLocationOffset, 
-                                                                    mateHitLocation->genomeLocation + mateHitLocation->genomeLocationOffset, pairProbability,
-                                                                    pairScore, &oldPairProbability)) {
-                        //
-                        // Back out the probability of the old match that we're merged with, if any.  The max
-                        // is necessary because a + b - b is not necessarily a in floating point.  If there
-                        // was no merge, the oldPairProbability is 0.
-                        //
-                        probabilityOfAllPairs = __max(0, probabilityOfAllPairs - oldPairProbability);
-
-                        if (pairScore <= maxK && (pairScore < bestPairScore || pairScore == bestPairScore && pairProbability > probabilityOfBestPair)) {
-                            //
-                            // A new best hit.
-                            //
-                            bestPairScore = pairScore;
-                            probabilityOfBestPair = pairProbability;
-                            bestResultGenomeLocation[readWithFewerHits] = smallReadHitGenomeLocation + genomeLocationOffset;
-                            bestResultGenomeLocation[readWithMoreHits] = mateHitLocation->genomeLocation + mateHitLocation->genomeLocationOffset;
-                            bestResultScore[readWithFewerHits] = fewerHitScore;
-                            bestResultScore[readWithMoreHits] = mateHitLocation->score;
-                            bestResultDirection[readWithFewerHits] = setPairDirection[whichSetPairToCheck][readWithFewerHits];
-                            bestResultDirection[readWithMoreHits] = setPairDirection[whichSetPairToCheck][readWithMoreHits];
-
-                            scoreLimit = bestPairScore + extraSearchDepth;
-                        }
-
-                        probabilityOfAllPairs += pairProbability;
-#ifdef  _DEBUG
-                        if (_DumpAlignments) {
-                            printf("Added %e (= %e * %e) giving new probability of all pairs %e\n", 
-                                pairProbability, mateHitLocation->matchProbability, fewerHitProbability, probabilityOfAllPairs);
-                        }
-#endif  // _DEBUG
-
-                        if (probabilityOfAllPairs >= 4.9) {
-                            //
-                            // Nothing will rescue us from a 0 MAPQ, so just stop looking.
-                            //
-                            goto doneScoring;
-                        }
-                    }
-                } // If the mate candidate had a non -1 score
-            }
-        } // for each potential mate candidate
-
-        //
-        // Advance the lookup in the smaller read, and then loop around checking the other set pair.
-        //
-        if (!setPair[whichSetPairToCheck][readWithFewerHits]->getNextLowerHit(&intersectionState[whichSetPairToCheck].lastGenomeLocationForReadWithFewerHits,
-            &intersectionState[whichSetPairToCheck].lastSeedOffsetForReadWithFewerHits, &intersectionState[whichSetPairToCheck].bestPossibleScoreForReadWithFewerHits)) {
-            //
-            // Done with this set pair.
-            //
-            setPairDone[whichSetPairToCheck] = true;
-        }
-
-        if (!setPairDone[1 - whichSetPairToCheck]) {
-            whichSetPairToCheck = 1 - whichSetPairToCheck;
-        }
-    } // loop alternating set pairs over 
-#else   // New three-phase code
 
     //
     // Phase 2: find all possible candidates and add them to candidate lists (for the reads with fewer and more hits).
@@ -683,6 +361,8 @@ IntersectingPairedEndAligner::align(
 		unsigned			bestPossibleScoreForReadWithFewerHits;
         unsigned            lastSeedOffsetForReadWithMoreHits;
         unsigned            bestPossibleScoreForReadWithMoreHits;
+
+        bool                outOfMoreHitsLocations = false;
 
         //
         // Seed the intersection state by doing a first lookup.
@@ -742,7 +422,7 @@ IntersectingPairedEndAligner::align(
             //
 
             unsigned previousMoreHitsLocation = lastGenomeLocationForReadWithMoreHits;
-            while (lastGenomeLocationForReadWithMoreHits + maxSpacing >= lastGenomeLocationForReadWithFewerHits) {
+            while (lastGenomeLocationForReadWithMoreHits + maxSpacing >= lastGenomeLocationForReadWithFewerHits && !outOfMoreHitsLocations) {
                 _ASSERT(lowestFreeScoringMateCandidate[whichSetPair] < scoringCandidatePoolSize / NUM_SET_PAIRS);   // Because we allocated an upper bound number of them
 
                 scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair]].init(
@@ -763,6 +443,7 @@ IntersectingPairedEndAligner::align(
 
                 if (!setPair[readWithMoreHits]->getNextLowerHit(&lastGenomeLocationForReadWithMoreHits, &lastSeedOffsetForReadWithMoreHits, &bestPossibleScoreForReadWithMoreHits)) {
                     lastGenomeLocationForReadWithMoreHits = 0;
+                    outOfMoreHitsLocations = true;
                     break; // out of the loop looking for candidates on the more hits side.
                 }
             }
@@ -780,7 +461,7 @@ IntersectingPairedEndAligner::align(
                 lowestBestPossibleScoreOfAnyPossibleMate = __min(lowestBestPossibleScoreOfAnyPossibleMate, scoringMateCandidates[whichSetPair][i].bestPossibleScore);
             }
 
-            if (lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits <= maxK + maxSpacing) {
+            if (lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits <= maxK + extraSearchDepth) {
                 //
                 // There's a set of ends that we can't prove doesn't have too large of a score.  Allocate a fewer hit candidate and stick it in the
                 // correct weight list.
@@ -1011,10 +692,7 @@ IntersectingPairedEndAligner::align(
         //
         scoringCandidates[currentBestPossibleScoreList] = candidate->scoreListNext;
      }
-    
-#endif // 0
 
-     
 doneScoring:
 
     if (bestPairScore == 65536) {
