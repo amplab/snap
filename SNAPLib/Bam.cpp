@@ -71,7 +71,7 @@ BAMReader::init(
     }
     _ASSERT(context.headerBytes > 0);
     reinit(startingOffset, amountOfFileToProcess);
-    if (startingOffset < context.headerBytes) {
+    if ((size_t) startingOffset < context.headerBytes) {
         char* p;
         _int64 valid, start;
         bool ok = data->getData(&p, &valid, &start);

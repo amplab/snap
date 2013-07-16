@@ -743,6 +743,7 @@ SAMFormat::writeHeader(
     }
 
     if (context.header != NULL) {
+		bool hasRG = false;
         for (const char* p = context.header; p < context.header + context.headerLength; ) {
             const char* newline = strnchr(p, '\n', (context.header + context.headerLength) - p);
             if (newline == NULL) {
@@ -751,6 +752,7 @@ SAMFormat::writeHeader(
             _ASSERT(newline - p >= 3);
             // skip @HD lines, and also @SQ lines if header does not match index
             if (strncmp(p, "@HD", 3) != 0 && (context.headerMatchesIndex || strncmp(p, "@SQ", 3) != 0)) {
+				hasRG |= strncmp(p, "@RG", 3) == 0;
                 if (bytesConsumed + (newline - p) + 1 >= headerBufferSize) {
                     fprintf(stderr,"SAMWriter: header buffer too small\n");
                     return false;
@@ -761,6 +763,15 @@ SAMFormat::writeHeader(
             }
             p = newline + 1;
         }
+		if (! hasRG) {
+			int n = snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "%s\n",
+				rgLine == NULL ? "@RG\tID:FASTQ\tSM:sample" : rgLine);
+			if (n > headerBufferSize - bytesConsumed) {
+				fprintf(stderr, "SAMWriter: header buffer too small\n");
+                return false;
+            }
+			bytesConsumed += n;
+		}
     }
 #ifndef SKIP_SQ_LINES
     if (context.header == NULL || ! context.headerMatchesIndex) {

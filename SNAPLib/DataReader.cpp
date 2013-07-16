@@ -284,7 +284,7 @@ WindowsOverlappedDataReader::getData(
     _int64* o_validBytes,
     _int64* o_startBytes)
 {
-    _ASSERT(nextBufferForConsumer >= 0 && nextBufferForConsumer < nBuffers);
+    _ASSERT(nextBufferForConsumer >= 0 && nextBufferForConsumer < (int) nBuffers);
     BufferInfo *info = &bufferInfo[nextBufferForConsumer];
     if (info->isEOF && info->offset >= info->validBytes) {
         //
@@ -328,7 +328,7 @@ WindowsOverlappedDataReader::advance(
 WindowsOverlappedDataReader::nextBatch()
 {
     AcquireExclusiveLock(&lock);
-    _ASSERT(nextBufferForConsumer >= 0 && nextBufferForConsumer < nBuffers);
+    _ASSERT(nextBufferForConsumer >= 0 && nextBufferForConsumer < (int) nBuffers);
     BufferInfo* info = &bufferInfo[nextBufferForConsumer];
     if (info->isEOF) {
         ReleaseExclusiveLock(&lock);
