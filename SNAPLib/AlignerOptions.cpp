@@ -444,7 +444,7 @@ SNAPInput::createPairedReadSupplierGenerator(int numThreads, const ReaderContext
         return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, context);
         
     case GZipFASTQFile:
-        return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, context);
+        return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, context, true);
 
     default:
         _ASSERT(false);
@@ -467,7 +467,7 @@ SNAPInput::createReadSupplierGenerator(int numThreads, const ReaderContext& cont
         return FASTQReader::createReadSupplierGenerator(fileName, numThreads, context);
         
     case GZipFASTQFile:
-        return FASTQReader::createReadSupplierGenerator(fileName, numThreads, context);
+        return FASTQReader::createReadSupplierGenerator(fileName, numThreads, context, true);
 
     default:
         _ASSERT(false);
