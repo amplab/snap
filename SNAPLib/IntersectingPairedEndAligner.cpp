@@ -845,6 +845,13 @@ IntersectingPairedEndAligner::HashTableHitSet::recordLookup(unsigned seedOffset,
     lookups[nLookupsUsed].seedOffset = seedOffset;
 	lookups[nLookupsUsed].beginsDisjointHitSet = beginsDisjointHitSet;
 
+    //
+    // Trim off any hits that are smaller than seedOffset, since they are clearly meaningless.
+    //
+    while (lookups[nLookupsUsed].nHits > 0 && lookups[nLookupsUsed].hits[lookups[nLookupsUsed].nHits - 1] < lookups[nLookupsUsed].seedOffset) {
+        lookups[nLookupsUsed].nHits--;
+    }
+
     nLookupsUsed++;
 }
 
@@ -1016,6 +1023,7 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(unsig
 
 	if (anyFound) {
 		*bestPossibleScore = computeBestPossibleScoreForCurrentHit();
+        _ASSERT(*actualGenomeOffsetFound <= maxGenomeOffsetToFind);
      }
 
     return anyFound;
