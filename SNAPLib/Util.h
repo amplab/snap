@@ -481,12 +481,16 @@ struct IdPair
     {
         return a.value > b.value;
     }
-    IdPair()
-        : id(0), value(0)
-    {}
-    IdPair(unsigned i_id, unsigned i_value)
-        : id(i_id), value(i_value)
-    {}
+    IdPair() : id(0), value(0) {}
+    IdPair(unsigned i_id, unsigned i_value) : id(i_id), value(i_value){}
+    // for use as key in VariableSizeMap
+    IdPair(int i) : id((unsigned) i), value(0) {}
+    bool operator==(int x) const
+    { return id == (unsigned) x && value == 0; }
+    bool operator!=(int x) const
+    { return id != (unsigned) x || value != 0; }
+    operator _uint64()
+    { return (((_uint64) id) << 32) | (_uint32) value; }
 };
     
 struct IdIntPair
@@ -511,6 +515,14 @@ struct IdIntPair
     IdIntPair(unsigned i_id, int i_value)
         : id(i_id), value(i_value)
     {}
+    // for use as key in VariableSizeMap
+    IdIntPair(int i) : id((unsigned) i), value(0) {}
+    bool operator==(int x) const
+    { return id == (unsigned) x && value == 0; }
+    bool operator!=(int x) const
+    { return id != (unsigned) x || value != 0; }
+    operator _uint64()
+    { return (((_uint64) id) << 32) | (_uint32) value; }
 };
 
 } // namespace util
