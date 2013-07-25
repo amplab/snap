@@ -53,6 +53,8 @@ public:
 
     //
     // This looks up a seed and its reverse complement, and returns the number and list of hits for each.
+    // It guarantees that if the lookup succeeds that hits[-1] and rcHits[-1] are valid memory with 
+    // arbirtary values.
     //
     void lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits);
 

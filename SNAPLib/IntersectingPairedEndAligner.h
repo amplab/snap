@@ -100,7 +100,33 @@ private:
         unsigned        seedOffset;
         unsigned        nHits;
         const unsigned  *hits;
-		bool			beginsDisjointHitSet;
+        unsigned        whichDisjointHitSet;
+
+        //
+        // We keep the hash table lookups that haven't been exhaused in a circular list.
+        //
+        HashTableLookup *nextLookupWithRemainingMembers;
+        HashTableLookup *prevLookupWithRemainingMembers;
+
+        //
+        // State for handling the binary search of a location in this lookup.
+        // This would ordinarily be stack local state in the binary search
+        // routine, but because a) we want to interleave the steps of the binary
+        // search in order to allow cache prefetches to have time to execute;
+        // and b) we don't want to do dynamic memory allocation (really at all),
+        // it gets stuck here.
+        //
+        int limit[2];   // The upper and lower limits of the current binary search in hits
+        unsigned maxGenomeOffsetToFindThisSeed;
+        
+        //
+        // A linked list of lookups that haven't yet completed this binary search.  This is a linked
+        // list with no header element, so testing for emptiness needs to happen at removal time.
+        // It's done that way to avoid a comparison for list head that would result in a hard-to-predict
+        // branch.
+        //
+        HashTableLookup *nextLookupForCurrentBinarySearch;
+        HashTableLookup *prevLookupForCurrentBinarySearch;
 
         unsigned        currentHitForIntersection;
      };
@@ -134,29 +160,35 @@ private:
         // A HashTableHitSet only allows a single iteration through its address space per call to
         // init().
         //
-        bool    getNextHitLessThanOrEqualTo(unsigned maxGenomeOffsetToFind, unsigned *actualGenomeOffsetFound, unsigned *seedOffsetFound, unsigned *bestPossibleScore);
+        bool    getNextHitLessThanOrEqualTo(unsigned maxGenomeOffsetToFind, unsigned *actualGenomeOffsetFound, unsigned *seedOffsetFound);
 
         //
         // Walk down just one step, don't binary search.
         //
-        bool getNextLowerHit(unsigned *genomeLocation, unsigned *seedOffsetFound, unsigned *bestPossibleScore);
+        bool getNextLowerHit(unsigned *genomeLocation, unsigned *seedOffsetFound);
 
 
         //
         // Find the highest genome address.
         //
-        bool    getFirstHit(unsigned *genomeLocation, unsigned *seedOffsetFound, unsigned *bestPossibleScore);
+        bool    getFirstHit(unsigned *genomeLocation, unsigned *seedOffsetFound);
+
+		unsigned computeBestPossibleScoreForCurrentHit();
 
     private:
+        struct DisjointHitSet {
+            unsigned countOfExhaustedHits;
+            unsigned missCount;
+        };
 
+        int             currentDisjointHitSet;
+        DisjointHitSet  *disjointHitSets;
         HashTableLookup *lookups;
+        HashTableLookup lookupListHead[1];
         unsigned        maxSeeds;
         unsigned        nLookupsUsed;
         unsigned        mostRecentLocationReturned;
 		unsigned		maxMergeDistance;
-
-
-		unsigned computeBestPossibleScoreForCurrentHit();
     };
 
     HashTableHitSet *hashTableHitSets[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
@@ -278,21 +310,6 @@ private:
         HitLocation     *buffer;
     };
 
-#if 0
-
-    //
-    // Ring buffers to keep track of the recent hits in the smaller and mate reads.  The buffer for the smaller read is just used to
-    // check for hits to merge (i.e., places close enough together that we assume that they're just offsets caused by indels in the read
-    // and don't treat them as separate for purposes of computing MAPQ).  The mate buffer is much larger and is used to find potential
-    // mate candidates as well as for merging.
-    //
-
-    HitLocationRingBuffer    *hitLocations[NUM_SET_PAIRS];
-    HitLocationRingBuffer    *mateHitLocations[NUM_SET_PAIRS];
-
-#endif // 0
-
- 
     char *rcReadData[NUM_READS_PER_PAIR];                   // the reverse complement of the data for each read
     char *rcReadQuality[NUM_READS_PER_PAIR];                // the reversed quality strings for each read
     unsigned readLen[NUM_READS_PER_PAIR];

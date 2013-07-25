@@ -844,6 +844,14 @@ GenomeIndex::fillInLookedUpResults(
     unsigned        *nHits, 
     const unsigned **hits)
 {
+    //
+    // WARNING: the code in the IntersectingPairedEndAligner relies on being able to look at 
+    // hits[-1].  It doesn't care about the value, but it must not be a bogus pointer.  This
+    // is true with the current layout (where it will either be the hit count, the key or
+    // forward pointer in the hash table entry or some intermediate hit in the case where the
+    // search is constrained by minLocation/maxLocation).  If you change this, be sure to look
+    // at the code and fix it.
+    //
     if (*subEntry < genome->getCountOfBases()) {
         //
         // It's a singleton.

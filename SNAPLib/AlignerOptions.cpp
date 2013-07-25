@@ -66,11 +66,11 @@ AlignerOptions::AlignerOptions(
 {
     if (forPairedEnd) {
         maxDist             = 15;
-        seedCoverage        = 2.0;
+        seedCoverage        = 1.25;
         maxHits             = 100;
      } else {
         maxDist             = 14;
-        seedCoverage        = 2.0;
+        seedCoverage        = 1.25;
         maxHits             = 300;
     }
 
