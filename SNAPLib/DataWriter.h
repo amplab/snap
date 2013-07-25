@@ -39,6 +39,8 @@ public:
         CopyFilter, // copies data into new buffer, same size
         TransformFilter, // copies data into new buffer, possibly different size
     };
+    // single filter instance per thread
+    // points to filterSupplier for common data
     class Filter
     {
     public:
@@ -51,7 +53,7 @@ public:
 		// called to set whether we're writing a header vs. individual reads
 		virtual void inHeader(bool flag) {} // default do nothing
 
-        // called when a chunk of data has been written into the file
+        // called when a chunk of data (i.e. a single read) has been written into the file
         virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location) = 0;
 
         // called when a batch has been completed, after advancing to the next
@@ -61,6 +63,7 @@ public:
         virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes) = 0;
     };
     
+    // factory for per-thread filters
     class FilterSupplier
     {
     public:
