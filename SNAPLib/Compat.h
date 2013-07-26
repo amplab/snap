@@ -238,7 +238,7 @@ typedef void (*ThreadMainFunction) (void *threadMainFunctionParameter);
 bool StartNewThread(ThreadMainFunction threadMainFunction, void *threadMainFunctionParameter);
 void BindThreadToProcessor(unsigned processorNumber); // This hard binds a thread to a processor.  You can no-op it at some perf hit.
 #ifdef  _MSC_VER
-#define GetThreadId() GetCurrentThreadId();
+#define GetThreadId() GetCurrentThreadId()
 #else   // _MSC_VER
 #define GetThreadId() 0 // Fill this in later if you ever care.  For now, it's just for debugging/tuning
 #endif  // _MSC_VER

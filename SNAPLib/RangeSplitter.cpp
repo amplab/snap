@@ -66,12 +66,14 @@ bool RangeSplitter::getNextRange(_int64 *rangeStart, _int64 *rangeLength)
 
     _int64 amountToTake;
     if (numThreads == 1) {
-        amountToTake = rangeEnd;
+		amountToTake = rangeEnd;
     } else if (amountLeft >= (rangeEnd - rangeBegin) / divisionSize) {
         amountToTake = (rangeEnd - rangeBegin) / divisionSize / numThreads;
 	    if (amountToTake == 0) {
-	      amountToTake = amountLeft;
-	    }
+			amountToTake = amountLeft;
+	    } else {
+			amountToTake = min(amountLeft, max(amountToTake, (_int64) minRangeSize));
+		}
     } else {
         // Figure out units processed in minMillis ms per thread (keeping in mind we ran numThreads in total).
         _int64 unitsInMinms = (position - rangeBegin) * minMillis / max((_int64) (timeInMillis() - startTime) * numThreads, (_int64) 1);
@@ -107,7 +109,7 @@ RangeSplittingReadSupplierGenerator::RangeSplittingReadSupplierGenerator(
 {
     fileName = new char[strlen(i_fileName) + 1];
     strcpy(fileName, i_fileName);
-    splitter = new RangeSplitter(QueryFileSize(fileName),numThreads);
+	splitter = new RangeSplitter(QueryFileSize(fileName),numThreads, 5, 0, 200, 10*MAX_READ_LENGTH);
 }
 
 ReadSupplier *
