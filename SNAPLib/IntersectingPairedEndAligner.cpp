@@ -484,11 +484,11 @@ IntersectingPairedEndAligner::align(
 
                 lowestFreeScoringCandidatePoolEntry++;
                 maxUsedBestPossibleScoreList = max(maxUsedBestPossibleScoreList, lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits);
+            }
 
-                if (!setPair[readWithFewerHits]->getNextLowerHit(&lastGenomeLocationForReadWithFewerHits, &lastSeedOffsetForReadWithFewerHits)) {
-                    break;
-                }
-             }
+            if (!setPair[readWithFewerHits]->getNextLowerHit(&lastGenomeLocationForReadWithFewerHits, &lastSeedOffsetForReadWithFewerHits)) {
+                break;
+            }
         }
     } // For each set pair
 
@@ -522,7 +522,7 @@ IntersectingPairedEndAligner::align(
         scoreLocation(readWithFewerHits, setPairDirection[candidate->whichSetPair][readWithFewerHits], candidate->readWithFewerHitsGenomeLocation, 
             candidate->seedOffset, scoreLimit, &fewerEndScore, &fewerEndMatchProbability, &fewerEndGenomeLocationOffset);
 
-        _ASSERT(-1 == fewerEndScore || fewerEndScore >= candidate->bestPossibleScore);
+        //BJB _ASSERT(-1 == fewerEndScore || fewerEndScore >= candidate->bestPossibleScore);
 
 #ifdef _DEBUG
         if (_DumpAlignments) {
@@ -563,7 +563,7 @@ IntersectingPairedEndAligner::align(
                         }
 #endif // _DEBUG
 
-                        _ASSERT(-1 == mate->score || mate->score >= mate->bestPossibleScore);
+                        //BJB _ASSERT(-1 == mate->score || mate->score >= mate->bestPossibleScore);
 
                         mate->scoreLimit = scoreLimit - fewerEndScore;
                     }
@@ -1204,6 +1204,10 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(unsig
         unsigned maxGenomeOffsetToFindThisSeed = maxGenomeOffsetToFind + lookups[i].seedOffset;
         while (limit[0] <= limit[1]) {
             unsigned probe = (limit[0] + limit[1]) / 2;
+            if (doAlignerPrefetch) {
+                _mm_prefetch((const char *)&lookups[i].hits[(limit[0] + probe) / 2 - 1], _MM_HINT_T2);
+                _mm_prefetch((const char *)&lookups[i].hits[(limit[1] + probe) / 2 - 1], _MM_HINT_T2);
+            }
             //
             // Recall that the hit sets are sorted from largest to smallest, so the strange looking logic is actually right.
             // We're evaluating the expression "lookups[i].hits[probe] <= maxGenomeOffsetToFindThisSeed && (probe == 0 || lookups[i].hits[probe-1] > maxGenomeOffsetToFindThisSeed)"
