@@ -1217,8 +1217,8 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(unsig
             unsigned clause2 = probe == 0;
 
             if (clause1 && (clause2 || lookups[i].hits[probe-1] > maxGenomeOffsetToFindThisSeed)) {
-                anyFound = true;
                 if (lookups[i].hits[probe] - lookups[i].seedOffset >  bestOffsetFound) {
+					anyFound = true;
                     mostRecentLocationReturned = *actualGenomeOffsetFound = bestOffsetFound = lookups[i].hits[probe] - lookups[i].seedOffset;
                     *seedOffsetFound = lookups[i].seedOffset;
                 }

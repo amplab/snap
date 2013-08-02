@@ -562,25 +562,27 @@ BAMFormat::writeHeader(
 
     // Write a RefSeq record for each chromosome / piece in the genome
     // todo: handle null genome index case - reparse header & translate into BAM
-    const Genome::Piece *pieces = context.genome->getPieces();
-    int numPieces = context.genome->getNumPieces();
-    bamHeader->n_ref() = numPieces;
-    BAMHeaderRefSeq* refseq = bamHeader->firstRefSeq();
-    unsigned genomeLen = context.genome->getCountOfBases();
-    for (int i = 0; i < numPieces; i++) {
-        int len = (int)strlen(pieces[i].name) + 1;
-        cursor += BAMHeaderRefSeq::size(len);
-        if (cursor > headerBufferSize) {
-            return false;
-        }
-        refseq->l_name = len;
-        memcpy(refseq->name(), pieces[i].name, len);
-        unsigned start = pieces[i].beginningOffset;
-        unsigned end = (i + 1 < numPieces) ? pieces[i+1].beginningOffset : genomeLen;
-        refseq->l_ref() = end - start;
-        refseq = refseq->next();
-        _ASSERT((char*) refseq - header == cursor);
-    }
+	if (context.genome != NULL) {
+		const Genome::Piece *pieces = context.genome->getPieces();
+		int numPieces = context.genome->getNumPieces();
+		bamHeader->n_ref() = numPieces;
+		BAMHeaderRefSeq* refseq = bamHeader->firstRefSeq();
+		unsigned genomeLen = context.genome->getCountOfBases();
+		for (int i = 0; i < numPieces; i++) {
+			int len = (int)strlen(pieces[i].name) + 1;
+			cursor += BAMHeaderRefSeq::size(len);
+			if (cursor > headerBufferSize) {
+				return false;
+			}
+			refseq->l_name = len;
+			memcpy(refseq->name(), pieces[i].name, len);
+			unsigned start = pieces[i].beginningOffset;
+			unsigned end = (i + 1 < numPieces) ? pieces[i+1].beginningOffset : genomeLen;
+			refseq->l_ref() = end - start;
+			refseq = refseq->next();
+			_ASSERT((char*) refseq - header == cursor);
+		}
+	}
     *headerActualSize = cursor;
     return true;
 }
@@ -1311,7 +1313,7 @@ public:
         lastRefId(-1),
         lastBin(0), binStart(0), lastBamEnd(0)
     {
-        refs = new RefInfo[genome->getNumPieces()];
+        refs = genome ? new RefInfo[genome->getNumPieces()] : NULL;
         readCounts[0] = readCounts[1] = 0;
     }
     

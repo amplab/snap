@@ -424,7 +424,7 @@ SAMReader::parsePieceName(
     pieceName[fieldLength[rfield]] = '\0';
 
     *o_offsetOfPiece = 0;
-    if ('*' != pieceName[0] && !genome->getOffsetOfPiece(pieceName,o_offsetOfPiece, o_indexOfPiece)) {
+    if ('*' != pieceName[0] && genome != NULL && !genome->getOffsetOfPiece(pieceName,o_offsetOfPiece, o_indexOfPiece)) {
         //fprintf(stderr,"Unable to find piece '%s' in genome.  SAM file malformed.\n",pieceName);
         //soft_exit(1);
     }
@@ -774,7 +774,7 @@ SAMFormat::writeHeader(
 		}
     }
 #ifndef SKIP_SQ_LINES
-    if (context.header == NULL || ! context.headerMatchesIndex) {
+    if ((context.header == NULL || ! context.headerMatchesIndex) && context.genome != NULL) {
         // Write an @SQ line for each chromosome / piece in the genome
         const Genome::Piece *pieces = context.genome->getPieces();
         int numPieces = context.genome->getNumPieces();
