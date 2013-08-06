@@ -19,7 +19,7 @@ Environment:
 #include "stdafx.h"
 #include "BigAlloc.h"
 #include "Compat.h"
-#include "util.h"
+#include "Util.h"
 #include "DataWriter.h"
 #include "BufferedAsync.h"
 #include "VariableSizeVector.h"
