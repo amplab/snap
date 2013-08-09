@@ -19,6 +19,7 @@ Environment:
 #include "stdafx.h"
 #include "BigAlloc.h"
 #include "Compat.h"
+#include "Util.h"
 #include "DataWriter.h"
 #include "BufferedAsync.h"
 #include "VariableSizeVector.h"
@@ -28,6 +29,8 @@ Environment:
 
 #define USE_DEVTEAM_OPTIONS 1
 //#define VALIDATE_SORT 1
+
+using std::max;
 
 #pragma pack(push, 4)
 struct SortEntry
@@ -313,7 +316,7 @@ SortedDataFilterSupplier::mergeSort()
     const DataSupplier* readerSupplier = DataSupplier::Default[true]; // autorelease
     // setup - open all files, read first block, begin read for second
     for (SortBlockVector::iterator i = blocks.begin(); i != blocks.end(); i++) {
-        i->reader = readerSupplier->getDataReader(8192); // todo: parameterize max read len
+        i->reader = readerSupplier->getDataReader(MAX_READ_LENGTH * 8); // todo: standardize max length
         i->reader->init(tempFileName);
         i->reader->reinit(i->start, i->bytes);
     }
@@ -468,7 +471,7 @@ DataWriterSupplier::sorted(
     const int bufferCount = 3;
     const size_t bufferSize = tempBufferMemory > 0
         ? tempBufferMemory / (bufferCount * numThreads)
-        : max((size_t) 16 * 1024 * 1024, ((size_t) genome->getCountOfBases() / 3) / bufferCount);
+        : max((size_t) 16 * 1024 * 1024, ((size_t) (genome ? genome->getCountOfBases() : 0) / 3) / bufferCount);
     DataWriter::FilterSupplier* filterSupplier =
         new SortedDataFilterSupplier(format, genome, tempFileName, sortedFileName, sortedFilterSuppler);
     return DataWriterSupplier::create(tempFileName, filterSupplier, bufferCount, bufferSize);

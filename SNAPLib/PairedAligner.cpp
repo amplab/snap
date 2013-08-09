@@ -595,7 +595,7 @@ PairedAlignerContext::typeSpecificBeginIteration()
     ReaderContext context;
     context.clipping = options->clipping;
     context.defaultReadGroup = options->defaultReadGroup;
-    context.genome = index->getGenome();
+    context.genome = index ? index->getGenome() : NULL;
     context.paired = true;
     context.header = NULL;
     options->inputs[0].readHeader(context);

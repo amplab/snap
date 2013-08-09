@@ -21,7 +21,6 @@ Revision History:
 
 --*/
 
-#pragma once
 #include "stdafx.h"
 #include "Read.h"
 #include "Compat.h"
