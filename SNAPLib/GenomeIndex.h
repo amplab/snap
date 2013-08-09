@@ -44,9 +44,9 @@ public:
     //
     static bool BuildIndexToDirectory(const Genome *genome, int seedLen, double slack,
                                       bool computeBias, const char *directory, _uint64 overflowTableFactor,
-                                      unsigned maxThreads, const char *histogramFileName = NULL);
+                                      unsigned maxThreads, unsigned chromosomePaddingSize, 
+                                      const char *histogramFileName = NULL);
 
-    bool saveToDirectory(char *directoryName);
     static GenomeIndex *loadFromDirectory(char *directoryName);
 
     inline const Genome *getGenome() {return genome;}
@@ -83,6 +83,9 @@ public:
         int seedLen, double* biasTable = NULL);
     
 private:
+
+    static const unsigned GenomeIndexFormatMajorVersion = 1;
+    static const unsigned GenomeIndexFormatMinorVersion = 0;
     
     static double GetHashTableSizeBias(unsigned whichTable, int seedSize);
 

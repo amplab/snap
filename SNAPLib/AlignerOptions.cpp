@@ -70,7 +70,7 @@ AlignerOptions::AlignerOptions(
         maxHits             = 100;
      } else {
         maxDist             = 14;
-        seedCoverage        = 1.25;
+        seedCoverage        = 2;
         maxHits             = 300;
     }
 
@@ -88,12 +88,12 @@ AlignerOptions::usage()
 AlignerOptions::usageMessage()
 {
     fprintf(stderr,
-        "Usage: %s\n"
+        "Usage: \n%s\n"
         "Options:\n"
-        "  -o filename  output alignments to filename in SAM format\n"
+        "  -o   filename  output alignments to filename in SAM or BAM format, depending on the file extension\n"
         "  -d   maximum edit distance allowed per read or pair (default: %d)\n"
         "  -n   number of seeds to use per read\n"
-        "  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default: %lf)\n",
+        "  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default: %lf)\n"
         "  -h   maximum hits to consider per seed (default: %d)\n"
         "  -c   Deprecated parameter; this is ignored.  Consumes one extra arg.\n"
         "  -a   Deprecated parameter; this is ignored.  Consumes one extra arg.\n"

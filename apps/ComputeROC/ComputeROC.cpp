@@ -85,8 +85,10 @@ WorkerThreadMain(void *param)
     rcontext.genome = genome;
     rcontext.paired = false;
     rcontext.defaultReadGroup = "";
+    rcontext.header = NULL;
     while (rangeSplitter->getNextRange(&rangeStart, &rangeLength)) {
         if (NULL == samReader) {
+            SAMReader::readHeader(inputFileName, rcontext);
             samReader = SAMReader::create(DataSupplier::Default[true], inputFileName, rcontext, rangeStart, rangeLength);
         } else {
             ((ReadReader *)samReader)->reinit(rangeStart, rangeLength);
@@ -321,7 +323,7 @@ int main(int argc, char * argv[])
 	size_t filenameLen = strlen(argv[1]) + 1 + strlen(genomeSuffix) + 1;
 	char *fileName = new char[strlen(argv[1]) + 1 + strlen(genomeSuffix) + 1];
 	snprintf(fileName,filenameLen,"%s%c%s",argv[1],PATH_SEP,genomeSuffix);
-	genome = Genome::loadFromFile(fileName); 
+	genome = Genome::loadFromFile(fileName, 0);
 	if (NULL == genome) {
 		fprintf(stderr,"Unable to load genome from file '%s'\n",fileName);
 		return -1;

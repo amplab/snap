@@ -203,7 +203,7 @@ void WaitForEvent(EventObject *eventObject) {WaitForSingleWaiterObject(eventObje
 
 void BindThreadToProcessor(unsigned processorNumber) // This hard binds a thread to a processor.  You can no-op it at some perf hit.
 {
-    if (!SetThreadAffinityMask(GetCurrentThread(),1 << processorNumber)) {
+    if (!SetThreadAffinityMask(GetCurrentThread(),((unsigned _int64)1) << processorNumber)) {
         fprintf(stderr,"Binding thread to processor %d failed, %d\n",processorNumber,GetLastError());
     }
 }

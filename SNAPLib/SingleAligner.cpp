@@ -109,6 +109,12 @@ SingleAlignerContext::parseOptions(
         }
     }
     
+    if (options->maxDist.end + options->extraSearchDepth > MAX_K) {
+        fprintf(stderr,"You specified too large of a maximum edit distance combined with extra search depth.  The must add up to no more than %d.\n", MAX_K);
+        fprintf(stderr,"Either reduce their sum, or change MAX_K in LandauVishkin.h and recompile.\n");
+        soft_exit(1);
+    }
+
     *argsConsumed = n;
     return options;
 }

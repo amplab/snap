@@ -39,6 +39,7 @@ using namespace std;
 
 static const int DEFAULT_SEED_SIZE = 20;
 static const double DEFAULT_SLACK = 0.3;
+static const unsigned DEFAULT_PADDING = 500;
 
 
 static void usage()
@@ -54,9 +55,13 @@ static void usage()
             "                   footprint, but may cause the index build to fail.  Making -O larger than necessary will not affect the resuting\n"
             "                   index.  Factor must be between 1 and 1000, and the default is 40.\n"
             " -tMaxThreads      Specify the maximum number of threads to use. Default is the number of cores.\n"
+            " -pPadding         Specify the number of Ns to put as padding between chromosomes.  This must be as large as the largest\n"
+            "                   edit distance you'll ever use, and there's a performance advantage to have it be bigger than any\n"
+            "                   read you'll process.  Default is %d\n"
             " -HHistogramFile   Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n",
             DEFAULT_SEED_SIZE,
-            DEFAULT_SLACK);
+            DEFAULT_SLACK,
+            DEFAULT_PADDING);
     soft_exit(1);
 }
 
@@ -80,6 +85,7 @@ GenomeIndex::runIndexer(
     bool computeBias = true;
     _uint64 overflowTableFactor = 40;
     const char *histogramFileName = NULL;
+    unsigned chromosomePadding = DEFAULT_PADDING;
 
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
@@ -114,6 +120,12 @@ GenomeIndex::runIndexer(
                 fprintf(stderr,"maxThreads must be between 1 and 100 inclusive (and you need to not leave a space after '-t')\n");
                 soft_exit(1);
             }
+        } else if (argv[n][0] == '-' && argv[n][1] == 'p') {
+            chromosomePadding = atoi(argv[n]+2);
+            if (0 == chromosomePadding) {
+                fprintf(stderr,"Invalid chromosome padding specified, must be at least one (and in practice as large as any max edit distance you might use).\n");
+                soft_exit(1);
+            }
         } else {
             fprintf(stderr, "Invalid argument: %s\n\n", argv[n]);
             usage();
@@ -129,14 +141,14 @@ GenomeIndex::runIndexer(
 
     printf("Hash table slack %lf\nLoading FASTA file '%s' into memory...", slack, fastaFile);
     _int64 start = timeInMillis();
-    const Genome *genome = ReadFASTAGenome(fastaFile);
+    const Genome *genome = ReadFASTAGenome(fastaFile, chromosomePadding);
     if (NULL == genome) {
         fprintf(stderr, "Unable to read FASTA file\n");
         soft_exit(1);
     }
     printf("%llds\n", (timeInMillis() + 500 - start) / 1000);
     unsigned nBases = genome->getCountOfBases();
-    if (!GenomeIndex::BuildIndexToDirectory(genome, seedLen, slack, computeBias, outputDir, overflowTableFactor, maxThreads, histogramFileName)) {
+    if (!GenomeIndex::BuildIndexToDirectory(genome, seedLen, slack, computeBias, outputDir, overflowTableFactor, maxThreads, chromosomePadding, histogramFileName)) {
         fprintf(stderr, "Genome index build failed\n");
         soft_exit(1);
     }
@@ -201,7 +213,7 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
 
     bool
 GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double slack, bool computeBias, const char *directoryName, _uint64 overflowTableFactor,
-                                    unsigned maxThreads, const char *histogramFileName)
+                                    unsigned maxThreads, unsigned chromosomePaddingSize, const char *histogramFileName)
 {
     bool buildHistogram = (histogramFileName != NULL);
     FILE *histogramFile;
@@ -499,7 +511,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 
     //
     // The save format is:
-    //  file 'GenomeIndex' contains in order nHashTables, overflowTableSize, seedLen.
+    //  file 'GenomeIndex' contains in order major version, minor version, nHashTables, overflowTableSize, seedLen, chromosomePaddingSize.
     //  File 'overflowTable' overflowTableSize bytes of the overflow table.
     //  Each hash table is saved in file base name 'GenomeIndexHash%d' where %d is the
     //  table number.
@@ -513,7 +525,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         return false;
     }
 
-    fprintf(indexFile,"%d %d %d",index->nHashTables, index->overflowTableSize, seedLen);
+    fprintf(indexFile,"%d %d %d %d %d %d", GenomeIndexFormatMajorVersion, GenomeIndexFormatMinorVersion, index->nHashTables, index->overflowTableSize, seedLen, chromosomePaddingSize);
 
     fclose(indexFile);
 
@@ -704,13 +716,24 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     }
 
     unsigned seedLen;
-    if (3 != fscanf(indexFile,"%d %d %d",&index->nHashTables, &index->overflowTableSize, &seedLen)) {
-        fprintf(stderr,"GenomeIndex::LoadFromDirectory: didn't read initial values\n");
+    unsigned majorVersion, minorVersion, chromosomePadding;
+    int nRead;
+    if (6 != (nRead = fscanf(indexFile,"%d %d %d %d %d %d", &majorVersion, &minorVersion, &index->nHashTables, &index->overflowTableSize, &seedLen, &chromosomePadding))) {
+        if (3 == nRead) {
+            fprintf(stderr, "Indices built by versions before 0.16.25 are no longer supported.  Please rebuild your index.\n");
+        } else {
+            fprintf(stderr,"GenomeIndex::LoadFromDirectory: didn't read initial values\n");
+        }
         fclose(indexFile);
         delete index;
         return NULL;
     }
     fclose(indexFile);
+
+    if (majorVersion != GenomeIndexFormatMajorVersion) {
+        fprintf(stderr,"This genome index appears to be from a newer version of SNAP than this, and so we can't read it.  Index version %d, SNAP index format version %d\n",
+            majorVersion, GenomeIndexFormatMajorVersion);
+    }
 
     if (0 == seedLen) {
         fprintf(stderr,"GenomeIndex::LoadFromDirectory: saw seed size of 0.\n");
@@ -769,7 +792,7 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     }
 
     snprintf(filenameBuffer,filenameBufferSize,"%s%cGenome",directoryName,PATH_SEP);
-    if (NULL == (index->genome = Genome::loadFromFile(filenameBuffer))) {
+    if (NULL == (index->genome = Genome::loadFromFile(filenameBuffer, chromosomePadding))) {
         fprintf(stderr,"GenomeIndex::loadFromDirectory: Failed to load the genome itself\n");
         delete index;
         return NULL;

@@ -177,7 +177,7 @@ void main(int argc, char * argv[])
 
     _int64 start = timeInMillis();
     printf("Loading genome...");
-    genome = Genome::loadFromFile(pathname);
+    genome = Genome::loadFromFile(pathname, 0);
     if (NULL == genome) {
         fprintf(stderr,"Unable to load genome from file '%s'\n",pathname);
         soft_exit(1);

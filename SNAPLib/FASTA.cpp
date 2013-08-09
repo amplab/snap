@@ -29,7 +29,7 @@ Revision History:
 using namespace std;
 
     const Genome *
-ReadFASTAGenome(const char *fileName)
+ReadFASTAGenome(const char *fileName, unsigned chromosomePaddingSize)
 {
     //
     // We need to know a bound on the size of the genome before we create the Genome object.
@@ -43,20 +43,45 @@ ReadFASTAGenome(const char *fileName)
         return NULL;
     }
 
-    Genome *genome = new Genome((unsigned) fileSize, (unsigned)fileSize);
-
     FILE *fastaFile = fopen(fileName, "r");
     if (fastaFile == NULL) {
         fprintf(stderr,"Unable to open FASTA file '%s' (even though we already got its size)\n",fileName);
-        delete genome;
         return NULL;
     }
 
     const size_t lineBufferSize = 4096;
     char lineBuffer[lineBufferSize];
 
+    //
+    // Count the chromosomes
+    //
+    unsigned nChromosomes = 0;
+
     while (NULL != fgets(lineBuffer,lineBufferSize,fastaFile)) {
         if (lineBuffer[0] == '>') {
+            nChromosomes++;
+        }
+    }
+    rewind(fastaFile);
+
+    Genome *genome = new Genome((unsigned) fileSize + (nChromosomes+1) * chromosomePaddingSize, (unsigned)fileSize + (nChromosomes+1) * chromosomePaddingSize);
+
+    char *paddingBuffer = new char[chromosomePaddingSize+1];
+    for (unsigned i = 0; i < chromosomePaddingSize; i++) {
+        paddingBuffer[i] = 'n';
+    }
+    paddingBuffer[chromosomePaddingSize] = '\0';
+
+    while (NULL != fgets(lineBuffer,lineBufferSize,fastaFile)) {
+        if (lineBuffer[0] == '>') {
+            //
+            // A new chromosome.  Add in the padding first.
+            //
+            genome->addData(paddingBuffer);
+
+            //
+            // Now supply the chromosome name.
+            //
             char* space = strchr(lineBuffer, ' ');
             char* tab = strchr(lineBuffer, '\t');
             char* end = space !=NULL ? (tab != NULL ? min(space, tab) : space)
@@ -94,7 +119,13 @@ ReadFASTAGenome(const char *fileName)
         }
     }
 
+    //
+    // And finally add padding at the end of the genome.
+    //
+    genome->addData(paddingBuffer);
+
     fclose(fastaFile);
+    delete [] paddingBuffer;
     return genome;
 }
 

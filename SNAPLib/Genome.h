@@ -51,6 +51,7 @@ public:
 
         void addData(const char *data, size_t len);
 
+        const unsigned getChromosomePadding() {return chromosomePadding;}
 
         ~Genome();
 
@@ -62,7 +63,7 @@ public:
         //
         // minOffset and length are used to read in only a part of a whole genome.
         //
-        static const Genome *loadFromFile(const char *fileName, unsigned i_minOffset = 0, unsigned length = 0);  
+        static const Genome *loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned i_minOffset = 0, unsigned length = 0);  
                                                                   // This loads from a genome save
                                                                   // file, not a FASTA file.  Use
                                                                   // FASTA.h for FASTA loads.
@@ -80,9 +81,14 @@ public:
                 return NULL;
             }
 
+            if (lengthNeeded <= chromosomePadding) {
+                return bases + (offset - minOffset);
+            }
+
             _ASSERT(offset >= minOffset && offset + lengthNeeded <= maxOffset + N_PADDING); // If the caller asks for a genome slice, it's only legal to look within it.
+
             if (lengthNeeded == 0) {
-                return bases + offset - minOffset;
+                return bases + (offset - minOffset);
             }
 
             //
@@ -192,6 +198,8 @@ private:
         static bool openFileAndGetSizes(const char *filename, FILE **file, unsigned *nBases, unsigned *nPieces);
 
         void sortPiecesByName();
+
+        unsigned chromosomePadding;
 };
 
 unsigned DistanceBetweenGenomeLocations(unsigned locationA, unsigned locationB);

@@ -293,7 +293,8 @@ Return Value:
     // A bitvector for used seeds, indexed on the starting location of the seed within the read.
     //
     if (inputRead->getDataLength() > maxReadSize) {
-        fprintf(stderr,"BaseAligner:: got too big read (%d > %d)", inputRead->getDataLength(), maxReadSize);
+        fprintf(stderr,"BaseAligner:: got too big read (%d > %d)\n", inputRead->getDataLength(), maxReadSize);
+        fprintf(stderr,"Increase MAX_READ_LENGTH at the beginning of Read.h and recompile\n");
         soft_exit(1);
     }
 
@@ -556,10 +557,22 @@ Return Value:
             } // not too popular
         }   // directions 
 
-        //
-        // Move us along.
-        //
+#if 1
         nextSeedToTest += seedLen;
+#else   // 0
+
+        //
+        // If we don't have enough seeds left to reach the end of the read, space out the seeds more-or-less evenly.
+        //
+        if ((maxSeedsToUse - (nSeedsApplied[FORWARD] + nSeedsApplied[RC]) + 1) * seedLen + nextSeedToTest < nPossibleSeeds) {
+            _ASSERT((nPossibleSeeds + nextSeedToTest) / (maxSeedsToUse - (nSeedsApplied[FORWARD] + nSeedsApplied[RC]) + 1) > seedLen);
+            nextSeedToTest += (nPossibleSeeds + nextSeedToTest) / (maxSeedsToUse - (nSeedsApplied[FORWARD] + nSeedsApplied[RC]) + 1);
+        } else {
+            nextSeedToTest += seedLen;
+        }
+        
+#endif // 0
+
 
         if (appliedEitherSeed) {
             //

@@ -37,8 +37,8 @@ Genome::Genome(unsigned i_maxBases, unsigned nBasesStored) : maxBases(i_maxBases
     }
 
     // Add N's for the N_PADDING bases before and after the genome itself
-    memset(bases - N_PADDING, 'N', N_PADDING);
-    memset(bases + nBasesStored, 'N', N_PADDING);
+    memset(bases - N_PADDING, 'n', N_PADDING);
+    memset(bases + nBasesStored, 'n', N_PADDING);
 
     nBases = 0;
 
@@ -158,7 +158,7 @@ Genome::saveToFile(const char *fileName) const
 }
 
     const Genome *
-Genome::loadFromFile(const char *fileName, unsigned i_minOffset, unsigned length)
+Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned i_minOffset, unsigned length)
 {    
     FILE *loadFile;
     unsigned nBases,nPieces;
@@ -185,6 +185,7 @@ Genome::loadFromFile(const char *fileName, unsigned i_minOffset, unsigned length
     genome->nPieces = genome->maxPieces = nPieces;
     genome->pieces = new Piece[nPieces];
     genome->minOffset = i_minOffset;
+    genome->chromosomePadding = chromosomePadding;
     if (i_minOffset >= nBases) {
         fprintf(stderr,"Genome::loadFromFile: specified minOffset %u >= nBases %u\n",i_minOffset,nBases);
     }

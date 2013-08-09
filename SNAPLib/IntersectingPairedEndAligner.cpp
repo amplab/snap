@@ -208,7 +208,8 @@ IntersectingPairedEndAligner::align(
         }
 
         if (readLen[whichRead] > maxReadSize) {
-            fprintf(stderr,"IntersectingPairedEndAligner:: got too big read (%d > %d)", readLen[whichRead], maxReadSize);
+            fprintf(stderr,"IntersectingPairedEndAligner:: got too big read (%d > %d)\n", readLen[whichRead], maxReadSize);
+            fprintf(stderr,"Change MAX_READ_LENTH at the beginning of Read.h and recompile.\n");
             soft_exit(1);
         }
 
@@ -325,7 +326,15 @@ IntersectingPairedEndAligner::align(
                 }
             }
 
-            nextSeedToTest += seedLen;
+            //
+            // If we don't have enough seeds left to reach the end of the read, space out the seeds more-or-less evenly.
+            //
+            if ((maxSeeds - countOfHashTableLookups[whichRead] + 1) * seedLen + nextSeedToTest < nPossibleSeeds) {
+                _ASSERT((nPossibleSeeds + nextSeedToTest) / (maxSeeds - countOfHashTableLookups[whichRead] + 1) > seedLen);
+                nextSeedToTest += (nPossibleSeeds + nextSeedToTest) / (maxSeeds - countOfHashTableLookups[whichRead] + 1);
+            } else {
+                nextSeedToTest += seedLen;
+            }
         } // while we need to lookup seeds for this read
     } // for each read
 
@@ -522,7 +531,7 @@ IntersectingPairedEndAligner::align(
         scoreLocation(readWithFewerHits, setPairDirection[candidate->whichSetPair][readWithFewerHits], candidate->readWithFewerHitsGenomeLocation, 
             candidate->seedOffset, scoreLimit, &fewerEndScore, &fewerEndMatchProbability, &fewerEndGenomeLocationOffset);
 
-        //BJB _ASSERT(-1 == fewerEndScore || fewerEndScore >= candidate->bestPossibleScore);
+        _ASSERT(-1 == fewerEndScore || fewerEndScore >= candidate->bestPossibleScore);
 
 #ifdef _DEBUG
         if (_DumpAlignments) {
@@ -563,7 +572,7 @@ IntersectingPairedEndAligner::align(
                         }
 #endif // _DEBUG
 
-                        //BJB _ASSERT(-1 == mate->score || mate->score >= mate->bestPossibleScore);
+                        _ASSERT(-1 == mate->score || mate->score >= mate->bestPossibleScore);
 
                         mate->scoreLimit = scoreLimit - fewerEndScore;
                     }

@@ -362,12 +362,19 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
         if (!options->parse(argv, argc, i, &done)) {
             options->usage();
         }
+
         if (done) {
             i++;    // For the ',' arg
             break;
         }
     }
 
+    if (options->maxDist.end + options->extraSearchDepth > MAX_K) {
+        fprintf(stderr,"You specified too large of a maximum edit distance combined with extra search depth.  The must add up to no more than %d.\n", MAX_K);
+        fprintf(stderr,"Either reduce their sum, or change MAX_K in LandauVishkin.h and recompile.\n");
+        soft_exit(1);
+    }
+        
     *argsConsumed = i;
     return options;
 }
