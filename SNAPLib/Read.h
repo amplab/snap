@@ -41,9 +41,9 @@ enum AlignmentResult {NotFound, SingleHit, MultipleHits, UnknownAlignment}; // B
 
 bool isAValidAlignmentResult(AlignmentResult result);
 // constant for small/medium/large reads
-//#define MAX_READ_LENGTH 300
+#define MAX_READ_LENGTH 300
 //#define MAX_READ_LENGTH 1000
-#define MAX_READ_LENGTH 20000
+///#define MAX_READ_LENGTH 20000
 
 //
 // Here's a brief description of the classes for input in SNAP:
@@ -480,6 +480,8 @@ public:
             data = localUnclippedDataBuffer + frontClippedLength;
             quality = localUnclippedQualityBuffer + frontClippedLength;
         }
+
+		static void checkIdMatch(Read* read0, Read* read1);
 
 private:
 

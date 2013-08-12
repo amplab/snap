@@ -68,6 +68,8 @@ protected:
     unsigned            intersectingAlignerMaxHits;
     const char         *fastqFile1;
     bool                ignoreMismatchedIDs;
+
+	friend class AlignerContext2;
 };
 
 struct PairedAlignerOptions : public AlignerOptions
