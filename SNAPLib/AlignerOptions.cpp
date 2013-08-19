@@ -93,7 +93,7 @@ AlignerOptions::usageMessage()
         "  -o filename  output alignments to filename in SAM format\n"
         "  -d   maximum edit distance allowed per read or pair (default: %d)\n"
         "  -n   number of seeds to use per read\n"
-        "  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default: %lf)\n",
+        "  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default: %lf)\n"
         "  -h   maximum hits to consider per seed (default: %d)\n"
         "  -c   Deprecated parameter; this is ignored.  Consumes one extra arg.\n"
         "  -a   Deprecated parameter; this is ignored.  Consumes one extra arg.\n"
