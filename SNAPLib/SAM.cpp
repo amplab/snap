@@ -154,7 +154,7 @@ SAMReader::readHeader(
 SAMReader::SAMReader(
     DataReader* i_data,
     const ReaderContext& i_context)
-    : ReadReader(i_context), data(i_data), headerSize(-1)
+    : ReadReader(i_context), data(i_data), headerSize(-1), clipping(i_context.clipping)
 {
 }
 
