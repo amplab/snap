@@ -893,7 +893,7 @@ GzipDataReader::decompress(
     }
     return zstream.avail_in == 0;
 }
-    
+  
     void
 GzipDataReader::decompressBatch()
 {
@@ -925,7 +925,7 @@ GzipDataReader::decompressBatch()
         soft_exit(1);
     }
     validBytes += priorBytes; // add back offset
-    //printf("file offset %lld decompress %lld -> %lld bytes, carry over %lld\n", fileOffset, compressedBytes, validBytes - priorBytes, priorBytes);
+    //printf("file offset %lld decompress %lld -> %lld bytes @ %llx, carry over %lld batch %d:%d\n", fileOffset, compressedBytes, validBytes - priorBytes, (_uint64) uncompressed, priorBytes, inner->getBatch().fileID, inner->getBatch().batchID); fflush(stdout);
     startBytes = inner->isEOF() ? validBytes : validBytes - overflowBytes ;
     inner->advance(compressedBytes);
     offset = 0;

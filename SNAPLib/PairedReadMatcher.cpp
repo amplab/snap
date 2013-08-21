@@ -60,6 +60,10 @@ private:
     _int64 overflowMatched;
     // used only if ! autoRelease:
     bool dependents; // true if pairs from 0->1
+    // manage inter-batch dependencies
+    // newer depends on older (i.e. only release older after newer)
+    // erase forward if older released first
+    // erase both if newer released first
     ExclusiveLock lock; // exclusive access to forward/backward
     typedef VariableSizeMap<DataBatch::Key,DataBatch> BatchMap;
     BatchMap forward; // dependencies from older batch (was unmatched) -> newer batch
@@ -152,7 +156,7 @@ PairedReadMatcher::getNextReadPair(
                 OverflowMap::iterator found2 = overflow.find(key);
                 if (found2 == overflow.end()) {
                     // no match, remember it for later matching
-	                unmatched[0].put(key, one);
+                    unmatched[0].put(key, one);
                     //printf("unmatched add %d:%d %s\n", batch[0].fileID, batch[0].batchID, key.data()); //!!
                     continue;
                 } else {
@@ -168,6 +172,7 @@ PairedReadMatcher::getNextReadPair(
                 if ((! autoRelease) && (! dependents)) {
                     dependents = true;
                     AcquireExclusiveLock(&lock);
+                    //printf("add dependency %d:%d->%d:%d\n", batch[0].fileID, batch[0].batchID, batch[1].fileID, batch[1].batchID);
                     forward.put(batch[1].asKey(), batch[0]);
                     backward.put(batch[0].asKey(), batch[1]);
                     ReleaseExclusiveLock(&lock);
@@ -195,29 +200,30 @@ PairedReadMatcher::releaseBatch(
     // only release when both forward & backward dependent batches have been released
     AcquireExclusiveLock(&lock);
     DataBatch::Key key = batch.asKey();
-    DataBatch* f = forward.tryFind(key);
-    bool keep = false;
-    if (f != NULL) {
-        DataBatch* fb = backward.tryFind(f->asKey());
-        keep = fb != NULL;
-        if (fb == NULL) {
-            //printf("release forward/backward batch reference %d:%d->%d:%d\n", batch.fileID, batch.batchID, f->fileID, f->batchID);
-            single->releaseBatch(*f);
-        }
-        forward.erase(key);
-    }
+    // case in which i'm the newer batch
     DataBatch* b = backward.tryFind(key);
     if (b != NULL) {
         DataBatch* bf = forward.tryFind(b->asKey());
-        keep |= bf != NULL;
         if (bf == NULL) {
-            //printf("release backward/forward batch reference %d:%d->%d:%d\n", batch.fileID, batch.batchID, b->fileID, b->batchID);
+            // batch I depend on already released, can release it now
+            //printf("release older batch %d:%d->%d:%d\n", batch.fileID, batch.batchID, b->fileID, b->batchID);
             single->releaseBatch(*b);
+        } else {
+            // forget dependency so older batch can be released later
+            //printf("forget newer batch dependency %d:%d->%d:%d\n", batch.fileID, batch.batchID, b->fileID, b->batchID);
+            forward.erase(b->asKey());
         }
         backward.erase(key);
     }
-    //printf("%s dependent batch %d:%d\n", keep ? "keep" : "release", batch.fileID, batch.batchID);
-    if (! keep) {
+    // case in which I'm the older batch
+    DataBatch* f = forward.tryFind(key);
+    if (f != NULL) {
+        // someone depends on me, signal that I've been released
+        //printf("keep older batch %d:%d->%d:%d\n", f->fileID, f->batchID, batch.fileID, batch.batchID);
+        forward.erase(key);
+    } else {
+        // noone depends on me, I can be released
+        //printf("release independent batch %d:%d\n", batch.fileID, batch.batchID);
         single->releaseBatch(batch);
     }
     ReleaseExclusiveLock(&lock);
