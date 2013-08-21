@@ -441,6 +441,7 @@ public:
         {
             if (hasValue()) {
                 K k;
+                i = 0;
                 do {
                     if (! map->advance(pos, i, key)) {
                         _ASSERT(false);
