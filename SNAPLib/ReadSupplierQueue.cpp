@@ -28,6 +28,8 @@ Revision History:
 #include "exit.h"
 #include "SAM.h"
 
+//#define PAIR_MATCH_DEBUG
+
  ReadSupplierQueue::ReadSupplierQueue(ReadReader *reader)
      : tracker(64)
 {
@@ -660,7 +662,7 @@ PairedReadSupplierFromQueue::getNextReadPair(Read **read0, Read **read1)
     if (twoFiles) {
         // Assert that both elements match.
         _ASSERT(currentSecondElement->totalReads == currentElement->totalReads);
-#if 0
+#ifdef PAIR_MATCH_DEBUG
         for (int i = 0; i < currentElement->totalReads; i++) {
             Read::checkIdMatch(&currentElement->reads[i], &currentSecondElement->reads[i]);
         }
@@ -670,7 +672,7 @@ PairedReadSupplierFromQueue::getNextReadPair(Read **read0, Read **read1)
         // Assert that there are an even number of reads (since they're in pairs)
         //
         _ASSERT(currentElement->totalReads % 2 == 0);
-#if 0
+#ifdef PAIR_MATCH_DEBUG
         for (int i = 0; i < currentElement->totalReads; i += 2) {
             Read::checkIdMatch(&currentElement->reads[i], &currentElement->reads[i+1]);
         }
@@ -680,14 +682,14 @@ PairedReadSupplierFromQueue::getNextReadPair(Read **read0, Read **read1)
     if (twoFiles) {
         *read0 = &currentElement->reads[nextReadIndex];
         *read1 = &currentSecondElement->reads[nextReadIndex];
-#if 0
+#ifdef PAIR_MATCH_DEBUG
 		Read::checkIdMatch(*read0, *read1);
 #endif
         nextReadIndex++;
     } else {
         *read0 = &currentElement->reads[nextReadIndex];
         *read1 = &currentElement->reads[nextReadIndex+1];
-#if 0
+#ifdef PAIR_MATCH_DEBUG
 		Read::checkIdMatch(*read0, *read1);
 #endif
         nextReadIndex += 2;

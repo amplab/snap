@@ -735,7 +735,7 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     int nRead;
     if (6 != (nRead = fscanf(indexFile,"%d %d %d %d %d %d", &majorVersion, &minorVersion, &index->nHashTables, &index->overflowTableSize, &seedLen, &chromosomePadding))) {
         if (3 == nRead) {
-            fprintf(stderr, "Indices built by versions before 0.16.25 are no longer supported.  Please rebuild your index.\n");
+            fprintf(stderr, "Indices built by versions before 0.16.27 are no longer supported.  Please rebuild your index.\n");
         } else {
             fprintf(stderr,"GenomeIndex::LoadFromDirectory: didn't read initial values\n");
         }
