@@ -40,9 +40,10 @@ struct PairedAlignmentResult;
 enum AlignmentResult {NotFound, SingleHit, MultipleHits, UnknownAlignment}; // BB: Changed Unknown to UnknownAlignment because of a conflict w/Windows headers
 
 bool isAValidAlignmentResult(AlignmentResult result);
-//#define MAX_READ_LENGTH 300
+// constant for small/medium/large reads
+#define MAX_READ_LENGTH 500
 //#define MAX_READ_LENGTH 1000
-#define MAX_READ_LENGTH 20000
+///#define MAX_READ_LENGTH 20000
 
 //
 // Here's a brief description of the classes for input in SNAP:
@@ -479,6 +480,8 @@ public:
             data = localUnclippedDataBuffer + frontClippedLength;
             quality = localUnclippedQualityBuffer + frontClippedLength;
         }
+
+		static void checkIdMatch(Read* read0, Read* read1);
 
 private:
 

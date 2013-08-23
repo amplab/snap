@@ -303,7 +303,7 @@ AlignerContext::printStats()
         double truePositives = (totalAligned - totalErrors) / max(stats->totalReads, (_int64) 1);
         double falsePositives = totalErrors / totalAligned;
         if (i <= 10 || i % 2 == 0 || i == 69) {
-            printf("%d\t%d\t%d\t%.3f\t%.2E\n", i, stats->mapqHistogram[i], stats->mapqErrors[i], truePositives, falsePositives);
+//            printf("%d\t%d\t%d\t%.3f\t%.2E\n", i, stats->mapqHistogram[i], stats->mapqErrors[i], truePositives, falsePositives);
         }
     }
 

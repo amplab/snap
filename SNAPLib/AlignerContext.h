@@ -143,6 +143,10 @@ public:
 
     virtual void beginThread() {}
 
+	virtual bool runIterationThread(PairedReadSupplier* supplier, AlignerContext* threadContext) { return false; }
+	
+	virtual bool runIterationThread(ReadSupplier* supplier, AlignerContext* threadContext) { return false; }
+
     virtual void finishThread() {}
 
     virtual void finishIteration() {}

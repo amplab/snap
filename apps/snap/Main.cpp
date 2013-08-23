@@ -48,7 +48,6 @@ static void usage()
     soft_exit(1);
 }
 
-
 int main(int argc, const char **argv)
 {
     printf("Welcome to SNAP version %s.\n\n", SNAP_VERSION);

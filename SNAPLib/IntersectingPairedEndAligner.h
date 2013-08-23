@@ -30,6 +30,7 @@ Revision History:
 #include "FixedSizeMap.h"
 
 const unsigned DEFAULT_INTERSECTING_ALIGNER_MAX_HITS = 16000;
+const unsigned DEFAULT_MAX_CANDIDATE_POOL_SIZE = 1000000;
 
 class IntersectingPairedEndAligner : public PairedEndAligner
 {
@@ -45,6 +46,7 @@ public:
         unsigned      maxSpacing_,                 // Maximum distance to allow between the two ends.
         unsigned      maxBigHits_,
         unsigned      extraSearchDepth_,
+        unsigned      maxCandidatePoolSize,
         BigAllocator  *allocator);
 
     void setLandauVishkin(
@@ -63,7 +65,7 @@ public:
         PairedAlignmentResult *result);
 
     static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxBigHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsFromCommandLine, 
-                                             double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth);
+                                             double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize);
 
      virtual _int64 getLocationsScored() const {
          return nLocationsScored;
@@ -76,7 +78,7 @@ private:
     static const int NUM_SET_PAIRS = 2;         // A "set pair" is read0 FORWARD + read1 RC, or read0 RC + read1 FORWARD.  Again, it doesn't make sense to change this.
 
     void allocateDynamicMemory(BigAllocator *allocator, unsigned maxReadSize, unsigned maxBigHitsToConsider, unsigned maxSeedsToUse, 
-                               unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth);
+                               unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize);
 
     GenomeIndex *   index;
     const Genome *  genome;

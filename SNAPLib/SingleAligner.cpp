@@ -142,6 +142,10 @@ SingleAlignerContext::runIterationThread()
         //
         return;
     }
+	if (extension->runIterationThread(supplier, this)) {
+		delete supplier;
+		return;
+	}
     if (index == NULL) {
         // no alignment, just input/output
         Read *read;

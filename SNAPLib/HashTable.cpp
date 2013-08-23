@@ -76,7 +76,7 @@ Arguments:
     }
 }
 
-SNAPHashTable::SNAPHashTable(char *loadFileName)
+SNAPHashTable *SNAPHashTable::loadFromFile(char *loadFileName)
 /*++
 
 Routine Description:
@@ -89,78 +89,64 @@ Arguments:
 
 --*/
 {
-    useBigAlloc = true;
-
     FILE *loadFile = fopen(loadFileName,"rb");
     if (loadFile == NULL) {
         fprintf(stderr,"SNAPHashTable::SNAPHashTable(%s) fopen failed\n",loadFileName);
         soft_exit(1);
     }
 
-    if (1 != fread(&tableSize,sizeof(tableSize),1,loadFile)) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable(%s) fread table size failed\n",loadFileName);
+    SNAPHashTable *table = loadFromFile(loadFile);
+    fclose (loadFile);
+
+    return table;
+}
+
+SNAPHashTable *SNAPHashTable::loadFromFile(FILE *loadFile)
+{
+    SNAPHashTable *table = new SNAPHashTable();
+
+    table->useBigAlloc = true;
+
+    unsigned fileMagic;
+    if (1 != fread(&fileMagic, sizeof(magic), 1, loadFile)) {
+        fprintf(stderr,"Magic number mismatch on hash table load.  %d != %d\n", fileMagic, magic);
+        soft_exit(1);
+    }
+ 
+    if (1 != fread(&table->tableSize, sizeof(table->tableSize), 1, loadFile)) {
+        fprintf(stderr,"SNAPHashTable::SNAPHashTable fread table size failed\n");
         soft_exit(1);
     }
 
-    if (1 != fread(&bytesToCheckForUnusedEntry, sizeof(bytesToCheckForUnusedEntry),1,loadFile)) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable(%s) fread unused entry size failed\n",loadFileName);
-        soft_exit(1);
-    }
 
-    if (1 != fread(&usedElementCount,sizeof(usedElementCount),1,loadFile)) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable(%s) fread data size failed\n",loadFileName);
+    if (1 != fread(&table->usedElementCount, sizeof(table->usedElementCount), 1, loadFile)) {
+        fprintf(stderr,"SNAPHashTable::SNAPHashTable fread data size failed\n");
         soft_exit(1);
 
     }
 
-    if (tableSize <= 0) {
-        table = NULL;
-        tableSize = 0;
-        fclose(loadFile);
-        return;
-    }
-
-    table = (Entry *)BigAlloc(tableSize * elementSize, &virtualAllocSize);
-
-    if (NULL == table) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable(%s) unable to allocate table memory\n",loadFileName);
+    if (table->tableSize <= 0) {
+        fprintf(stderr,"Zero or negative hash table size\n");
         soft_exit(1);
     }
 
-    const char *tableFileExtension = ".table";
-    size_t tableFileNameLength = strlen(loadFileName) + strlen(tableFileExtension) + 1;    
-    char *tableFileName  = new char[tableFileNameLength];
-    snprintf(tableFileName,tableFileNameLength,"%s%s",loadFileName,tableFileExtension);
-    FILE* tableFile = fopen(tableFileName,"rb");
-    if (tableFile == NULL) {
-        fprintf(stderr,"CloseHashTable::SNAPHashTable: Unable to open table file %s, %d\n",tableFileName,errno);
-        soft_exit(1);
-    }
+    table->table = (Entry *)BigAlloc(table->tableSize * elementSize, &table->virtualAllocSize);
 
     size_t maxReadSize = 100 * 1024 * 1024;
     size_t readOffset = 0;
-    while (readOffset < tableSize * elementSize) {
-        size_t amountToRead = __min(tableSize * elementSize - readOffset,
-			__min(maxReadSize,virtualAllocSize - readOffset));
-        size_t bytesRead = fread((char*)table + readOffset, 1, amountToRead, tableFile);
+    while (readOffset < table->tableSize * elementSize) {
+        size_t amountToRead = __min(table->tableSize * table->elementSize - readOffset,
+			__min(maxReadSize,table->virtualAllocSize - readOffset));
+        size_t bytesRead = fread((char*)table->table + readOffset, 1, amountToRead, loadFile);
         if (bytesRead < amountToRead) {
             fprintf(stderr,"SNAPHashTable::SNAPHashTable: fread failed, %d, %lu, %lu\n",errno,bytesRead,amountToRead);
             soft_exit(1);
         }
-        // MATEI: Not sure this is needed
-        /*
-        if (0 == bytesRead) {
-            fprintf(stderr,"SNAPHashTable::SNAPHashTable: fread read no data\n");
-            soft_exit(1);
-        }
-        */
+ 
         readOffset += bytesRead;
     }
 
-    fclose(loadFile);
-    fclose(tableFile);
-    delete [] tableFileName;
-
+    return table;
 }
 
 SNAPHashTable::~SNAPHashTable()
@@ -185,58 +171,46 @@ SNAPHashTable::saveToFile(const char *saveFileName)
         return false;
     }
 
+    bool worked = saveToFile(saveFile);
+    fclose(saveFile);
+
+    return worked;
+}
+
+bool
+SNAPHashTable::saveToFile(FILE *saveFile) 
+{
+    if (1 != fwrite(&magic,sizeof(magic),1,saveFile)) {
+        fprintf(stderr,"SNAPHashTable::SNAPHashTable fwrite magic number failed\n");
+        return false;
+
+    }    
+    
     if (1 != fwrite(&tableSize,sizeof(tableSize),1,saveFile)) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable(%s) fwrite table size failed\n",saveFileName);
+        fprintf(stderr,"SNAPHashTable::SNAPHashTable fwrite table size failed\n");
         return false;
 
-    }
-
-    if (1 != fwrite(&bytesToCheckForUnusedEntry,sizeof(bytesToCheckForUnusedEntry),1,saveFile)) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable(%s) fwrite unused entry size failed\n",saveFileName);
-        return false;
     }
 
     if (1 != fwrite(&usedElementCount,sizeof(usedElementCount),1,saveFile)) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable(%s) fwrite data size failed\n",saveFileName);
+        fprintf(stderr,"SNAPHashTable::SNAPHashTable fwrite data size failed\n");
         return false;
 
-    }
-
-    const char *tableFileExtension = ".table";
-    size_t tableFileNameLength = strlen(saveFileName) + strlen(tableFileExtension) + 1;    
-    char *tableFileName  = new char[tableFileNameLength];
-    snprintf(tableFileName,tableFileNameLength,"%s%s",saveFileName,tableFileExtension);
-    FILE* tableFile = fopen(tableFileName,"wb");
-    if (tableFile == NULL) {
-        fprintf(stderr,"CloseHashTable::saveToFile: Unable to open table file %s, %d\n",tableFileName,errno);
-        soft_exit(1);
     }
 
     size_t maxWriteSize = 100 * 1024 * 1024;
     size_t writeOffset = 0;
     while (writeOffset < tableSize * elementSize) {
-        size_t amountToWrite = __min(maxWriteSize,virtualAllocSize - writeOffset);
-        size_t bytesWritten = fwrite((char*)table + writeOffset, 1, amountToWrite, tableFile);
+        size_t amountToWrite = __min(maxWriteSize,tableSize * elementSize - writeOffset);
+        size_t bytesWritten = fwrite((char*)table + writeOffset, 1, amountToWrite, saveFile);
         if (bytesWritten < amountToWrite) {
             fprintf(stderr,"SNAPHashTable::saveToFile: fwrite failed, %d\n",errno);
-            fprintf(stderr,"handle %p, addr %p, atr: %lu, &bw %p\n",tableFile,(char*)table + writeOffset,amountToWrite,&bytesWritten);
+            fprintf(stderr,"handle %p, addr %p, atr: %lu, &bw %p\n",saveFile,(char*)table + writeOffset,amountToWrite,&bytesWritten);
             return false;
         }
-        // MATEI: Not sure this is needed
-        /*
-        if (0 == bytesWritten) {
-            fprintf(stderr,"SNAPHashTable::saveToFile: WriteFile wrote no data\n");
-            return false;
-        }
-        */
         writeOffset += bytesWritten;
     }
 
-    fclose(tableFile);
-    delete [] tableFileName;
-    
-
-    fclose(saveFile);
     return true;
 }
     

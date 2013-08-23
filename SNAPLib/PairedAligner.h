@@ -66,8 +66,11 @@ protected:
     int                 maxSpacing;
     bool                forceSpacing;
     unsigned            intersectingAlignerMaxHits;
+    unsigned            maxCandidatePoolSize;
     const char         *fastqFile1;
     bool                ignoreMismatchedIDs;
+
+	friend class AlignerContext2;
 };
 
 struct PairedAlignerOptions : public AlignerOptions
@@ -80,8 +83,9 @@ struct PairedAlignerOptions : public AlignerOptions
 
     virtual bool isPaired() { return true; }
 
-    int minSpacing;
-    int maxSpacing;
-    bool forceSpacing;
-    unsigned intersectingAlignerMaxHits;
+    int         minSpacing;
+    int         maxSpacing;
+    bool        forceSpacing;
+    unsigned    intersectingAlignerMaxHits;
+    unsigned    maxCandidatePoolSize;
 };

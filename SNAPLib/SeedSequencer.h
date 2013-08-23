@@ -31,6 +31,63 @@ inline unsigned GetWrappedNextSeedToTest(unsigned seedLen, unsigned wrapCount)
         return 0;
     }
     switch (seedLen) {
+        case 25: {
+            switch (wrapCount) {
+                case 1: return 13;
+                case 2: return 6; 
+                case 3: return 19;
+                case 4: return 3;
+                case 5: return 16;
+                case 6: return 22;
+                case 7: return 9;
+                case 8: return 11;
+                case 9: return 1;
+                case 10: return 14;
+                case 11: return 7;
+                case 12: return 20;
+                case 13: return 4;
+                case 14: return 17;
+                case 15: return 23;
+                case 16: return 2;
+                case 17: return 15;
+                case 18: return 5;
+                case 19: return 21;
+                case 20: return 8;
+                case 21: return 24;
+                case 22: return 10;
+                case 23: return 18;
+                case 24: return 12;
+            }
+        }
+
+        case 24:{
+            switch (wrapCount) {
+                case 1: return 12;
+                case 2: return 6; 
+                case 3: return 18;
+                case 4: return 3;
+                case 5: return 15;
+                case 6: return 21;
+                case 7: return 9;
+                case 8: return 1;
+                case 9: return 13;
+                case 10: return 19;
+                case 11: return 7;
+                case 12: return 16;
+                case 13: return 4;
+                case 14: return 22;
+                case 15: return 10;
+                case 16: return 2;
+                case 17: return 14;
+                case 18: return 20;
+                case 19: return 5;
+                case 20: return 17;
+                case 21: return 8;
+                case 22: return 23;
+                case 23: return 11;
+            }
+        }
+
         case 23: {
             switch (wrapCount) {
                 case 1: return 12;
@@ -57,6 +114,7 @@ inline unsigned GetWrappedNextSeedToTest(unsigned seedLen, unsigned wrapCount)
                 case 22: return 8;
             }
         }
+
         case 22: {
             switch (wrapCount) {
                 case 1: return 11;
@@ -109,6 +167,7 @@ inline unsigned GetWrappedNextSeedToTest(unsigned seedLen, unsigned wrapCount)
                 default: _ASSERT(!"NOTREACHED");
             }
         }
+
         case 20: {
             switch (wrapCount) {
                 case 1: return 10;

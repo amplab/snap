@@ -59,4 +59,6 @@ protected:
     //RangeSplittingReadSupplierGenerator   *readSupplierGenerator;
 
     ReadSupplierGenerator *readSupplierGenerator;
+
+	friend class AlignerContext2;
 };

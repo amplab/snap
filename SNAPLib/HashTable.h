@@ -34,11 +34,15 @@ class SNAPHashTable {
         //
         // Load from file.
         //
-        SNAPHashTable(char *loadFileName);
+        static SNAPHashTable *loadFromFile(char *loadFileName);
+
+        static SNAPHashTable *loadFromFile(FILE *loadFile);
 
         ~SNAPHashTable();
 
         bool saveToFile(const char *saveFileName);
+
+        bool saveToFile(FILE *saveFile);
 
         //
         // Fails if either the table is full or key already exists.
@@ -108,6 +112,8 @@ class SNAPHashTable {
 
 private:
 
+        SNAPHashTable() {}
+
         static const unsigned QUADRATIC_CHAINING_DEPTH = 5; // Chain quadratically for this long, then linerarly  Set to 0 for linear chaining
 
         struct Entry {
@@ -130,9 +136,6 @@ private:
 
         bool useBigAlloc;
 
-    
-        unsigned bytesToCheckForUnusedEntry;
-
         //
         // Returns either the entry for this key, or else the entry where the key would be
         // inserted if it's not in the table.
@@ -140,4 +143,6 @@ private:
         Entry* getEntryForKey(__in unsigned key) const;
 
         friend class SeedCountIterator;
+
+        static const unsigned magic = 0xb111b010;
 };

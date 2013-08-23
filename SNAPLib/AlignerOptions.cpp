@@ -65,13 +65,14 @@ AlignerOptions::AlignerOptions(
     numSeedsFromCommandLine(0)
 {
     if (forPairedEnd) {
-        maxDist             = 15;
-        seedCoverage        = 1.25;
-        maxHits             = 100;
+        maxDist                 = 15;
+        seedCoverage            = 0;
+        numSeedsFromCommandLine = 8;
+        maxHits                 = 16000;
      } else {
-        maxDist             = 14;
-        seedCoverage        = 2;
-        maxHits             = 300;
+        maxDist                 = 14;
+        numSeedsFromCommandLine = 25;
+        maxHits                 = 300;
     }
 
     initializeLVProbabilitiesToPhredPlus33();
@@ -184,6 +185,7 @@ AlignerOptions::parse(
             }
             seedCountSpecified = true;
             seedCoverage = atof(argv[n+1]);
+            numSeedsFromCommandLine = 0;
             n++;
             return true;
         }

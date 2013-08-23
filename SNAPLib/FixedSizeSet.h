@@ -81,6 +81,10 @@ public:
                 entries[pos].key = key;
                 entries[pos].epoch = epoch;
                 size++;
+                if (size >= capacity) { // Can't be exactly equal, because then contains with a non-existant element infinite loops
+                    fprintf(stderr,"FixedSizeSet overflowed.  Code bug.\n");
+                    soft_exit(1);
+                }
                 return;
             } else if (entries[pos].key == key) {
                 return;
