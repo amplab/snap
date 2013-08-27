@@ -19,6 +19,8 @@ public:
 template<typename K, typename V>
 struct VariableSizeMapEntry
 {
+    VariableSizeMapEntry() : key(), value() {}
+    VariableSizeMapEntry(K k, V v) : key(k), value(v) {}
     K key;
     V value;
 };
@@ -441,10 +443,10 @@ public:
         {
             if (hasValue()) {
                 K k;
-                i = 0;
                 do {
                     if (! map->advance(pos, i, key)) {
-                        _ASSERT(false);
+                        pos = map->capacity;
+                        return;
                     }
                 } while ((k = map->entries[pos].key) != key && k != empty);
             }

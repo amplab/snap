@@ -475,7 +475,7 @@ struct IdPair
     }
     static bool valueComparator(const IdPair& a, const IdPair& b)
     {
-        return a.value < b.value;
+        return a.value < b.value || (a.value == b.value && a.id < b.id);
     }
     static bool valueComparatorDescending(const IdPair& a, const IdPair& b)
     {
@@ -514,6 +514,9 @@ struct IdIntPair
     {}
     IdIntPair(unsigned i_id, int i_value)
         : id(i_id), value(i_value)
+    {}
+    IdIntPair(_uint64 x)
+        : id((unsigned) (x >> 32)), value((int) x)
     {}
     // for use as key in VariableSizeMap
     IdIntPair(int i) : id((unsigned) i), value(0) {}
