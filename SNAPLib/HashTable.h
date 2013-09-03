@@ -164,5 +164,5 @@ private:
 
         friend class SeedCountIterator;
 
-        static const unsigned magic = 0xb111b010;
+        static const unsigned magic;
 };

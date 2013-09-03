@@ -308,3 +308,5 @@ SNAPHashTable::SlowLookup(_uint64 key)
 
     return &entry->value1;
 }
+
+const unsigned SNAPHashTable::magic = 0xb111b010;
