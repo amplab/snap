@@ -24,13 +24,111 @@ Revision History:
 
 #pragma once
 #include "exit.h"
+#include "Seed.h"
 
-inline unsigned GetWrappedNextSeedToTest(unsigned seedLen, unsigned wrapCount) 
+
+class SeedSequencer {
+public:
+    SeedSequencer(unsigned i_seedSize);
+
+    inline unsigned SeedOffset(unsigned wrapCount) {
+        _ASSERT(wrapCount < seedSize);
+        return offsets[seedSize];
+    }
+
+    inline unsigned GetWrappedNextSeedToTest(unsigned wrapCount) {
+        _ASSERT(wrapCount < seedSize);
+        return(offsets[seedSize]);
+    }
+
+private:
+
+    unsigned seedSize;
+    unsigned *offsets;
+};
+
+
+
+void InitializeSeedSequencers();
+
+unsigned GetWrappedNextSeedToTest(unsigned seedLen, unsigned wrapCount) 
+#if     1
+        ;   // The definition is in SeedSequencer.cpp
+#else   // 1 -- old style with switch/case
 {
     if (0 == wrapCount) {
         return 0;
     }
     switch (seedLen) {
+        case 32: {
+            switch (wrapCount) {
+                case 1: return 16;
+                case 2: return 8; 
+                case 3: return 24;
+                case 4: return 4;
+                case 5: return 20;
+                case 6: return 12;
+                case 7: return 28;
+                case 8: return 6;
+                case 9: return 18;
+                case 10: return 10;
+                case 11: return 26;
+                case 12: return 2;
+                case 13: return 14;
+                case 14: return 22;
+                case 15: return 30;
+                case 16: return 3;
+                case 17: return 17;
+                case 18: return 9;
+                case 19: return 23;
+                case 20: return 29;
+                case 21: return 7;
+                case 22: return 19;
+                case 23: return 27;
+                case 24: return 5;
+                case 25: return 25;
+                case 26: return 11;
+                case 27: return 21;
+                case 28: return 31;
+                case 29: return 15;
+                case 30: return 1;
+                case 31: return 13;
+            }
+        }        
+        case 31: {
+            switch (wrapCount) {
+                case 1: return 15;
+                case 2: return 23; 
+                case 3: return 8;
+                case 4: return 19;
+                case 5: return 4;
+                case 6: return 27;
+                case 7: return 11;
+                case 8: return 17;
+                case 9: return 6;
+                case 10: return 25;
+                case 11: return 2;
+                case 12: return 29;
+                case 13: return 13;
+                case 14: return 21;
+                case 15: return 9;
+                case 16: return 24;
+                case 17: return 3;
+                case 18: return 18;
+                case 19: return 10;
+                case 20: return 26;
+                case 21: return 5;
+                case 22: return 30;
+                case 23: return 14;
+                case 24: return 7;
+                case 25: return 22;
+                case 26: return 1;
+                case 27: return 16;
+                case 28: return 28;
+                case 29: return 12;
+                case 30: return 20;
+             }
+        }
         case 25: {
             switch (wrapCount) {
                 case 1: return 13;
@@ -286,3 +384,4 @@ inline unsigned GetWrappedNextSeedToTest(unsigned seedLen, unsigned wrapCount)
     } // outer switch
     return 0;
 } 
+#endif  // 1

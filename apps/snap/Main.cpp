@@ -30,11 +30,12 @@ Revision History:
 #include "SingleAligner.h"
 #include "PairedAligner.h"
 #include "exit.h"
+#include "SeedSequencer.h"
 
 
 using namespace std;
 
-const char *SNAP_VERSION = "0.16alpha.27"; 
+const char *SNAP_VERSION = "0.16alpha.28"; 
 
 static void usage()
 {
@@ -51,6 +52,8 @@ static void usage()
 int main(int argc, const char **argv)
 {
     printf("Welcome to SNAP version %s.\n\n", SNAP_VERSION);
+
+    InitializeSeedSequencers();
 
     if (argc < 2) {
         usage();

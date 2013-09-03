@@ -40,6 +40,7 @@ using namespace std;
 static const int DEFAULT_SEED_SIZE = 20;
 static const double DEFAULT_SLACK = 0.3;
 static const unsigned DEFAULT_PADDING = 500;
+static const unsigned DEFAULT_KEY_BYTES = 4;
 
 
 static void usage()
@@ -59,10 +60,12 @@ static void usage()
             "                   edit distance you'll ever use, and there's a performance advantage to have it be bigger than any\n"
             "                   read you'll process.  Default is %d\n"
             " -HHistogramFile   Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n"
-            " -exact            Compute hash table sizes exactly.  This will slow down index build, but may be necessary in some cases\n",
+            " -exact            Compute hash table sizes exactly.  This will slow down index build, but may be necessary in some cases\n"
+            " -keysize          The number of bytes to use for the hash table key.  Larger values increase SNAP's memory footprint, but allow larger seeds.  Default: %d\n",
             DEFAULT_SEED_SIZE,
             DEFAULT_SLACK,
-            DEFAULT_PADDING);
+            DEFAULT_PADDING,
+            DEFAULT_KEY_BYTES);
     soft_exit(1);
 }
 
@@ -88,6 +91,7 @@ GenomeIndex::runIndexer(
     const char *histogramFileName = NULL;
     unsigned chromosomePadding = DEFAULT_PADDING;
     bool forceExact = false;
+    unsigned keySizeInBytes = DEFAULT_KEY_BYTES;
 
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
@@ -128,16 +132,26 @@ GenomeIndex::runIndexer(
                 fprintf(stderr,"Invalid chromosome padding specified, must be at least one (and in practice as large as any max edit distance you might use).\n");
                 soft_exit(1);
             }
+        } else if (strcmp(argv[n], "-keysize") == 0) {
+            if (n + 1 < argc) {
+                keySizeInBytes = atoi(argv[n+1]);
+                if (keySizeInBytes < 4 || keySizeInBytes > 8) {
+                    fprintf(stderr, "Key size must be between 4 and 8 inclusive\n");
+                    soft_exit(1);
+                }
+                n++;
+            } else {
+                usage();
+            }
         } else {
             fprintf(stderr, "Invalid argument: %s\n\n", argv[n]);
             usage();
         }
     }
 
-    if (seedLen < 16 || seedLen > 25) {
-        // Right now there's some hard-coded stuff, like the seed warp table, that
-        // does not work for seed lengths outside the range of 16-25.
-        fprintf(stderr, "Seed length must be between 16 and 25\n");
+    if (seedLen < 16 || seedLen > 32) {
+        // Seeds are stored in 64 bits, so they can't be larger than 32 bases for now.
+        fprintf(stderr, "Seed length must be between 16 and 32, inclusive\n");
         soft_exit(1);
     }
 
@@ -155,7 +169,7 @@ GenomeIndex::runIndexer(
     }
     printf("%llds\n", (timeInMillis() + 500 - start) / 1000);
     unsigned nBases = genome->getCountOfBases();
-    if (!GenomeIndex::BuildIndexToDirectory(genome, seedLen, slack, computeBias, outputDir, overflowTableFactor, maxThreads, chromosomePadding, forceExact, histogramFileName)) {
+    if (!GenomeIndex::BuildIndexToDirectory(genome, seedLen, slack, computeBias, outputDir, overflowTableFactor, maxThreads, chromosomePadding, forceExact, keySizeInBytes, histogramFileName)) {
         fprintf(stderr, "Genome index build failed\n");
         soft_exit(1);
     }
@@ -165,62 +179,86 @@ GenomeIndex::runIndexer(
 }
 
 SNAPHashTable** GenomeIndex::allocateHashTables(
-    unsigned* o_nTables,
-    size_t capacity,
-    double slack,
-    int seedLen,
-    double* biasTable)
+    unsigned*       o_nTables,
+    size_t          capacity,
+    double          slack,
+    int             seedLen,
+    unsigned        hashTableKeySize,
+    double*         biasTable)
 {
+    _ASSERT(NULL != biasTable);
+
+    BigAllocUseHugePages = false;   // Huge pages just slow down allocation and don't help much for hash table build, so don't use them.
+
     if (slack <= 0) {
         fprintf(stderr, "allocateHashTables: must have positive slack for the hash table to work.  0.3 is probably OK, 0.1 is minimal, less will wreak havoc with perf.\n");
-        return false;
+        soft_exit(1);
     }
 
     if (seedLen <= 0) {
         fprintf(stderr, "allocateHashTables: seedLen is too small (must be > 0, and practically should be >= 15 or so.\n");
-        return false;
+        soft_exit(1);
+    }
+
+    if (hashTableKeySize < 4 || hashTableKeySize > 8) {
+        fprintf(stderr, "allocateHashTables: key size must be 4-8 inclusive\n");
+        soft_exit(1);
+    }
+
+    if ((unsigned)seedLen < hashTableKeySize * 4) {
+        fprintf(stderr, "allocateHashTables: key size too large for seedLen.\n");
+        soft_exit(1);
+    }
+
+    if ((unsigned)seedLen > hashTableKeySize * 4 + 9) {
+        fprintf(stderr, "allocateHashTables: key size too small for seeLen.\n");
+        soft_exit(1);
     }
     
     //
     // Make an array of HashTables, size depending on the seed size.  The way the index works is that we use
-    // the low 32 bits (16 bases) of the seed as a hash key.  Any remaining bases are used as an index into the
-    // particular hash table in question.
+    // the low bits of the seed as a hash key.  Any remaining bases are used as an index into the
+    // particular hash table in question.  The division between "low" and "high" depends on the hash table key size.
     //
-    unsigned nHashTables = 1 << ((max(seedLen,16) - 16) * 2);
+    unsigned nHashTablesToBuild = 1 << ((seedLen - hashTableKeySize * 4) * 2);
 
+    if (nHashTablesToBuild > 256 * 1024) {
+        fprintf(stderr, "allocateHashTables: key size too small for seedLen.  Try specifying -keySize and giving it a larger value.\n");
+        soft_exit(1);
+    }
     //
     // Average size of the hash table.  We bias this later based on the actual content of the genome.
     //
-    size_t hashTableSize = (size_t) ((double)capacity * (slack + 1.0) / nHashTables);
+    size_t hashTableSize = (size_t) ((double)capacity * (slack + 1.0) / nHashTablesToBuild);
     
-    SNAPHashTable **hashTables = new SNAPHashTable*[nHashTables];
+    SNAPHashTable **hashTables = new SNAPHashTable*[nHashTablesToBuild];
     
-    for (unsigned i = 0; i < nHashTables; i++) {
+    for (unsigned i = 0; i < nHashTablesToBuild; i++) {
         //
         // Create the actual hash tables.  It turns out that the human genome is highly non-uniform in its
         // sequences of bases, so we bias the hash table sizes based on their popularity (which is emperically
         // measured), or use the estimates that we generated and passed in as "biasTable."
         //
-        double bias = biasTable != NULL ? biasTable[i] : GenomeIndex::GetHashTableSizeBias(i, seedLen);
+        double bias = biasTable[i];
         unsigned biasedSize = (unsigned) (hashTableSize * bias);
         if (biasedSize < 100) {
             biasedSize = 100;
         }
-        hashTables[i] = new SNAPHashTable(biasedSize, false);
+        hashTables[i] = new SNAPHashTable(biasedSize, hashTableKeySize);
 
         if (NULL == hashTables[i]) {
-            fprintf(stderr,"IndexBuilder: unable to allocate HashTable %d of %d\n",i+1,nHashTables);
+            fprintf(stderr, "IndexBuilder: unable to allocate HashTable %d of %d\n", i+1, nHashTablesToBuild);
             soft_exit(1);
         }
     }
 
-    *o_nTables = nHashTables;
+    *o_nTables = nHashTablesToBuild;
     return hashTables;
 }
 
     bool
 GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double slack, bool computeBias, const char *directoryName, _uint64 overflowTableFactor,
-                                    unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, const char *histogramFileName)
+                                    unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, unsigned hashTableKeySize, const char *histogramFileName)
 {
     bool buildHistogram = (histogramFileName != NULL);
     FILE *histogramFile;
@@ -243,23 +281,29 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 
     unsigned countOfBases = genome->getCountOfBases();
     if (countOfBases > 0xfffffff0) {
-        fprintf(stderr, "Genome is too big for this index.  Must be some headroom beneath 2^32 bases.\n");
+        fprintf(stderr, "Genome is too big for SNAP.  Must be some headroom beneath 2^32 bases.\n");
         return false;
     }
 
     // Compute bias table sizes, unless we're using the precomputed ones hardcoded in BiasTables.cpp
     double *biasTable = NULL;
     if (computeBias) {
-        unsigned nHashTables = 1 << ((max(seedLen,16) - 16) * 2);
+        unsigned nHashTables = 1 << ((max((unsigned)seedLen, hashTableKeySize * 4) - hashTableKeySize * 4) * 2);
         biasTable = new double[nHashTables];
-        ComputeBiasTable(genome, seedLen, biasTable, maxThreads, forceExact);
+        ComputeBiasTable(genome, seedLen, biasTable, maxThreads, forceExact, hashTableKeySize);
+    } else {
+        biasTable = hg19_biasTables[hashTableKeySize][seedLen];
+        if (NULL == biasTable) {
+            fprintf(stderr, "-hg19 not available for this seed length/key size pair.\n");
+            return false;
+        }
     }
 
     printf("Allocating memory for hash and overflow tables...");
     _int64 start = timeInMillis();
     unsigned nHashTables;
     SNAPHashTable** hashTables = index->hashTables =
-        allocateHashTables(&nHashTables, countOfBases, slack, seedLen, biasTable);
+        allocateHashTables(&nHashTables, countOfBases, slack, seedLen, hashTableKeySize, biasTable);
     index->nHashTables = nHashTables;
 
     //
@@ -300,7 +344,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         soft_exit(1);
     }
   
-    printf("%llds\n%d nOverflowEntries, %lld bytes, %d nOverflowBackpointers, %lld bytes\nBuilding hash tables.\n", 
+    printf("%llds\n%d nOverflowEntries, %lld bytes, %u nOverflowBackpointers, %lld bytes\nBuilding hash tables.\n", 
         (timeInMillis() + 500 - start) / 1000,
         nOverflowEntries, (_int64)nOverflowEntries * sizeof(OverflowEntry), nOverflowBackpointers, (_int64) nOverflowBackpointers * sizeof(OverflowBackpointer));
   
@@ -353,8 +397,8 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         threadContexts[i].overflowBackpointers = overflowBackpointers;
         threadContexts[i].nOverflowBackpointers = nOverflowBackpointers;
         threadContexts[i].nextOverflowBackpointer = &nextOverflowBackpointer;
-        threadContexts[i].countOfDuplicateOverflows = &countOfDuplicateOverflows;
         threadContexts[i].hashTableLocks = hashTableLocks;
+        threadContexts[i].hashTableKeySize = hashTableKeySize;
 
         StartNewThread(BuildHashTablesWorkerThreadMain, &threadContexts[i]);
     }
@@ -532,7 +576,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         return false;
     }
 
-    fprintf(indexFile,"%d %d %d %d %d %d", GenomeIndexFormatMajorVersion, GenomeIndexFormatMinorVersion, index->nHashTables, index->overflowTableSize, seedLen, chromosomePaddingSize);
+    fprintf(indexFile,"%d %d %d %d %d %d %d", GenomeIndexFormatMajorVersion, GenomeIndexFormatMinorVersion, index->nHashTables, index->overflowTableSize, seedLen, chromosomePaddingSize, hashTableKeySize);
 
     fclose(indexFile);
 
@@ -629,86 +673,6 @@ GenomeIndex::AddOverflowBackpointer(
     overflowEntry->nInstances++;
 }
 
-    double
-GenomeIndex::GetHashTableSizeBias(
-    unsigned        whichTable,
-    int             seedLen)
-/*++
-
-Routine Description:
-
-    Provide the bias amount for a given hash table.
-
-    The index uses multiple hash tables as a way to keep the hash table key size no more
-    than 32 bits.  When we have seeds > 32 bits, we divide the space into 32 bit chunks and
-    have one hash table for each.  The obvious thing to do is that we have n hash tables we should
-    have each one be totalSize/n.  However, the human genome is highly nonuniform, and if we
-    do that we have some tables overflow and others wind up underused.  So, we take the
-    frequency of occurence of the various base sequences into account when we create the hash tables,
-    resulting in more-or-less even loading.
-
-    This method returns the bias to apply for a particular table/seed size combo.  Because it's empirically measured,
-    it's just a giant lookup table.  If we haven't measured the particular table size, we just return
-    an even weighting, which will almost certainly result in overflowing one of the tables (for 
-    size 20 seeds the most popular table is 37 times bigger than the least popular).  This will run
-    until you overflow, at which time the IndexBuilder will dump out the weights it's got, which will
-    allow you to make a provisional entry in this table, which will get you to the final weights.
-
-    There's one additional twist: because of duplications in the genome (and N in the reference genome)
-    there will be fewer entries in the hash table than bases in the genome.  We apply this bias to the
-    result as well, so the mean of all of the entries will be about 72%, not 100% like you'd otherwise
-    expect.  This saves memory (or, alternately, makes the slack parameter more accurate, take your
-    pick).
-
-Arguments:
-
-    whichTable      - which table's bias do we want
-    seedLen         - what's the seed size (and hence the number of tables overall)
-
---*/
-{
-    switch (seedLen) {
-
-        case 25: {
-            _ASSERT(whichTable < 262144);
-            return biasTable25[whichTable];
-        }
-
-        case 24: {
-            _ASSERT(whichTable < 65536);
-            return biasTable24[whichTable];
-        }
-
-        case 23: {
-            _ASSERT(whichTable < 16384);
-            return biasTable23[whichTable];
-        }
-
-        case 22: {
-            _ASSERT(whichTable < 4096);
-            return biasTable22[whichTable];
-        }
-
-        case 21: {
-            _ASSERT(whichTable < 1024);
-            return biasTable21[whichTable];
-        }
-
-        case 20: {
-            _ASSERT(whichTable < 256);
-            return biasTable20[whichTable];
-        }
-
-        case 19: {  // hg19
-            _ASSERT(whichTable < 64);
-            return biasTable19[whichTable];
-        }
-    }
-
-    fprintf(stderr,"GetHashTableSizeBias: bogus parameters, %d, %d\n",whichTable,seedLen);
-    soft_exit(1);
-    return 0;   // Just to make the compiler happy.
-}
 
 GenomeIndex::GenomeIndex() : nHashTables(0), hashTables(NULL), overflowTable(NULL), genome(NULL)
 {
@@ -733,9 +697,9 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     unsigned seedLen;
     unsigned majorVersion, minorVersion, chromosomePadding;
     int nRead;
-    if (6 != (nRead = fscanf(indexFile,"%d %d %d %d %d %d", &majorVersion, &minorVersion, &index->nHashTables, &index->overflowTableSize, &seedLen, &chromosomePadding))) {
-        if (3 == nRead) {
-            fprintf(stderr, "Indices built by versions before 0.16.27 are no longer supported.  Please rebuild your index.\n");
+    if (7 != (nRead = fscanf(indexFile,"%d %d %d %d %d %d %d", &majorVersion, &minorVersion, &index->nHashTables, &index->overflowTableSize, &seedLen, &chromosomePadding, &index->hashTableKeySize))) {
+        if (3 == nRead || 6 == nRead) {
+            fprintf(stderr, "Indices built by versions before 0.16.28 are no longer supported.  Please rebuild your index.\n");
         } else {
             fprintf(stderr,"GenomeIndex::LoadFromDirectory: didn't read initial values\n");
         }
@@ -746,7 +710,7 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     fclose(indexFile);
 
     if (majorVersion != GenomeIndexFormatMajorVersion) {
-        fprintf(stderr,"This genome index appears to be from a newer version of SNAP than this, and so we can't read it.  Index version %d, SNAP index format version %d\n",
+        fprintf(stderr,"This genome index appears to be from a different version of SNAP than this, and so we can't read it.  Index version %d, SNAP index format version %d\n",
             majorVersion, GenomeIndexFormatMajorVersion);
     }
 
@@ -858,9 +822,9 @@ GenomeIndex::lookupSeed(
         seed = ~seed;
     }
 
-    _ASSERT(seed.getHighBases() < nHashTables);
-    unsigned lowBases = seed.getLowBases();
-    unsigned *entry = hashTables[seed.getHighBases()]->Lookup(lowBases);
+    _ASSERT(seed.getHighBases(hashTableKeySize) < nHashTables);
+    _uint64 lowBases = seed.getLowBases(hashTableKeySize);
+    unsigned *entry = hashTables[seed.getHighBases(hashTableKeySize)]->Lookup(lowBases);
     if (NULL == entry) {
         *nHits = 0;
         *nRCHits = 0;
@@ -980,11 +944,11 @@ GenomeIndex::~GenomeIndex()
 }
 
     void
-GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, unsigned maxThreads, bool forceExact)
+GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, unsigned maxThreads, bool forceExact, unsigned hashTableKeySize)
 /**
  * Fill in table with the table size biases for a given genome and seed size.
  * We assume that table is already of the correct size for our seed size
- * (namely 4**(seedLen-16)), and just fill in the values.
+ * (namely 4**(seedLen-hashTableKeySize*4)), and just fill in the values.
  *
  * If the genome is less than 2^20 bases, we count the seeds in each table exactly;
  * otherwise, we estimate them using Flajolet-Martin approximate counters.
@@ -993,7 +957,7 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
     _int64 start = timeInMillis();
     printf("Computing bias table.\n");
 
-    unsigned nHashTables = (seedLen <= 16 ? 1 : 1 << ((seedLen - 16) * 2));
+    unsigned nHashTables = ((unsigned)seedLen <= (hashTableKeySize * 4) ? 1 : 1 << (((unsigned)seedLen - hashTableKeySize * 4) * 2));
     unsigned countOfBases = genome->getCountOfBases();
 
     static const unsigned GENOME_SIZE_FOR_EXACT_COUNT = 1 << 20;  // Needs to be a power of 2 for hash sets
@@ -1003,7 +967,7 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
         fprintf(stderr,"You can't use -exact for genomes with >= 2^30 bases.\n");
         soft_exit(1);
     }
-    FixedSizeVector<unsigned> numExactSeeds(nHashTables, 0);
+    FixedSizeVector<int> numExactSeeds(nHashTables, 0);
     vector<ApproximateCounter> approxCounters(nHashTables);
 
     _int64 validSeeds = 0;
@@ -1041,10 +1005,10 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
                 seed = ~seed;       // Couldn't resist using ~ for this.
             }
 
-            _ASSERT(seed.getHighBases() < nHashTables);
+            _ASSERT(seed.getHighBases(hashTableKeySize) < nHashTables);
              if (!exactSeedsSeen.contains(seed.getBases())) {
                 exactSeedsSeen.add(seed.getBases());
-                numExactSeeds[seed.getHighBases()]++;
+                numExactSeeds[seed.getHighBases(hashTableKeySize)]++;
             }
         }
     } else {
@@ -1077,6 +1041,7 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
             }
             contexts[i].genomeChunkEnd = nextChunkToProcess;
             contexts[i].nHashTables = nHashTables;
+            contexts[i].hashTableKeySize = hashTableKeySize;
             contexts[i].runningThreadCount = &runningThreadCount;
             contexts[i].genome = genome;
             contexts[i].nBasesProcessed = &nBasesProcessed;
@@ -1103,7 +1068,7 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
     }
 
     for (unsigned i = 0; i < nHashTables; i++) {
-        int count = computeExactly ? numExactSeeds[i] : approxCounters[i].getCount();
+        _uint64 count = computeExactly ? numExactSeeds[i] : approxCounters[i].getCount();
         table[i] = (count / distinctSeeds) * ((double)validSeeds / countOfBases) * nHashTables;
     }
 
@@ -1120,9 +1085,9 @@ struct PerCounterBatch {
     static const unsigned nSeedsPerBatch = 1000;
 
     unsigned nUsed;
-    unsigned lowBases[nSeedsPerBatch];
+    _uint64 lowBases[nSeedsPerBatch];
 
-    bool addSeed(unsigned seedLowBases) {
+    bool addSeed(_uint64 seedLowBases) {
         _ASSERT(nUsed < nSeedsPerBatch);
         lowBases[nUsed] = seedLowBases;
         nUsed++;
@@ -1187,18 +1152,17 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
                 seed = ~seed;       // Couldn't resist using ~ for this.
             }
 
-            unsigned whichHashTable = seed.getHighBases();
+            unsigned whichHashTable = seed.getHighBases(context->hashTableKeySize);
 
             _ASSERT(whichHashTable < context->nHashTables);
 
-            if (batches[whichHashTable].addSeed(seed.getLowBases())) {
+            if (batches[whichHashTable].addSeed(seed.getLowBases(context->hashTableKeySize))) {
                 PerCounterBatch *batch = &batches[whichHashTable];
                 AcquireExclusiveLock(&context->approximateCounterLocks[whichHashTable]);
                 batch->apply(&(*context->approxCounters)[whichHashTable]);    
                 ReleaseExclusiveLock(&context->approximateCounterLocks[whichHashTable]);
 
                 _int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, PerCounterBatch::nSeedsPerBatch + unrecordedSkippedSeeds);
-
 
                 if ((_uint64)basesProcessed / printBatchSize > ((_uint64)basesProcessed - PerCounterBatch::nSeedsPerBatch - unrecordedSkippedSeeds)/printBatchSize) {
                     printf("Bias computation: %lld / %lld\n",(basesProcessed/printBatchSize)*printBatchSize, (_int64)countOfBases);
@@ -1227,7 +1191,6 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
 
     InterlockedAdd64AndReturnNewValue(context->validSeeds, validSeeds);
 
-
     if (0 == InterlockedDecrementAndReturnNewValue(context->runningThreadCount)) {
         SignalSingleWaiterObject(context->doneObject);
     }
@@ -1242,13 +1205,13 @@ struct PerHashTableBatch {
 
     struct Entry {
         bool usingComplement;
-        unsigned lowBases;
+        _uint64 lowBases;
         unsigned genomeLocation;
     };
 
     Entry entries[nSeedsPerBatch];
 
-    bool addSeed(unsigned genomeLocation, unsigned seedLowBases, bool seedUsingComplement) {
+    bool addSeed(unsigned genomeLocation, _uint64 seedLowBases, bool seedUsingComplement) {
         _ASSERT(nUsed < nSeedsPerBatch);
         entries[nUsed].lowBases = seedLowBases;
         entries[nUsed].usingComplement = seedUsingComplement;
@@ -1287,6 +1250,7 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
  
     PerHashTableBatch *batches = new PerHashTableBatch[index->nHashTables];
 
+    const _int64 printPeriod = 100000000;
     _uint64 unrecordedSkippedSeeds = 0;
 
     for (unsigned genomeLocation = context->genomeChunkStart; genomeLocation < context->genomeChunkEnd; genomeLocation++) {
@@ -1319,10 +1283,10 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
             seed = ~seed;       // Couldn't resist using ~ for this.
         }
 
-       unsigned whichHashTable = seed.getHighBases();
+       unsigned whichHashTable = seed.getHighBases(context->hashTableKeySize);
        _ASSERT(whichHashTable < index->nHashTables);
  
-        if (batches[whichHashTable].addSeed(genomeLocation, seed.getLowBases(), usingComplement)) {
+         if (batches[whichHashTable].addSeed(genomeLocation, seed.getLowBases(context->hashTableKeySize), usingComplement)) {
             AcquireExclusiveLock(&context->hashTableLocks[whichHashTable]);
             for (unsigned i = 0; i < batches[whichHashTable].nUsed; i++) {
                 ApplyHashTableUpdate(context, whichHashTable, batches[whichHashTable].entries[i].genomeLocation, 
@@ -1332,7 +1296,7 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
             ReleaseExclusiveLock(&context->hashTableLocks[whichHashTable]);
 
             _int64 newNBasesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[whichHashTable].nUsed + unrecordedSkippedSeeds);
-            const _int64 printPeriod = 100000000;
+
             if ((unsigned)(newNBasesProcessed / printPeriod) > (unsigned)((newNBasesProcessed - batches[whichHashTable].nUsed - unrecordedSkippedSeeds) / printPeriod)) {
                 printf("Indexing %lld / %lld\n", (newNBasesProcessed / printPeriod) * printPeriod, countOfBases);
             }
@@ -1346,6 +1310,13 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
     //
 
     for (unsigned whichHashTable = 0; whichHashTable < nHashTables; whichHashTable++) {
+        _int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[whichHashTable].nUsed + unrecordedSkippedSeeds);
+
+        if ((_uint64)basesProcessed / printPeriod > ((_uint64)basesProcessed - batches[whichHashTable].nUsed - unrecordedSkippedSeeds)/printPeriod) {
+            printf("Indexing %lld / %lld\n",(basesProcessed/printPeriod)*printPeriod, (_int64)countOfBases);
+        }
+
+        unrecordedSkippedSeeds = 0; // All except the first time through the loop this will be 0.        
         AcquireExclusiveLock(&context->hashTableLocks[whichHashTable]);
         for (unsigned i = 0; i < batches[whichHashTable].nUsed; i++) {
             ApplyHashTableUpdate(context, whichHashTable, batches[whichHashTable].entries[i].genomeLocation, 
@@ -1369,7 +1340,7 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
 }
 
     void 
-GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, unsigned whichHashTable, unsigned genomeLocation, unsigned lowBases, bool usingComplement,
+GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64 whichHashTable, unsigned genomeLocation, _uint64 lowBases, bool usingComplement,
                 _int64 *bothComplementsUsed, _int64 *countOfDuplicateOverflows)
 {
     GenomeIndex *index = context->index;
@@ -1390,9 +1361,9 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, unsigne
             newEntry[1] = genomeLocation;
         }
 
-        if (!hashTable->Insert(lowBases,newEntry)) {
+        if (!hashTable->Insert(lowBases, newEntry)) {
             for (unsigned j = 0; j < index->nHashTables; j++) {
-//                printf("HashTable[%d] has %lld used elements\n",j,(_int64)index->hashTables[j]->GetUsedElementCount());
+                printf("HashTable[%d] has %lld used elements\n",j,(_int64)index->hashTables[j]->GetUsedElementCount());
             }
             printf("IndexBuilder: exceeded size of hash table %d.\n"
                     "If you're indexing a non-human genome, make sure not to pass the -hg19 option.  Otheriwse, use -exact or increase slack with -h.\n",

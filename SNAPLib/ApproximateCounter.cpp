@@ -30,7 +30,7 @@ unsigned ApproximateCounter::getCount()
 {
     double s = 0;
     for (int i = 0; i < BUCKETS; i++) {
-        int r = 0;
+        _uint64 r = 0;
         while (r < 64 && (buckets[i] & (1LL << r)) != 0) {
             r++;
         }

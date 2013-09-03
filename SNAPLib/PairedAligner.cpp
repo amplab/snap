@@ -301,6 +301,7 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
         "   files must come in pairs, since each read end is in a separate file.");
     options->extra = extension->extraOptions();
     if (argc < 2) {
+        fprintf(stderr, "Too few parameters\n");
         options->usage();
     }
 
@@ -336,6 +337,7 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
         soft_exit(1);
     }
     if (0 == nInputs) {
+        fprintf(stderr,"Didn't see any input files\n");
         options->usage();
     }
     //
@@ -371,7 +373,9 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
 
     for (/* i initialized by previous loop*/; i < argc; i++) {
         bool done;
+        int oldI = i;
         if (!options->parse(argv, argc, i, &done)) {
+            fprintf(stderr, "Didn't understand options starting at %s\n", argv[oldI]);
             options->usage();
         }
 

@@ -63,6 +63,7 @@ SingleAlignerContext::parseOptions(
 		"   where <input file(s)> is a list of files to process.\n",false);
     options->extra = extension->extraOptions();
     if (argc < 2) {
+        fprintf(stderr,"Too few parameters\n");
         options->usage();
     }
 
@@ -77,6 +78,7 @@ SingleAlignerContext::parseOptions(
 	}
 
 	if (0 == nInputs) {
+        fprintf(stderr,"Didn't see any input files\n");
 		options->usage();
 	}
 
@@ -99,7 +101,9 @@ SingleAlignerContext::parseOptions(
     int n;
     for (n = 1 + nInputs; n < argc; n++) {
         bool done;
-        if (! options->parse(argv, argc, n, &done)) {
+        int oldN = n;
+        if (!options->parse(argv, argc, n, &done)) {
+            fprintf(stderr,"Didn't understand options starting at %s\n", argv[oldN]);
             options->usage();
         }
 

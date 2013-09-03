@@ -28,6 +28,8 @@ Revision History:
 #include "Tables.h"
 #include "Util.h"
 
+const unsigned LargestSeedSize = 32;
+
 
 struct Seed {
     //
@@ -57,19 +59,27 @@ struct Seed {
     {
     }
 
-    inline unsigned getLowBases() const {   // Returns the lowest 16 bases as an unsigned
-        return (unsigned) (bases & 0xffffffff);
+    inline _uint64 getLowBases(unsigned keySizeInBytes) const {   // Returns the lowest bases as an unsigned
+        if (keySizeInBytes == 8) {
+            return bases;
+        } else {
+            return  bases & (((_uint64)1 << (keySizeInBytes * 8)) - 1);
+        }
     }
 
-    inline unsigned getHighBases() const {   // Returns any bases > 16 as an unsigned.  If seedLen <= 16, returns 0.
-        return (unsigned) ((bases >> 32) & 0xffffffff);
+    inline unsigned getHighBases(unsigned keySizeInBytes) const {   // Returns any high as an unsigned.  If seedLen <= 16, returns 0.
+        if (keySizeInBytes == 8) {
+            return 0;
+        } else {
+            return (unsigned)(bases >> (keySizeInBytes * 8));
+        }
     }
 
-    inline _int64 getBases() const {
+    inline _uint64 getBases() const {
         return bases;
     }
 
-    inline _int64 getRCBases() const {
+    inline _uint64 getRCBases() const {
         return reverseComplement;
     }
 
@@ -180,11 +190,11 @@ struct Seed {
     static const int MaxBases = 32;
 private:
 
-    _int64   bases;
+    _uint64   bases;
 
     //
     // Since we pretty much always compute the reverse complement of a seed, we just keep it
     // here.  That way we only execute the loop once: when the constructor runs.
     //
-    _int64   reverseComplement;
+    _uint64   reverseComplement;
 };

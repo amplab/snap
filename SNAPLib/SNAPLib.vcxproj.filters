@@ -302,5 +302,8 @@
     <ClCompile Include="ChimericPairedEndAligner.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="SeedSequencer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

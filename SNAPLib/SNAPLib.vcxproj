@@ -246,6 +246,7 @@
     <ClCompile Include="ReadWriter.cpp" />
     <ClCompile Include="SAM.cpp" />
     <ClCompile Include="Seed.cpp" />
+    <ClCompile Include="SeedSequencer.cpp" />
     <ClCompile Include="SingleAligner.cpp" />
     <ClCompile Include="SortedDataWriter.cpp" />
     <ClCompile Include="stdafx.cpp">
