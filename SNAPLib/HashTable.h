@@ -150,7 +150,7 @@ private:
         Entry *Table;
         size_t tableSize;
         unsigned keySizeInBytes;
-        static const unsigned dataSizeInBytes = 8;
+        static const unsigned dataSizeInBytes;
         unsigned elementSize;
         size_t usedElementCount;
 

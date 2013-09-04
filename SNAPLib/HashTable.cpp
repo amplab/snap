@@ -310,3 +310,4 @@ SNAPHashTable::SlowLookup(_uint64 key)
 }
 
 const unsigned SNAPHashTable::magic = 0xb111b010;
+const unsigned SNAPHashTable::dataSizeInBytes = 8;

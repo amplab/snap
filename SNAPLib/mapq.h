@@ -39,16 +39,19 @@ inline int computeMAPQ(
     _ASSERT(probabilityOfBestCandidate >= 0.0);
     // Special case for MAPQ 70, which we generate only if there is no evidence of a mismatch at all.
 
-    if (probabilityOfAllCandidates == probabilityOfBestCandidate && popularSeedsSkipped == 0 && score < 5) {
-        return 70;
-    }
+    // cheese is off, so no special casing MAPQ 70.  If you want to turn is back on, return these three lines and then change the two instance of 70 to 69 in the 
+    // next set below (baseMAPQ =, twice).
+    //
+//    if (probabilityOfAllCandidates == probabilityOfBestCandidate && popularSeedsSkipped == 0 && score < 5) {
+//        return 70;
+//    }
 
     double correctnessProbability = probabilityOfBestCandidate / probabilityOfAllCandidates;
     int baseMAPQ;
     if (correctnessProbability >= 1) {
-        baseMAPQ =  69;
+        baseMAPQ =  70;
     } else {
-        baseMAPQ = __min(69, (int)(-10 * log10(1 - correctnessProbability)));
+        baseMAPQ = __min(70, (int)(-10 * log10(1 - correctnessProbability)));
     }
 
     //
