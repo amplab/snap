@@ -488,6 +488,14 @@ SAMReader::init(
 SAMReader::reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
 {
     _ASSERT(-1 != headerSize && startingOffset >= headerSize);  // Must call init() before reinit()
+    //
+    // There's no way to tell if we start at the very beginning of a read, we need to see the previous newline.
+    // So, read one byte before our assigned read in case that was the terminating newline of the previous read.
+    //
+    if (startingOffset > headerSize) {
+        startingOffset--;
+        amountOfFileToProcess++;
+    }
     data->reinit(startingOffset, amountOfFileToProcess);
     char* buffer;
     _int64 validBytes;
@@ -781,7 +789,7 @@ SAMFormat::writeHeader(
         unsigned genomeLen = context.genome->getCountOfBases();
         for (int i = 0; i < numPieces; i++) {
             unsigned start = pieces[i].beginningOffset;
-            unsigned end = (i + 1 < numPieces) ? pieces[i+1].beginningOffset : genomeLen;
+            unsigned end = ((i + 1 < numPieces) ? pieces[i+1].beginningOffset : genomeLen) - context.genome->getChromosomePadding();
             bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%u\n", pieces[i].name, end - start);
 
             if (bytesConsumed >= headerBufferSize) {

@@ -51,7 +51,7 @@ public:
 
         void addData(const char *data, size_t len);
 
-        const unsigned getChromosomePadding() {return chromosomePadding;}
+        const unsigned getChromosomePadding() const {return chromosomePadding;}
 
         ~Genome();
 
