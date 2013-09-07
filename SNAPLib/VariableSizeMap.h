@@ -114,7 +114,7 @@ public:
             for (int i = 0; i < small; i++) {
                 K k = old[i].key;
                 if (k != _empty && k != _tombstone) {
-                    Entry* p = scan(k, true);
+                    Entry* p = this->scan(k, true);
                     _ASSERT(p != NULL);
                     p->key = k;
                     p->value = old[i].value;
@@ -168,7 +168,7 @@ public:
 
     iterator find(K key)
     {
-        Entry* p = scan(key, false);
+        Entry* p = this->scan(key, false);
         return p != NULL ? p : end();
     }
 
@@ -255,7 +255,7 @@ public:
 
     VariableSizeMap(const VariableSizeMap<K,V>& other)
     {
-        assign((VariableSizeMapBase<K,V>*)&other);
+        this->assign((VariableSizeMapBase<K,V>*)&other);
     }
 
     VariableSizeMap(void** data, unsigned i_capacity)
@@ -267,7 +267,7 @@ public:
 
     inline void operator=(const VariableSizeMap<K,V>& other)
     {
-        assign((VariableSizeMapBase<K,V>*)&other);
+        this->assign((VariableSizeMapBase<K,V>*)&other);
     }
 
     ~VariableSizeMap()
@@ -276,7 +276,7 @@ public:
     
     inline bool tryGet(K key, V* o_value)
     {
-        Entry* p = scan(key, false);
+        Entry* p = this->scan(key, false);
         if (p != NULL) {
             *o_value = p->value;
         }
@@ -285,20 +285,20 @@ public:
 
     inline V* tryFind(K key)
     {
-        Entry* p = scan(key, false);
+        Entry* p = this->scan(key, false);
         return p != NULL ? &p->value : NULL;
     }
 
     inline V get(K key)
     {
-        Entry* p = scan(key, false);
+        Entry* p = this->scan(key, false);
         _ASSERT(p != NULL);
         return p->value;
     }
 
     bool erase(K key)
     {
-        Entry* p = scan(key, false);
+        Entry* p = this->scan(key, false);
         if (p != NULL) {
             p->key = K(_tombstone);
             this->count--;
@@ -308,7 +308,7 @@ public:
     
     inline V& operator[](K key)
     {
-        Entry* p = scan(key, false);
+        Entry* p = this->scan(key, false);
         _ASSERT(p != NULL);
         return p->value;
     }
@@ -333,10 +333,10 @@ public:
     inline bool tryAdd(K key, V value, V** o_pvalue)
     {
         while (true) {
-            Entry* p = scan(key, true);
+            Entry* p = this->scan(key, true);
             if (p == NULL) {
                 this->grow();
-                p = scan(key, true);
+                p = this->scan(key, true);
                 _ASSERT(p != NULL);
             }
             K prior = p->key;
@@ -357,7 +357,7 @@ public:
                         *o_pvalue = &p->value;
                     } else {
                         this->grow();
-                        *o_pvalue = &scan(key, false)->value; // lookup again after rehashing
+                        *o_pvalue = &this->scan(key, false)->value; // lookup again after rehashing
                     }
                     return true;
                 } else {
