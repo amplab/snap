@@ -73,7 +73,7 @@ class SNAPHashTable {
         }
 
         inline unsigned *Lookup(_uint64 key) const {
-            _ASSERT(keySizeInBytes == 8 || (key & (~(((_uint64)1 << (keySizeInBytes * 8)) - 1) == 0)));    // High bits of the key aren't set.
+            _ASSERT(keySizeInBytes == 8 || (key & ~((((_uint64)1) << (keySizeInBytes * 8)) - 1)) == 0);    // High bits of the key aren't set.
             _uint64 tableIndex = hash(key) % tableSize;
             Entry *entry = getEntry(tableIndex);
             if (isKeyEqual(entry, key) && entry->value1 != InvalidGenomeLocation) {
