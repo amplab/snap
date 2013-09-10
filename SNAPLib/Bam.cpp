@@ -32,6 +32,8 @@ Environment:
 #include "VariableSizeMap.h"
 #include "PairedAligner.h"
 #include "GzipDataWriter.h"
+#include <string>
+#include <sstream>
 
 using std::max;
 using std::min;
@@ -517,6 +519,7 @@ BAMFormat::getWriterSupplier(
         // todo: make markDuplicates optional?
         DataWriter::FilterSupplier* filters = gzipSupplier;
         if (! options->noDuplicateMarking) {
+            filters = DataWriterSupplier::bamQC()->compose(filters);
             filters = DataWriterSupplier::markDuplicates(genome)->compose(filters);
         }
         if (! options->noIndex) {
@@ -1523,4 +1526,351 @@ BAMIndexSupplier::addInterval(
             info->intervals.push_back(fileOffset);
         //}
     }
+}
+
+/**** QC Filters ****/
+
+class ReadQCFilter : public BAMFilter
+{
+    
+private:
+    const static int MAX_INSERT = 1000;
+    const static int MIN_INSERT = 50;
+    const static int MIN_GOOD_BASE_QUALITY = 20;
+    // container for the counts
+    // metric variables here
+    long num_reads;
+    long num_pf_reads;
+    long num_duplicate_reads;
+    // all metrics after this point are non-duplicate pf reads
+    // (note: picard does include duplicates, but I think that's wrong)
+    long num_chimeric_reads;
+    long num_aligned_reads;
+    long num_hq_aligned_reads;
+    long num_hq_aligned_bases;
+    double mean_read_length;
+    long num_forward_strand;
+    long num_indels_in_reads;
+    std::map<int,long> insert_size_histogram;
+    
+    // these metrics require additional information (such as an interval list)
+    // may not want to calculate these in SNAP (instead, perhaps pipe to GATK)
+    long on_target_bases; // needs interval list
+    long num_adaptor_reads; // needs adaptor sequence
+    long hq_mismatching_bases; // needs reference sequence
+    
+    
+    // pie-in-the-sky metrics
+    // may not want to calculate these in SNAP (instead, perhaps pipe to GATK)
+    long well_covered_reference_bases;
+    double fingerprint_lod;
+    double mean_target_coverage;
+    long poorly_covered_targets;
+    
+    
+    virtual bool isDuplicate(BAMAlignment* read);
+    virtual bool isPassFilter(BAMAlignment* read);
+    virtual bool isChimeric(BAMAlignment* read);
+    virtual bool isAligned(BAMAlignment* read);
+    virtual bool isHighQualityAlignment(BAMAlignment* read);
+    virtual int countHighQualityBases(BAMAlignment* read);
+    virtual bool isForwardStrand(BAMAlignment* read);
+    virtual int countNumberOfIndels(BAMAlignment* read);
+    virtual void mergeInsertSizeHistogram(std::map<int,long> other);
+    virtual bool isFirstOfPair(BAMAlignment* read);
+    virtual void addInsertSize(BAMAlignment* read);
+    
+public:
+    
+    ReadQCFilter() : BAMFilter(DataWriter::ReadFilter) {
+        // instantiate metric variables
+        num_reads = 0;
+        num_pf_reads = 0;
+        num_duplicate_reads = 0;
+        num_chimeric_reads = 0;
+        num_aligned_reads = 0;
+        num_hq_aligned_reads = 0;
+        hq_mismatching_bases = 0;
+        //mean_read_length = 0.0;
+        num_forward_strand = 0;
+        num_indels_in_reads = 0;
+        insert_size_histogram = std::map<int,long>();
+        // note: a number of metrics are not instantiated (see abov)
+    }
+    
+    ~ReadQCFilter() {
+        num_reads = NULL;
+    }
+    
+    
+    // accessor methods
+    // (what can I say: Java has ruined me)
+    long getNumReads() {
+        return num_reads;
+    }
+    
+    long getNumDuplicates() {
+        return num_duplicate_reads;
+    }
+    
+    long getNumPassFilter() {
+        return num_pf_reads;
+    }
+    
+    long getNumChimeric() {
+        return num_chimeric_reads;
+    }
+    
+    long getNumHQAligned() {
+        return num_hq_aligned_reads;
+    }
+    
+    long getNumTotalAligned() {
+        return num_aligned_reads;
+    }
+    
+    long getNumHighQualityBases() {
+        return num_hq_aligned_bases;
+    }
+    
+    double getReadLength() {
+        return mean_read_length;
+    }
+    
+    long getNumForwardStrand() {
+        return num_forward_strand;
+    }
+    
+    long getNumIndelsInReads() {
+        return num_indels_in_reads;
+    }
+    
+    std::map<int,long> getInsertSizes() {
+        return insert_size_histogram;
+    }
+    
+    void merge(ReadQCFilter* other) {
+        num_reads += other->num_reads;
+        num_pf_reads += other->num_pf_reads;
+        num_duplicate_reads += other->num_duplicate_reads;
+        num_chimeric_reads += other->num_chimeric_reads;
+        num_aligned_reads += other->num_aligned_reads;
+        num_hq_aligned_reads += other->num_hq_aligned_reads;
+        num_hq_aligned_bases += other->num_hq_aligned_bases;
+        // num_reads has been merged at this point
+        //mean_read_length = (num_reads - other->num_reads)/((float)num_reads)*mean_read_length +
+        //                   (other->num_reads)/((float)num_reads)*other->mean_read_length;
+        num_forward_strand += other->num_forward_strand;
+        num_indels_in_reads += other->num_indels_in_reads;
+        mergeInsertSizeHistogram(other->getInsertSizes());
+    }
+    
+protected:
+    virtual void onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex);
+    
+};
+
+class ReadQCFilterSupplier : public DataWriter::FilterSupplier {
+public:
+    
+    ReadQCFilterSupplier() : FilterSupplier(DataWriter::ReadFilter) {
+        filters = std::vector<ReadQCFilter*>();
+    }
+    
+    virtual DataWriter::Filter* getFilter()
+    {
+        ReadQCFilter* fltr = new ReadQCFilter();
+        filters.push_back(fltr);
+        return fltr;
+    }
+    
+    virtual void onClose(DataWriterSupplier* supplier);
+    virtual std::string formatQCTables(ReadQCFilter* data);
+    
+private:
+    std::vector<ReadQCFilter*> filters;
+};
+
+void ReadQCFilter::onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex) {
+    /** Update the QC metrics **/
+    
+    BAMAlignment* read = getRead(fileOffset);
+    num_reads++;
+    // the duplicate marker should have been run now, so all we have to do is get the flag
+    if ( isDuplicate(read) ) {
+        num_duplicate_reads++;
+    }
+    
+    if ( isPassFilter(read) ) {
+        num_pf_reads++;
+    }
+    
+    /** If read fails filters or is a duplicate, don't count in other metrics **/
+    if ( ! isPassFilter(read) || isDuplicate(read) ) {
+        return;
+    }
+    
+    if ( isHighQualityAlignment(read) ) {
+        num_hq_aligned_reads++;
+    }
+    
+    if ( isAligned(read) ) {
+        num_aligned_reads++;
+        num_hq_aligned_bases += countHighQualityBases(read);
+        // todo: change this to Knuth's TAoCP running average
+        //mean_read_length = ((num_reads-1)*mean_read_length + read->l_seq)/num_reads;
+        if ( isForwardStrand(read) ) {
+            num_forward_strand++;
+        }
+        
+        num_indels_in_reads += countNumberOfIndels(read);
+        if ( isAligned(read) && isFirstOfPair(read) ) {
+            if ( isChimeric(read) ) {
+                num_chimeric_reads++;
+            }
+            addInsertSize(read);
+        }
+    }
+}
+
+bool ReadQCFilter::isDuplicate(BAMAlignment* read) {
+    return (read->FLAG & SAM_DUPLICATE) != 0;
+}
+
+bool ReadQCFilter::isPassFilter(BAMAlignment* read) {
+    // 0x200 = *not* passing quality controls (so 1 & 1 means fail)
+    return (read->FLAG & 0x200) == 0;
+}
+
+bool ReadQCFilter::isChimeric(BAMAlignment* read) {
+    // a chimeric read is one whose mate is aligned to a different contig or
+    // whose mate is aligned more than a large insert away (default:100kb)
+    
+    if ( read->refID != read->next_refID ) { return true; }
+    return ( (read->pos - read->next_pos) > 100000 ) || ( (read->next_pos - read->pos) > 100000 );
+}
+
+bool ReadQCFilter::isAligned(BAMAlignment* read) {
+    return (read->FLAG & 0x4) == 0;
+}
+
+bool ReadQCFilter::isHighQualityAlignment(BAMAlignment* read) {
+    return ReadQCFilter::isAligned(read) && read->MAPQ >= 20;
+}
+
+int ReadQCFilter::countHighQualityBases(BAMAlignment* read) {
+    static char* qualBuffer = new char[1000]; // max read length
+    BAMAlignment::decodeQual(qualBuffer, read->qual(), read->l_seq);
+    int highQualityBases = 0;
+    for ( int i = 0; i < strlen(qualBuffer); i++ ) {
+        int q = (int) ( qualBuffer[i] - '!' );
+        if ( q > MIN_GOOD_BASE_QUALITY ) {
+            highQualityBases++;
+        }
+    }
+    
+    return highQualityBases;
+}
+
+bool ReadQCFilter::isForwardStrand(BAMAlignment* read) {
+    return (read->FLAG & 0x10) == 0;
+}
+
+bool ReadQCFilter::isFirstOfPair(BAMAlignment* read) {
+    return (read->FLAG & 0x80) == 0;
+}
+
+int ReadQCFilter::countNumberOfIndels(BAMAlignment* read) {
+    static char* cigarBuffer = new char[read->n_cigar_op];
+    if (! BAMAlignment::decodeCigar(cigarBuffer, read->l_seq, read->cigar(), read->n_cigar_op)) {
+        return 0;
+    }
+    char *cigar = cigarBuffer;
+    // i -think- the cigar from decodeCigar is just the operators; don't see anywhere the numbers are put in
+    int numInsDel = 0;
+    for ( int i = 0; i < read->n_cigar_op; i++ ) {
+        if ( cigar[i] == 'D' || cigar[i] == 'I' ) {
+            numInsDel++;
+        }
+    }
+    
+    return numInsDel;
+}
+
+void ReadQCFilter::addInsertSize(BAMAlignment* read) {
+    _ASSERT( (read->FLAG & 0x1) == 1);
+    if ( (read->FLAG & 0x8) == 1 || read->refID != read->next_refID ) {
+        // no insert size due to unmapped mate or different contigs: skip
+        return;
+    }
+    int size;
+    if ( read->pos > read->next_pos ) {
+        size = read->pos - read->next_pos;
+    } else {
+        size = read->next_pos - read->pos;
+    }
+    if ( size < MIN_INSERT || size > MAX_INSERT ) { return; }
+    if ( insert_size_histogram.find(size) == insert_size_histogram.end() ) {
+        // not found, so add it
+        insert_size_histogram[size] = 0L;
+    }
+    insert_size_histogram[size] = insert_size_histogram[size] + 1;
+    
+}
+
+void ReadQCFilter::mergeInsertSizeHistogram(std::map<int,long> other) {
+    /* guess the auto keyword doens't work */
+    for ( std::map<int,long>::iterator it = other.begin(); it != other.end(); ++it ) {
+        if ( insert_size_histogram.find(it->first) == insert_size_histogram.end() ) {
+            insert_size_histogram[it->first] = 0;
+        }
+        insert_size_histogram[it->first] = insert_size_histogram[it->first] + it->second;
+    }
+}
+
+void ReadQCFilterSupplier::onClose(DataWriterSupplier* supplier) {
+    ReadQCFilter* first = filters[0];
+    for ( std::vector<ReadQCFilter*>::size_type i = 1; i < filters.size(); i++ ) {
+        std::cout << i;
+        std::cout << " of ";
+        std::cout << filters.size();
+        std::cout << "\n";
+        first->merge(filters[i]);
+    }
+    
+    std::string tables = formatQCTables(first);
+    std::cout << "\n\n ------------------------------------ \n\n";
+    std::cout << tables; // todo - output to a file specified on the command line
+    std::cout << "\n\n ------------------------------------ \n\n";
+}
+
+std::string ReadQCFilterSupplier::formatQCTables(ReadQCFilter* qcmetrics) {
+    // formats the QC metrics into a table.
+    // currently these are simple key-value pairs except for the insert size histogram.
+    std::ostringstream formattedTable;
+    formattedTable << "Total Reads:" << "\t" << qcmetrics ->getNumReads() << "\n";
+    formattedTable << "Pass Filter Reads:" << "\t" << qcmetrics -> getNumPassFilter() << "\n";
+    formattedTable << "Duplicate Reads:" << "\t" << qcmetrics->getNumDuplicates() << "\n";
+    formattedTable << "Num Aligned PF Reads:" << "\t" << qcmetrics->getNumTotalAligned() << "\n";
+    formattedTable << "Num HQ Aligned:" << "\t" << qcmetrics -> getNumHQAligned() << "\n";
+    formattedTable << "Num Forward Strand:" << "\t" << qcmetrics->getNumForwardStrand() << "\n";
+    formattedTable << "Num HQ Aligned Bases:" << "\t" << qcmetrics -> getNumHighQualityBases() << "\n";
+    formattedTable << "Mean Indels Per Read:" << "\t" << ((float)qcmetrics->getNumIndelsInReads())/qcmetrics->getNumTotalAligned() << "\n";
+    formattedTable << "Num Chimeric Reads:" << "\t" << qcmetrics -> getNumChimeric() << "\n";
+    formattedTable << "\n";
+    std::map<int,long> insertSizes = qcmetrics->getInsertSizes();
+    std::cout << "The map size is: " << insertSizes.size();
+    for ( int insert = 0; insert < 1000; insert++ ) {
+        if ( insertSizes.find(insert) != insertSizes.end() ) {
+            formattedTable << "\n" << "InsertSizeHistogram" << "\t" << insert << "\t" << insertSizes[insert];
+        }
+    }
+    
+    return formattedTable.str();
+}
+
+DataWriter::FilterSupplier*
+DataWriterSupplier::bamQC()
+{
+    return new ReadQCFilterSupplier();
 }

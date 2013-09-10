@@ -150,4 +150,6 @@ public:
     static DataWriter::FilterSupplier* markDuplicates(const Genome* genome);
 
     static DataWriter::FilterSupplier* bamIndex(const char* indexFileName, const Genome* genome, GzipWriterFilterSupplier* gzipSupplier);
+    
+    static DataWriter::FilterSupplier* bamQC();
 };
