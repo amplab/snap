@@ -34,6 +34,7 @@ Environment:
 #include "GzipDataWriter.h"
 #include <string>
 #include <sstream>
+#include <set>
 
 using std::max;
 using std::min;
@@ -510,6 +511,7 @@ BAMFormat::getWriterSupplier(
 {
     DataWriterSupplier* dataSupplier;
     GzipWriterFilterSupplier* gzipSupplier = DataWriterSupplier::gzip(true, 0x10000, options->numThreads, options->bindToProcessors, options->sortOutput);
+    DataWriter::FilterSupplier* filters = gzipSupplier;
     if (options->sortOutput) {
         size_t len = strlen(options->outputFileTemplate);
         // todo: this is going to leak, but there's no easy way to free it, and it's small...
@@ -517,9 +519,7 @@ BAMFormat::getWriterSupplier(
         strcpy(tempFileName, options->outputFileTemplate);
         strcpy(tempFileName + len, ".tmp");
         // todo: make markDuplicates optional?
-        DataWriter::FilterSupplier* filters = gzipSupplier;
         if (! options->noDuplicateMarking) {
-            filters = DataWriterSupplier::bamQC()->compose(filters);
             filters = DataWriterSupplier::markDuplicates(genome)->compose(filters);
         }
         if (! options->noIndex) {
@@ -531,7 +531,8 @@ BAMFormat::getWriterSupplier(
         dataSupplier = DataWriterSupplier::sorted(this, genome, tempFileName, options->sortMemory * (1ULL << 30),
             options->numThreads, options->outputFileTemplate, filters);
     } else {
-        dataSupplier = DataWriterSupplier::create(options->outputFileTemplate, gzipSupplier);
+        filters = DataWriterSupplier::bamQC()->compose(filters);
+        dataSupplier = DataWriterSupplier::create(options->outputFileTemplate, filters);
     }
     return ReadWriterSupplier::create(this, dataSupplier, genome);
 }
@@ -1537,6 +1538,12 @@ private:
     const static int MAX_INSERT = 1000;
     const static int MIN_INSERT = 50;
     const static int MIN_GOOD_BASE_QUALITY = 20;
+    // reference to a global collection of read pair alignments for duplicate marking
+    // this isn't thread safe, but since its a set into which objects go in and never come out
+    // we only need to worry about missing a duplicate occasionally. Small price to pay for never having to sort.
+    
+    std::set<_int64> observedPairAlignments;
+    
     // container for the counts
     // metric variables here
     long num_reads;
@@ -1579,10 +1586,11 @@ private:
     virtual void mergeInsertSizeHistogram(std::map<int,long> other);
     virtual bool isFirstOfPair(BAMAlignment* read);
     virtual void addInsertSize(BAMAlignment* read);
+    virtual _int64 pairHash(_int32 ref1, _int32 pos1, _int32 ref2, _int32 pos2);
     
 public:
     
-    ReadQCFilter() : BAMFilter(DataWriter::ReadFilter) {
+    ReadQCFilter(std::set<_int64>threadUnsafePairSet) : BAMFilter(DataWriter::ReadFilter) {
         // instantiate metric variables
         num_reads = 0;
         num_pf_reads = 0;
@@ -1596,6 +1604,8 @@ public:
         num_indels_in_reads = 0;
         insert_size_histogram = std::map<int,long>();
         // note: a number of metrics are not instantiated (see abov)
+        
+        observedPairAlignments = threadUnsafePairSet;
     }
     
     ~ReadQCFilter() {
@@ -1673,13 +1683,15 @@ protected:
 class ReadQCFilterSupplier : public DataWriter::FilterSupplier {
 public:
     
+    std::set<_int64> pairsSeen;
+    
     ReadQCFilterSupplier() : FilterSupplier(DataWriter::ReadFilter) {
         filters = std::vector<ReadQCFilter*>();
     }
     
     virtual DataWriter::Filter* getFilter()
     {
-        ReadQCFilter* fltr = new ReadQCFilter();
+        ReadQCFilter* fltr = new ReadQCFilter(pairsSeen);
         filters.push_back(fltr);
         return fltr;
     }
@@ -1696,26 +1708,29 @@ void ReadQCFilter::onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex) 
     
     BAMAlignment* read = getRead(fileOffset);
     num_reads++;
-    // the duplicate marker should have been run now, so all we have to do is get the flag
-    if ( isDuplicate(read) ) {
-        num_duplicate_reads++;
-    }
-    
-    if ( isPassFilter(read) ) {
-        num_pf_reads++;
-    }
-    
-    /** If read fails filters or is a duplicate, don't count in other metrics **/
-    if ( ! isPassFilter(read) || isDuplicate(read) ) {
-        return;
-    }
-    
-    if ( isHighQualityAlignment(read) ) {
-        num_hq_aligned_reads++;
-    }
-    
+        
     if ( isAligned(read) ) {
         num_aligned_reads++;
+        bool isDup = isDuplicate(read);
+        if ( isDup ) {
+            num_duplicate_reads++;
+        }
+        
+        if ( isPassFilter(read) ) {
+            num_pf_reads++;
+        }
+        
+        /** If read fails filters or is a duplicate, don't count in other metrics **/
+        if ( ! isPassFilter(read) || isDup ) {
+            return;
+        }
+        
+        
+        if ( isHighQualityAlignment(read) ) {
+            num_hq_aligned_reads++;
+        }
+
+        
         num_hq_aligned_bases += countHighQualityBases(read);
         // todo: change this to Knuth's TAoCP running average
         //mean_read_length = ((num_reads-1)*mean_read_length + read->l_seq)/num_reads;
@@ -1733,8 +1748,69 @@ void ReadQCFilter::onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex) 
     }
 }
 
+_int64 ReadQCFilter::pairHash(_int32 firstRef, _int32 firstPos, _int32 secondRef, _int32 secondPos) {
+    _int64 hash = 0ULL;
+    // first 6 bits: the contig of the first read
+    hash |= (_uint32) firstRef;
+    // next 29 bits: the position of the first read
+    hash = hash << 29;
+    hash |= ( (_uint32) firstPos) & 0x1FFFFFFF;
+    // next bit: read not aligned to same contig
+    hash = hash << 1;
+    if ( firstRef != secondRef ) {
+        hash |= 0x1;
+        // next 28 bits: miniature version of the single read hash
+        // 5 bit contig
+        hash = hash << 5;
+        hash |= ((_uint32) secondRef) & 0x1F;
+        // 23 bit position
+        hash |= ((_uint32) secondPos) & 0x7FFFFF;
+    } else {
+        // first and second read on same contig
+        // in this case, then next 28 bits is just the insert size
+        hash = hash << 28;
+        hash |= ((_uint32) secondPos - (_uint32)firstPos ) & 0xFFFFFFF;
+    }
+    return hash;
+}
+
+
 bool ReadQCFilter::isDuplicate(BAMAlignment* read) {
-    return (read->FLAG & SAM_DUPLICATE) != 0;
+    // it must be the case that the read itself is mapped: read->FLAG & 0x04 = 1
+    _int64 hash;
+    if ( (read->FLAG & 0x4) && (read->FLAG & 0x8) ) {
+        // if the read and mate are mapped construct a unique integer for this read
+        _int32 readRef = read->refID;
+        _int32 readPos = read->pos;
+        _int32 mateRef = read->next_refID;
+        _int32 matePos = read->next_pos;
+        if ( readRef < mateRef ) {
+            hash = pairHash(readRef,readPos,mateRef,matePos);
+        } else if ( mateRef < readRef ) {
+            hash = pairHash(mateRef,matePos,readRef,readPos);
+        } else if ( readPos <= matePos ) {
+            hash = pairHash(readRef,readPos,mateRef,matePos);
+        } else {
+            hash = pairHash(mateRef,matePos,readRef,readPos);
+        }
+    } else {
+        // if the mate is unmapped just take the initial 36 bits of the single-read hash - this means that the
+        // duplication rate will be artificially high for insertions of completely novel sequence, since the
+        // insert size can't help disambiguate fragments. Ideally we'd want to sprinkle in bases from the
+        // mate to help disambiguate, but that defeats the purpose of quickhash.
+        hash = pairHash(read->refID,read->pos,0u,0u);
+    }
+    
+    // check if the hash has been observed
+    // this is not a thread-safe lookup but the loss in sensitivity should be incredibly low
+    bool observed = (observedPairAlignments.find(hash) == observedPairAlignments.end());
+    if ( ! observed) {
+        // stick it into the set, since we've seen it
+        // this is not a thread-safe insert, but...i can't really see how it can screw things up
+        observedPairAlignments.insert(hash);
+    }
+    
+    return observed;
 }
 
 bool ReadQCFilter::isPassFilter(BAMAlignment* read) {
