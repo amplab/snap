@@ -113,7 +113,7 @@ SAMReader::skipToBeyondNextRunOfSpacesAndTabs(char *str, const char *endOfBuffer
 
     SAMReader *
 SAMReader::create(
-    const DataSupplier* supplier,
+    DataSupplier* supplier,
     const char *fileName,
     const ReaderContext& context,
     _int64 startingOffset, 
@@ -199,11 +199,11 @@ SAMReader::parseHeader(
             }
 
             char *snStart = nextLineToProcess + 4;
-            while (snStart < endOfBuffer && strncmp(snStart,"SN:",__min(3,endOfBuffer-snStart)) && *snStart != '\n') {
+            while (snStart < endOfBuffer && strncmp(snStart,"SN:",__min(3,endOfBuffer-snStart)) && *snStart != '\n' && *snStart != 0) {
                 snStart++;
             }
 
-            if (snStart >= endOfBuffer || *snStart == '\n') {
+            if (snStart >= endOfBuffer || *snStart == '\n' || *snStart == 0) {
                 fprintf(stderr,"Malformed @SQ line doesn't have 'SN:' in file '%s'\n",fileName);
                 return false;
             }
@@ -211,7 +211,7 @@ SAMReader::parseHeader(
             const size_t pieceNameBufferSize = 512;
             char pieceName[pieceNameBufferSize];
             for (unsigned i = 0; i < pieceNameBufferSize && snStart+3+i < endOfBuffer; i++) {
-                if (snStart[3+i] == ' ' || snStart[3+i] == '\t' || snStart[3+i] == '\n') {
+                if (snStart[3+i] == ' ' || snStart[3+i] == '\t' || snStart[3+i] == '\n' || snStart[3+i] == 0) {
                     pieceName[i] = '\0';
                 } else {
                     pieceName[i] = snStart[3+i];
@@ -231,11 +231,18 @@ SAMReader::parseHeader(
             fprintf(stderr,"Unrecognized header line in SAM file.\n");
             return false;
         }
-        nextLineToProcess = strnchr(nextLineToProcess,'\n',endOfBuffer-nextLineToProcess) + 1;
+		char * p = strnchr(nextLineToProcess,'\n',endOfBuffer-nextLineToProcess);
+		if (p == NULL) {
+            // no newline, look for null to truncate buffer
+            p = (char*) memchr(nextLineToProcess, 0, endOfBuffer - nextLineToProcess);
+            nextLineToProcess = p != NULL ? p + 1 : endOfBuffer;
+            break;
+		}
+        nextLineToProcess = p + 1;
     }
 
     *o_headerMatchesIndex &= genome != NULL && numSQLines == genome->getNumPieces();
-    *o_headerSize = nextLineToProcess - firstLine;
+	*o_headerSize = nextLineToProcess - firstLine;
     return true;
 }
 

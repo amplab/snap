@@ -28,6 +28,8 @@ Environment:
 
 using std::max;
 using std::min;
+using std::map;
+using std::string;
 
 #ifdef _MSC_VER
 
@@ -626,14 +628,14 @@ class WindowsOverlappedDataSupplier : public DataSupplier
 {
 public:
     WindowsOverlappedDataSupplier(bool autoRelease) : DataSupplier(autoRelease) {}
-    virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0) const
+    virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0)
     {
         int buffers = autoRelease ? 2 : (ThreadCount + max(ThreadCount * 3 / 4, 3));
         return new WindowsOverlappedDataReader(buffers, overflowBytes, extraFactor, autoRelease);
     }
 };
 
-const DataSupplier* DataSupplier::WindowsOverlapped[2] =
+DataSupplier* DataSupplier::WindowsOverlapped[2] =
 { new WindowsOverlappedDataSupplier(false), new WindowsOverlappedDataSupplier(true) };
 
 #endif // _MSC_VER
@@ -736,9 +738,17 @@ GzipDataReader::readHeader(
     char* header;
     _int64 extraBytes;
     inner->getExtra(&header, &extraBytes);
-    _int64 compressedHeaderSize;
-    decompress(compressed, compressedBytes, &compressedHeaderSize, header, *io_headerSize, io_headerSize, SingleBlock);
-    inner->advance(compressedHeaderSize);
+    _int64 headerSize = 0;
+    while (headerSize < *io_headerSize && compressedBytes > 0) {
+        _int64 compressedBlockSize, decompressedBlockSize;
+        decompress(compressed, compressedBytes, &compressedBlockSize,
+            header + headerSize, extraBytes - headerSize, &decompressedBlockSize, SingleBlock);
+        inner->advance(compressedBlockSize);
+        compressed += compressedBlockSize;
+        compressedBytes -= compressedBlockSize;
+        headerSize += decompressedBlockSize;
+    }
+    *io_headerSize = headerSize;
     return header;
 }
 
@@ -934,11 +944,11 @@ GzipDataReader::decompressBatch()
 class GzipDataSupplier : public DataSupplier
 {
 public:
-    GzipDataSupplier(const DataSupplier* i_inner, bool autoRelease)
+    GzipDataSupplier(DataSupplier* i_inner, bool autoRelease)
         : DataSupplier(autoRelease), inner(i_inner)
     {}
 
-    virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0) const
+    virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0)
     {
         // adjust extra factor for compression ratio
         double totalFactor = MAX_FACTOR * (1.0 + extraFactor);
@@ -955,12 +965,12 @@ public:
     }
 
 private:
-    const DataSupplier* inner;
+    DataSupplier* inner;
 };
 
     DataSupplier*
 DataSupplier::Gzip(
-    const DataSupplier* inner,
+    DataSupplier* inner,
     bool autoRelease)
 {
     return new GzipDataSupplier(inner, autoRelease);
@@ -970,11 +980,29 @@ DataSupplier::Gzip(
 // MemMap
 //
 
+class MemMapDataSupplier : public DataSupplier
+{
+public:
+    MemMapDataSupplier(bool autoRelease);
+
+    virtual ~MemMapDataSupplier();
+
+    virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0);
+
+    FileMapper* getMapper(const char* fileName);
+    void releaseMapper(const char* fileName);
+
+private:
+    ExclusiveLock lock;
+    map<string,FileMapper*> mappers;
+    map<string,int> refcounts;
+};
+
 class MemMapDataReader : public DataReader
 {
 public:
 
-    MemMapDataReader(int i_batchCount, _int64 i_batchSize, _int64 i_overflowBytes, _int64 i_batchExtra, bool autoRelease);
+    MemMapDataReader(MemMapDataSupplier* i_supplier, int i_batchCount, _int64 i_batchSize, _int64 i_overflowBytes, _int64 i_batchExtra, bool autoRelease);
 
     virtual ~MemMapDataReader();
     
@@ -1027,6 +1055,7 @@ private:
     _int64          currentMapOffset; // current file offset of mapped region
     _int64          currentMapStartSize; // start size of mapped region (not incl overflow)
     _int64          currentMapSize; // total valid size of mapped region (incl overflow)
+    void*           currentMappedBase; // mapped base for unmap
     char*           extra; // extra data buffer
     int             extraUsed; // number of extra data buffers in use
     DataBatch*      extraBatches; // non-zero for each extra buffer that is in use
@@ -1035,13 +1064,14 @@ private:
     _uint32         currentBatch; // current batch number starting at 1
     _int64          startBytes; // in current batch
     _int64          validBytes; // in current batch
-    FileMapper      mapper;
+    MemMapDataSupplier* supplier;
+    FileMapper*     mapper;
     SingleWaiterObject waiter; // flow control
     ExclusiveLock   lock; // lock around flow control members (currentBatch, extraUsed, etc.)
 };
  
 
-MemMapDataReader::MemMapDataReader(int i_batchCount, _int64 i_batchSize, _int64 i_overflowBytes, _int64 i_batchExtra, bool autoRelease)
+MemMapDataReader::MemMapDataReader(MemMapDataSupplier* i_supplier, int i_batchCount, _int64 i_batchSize, _int64 i_overflowBytes, _int64 i_batchExtra, bool autoRelease)
     : DataReader(autoRelease),
     batchCount(i_batchCount),
         batchSizeParam(i_batchSize),
@@ -1053,7 +1083,8 @@ MemMapDataReader::MemMapDataReader(int i_batchCount, _int64 i_batchSize, _int64 
         currentMapOffset(0),
         currentMapSize(0),
         currentExtraIndex(0),
-        mapper()
+        supplier(i_supplier),
+        mapper(NULL)
 {
     _ASSERT(batchCount > 0 && batchSizeParam >= 0 && batchExtra >= 0);
     if (batchExtra > 0) {
@@ -1081,17 +1112,27 @@ MemMapDataReader::~MemMapDataReader()
     }
     DestroyExclusiveLock(&lock);
     DestroySingleWaiterObject(&waiter);
+    if (mapper != NULL) {
+        if (currentMap != NULL) {
+            mapper->unmap(currentMappedBase);
+        }
+        supplier->releaseMapper(fileName);
+    }
 }
 
     bool
 MemMapDataReader::init(
     const char* i_fileName)
 {
-    if (! mapper.init(i_fileName)) {
+    if (mapper != NULL) {
+        supplier->releaseMapper(fileName);
+    }
+    mapper = supplier->getMapper(i_fileName);
+    if (mapper == NULL) {
         return false;
     }
     fileName = i_fileName;
-    fileSize = mapper.getFileSize();
+    fileSize = mapper->getFileSize();
     batchSize = batchSizeParam == 0 ? fileSize : batchSizeParam;
     return true;
 }
@@ -1112,13 +1153,13 @@ MemMapDataReader::reinit(
 {
     _ASSERT(i_startingOffset >= 0 && amountOfFileToProcess >= 0);
     if (currentMap != NULL) {
-        mapper.unmap();
+        mapper->unmap(currentMappedBase);
     }
     _int64 oldAmount = amountOfFileToProcess;
     _int64 startSize = amountOfFileToProcess == 0 ? fileSize - i_startingOffset
 	: max((_int64) 0, min(fileSize - i_startingOffset, amountOfFileToProcess));
     amountOfFileToProcess = max((_int64)0, min(startSize + overflowBytes, fileSize - i_startingOffset));
-    currentMap = mapper.createMapping(i_startingOffset, amountOfFileToProcess);
+    currentMap = mapper->createMapping(i_startingOffset, amountOfFileToProcess, &currentMappedBase);
     if (currentMap == NULL) {
         fprintf(stderr, "MemMapDataReader: fail to map %s at %lld,%lld\n", fileName, i_startingOffset, amountOfFileToProcess);
         soft_exit(1);
@@ -1262,24 +1303,62 @@ MemMapDataReader::getExtra(
     }
 }
 
-class MemMapDataSupplier : public DataSupplier
+MemMapDataSupplier::MemMapDataSupplier(bool autoRelease)
+    : DataSupplier(autoRelease)
 {
-public:
-    MemMapDataSupplier(bool autoRelease) : DataSupplier(autoRelease) {}
-    virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0) const
-    {
-        _ASSERT(extraFactor >= 0 && overflowBytes >= 0);
-        if (extraFactor == 0) {
-            // no per-batch expansion factor, so can read entire file as a batch
-            return new MemMapDataReader(1, 0, overflowBytes, 0, autoRelease);
-        } else {
-            // break up into 4Mb batches
-            _int64 batch = 4 * 1024 * 1024;
-            _int64 extra = (_int64)(batch * extraFactor);
-            return new MemMapDataReader(autoRelease ? 2 : ThreadCount + min(ThreadCount * 3 / 4, 3), batch, overflowBytes, extra, autoRelease);
-        }
+    InitializeExclusiveLock(&lock);
+}
+
+MemMapDataSupplier::~MemMapDataSupplier()
+{
+    DestroyExclusiveLock(&lock);
+}
+
+    DataReader* 
+MemMapDataSupplier::getDataReader(
+    _int64 overflowBytes,
+    double extraFactor)
+{
+    _ASSERT(extraFactor >= 0 && overflowBytes >= 0);
+    if (extraFactor == 0) {
+        // no per-batch expansion factor, so can read entire file as a batch
+        return new MemMapDataReader(this, 1, 0, overflowBytes, 0, autoRelease);
+    } else {
+        // break up into 4Mb batches
+        _int64 batch = 4 * 1024 * 1024;
+        _int64 extra = (_int64)(batch * extraFactor);
+        return new MemMapDataReader(this, autoRelease ? 2 : ThreadCount + min(ThreadCount * 3 / 4, 3), batch, overflowBytes, extra, autoRelease);
     }
-};
+}
+
+    FileMapper*
+MemMapDataSupplier::getMapper(
+    const char* fileName)
+{
+    AcquireExclusiveLock(&lock);
+    FileMapper* result = mappers[fileName];
+    if (result == NULL) {
+        result = new FileMapper();
+        result->init(fileName);
+        mappers[fileName] = result;
+    }
+    ++refcounts[fileName];
+    ReleaseExclusiveLock(&lock);
+    return result;
+}
+
+    void
+MemMapDataSupplier::releaseMapper(
+    const char* fileName)
+{
+    AcquireExclusiveLock(&lock);
+    int n = refcounts[fileName];
+    if (n > 0 && 0 == --refcounts[fileName]) {
+        delete mappers[fileName];
+        mappers[fileName] = NULL;
+    }
+    ReleaseExclusiveLock(&lock);
+}
 
 //
 // BatchTracker
@@ -1331,18 +1410,18 @@ BatchTracker::removeRead(
 // public static suppliers
 //
 
-const DataSupplier* DataSupplier::MemMap[] =
+DataSupplier* DataSupplier::MemMap[] =
 { new MemMapDataSupplier(false), new MemMapDataSupplier(true) };
 
 #ifdef _MSC_VER
-const DataSupplier* DataSupplier::Default[2] =
+DataSupplier* DataSupplier::Default[2] =
 { DataSupplier::WindowsOverlapped[false], DataSupplier::WindowsOverlapped[true] };
 #else
-const DataSupplier* DataSupplier::Default[2] = 
+DataSupplier* DataSupplier::Default[2] = 
 { DataSupplier::MemMap[false], DataSupplier::MemMap[true] };
 #endif
 
-const DataSupplier* DataSupplier::GzipDefault[2] =
+DataSupplier* DataSupplier::GzipDefault[2] =
 { DataSupplier::Gzip(DataSupplier::Default[false], false), DataSupplier::Gzip(DataSupplier::Default[true], true) };
 
 int DataSupplier::ThreadCount = 1;

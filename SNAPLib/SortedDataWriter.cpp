@@ -313,7 +313,7 @@ SortedDataFilterSupplier::mergeSort()
         fprintf(stderr, "open sorted file for write failed\n");
         return false;
     }
-    const DataSupplier* readerSupplier = DataSupplier::Default[true]; // autorelease
+    DataSupplier* readerSupplier = DataSupplier::Default[true]; // autorelease
     // setup - open all files, read first block, begin read for second
     for (SortBlockVector::iterator i = blocks.begin(); i != blocks.end(); i++) {
         i->reader = readerSupplier->getDataReader(MAX_READ_LENGTH * 8); // todo: standardize max length
