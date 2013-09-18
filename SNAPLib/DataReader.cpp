@@ -736,9 +736,17 @@ GzipDataReader::readHeader(
     char* header;
     _int64 extraBytes;
     inner->getExtra(&header, &extraBytes);
-    _int64 compressedHeaderSize;
-    decompress(compressed, compressedBytes, &compressedHeaderSize, header, *io_headerSize, io_headerSize, SingleBlock);
-    inner->advance(compressedHeaderSize);
+    _int64 headerSize = 0;
+    while (headerSize < *io_headerSize && compressedBytes > 0) {
+        _int64 compressedBlockSize, decompressedBlockSize;
+        decompress(compressed, compressedBytes, &compressedBlockSize,
+            header + headerSize, extraBytes - headerSize, &decompressedBlockSize, SingleBlock);
+        inner->advance(compressedBlockSize);
+        compressed += compressedBlockSize;
+        compressedBytes -= compressedBlockSize;
+        headerSize += decompressedBlockSize;
+    }
+    *io_headerSize = headerSize;
     return header;
 }
 
