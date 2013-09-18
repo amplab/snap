@@ -1654,9 +1654,7 @@ int _fseek64bit(FILE *stream, _int64 offset, int origin)
 FileMapper::FileMapper()
 {
     fd = -1;
-    mappedRegion = NULL;
     initialized = false;
-    amountMapped = 0;
     mapCount = 0;
     pagesize = getpagesize();
 }
