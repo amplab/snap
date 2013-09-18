@@ -68,7 +68,7 @@ public:
 
         static void readHeader(const char* fileName, ReaderContext& i_context);
 
-        static SAMReader* create(const DataSupplier* supplier, const char *fileName,
+        static SAMReader* create(DataSupplier* supplier, const char *fileName,
                 const ReaderContext& i_context,
                 _int64 startingOffset, _int64 amountOfFileToProcess);
         

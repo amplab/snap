@@ -654,17 +654,18 @@ int getpagesize()
 FileMapper::FileMapper()
 {
     hFile = INVALID_HANDLE_VALUE;
-    hFilePrefetch = INVALID_HANDLE_VALUE;
     hMapping = NULL;
-    mappedRegion = NULL;
     initialized = false;
-    amountMapped = 0;
     pagesize = getpagesize();
+    mapCount = 0;
     
+#if 0
+    hFilePrefetch = INVALID_HANDLE_VALUE;
     lap->hEvent = NULL;
     prefetchBuffer = BigAlloc(prefetchBufferSize);
     isPrefetchOutstanding = false;
     lastPrefetch = 0;
+#endif
 
     millisSpentInReadFile = 0;
     countOfImmediateCompletions = 0;
@@ -673,26 +674,38 @@ FileMapper::FileMapper()
 }
 
 bool
-FileMapper::init(const char *fileName)
+FileMapper::init(const char *i_fileName)
 {
+    if (initialized) {
+        if (strcmp(fileName, i_fileName)) {
+            fprintf(stderr, "FileMapper already initialized with %s, cannot init with %s\n", fileName, i_fileName);
+            return false;
+        }
+        return true;
+    }
+    fileName = i_fileName;
     hFile = CreateFile(fileName, GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN,NULL);
     if (INVALID_HANDLE_VALUE == hFile) {
         fprintf(stderr,"Failed to open '%s', error %d\n",fileName, GetLastError());
         return false;
     }
 
+#if 0
     hFilePrefetch = CreateFile(fileName, GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_FLAG_OVERLAPPED,NULL);
     if (INVALID_HANDLE_VALUE == hFilePrefetch) {
         fprintf(stderr,"Failed to open '%s' for prefetch, error %d\n",fileName, GetLastError());
         CloseHandle(hFile);
         return false;
     }
+#endif
 
     BY_HANDLE_FILE_INFORMATION fileInfo;
     if (!GetFileInformationByHandle(hFile,&fileInfo)) {
         fprintf(stderr,"Unable to get file information for '%s', error %d\n", fileName, GetLastError());
         CloseHandle(hFile);
+#if 0
         CloseHandle(hFilePrefetch);
+#endif
         return false;
     }
     LARGE_INTEGER liFileSize;
@@ -704,12 +717,14 @@ FileMapper::init(const char *fileName)
     if (NULL == hMapping) {
         fprintf(stderr,"Unable to create mapping to file '%s', %d\n", fileName, GetLastError());
         CloseHandle(hFile);
+#if 0
         CloseHandle(hFilePrefetch);
+#endif
         return false;
     }
-
+#if 0
     lap->hEvent = CreateEvent(NULL,FALSE,FALSE,NULL);
-
+#endif
     initialized = true;
 
  
@@ -717,10 +732,8 @@ FileMapper::init(const char *fileName)
 }
 
 char *
-FileMapper::createMapping(size_t offset, size_t amountToMap)
+FileMapper::createMapping(size_t offset, size_t amountToMap, void** o_mappedBase)
 {
-    _ASSERT(NULL == mappedRegion);
- 
     size_t beginRounding = offset % pagesize;
     LARGE_INTEGER liStartingOffset;
     liStartingOffset.QuadPart = offset - beginRounding;
@@ -735,49 +748,55 @@ FileMapper::createMapping(size_t offset, size_t amountToMap)
         mapRequestSize = 0; // Says to just map the whole thing.
     }
 
-    mappedBase = (char *)MapViewOfFile(hMapping,FILE_MAP_READ,liStartingOffset.HighPart,liStartingOffset.LowPart, mapRequestSize);
+    char* mappedBase = (char *)MapViewOfFile(hMapping,FILE_MAP_READ,liStartingOffset.HighPart,liStartingOffset.LowPart, mapRequestSize);
     if (NULL == mappedBase) {
         fprintf(stderr,"Unable to map file, %d\n", GetLastError());
         return NULL;
     } 
-    mappedRegion = mappedBase + beginRounding;
+    char* mappedRegion = mappedBase + beginRounding;
 
-    amountMapped = amountToMap;
-
+#if 0
     prefetch(0);
+#endif
 
+    InterlockedIncrementAndReturnNewValue(&mapCount);
+    *o_mappedBase = mappedBase;
    return mappedRegion;
 }
 
 void
-FileMapper::unmap()
+FileMapper::unmap(void* mappedBase)
 {
-    if (NULL != mappedBase) {
+    _ASSERT(mapCount > 0);
+    if (mapCount > 0) {
+        int n = InterlockedDecrementAndReturnNewValue(&mapCount);
+        _ASSERT(n >= 0);
         if (!UnmapViewOfFile(mappedBase)) {
             fprintf(stderr,"Unmap of file failed, %d\n", GetLastError());
         }
-        mappedRegion = NULL;
-        mappedBase = NULL;
     }
 }
 
 FileMapper::~FileMapper()
 {
-    unmap();
+    _ASSERT(mapCount == 0);
+#if 0
     if (isPrefetchOutstanding) {
         DWORD numberOfBytesTransferred;
         GetOverlappedResult(hFile,lap,&numberOfBytesTransferred,TRUE);
     }
     BigDealloc(prefetchBuffer);
     prefetchBuffer = NULL;
+    CloseHandle(hFilePrefetch);
+    CloseHandle(lap->hEvent);
+#endif
     CloseHandle(hMapping);
     CloseHandle(hFile);
-    CloseHandle(lap->hEvent);
-    CloseHandle(hFilePrefetch);
     printf("FileMapper: %lld immediate completions, %lld delayed completions, %lld failures, %lld ms in readfile (%lld ms/call)\n",countOfImmediateCompletions, countOfDelayedCompletions, countOfFailures, millisSpentInReadFile, 
-        millisSpentInReadFile/(countOfImmediateCompletions + countOfDelayedCompletions + countOfFailures));
+        millisSpentInReadFile/max(1, countOfImmediateCompletions + countOfDelayedCompletions + countOfFailures));
 }
-     
+    
+#if 0
 void
 FileMapper::prefetch(size_t currentRead)
 {
@@ -834,6 +853,8 @@ FileMapper::prefetch(size_t currentRead)
     }
     InterlockedAdd64AndReturnNewValue(&millisSpentInReadFile,timeInMillis() - start);
 }
+#endif
+
 #else   // _MSC_VER
 
 #if defined(__MACH__)
@@ -1636,12 +1657,21 @@ FileMapper::FileMapper()
     mappedRegion = NULL;
     initialized = false;
     amountMapped = 0;
+    mapCount = 0;
     pagesize = getpagesize();
 }
 
 bool
-FileMapper::init(const char *fileName)
+FileMapper::init(const char *i_fileName)
 {
+    if (initialized) {
+        if (strcmp(fileName, i_fileName)) {
+            fprintf(stderr, "FileMapper already initialized with %s, cannot init with %s\n", fileName, i_fileName);
+            return false;
+        }
+        return true;
+    }
+    fileName = i_fileName;
     fd = open(fileName, O_RDONLY);
     if (fd == -1) {
 	    fprintf(stderr, "Failed to open %s\n", fileName);
@@ -1662,10 +1692,8 @@ FileMapper::init(const char *fileName)
 }
 
 char *
-FileMapper::createMapping(size_t offset, size_t amountToMap)
+FileMapper::createMapping(size_t offset, size_t amountToMap, void** o_token)
 {
-    _ASSERT(NULL == mappedRegion);
-
     size_t beginRounding = offset % pagesize;
 
     size_t mapRequestSize = beginRounding + amountToMap;
@@ -1674,7 +1702,7 @@ FileMapper::createMapping(size_t offset, size_t amountToMap)
         mapRequestSize = 0; // Says to just map the whole thing.
     } 
 
-    mappedBase = (char *) mmap(NULL, amountToMap + beginRounding, PROT_READ, MAP_SHARED, fd, offset - beginRounding);
+    char* mappedBase = (char *) mmap(NULL, amountToMap + beginRounding, PROT_READ, MAP_SHARED, fd, offset - beginRounding);
     if (mappedBase == MAP_FAILED) {
 	    fprintf(stderr, "mmap failed.\n");
 	    return NULL;
@@ -1683,27 +1711,32 @@ FileMapper::createMapping(size_t offset, size_t amountToMap)
     int r = madvise(mappedBase, min((size_t) madviseSize, amountToMap + beginRounding), MADV_WILLNEED | MADV_SEQUENTIAL);
     _ASSERT(r == 0);
     lastPosMadvised = 0;
-    amountMapped = amountToMap;
-    mappedRegion = mappedBase + beginRounding;
 
-    return mappedRegion;
+    InterlockedIncrementAndReturnNewValue(&mapCount);
+    *o_token = new UnmapToken(mappedBase, amountToMap);
+    return mappedBase + beginRounding;
 }
 
 void
-FileMapper::unmap()
+FileMapper::unmap(void* i_token)
 {
-    if (NULL != mappedRegion) {
-        munmap(mappedBase, amountMapped);
-        mappedRegion = NULL;
+    _ASSERT(mapCount > 0);
+    if (mapCount > 0) {
+        int n = InterlockedDecrementAndReturnNewValue(&mapCount);
+        _ASSERT(n >= 0);
+        UnmapToken* token = (UnmapToken*) i_token;
+        munmap(token->first, token->second);
+        delete token;
     }
 }
 
 FileMapper::~FileMapper()
 {
-    unmap();
+    _ASSERT(mapCount == 0);
     close(fd);
 }
 
+#if 0
 void
 FileMapper::prefetch(size_t currentRead)
 {
@@ -1723,6 +1756,8 @@ FileMapper::prefetch(size_t currentRead)
         lastPosMadvised = offset;
     }
 }
+#endif
+
 #endif  // _MSC_VER
 
 AsyncFile* AsyncFile::open(const char* filename, bool write)

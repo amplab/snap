@@ -113,7 +113,7 @@ SAMReader::skipToBeyondNextRunOfSpacesAndTabs(char *str, const char *endOfBuffer
 
     SAMReader *
 SAMReader::create(
-    const DataSupplier* supplier,
+    DataSupplier* supplier,
     const char *fileName,
     const ReaderContext& context,
     _int64 startingOffset, 
