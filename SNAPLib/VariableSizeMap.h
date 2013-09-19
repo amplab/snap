@@ -357,7 +357,7 @@ public:
 		        int l = this->limit;
                 bool occupy = prior == _empty;
                 if (o < l || ! occupy) {
-                    occupied += occupy;
+                    this->occupied += occupy;
                     *o_pvalue = &p->value;
                 } else {
                     this->grow();
