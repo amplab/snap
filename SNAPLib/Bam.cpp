@@ -1063,7 +1063,7 @@ private:
     size_t runOffset; // offset in file of first read in run
     _uint32 runLocation; // location in genome
     int runCount; // number of aligned reads
-    typedef VariableSizeMap<DuplicateReadKey,DuplicateMateInfo,150,MapNumericHash<DuplicateReadKey>,90,0,-2,-3> MateMap;
+    typedef VariableSizeMap<DuplicateReadKey,DuplicateMateInfo,150,MapNumericHash<DuplicateReadKey>,70,0,-2> MateMap;
     static const _uint64 RunKey = 0xffffffffc0000000UL;
     static const _uint64 RunRC = 0x80000000;
     static const _uint64 RunNextRC = 0x40000000;
@@ -1333,7 +1333,7 @@ private:
         _uint64 start, end;
     };
     typedef VariableSizeVector<BAMChunk> ChunkVec;
-    typedef VariableSizeMap<_uint32,ChunkVec,150,MapNumericHash<_uint32>,90,-1,-2,-3> BinMap;
+    typedef VariableSizeMap<_uint32,ChunkVec,150,MapNumericHash<_uint32>,80,-1,-2> BinMap;
     typedef VariableSizeVector<_uint64> LinearMap;
     struct RefInfo {
         BinMap bins;

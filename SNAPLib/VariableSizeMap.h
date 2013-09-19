@@ -38,27 +38,27 @@ template<
     typename V,
     int growth = 150,
     typename Hash = MapNumericHash<K>,
-    int fill = 90,
+    int fill = 80,
     int _empty = 0,
     int _tombstone = -1,
-    int _busy = -2,
     bool multi = false>
 class VariableSizeMapBase
 {
 protected:
     VariableSizeMapBase(int i_capacity = 16)
-        : entries(NULL), count(0), capacity(i_capacity)
+        : entries(NULL), count(0), capacity(i_capacity), occupied(0)
     {
         reserve(max(16,i_capacity));
     }
 
     VariableSizeMapBase(void** data, unsigned i_capacity)
-        : entries((Entry*) (2 + (_int64*) *data)),
+        : entries((Entry*) (3 + (_int64*) *data)),
         capacity(i_capacity),
         count((int) ((_int64*)*data)[0]),
-        limit((int) ((_int64*)*data)[1])
+        limit((int) ((_int64*)*data)[1]),
+        occupied((int) ((_int64*)*data)[2])
     {
-        *data = ((char*)*data) + (size_t) i_capacity * sizeof(Entry) + 2 * sizeof(_int64);
+        *data = ((char*)*data) + (size_t) i_capacity * sizeof(Entry) + 3 * sizeof(_int64);
     }
     
     inline void assign(VariableSizeMapBase<K,V>* other)
@@ -71,12 +71,14 @@ protected:
         count = other->count;
         limit = other->limit;
         hash = other->hash;
+        occupied = other->occupied;
         other->entries = NULL;
         other->count = 0;
     }
 
     inline void grow()
     {
+        _ASSERT(growth > 100);
         _int64 larger = ((_int64) capacity * growth) / 100;
         _ASSERT(larger < INT32_MAX);
         reserve((int) larger);
@@ -121,6 +123,7 @@ public:
                     count++;
                 }
             }
+            occupied = count;
             delete[] old;
         }
     }
@@ -138,7 +141,7 @@ public:
                 }
             }
         }
-        count = 0;
+        count = occupied = 0;
     }
     
     typedef VariableSizeMapEntry<K,V> Entry;
@@ -178,6 +181,8 @@ public:
         WriteLargeFile(file, &x, sizeof(_int64));
         x = (_int64) limit;
         WriteLargeFile(file, &x, sizeof(_int64));
+        x = (_int64) occupied;
+        WriteLargeFile(file, &x, sizeof(_int64));
         WriteLargeFile(file, entries, sizeof(Entry) * (size_t) capacity);
     }
     
@@ -187,7 +192,7 @@ protected:
 
     void init(int& pos, int& i, K key)
     {
-        _ASSERT(key != _empty && key != _tombstone && key != _busy);
+        _ASSERT(key != _empty && key != _tombstone);
         pos = hash(key) % capacity;
         i = 1;
         if (entries == NULL) {
@@ -217,9 +222,6 @@ protected:
         }
         while (true) {
             Entry* p = &entries[pos];
-            while (growth == 0 && p->key == _busy) {
-                // spin
-            }
             K k = p->key;
             if (k == key && ! (multi && add)) {
                 return p;
@@ -236,6 +238,7 @@ protected:
     Entry *entries;
     int capacity;
     int count;
+    int occupied; // number of non-empty slots (includes tombstones)
     int limit; // current limit (capacity * fill / 100)
     Hash hash;
 };
@@ -244,13 +247,13 @@ protected:
 // Single-valued map
 //
 template< typename K, typename V, int growth = 150, typename Hash = MapNumericHash<K>,
-    int fill = 90, int _empty = 0, int _tombstone = -1, int _busy = -2 >
+    int fill = 80, int _empty = 0, int _tombstone = -1 >
 class VariableSizeMap
-    : public VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,_busy,false>
+    : public VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,false>
 {
 public:
     VariableSizeMap(int i_capacity = 16)
-        : VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,_busy,false>(i_capacity)
+        : VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,false>(i_capacity)
     {}
 
     VariableSizeMap(const VariableSizeMap<K,V>& other)
@@ -259,7 +262,7 @@ public:
     }
 
     VariableSizeMap(void** data, unsigned i_capacity)
-        : VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,_busy,false>(data, i_capacity)
+        : VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,false>(data, i_capacity)
     {
     }
 
@@ -345,48 +348,22 @@ public:
                 return false;
             }
             if (prior == _empty || prior == _tombstone) {
-                if (growth != 0) {
-                    // single-threaded
-                    p->key = key;
-                    p->value = value;
-                    this->count++;
-		    // hack!! to get around gcc bug
-		    int c = this->count;
-		    int l = this->limit;
-                    if (c < l) {
-                        *o_pvalue = &p->value;
-                    } else {
-                        this->grow();
-                        *o_pvalue = &this->scan(key, false)->value; // lookup again after rehashing
-                    }
-                    return true;
-                } else {
-                    // multi-threaded
-                    if (sizeof(K) == 4) {
-#if 0
-                        if (InterlockedCompareExchange32AndReturnOldValue((volatile _uint32*) &p->key, busy, prior) != prior) {
-                            continue;
-                        }
-#endif
-                    } else if (sizeof(K) == 8) {
-#if 0
-                        if (InterlockedCompareExchange64AndReturnOldValue((volatile _uint64*) &p->key, busy, prior) != prior) {
-                            continue;
-                        }
-#endif
-                    } else {
-                        p->key = K(_busy);
-                    }
-                    p->value = value;
-#if 0
-                    InsertWriteBarrier();
-#endif
-                    p->key = key;
-                    int incremented = (int) InterlockedIncrementAndReturnNewValue((volatile int*) &this->count);
-                    _ASSERT(incremented <= limit);
+                // single-threaded
+                p->key = key;
+                p->value = value;
+                this->count++;
+		        // hack!! to get around gcc bug
+		        int o = this->occupied;
+		        int l = this->limit;
+                bool occupy = prior == _empty;
+                if (o < l || ! occupy) {
+                    occupied += occupy;
                     *o_pvalue = &p->value;
-                    return true;
+                } else {
+                    this->grow();
+                    *o_pvalue = &this->scan(key, false)->value; // lookup again after rehashing
                 }
+                return true;
             }
         }
     }
@@ -397,23 +374,23 @@ typedef VariableSizeMap<unsigned,int> IdIntMap;
 // 
 // Single-valued map
 //
-template< typename K, typename V, int growth = 150, typename Hash = MapNumericHash<K>, int fill = 90, K empty = K(), K tombstone = K(-1), K busy = K(-2) >
+template< typename K, typename V, int growth = 150, typename Hash = MapNumericHash<K>, int fill = 80, K _empty = K(), K _tombstone = K(-1) >
 class VariableSizeMultiMap
-    : public VariableSizeMapBase<K,V,growth,Hash,fill,empty,tombstone,busy,true>
+    : public VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,true>
 {
 public:
     VariableSizeMultiMap(int i_capacity = 16)
-        : VariableSizeMapBase<K,V,growth,Hash,fill,empty,tombstone,busy,true>(i_capacity)
+        : VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,true>(i_capacity)
     {}
 
     VariableSizeMultiMap(VariableSizeMultiMap& other)
-        : VariableSizeMapBase<K,V,growth,Hash,fill,empty,tombstone,busy,true>(other.capacity)
+        : VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,true>(other.capacity)
     {
         this->assign(&other);
     }
 
     VariableSizeMultiMap(void** data, unsigned i_capacity)
-        : VariableSizeMapBase<K,V,growth,Hash,fill,empty,tombstone,busy,true>(data, i_capacity)
+        : VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,true>(data, i_capacity)
     {
     }
 
@@ -431,7 +408,7 @@ public:
     {
     public:
         bool hasValue()
-        { return pos < map->capacity && map->entries[pos].key != empty; }
+        { return pos < map->capacity && map->entries[pos].key != _empty; }
 
         Entry* operator*() const
         { _ASSERT(pos < map->capacity); return &map->entries[pos]; }
@@ -448,7 +425,7 @@ public:
                         pos = map->capacity;
                         return;
                     }
-                } while ((k = map->entries[pos].key) != key && k != empty);
+                } while ((k = map->entries[pos].key) != key && k != _empty);
             }
         }
 
@@ -475,7 +452,7 @@ public:
         {
             map->init(pos, i, key);
             K k = map->entries[pos].key;
-            if (k != key && k != empty) {
+            if (k != key && k != _empty) {
                 next(); // skip tombstones & other keys
             }
         }
@@ -513,7 +490,7 @@ public:
     // always add even if value exists for key
     inline void add(K key, V value)
     {
-        if (this->count >= this->limit) {
+        if (this->occupied >= this->limit) {
             this->grow();
         }
         Entry* p = this->scan(key, true);
@@ -523,6 +500,7 @@ public:
             p = this->scan(key, true);
             _ASSERT(p != NULL);
         }
+        this->occupied += p->key == _empty;
         p->key = key;
         p->value = value;
         this->count++;
@@ -544,24 +522,37 @@ public:
                 if (p->value == value) {
                     return false;
                 }
-            } else if (p->key == tombstone && slot == NULL) {
-                slot = p; // remember in case we don't find a match
-            } else if (p->key == empty) {
-                slot = p; // got to end with no match, use this slot
-                break;
+                // keep looking...
+            } else if (p->key == _tombstone) {
+                if (slot == NULL) {
+                    slot = p; // remember in case we don't find a match
+                }
+                // keep looking...
+            } else if (p->key == _empty) {
+                if (slot == NULL) {
+                    slot = p;
+                }
+                break; // got to end with no match
             }
             if (! this->advance(pos, i, key)) {
                 break;
             }
         }
-	    // hack!! to get around gcc bug
-	    int c = this->count;
-	    int l = this->limit;
-        if (slot != NULL && c < l) {
-            _ASSERT(slot->key == empty || slot->key == tombstone);
-            slot->key = key;
-            slot->value = value;
-            this->count++;
+        if (slot != NULL) {
+            _ASSERT(slot->key == _empty || slot->key == _tombstone);
+	        // hack!! to get around gcc bug
+	        int o = this->occupied;
+	        int l = this->limit;
+            bool occupy = slot->key == _empty;
+            if (o < l || ! occupy) {
+                slot->key = key;
+                slot->value = value;
+                this->count++;
+                this->occupied += occupy;
+            } else {
+                this->grow();
+                return this->put(key, value);
+            }
         } else {
             this->add(key, value);
         }
@@ -573,7 +564,7 @@ public:
     {
         for (valueIterator i = getAll(key); i.hasValue(); i.next()) {
             if (i->value == value) {
-                i->key = tombstone;
+                i->key = _tombstone;
                 this->count--;
                 return true;
             }
@@ -585,7 +576,7 @@ public:
     {
         int n = 0;
         for (valueIterator i = getAll(key); i.hasValue(); i.next()) {
-            i->key = tombstone;
+            i->key = _tombstone;
             this->count--;
             n++;
         }
