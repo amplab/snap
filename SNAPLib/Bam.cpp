@@ -1803,7 +1803,7 @@ bool ReadQCFilter::isDuplicate(BAMAlignment* read) {
     
     // check if the hash has been observed
     // this is not a thread-safe lookup but the loss in sensitivity should be incredibly low
-    bool observed = (observedPairAlignments.find(hash) == observedPairAlignments.end());
+    bool observed = (observedPairAlignments.find(hash) != observedPairAlignments.end());
     if ( ! observed) {
         // stick it into the set, since we've seen it
         // this is not a thread-safe insert, but...i can't really see how it can screw things up

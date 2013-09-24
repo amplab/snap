@@ -330,7 +330,7 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
                 nInputs++;
             }
             foundFirstHalfOfFASTQ = !foundFirstHalfOfFASTQ;
-        }
+        }   
     }
     if (foundFirstHalfOfFASTQ) {
         fprintf(stderr,"For the paired aligner, FASTQ files must come in pairs.  The last one is unmatched.\n");
