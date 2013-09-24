@@ -59,6 +59,7 @@ struct ThreadContext {
     _int64 countOfReadsByEditDistance[MaxMAPQ+1][MaxEditDistance+1];
     _int64 countOfMisalignmentsByEditDistance[MaxMAPQ+1][MaxEditDistance+1];
 
+
     ThreadContext() {
         nUnaligned = 0;
         totalReads = 0;
@@ -109,7 +110,9 @@ WorkerThreadMain(void *param)
         Read read;
         LandauVishkinWithCigar lv;
         while (samReader->getNextRead(&read, &alignmentResult, &genomeLocation, &isRC, &mapQ, &flag, &cigar)) {
-
+  	    if (justCount) {
+              context->countOfReads[mapQ]++;
+	    }
             if (mapQ < 0 || mapQ > MaxMAPQ) {
                 fprintf(stderr,"Invalid MAPQ: %d\n",mapQ);
                 exit(1);
@@ -374,10 +377,7 @@ int main(int argc, char * argv[])
     }
     printf("%lld reads, %lld unaligned (%0.2f%%)\n", totalReads, nUnaligned, 100. * (double)nUnaligned / (double)totalReads);
 
-    if (justCount) return 0;
-
-    printf("%lld total unaligned\nMAPQ\tnReads\tnMisaligned\n",nUnaligned);
-
+    printf("MAPQ\tnReads\tnMisaligned\n");
     for (int i = 0; i <= MaxMAPQ; i++) {
         _int64 nReads = 0;
         _int64 nMisaligned = 0;
