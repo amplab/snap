@@ -493,7 +493,7 @@ void Genome::fillInPieceLengths()
         pieces[i].length =  pieces[i+1].beginningOffset - pieces[i].beginningOffset;
     }
 
-    pieces[nPieces-1].length = nBases - pieces[nPieces-1].length;
+    pieces[nPieces-1].length = nBases - pieces[nPieces-1].beginningOffset;
 }
 
 const Genome::Piece *Genome::getPieceForRead(unsigned location, unsigned readLength, unsigned *extraBasesClippedBefore) const 
