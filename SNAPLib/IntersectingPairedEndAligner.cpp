@@ -331,8 +331,9 @@ IntersectingPairedEndAligner::align(
             // If we don't have enough seeds left to reach the end of the read, space out the seeds more-or-less evenly.
             //
             if ((maxSeeds - countOfHashTableLookups[whichRead] + 1) * seedLen + nextSeedToTest < nPossibleSeeds) {
-                _ASSERT((nPossibleSeeds + nextSeedToTest) / (maxSeeds - countOfHashTableLookups[whichRead] + 1) > seedLen);
+                _ASSERT((nPossibleSeeds + nextSeedToTest) / (maxSeeds - countOfHashTableLookups[whichRead] + 1) >= seedLen);
                 nextSeedToTest += (nPossibleSeeds + nextSeedToTest) / (maxSeeds - countOfHashTableLookups[whichRead] + 1);
+                _ASSERT(nextSeedToTest < nPossibleSeeds);   // We haven't run off the end of the read.
             } else {
                 nextSeedToTest += seedLen;
             }

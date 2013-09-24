@@ -17,6 +17,7 @@ Environment:
 --*/
 
 #include "stdafx.h"
+#include "SAM.h"
 #include "BigAlloc.h"
 #include "Compat.h"
 #include "Read.h"
@@ -452,7 +453,7 @@ private:
 
     static int computeCigarOps(const Genome * genome, LandauVishkinWithCigar * lv,
         char * cigarBuf, int cigarBufLen,
-        const char * data, unsigned dataLength, unsigned basesClippedBefore, unsigned basesClippedAfter,
+        const char * data, unsigned dataLength, unsigned basesClippedBefore, unsigned extraBasesClippedBefore, unsigned basesClippedAfter,
         unsigned genomeLocation, bool isRC, bool useM, int * editDistance);
 
     const bool useM;
@@ -628,20 +629,21 @@ BAMFormat::writeRead(
     unsigned fullLength;
     unsigned clippedLength;
     unsigned basesClippedBefore;
+    unsigned extraBasesClippedBefore;
     unsigned basesClippedAfter;
     int editDistance;
 
-    if (! getSAMData(genome, lv, data, quality, MAX_READ, pieceName, pieceIndex, 
+    if (! SAMFormat::createSAMLine(genome, lv, data, quality, MAX_READ, pieceName, pieceIndex, 
         flags, positionInPiece, mapQuality, matePieceName, matePieceIndex, matePositionInPiece, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, useM,
-        hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection))
+        hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection, &extraBasesClippedBefore))
     {
         return false;
     }
     if (genomeLocation != InvalidGenomeLocation) {
         cigarOps = computeCigarOps(genome, lv, (char*) cigarBuf, cigarBufSize * sizeof(_uint32),
-                                   clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
+                                   clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter,
                                    genomeLocation, direction == RC, useM, &editDistance);
     }
 
@@ -764,6 +766,7 @@ BAMFormat::computeCigarOps(
     const char *                data,
     unsigned                    dataLength,
     unsigned                    basesClippedBefore,
+    unsigned                    extraBasesClippedBefore,
     unsigned                    basesClippedAfter,
     unsigned                    genomeLocation,
     bool                        isRC,
@@ -771,6 +774,13 @@ BAMFormat::computeCigarOps(
     int *                       editDistance
 )
 {
+    //
+    // Apply the extra clipping.
+    //
+    genomeLocation += extraBasesClippedBefore;
+    data += extraBasesClippedBefore;
+    dataLength -= extraBasesClippedBefore;
+
     const char *reference = genome->getSubstring(genomeLocation, dataLength);
     int used;
     if (NULL != reference) {
@@ -780,8 +790,8 @@ BAMFormat::computeCigarOps(
                             data,
                             dataLength,
                             MAX_K - 1,
-                            cigarBuf + 4 * (basesClippedBefore > 0),
-                            cigarBufLen - 4 * ((basesClippedBefore > 0) + (basesClippedAfter > 0)),
+                            cigarBuf + 4 * ((basesClippedBefore + extraBasesClippedBefore) > 0),
+                            cigarBufLen - 4 * (((basesClippedBefore + extraBasesClippedBefore) > 0) + (basesClippedAfter > 0)),
 						    useM, BAM_CIGAR_OPS, &used);
     } else {
         //
@@ -802,8 +812,8 @@ BAMFormat::computeCigarOps(
         return 0;
     } else {
         // Add some CIGAR instructions for soft-clipping if we've ignored some bases in the read.
-        if (basesClippedBefore > 0) {
-            *(_uint32*)cigarBuf = (basesClippedBefore << 4) | BAMAlignment::CigarToCode['S'];
+        if (basesClippedBefore + extraBasesClippedBefore > 0) {
+            *(_uint32*)cigarBuf = ((basesClippedBefore + extraBasesClippedBefore) << 4) | BAMAlignment::CigarToCode['S'];
             used += 4;
         }
         if (basesClippedAfter > 0) {

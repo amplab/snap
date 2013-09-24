@@ -27,6 +27,7 @@ Environment:
 #include "directions.h"
 #include "Read.h"
 #include "DataReader.h"
+#include "FileFormat.h"
 
 bool readIdsMatch(const char* id0, const char* id1);
 
@@ -87,6 +88,7 @@ public:
         
         static char* skipToBeyondNextRunOfSpacesAndTabs(char *str, const char *endOfBuffer, size_t *charsUntilFirstSpaceOrTab = NULL);
 
+
 protected:
 
         //
@@ -124,6 +126,7 @@ protected:
                         unsigned *genomeLocation, Direction *direction, unsigned *mapQ, 
                         size_t *lineLength, unsigned *flag, const char **cigar, ReadClippingType clipping);
 
+
 private:
         void init(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess);
 
@@ -136,3 +139,74 @@ private:
         friend class SAMFormat;
 };
 
+class SAMFormat : public FileFormat
+{
+public:
+    SAMFormat(bool i_useM) : useM(i_useM) {}
+
+    virtual bool isFormatOf(const char* filename) const;
+    
+    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* o_location, unsigned* o_readBytes, int* o_refID, int* o_pos) const;
+
+    virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
+
+    virtual bool writeHeader(
+        const ReaderContext& context, char *header, size_t headerBufferSize, size_t *headerActualSize,
+        bool sorted, int argc, const char **argv, const char *version, const char *rgLine) const;
+
+    virtual bool writeRead(
+        const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
+        size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
+        int mapQuality, unsigned genomeLocation, Direction direction,
+        bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
+        AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD) const; 
+
+    // calculate data needed to write SAM/BAM record
+    // very long argument list since this was extracted from
+    // original SAM record writing routine so it could be shared with BAM
+
+    static bool
+    createSAMLine(
+        const Genome * genome,
+        LandauVishkinWithCigar * lv,
+        // output data
+        char* data,
+        char* quality,
+        unsigned dataSize,
+        const char*& pieceName,
+        int& pieceIndex,
+        int& flags,
+        unsigned& positionInPiece,
+        int& mapQuality,
+        const char*& matePieceName,
+        int& matePieceIndex,
+        unsigned& matePositionInPiece,
+        _int64& templateLength,
+        unsigned& fullLength,
+        const char*& clippedData,
+        unsigned& clippedLength,
+        unsigned& basesClippedBefore,
+        unsigned& basesClippedAfter,
+        // input data
+        size_t& qnameLen,
+        Read * read,
+        AlignmentResult result, 
+        unsigned genomeLocation,
+        Direction direction,
+        bool useM,
+        bool hasMate,
+        bool firstInPair,
+        Read * mate, 
+        AlignmentResult mateResult,
+        unsigned mateLocation,
+        Direction mateDirection,
+        unsigned *extraBasesClippedBefore);
+
+private:
+    static const char * computeCigarString(const Genome * genome, LandauVishkinWithCigar * lv,
+        char * cigarBuf, int cigarBufLen, char * cigarBufWithClipping, int cigarBufWithClippingLen,
+        const char * data, unsigned dataLength, unsigned basesClippedBefore, unsigned extraBasesClippedBefore, unsigned basesClippedAfter,
+        unsigned genomeLocation, Direction direction, bool useM, int * editDistance);
+
+    const bool useM;
+};
