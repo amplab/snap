@@ -34,6 +34,7 @@ void usage()
     fprintf(stderr,"usage: ComputeROC genomeDirectory inputFile {-b}\n");
     fprintf(stderr,"       -b means to accept reads that match either end of the range regardless of RC\n");
     fprintf(stderr,"       -c means to just count the number of reads that are aligned, not to worry about correctness\n");
+    fprintf(stderr,"       -v means to correct for the error in generating the wgsim coordinates in the Venter data\n");
     fprintf(stderr,"You can specify only one of -b or -c\n");
   	exit(1);
 }
@@ -45,6 +46,8 @@ const char *inputFileName;
 const Genome *genome;
 bool matchBothWays = false;
 bool justCount = false;
+bool venter = false;
+unsigned slackAmount = 50;
 
 static const int MaxMAPQ = 70;
 const unsigned MaxEditDistance = 100;
@@ -228,10 +231,11 @@ WorkerThreadMain(void *param)
                     }  else if(strncmp(piece->name, idBuffer, __min(read.getIdLength(), chrNameLen))) {
                         matched = false;
                     } else {
-                        if (isWithin(offsetA, genomeLocation - piece->beginningOffset, 50)) {
+                        if (isWithin(offsetA, genomeLocation - piece->beginningOffset, slackAmount)) {
                             matched = true;
                             match0 = true;
-                        } else if (isWithin(offsetB, genomeLocation - piece->beginningOffset, 50)) {
+                        } else if ((!venter && isWithin(offsetB, genomeLocation - piece->beginningOffset, slackAmount)) || 
+                                   (venter && offsetB > read.getDataLength() && isWithin(offsetB - read.getDataLength(), genomeLocation - piece->beginningOffset, slackAmount))) {
                             matched = true;
                             match1 = true;
                         } else {
@@ -317,15 +321,15 @@ int main(int argc, char * argv[])
 {
     BigAllocUseHugePages = false;
 
-    if (3 != argc && 4 != argc) {
-		usage();
-	}
+    if (argc < 3) usage();
 
-    if (4 == argc) {
-        if (!strcmp(argv[3],"-b")) {
+    for (int i = 3; i < argc; i++) {
+        if (!strcmp(argv[i], "-b")) {
             matchBothWays = true;
-        } else if (!strcmp(argv[3], "-c")) {
+        } else if (!strcmp(argv[i], "-c")) {
             justCount = true;
+        } else if (!strcmp(argv[i], "-v")) {
+            venter = true;
         } else {
             usage();
         }
