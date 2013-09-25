@@ -256,6 +256,7 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned 
     }
 
     fclose(loadFile);
+    genome->fillInPieceLengths();
     genome->sortPiecesByName();
     return genome;
 }
@@ -377,6 +378,10 @@ Genome::getPieceAtLocation(unsigned location) const
 Genome::getNextPieceAfterLocation(unsigned location) const
 {
     _ASSERT(location < nBases);
+    if (nPieces > 0 && location < pieces[0].beginningOffset) {
+            return &pieces[0];
+    }
+
     int low = 0;
     int high = nPieces - 1;
     while (low <= high) {
@@ -467,6 +472,8 @@ Genome::copy(bool copyX, bool copyY, bool copyM) const
         offsetInReference += amountToCopy;
     }
 
+    newCopy->fillInPieceLengths();
+    newCopy->sortPiecesByName();
     return newCopy;
 }
 
@@ -476,4 +483,41 @@ unsigned DistanceBetweenGenomeLocations(unsigned locationA, unsigned locationB)
     unsigned smallerGenomeOffset = __min(locationA, locationB);
 
     return largerGenomeOffset - smallerGenomeOffset;
+}
+
+void Genome::fillInPieceLengths()
+{
+    if (nPieces == 0) return;
+
+    for (int i = 0; i < nPieces - 1; i++) {
+        pieces[i].length =  pieces[i+1].beginningOffset - pieces[i].beginningOffset;
+    }
+
+    pieces[nPieces-1].length = nBases - pieces[nPieces-1].beginningOffset;
+}
+
+const Genome::Piece *Genome::getPieceForRead(unsigned location, unsigned readLength, unsigned *extraBasesClippedBefore) const 
+{
+    const Piece *piece = getPieceAtLocation(location);
+
+    //
+    // Sometimes, a read aligns before the beginning of a chromosome (imagine prepending a few bases to the read).
+    // In that case, we want to handle it by soft-clipping the bases off of the beginning of the read.  We detect it
+    // here by looking to see if the aligned location plus the read length crosses a piece boundary.  It also might
+    // happen that it is aligned before the first piece, in which case piece will be NULL.
+    //
+    if (NULL == piece || location + readLength > piece->beginningOffset + piece->length) {
+        //
+        // We should never align over the end of a chromosome, only before the beginning.  So move this into the next
+        // chromosome.
+        //
+        piece = getNextPieceAfterLocation(location);
+        _ASSERT(NULL != piece);
+        _ASSERT(piece->beginningOffset > location && piece->beginningOffset < location + readLength);
+        *extraBasesClippedBefore = piece->beginningOffset - location;
+    } else {
+        *extraBasesClippedBefore = 0;
+    }
+
+    return piece;
 }

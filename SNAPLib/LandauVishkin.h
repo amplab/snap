@@ -4,7 +4,7 @@
 #include "BigAlloc.h"
 #include "exit.h"
 
-const int MAX_K = 31;
+const int MAX_K = 63;
 
 //
 // These are global so there are only one for both senses of the template

@@ -33,6 +33,8 @@ void usage()
 {
     fprintf(stderr,"usage: ComputeROC genomeDirectory inputFile {-b}\n");
     fprintf(stderr,"       -b means to accept reads that match either end of the range regardless of RC\n");
+    fprintf(stderr,"       -c means to just count the number of reads that are aligned, not to worry about correctness\n");
+    fprintf(stderr,"You can specify only one of -b or -c\n");
   	exit(1);
 }
 
@@ -42,6 +44,7 @@ SingleWaiterObject allThreadsDone;
 const char *inputFileName;
 const Genome *genome;
 bool matchBothWays = false;
+bool justCount = false;
 
 static const int MaxMAPQ = 70;
 const unsigned MaxEditDistance = 100;
@@ -51,12 +54,15 @@ struct ThreadContext {
     _int64 countOfReads[MaxMAPQ+1];
     _int64 countOfMisalignments[MaxMAPQ+1];
     _int64 nUnaligned;
+    _int64 totalReads;
 
     _int64 countOfReadsByEditDistance[MaxMAPQ+1][MaxEditDistance+1];
     _int64 countOfMisalignmentsByEditDistance[MaxMAPQ+1][MaxEditDistance+1];
 
+
     ThreadContext() {
         nUnaligned = 0;
+        totalReads = 0;
         for (int i = 0; i <= MaxMAPQ; i++) {
             countOfReads[i] = countOfMisalignments[i] = 0;
             for (int j = 0; j <= MaxEditDistance; j++) {
@@ -104,15 +110,19 @@ WorkerThreadMain(void *param)
         Read read;
         LandauVishkinWithCigar lv;
         while (samReader->getNextRead(&read, &alignmentResult, &genomeLocation, &isRC, &mapQ, &flag, &cigar)) {
-
+  	    if (justCount) {
+              context->countOfReads[mapQ]++;
+	    }
             if (mapQ < 0 || mapQ > MaxMAPQ) {
                 fprintf(stderr,"Invalid MAPQ: %d\n",mapQ);
                 exit(1);
             }
 
+            context->totalReads++;
+
             if (0xffffffff == genomeLocation) {
                 context->nUnaligned++;
-            } else {
+            } else if (!justCount) {
                 if (flag & SAM_REVERSE_COMPLEMENT) {
                     read.becomeRC();
                 }
@@ -314,6 +324,8 @@ int main(int argc, char * argv[])
     if (4 == argc) {
         if (!strcmp(argv[3],"-b")) {
             matchBothWays = true;
+        } else if (!strcmp(argv[3], "-c")) {
+            justCount = true;
         } else {
             usage();
         }
@@ -358,11 +370,14 @@ int main(int argc, char * argv[])
     WaitForSingleWaiterObject(&allThreadsDone);
 
     _int64 nUnaligned = 0;
+    _int64 totalReads = 0;
     for (unsigned i = 0; i < nThreads; i++) {
         nUnaligned += contexts[i].nUnaligned;
+        totalReads += contexts[i].totalReads;
     }
-    printf("%lld total unaligned\nMAPQ\tnReads\tnMisaligned\n",nUnaligned);
+    printf("%lld reads, %lld unaligned (%0.2f%%)\n", totalReads, nUnaligned, 100. * (double)nUnaligned / (double)totalReads);
 
+    printf("MAPQ\tnReads\tnMisaligned\n");
     for (int i = 0; i <= MaxMAPQ; i++) {
         _int64 nReads = 0;
         _int64 nMisaligned = 0;
