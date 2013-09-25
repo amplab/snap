@@ -525,8 +525,10 @@ BAMFormat::getWriterSupplier(
             strcpy(indexFileName + len, ".bai");
             filters = DataWriterSupplier::bamIndex(indexFileName, genome, gzipSupplier)->compose(filters);
         }
-        dataSupplier = DataWriterSupplier::sorted(this, genome, tempFileName, options->sortMemory * (1ULL << 30),
-            options->numThreads, options->outputFileTemplate, filters);
+        dataSupplier = DataWriterSupplier::sorted(this, genome, tempFileName,
+            options->sortMemory * (1ULL << 30),
+            options->numThreads, options->outputFileTemplate, filters,
+            FileEncoder::gzip(gzipSupplier, options->numThreads, options->bindToProcessors));
     } else {
         dataSupplier = DataWriterSupplier::create(options->outputFileTemplate, gzipSupplier);
     }
@@ -1275,7 +1277,8 @@ public:
     virtual DataWriter::Filter* getFilter()
     { return new BAMDupMarkFilter(genome); }
 
-    virtual void onClose(DataWriterSupplier* supplier) {}
+    virtual void onClosing(DataWriterSupplier* supplier) {}
+    virtual void onClosed(DataWriterSupplier* supplier) {}
 
 private:
     const Genome* genome;
@@ -1293,7 +1296,7 @@ class BAMIndexFilter : public BAMFilter
 {
 public:
     BAMIndexFilter(BAMIndexSupplier* i_supplier)
-        : BAMFilter(DataWriter::CopyFilter), supplier(i_supplier) {}
+        : BAMFilter(DataWriter::ReadFilter), supplier(i_supplier) {}
 
 protected:
     virtual void onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex);
@@ -1320,7 +1323,8 @@ public:
     virtual DataWriter::Filter* getFilter()
     { return new BAMIndexFilter(this); }
 
-    virtual void onClose(DataWriterSupplier* supplier);
+    virtual void onClosing(DataWriterSupplier* supplier) {}
+    virtual void onClosed(DataWriterSupplier* supplier);
 
 private:
 
@@ -1407,7 +1411,7 @@ BAMIndexSupplier::onRead(
 }
 
     void
-BAMIndexSupplier::onClose(
+BAMIndexSupplier::onClosed(
     DataWriterSupplier* supplier)
 {
     // add final chunk

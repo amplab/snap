@@ -1237,7 +1237,7 @@ MemMapDataReader::nextBatch()
                 }
             }
             releaseLock();
-	    offset = max(offset, startBytes) - startBytes;
+            offset = max(offset, startBytes) - startBytes;
             startBytes = min(batchSize, currentMapStartSize - (currentBatch - 1) * batchSize);
             validBytes = min(batchSize + overflowBytes, currentMapSize - (currentBatch - 1) * batchSize);
             _ASSERT(validBytes >= 0);

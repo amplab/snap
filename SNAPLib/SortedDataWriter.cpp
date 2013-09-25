@@ -118,11 +118,13 @@ public:
         const Genome* i_genome,
         const char* i_tempFileName,
         const char* i_sortedFileName,
-        DataWriter::FilterSupplier* i_sortedFilterSupplier)
+        DataWriter::FilterSupplier* i_sortedFilterSupplier,
+        FileEncoder* i_encoder = NULL)
         :
         format(i_fileFormat),
         genome(i_genome),
         FilterSupplier(DataWriter::CopyFilter),
+        encoder(i_encoder),
         tempFileName(i_tempFileName),
         sortedFileName(i_sortedFileName),
         sortedFilterSupplier(i_sortedFilterSupplier),
@@ -138,7 +140,8 @@ public:
 
     virtual DataWriter::Filter* getFilter();
 
-    virtual void onClose(DataWriterSupplier* supplier);
+    virtual void onClosing(DataWriterSupplier* supplier) {}
+    virtual void onClosed(DataWriterSupplier* supplier);
 
     void setHeaderSize(size_t bytes)
     { headerSize = bytes; }
@@ -157,6 +160,7 @@ private:
     const char*                     tempFileName;
     const char*                     sortedFileName;
     DataWriter::FilterSupplier*     sortedFilterSupplier;
+    FileEncoder*                    encoder;
     size_t                          headerSize;
     ExclusiveLock                   lock; // for adding blocks
     SortBlockVector                 blocks;
@@ -245,7 +249,7 @@ SortedDataFilterSupplier::getFilter()
 }
 
     void
-SortedDataFilterSupplier::onClose(
+SortedDataFilterSupplier::onClosed(
     DataWriterSupplier* supplier)
 {
     if (blocks.size() == 1 && sortedFilterSupplier == NULL) {
@@ -307,7 +311,8 @@ SortedDataFilterSupplier::mergeSort()
 #endif
 
     // set up buffered output
-    DataWriterSupplier* writerSupplier = DataWriterSupplier::create(sortedFileName, sortedFilterSupplier);
+    DataWriterSupplier* writerSupplier = DataWriterSupplier::create(sortedFileName, sortedFilterSupplier,
+        encoder, encoder != NULL ? 6 : 4); // use more buffers to let encoder run async
     DataWriter* writer = writerSupplier->getWriter();
     if (writer == NULL) {
         fprintf(stderr, "open sorted file for write failed\n");
@@ -466,13 +471,14 @@ DataWriterSupplier::sorted(
     size_t tempBufferMemory,
     int numThreads,
     const char* sortedFileName,
-    DataWriter::FilterSupplier* sortedFilterSuppler)
+    DataWriter::FilterSupplier* sortedFilterSuppler,
+    FileEncoder* encoder)
 {
     const int bufferCount = 3;
     const size_t bufferSize = tempBufferMemory > 0
         ? tempBufferMemory / (bufferCount * numThreads)
         : max((size_t) 16 * 1024 * 1024, ((size_t) (genome ? genome->getCountOfBases() : 0) / 3) / bufferCount);
     DataWriter::FilterSupplier* filterSupplier =
-        new SortedDataFilterSupplier(format, genome, tempFileName, sortedFileName, sortedFilterSuppler);
-    return DataWriterSupplier::create(tempFileName, filterSupplier, bufferCount, bufferSize);
+        new SortedDataFilterSupplier(format, genome, tempFileName, sortedFileName, sortedFilterSuppler, encoder);
+    return DataWriterSupplier::create(tempFileName, filterSupplier, NULL, bufferCount, bufferSize);
 }
