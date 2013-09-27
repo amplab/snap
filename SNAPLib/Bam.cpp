@@ -508,7 +508,7 @@ BAMFormat::getWriterSupplier(
     const Genome* genome) const
 {
     DataWriterSupplier* dataSupplier;
-    GzipWriterFilterSupplier* gzipSupplier = DataWriterSupplier::gzip(true, 0x10000, options->numThreads, options->bindToProcessors, options->sortOutput);
+    GzipWriterFilterSupplier* gzipSupplier = DataWriterSupplier::gzip(true, BAM_BLOCK, options->numThreads, options->bindToProcessors, options->sortOutput);
     if (options->sortOutput) {
         size_t len = strlen(options->outputFileTemplate);
         // todo: this is going to leak, but there's no easy way to free it, and it's small...
