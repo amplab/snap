@@ -868,7 +868,7 @@ DecompressDataReader::nextBatch()
     old->ready = false;
     PreventEventWaitersFromProceeding(&old->decompressDone);
     current = (current + 1) % count;
-    //printf("nextBatch #%i copy %lld + %lld/%lld\n", current, copy, next->decompressedStart, next->decompressedValid);
+    printf("nextBatch #%i copy %lld + %lld/%lld\n", current, copy, next->decompressedStart, next->decompressedValid);
     if (autoRelease) {
         releaseBatch(old->batch);
     }
@@ -898,7 +898,7 @@ DecompressDataReader::releaseBatch(DataBatch batch)
     for (int i = count - 1; i >=0; i--) {
         Entry* entry = &entries[(start + i) % count];
         if (entry->batch == batch) {
-            //printf("releaseBatch %d:%d #%d\n", batch.fileID, batch.batchID, (start+i)%count);
+            printf("releaseBatch %d:%d #%d\n", batch.fileID, batch.batchID, (start+i)%count);
             _ASSERT(! entry->ready);
             AllowEventWaitersToProceed(&entry->releaseDone);
             break;
@@ -961,7 +961,7 @@ DecompressDataReader::decompress(
         oldAvailOut = zstream->avail_out;
         oldAvailIn = zstream->avail_out;
         status = inflate(zstream, mode == SingleBlock ? Z_NO_FLUSH : Z_FINISH);
-        //printf("decompress block #%d %lld -> %lld = %d\n", block, zstream.next_in - lastIn, zstream.next_out - lastOut, status);
+        // printf("decompress block #%d %lld -> %lld = %d\n", block, zstream.next_in - lastIn, zstream.next_out - lastOut, status);
         block++;
         if (status < 0 && status != Z_BUF_ERROR) {
             fprintf(stderr, "GzipDataReader: inflate failed with %d\n", status);
@@ -972,7 +972,7 @@ DecompressDataReader::decompress(
             soft_exit(1);
         }
     } while (zstream->avail_in != 0 && (zstream->avail_out != oldAvailOut || zstream->avail_in != oldAvailIn) && mode != SingleBlock);
-    //printf("end decompress status=%d, avail_in=%lld, last block=%lld->%lld, avail_out=%lld\n", status, zstream.avail_in, zstream.next_in - lastIn, zstream.next_out - lastOut, zstream.avail_out);
+    // printf("end decompress status=%d, avail_in=%lld, last block=%lld->%lld, avail_out=%lld\n", status, zstream.avail_in, zstream.next_in - lastIn, zstream.next_out - lastOut, zstream.avail_out);
     if (o_inputRead) {
         *o_inputRead = inputBytes - zstream->avail_in;
     }
@@ -1072,7 +1072,7 @@ DecompressDataReader::decompressThread(
     DecompressDataReader* reader = (DecompressDataReader*) context;
     OffsetVector inputs, outputs;
     DecompressManager manager(&inputs, &outputs);
-    ParallelCoworker coworker(max(4, DataSupplier::ThreadCount), false, &manager);
+    ParallelCoworker coworker(min(4, DataSupplier::ThreadCount), false, &manager);
     coworker.start();
     int index = 0;
     // keep reading & decompressing entries until stopped
@@ -1086,7 +1086,7 @@ DecompressDataReader::decompressThread(
         // always starts with a fresh batch - advances after reading it all
         bool ok = reader->inner->getData(&entry->compressed, &entry->compressedValid, &entry->compressedStart);
         if (! ok) {
-            //printf("decompressThread #%d eof\n", index);
+            printf("decompressThread #%d eof\n", index);
             if (! reader->inner->isEOF()) {
                 fprintf(stderr, "error reading file at offset %lld\n", reader->getFileOffset());
                 soft_exit(1);
@@ -1114,7 +1114,7 @@ DecompressDataReader::decompressThread(
             // append final offsets
             inputs.push_back(input);
             outputs.push_back(output);
-            //printf("decompressThread read #%d %lld->%lld\n", index, input, output);
+            printf("decompressThread read #%d %lld->%lld\n", index, input, output);
             reader->inner->advance(input);
             entry->decompressedValid = output;
             entry->decompressedStart = output - reader->overflowBytes;
@@ -1124,7 +1124,7 @@ DecompressDataReader::decompressThread(
             coworker.step();
         }
         // make buffer available for clients & go on to next
-        //printf("decompressThread #%d ready\n", index);
+        printf("decompressThread #%d ready\n", index);
         entry->ready = true;
         PreventEventWaitersFromProceeding(&entry->releaseDone);
         AllowEventWaitersToProceed(&entry->decompressDone);
@@ -1164,7 +1164,7 @@ DecompressDataReaderSupplier::getDataReader(
     // create new reader, telling it how many bytes it owns
     // it will subtract overflow off the end of each batch
     // batch count here is cheap, so make it high enough that it never hits the limit
-    return new DecompressDataReader(autoRelease, data, min(4, DataSupplier::ThreadCount), totalExtra, mine, overflowBytes);
+    return new DecompressDataReader(autoRelease, data, max(4, DataSupplier::ThreadCount*2), totalExtra, mine, overflowBytes);
 }
     
     DataSupplier*
