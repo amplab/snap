@@ -32,6 +32,9 @@ Environment:
 // SAM Format Specification v1.4-r985
 
 // header information in each BGZF compression block
+
+#define BAM_BLOCK 65536
+
 #pragma pack(push, 1)
 struct BAMHeaderRefSeq;
 struct BAMHeader
@@ -285,6 +288,51 @@ struct BAMAlignAux
     BAMAlignAux* next()
     { return (BAMAlignAux*) (size() + (char*) this); }
 };
+
+struct BgzfExtra
+{
+    _uint8 SI1;
+    _uint8 SI2;
+    _uint16 SLEN;
+    
+    void* data()
+    { return this + 1; }
+    
+    BgzfExtra* nextExtra()
+    { return (BgzfExtra*) (SLEN + (char*) data()); }
+};
+
+struct BgzfHeader
+{
+    _uint8 ID1;
+    _uint8 ID2;
+    _uint8 CM;
+    _uint8 FLG;
+    _uint32 MTIME;
+    _uint8 XFL;
+    _uint8 OS;
+    _uint16 XLEN;
+
+    BgzfExtra* firstExtra()
+    { return (BgzfExtra*) (sizeof(_uint16) + (char*) &this->XLEN); }
+
+    _uint16 BSIZE()
+    {
+        for (BgzfExtra* x = firstExtra(); (char*) x < XLEN + (char*) firstExtra(); x = x->nextExtra()) {
+            if (x->SI1 == 66 && x->SI2 == 67) {
+                _ASSERT(x->SLEN == 2);
+                return * (_uint16*) x->data();
+            }
+        }
+        _ASSERT(false);
+        return 0;
+    }
+
+    _uint32 ISIZE()
+    { return * (_uint32*) (BSIZE() - 3 + (char*) this); }
+};
+
+
 #pragma pack(pop)
 
 

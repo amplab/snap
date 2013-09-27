@@ -22,6 +22,7 @@ Environment:
 #include "VariableSizeVector.h"
 #include "ParallelTask.h"
 #include "RangeSplitter.h"
+#include "Bam.h"
 #include "zlib.h"
 #include "exit.h"
 
@@ -167,7 +168,7 @@ GzipCompressWorkerManager::finishStep()
     void
 GzipCompressWorker::step()
 {
-    GzipCompressWorkerManager* supplier = (GzipCompressWorkerManager*) getSupplier();
+    GzipCompressWorkerManager* supplier = (GzipCompressWorkerManager*) getManager();
     if (heap == NULL) {
         heap = new ThreadHeap(supplier->chunkSize * 8); // appears to use 4*chunkSize per run
         zstream.zalloc = zalloc;
@@ -205,7 +206,7 @@ GzipCompressWorker::compressChunk(
     char* fromBuffer,
     size_t fromUsed)
 {
-    if (bamFormat && fromUsed > 0x10000) {
+    if (bamFormat && fromUsed > BAM_BLOCK) {
         fprintf(stderr, "exceeded BAM chunk size\n");
         soft_exit(1);
     }
@@ -252,7 +253,6 @@ GzipCompressWorker::compressChunk(
     uInt oldAvail;
     int status;
 
-
     status = deflateInit2(&zstream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, windowBits | GZIP_ENCODING, 8, Z_DEFAULT_STRATEGY);
     if (status < 0) {
         fprintf(stderr, "GzipWriterFilter: deflateInit2 failed with %d\n", status);
@@ -290,7 +290,7 @@ GzipCompressWorker::compressChunk(
     size_t toUsed = toSize - zstream.avail_out;
     if (bamFormat) {
         // backpatch compressed block size into gzip header
-        if (toUsed >= 0x10000) {
+        if (toUsed >= BAM_BLOCK) {
             fprintf(stderr, "exceeded BAM chunk size\n");
             soft_exit(1);
         }

@@ -509,7 +509,7 @@ BAMFormat::getWriterSupplier(
 {
     DataWriterSupplier* dataSupplier;
     GzipWriterFilterSupplier* gzipSupplier =
-        DataWriterSupplier::gzip(true, 0x10000, max(1, options->numThreads - 1), false, options->sortOutput);
+        DataWriterSupplier::gzip(true, BAM_BLOCK, max(1, options->numThreads - 1), false, options->sortOutput);
         // (leave a thread free for main, and let OS map threads to cores to allow system IO etc.)
     if (options->sortOutput) {
         size_t len = strlen(options->outputFileTemplate);

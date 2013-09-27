@@ -270,16 +270,16 @@ public:
     virtual void step() = 0;
 
 protected:
-    ParallelWorkerManager* getSupplier() { return supplier; }
+    ParallelWorkerManager* getManager() { return manager; }
     int getThreadNum() { return threadNum; }
     int getNumThreads() { return numThreads; }
 
 private:
     friend class ParallelCoworker;
-    void configure(ParallelWorkerManager* i_supplier, int i_threadNum, int i_numThreads)
-    { supplier = i_supplier; threadNum = i_threadNum; numThreads = i_numThreads; }
+    void configure(ParallelWorkerManager* i_manager, int i_threadNum, int i_numThreads)
+    { manager = i_manager; threadNum = i_threadNum; numThreads = i_numThreads; }
 
-    ParallelWorkerManager* supplier;
+    ParallelWorkerManager* manager;
     int threadNum;
     int numThreads;
 };
