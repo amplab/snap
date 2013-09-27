@@ -224,7 +224,7 @@ FileEncoder::getEncodeBatch(
     *o_batchUsed = batch->used;
     *o_logicalOffset = batch->logicalOffset;
     *o_physicalOffset = batch->fileOffset;
-    printf("getEncodeBatch %d %lld @ %lld/%lld\n", encoderBatch, batch->used, batch->fileOffset, batch->logicalOffset);
+    //printf("getEncodeBatch %d %lld @ %lld/%lld\n", encoderBatch, batch->used, batch->fileOffset, batch->logicalOffset);
 }
 
     void
@@ -232,7 +232,7 @@ FileEncoder::setEncodedBatchSize(
     size_t newSize)
 {
     size_t old = writer->batches[encoderBatch].used;
-    printf("setEncodedBatchSize %d %lld -> %lld\n", encoderBatch, old, newSize);
+    //printf("setEncodedBatchSize %d %lld -> %lld\n", encoderBatch, old, newSize);
     if (newSize != old) {
         _ASSERT(newSize < old);
         AcquireExclusiveLock(lock);
@@ -364,7 +364,7 @@ AsyncDataWriter::nextBatch()
     Batch* write = &batches[written];
     write->logicalUsed = write->used;
     current = (current + 1) % count;
-    printf("nextBatch reset %d used=0\n", current);
+    //printf("nextBatch reset %d used=0\n", current);
     batches[current].used = 0;
     bool newBuffer = filter != NULL && (filter->filterType == CopyFilter || filter->filterType == TransformFilter);
     bool newSize = newBuffer && filter->filterType == TransformFilter;

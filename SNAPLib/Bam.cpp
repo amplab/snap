@@ -508,7 +508,9 @@ BAMFormat::getWriterSupplier(
     const Genome* genome) const
 {
     DataWriterSupplier* dataSupplier;
-    GzipWriterFilterSupplier* gzipSupplier = DataWriterSupplier::gzip(true, 0x10000, options->numThreads, options->bindToProcessors, options->sortOutput);
+    GzipWriterFilterSupplier* gzipSupplier =
+        DataWriterSupplier::gzip(true, 0x10000, max(1, options->numThreads - 1), false, options->sortOutput);
+        // (leave a thread free for main, and let OS map threads to cores to allow system IO etc.)
     if (options->sortOutput) {
         size_t len = strlen(options->outputFileTemplate);
         // todo: this is going to leak, but there's no easy way to free it, and it's small...
@@ -915,17 +917,18 @@ BAMFilter::getRead(
     BAMAlignment*
 BAMFilter::getNextRead(
     BAMAlignment* bam,
-    size_t* o_offset)
+    size_t* io_offset)
 {
     char* p = (char*) bam;
+    size_t size = bam->size();
+    size_t oldOffset = *io_offset;
+    *io_offset += size;
     if (p >= currentBuffer && p < currentBuffer + currentBufferBytes) {
         p += bam->size();
         if (p >= currentBuffer + currentBufferBytes) {
             return NULL;
         }
-        if (o_offset != NULL) {
-            *o_offset = currentOffset + (p - currentBuffer);
-        }
+        _ASSERT(*io_offset == currentOffset + (p - currentBuffer));
         _ASSERT(((BAMAlignment*)p)->refID >= -1);
         return (BAMAlignment*) p;
     }
@@ -936,12 +939,9 @@ BAMFilter::getNextRead(
             break;
         }
         if (p >= buffer && p < buffer+ bufferUsed) {
-            p += bam->size();
-            size_t offset = bufferOffset + (p - buffer);
-            if (o_offset != NULL) {
-                *o_offset = offset;
-            }
-            return p < buffer + bufferUsed? (BAMAlignment*) p : getRead(offset);
+            p += size;
+            _ASSERT(*io_offset == bufferOffset + (p - buffer));
+            return p < buffer + bufferUsed? (BAMAlignment*) p : getRead(*io_offset);
         }
     }
     return NULL;
