@@ -118,9 +118,6 @@ WorkerThreadMain(void *param)
         Read read;
         LandauVishkinWithCigar lv;
         while (samReader->getNextRead(&read, &alignmentResult, &genomeLocation, &isRC, &mapQ, &flag, &cigar)) {
-  	    if (justCount) {
-              context->countOfReads[mapQ]++;
-	    }
             if (mapQ < 0 || mapQ > MaxMAPQ) {
                 fprintf(stderr,"Invalid MAPQ: %d\n",mapQ);
                 exit(1);
@@ -130,7 +127,9 @@ WorkerThreadMain(void *param)
 
             if (0xffffffff == genomeLocation) {
                 context->nUnaligned++;
-            } else if (!justCount) {
+            } else if (justCount) {
+              context->countOfReads[mapQ]++;
+	    } else if (!justCount) {
                 if (flag & SAM_REVERSE_COMPLEMENT) {
                     read.becomeRC();
                 }
