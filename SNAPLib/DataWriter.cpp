@@ -234,7 +234,6 @@ FileEncoder::setEncodedBatchSize(
     size_t old = writer->batches[encoderBatch].used;
     //printf("setEncodedBatchSize %d %lld -> %lld\n", encoderBatch, old, newSize);
     if (newSize != old) {
-        _ASSERT(newSize < old);
         AcquireExclusiveLock(lock);
         writer->batches[encoderBatch].used = newSize;
         for (int i = (encoderBatch + 1) % writer->count; i != writer->current; i = (i + 1) % writer->count) {

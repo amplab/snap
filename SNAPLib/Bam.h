@@ -329,7 +329,11 @@ struct BgzfHeader
     }
 
     _uint32 ISIZE()
-    { return * (_uint32*) (BSIZE() - 3 + (char*) this); }
+    {
+        _uint32 result = * (_uint32*) (BSIZE() - 3 + (char*) this);
+        _ASSERT(result <= BAM_BLOCK);
+        return result;
+    }
 };
 
 

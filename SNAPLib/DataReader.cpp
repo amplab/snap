@@ -1164,7 +1164,7 @@ DecompressDataReaderSupplier::getDataReader(
     // create new reader, telling it how many bytes it owns
     // it will subtract overflow off the end of each batch
     // batch count here is cheap, so make it high enough that it never hits the limit
-    return new DecompressDataReader(autoRelease, data, max(4, DataSupplier::ThreadCount*2), totalExtra, mine, overflowBytes);
+    return new DecompressDataReader(autoRelease, data, max(8, DataSupplier::ThreadCount*4), totalExtra, mine, overflowBytes);
 }
     
     DataSupplier*

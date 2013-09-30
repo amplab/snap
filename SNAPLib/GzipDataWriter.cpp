@@ -182,7 +182,7 @@ GzipCompressWorker::step()
     for (int i = begin; i < end; i++) {
         size_t bytes = min(supplier->chunkSize, supplier->inputUsed - i * supplier->chunkSize);
         supplier->sizes[i] = compressChunk(zstream, supplier->bam,
-            supplier->buffer + i * supplier->chunkSize, bytes, 
+            supplier->buffer + i * supplier->chunkSize, supplier->chunkSize, 
             supplier->input + i * supplier->chunkSize, bytes);
         _ASSERT(supplier->sizes[i] <= supplier->chunkSize); // can't grow!
     }
