@@ -48,7 +48,7 @@ const Genome *genome;
 bool matchBothWays = false;
 bool justCount = false;
 bool venter = false;
-unsigned slackAmount = 50;
+unsigned slackAmount = 151;
 bool printBetterErrors = false;
 
 static const int MaxMAPQ = 70;
