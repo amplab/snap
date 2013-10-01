@@ -311,13 +311,13 @@ WorkerThreadMain(void *param)
                                 context->countOfMisalignetsWithBetterEditDistance[mapQ]++;
                             }
 
-                            if (!printBetterErrors || (printBetterErrors && betterEditDistance)) {
+                            // if (!printBetterErrors || (printBetterErrors && betterEditDistance)) {
                            
-                                printf("%s\t%d\t%s\t%u\t%d\t%s\t*\t*\t100\t%.*s\t%.*s\tAlignedGenomeLocation:%u\tCorrectGenomeLocation: %u\tCigarForCorrect: %s\tCorrectData: %.*s\tAlignedData: %.*s\n", 
-                                    idBuffer, flag, piece->name, genomeLocation - piece->beginningOffset, mapQ, cigarForAligned, read.getDataLength(), read.getData(), 
-                                    read.getDataLength(), read.getQuality(),  genomeLocation, correctLocation, cigarForCorrect, read.getDataLength(),
-                                    correctGenomeData, read.getDataLength(), alignedGenomeData);
-                            }
+                            //     printf("%s\t%d\t%s\t%u\t%d\t%s\t*\t*\t100\t%.*s\t%.*s\tAlignedGenomeLocation:%u\tCorrectGenomeLocation: %u\tCigarForCorrect: %s\tCorrectData: %.*s\tAlignedData: %.*s\n", 
+                            //         idBuffer, flag, piece->name, genomeLocation - piece->beginningOffset, mapQ, cigarForAligned, read.getDataLength(), read.getData(), 
+                            //         read.getDataLength(), read.getQuality(),  genomeLocation, correctLocation, cigarForCorrect, read.getDataLength(),
+                            //         correctGenomeData, read.getDataLength(), alignedGenomeData);
+                            //}
                         }
                     }
                 }
