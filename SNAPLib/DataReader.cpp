@@ -697,10 +697,18 @@ private:
     friend class DecompressManager;
     friend class DecompressWorker;
 
+    enum EntryState
+    {
+        EntryReady, // for reading by client, on first list
+        EntryHeld, // finished reading but not released, not on a list
+        EntryAvailable, // released by client, on available list
+        EntryReading // reading or decompressing, not on a list
+    };
+
     struct Entry
     {
-        bool ready; // false if reading/decompressing (bg thread), true if ready (main thread)
-        EventObject releaseDone; // main thread signal to reuse for new batch
+        Entry* next; // next entry on first/available list
+        EntryState state;
         DataBatch batch;
         char* compressed;
         _int64 compressedStart; // limit to start a new zip block
@@ -708,22 +716,35 @@ private:
         char* decompressed;
         _int64 decompressedStart;
         _int64 decompressedValid;
-        EventObject decompressDone; // bg thread signal to show ready for client
     };
+
+    // use only these routines to manipulate the linked  lists
+    Entry* peekReady(); // from first, block if none
+    void popReady(); // from first
+    void enqueueReady(Entry* entry); // as last
+    Entry* dequeueAvailable(); // as available, block if none
+    void enqueueAvailable(Entry* entry); // from available
 
     DataReader* inner; // inner reader for compressed data
     const _int64 extraBytes; // number of bytes of extra that I get to use
     const _int64 overflowBytes; // overflow between batches
     const _int64 totalExtra; // total extra data
     const int chunkSize; // max size of decompressed data
-    Entry* entries; // ring buffer of batches from inner reader
-    int count; // # of entries
-    int current; // current entry being read by client
     _int64 offset; // into current entry
     bool threadStarted; // whether thread has been started
     bool eof; // true when we've read to eof of previous
     bool stopping; // set to stop everything
     EventObject decompressThreadDone; // signalled by background thread on exit
+
+    // entry lists
+    Entry* entries; // ring buffer of batches from inner reader
+    int count; // # of entries
+    Entry* first; // first ready buffer, NULL if none, currently being read by client
+    Entry* last; // last ready buffer, NULL if none
+    EventObject readyEvent; // signalled by bg thread when first goes NULL->non-NULL
+    Entry* available; // first non-ready buffer (head of freelist), NULL if none
+    EventObject availableEvent; // signalled by main thread when available goes NULL->non-NULL
+    ExclusiveLock lock; // lock on linked list pointers in this object and in Entry
 };
 
 
@@ -735,28 +756,32 @@ DecompressDataReader::DecompressDataReader(
     _int64 i_extraBytes,
     _int64 i_overflowBytes,
     int i_chunkSize)
-    : DataReader(autoRelease), inner(i_inner), count(i_count), current(0), offset(i_overflowBytes),
+    : DataReader(autoRelease), inner(i_inner), count(i_count), offset(i_overflowBytes),
     totalExtra(i_totalExtra), extraBytes(i_extraBytes), overflowBytes(i_overflowBytes),
     chunkSize(i_chunkSize), threadStarted(false), eof(false), stopping(false)
 {
     entries = new Entry[count];
     for (int i = 0; i < count; i++) {
         Entry* entry = &entries[i];
-        CreateEventObject(&entry->releaseDone);
-        CreateEventObject(&entry->decompressDone);
-        entry->ready = false;
+        entry->state = EntryAvailable;
+        entry->next = i < count - 1 ? &entries[i + 1] : NULL;
     }
+    available = entries;
+    first = last = NULL;
+    CreateEventObject(&readyEvent);
+    PreventEventWaitersFromProceeding(&readyEvent);
+    CreateEventObject(&availableEvent);
+    AllowEventWaitersToProceed(&availableEvent);
     CreateEventObject(&decompressThreadDone);
     PreventEventWaitersFromProceeding(&decompressThreadDone);
+    InitializeExclusiveLock(&lock);
 }
 
 DecompressDataReader::~DecompressDataReader()
 {
     if (threadStarted) {
         stopping = true;
-        for (int i = 0; i < count; i++) {
-            AllowEventWaitersToProceed(&entries[i].releaseDone);
-        }
+        AllowEventWaitersToProceed(&availableEvent);
         WaitForEvent(&decompressThreadDone);
     }
     delete entries;
@@ -807,16 +832,9 @@ DecompressDataReader::reinit(
         fprintf(stderr, "DecompressDataReader reinit called twice\n");
         soft_exit(1);
     }
-    threadStarted = true;
     // todo: transform start/amount to add for compression? I don't think so...
     inner->reinit(startingOffset, amountOfFileToProcess);
-    current = 0;
-    for (int i = 0; i < count; i++) {
-        Entry* entry = &entries[i];
-        AllowEventWaitersToProceed(&entry->releaseDone);
-        PreventEventWaitersFromProceeding(&entry->decompressDone);
-        entry->ready = false;
-    }
+    threadStarted = true;
     if (! StartNewThread(decompressThread, this)) {
         fprintf(stderr, "failed to start decompressThread\n");
         soft_exit(1);
@@ -829,10 +847,7 @@ DecompressDataReader::getData(
     _int64* o_validBytes,
     _int64* o_startBytes)
 {
-    Entry* entry = &entries[current];
-    if (! entry->ready) { // todo: just wait?
-        WaitForEvent(&entry->decompressDone);
-    }
+    Entry* entry = peekReady();
     if (eof || offset >= entry->decompressedStart) {
         return false;
     }
@@ -849,7 +864,7 @@ DecompressDataReader::advance(
     _int64 bytes)
 
 {
-    offset = min(offset + max(bytes, 0), entries[current].decompressedValid);
+    offset = min(offset + max(bytes, 0), peekReady()->decompressedValid);
 }
 
     void
@@ -858,17 +873,14 @@ DecompressDataReader::nextBatch()
     if (eof) {
         return;
     }
-    Entry* old = &entries[current];
-    Entry* next = &entries[(current + 1) % count];
-    WaitForEvent(&next->decompressDone);
-    _ASSERT(next->ready);
+    Entry* old = peekReady();
+    popReady();
+    Entry* next = peekReady();
+    _ASSERT(next->state == EntryReady);
     _int64 copy = old->decompressedValid - max(offset, old->decompressedStart);
     memcpy(next->decompressed + overflowBytes - copy, old->decompressed + old->decompressedValid - copy, copy);
     offset = overflowBytes - copy;
-    old->ready = false;
-    PreventEventWaitersFromProceeding(&old->decompressDone);
-    current = (current + 1) % count;
-    printf("nextBatch #%i copy %lld + %lld/%lld\n", current, copy, next->decompressedStart, next->decompressedValid);
+    //printf("nextBatch #%d->%d copy %lld + %lld/%lld\n", old-entries, next-entries, copy, next->decompressedStart, next->decompressedValid);
     if (autoRelease) {
         releaseBatch(old->batch);
     }
@@ -887,20 +899,18 @@ DecompressDataReader::isEOF()
     DataBatch
 DecompressDataReader::getBatch()
 {
-    return entries[current].batch;
+    return peekReady()->batch;
 }
 
     void
 DecompressDataReader::releaseBatch(DataBatch batch)
 {
-    int start = current; // capture in case modified by another thread
     // loop backward from previous since that is most likely to be released
-    for (int i = count - 1; i >=0; i--) {
-        Entry* entry = &entries[(start + i) % count];
+    for (int i = 0; i < count; i++) {
+        Entry* entry = &entries[i];
         if (entry->batch == batch) {
-            printf("releaseBatch %d:%d #%d\n", batch.fileID, batch.batchID, (start+i)%count);
-            _ASSERT(! entry->ready);
-            AllowEventWaitersToProceed(&entry->releaseDone);
+            //printf("releaseBatch %d:%d #%d\n", batch.fileID, batch.batchID, i);
+            enqueueAvailable(entry);
             break;
         }
     }
@@ -918,7 +928,7 @@ DecompressDataReader::getExtra(
     char** o_extra,
     _int64* o_length)
 {
-    *o_extra = entries[current].decompressed + extraBytes;
+    *o_extra = peekReady()->decompressed + extraBytes;
     *o_length = totalExtra - extraBytes;
 }
     
@@ -1074,19 +1084,17 @@ DecompressDataReader::decompressThread(
     DecompressManager manager(&inputs, &outputs);
     ParallelCoworker coworker(min(4, DataSupplier::ThreadCount), false, &manager);
     coworker.start();
-    int index = 0;
     // keep reading & decompressing entries until stopped
     while (true) {
-        Entry* entry = &reader->entries[index];
-        WaitForEvent(&entry->releaseDone);
+        Entry* entry = reader->dequeueAvailable();
         if (reader->stopping) {
             break;
         }
-        _ASSERT(! entry->ready);
         // always starts with a fresh batch - advances after reading it all
         bool ok = reader->inner->getData(&entry->compressed, &entry->compressedValid, &entry->compressedStart);
+        int index = (int) (entry - reader->entries);
         if (! ok) {
-            printf("decompressThread #%d eof\n", index);
+            //printf("decompressThread #%d eof\n", index);
             if (! reader->inner->isEOF()) {
                 fprintf(stderr, "error reading file at offset %lld\n", reader->getFileOffset());
                 soft_exit(1);
@@ -1114,7 +1122,7 @@ DecompressDataReader::decompressThread(
             // append final offsets
             inputs.push_back(input);
             outputs.push_back(output);
-            printf("decompressThread read #%d %lld->%lld\n", index, input, output);
+            //printf("decompressThread read #%d %lld->%lld\n", index, input, output);
             reader->inner->advance(input);
             entry->decompressedValid = output;
             entry->decompressedStart = output - reader->overflowBytes;
@@ -1124,16 +1132,99 @@ DecompressDataReader::decompressThread(
             coworker.step();
         }
         // make buffer available for clients & go on to next
-        printf("decompressThread #%d ready\n", index);
-        entry->ready = true;
-        PreventEventWaitersFromProceeding(&entry->releaseDone);
-        AllowEventWaitersToProceed(&entry->decompressDone);
-        index = (index + 1) % reader->count;
+        //printf("decompressThread #%d ready\n", index);
+        reader->enqueueReady(entry);
     }
     coworker.stop();
     AllowEventWaitersToProceed(&reader->decompressThreadDone);
 }
-  
+
+    DecompressDataReader::Entry*
+DecompressDataReader::peekReady()
+{
+    // not thread-safe relative to popReady!
+    if (first == NULL) {
+        WaitForEvent(&readyEvent);
+    }
+    _ASSERT(first->state == EntryReady);
+    return first;
+}
+
+    void
+DecompressDataReader::popReady()
+{
+    while (true) {
+        AcquireExclusiveLock(&lock);
+        if (first != NULL) {
+            _ASSERT(first->state == EntryReady);
+            first->state = EntryHeld;
+            if (first->next == NULL) {
+                _ASSERT(last == first);
+                last = NULL;
+                PreventEventWaitersFromProceeding(&readyEvent);
+            }
+            first = first->next;
+            _ASSERT(first == NULL || first->state == EntryReady);
+            ReleaseExclusiveLock(&lock);
+            return;
+        }
+        ReleaseExclusiveLock(&lock);
+        WaitForEvent(&readyEvent);
+    }
+}
+
+    void
+DecompressDataReader::enqueueReady(Entry* entry)
+{
+    AcquireExclusiveLock(&lock);
+    _ASSERT(entry->state == EntryReading);
+    entry->next = NULL;
+    entry->state = EntryReady;
+    if (last == NULL) {
+        first = last = entry;
+        AllowEventWaitersToProceed(&readyEvent);
+    } else {
+        last->next = entry;
+        last = entry;
+    }
+    ReleaseExclusiveLock(&lock);
+}
+
+    DecompressDataReader::Entry*
+DecompressDataReader::dequeueAvailable()
+{
+    while (true) {
+        AcquireExclusiveLock(&lock);
+        if (available!= NULL) {
+            _ASSERT(available->state == EntryAvailable);
+            available->state = EntryReading;
+            Entry* result = available;
+            available = available->next;
+            if (available == NULL) {
+                PreventEventWaitersFromProceeding(&availableEvent);
+            }
+            ReleaseExclusiveLock(&lock);
+            return result;
+        }
+        ReleaseExclusiveLock(&lock);
+        WaitForEvent(&availableEvent);
+    }
+}
+
+    void
+DecompressDataReader::enqueueAvailable(Entry* entry)
+{
+    AcquireExclusiveLock(&lock);
+    _ASSERT(entry->state == EntryHeld);
+    entry->state = EntryAvailable;
+    entry->next = available;
+    available = entry;
+    if (entry->next == NULL) {
+        AllowEventWaitersToProceed(&availableEvent);
+    }
+    ReleaseExclusiveLock(&lock);
+}
+
 class DecompressDataReaderSupplier : public DataSupplier
 {
 public:

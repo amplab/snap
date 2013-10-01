@@ -324,6 +324,9 @@ AsyncDataWriter::getBatch(
     if (relative < 1 - count || relative > count - 1) {
         return false;
     }
+    if (encoder != NULL && relative <= ((encoder->encoderBatch - current + count) % count) - count) {
+        return false;
+    }
     int index = (current + relative + count) % count; // ensure non-negative
     Batch* batch = &batches[index];
     *o_buffer = batch->buffer;
