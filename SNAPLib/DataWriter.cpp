@@ -20,6 +20,7 @@ Environment:
 #include "BigAlloc.h"
 #include "Compat.h"
 #include "DataWriter.h"
+#include "ParallelTask.h"
 #include "exit.h"
 
 using std::min;
@@ -29,7 +30,7 @@ class AsyncDataWriterSupplier : public DataWriterSupplier
 {
 public:
     AsyncDataWriterSupplier(const char* i_filename, DataWriter::FilterSupplier* i_filterSupplier,
-        int i_bufferCount, size_t i_bufferSize);
+        FileEncoder* i_encoder, int i_bufferCount, size_t i_bufferSize);
 
     virtual DataWriter* getWriter();
 
@@ -37,23 +38,27 @@ public:
 
 private:
     friend class AsyncDataWriter;
+    friend class FileEncoder;
     void advance(size_t physical, size_t logical, size_t* o_physical, size_t* o_logical);
 
     const char* filename;
     AsyncFile* file;
     DataWriter::FilterSupplier* filterSupplier;
+    FileEncoder* encoder;
     const int bufferCount;
     const size_t bufferSize;
     ExclusiveLock lock;
     size_t sharedOffset;
     size_t sharedLogical;
+    bool closing;
 };
 
 class AsyncDataWriter : public DataWriter
 {
 public:
 
-    AsyncDataWriter(AsyncFile* i_file, AsyncDataWriterSupplier* i_supplier, int i_count, size_t i_bufferSize, Filter* i_filter);
+    AsyncDataWriter(AsyncFile* i_file, AsyncDataWriterSupplier* i_supplier,
+        int i_count, size_t i_bufferSize, Filter* i_filter, FileEncoder* i_encoder);
 
     virtual ~AsyncDataWriter()
     {
@@ -62,6 +67,9 @@ public:
         }
         BigDealloc(batches[0].buffer); // all in one big block
         delete [] batches;
+        if (encoder != NULL) {
+            delete encoder;
+        }
     }
 
     virtual bool getBuffer(char** o_buffer, size_t* o_size);
@@ -71,10 +79,17 @@ public:
     virtual bool getBatch(int relative, char** o_buffer, size_t* o_size, size_t* o_used, size_t* o_offset, size_t* o_logicalUsed = 0, size_t* o_logicalOffset = NULL);
 
     virtual bool nextBatch();
-
+    
     virtual void close();
 
 private:
+
+    void acquireLock()
+    { if (encoder != NULL) { AcquireExclusiveLock(&lock); } }
+
+    void releaseLock()
+    { if (encoder != NULL) { ReleaseExclusiveLock(&lock); } }
+
     struct Batch
     {
         char* buffer;
@@ -83,22 +98,163 @@ private:
         size_t fileOffset;
         size_t logicalUsed;
         size_t logicalOffset;
+        EventObject encoded;
     };
     Batch* batches;
     const int count;
     const size_t bufferSize;
     AsyncDataWriterSupplier* supplier;
     int current;
+    FileEncoder* encoder;
+    ExclusiveLock lock;
+
+    friend class FileEncoder;
 };
+
+FileEncoder::FileEncoder(
+    int numThreads,
+    bool bindToProcessors,
+    ParallelWorkerManager* i_manager)
+    :
+    encoderRunning(false),
+    worker(numThreads == 0 ? NULL
+        : new ParallelCoworker(numThreads, bindToProcessors, i_manager, FileEncoder::outputReadyCallback, this))
+{}
+
+    void
+FileEncoder::initialize(
+    AsyncDataWriter* i_writer)
+{
+    writer = i_writer;
+    lock = &writer->lock;
+    encoderBatch = writer->count - 1;
+    worker->getManager()->initialize(this);
+    worker->start();
+}
+
+    void
+FileEncoder::inputReady()
+{
+    AcquireExclusiveLock(lock);
+    if (! encoderRunning) {
+        checkForInput();
+    }
+    ReleaseExclusiveLock(lock);
+}
+
+    void
+FileEncoder::close()
+{
+    // wait for pending encodes
+    AcquireExclusiveLock(lock);
+    int start = encoderBatch;
+    int pending = (writer->current + writer->count - start) % writer->count;
+    ReleaseExclusiveLock(lock);
+    for (int i = 0; i < pending; i++) {
+        WaitForEvent(&writer->batches[(start + i) % writer->count].encoded);
+    }
+    worker->stop();
+}
+
+    void
+FileEncoder::outputReadyCallback(
+    void *p)
+{
+    ((FileEncoder*) p)->outputReady();
+}
+
+    void
+FileEncoder::outputReady()
+{
+    AcquireExclusiveLock(lock);
+
+    encoderRunning = false;
+
+    // begin writing the buffer to disk
+    AsyncDataWriter::Batch* write = &writer->batches[encoderBatch];
+    if (! write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
+        fprintf(stderr, "error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
+        soft_exit(1);
+    }
+    AllowEventWaitersToProceed(&write->encoded);
+
+    // check for more work
+    checkForInput();
+
+    ReleaseExclusiveLock(lock);
+}
+
+    void
+FileEncoder::checkForInput()
+{
+    // look for another block ready to encode
+    while (true) {
+        int nextBatch = (encoderBatch + 1) % writer->count;
+        if (nextBatch == writer->current) {
+            break;
+        }
+        encoderBatch = nextBatch;
+        AsyncDataWriter::Batch* encode = &writer->batches[encoderBatch];
+        if (encode->used > 0) {
+            encoderRunning = true;
+            worker->step();
+            break;
+        }
+    }
+}
+
+    void
+FileEncoder::setupEncode(
+    int relative)
+{
+    encoderBatch = (writer->current + relative + writer->count) % writer->count;
+}
+
+    void
+FileEncoder::getEncodeBatch(
+    char** o_batch,
+    size_t* o_batchSize,
+    size_t* o_batchUsed,
+    size_t* o_logicalOffset,
+    size_t* o_physicalOffset)
+{
+    AsyncDataWriter::Batch* batch = &writer->batches[encoderBatch];
+    *o_batch = batch->buffer;
+    *o_batchSize = writer->bufferSize;
+    *o_batchUsed = batch->used;
+    *o_logicalOffset = batch->logicalOffset;
+    *o_physicalOffset = batch->fileOffset;
+    //printf("getEncodeBatch %d %lld @ %lld/%lld\n", encoderBatch, batch->used, batch->fileOffset, batch->logicalOffset);
+}
+
+    void
+FileEncoder::setEncodedBatchSize(
+    size_t newSize)
+{
+    size_t old = writer->batches[encoderBatch].used;
+    //printf("setEncodedBatchSize %d %lld -> %lld\n", encoderBatch, old, newSize);
+    if (newSize != old) {
+        AcquireExclusiveLock(lock);
+        writer->batches[encoderBatch].used = newSize;
+        for (int i = (encoderBatch + 1) % writer->count; i != writer->current; i = (i + 1) % writer->count) {
+            writer->batches[i].fileOffset -= old - newSize;
+        }
+        size_t ignore;
+        writer->supplier->advance(newSize - old, 0, &ignore, &ignore);
+        ReleaseExclusiveLock(lock);
+    }
+}
 
 AsyncDataWriter::AsyncDataWriter(
     AsyncFile* i_file,
     AsyncDataWriterSupplier* i_supplier, 
     int i_count,
     size_t i_bufferSize,
-    Filter* i_filter)
+    Filter* i_filter,
+    FileEncoder* i_encoder)
     :
     DataWriter(i_filter),
+    encoder(i_encoder),
     supplier(i_supplier),
     count(i_count),
     bufferSize(i_bufferSize),
@@ -118,6 +274,14 @@ AsyncDataWriter::AsyncDataWriter(
         batches[i].fileOffset = 0;
         batches[i].logicalUsed = 0;
         batches[i].logicalOffset = 0;
+        if (encoder != NULL) {
+            CreateEventObject(&batches[i].encoded);
+            AllowEventWaitersToProceed(&batches[i].encoded); // initialize so empty bufs are available
+        }
+    }
+    if (encoder != NULL) {
+        InitializeExclusiveLock(&lock);
+        encoder->initialize(this);
     }
 }
     
@@ -160,6 +324,9 @@ AsyncDataWriter::getBatch(
     if (relative < 1 - count || relative > count - 1) {
         return false;
     }
+    if (encoder != NULL && relative <= ((encoder->encoderBatch - current + count) % count) - count) {
+        return false;
+    }
     int index = (current + relative + count) % count; // ensure non-negative
     Batch* batch = &batches[index];
     *o_buffer = batch->buffer;
@@ -179,6 +346,9 @@ AsyncDataWriter::getBatch(
         *o_logicalOffset = relative <=0 ? batch->logicalOffset : 0;
     }
     if (relative >= 0) {
+        if (encoder != NULL) {
+            WaitForEvent(&batch->encoded);
+        }
         batch->file->waitForCompletion();
     }
     return true;
@@ -188,10 +358,15 @@ AsyncDataWriter::getBatch(
 AsyncDataWriter::nextBatch()
 {
     _int64 start = timeInNanos();
+    if (encoder != NULL) {
+        WaitForEvent(&batches[(current + 1) % count].encoded);
+    }
+    acquireLock();
     int written = current;
     Batch* write = &batches[written];
     write->logicalUsed = write->used;
     current = (current + 1) % count;
+    //printf("nextBatch reset %d used=0\n", current);
     batches[current].used = 0;
     bool newBuffer = filter != NULL && (filter->filterType == CopyFilter || filter->filterType == TransformFilter);
     bool newSize = newBuffer && filter->filterType == TransformFilter;
@@ -223,10 +398,17 @@ AsyncDataWriter::nextBatch()
         }
     }
     _int64 start2 = timeInNanos();
+    releaseLock();
+
     InterlockedAdd64AndReturnNewValue(&FilterTime, start2 - start);
-    if (! write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
-        fprintf(stderr, "error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
-        soft_exit(1);
+    if (encoder == NULL) {
+        if (! write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
+            fprintf(stderr, "error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
+            soft_exit(1);
+        }
+    } else {
+        PreventEventWaitersFromProceeding(&write->encoded);
+        encoder->inputReady();
     }
     if (! batches[current].file->waitForCompletion()) {
         fprintf(stderr, "error: file write failed\n");
@@ -240,6 +422,13 @@ AsyncDataWriter::nextBatch()
 AsyncDataWriter::close()
 {
     nextBatch(); // ensure last buffer gets written
+    if (encoder != NULL) {
+        encoder->close();
+        for (int i = 0; i < count; i++) {
+            DestroyEventObject(&batches[i].encoded);
+        }
+        DestroyExclusiveLock(&lock);
+    }
     for (int i = 0; i < count; i++) {
         batches[i].file->close();
     }
@@ -248,15 +437,18 @@ AsyncDataWriter::close()
 AsyncDataWriterSupplier::AsyncDataWriterSupplier(
     const char* i_filename,
     DataWriter::FilterSupplier* i_filterSupplier,
+    FileEncoder* i_encoder,
     int i_bufferCount,
     size_t i_bufferSize)
     :
     filename(i_filename),
     filterSupplier(i_filterSupplier),
+    encoder(i_encoder),
     bufferCount(i_bufferCount),
     bufferSize(i_bufferSize),
     sharedOffset(0),
-    sharedLogical(0)
+    sharedLogical(0),
+    closing(false)
 {
     file = AsyncFile::open(filename, true);
     if (file == NULL) {
@@ -270,18 +462,20 @@ AsyncDataWriterSupplier::AsyncDataWriterSupplier(
 AsyncDataWriterSupplier::getWriter()
 {
     return new AsyncDataWriter(file, this, bufferCount, bufferSize,
-        filterSupplier ? filterSupplier->getFilter() : NULL);
+        filterSupplier && ! closing ? filterSupplier->getFilter() : NULL,
+        closing ? NULL : encoder);
 }
 
     void
 AsyncDataWriterSupplier::close()
 {
-    if (filterSupplier != NULL && filterSupplier->filterType == DataWriter::TransformFilter) {
-        filterSupplier->onClose(this);
+    closing = true;
+    if (filterSupplier != NULL) {
+        filterSupplier->onClosing(this);
     }
     file->close();
-    if (filterSupplier != NULL && filterSupplier->filterType != DataWriter::TransformFilter) {
-        filterSupplier->onClose(this);
+    if (filterSupplier != NULL) {
+        filterSupplier->onClosed(this);
     }
     DestroyExclusiveLock(&lock);
 }
@@ -304,10 +498,11 @@ AsyncDataWriterSupplier::advance(
 DataWriterSupplier::create(
     const char* filename,
     DataWriter::FilterSupplier* filterSupplier,
+    FileEncoder* encoder,
     int count,
     size_t bufferSize)
 {
-    return new AsyncDataWriterSupplier(filename, filterSupplier, count, bufferSize);
+    return new AsyncDataWriterSupplier(filename, filterSupplier, encoder, count, bufferSize);
 }
 
 class ComposeFilter : public DataWriter::Filter
@@ -355,10 +550,16 @@ public:
     virtual DataWriter::Filter* getFilter()
     { return new ComposeFilter(a->getFilter(), b->getFilter()); }
 
-    virtual void onClose(DataWriterSupplier* supplier)
+    virtual void onClosing(DataWriterSupplier* supplier)
     {
-        a->onClose(supplier);
-        b->onClose(supplier);
+        a->onClosing(supplier);
+        b->onClosing(supplier);
+    }
+    
+    virtual void onClosed(DataWriterSupplier* supplier)
+    {
+        a->onClosed(supplier);
+        b->onClosed(supplier);
     }
 
 private:

@@ -22,6 +22,7 @@ Environment:
 #include "VariableSizeVector.h"
 #include "ParallelTask.h"
 #include "RangeSplitter.h"
+#include "Bam.h"
 #include "zlib.h"
 #include "exit.h"
 
@@ -29,256 +30,175 @@ using std::min;
 using std::max;
 using std::pair;
 
-class GzipSharedContext
+class GzipWriterFilterSupplier;
+
+class GzipCompressWorkerManager : public ParallelWorkerManager
 {
 public:
-    GzipSharedContext(bool i_bam, size_t i_chunkSize, int i_numThreads, bool i_bindToProcessors)
-        : stop(false), bam(i_bam), numThreads(i_numThreads),
-        nChunks(0), chunkSize(i_chunkSize), bindToProcessors(i_bindToProcessors)
-    {
-        workReady = new EventObject[numThreads];
-        workDone = new EventObject[numThreads];
-        for (int i = 0; i < numThreads; i++) {
-            CreateEventObject(&workReady[i]);
-            PreventEventWaitersFromProceeding(&workReady[i]);
-            CreateEventObject(&workDone[i]);
-            PreventEventWaitersFromProceeding(&workDone[i]);
-        }
-    }
+    GzipCompressWorkerManager(GzipWriterFilterSupplier* i_filterSupplier)
+        : filterSupplier(i_filterSupplier), buffer(NULL),
+        chunkSize(i_filterSupplier->chunkSize), bam(i_filterSupplier->bamFormat)
+    {}
 
-    ~GzipSharedContext()
-    {
-        for (int i = 0; i < numThreads; i++) {
-            DestroyEventObject(&workReady[i]);
-            DestroyEventObject(&workDone[i]);
-        }
-        delete [] workReady;
-        delete [] workDone;
-    }
+    virtual ~GzipCompressWorkerManager();
 
-    size_t* run(int i_nChunks, char* i_input, char* i_output)
-    {
-        nChunks = i_nChunks;
-        sizes.clear();
-        sizes.extend(nChunks);
- 
-        input = i_input;
-        output = i_output;
-        for (int i = 0; i < numThreads; i++) {
-            PreventEventWaitersFromProceeding(&workDone[i]);
-            AllowEventWaitersToProceed(&workReady[i]);
-        }
+    virtual void initialize(void* i_writer);
 
-        //
-        // Let the workers run and wait for them all to finish.
-        //
+    virtual ParallelWorker* createWorker();
 
-        for (int i = 0; i < numThreads; i++) {
-            WaitForEvent(&workDone[i]);
-        }
+    virtual void beginStep();
 
-        return sizes.begin();
-    }
-
-    void done()
-    {
-        stop = true;
-        for (int i = 0; i < numThreads; i++) {
-            AllowEventWaitersToProceed(&workReady[i]);
-        }
-    }
-
-
-    EventObject *workReady; // One per worker thread
-    EventObject *workDone;  // One per worker thread
-    volatile bool stop;
+    virtual void finishStep();
+    
+private:
     VariableSizeVector<size_t> sizes;
     volatile int nChunks;
     const size_t chunkSize;
     const bool bam;
-    const int numThreads;
-    const bool bindToProcessors;
+    FileEncoder* encoder;
+    GzipWriterFilterSupplier* filterSupplier;
     char* input;
-    char* output;
+    size_t inputSize;
+    size_t inputUsed;
+    size_t logicalOffset;
+    size_t physicalOffset;
+    char* buffer;
+    VariableSizeVector< pair<_uint64,_uint64> > translation;
+
+    friend class GzipCompressWorker;
+    friend class GzipCompressWorkerManager;
 };
 
-struct GzipContext : public TaskContextBase
+class GzipCompressWorker : public ParallelWorker
 {
-    GzipContext()
-    {
-#ifdef  _MSC_VER
-        useTimingBarrier = false;
-#endif
-    }
-    GzipSharedContext* shared;
-    void initializeThread() {}
-    void runThread();
-    void finishThread(GzipContext* common) {}
+public:
+    GzipCompressWorker() : heap(NULL) {}
+
+    virtual ~GzipCompressWorker() { delete heap; }
+
+    virtual void step();
+    
+    static void validateZipBlock(char* start, size_t bytes, unsigned uncompressedBytes);
+
+    static size_t compressChunk(z_stream& zstream, bool bamFormat, char* toBuffer, size_t toSize, char* fromBuffer, size_t fromUsed);
+
+private:
+    z_stream zstream;
+    ThreadHeap* heap;
 };
 
-class GzipWriterFilterSupplier;
+// used for case where each thread compresses by itself 
 
 class GzipWriterFilter : public DataWriter::Filter
 {
 public:
     GzipWriterFilter(GzipWriterFilterSupplier* i_supplier);
-    
-    virtual ~GzipWriterFilter()
-    {
-        shared.done();
-        delete task;
-    }
 
     virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location);
 
     virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
 
-    static size_t compressChunk(z_stream& zstream, bool bamFormat, char* toBuffer, size_t toSize, char* fromBuffer, size_t fromUsed);
-
 private:
 
     GzipWriterFilterSupplier* supplier;
-    const size_t chunkSize;
-    const bool bamFormat;
-    z_stream zstream;
-    ThreadHeap heap;
-    GzipSharedContext shared;
-    GzipContext context;
-    ParallelTask<GzipContext>* task;
+    // if doing inline compression, filled in with minimally initialized objects
+    GzipCompressWorkerManager* manager;
+    ParallelWorker* worker;
+    FileEncoder* encoder;
 };
 
-    void
-GzipContext::runThread()
+GzipCompressWorkerManager::~GzipCompressWorkerManager()
 {
-    ThreadHeap heap(shared->chunkSize * 5); // seems to use 4x chunk size per run
-    z_stream zstream;
-    zstream.zalloc = zalloc;
-    zstream.zfree = zfree;
-    zstream.opaque = &heap;
-    while (true) {
-        //printf("zip task thread %d waiting to begin\n", GetCurrentThreadId());
-        WaitForEvent(&shared->workReady[threadNum]);
-        PreventEventWaitersFromProceeding(&shared->workReady[threadNum]);
-        if (shared->stop) {
-            return;
-        }
-        //printf("zip task thread %d begin\n", GetCurrentThreadId());
-        _int64 start = timeInMillis();
-        int n = (shared->nChunks + shared->numThreads - 1) / shared->numThreads;
-        int begin = threadNum * n;
-        int end = min(begin + n, (int) shared->nChunks);
-        for (int i = begin; i < end; i++) {
-            shared->sizes[i] = GzipWriterFilter::compressChunk(zstream, shared->bam,
-                shared->output + i * shared->chunkSize, shared->chunkSize, 
-                shared->input + i * shared->chunkSize, shared->chunkSize);
-        }
-        //printf("zip task thread %d done %lld ms\n", GetCurrentThreadId(), timeInMillis() - start);
-        AllowEventWaitersToProceed(&shared->workDone[threadNum]);
-    }
-}
-
-GzipWriterFilter::GzipWriterFilter(
-    GzipWriterFilterSupplier* i_supplier)
-    :
-    Filter(DataWriter::TransformFilter),
-    supplier(i_supplier),
-    bamFormat(i_supplier->bamFormat),
-    chunkSize(i_supplier->chunkSize),
-    shared(i_supplier->bamFormat, i_supplier->chunkSize, i_supplier->numThreads, i_supplier->bindToProcessors),
-    heap(i_supplier->chunkSize * 5)
-{
-    zstream.zalloc = zalloc;
-    zstream.zfree = zfree;
-    zstream.opaque = &heap;
-    if (i_supplier->multiThreaded) {
-        context.totalThreads = i_supplier->numThreads;
-        context.bindToProcessors = i_supplier->bindToProcessors;
-        context.shared = &shared;
-        task = new ParallelTask<GzipContext>(&context);
-        task->fork();
+    if (buffer != NULL) {
+        delete buffer;
     }
 }
 
     void
-GzipWriterFilter::onAdvance(
-    DataWriter* writer,
-    size_t batchOffset,
-    char* data,
-    unsigned bytes,
-    unsigned location)
+GzipCompressWorkerManager::initialize(
+    void* i_encoder)
 {
-    // nothing
+    encoder = (FileEncoder*) i_encoder;
 }
 
-    static void
-validateZipBlock(
+    ParallelWorker*
+GzipCompressWorkerManager::createWorker()
+{
+    return new GzipCompressWorker();
+}
+
+    void
+GzipCompressWorkerManager::beginStep()
+{
+    if (filterSupplier->closing) {
+        nChunks = 0;
+        return;
+    }
+    encoder->getEncodeBatch(&input, &inputSize, &inputUsed, &logicalOffset, &physicalOffset);
+    nChunks = (int) ((inputUsed + chunkSize - 1) / chunkSize);
+    sizes.clear();
+    sizes.extend(nChunks);
+ 
+    if (buffer == NULL) {
+        buffer = (char*) BigAlloc(inputSize);
+    }
+}
+
+    void
+GzipCompressWorkerManager::finishStep()
+{
+    if (filterSupplier->closing) {
+        return;
+    }
+    size_t toUsed = 0;
+    for (int i = 0; i < nChunks; i++) {
+        translation.push_back(pair<_uint64,_uint64>(logicalOffset, physicalOffset + toUsed));
+        logicalOffset += chunkSize;
+        if (i < nChunks - 1) { // don't know uncompressed size of last chunk
+            GzipCompressWorker::validateZipBlock(buffer + i * chunkSize, sizes[i], (unsigned) chunkSize);
+        }
+        memmove(input + toUsed, buffer + i * chunkSize, sizes[i]);
+        toUsed += sizes[i];
+    }
+    encoder->setEncodedBatchSize(toUsed);
+    filterSupplier->addTranslations(&translation);
+    translation.clear();
+}
+
+    void
+GzipCompressWorker::step()
+{
+    GzipCompressWorkerManager* supplier = (GzipCompressWorkerManager*) getManager();
+    if (heap == NULL) {
+        heap = new ThreadHeap(supplier->chunkSize * 8); // appears to use 4*chunkSize per run
+        zstream.zalloc = zalloc;
+        zstream.zfree = zfree;
+        zstream.opaque = heap;
+    }
+    //printf("zip task thread %d begin\n", GetCurrentThreadId());
+    _int64 start = timeInMillis();
+    int begin = (getThreadNum() * supplier->nChunks) / getNumThreads();
+    int end = ((1 + getThreadNum()) * supplier->nChunks) / getNumThreads();
+    for (int i = begin; i < end; i++) {
+        size_t bytes = min(supplier->chunkSize, supplier->inputUsed - i * supplier->chunkSize);
+        supplier->sizes[i] = compressChunk(zstream, supplier->bam,
+            supplier->buffer + i * supplier->chunkSize, supplier->chunkSize, 
+            supplier->input + i * supplier->chunkSize, bytes);
+        _ASSERT(supplier->sizes[i] <= supplier->chunkSize); // can't grow!
+    }
+}
+    
+    void
+GzipCompressWorker::validateZipBlock(
     char* start,
     size_t bytes,
     unsigned uncompressedBytes)
 {
     _ASSERT(*(_uint32*)start == 0x04088b1f && *(_uint32*)(start+bytes-4) == uncompressedBytes);
 }
-
+    
     size_t
-GzipWriterFilter::onNextBatch(
-    DataWriter* writer,
-    size_t offset,
-    size_t bytes)
-{
-    char* fromBuffer;
-    size_t fromSize, fromUsed, physicalOffset, logicalOffset;
-    writer->getBatch(-1, &fromBuffer, &fromSize, &fromUsed, &physicalOffset, NULL, &logicalOffset);
-    if (fromUsed == 0) {
-        return 0;
-    }
-    char* toBuffer;
-    size_t toSize, toUsed;
-    writer->getBatch(0, &toBuffer, &toSize, &toUsed);
-    if (toSize - toUsed < fromSize) {
-        fprintf(stderr, "GzipWriterFilter: not enough space for compression buffers\n");
-        soft_exit(1);
-    }
-    if (supplier->closing) {
-        _ASSERT(toSize - toUsed >= fromUsed);
-        memcpy(toBuffer + toUsed, fromBuffer, fromUsed);
-        return toUsed + fromUsed;
-    }
-    int nChunks = (int) (fromUsed / chunkSize);
-    size_t extra = fromUsed - chunkSize * nChunks;
-    if (supplier->multiThreaded) {
-        size_t* sizes = shared.run(nChunks, fromBuffer, toBuffer + toUsed);
-        size_t extraUsed = 0;
-        if (extra > 0) {
-            extraUsed = compressChunk(zstream, supplier->bamFormat,
-				      toBuffer + toUsed + nChunks * chunkSize, max(extra, (size_t)1024),
-                fromBuffer + nChunks * chunkSize, extra);
-        }
-        for (int i = 0; i < nChunks; i++) {
-            supplier->addTranslation(logicalOffset, physicalOffset + toUsed);
-            logicalOffset += chunkSize;
-            validateZipBlock(toBuffer + i * chunkSize, sizes[i], (unsigned) chunkSize);
-            memmove(toBuffer + toUsed, toBuffer + i * chunkSize, sizes[i]);
-            toUsed += sizes[i];
-        }
-        if (extra > 0) {
-            supplier->addTranslation(logicalOffset, physicalOffset + toUsed);
-            validateZipBlock(toBuffer + nChunks * chunkSize, extraUsed, (unsigned) extra);
-            memmove(toBuffer + toUsed, toBuffer + nChunks * chunkSize, extraUsed);
-            toUsed += extraUsed;
-        }
-    } else {
-        for (size_t chunk = 0; chunk < fromUsed; chunk += chunkSize) {
-            supplier->addTranslation(logicalOffset + chunk, physicalOffset + toUsed);
-            toUsed += compressChunk(zstream, supplier->bamFormat,
-                toBuffer + toUsed, toSize - toUsed, 
-                fromBuffer + chunk, min(fromUsed - chunk, chunkSize));
-        }
-    }
-    return toUsed;
-}
-
-    size_t
-GzipWriterFilter::compressChunk(
+GzipCompressWorker::compressChunk(
     z_stream& zstream,
     bool bamFormat,
     char* toBuffer,
@@ -286,7 +206,7 @@ GzipWriterFilter::compressChunk(
     char* fromBuffer,
     size_t fromUsed)
 {
-    if (bamFormat && fromUsed > 0x10000) {
+    if (bamFormat && fromUsed > BAM_BLOCK) {
         fprintf(stderr, "exceeded BAM chunk size\n");
         soft_exit(1);
     }
@@ -333,7 +253,6 @@ GzipWriterFilter::compressChunk(
     uInt oldAvail;
     int status;
 
-
     status = deflateInit2(&zstream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, windowBits | GZIP_ENCODING, 8, Z_DEFAULT_STRATEGY);
     if (status < 0) {
         fprintf(stderr, "GzipWriterFilter: deflateInit2 failed with %d\n", status);
@@ -371,7 +290,7 @@ GzipWriterFilter::compressChunk(
     size_t toUsed = toSize - zstream.avail_out;
     if (bamFormat) {
         // backpatch compressed block size into gzip header
-        if (toUsed >= 0x10000) {
+        if (toUsed >= BAM_BLOCK) {
             fprintf(stderr, "exceeded BAM chunk size\n");
             soft_exit(1);
         }
@@ -380,6 +299,47 @@ GzipWriterFilter::compressChunk(
     return toUsed;
 }
     
+GzipWriterFilter::GzipWriterFilter(GzipWriterFilterSupplier* i_supplier)
+    : DataWriter::Filter(DataWriter::ModifyFilter), supplier(i_supplier), manager(NULL), worker(NULL)
+{}
+
+
+    void
+GzipWriterFilter::onAdvance(
+    DataWriter* writer,
+    size_t batchOffset,
+    char* data,
+    unsigned bytes,
+    unsigned location)
+{
+    // nothing
+}
+
+    size_t
+GzipWriterFilter::onNextBatch(
+    DataWriter* writer,
+    size_t offset,
+    size_t bytes)
+{
+    char* fromBuffer;
+    size_t fromSize, fromUsed, physicalOffset, logicalOffset;
+    writer->getBatch(-1, &fromBuffer, &fromSize, &fromUsed, &physicalOffset, NULL, &logicalOffset);
+    if (fromUsed == 0 || supplier->multiThreaded || supplier->closing) {
+        return fromUsed;
+    }
+    // do compress buffer synchronously in-place
+    if (manager == NULL) {
+        manager = new GzipCompressWorkerManager(supplier);
+        worker = manager->createWorker();
+        encoder = new FileEncoder(0, false, manager);
+        encoder->initialize((AsyncDataWriter*) writer);
+    }
+    encoder->setupEncode(-1);
+    manager->beginStep();
+    worker->step();
+    manager->finishStep();
+    return bytes; // ignored
+}
 
     GzipWriterFilterSupplier*
 DataWriterSupplier::gzip(
@@ -399,7 +359,7 @@ GzipWriterFilterSupplier::getFilter()
 }
 
     void
-GzipWriterFilterSupplier::onClose(
+GzipWriterFilterSupplier::onClosing(
     DataWriterSupplier* supplier)
 {
     if (bamFormat) {
@@ -425,6 +385,16 @@ GzipWriterFilterSupplier::onClose(
     // sort translations
     std::sort(translation.begin(), translation.end(), translationComparator);
 }
+
+    void
+GzipWriterFilterSupplier::addTranslations(
+    VariableSizeVector< pair<_uint64,_uint64> >* moreTranslations)
+{
+    AcquireExclusiveLock(&lock);
+    translation.append(moreTranslations);
+    ReleaseExclusiveLock(&lock);
+}
+
 
     bool
 GzipWriterFilterSupplier::translate(
@@ -453,3 +423,13 @@ GzipWriterFilterSupplier::translationComparator(
     return a.first < b.first;
 }
     
+    FileEncoder*
+FileEncoder::gzip(
+    GzipWriterFilterSupplier* filterSupplier,
+    int numThreads,
+    bool bindToProcessor,
+    size_t chunkSize,
+    bool bam)
+{
+    return new FileEncoder(numThreads, bindToProcessor, new GzipCompressWorkerManager(filterSupplier));
+}
