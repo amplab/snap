@@ -17,6 +17,7 @@ Environment:
 #include "stdafx.h"
 #include "ParallelTask.h"
 
+using std::max;
 
 ParallelCoworker::ParallelCoworker(int i_numThreads, bool i_bindToProcessors, ParallelWorkerManager* i_manager, Callback i_callback, void* i_parameter)
     : stopped(false), numThreads(i_numThreads), bindToProcessors(i_bindToProcessors), manager(i_manager), callback(i_callback), parameter(i_parameter)

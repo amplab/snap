@@ -873,7 +873,7 @@ DecompressDataReader::advance(
     _int64 bytes)
 
 {
-    offset = min(offset + max(bytes, 0), peekReady()->decompressedValid);
+    offset = min(offset + max(bytes, (_int64) 0), peekReady()->decompressedValid);
 }
 
     void

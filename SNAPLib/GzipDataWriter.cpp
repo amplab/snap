@@ -64,7 +64,6 @@ private:
     VariableSizeVector< pair<_uint64,_uint64> > translation;
 
     friend class GzipCompressWorker;
-    friend class GzipCompressWorkerManager;
 };
 
 class GzipCompressWorker : public ParallelWorker
