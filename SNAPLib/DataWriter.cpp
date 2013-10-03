@@ -176,7 +176,7 @@ FileEncoder::outputReady()
     // begin writing the buffer to disk
     AsyncDataWriter::Batch* write = &writer->batches[encoderBatch];
     writer->supplier->advance(write->used, 0, &write->fileOffset, &write->logicalOffset);
-    printf("outputReady write batch %d @%lld:%lld\n", encoderBatch, write->fileOffset, write->used);
+    //printf("outputReady write batch %d @%lld:%lld\n", encoderBatch, write->fileOffset, write->used);
     if (! write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
         fprintf(stderr, "error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
         soft_exit(1);
@@ -225,7 +225,7 @@ FileEncoder::getEncodeBatch(
     *o_batch = batch->buffer;
     *o_batchSize = writer->bufferSize;
     *o_batchUsed = batch->used;
-    printf("getEncodeBatch #%d: %lld/%lld\n", encoderBatch, batch->used, writer->bufferSize);
+    //printf("getEncodeBatch #%d: %lld/%lld\n", encoderBatch, batch->used, writer->bufferSize);
 }
 
     void
@@ -244,7 +244,7 @@ FileEncoder::setEncodedBatchSize(
     size_t newSize)
 {
     size_t old = writer->batches[encoderBatch].used;
-    printf("setEncodedBatchSize #%d %lld -> %lld\n", encoderBatch, old, newSize);
+    //printf("setEncodedBatchSize #%d %lld -> %lld\n", encoderBatch, old, newSize);
     if (newSize != old) {
         AcquireExclusiveLock(lock);
         AsyncDataWriter::Batch* batch = &writer->batches[encoderBatch];
@@ -411,7 +411,7 @@ AsyncDataWriter::nextBatch()
 
     InterlockedAdd64AndReturnNewValue(&FilterTime, start2 - start);
     if (encoder == NULL) {
-        printf("nextBatch beginWrite #%d @%lld: %lld bytes\n", write-batches, write->fileOffset, write->used);
+        //printf("nextBatch beginWrite #%d @%lld: %lld bytes\n", write-batches, write->fileOffset, write->used);
         //_ASSERT(BgzfHeader::validate(write->buffer, write->used)); //!! remove before checkin
         if (! write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
             fprintf(stderr, "error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
@@ -502,7 +502,7 @@ AsyncDataWriterSupplier::advance(
     sharedOffset += physical;
     *o_logical = sharedLogical;
     sharedLogical += logical;
-    printf("advance %lld + %lld = %lld, logical %lld + %lld = %lld\n", *o_physical, physical, sharedOffset, *o_logical, logical, sharedLogical);
+    //printf("advance %lld + %lld = %lld, logical %lld + %lld = %lld\n", *o_physical, physical, sharedOffset, *o_logical, logical, sharedLogical);
     ReleaseExclusiveLock(&lock);
 }
 

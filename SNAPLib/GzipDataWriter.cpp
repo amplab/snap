@@ -386,11 +386,6 @@ GzipWriterFilterSupplier::addTranslations(
 {
     AcquireExclusiveLock(&lock);
     translation.append(moreTranslations);
-    printf("addTranslation + %d = %d:", moreTranslations->size(), translation.size());
-    for (int i = 0; i < min(moreTranslations->size(), 20); i++) {
-        printf(" %lld->%lld", (*moreTranslations)[i].first, (*moreTranslations)[i].second);
-    }
-    printf("%s\n", moreTranslations->size() > 10 ? " ..." : "");
     ReleaseExclusiveLock(&lock);
 }
 

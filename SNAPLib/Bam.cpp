@@ -1398,7 +1398,7 @@ BAMIndexSupplier::onRead(
     size_t fileOffset,
     int batchIndex)
 {
-    printf("index onRead %d:%d+%d @ %lld %d\n", bam->refID, bam->pos, bam->l_ref(), fileOffset, batchIndex);
+    //printf("index onRead %d:%d+%d @ %lld %d\n", bam->refID, bam->pos, bam->l_ref(), fileOffset, batchIndex);
     if (bam->refID != lastRefId) {
         if (lastRefId != -1) {
             addChunk(lastRefId, BAMAlignment::BAM_EXTRA_BIN, firstBamStart, lastBamEnd);
