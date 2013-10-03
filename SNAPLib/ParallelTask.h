@@ -257,6 +257,8 @@ public:
     virtual void beginStep() {}
 
     virtual void finishStep() {}
+
+    void configure(ParallelWorker* worker, int threadNum, int totalThreads); // special case
 };
 
 // per-thread worker
@@ -276,6 +278,7 @@ protected:
 
 private:
     friend class ParallelCoworker;
+    friend class ParallelWorkerManager;
     void configure(ParallelWorkerManager* i_manager, int i_threadNum, int i_numThreads)
     { manager = i_manager; threadNum = i_threadNum; numThreads = i_numThreads; }
 

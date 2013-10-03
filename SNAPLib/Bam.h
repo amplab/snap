@@ -334,6 +334,10 @@ struct BgzfHeader
         _ASSERT(result <= BAM_BLOCK);
         return result;
     }
+
+    bool validate(size_t compressed, size_t uncompressed);
+
+    static bool validate(char* buffer, size_t bytes);
 };
 
 

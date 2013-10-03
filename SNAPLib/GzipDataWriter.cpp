@@ -60,8 +60,6 @@ private:
     char* input;
     size_t inputSize;
     size_t inputUsed;
-    size_t logicalOffset;
-    size_t physicalOffset;
     char* buffer;
     VariableSizeVector< pair<_uint64,_uint64> > translation;
 
@@ -78,8 +76,6 @@ public:
 
     virtual void step();
     
-    static void validateZipBlock(char* start, size_t bytes, unsigned uncompressedBytes);
-
     static size_t compressChunk(z_stream& zstream, bool bamFormat, char* toBuffer, size_t toSize, char* fromBuffer, size_t fromUsed);
 
 private:
@@ -134,7 +130,7 @@ GzipCompressWorkerManager::beginStep()
         nChunks = 0;
         return;
     }
-    encoder->getEncodeBatch(&input, &inputSize, &inputUsed, &logicalOffset, &physicalOffset);
+    encoder->getEncodeBatch(&input, &inputSize, &inputUsed);
     nChunks = (int) ((inputUsed + chunkSize - 1) / chunkSize);
     sizes.clear();
     sizes.extend(nChunks);
@@ -150,16 +146,19 @@ GzipCompressWorkerManager::finishStep()
     if (filterSupplier->closing) {
         return;
     }
-    size_t toUsed = 0;
+    size_t toUsed = 0, logicalOffset, physicalOffset;
+    encoder->getOffsets(&logicalOffset, &physicalOffset);
     for (int i = 0; i < nChunks; i++) {
         translation.push_back(pair<_uint64,_uint64>(logicalOffset, physicalOffset + toUsed));
-        logicalOffset += chunkSize;
-        if (i < nChunks - 1) { // don't know uncompressed size of last chunk
-            GzipCompressWorker::validateZipBlock(buffer + i * chunkSize, sizes[i], (unsigned) chunkSize);
-        }
-        memmove(input + toUsed, buffer + i * chunkSize, sizes[i]);
+        _ASSERT(i * chunkSize < inputUsed);
+        _ASSERT(sizes[i] <= chunkSize);
+        size_t logicalChunk = min(chunkSize, inputUsed - i * chunkSize);
+        logicalOffset += logicalChunk;
+        _ASSERT(((BgzfHeader*)(buffer + i * chunkSize))->validate(sizes[i], logicalChunk));
+        memcpy(input + toUsed, buffer + i * chunkSize, sizes[i]);
         toUsed += sizes[i];
     }
+    _ASSERT(BgzfHeader::validate(input, toUsed));
     encoder->setEncodedBatchSize(toUsed);
     filterSupplier->addTranslations(&translation);
     translation.clear();
@@ -187,15 +186,7 @@ GzipCompressWorker::step()
         _ASSERT(supplier->sizes[i] <= supplier->chunkSize); // can't grow!
     }
 }
-    
-    void
-GzipCompressWorker::validateZipBlock(
-    char* start,
-    size_t bytes,
-    unsigned uncompressedBytes)
-{
-    _ASSERT(*(_uint32*)start == 0x04088b1f && *(_uint32*)(start+bytes-4) == uncompressedBytes);
-}
+   
     
     size_t
 GzipCompressWorker::compressChunk(
@@ -300,7 +291,7 @@ GzipCompressWorker::compressChunk(
 }
     
 GzipWriterFilter::GzipWriterFilter(GzipWriterFilterSupplier* i_supplier)
-    : DataWriter::Filter(DataWriter::ModifyFilter), supplier(i_supplier), manager(NULL), worker(NULL)
+    : DataWriter::Filter(DataWriter::ResizeFilter), supplier(i_supplier), manager(NULL), worker(NULL)
 {}
 
 
@@ -333,12 +324,15 @@ GzipWriterFilter::onNextBatch(
         worker = manager->createWorker();
         encoder = new FileEncoder(0, false, manager);
         encoder->initialize((AsyncDataWriter*) writer);
+        manager->initialize(encoder);
+        manager->configure(worker, 0, 1);
     }
     encoder->setupEncode(-1);
     manager->beginStep();
     worker->step();
     manager->finishStep();
-    return bytes; // ignored
+    writer->getBatch(-1, &fromBuffer, &fromSize, &fromUsed, &physicalOffset, NULL, &logicalOffset);
+    return fromUsed;
 }
 
     GzipWriterFilterSupplier*
@@ -392,6 +386,11 @@ GzipWriterFilterSupplier::addTranslations(
 {
     AcquireExclusiveLock(&lock);
     translation.append(moreTranslations);
+    printf("addTranslation + %d = %d:", moreTranslations->size(), translation.size());
+    for (int i = 0; i < min(moreTranslations->size(), 20); i++) {
+        printf(" %lld->%lld", (*moreTranslations)[i].first, (*moreTranslations)[i].second);
+    }
+    printf("%s\n", moreTranslations->size() > 10 ? " ..." : "");
     ReleaseExclusiveLock(&lock);
 }
 

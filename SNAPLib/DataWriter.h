@@ -39,6 +39,7 @@ public:
         ModifyFilter, // modifies data in place
         CopyFilter, // copies data into new buffer, same size
         TransformFilter, // copies data into new buffer, possibly different size
+        ResizeFilter, // rewrites data in same buffer, possibly different size
     };
     // single filter instance per thread
     // points to filterSupplier for common data
@@ -164,7 +165,11 @@ public:
     FileEncoder(int numThreads, bool bindToProcessors, ParallelWorkerManager* i_supplier);
 
     ~FileEncoder()
-    { _ASSERT(! encoderRunning); worker->stop(); delete worker; }
+    {
+        if (coworker != NULL) {
+            _ASSERT(! encoderRunning); coworker->stop(); delete coworker;
+        }
+    }
 
     static FileEncoder* gzip(GzipWriterFilterSupplier* filterSupplier, int numThreads, bool bindToProcessor, size_t chunkSize = 65536, bool bam = true);
 
@@ -180,7 +185,9 @@ public:
 
     void setupEncode(int relative);
     
-    void getEncodeBatch(char** o_batch, size_t* o_batchSize, size_t* o_batchUsed, size_t* o_logicalOffset, size_t* o_physicalOffset);
+    void getEncodeBatch(char** o_batch, size_t* o_batchSize, size_t* o_batchUsed);
+
+    void getOffsets(size_t* o_logicalOffset, size_t* o_physicalOffset);
 
     void setEncodedBatchSize(size_t newSize);
 
@@ -195,7 +202,7 @@ private:
     void checkForInput();
 
     AsyncDataWriter* writer;
-    ParallelCoworker* worker;
+    ParallelCoworker* coworker;
     ExclusiveLock* lock;
     bool encoderRunning;
     int encoderBatch;

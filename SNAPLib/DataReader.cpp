@@ -694,6 +694,8 @@ private:
 
     static void decompressThread(void *context);
 
+    static void decompressThreadContinuous(void *context);
+
     friend class DecompressManager;
     friend class DecompressWorker;
 
@@ -716,6 +718,7 @@ private:
         char* decompressed;
         _int64 decompressedStart;
         _int64 decompressedValid;
+        bool allocated; // if decompressed has been allocated specially, not from inner extra data
     };
 
     // use only these routines to manipulate the linked  lists
@@ -733,7 +736,7 @@ private:
     _int64 offset; // into current entry
     bool threadStarted; // whether thread has been started
     bool eof; // true when we've read to eof of previous
-    bool stopping; // set to stop everything
+    volatile bool stopping; // set to stop everything
     EventObject decompressThreadDone; // signalled by background thread on exit
 
     // entry lists
@@ -765,6 +768,8 @@ DecompressDataReader::DecompressDataReader(
         Entry* entry = &entries[i];
         entry->state = EntryAvailable;
         entry->next = i < count - 1 ? &entries[i + 1] : NULL;
+        entry->decompressed = NULL;
+        entry->allocated = false;
     }
     available = entries;
     first = last = NULL;
@@ -784,7 +789,11 @@ DecompressDataReader::~DecompressDataReader()
         AllowEventWaitersToProceed(&availableEvent);
         WaitForEvent(&decompressThreadDone);
     }
-    delete entries;
+    for (int i = 0;  i < count; i++) {
+        if (entries[i].allocated) {
+            delete [] entries[i].decompressed;
+        }
+    }
     delete inner;
 }
 
@@ -800,7 +809,7 @@ DecompressDataReader::readHeader(
     _int64* io_headerSize)
 {
     z_stream zstream;
-    ThreadHeap heap(BAM_BLOCK);
+    ThreadHeap heap(max(chunkSize,1000));
     _int64 compressedBytes = (_int64)(*io_headerSize / MIN_FACTOR);
     char* compressed = inner->readHeader(&compressedBytes);
     char* header;
@@ -810,7 +819,7 @@ DecompressDataReader::readHeader(
     _int64 headerSize = 0;
     while (headerSize < *io_headerSize && compressedBytes > 0) {
         _int64 compressedBlockSize, decompressedBlockSize;
-        decompress(&zstream, &heap,
+        decompress(&zstream, chunkSize != 0 ? &heap : NULL,
             compressed, compressedBytes, &compressedBlockSize,
             header + headerSize, totalExtra - headerSize, &decompressedBlockSize,
             StartMultiBlock);
@@ -835,7 +844,7 @@ DecompressDataReader::reinit(
     // todo: transform start/amount to add for compression? I don't think so...
     inner->reinit(startingOffset, amountOfFileToProcess);
     threadStarted = true;
-    if (! StartNewThread(decompressThread, this)) {
+    if (! StartNewThread(chunkSize > 0 ? decompressThread : decompressThreadContinuous, this)) {
         fprintf(stderr, "failed to start decompressThread\n");
         soft_exit(1);
     }
@@ -880,7 +889,7 @@ DecompressDataReader::nextBatch()
     _int64 copy = old->decompressedValid - max(offset, old->decompressedStart);
     memcpy(next->decompressed + overflowBytes - copy, old->decompressed + old->decompressedValid - copy, copy);
     offset = overflowBytes - copy;
-    //printf("nextBatch #%d->%d copy %lld + %lld/%lld\n", old-entries, next-entries, copy, next->decompressedStart, next->decompressedValid);
+    //printf("nextBatch %d:%d #%d -> %d:%d #%d copy %lld + %lld/%lld\n", old->batch.fileID, old->batch.batchID, old-entries, next->batch.fileID, next->batch.batchID, next-entries, copy, next->decompressedStart, next->decompressedValid);
     if (autoRelease) {
         releaseBatch(old->batch);
     }
@@ -952,16 +961,23 @@ DecompressDataReader::decompress(
     zstream->avail_in = (uInt)inputBytes;
     zstream->next_out = (Bytef*) output;
     zstream->avail_out = (uInt)outputBytes;
-    zstream->zalloc = zalloc;
-    zstream->zfree = zfree;
-    zstream->opaque = heap;
+    if (heap != NULL) {
+        zstream->zalloc = zalloc;
+        zstream->zfree = zfree;
+        zstream->opaque = heap;
+    } else {
+        zstream->zalloc = NULL;
+        zstream->zfree = NULL;
+    }
     uInt oldAvailOut, oldAvailIn;
     int block = 0;
     bool multiBlock = true;
     int status;
     do {
 	    if (mode != ContinueMultiBlock || block != 0) {
-            heap->reset();
+            if (heap != NULL) {
+                heap->reset();
+            }
             status = inflateInit2(zstream, windowBits | ENABLE_ZLIB_GZIP);
             if (status < 0) {
                 fprintf(stderr, "GzipDataReader: inflateInit2 failed with %d\n", status);
@@ -1101,12 +1117,15 @@ DecompressDataReader::decompressThread(
             }
             // mark as eof - no data
             entry->decompressedValid = entry->decompressedStart = reader->overflowBytes;
+            if (entry->decompressed == NULL) {
+                entry->decompressed = new char[reader->overflowBytes];
+                entry->allocated = true;
+            }
         } else {
-            // figure out offsets and advance inner data
             _int64 ignore;
             reader->inner->getExtra(&entry->decompressed, &ignore);
             _ASSERT(ignore >= reader->extraBytes && ignore >= reader->overflowBytes);
-            entry->batch = reader->inner->getBatch();
+            // figure out offsets and advance inner data
             inputs.clear();
             outputs.clear();
             _int64 input = 0;
@@ -1118,6 +1137,7 @@ DecompressDataReader::decompressThread(
                 input += zip->BSIZE() + 1;
                 output += zip->ISIZE();
                 _ASSERT(output <= reader->extraBytes && input <= entry->compressedValid);
+                _ASSERT(zip->BSIZE() < BAM_BLOCK && zip->ISIZE() <= BAM_BLOCK);
             } while (input < entry->compressedStart);
             // append final offsets
             inputs.push_back(input);
@@ -1126,6 +1146,7 @@ DecompressDataReader::decompressThread(
             reader->inner->advance(input);
             entry->decompressedValid = output;
             entry->decompressedStart = output - reader->overflowBytes;
+            entry->batch = reader->inner->getBatch();
             reader->inner->nextBatch(); // start reading next batch
             // decompress all chunks synchronously on multiple threads
             manager.entry = entry;
@@ -1136,6 +1157,57 @@ DecompressDataReader::decompressThread(
         reader->enqueueReady(entry);
     }
     coworker.stop();
+    AllowEventWaitersToProceed(&reader->decompressThreadDone);
+}
+    void
+DecompressDataReader::decompressThreadContinuous(
+    void* context)
+{
+    DecompressDataReader* reader = (DecompressDataReader*) context;
+    z_stream zstream;
+    bool first = true;
+    while (true) {
+        Entry* entry = reader->dequeueAvailable();
+        if (reader->stopping) {
+            break;
+        }
+        // always starts with a fresh batch - advances after reading it all
+        bool ok = reader->inner->getData(&entry->compressed, &entry->compressedValid, &entry->compressedStart);
+        int index = (int) (entry - reader->entries);
+        if (! ok) {
+            //printf("decompressThread #%d eof\n", index);
+            if (! reader->inner->isEOF()) {
+                fprintf(stderr, "error reading file at offset %lld\n", reader->getFileOffset());
+                soft_exit(1);
+            }
+            // mark as eof - no data
+            entry->decompressedValid = entry->decompressedStart = reader->overflowBytes;
+            if (entry->decompressed == NULL) {
+                entry->decompressed = new char[reader->overflowBytes];
+                entry->allocated = true;
+            }
+        } else {
+            // figure out offsets and advance inner data
+            _int64 ignore;
+            reader->inner->getExtra(&entry->decompressed, &ignore);
+            _ASSERT(ignore >= reader->extraBytes && ignore >= reader->overflowBytes);
+            _int64 compressedRead, decompressedWritten;
+            entry->batch = reader->inner->getBatch();
+            reader->inner->advance(entry->compressedValid);
+            reader->inner->nextBatch(); // start reading next batch
+            decompress(&zstream, NULL,
+                entry->compressed, entry->compressedValid, &compressedRead,
+                entry->decompressed + reader->overflowBytes, reader->extraBytes - reader->overflowBytes, &decompressedWritten,
+                first ? StartMultiBlock : ContinueMultiBlock);
+            _ASSERT(compressedRead == entry->compressedValid && decompressedWritten <= reader->extraBytes - reader->overflowBytes);
+            entry->decompressedValid = reader->overflowBytes + decompressedWritten;
+            entry->decompressedStart = decompressedWritten;
+            first = false;
+        }
+        // make buffer available for clients & go on to next
+        //printf("decompressThread #%d ready\n", index);
+        reader->enqueueReady(entry);
+    }
     AllowEventWaitersToProceed(&reader->decompressThreadDone);
 }
 
@@ -1157,6 +1229,7 @@ DecompressDataReader::popReady()
         AcquireExclusiveLock(&lock);
         if (first != NULL) {
             _ASSERT(first->state == EntryReady);
+            //printf("popReady %d:%d #%d -> held\n", first->batch.fileID, first->batch.batchID, first - entries);
             first->state = EntryHeld;
             if (first->next == NULL) {
                 _ASSERT(last == first);
@@ -1195,6 +1268,7 @@ DecompressDataReader::dequeueAvailable()
 {
     while (true) {
         AcquireExclusiveLock(&lock);
+        //printf("dequeueAvailable #%d\n", available == NULL ? -1 : available - entries);
         if (available!= NULL) {
             _ASSERT(available->state == EntryAvailable);
             available->state = EntryReading;
@@ -1208,6 +1282,9 @@ DecompressDataReader::dequeueAvailable()
         }
         ReleaseExclusiveLock(&lock);
         WaitForEvent(&availableEvent);
+        if (stopping) {
+            return NULL;
+        }
     }
 }
 
@@ -1228,14 +1305,15 @@ DecompressDataReader::enqueueAvailable(Entry* entry)
 class DecompressDataReaderSupplier : public DataSupplier
 {
 public:
-    DecompressDataReaderSupplier(DataSupplier* i_inner, bool autoRelease)
-        : DataSupplier(autoRelease), inner(i_inner)
+    DecompressDataReaderSupplier(DataSupplier* i_inner, bool autoRelease, int i_blockSize = BAM_BLOCK)
+        : DataSupplier(autoRelease), inner(i_inner), blockSize(i_blockSize)
     {}
 
     virtual DataReader* getDataReader(_int64 overflowBytes = 0, double extraFactor = 0.0);
 
 private:
     DataSupplier* inner;
+    const int blockSize;
 };
 
     DataReader*
@@ -1246,7 +1324,7 @@ DecompressDataReaderSupplier::getDataReader(
     // adjust extra factor for compression ratio
     double totalFactor = MAX_FACTOR * (1.0 + extraFactor);
     // get inner reader with no overflow since zlib can't deal with it
-    DataReader* data = inner->getDataReader(BAM_BLOCK, totalFactor);
+    DataReader* data = inner->getDataReader(blockSize, totalFactor);
     // compute how many extra bytes are owned by this layer
     char* p;
     _int64 totalExtra;
@@ -1255,7 +1333,15 @@ DecompressDataReaderSupplier::getDataReader(
     // create new reader, telling it how many bytes it owns
     // it will subtract overflow off the end of each batch
     // batch count here is cheap, so make it high enough that it never hits the limit
-    return new DecompressDataReader(autoRelease, data, max(8, DataSupplier::ThreadCount*4), totalExtra, mine, overflowBytes);
+    return new DecompressDataReader(autoRelease, data, max(8, DataSupplier::ThreadCount*4), totalExtra, mine, overflowBytes, blockSize);
+}
+    
+    DataSupplier*
+DataSupplier::GzipBam(
+    DataSupplier* inner,
+    bool autoRelease)
+{
+    return new DecompressDataReaderSupplier(inner, autoRelease, BAM_BLOCK);
 }
     
     DataSupplier*
@@ -1263,7 +1349,7 @@ DataSupplier::Gzip(
     DataSupplier* inner,
     bool autoRelease)
 {
-    return new DecompressDataReaderSupplier(inner, autoRelease);
+    return new DecompressDataReaderSupplier(inner, autoRelease, 0);
 }
 
 //
@@ -1714,6 +1800,9 @@ DataSupplier* DataSupplier::Default[2] =
 // inner supplier must NOT be autorelease since wrapper keeps multiple buffers alive
 DataSupplier* DataSupplier::GzipDefault[2] =
 { DataSupplier::Gzip(DataSupplier::Default[false], false), DataSupplier::Gzip(DataSupplier::Default[false], true) };
+
+DataSupplier* DataSupplier::GzipBamDefault[2] =
+{ DataSupplier::GzipBam(DataSupplier::Default[false], false), DataSupplier::GzipBam(DataSupplier::Default[false], true) };
 
 int DataSupplier::ThreadCount = 1;
 

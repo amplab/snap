@@ -22,6 +22,7 @@ Environment:
 #include "DataWriter.h"
 #include "ParallelTask.h"
 #include "exit.h"
+#include "Bam.h"
 
 using std::min;
 using std::max;
@@ -117,7 +118,7 @@ FileEncoder::FileEncoder(
     ParallelWorkerManager* i_manager)
     :
     encoderRunning(false),
-    worker(numThreads == 0 ? NULL
+    coworker(numThreads == 0 ? NULL
         : new ParallelCoworker(numThreads, bindToProcessors, i_manager, FileEncoder::outputReadyCallback, this))
 {}
 
@@ -128,8 +129,10 @@ FileEncoder::initialize(
     writer = i_writer;
     lock = &writer->lock;
     encoderBatch = writer->count - 1;
-    worker->getManager()->initialize(this);
-    worker->start();
+    if (coworker != NULL) {
+        coworker->getManager()->initialize(this);
+        coworker->start();
+    }
 }
 
     void
@@ -153,7 +156,7 @@ FileEncoder::close()
     for (int i = 0; i < pending; i++) {
         WaitForEvent(&writer->batches[(start + i) % writer->count].encoded);
     }
-    worker->stop();
+    coworker->stop();
 }
 
     void
@@ -172,6 +175,8 @@ FileEncoder::outputReady()
 
     // begin writing the buffer to disk
     AsyncDataWriter::Batch* write = &writer->batches[encoderBatch];
+    writer->supplier->advance(write->used, 0, &write->fileOffset, &write->logicalOffset);
+    printf("outputReady write batch %d @%lld:%lld\n", encoderBatch, write->fileOffset, write->used);
     if (! write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
         fprintf(stderr, "error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
         soft_exit(1);
@@ -197,7 +202,7 @@ FileEncoder::checkForInput()
         AsyncDataWriter::Batch* encode = &writer->batches[encoderBatch];
         if (encode->used > 0) {
             encoderRunning = true;
-            worker->step();
+            coworker->step();
             break;
         }
     }
@@ -214,17 +219,24 @@ FileEncoder::setupEncode(
 FileEncoder::getEncodeBatch(
     char** o_batch,
     size_t* o_batchSize,
-    size_t* o_batchUsed,
-    size_t* o_logicalOffset,
-    size_t* o_physicalOffset)
+    size_t* o_batchUsed)
 {
     AsyncDataWriter::Batch* batch = &writer->batches[encoderBatch];
     *o_batch = batch->buffer;
     *o_batchSize = writer->bufferSize;
     *o_batchUsed = batch->used;
-    *o_logicalOffset = batch->logicalOffset;
-    *o_physicalOffset = batch->fileOffset;
-    //printf("getEncodeBatch %d %lld @ %lld/%lld\n", encoderBatch, batch->used, batch->fileOffset, batch->logicalOffset);
+    printf("getEncodeBatch #%d: %lld/%lld\n", encoderBatch, batch->used, writer->bufferSize);
+}
+
+    void
+FileEncoder::getOffsets(
+    size_t* o_logicalOffset,
+    size_t* o_physicalOffset)
+{
+    // logical has already been set correctly in batch
+    *o_logicalOffset = writer->batches[encoderBatch].logicalOffset;
+    // physical is not yet updated, use shared
+    *o_physicalOffset = writer->supplier->sharedOffset;
 }
 
     void
@@ -232,15 +244,12 @@ FileEncoder::setEncodedBatchSize(
     size_t newSize)
 {
     size_t old = writer->batches[encoderBatch].used;
-    //printf("setEncodedBatchSize %d %lld -> %lld\n", encoderBatch, old, newSize);
+    printf("setEncodedBatchSize #%d %lld -> %lld\n", encoderBatch, old, newSize);
     if (newSize != old) {
         AcquireExclusiveLock(lock);
-        writer->batches[encoderBatch].used = newSize;
-        for (int i = (encoderBatch + 1) % writer->count; i != writer->current; i = (i + 1) % writer->count) {
-            writer->batches[i].fileOffset -= old - newSize;
-        }
-        size_t ignore;
-        writer->supplier->advance(newSize - old, 0, &ignore, &ignore);
+        AsyncDataWriter::Batch* batch = &writer->batches[encoderBatch];
+        batch->logicalUsed = batch->used;
+        batch->used = newSize;
         ReleaseExclusiveLock(lock);
     }
 }
@@ -369,20 +378,20 @@ AsyncDataWriter::nextBatch()
     //printf("nextBatch reset %d used=0\n", current);
     batches[current].used = 0;
     bool newBuffer = filter != NULL && (filter->filterType == CopyFilter || filter->filterType == TransformFilter);
-    bool newSize = newBuffer && filter->filterType == TransformFilter;
+    bool newSize = filter != NULL && (filter->filterType == TransformFilter || filter->filterType == ResizeFilter);
     if (newSize) {
         // advisory only
         write->fileOffset = supplier->sharedOffset;
         write->logicalOffset = supplier->sharedLogical;
     } else {
-        supplier->advance(write->used, write->logicalUsed, &write->fileOffset, &write->logicalOffset);
+        supplier->advance(encoder == NULL ? write->used : 0, write->logicalUsed, &write->fileOffset, &write->logicalOffset);
     }
     if (filter != NULL) {
         size_t n = filter->onNextBatch(this, write->fileOffset, write->used);
-        if (newSize) {
-            write->used = n;
-            supplier->advance(n, write->logicalUsed, &write->fileOffset, &write->logicalOffset);
-        }
+	    if (newSize) {
+	        write->used = n;
+            supplier->advance(encoder == NULL ? write->used : 0, write->logicalUsed, &write->fileOffset, &write->logicalOffset);
+	    }
         if (newBuffer) {
             // current has used>0, written has logicalUsed>0, for compressed & uncompressed data respectively
             batches[current].used = write->used;
@@ -402,6 +411,8 @@ AsyncDataWriter::nextBatch()
 
     InterlockedAdd64AndReturnNewValue(&FilterTime, start2 - start);
     if (encoder == NULL) {
+        printf("nextBatch beginWrite #%d @%lld: %lld bytes\n", write-batches, write->fileOffset, write->used);
+        //_ASSERT(BgzfHeader::validate(write->buffer, write->used)); //!! remove before checkin
         if (! write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
             fprintf(stderr, "error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
             soft_exit(1);
@@ -491,6 +502,7 @@ AsyncDataWriterSupplier::advance(
     sharedOffset += physical;
     *o_logical = sharedLogical;
     sharedLogical += logical;
+    printf("advance %lld + %lld = %lld, logical %lld + %lld = %lld\n", *o_physical, physical, sharedOffset, *o_logical, logical, sharedLogical);
     ReleaseExclusiveLock(&lock);
 }
 

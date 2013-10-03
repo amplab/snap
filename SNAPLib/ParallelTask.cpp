@@ -131,3 +131,12 @@ WorkerContext::finishThread(WorkerContext* common)
         SignalSingleWaiterObject(&shared->finished);
     }
 }
+
+    void
+ParallelWorkerManager::configure(
+    ParallelWorker* worker,
+    int threadNum,
+    int totalThreads)
+{
+    worker->configure(this, threadNum, totalThreads);
+}

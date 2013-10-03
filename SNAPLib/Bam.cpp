@@ -65,7 +65,7 @@ BAMReader::init(
 {
     // todo: integrate supplier models
     // might need up to 2x extra for expanded sequence + quality + cigar data
-    data = DataSupplier::GzipDefault[false]->getDataReader(MAX_RECORD_LENGTH, 2.5);
+    data = DataSupplier::GzipBamDefault[false]->getDataReader(MAX_RECORD_LENGTH, 2.5);
     if (! data->init(fileName)) {
         fprintf(stderr, "Unable to read file %s\n", fileName);
         soft_exit(1);
@@ -96,7 +96,7 @@ BAMReader::readHeader(
     ReaderContext& context)
 {
     _ASSERT(context.header == NULL);
-    DataReader* data = DataSupplier::GzipDefault[false]->getDataReader(MAX_RECORD_LENGTH, 2.5);
+    DataReader* data = DataSupplier::GzipBamDefault[false]->getDataReader(MAX_RECORD_LENGTH, 2.5);
     if (! data->init(fileName)) {
         fprintf(stderr, "Unable to read file %s\n", fileName);
         soft_exit(1);
@@ -1398,6 +1398,7 @@ BAMIndexSupplier::onRead(
     size_t fileOffset,
     int batchIndex)
 {
+    printf("index onRead %d:%d+%d @ %lld %d\n", bam->refID, bam->pos, bam->l_ref(), fileOffset, batchIndex);
     if (bam->refID != lastRefId) {
         if (lastRefId != -1) {
             addChunk(lastRefId, BAMAlignment::BAM_EXTRA_BIN, firstBamStart, lastBamEnd);
@@ -1537,4 +1538,32 @@ BAMIndexSupplier::addInterval(
             info->intervals.push_back(fileOffset);
         //}
     }
+}
+
+    bool
+BgzfHeader::validate(char* buffer, size_t bytes)
+{
+    char* p;
+    for (p = buffer; p - buffer < bytes; ) {
+        BgzfHeader* h = (BgzfHeader*) p;
+        unsigned bsize = h->BSIZE() + 1;
+        unsigned isize = h->ISIZE();
+        if (bsize == 0 || bsize > BAM_BLOCK || isize > BAM_BLOCK ||
+                bsize > max(2 * isize, isize+1000) || ! h->validate(bsize, isize)) {
+            return false;
+        }
+        p += bsize;
+    }
+    return p == buffer + bytes;
+}
+
+    bool
+BgzfHeader::validate(
+    size_t compressed,
+    size_t uncompressed)
+{
+    return ID1 == 0x1f && ID2 == 0x8b && CM == 8 && FLG == 4 &&
+        MTIME == 0 && XFL == 0 && OS == 0 &&
+        ISIZE() == uncompressed&&
+        BSIZE() + 1 == compressed;
 }
