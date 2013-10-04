@@ -791,7 +791,7 @@ DecompressDataReader::~DecompressDataReader()
     }
     for (int i = 0;  i < count; i++) {
         if (entries[i].allocated) {
-            delete [] entries[i].decompressed;
+            BigDealloc(entries[i].decompressed);
         }
     }
     delete inner;
@@ -1118,8 +1118,9 @@ DecompressDataReader::decompressThread(
             // mark as eof - no data
             entry->decompressedValid = entry->decompressedStart = reader->overflowBytes;
             if (entry->decompressed == NULL) {
-                entry->decompressed = new char[reader->overflowBytes];
+                entry->decompressed = (char*) BigAlloc(reader->totalExtra);
                 entry->allocated = true;
+                entry->batch = reader->inner->getBatch();
             }
         } else {
             _int64 ignore;
@@ -1183,8 +1184,9 @@ DecompressDataReader::decompressThreadContinuous(
             // mark as eof - no data
             entry->decompressedValid = entry->decompressedStart = reader->overflowBytes;
             if (entry->decompressed == NULL) {
-                entry->decompressed = new char[reader->overflowBytes];
+                entry->decompressed = (char*) BigAlloc(reader->totalExtra);
                 entry->allocated = true;
+                entry->batch = reader->inner->getBatch();
             }
         } else {
             // figure out offsets and advance inner data
