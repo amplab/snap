@@ -117,6 +117,17 @@ public:
         _ASSERT(count < capacity);
         entries[count++] = value;
     }
+
+    inline void append(VariableSizeVector<V>* other)
+    {
+        if (other->count == 0) {
+            return;
+        }
+        reserve(count + other->count);
+        // todo: allow for operator assign/copy constructor?
+        memcpy(&entries[count], other->entries, other->count * sizeof(V));
+        count += other->count;
+    }
     
     typedef bool comparator(const V& a, const V& b);
 

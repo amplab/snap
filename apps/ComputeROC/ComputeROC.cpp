@@ -49,7 +49,7 @@ const Genome *genome;
 bool matchBothWays = false;
 bool justCount = false;
 bool venter = false;
-unsigned slackAmount = 50;
+unsigned slackAmount = 151;
 bool printBetterErrors = false;
 bool printErrorsAtMAPQ70 = false;
 
@@ -120,9 +120,6 @@ WorkerThreadMain(void *param)
         Read read;
         LandauVishkinWithCigar lv;
         while (samReader->getNextRead(&read, &alignmentResult, &genomeLocation, &isRC, &mapQ, &flag, &cigar)) {
-  	    if (justCount) {
-              context->countOfReads[mapQ]++;
-	    }
             if (mapQ < 0 || mapQ > MaxMAPQ) {
                 fprintf(stderr,"Invalid MAPQ: %d\n",mapQ);
                 exit(1);
@@ -132,7 +129,9 @@ WorkerThreadMain(void *param)
 
             if (0xffffffff == genomeLocation) {
                 context->nUnaligned++;
-            } else if (!justCount) {
+            } else if (justCount) {
+              context->countOfReads[mapQ]++;
+	    } else if (!justCount) {
                 if (flag & SAM_REVERSE_COMPLEMENT) {
                     read.becomeRC();
                 }
@@ -314,13 +313,13 @@ WorkerThreadMain(void *param)
                                 context->countOfMisalignetsWithBetterEditDistance[mapQ]++;
                             }
 
-                            if (!printBetterErrors || (printBetterErrors && betterEditDistance)) {
+                            // if (!printBetterErrors || (printBetterErrors && betterEditDistance)) {
                            
-                                printf("%s\t%d\t%s\t%u\t%d\t%s\t*\t*\t100\t%.*s\t%.*s\tAlignedGenomeLocation:%u\tCorrectGenomeLocation: %u\tCigarForCorrect: %s\tCorrectData: %.*s\tAlignedData: %.*s\n", 
-                                    idBuffer, flag, piece->name, genomeLocation - piece->beginningOffset, mapQ, cigarForAligned, read.getDataLength(), read.getData(), 
-                                    read.getDataLength(), read.getQuality(),  genomeLocation, correctLocation, cigarForCorrect, read.getDataLength(),
-                                    correctGenomeData, read.getDataLength(), alignedGenomeData);
-                            }
+                            //     printf("%s\t%d\t%s\t%u\t%d\t%s\t*\t*\t100\t%.*s\t%.*s\tAlignedGenomeLocation:%u\tCorrectGenomeLocation: %u\tCigarForCorrect: %s\tCorrectData: %.*s\tAlignedData: %.*s\n", 
+                            //         idBuffer, flag, piece->name, genomeLocation - piece->beginningOffset, mapQ, cigarForAligned, read.getDataLength(), read.getData(), 
+                            //         read.getDataLength(), read.getQuality(),  genomeLocation, correctLocation, cigarForCorrect, read.getDataLength(),
+                            //         correctGenomeData, read.getDataLength(), alignedGenomeData);
+                            //}
                         }
                     }
                 }

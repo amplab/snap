@@ -195,3 +195,104 @@ ParallelTask<TContext>::threadWorker(
         SignalSingleWaiterObject(context->doneWaiter);
 	}
 }
+
+struct WorkerContext;
+class ParallelWorker;
+class ParallelWorkerManager;
+
+// coroutined parallel workers
+// does code inline if numThreads = 0
+// can either callback when done, or synchronously wait for all to complete
+class ParallelCoworker
+{
+public:
+
+    typedef void (*Callback)(void*);
+    ParallelCoworker(int i_numThreads, bool i_bindToProcessors, ParallelWorkerManager* supplier, Callback callback = NULL, void* parameter = NULL);
+
+    ~ParallelCoworker();
+
+    // start forked thread running
+    void start();
+
+    // do one unit of work, asynchronously if callback, else synchronously
+    void step();
+
+    // stop everything, waits until all threads exit
+    void stop();
+
+    ParallelWorkerManager* getManager() { return manager; }
+
+private:
+    EventObject *workReady; // One per worker thread
+    EventObject *workDone;  // One per worker thread
+    ParallelWorker** workers; // one per worker thread
+    ParallelWorkerManager* manager;
+    volatile bool stopped;
+    const int numThreads;
+    const bool bindToProcessors;
+    Callback callback;
+    void* parameter;
+    WorkerContext* context;
+    ParallelTask<WorkerContext>* task;
+    SingleWaiterObject finished;
+
+    friend struct WorkerContext;
+};
+
+// abstract classes for specifying the actual work
+
+// creates new per-thread workers
+class ParallelWorker;
+
+class ParallelWorkerManager
+{
+public:
+
+    // todo: using void* context pointers to avoid pain of templates but should really be made typesafe
+    virtual void initialize(void* context) {}
+
+    virtual ParallelWorker* createWorker() = 0;
+
+    virtual void beginStep() {}
+
+    virtual void finishStep() {}
+
+    void configure(ParallelWorker* worker, int threadNum, int totalThreads); // special case
+};
+
+// per-thread worker
+class ParallelWorker
+{
+public:
+    ParallelWorker() {}
+    virtual ~ParallelWorker() {}
+
+    virtual void initialize() {}
+    virtual void step() = 0;
+
+protected:
+    ParallelWorkerManager* getManager() { return manager; }
+    int getThreadNum() { return threadNum; }
+    int getNumThreads() { return numThreads; }
+
+private:
+    friend class ParallelCoworker;
+    friend class ParallelWorkerManager;
+    void configure(ParallelWorkerManager* i_manager, int i_threadNum, int i_numThreads)
+    { manager = i_manager; threadNum = i_threadNum; numThreads = i_numThreads; }
+
+    ParallelWorkerManager* manager;
+    int threadNum;
+    int numThreads;
+};
+
+struct WorkerContext : public TaskContextBase
+{
+    ParallelCoworker* shared;
+
+    void initializeThread();
+    void runThread();
+    void finishThread(WorkerContext* common);
+};
+

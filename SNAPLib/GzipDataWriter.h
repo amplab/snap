@@ -37,7 +37,7 @@ class GzipWriterFilterSupplier : public DataWriter::FilterSupplier
 public:
     GzipWriterFilterSupplier(bool i_bamFormat, size_t i_chunkSize, int i_numThreads, bool i_bindToProcessors, bool i_multiThreaded)
     :
-        FilterSupplier(DataWriter::TransformFilter),
+        FilterSupplier(DataWriter::ResizeFilter),
         bamFormat(i_bamFormat),
         chunkSize(i_chunkSize),
         numThreads(i_numThreads),
@@ -57,7 +57,10 @@ public:
 
     virtual DataWriter::Filter* getFilter();
 
-    virtual void onClose(DataWriterSupplier* supplier);
+    virtual void onClosing(DataWriterSupplier* supplier);
+    virtual void onClosed(DataWriterSupplier* supplier) {}
+
+    void addTranslations(VariableSizeVector< pair<_uint64,_uint64> >* translation);
     
     bool translate(_uint64 logical, _uint64* o_physical, _uint64* delta);
 
@@ -76,6 +79,7 @@ public:
 
 private:
     friend class GzipWriterFilter;
+    friend class GzipCompressWorkerManager;
 
     void addTranslation(_uint64 logical, _uint64 physical)
     {

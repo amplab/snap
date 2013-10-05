@@ -24,6 +24,7 @@ Revision History:
 
 #include "Compat.h"
 #include "Read.h"
+#include "ParallelTask.h"
 
 class DataWriterSupplier;
 
@@ -38,6 +39,7 @@ public:
         ModifyFilter, // modifies data in place
         CopyFilter, // copies data into new buffer, same size
         TransformFilter, // copies data into new buffer, possibly different size
+        ResizeFilter, // rewrites data in same buffer, possibly different size
     };
     // single filter instance per thread
     // points to filterSupplier for common data
@@ -77,9 +79,9 @@ public:
 
         virtual Filter* getFilter() = 0;
 
-        // called when entire file is done
-        // TransformFilter will get a writer to append data if it wants
-        virtual void onClose(DataWriterSupplier* supplier) = 0;
+        // called when entire file is done; onClosing before file is closed, onClosed after
+        virtual void onClosing(DataWriterSupplier* supplier) = 0;
+        virtual void onClosed(DataWriterSupplier* supplier) = 0;
     };
 
     DataWriter(Filter* i_filter) : filter(i_filter) {}
@@ -118,6 +120,7 @@ protected:
 class FileFormat;
 class Genome;
 class GzipWriterFilterSupplier;
+class FileEncoder;
 
 // creates writers for multiple threads
 class DataWriterSupplier
@@ -133,6 +136,7 @@ public:
     static DataWriterSupplier* create(
         const char* filename,
         DataWriter::FilterSupplier* filterSupplier = NULL,
+        FileEncoder* encoder = NULL,
         int count = 4, size_t bufferSize = 16 * 1024 * 1024);
     
     static DataWriterSupplier* sorted(
@@ -142,7 +146,8 @@ public:
         size_t tempBufferMemory,
         int numThreads,
         const char* sortedFileName,
-        DataWriter::FilterSupplier* sortedFilterSupplier);
+        DataWriter::FilterSupplier* sortedFilterSupplier,
+        FileEncoder* encoder = NULL);
 
     // defaults follow BAM output spec
     static GzipWriterFilterSupplier* gzip(bool bamFormat, size_t chunkSize, int numThreads, bool bindToProcessors, bool multiThreaded);
@@ -150,4 +155,57 @@ public:
     static DataWriter::FilterSupplier* markDuplicates(const Genome* genome);
 
     static DataWriter::FilterSupplier* bamIndex(const char* indexFileName, const Genome* genome, GzipWriterFilterSupplier* gzipSupplier);
+};
+
+class AsyncDataWriter;
+
+class FileEncoder
+{
+public:
+    FileEncoder(int numThreads, bool bindToProcessors, ParallelWorkerManager* i_supplier);
+
+    ~FileEncoder()
+    {
+        if (coworker != NULL) {
+            _ASSERT(! encoderRunning); coworker->stop(); delete coworker;
+        }
+    }
+
+    static FileEncoder* gzip(GzipWriterFilterSupplier* filterSupplier, int numThreads, bool bindToProcessor, size_t chunkSize = 65536, bool bam = true);
+
+    // post-construction initialization
+    void initialize(AsyncDataWriter* i_writer);
+
+    // called by writer when there is data to encode; threadsafe
+    void inputReady();
+
+    void close();
+
+    // called by supplier to get/set information about current batch
+
+    void setupEncode(int relative);
+    
+    void getEncodeBatch(char** o_batch, size_t* o_batchSize, size_t* o_batchUsed);
+
+    void getOffsets(size_t* o_logicalOffset, size_t* o_physicalOffset);
+
+    void setEncodedBatchSize(size_t newSize);
+
+private:
+    // static callback for encoder; threadsafe
+    static void outputReadyCallback(void *p);
+
+    // called by encoder when a block of data has been encoded; threadsafe
+    void outputReady();
+
+    // scans writer and kicks off encoder if there is something ready; must hold lock
+    void checkForInput();
+
+    AsyncDataWriter* writer;
+    ParallelCoworker* coworker;
+    ExclusiveLock* lock;
+    bool encoderRunning;
+    int encoderBatch;
+
+    friend class AsyncDataWriter;
 };

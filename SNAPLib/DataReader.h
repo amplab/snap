@@ -155,6 +155,7 @@ public:
     //
 
     // 
+    static DataSupplier* GzipBam(DataSupplier* inner, bool autoRelease);
     static DataSupplier* Gzip(DataSupplier* inner, bool autoRelease);
 
     // memmap works on both platforms (but better on Linux)
@@ -168,6 +169,7 @@ public:
     // default raw data supplier for platform
     static DataSupplier* Default[2];
     static DataSupplier* GzipDefault[2];
+    static DataSupplier* GzipBamDefault[2];
 
     // hack: must be set to communicate thread count into suppliers
     static int ThreadCount;
