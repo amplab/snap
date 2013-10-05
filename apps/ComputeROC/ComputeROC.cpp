@@ -36,6 +36,7 @@ void usage()
     fprintf(stderr,"       -c means to just count the number of reads that are aligned, not to worry about correctness\n");
     fprintf(stderr,"       -v means to correct for the error in generating the wgsim coordinates in the Venter data\n");
     fprintf(stderr,"       -e means to print out misaligned reads where the aligned location has a lower edit distance than the 'correct' one.\n");
+    fprintf(stderr,"       -70 means to print out any misaligned reads with MAPQ 70.\n");
     fprintf(stderr,"You can specify only one of -b or -c\n");
   	exit(1);
 }
@@ -50,6 +51,7 @@ bool justCount = false;
 bool venter = false;
 unsigned slackAmount = 50;
 bool printBetterErrors = false;
+bool printErrorsAtMAPQ70 = false;
 
 static const int MaxMAPQ = 70;
 const unsigned MaxEditDistance = 100;
@@ -261,7 +263,7 @@ WorkerThreadMain(void *param)
                         context->countOfMisalignments[mapQ]++;
                         context->countOfMisalignmentsByEditDistance[mapQ][editDistance]++;
 
-                        if (70 == mapQ || 69 == mapQ || printBetterErrors) {
+                        if ((70 == mapQ && printErrorsAtMAPQ70) || printBetterErrors) {
 
                             //
                             // We don't know which offset is correct, because neither one matched.  Just take the one with the lower edit distance.
@@ -346,7 +348,9 @@ int main(int argc, char * argv[])
         } else if (!strcmp(argv[i], "-v")) {
             venter = true;        
         } else if (!strcmp(argv[i], "-e")) {
-            printBetterErrors = true;
+            printBetterErrors = true;        
+        } else if (!strcmp(argv[i], "-70")) {
+            printErrorsAtMAPQ70 = true;
         } else {
             usage();
         }
