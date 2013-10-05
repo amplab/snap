@@ -1544,7 +1544,7 @@ BAMIndexSupplier::addInterval(
 BgzfHeader::validate(char* buffer, size_t bytes)
 {
     char* p;
-    for (p = buffer; p - buffer < bytes; ) {
+    for (p = buffer; p - buffer < (_int64)bytes; ) {
         BgzfHeader* h = (BgzfHeader*) p;
         unsigned bsize = h->BSIZE() + 1;
         unsigned isize = h->ISIZE();
