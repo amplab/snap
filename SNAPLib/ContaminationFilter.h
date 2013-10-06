@@ -27,6 +27,7 @@ Revision History:
 #include <fstream>
 #include <pthread.h>
 
+#include "stdafx.h"
 #include "PairedEndAligner.h"
 #include "Genome.h"
 

@@ -28,6 +28,7 @@ Environment:
 #include "Read.h"
 #include "DataReader.h"
 #include "FileFormat.h"
+#include "GTFReader.h"
 
 bool readIdsMatch(const char* id0, const char* id1);
 
@@ -148,18 +149,18 @@ public:
     
     virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* o_location, unsigned* o_readBytes, int* o_refID, int* o_pos) const;
 
-    virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
+    virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome, const Genome* transcriptome, const GTFReader* gtf) const;
 
     virtual bool writeHeader(
         const ReaderContext& context, char *header, size_t headerBufferSize, size_t *headerActualSize,
         bool sorted, int argc, const char **argv, const char *version, const char *rgLine) const;
 
     virtual bool writeRead(
-        const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
+        const Genome * genome, const Genome * transcriptome, const GTFReader * gtf, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
-        int mapQuality, unsigned genomeLocation, Direction direction,
+        int mapQuality, unsigned genomeLocation, Direction direction, bool isTranscriptome, unsigned tlocation,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
-        AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD) const; 
+        AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD, bool mateIsTranscriptome = false, unsigned mateTlocation = 0) const; 
 
     // calculate data needed to write SAM/BAM record
     // very long argument list since this was extracted from
@@ -168,6 +169,8 @@ public:
     static bool
     createSAMLine(
         const Genome * genome,
+        const Genome * transcriptome,
+        const GTFReader * gtf,
         LandauVishkinWithCigar * lv,
         // output data
         char* data,
@@ -193,6 +196,7 @@ public:
         AlignmentResult result, 
         unsigned genomeLocation,
         Direction direction,
+        bool isTranscriptome,
         bool useM,
         bool hasMate,
         bool firstInPair,
@@ -200,13 +204,14 @@ public:
         AlignmentResult mateResult,
         unsigned mateLocation,
         Direction mateDirection,
+        bool mateIsTranscriptome,
         unsigned *extraBasesClippedBefore);
 
 private:
     static const char * computeCigarString(const Genome * genome, LandauVishkinWithCigar * lv,
         char * cigarBuf, int cigarBufLen, char * cigarBufWithClipping, int cigarBufWithClippingLen,
         const char * data, unsigned dataLength, unsigned basesClippedBefore, unsigned extraBasesClippedBefore, unsigned basesClippedAfter,
-        unsigned genomeLocation, Direction direction, bool useM, int * editDistance);
+        unsigned genomeLocation, Direction direction, bool useM, int * editDistance, std::vector<unsigned> &tokens);
 
     const bool useM;
 };

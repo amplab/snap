@@ -29,6 +29,7 @@ Revision History:
 #include <map>
 #include <algorithm>
 
+#include "stdafx.h"
 #include "PairedEndAligner.h"
 #include "BaseAligner.h"
 #include "Genome.h"

@@ -42,10 +42,10 @@ static void usage()
     fprintf(stderr,
             "Usage: snap-rna <command> [<options>]\n"
             "Commands:\n"
-            "   index    build a genome index\n"
+            "   index         build a genome index\n"
             "   transcriptome build a transcriptome index\n"
-            "   single   align single-end reads\n"
-            "   paired   align paired-end reads\n"
+            "   single        align single-end reads\n"
+            "   paired        align paired-end reads\n"
             "Type a command without arguments to see its help.\n");
     soft_exit(1);
 }

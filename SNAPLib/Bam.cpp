@@ -663,7 +663,7 @@ BAMFormat::writeRead(
         if (!isTranscriptome) {
             cigarOps = computeCigarOps(genome, lv, (char*) cigarBuf, cigarBufSize * sizeof(_uint32),
                                        clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter,
-                                       genomeLocation, direction == RC, useM, &editDistance);
+                                       genomeLocation, direction == RC, useM, &editDistance, tokens);
                                    
         } else {
         
@@ -829,7 +829,7 @@ BAMFormat::computeCigarOps(
                             MAX_K - 1,
                             cigarBuf + 4 * ((basesClippedBefore + extraBasesClippedBefore) > 0),
                             cigarBufLen - 4 * (((basesClippedBefore + extraBasesClippedBefore) > 0) + (basesClippedAfter > 0)),
-						    useM, BAM_CIGAR_OPS, &used);
+						    useM, tokens, BAM_CIGAR_OPS, &used);
     } else {
         //
         // Fell off the end of the chromosome.

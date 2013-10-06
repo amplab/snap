@@ -158,7 +158,7 @@ SingleAlignerContext::runIterationThread()
         Read *read;
         while (NULL != (read = supplier->getNextRead())) {
             stats->totalReads++;
-            writeRead(read, NotFound, InvalidGenomeLocation, FORWARD, 0, 0);
+            writeRead(read, NotFound, InvalidGenomeLocation, FORWARD, false, 0, 0, 0);
         }
         delete supplier;
         return;
@@ -228,7 +228,7 @@ SingleAlignerContext::runIterationThread()
         // Skip the read if it has too many Ns or trailing 2 quality scores.
         if (read->getDataLength() < 50 || read->countOfNs() > maxDist || !quality) {
             if (readWriter != NULL && options->passFilter(read, NotFound)) {
-                readWriter->writeRead(read, NotFound, 0, InvalidGenomeLocation, false);
+                readWriter->writeRead(read, NotFound, 0, InvalidGenomeLocation, false, false, 0);
             }
             continue;
         } else {
