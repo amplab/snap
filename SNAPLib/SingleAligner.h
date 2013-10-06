@@ -52,7 +52,7 @@ protected:
 
     // for subclasses
 
-    virtual void writeRead(Read* read, AlignmentResult result, unsigned location, Direction direction, int score, int mapq);
+    virtual void writeRead(Read* read, AlignmentResult result, unsigned location, Direction direction, bool isTranscriptome, unsigned tlocation, int score, int mapq);
 
     virtual void updateStats(AlignerStats* stats, Read* read, AlignmentResult result, unsigned location, int score, int mapq, bool wasError);
 

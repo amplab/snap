@@ -3,6 +3,8 @@
 #include "FixedSizeMap.h"
 #include "BigAlloc.h"
 #include "exit.h"
+#include "GTFReader.h"
+#include <vector>
 
 const int MAX_K = 63;
 
@@ -537,8 +539,11 @@ public:
     // Compute the edit distance between two strings and write the CIGAR string in cigarBuf.
     // Returns -1 if the edit distance exceeds k or -2 if we run out of space in cigarBuf.
     int computeEditDistance(const char* text, int textLen, const char* pattern, int patternLen, int k,
-                            char* cigarBuf, int cigarBufLen, bool useM,
+                            char* cigarBuf, int cigarBufLen, bool useM, std::vector<unsigned> &tokens,
                             CigarFormat format = COMPACT_CIGAR_STRING, int* cigarBufUsed = NULL);
+                            
+    int insertSpliceJunctions(const GTFReader *gtf, std::vector<unsigned> tokens, std::string transcript_id, unsigned pos, char *cigarNew, int cigarNewLen, CigarFormat format = COMPACT_CIGAR_STRING);
+                            
     // take a compact cigar binary format and turn it into one byte per reference base
     // describing the difference from the reference at that location
     // might lose information for large inserts

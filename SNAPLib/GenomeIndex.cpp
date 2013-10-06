@@ -34,6 +34,7 @@ Revision History:
 #include "HashTable.h"
 #include "Seed.h"
 #include "exit.h"
+#include "GTFReader.h"
 
 using namespace std;
 
@@ -43,10 +44,10 @@ static const unsigned DEFAULT_PADDING = 500;
 static const unsigned DEFAULT_KEY_BYTES = 4;
 
 
-static void usage()
+static void tusage()
 {
     fprintf(stderr,
-            "Usage: snap index <input.fa> <output-dir> [<options>]\n"
+            "Usage: snap-rna transcriptome <input.gtf> <input.fa> <output-dir> [<options>]\n"
             "Options:\n"
             "  -s               Seed size (default: %d)\n"
             "  -h               Hash table slack (default: %.1f)\n"
@@ -69,6 +70,145 @@ static void usage()
     soft_exit(1);
 }
 
+static void usage()
+{
+    fprintf(stderr,
+            "Usage: snap-rna index <input.fa> <output-dir> [<options>]\n"
+            "Options:\n"
+            "  -s               Seed size (default: %d)\n"
+            "  -h               Hash table slack (default: %.1f)\n"
+            "  -hg19            Use pre-computed table bias for hg19, which results in better speed, balance, and memory footprint but may not work for other references.\n"
+            "  -Ofactor         Specify the size of the overflow space.  This will change the memory footprint, but may be needed for some genomes.\n"
+            "                   Larger numbers use more memory but work better with more repetitive genomes.  Smaller numbers reduce the memory\n"
+            "                   footprint, but may cause the index build to fail.  Making -O larger than necessary will not affect the resuting\n"
+            "                   index.  Factor must be between 1 and 1000, and the default is 50.\n"
+            " -tMaxThreads      Specify the maximum number of threads to use. Default is the number of cores.\n"
+            " -pPadding         Specify the number of Ns to put as padding between chromosomes.  This must be as large as the largest\n"
+            "                   edit distance you'll ever use, and there's a performance advantage to have it be bigger than any\n"
+            "                   read you'll process.  Default is %d\n"
+            " -HHistogramFile   Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n"
+            " -exact            Compute hash table sizes exactly.  This will slow down index build, but may be necessary in some cases\n"
+            " -keysize          The number of bytes to use for the hash table key.  Larger values increase SNAP's memory footprint, but allow larger seeds.  Default: %d\n",
+            DEFAULT_SEED_SIZE,
+            DEFAULT_SLACK,
+            DEFAULT_PADDING,
+            DEFAULT_KEY_BYTES);
+    soft_exit(1);
+}
+
+
+    void
+GenomeIndex::runTranscriptomeIndexer(
+    int argc,
+    const char **argv)
+{
+    if (argc < 3) {
+        usage();
+    }
+
+    const char *gtfFile = argv[0];
+    const char *fastaFile = argv[1];
+    const char *outputDir = argv[2];
+
+    unsigned maxThreads = GetNumberOfProcessors();
+
+    int seedLen = DEFAULT_SEED_SIZE;
+    double slack = DEFAULT_SLACK;
+    bool computeBias = true;
+    _uint64 overflowTableFactor = 50;
+    const char *histogramFileName = NULL;
+    unsigned chromosomePadding = DEFAULT_PADDING;
+    bool forceExact = false;
+    unsigned keySizeInBytes = DEFAULT_KEY_BYTES;
+
+    for (int n = 3; n < argc; n++) {
+        if (strcmp(argv[n], "-s") == 0) {
+            if (n + 1 < argc) {
+                seedLen = atoi(argv[n+1]);
+                n++;
+            } else {
+                usage();
+            }
+        } else if (strcmp(argv[n], "-h") == 0) {
+            if (n + 1 < argc) {
+                slack = atof(argv[n+1]);
+                n++;
+            } else {
+                usage();
+            }
+        } else if (strcmp(argv[n], "-exact") == 0) {
+            forceExact = true;
+        } else if (strcmp(argv[n], "-hg19") == 0) {
+            computeBias = false;
+        } else if (argv[n][0] == '-' && argv[n][1] == 'H') {
+            histogramFileName = argv[n] + 2;
+        } else if (argv[n][0] == '-' && argv[n][1] == 'O') {
+            overflowTableFactor = atoi(argv[n]+2);
+            if (overflowTableFactor < 1 || overflowTableFactor > 1000) {
+                fprintf(stderr,"Overflow table factor must be between 1 and 1000 inclusive (and you need to not leave a space after '-O')\n");
+                soft_exit(1);
+            }
+        } else if (argv[n][0] == '-' && argv[n][1] == 't') {
+            maxThreads = atoi(argv[n]+2);
+            if (maxThreads < 1 || maxThreads > 100) {
+                fprintf(stderr,"maxThreads must be between 1 and 100 inclusive (and you need to not leave a space after '-t')\n");
+                soft_exit(1);
+            }
+        } else if (argv[n][0] == '-' && argv[n][1] == 'p') {
+            chromosomePadding = atoi(argv[n]+2);
+            if (0 == chromosomePadding) {
+                fprintf(stderr,"Invalid chromosome padding specified, must be at least one (and in practice as large as any max edit distance you might use).\n");
+                soft_exit(1);
+            }
+        } else if (strcmp(argv[n], "-keysize") == 0) {
+            if (n + 1 < argc) {
+                keySizeInBytes = atoi(argv[n+1]);
+                if (keySizeInBytes < 4 || keySizeInBytes > 8) {
+                    fprintf(stderr, "Key size must be between 4 and 8 inclusive\n");
+                    soft_exit(1);
+                }
+                n++;
+            } else {
+                usage();
+            }
+        } else {
+            fprintf(stderr, "Invalid argument: %s\n\n", argv[n]);
+            usage();
+        }
+    }
+
+    if (seedLen < 16 || seedLen > 32) {
+        // Seeds are stored in 64 bits, so they can't be larger than 32 bases for now.
+        fprintf(stderr, "Seed length must be between 16 and 32, inclusive\n");
+        soft_exit(1);
+    }
+
+    if (seedLen < 19 && !computeBias) {
+        fprintf(stderr,"For hg19, you must use seed sizes between 19 and 25 (and not specifying -hg19 won't help, it'll just take longer to fail).\n");
+        soft_exit(1);
+    }
+
+    printf("Hash table slack %lf\nLoading FASTA file '%s' into memory...", slack, fastaFile);
+    _int64 start = timeInMillis();
+    const Genome *genome = ReadFASTAGenome(fastaFile, chromosomePadding);
+    if (NULL == genome) {
+        fprintf(stderr, "Unable to read FASTA file\n");
+        soft_exit(1);
+    }
+    printf("%llds\n", (timeInMillis() + 500 - start) / 1000);
+           
+    //First build the transcriptome file
+    GTFReader gtf;
+    gtf.Load(gtfFile);
+    
+    //Pass in the genome to the GTF object to write out the transcriptome file
+    gtf.BuildTranscriptome(genome);
+    
+    //Replace the input FASTA file with the newly created transcriptome file
+    argv[1] = "transcriptome.fa";
+    GenomeIndex::runIndexer(argc-1, argv+1);
+           
+}
 
     void
 GenomeIndex::runIndexer(

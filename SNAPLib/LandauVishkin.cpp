@@ -6,11 +6,11 @@
 #include "BaseAligner.h"
 #include "Bam.h"
 #include "exit.h"
+#include <vector>
 
 using std::make_pair;
 using std::min;
 
- 
 LandauVishkinWithCigar::LandauVishkinWithCigar()
 {
     for (int i = 0; i < MAX_K+1; i++) {
@@ -24,8 +24,12 @@ LandauVishkinWithCigar::LandauVishkinWithCigar()
     Write cigar to buffer, return true if it fits
     null-terminates buffer if it returns false (i.e. fills up buffer)
 --*/
-bool writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat format)
+bool writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat format, std::vector<unsigned> &tokens)
 {
+
+    tokens.push_back(count);
+    tokens.push_back(code);
+
     _ASSERT(count >= 0);
     if (count <= 0) {
         return true;
@@ -112,11 +116,140 @@ LandauVishkinWithCigar::printLinear(
     *buffer++ = 0;
 }
 
+int LandauVishkinWithCigar::insertSpliceJunctions(
+    const GTFReader *gtf,
+    std::vector<unsigned> tokens, 
+    std::string transcript_id, 
+    unsigned pos,
+    char *cigarNew, 
+    int cigarNewLen, 
+    CigarFormat format)
+{
+
+    //Create array to store new tokens
+    std::vector<unsigned> final;
+
+    //Keep pointer to beginning
+    char* cigarBufStart = cigarNew;
+    
+    //If the length of tokens is odd, something is wrong
+    if (tokens.size() % 2 != 0) {
+        fprintf(stderr, "Error: Size of CIGAR tokens is odd (%d)\n", tokens.size());
+        exit(1);
+    }
+
+    //printf("%d %s %u\n", gtf->Size(), transcript_id.c_str(), pos);  
+    unsigned prev = pos;
+    unsigned current = pos;
+    std::string new_cigar;
+    int numCigarOps = 0;
+
+    //Loop over all the operators
+    for (std::vector<unsigned>::iterator it = tokens.begin(); it != tokens.end(); it+=2) {
+       
+        //Get the size of the operator and the operator character
+        unsigned length = *it;
+        char op = *(it+1);
+   
+        //printf("%u %c\n", length, op);
+   
+        if (op == 'I') {
+            if (! writeCigar(&cigarNew, &cigarNewLen, length, op, format, final)) {
+                return -2;
+            }
+            numCigarOps++;
+        }
+        
+        else {
+      
+            //Get the end of this operator
+            current += length-1;
+            
+            //Get the junctions
+            //printf("Querying with pos: %d length: %d\n", prev, length);
+            std::vector<junction> junctions;
+            gtf->GetTranscript(transcript_id).Junctions(prev, length, junctions);
+        
+            //If this operator crosses a splice junction, we must add it into the CIGAR operator
+            if (junctions.size() > 0) {
+            
+                //printf("Junctions: %d Remainder: %d\n", junctions.size(), length);
+            
+                // Add any junctions to the CIGAR operator
+                unsigned remainder = length;
+                          
+                //Iterate over the junctions
+                for (std::vector<junction>::iterator jit = junctions.begin(); jit != junctions.end(); ++jit) {
+                                    
+                    // Special case 1: the read begins right on the splice
+                    // junction: in this case we do not insert the junction
+                    if (jit->first == pos) {
+                        continue;
+                    }
+                                            
+                    // Junction[0] is the position in transcript space where the
+                    // splice junction begins (end of exon + 1)
+                    int step = jit->first - prev;
+                    remainder = remainder - step;
+                    
+                    //printf("%u %u %u %d %u\n", jit->first, jit->second, prev, step, remainder);
+                              
+                    // Add in portion of operator
+                    if (step > 0) {
+                        if (! writeCigar(&cigarNew, &cigarNewLen, step, op, format, final)) {
+                            return -2;
+                        }
+                        numCigarOps++;
+                    }   
+                                                
+                    // Add in splice junction spacer only if this is not the first operator
+                    if (! writeCigar(&cigarNew, &cigarNewLen, jit->second, 'N', format, final)) {
+                        return -2;
+                    }
+                    numCigarOps++;
+                                               
+                    // Increment the amount we move through the transcript
+                    prev = prev + step;  
+                    
+                }                      
+                        
+                // Add in remainder of current operator
+                if (remainder > 0) {
+                    if (! writeCigar(&cigarNew, &cigarNewLen, remainder, op, format, final)) {
+                        return -2;
+                    }
+                    numCigarOps++;
+                }
+
+        
+            // If there are no splice junctions, just print the operator as-is
+            } else {            
+                if (! writeCigar(&cigarNew, &cigarNewLen, length, op, format, final)) {
+                    return -2;
+                }
+                numCigarOps++;
+            }
+            
+            // We begin at the next position for the next operator
+            current = current + 1;           
+            prev = current;
+        }
+    }
+
+    if (format != BAM_CIGAR_OPS) {
+        *(cigarNew - (cigarNewLen == 0 ? 1 : 0)) = '\0'; // terminate string
+    }
+
+    return numCigarOps;
+
+}
+
 int LandauVishkinWithCigar::computeEditDistance(
     const char* text, int textLen,
     const char* pattern, int patternLen,
     int k,
-    char *cigarBuf, int cigarBufLen, bool useM, 
+    char *cigarBuf, int cigarBufLen, bool useM,
+    std::vector<unsigned> &tokens,
     CigarFormat format, int* cigarBufUsed)
 {
     _ASSERT(patternLen >= 0 && textLen >= 0);
@@ -147,17 +280,17 @@ done1:
     if (L[0][MAX_K] == end) {
         // We matched the text exactly; fill the CIGAR string with all ='s (or M's)
 		if (useM) {
-			if (! writeCigar(&cigarBuf, &cigarBufLen, patternLen, 'M', format)) {
+			if (! writeCigar(&cigarBuf, &cigarBufLen, patternLen, 'M', format, tokens)) {
 				return -2;
 			}
             // todo: should this also write X's like '=' case? or is 'M' special?
 		} else {
-			if (! writeCigar(&cigarBuf, &cigarBufLen, end, '=', format)) {
+			if (! writeCigar(&cigarBuf, &cigarBufLen, end, '=', format, tokens)) {
 				return -2;
 			}
 			if (patternLen > end) {
 				// Also need to write a bunch of X's past the end of the text
-				if (! writeCigar(&cigarBuf, &cigarBufLen, patternLen - end, 'X', format)) {
+				if (! writeCigar(&cigarBuf, &cigarBufLen, patternLen - end, 'X', format, tokens)) {
 					return -2;
 				}
 			}
@@ -230,7 +363,7 @@ done1:
 						// No inserts or deletes, and with useM equal and SNP look the same, so just
 						// emit a simple string.
 						//
-						if (!writeCigar(&cigarBuf, &cigarBufLen, patternLen, 'M', format)) {
+						if (!writeCigar(&cigarBuf, &cigarBufLen, patternLen, 'M', format, tokens)) {
 							return -2;
 						}
 					} else {
@@ -239,7 +372,7 @@ done1:
 						for (int i = 0; i < end; i++) {
 							bool newMatching = (pattern[i] == text[i]);
 							if (newMatching != matching) {
-								if (!writeCigar(&cigarBuf, &cigarBufLen, i - streakStart, (matching ? '=' : 'X'), format)) {
+								if (!writeCigar(&cigarBuf, &cigarBufLen, i - streakStart, (matching ? '=' : 'X'), format, tokens)) {
 									return -2;
 								}
 								matching = newMatching;
@@ -251,16 +384,16 @@ done1:
 						if (patternLen > streakStart) {
 							if (!matching) {
 								// Write out X's all the way to patternLen
-								if (!writeCigar(&cigarBuf, &cigarBufLen, patternLen - streakStart, 'X', format)) {
+								if (!writeCigar(&cigarBuf, &cigarBufLen, patternLen - streakStart, 'X', format, tokens)) {
 									return -2;
 								}
 							} else {
 								// Write out some ='s and then possibly X's if pattern is longer than text
-								if (!writeCigar(&cigarBuf, &cigarBufLen, end - streakStart, '=', format)) {
+								if (!writeCigar(&cigarBuf, &cigarBufLen, end - streakStart, '=', format, tokens)) {
 									return -2;
 								}
 								if (patternLen > end) {
-									if (!writeCigar(&cigarBuf, &cigarBufLen, patternLen - end, 'X', format)) {
+									if (!writeCigar(&cigarBuf, &cigarBufLen, patternLen - end, 'X', format, tokens)) {
 										return -2;
 									}
 								}
@@ -326,7 +459,7 @@ done1:
 				} else {
 					// Write out ='s for the first patch of exact matches that brought us to L[0][0]
 					if (L[0][MAX_K+0] > 0) {
-						if (! writeCigar(&cigarBuf, &cigarBufLen, L[0][MAX_K+0], '=', format)) {
+						if (! writeCigar(&cigarBuf, &cigarBufLen, L[0][MAX_K+0], '=', format, tokens)) {
 							return -2;
 						}
 					}
@@ -346,17 +479,17 @@ done1:
 							accumulatedMs += actionCount;
 						} else {
 							if (accumulatedMs != 0) {
-								if (!writeCigar(&cigarBuf, &cigarBufLen, accumulatedMs, 'M', format)) {
+								if (!writeCigar(&cigarBuf, &cigarBufLen, accumulatedMs, 'M', format, tokens)) {
 									return -2;
 								}
 								accumulatedMs = 0;
 							}
-							if (!writeCigar(&cigarBuf, &cigarBufLen, actionCount, action, format)) {
+							if (!writeCigar(&cigarBuf, &cigarBufLen, actionCount, action, format, tokens)) {
 								return -2;
 							}
 						}
 					} else {
-						if (! writeCigar(&cigarBuf, &cigarBufLen, actionCount, action, format)) {
+						if (! writeCigar(&cigarBuf, &cigarBufLen, actionCount, action, format, tokens)) {
 							return -2;
 						}
 					}
@@ -365,7 +498,7 @@ done1:
 						if (useM) {
 							accumulatedMs += backtraceMatched[curE];
 						} else {
-							if (! writeCigar(&cigarBuf, &cigarBufLen, backtraceMatched[curE], '=', format)) {
+							if (! writeCigar(&cigarBuf, &cigarBufLen, backtraceMatched[curE], '=', format, tokens)) {
 								return -2;
 							}
 						}
@@ -376,7 +509,7 @@ done1:
 					//
 					// Write out the trailing Ms.
 					//
-					if (!writeCigar(&cigarBuf, &cigarBufLen, accumulatedMs, 'M', format)) {
+					if (!writeCigar(&cigarBuf, &cigarBufLen, accumulatedMs, 'M', format, tokens)) {
 						return -2;
 					}
 				}

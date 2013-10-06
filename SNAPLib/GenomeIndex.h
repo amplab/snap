@@ -36,6 +36,7 @@ public:
     // run the indexer from command line arguments
     //
     static void runIndexer(int argc, const char **argv);
+    static void runTranscriptomeIndexer(int argc, const char **argv);
 
     //
     // Build a genome index and write it to a directory.  If you don't already have a saved index

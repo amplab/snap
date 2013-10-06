@@ -33,6 +33,7 @@ Environment:
 #include "VariableSizeMap.h"
 #include "PairedAligner.h"
 #include "GzipDataWriter.h"
+#include <vector>
 
 using std::max;
 using std::min;
@@ -436,25 +437,27 @@ public:
     
     virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* o_location, unsigned* o_readBytes, int* o_refID, int* o_pos) const;
     
-    virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
+    virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome, const Genome* transcriptome, const GTFReader* gtf) const;
 
     virtual bool writeHeader(
         const ReaderContext& context, char *header, size_t headerBufferSize, size_t *headerActualSize,
         bool sorted, int argc, const char **argv, const char *version, const char *rgLine) const;
 
     virtual bool writeRead(
-        const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
+        const Genome * genome, const Genome * transcriptome, const GTFReader * gtf,
+        LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
-        int mapQuality, unsigned genomeLocation, Direction direction,
+        int mapQuality, unsigned genomeLocation, Direction direction, bool isTranscriptome = false, unsigned tlocation = 0,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
-        AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD) const; 
+        AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD,
+        bool mateIsTranscriptome = false, unsigned mateTlocation = 0) const; 
 
 private:
 
     static int computeCigarOps(const Genome * genome, LandauVishkinWithCigar * lv,
         char * cigarBuf, int cigarBufLen,
         const char * data, unsigned dataLength, unsigned basesClippedBefore, unsigned extraBasesClippedBefore, unsigned basesClippedAfter,
-        unsigned genomeLocation, bool isRC, bool useM, int * editDistance);
+        unsigned genomeLocation, bool isRC, bool useM, int * editDistance, std::vector<unsigned> &tokens);
 
     const bool useM;
 };
@@ -505,7 +508,9 @@ BAMFormat::getSortInfo(
     ReadWriterSupplier*
 BAMFormat::getWriterSupplier(
     AlignerOptions* options,
-    const Genome* genome) const
+    const Genome* genome,
+    const Genome* transcriptome,
+    const GTFReader* gtf) const
 {
     DataWriterSupplier* dataSupplier;
     GzipWriterFilterSupplier* gzipSupplier =
@@ -535,7 +540,7 @@ BAMFormat::getWriterSupplier(
     } else {
         dataSupplier = DataWriterSupplier::create(options->outputFileTemplate, gzipSupplier);
     }
-    return ReadWriterSupplier::create(this, dataSupplier, genome);
+    return ReadWriterSupplier::create(this, dataSupplier, genome, transcriptome, gtf);
 }
 
     bool
@@ -595,6 +600,8 @@ BAMFormat::writeHeader(
     bool
 BAMFormat::writeRead(
     const Genome * genome,
+    const Genome * transcriptome,
+    const GTFReader *gtf,
     LandauVishkinWithCigar * lv,
     char * buffer,
     size_t bufferSpace, 
@@ -605,16 +612,21 @@ BAMFormat::writeRead(
     int mapQuality,
     unsigned genomeLocation,
     Direction direction,
+    bool isTranscriptome,
+    unsigned tlocation,
     bool hasMate,
     bool firstInPair,
     Read * mate, 
     AlignmentResult mateResult,
     unsigned mateLocation,
-    Direction mateDirection) const
+    Direction mateDirection,
+    bool mateIsTranscriptome,
+    unsigned mateTlocation) const
 {
     const int MAX_READ = MAX_READ_LENGTH;
     const int cigarBufSize = MAX_READ;
     _uint32 cigarBuf[cigarBufSize];
+    _uint32 cigarNew[cigarBufSize];
 
     int flags = 0;
     const char *pieceName = "*";
@@ -637,18 +649,38 @@ BAMFormat::writeRead(
     unsigned basesClippedAfter;
     int editDistance;
 
-    if (! SAMFormat::createSAMLine(genome, lv, data, quality, MAX_READ, pieceName, pieceIndex, 
+    if (! SAMFormat::createSAMLine(genome, transcriptome, gtf, lv, data, quality, MAX_READ, pieceName, pieceIndex, 
         flags, positionInPiece, mapQuality, matePieceName, matePieceIndex, matePositionInPiece, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
-        qnameLen, read, result, genomeLocation, direction, useM,
-        hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection, &extraBasesClippedBefore))
+        qnameLen, read, result, genomeLocation, direction, isTranscriptome, useM,
+        hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection, mateIsTranscriptome, &extraBasesClippedBefore))
     {
         return false;
     }
     if (genomeLocation != InvalidGenomeLocation) {
-        cigarOps = computeCigarOps(genome, lv, (char*) cigarBuf, cigarBufSize * sizeof(_uint32),
-                                   clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter,
-                                   genomeLocation, direction == RC, useM, &editDistance);
+
+        std::vector<unsigned> tokens;
+        if (!isTranscriptome) {
+            cigarOps = computeCigarOps(genome, lv, (char*) cigarBuf, cigarBufSize * sizeof(_uint32),
+                                       clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter,
+                                       genomeLocation, direction == RC, useM, &editDistance);
+                                   
+        } else {
+        
+            //Vector of tokens from CIGAR string for Transcriptome conversion
+            cigarOps = computeCigarOps(transcriptome, lv, (char*) cigarNew, cigarBufSize * sizeof(_uint32),
+                                               clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter,
+                                               tlocation, direction == RC, useM, &editDistance, tokens);
+                                                          
+            //We need the pieceName for conversion             
+            const Genome::Piece *transcriptomePiece = transcriptome->getPieceAtLocation(tlocation);
+            const char* transcriptomePieceName = transcriptomePiece->name;
+            unsigned transcriptomePositionInPiece = tlocation - transcriptomePiece->beginningOffset + 1; // SAM is 1-based
+            
+            //Need to assign to cigarOPS                                                                          
+            cigarOps = lv->insertSpliceJunctions(gtf, tokens, transcriptomePieceName, transcriptomePositionInPiece, (char*) cigarBuf, cigarBufSize * sizeof(_uint32), BAM_CIGAR_OPS);
+                        
+        }
     }
 
     // Write the BAM entry
@@ -775,7 +807,8 @@ BAMFormat::computeCigarOps(
     unsigned                    genomeLocation,
     bool                        isRC,
 	bool						useM,
-    int *                       editDistance
+    int *                       editDistance,
+    std::vector<unsigned>       &tokens
 )
 {
     //

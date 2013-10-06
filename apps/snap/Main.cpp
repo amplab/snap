@@ -40,9 +40,10 @@ const char *SNAP_VERSION = "0.16alpha.37";
 static void usage()
 {
     fprintf(stderr,
-            "Usage: snap <command> [<options>]\n"
+            "Usage: snap-rna <command> [<options>]\n"
             "Commands:\n"
             "   index    build a genome index\n"
+            "   transcriptome build a transcriptome index\n"
             "   single   align single-end reads\n"
             "   paired   align paired-end reads\n"
             "Type a command without arguments to see its help.\n");
@@ -51,7 +52,7 @@ static void usage()
 
 int main(int argc, const char **argv)
 {
-    printf("Welcome to SNAP version %s.\n\n", SNAP_VERSION);
+    printf("Welcome to SNAP-RNA version %s.\n\n", SNAP_VERSION);
 
     InitializeSeedSequencers();
 
@@ -59,6 +60,8 @@ int main(int argc, const char **argv)
         usage();
     } else if (strcmp(argv[1], "index") == 0) {
         GenomeIndex::runIndexer(argc - 2, argv + 2);
+    } else if (strcmp(argv[1], "transcriptome") == 0) {
+        GenomeIndex::runTranscriptomeIndexer(argc - 2, argv + 2);
     } else if (strcmp(argv[1], "single") == 0 || strcmp(argv[1], "paired") == 0) {
         for (int i = 1; i < argc; /* i is increased below */) {
             unsigned nArgsConsumed;

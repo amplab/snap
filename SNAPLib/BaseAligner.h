@@ -33,8 +33,10 @@ Revision History:
 #include "ProbabilityDistance.h"
 #include "AlignerStats.h"
 #include "directions.h"
+#include <map>
+#include <set>
 
-
+typedef std::map<unsigned, std::set<unsigned> > seed_map;
 
 class BaseAligner: public Aligner {
 public:
@@ -76,7 +78,33 @@ public:
         int         *mapq,
         unsigned     searchRadius,       // If non-zero, constrain search around searchLocation in direction searchRC.
         unsigned     searchLocation,
-        Direction    searchDirection);
+        Direction    searchDirection,
+        int          maxHitsToGet = 0,
+        int         *multiHitsFound = NULL,
+        unsigned    *multiHitLocations = NULL,
+        bool        *multiHitRCs = NULL,
+        int         *multiHitScores = NULL);
+        
+        AlignmentResult
+    CharacterizeSeeds(
+        Read      *inputRead,
+        unsigned  *genomeLocation,
+        Direction *hitDirection,
+        int       *finalScore,
+        int       *mapq,
+        unsigned   searchRadius,
+        unsigned   searchLocation,
+        Direction  searchDirection,
+        seed_map  &map,
+        seed_map  &mapRC);
+        
+        void 
+    fillHitsFound(
+        unsigned    maxHitsToGet, 
+        int        *multiHitsFound, 
+        unsigned   *multiHitLocations,
+        bool       *multiHitRCs,
+        int        *multiHitScores);
         
     //
     // Statistics gathering.
@@ -116,6 +144,12 @@ public:
     static size_t getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned numSeedsFromCommandLine, double seedCoverage);
 
 private:
+
+    // Store the best hits at a given edit distance, as well as their number
+    static const int MAX_MULTI_HITS_TO_GET = 512;
+    unsigned hitCount[MAX_K];
+    unsigned hitLocations[MAX_K][MAX_MULTI_HITS_TO_GET];
+    bool hitRCs[MAX_K][MAX_MULTI_HITS_TO_GET];
 
     bool hadBigAllocator;
 
@@ -265,7 +299,8 @@ private:
         int             *finalScore,
         unsigned        *singleHitGenomeLocation,
         Direction       *hitDirection,
-        int             *mapq);
+        int             *mapq,
+        unsigned        maxHitsToGet);
     
     void clearCandidates();
 

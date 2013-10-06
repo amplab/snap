@@ -34,6 +34,7 @@ Revision History:
 class FileFormat;
 
 class Genome;
+class GTFReader;
 
 struct PairedAlignmentResult;
 
@@ -86,6 +87,8 @@ enum ReadClippingType {NoClipping, ClipFront, ClipBack, ClipFrontAndBack};
 struct ReaderContext
 {
     const Genome*       genome;
+    const Genome*       transcriptome;
+    GTFReader*          gtf;
     const char*         defaultReadGroup;
     ReadClippingType    clipping;
     bool                paired;
@@ -165,7 +168,7 @@ public:
     virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine) = 0;
 
     // write a single read, return true if successful
-    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, unsigned genomeLocation, Direction direction) = 0;
+    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, unsigned genomeLocation, Direction direction, bool isTranscriptome, unsigned tlocation) = 0;
 
     // write a pair of reads, return true if successful
     virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result) = 0;
@@ -184,7 +187,7 @@ public:
     virtual void close() = 0;
 
     static ReadWriterSupplier* create(const FileFormat* format, DataWriterSupplier* dataSupplier,
-        const Genome* genome);
+        const Genome* genome, const Genome* transcriptome, const GTFReader* gtf);
 };
 
 #define READ_GROUP_FROM_AUX     ((const char*) -1)
@@ -414,6 +417,19 @@ public:
                 count += IS_N[data[i]];
             }
             return count;
+        }
+        
+        bool qualityFilter(float min_percent, unsigned min_qual, unsigned offset=33) const {        
+            unsigned count = 0;
+            for (unsigned i = 0; i < dataLength; i++) {
+                if (quality[i]-offset >= min_qual) {
+                    count++;
+                }
+            }
+            if ((float(count)/float(dataLength))*100.f >= min_percent) {
+                return true;
+            }
+            return false; 
         }
 
         void computeReverseCompliment(char *outputBuffer) { // Caller guarantees that outputBuffer is at least getDataLength() bytes

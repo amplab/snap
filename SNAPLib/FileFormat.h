@@ -29,6 +29,7 @@ Revision History:
 #include "Genome.h"
 #include "LandauVishkin.h"
 #include "AlignerOptions.h"
+#include "GTFReader.h"
 
 //
 // abstract class defining format-specific operations
@@ -75,18 +76,20 @@ public:
     // writing
     //
 
-    virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const = 0;
+    virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome, const Genome* transcriptome, const GTFReader* gtf) const = 0;
 
     virtual bool writeHeader(
         const ReaderContext& context, char *header, size_t headerBufferSize, size_t *headerActualSize,
         bool sorted, int argc, const char **argv, const char *version, const char *rgLine) const = 0;
 
     virtual bool writeRead(
-        const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
+        const Genome * genome, const Genome * transcriptome, const GTFReader * gtf, 
+        LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
-        int mapQuality, unsigned genomeLocation, Direction direction,
+        int mapQuality, unsigned genomeLocation, Direction direction, bool isTranscriptome = false, unsigned tlocation = 0,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
-        AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD) const = 0; 
+        AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD,
+        bool mateIsTranscriptome = false, unsigned mateTlocation= 0) const = 0; 
 
     //
     // formats

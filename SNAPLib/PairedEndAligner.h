@@ -44,6 +44,10 @@ struct PairedAlignmentResult {
 
     int mapq[NUM_READS_PER_PAIR];               // mapping quality of each end, encoded like a Phred score (but as an integer, not ASCII Phred + 33).
 
+    bool isTranscriptome[NUM_READS_PER_PAIR];   //is this alignment a transcriptome alignment or genome alignment
+    unsigned tlocation[NUM_READS_PER_PAIR];     //pos of the trancriptome alignment
+    //char flag[NUM_READS_PER_PAIR];              //alignment flag
+
     bool fromAlignTogether;                     // Was this alignment created by aligning both reads together, rather than from some combination of single-end aligners?
     bool alignedAsPair;                         // Were the reads aligned as a pair, or separately?
     _int64 nanosInAlignTogether;

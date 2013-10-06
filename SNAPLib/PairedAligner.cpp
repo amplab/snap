@@ -48,6 +48,7 @@ Revision History:
 #include "Util.h"
 #include "IntersectingPairedEndAligner.h"
 #include "exit.h"
+#include "AlignmentFilter.h"
 
 using namespace std;
 
@@ -296,16 +297,18 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
     version = i_version;
 
     PairedAlignerOptions* options = new PairedAlignerOptions(
-        "snap paired <index-dir> <input file(s)> <read2.fq> [<options>]\n"
+        "snap-rna paired <genome-dir> <transcriptome-dir> <annotation> <input file(s)> <read2.fq> [<options>]\n"
         "   where <input file(s)> is a list of files to process.  FASTQ\n"
         "   files must come in pairs, since each read end is in a separate file.");
     options->extra = extension->extraOptions();
-    if (argc < 2) {
+    if (argc < 4) {
         fprintf(stderr, "Too few parameters\n");
         options->usage();
     }
 
     options->indexDir = argv[0];
+    options->transcriptomeDir = argv[1];
+    options->annotation = argv[2];
     //
     // Figure out how many inputs there are.  All options begin with a '-', so count the
     // args until we hit an option.  FASTQ files come in pairs, and each pair only counts
@@ -313,7 +316,7 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
     //
     int nInputs = 0;
     bool foundFirstHalfOfFASTQ = false;
-    for (int i = 1; i < argc; i++) {
+    for (int i = 3; i < argc; i++) {
         if (argv[i][0] == '-' || argv[i][0] == ',' && argv[i][1] == '\0') {
                 break;
         }
@@ -347,7 +350,7 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
     options->inputs = new SNAPInput[nInputs];
     int i;
     int whichInput = 0;
-    for (i = 1; i < argc; i++) {
+    for (i = 3; i < argc; i++) {
         if (argv[i][0] == '-') {
                 break;
         }
@@ -459,16 +462,16 @@ void PairedAlignerContext::runIterationThread()
     }
 
     int maxReadSize = MAX_READ_LENGTH;
-    size_t memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), 
+    size_t g_memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), 
                                                                 numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize);
 
-    BigAllocator *allocator = new BigAllocator(memoryPoolSize);
+    BigAllocator *g_allocator = new BigAllocator(g_memoryPoolSize);
     
-    IntersectingPairedEndAligner *intersectingAligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
+    IntersectingPairedEndAligner *g_intersectingAligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
-                                                                maxCandidatePoolSize, allocator);
+                                                                maxCandidatePoolSize, g_allocator);
 
-    ChimericPairedEndAligner *aligner = new ChimericPairedEndAligner(
+    ChimericPairedEndAligner *g_aligner = new ChimericPairedEndAligner(
         index,
         maxReadSize,
         maxHits,
@@ -479,7 +482,56 @@ void PairedAlignerContext::runIterationThread()
         maxSpacing,
         forceSpacing,
         extraSearchDepth,
-        intersectingAligner);
+        g_intersectingAligner);
+        
+    BigAllocator *c_allocator = NULL;
+    IntersectingPairedEndAligner *c_intersectingAligner = NULL;
+    ChimericPairedEndAligner *c_aligner = NULL;
+
+    if (contamination != NULL) {
+
+      //Contamination database for paired end reads
+      size_t c_memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(contamination, intersectingAlignerMaxHits, maxReadSize, contamination->getSeedLength(),
+                                                                  numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize);
+      c_allocator = new BigAllocator(c_memoryPoolSize);
+      c_intersectingAligner = new IntersectingPairedEndAligner(contamination, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
+                                                                  seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth,
+                                                                  maxCandidatePoolSize, c_allocator);
+
+      c_aligner = new ChimericPairedEndAligner(
+          contamination,
+          maxReadSize,
+          maxHits,
+          maxDist,
+          numSeedsFromCommandLine,
+          seedCoverage,
+          minSpacing,
+          maxSpacing,
+          forceSpacing,
+          extraSearchDepth,
+          c_intersectingAligner);
+    }
+
+    //Base aligner for transcriptome 
+    BaseAligner *transcriptomeAligner = new BaseAligner(transcriptome, maxHits, maxDist, maxReadSize,
+                                                        numSeedsFromCommandLine,  seedCoverage, extraSearchDepth, NULL, NULL);
+    transcriptomeAligner->setExplorePopularSeeds(options->explorePopularSeeds);
+    transcriptomeAligner->setStopOnFirstHit(options->stopOnFirstHit);
+    
+    //This is for partial matching
+    BaseAligner *partialAligner = new BaseAligner(
+            index,
+            (unsigned)300, //Need to find a way to have this set by user
+            maxDist,
+            maxReadSize,
+            (unsigned)12, //This is instead of seedCoverage
+            seedCoverage,
+            extraSearchDepth,
+            NULL,               // LV (no need to cache in the single aligner)
+            NULL);
+            
+    partialAligner->setExplorePopularSeeds(options->explorePopularSeeds);
+    partialAligner->setStopOnFirstHit(options->stopOnFirstHit);
 
     ReadWriter *readWriter = this->readWriter;
 
@@ -508,7 +560,12 @@ void PairedAlignerContext::runIterationThread()
         int maxDist = this->maxDist;
         bool useful0 = read0->getDataLength() >= 50 && (int)read0->countOfNs() <= maxDist;
         bool useful1 = read1->getDataLength() >= 50 && (int)read1->countOfNs() <= maxDist;
-        if (!useful0 && !useful1) {
+        
+        //Quality filtering
+        bool quality0 = read0->qualityFilter(options->minPercentAbovePhred, options->minPhred, options->phredOffset);
+        bool quality1 = read1->qualityFilter(options->minPercentAbovePhred, options->minPhred, options->phredOffset);
+        
+        if ((!useful0 && !useful1) || (!quality0 || !quality0)) {
             PairedAlignmentResult result;
             result.status[0] = NotFound;
             result.status[1] = NotFound;
@@ -521,9 +578,76 @@ void PairedAlignerContext::runIterationThread()
             stats->usefulReads += (useful0 && useful1) ? 2 : 1;
         }
 
-        PairedAlignmentResult result;
+        PairedAlignmentResult result, contaminantResult;
+        result.isTranscriptome[0] = false;
+        result.isTranscriptome[1] = false;
+        
+        //Make users setting
+        AlignmentFilter filter(read0, read1, index->getGenome(), transcriptome->getGenome(), gtf, minSpacing, maxSpacing, options->confDiff, options->maxDist.start, index->getSeedLength(), partialAligner);
 
-        aligner->align(read0, read1, &result);
+        unsigned maxHitsToGet = 1000;
+        
+        unsigned loc0, loc1;
+        Direction rc0, rc1, temp;
+        int score0, score1;
+        int mapq0, mapq1;
+        AlignmentResult status0, status1;
+        
+        int       transcriptome_multiHitsFound0;
+        unsigned  *transcriptome_multiHitLocations0 = new unsigned[maxHitsToGet];
+        bool      *transcriptome_multiHitRCs0 = new bool[maxHitsToGet];
+        int       *transcriptome_multiHitScores0 = new int[maxHitsToGet]; 
+        int       transcriptome_multiHitsFound1;
+        unsigned  *transcriptome_multiHitLocations1 = new unsigned[maxHitsToGet];
+        bool      *transcriptome_multiHitRCs1 = new bool[maxHitsToGet];
+        int       *transcriptome_multiHitScores1 = new int[maxHitsToGet]; 
+        
+        transcriptomeAligner->setReadId(0);      
+        status0 = transcriptomeAligner->AlignRead(read0, &loc0, &rc0, &score0, &mapq0, 0, 0, 0, maxHitsToGet, &transcriptome_multiHitsFound0, transcriptome_multiHitLocations0, transcriptome_multiHitRCs0, transcriptome_multiHitScores0);            
+       
+        transcriptomeAligner->setReadId(1);      
+        status0 = transcriptomeAligner->AlignRead(read1, &loc1, &rc1, &score1, &mapq1, 0, 0, 0, maxHitsToGet, &transcriptome_multiHitsFound1, transcriptome_multiHitLocations1, transcriptome_multiHitRCs1, transcriptome_multiHitScores1);            
+      
+        //Add reads to filter
+        for (int i = 0; i < transcriptome_multiHitsFound0; ++i) {
+            filter.AddAlignment(transcriptome_multiHitLocations0[i], transcriptome_multiHitRCs0[i], transcriptome_multiHitScores0[i], 0, true, false);
+        }
+    
+        for (int i = 0; i < transcriptome_multiHitsFound1; ++i) {
+            filter.AddAlignment(transcriptome_multiHitLocations1[i], transcriptome_multiHitRCs1[i], transcriptome_multiHitScores1[i], 0, true, true);
+        }    
+    
+        //Now delete the memory
+        delete[] transcriptome_multiHitLocations0;
+        delete[] transcriptome_multiHitRCs0;
+        delete[] transcriptome_multiHitScores0;
+        delete[] transcriptome_multiHitLocations1;
+        delete[] transcriptome_multiHitRCs1;
+        delete[] transcriptome_multiHitScores1;  
+
+        //Use the Intersecting Aligner for genomic alignments for speed
+        g_aligner->align(read0, read1, &result);
+        filter.AddAlignment(result.location[0], result.direction[0], result.score[0], result.mapq[0], false, false);
+        filter.AddAlignment(result.location[1], result.direction[1], result.score[1], result.mapq[1], false, true);
+       
+        //Perform the primary filtering of all aligned reads
+        unsigned status = filter.Filter(&result);
+
+        //If the read is still unaligned
+        if ((result.status[0] == NotFound) && (result.status[1] == NotFound)) {
+        
+          //If the contamination database is present
+          if (c_aligner != NULL) {
+
+            c_aligner->align(read0, read1, &contaminantResult);
+            if ((contaminantResult.status[0] != NotFound) && (contaminantResult.status[1] != NotFound)) {
+
+              c_filter->AddAlignment(contaminantResult.location[0], contaminantResult.direction[0], contaminantResult.score[0], contaminantResult.mapq[0], false, false);
+              c_filter->AddAlignment(contaminantResult.location[1], contaminantResult.direction[1], contaminantResult.score[1], contaminantResult.mapq[1], false, true);
+
+            }
+          }
+        }
 
         if (forceSpacing && isOneLocation(result.status[0]) != isOneLocation(result.status[1])) {
             // either both align or neither do
@@ -547,13 +671,24 @@ void PairedAlignerContext::runIterationThread()
         updateStats((PairedAlignerStats*) stats, read0, read1, &result);
     }
 
-    stats->lvCalls = aligner->getLocationsScored();
+    stats->lvCalls = g_aligner->getLocationsScored();
 
-    delete aligner;
+    if (c_aligner != NULL) {
+      delete c_aligner;
+    }
+    if (c_intersectingAligner != NULL) {
+      c_intersectingAligner->~IntersectingPairedEndAligner();
+    }
+    if (c_allocator != NULL) {
+      delete c_allocator;
+    }
+    
+    delete g_aligner;
     delete supplier;
-
-    intersectingAligner->~IntersectingPairedEndAligner();
-    delete allocator;
+    g_intersectingAligner->~IntersectingPairedEndAligner();
+    transcriptomeAligner->~BaseAligner();
+    partialAligner->~BaseAligner();       
+    delete g_allocator;
 }
 
 void PairedAlignerContext::writePair(Read* read0, Read* read1, PairedAlignmentResult* result)

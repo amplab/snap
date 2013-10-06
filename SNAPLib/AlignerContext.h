@@ -31,6 +31,8 @@ Revision History:
 #include "AlignerStats.h"
 #include "ParallelTask.h"
 #include "GenomeIndex.h"
+#include "GTFReader.h"
+#include "ContaminationFilter.h"
 
 class AlignerExtension;
 
@@ -93,6 +95,10 @@ public:
  
     // common state across all threads
     GenomeIndex                         *index;
+    GenomeIndex                         *transcriptome;
+    GenomeIndex                         *contamination;
+    GTFReader                           *gtf;
+    ContaminationFilter                 *c_filter;
     ReadWriterSupplier                  *writerSupplier;
     ReaderContext                        readerContext;
     _int64                               alignStart;

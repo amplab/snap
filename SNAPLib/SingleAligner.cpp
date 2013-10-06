@@ -38,6 +38,7 @@ Revision History:
 #include "Util.h"
 #include "SingleAligner.h"
 #include "MultiInputReadSupplier.h"
+#include "AlignmentFilter.h"
 
 using namespace std;
 using util::stringEndsWith;
@@ -59,18 +60,20 @@ SingleAlignerContext::parseOptions(
     version = i_version;
 
     AlignerOptions* options = new AlignerOptions(
-        "snap single <index-dir> <inputFile(s)> [<options>]"
+        "snap-rna single <genome-dir> <transcriptome-dir> <annotation> <inputFile(s)> [<options>]"
 		"   where <input file(s)> is a list of files to process.\n",false);
     options->extra = extension->extraOptions();
-    if (argc < 2) {
+    if (argc < 4) {
         fprintf(stderr,"Too few parameters\n");
         options->usage();
     }
 
     options->indexDir = argv[0];
+    options->transcriptomeDir = argv[1];
+    options->annotation = argv[2];
 
 	int nInputs = 0;
-	for (int i = 1; i < argc; i++) {
+	for (int i = 3; i < argc; i++) {
 		if (argv[i][0] == '-' || argv[i][0] == ',' && argv[i][1] == '\0') {
 			break;
 		}
@@ -85,13 +88,13 @@ SingleAlignerContext::parseOptions(
 	options->nInputs = nInputs;
 	options->inputs = new SNAPInput[nInputs];
 
-	for (int i = 1; i < argc; i++) {
+	for (int i = 3; i < argc; i++) {
 		if (argv[i][0] == '-' || argv[i][0] == ',' && argv[i][1] == '\0') {
 			break;
 		}
 
-		options->inputs[i-1].fileName = argv[i];
-		options->inputs[i-1].fileType =
+		options->inputs[i-3].fileName = argv[i];
+		options->inputs[i-3].fileType =
             stringEndsWith(argv[i],".sam") ? SAMFile :
             stringEndsWith(argv[i],".bam") ? BAMFile :
             stringEndsWith(argv[i], ".fastq.gz") || stringEndsWith(argv[i], ".fq.gz") ? GZipFASTQFile :
@@ -99,7 +102,7 @@ SingleAlignerContext::parseOptions(
 	}
 
     int n;
-    for (n = 1 + nInputs; n < argc; n++) {
+    for (n = 3 + nInputs; n < argc; n++) {
         bool done;
         int oldN = n;
         if (!options->parse(argv, argc, n, &done)) {
@@ -163,9 +166,9 @@ SingleAlignerContext::runIterationThread()
 
     int maxReadSize = MAX_READ_LENGTH;
  
-    BigAllocator *allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, maxHits, maxReadSize, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage));
-   
-    BaseAligner *aligner = new (allocator) BaseAligner(
+    BigAllocator *g_allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, maxHits, maxReadSize, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage));
+
+    BaseAligner *g_aligner = new (g_allocator) BaseAligner(
             index,
             maxHits,
             maxDist,
@@ -176,13 +179,33 @@ SingleAlignerContext::runIterationThread()
             NULL,               // LV (no need to cache in the single aligner)
             NULL,               // reverse LV
             stats,
-            allocator);
+            g_allocator);
 
-    allocator->assertAllMemoryUsed();
-    allocator->checkCanaries();
+    g_allocator->assertAllMemoryUsed();
+    g_allocator->checkCanaries();
 
-    aligner->setExplorePopularSeeds(options->explorePopularSeeds);
-    aligner->setStopOnFirstHit(options->stopOnFirstHit);
+    g_aligner->setExplorePopularSeeds(options->explorePopularSeeds);
+    g_aligner->setStopOnFirstHit(options->stopOnFirstHit);
+    
+    BigAllocator *t_allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, maxHits, maxReadSize, transcriptome->getSeedLength(), numSeedsFromCommandLine, seedCoverage));    
+    BaseAligner *t_aligner = new (t_allocator) BaseAligner(
+            transcriptome,
+            maxHits,
+            maxDist,
+            maxReadSize,
+            numSeedsFromCommandLine,
+            seedCoverage,
+            extraSearchDepth,
+            NULL,               // LV (no need to cache in the single aligner)
+            NULL,               // reverse LV
+            stats,
+            t_allocator);
+
+    t_allocator->assertAllMemoryUsed();
+    t_allocator->checkCanaries();
+    
+    t_aligner->setExplorePopularSeeds(options->explorePopularSeeds);
+    t_aligner->setStopOnFirstHit(options->stopOnFirstHit);
 
 #ifdef  _MSC_VER
     if (options->useTimingBarrier) {
@@ -198,9 +221,12 @@ SingleAlignerContext::runIterationThread()
     Read *read;
     while (NULL != (read = supplier->getNextRead())) {
         stats->totalReads++;
+        
+        //Quality filtering
+        bool quality = read->qualityFilter(options->minPercentAbovePhred, options->minPhred, options->phredOffset);
 
         // Skip the read if it has too many Ns or trailing 2 quality scores.
-        if (read->getDataLength() < 50 || read->countOfNs() > maxDist) {
+        if (read->getDataLength() < 50 || read->countOfNs() > maxDist || !quality) {
             if (readWriter != NULL && options->passFilter(read, NotFound)) {
                 readWriter->writeRead(read, NotFound, 0, InvalidGenomeLocation, false);
             }
@@ -214,27 +240,42 @@ SingleAlignerContext::runIterationThread()
         int score;
         int mapq;
 
-        AlignmentResult result = aligner->AlignRead(read, &location, &direction, &score, &mapq);
+        //Set transcriptome and flag here
+        bool isTranscriptome = false;
+        unsigned tlocation = 0;
 
-        allocator->checkCanaries();
+        AlignmentFilter filter(NULL, read, index->getGenome(), transcriptome->getGenome(), gtf, 0, 0, options->confDiff, options->maxDist.start, index->getSeedLength(), g_aligner);
+
+        AlignmentResult t_result = t_aligner->AlignRead(read, &location, &direction, &score, &mapq);
+        t_allocator->checkCanaries();
+        filter.AddAlignment(location, direction, score, mapq, true, true);
+
+        AlignmentResult g_result = g_aligner->AlignRead(read, &location, &direction, &score, &mapq);
+        g_allocator->checkCanaries();
+        filter.AddAlignment(location, direction, score, mapq, false, true);
+        
+        //Filter the results
+        AlignmentResult result = filter.FilterSingle(&location, &direction, &score, &mapq, &isTranscriptome, &tlocation);
 
         bool wasError = false;
         if (result != NotFound && computeError) {
             wasError = wgsimReadMisaligned(read, location, index, options->misalignThreshold);
         }
 
-        writeRead(read, result, location, direction, score, mapq);
+        writeRead(read, result, location, direction, isTranscriptome, tlocation, score, mapq);
         
         updateStats(stats, read, result, location, score, mapq, wasError);
     }
 
-    aligner->~BaseAligner(); // This calls the destructor without calling operator delete, allocator owns the memory.
+    g_aligner->~BaseAligner(); // This calls the destructor without calling operator delete, allocator owns the memory.
+    t_aligner->~BaseAligner(); 
  
     if (supplier != NULL) {
         delete supplier;
     }
 
-    delete allocator;   // This is what actually frees the memory.
+    delete g_allocator;   // This is what actually frees the memory.
+    delete t_allocator;
 }
     
     void
@@ -243,11 +284,13 @@ SingleAlignerContext::writeRead(
     AlignmentResult result,
     unsigned location,
     Direction direction,
+    bool isTranscriptome,
+    unsigned tlocation,
     int score,
     int mapq)
 {
     if (readWriter != NULL && options->passFilter(read, result)) {
-        readWriter->writeRead(read, result, mapq, location, direction);
+        readWriter->writeRead(read, result, mapq, location, direction, isTranscriptome, tlocation);
     }
 }
 

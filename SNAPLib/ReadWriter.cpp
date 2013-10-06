@@ -32,8 +32,8 @@ Environment:
 class SimpleReadWriter : public ReadWriter
 {
 public:
-    SimpleReadWriter(const FileFormat* i_format, DataWriter* i_writer, const Genome* i_genome)
-        : format(i_format), writer(i_writer), genome(i_genome)
+    SimpleReadWriter(const FileFormat* i_format, DataWriter* i_writer, const Genome* i_genome, const Genome * i_transcriptome, const GTFReader * i_gtf)
+        : format(i_format), writer(i_writer), genome(i_genome), transcriptome(i_transcriptome), gtf(i_gtf)
     {}
 
     virtual ~SimpleReadWriter()
@@ -43,7 +43,7 @@ public:
 
     virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine);
 
-    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, unsigned genomeLocation, Direction direction);
+    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, unsigned genomeLocation, Direction direction, bool isTranscriptome, unsigned tlocation);
 
     virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result);
 
@@ -53,6 +53,8 @@ private:
     const FileFormat* format;
     DataWriter* writer;
     const Genome* genome;
+    const Genome* transcriptome;
+    const GTFReader* gtf;
     LandauVishkinWithCigar lvc;
 };
 
@@ -91,7 +93,9 @@ SimpleReadWriter::writeRead(
     AlignmentResult result,
     int mapQuality,
     unsigned genomeLocation,
-    Direction direction)
+    Direction direction,
+    bool isTranscriptome, 
+    unsigned tlocation)
 {
     char* buffer;
     size_t size;
@@ -103,7 +107,7 @@ SimpleReadWriter::writeRead(
         if (! writer->getBuffer(&buffer, &size)) {
             return false;
         }
-        if (format->writeRead(genome, &lvc, buffer, size, &used, read->getIdLength(), read, result, mapQuality, genomeLocation, direction)) {
+        if (format->writeRead(genome, transcriptome, gtf, &lvc, buffer, size, &used, read->getIdLength(), read, result, mapQuality, genomeLocation, direction, isTranscriptome, tlocation)) {
             _ASSERT(used <= size);
 
         if (used > 0xffffffff) {
@@ -170,14 +174,16 @@ SimpleReadWriter::writePair(
             return false;
         }
 
-        bool writesFit = format->writeRead(genome, &lvc, buffer, size, &sizeUsed[first],
-                            idLengths[first], reads[first], result->status[first], result->mapq[first], locations[first], result->direction[first], true, true,
-                            reads[second], result->status[second], locations[second], result->direction[second]);
+        bool writesFit = format->writeRead(genome, transcriptome, gtf, &lvc, buffer, size, &sizeUsed[first],
+                            idLengths[first], reads[first], result->status[first], result->mapq[first], locations[first], result->direction[first], 
+                            result->isTranscriptome[first], result->tlocation[first], true, true,
+                            reads[second], result->status[second], locations[second], result->direction[second], result->isTranscriptome[second], result->tlocation[second]);
 
         if (writesFit) {
-            writesFit = format->writeRead(genome, &lvc, buffer + sizeUsed[first], size - sizeUsed[first], &sizeUsed[second],
-                idLengths[second], reads[second], result->status[second], result->mapq[second], locations[second], result->direction[second], true, false,
-                reads[first], result->status[first], locations[first], result->direction[first]);
+            writesFit = format->writeRead(genome, transcriptome, gtf, &lvc, buffer + sizeUsed[first], size - sizeUsed[first], &sizeUsed[second],
+                idLengths[second], reads[second], result->status[second], result->mapq[second], locations[second], result->direction[second], 
+                result->isTranscriptome[second], result->tlocation[second], true, false,
+                reads[first], result->status[first], locations[first], result->direction[first], result->isTranscriptome[first], result->tlocation[first]);
             if (writesFit) {
                 break;
             }
@@ -218,11 +224,13 @@ SimpleReadWriter::close()
 class SimpleReadWriterSupplier : public ReadWriterSupplier
 {
 public:
-    SimpleReadWriterSupplier(const FileFormat* i_format, DataWriterSupplier* i_dataSupplier, const Genome* i_genome)
+    SimpleReadWriterSupplier(const FileFormat* i_format, DataWriterSupplier* i_dataSupplier, const Genome* i_genome, const Genome* i_transcriptome, const GTFReader* i_gtf)
         :
         format(i_format),
         dataSupplier(i_dataSupplier),
-        genome(i_genome)
+        genome(i_genome),
+        transcriptome(i_transcriptome),
+        gtf(i_gtf)
     {}
 
     ~SimpleReadWriterSupplier()
@@ -232,7 +240,7 @@ public:
 
     virtual ReadWriter* getWriter()
     {
-        return new SimpleReadWriter(format, dataSupplier->getWriter(), genome);
+        return new SimpleReadWriter(format, dataSupplier->getWriter(), genome, transcriptome, gtf);
     }
 
     virtual void close()
@@ -244,14 +252,18 @@ private:
     const FileFormat* format;
     DataWriterSupplier* dataSupplier;
     const Genome* genome;
+    const Genome* transcriptome;
+    const GTFReader* gtf;
 };
 
     ReadWriterSupplier*
 ReadWriterSupplier::create(
     const FileFormat* format,
     DataWriterSupplier* dataSupplier,
-    const Genome* genome)
+    const Genome* genome,
+    const Genome* transcriptome, 
+    const GTFReader* gtf)
 {
-    return new SimpleReadWriterSupplier(format, dataSupplier, genome);
+    return new SimpleReadWriterSupplier(format, dataSupplier, genome, transcriptome, gtf);
 }
 
