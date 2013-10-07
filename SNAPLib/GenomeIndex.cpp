@@ -103,7 +103,7 @@ GenomeIndex::runTranscriptomeIndexer(
     const char **argv)
 {
     if (argc < 3) {
-        usage();
+        tusage();
     }
 
     const char *gtfFile = argv[0];
