@@ -1548,7 +1548,6 @@ BAMIndexSupplier::addInterval(
     }
 }
 
-<<<<<<< HEAD
 /**** QC Filters ****/
 
 class ReadQCFilter : public BAMFilter
