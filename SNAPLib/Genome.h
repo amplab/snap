@@ -164,6 +164,8 @@ public:
         inline const Piece *getPieces() const { return pieces; }
 
         inline int getNumPieces() const { return nPieces; }
+    
+        inline unsigned getNumBases() const { return nBases; }
 
         const Piece *getPieceAtLocation(unsigned location) const;
         const Piece *getNextPieceAfterLocation(unsigned location) const;

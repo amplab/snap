@@ -531,7 +531,7 @@ BAMFormat::getWriterSupplier(
         dataSupplier = DataWriterSupplier::sorted(this, genome, tempFileName, options->sortMemory * (1ULL << 30),
             options->numThreads, options->outputFileTemplate, filters);
     } else {
-        filters = DataWriterSupplier::bamQC()->compose(filters);
+        filters = DataWriterSupplier::bamQC(genome)->compose(filters);
         dataSupplier = DataWriterSupplier::create(options->outputFileTemplate, filters);
     }
     return ReadWriterSupplier::create(this, dataSupplier, genome);
@@ -827,6 +827,8 @@ public:
 	
 	virtual void inHeader(bool flag)
 	{ header = flag; }
+    
+    virtual void finalize() {};
 
     virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location);
 
@@ -856,6 +858,7 @@ BAMFilter::onNextBatch(
     size_t offset,
     size_t bytes)
 {
+    std::cout << "BAMFilter::onNextBatch (Bam.cpp 861)\n";
     bool ok = writer->getBatch(-1, &currentBuffer, NULL, NULL, NULL, &currentBufferBytes, &currentOffset);
     _ASSERT(ok);
     currentWriter = writer;
@@ -868,6 +871,7 @@ BAMFilter::onNextBatch(
     currentBuffer = NULL;
     currentBufferBytes = 0;
     currentOffset = 0;
+    std::cout << "BAMFilter::onNextBatch done (Bam.cpp 874)\n";
     return bytes;
 }
     
@@ -1538,6 +1542,8 @@ private:
     const static int MAX_INSERT = 1000;
     const static int MIN_INSERT = 50;
     const static int MIN_GOOD_BASE_QUALITY = 20;
+    const static unsigned char LOW_COVERAGE = 3;
+    long* contig_offsets;
     // reference to a global collection of read pair alignments for duplicate marking
     // this isn't thread safe, but since its a set into which objects go in and never come out
     // we only need to worry about missing a duplicate occasionally. Small price to pay for never having to sort.
@@ -1559,6 +1565,14 @@ private:
     long num_forward_strand;
     long num_indels_in_reads;
     std::map<int,long> insert_size_histogram;
+    unsigned char* coverage;
+    // depth statistics
+    long _genome_size;
+    long low_covered_bases;
+    long no_coverage_bases;
+    long tenX_covered_bases;
+    long twentyX_covered_bases;
+    long total_bases;
     
     // these metrics require additional information (such as an interval list)
     // may not want to calculate these in SNAP (instead, perhaps pipe to GATK)
@@ -1586,11 +1600,15 @@ private:
     virtual void mergeInsertSizeHistogram(std::map<int,long> other);
     virtual bool isFirstOfPair(BAMAlignment* read);
     virtual void addInsertSize(BAMAlignment* read);
+    virtual void update_depth(BAMAlignment* read);
     virtual _int64 pairHash(_int32 ref1, _int32 pos1, _int32 ref2, _int32 pos2);
+    
+    int _threadNum;
+    int* _totalThreads;
     
 public:
     
-    ReadQCFilter(std::set<_int64>threadUnsafePairSet) : BAMFilter(DataWriter::ReadFilter) {
+    ReadQCFilter(std::set<_int64>threadUnsafePairSet,unsigned char* cvg,long* offsets, long baseSize, int threadNum, int* threads) : BAMFilter(DataWriter::ReadFilter) {
         // instantiate metric variables
         num_reads = 0;
         num_pf_reads = 0;
@@ -1606,6 +1624,13 @@ public:
         // note: a number of metrics are not instantiated (see abov)
         
         observedPairAlignments = threadUnsafePairSet;
+        coverage = cvg;
+        contig_offsets = offsets;
+        
+        _threadNum = threadNum;
+        _totalThreads = threads;
+        _genome_size = baseSize;
+        std::cout << "added filter " << threadNum << "\n";
     }
     
     ~ReadQCFilter() {
@@ -1655,6 +1680,26 @@ public:
         return num_indels_in_reads;
     }
     
+    long getTotalBases() {
+        return total_bases;
+    }
+    
+    long get20xCoveredBases() {
+        return twentyX_covered_bases;
+    }
+    
+    long get10xCoveredBases() {
+        return tenX_covered_bases;
+    }
+    
+    long getLowCoverageBases() {
+        return low_covered_bases;
+    }
+    
+    long getNoCoverageBases() {
+        return no_coverage_bases;
+    }
+    
     std::map<int,long> getInsertSizes() {
         return insert_size_histogram;
     }
@@ -1673,7 +1718,15 @@ public:
         num_forward_strand += other->num_forward_strand;
         num_indels_in_reads += other->num_indels_in_reads;
         mergeInsertSizeHistogram(other->getInsertSizes());
+        low_covered_bases += other->low_covered_bases;
+        no_coverage_bases += other->no_coverage_bases;
+        tenX_covered_bases += other->tenX_covered_bases;
+        twentyX_covered_bases += other->twentyX_covered_bases;
+        total_bases += other->total_bases;
+        // note: don't touch coverage here, that's global
     }
+    
+    virtual void finalize();
     
 protected:
     virtual void onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex);
@@ -1684,15 +1737,33 @@ class ReadQCFilterSupplier : public DataWriter::FilterSupplier {
 public:
     
     std::set<_int64> pairsSeen;
+    unsigned char* positional_depth; // the genome depth, one per reference position
     
-    ReadQCFilterSupplier() : FilterSupplier(DataWriter::ReadFilter) {
+    ReadQCFilterSupplier(const Genome* i_genome) : FilterSupplier(DataWriter::ReadFilter), genome(i_genome) {
+        
         filters = std::vector<ReadQCFilter*>();
+        // initialize the coverage counts - another 3 billion bytes (0.01gb)
+        
+        positional_depth = new unsigned char[genome->getNumBases()];
+        memset(positional_depth,0,genome->getNumBases());
+        piece_offsets = new long[genome->getNumPieces()];
+        
+        const Genome::Piece* pieces = genome->getPieces();
+        for ( int i = 0; i < genome->getNumPieces(); i++ ) {
+            piece_offsets[i] = (long) pieces[i].beginningOffset - genome->getChromosomePadding();
+        }
+        
+        threads = new int[1];
+        threads[0] = 0; // heh memory doesn't get set to 0
     }
     
     virtual DataWriter::Filter* getFilter()
     {
-        ReadQCFilter* fltr = new ReadQCFilter(pairsSeen);
+        std::cout << "adding filter\n";
+        int filterNo = threads[0];
+        ReadQCFilter* fltr = new ReadQCFilter(pairsSeen,positional_depth,piece_offsets,genome->getNumBases(),filterNo,threads);
         filters.push_back(fltr);
+        ++threads[0];
         return fltr;
     }
     
@@ -1701,6 +1772,9 @@ public:
     
 private:
     std::vector<ReadQCFilter*> filters;
+    long* piece_offsets;
+    const Genome* genome;
+    int* threads;
 };
 
 void ReadQCFilter::onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex) {
@@ -1725,6 +1799,7 @@ void ReadQCFilter::onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex) 
             return;
         }
         
+        update_depth(read);
         
         if ( isHighQualityAlignment(read) ) {
             num_hq_aligned_reads++;
@@ -1745,6 +1820,27 @@ void ReadQCFilter::onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex) 
             }
             addInsertSize(read);
         }
+    }
+}
+
+void ReadQCFilter::update_depth(BAMAlignment* read) {
+    std::cout << "Updating depth\n";
+    _int32 contig_id = read->refID;
+    _uint32 ali_start = read->pos + contig_offsets[contig_id];
+    _uint32 ali_end = ali_start + read->l_ref();
+    
+    if ( ali_end >= _genome_size ) {
+        ali_end = _genome_size-1;
+    }
+    
+    if ( ali_start > _genome_size ) {
+        std::cerr << "\n - err - \n" << read->refID << " and " << read->pos << " but size " << _genome_size << "  huh??\n";
+        return;
+    }
+    
+    std::cout << "Updating coverage for " << ali_start << " to " << ali_end << "\n";
+    for ( _uint32 i = ali_start; i <= ali_end; i++ ) {
+        coverage[i] += (coverage[i] < 255);
     }
 }
 
@@ -1904,12 +2000,50 @@ void ReadQCFilter::mergeInsertSizeHistogram(std::map<int,long> other) {
     }
 }
 
+void ReadQCFilter::finalize() {
+    // inherited from the base DataWriterFilter class - called after the final batch of data has been written for this thread
+    // tells the thread (before everything gets merged and multi-threading is lost) to get the depth counts its
+    // responsible for
+    no_coverage_bases = 0;
+    low_covered_bases = 0;
+    tenX_covered_bases = 0;
+    twentyX_covered_bases = 0;
+    total_bases = 0;
+    if ( _threadNum == 0 ) {
+        // this is the aggregator filter, break early after initialization
+        return;
+    }
+    long depth_finalize_start = ((long) _genome_size/(_totalThreads[0]-1))*_threadNum; // totalThreads includes the aggregator
+    long depth_finalize_end;
+    if ( _totalThreads[0] == _threadNum ) {
+        depth_finalize_end = _genome_size;
+    } else {
+        depth_finalize_end = ((long) _genome_size/(_totalThreads[0]-1))*(1+_threadNum);
+    }
+    std::cout << "finalizing filter " << _threadNum << " of " << _totalThreads << " from " << depth_finalize_start << " to " << depth_finalize_end << "\n";
+    for ( long pos = depth_finalize_start; pos < depth_finalize_end; pos++ ) {
+        ++total_bases;
+        if ( coverage[pos] >= 20 ) {
+            ++ twentyX_covered_bases;
+            ++ tenX_covered_bases;
+        } else if ( coverage[pos] >= 10 ) {
+            ++ tenX_covered_bases;
+        } else if ( coverage[pos] == 0 ) {
+            ++ no_coverage_bases;
+        } else if ( coverage[pos] <= LOW_COVERAGE ) {
+            ++ low_covered_bases;
+        }
+    }
+    std::cout << "Done finalizing filter " << _threadNum << "\n";
+    
+}
+
 void ReadQCFilterSupplier::onClose(DataWriterSupplier* supplier) {
-    ReadQCFilter* first = filters[0];
+    ReadQCFilter* first = filters[0]; // this filter will always be the one writing the bam header, and it is the merge target
     for ( std::vector<ReadQCFilter*>::size_type i = 1; i < filters.size(); i++ ) {
         std::cout << i;
         std::cout << " of ";
-        std::cout << filters.size();
+        std::cout << filters.size()-1;
         std::cout << "\n";
         first->merge(filters[i]);
     }
@@ -1933,6 +2067,15 @@ std::string ReadQCFilterSupplier::formatQCTables(ReadQCFilter* qcmetrics) {
     formattedTable << "Num HQ Aligned Bases:" << "\t" << qcmetrics -> getNumHighQualityBases() << "\n";
     formattedTable << "Mean Indels Per Read:" << "\t" << ((float)qcmetrics->getNumIndelsInReads())/qcmetrics->getNumTotalAligned() << "\n";
     formattedTable << "Num Chimeric Reads:" << "\t" << qcmetrics -> getNumChimeric() << "\n";
+    formattedTable << "Total Bases:" << "\t" << qcmetrics -> getTotalBases() << "\n";
+    formattedTable << "Covered to 20x:" << "\t" << qcmetrics -> get20xCoveredBases() << "\t(";
+    formattedTable << (double)((int)((10000*(double)qcmetrics->get20xCoveredBases()/qcmetrics->getTotalBases())))/100 << "%)\n";
+    formattedTable << "Covered to 10x:" << "\t" << qcmetrics -> get10xCoveredBases() << "\t(";
+    formattedTable << (double)((int)((10000*(double)qcmetrics->get10xCoveredBases()/qcmetrics->getTotalBases())))/100 << "%)\n";
+    formattedTable << "Poorly covered:" << "\t" << qcmetrics -> getLowCoverageBases() << "\t(";
+    formattedTable << (double)((int)((10000*(double)qcmetrics->getLowCoverageBases()/qcmetrics->getTotalBases())))/100 << "%)\n";
+    formattedTable << "Uncovered:" << "\t" << qcmetrics -> getNoCoverageBases() << "\t(";
+    formattedTable << (double)((int)((10000*(double)qcmetrics->getNoCoverageBases()/qcmetrics->getTotalBases())))/100 << "%)\n";
     formattedTable << "\n";
     std::map<int,long> insertSizes = qcmetrics->getInsertSizes();
     std::cout << "The map size is: " << insertSizes.size();
@@ -1946,7 +2089,7 @@ std::string ReadQCFilterSupplier::formatQCTables(ReadQCFilter* qcmetrics) {
 }
 
 DataWriter::FilterSupplier*
-DataWriterSupplier::bamQC()
+DataWriterSupplier::bamQC(const Genome* gn)
 {
-    return new ReadQCFilterSupplier();
+    return new ReadQCFilterSupplier(gn);
 }

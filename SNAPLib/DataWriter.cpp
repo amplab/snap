@@ -157,6 +157,7 @@ AsyncDataWriter::getBatch(
     size_t* o_logicalUsed,
     size_t* o_logicalOffset)
 {
+    std::cout << "Getting batch (DataWriter.cpp 160)\n";
     if (relative < 1 - count || relative > count - 1) {
         return false;
     }
@@ -181,12 +182,14 @@ AsyncDataWriter::getBatch(
     if (relative >= 0) {
         batch->file->waitForCompletion();
     }
+    std::cout << "Batch done. (DataWriter.cpp 185)\n";
     return true;
 }
 
     bool
 AsyncDataWriter::nextBatch()
 {
+    std::cout << "Getting next batch (DataWriter.cpp 190)\n";
     _int64 start = timeInNanos();
     int written = current;
     Batch* write = &batches[written];
@@ -195,6 +198,7 @@ AsyncDataWriter::nextBatch()
     batches[current].used = 0;
     bool newBuffer = filter != NULL && (filter->filterType == CopyFilter || filter->filterType == TransformFilter);
     bool newSize = newBuffer && filter->filterType == TransformFilter;
+    std::cout << "[newBuffer is " << newBuffer << " and newSize is " << newSize << ")\n";
     if (newSize) {
         // advisory only
         write->fileOffset = supplier->sharedOffset;
@@ -205,6 +209,7 @@ AsyncDataWriter::nextBatch()
     if (filter != NULL) {
         size_t n = filter->onNextBatch(this, write->fileOffset, write->used);
         if (newSize) {
+            std::cout << "Advancing (DataWriter.cpp 212)\n";
             write->used = n;
             supplier->advance(n, write->logicalUsed, &write->fileOffset, &write->logicalOffset);
         }
@@ -233,13 +238,16 @@ AsyncDataWriter::nextBatch()
         soft_exit(1);
     }
     InterlockedAdd64AndReturnNewValue(&WaitTime, timeInNanos() - start2);
+    std::cout << "Batch got (DataWriter.cpp 241)\n";
     return true;
 }
 
     void
 AsyncDataWriter::close()
 {
+    std::cout << "Closing (DataWriter.cpp 248)\n";
     nextBatch(); // ensure last buffer gets written
+    filter->finalize();
     for (int i = 0; i < count; i++) {
         batches[i].file->close();
     }
@@ -276,6 +284,7 @@ AsyncDataWriterSupplier::getWriter()
     void
 AsyncDataWriterSupplier::close()
 {
+    std::cout << "Supplier is closing (DataWriter.cpp 287)\n";
     if (filterSupplier != NULL && filterSupplier->filterType == DataWriter::TransformFilter) {
         filterSupplier->onClose(this);
     }
@@ -336,6 +345,11 @@ public:
         size_t sa = a->onNextBatch(writer, offset, bytes);
         size_t sb = b->onNextBatch(writer, offset, sa);
         return sb;
+    }
+    
+    virtual void finalize() {
+        a->finalize();
+        b->finalize();
     }
 
 private:

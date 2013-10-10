@@ -52,6 +52,9 @@ public:
 
 		// called to set whether we're writing a header vs. individual reads
 		virtual void inHeader(bool flag) {} // default do nothing
+        
+        // called after the final chunk of data has been written into a file
+        virtual void finalize() {} // default do nothing
 
         // called when a chunk of data (i.e. a single read) has been written into the file
         virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location) = 0;
@@ -151,5 +154,5 @@ public:
 
     static DataWriter::FilterSupplier* bamIndex(const char* indexFileName, const Genome* genome, GzipWriterFilterSupplier* gzipSupplier);
     
-    static DataWriter::FilterSupplier* bamQC();
+    static DataWriter::FilterSupplier* bamQC(const Genome* genome);
 };

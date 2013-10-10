@@ -224,7 +224,7 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned 
 	  curName[pos] = pieceNameBuffer[pos + n];
 	}
         curName[pieceSize] = '\0';
-    }
+    } // npieces
 
     //
     // Skip over the miserable \n that gets left in the file.
@@ -428,7 +428,7 @@ Genome::copy(bool copyX, bool copyY, bool copyM) const
             nextPiece = getNextPieceAfterLocation(offsetInReference + 1);
             if ((!copyX && !strcmp(currentPiece->name,"chrX")) ||
                 (!copyY && !strcmp(currentPiece->name,"chrY")) ||
-                (!copyM && !strcmp(currentPiece->name,"chrM"))) {
+                (!copyM && !strcmp(currentPiece->name,"chrM"))) { // what happens with b37 (contigs X, Y, MT rather than chrM chrX chrY)
                 //
                 // Yes, skip over this piece.
                 //
