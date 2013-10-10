@@ -30,6 +30,7 @@ Revision History:
 #include "AlignerOptions.h"
 #include "AlignerStats.h"
 #include "ParallelTask.h"
+#include "GenomeIndex.h"
 
 class AlignerExtension;
 

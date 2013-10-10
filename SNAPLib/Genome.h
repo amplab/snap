@@ -158,6 +158,7 @@ public:
 
         struct Piece {
             unsigned     beginningOffset;
+            unsigned     length;
             char        *name;
         };
 
@@ -168,10 +169,18 @@ public:
         inline unsigned getNumBases() const { return nBases; }
 
         const Piece *getPieceAtLocation(unsigned location) const;
+        const Piece *getPieceForRead(unsigned location, unsigned readLength, unsigned *extraBasesClippedBefore) const;
         const Piece *getNextPieceAfterLocation(unsigned location) const;
 
         Genome *copy() const {return copy(true,true,true);}
         Genome *copyGenomeOneSex(bool useY, bool useM) const {return copy(!useY,useY,useM);}
+
+        //
+        // These are only public so creators of new genomes (i.e., FASTA) can use them.
+        // 
+        void    fillInPieceLengths();
+        void    sortPiecesByName();
+
 private:
 
         static const int N_PADDING = 100; // Padding to add on either end of the genome to allow substring reads past it
@@ -199,7 +208,6 @@ private:
 
         static bool openFileAndGetSizes(const char *filename, FILE **file, unsigned *nBases, unsigned *nPieces);
 
-        void sortPiecesByName();
 
         unsigned chromosomePadding;
 };

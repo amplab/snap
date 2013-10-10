@@ -54,7 +54,7 @@ FASTQReader::~FASTQReader()
 
     FASTQReader*
 FASTQReader::create(
-    const DataSupplier* supplier,
+    DataSupplier* supplier,
     const char *fileName,
     _int64 startingOffset,
     _int64 amountOfFileToProcess,
@@ -360,7 +360,7 @@ PairedFASTQReader::~PairedFASTQReader()
 
 	PairedFASTQReader *
 PairedFASTQReader::create(
-    const DataSupplier* supplier,
+    DataSupplier* supplier,
     const char *fileName0,
     const char *fileName1,
     _int64 startingOffset,
@@ -408,7 +408,7 @@ PairedFASTQReader::createPairedReadSupplierGenerator(
     //
     if (QueryFileSize(fileName0) != QueryFileSize(fileName1) || gzip) {
         fprintf(stderr,"FASTQ using supplier queue\n");
-        const DataSupplier* dataSupplier = gzip ? DataSupplier::GzipDefault[false] : DataSupplier::Default[false];
+        DataSupplier* dataSupplier = gzip ? DataSupplier::GzipDefault[false] : DataSupplier::Default[false];
         ReadReader *reader1 = FASTQReader::create(dataSupplier, fileName0,0,QueryFileSize(fileName0),context);
         ReadReader *reader2 = FASTQReader::create(dataSupplier, fileName1,0,QueryFileSize(fileName1),context);
         if (NULL == reader1 || NULL == reader2) {

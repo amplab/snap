@@ -41,7 +41,7 @@ public:
         virtual ~FASTQReader();
 
 
-        static FASTQReader* create(const DataSupplier* supplier, const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess,
+        static FASTQReader* create(DataSupplier* supplier, const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess,
                                    const ReaderContext& i_context);
 
         static void readHeader(const char* fileName, ReaderContext& i_context);
@@ -82,7 +82,7 @@ public:
         virtual ~PairedFASTQReader();
 
 
-        static PairedFASTQReader* create(const DataSupplier* supplier, const char *fileName0, const char *fileName1, _int64 startingOffset, 
+        static PairedFASTQReader* create(DataSupplier* supplier, const char *fileName0, const char *fileName1, _int64 startingOffset, 
                                          _int64 amountOfFileToProcess, const ReaderContext& context);
 
         virtual bool getNextReadPair(Read *read0, Read *read1);

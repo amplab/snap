@@ -33,6 +33,11 @@ void usage()
 {
     fprintf(stderr,"usage: ComputeROC genomeDirectory inputFile {-b}\n");
     fprintf(stderr,"       -b means to accept reads that match either end of the range regardless of RC\n");
+    fprintf(stderr,"       -c means to just count the number of reads that are aligned, not to worry about correctness\n");
+    fprintf(stderr,"       -v means to correct for the error in generating the wgsim coordinates in the Venter data\n");
+    fprintf(stderr,"       -e means to print out misaligned reads where the aligned location has a lower edit distance than the 'correct' one.\n");
+    fprintf(stderr,"       -70 means to print out any misaligned reads with MAPQ 70.\n");
+    fprintf(stderr,"You can specify only one of -b or -c\n");
   	exit(1);
 }
 
@@ -42,6 +47,11 @@ SingleWaiterObject allThreadsDone;
 const char *inputFileName;
 const Genome *genome;
 bool matchBothWays = false;
+bool justCount = false;
+bool venter = false;
+unsigned slackAmount = 151;
+bool printBetterErrors = false;
+bool printErrorsAtMAPQ70 = false;
 
 static const int MaxMAPQ = 70;
 const unsigned MaxEditDistance = 100;
@@ -50,18 +60,24 @@ struct ThreadContext {
 
     _int64 countOfReads[MaxMAPQ+1];
     _int64 countOfMisalignments[MaxMAPQ+1];
+    _int64 countOfMisalignetsWithBetterEditDistance[MaxMAPQ+1];
     _int64 nUnaligned;
+    _int64 totalReads;
 
     _int64 countOfReadsByEditDistance[MaxMAPQ+1][MaxEditDistance+1];
     _int64 countOfMisalignmentsByEditDistance[MaxMAPQ+1][MaxEditDistance+1];
+    _int64 countOfMisalignetsWithBetterEditDistanceByEditDistance[MaxMAPQ+1][MaxEditDistance+1];
+ 
 
     ThreadContext() {
         nUnaligned = 0;
+        totalReads = 0;
         for (int i = 0; i <= MaxMAPQ; i++) {
-            countOfReads[i] = countOfMisalignments[i] = 0;
+            countOfReads[i] = countOfMisalignments[i] = countOfMisalignetsWithBetterEditDistance[i] = 0;
             for (int j = 0; j <= MaxEditDistance; j++) {
                 countOfReadsByEditDistance[i][j] = 0;
                 countOfMisalignmentsByEditDistance[i][j] = 0;
+                countOfMisalignetsWithBetterEditDistanceByEditDistance[i][j] = 0;
             }
         }
     }
@@ -104,15 +120,18 @@ WorkerThreadMain(void *param)
         Read read;
         LandauVishkinWithCigar lv;
         while (samReader->getNextRead(&read, &alignmentResult, &genomeLocation, &isRC, &mapQ, &flag, &cigar)) {
-
             if (mapQ < 0 || mapQ > MaxMAPQ) {
                 fprintf(stderr,"Invalid MAPQ: %d\n",mapQ);
                 exit(1);
             }
 
+            context->totalReads++;
+
             if (0xffffffff == genomeLocation) {
                 context->nUnaligned++;
-            } else {
+            } else if (justCount) {
+              context->countOfReads[mapQ]++;
+	    } else if (!justCount) {
                 if (flag & SAM_REVERSE_COMPLEMENT) {
                     read.becomeRC();
                 }
@@ -194,6 +213,10 @@ WorkerThreadMain(void *param)
                                 memcpy(correctChromosomeName, idBuffer, chrNameLen);
                                 correctChromosomeName[chrNameLen] = '\0';
 
+                                if (venter && offsetB >= read.getDataLength()) {
+                                    offsetB -= read.getDataLength();
+                                }
+
                                 if (!genome->getOffsetOfPiece(correctChromosomeName, &offsetOfCorrectChromosome)) {
                                     fprintf(stderr, "Couldn't parse chromosome name '%s' from read id\n", correctChromosomeName);
                                 } else {
@@ -202,8 +225,6 @@ WorkerThreadMain(void *param)
                             }
                         }
                     }
-
- 
 
                     if (badParse) {
                         fprintf(stderr,"Unable to parse read ID '%s', perhaps this isn't simulated data.  piecelen = %d, pieceName = '%s', piece offset = %u, genome offset = %u\n", idBuffer, strlen(piece->name), piece->name, piece->beginningOffset, genomeLocation);
@@ -218,10 +239,10 @@ WorkerThreadMain(void *param)
                     }  else if(strncmp(piece->name, idBuffer, __min(read.getIdLength(), chrNameLen))) {
                         matched = false;
                     } else {
-                        if (isWithin(offsetA, genomeLocation - piece->beginningOffset, 50)) {
+                        if (isWithin(offsetA, genomeLocation - piece->beginningOffset, slackAmount)) {
                             matched = true;
                             match0 = true;
-                        } else if (isWithin(offsetB, genomeLocation - piece->beginningOffset, 50)) {
+                        } else if (isWithin(offsetB, genomeLocation - piece->beginningOffset, slackAmount)) {
                             matched = true;
                             match1 = true;
                         } else {
@@ -241,7 +262,7 @@ WorkerThreadMain(void *param)
                         context->countOfMisalignments[mapQ]++;
                         context->countOfMisalignmentsByEditDistance[mapQ][editDistance]++;
 
-                        if (70 == mapQ || 69 == mapQ) {
+                        if ((70 == mapQ && printErrorsAtMAPQ70) || printBetterErrors) {
 
                             //
                             // We don't know which offset is correct, because neither one matched.  Just take the one with the lower edit distance.
@@ -285,11 +306,20 @@ WorkerThreadMain(void *param)
                                 correctLocation = correctLocationB;
                                 cigarForCorrect = cigarB;
                             }
+
+                            bool betterEditDistance = ((distanceA > editDistance && distanceB > editDistance) || (-1 == distanceA && -1 == distanceB));
+                            if (betterEditDistance) {
+                                context->countOfMisalignetsWithBetterEditDistanceByEditDistance[mapQ][editDistance]++;
+                                context->countOfMisalignetsWithBetterEditDistance[mapQ]++;
+                            }
+
+                            // if (!printBetterErrors || (printBetterErrors && betterEditDistance)) {
                            
-                            printf("%s\t%d\t%s\t%u\t%d\t%s\t*\t*\t100\t%.*s\t%.*s\tAlignedGenomeLocation:%u\tCorrectGenomeLocation: %u\tCigarForCorrect: %s\tCorrectData: %.*s\tAlignedData: %.*s\n", 
-                                idBuffer, flag, piece->name, genomeLocation - piece->beginningOffset, mapQ, cigarForAligned, read.getDataLength(), read.getData(), 
-                                read.getDataLength(), read.getQuality(),  genomeLocation, correctLocation, cigarForCorrect, read.getDataLength(),
-                                correctGenomeData, read.getDataLength(), alignedGenomeData);
+                            //     printf("%s\t%d\t%s\t%u\t%d\t%s\t*\t*\t100\t%.*s\t%.*s\tAlignedGenomeLocation:%u\tCorrectGenomeLocation: %u\tCigarForCorrect: %s\tCorrectData: %.*s\tAlignedData: %.*s\n", 
+                            //         idBuffer, flag, piece->name, genomeLocation - piece->beginningOffset, mapQ, cigarForAligned, read.getDataLength(), read.getData(), 
+                            //         read.getDataLength(), read.getQuality(),  genomeLocation, correctLocation, cigarForCorrect, read.getDataLength(),
+                            //         correctGenomeData, read.getDataLength(), alignedGenomeData);
+                            //}
                         }
                     }
                 }
@@ -307,13 +337,19 @@ int main(int argc, char * argv[])
 {
     BigAllocUseHugePages = false;
 
-    if (3 != argc && 4 != argc) {
-		usage();
-	}
+    if (argc < 3) usage();
 
-    if (4 == argc) {
-        if (!strcmp(argv[3],"-b")) {
+    for (int i = 3; i < argc; i++) {
+        if (!strcmp(argv[i], "-b")) {
             matchBothWays = true;
+        } else if (!strcmp(argv[i], "-c")) {
+            justCount = true;
+        } else if (!strcmp(argv[i], "-v")) {
+            venter = true;        
+        } else if (!strcmp(argv[i], "-e")) {
+            printBetterErrors = true;        
+        } else if (!strcmp(argv[i], "-70")) {
+            printErrorsAtMAPQ70 = true;
         } else {
             usage();
         }
@@ -358,19 +394,32 @@ int main(int argc, char * argv[])
     WaitForSingleWaiterObject(&allThreadsDone);
 
     _int64 nUnaligned = 0;
+    _int64 totalReads = 0;
     for (unsigned i = 0; i < nThreads; i++) {
         nUnaligned += contexts[i].nUnaligned;
+        totalReads += contexts[i].totalReads;
     }
-    printf("%lld total unaligned\nMAPQ\tnReads\tnMisaligned\n",nUnaligned);
+    printf("%lld reads, %lld unaligned (%0.2f%%)\n", totalReads, nUnaligned, 100. * (double)nUnaligned / (double)totalReads);
 
+    printf("MAPQ\tnReads\tnMisaligned");
+    if (printBetterErrors) {
+        printf("\tBetterMisaligned");
+    }
+    printf("\n");
     for (int i = 0; i <= MaxMAPQ; i++) {
         _int64 nReads = 0;
         _int64 nMisaligned = 0;
+        _int64 betterMisaligned = 0;
         for (unsigned j = 0; j < nThreads; j++) {
             nReads += contexts[j].countOfReads[i];
             nMisaligned += contexts[j].countOfMisalignments[i];
+            betterMisaligned += contexts[j].countOfMisalignetsWithBetterEditDistance[i];
         }
-        printf("%d\t%lld\t%lld\n", i, nReads, nMisaligned);
+        printf("%d\t%lld\t%lld", i, nReads, nMisaligned);
+        if (printBetterErrors) {
+            printf("\t%lld", betterMisaligned);
+        }
+        printf("\n");
     }
 
     int maxEditDistanceSeen = 0;

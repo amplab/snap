@@ -354,42 +354,53 @@ public:
     FileMapper();
     ~FileMapper();
 
+    // can only be called once - only usable for a single file
     bool init(const char *fileName);
+
     const size_t getFileSize() {
         _ASSERT(initialized);
         return fileSize;
     }
 
-    // You only get one of these at a time.  You must call unmap() before making a new mapping
-    char *createMapping(size_t offset, size_t amountToMap); 
-    void unmap();
+    // can get multiple mappings on the same file
+    char *createMapping(size_t offset, size_t amountToMap, void** o_token); 
 
+    // MUST call unmap on each token out of createMapping, the destructor WILL NOT cleanup
+    void unmap(void* token);
+
+#if 0
+    // prefetch was not being used, and implementation depended on single mapping per object
+    // ifdef'ed out when API was changed to allow multiple mappings (to reduce FD usage)
+    // can resurrect prefetch if we need it...
     void prefetch(size_t currentRead);
+#endif
 
 private:
     bool        initialized;
+    const char* fileName;
     size_t      fileSize;
-    char        *mappedBase;    // What we actually mapped, rounded down for alignment
-    char        *mappedRegion;
-    size_t      amountMapped;
     size_t      pagesize;
+    int         mapCount; // simple count of mappings that have not yet been unmapped
 
 #ifdef  _MSC_VER
     HANDLE      hFile;
-    HANDLE      hFilePrefetch;
     HANDLE      hMapping;
 
+#if 0
+    HANDLE      hFilePrefetch;
     OVERLAPPED  lap[1];     // for the prefetch read
     void        *prefetchBuffer;
     static const int prefetchBufferSize = 16 * 1024 * 1024;
     bool        isPrefetchOutstanding;
     size_t      lastPrefetch;
+#endif
     _int64 millisSpentInReadFile;
     _int64 countOfImmediateCompletions;
     _int64 countOfDelayedCompletions;
     _int64 countOfFailures;
 #else   // _MSC_VER
     static const int madviseSize = 4 * 1024 * 1024;
+    typedef std::pair<void*,size_t> UnmapToken;
 
     int         fd;
     _uint64     lastPosMadvised;

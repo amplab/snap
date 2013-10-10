@@ -148,26 +148,28 @@ public:
     
     virtual ~DataSupplier() {}
 
-    virtual DataReader* getDataReader(_int64 overflowBytes = 0, double extraFactor = 0.0) const = 0;
+    virtual DataReader* getDataReader(_int64 overflowBytes = 0, double extraFactor = 0.0) = 0;
 
     //
     // creating specific factories
     //
 
     // 
-    static DataSupplier* Gzip(const DataSupplier* inner, bool autoRelease);
+    static DataSupplier* GzipBam(DataSupplier* inner, bool autoRelease);
+    static DataSupplier* Gzip(DataSupplier* inner, bool autoRelease);
 
     // memmap works on both platforms (but better on Linux)
-    static const DataSupplier* MemMap[2];
+    static DataSupplier* MemMap[2];
 
 #ifdef _MSC_VER
     // overlapped is only on Windows
-    static const DataSupplier* WindowsOverlapped[2];
+    static DataSupplier* WindowsOverlapped[2];
 #endif
 
     // default raw data supplier for platform
-    static const DataSupplier* Default[2];
-    static const DataSupplier* GzipDefault[2];
+    static DataSupplier* Default[2];
+    static DataSupplier* GzipDefault[2];
+    static DataSupplier* GzipBamDefault[2];
 
     // hack: must be set to communicate thread count into suppliers
     static int ThreadCount;

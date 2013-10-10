@@ -84,7 +84,7 @@ if not quick:
 	os.remove(_f("temp/^_ref12u.sam"))
 	runit([bin + "samtools", "view", _f("^_sorted_ref12.bam"), "-o", _f("temp/^_sorted_ref12.sam")], "samtools5", strict=True)
 	# create index
-	runit([snap, "index", _f("temp/^.fa"), _f("temp/^.idx"), "-c"], "snap-index", strict=True)
+	runit([snap, "index", _f("temp/^.fa"), _f("temp/^.idx")], "snap-index", strict=True)
 
 inputs = {
     "fq": [["temp/^_in1.fq"], ["temp/^_in1.fq", "temp/^_in2.fq"]],

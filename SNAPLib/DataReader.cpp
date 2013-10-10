@@ -23,11 +23,14 @@ Environment:
 #include "RangeSplitter.h"
 #include "ParallelTask.h"
 #include "DataReader.h"
+#include "Bam.h"
 #include "zlib.h"
 #include "exit.h"
 
 using std::max;
 using std::min;
+using std::map;
+using std::string;
 
 #ifdef _MSC_VER
 
@@ -626,20 +629,20 @@ class WindowsOverlappedDataSupplier : public DataSupplier
 {
 public:
     WindowsOverlappedDataSupplier(bool autoRelease) : DataSupplier(autoRelease) {}
-    virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0) const
+    virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0)
     {
         int buffers = autoRelease ? 2 : (ThreadCount + max(ThreadCount * 3 / 4, 3));
         return new WindowsOverlappedDataReader(buffers, overflowBytes, extraFactor, autoRelease);
     }
 };
 
-const DataSupplier* DataSupplier::WindowsOverlapped[2] =
+DataSupplier* DataSupplier::WindowsOverlapped[2] =
 { new WindowsOverlappedDataSupplier(false), new WindowsOverlappedDataSupplier(true) };
 
 #endif // _MSC_VER
 
 //
-// Gzip
+// Decompress
 //
 
 static const int windowBits = 15;
@@ -648,14 +651,14 @@ static const int ENABLE_ZLIB_GZIP = 32;
 static const double MIN_FACTOR = 1.2;
 static const double MAX_FACTOR = 10.0;
 
-class GzipDataReader : public DataReader
+class DecompressDataReader : public DataReader
 {
 public:
 
-    GzipDataReader(_int64 i_overflowBytes, _int64 i_extraBytes, DataReader* i_inner, bool autoRelease);
+    DecompressDataReader(bool autoRelease, DataReader* i_inner, int i_count, _int64 totalExtra, _int64 i_extraBytes, _int64 i_overflowBytes, int i_chunkSize = BAM_BLOCK);
 
-    virtual ~GzipDataReader();
-    
+    virtual ~DecompressDataReader();
+
     virtual bool init(const char* fileName);
 
     virtual char* readHeader(_int64* io_headerSize);
@@ -678,170 +681,270 @@ public:
 
     virtual void getExtra(char** o_extra, _int64* o_length);
 
+    enum DecompressMode { SingleBlock, ContinueMultiBlock, StartMultiBlock };
+
+    static bool decompress(z_stream* zstream, ThreadHeap* heap, char* input, _int64 inputSize, _int64* o_inputUsed,
+        char* output, _int64 outputSize, _int64* o_outputUsed, DecompressMode mode);
+
+    // debugging
+    char* findPointer(void* p);
+
 private:
 
-    enum DecompressMode { SingleBlock, ContinueMultiBlock, StartMultiBlock };
-    bool decompress(char* input, _int64 inputBytes, _int64* o_inputRead,
-        char* output, _int64 outputBytes, _int64* o_outputWritten,
-        DecompressMode mode);
 
-    void decompressBatch();
-    
-    const _int64    extraBytes; // extra bytes I have to use
-    const _int64    overflowBytes; // overflow bytes I may need to allow between chunks
-    DataReader*     inner; // inner reader to get data chunks
-    z_stream        zstream; // stateful zlib stream
-    _int64          startBytes; // start bytes in extra data
-    _int64          validBytes; // valid bytes in extra data
-    _int64          offset; // current offset in extra data
-    _int64          priorBytes; // bytes copied from end of prior buffer
-    bool            gotBatchData; // whether data has been read & decompressed for current batch
-    bool            continueBlock; // whether to continue a block or start a new one
-    ThreadHeap      heap;
+    static void decompressThread(void *context);
+
+    static void decompressThreadContinuous(void *context);
+
+    friend class DecompressManager;
+    friend class DecompressWorker;
+
+    enum EntryState
+    {
+        EntryReady, // for reading by client, on first list
+        EntryHeld, // finished reading but not released, not on a list
+        EntryAvailable, // released by client, on available list
+        EntryReading // reading or decompressing, not on a list
+    };
+
+    struct Entry
+    {
+        Entry* next; // next entry on first/available list
+        EntryState state;
+        DataBatch batch;
+        char* compressed;
+        _int64 compressedStart; // limit to start a new zip block
+        _int64 compressedValid; // total available data
+        char* decompressed;
+        _int64 decompressedStart;
+        _int64 decompressedValid;
+        bool allocated; // if decompressed has been allocated specially, not from inner extra data
+    };
+
+    // use only these routines to manipulate the linked  lists
+    Entry* peekReady(); // from first, block if none
+    void popReady(); // from first
+    void enqueueReady(Entry* entry); // as last
+    Entry* dequeueAvailable(); // as available, block if none
+    void enqueueAvailable(Entry* entry); // from available
+
+    DataReader* inner; // inner reader for compressed data
+    const _int64 extraBytes; // number of bytes of extra that I get to use
+    const _int64 overflowBytes; // overflow between batches
+    const _int64 totalExtra; // total extra data
+    const int chunkSize; // max size of decompressed data
+    _int64 offset; // into current entry
+    bool threadStarted; // whether thread has been started
+    bool eof; // true when we've read to eof of previous
+    volatile bool stopping; // set to stop everything
+    EventObject decompressThreadDone; // signalled by background thread on exit
+
+    // entry lists
+    Entry* entries; // ring buffer of batches from inner reader
+    int count; // # of entries
+    Entry* first; // first ready buffer, NULL if none, currently being read by client
+    Entry* last; // last ready buffer, NULL if none
+    EventObject readyEvent; // signalled by bg thread when first goes NULL->non-NULL
+    Entry* available; // first non-ready buffer (head of freelist), NULL if none
+    EventObject availableEvent; // signalled by main thread when available goes NULL->non-NULL
+    ExclusiveLock lock; // lock on linked list pointers in this object and in Entry
 };
- 
-GzipDataReader::GzipDataReader(_int64 i_overflowBytes, _int64 i_extraBytes, DataReader* i_inner, bool autoRelease)
-    : DataReader(autoRelease), overflowBytes(i_overflowBytes),
-    extraBytes(i_extraBytes),
-    inner(i_inner),
-    zstream(),
-    heap(65536)
+
+
+DecompressDataReader::DecompressDataReader(
+    bool autoRelease,
+    DataReader* i_inner,
+    int i_count,
+    _int64 i_totalExtra,
+    _int64 i_extraBytes,
+    _int64 i_overflowBytes,
+    int i_chunkSize)
+    : DataReader(autoRelease), inner(i_inner), count(i_count), offset(i_overflowBytes),
+    totalExtra(i_totalExtra), extraBytes(i_extraBytes), overflowBytes(i_overflowBytes),
+    chunkSize(i_chunkSize), threadStarted(false), eof(false), stopping(false)
 {
+    entries = new Entry[count];
+    for (int i = 0; i < count; i++) {
+        Entry* entry = &entries[i];
+        entry->state = EntryAvailable;
+        entry->next = i < count - 1 ? &entries[i + 1] : NULL;
+        entry->decompressed = NULL;
+        entry->allocated = false;
+    }
+    available = entries;
+    first = last = NULL;
+    CreateEventObject(&readyEvent);
+    PreventEventWaitersFromProceeding(&readyEvent);
+    CreateEventObject(&availableEvent);
+    AllowEventWaitersToProceed(&availableEvent);
+    CreateEventObject(&decompressThreadDone);
+    PreventEventWaitersFromProceeding(&decompressThreadDone);
+    InitializeExclusiveLock(&lock);
 }
 
-GzipDataReader::~GzipDataReader()
+DecompressDataReader::~DecompressDataReader()
 {
+    if (threadStarted) {
+        stopping = true;
+        AllowEventWaitersToProceed(&availableEvent);
+        WaitForEvent(&decompressThreadDone);
+    }
+    for (int i = 0;  i < count; i++) {
+        if (entries[i].allocated) {
+            BigDealloc(entries[i].decompressed);
+        }
+    }
     delete inner;
 }
 
     bool
-GzipDataReader::init(
-    const char* i_fileName)
+DecompressDataReader::init(
+    const char* fileName)
 {
-    if (! inner->init(i_fileName)) {
-        return false;
-    }
-    zstream.zalloc = zalloc;
-    zstream.zfree = zfree;
-    zstream.opaque = &heap;
-    return true;
+    return inner->init(fileName);
 }
 
     char*
-GzipDataReader::readHeader(
+DecompressDataReader::readHeader(
     _int64* io_headerSize)
 {
+    z_stream zstream;
+    ThreadHeap heap(max(chunkSize,1000));
     _int64 compressedBytes = (_int64)(*io_headerSize / MIN_FACTOR);
     char* compressed = inner->readHeader(&compressedBytes);
     char* header;
-    _int64 extraBytes;
-    inner->getExtra(&header, &extraBytes);
-    _int64 compressedHeaderSize;
-    decompress(compressed, compressedBytes, &compressedHeaderSize, header, *io_headerSize, io_headerSize, SingleBlock);
-    inner->advance(compressedHeaderSize);
+    _int64 total;
+    inner->getExtra(&header, &total);
+    _ASSERT(total == totalExtra);
+    _int64 headerSize = 0;
+    while (headerSize < *io_headerSize && compressedBytes > 0) {
+        _int64 compressedBlockSize, decompressedBlockSize;
+        decompress(&zstream, chunkSize != 0 ? &heap : NULL,
+            compressed, compressedBytes, &compressedBlockSize,
+            header + headerSize, totalExtra - headerSize, &decompressedBlockSize,
+            StartMultiBlock);
+        inner->advance(compressedBlockSize);
+        compressed += compressedBlockSize;
+        compressedBytes -= compressedBlockSize;
+        headerSize += decompressedBlockSize;
+    }
+    *io_headerSize = headerSize;
     return header;
 }
 
     void
-GzipDataReader::reinit(
-    _int64 i_startingOffset,
+DecompressDataReader::reinit(
+    _int64 startingOffset,
     _int64 amountOfFileToProcess)
 {
+    if (threadStarted) {
+        fprintf(stderr, "DecompressDataReader reinit called twice\n");
+        soft_exit(1);
+    }
     // todo: transform start/amount to add for compression? I don't think so...
-    inner->reinit(i_startingOffset, amountOfFileToProcess);
-    gotBatchData = false;
-    continueBlock = false;
-    offset = 0;
-    priorBytes = 0;
+    inner->reinit(startingOffset, amountOfFileToProcess);
+    threadStarted = true;
+    if (! StartNewThread(chunkSize > 0 ? decompressThread : decompressThreadContinuous, this)) {
+        fprintf(stderr, "failed to start decompressThread\n");
+        soft_exit(1);
+    }
 }
 
     bool
-GzipDataReader::getData(
+DecompressDataReader::getData(
     char** o_buffer,
     _int64* o_validBytes,
     _int64* o_startBytes)
 {
-    if (! gotBatchData) {
-        decompressBatch();
-        gotBatchData = true;
-    }
-    if (offset >= startBytes) {
+    Entry* entry = peekReady();
+    if (eof || offset >= entry->decompressedStart) {
         return false;
     }
-    inner->getExtra(o_buffer, o_validBytes);
-    *o_buffer += offset;
-    *o_validBytes = validBytes - offset;
-    if (o_startBytes) {
-        *o_startBytes = startBytes - offset;
+    *o_buffer = entry->decompressed + offset;
+    *o_validBytes = entry->decompressedValid - offset;
+    if (o_startBytes != NULL) {
+        *o_startBytes = entry->decompressedStart- offset;
     }
     return true;
 }
 
     void
-GzipDataReader::advance(
+DecompressDataReader::advance(
     _int64 bytes)
+
 {
-    offset = min(offset + max((_int64) 0, bytes), validBytes);
+    offset = min(offset + max(bytes, (_int64) 0), peekReady()->decompressedValid);
 }
 
     void
-GzipDataReader::nextBatch()
+DecompressDataReader::nextBatch()
 {
-    // copy trailing data off the end of prior buffer
-    priorBytes = validBytes - max(offset, startBytes);
-    char* priorData; _int64 n;
-    inner->getExtra(&priorData, &n);
-    priorData += validBytes - priorBytes;
-    DataBatch innerBatch = inner->getBatch();
-    inner->nextBatch();
-    char* currentData;
-    inner->getExtra(&currentData, &n);
-    memcpy(currentData, priorData, priorBytes);
-    if (autoRelease) {
-        inner->releaseBatch(innerBatch);
+    if (eof) {
+        return;
     }
-    offset = 0;
-    gotBatchData = false;
-    continueBlock = true;
+    Entry* old = peekReady();
+    popReady();
+    Entry* next = peekReady();
+    _ASSERT(next->state == EntryReady);
+    _int64 copy = old->decompressedValid - max(offset, old->decompressedStart);
+    memcpy(next->decompressed + overflowBytes - copy, old->decompressed + old->decompressedValid - copy, copy);
+    offset = overflowBytes - copy;
+    //printf("nextBatch %d:%d #%d -> %d:%d #%d copy %lld + %lld/%lld\n", old->batch.fileID, old->batch.batchID, old-entries, next->batch.fileID, next->batch.batchID, next-entries, copy, next->decompressedStart, next->decompressedValid);
+    if (autoRelease) {
+        releaseBatch(old->batch);
+    }
+    if (offset == next->decompressedValid) {
+        eof = true;
+        _ASSERT(inner->isEOF());
+    }
 }
 
     bool
-GzipDataReader::isEOF()
+DecompressDataReader::isEOF()
 {
-    return inner->isEOF();
+    return eof;
 }
-    
+
     DataBatch
-GzipDataReader::getBatch()
+DecompressDataReader::getBatch()
 {
-    return inner->getBatch();
+    return peekReady()->batch;
 }
 
     void
-GzipDataReader::releaseBatch(
-    DataBatch batch)
+DecompressDataReader::releaseBatch(DataBatch batch)
 {
+    // loop backward from previous since that is most likely to be released
+    for (int i = 0; i < count; i++) {
+        Entry* entry = &entries[i];
+        if (entry->batch == batch) {
+            //printf("releaseBatch %d:%d #%d\n", batch.fileID, batch.batchID, i);
+            enqueueAvailable(entry);
+            break;
+        }
+    }
     inner->releaseBatch(batch);
 }
 
     _int64
-GzipDataReader::getFileOffset()
+DecompressDataReader::getFileOffset()
 {
     return inner->getFileOffset();
 }
 
     void
-GzipDataReader::getExtra(
+DecompressDataReader::getExtra(
     char** o_extra,
     _int64* o_length)
 {
-    inner->getExtra(o_extra, o_length);
-    *o_extra += extraBytes;
-    *o_length -= extraBytes;
+    *o_extra = peekReady()->decompressed + extraBytes;
+    *o_length = totalExtra - extraBytes;
 }
     
     bool
-GzipDataReader::decompress(
+DecompressDataReader::decompress(
+    z_stream* zstream,
+    ThreadHeap* heap,
     char* input,
     _int64 inputBytes,
     _int64* o_inputRead,
@@ -854,127 +957,430 @@ GzipDataReader::decompress(
         fprintf(stderr,"GzipDataReader: inputBytes or outputBytes > max unsigned int\n");
         soft_exit(1);
     }
-    zstream.next_in = (Bytef*) input;
-    zstream.avail_in = (uInt)inputBytes;
-    zstream.next_out = (Bytef*) output;
-    zstream.avail_out = (uInt)outputBytes;
+    zstream->next_in = (Bytef*) input;
+    zstream->avail_in = (uInt)inputBytes;
+    zstream->next_out = (Bytef*) output;
+    zstream->avail_out = (uInt)outputBytes;
+    if (heap != NULL) {
+        zstream->zalloc = zalloc;
+        zstream->zfree = zfree;
+        zstream->opaque = heap;
+    } else {
+        zstream->zalloc = NULL;
+        zstream->zfree = NULL;
+    }
     uInt oldAvailOut, oldAvailIn;
     int block = 0;
+    bool multiBlock = true;
     int status;
     do {
 	    if (mode != ContinueMultiBlock || block != 0) {
-            heap.reset();
-            status = inflateInit2(&zstream, windowBits | ENABLE_ZLIB_GZIP);
+            if (heap != NULL) {
+                heap->reset();
+            }
+            status = inflateInit2(zstream, windowBits | ENABLE_ZLIB_GZIP);
             if (status < 0) {
                 fprintf(stderr, "GzipDataReader: inflateInit2 failed with %d\n", status);
                 return false;
             }
         }
-        oldAvailOut = zstream.avail_out;
-        oldAvailIn = zstream.avail_out;
-        status = inflate(&zstream, mode == SingleBlock ? Z_NO_FLUSH : Z_FINISH);
-        //printf("decompress block #%d %lld -> %lld = %d\n", block, zstream.next_in - lastIn, zstream.next_out - lastOut, status);
+        oldAvailOut = zstream->avail_out;
+        oldAvailIn = zstream->avail_out;
+        status = inflate(zstream, mode == SingleBlock ? Z_NO_FLUSH : Z_FINISH);
+        // printf("decompress block #%d %lld -> %lld = %d\n", block, zstream.next_in - lastIn, zstream.next_out - lastOut, status);
         block++;
         if (status < 0 && status != Z_BUF_ERROR) {
             fprintf(stderr, "GzipDataReader: inflate failed with %d\n", status);
             soft_exit(1);
         }
-        if (status < 0 && zstream.avail_out == 0 && zstream.avail_in > 0) {
+        if (status < 0 && zstream->avail_out == 0 && zstream->avail_in > 0) {
             fprintf(stderr, "GzipDataReader: insufficient decompression buffer space\n");
             soft_exit(1);
         }
-    } while (zstream.avail_in != 0 && (zstream.avail_out != oldAvailOut || zstream.avail_in != oldAvailIn) && mode != SingleBlock);
-    //printf("end decompress status=%d, avail_in=%lld, last block=%lld->%lld, avail_out=%lld\n", status, zstream.avail_in, zstream.next_in - lastIn, zstream.next_out - lastOut, zstream.avail_out);
+    } while (zstream->avail_in != 0 && (zstream->avail_out != oldAvailOut || zstream->avail_in != oldAvailIn) && mode != SingleBlock);
+    // printf("end decompress status=%d, avail_in=%lld, last block=%lld->%lld, avail_out=%lld\n", status, zstream.avail_in, zstream.next_in - lastIn, zstream.next_out - lastOut, zstream.avail_out);
     if (o_inputRead) {
-        *o_inputRead = inputBytes - zstream.avail_in;
+        *o_inputRead = inputBytes - zstream->avail_in;
     }
     if (o_outputWritten) {
-        *o_outputWritten = outputBytes - zstream.avail_out;
+        *o_outputWritten = outputBytes - zstream->avail_out;
     }
-    return zstream.avail_in == 0;
+    return zstream->avail_in == 0;
 }
   
-    void
-GzipDataReader::decompressBatch()
+    char*
+DecompressDataReader::findPointer(
+    void* p)
 {
-    size_t fileOffset = inner->getFileOffset();
-    char* compressed;
-    _int64 compressedBytes;
-    if (! inner->getData(&compressed, &compressedBytes)) {
-	    inner->nextBatch();
-	    if (! inner->getData(&compressed, &compressedBytes)) {
-            if (inner->isEOF()) {
-                offset = 0;
-                validBytes = startBytes = 0;
-                return;
-            }
-            fprintf(stderr, "GzipDataReader:decompressBatch failed getData at %lld\n", fileOffset);
-            soft_exit(1);
-	    }
+    static char result[100];
+    sprintf(result, "not found");
+    for (int i = 0; i < count; i++) {
+        Entry* e = &entries[i];
+        if (e->compressed <= p && p < e->compressed + e->compressedValid) {
+            sprintf(result, "compressed #%d @ %lld", i, (char*)p - e->compressed);
+            break;
+        }
+        if (e->decompressed <= p && p < e->decompressed + extraBytes) {
+            sprintf(result, "decompressed #%d %lld", i, (char*) p - e->decompressed);
+            break;
+        }
+        if (e->decompressed + extraBytes <= p && p < e->decompressed + totalExtra) {
+            sprintf(result, "extra #%d %lld", i, (char*) p - e->decompressed - extraBytes);
+            break;
+        }
     }
-
-    char* uncompressed;
-    _int64 uncompressedBytes;
-    inner->getExtra(&uncompressed, &uncompressedBytes);
-    uncompressedBytes = extraBytes - priorBytes; // limit to just mine, subtracting prior data already copied in
-    bool all = decompress(compressed, compressedBytes, NULL, uncompressed + priorBytes, uncompressedBytes, &validBytes,
-        continueBlock ? ContinueMultiBlock : StartMultiBlock);
-    if (! all) {
-        // todo: handle this situation!!
-        fprintf(stderr, "GzipDataReader:decompressBatch too big at %lld\n", fileOffset);
-        soft_exit(1);
-    }
-    validBytes += priorBytes; // add back offset
-    //printf("file offset %lld decompress %lld -> %lld bytes @ %llx, carry over %lld batch %d:%d\n", fileOffset, compressedBytes, validBytes - priorBytes, (_uint64) uncompressed, priorBytes, inner->getBatch().fileID, inner->getBatch().batchID); fflush(stdout);
-    startBytes = inner->isEOF() ? validBytes : validBytes - overflowBytes ;
-    inner->advance(compressedBytes);
-    offset = 0;
+    return result;
 }
 
-class GzipDataSupplier : public DataSupplier
+typedef VariableSizeVector<_int64> OffsetVector;
+
+class DecompressWorker : public ParallelWorker
 {
 public:
-    GzipDataSupplier(const DataSupplier* i_inner, bool autoRelease)
-        : DataSupplier(autoRelease), inner(i_inner)
-    {}
+    DecompressWorker();
 
-    virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0) const
-    {
-        // adjust extra factor for compression ratio
-        double totalFactor = MAX_FACTOR * (1.0 + extraFactor);
-        // get inner reader with no overflow since zlib can't deal with it
-        DataReader* data = inner->getDataReader(0, totalFactor);
-        // compute how many extra bytes are owned by this layer
-        char* p;
-        _int64 mine;
-        data->getExtra(&p, &mine);
-        mine = (_int64)(mine * MAX_FACTOR / totalFactor);
-        // create new reader, telling it how many bytes it owns
-        // it will subtract overflow off the end of each batch
-        return new GzipDataReader(overflowBytes, mine, data, autoRelease);
-    }
+    virtual void step();
 
 private:
-    const DataSupplier* inner;
+    z_stream zstream;
+    ThreadHeap heap;
+};
+    
+class DecompressManager: public ParallelWorkerManager
+{
+public:
+    DecompressManager(OffsetVector* i_inputs, OffsetVector* i_outputs)
+        : inputs(i_inputs), outputs(i_outputs)
+    {}
+
+    virtual ParallelWorker* createWorker()
+    { return new DecompressWorker(); }
+
+    OffsetVector* inputs;
+    OffsetVector* outputs;
+    DecompressDataReader::Entry* entry;
+
+    friend class DecompressWorker;
 };
 
+DecompressWorker::DecompressWorker()
+    : heap(BAM_BLOCK)
+{
+    zstream.zalloc = zalloc;
+    zstream.zfree = zfree;
+    zstream.opaque = &heap;
+}
+
+    void
+DecompressWorker::step()
+{
+    DecompressManager* manager = (DecompressManager*) getManager();
+    for (int i = getThreadNum(); i < manager->inputs->size() - 1; i += getNumThreads()) {
+        _int64 inputUsed, outputUsed;
+        DecompressDataReader::decompress(&zstream,
+            &heap,
+            manager->entry->compressed + (*manager->inputs)[i],
+            (*manager->inputs)[i + 1] - (*manager->inputs)[i],
+            &inputUsed,
+            manager->entry->decompressed + (*manager->outputs)[i],
+            (*manager->outputs)[i + 1] - (*manager->outputs)[i],
+            &outputUsed,
+            DecompressDataReader::SingleBlock);
+        _ASSERT(inputUsed == (*manager->inputs)[i + 1] - (*manager->inputs)[i] &&
+            outputUsed == (*manager->outputs)[i + 1] - (*manager->outputs)[i]);
+    }
+}
+
+    void
+DecompressDataReader::decompressThread(
+    void* context)
+{
+    DecompressDataReader* reader = (DecompressDataReader*) context;
+    OffsetVector inputs, outputs;
+    DecompressManager manager(&inputs, &outputs);
+    ParallelCoworker coworker(min(4, DataSupplier::ThreadCount), false, &manager);
+    coworker.start();
+    // keep reading & decompressing entries until stopped
+    while (true) {
+        Entry* entry = reader->dequeueAvailable();
+        if (reader->stopping) {
+            break;
+        }
+        // always starts with a fresh batch - advances after reading it all
+        bool ok = reader->inner->getData(&entry->compressed, &entry->compressedValid, &entry->compressedStart);
+        int index = (int) (entry - reader->entries);
+        if (! ok) {
+            //printf("decompressThread #%d eof\n", index);
+            if (! reader->inner->isEOF()) {
+                fprintf(stderr, "error reading file at offset %lld\n", reader->getFileOffset());
+                soft_exit(1);
+            }
+            // mark as eof - no data
+            entry->decompressedValid = entry->decompressedStart = reader->overflowBytes;
+            if (entry->decompressed == NULL) {
+                entry->decompressed = (char*) BigAlloc(reader->totalExtra);
+                entry->allocated = true;
+                entry->batch = reader->inner->getBatch();
+            }
+        } else {
+            _int64 ignore;
+            reader->inner->getExtra(&entry->decompressed, &ignore);
+            _ASSERT(ignore >= reader->extraBytes && ignore >= reader->overflowBytes);
+            // figure out offsets and advance inner data
+            inputs.clear();
+            outputs.clear();
+            _int64 input = 0;
+            _int64 output = reader->overflowBytes;
+            do {
+                inputs.push_back(input);
+                outputs.push_back(output);
+                BgzfHeader* zip = (BgzfHeader*) (entry->compressed + input);
+                input += zip->BSIZE() + 1;
+                output += zip->ISIZE();
+                _ASSERT(output <= reader->extraBytes && input <= entry->compressedValid);
+                _ASSERT(zip->BSIZE() < BAM_BLOCK && zip->ISIZE() <= BAM_BLOCK);
+            } while (input < entry->compressedStart);
+            // append final offsets
+            inputs.push_back(input);
+            outputs.push_back(output);
+            //printf("decompressThread read #%d %lld->%lld\n", index, input, output);
+            reader->inner->advance(input);
+            entry->decompressedValid = output;
+            entry->decompressedStart = output - reader->overflowBytes;
+            entry->batch = reader->inner->getBatch();
+            reader->inner->nextBatch(); // start reading next batch
+            // decompress all chunks synchronously on multiple threads
+            manager.entry = entry;
+            coworker.step();
+        }
+        // make buffer available for clients & go on to next
+        //printf("decompressThread #%d ready\n", index);
+        reader->enqueueReady(entry);
+    }
+    coworker.stop();
+    AllowEventWaitersToProceed(&reader->decompressThreadDone);
+}
+    void
+DecompressDataReader::decompressThreadContinuous(
+    void* context)
+{
+    DecompressDataReader* reader = (DecompressDataReader*) context;
+    z_stream zstream;
+    bool first = true;
+    while (true) {
+        Entry* entry = reader->dequeueAvailable();
+        if (reader->stopping) {
+            break;
+        }
+        // always starts with a fresh batch - advances after reading it all
+        bool ok = reader->inner->getData(&entry->compressed, &entry->compressedValid, &entry->compressedStart);
+        int index = (int) (entry - reader->entries);
+        if (! ok) {
+            //printf("decompressThread #%d eof\n", index);
+            if (! reader->inner->isEOF()) {
+                fprintf(stderr, "error reading file at offset %lld\n", reader->getFileOffset());
+                soft_exit(1);
+            }
+            // mark as eof - no data
+            entry->decompressedValid = entry->decompressedStart = reader->overflowBytes;
+            if (entry->decompressed == NULL) {
+                entry->decompressed = (char*) BigAlloc(reader->totalExtra);
+                entry->allocated = true;
+                entry->batch = reader->inner->getBatch();
+            }
+        } else {
+            // figure out offsets and advance inner data
+            _int64 ignore;
+            reader->inner->getExtra(&entry->decompressed, &ignore);
+            _ASSERT(ignore >= reader->extraBytes && ignore >= reader->overflowBytes);
+            _int64 compressedRead, decompressedWritten;
+            entry->batch = reader->inner->getBatch();
+            reader->inner->advance(entry->compressedValid);
+            reader->inner->nextBatch(); // start reading next batch
+            decompress(&zstream, NULL,
+                entry->compressed, entry->compressedValid, &compressedRead,
+                entry->decompressed + reader->overflowBytes, reader->extraBytes - reader->overflowBytes, &decompressedWritten,
+                first ? StartMultiBlock : ContinueMultiBlock);
+            _ASSERT(compressedRead == entry->compressedValid && decompressedWritten <= reader->extraBytes - reader->overflowBytes);
+            entry->decompressedValid = reader->overflowBytes + decompressedWritten;
+            entry->decompressedStart = decompressedWritten;
+            first = false;
+        }
+        // make buffer available for clients & go on to next
+        //printf("decompressThread #%d ready\n", index);
+        reader->enqueueReady(entry);
+    }
+    AllowEventWaitersToProceed(&reader->decompressThreadDone);
+}
+
+    DecompressDataReader::Entry*
+DecompressDataReader::peekReady()
+{
+    // not thread-safe relative to popReady!
+    if (first == NULL) {
+        WaitForEvent(&readyEvent);
+    }
+    _ASSERT(first->state == EntryReady);
+    return first;
+}
+
+    void
+DecompressDataReader::popReady()
+{
+    while (true) {
+        AcquireExclusiveLock(&lock);
+        if (first != NULL) {
+            _ASSERT(first->state == EntryReady);
+            //printf("popReady %d:%d #%d -> held\n", first->batch.fileID, first->batch.batchID, first - entries);
+            first->state = EntryHeld;
+            if (first->next == NULL) {
+                _ASSERT(last == first);
+                last = NULL;
+                PreventEventWaitersFromProceeding(&readyEvent);
+            }
+            first = first->next;
+            _ASSERT(first == NULL || first->state == EntryReady);
+            ReleaseExclusiveLock(&lock);
+            return;
+        }
+        ReleaseExclusiveLock(&lock);
+        WaitForEvent(&readyEvent);
+    }
+}
+
+    void
+DecompressDataReader::enqueueReady(Entry* entry)
+{
+    AcquireExclusiveLock(&lock);
+    _ASSERT(entry->state == EntryReading);
+    entry->next = NULL;
+    entry->state = EntryReady;
+    if (last == NULL) {
+        first = last = entry;
+        AllowEventWaitersToProceed(&readyEvent);
+    } else {
+        last->next = entry;
+        last = entry;
+    }
+    ReleaseExclusiveLock(&lock);
+}
+
+    DecompressDataReader::Entry*
+DecompressDataReader::dequeueAvailable()
+{
+    while (true) {
+        AcquireExclusiveLock(&lock);
+        //printf("dequeueAvailable #%d\n", available == NULL ? -1 : available - entries);
+        if (available!= NULL) {
+            _ASSERT(available->state == EntryAvailable);
+            available->state = EntryReading;
+            Entry* result = available;
+            available = available->next;
+            if (available == NULL) {
+                PreventEventWaitersFromProceeding(&availableEvent);
+            }
+            ReleaseExclusiveLock(&lock);
+            return result;
+        }
+        ReleaseExclusiveLock(&lock);
+        WaitForEvent(&availableEvent);
+        if (stopping) {
+            return NULL;
+        }
+    }
+}
+
+    void
+DecompressDataReader::enqueueAvailable(Entry* entry)
+{
+    AcquireExclusiveLock(&lock);
+    _ASSERT(entry->state == EntryHeld);
+    entry->state = EntryAvailable;
+    entry->next = available;
+    available = entry;
+    if (entry->next == NULL) {
+        AllowEventWaitersToProceed(&availableEvent);
+    }
+    ReleaseExclusiveLock(&lock);
+}
+
+class DecompressDataReaderSupplier : public DataSupplier
+{
+public:
+    DecompressDataReaderSupplier(DataSupplier* i_inner, bool autoRelease, int i_blockSize = BAM_BLOCK)
+        : DataSupplier(autoRelease), inner(i_inner), blockSize(i_blockSize)
+    {}
+
+    virtual DataReader* getDataReader(_int64 overflowBytes = 0, double extraFactor = 0.0);
+
+private:
+    DataSupplier* inner;
+    const int blockSize;
+};
+
+    DataReader*
+DecompressDataReaderSupplier::getDataReader(
+    _int64 overflowBytes,
+    double extraFactor)
+{
+    // adjust extra factor for compression ratio
+    double totalFactor = MAX_FACTOR * (1.0 + extraFactor);
+    // get inner reader with no overflow since zlib can't deal with it
+    DataReader* data = inner->getDataReader(blockSize, totalFactor);
+    // compute how many extra bytes are owned by this layer
+    char* p;
+    _int64 totalExtra;
+    data->getExtra(&p, &totalExtra);
+    _int64 mine = (_int64)(totalExtra * MAX_FACTOR / totalFactor);
+    // create new reader, telling it how many bytes it owns
+    // it will subtract overflow off the end of each batch
+    // batch count here is cheap, so make it high enough that it never hits the limit
+    return new DecompressDataReader(autoRelease, data, max(8, DataSupplier::ThreadCount*4), totalExtra, mine, overflowBytes, blockSize);
+}
+    
     DataSupplier*
-DataSupplier::Gzip(
-    const DataSupplier* inner,
+DataSupplier::GzipBam(
+    DataSupplier* inner,
     bool autoRelease)
 {
-    return new GzipDataSupplier(inner, autoRelease);
+    return new DecompressDataReaderSupplier(inner, autoRelease, BAM_BLOCK);
+}
+    
+    DataSupplier*
+DataSupplier::Gzip(
+    DataSupplier* inner,
+    bool autoRelease)
+{
+    return new DecompressDataReaderSupplier(inner, autoRelease, 0);
 }
 
 //
 // MemMap
 //
 
+class MemMapDataSupplier : public DataSupplier
+{
+public:
+    MemMapDataSupplier(bool autoRelease);
+
+    virtual ~MemMapDataSupplier();
+
+    virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0);
+
+    FileMapper* getMapper(const char* fileName);
+    void releaseMapper(const char* fileName);
+
+private:
+    ExclusiveLock lock;
+    map<string,FileMapper*> mappers;
+    map<string,int> refcounts;
+};
+
 class MemMapDataReader : public DataReader
 {
 public:
 
-    MemMapDataReader(int i_batchCount, _int64 i_batchSize, _int64 i_overflowBytes, _int64 i_batchExtra, bool autoRelease);
+    MemMapDataReader(MemMapDataSupplier* i_supplier, int i_batchCount, _int64 i_batchSize, _int64 i_overflowBytes, _int64 i_batchExtra, bool autoRelease);
 
     virtual ~MemMapDataReader();
     
@@ -1027,6 +1433,7 @@ private:
     _int64          currentMapOffset; // current file offset of mapped region
     _int64          currentMapStartSize; // start size of mapped region (not incl overflow)
     _int64          currentMapSize; // total valid size of mapped region (incl overflow)
+    void*           currentMappedBase; // mapped base for unmap
     char*           extra; // extra data buffer
     int             extraUsed; // number of extra data buffers in use
     DataBatch*      extraBatches; // non-zero for each extra buffer that is in use
@@ -1035,13 +1442,14 @@ private:
     _uint32         currentBatch; // current batch number starting at 1
     _int64          startBytes; // in current batch
     _int64          validBytes; // in current batch
-    FileMapper      mapper;
+    MemMapDataSupplier* supplier;
+    FileMapper*     mapper;
     SingleWaiterObject waiter; // flow control
     ExclusiveLock   lock; // lock around flow control members (currentBatch, extraUsed, etc.)
 };
  
 
-MemMapDataReader::MemMapDataReader(int i_batchCount, _int64 i_batchSize, _int64 i_overflowBytes, _int64 i_batchExtra, bool autoRelease)
+MemMapDataReader::MemMapDataReader(MemMapDataSupplier* i_supplier, int i_batchCount, _int64 i_batchSize, _int64 i_overflowBytes, _int64 i_batchExtra, bool autoRelease)
     : DataReader(autoRelease),
     batchCount(i_batchCount),
         batchSizeParam(i_batchSize),
@@ -1053,7 +1461,8 @@ MemMapDataReader::MemMapDataReader(int i_batchCount, _int64 i_batchSize, _int64 
         currentMapOffset(0),
         currentMapSize(0),
         currentExtraIndex(0),
-        mapper()
+        supplier(i_supplier),
+        mapper(NULL)
 {
     _ASSERT(batchCount > 0 && batchSizeParam >= 0 && batchExtra >= 0);
     if (batchExtra > 0) {
@@ -1081,17 +1490,27 @@ MemMapDataReader::~MemMapDataReader()
     }
     DestroyExclusiveLock(&lock);
     DestroySingleWaiterObject(&waiter);
+    if (mapper != NULL) {
+        if (currentMap != NULL) {
+            mapper->unmap(currentMappedBase);
+        }
+        supplier->releaseMapper(fileName);
+    }
 }
 
     bool
 MemMapDataReader::init(
     const char* i_fileName)
 {
-    if (! mapper.init(i_fileName)) {
+    if (mapper != NULL) {
+        supplier->releaseMapper(fileName);
+    }
+    mapper = supplier->getMapper(i_fileName);
+    if (mapper == NULL) {
         return false;
     }
     fileName = i_fileName;
-    fileSize = mapper.getFileSize();
+    fileSize = mapper->getFileSize();
     batchSize = batchSizeParam == 0 ? fileSize : batchSizeParam;
     return true;
 }
@@ -1112,13 +1531,13 @@ MemMapDataReader::reinit(
 {
     _ASSERT(i_startingOffset >= 0 && amountOfFileToProcess >= 0);
     if (currentMap != NULL) {
-        mapper.unmap();
+        mapper->unmap(currentMappedBase);
     }
     _int64 oldAmount = amountOfFileToProcess;
     _int64 startSize = amountOfFileToProcess == 0 ? fileSize - i_startingOffset
 	: max((_int64) 0, min(fileSize - i_startingOffset, amountOfFileToProcess));
     amountOfFileToProcess = max((_int64)0, min(startSize + overflowBytes, fileSize - i_startingOffset));
-    currentMap = mapper.createMapping(i_startingOffset, amountOfFileToProcess);
+    currentMap = mapper->createMapping(i_startingOffset, amountOfFileToProcess, &currentMappedBase);
     if (currentMap == NULL) {
         fprintf(stderr, "MemMapDataReader: fail to map %s at %lld,%lld\n", fileName, i_startingOffset, amountOfFileToProcess);
         soft_exit(1);
@@ -1196,7 +1615,7 @@ MemMapDataReader::nextBatch()
                 }
             }
             releaseLock();
-	    offset = max(offset, startBytes) - startBytes;
+            offset = max(offset, startBytes) - startBytes;
             startBytes = min(batchSize, currentMapStartSize - (currentBatch - 1) * batchSize);
             validBytes = min(batchSize + overflowBytes, currentMapSize - (currentBatch - 1) * batchSize);
             _ASSERT(validBytes >= 0);
@@ -1262,24 +1681,62 @@ MemMapDataReader::getExtra(
     }
 }
 
-class MemMapDataSupplier : public DataSupplier
+MemMapDataSupplier::MemMapDataSupplier(bool autoRelease)
+    : DataSupplier(autoRelease)
 {
-public:
-    MemMapDataSupplier(bool autoRelease) : DataSupplier(autoRelease) {}
-    virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0) const
-    {
-        _ASSERT(extraFactor >= 0 && overflowBytes >= 0);
-        if (extraFactor == 0) {
-            // no per-batch expansion factor, so can read entire file as a batch
-            return new MemMapDataReader(1, 0, overflowBytes, 0, autoRelease);
-        } else {
-            // break up into 4Mb batches
-            _int64 batch = 4 * 1024 * 1024;
-            _int64 extra = (_int64)(batch * extraFactor);
-            return new MemMapDataReader(autoRelease ? 2 : ThreadCount + min(ThreadCount * 3 / 4, 3), batch, overflowBytes, extra, autoRelease);
-        }
+    InitializeExclusiveLock(&lock);
+}
+
+MemMapDataSupplier::~MemMapDataSupplier()
+{
+    DestroyExclusiveLock(&lock);
+}
+
+    DataReader* 
+MemMapDataSupplier::getDataReader(
+    _int64 overflowBytes,
+    double extraFactor)
+{
+    _ASSERT(extraFactor >= 0 && overflowBytes >= 0);
+    if (extraFactor == 0) {
+        // no per-batch expansion factor, so can read entire file as a batch
+        return new MemMapDataReader(this, 1, 0, overflowBytes, 0, autoRelease);
+    } else {
+        // break up into 4Mb batches
+        _int64 batch = 4 * 1024 * 1024;
+        _int64 extra = (_int64)(batch * extraFactor);
+        return new MemMapDataReader(this, autoRelease ? 2 : ThreadCount + min(ThreadCount * 3 / 4, 3), batch, overflowBytes, extra, autoRelease);
     }
-};
+}
+
+    FileMapper*
+MemMapDataSupplier::getMapper(
+    const char* fileName)
+{
+    AcquireExclusiveLock(&lock);
+    FileMapper* result = mappers[fileName];
+    if (result == NULL) {
+        result = new FileMapper();
+        result->init(fileName);
+        mappers[fileName] = result;
+    }
+    ++refcounts[fileName];
+    ReleaseExclusiveLock(&lock);
+    return result;
+}
+
+    void
+MemMapDataSupplier::releaseMapper(
+    const char* fileName)
+{
+    AcquireExclusiveLock(&lock);
+    int n = refcounts[fileName];
+    if (n > 0 && 0 == --refcounts[fileName]) {
+        delete mappers[fileName];
+        mappers[fileName] = NULL;
+    }
+    ReleaseExclusiveLock(&lock);
+}
 
 //
 // BatchTracker
@@ -1331,19 +1788,23 @@ BatchTracker::removeRead(
 // public static suppliers
 //
 
-const DataSupplier* DataSupplier::MemMap[] =
+DataSupplier* DataSupplier::MemMap[] =
 { new MemMapDataSupplier(false), new MemMapDataSupplier(true) };
 
 #ifdef _MSC_VER
-const DataSupplier* DataSupplier::Default[2] =
+DataSupplier* DataSupplier::Default[2] =
 { DataSupplier::WindowsOverlapped[false], DataSupplier::WindowsOverlapped[true] };
 #else
-const DataSupplier* DataSupplier::Default[2] = 
+DataSupplier* DataSupplier::Default[2] = 
 { DataSupplier::MemMap[false], DataSupplier::MemMap[true] };
 #endif
 
-const DataSupplier* DataSupplier::GzipDefault[2] =
-{ DataSupplier::Gzip(DataSupplier::Default[false], false), DataSupplier::Gzip(DataSupplier::Default[true], true) };
+// inner supplier must NOT be autorelease since wrapper keeps multiple buffers alive
+DataSupplier* DataSupplier::GzipDefault[2] =
+{ DataSupplier::Gzip(DataSupplier::Default[false], false), DataSupplier::Gzip(DataSupplier::Default[false], true) };
+
+DataSupplier* DataSupplier::GzipBamDefault[2] =
+{ DataSupplier::GzipBam(DataSupplier::Default[false], false), DataSupplier::GzipBam(DataSupplier::Default[false], true) };
 
 int DataSupplier::ThreadCount = 1;
 

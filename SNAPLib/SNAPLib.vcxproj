@@ -237,6 +237,7 @@
     <ClCompile Include="PairedAligner.cpp" />
     <ClCompile Include="PairedEndAligner.cpp" />
     <ClCompile Include="PairedReadMatcher.cpp" />
+    <ClCompile Include="ParallelTask.cpp" />
     <ClCompile Include="ProbabilityDistance.cpp" />
     <ClCompile Include="Range.cpp" />
     <ClCompile Include="RangeSplitter.cpp" />

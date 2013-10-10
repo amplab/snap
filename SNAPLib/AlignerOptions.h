@@ -28,7 +28,6 @@ Revision History:
 #include "options.h"
 #include "Range.h"
 #include "Genome.h"
-#include "SAM.h"
 #include "RangeSplitter.h"
 
 #define MAPQ_LIMIT_FOR_SINGLE_HIT 10

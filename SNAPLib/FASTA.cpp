@@ -123,6 +123,8 @@ ReadFASTAGenome(const char *fileName, unsigned chromosomePaddingSize)
     // And finally add padding at the end of the genome.
     //
     genome->addData(paddingBuffer);
+    genome->fillInPieceLengths();
+    genome->sortPiecesByName();
 
     fclose(fastaFile);
     delete [] paddingBuffer;

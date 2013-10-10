@@ -93,12 +93,10 @@ Global
 		{70D9DA2A-E423-4705-BC71-0198C365A730}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
 		{70D9DA2A-E423-4705-BC71-0198C365A730}.Debug|Mixed Platforms.Build.0 = Debug|Win32
 		{70D9DA2A-E423-4705-BC71-0198C365A730}.Debug|Win32.ActiveCfg = Debug|x64
-		{70D9DA2A-E423-4705-BC71-0198C365A730}.Debug|Win32.Build.0 = Debug|x64
 		{70D9DA2A-E423-4705-BC71-0198C365A730}.Debug|x64.ActiveCfg = Debug|x64
 		{70D9DA2A-E423-4705-BC71-0198C365A730}.Release|Mixed Platforms.ActiveCfg = Release|Win32
 		{70D9DA2A-E423-4705-BC71-0198C365A730}.Release|Mixed Platforms.Build.0 = Release|Win32
 		{70D9DA2A-E423-4705-BC71-0198C365A730}.Release|Win32.ActiveCfg = Release|x64
-		{70D9DA2A-E423-4705-BC71-0198C365A730}.Release|Win32.Build.0 = Release|x64
 		{70D9DA2A-E423-4705-BC71-0198C365A730}.Release|x64.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
