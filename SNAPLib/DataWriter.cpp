@@ -381,12 +381,8 @@ AsyncDataWriter::nextBatch()
     //printf("nextBatch reset %d used=0\n", current);
     batches[current].used = 0;
     bool newBuffer = filter != NULL && (filter->filterType == CopyFilter || filter->filterType == TransformFilter);
-<<<<<<< HEAD
-    bool newSize = newBuffer && filter->filterType == TransformFilter;
-    std::cout << "[newBuffer is " << newBuffer << " and newSize is " << newSize << ")\n";
-=======
     bool newSize = filter != NULL && (filter->filterType == TransformFilter || filter->filterType == ResizeFilter);
->>>>>>> b679d44b14c0a43ced1fc5051ccdc39fdbe516ef
+    std::cout << "[newBuffer is " << newBuffer << " and newSize is " << newSize << ")\n";
     if (newSize) {
         // advisory only
         write->fileOffset = supplier->sharedOffset;
@@ -396,18 +392,12 @@ AsyncDataWriter::nextBatch()
     }
     if (filter != NULL) {
         size_t n = filter->onNextBatch(this, write->fileOffset, write->used);
-<<<<<<< HEAD
-        if (newSize) {
-            std::cout << "Advancing (DataWriter.cpp 212)\n";
-            write->used = n;
-            supplier->advance(n, write->logicalUsed, &write->fileOffset, &write->logicalOffset);
-        }
-=======
+        
 	    if (newSize) {
+            std::cout << "Advancing (DataWriter.cpp 212)\n";
 	        write->used = n;
             supplier->advance(encoder == NULL ? write->used : 0, write->logicalUsed, &write->fileOffset, &write->logicalOffset);
 	    }
->>>>>>> b679d44b14c0a43ced1fc5051ccdc39fdbe516ef
         if (newBuffer) {
             // current has used>0, written has logicalUsed>0, for compressed & uncompressed data respectively
             batches[current].used = write->used;
@@ -451,9 +441,7 @@ AsyncDataWriter::close()
 {
     std::cout << "Closing (DataWriter.cpp 248)\n";
     nextBatch(); // ensure last buffer gets written
-<<<<<<< HEAD
-    filter->finalize();
-=======
+    filter->finalize();\
     if (encoder != NULL) {
         encoder->close();
         for (int i = 0; i < count; i++) {
@@ -461,7 +449,7 @@ AsyncDataWriter::close()
         }
         DestroyExclusiveLock(&lock);
     }
->>>>>>> b679d44b14c0a43ced1fc5051ccdc39fdbe516ef
+    
     for (int i = 0; i < count; i++) {
         batches[i].file->close();
     }
@@ -502,15 +490,12 @@ AsyncDataWriterSupplier::getWriter()
     void
 AsyncDataWriterSupplier::close()
 {
-<<<<<<< HEAD
     std::cout << "Supplier is closing (DataWriter.cpp 287)\n";
     if (filterSupplier != NULL && filterSupplier->filterType == DataWriter::TransformFilter) {
         filterSupplier->onClose(this);
-=======
     closing = true;
     if (filterSupplier != NULL) {
         filterSupplier->onClosing(this);
->>>>>>> b679d44b14c0a43ced1fc5051ccdc39fdbe516ef
     }
     file->close();
     if (filterSupplier != NULL) {
