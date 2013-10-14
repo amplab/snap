@@ -32,10 +32,13 @@ ContaminationFilter::ContaminationFilter(const Genome *contamination_, const cha
             prefix = prefix.substr(0, pos);
         }
     }
+    InitializeExclusiveLock(&lock);
 }
 
 ContaminationFilter::~ContaminationFilter() 
-{}
+{
+    DestroyExclusiveLock(&lock);
+}
 
 int ContaminationFilter::AddAlignment(unsigned location, Direction direction, int score, int mapq, bool isTranscriptome, bool isMate0) {
 

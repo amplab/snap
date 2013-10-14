@@ -256,6 +256,7 @@ void ReadIntervalPair::WriteGTF(ofstream &outfile) const {
 }
 
 ReadIntervalMap::ReadIntervalMap() {   
+    InitializeExclusiveLock(&lock);
 }
    
 ReadIntervalMap::ReadIntervalMap(const ReadIntervalMap &rhs) {
@@ -264,7 +265,7 @@ ReadIntervalMap::ReadIntervalMap(const ReadIntervalMap &rhs) {
 }
 
 ReadIntervalMap::~ReadIntervalMap() {
-
+    DestroyExclusiveLock(&lock);
     for (std::vector<Interval<ReadInterval*> >::iterator it = read_intervals.begin(); it != read_intervals.end(); ++it) {
         delete it->value;
     }
@@ -792,13 +793,19 @@ bool GTFFeature::operator<(const GTFFeature& rhs) const {
 
 GTFGene::GTFGene(string _chr, string _gene_id, unsigned _start, unsigned _end, string gene_name_) 
     : chr(_chr), gene_id(_gene_id), start(_start), end(_end), gene_name(gene_name_), read_count(0)
-{}
+{
+    InitializeExclusiveLock(&lock);
+}
 
 GTFGene::GTFGene(const GTFGene& rhs) 
     : chr(rhs.chr), gene_id(rhs.gene_id), start(rhs.start), end(rhs.end), gene_name(rhs.gene_name), features(rhs.features), read_count(rhs.read_count)
-{}
+{
+    InitializeExclusiveLock(&lock);
+}
   
-GTFGene::~GTFGene() {}
+GTFGene::~GTFGene() {
+    DestroyExclusiveLock(&lock);
+}
 
 GTFGene& GTFGene::operator=(const GTFGene& rhs) {
 
@@ -810,6 +817,7 @@ GTFGene& GTFGene::operator=(const GTFGene& rhs) {
         gene_name = rhs.gene_name;
         features = rhs.features;
         read_count = rhs.read_count;
+        InitializeExclusiveLock(&lock);
     }
     return *this;
 }
@@ -863,14 +871,20 @@ void GTFGene::Print() const {
 
 GTFTranscript::GTFTranscript(string _chr, string _gene_id, string _transcript_id, string _gene_name, string _transcript_name, unsigned _start, unsigned _end) 
     : chr(_chr), gene_id(_gene_id), transcript_id(_transcript_id), gene_name(_gene_name), transcript_name(_transcript_name), start(_start), end(_end), read_count(0)
-{}
+{
+    InitializeExclusiveLock(&lock);
+}
 
 GTFTranscript::GTFTranscript(const GTFTranscript& rhs) 
     : chr(rhs.chr), gene_id(rhs.gene_id), transcript_id(rhs.transcript_id), gene_name(rhs.gene_name), transcript_name(rhs.transcript_name), features(rhs.features), start(rhs.start), end(rhs.end), read_count(rhs.read_count)
-{}
+{
+    InitializeExclusiveLock(&lock);
+}
   
 GTFTranscript::~GTFTranscript() 
-{}
+{
+    DestroyExclusiveLock(&lock);
+}
 
 GTFTranscript& GTFTranscript::operator=(const GTFTranscript& rhs) {
 
@@ -884,6 +898,7 @@ GTFTranscript& GTFTranscript::operator=(const GTFTranscript& rhs) {
         start = rhs.start;
         end = rhs.end;
         read_count = rhs.read_count;
+        InitializeExclusiveLock(&lock);
     }
     return *this;
 }
