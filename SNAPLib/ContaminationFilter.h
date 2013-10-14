@@ -25,9 +25,9 @@ Revision History:
 #include <stdio.h>
 #include <map>
 #include <fstream>
-#include <pthread.h>
 
 #include "stdafx.h"
+#include "Compat.h"
 #include "PairedEndAligner.h"
 #include "Genome.h"
 
@@ -72,7 +72,7 @@ class ContaminationFilter {
         
         const Genome* contamination;
         contamination_count counts;
-        pthread_mutex_t mutex;
+        ExclusiveLock lock;
         string prefix;
 };
 

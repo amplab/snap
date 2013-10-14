@@ -256,7 +256,6 @@ void ReadIntervalPair::WriteGTF(ofstream &outfile) const {
 }
 
 ReadIntervalMap::ReadIntervalMap() {   
-    pthread_mutex_init(&mutex, NULL);
 }
    
 ReadIntervalMap::ReadIntervalMap(const ReadIntervalMap &rhs) {
@@ -265,7 +264,6 @@ ReadIntervalMap::ReadIntervalMap(const ReadIntervalMap &rhs) {
 }
 
 ReadIntervalMap::~ReadIntervalMap() {
-    pthread_mutex_destroy(&mutex);
 
     for (std::vector<Interval<ReadInterval*> >::iterator it = read_intervals.begin(); it != read_intervals.end(); ++it) {
         delete it->value;
@@ -288,8 +286,8 @@ ReadIntervalMap& ReadIntervalMap::operator=(const ReadIntervalMap &rhs) {
 void ReadIntervalMap::AddInterval(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, bool is_spliced) {
 
     //Get the mutex
-    pthread_mutex_lock(&mutex);
-    
+    AcquireExclusiveLock(&lock);    
+
     ReadInterval *mate0 = new ReadInterval(chr0, start0, end0, id, is_spliced);
     ReadInterval *mate1 = new ReadInterval(chr1, start1, end1, id, is_spliced);
 
@@ -301,8 +299,7 @@ void ReadIntervalMap::AddInterval(string chr0, unsigned start0, unsigned end0, s
     read_intervals.push_back(Interval<ReadInterval*>(start1, end1, mate1));
     
     //Unlock it
-    pthread_mutex_unlock(&mutex);
-    
+    ReleaseExclusiveLock(&lock);
 }
 
 void ReadIntervalMap::Print() const {
@@ -795,19 +792,13 @@ bool GTFFeature::operator<(const GTFFeature& rhs) const {
 
 GTFGene::GTFGene(string _chr, string _gene_id, unsigned _start, unsigned _end, string gene_name_) 
     : chr(_chr), gene_id(_gene_id), start(_start), end(_end), gene_name(gene_name_), read_count(0)
-{
-    pthread_mutex_init(&mutex, NULL);
-}
+{}
 
 GTFGene::GTFGene(const GTFGene& rhs) 
     : chr(rhs.chr), gene_id(rhs.gene_id), start(rhs.start), end(rhs.end), gene_name(rhs.gene_name), features(rhs.features), read_count(rhs.read_count)
-{
-    pthread_mutex_init(&mutex, NULL);
-}
+{}
   
-GTFGene::~GTFGene() {
-    pthread_mutex_destroy(&mutex);
-}
+GTFGene::~GTFGene() {}
 
 GTFGene& GTFGene::operator=(const GTFGene& rhs) {
 
@@ -819,7 +810,6 @@ GTFGene& GTFGene::operator=(const GTFGene& rhs) {
         gene_name = rhs.gene_name;
         features = rhs.features;
         read_count = rhs.read_count;
-        pthread_mutex_init(&mutex, NULL);
     }
     return *this;
 }
@@ -851,13 +841,12 @@ bool GTFGene::CheckBoundary(string query_chr, unsigned query_pos, unsigned buffe
 void GTFGene::IncrementReadCount() {
     
     //Lock the mutex, because multiple threads might try to do this simultaneously
-    pthread_mutex_lock(&mutex);
-        
+    AcquireExclusiveLock(&lock);    
+    
     read_count++;
         
     //Unlock it
-    pthread_mutex_unlock(&mutex);
-
+    ReleaseExclusiveLock(&lock);
 }
 
 void GTFGene::WriteReadCountID(ofstream &outfile) const {
@@ -874,20 +863,14 @@ void GTFGene::Print() const {
 
 GTFTranscript::GTFTranscript(string _chr, string _gene_id, string _transcript_id, string _gene_name, string _transcript_name, unsigned _start, unsigned _end) 
     : chr(_chr), gene_id(_gene_id), transcript_id(_transcript_id), gene_name(_gene_name), transcript_name(_transcript_name), start(_start), end(_end), read_count(0)
-{
-    pthread_mutex_init(&mutex, NULL);
-}
+{}
 
 GTFTranscript::GTFTranscript(const GTFTranscript& rhs) 
     : chr(rhs.chr), gene_id(rhs.gene_id), transcript_id(rhs.transcript_id), gene_name(rhs.gene_name), transcript_name(rhs.transcript_name), features(rhs.features), start(rhs.start), end(rhs.end), read_count(rhs.read_count)
-{
-    pthread_mutex_init(&mutex, NULL);
-}
+{}
   
 GTFTranscript::~GTFTranscript() 
-{
-    pthread_mutex_destroy(&mutex);
-}
+{}
 
 GTFTranscript& GTFTranscript::operator=(const GTFTranscript& rhs) {
 
@@ -901,7 +884,6 @@ GTFTranscript& GTFTranscript::operator=(const GTFTranscript& rhs) {
         start = rhs.start;
         end = rhs.end;
         read_count = rhs.read_count;
-        pthread_mutex_init(&mutex, NULL);
     }
     return *this;
 }
@@ -929,13 +911,12 @@ void GTFTranscript::UpdateBoundaries(unsigned new_start, unsigned new_end) {
 void GTFTranscript::IncrementReadCount() {
     
     //Lock the mutex, because multiple threads might try to do this simultaneously
-    pthread_mutex_lock(&mutex);
-        
+    AcquireExclusiveLock(&lock);
+    
     read_count++;
         
     //Unlock it
-    pthread_mutex_unlock(&mutex);
-
+    ReleaseExclusiveLock(&lock);
 }
 
 unsigned GTFTranscript::GenomicPosition(unsigned transcript_pos, unsigned span) const {

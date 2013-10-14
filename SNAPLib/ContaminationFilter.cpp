@@ -32,13 +32,10 @@ ContaminationFilter::ContaminationFilter(const Genome *contamination_, const cha
             prefix = prefix.substr(0, pos);
         }
     }
-    pthread_mutex_init(&mutex, NULL);
 }
 
 ContaminationFilter::~ContaminationFilter() 
-{
-  pthread_mutex_destroy(&mutex);
-}
+{}
 
 int ContaminationFilter::AddAlignment(unsigned location, Direction direction, int score, int mapq, bool isTranscriptome, bool isMate0) {
 
@@ -59,7 +56,7 @@ int ContaminationFilter::AddAlignment(unsigned location, Direction direction, in
     if (pos != 0) {
 
        //Lock the mutex
-       pthread_mutex_lock(&mutex);
+       AcquireExclusiveLock(&lock);
 
        //Try to find this rname in the counts map
        contamination_count::iterator pos = counts.find(rname);
@@ -74,7 +71,7 @@ int ContaminationFilter::AddAlignment(unsigned location, Direction direction, in
        }
 
        //Unlock the mutex
-       pthread_mutex_unlock(&mutex);
+       ReleaseExclusiveLock(&lock);
 
     }
 
