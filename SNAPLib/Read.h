@@ -340,9 +340,9 @@ public:
 		inline ReadClippingType getClippingState() const {return clippingState;}
         inline DataBatch getBatch() { return batch; }
         inline void setBatch(DataBatch b) { batch = b; }
-        inline const char* getReadGroup() { return readGroup; }
+        inline const char* getReadGroup() const { return readGroup; }
         inline void setReadGroup(const char* rg) { readGroup = rg; }
-        inline char* getAuxiliaryData(unsigned* o_length, bool * o_isSAM)
+        inline char* getAuxiliaryData(unsigned* o_length, bool * o_isSAM) const
         {
             *o_length = auxiliaryDataLength;
             *o_isSAM = auxiliaryData && auxiliaryDataLength >= 5 && auxiliaryData[2] == ':';
@@ -533,7 +533,7 @@ private:
 //
 class ReadWithOwnMemory : public Read {
 public:
-    ReadWithOwnMemory() : Read(), dataBuffer(NULL), idBuffer(NULL), qualityBuffer(NULL) {}
+    ReadWithOwnMemory() : Read(), dataBuffer(NULL), idBuffer(NULL), qualityBuffer(NULL), auxBuffer(NULL) {}
 
     ReadWithOwnMemory(const Read &baseRead) {
         set(baseRead);
@@ -544,6 +544,7 @@ public:
         delete [] dataBuffer;
         delete [] idBuffer;
         delete [] qualityBuffer;
+        delete [] auxBuffer;
     }
 
 private:
@@ -565,10 +566,23 @@ private:
     
         init(idBuffer,baseRead.getIdLength(),dataBuffer,qualityBuffer,baseRead.getUnclippedLength());
 		clip(baseRead.getClippingState());
+
+        setReadGroup(baseRead.getReadGroup());
+        
+        unsigned auxlen;
+        bool auxsam;
+        char* aux = baseRead.getAuxiliaryData(&auxlen, &auxsam);
+        if (aux != NULL && auxlen > 0) {
+            auxBuffer = new char[auxlen];
+            memcpy(auxBuffer, aux, auxlen);
+            setAuxiliaryData(auxBuffer, auxlen);
+        } else {
+            setAuxiliaryData(NULL, 0);
+        }
     }
         
     char *idBuffer;
     char *dataBuffer;
     char *qualityBuffer;
-        
+    char *auxBuffer;
 };
