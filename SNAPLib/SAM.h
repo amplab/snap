@@ -200,13 +200,14 @@ public:
         AlignmentResult mateResult,
         unsigned mateLocation,
         Direction mateDirection,
-        unsigned *extraBasesClippedBefore);
+        unsigned *extraBasesClippedBefore,
+        unsigned *extraBasesClippedAfter);
 
 private:
     static const char * computeCigarString(const Genome * genome, LandauVishkinWithCigar * lv,
         char * cigarBuf, int cigarBufLen, char * cigarBufWithClipping, int cigarBufWithClippingLen,
-        const char * data, unsigned dataLength, unsigned basesClippedBefore, unsigned extraBasesClippedBefore, unsigned basesClippedAfter,
-        unsigned genomeLocation, Direction direction, bool useM, int * editDistance);
+        const char * data, unsigned dataLength, unsigned basesClippedBefore, unsigned extraBasesClippedBefore, unsigned basesClippedAfter, 
+        unsigned extraBasesClippedAfter, unsigned genomeLocation, Direction direction, bool useM, int * editDistance);
 
     const bool useM;
 };

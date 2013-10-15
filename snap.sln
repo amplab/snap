@@ -28,6 +28,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wc", "apps\wc\wc.vcxproj", 
 		{E620DC13-195C-41EF-B33B-8FE7DE9F8ADC} = {E620DC13-195C-41EF-B33B-8FE7DE9F8ADC}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ExtractReads", "apps\ExtractReads\ExtractReads.vcxproj", "{FD52DC05-194B-4BD8-828E-A5679777D6C8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Mixed Platforms = Debug|Mixed Platforms
@@ -98,8 +100,21 @@ Global
 		{70D9DA2A-E423-4705-BC71-0198C365A730}.Release|Mixed Platforms.Build.0 = Release|Win32
 		{70D9DA2A-E423-4705-BC71-0198C365A730}.Release|Win32.ActiveCfg = Release|x64
 		{70D9DA2A-E423-4705-BC71-0198C365A730}.Release|x64.ActiveCfg = Release|x64
+		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
+		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Debug|Mixed Platforms.Build.0 = Debug|Win32
+		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Debug|Win32.ActiveCfg = Debug|Win32
+		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Debug|Win32.Build.0 = Debug|Win32
+		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Debug|x64.ActiveCfg = Debug|x64
+		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Release|Mixed Platforms.ActiveCfg = Release|Win32
+		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Release|Mixed Platforms.Build.0 = Release|Win32
+		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Release|Win32.ActiveCfg = Release|Win32
+		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Release|Win32.Build.0 = Release|Win32
+		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Release|x64.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
 	EndGlobalSection
 EndGlobal

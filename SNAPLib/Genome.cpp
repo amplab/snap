@@ -506,7 +506,7 @@ const Genome::Piece *Genome::getPieceForRead(unsigned location, unsigned readLen
     // here by looking to see if the aligned location plus the read length crosses a piece boundary.  It also might
     // happen that it is aligned before the first piece, in which case piece will be NULL.
     //
-    if (NULL == piece || location + readLength > piece->beginningOffset + piece->length) {
+     if (NULL == piece || location + readLength > piece->beginningOffset + piece->length) {
         //
         // We should never align over the end of a chromosome, only before the beginning.  So move this into the next
         // chromosome.

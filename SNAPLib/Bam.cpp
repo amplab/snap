@@ -454,7 +454,7 @@ private:
     static int computeCigarOps(const Genome * genome, LandauVishkinWithCigar * lv,
         char * cigarBuf, int cigarBufLen,
         const char * data, unsigned dataLength, unsigned basesClippedBefore, unsigned extraBasesClippedBefore, unsigned basesClippedAfter,
-        unsigned genomeLocation, bool isRC, bool useM, int * editDistance);
+        unsigned extraBasesClippedAfter, unsigned genomeLocation, bool isRC, bool useM, int * editDistance);
 
     const bool useM;
 };
@@ -635,19 +635,21 @@ BAMFormat::writeRead(
     unsigned basesClippedBefore;
     unsigned extraBasesClippedBefore;
     unsigned basesClippedAfter;
+    unsigned extraBasesClippedAfter;
     int editDistance;
 
     if (! SAMFormat::createSAMLine(genome, lv, data, quality, MAX_READ, pieceName, pieceIndex, 
         flags, positionInPiece, mapQuality, matePieceName, matePieceIndex, matePositionInPiece, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, useM,
-        hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection, &extraBasesClippedBefore))
+        hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection, 
+        &extraBasesClippedBefore, &extraBasesClippedAfter))
     {
         return false;
     }
     if (genomeLocation != InvalidGenomeLocation) {
         cigarOps = computeCigarOps(genome, lv, (char*) cigarBuf, cigarBufSize * sizeof(_uint32),
-                                   clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter,
+                                   clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter, extraBasesClippedAfter, 
                                    genomeLocation, direction == RC, useM, &editDistance);
     }
 
@@ -772,6 +774,7 @@ BAMFormat::computeCigarOps(
     unsigned                    basesClippedBefore,
     unsigned                    extraBasesClippedBefore,
     unsigned                    basesClippedAfter,
+    unsigned                    extraBasesClippedAfter,
     unsigned                    genomeLocation,
     bool                        isRC,
 	bool						useM,
@@ -790,12 +793,12 @@ BAMFormat::computeCigarOps(
     if (NULL != reference) {
         *editDistance = lv->computeEditDistance(
                             reference,
-                            dataLength,
+                            dataLength - extraBasesClippedAfter,
                             data,
-                            dataLength,
+                            dataLength - extraBasesClippedAfter,
                             MAX_K - 1,
                             cigarBuf + 4 * ((basesClippedBefore + extraBasesClippedBefore) > 0),
-                            cigarBufLen - 4 * (((basesClippedBefore + extraBasesClippedBefore) > 0) + (basesClippedAfter > 0)),
+                            cigarBufLen - 4 * (((basesClippedBefore + extraBasesClippedBefore) > 0) + (basesClippedAfter + extraBasesClippedAfter > 0)),
 						    useM, BAM_CIGAR_OPS, &used);
     } else {
         //
@@ -820,8 +823,8 @@ BAMFormat::computeCigarOps(
             *(_uint32*)cigarBuf = ((basesClippedBefore + extraBasesClippedBefore) << 4) | BAMAlignment::CigarToCode['S'];
             used += 4;
         }
-        if (basesClippedAfter > 0) {
-            *(_uint32*)(cigarBuf + used) = (basesClippedAfter << 4) | BAMAlignment::CigarToCode['S'];
+        if (basesClippedAfter + extraBasesClippedAfter > 0) {
+            *(_uint32*)(cigarBuf + used) = ((basesClippedAfter + extraBasesClippedAfter) << 4) | BAMAlignment::CigarToCode['S'];
             used += 4;
         }
         return used / 4;

@@ -816,7 +816,8 @@ SAMFormat::createSAMLine(
     AlignmentResult mateResult,
     unsigned mateLocation,
     Direction mateDirection,
-    unsigned *extraBasesClippedBefore)
+    unsigned *extraBasesClippedBefore,
+    unsigned *extraBasesClippedAfter)
 {
     pieceName = "*";
     positionInPiece = 0;
@@ -868,6 +869,7 @@ SAMFormat::createSAMLine(
     }
 
     int editDistance = -1;
+    *extraBasesClippedAfter = 0;
     if (genomeLocation != InvalidGenomeLocation) {
         // This could be either a single hit read or a multiple hit read where we just
         // returned one location, but either way, let's print that location. We will then
@@ -877,6 +879,13 @@ SAMFormat::createSAMLine(
             flags |= SAM_REVERSE_COMPLEMENT;
         }
         const Genome::Piece *piece = genome->getPieceForRead(genomeLocation, read->getDataLength(), extraBasesClippedBefore);
+        _ASSERT(NULL != piece && piece->length > genome->getChromosomePadding());
+        if (genomeLocation + read->getDataLength() > piece->beginningOffset + piece->length - genome->getChromosomePadding()) {
+            //
+            // The read hangs off the end of the contig.  Soft clip it at the end.
+            //
+            *extraBasesClippedAfter =genomeLocation + read->getDataLength() - (piece->beginningOffset + piece->length - genome->getChromosomePadding());
+        }
         genomeLocation += *extraBasesClippedBefore;
 
         pieceName = piece->name;
@@ -998,19 +1007,21 @@ SAMFormat::writeRead(
     unsigned basesClippedBefore;
     unsigned extraBasesClippedBefore;   // Clipping added if we align before the beginning of a chromosome
     unsigned basesClippedAfter;
+    unsigned extraBasesClippedAfter;    // Clipping added if we align off the end of a chromosome
     int editDistance = -1;
 
     if (! createSAMLine(genome, lv, data, quality, MAX_READ, pieceName, pieceIndex, 
         flags, positionInPiece, mapQuality, matePieceName, matePieceIndex, matePositionInPiece, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, useM,
-        hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection, &extraBasesClippedBefore))
+        hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection, 
+        &extraBasesClippedBefore, &extraBasesClippedAfter))
     {
         return false;
     }
     if (genomeLocation != InvalidGenomeLocation) {
         cigar = computeCigarString(genome, lv, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize, 
-                                   clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter,
+                                   clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter, extraBasesClippedAfter, 
                                    genomeLocation, direction, useM, &editDistance);
     }
 
@@ -1116,6 +1127,7 @@ SAMFormat::computeCigarString(
     unsigned                    basesClippedBefore,
     unsigned                    extraBasesClippedBefore,
     unsigned                    basesClippedAfter,
+    unsigned                    extraBasesClippedAfter,
     unsigned                    genomeLocation,
     Direction                   direction,
 	bool						useM,
@@ -1133,9 +1145,9 @@ SAMFormat::computeCigarString(
     if (NULL != reference) {
         *editDistance = lv->computeEditDistance(
                             reference,
-                            dataLength,
+                            dataLength - extraBasesClippedAfter,
                             data,
-                            dataLength,
+                            dataLength - extraBasesClippedAfter,
                             MAX_K - 1,
                             cigarBuf,
                             cigarBufLen,
@@ -1164,8 +1176,8 @@ SAMFormat::computeCigarString(
         if (basesClippedBefore + extraBasesClippedBefore > 0) {
             snprintf(clipBefore, sizeof(clipBefore), "%uS", basesClippedBefore + extraBasesClippedBefore);
         }
-        if (basesClippedAfter > 0) {
-            snprintf(clipAfter, sizeof(clipAfter), "%uS", basesClippedAfter);
+        if (basesClippedAfter + extraBasesClippedAfter > 0) {
+            snprintf(clipAfter, sizeof(clipAfter), "%uS", basesClippedAfter + extraBasesClippedAfter);
         }
         snprintf(cigarBufWithClipping, cigarBufWithClippingLen, "%s%s%s", clipBefore, cigarBuf, clipAfter);
         return cigarBufWithClipping;

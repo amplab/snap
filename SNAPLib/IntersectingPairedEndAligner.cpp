@@ -410,12 +410,19 @@ IntersectingPairedEndAligner::align(
                 }
             } 
             
-            if (lastGenomeLocationForReadWithMoreHits + maxSpacing < lastGenomeLocationForReadWithFewerHits && 
+            if ((lastGenomeLocationForReadWithMoreHits + maxSpacing < lastGenomeLocationForReadWithFewerHits || outOfMoreHitsLocations) && 
                 (0 == lowestFreeScoringMateCandidate[whichSetPair] || 
                 !isWithin(scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair]-1].readWithMoreHitsGenomeLocation, lastGenomeLocationForReadWithFewerHits, maxSpacing))) {
                 //
                 // No mates for the hit on the read with fewer hits.  Skip to the next candidate.
                 //
+                if (outOfMoreHitsLocations) {
+                    //
+                    // Nothing left on the more hits side, we're done with this set pair.
+                    //
+                    break;
+                }
+
                 if (!setPair[readWithFewerHits]->getNextHitLessThanOrEqualTo(lastGenomeLocationForReadWithMoreHits + maxSpacing, &lastGenomeLocationForReadWithFewerHits, 
                                                         &lastSeedOffsetForReadWithFewerHits)) {
                     //
