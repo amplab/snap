@@ -736,8 +736,10 @@ SAMFormat::writeHeader(
             }
             _ASSERT(newline - p >= 3);
             // skip @HD lines, and also @SQ lines if header does not match index
-            if (strncmp(p, "@HD", 3) != 0 && (context.headerMatchesIndex || strncmp(p, "@SQ", 3) != 0)) {
-				hasRG |= strncmp(p, "@RG", 3) == 0;
+			hasRG |= strncmp(p, "@RG", 3) == 0;
+            if (strncmp(p, "@HD", 3) != 0 &&
+                    (context.headerMatchesIndex || strncmp(p, "@SQ", 3) != 0) &&
+                    strncmp(p, "@PG\tID:SNAP\t", 12) != 0) {
                 if (bytesConsumed + (newline - p) + 1 >= headerBufferSize) {
                     fprintf(stderr,"SAMWriter: header buffer too small\n");
                     return false;

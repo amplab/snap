@@ -283,7 +283,6 @@ SingleAlignerContext::updateStats(
     void 
 SingleAlignerContext::typeSpecificBeginIteration()
 {
-    readerContext.header = NULL;
     options->inputs[0].readHeader(readerContext);
 
     if (1 == options->nInputs) {
