@@ -462,24 +462,29 @@ void PairedAlignerContext::runIterationThread()
     size_t memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), 
                                                                 numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize);
 
+    memoryPoolSize += ChimericPairedEndAligner::getBigAllocatorReservation(index, maxReadSize, maxHits, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxDist,
+                                                    extraSearchDepth, maxCandidatePoolSize);
+
     BigAllocator *allocator = new BigAllocator(memoryPoolSize);
     
-    IntersectingPairedEndAligner *intersectingAligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
+    IntersectingPairedEndAligner *intersectingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
                                                                 maxCandidatePoolSize, allocator);
 
-    ChimericPairedEndAligner *aligner = new ChimericPairedEndAligner(
+
+    ChimericPairedEndAligner *aligner = new (allocator) ChimericPairedEndAligner(
         index,
         maxReadSize,
         maxHits,
         maxDist,
         numSeedsFromCommandLine,
         seedCoverage,
-        minSpacing,
-        maxSpacing,
         forceSpacing,
         extraSearchDepth,
-        intersectingAligner);
+        intersectingAligner,
+        allocator);
+
+    allocator->checkCanaries();
 
     ReadWriter *readWriter = this->readWriter;
 
@@ -530,7 +535,7 @@ void PairedAlignerContext::runIterationThread()
             result.status[0] = result.status[1] = NotFound;
             result.location[0] = result.location[1] = InvalidGenomeLocation;
         }
-#if 1       // cheese
+#if 0       // cheese
         if (result.score[0] + result.score[1] >= 5) {
             double divisor = __max(1,((result.score[0] + result.score[1]) *2.0) / 5.0);
             if (result.mapq[0] < 50) {
@@ -549,7 +554,9 @@ void PairedAlignerContext::runIterationThread()
 
     stats->lvCalls = aligner->getLocationsScored();
 
-    delete aligner;
+    allocator->checkCanaries();
+
+    aligner->~ChimericPairedEndAligner();
     delete supplier;
 
     intersectingAligner->~IntersectingPairedEndAligner();

@@ -178,7 +178,6 @@ SingleAlignerContext::runIterationThread()
             stats,
             allocator);
 
-    allocator->assertAllMemoryUsed();
     allocator->checkCanaries();
 
     aligner->setExplorePopularSeeds(options->explorePopularSeeds);

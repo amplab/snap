@@ -42,7 +42,6 @@ AlignerOptions::AlignerOptions(
     bindToProcessors(false),
     ignoreMismatchedIDs(false),
     outputFileTemplate(NULL),
-    doAlignerPrefetch(false),
     clipping(ClipBack),
     sortOutput(false),
     noIndex(false),

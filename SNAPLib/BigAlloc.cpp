@@ -396,7 +396,7 @@ bool BigCommit(
 
 #endif /* _MSC_VER */
 
-BigAllocator::BigAllocator(size_t i_maxMemory) : maxMemory(i_maxMemory)
+BigAllocator::BigAllocator(size_t i_maxMemory, size_t i_allocationGranularity) : maxMemory(i_maxMemory), allocationGranularity(i_allocationGranularity)
 {
 #if     _DEBUG
     maxMemory += maxCanaries * sizeof(unsigned);
@@ -423,7 +423,14 @@ BigAllocator::~BigAllocator()
 void *
 BigAllocator::allocate(size_t amountToAllocate)
 {
-    _ASSERT(allocPointer + amountToAllocate <= basePointer + maxMemory);
+    //
+    // Round up to the allocation granularity.
+    //
+    if ((size_t)allocPointer % allocationGranularity != 0) {
+        allocPointer = (char *)((size_t)allocPointer + allocationGranularity - (size_t)allocPointer % allocationGranularity);
+        _ASSERT((size_t)allocPointer % allocationGranularity == 0);
+    }
+
     if (allocPointer + amountToAllocate > basePointer + maxMemory) {
         fprintf(stderr, "BigAllocator: allocating too much memory, %lld > %lld\n", allocPointer + amountToAllocate  - basePointer , maxMemory);
         soft_exit(1);
@@ -443,12 +450,7 @@ BigAllocator::allocate(size_t amountToAllocate)
 #endif  // DEBUG
     return retVal;
 }
-    void 
-BigAllocator::assertAllMemoryUsed()
-{
-    _ASSERT(allocPointer == basePointer + maxMemory - (maxCanaries - nCanaries) * sizeof(unsigned));
-}
-
+ 
 #if     _DEBUG
     void
 BigAllocator::checkCanaries()
@@ -467,8 +469,8 @@ BigAllocator::checkCanaries()
 
     void *
 CountingBigAllocator::allocate(size_t sizeToAllocate)
-{
-    size += sizeToAllocate;
+{            
+    size += sizeToAllocate + allocationGranularity - 1; // Add in the max roundoff
 
     Allocation *allocation = new Allocation;
     allocation->next = allocations;

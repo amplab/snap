@@ -69,7 +69,6 @@ struct AlignerOptions : public AbstractOptions
     bool                bindToProcessors;
     bool                ignoreMismatchedIDs;
     const char         *outputFileTemplate;
-    bool                doAlignerPrefetch;
     int                 nInputs;
     SNAPInput          *inputs;
     ReadClippingType    clipping;

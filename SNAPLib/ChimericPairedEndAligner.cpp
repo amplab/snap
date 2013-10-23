@@ -44,20 +44,33 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         unsigned            maxHits,
         unsigned            maxK,
         unsigned            maxSeedsFromCommandLine,
-        double              maxSeedCoverage,
-        unsigned            minSpacing,                // Minimum distance to allow between the two ends.
-        unsigned            maxSpacing,                // Maximum distance to allow between the two ends.
+        double              seedCoverage,
         bool                forceSpacing_,
         unsigned            extraSearchDepth,
-        PairedEndAligner    *underlyingPairedEndAligner_)
- :  underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_),
-    lv(0), reverseLV(0)
+        PairedEndAligner    *underlyingPairedEndAligner_,
+        BigAllocator        *allocator)
+ :  underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), lv(0), reverseLV(0)
 {
     // Create single-end aligners.
-    singleAligner = new BaseAligner(index, maxHits, maxK, maxReadSize,
-                                    maxSeedsFromCommandLine,  maxSeedCoverage, extraSearchDepth, &lv, &reverseLV);
-
+    singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
+                                    maxSeedsFromCommandLine,  seedCoverage, extraSearchDepth, &lv, &reverseLV, NULL, allocator);
+    
     underlyingPairedEndAligner->setLandauVishkin(&lv, &reverseLV);
+}
+
+    size_t 
+ChimericPairedEndAligner::getBigAllocatorReservation(
+        GenomeIndex *   index, 
+        unsigned        maxReadSize, 
+        unsigned        maxHits, 
+        unsigned        seedLen, 
+        unsigned        maxSeedsFromCommandLine, 
+        double          seedCoverage,
+        unsigned        maxEditDistanceToConsider, 
+        unsigned        maxExtraSearchDepth, 
+        unsigned        maxCandidatePoolSize)
+{
+    return BaseAligner::getBigAllocatorReservation(false, maxHits, maxReadSize, seedLen, maxSeedsFromCommandLine, seedCoverage) + sizeof(ChimericPairedEndAligner);
 }
 
 

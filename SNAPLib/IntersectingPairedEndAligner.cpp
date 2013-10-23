@@ -90,7 +90,7 @@ IntersectingPairedEndAligner::getBigAllocatorReservation(GenomeIndex * index, un
     }
     CountingBigAllocator countingAllocator;
     {
-        IntersectingPairedEndAligner aligner; // This has to be in a nested scope so it's destructor is called before that of the countingAllocator
+        IntersectingPairedEndAligner aligner; // This has to be in a nested scope so its destructor is called before that of the countingAllocator
         aligner.index = index;
 
         aligner.allocateDynamicMemory(&countingAllocator, maxReadSize, maxBigHitsToConsider, maxSeedsToUse, maxEditDistanceToConsider, maxExtraSearchDepth, maxCandidatePoolSize);
@@ -111,19 +111,9 @@ IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, uns
         for (Direction dir = 0; dir < NUM_DIRECTIONS; dir++) {
             reversedRead[whichRead][dir] = (char *)allocator->allocate(maxReadSize);
             hashTableHitSets[whichRead][dir] =(HashTableHitSet *)allocator->allocate(sizeof(HashTableHitSet)); /*new HashTableHitSet();*/
-            hashTableHitSets[whichRead][dir]->firstInit(maxSeedsToUse, maxEditDistanceToConsider);
+            hashTableHitSets[whichRead][dir]->firstInit(maxSeedsToUse, maxEditDistanceToConsider, allocator);
         }
     }
-
-#if 0
-
-
-    for (int i = 0; i < NUM_SET_PAIRS; i++) {
-        hitLocations[i] = new(allocator) HitLocationRingBuffer(maxEditDistanceToConsider * 2 + 2);      // *2 is for before & after, +2 is just to make sure the ring buffer tail doesn't overrun the head
-        mateHitLocations[i] = new(allocator) HitLocationRingBuffer(2 * (maxSpacing + 1) + 2);  // Likewise.
-    }
-
-#endif // 0
 
     scoringCandidatePoolSize = min(maxCandidatePoolSize, maxBigHitsToConsider * maxSeedsToUse * NUM_READS_PER_PAIR);
 
@@ -849,13 +839,14 @@ IntersectingPairedEndAligner::scoreLocation(
 }
 
     void
- IntersectingPairedEndAligner::HashTableHitSet::firstInit(unsigned maxSeeds_, unsigned maxMergeDistance_) 
+ IntersectingPairedEndAligner::HashTableHitSet::firstInit(unsigned maxSeeds_, unsigned maxMergeDistance_, BigAllocator *allocator) 
  {
     maxSeeds = maxSeeds_;
     maxMergeDistance = maxMergeDistance_;
     nLookupsUsed = 0;
-    lookups = new HashTableLookup[maxSeeds];
-    disjointHitSets = new DisjointHitSet[maxSeeds];
+    lookups = (HashTableLookup *)allocator->allocate(sizeof(HashTableLookup) * maxSeeds);
+    liveLookups = (unsigned *)allocator->allocate(sizeof(*liveLookups) * maxSeeds);
+    disjointHitSets = (DisjointHitSet *)allocator->allocate(sizeof(DisjointHitSet) * maxSeeds);
  }
     void 
 IntersectingPairedEndAligner::HashTableHitSet::init()
@@ -1224,6 +1215,96 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(unsig
             lookup = lookup->nextLookupForCurrentBinarySearch;
         }
     } // For ever
+#elif   0
+    //
+    // Version that interleaves the steps in each search so that it can launch prefetches farther ahead.  Essentially just the
+    // the simple version with the outer loops reversed.
+    //
+    bool anyFound = false;
+    unsigned bestOffsetFound = 0;
+    unsigned nLiveLookups = 0;
+    
+    //
+    // The state of the binary search is stored in each lookup object.  Initialize them, and kick off prefetches
+    // for each of their first locations to be tested.
+    //
+    for (unsigned i = 0; i < nLookupsUsed; i++) {
+        lookups[i].limit[0] = (int)lookups[i].currentHitForIntersection;
+        lookups[i].limit[1] = (int)lookups[i].nHits - 1;
+
+        if (lookups[i].limit[0] <= lookups[i].limit[1]) {
+            liveLookups[nLiveLookups] = i;
+            nLiveLookups++;
+
+            if (doAlignerPrefetch) {
+                _mm_prefetch((const char *)&lookups[i].hits[(lookups[i].limit[0] + lookups[i].limit[1])/2-1], _MM_HINT_T2);
+            }
+        }
+    }
+
+
+    while (nLiveLookups > 0) {
+        //
+        // For each lookup, take one step of the binary search.
+        //
+        for (unsigned i = 0; i < nLiveLookups; i++) {
+            HashTableLookup *lookup = &lookups[liveLookups[i]];
+            _ASSERT(lookup->limit[0] <= lookup->limit[1]);  // else it shoulnd't be live
+
+            //
+            // We could store these in the lookup object rather than recomputing them every time.
+            //
+            int probe = (lookup->limit[0] + lookup->limit[1]) / 2;
+            unsigned maxGenomeOffsetToFindThisSeed = maxGenomeOffsetToFind + lookup->seedOffset; 
+            //
+            // Recall that the hit sets are sorted from largest to smallest, so the strange looking logic is actually right.
+            // We're evaluating the expression "lookup->hits[probe] <= maxGenomeOffsetToFindThisSeed && (probe == 0 || lookup->hits[probe-1] > maxGenomeOffsetToFindThisSeed)"
+            // It's written in this strange way just so the profile tool will show us where the time's going.
+            //
+            unsigned clause1 = lookup->hits[probe] <= maxGenomeOffsetToFindThisSeed;
+            unsigned clause2 = probe == 0;
+
+            if (clause1 && (clause2 || lookup->hits[probe-1] > maxGenomeOffsetToFindThisSeed)) {
+                //
+                // Done with this lookup.
+                //
+                if (lookup->hits[probe] - lookup->seedOffset >  bestOffsetFound) {
+					anyFound = true;
+                    mostRecentLocationReturned = *actualGenomeOffsetFound = bestOffsetFound = lookup->hits[probe] - lookup->seedOffset;
+                    *seedOffsetFound = lookup->seedOffset;
+                }
+                lookup->currentHitForIntersection = probe;
+ 
+                //
+                // Remove us from liveLookups by copying the last one into our spot and reducing the count.
+                //
+                liveLookups[i] = liveLookups[nLiveLookups-1];
+                nLiveLookups--;
+                i--;    // So we don't skip the one we just copied.
+            } else {
+                if (lookup->hits[probe] > maxGenomeOffsetToFindThisSeed) {   // Recode this without the if to avoid the hard-to-predict branch.
+                    lookup->limit[0] = probe + 1;
+                } else {
+                    lookup->limit[1] = probe - 1;
+                }
+
+                if (lookup->limit[0] > lookup->limit[1]) {
+                    //
+                    // No hit here, done with this lookup.
+                    //
+                    // Remove us from liveLookups by copying the last one into our spot and reducing the count.
+                    //
+                    liveLookups[i] = liveLookups[nLiveLookups-1];
+                    nLiveLookups--;
+                    i--;    // So we don't skip the one we just copied.
+                    lookup->currentHitForIntersection = lookup->nHits;
+                } else if (doAlignerPrefetch) {
+                    _mm_prefetch((const char *)&lookup->hits[(lookup->limit[0] + lookup->limit[1]) / 2 - 1], _MM_HINT_T2);   // -1 is because we look one before probe in the test-for-done case.
+                }
+            } // If this was the right candidate for this lookup.
+         }
+    } 
+  
 #else   // The traditional version
     bool anyFound = false;
     unsigned bestOffsetFound = 0;
@@ -1235,9 +1316,9 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(unsig
         unsigned maxGenomeOffsetToFindThisSeed = maxGenomeOffsetToFind + lookups[i].seedOffset;
         while (limit[0] <= limit[1]) {
             unsigned probe = (limit[0] + limit[1]) / 2;
-            if (doAlignerPrefetch) {
+            if (doAlignerPrefetch) { // not clear this helps.  We're probably not far enough ahead.
                 _mm_prefetch((const char *)&lookups[i].hits[(limit[0] + probe) / 2 - 1], _MM_HINT_T2);
-                _mm_prefetch((const char *)&lookups[i].hits[(limit[1] + probe) / 2 - 1], _MM_HINT_T2);
+                _mm_prefetch((const char *)&lookups[i].hits[(limit[1] + probe) / 2 + 1], _MM_HINT_T2);
             }
             //
             // Recall that the hit sets are sorted from largest to smallest, so the strange looking logic is actually right.
