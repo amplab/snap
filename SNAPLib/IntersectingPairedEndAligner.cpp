@@ -1237,73 +1237,85 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(unsig
             nLiveLookups++;
 
             if (doAlignerPrefetch) {
-                _mm_prefetch((const char *)&lookups[i].hits[(lookups[i].limit[0] + lookups[i].limit[1])/2-1], _MM_HINT_T2);
+                _mm_prefetch((const char *)&lookups[i].hits[(lookups[i].limit[0] + lookups[i].limit[1])/2-1], _MM_HINT_T1);
             }
         }
     }
 
+    if (nLookupsUsed == 0) {
+        return false;
+    }
 
-    while (nLiveLookups > 0) {
+
+    unsigned i = 0;
+    for (;;) {
+        HashTableLookup *lookup = &lookups[liveLookups[i]];
+        _ASSERT(lookup->limit[0] <= lookup->limit[1]);  // else it shoulnd't be live
+
         //
-        // For each lookup, take one step of the binary search.
+        // We could store these in the lookup object rather than recomputing them every time.
         //
-        for (unsigned i = 0; i < nLiveLookups; i++) {
-            HashTableLookup *lookup = &lookups[liveLookups[i]];
-            _ASSERT(lookup->limit[0] <= lookup->limit[1]);  // else it shoulnd't be live
+        int probe = (lookup->limit[0] + lookup->limit[1]) / 2;
+        unsigned maxGenomeOffsetToFindThisSeed = maxGenomeOffsetToFind + lookup->seedOffset; 
+        //
+        // Recall that the hit sets are sorted from largest to smallest, so the strange looking logic is actually right.
+        // We're evaluating the expression "lookup->hits[probe] <= maxGenomeOffsetToFindThisSeed && (probe == 0 || lookup->hits[probe-1] > maxGenomeOffsetToFindThisSeed)"
+        // It's written in this strange way just so the profile tool will show us where the time's going.
+        //
+        unsigned clause1 = lookup->hits[probe] <= maxGenomeOffsetToFindThisSeed;
+        unsigned clause2 = probe == 0;
 
+        if (clause1 && (clause2 || lookup->hits[probe-1] > maxGenomeOffsetToFindThisSeed)) {
             //
-            // We could store these in the lookup object rather than recomputing them every time.
+            // Done with this lookup.
             //
-            int probe = (lookup->limit[0] + lookup->limit[1]) / 2;
-            unsigned maxGenomeOffsetToFindThisSeed = maxGenomeOffsetToFind + lookup->seedOffset; 
-            //
-            // Recall that the hit sets are sorted from largest to smallest, so the strange looking logic is actually right.
-            // We're evaluating the expression "lookup->hits[probe] <= maxGenomeOffsetToFindThisSeed && (probe == 0 || lookup->hits[probe-1] > maxGenomeOffsetToFindThisSeed)"
-            // It's written in this strange way just so the profile tool will show us where the time's going.
-            //
-            unsigned clause1 = lookup->hits[probe] <= maxGenomeOffsetToFindThisSeed;
-            unsigned clause2 = probe == 0;
-
-            if (clause1 && (clause2 || lookup->hits[probe-1] > maxGenomeOffsetToFindThisSeed)) {
-                //
-                // Done with this lookup.
-                //
-                if (lookup->hits[probe] - lookup->seedOffset >  bestOffsetFound) {
-					anyFound = true;
-                    mostRecentLocationReturned = *actualGenomeOffsetFound = bestOffsetFound = lookup->hits[probe] - lookup->seedOffset;
-                    *seedOffsetFound = lookup->seedOffset;
-                }
-                lookup->currentHitForIntersection = probe;
+            if (lookup->hits[probe] - lookup->seedOffset >  bestOffsetFound) {
+				anyFound = true;
+                mostRecentLocationReturned = *actualGenomeOffsetFound = bestOffsetFound = lookup->hits[probe] - lookup->seedOffset;
+                *seedOffsetFound = lookup->seedOffset;
+            }
+            lookup->currentHitForIntersection = probe;
  
+            //
+            // Remove us from liveLookups by copying the last one into our spot and reducing the count.
+            //
+            liveLookups[i] = liveLookups[nLiveLookups-1];
+
+            nLiveLookups--;
+            if (nLiveLookups == 0) {
+                break;
+            }
+            i = i % nLiveLookups;
+         } else {
+            if (lookup->hits[probe] > maxGenomeOffsetToFindThisSeed) {   // Recode this without the if to avoid the hard-to-predict branch.
+                lookup->limit[0] = probe + 1;
+            } else {
+                lookup->limit[1] = probe - 1;
+            }
+
+            if (lookup->limit[0] > lookup->limit[1]) {
+                //
+                // No hit here, done with this lookup.
                 //
                 // Remove us from liveLookups by copying the last one into our spot and reducing the count.
                 //
+                lookup->currentHitForIntersection = lookup->nHits;
+
                 liveLookups[i] = liveLookups[nLiveLookups-1];
                 nLiveLookups--;
-                i--;    // So we don't skip the one we just copied.
-            } else {
-                if (lookup->hits[probe] > maxGenomeOffsetToFindThisSeed) {   // Recode this without the if to avoid the hard-to-predict branch.
-                    lookup->limit[0] = probe + 1;
-                } else {
-                    lookup->limit[1] = probe - 1;
+                if (nLiveLookups == 0) {
+                    break;
                 }
-
-                if (lookup->limit[0] > lookup->limit[1]) {
-                    //
-                    // No hit here, done with this lookup.
-                    //
-                    // Remove us from liveLookups by copying the last one into our spot and reducing the count.
-                    //
-                    liveLookups[i] = liveLookups[nLiveLookups-1];
-                    nLiveLookups--;
-                    i--;    // So we don't skip the one we just copied.
-                    lookup->currentHitForIntersection = lookup->nHits;
-                } else if (doAlignerPrefetch) {
+                i = i % nLiveLookups;
+ 
+            } else {
+                if (doAlignerPrefetch) {
                     _mm_prefetch((const char *)&lookup->hits[(lookup->limit[0] + lookup->limit[1]) / 2 - 1], _MM_HINT_T2);   // -1 is because we look one before probe in the test-for-done case.
                 }
-            } // If this was the right candidate for this lookup.
-         }
-    } 
+                i = (i + 1) % nLiveLookups;
+            }
+        } // If this was the right candidate for this lookup.
+     } 
   
 #else   // The traditional version
     bool anyFound = false;
