@@ -94,8 +94,8 @@ int main(int argc, char * argv[])
     _int64 emittedReads = 0;
     while (readSupplier->getNextRead()) {
         totalReads++;
-        const Genome::Piece *piece = genome->getPieceAtLocation(genomeLocation);
-        if (NULL != piece && !strcmp(piece->name, argv[4])) {
+        const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
+        if (NULL != contig && !strcmp(contig->name, argv[4])) {
             emittedReads++;
             writer->writeRead(&read, alignmentResult, mapQ, genomeLocation, isRC ? RC : FORWARD);
         }

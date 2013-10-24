@@ -769,20 +769,20 @@ IntersectingPairedEndAligner::scoreLocation(
     const char *data = genome->getSubstring(genomeLocation, genomeDataLength);
     if (NULL == data) {
         //
-        // We're up against the end of a chromosome.  Reduce the extra space enough that it isn't too
+        // We're up against the end of a contig.  Reduce the extra space enough that it isn't too
         // long.  We're willing to reduce it to less than the length of a read, because the read could
-        // but up against the end of the chromosome and have insertions in it.
+        // butt up against the end of the contig and have insertions in it.
         //
-        const Genome::Piece *piece = genome->getPieceAtLocation(genomeLocation);
+        const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
                     
         unsigned endOffset;
         if (genomeLocation + readDataLength + MAX_K >= genome->getCountOfBases()) {
             endOffset = genome->getCountOfBases();
         } else {
-            const Genome::Piece *nextPiece = genome->getPieceAtLocation(genomeLocation + readDataLength + MAX_K);
-            _ASSERT(NULL != piece && piece->beginningOffset <= genomeLocation && piece != nextPiece);
+            const Genome::Contig *nextContig = genome->getContigAtLocation(genomeLocation + readDataLength + MAX_K);
+            _ASSERT(NULL != contig && contig->beginningOffset <= genomeLocation && contig != nextContig);
 
-            endOffset = nextPiece->beginningOffset;
+            endOffset = nextContig->beginningOffset;
         }
         genomeDataLength = endOffset - genomeLocation - 1;
         if (genomeDataLength >= readDataLength - MAX_K) {
@@ -1031,7 +1031,7 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(unsig
     //
     // This code does a binary search over the lookups in this hit set to find the greatest location that's not larger than
     // maxGenomeOffsetToFind in any of the sets.  It is written in a very convoluted way because it's the performance
-    // critical piece of the inner loop of SNAP's paired-end aligner.  The code is designed to do two things: first, to avoid
+    // critical contig of the inner loop of SNAP's paired-end aligner.  The code is designed to do two things: first, to avoid
     // branch predictor misses (which flush the instruction pipeline and take a very long time), and second to avoid
     // L2 cache misses looking into the hit sets.
     //
@@ -1098,7 +1098,7 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(unsig
     };
 
     //
-    // Check to see if we should remove the lookup header because it has no useful entries.  This unfortunate piece of
+    // Check to see if we should remove the lookup header because it has no useful entries.  This unfortunate contig of
     // code is necesary because I chose to have a linked list with no header element in order to avoid having to test
     // for the header in the main loop below.
     //

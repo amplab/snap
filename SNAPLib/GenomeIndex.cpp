@@ -980,7 +980,7 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
             }
             const char *bases = genome->getSubstring(i,seedLen);
             //
-            // Check it for NULL, because Genome won't return strings that cross piece (chromosome) boundaries.
+            // Check it for NULL, because Genome won't return strings that cross contig boundaries.
             //
             if (NULL == bases) {
                 continue;
@@ -1125,7 +1125,7 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
 
             const char *bases = context->genome->getSubstring(i, context->seedLen);
             //
-            // Check it for NULL, because Genome won't return strings that cross piece (chromosome) boundaries.
+            // Check it for NULL, because Genome won't return strings that cross contig boundaries.
             //
             if (NULL == bases) {
                 continue;
@@ -1256,7 +1256,7 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
     for (unsigned genomeLocation = context->genomeChunkStart; genomeLocation < context->genomeChunkEnd; genomeLocation++) {
         const char *bases = genome->getSubstring(genomeLocation, seedLen);
         //
-        // Check it for NULL, because Genome won't return strings that cross piece (chromosome) boundaries.
+        // Check it for NULL, because Genome won't return strings that cross contig boundaries.
         //
         if (NULL == bases) {
             noBaseAvailable++;

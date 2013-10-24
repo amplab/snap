@@ -113,11 +113,11 @@ protected:
         static bool parseLine(char *line, char *endOfBuffer, char *result[],
             size_t *lineLength, size_t fieldLengths[]);
 
-        static void parsePieceName(const Genome* genome, char* pieceName,
-            size_t pieceNameBufferSize, unsigned* o_offsetOfPiece, int* o_indexOfPiece,
+        static void parseContigName(const Genome* genome, char* contigName,
+            size_t contigNameBufferSize, unsigned* o_offsetOfContig, int* o_indexOfContig,
             char* field[], size_t fieldLength[], unsigned rfield = RNAME);
 
-        static unsigned parseLocation(unsigned offsetOfPiece, char* field[], size_t fieldLength[], unsigned rfield = RNAME, unsigned posfield = POS);
+        static unsigned parseLocation(unsigned offsetOfContig, char* field[], size_t fieldLength[], unsigned rfield = RNAME, unsigned posfield = POS);
 
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
                         unsigned *genomeLocation, Direction *direction, unsigned *mapQ, unsigned *flag, bool ignoreEndOfRange, const char **cigar);
@@ -173,14 +173,14 @@ public:
         char* data,
         char* quality,
         unsigned dataSize,
-        const char*& pieceName,
-        int& pieceIndex,
+        const char*& contigName,
+        int& contigIndex,
         int& flags,
-        unsigned& positionInPiece,
+        unsigned& positionInContig,
         int& mapQuality,
-        const char*& matePieceName,
-        int& matePieceIndex,
-        unsigned& matePositionInPiece,
+        const char*& mateContigName,
+        int& mateContigIndex,
+        unsigned& matePositionInContig,
         _int64& templateLength,
         unsigned& fullLength,
         const char*& clippedData,

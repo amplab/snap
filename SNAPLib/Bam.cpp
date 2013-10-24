@@ -369,7 +369,7 @@ BAMReader::getReadFromLine(
     _ASSERT((size_t)(endOfBuffer - line) >= bam->size());
     
     if (NULL != genomeLocation) {
-        _ASSERT(-1 <= bam->refID && bam->refID < (int)genome->getNumPieces());
+        _ASSERT(-1 <= bam->refID && bam->refID < (int)genome->getNumContigs());
         *genomeLocation = bam->getLocation(genome);
     }
 
@@ -479,16 +479,16 @@ BAMFormat::getSortInfo(
 	int* o_pos) const
 {
     BAMAlignment* bam = (BAMAlignment*) buffer;
-    _ASSERT((size_t) bytes >= sizeof(BAMAlignment) && bam->size() <= (size_t) bytes && bam->refID < genome->getNumPieces());
+    _ASSERT((size_t) bytes >= sizeof(BAMAlignment) && bam->size() <= (size_t) bytes && bam->refID < genome->getNumContigs());
 	if (o_location != NULL) {
-		if (bam->refID < 0 || bam->refID >= genome->getNumPieces() || bam->pos < 0) {
-			if (bam->next_refID < 0 || bam->next_refID > genome->getNumPieces() || bam->next_pos < 0) {
+		if (bam->refID < 0 || bam->refID >= genome->getNumContigs() || bam->pos < 0) {
+			if (bam->next_refID < 0 || bam->next_refID > genome->getNumContigs() || bam->next_pos < 0) {
 				*o_location = UINT32_MAX;
 			} else {
-				*o_location = genome->getPieces()[bam->next_refID].beginningOffset + bam->next_pos;
+				*o_location = genome->getContigs()[bam->next_refID].beginningOffset + bam->next_pos;
 			}
 		} else {
-			*o_location = genome->getPieces()[bam->refID].beginningOffset + bam->pos;
+			*o_location = genome->getContigs()[bam->refID].beginningOffset + bam->pos;
 		}
 	}
 	if (o_readBytes != NULL) {
@@ -565,24 +565,24 @@ BAMFormat::writeHeader(
     bamHeader->l_text = (int)samHeaderSize;
     cursor = BAMHeader::size((int)samHeaderSize);
 
-    // Write a RefSeq record for each chromosome / piece in the genome
+    // Write a RefSeq record for each chromosome / contig in the genome
     // todo: handle null genome index case - reparse header & translate into BAM
 	if (context.genome != NULL) {
-		const Genome::Piece *pieces = context.genome->getPieces();
-		int numPieces = context.genome->getNumPieces();
-		bamHeader->n_ref() = numPieces;
+		const Genome::Contig *contigs = context.genome->getContigs();
+		int numContigs = context.genome->getNumContigs();
+		bamHeader->n_ref() = numContigs;
 		BAMHeaderRefSeq* refseq = bamHeader->firstRefSeq();
 		unsigned genomeLen = context.genome->getCountOfBases();
-		for (int i = 0; i < numPieces; i++) {
-			int len = (int)strlen(pieces[i].name) + 1;
+		for (int i = 0; i < numContigs; i++) {
+			int len = (int)strlen(contigs[i].name) + 1;
 			cursor += BAMHeaderRefSeq::size(len);
 			if (cursor > headerBufferSize) {
 				return false;
 			}
 			refseq->l_name = len;
-			memcpy(refseq->name(), pieces[i].name, len);
-			unsigned start = pieces[i].beginningOffset;
-            unsigned end = ((i + 1 < numPieces) ? pieces[i+1].beginningOffset : genomeLen) - context.genome->getChromosomePadding();
+			memcpy(refseq->name(), contigs[i].name, len);
+			unsigned start = contigs[i].beginningOffset;
+            unsigned end = ((i + 1 < numContigs) ? contigs[i+1].beginningOffset : genomeLen) - context.genome->getChromosomePadding();
             refseq->l_ref() = end - start;
 			refseq = refseq->next();
 			_ASSERT((char*) refseq - header == cursor);
@@ -617,13 +617,13 @@ BAMFormat::writeRead(
     _uint32 cigarBuf[cigarBufSize];
 
     int flags = 0;
-    const char *pieceName = "*";
-    int pieceIndex = -1;
-    unsigned positionInPiece = 0;
+    const char *contigName = "*";
+    int contigIndex = -1;
+    unsigned positionInContig = 0;
     int cigarOps = 0;
-    const char *matePieceName = "*";
-    int matePieceIndex = -1;
-    unsigned matePositionInPiece = 0;
+    const char *mateContigName = "*";
+    int mateContigIndex = -1;
+    unsigned matePositionInContig = 0;
     _int64 templateLength = 0;
 
     char data[MAX_READ];
@@ -638,8 +638,8 @@ BAMFormat::writeRead(
     unsigned extraBasesClippedAfter;
     int editDistance;
 
-    if (! SAMFormat::createSAMLine(genome, lv, data, quality, MAX_READ, pieceName, pieceIndex, 
-        flags, positionInPiece, mapQuality, matePieceName, matePieceIndex, matePositionInPiece, templateLength,
+    if (! SAMFormat::createSAMLine(genome, lv, data, quality, MAX_READ, contigName, contigIndex, 
+        flags, positionInContig, mapQuality, mateContigName, mateContigIndex, matePositionInContig, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, useM,
         hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection, 
@@ -692,8 +692,8 @@ BAMFormat::writeRead(
     }
     BAMAlignment* bam = (BAMAlignment*) buffer;
     bam->block_size = (int)bamSize - 4;
-    bam->refID = pieceIndex;
-    bam->pos = positionInPiece - 1;
+    bam->refID = contigIndex;
+    bam->pos = positionInContig - 1;
 
     if (qnameLen > 254) {
         fprintf(stderr, "BAM format: QNAME field must be less than 254 characters long, instead it's %lld\n", qnameLen);
@@ -705,16 +705,16 @@ BAMFormat::writeRead(
     for (int i = 0; i < cigarOps; i++) {
         refLength += BAMAlignment::CigarCodeToRefBase[cigarBuf[i] & 0xf] * (cigarBuf[i] >> 4);
     }
-    bam->bin = genomeLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(positionInPiece-1, positionInPiece-1 + refLength) :
+    bam->bin = genomeLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(positionInContig-1, positionInContig-1 + refLength) :
 		// unmapped is at mate's position, length 1
-		mateLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(matePositionInPiece-1, matePositionInPiece) :
+		mateLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(matePositionInContig-1, matePositionInContig) :
 		// otherwise at -1, length 1
 		BAMAlignment::reg2bin(-1, 0);
     bam->n_cigar_op = cigarOps;
     bam->FLAG = flags;
     bam->l_seq = fullLength;
-    bam->next_refID = matePieceIndex;
-    bam->next_pos = matePositionInPiece - 1;
+    bam->next_refID = mateContigIndex;
+    bam->next_pos = matePositionInContig - 1;
     bam->tlen = (int)templateLength;
     memcpy(bam->read_name(), read->getId(), qnameLen);
     bam->read_name()[qnameLen] = 0;
@@ -1133,7 +1133,7 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                 }
                 offset = runOffset + (*i & RunOffset);
                 BAMAlignment* record = getRead(offset);
-                _ASSERT(record->refID >= -1 && record->refID < genome->getNumPieces()); // simple sanity check
+                _ASSERT(record->refID >= -1 && record->refID < genome->getNumContigs()); // simple sanity check
                 // skip adjacent half-mapped pairs, they're not really runs
                 if (i + 1 < run.end() && readIdsMatch(record->read_name(), getRead(runOffset + (*(i+1) & RunOffset))->read_name())) {
                     i++;
@@ -1329,7 +1329,7 @@ public:
         lastRefId(-1),
         lastBin(0), binStart(0), lastBamEnd(0)
     {
-        refs = genome ? new RefInfo[genome->getNumPieces()] : NULL;
+        refs = genome ? new RefInfo[genome->getNumContigs()] : NULL;
         readCounts[0] = readCounts[1] = 0;
     }
     
@@ -1435,10 +1435,10 @@ BAMIndexSupplier::onClosed(
         addChunk(lastRefId, BAMAlignment::BAM_EXTRA_BIN, readCounts[0], readCounts[1]);
     }
     // extend interval indices to length of pices
-    for (int i = 0; i < genome->getNumPieces(); i++) {
+    for (int i = 0; i < genome->getNumContigs(); i++) {
         RefInfo* ref = getRefInfo(i);
-        int end = i + 1 < genome->getNumPieces() ? genome->getPieces()[i + 1].beginningOffset : genome->getCountOfBases();
-        int last = (end - genome->getPieces()[i].beginningOffset - 1) / 16384;
+        int end = i + 1 < genome->getNumContigs() ? genome->getContigs()[i + 1].beginningOffset : genome->getCountOfBases();
+        int last = (end - genome->getContigs()[i].beginningOffset - 1) / 16384;
         for (int j = ref->intervals.size(); j <= last; j++) {
             ref->intervals.push_back(0);
         }
@@ -1448,7 +1448,7 @@ BAMIndexSupplier::onClosed(
     FILE* index = fopen(indexFileName, "wb");
     char magic[4] = {'B', 'A', 'I', 1};
     fwrite(magic, sizeof(magic), 1, index);
-    _int32 n_ref = genome->getNumPieces();
+    _int32 n_ref = genome->getNumContigs();
     fwrite(&n_ref, sizeof(n_ref), 1, index);
 
     for (int i = 0; i < n_ref; i++) {
@@ -1495,7 +1495,7 @@ BAMIndexSupplier::onClosed(
 BAMIndexSupplier::getRefInfo(
     int refId)
 {
-    return refId >= 0 && refId < genome->getNumPieces() ? &refs[refId] : NULL;
+    return refId >= 0 && refId < genome->getNumContigs() ? &refs[refId] : NULL;
 }
 
     void

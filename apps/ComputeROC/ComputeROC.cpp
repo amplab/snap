@@ -136,9 +136,9 @@ WorkerThreadMain(void *param)
                     read.becomeRC();
                 }
                             
-                const Genome::Piece *piece = genome->getPieceAtLocation(genomeLocation);
-                if (NULL == piece) {
-                    fprintf(stderr,"couldn't find genome piece for offset %u\n",genomeLocation);
+                const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
+                if (NULL == contig) {
+                    fprintf(stderr,"couldn't find genome contig for offset %u\n",genomeLocation);
                     exit(1);
                 }
                 unsigned offsetA, offsetB;
@@ -217,7 +217,7 @@ WorkerThreadMain(void *param)
                                     offsetB -= read.getDataLength();
                                 }
 
-                                if (!genome->getOffsetOfPiece(correctChromosomeName, &offsetOfCorrectChromosome)) {
+                                if (!genome->getOffsetOfContig(correctChromosomeName, &offsetOfCorrectChromosome)) {
                                     fprintf(stderr, "Couldn't parse chromosome name '%s' from read id\n", correctChromosomeName);
                                 } else {
                                     badParse = false;
@@ -227,7 +227,7 @@ WorkerThreadMain(void *param)
                     }
 
                     if (badParse) {
-                        fprintf(stderr,"Unable to parse read ID '%s', perhaps this isn't simulated data.  piecelen = %d, pieceName = '%s', piece offset = %u, genome offset = %u\n", idBuffer, strlen(piece->name), piece->name, piece->beginningOffset, genomeLocation);
+                        fprintf(stderr,"Unable to parse read ID '%s', perhaps this isn't simulated data.  contiglen = %d, contigName = '%s', contig offset = %u, genome offset = %u\n", idBuffer, strlen(contig->name), contig->name, contig->beginningOffset, genomeLocation);
                         exit(1);
                     }
 
@@ -236,13 +236,13 @@ WorkerThreadMain(void *param)
                     bool match1 = false;
                     if (-1 == offsetA || -1 == offsetB) {
                         matched = false;
-                    }  else if(strncmp(piece->name, idBuffer, __min(read.getIdLength(), chrNameLen))) {
+                    }  else if(strncmp(contig->name, idBuffer, __min(read.getIdLength(), chrNameLen))) {
                         matched = false;
                     } else {
-                        if (isWithin(offsetA, genomeLocation - piece->beginningOffset, slackAmount)) {
+                        if (isWithin(offsetA, genomeLocation - contig->beginningOffset, slackAmount)) {
                             matched = true;
                             match0 = true;
-                        } else if (isWithin(offsetB, genomeLocation - piece->beginningOffset, slackAmount)) {
+                        } else if (isWithin(offsetB, genomeLocation - contig->beginningOffset, slackAmount)) {
                             matched = true;
                             match1 = true;
                         } else {
@@ -316,7 +316,7 @@ WorkerThreadMain(void *param)
                             // if (!printBetterErrors || (printBetterErrors && betterEditDistance)) {
                            
                             //     printf("%s\t%d\t%s\t%u\t%d\t%s\t*\t*\t100\t%.*s\t%.*s\tAlignedGenomeLocation:%u\tCorrectGenomeLocation: %u\tCigarForCorrect: %s\tCorrectData: %.*s\tAlignedData: %.*s\n", 
-                            //         idBuffer, flag, piece->name, genomeLocation - piece->beginningOffset, mapQ, cigarForAligned, read.getDataLength(), read.getData(), 
+                            //         idBuffer, flag, contig->name, genomeLocation - contig->beginningOffset, mapQ, cigarForAligned, read.getDataLength(), read.getData(), 
                             //         read.getDataLength(), read.getQuality(),  genomeLocation, correctLocation, cigarForCorrect, read.getDataLength(),
                             //         correctGenomeData, read.getDataLength(), alignedGenomeData);
                             //}

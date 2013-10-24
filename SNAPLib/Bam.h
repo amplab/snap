@@ -159,11 +159,11 @@ struct BAMAlignment
     // absoluate genome locations
 
     _uint32 getLocation(const Genome* genome) const
-    { return pos < 0 || refID < 0 || refID >= genome->getNumPieces() || (FLAG & SAM_UNMAPPED)
-        ? UINT32_MAX : (genome->getPieces()[refID].beginningOffset + pos); }
+    { return pos < 0 || refID < 0 || refID >= genome->getNumContigs() || (FLAG & SAM_UNMAPPED)
+        ? UINT32_MAX : (genome->getContigs()[refID].beginningOffset + pos); }
 
     _uint32 getNextLocation(const Genome* genome) const
-    { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? UINT32_MAX : (genome->getPieces()[next_refID].beginningOffset + next_pos); }
+    { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? UINT32_MAX : (genome->getContigs()[next_refID].beginningOffset + next_pos); }
 };
 
 #define INT8_VAL_TYPE       'c'
@@ -410,6 +410,6 @@ private:
 
         DataReader*         data;
         //unsigned            n_ref; // number of reference sequences
-        //unsigned*           refOffset; // array mapping ref sequence ID to piece location
+        //unsigned*           refOffset; // array mapping ref sequence ID to contig location
         _int64              extraOffset; // offset into extra data
 };
