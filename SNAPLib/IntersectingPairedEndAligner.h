@@ -70,6 +70,9 @@ public:
     void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(IntersectingPairedEndAligner)); return allocator->allocate(size);}
     void operator delete(void *ptr, BigAllocator *allocator) {/* do nothing.  Memory gets cleaned up when the allocator is deleted.*/}
 
+    void *operator new(size_t size) {return BigAlloc(size);}
+    void operator delete(void *ptr) {BigDealloc(ptr);}
+
     virtual _int64 getLocationsScored() const {
          return nLocationsScored;
      }
