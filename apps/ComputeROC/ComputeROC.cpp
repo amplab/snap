@@ -100,6 +100,7 @@ WorkerThreadMain(void *param)
     rcontext.clipping = NoClipping;
     rcontext.genome = genome;
     rcontext.paired = false;
+    rcontext.ignoreSecondaryAlignments = true;
     rcontext.defaultReadGroup = "";
     rcontext.header = NULL;
     while (rangeSplitter->getNextRange(&rangeStart, &rangeLength)) {

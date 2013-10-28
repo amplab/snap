@@ -89,6 +89,7 @@ struct ReaderContext
     const char*         defaultReadGroup;
     ReadClippingType    clipping;
     bool                paired;
+    bool                ignoreSecondaryAlignments;   // Should we just ignore reads with the Secondary Alignment bit set?
     const char*         header; // allocated buffer for header
     size_t              headerLength; // length of string
     size_t              headerBytes; // bytes used for header in file

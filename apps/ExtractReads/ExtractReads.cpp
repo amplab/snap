@@ -60,6 +60,7 @@ int main(int argc, char * argv[])
     readerContext.genome = genome;
     readerContext.clipping = NoClipping;
     readerContext.paired = false;
+    readerContext.ignoreSecondaryAlignments = true;
     readerContext.defaultReadGroup = "";
 
     ReadSupplierGenerator *readSupplierGenerator = BAMReader::createReadSupplierGenerator(fileName,1, readerContext);

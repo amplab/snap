@@ -317,35 +317,42 @@ BAMReader::getNextRead(
     bool ignoreEndOfRange,
     const char **cigar)
 {
-    char* buffer;
-    _int64 bytes;
-    if (! data->getData(&buffer, &bytes)) {
-        data->nextBatch();
+    unsigned local_flag;
+    if (NULL == flag) {
+        flag = &local_flag;
+    }
+
+    do {
+        char* buffer;
+        _int64 bytes;
         if (! data->getData(&buffer, &bytes)) {
-            return false;
+            data->nextBatch();
+            if (! data->getData(&buffer, &bytes)) {
+                return false;
+            }
+            extraOffset = 0;
         }
-        extraOffset = 0;
-    }
-    BAMAlignment* bam = (BAMAlignment*) buffer;
-    if ((unsigned _int64)bytes < sizeof(bam->block_size) || (unsigned _int64)bytes < bam->size()) {
-        fprintf(stderr, "Unexpected end of BAM file at %lld\n", data->getFileOffset());
-        soft_exit(1);
-    }
-    data->advance(bam->size());
-    size_t lineLength;
-    getReadFromLine(context.genome, buffer, buffer + bytes, read, alignmentResult, genomeLocation,
-        isRC, mapQ, &lineLength, flag, cigar, context.clipping);
-    unsigned auxLen = bam->auxLen();
-    read->setReadGroup(context.defaultReadGroup);
-    if (auxLen > 0) {
-        read->setAuxiliaryData((char*) bam->firstAux(), auxLen);
-        for (BAMAlignAux* aux = bam->firstAux(); aux < bam->endAux(); aux = aux->next()) {
-            if (aux->val_type == 'Z' && aux->tag[0] == 'R' && aux->tag[1] == 'G') {
-                read->setReadGroup(READ_GROUP_FROM_AUX);
-                break;
+        BAMAlignment* bam = (BAMAlignment*) buffer;
+        if ((unsigned _int64)bytes < sizeof(bam->block_size) || (unsigned _int64)bytes < bam->size()) {
+            fprintf(stderr, "Unexpected end of BAM file at %lld\n", data->getFileOffset());
+            soft_exit(1);
+        }
+        data->advance(bam->size());
+        size_t lineLength;
+        getReadFromLine(context.genome, buffer, buffer + bytes, read, alignmentResult, genomeLocation,
+            isRC, mapQ, &lineLength, flag, cigar, context.clipping);
+        unsigned auxLen = bam->auxLen();
+        read->setReadGroup(context.defaultReadGroup);
+        if (auxLen > 0) {
+            read->setAuxiliaryData((char*) bam->firstAux(), auxLen);
+            for (BAMAlignAux* aux = bam->firstAux(); aux < bam->endAux(); aux = aux->next()) {
+                if (aux->val_type == 'Z' && aux->tag[0] == 'R' && aux->tag[1] == 'G') {
+                    read->setReadGroup(READ_GROUP_FROM_AUX);
+                    break;
+                }
             }
         }
-    }
+    } while (context.ignoreSecondaryAlignments && (*flag & SAM_SECONDARY));
     return true;
 }
 

@@ -13,7 +13,7 @@ Authors:
     Ravi Pandya, May, 2012
 
 Environment:
-`
+
     User mode service.
 
 Revision History:
@@ -61,7 +61,8 @@ AlignerOptions::AlignerOptions(
     extraSearchDepth(2),
     defaultReadGroup("FASTQ"),
     seedCountSpecified(false),
-    numSeedsFromCommandLine(0)
+    numSeedsFromCommandLine(0),
+    ignoreSecondaryAlignments(true)
 {
     if (forPairedEnd) {
         maxDist                 = 15;
@@ -125,6 +126,7 @@ AlignerOptions::usageMessage()
         "  --hp Indicates not to use huge pages (this may speed up index load and slow down alignment)\n"
         "  -D   Specifies the extra search depth (the edit distance beyond the best hit that SNAP uses to compute MAPQ).  Default 2\n"
         "  -rg  Specify the default read group if it is not specified in the input file\n"
+        "  -sa  Include reads in SAM or BAM files with the secondary alignment (0x100) flag set; default is to drop them.\n"
 
 // not written yet        "  -r   Specify the content of the @RG line in the SAM header.\n"
             ,
@@ -292,6 +294,9 @@ AlignerOptions::parse(
 #endif  // USE_DEVTEAM_OPTIONS
 	} else if (strcmp(argv[n], "-M") == 0) {
 		useM = true;
+		return true;
+	} else if (strcmp(argv[n], "-sa") == 0) {
+		ignoreSecondaryAlignments = false;
 		return true;
 	} else if (strcmp(argv[n], "-G") == 0) {
         if (n + 1 < argc) {

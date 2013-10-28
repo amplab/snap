@@ -530,29 +530,35 @@ SAMReader::getNextRead(
     bool ignoreEndOfRange,
     const char **cigar)
 {
-    char* buffer;
-    _int64 bytes;
-    if (! data->getData(&buffer, &bytes)) {
-        data->nextBatch();
+    unsigned local_flag;
+    if (NULL == flag) {
+        flag = &local_flag;
+    }
+    do {
+        char* buffer;
+        _int64 bytes;
         if (! data->getData(&buffer, &bytes)) {
-            return false;
+            data->nextBatch();
+            if (! data->getData(&buffer, &bytes)) {
+                return false;
+            }
         }
-    }
-    char *newLine = strnchr(buffer, '\n', bytes);
-    if (NULL == newLine) {
-        //
-        // There is no newline, so the line crosses the end of the buffer.
-        // This should never happen since underlying reader manages overflow between chunks.
-        //
-        fprintf(stderr,"SAM file has too long a line, or doesn't end with a newline!  Failing.  fileOffset = %lld\n", data->getFileOffset());
-        soft_exit(1);
-    }
+        char *newLine = strnchr(buffer, '\n', bytes);
+        if (NULL == newLine) {
+            //
+            // There is no newline, so the line crosses the end of the buffer.
+            // This should never happen since underlying reader manages overflow between chunks.
+            //
+            fprintf(stderr,"SAM file has too long a line, or doesn't end with a newline!  Failing.  fileOffset = %lld\n", data->getFileOffset());
+            soft_exit(1);
+        }
 
-    size_t lineLength;
-    read->setReadGroup(context.defaultReadGroup);
-    getReadFromLine(context.genome, buffer,buffer + bytes, read, alignmentResult, genomeLocation, direction, mapQ, &lineLength, flag, cigar, clipping);
-    read->setBatch(data->getBatch());
-    data->advance((newLine + 1) - buffer);
+        size_t lineLength;
+        read->setReadGroup(context.defaultReadGroup);
+        getReadFromLine(context.genome, buffer,buffer + bytes, read, alignmentResult, genomeLocation, direction, mapQ, &lineLength, flag, cigar, clipping);
+        read->setBatch(data->getBatch());
+        data->advance((newLine + 1) - buffer);
+    } while (context.ignoreSecondaryAlignments && ((*flag) & SAM_SECONDARY));
 
     return true;
 }

@@ -205,6 +205,7 @@ AlignerContext::beginIteration()
     readerContext.defaultReadGroup = options->defaultReadGroup;
     readerContext.genome = index != NULL ? index->getGenome() : NULL;
     readerContext.paired = false;
+    readerContext.ignoreSecondaryAlignments = options->ignoreSecondaryAlignments;
 	readerContext.header = NULL;
 	readerContext.headerLength = 0;
 	readerContext.headerBytes = 0;
