@@ -126,7 +126,7 @@ void ChimericPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRe
     Read *read[NUM_READS_PER_PAIR] = {read0, read1};
     for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
         result->status[r] = singleAligner->AlignRead(read[r], &result->location[r], &result->direction[r], &result->score[r], &result->mapq[r]);
-        result->mapq[r] /= 4;   // Heavy quality penalty for chimeric reads
+        result->mapq[r] /= 3;   // Heavy quality penalty for chimeric reads
     }
     result->fromAlignTogether = false;
     result->alignedAsPair = false;
