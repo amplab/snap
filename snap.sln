@@ -103,18 +103,13 @@ Global
 		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
 		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Debug|Mixed Platforms.Build.0 = Debug|Win32
 		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Debug|Win32.ActiveCfg = Debug|Win32
-		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Debug|Win32.Build.0 = Debug|Win32
 		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Debug|x64.ActiveCfg = Debug|x64
 		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Release|Mixed Platforms.ActiveCfg = Release|Win32
 		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Release|Mixed Platforms.Build.0 = Release|Win32
 		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Release|Win32.ActiveCfg = Release|Win32
-		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Release|Win32.Build.0 = Release|Win32
 		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Release|x64.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
-	EndGlobalSection
-	GlobalSection(Performance) = preSolution
-		HasPerformanceSessions = true
 	EndGlobalSection
 EndGlobal

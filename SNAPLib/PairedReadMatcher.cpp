@@ -100,7 +100,11 @@ PairedReadMatcher::getNextReadPair(
     Read *read1,
     Read *read2)
 {
+    int skipped = 0;
     while (true) {
+        if (skipped++ == 10000) {
+            fprintf(stderr, "warning: no matching read pairs in 10,000 reads, input file might be unsorted or have unexpected read id format\n");
+        }
         Read one;
         if (! single->getNextRead(&one)) {
             int n = unmatched[0].size() + unmatched[1].size();
@@ -113,8 +117,14 @@ PairedReadMatcher::getNextReadPair(
         // build key for pending read table, removing /1 or /2 at end
         const char* id = one.getId();
         unsigned idLength = one.getIdLength();
-        if (idLength > 2 && id[idLength-2] == '/' && (id[idLength-1] == '1' || id[idLength-1] == '2')) {
-            idLength -= 2;
+        // truncate at space or slash
+        char* slash = (char*) memchr((void*)id, '/', idLength);
+        if (slash != NULL) {
+            idLength = slash - id;
+        }
+        char* space = (char*) memchr((void*)id, ' ', idLength);
+        if (space != NULL) {
+            idLength = space - id;
         }
         StringHash key = util::hash64(id, idLength);
         if (one.getBatch() != batch[0]) {
