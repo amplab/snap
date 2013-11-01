@@ -299,7 +299,7 @@ SAMReader::getReadFromLine(
     char                *endOfBuffer, 
     Read                *read, 
     AlignmentResult     *alignmentResult,
-    unsigned            *genomeLocation, 
+    unsigned            *out_genomeLocation, 
     Direction           *direction,
     unsigned            *mapQ,
     size_t              *lineLength,
@@ -325,8 +325,10 @@ SAMReader::getReadFromLine(
     unsigned offsetOfContig;
     parseContigName(genome, contigName, contigNameBufferSize, &offsetOfContig, NULL, field, fieldLength);
 
-    if (NULL != genomeLocation) {
-        *genomeLocation = parseLocation(offsetOfContig, field, fieldLength);
+    unsigned genomeLocation = parseLocation(offsetOfContig, field, fieldLength);
+
+    if (NULL != out_genomeLocation) {
+        *out_genomeLocation = genomeLocation;
     }
 
     if (fieldLength[SEQ] != fieldLength[QUAL]) {
@@ -352,7 +354,12 @@ SAMReader::getReadFromLine(
         //
         // Clip reads where the quality strings end in '#'
         //
-        read->init(field[QNAME],(unsigned)fieldLength[QNAME],field[SEQ],field[QUAL],(unsigned)fieldLength[SEQ]);
+
+        unsigned originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping;
+        Read::computeClippingFromCigar(field[CIGAR], &originalFrontClipping, &originalBackClipping, &originalFrontHardClipping, &originalBackHardClipping);
+
+        read->init(field[QNAME],(unsigned)fieldLength[QNAME],field[SEQ],field[QUAL],(unsigned)fieldLength[SEQ], genomeLocation, atoi(field[MAPQ]), _flag, 
+            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping);
         //
         // If this read is RC in the SAM file, we need to reverse it here, since Reads are always the sense that they were as they came
         // out of the base caller.
@@ -1030,7 +1037,7 @@ SAMFormat::writeRead(
     if (genomeLocation != InvalidGenomeLocation) {
         cigar = computeCigarString(genome, lv, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize, 
                                    clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter, extraBasesClippedAfter, 
-                                   genomeLocation, direction, useM, &editDistance);
+                                   read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(), genomeLocation, direction, useM, &editDistance);
     }
 
     // Write the SAM entry, which requires the following fields:
@@ -1136,6 +1143,8 @@ SAMFormat::computeCigarString(
     unsigned                    extraBasesClippedBefore,
     unsigned                    basesClippedAfter,
     unsigned                    extraBasesClippedAfter,
+    unsigned                    frontHardClipping,
+    unsigned                    backHardClipping,
     unsigned                    genomeLocation,
     Direction                   direction,
 	bool						useM,
@@ -1181,13 +1190,22 @@ SAMFormat::computeCigarString(
         // Add some CIGAR instructions for soft-clipping if we've ignored some bases in the read.
         char clipBefore[16] = {'\0'};
         char clipAfter[16] = {'\0'};
+        char hardClipBefore[16] = {'\0'};
+        char hardClipAfter[16] = {'\0'};
+        if (frontHardClipping > 0) {
+            snprintf(hardClipBefore, sizeof(hardClipBefore), "%uH", frontHardClipping);
+        }
         if (basesClippedBefore + extraBasesClippedBefore > 0) {
             snprintf(clipBefore, sizeof(clipBefore), "%uS", basesClippedBefore + extraBasesClippedBefore);
         }
         if (basesClippedAfter + extraBasesClippedAfter > 0) {
             snprintf(clipAfter, sizeof(clipAfter), "%uS", basesClippedAfter + extraBasesClippedAfter);
         }
-        snprintf(cigarBufWithClipping, cigarBufWithClippingLen, "%s%s%s", clipBefore, cigarBuf, clipAfter);
+        if (backHardClipping > 0) {
+            snprintf(hardClipAfter, sizeof(hardClipAfter), "%uH", backHardClipping);
+        }
+        snprintf(cigarBufWithClipping, cigarBufWithClippingLen, "%s%s%s%s%s", hardClipBefore, clipBefore, cigarBuf, clipAfter, hardClipAfter);
+
         return cigarBufWithClipping;
     }
 }

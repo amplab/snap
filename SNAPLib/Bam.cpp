@@ -363,7 +363,7 @@ BAMReader::getReadFromLine(
     char *endOfBuffer,
     Read *read,
     AlignmentResult *alignmentResult,
-    unsigned *genomeLocation,
+    unsigned *out_genomeLocation,
     bool *isRC,
     unsigned *mapQ, 
     size_t *lineLength,
@@ -374,10 +374,22 @@ BAMReader::getReadFromLine(
     _ASSERT(endOfBuffer - line >= sizeof(BAMHeader));
     BAMAlignment* bam = (BAMAlignment*) line;
     _ASSERT((size_t)(endOfBuffer - line) >= bam->size());
+
+    unsigned genomeLocation = bam->getLocation(genome);
     
-    if (NULL != genomeLocation) {
+    if (NULL != out_genomeLocation) {
         _ASSERT(-1 <= bam->refID && bam->refID < (int)genome->getNumContigs());
-        *genomeLocation = bam->getLocation(genome);
+        *out_genomeLocation = genomeLocation;
+    }
+
+
+    char* cigarBuffer = getExtra(MAX_SEQ_LENGTH);
+    if (! BAMAlignment::decodeCigar(cigarBuffer, MAX_SEQ_LENGTH, bam->cigar(), bam->n_cigar_op)) {
+        cigarBuffer = ""; // todo: fail?
+    }
+
+    if (NULL != cigar) {
+        *cigar = cigarBuffer;
     }
 
     if (NULL != read) {
@@ -386,7 +398,12 @@ BAMReader::getReadFromLine(
         char* qualBuffer = getExtra(bam->l_seq);
         BAMAlignment::decodeSeq(seqBuffer, bam->seq(), bam->l_seq);
         BAMAlignment::decodeQual(qualBuffer, bam->qual(), bam->l_seq);
-        read->init(bam->read_name(), bam->l_read_name - 1, seqBuffer, qualBuffer, bam->l_seq);
+
+        unsigned originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping;
+        Read::computeClippingFromCigar(cigarBuffer, &originalFrontClipping, &originalBackClipping, &originalFrontHardClipping, &originalBackHardClipping);
+
+        read->init(bam->read_name(), bam->l_read_name - 1, seqBuffer, qualBuffer, bam->l_seq, genomeLocation, bam->MAPQ, bam->FLAG, 
+            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping);
         read->setBatch(data->getBatch());
         if (bam->FLAG & SAM_REVERSE_COMPLEMENT) {
             read->becomeRC();
@@ -411,13 +428,7 @@ BAMReader::getReadFromLine(
         *flag = bam->FLAG;
     }
 
-    if (NULL != cigar) {
-        char* cigarBuffer = getExtra(MAX_SEQ_LENGTH);
-        if (! BAMAlignment::decodeCigar(cigarBuffer, MAX_SEQ_LENGTH, bam->cigar(), bam->n_cigar_op)) {
-            *cigar = ""; // todo: fail?
-        }
-        *cigar = cigarBuffer;
-    }
+
 }
 
     char*
@@ -461,7 +472,8 @@ private:
     static int computeCigarOps(const Genome * genome, LandauVishkinWithCigar * lv,
         char * cigarBuf, int cigarBufLen,
         const char * data, unsigned dataLength, unsigned basesClippedBefore, unsigned extraBasesClippedBefore, unsigned basesClippedAfter,
-        unsigned extraBasesClippedAfter, unsigned genomeLocation, bool isRC, bool useM, int * editDistance);
+        unsigned extraBasesClippedAfter,     unsigned frontHardClipping, unsigned backHardClipping,
+        unsigned genomeLocation, bool isRC, bool useM, int * editDistance);
 
     const bool useM;
 };
@@ -657,6 +669,7 @@ BAMFormat::writeRead(
     if (genomeLocation != InvalidGenomeLocation) {
         cigarOps = computeCigarOps(genome, lv, (char*) cigarBuf, cigarBufSize * sizeof(_uint32),
                                    clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter, extraBasesClippedAfter, 
+                                   read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
                                    genomeLocation, direction == RC, useM, &editDistance);
     }
 
@@ -782,6 +795,8 @@ BAMFormat::computeCigarOps(
     unsigned                    extraBasesClippedBefore,
     unsigned                    basesClippedAfter,
     unsigned                    extraBasesClippedAfter,
+    unsigned                    frontHardClipping,
+    unsigned                    backHardClipping,
     unsigned                    genomeLocation,
     bool                        isRC,
 	bool						useM,
@@ -795,6 +810,9 @@ BAMFormat::computeCigarOps(
     data += extraBasesClippedBefore;
     dataLength -= extraBasesClippedBefore;
 
+    unsigned clippingWordsBefore = ((basesClippedBefore + extraBasesClippedBefore > 0) ? 1 : 0) + ((frontHardClipping > 0) ? 1 : 0);
+    unsigned clippingWordsAfter = ((basesClippedAfter + extraBasesClippedAfter > 0) ? 1 : 0) + ((backHardClipping > 0) ? 1 : 0);
+
     const char *reference = genome->getSubstring(genomeLocation, dataLength);
     int used;
     if (NULL != reference) {
@@ -804,8 +822,8 @@ BAMFormat::computeCigarOps(
                             data,
                             dataLength - extraBasesClippedAfter,
                             MAX_K - 1,
-                            cigarBuf + 4 * ((basesClippedBefore + extraBasesClippedBefore) > 0),
-                            cigarBufLen - 4 * (((basesClippedBefore + extraBasesClippedBefore) > 0) + (basesClippedAfter + extraBasesClippedAfter > 0)),
+                            cigarBuf + 4 * clippingWordsBefore,
+                            cigarBufLen - 4 * (clippingWordsBefore + clippingWordsAfter),
 						    useM, BAM_CIGAR_OPS, &used);
     } else {
         //
@@ -825,13 +843,25 @@ BAMFormat::computeCigarOps(
         }
         return 0;
     } else {
+        //
+        // If we have hard clipping, add in the cigar string for it.
+        //
+        if (frontHardClipping > 0) {
+            *(_uint32*)cigarBuf = (frontHardClipping << 4) | BAMAlignment::CigarToCode['H'];
+            used += 4;
+        }
         // Add some CIGAR instructions for soft-clipping if we've ignored some bases in the read.
         if (basesClippedBefore + extraBasesClippedBefore > 0) {
-            *(_uint32*)cigarBuf = ((basesClippedBefore + extraBasesClippedBefore) << 4) | BAMAlignment::CigarToCode['S'];
+            *((_uint32*)cigarBuf + ((frontHardClipping > 0) ? 1 : 0))  = ((basesClippedBefore + extraBasesClippedBefore) << 4) | BAMAlignment::CigarToCode['S'];
             used += 4;
         }
         if (basesClippedAfter + extraBasesClippedAfter > 0) {
             *(_uint32*)(cigarBuf + used) = ((basesClippedAfter + extraBasesClippedAfter) << 4) | BAMAlignment::CigarToCode['S'];
+            used += 4;
+        }
+
+        if (backHardClipping > 0) {
+            *(_uint32*)(cigarBuf + used) = (backHardClipping << 4) | BAMAlignment::CigarToCode['H'];
             used += 4;
         }
         return used / 4;

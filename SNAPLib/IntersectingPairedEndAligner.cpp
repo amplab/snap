@@ -137,6 +137,10 @@ IntersectingPairedEndAligner::align(
     result->nLVCalls = 0;
     result->nSmallHits = 0;
 
+if (!memcmp(":76859", read0->getId() + read0->getIdLength() - 6, 6) || read0->getOriginalFrontHardClipping() + read0->getOriginalBackHardClipping() + read1->getOriginalFrontHardClipping() + read1->getOriginalBackHardClipping() > 0) {
+    printf("Here!");
+}
+
     unsigned maxSeeds;
     if (numSeedsFromCommandLine != 0) {
         maxSeeds = numSeedsFromCommandLine;

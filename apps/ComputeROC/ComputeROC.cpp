@@ -23,6 +23,7 @@ Revision History:
 
 #include "stdafx.h"
 #include "SAM.h"
+#include "Bam.h"
 #include "Genome.h"
 #include "Compat.h"
 #include "Read.h"
@@ -41,7 +42,7 @@ void usage()
   	exit(1);
 }
 
-RangeSplitter *rangeSplitter;
+ReadSupplierGenerator *readSupplierGenerator;
 volatile _int64 nRunningThreads;
 SingleWaiterObject allThreadsDone;
 const char *inputFileName;
@@ -93,240 +94,220 @@ WorkerThreadMain(void *param)
 {
     ThreadContext *context = (ThreadContext *)param;
 
-    _int64 rangeStart, rangeLength;
+    ReadSupplier *readSupplier = readSupplierGenerator->generateNewReadSupplier();
 
-    SAMReader *samReader = NULL;
-    ReaderContext rcontext;
-    rcontext.clipping = NoClipping;
-    rcontext.genome = genome;
-    rcontext.paired = false;
-    rcontext.ignoreSecondaryAlignments = true;
-    rcontext.defaultReadGroup = "";
-    rcontext.header = NULL;
-    while (rangeSplitter->getNextRange(&rangeStart, &rangeLength)) {
-        if (NULL == samReader) {
-            SAMReader::readHeader(inputFileName, rcontext);
-            samReader = SAMReader::create(DataSupplier::Default[true], inputFileName, rcontext, rangeStart, rangeLength);
-        } else {
-            ((ReadReader *)samReader)->reinit(rangeStart, rangeLength);
+    Read *read;
+    LandauVishkinWithCigar lv;
+    while (NULL != (read = readSupplier->getNextRead())) {
+        unsigned mapQ = read->getOriginalMAPQ();
+        unsigned genomeLocation = read->getOriginalAlignedLocation();
+        unsigned flag = read->getOriginalSAMFlags();
+
+        if (mapQ < 0 || mapQ > MaxMAPQ) {
+            fprintf(stderr,"Invalid MAPQ: %d\n",mapQ);
+            exit(1);
         }
 
-        AlignmentResult alignmentResult;
-        unsigned genomeLocation;
-        Direction isRC;
-        unsigned mapQ;
-        unsigned flag;
-        const char *cigar;
-        unsigned nextFileToWrite = 0;
-        Read read;
-        LandauVishkinWithCigar lv;
-        while (samReader->getNextRead(&read, &alignmentResult, &genomeLocation, &isRC, &mapQ, &flag, &cigar)) {
-            if (mapQ < 0 || mapQ > MaxMAPQ) {
-                fprintf(stderr,"Invalid MAPQ: %d\n",mapQ);
+        context->totalReads++;
+
+        if (0xffffffff == genomeLocation) {
+            context->nUnaligned++;
+        } else if (justCount) {
+            context->countOfReads[mapQ]++;
+	    } else if (!justCount) {
+            if (flag & SAM_REVERSE_COMPLEMENT) {
+                read->becomeRC();
+            }
+                            
+            const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
+            if (NULL == contig) {
+                fprintf(stderr,"couldn't find genome contig for offset %u\n",genomeLocation);
                 exit(1);
             }
+            unsigned offsetA, offsetB;
+            bool matched;
 
-            context->totalReads++;
+            const unsigned cigarBufLen = 1000;
+            char cigarForAligned[cigarBufLen];
+            const char *alignedGenomeData = genome->getSubstring(genomeLocation, 1); 
+            int editDistance = lv.computeEditDistance(alignedGenomeData, read->getDataLength() + 20, read->getData(), read->getDataLength(), 30, cigarForAligned, cigarBufLen, false);
 
-            if (0xffffffff == genomeLocation) {
-                context->nUnaligned++;
-            } else if (justCount) {
-              context->countOfReads[mapQ]++;
-	    } else if (!justCount) {
-                if (flag & SAM_REVERSE_COMPLEMENT) {
-                    read.becomeRC();
+            if (editDistance == -1 || editDistance > MaxEditDistance) {
+                editDistance = MaxEditDistance;
+            }
+
+            //
+            // Parse the read ID.  The format is ChrName_OffsetA_OffsetB_?:<more stuff>.  This would be simple to parse, except that
+            // ChrName can include "_".  So, we parse it by looking for the first : and then working backward.
+            //
+            char idBuffer[10000];   // Hopefully big enough.  I'm not worried about malicious input data here.
+
+            memcpy(idBuffer,read->getId(),read->getIdLength());
+            idBuffer[read->getIdLength()] = 0;
+                    
+            const char *firstColon = strchr(idBuffer,':');
+            bool badParse = true;
+            size_t chrNameLen;
+            const char *beginningOfSecondNumber;
+            const char *beginningOfFirstNumber; int stage = 0;
+            unsigned offsetOfCorrectChromosome;
+ 
+            if (NULL != firstColon && firstColon - 3 > idBuffer && (*(firstColon-1) == '?' || isADigit(*(firstColon - 1)))) {
+                //
+                // We've parsed backwards to see that we have at least #: or ?: where '#' is a digit and ? is literal.  If it's
+                // a digit, then scan backwards through that number.
+                //
+                const char *underscoreBeforeFirstColon = firstColon - 2;
+                while (underscoreBeforeFirstColon > idBuffer && isADigit(*underscoreBeforeFirstColon)) {
+                    underscoreBeforeFirstColon--;
                 }
-                            
-                const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
-                if (NULL == contig) {
-                    fprintf(stderr,"couldn't find genome contig for offset %u\n",genomeLocation);
+
+                if (*underscoreBeforeFirstColon == '_' && (isADigit(*(underscoreBeforeFirstColon - 1)) || *(underscoreBeforeFirstColon - 1) == '_')) {
+                    stage = 1;
+                    if (isADigit(*(underscoreBeforeFirstColon - 1))) {
+                        beginningOfSecondNumber = firstColon - 3;
+                        while (beginningOfSecondNumber > idBuffer && isADigit(*beginningOfSecondNumber)) {
+                            beginningOfSecondNumber--;
+                        }
+                        beginningOfSecondNumber++; // That loop actually moved us back one char before the beginning;
+                    } else {
+                        //
+                        // There's only one number,  we have two consecutive underscores.
+                        //
+                        beginningOfSecondNumber = underscoreBeforeFirstColon;
+                    }
+                    if (beginningOfSecondNumber - 2 > idBuffer && *(beginningOfSecondNumber - 1) == '_' && isADigit(*(beginningOfSecondNumber - 2))) {
+                        stage = 2;
+                        beginningOfFirstNumber = beginningOfSecondNumber - 2;
+                        while (beginningOfFirstNumber > idBuffer && isADigit(*beginningOfFirstNumber)) {
+                            beginningOfFirstNumber--;
+                        }
+                        beginningOfFirstNumber++; // Again, we went one too far.
+
+                        offsetA = -1;
+                        offsetB = -1;
+
+                        if (*(beginningOfFirstNumber - 1) == '_' && 1 == sscanf(beginningOfFirstNumber,"%u",&offsetA) &&
+                            ('_' == *beginningOfSecondNumber || 1 == sscanf(beginningOfSecondNumber,"%u", &offsetB))) {
+                                stage = 3;
+
+                            chrNameLen = (beginningOfFirstNumber - 1) - idBuffer;
+                            char correctChromosomeName[1000];
+                            memcpy(correctChromosomeName, idBuffer, chrNameLen);
+                            correctChromosomeName[chrNameLen] = '\0';
+
+                            if (venter && offsetB >= read->getDataLength()) {
+                                offsetB -= read->getDataLength();
+                            }
+
+                            if (!genome->getOffsetOfContig(correctChromosomeName, &offsetOfCorrectChromosome)) {
+                                fprintf(stderr, "Couldn't parse chromosome name '%s' from read id\n", correctChromosomeName);
+                            } else {
+                                badParse = false;
+                            }
+                        }
+                    }
+                }
+
+                if (badParse) {
+                    fprintf(stderr,"Unable to parse read ID '%s', perhaps this isn't simulated data.  contiglen = %d, contigName = '%s', contig offset = %u, genome offset = %u\n", idBuffer, strlen(contig->name), contig->name, contig->beginningOffset, genomeLocation);
                     exit(1);
                 }
-                unsigned offsetA, offsetB;
-                bool matched;
-
-                const unsigned cigarBufLen = 1000;
-                char cigarForAligned[cigarBufLen];
-                const char *alignedGenomeData = genome->getSubstring(genomeLocation, 1); 
-                int editDistance = lv.computeEditDistance(alignedGenomeData, read.getDataLength() + 20, read.getData(), read.getDataLength(), 30, cigarForAligned, cigarBufLen, false);
-
-                if (editDistance == -1 || editDistance > MaxEditDistance) {
-                    editDistance = MaxEditDistance;
-                }
-
-                //
-                // Parse the read ID.  The format is ChrName_OffsetA_OffsetB_?:<more stuff>.  This would be simple to parse, except that
-                // ChrName can include "_".  So, we parse it by looking for the first : and then working backward.
-                //
-                char idBuffer[10000];   // Hopefully big enough.  I'm not worried about malicious input data here.
-
-                memcpy(idBuffer,read.getId(),read.getIdLength());
-                idBuffer[read.getIdLength()] = 0;
-                    
-                const char *firstColon = strchr(idBuffer,':');
-                bool badParse = true;
-                size_t chrNameLen;
-                const char *beginningOfSecondNumber;
-                const char *beginningOfFirstNumber; int stage = 0;
-                unsigned offsetOfCorrectChromosome;
- 
-                if (NULL != firstColon && firstColon - 3 > idBuffer && (*(firstColon-1) == '?' || isADigit(*(firstColon - 1)))) {
-                    //
-                    // We've parsed backwards to see that we have at least #: or ?: where '#' is a digit and ? is literal.  If it's
-                    // a digit, then scan backwards through that number.
-                    //
-                    const char *underscoreBeforeFirstColon = firstColon - 2;
-                    while (underscoreBeforeFirstColon > idBuffer && isADigit(*underscoreBeforeFirstColon)) {
-                        underscoreBeforeFirstColon--;
-                    }
-
-                    if (*underscoreBeforeFirstColon == '_' && (isADigit(*(underscoreBeforeFirstColon - 1)) || *(underscoreBeforeFirstColon - 1) == '_')) {
-                        stage = 1;
-                        if (isADigit(*(underscoreBeforeFirstColon - 1))) {
-                            beginningOfSecondNumber = firstColon - 3;
-                            while (beginningOfSecondNumber > idBuffer && isADigit(*beginningOfSecondNumber)) {
-                                beginningOfSecondNumber--;
-                            }
-                            beginningOfSecondNumber++; // That loop actually moved us back one char before the beginning;
-                        } else {
-                            //
-                            // There's only one number,  we have two consecutive underscores.
-                            //
-                            beginningOfSecondNumber = underscoreBeforeFirstColon;
-                        }
-                        if (beginningOfSecondNumber - 2 > idBuffer && *(beginningOfSecondNumber - 1) == '_' && isADigit(*(beginningOfSecondNumber - 2))) {
-                            stage = 2;
-                            beginningOfFirstNumber = beginningOfSecondNumber - 2;
-                            while (beginningOfFirstNumber > idBuffer && isADigit(*beginningOfFirstNumber)) {
-                                beginningOfFirstNumber--;
-                            }
-                            beginningOfFirstNumber++; // Again, we went one too far.
-
-                           offsetA = -1;
-                           offsetB = -1;
-
-                            if (*(beginningOfFirstNumber - 1) == '_' && 1 == sscanf(beginningOfFirstNumber,"%u",&offsetA) &&
-                                ('_' == *beginningOfSecondNumber || 1 == sscanf(beginningOfSecondNumber,"%u", &offsetB))) {
-                                    stage = 3;
-
-                                chrNameLen = (beginningOfFirstNumber - 1) - idBuffer;
-                                char correctChromosomeName[1000];
-                                memcpy(correctChromosomeName, idBuffer, chrNameLen);
-                                correctChromosomeName[chrNameLen] = '\0';
-
-                                if (venter && offsetB >= read.getDataLength()) {
-                                    offsetB -= read.getDataLength();
-                                }
-
-                                if (!genome->getOffsetOfContig(correctChromosomeName, &offsetOfCorrectChromosome)) {
-                                    fprintf(stderr, "Couldn't parse chromosome name '%s' from read id\n", correctChromosomeName);
-                                } else {
-                                    badParse = false;
-                                }
-                            }
-                        }
-                    }
-
-                    if (badParse) {
-                        fprintf(stderr,"Unable to parse read ID '%s', perhaps this isn't simulated data.  contiglen = %d, contigName = '%s', contig offset = %u, genome offset = %u\n", idBuffer, strlen(contig->name), contig->name, contig->beginningOffset, genomeLocation);
-                        exit(1);
-                    }
 
  
-                    bool match0 = false;
-                    bool match1 = false;
-                    if (-1 == offsetA || -1 == offsetB) {
-                        matched = false;
-                    }  else if(strncmp(contig->name, idBuffer, __min(read.getIdLength(), chrNameLen))) {
-                        matched = false;
+                bool match0 = false;
+                bool match1 = false;
+                if (-1 == offsetA || -1 == offsetB) {
+                    matched = false;
+                }  else if(strncmp(contig->name, idBuffer, __min(read->getIdLength(), chrNameLen))) {
+                    matched = false;
+                } else {
+                    if (isWithin(offsetA, genomeLocation - contig->beginningOffset, slackAmount)) {
+                        matched = true;
+                        match0 = true;
+                    } else if (isWithin(offsetB, genomeLocation - contig->beginningOffset, slackAmount)) {
+                        matched = true;
+                        match1 = true;
                     } else {
-                        if (isWithin(offsetA, genomeLocation - contig->beginningOffset, slackAmount)) {
-                            matched = true;
+                        matched = false;
+                        if (flag & SAM_FIRST_SEGMENT) {
                             match0 = true;
-                        } else if (isWithin(offsetB, genomeLocation - contig->beginningOffset, slackAmount)) {
-                            matched = true;
-                            match1 = true;
                         } else {
-                            matched = false;
-                            if (flag & SAM_FIRST_SEGMENT) {
-                                match0 = true;
-                            } else {
-                                match1 = true;
-                            }
-                        }
-                    }
-
-                    context->countOfReads[mapQ]++;
-                    context->countOfReadsByEditDistance[mapQ][editDistance]++;
-
-                    if (!matched) {
-                        context->countOfMisalignments[mapQ]++;
-                        context->countOfMisalignmentsByEditDistance[mapQ][editDistance]++;
-
-                        if ((70 == mapQ && printErrorsAtMAPQ70) || printBetterErrors) {
-
-                            //
-                            // We don't know which offset is correct, because neither one matched.  Just take the one with the lower edit distance.
-                            //
-                            unsigned correctLocationA = offsetOfCorrectChromosome + offsetA;
-                            unsigned correctLocationB = offsetOfCorrectChromosome + offsetB;
-
-                            unsigned correctLocation = 0;
-                            const char *correctData = NULL;
-
-                            const char *dataA = genome->getSubstring(correctLocationA, 1);
-                            const char *dataB = genome->getSubstring(correctLocationB, 1);
-                            int distanceA, distanceB;
-                            char cigarA[cigarBufLen];
-                            char cigarB[cigarBufLen];
-
-                            cigarA[0] = '*'; cigarA[1] = '\0';
-                            cigarB[0] = '*'; cigarB[1] = '\0';
-
-                            if (dataA == NULL) {
-                                distanceA = -1;
-                            } else {
-                                distanceA = lv.computeEditDistance(dataA, read.getDataLength() + 20, read.getData(), read.getDataLength(), 30, cigarA, cigarBufLen, false);
-                            }
-
-                            if (dataB == NULL) {
-                                distanceB = -1;
-                            } else {
-                                distanceB = lv.computeEditDistance(dataB, read.getDataLength() + 20, read.getData(), read.getDataLength(), 30, cigarB, cigarBufLen, false);
-                            }
-
-                            const char *correctGenomeData;
-                            char *cigarForCorrect;
-
-                            if (distanceA != -1 && distanceA <= distanceB || distanceB == -1) {
-                                correctGenomeData = dataA;
-                                correctLocation = correctLocationA;
-                                cigarForCorrect = cigarA;
-                            } else {
-                                correctGenomeData = dataB;
-                                correctLocation = correctLocationB;
-                                cigarForCorrect = cigarB;
-                            }
-
-                            bool betterEditDistance = ((distanceA > editDistance && distanceB > editDistance) || (-1 == distanceA && -1 == distanceB));
-                            if (betterEditDistance) {
-                                context->countOfMisalignetsWithBetterEditDistanceByEditDistance[mapQ][editDistance]++;
-                                context->countOfMisalignetsWithBetterEditDistance[mapQ]++;
-                            }
-
-                            // if (!printBetterErrors || (printBetterErrors && betterEditDistance)) {
-                           
-                            //     printf("%s\t%d\t%s\t%u\t%d\t%s\t*\t*\t100\t%.*s\t%.*s\tAlignedGenomeLocation:%u\tCorrectGenomeLocation: %u\tCigarForCorrect: %s\tCorrectData: %.*s\tAlignedData: %.*s\n", 
-                            //         idBuffer, flag, contig->name, genomeLocation - contig->beginningOffset, mapQ, cigarForAligned, read.getDataLength(), read.getData(), 
-                            //         read.getDataLength(), read.getQuality(),  genomeLocation, correctLocation, cigarForCorrect, read.getDataLength(),
-                            //         correctGenomeData, read.getDataLength(), alignedGenomeData);
-                            //}
+                            match1 = true;
                         }
                     }
                 }
-            } // if it was mapped
-        } // for each read from the sam reader
-    }
+
+                context->countOfReads[mapQ]++;
+                context->countOfReadsByEditDistance[mapQ][editDistance]++;
+
+                if (!matched) {
+                    context->countOfMisalignments[mapQ]++;
+                    context->countOfMisalignmentsByEditDistance[mapQ][editDistance]++;
+
+                    if ((70 == mapQ && printErrorsAtMAPQ70) || printBetterErrors) {
+
+                        //
+                        // We don't know which offset is correct, because neither one matched.  Just take the one with the lower edit distance.
+                        //
+                        unsigned correctLocationA = offsetOfCorrectChromosome + offsetA;
+                        unsigned correctLocationB = offsetOfCorrectChromosome + offsetB;
+
+                        unsigned correctLocation = 0;
+                        const char *correctData = NULL;
+
+                        const char *dataA = genome->getSubstring(correctLocationA, 1);
+                        const char *dataB = genome->getSubstring(correctLocationB, 1);
+                        int distanceA, distanceB;
+                        char cigarA[cigarBufLen];
+                        char cigarB[cigarBufLen];
+
+                        cigarA[0] = '*'; cigarA[1] = '\0';
+                        cigarB[0] = '*'; cigarB[1] = '\0';
+
+                        if (dataA == NULL) {
+                            distanceA = -1;
+                        } else {
+                            distanceA = lv.computeEditDistance(dataA, read->getDataLength() + 20, read->getData(), read->getDataLength(), 30, cigarA, cigarBufLen, false);
+                        }
+
+                        if (dataB == NULL) {
+                            distanceB = -1;
+                        } else {
+                            distanceB = lv.computeEditDistance(dataB, read->getDataLength() + 20, read->getData(), read->getDataLength(), 30, cigarB, cigarBufLen, false);
+                        }
+
+                        const char *correctGenomeData;
+                        char *cigarForCorrect;
+
+                        if (distanceA != -1 && distanceA <= distanceB || distanceB == -1) {
+                            correctGenomeData = dataA;
+                            correctLocation = correctLocationA;
+                            cigarForCorrect = cigarA;
+                        } else {
+                            correctGenomeData = dataB;
+                            correctLocation = correctLocationB;
+                            cigarForCorrect = cigarB;
+                        }
+
+                        bool betterEditDistance = ((distanceA > editDistance && distanceB > editDistance) || (-1 == distanceA && -1 == distanceB));
+                        if (betterEditDistance) {
+                            context->countOfMisalignetsWithBetterEditDistanceByEditDistance[mapQ][editDistance]++;
+                            context->countOfMisalignetsWithBetterEditDistance[mapQ]++;
+                        }
+
+                        // if (!printBetterErrors || (printBetterErrors && betterEditDistance)) {
+                           
+                        //     printf("%s\t%d\t%s\t%u\t%d\t%s\t*\t*\t100\t%.*s\t%.*s\tAlignedGenomeLocation:%u\tCorrectGenomeLocation: %u\tCigarForCorrect: %s\tCorrectData: %.*s\tAlignedData: %.*s\n", 
+                        //         idBuffer, flag, contig->name, genomeLocation - contig->beginningOffset, mapQ, cigarForAligned, read.getDataLength(), read.getData(), 
+                        //         read.getDataLength(), read.getQuality(),  genomeLocation, correctLocation, cigarForCorrect, read.getDataLength(),
+                        //         correctGenomeData, read.getDataLength(), alignedGenomeData);
+                        //}
+                    }
+                }
+            }
+        } // if it was mapped
+    } // for each read from the sam reader
 
      if (0 == InterlockedAdd64AndReturnNewValue(&nRunningThreads, -1)) {
         SignalSingleWaiterObject(&allThreadsDone);
@@ -378,11 +359,27 @@ int main(int argc, char * argv[])
 #endif // _DEBUG
 
 
+    DataSupplier::ThreadCount = nThreads;
     nRunningThreads = nThreads;
 
-    _int64 fileSize = QueryFileSize(argv[2]);
-    rangeSplitter = new RangeSplitter(fileSize, nThreads);
-    
+    ReaderContext readerContext;
+    readerContext.clipping = NoClipping;
+    readerContext.defaultReadGroup = "";
+    readerContext.genome = genome;
+    readerContext.paired = false;
+    readerContext.ignoreSecondaryAlignments = true;
+	readerContext.header = NULL;
+	readerContext.headerLength = 0;
+	readerContext.headerBytes = 0;
+
+    if (NULL != strrchr(inputFileName, '.') && !_stricmp(strrchr(inputFileName, '.'), ".bam")) {
+        BAMReader::readHeader(inputFileName, readerContext);
+        readSupplierGenerator = BAMReader::createReadSupplierGenerator(inputFileName, nThreads, readerContext);
+    } else {
+        SAMReader::readHeader(inputFileName, readerContext);
+       readSupplierGenerator = SAMReader::createReadSupplierGenerator(inputFileName, nThreads, readerContext);
+    }
+
     CreateSingleWaiterObject(&allThreadsDone);
     ThreadContext *contexts = new ThreadContext[nThreads];
 

@@ -90,6 +90,7 @@ struct AlignerOptions : public AbstractOptions
     unsigned            extraSearchDepth;
     const char         *defaultReadGroup; // if not specified in input
     bool                ignoreSecondaryAlignments;
+    bool                preserveClipping;
 
     void usage();
 

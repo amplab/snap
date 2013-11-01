@@ -795,6 +795,7 @@ DecompressDataReader::~DecompressDataReader()
         }
     }
     delete inner;
+    DestroyExclusiveLock(&lock);
 }
 
     bool
