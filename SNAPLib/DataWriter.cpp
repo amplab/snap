@@ -440,7 +440,6 @@ AsyncDataWriter::close()
         for (int i = 0; i < count; i++) {
             DestroyEventObject(&batches[i].encoded);
         }
-//        DestroyExclusiveLock(&lock); This now happens in the AsyncDataWriter destructor.
     }
     for (int i = 0; i < count; i++) {
         batches[i].file->close();

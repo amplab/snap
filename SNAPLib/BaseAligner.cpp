@@ -1372,6 +1372,7 @@ BaseAligner::getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsT
     size_t hashTableElementPoolSize = maxHitsToConsider * maxSeedsToUse * 2 ;   // *2 for RC
 
     return
+        sizeof(_uint64) * 14                                        + // allow for alignment
         sizeof(BaseAligner)                                         + // our own member variables
         (ownLandauVishkin ? 
             LandauVishkin<>::getBigAllocatorReservation() +

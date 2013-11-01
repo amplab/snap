@@ -70,13 +70,13 @@ ChimericPairedEndAligner::getBigAllocatorReservation(
         unsigned        maxExtraSearchDepth, 
         unsigned        maxCandidatePoolSize)
 {
-    return BaseAligner::getBigAllocatorReservation(false, maxHits, maxReadSize, seedLen, maxSeedsFromCommandLine, seedCoverage) + sizeof(ChimericPairedEndAligner);
+    return BaseAligner::getBigAllocatorReservation(false, maxHits, maxReadSize, seedLen, maxSeedsFromCommandLine, seedCoverage) + sizeof(ChimericPairedEndAligner) + sizeof(_uint64);
 }
 
 
 ChimericPairedEndAligner::~ChimericPairedEndAligner()
 {
-    delete singleAligner;
+    singleAligner->~BaseAligner();
 }
 
 #ifdef _DEBUG

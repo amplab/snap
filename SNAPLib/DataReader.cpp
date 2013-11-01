@@ -794,6 +794,7 @@ DecompressDataReader::~DecompressDataReader()
             BigDealloc(entries[i].decompressed);
         }
     }
+    DestroyExclusiveLock(&lock);
     delete inner;
     DestroyExclusiveLock(&lock);
 }
