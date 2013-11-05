@@ -1160,7 +1160,7 @@ SAMFormat::computeCigarString(
 
     const char *reference = genome->getSubstring(genomeLocation, dataLength);
     if (NULL != reference) {
-        *editDistance = lv->computeEditDistance(
+        *editDistance = lv->computeEditDistanceNormalized(
                             reference,
                             dataLength - extraBasesClippedAfter,
                             data,

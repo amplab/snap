@@ -816,7 +816,7 @@ BAMFormat::computeCigarOps(
     const char *reference = genome->getSubstring(genomeLocation, dataLength);
     int used;
     if (NULL != reference) {
-        *editDistance = lv->computeEditDistance(
+        *editDistance = lv->computeEditDistanceNormalized(
                             reference,
                             dataLength - extraBasesClippedAfter,
                             data,

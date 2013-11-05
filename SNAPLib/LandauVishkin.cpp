@@ -112,12 +112,17 @@ LandauVishkinWithCigar::printLinear(
     *buffer++ = 0;
 }
 
+static const int PrevDelta[3][3] = 
+    {{+1, 0, -1},    // d < 0
+    {0, -1, +1},    // d == 0
+    {-1, 0, +1}};   // d > 0
+
 int LandauVishkinWithCigar::computeEditDistance(
     const char* text, int textLen,
     const char* pattern, int patternLen,
     int k,
     char *cigarBuf, int cigarBufLen, bool useM, 
-    CigarFormat format, int* cigarBufUsed)
+    CigarFormat format, int* o_cigarBufUsed, int* o_textUsed)
 {
     _ASSERT(patternLen >= 0 && textLen >= 0);
     _ASSERT(k < MAX_K);
@@ -163,8 +168,11 @@ done1:
 			}
 		}
         // todo: should this null-terminate?
-        if (cigarBufUsed != NULL) {
-            *cigarBufUsed = (int)(cigarBuf - cigarBufStart);
+        if (o_cigarBufUsed != NULL) {
+            *o_cigarBufUsed = (int)(cigarBuf - cigarBufStart);
+        }
+        if (o_textUsed != NULL) {
+            *o_textUsed = end;
         }
         return 0;
     }
@@ -173,42 +181,46 @@ done1:
         // Go through the offsets, d, in the order 0, -1, 1, -2, 2, etc, in order to find CIGAR strings
         // with few indels first if possible.
         for (int d = 0; d != -(e+1); d = (d >= 0 ? -(d+1) : -d)) {
-            int best = L[e-1][MAX_K+d] + 1; // up
-            A[e][MAX_K+d] = 'X';
-            int left = L[e-1][MAX_K+d-1];
-            if (left > best) {
-                best = left;
-                A[e][MAX_K+d] = 'D';
-            }
-            int right = L[e-1][MAX_K+d+1] + 1;
-            if (right > best) {
-                best = right;
-                A[e][MAX_K+d] = 'I';
-            }
+            int bestdelta = 0;
+            int bestbest = -1;
+            //  extend previous solutions as far as possible, pick best, minimizing indels
+            int dy = (d >= 0) + (d > 0);
+            for (int dx = 0; dx < 3; dx++) {
+                int delta = PrevDelta[dy][dx];
+                int best = L[e-1][MAX_K+d + delta] + (delta >= 0);
+                if (best < 0) {
+                    continue;
+                }
+                const char* p = pattern + best;
+                const char* t = (text + d) + best;
+                if (*p == *t) {
+                    int end = min(patternLen, textLen - d);
+                    const char* pend = pattern + end;
 
-            const char* p = pattern + best;
-            const char* t = (text + d) + best;
-            if (*p == *t) {
-                int end = min(patternLen, textLen - d);
-                const char* pend = pattern + end;
-
-                while (true) {
-                    _uint64 x = *((_uint64*) p) ^ *((_uint64*) t);
-                    if (x) {
-                        unsigned long zeroes;
-                        CountTrailingZeroes(x, zeroes);
-                        zeroes >>= 3;
-                        best = min((int)(p - pattern) + (int)zeroes, end);
-                        break;
+                    while (true) {
+                        _uint64 x = *((_uint64*) p) ^ *((_uint64*) t);
+                        if (x) {
+                            unsigned long zeroes;
+                            CountTrailingZeroes(x, zeroes);
+                            zeroes >>= 3;
+                            best = min((int)(p - pattern) + (int)zeroes, end);
+                            break;
+                        }
+                        p += 8;
+                        if (p >= pend) {
+                            best = end;
+                            break;
+                        }
+                        t += 8;
                     }
-                    p += 8;
-                    if (p >= pend) {
-                        best = end;
-                        break;
-                    }
-                    t += 8;
+                }
+                if (best > bestbest) {
+                    bestbest = best;
+                    bestdelta = delta;
                 }
             }
+            int best = bestbest;
+            A[e][MAX_K+d] = "DXI"[bestdelta + 1];
 
             L[e][MAX_K+d] = best;
 
@@ -268,8 +280,11 @@ done1:
 						}
 					}
                     *(cigarBuf - (cigarBufLen == 0 ? 1 : 0)) = '\0'; // terminate string
-                    if (cigarBufUsed != NULL) {
-                        *cigarBufUsed = (int)(cigarBuf - cigarBufStart);
+                    if (o_cigarBufUsed != NULL) {
+                        *o_cigarBufUsed = (int)(cigarBuf - cigarBufStart);
+                    }
+                    if (o_textUsed != NULL) {
+                        *o_textUsed = end;
                     }
                     return e;
                 }
@@ -383,8 +398,11 @@ done1:
                 if (format != BAM_CIGAR_OPS) {
                     *(cigarBuf - (cigarBufLen == 0 ? 1 : 0)) = '\0'; // terminate string
                 }
-                if (cigarBufUsed != NULL) {
-                    *cigarBufUsed = (int)(cigarBuf - cigarBufStart);
+                if (o_cigarBufUsed != NULL) {
+                    *o_cigarBufUsed = (int)(cigarBuf - cigarBufStart);
+                }
+                if (o_textUsed != NULL) {
+                    *o_textUsed = min(textLen, best + d);
                 }
                 return e;
             }
@@ -394,6 +412,80 @@ done1:
     // Could not align strings with at most K edits
     *(cigarBuf - (cigarBufLen == 0 ? 1 : 0)) = '\0'; // terminate string
     return -1;
+}
+
+int LandauVishkinWithCigar::computeEditDistanceNormalized(
+    const char* text, int textLen,
+    const char* pattern, int patternLen,
+    int k,
+    char *cigarBuf, int cigarBufLen, bool useM, 
+    CigarFormat format, int* cigarBufUsed)
+{
+    if (format != BAM_CIGAR_OPS && format != COMPACT_CIGAR_STRING) {
+        fprintf(stderr, "LandauVishkinWithCigar::computeEditDistanceNormalized invalid parameter\n");
+        soft_exit(1);
+    }
+    int bamBufLen = (format == BAM_CIGAR_OPS ? 1 : 2) * cigarBufLen; // should be enough
+    char* bamBuf = (char*) alloca(bamBufLen);
+    int bamBufUsed, textUsed;
+    int score = computeEditDistance(text, textLen, pattern, patternLen, k, bamBuf, bamBufLen,
+        useM, BAM_CIGAR_OPS, &bamBufUsed, &textUsed);
+    if (score < 0) {
+        return score;
+    }
+    _uint32* bamOps = (_uint32*) bamBuf;
+    int bamOpCount = bamBufUsed / sizeof(*bamOps);
+    bool hasIndels = false;
+    for (int i = 0; i < bamOpCount && ! hasIndels; i++) {
+        char c = BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[i])];
+        hasIndels = c == 'I' || c == 'D';
+    }
+    if (hasIndels && textUsed == textLen) {
+        // run it again in reverse so it pushes indels towards the beginning
+        char* text2 = (char*) alloca(textLen + 1);
+        _ASSERT(textUsed <= textLen);
+        util::memrevcpy(text2, text, textUsed);
+        char* pattern2 = (char*) alloca(patternLen + 1);
+        util::memrevcpy(pattern2, pattern, patternLen);
+        int bamBufUsed2, textUsed2;
+        int score2 = computeEditDistance(text2, textUsed, pattern2, patternLen, k, bamBuf, bamBufLen,
+            useM, BAM_CIGAR_OPS, &bamBufUsed2, &textUsed2);
+        if (score == score2 && bamBufUsed2 == bamBufUsed && textUsed2 == textUsed) {
+            // reverse the operations
+            for (int i = 0; i < bamOpCount / 2; i++) {
+                _uint32 t = bamOps[i];
+                bamOps[i] = bamOps[bamOpCount - i - 1];
+                bamOps[bamOpCount - i - 1] = t;
+            }
+        } else if (false) { // debugging
+            text2[textUsed2] = 0;
+            pattern2[patternLen] = 0;
+            printf("inconsistent forward/reverse comparison\nreverse score %d, textUsed %d, bamUsed %d, text/pattern:\n%s\n%s\n",
+                score2, textUsed2, bamBufUsed2, text2, pattern2);
+            memcpy(text2, text, textLen);
+            text2[textLen] = 0;
+            memcpy(pattern2, pattern, patternLen);
+            pattern2[patternLen] = 0;
+            printf("forward score %d, textUsed %d, bamUsed %d, text/pattern:\n%s\n%s\n",
+                score, textUsed, bamBufUsed, text2, pattern2);
+        }
+    }
+    // copy out cigar info
+    if (format == BAM_CIGAR_OPS) {
+        memcpy(cigarBuf, bamBuf, bamBufUsed);
+        if (cigarBufUsed != NULL) {
+            *cigarBufUsed = bamBufUsed;
+        }
+    } else {
+        bool ok = BAMAlignment::decodeCigar(cigarBuf, cigarBufLen, bamOps, bamOpCount);
+        if (! ok) {
+            return -1;
+        }
+        if (cigarBufUsed != NULL) {
+            *cigarBufUsed = strlen(cigarBuf) + 1;
+        }
+    }
+    return score;
 }
 
     int
