@@ -1609,7 +1609,7 @@ private:
     virtual bool isChimeric(BAMAlignment* read);
     virtual bool isAligned(BAMAlignment* read);
     virtual bool isHighQualityAlignment(BAMAlignment* read);
-    virtual int countHighQualityBases(BAMAlignment* read);
+    virtual long countHighQualityBases(BAMAlignment* read);
     virtual bool isForwardStrand(BAMAlignment* read);
     virtual int countNumberOfIndels(BAMAlignment* read);
     virtual void mergeInsertSizeHistogram(std::map<int,long> other);
@@ -1629,9 +1629,10 @@ public:
         num_pf_reads = 0;
         num_duplicate_reads = 0;
         num_chimeric_reads = 0;
-        num_aligned_reads = 0;
-        num_hq_aligned_reads = 0;
-        hq_mismatching_bases = 0;
+        num_aligned_reads = 0L;
+        num_hq_aligned_reads = 0L;
+        num_hq_aligned_bases = 0L;
+        hq_mismatching_bases = 0L;
         //mean_read_length = 0.0;
         num_forward_strand = 0;
         num_indels_in_reads = 0;
@@ -1782,7 +1783,8 @@ public:
         return fltr;
     }
     
-    virtual void onClose(DataWriterSupplier* supplier);
+    virtual void onClosing(DataWriterSupplier* supplier);
+    virtual void onClosed(DataWriterSupplier* supplier) {}
     virtual std::string formatQCTables(ReadQCFilter* data);
     
 private:
@@ -1794,6 +1796,7 @@ private:
 
 void ReadQCFilter::onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex) {
     /** Update the QC metrics **/
+    //std::cout << "Processing read " << bam->read_name() << "\n";
     
     BAMAlignment* read = getRead(fileOffset);
     num_reads++;
@@ -1839,7 +1842,7 @@ void ReadQCFilter::onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex) 
 }
 
 void ReadQCFilter::update_depth(BAMAlignment* read) {
-    std::cout << "Updating depth\n";
+    //std::cout << "Updating depth for read " << read->read_name() << " from " << read->pos+contig_offsets[read->refID] << " with l_ref = " << read->l_ref() << "\n";
     _int32 contig_id = read->refID;
     _uint32 ali_start = read->pos + contig_offsets[contig_id];
     _uint32 ali_end = ali_start + read->l_ref();
@@ -1853,7 +1856,7 @@ void ReadQCFilter::update_depth(BAMAlignment* read) {
         return;
     }
     
-    std::cout << "Updating coverage for " << ali_start << " to " << ali_end << "\n";
+    //std::cout << "Updating coverage for " << ali_start << " to " << ali_end << "\n";
     for ( _uint32 i = ali_start; i <= ali_end; i++ ) {
         coverage[i] += (coverage[i] < 255);
     }
@@ -1945,12 +1948,12 @@ bool ReadQCFilter::isHighQualityAlignment(BAMAlignment* read) {
     return ReadQCFilter::isAligned(read) && read->MAPQ >= 20;
 }
 
-int ReadQCFilter::countHighQualityBases(BAMAlignment* read) {
+long ReadQCFilter::countHighQualityBases(BAMAlignment* read) {
     static char* qualBuffer = new char[1000]; // max read length
     BAMAlignment::decodeQual(qualBuffer, read->qual(), read->l_seq);
-    int highQualityBases = 0;
+    long highQualityBases = 0L;
     for ( int i = 0; i < strlen(qualBuffer); i++ ) {
-        int q = (int) ( qualBuffer[i] - '!' );
+        unsigned int q = (unsigned int) ( qualBuffer[i] - '!' );
         if ( q > MIN_GOOD_BASE_QUALITY ) {
             highQualityBases++;
         }
@@ -2028,12 +2031,12 @@ void ReadQCFilter::finalize() {
         // this is the aggregator filter, break early after initialization
         return;
     }
-    long depth_finalize_start = ((long) _genome_size/(_totalThreads[0]-1))*_threadNum; // totalThreads includes the aggregator
+    long depth_finalize_start = ((long) _genome_size/(_totalThreads[0]-1))*(_threadNum-1); // totalThreads includes the aggregator
     long depth_finalize_end;
     if ( _totalThreads[0] == _threadNum ) {
         depth_finalize_end = _genome_size;
     } else {
-        depth_finalize_end = ((long) _genome_size/(_totalThreads[0]-1))*(1+_threadNum);
+        depth_finalize_end = ((long) _genome_size/(_totalThreads[0]-1))*(_threadNum);
     }
     std::cout << "finalizing filter " << _threadNum << " of " << _totalThreads << " from " << depth_finalize_start << " to " << depth_finalize_end << "\n";
     for ( long pos = depth_finalize_start; pos < depth_finalize_end; pos++ ) {
@@ -2053,12 +2056,14 @@ void ReadQCFilter::finalize() {
     
 }
 
-void ReadQCFilterSupplier::onClose(DataWriterSupplier* supplier) {
+void ReadQCFilterSupplier::onClosing(DataWriterSupplier* supplier) {
     ReadQCFilter* first = filters[0]; // this filter will always be the one writing the bam header, and it is the merge target
+    first->finalize();
     for ( std::vector<ReadQCFilter*>::size_type i = 1; i < filters.size(); i++ ) {
+        filters[i]->finalize(); // this should be async ideally
         std::cout << i;
         std::cout << " of ";
-        std::cout << filters.size()-1;
+        std::cout << filters.size()-1 << " with hq bases = " << filters[i]->getNumHighQualityBases();
         std::cout << "\n";
         first->merge(filters[i]);
     }

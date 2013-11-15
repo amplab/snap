@@ -330,7 +330,7 @@ AsyncDataWriter::getBatch(
     size_t* o_logicalUsed,
     size_t* o_logicalOffset)
 {
-    std::cout << "Getting batch (DataWriter.cpp 160)\n";
+    std::cout << "Getting batch (DataWriter.cpp 333)\n";
     if (relative < 1 - count || relative > count - 1) {
         return false;
     }
@@ -361,14 +361,14 @@ AsyncDataWriter::getBatch(
         }
         batch->file->waitForCompletion();
     }
-    std::cout << "Batch done. (DataWriter.cpp 185)\n";
+    std::cout << "Batch done. (DataWriter.cpp 364)\n";
     return true;
 }
 
     bool
 AsyncDataWriter::nextBatch()
 {
-    std::cout << "Getting next batch (DataWriter.cpp 190)\n";
+    std::cout << "Getting next batch (DataWriter.cpp 371)\n";
     _int64 start = timeInNanos();
     if (encoder != NULL) {
         WaitForEvent(&batches[(current + 1) % count].encoded);
@@ -394,7 +394,7 @@ AsyncDataWriter::nextBatch()
         size_t n = filter->onNextBatch(this, write->fileOffset, write->used);
         
 	    if (newSize) {
-            std::cout << "Advancing (DataWriter.cpp 212)\n";
+            std::cout << "Advancing (DataWriter.cpp 397)\n";
 	        write->used = n;
             supplier->advance(encoder == NULL ? write->used : 0, write->logicalUsed, &write->fileOffset, &write->logicalOffset);
 	    }
@@ -432,7 +432,7 @@ AsyncDataWriter::nextBatch()
         soft_exit(1);
     }
     InterlockedAdd64AndReturnNewValue(&WaitTime, timeInNanos() - start2);
-    std::cout << "Batch got (DataWriter.cpp 241)\n";
+    std::cout << "Batch got (DataWriter.cpp 435)\n";
     return true;
 }
 
@@ -441,7 +441,7 @@ AsyncDataWriter::close()
 {
     std::cout << "Closing (DataWriter.cpp 248)\n";
     nextBatch(); // ensure last buffer gets written
-    filter->finalize();\
+    //filter->finalize();
     if (encoder != NULL) {
         encoder->close();
         for (int i = 0; i < count; i++) {
@@ -490,9 +490,10 @@ AsyncDataWriterSupplier::getWriter()
     void
 AsyncDataWriterSupplier::close()
 {
-    std::cout << "Supplier is closing (DataWriter.cpp 287)\n";
+    std::cout << "Supplier is closing (DataWriter.cpp 493)\n";
     if (filterSupplier != NULL && filterSupplier->filterType == DataWriter::TransformFilter) {
-        filterSupplier->onClose(this);
+        filterSupplier->onClosing(this);
+    }
     closing = true;
     if (filterSupplier != NULL) {
         filterSupplier->onClosing(this);
