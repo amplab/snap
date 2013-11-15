@@ -251,9 +251,6 @@
     <ClCompile Include="PairedAligner.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="PairedEndAligner.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="PairedReadMatcher.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

@@ -67,9 +67,16 @@ public:
     static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxBigHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsFromCommandLine, 
                                              double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize);
 
-     virtual _int64 getLocationsScored() const {
+    void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(IntersectingPairedEndAligner)); return allocator->allocate(size);}
+    void operator delete(void *ptr, BigAllocator *allocator) {/* do nothing.  Memory gets cleaned up when the allocator is deleted.*/}
+
+    void *operator new(size_t size) {return BigAlloc(size);}
+    void operator delete(void *ptr) {BigDealloc(ptr);}
+
+    virtual _int64 getLocationsScored() const {
          return nLocationsScored;
      }
+
 
 private:
 
@@ -139,7 +146,7 @@ private:
     class HashTableHitSet {
     public:
         HashTableHitSet() {}
-        void firstInit(unsigned maxSeeds_, unsigned maxMergeDistance_);
+        void firstInit(unsigned maxSeeds_, unsigned maxMergeDistance_, BigAllocator *allocator);
 
         //
         // Reset to empty state.
@@ -191,6 +198,9 @@ private:
         unsigned        nLookupsUsed;
         unsigned        mostRecentLocationReturned;
 		unsigned		maxMergeDistance;
+
+        // This is effectively a local in getNextHitLessThanOrEqualTo, but since it's dynamically sized we put it here.
+        unsigned        *liveLookups;
     };
 
     HashTableHitSet *hashTableHitSets[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
@@ -229,88 +239,6 @@ private:
         unsigned        genomeLocationOfNearestMatchedCandidate;
     };
 
-    class HitLocationRingBuffer {
-    public:
-        HitLocationRingBuffer(unsigned bufferSize_) : bufferSize(bufferSize_), head(0), tail(0)
-        {
-            buffer = new HitLocation[bufferSize];
-        }
-
-        ~HitLocationRingBuffer()
-        {
-            delete [] buffer;
-        }
-
-        bool isEmpty() {return head == tail;}
-
-        void insertHead(unsigned genomeLocation, unsigned seedOffset, unsigned bestPossibleScore) 
-        {
-            _ASSERT((head + 1 ) % bufferSize != tail);  // Not overflowing
-            _ASSERT(head == tail || genomeLocation < buffer[(head + bufferSize - 1)%bufferSize].genomeLocation);  // Inserting in strictly descending order
-
-            buffer[head].genomeLocation = genomeLocation;
-            buffer[head].seedOffset = seedOffset;
-            buffer[head].isScored = false;
-            buffer[head].genomeLocationOfNearestMatchedCandidate = 0xffffffff;
-			buffer[head].bestPossibleScore = bestPossibleScore;
-           head = (head + 1) % bufferSize;
-        }
-
-        void insertHead(unsigned genomeLocation, unsigned seedOffset, unsigned score, double matchProbability)
-        {
-            insertHead(genomeLocation, seedOffset, score);
-            HitLocation *insertedLocation = &buffer[(head + bufferSize - 1)%bufferSize];
-            insertedLocation->isScored = true;
-            insertedLocation->score = score;
-            insertedLocation->matchProbability = matchProbability;
-        }
-
-        void clear() 
-        {
-            head = tail = 0;
-        }
-
-        void trimAboveLocation(unsigned highestGenomeLocatonToKeep)
-        {
-            for (; tail != head && buffer[tail].genomeLocation > highestGenomeLocatonToKeep; tail = (tail + 1) % bufferSize) {
-                // This loop body intentionally left blank.
-            }
-        }
-
-        HitLocation *getTail(unsigned *index) {
-            if (head == tail) return NULL;
-            *index = tail;
-            return &buffer[tail];
-        }
-
-        HitLocation *getTail() {
-            if (head == tail) return NULL;
-            return &buffer[tail];
-        }
-
-        HitLocation *getHead() {
-            if (head == tail) return NULL;
-            //
-            // Recall that head is the next place to write, so it's not filled in yet.
-            // Use the previous element.
-            //
-            return &buffer[(head + bufferSize - 1)% bufferSize];
-        }
-
-        HitLocation *getNext(unsigned *index)  // Working from tail to head
-        {
-            if ((*index + 1) % bufferSize == head) return NULL;
-            *index = (*index + 1) % bufferSize;
-             return &buffer[*index];
-        }
-
-    private:
-
-        unsigned        bufferSize;
-        unsigned        head;
-        unsigned        tail;
-        HitLocation     *buffer;
-    };
 
     char *rcReadData[NUM_READS_PER_PAIR];                   // the reverse complement of the data for each read
     char *rcReadQuality[NUM_READS_PER_PAIR];                // the reversed quality strings for each read

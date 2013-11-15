@@ -178,7 +178,6 @@ SingleAlignerContext::runIterationThread()
             stats,
             allocator);
 
-    allocator->assertAllMemoryUsed();
     allocator->checkCanaries();
 
     aligner->setExplorePopularSeeds(options->explorePopularSeeds);
@@ -283,7 +282,6 @@ SingleAlignerContext::updateStats(
     void 
 SingleAlignerContext::typeSpecificBeginIteration()
 {
-    readerContext.header = NULL;
     options->inputs[0].readHeader(readerContext);
 
     if (1 == options->nInputs) {

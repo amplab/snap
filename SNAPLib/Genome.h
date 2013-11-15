@@ -43,8 +43,8 @@ public:
             unsigned             i_maxBases,
             unsigned             nBasesStored);
 
-        void startPiece(
-            const char          *pieceName);
+        void startContig(
+            const char          *contigName);
 
         void addData(
             const char          *data);
@@ -68,7 +68,7 @@ public:
                                                                   // file, not a FASTA file.  Use
                                                                   // FASTA.h for FASTA loads.
 
-        static bool getSizeFromFile(const char *fileName, unsigned *nBases, unsigned *nPieces);
+        static bool getSizeFromFile(const char *fileName, unsigned *nBases, unsigned *nContigs);
 
         bool saveToFile(const char *fileName) const;
 
@@ -92,29 +92,29 @@ public:
             }
 
             //
-            // See if the substring crosses a piece (chromosome) boundary.  If so, disallow it.
+            // See if the substring crosses a contig (chromosome) boundary.  If so, disallow it.
             //
 
-            if (nPieces > 100) {
+            if (nContigs > 100) {
                 //
-                // Start by special casing the last piece (it makes the rest of the code easier).
+                // Start by special casing the last contig (it makes the rest of the code easier).
                 //
-                if (pieces[nPieces - 1].beginningOffset <= offset) {
+                if (contigs[nContigs - 1].beginningOffset <= offset) {
                     //
-                    // Because it starts in the last piece, it's OK because we already checked overflow
+                    // Because it starts in the last contig, it's OK because we already checked overflow
                 // of the whole genome.
                 //
                 return bases + (offset-minOffset);
             }
     
                 int min = 0;
-                int max = nPieces - 2;
+                int max = nContigs - 2;
                 while (min <= max) {
                     int i = (min + max) / 2;
-                    if (pieces[i].beginningOffset <= offset) {
-                        if (pieces[i+1].beginningOffset > offset) {
-                            if (pieces[i+1].beginningOffset <= offset + lengthNeeded - 1) {
-                                return NULL;    // This crosses a piece boundary.
+                    if (contigs[i].beginningOffset <= offset) {
+                        if (contigs[i+1].beginningOffset > offset) {
+                            if (contigs[i+1].beginningOffset <= offset + lengthNeeded - 1) {
+                                return NULL;    // This crosses a contig boundary.
                             } else {
                                 return bases + (offset-minOffset);
                             }
@@ -130,13 +130,13 @@ public:
                 return NULL;
             } else {
                 //
-                // Use linear rather than binary search for small numbers of pieces, because binary search
+                // Use linear rather than binary search for small numbers of contigs, because binary search
                 // confuses the branch predictor, and so is slower even though it uses many fewer instructions.
                 //
-                for (int i = 0 ; i < nPieces; i++) {
-                    if (offset + lengthNeeded - 1 >= pieces[i].beginningOffset) {
-                        if (offset < pieces[i].beginningOffset) {
-                            return NULL;        // crosses a piece boundary.
+                for (int i = 0 ; i < nContigs; i++) {
+                    if (offset + lengthNeeded - 1 >= contigs[i].beginningOffset) {
+                        if (offset < contigs[i].beginningOffset) {
+                            return NULL;        // crosses a contig boundary.
                         } else {
                             return bases + (offset-minOffset);
                         }
@@ -149,28 +149,30 @@ public:
 
         inline unsigned getCountOfBases() const {return nBases;}
 
-        bool getOffsetOfPiece(const char *pieceName, unsigned *offset, int* index = NULL) const;
+        bool getOffsetOfContig(const char *contigName, unsigned *offset, int* index = NULL) const;
 
         inline void prefetchData(unsigned genomeOffset) const {
             _mm_prefetch(bases + genomeOffset,_MM_HINT_T2);
             _mm_prefetch(bases + genomeOffset + 64,_MM_HINT_T2);
         }
 
-        struct Piece {
+        struct Contig {
             unsigned     beginningOffset;
             unsigned     length;
             char        *name;
         };
 
-        inline const Piece *getPieces() const { return pieces; }
+        inline const Contig *getContigs() const { return contigs; }
 
-        inline int getNumPieces() const { return nPieces; }
+        inline int getNumPieces() const { return nContigs; }
     
         inline unsigned getNumBases() const { return nBases; }
+    
+        inline int getNumContigs() const { return nContigs; }
 
-        const Piece *getPieceAtLocation(unsigned location) const;
-        const Piece *getPieceForRead(unsigned location, unsigned readLength, unsigned *extraBasesClippedBefore) const;
-        const Piece *getNextPieceAfterLocation(unsigned location) const;
+        const Contig *getContigAtLocation(unsigned location) const;
+        const Contig *getContigForRead(unsigned location, unsigned readLength, unsigned *extraBasesClippedBefore) const;
+        const Contig *getNextContigAfterLocation(unsigned location) const;
 
         Genome *copy() const {return copy(true,true,true);}
         Genome *copyGenomeOneSex(bool useY, bool useM) const {return copy(!useY,useY,useM);}
@@ -178,8 +180,8 @@ public:
         //
         // These are only public so creators of new genomes (i.e., FASTA) can use them.
         // 
-        void    fillInPieceLengths();
-        void    sortPiecesByName();
+        void    fillInContigLengths();
+        void    sortContigsByName();
 
 private:
 
@@ -195,18 +197,18 @@ private:
         unsigned     maxOffset;
 
         //
-        // A genome is made up of a bunch of pieces, typically chromosomes.  Pieces have names,
+        // A genome is made up of a bunch of contigs, typically chromosomes.  Contigs have names,
         // which are stored here.
         //
-        int          nPieces;
-        int          maxPieces;
+        int          nContigs;
+        int          maxContigs;
 
-        Piece       *pieces;    // This is always in order (it's not possible to express it otherwise in FASTA).
+        Contig      *contigs;    // This is always in order (it's not possible to express it otherwise in FASTA).
 
-        Piece       *piecesByName;
+        Contig      *contigsByName;
         Genome *copy(bool copyX, bool copyY, bool copyM) const;
 
-        static bool openFileAndGetSizes(const char *filename, FILE **file, unsigned *nBases, unsigned *nPieces);
+        static bool openFileAndGetSizes(const char *filename, FILE **file, unsigned *nBases, unsigned *nContigs);
 
 
         unsigned chromosomePadding;

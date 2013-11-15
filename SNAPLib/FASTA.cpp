@@ -89,7 +89,7 @@ ReadFASTAGenome(const char *fileName, unsigned chromosomePaddingSize)
             // Go up to blank, or remove the trailing newline from fgets
             end = end != NULL ? end : (lineBuffer + strlen(lineBuffer) - 1);
             *end = '\0';
-            genome->startPiece(lineBuffer+1);
+            genome->startContig(lineBuffer+1);
         } else {
             //
             // Convert it to upper case and truncate the newline before adding it to the genome.
@@ -123,8 +123,8 @@ ReadFASTAGenome(const char *fileName, unsigned chromosomePaddingSize)
     // And finally add padding at the end of the genome.
     //
     genome->addData(paddingBuffer);
-    genome->fillInPieceLengths();
-    genome->sortPiecesByName();
+    genome->fillInContigLengths();
+    genome->sortContigsByName();
 
     fclose(fastaFile);
     delete [] paddingBuffer;
@@ -136,16 +136,16 @@ ReadFASTAGenome(const char *fileName, unsigned chromosomePaddingSize)
 //
 bool AppendFASTAGenome(const Genome *genome, FILE *fasta, const char *prefix="")
 {
-    int nPieces = genome->getNumPieces();
-    const Genome::Piece *pieces = genome->getPieces();
-    for (int i = 0; i < nPieces; ++i) {
-        const Genome::Piece &piece = pieces[i];
-        unsigned start = piece.beginningOffset;
-        unsigned end = i + 1 < nPieces ? pieces[i + 1].beginningOffset : genome->getCountOfBases();
+    int nContigs = genome->getNumContigs();
+    const Genome::Contig *contigs = genome->getContigs();
+    for (int i = 0; i < nContigs; ++i) {
+        const Genome::Contig &contig = contigs[i];
+        unsigned start = contig.beginningOffset;
+        unsigned end = i + 1 < nContigs ? contigs[i + 1].beginningOffset : genome->getCountOfBases();
         unsigned size = end - start;
         const char *bases = genome->getSubstring(start, size);
 
-        fprintf(fasta, ">%s%s\n", prefix, piece.name);
+        fprintf(fasta, ">%s%s\n", prefix, contig.name);
         fwrite(bases, 1, size, fasta);
         fputc('\n', fasta);
     }

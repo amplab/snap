@@ -49,7 +49,7 @@ inline double exp10(double x) { return exp(x * LOG10); }
 
 const void* memmem(const void* data, const size_t dataLength, const void* pattern, const size_t patternLength);
 
-typedef CRITICAL_SECTION    ExclusiveLock;
+typedef CRITICAL_SECTION    UnderlyingExclusiveLock;
 typedef HANDLE SingleWaiterObject;      // This is an event in Windows.  It's just a synchronization object that you can wait for and set.
 typedef HANDLE EventObject;
 
@@ -127,7 +127,7 @@ inline bool _BitScanForward64(unsigned long *result, _uint64 x) {
 // We implement SingleWaiterObject using a mutex because POSIX unnamed semaphores don't work on OS X
 class SingleWaiterObjectImpl;
 
-typedef pthread_mutex_t ExclusiveLock;
+typedef pthread_mutex_t UnderlyingExclusiveLock;
 typedef SingleWaiterObjectImpl *SingleWaiterObject;
 
 class EventObjectImpl;
@@ -172,17 +172,65 @@ void PrintWaitProfile();
 
 //
 // Exclusive locks.  These have the obvious semantics: At most one thread can acquire one at any time, the others block
-// until the first one releases it.
+// until the first one releases it.  In the DEBUG build we wrap the lock in a class that ensures that it's initialized before
+// it's used (which we found out the hard way isn't always so obvious).
 //
+extern void AcquireUnderlyingExclusiveLock(UnderlyingExclusiveLock *);
+bool InitializeUnderlyingExclusiveLock(UnderlyingExclusiveLock *lock);
+void ReleaseUnderlyingExclusiveLock(UnderlyingExclusiveLock *lock);
+bool DestroyUnderlyingExclusiveLock(UnderlyingExclusiveLock *lock);
+
+#ifdef _DEBUG
+class ExclusiveLock {
+public:
+    UnderlyingExclusiveLock lock;
+    bool                    initialized;
+
+    ExclusiveLock() : initialized(false) {}
+    ~ExclusiveLock() {_ASSERT(!initialized);}   // Must DestroyExclusiveLock first
+};
+
+inline void AcquireExclusiveLock(ExclusiveLock *lock)
+{
+    _ASSERT(lock->initialized);
+    AcquireUnderlyingExclusiveLock(&lock->lock);
+}
+
+inline bool InitializeExclusiveLock(ExclusiveLock *lock)
+{
+    _ASSERT(!lock->initialized);
+    lock->initialized = true;
+    return InitializeUnderlyingExclusiveLock(&lock->lock);
+}
+
+inline void ReleaseExclusiveLock (ExclusiveLock *lock)
+{
+    _ASSERT(lock->initialized);
+    ReleaseUnderlyingExclusiveLock(&lock->lock);
+}
+
+inline void DestroyExclusiveLock(ExclusiveLock *lock)
+{
+    _ASSERT(lock->initialized);
+    lock->initialized = false;
+    DestroyUnderlyingExclusiveLock(&lock->lock);
+}
+#else   // _DEBUG
+#define ExclusiveLock UnderlyingExclusiveLock
+#define InitializeExclusiveLock InitializeUnderlyingExclusiveLock
+#define ReleaseExclusiveLock ReleaseUnderlyingExclusiveLock
+#define DestroyExclusiveLock DestroyUnderlyingExclusiveLock
+#endif // _DEBUG
+
 #ifdef PROFILE_WAIT
 #define AcquireExclusiveLock(lock) AcquireExclusiveLockProfile((lock), __FUNCTION__, __LINE__)
 void AcquireExclusiveLockProfile(ExclusiveLock *lock, const char* fn, int line);
-#else
-void AcquireExclusiveLock(ExclusiveLock *lock);
+#elif   _DEBUG
+// already defined above
+#else   // !debug, !profile_wait
+#define AcquireExclusiveLock AcquireUnderlyingExclusiveLock
 #endif
-void ReleaseExclusiveLock(ExclusiveLock *lock);
-bool InitializeExclusiveLock(ExclusiveLock *lock);
-bool DestroyExclusiveLock(ExclusiveLock *lock);
+
 
 //
 // Single waiter objects.  The semantics are that a single thread can wait on one of these, and when it's

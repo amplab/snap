@@ -99,6 +99,7 @@ ReadSupplierQueue::~ReadSupplierQueue()
 
     DestroyEventObject(&throttle[0]);
     DestroyEventObject(&throttle[1]);
+    DestroyExclusiveLock(&lock);
 }
 
 

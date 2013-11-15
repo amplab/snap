@@ -235,7 +235,6 @@
     <ClCompile Include="mapq.cpp" />
     <ClCompile Include="MultiInputReadSupplier.cpp" />
     <ClCompile Include="PairedAligner.cpp" />
-    <ClCompile Include="PairedEndAligner.cpp" />
     <ClCompile Include="PairedReadMatcher.cpp" />
     <ClCompile Include="ParallelTask.cpp" />
     <ClCompile Include="ProbabilityDistance.cpp" />

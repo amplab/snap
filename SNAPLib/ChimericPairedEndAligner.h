@@ -26,6 +26,7 @@ Revision History:
 
 #include "PairedEndAligner.h"
 #include "BaseAligner.h"
+#include "BigAlloc.h"
 
 class ChimericPairedEndAligner : public PairedEndAligner {
 public:
@@ -36,14 +37,19 @@ public:
         unsigned            maxK,
         unsigned            maxSeedsFromCommandLine,
         double              seedCoverage,
-        unsigned            minSpacing,                // Minimum distance to allow between the two ends.
-        unsigned            maxSpacing,                // Maximum distance to allow between the two ends.
-        bool                forceSpacing,
+        bool                forceSpacing_,
         unsigned            extraSearchDepth,
-        PairedEndAligner    *underlyingPairedEndAligner_);
+        PairedEndAligner    *underlyingPairedEndAligner_,
+        BigAllocator        *allocator);
     
     virtual ~ChimericPairedEndAligner();
     
+    static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxReadSize, unsigned maxHits, unsigned seedLen, unsigned maxSeedsFromCommandLine, 
+                                             double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize);
+
+    void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(ChimericPairedEndAligner)); return allocator->allocate(size);}
+    void operator delete(void *ptr, BigAllocator *allocator) {/* do nothing.  Memory gets cleaned up when the allocator is deleted.*/}
+
     virtual void align(
         Read                  *read0,
         Read                  *read1,
@@ -52,17 +58,13 @@ public:
     void *operator new(size_t size) {return BigAlloc(size);}
     void operator delete(void *ptr) {BigDealloc(ptr);}
 
-    static size_t getBigAllocatorReservation(unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsToUse);
-    void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(ChimericPairedEndAligner)); return allocator->allocate(size);}
-    void operator delete(void *ptr, BigAllocator *allocator) {/* do nothing, the owner of the allocator is responsible for cleaning up the memory */}
-
     virtual _int64 getLocationsScored() const {
         return underlyingPairedEndAligner->getLocationsScored() + singleAligner->getLocationsScored();
     }
 
 private:
    
-    bool forceSpacing;
+    bool        forceSpacing;
     BaseAligner *singleAligner;
     PairedEndAligner *underlyingPairedEndAligner;
 

@@ -57,7 +57,7 @@ struct PairedAlignmentResult {
 class PairedEndAligner
 {
 public:
-    virtual ~PairedEndAligner();
+    virtual ~PairedEndAligner() {}
     
     virtual void align(
         Read                  *read0,
