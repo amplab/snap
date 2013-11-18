@@ -28,6 +28,9 @@ Environment:
 #include "SAM.h"
 #include "DataReader.h"
 
+// for debugging file I/O, validate BAM records on input & output
+//#define VALIDATE_BAM
+
 // BAM format layout
 // SAM Format Specification v1.4-r985
 
@@ -166,6 +169,12 @@ struct BAMAlignment
 
     _uint32 getNextLocation(const Genome* genome) const
     { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? UINT32_MAX : (genome->getContigs()[next_refID].beginningOffset + next_pos); }
+
+#ifdef VALIDATE_BAM
+    void validate();
+#else
+    inline void validate() {} // inline noop
+#endif
 };
 
 #define INT8_VAL_TYPE       'c'

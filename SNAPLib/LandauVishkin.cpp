@@ -484,7 +484,7 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
             return -1;
         }
         if (cigarBufUsed != NULL) {
-            *cigarBufUsed = strlen(cigarBuf) + 1;
+            *cigarBufUsed = (int) strlen(cigarBuf) + 1;
         }
     }
     return score;
