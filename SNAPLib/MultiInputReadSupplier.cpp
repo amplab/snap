@@ -235,7 +235,6 @@ MultiInputPairedReadSupplierGenerator::MultiInputPairedReadSupplierGenerator(int
 {
     nReadSuppliers = i_nReadSuppliers;
     readSupplierGenerators = i_readSupplierGenerators;  // We own the array and the generators.
-
 }
 
 MultiInputPairedReadSupplierGenerator::~MultiInputPairedReadSupplierGenerator()
