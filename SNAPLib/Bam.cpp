@@ -913,7 +913,7 @@ BAMFilter::onNextBatch(
     size_t offset,
     size_t bytes)
 {
-    std::cout << "BAMFilter::onNextBatch (Bam.cpp 861)\n";
+    
     bool ok = writer->getBatch(-1, &currentBuffer, NULL, NULL, NULL, &currentBufferBytes, &currentOffset);
     _ASSERT(ok);
     currentWriter = writer;
@@ -926,7 +926,7 @@ BAMFilter::onNextBatch(
     currentBuffer = NULL;
     currentBufferBytes = 0;
     currentOffset = 0;
-    std::cout << "BAMFilter::onNextBatch done (Bam.cpp 874)\n";
+    
     return bytes;
 }
     
@@ -1687,7 +1687,7 @@ public:
         _threadNum = threadNum;
         _totalThreads = threads;
         _genome_size = baseSize;
-        std::cout << "added filter " << threadNum << "\n";
+        
     }
     
     ~ReadQCFilter() {
@@ -1818,7 +1818,7 @@ public:
     
     virtual DataWriter::Filter* getFilter()
     {
-        std::cout << "adding filter\n";
+        
         int filterNo = threads[0];
         ReadQCFilter* fltr = new ReadQCFilter(pairsSeen,positional_depth,piece_offsets,genome->getNumBases(),filterNo,threads);
         filters.push_back(fltr);
@@ -1882,7 +1882,6 @@ void ReadQCFilter::onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex) 
 }
 
 void ReadQCFilter::update_depth(BAMAlignment* read) {
-    //std::cout << "Updating depth for read " << read->read_name() << " from " << read->pos+contig_offsets[read->refID] << " with l_ref = " << read->l_ref() << "\n";
     _int32 contig_id = read->refID;
     _uint32 ali_start = read->pos + contig_offsets[contig_id];
     _uint32 ali_end = ali_start + read->l_ref();
@@ -1896,7 +1895,6 @@ void ReadQCFilter::update_depth(BAMAlignment* read) {
         return;
     }
     
-    //std::cout << "Updating coverage for " << ali_start << " to " << ali_end << "\n";
     for ( _uint32 i = ali_start; i <= ali_end; i++ ) {
         coverage[i] += (coverage[i] < 255);
     }
@@ -2067,7 +2065,7 @@ void ReadQCFilter::finalize() {
     } else {
         depth_finalize_end = ((long) _genome_size/(_totalThreads[0]-1))*(_threadNum);
     }
-    std::cout << "finalizing filter " << _threadNum << " of " << _totalThreads << " from " << depth_finalize_start << " to " << depth_finalize_end << "\n";
+    
     for ( long pos = depth_finalize_start; pos < depth_finalize_end; pos++ ) {
         ++total_bases;
         if ( coverage[pos] >= 20 ) {
@@ -2081,7 +2079,7 @@ void ReadQCFilter::finalize() {
             ++ low_covered_bases;
         }
     }
-    std::cout << "Done finalizing filter " << _threadNum << "\n";
+    
     
 }
 
@@ -2090,10 +2088,6 @@ void ReadQCFilterSupplier::onClosing(DataWriterSupplier* supplier) {
     first->finalize();
     for ( std::vector<ReadQCFilter*>::size_type i = 1; i < filters.size(); i++ ) {
         filters[i]->finalize(); // this should be async ideally
-        std::cout << i;
-        std::cout << " of ";
-        std::cout << filters.size()-1 << " with hq bases = " << filters[i]->getNumHighQualityBases();
-        std::cout << "\n";
         first->merge(filters[i]);
     }
     
@@ -2167,7 +2161,7 @@ std::string ReadQCFilterSupplier::formatQCTables(ReadQCFilter* qcmetrics, int ta
     formattedTable << (double)((int)((10000*(double)qcmetrics->getNoCoverageBases()/qcmetrics->getTotalBases())))/100 << "%)\n";
     formattedTable << "\n";
     std::map<int,long> insertSizes = qcmetrics->getInsertSizes();
-    std::cout << "The map size is: " << insertSizes.size();
+    
     for ( int insert = 0; insert < 1000; insert++ ) {
         if ( insertSizes.find(insert) != insertSizes.end() ) {
             formattedTable << "\n" << "InsertSizeHistogram" << "\t" << insert << "\t" << insertSizes[insert];
