@@ -1836,7 +1836,6 @@ private:
 
 void ReadQCFilter::onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex) {
     /** Update the QC metrics **/
-    //std::cout << "Processing read " << bam->read_name() << "\n";
     
     BAMAlignment* read = getRead(fileOffset);
     num_reads++;
@@ -1865,8 +1864,6 @@ void ReadQCFilter::onRead(BAMAlignment* bam, size_t fileOffset, int batchIndex) 
 
         
         num_hq_aligned_bases += countHighQualityBases(read);
-        // todo: change this to Knuth's TAoCP running average
-        //mean_read_length = ((num_reads-1)*mean_read_length + read->l_seq)/num_reads;
         if ( isForwardStrand(read) ) {
             num_forward_strand++;
         }
@@ -1904,27 +1901,19 @@ void ReadQCFilter::update_depth(BAMAlignment* read) {
 
 _int64 ReadQCFilter::pairHash(_int32 firstRef, _int32 firstPos, _int32 secondRef, _int32 secondPos) {
     _int64 hash = 0ULL;
-    // first 6 bits: the contig of the first read
+    // first 7 bits: the contig of the first read
     hash |= (_uint32) firstRef;
-    // next 29 bits: the position of the first read
-    hash = hash << 29;
+    // next 28 bits: the position of the first read
+    hash = hash << 28;
     hash |= ( (_uint32) firstPos) & 0x1FFFFFFF;
     // next bit: read not aligned to same contig
     hash = hash << 1;
     if ( firstRef != secondRef ) {
         hash |= 0x1;
-        // next 28 bits: miniature version of the single read hash
-        // 5 bit contig
-        hash = hash << 5;
-        hash |= ((_uint32) secondRef) & 0x1F;
-        // 23 bit position
-        hash |= ((_uint32) secondPos) & 0x7FFFFF;
-    } else {
-        // first and second read on same contig
-        // in this case, then next 28 bits is just the insert size
-        hash = hash << 28;
-        hash |= ((_uint32) secondPos - (_uint32)firstPos ) & 0xFFFFFFF;
     }
+    // next 28 bits: mate position, if it exists
+    hash = hash << 28
+    hash |= ((_uint32) secondPos) & 0x1FFFFFFF;
     return hash;
 }
 
@@ -1948,10 +1937,7 @@ bool ReadQCFilter::isDuplicate(BAMAlignment* read) {
             hash = pairHash(mateRef,matePos,readRef,readPos);
         }
     } else {
-        // if the mate is unmapped just take the initial 36 bits of the single-read hash - this means that the
-        // duplication rate will be artificially high for insertions of completely novel sequence, since the
-        // insert size can't help disambiguate fragments. Ideally we'd want to sprinkle in bases from the
-        // mate to help disambiguate, but that defeats the purpose of quickhash.
+        // if the mate is unmapped set the ref and pos to 0
         hash = pairHash(read->refID,read->pos,0u,0u);
     }
     
