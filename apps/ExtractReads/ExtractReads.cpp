@@ -89,8 +89,6 @@ int main(int argc, char * argv[])
     unsigned genomeLocation;
     bool isRC;
     unsigned mapQ;
-    unsigned flag;
-    const char *cigar;
     _int64 totalReads = 0;
     _int64 emittedReads = 0;
     while (readSupplier->getNextRead()) {
@@ -98,7 +96,7 @@ int main(int argc, char * argv[])
         const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
         if (NULL != contig && !strcmp(contig->name, argv[4])) {
             emittedReads++;
-            writer->writeRead(&read, alignmentResult, mapQ, genomeLocation, isRC ? RC : FORWARD);
+            writer->writeRead(read, alignmentResult, mapQ, genomeLocation, isRC ? RC : FORWARD);
         }
     }
     writer->close();

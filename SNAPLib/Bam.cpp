@@ -306,6 +306,35 @@ BAMAlignment::reg2bins(
     return i;
 }
 
+#ifdef VALIDATE_BAM
+    void
+BAMAlignment::validate()
+{
+    _ASSERT(block_size < 0x100000); // sanity check, should be <1MB!
+    _ASSERT(size(l_read_name, n_cigar_op, l_seq, 0) <= block_size + sizeof(block_size));
+    _ASSERT(refID >= -1 && refID <= (int) 0x100000);
+    // todo: validate bin, requires more info
+    _ASSERT(MAPQ <= 80);
+    _ASSERT(FLAG <= 0x7ff);
+    _ASSERT(next_refID >= -1 && refID <= (int) 0x100000);
+    for (char* p = read_name(); p < read_name() + l_read_name - 1; p++) {
+        _ASSERT(*p >= ' ' && *p <= '~');
+    }
+    _ASSERT(read_name()[l_read_name - 1] == 0);
+    // can't validate seq, all values are valid (though some are unlikely!)
+    char* q = qual();
+    for (int i = 0; i < l_seq; i++) {
+        _ASSERT(q[i] >= -1 && q[i] <= 80);
+    }
+    BAMAlignAux* aux = firstAux();
+    for (; (char*)aux - (char*)firstAux() < auxLen(); aux = aux->next()) {
+        _ASSERT(aux->tag[0] >= ' ' && aux->tag[0] <= '~' && aux->tag[1] >= ' ' && aux->tag[1] <= '~');
+        _ASSERT(strchr("AcCsSiIfZHB", aux->val_type) != NULL);
+    }
+    _ASSERT((char*) aux - (char*) firstAux() == auxLen());
+}
+#endif
+
     bool
 BAMReader::getNextRead(
     Read *read,
@@ -374,6 +403,7 @@ BAMReader::getReadFromLine(
     _ASSERT(endOfBuffer - line >= sizeof(BAMHeader));
     BAMAlignment* bam = (BAMAlignment*) line;
     _ASSERT((size_t)(endOfBuffer - line) >= bam->size());
+    bam->validate();
 
     unsigned genomeLocation = bam->getLocation(genome);
     
@@ -778,6 +808,7 @@ BAMFormat::writeRead(
     if (NULL != spaceUsed) {
         *spaceUsed = bamSize;
     }
+    bam->validate();
     return true;
 }
 

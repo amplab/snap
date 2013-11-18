@@ -134,8 +134,8 @@ PairedReadMatcher::getNextReadPair(
                 //char* buf = (char*) alloca(500);
                 for (ReadMap::iterator r = unmatched[1].begin(); r != unmatched[1].end(); r = unmatched[1].next(r)) {
                     overflow.put(r->key, ReadWithOwnMemory(r->value));
-                    //memcpy(buf, r->second.getId(), r->second.getIdLength());
-                    //buf[r->second.getIdLength()] = 0;
+                    //memcpy(buf, r->value.getId(), r->value.getIdLength());
+                    //buf[r->value.getIdLength()] = 0;
                     //printf("overflow add %d:%d %s\n", batch[1].fileID, batch[1].batchID, buf);
                 }
             }
@@ -167,7 +167,7 @@ PairedReadMatcher::getNextReadPair(
                 if (found2 == overflow.end()) {
                     // no match, remember it for later matching
                     unmatched[0].put(key, one);
-                    //printf("unmatched add %d:%d %s\n", batch[0].fileID, batch[0].batchID, key.data()); //!!
+                    //printf("unmatched add %d:%d %lx\n", batch[0].fileID, batch[0].batchID, key); //!!
                     continue;
                 } else {
                     // copy data into read, keep in overflow table indefinitely to preserve memory

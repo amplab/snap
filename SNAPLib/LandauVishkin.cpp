@@ -434,28 +434,30 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
         return score;
     }
     _uint32* bamOps = (_uint32*) bamBuf;
-    int bamOpCount = bamBufUsed / sizeof(*bamOps);
+    int bamOpCount = bamBufUsed / sizeof(_uint32);
     bool hasIndels = false;
     for (int i = 0; i < bamOpCount && ! hasIndels; i++) {
         char c = BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[i])];
         hasIndels = c == 'I' || c == 'D';
     }
-    if (hasIndels && textUsed == textLen) {
+    if (hasIndels) {
         // run it again in reverse so it pushes indels towards the beginning
         char* text2 = (char*) alloca(textLen + 1);
         _ASSERT(textUsed <= textLen);
         util::memrevcpy(text2, text, textUsed);
         char* pattern2 = (char*) alloca(patternLen + 1);
         util::memrevcpy(pattern2, pattern, patternLen);
+        char* bamBuf2 = (char*) alloca(bamBufLen);
         int bamBufUsed2, textUsed2;
-        int score2 = computeEditDistance(text2, textUsed, pattern2, patternLen, k, bamBuf, bamBufLen,
+        int score2 = computeEditDistance(text2, textUsed, pattern2, patternLen, k, bamBuf2, bamBufLen,
             useM, BAM_CIGAR_OPS, &bamBufUsed2, &textUsed2);
-        if (score == score2 && bamBufUsed2 == bamBufUsed && textUsed2 == textUsed) {
+        if (score == score2 /* && bamBufUsed2 == bamBufUsed && textUsed2 == textUsed*/) {
+            bamBufUsed = bamBufUsed2;
+            int bamOpCount = bamBufUsed / sizeof(_uint32);
+            textUsed = textUsed2;
             // reverse the operations
-            for (int i = 0; i < bamOpCount / 2; i++) {
-                _uint32 t = bamOps[i];
-                bamOps[i] = bamOps[bamOpCount - i - 1];
-                bamOps[bamOpCount - i - 1] = t;
+            for (int i = 0; i < bamOpCount; i++) {
+                bamOps[i] = ((_uint32*) bamBuf2)[bamOpCount - 1 - i];
             }
         } else if (false) { // debugging
             text2[textUsed2] = 0;
@@ -482,7 +484,7 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
             return -1;
         }
         if (cigarBufUsed != NULL) {
-            *cigarBufUsed = strlen(cigarBuf) + 1;
+            *cigarBufUsed = (int) strlen(cigarBuf) + 1;
         }
     }
     return score;
