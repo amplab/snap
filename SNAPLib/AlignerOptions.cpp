@@ -63,7 +63,8 @@ AlignerOptions::AlignerOptions(
     seedCountSpecified(false),
     numSeedsFromCommandLine(0),
     ignoreSecondaryAlignments(true),
-    preserveClipping(false)
+    preserveClipping(false),
+    definedTargetsFile(NULL)
 {
     if (forPairedEnd) {
         maxDist                 = 15;
@@ -129,6 +130,7 @@ AlignerOptions::usageMessage()
         "  -rg  Specify the default read group if it is not specified in the input file\n"
         "  -sa  Include reads in SAM or BAM files with the secondary alignment (0x100) flag set; default is to drop them.\n"
         "  -pc  Preserve the soft clipping for reads coming from SAM or BAM files\n"
+        "  -TI  Calculate mean target depth and targets >=20x coverage for these intervals\n"
 
 // not written yet        "  -r   Specify the content of the @RG line in the SAM header.\n"
             ,
@@ -315,7 +317,17 @@ AlignerOptions::parse(
         } else {
             fprintf(stderr,"Must have the gap penalty value after -G\n");
         }
-    } else if (strcmp(argv[n], "-r") == 0) {
+    } else if ( strcmp(argv[n], "-TI") == 0 ) {
+        if ( n + 1 < argc ) {
+            definedTargetsFile = argv[n+1];
+            n++;
+            return true;
+        } else {
+            fprintf(stderr,"Must specify the name of the target intervals file after -TI\n");
+        }
+    }
+    
+    else if (strcmp(argv[n], "-r") == 0) {
 #if 0   // This isn't ready yet.
         if (n + 1 < argc) {
             //

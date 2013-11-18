@@ -159,7 +159,7 @@ public:
 
     static DataWriter::FilterSupplier* bamIndex(const char* indexFileName, const Genome* genome, GzipWriterFilterSupplier* gzipSupplier);
     
-    static DataWriter::FilterSupplier* bamQC(const Genome* genome);
+    static DataWriter::FilterSupplier* bamQC(const Genome* genome, const char* targetsFileName);
 };
 
 class AsyncDataWriter;

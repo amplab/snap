@@ -36,6 +36,7 @@ Environment:
 #include <string>
 #include <sstream>
 #include <set>
+#include <fstream>
 
 using std::max;
 using std::min;
@@ -555,7 +556,7 @@ BAMFormat::getWriterSupplier(
             options->numThreads, options->outputFileTemplate, filters,
             FileEncoder::gzip(gzipSupplier, options->numThreads, options->bindToProcessors));
     } else {
-        filters = DataWriterSupplier::bamQC(genome)->compose(filters);
+        filters = DataWriterSupplier::bamQC(genome,options->definedTargetsFile)->compose(filters);
         dataSupplier = DataWriterSupplier::create(options->outputFileTemplate, filters);
     }
     return ReadWriterSupplier::create(this, dataSupplier, genome);
@@ -1794,8 +1795,9 @@ public:
     
     std::set<_int64> pairsSeen;
     unsigned char* positional_depth; // the genome depth, one per reference position
+    const char* targets_file;
     
-    ReadQCFilterSupplier(const Genome* i_genome) : FilterSupplier(DataWriter::ReadFilter), genome(i_genome) {
+    ReadQCFilterSupplier(const Genome* i_genome, const char* targetsFileName) : FilterSupplier(DataWriter::ReadFilter), genome(i_genome) {
         
         filters = std::vector<ReadQCFilter*>();
         // initialize the coverage counts - another 3 billion bytes (0.01gb)
@@ -1804,13 +1806,14 @@ public:
         memset(positional_depth,0,genome->getNumBases());
         piece_offsets = new long[genome->getNumPieces()];
         
-        const Genome::Piece* pieces = genome->getPieces();
+        const Genome::Contig* pieces = genome->getContigs();
         for ( int i = 0; i < genome->getNumPieces(); i++ ) {
             piece_offsets[i] = (long) pieces[i].beginningOffset - genome->getChromosomePadding();
         }
         
         threads = new int[1];
         threads[0] = 0; // heh memory doesn't get set to 0
+        targets_file = targetsFileName;
     }
     
     virtual DataWriter::Filter* getFilter()
@@ -1825,7 +1828,7 @@ public:
     
     virtual void onClosing(DataWriterSupplier* supplier);
     virtual void onClosed(DataWriterSupplier* supplier) {}
-    virtual std::string formatQCTables(ReadQCFilter* data);
+    virtual std::string formatQCTables(ReadQCFilter* data, int targ20, int targ10, int targs);
     
 private:
     std::vector<ReadQCFilter*> filters;
@@ -1912,7 +1915,7 @@ _int64 ReadQCFilter::pairHash(_int32 firstRef, _int32 firstPos, _int32 secondRef
         hash |= 0x1;
     }
     // next 28 bits: mate position, if it exists
-    hash = hash << 28
+    hash = hash << 28;
     hash |= ((_uint32) secondPos) & 0x1FFFFFFF;
     return hash;
 }
@@ -2094,13 +2097,53 @@ void ReadQCFilterSupplier::onClosing(DataWriterSupplier* supplier) {
         first->merge(filters[i]);
     }
     
-    std::string tables = formatQCTables(first);
+    // if there is a targets file, stream it through and calculate the per target mean coverage
+    // as well as counts to >= 20x
+    
+    int targets20x = -1;
+    int targets10x = -1;
+    int nTargets = -1;
+    if ( targets_file != NULL ) {
+        std::ifstream targetStream;
+        targetStream.open(targets_file);
+        targets20x = 0;
+        targets10x = 0;
+        nTargets = 0;
+        while ( ! targetStream.eof() ) {
+            char next = targetStream.peek();
+            if ( next != '@' && next != '#' ) {
+                std::string ctig;
+                int sta,sto;
+                targetStream >> ctig >> sta >> sto;
+                unsigned* dp_offset;
+                genome->getOffsetOfContig((char*)ctig.c_str(),dp_offset,NULL); // can't guarantee order of file, so do lookup
+                unsigned start = dp_offset[0] + (unsigned) sta;
+                unsigned stop = dp_offset[0] + (unsigned) sto;
+                double sum = 0.0;
+                for ( unsigned loc = start ; loc <= stop; start++ ) {
+                    sum += positional_depth[loc];
+                }
+                sum = ( sum / (stop - start) );
+                if ( sum > 20 ) {
+                    ++targets20x;
+                }
+                if ( sum > 10 ) {
+                    ++targets10x;
+                }
+                ++nTargets;
+            } else {
+                targetStream.ignore(1024,'\n');
+            }
+        }
+    }
+    
+    std::string tables = formatQCTables(first,targets20x,targets10x,nTargets);
     std::cout << "\n\n ------------------------------------ \n\n";
     std::cout << tables; // todo - output to a file specified on the command line
     std::cout << "\n\n ------------------------------------ \n\n";
 }
 
-std::string ReadQCFilterSupplier::formatQCTables(ReadQCFilter* qcmetrics) {
+std::string ReadQCFilterSupplier::formatQCTables(ReadQCFilter* qcmetrics, int tar20, int tar10, int nTar) {
     // formats the QC metrics into a table.
     // currently these are simple key-value pairs except for the insert size histogram.
     std::ostringstream formattedTable;
@@ -2131,13 +2174,20 @@ std::string ReadQCFilterSupplier::formatQCTables(ReadQCFilter* qcmetrics) {
         }
     }
     
+    if ( nTar > 0 ) {
+        formattedTable << "\n\nHybrid Selection\n\n";
+        formattedTable << "Targets:" << "\t" << nTar << "\n";
+        formattedTable << "Targets mean cov >= 20x" << "\t" << tar20 << "\n";
+        formattedTable << "Targets mean cov >= 10x" << "\t" << tar10 << "\n";
+    }
+    
     return formattedTable.str();
 }
 
 DataWriter::FilterSupplier*
-DataWriterSupplier::bamQC(const Genome* gn)
+DataWriterSupplier::bamQC(const Genome* gn, const char* targetsFileName)
 {
-    return new ReadQCFilterSupplier(gn);
+    return new ReadQCFilterSupplier(gn,targetsFileName);
 }
 
     bool

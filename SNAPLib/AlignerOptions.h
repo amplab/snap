@@ -91,6 +91,7 @@ struct AlignerOptions : public AbstractOptions
     const char         *defaultReadGroup; // if not specified in input
     bool                ignoreSecondaryAlignments;
     bool                preserveClipping;
+    const char         *definedTargetsFile; // file listing target for (say) capture experiment (for QC metrics)
 
     void usage();
 
