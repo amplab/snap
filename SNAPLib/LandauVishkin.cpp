@@ -87,6 +87,17 @@ bool writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat f
     } // switch
 }
 
+#if 0
+inline void validateAction(char& last, char current)
+{
+    _ASSERT(last != current);
+    last = current;
+}
+#else
+inline void validateAction(char& last, char current) {}
+#endif
+
+
     void
 LandauVishkinWithCigar::printLinear(
     char* buffer,
@@ -177,6 +188,8 @@ done1:
         return 0;
     }
 
+    char lastAction = '*';
+
     for (int e = 1; e <= k; e++) {
         // Go through the offsets, d, in the order 0, -1, 1, -2, 2, etc, in order to find CIGAR strings
         // with few indels first if possible.
@@ -242,6 +255,7 @@ done1:
 						// No inserts or deletes, and with useM equal and SNP look the same, so just
 						// emit a simple string.
 						//
+                        validateAction(lastAction, 'M');
 						if (!writeCigar(&cigarBuf, &cigarBufLen, patternLen, 'M', format)) {
 							return -2;
 						}
@@ -251,6 +265,7 @@ done1:
 						for (int i = 0; i < end; i++) {
 							bool newMatching = (pattern[i] == text[i]);
 							if (newMatching != matching) {
+                                validateAction(lastAction, matching ? '=' : 'X');
 								if (!writeCigar(&cigarBuf, &cigarBufLen, i - streakStart, (matching ? '=' : 'X'), format)) {
 									return -2;
 								}
@@ -263,15 +278,18 @@ done1:
 						if (patternLen > streakStart) {
 							if (!matching) {
 								// Write out X's all the way to patternLen
+                                validateAction(lastAction, 'X');
 								if (!writeCigar(&cigarBuf, &cigarBufLen, patternLen - streakStart, 'X', format)) {
 									return -2;
 								}
 							} else {
 								// Write out some ='s and then possibly X's if pattern is longer than text
+                                validateAction(lastAction, '=');
 								if (!writeCigar(&cigarBuf, &cigarBufLen, end - streakStart, '=', format)) {
 									return -2;
 								}
 								if (patternLen > end) {
+                                    validateAction(lastAction, 'X');
 									if (!writeCigar(&cigarBuf, &cigarBufLen, patternLen - end, 'X', format)) {
 										return -2;
 									}
@@ -341,6 +359,7 @@ done1:
 				} else {
 					// Write out ='s for the first patch of exact matches that brought us to L[0][0]
 					if (L[0][MAX_K+0] > 0) {
+                        validateAction(lastAction, '=');
 						if (! writeCigar(&cigarBuf, &cigarBufLen, L[0][MAX_K+0], '=', format)) {
 							return -2;
 						}
@@ -361,17 +380,20 @@ done1:
 							accumulatedMs += actionCount;
 						} else {
 							if (accumulatedMs != 0) {
+                                validateAction(lastAction, 'M');
 								if (!writeCigar(&cigarBuf, &cigarBufLen, accumulatedMs, 'M', format)) {
 									return -2;
 								}
 								accumulatedMs = 0;
 							}
-							if (!writeCigar(&cigarBuf, &cigarBufLen, actionCount, action, format)) {
+                            validateAction(lastAction, action);
+                            if (!writeCigar(&cigarBuf, &cigarBufLen, actionCount, action, format)) {
 								return -2;
 							}
 						}
 					} else {
-						if (! writeCigar(&cigarBuf, &cigarBufLen, actionCount, action, format)) {
+                        validateAction(lastAction, action);
+                        if (! writeCigar(&cigarBuf, &cigarBufLen, actionCount, action, format)) {
 							return -2;
 						}
 					}
@@ -380,7 +402,8 @@ done1:
 						if (useM) {
 							accumulatedMs += backtraceMatched[curE];
 						} else {
-							if (! writeCigar(&cigarBuf, &cigarBufLen, backtraceMatched[curE], '=', format)) {
+                            validateAction(lastAction, '=');
+                            if (! writeCigar(&cigarBuf, &cigarBufLen, backtraceMatched[curE], '=', format)) {
 								return -2;
 							}
 						}
@@ -391,6 +414,7 @@ done1:
 					//
 					// Write out the trailing Ms.
 					//
+                    validateAction(lastAction, 'M');
 					if (!writeCigar(&cigarBuf, &cigarBufLen, accumulatedMs, 'M', format)) {
 						return -2;
 					}
@@ -452,8 +476,9 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
         int score2 = computeEditDistance(text2, textUsed, pattern2, patternLen, k, bamBuf2, bamBufLen,
             useM, BAM_CIGAR_OPS, &bamBufUsed2, &textUsed2);
         if (score == score2 /* && bamBufUsed2 == bamBufUsed && textUsed2 == textUsed*/) {
+            bamBuf = bamBuf2;
             bamBufUsed = bamBufUsed2;
-            int bamOpCount = bamBufUsed / sizeof(_uint32);
+            bamOpCount = bamBufUsed2 / sizeof(_uint32);
             textUsed = textUsed2;
             // reverse the operations
             for (int i = 0; i < bamOpCount; i++) {
@@ -474,7 +499,7 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
     }
     // copy out cigar info
     if (format == BAM_CIGAR_OPS) {
-        memcpy(cigarBuf, bamBuf, bamBufUsed);
+        memcpy(cigarBuf, bamOps, bamBufUsed);
         if (cigarBufUsed != NULL) {
             *cigarBufUsed = bamBufUsed;
         }
