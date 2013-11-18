@@ -217,10 +217,14 @@ BAMAlignment::decodeCigar(
     int ops)
 {
     int i = 0;
+    _uint32 lastOp = 99999;
     while (ops > 0 && i < cigarSize - 11) { // 9 decimal digits (28 bits) + 1 cigar char + null terminator
         i += sprintf(o_cigar + i, "%u", *cigar >> 4);
         _ASSERT((*cigar & 0xf) <= 8);
-        o_cigar[i++] = BAMAlignment::CodeToCigar[*cigar & 0xf];
+        _uint32 op = *cigar & 0xf;
+        o_cigar[i++] = BAMAlignment::CodeToCigar[op];
+        _ASSERT(op != lastOp);
+        lastOp = op;
         ops--;
         cigar++;
     }
