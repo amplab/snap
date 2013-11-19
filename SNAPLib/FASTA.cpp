@@ -64,7 +64,7 @@ ReadFASTAGenome(const char *fileName, unsigned chromosomePaddingSize)
     }
     rewind(fastaFile);
 
-    Genome *genome = new Genome((unsigned) fileSize + (nChromosomes+1) * chromosomePaddingSize, (unsigned)fileSize + (nChromosomes+1) * chromosomePaddingSize);
+    Genome *genome = new Genome((unsigned) fileSize + (nChromosomes+1) * chromosomePaddingSize, (unsigned)fileSize + (nChromosomes+1) * chromosomePaddingSize, chromosomePaddingSize);
 
     char *paddingBuffer = new char[chromosomePaddingSize+1];
     for (unsigned i = 0; i < chromosomePaddingSize; i++) {

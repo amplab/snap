@@ -28,7 +28,8 @@ Revision History:
 #include "BigAlloc.h"
 #include "exit.h"
 
-Genome::Genome(unsigned i_maxBases, unsigned nBasesStored) : maxBases(i_maxBases), minOffset(0), maxOffset(i_maxBases)
+Genome::Genome(unsigned i_maxBases, unsigned nBasesStored, unsigned i_chromosomePadding)
+    : maxBases(i_maxBases), minOffset(0), maxOffset(i_maxBases), chromosomePadding(i_chromosomePadding)
 {
     bases = ((char *) BigAlloc(nBasesStored + 2 * N_PADDING)) + N_PADDING;
     if (NULL == bases) {
@@ -179,13 +180,12 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned 
         length = __min(length,nBases - i_minOffset);
     }
 
-    Genome *genome = new Genome(nBases,length);
+    Genome *genome = new Genome(nBases,length, chromosomePadding);
    
     genome->nBases = nBases;
     genome->nContigs = genome->maxContigs = nContigs;
     genome->contigs = new Contig[nContigs];
     genome->minOffset = i_minOffset;
-    genome->chromosomePadding = chromosomePadding;
     if (i_minOffset >= nBases) {
         fprintf(stderr,"Genome::loadFromFile: specified minOffset %u >= nBases %u\n",i_minOffset,nBases);
     }
@@ -413,7 +413,7 @@ Genome::getNextContigAfterLocation(unsigned location) const
     Genome *
 Genome::copy(bool copyX, bool copyY, bool copyM) const
 {
-    Genome *newCopy = new Genome(getCountOfBases(),getCountOfBases());
+    Genome *newCopy = new Genome(getCountOfBases(),getCountOfBases(), chromosomePadding);
 
     if (NULL == newCopy) {
         fprintf(stderr,"Genome::copy: failed to allocate space for copy.\n");

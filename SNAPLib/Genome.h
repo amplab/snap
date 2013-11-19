@@ -41,7 +41,8 @@ public:
         //
         Genome(
             unsigned             i_maxBases,
-            unsigned             nBasesStored);
+            unsigned             nBasesStored,
+            unsigned             i_chromosomePadding);
 
         void startContig(
             const char          *contigName);
@@ -207,7 +208,7 @@ private:
         static bool openFileAndGetSizes(const char *filename, FILE **file, unsigned *nBases, unsigned *nContigs);
 
 
-        unsigned chromosomePadding;
+        const unsigned chromosomePadding;
 };
 
 unsigned DistanceBetweenGenomeLocations(unsigned locationA, unsigned locationB);
