@@ -318,7 +318,7 @@ BAMAlignment::validate()
     _ASSERT(size(l_read_name, n_cigar_op, l_seq, 0) <= block_size + sizeof(block_size));
     _ASSERT(refID >= -1 && refID <= (int) 0x100000);
     // todo: validate bin, requires more info
-    _ASSERT(MAPQ <= 80);
+    _ASSERT(MAPQ <= 80 || MAPQ == 255);
     _ASSERT(FLAG <= 0x7ff);
     _ASSERT(next_refID >= -1 && refID <= (int) 0x100000);
     for (char* p = read_name(); p < read_name() + l_read_name - 1; p++) {
