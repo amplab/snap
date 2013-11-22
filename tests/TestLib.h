@@ -112,6 +112,13 @@ int runAllTests(char *filter);
         throw test::TestFailedException(__FILE__, __LINE__, oss.str()); \
     }
 
+#define ASSERT_EQ_M(expected, actual, message)		\
+    if (!((expected) == (actual))) { \
+        std::ostringstream oss; \
+        oss << #actual << " was " << (actual) << ", expected " << (expected) << ": " << (message); \
+        throw test::TestFailedException(__FILE__, __LINE__, oss.str()); \
+    }
+
 #define ASSERT_NE(expected, actual) \
     if (!((expected) != (actual))) { \
         std::ostringstream oss; \

@@ -268,6 +268,12 @@ bool StartNewThread(ThreadMainFunction threadMainFunction, void *threadMainFunct
     hThread = NULL;
     return true;
 }
+
+void SleepForMillis(unsigned millis)
+{
+  Sleep(millis);
+}
+
 unsigned GetNumberOfProcessors()
 {
     SYSTEM_INFO systemInfo[1];
@@ -1106,6 +1112,11 @@ void BindThreadToProcessor(unsigned processorNumber)
 unsigned GetNumberOfProcessors()
 {
     return (unsigned) sysconf(_SC_NPROCESSORS_ONLN);
+}
+
+void SleepForMillis(unsigned millis)
+{
+  usleep(millis*1000);
 }
 
 _int64 QueryFileSize(const char *fileName)
