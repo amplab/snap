@@ -1695,7 +1695,7 @@ FileMapper::createMapping(size_t offset, size_t amountToMap, void** o_token)
     size_t beginRounding = offset % pagesize;
 
     size_t mapRequestSize = beginRounding + amountToMap;
-    _ASSERT(mapRequestSize % pagesize == 0);
+    //_ASSERT(mapRequestSize % pagesize == 0);
     if (mapRequestSize + offset >= fileSize) {
         mapRequestSize = 0; // Says to just map the whole thing.
     } 

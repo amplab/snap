@@ -894,6 +894,9 @@ DecompressDataReader::nextBatch()
     }
     Entry* next = peekReady();
     _ASSERT(next->state == EntryReady);
+    for (int i = 0; i < count; i++) {
+        _ASSERT(next == &entries[i] || entries[i].state == EntryAvailable || entries[i].decompressed != next->decompressed);
+    }
     _int64 copy = old->decompressedValid - max(offset, old->decompressedStart);
     memcpy(next->decompressed + overflowBytes - copy, old->decompressed + old->decompressedValid - copy, copy);
     offset = overflowBytes - copy;
@@ -1128,10 +1131,9 @@ DecompressDataReader::decompressThread(
             entry->decompressedValid = entry->decompressedStart = reader->overflowBytes;
             DataBatch b = reader->inner->getBatch();
             entry->batch = DataBatch(b.batchID + 1, b.fileID);
-            if (entry->decompressed == NULL) {
-                entry->decompressed = (char*) BigAlloc(reader->totalExtra);
-                entry->allocated = true;
-            }
+	    // decompressed buffer is same as next-to-last batch, need to allocate own buffer
+            entry->decompressed = (char*) BigAlloc(reader->totalExtra);
+            entry->allocated = true;
             stop = true;
         } else {
             _int64 ignore;
@@ -1198,10 +1200,8 @@ DecompressDataReader::decompressThreadContinuous(
             entry->decompressedValid = entry->decompressedStart = reader->overflowBytes;
             DataBatch b = reader->inner->getBatch();
             entry->batch = DataBatch(b.batchID + 1, b.fileID);
-            if (entry->decompressed == NULL) {
-                entry->decompressed = (char*) BigAlloc(reader->totalExtra);
-                entry->allocated = true;
-            }
+            entry->decompressed = (char*) BigAlloc(reader->totalExtra);
+            entry->allocated = true;
             stop = true;
         } else {
             // figure out offsets and advance inner data
