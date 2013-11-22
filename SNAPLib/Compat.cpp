@@ -268,6 +268,12 @@ bool StartNewThread(ThreadMainFunction threadMainFunction, void *threadMainFunct
     hThread = NULL;
     return true;
 }
+
+void SleepForMillis(unsigned millis)
+{
+  Sleep(millis);
+}
+
 unsigned GetNumberOfProcessors()
 {
     SYSTEM_INFO systemInfo[1];
@@ -1108,6 +1114,11 @@ unsigned GetNumberOfProcessors()
     return (unsigned) sysconf(_SC_NPROCESSORS_ONLN);
 }
 
+void SleepForMillis(unsigned millis)
+{
+  usleep(millis*1000);
+}
+
 _int64 QueryFileSize(const char *fileName)
 {
     int fd = open(fileName, O_RDONLY);
@@ -1695,7 +1706,7 @@ FileMapper::createMapping(size_t offset, size_t amountToMap, void** o_token)
     size_t beginRounding = offset % pagesize;
 
     size_t mapRequestSize = beginRounding + amountToMap;
-    _ASSERT(mapRequestSize % pagesize == 0);
+    //_ASSERT(mapRequestSize % pagesize == 0);
     if (mapRequestSize + offset >= fileSize) {
         mapRequestSize = 0; // Says to just map the whole thing.
     } 

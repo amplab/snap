@@ -288,8 +288,10 @@ void BindThreadToProcessor(unsigned processorNumber); // This hard binds a threa
 #ifdef  _MSC_VER
 #define GetThreadId() GetCurrentThreadId()
 #else   // _MSC_VER
-#define GetThreadId() 0 // Fill this in later if you ever care.  For now, it's just for debugging/tuning
+#define GetThreadId() pthread_self()
 #endif  // _MSC_VER
+
+void SleepForMillis(unsigned millis);
 
 unsigned GetNumberOfProcessors();
 
