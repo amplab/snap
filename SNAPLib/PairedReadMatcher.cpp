@@ -29,6 +29,9 @@ Revision History:
 #include "DataReader.h"
 #include "VariableSizeMap.h"
 
+// turn on to debug matching process
+//#define VALIDATE_MATCH
+
 using std::pair;
 
 class PairedReadMatcher: public PairedReadReader
@@ -57,6 +60,12 @@ private:
     ReadMap unmatched[2]; // read id -> Read
     typedef VariableSizeMap<StringHash,ReadWithOwnMemory> OverflowMap;
     OverflowMap overflow; // read id -> Read
+#ifdef VALIDATE_MATCH
+    typedef VariableSizeMap<StringHash,char*> StringMap;
+    StringMap strings;
+    typedef VariableSizeMap<StringHash,int> HashSet;
+    HashSet overflowUsed;
+#endif
     _int64 overflowMatched;
     // used only if ! autoRelease:
     bool dependents; // true if pairs from 0->1
@@ -111,6 +120,22 @@ PairedReadMatcher::getNextReadPair(
             int n2 = (int) (overflow.size() - overflowMatched);
             if (n + n2 > 0) {
                 fprintf(stderr, " warning: PairedReadMatcher discarding %d+%d unpaired reads at eof\n", n, n2);
+#ifdef VALIDATE_MATCH
+                for (int i = 0; i < 2; i++) {
+                    fprintf(stdout, "unmatched[%d]\n", i);
+                    for (ReadMap::iterator j = unmatched[i].begin(); j != unmatched[i].end(); j = unmatched[i].next(j)) {
+                        fprintf(stdout, "%s\n", strings[j->key]);
+                    }
+                }
+                int printed = 0;
+                fprintf(stdout, "sample of overflow\n");
+                for (OverflowMap::iterator o = overflow.begin(); printed < 500 && o != overflow.end(); o = overflow.next(o)) {
+                    if (NULL == overflowUsed.tryFind(o->key)) {
+                        printed++;
+                        fprintf(stdout, "%s\n", strings[o->key]);
+                    }
+                }
+#endif
             }
             return false;
         }
@@ -127,13 +152,19 @@ PairedReadMatcher::getNextReadPair(
             idLength = (unsigned)(space - id);
         }
         StringHash key = util::hash64(id, idLength);
+#ifdef VALIDATE_MATCH
+        char* s = new char[idLength+1];
+        memcpy(s, id, idLength);
+        s[idLength] = 0;
+        strings.put(key, s);
+#endif
         if (one.getBatch() != batch[0]) {
             // roll over batches
             if (unmatched[1].size() > 0) {
                 //printf("warning: PairedReadMatcher overflow %d unpaired reads from %d:%d\n", unmatched[1].size(), batch[1].fileID, batch[1].batchID); //!!
                 //char* buf = (char*) alloca(500);
                 for (ReadMap::iterator r = unmatched[1].begin(); r != unmatched[1].end(); r = unmatched[1].next(r)) {
-                    overflow.put(r->key, ReadWithOwnMemory(r->value));
+                    //overflow.put(r->key, ReadWithOwnMemory(r->value));
                     //memcpy(buf, r->value.getId(), r->value.getIdLength());
                     //buf[r->value.getIdLength()] = 0;
                     //printf("overflow add %d:%d %s\n", batch[1].fileID, batch[1].batchID, buf);
@@ -174,6 +205,9 @@ PairedReadMatcher::getNextReadPair(
                     *read2 = * (Read*) &found2->value;
                     _ASSERT(read2->getData()[0]);
                     overflowMatched++;
+#ifdef VALIDATE_MATCH
+                    overflowUsed.put(key, 1);
+#endif
                     //printf("overflow matched %d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, read2->getId()); //!!
                     read2->setBatch(batch[0]); // overwrite batch so both reads have same batch, will track deps instead
                 }
