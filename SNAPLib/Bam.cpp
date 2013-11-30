@@ -739,7 +739,7 @@ BAMFormat::writeRead(
     if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
         bamSize += 4 + strlen(read->getReadGroup());
     }
-    bamSize += 3 + sizeof(_int32); // NM field
+    bamSize += 4; // NM:C field
     bamSize += strlen("PGZSNAP") + 1; // PG field
     if (bamSize > bufferSpace) {
         return false;
@@ -805,8 +805,8 @@ BAMFormat::writeRead(
     auxLen += (unsigned) pg->size();
     // NM
     BAMAlignAux* nm = (BAMAlignAux*) (auxLen + (char*) bam->firstAux());
-    nm->tag[0] = 'N'; nm->tag[1] = 'M'; nm->val_type = 'i';
-    *(_int32*)nm->value() = editDistance;
+    nm->tag[0] = 'N'; nm->tag[1] = 'M'; nm->val_type = 'C';
+    *(_uint8*)nm->value() = (_uint8)editDistance;
     auxLen += (unsigned) nm->size();
 
     if (NULL != spaceUsed) {
