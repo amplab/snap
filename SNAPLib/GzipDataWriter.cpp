@@ -371,6 +371,16 @@ GzipWriterFilterSupplier::onClosing(
         }
         memcpy(buffer, eof, sizeof(eof));
         writer->advance(sizeof(eof));
+
+        // add final translation for last empty block
+        writer->nextBatch();
+        char* ignore;
+        pair<_uint64,_uint64> last;
+        size_t used;
+        writer->getBatch(-1, &ignore, NULL, &used, &last.second, NULL, &last.first);
+        last.second += used;
+        translation.push_back(last);
+
         writer->close();
         delete writer;
     }
