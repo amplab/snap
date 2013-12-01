@@ -1594,15 +1594,12 @@ BAMIndexSupplier::addInterval(
     if (info == NULL) {
         return;
     }
-    int slot = begin <= 0 ? 0 : ((begin - 1) / 16384);
-    //_uint32 slot2 = end <= 0 ? 0 : ((end - 1) / 16384);
-    if (slot/*2*/ >= info->intervals.size()) {
+    int slot = end <= 0 ? 0 : ((end - 1) / 16384);
+    if (slot >= info->intervals.size()) {
         for (int i = info->intervals.size(); i < slot; i++) {
             info->intervals.push_back(UINT64_MAX);
         }
-        //for (int i = slot; i <= slot2; i++) {
-            info->intervals.push_back(fileOffset);
-        //}
+        info->intervals.push_back(fileOffset);
     }
 }
 
