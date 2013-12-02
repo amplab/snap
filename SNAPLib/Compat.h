@@ -119,6 +119,8 @@ inline double exp10(double x) { return exp(x * LOG10); }
 #define MAX_PATH 4096
 #define __cdecl __attribute__((__cdecl__))
 
+#define _stricmp strcasecmp
+
 inline bool _BitScanForward64(unsigned long *result, _uint64 x) {
     *result = __builtin_ctzll(x);
     return x != 0;
