@@ -131,7 +131,7 @@ private:
  
     int                 nReadersRunning;
     int                 nSuppliersRunning;
-    bool                allReadsQueued;
+    volatile bool       allReadsQueued;
 
     bool areAnyReadsReady(); // must hold the lock to call this.
 

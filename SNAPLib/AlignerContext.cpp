@@ -317,6 +317,7 @@ AlignerContext::beginIteration()
     readerContext.transcriptome = transcriptome != NULL ? transcriptome->getGenome() : NULL;
     readerContext.gtf = gtf != NULL ? gtf : NULL;
     readerContext.paired = false;
+    readerContext.ignoreSecondaryAlignments = options->ignoreSecondaryAlignments;
 	readerContext.header = NULL;
 	readerContext.headerLength = 0;
 	readerContext.headerBytes = 0;

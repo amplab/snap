@@ -45,7 +45,7 @@ using std::max;
 #undef WaitForSingleWaiterObject
 #undef WaitForEvent
 
-void AcquireExclusiveLock(ExclusiveLock *lock);
+void AcquireUnderlyingExclusiveLock(UnderlyingExclusiveLock *lock);
 bool WaitForSingleWaiterObject(SingleWaiterObject *singleWaiterObject);
 void WaitForEvent(EventObject *eventObject); 
 
@@ -143,20 +143,20 @@ _int64 timeInNanos()
     return perfCount.QuadPart * 1000000000 / performanceFrequency;
 }
 
-void AcquireExclusiveLock(ExclusiveLock *lock) {
+void AcquireUnderlyingExclusiveLock(UnderlyingExclusiveLock *lock) {
     EnterCriticalSection(lock);
 }
 
-void ReleaseExclusiveLock(ExclusiveLock *lock) {
+void ReleaseUnderlyingExclusiveLock(UnderlyingExclusiveLock *lock) {
     LeaveCriticalSection(lock);
 }
 
-bool InitializeExclusiveLock(ExclusiveLock *lock) {
+bool InitializeUnderlyingExclusiveLock(UnderlyingExclusiveLock *lock) {
     InitializeCriticalSection(lock);
     return true;
 }
 
-bool DestroyExclusiveLock(ExclusiveLock *lock) {
+bool DestroyUnderlyingExclusiveLock(UnderlyingExclusiveLock *lock) {
     DeleteCriticalSection(lock);
     return true;
 }
@@ -268,6 +268,12 @@ bool StartNewThread(ThreadMainFunction threadMainFunction, void *threadMainFunct
     hThread = NULL;
     return true;
 }
+
+void SleepForMillis(unsigned millis)
+{
+  Sleep(millis);
+}
+
 unsigned GetNumberOfProcessors()
 {
     SYSTEM_INFO systemInfo[1];
@@ -892,22 +898,22 @@ _int64 timeInNanos()
     return ((_int64) ts.tv_sec) * 1000000000 + (_int64) ts.tv_nsec;
 }
 
-void AcquireExclusiveLock(ExclusiveLock *lock)
+void AcquireUnderlyingExclusiveLock(UnderlyingExclusiveLock *lock)
 {
     pthread_mutex_lock(lock);
 }
 
-void ReleaseExclusiveLock(ExclusiveLock *lock)
+void ReleaseUnderlyingExclusiveLock(UnderlyingExclusiveLock *lock)
 {
     pthread_mutex_unlock(lock);
 }
 
-bool InitializeExclusiveLock(ExclusiveLock *lock)
+bool InitializeUnderlyingExclusiveLock(UnderlyingExclusiveLock *lock)
 {
     return pthread_mutex_init(lock, NULL) == 0;
 }
 
-bool DestroyExclusiveLock(ExclusiveLock *lock)
+bool DestroyUnderlyingExclusiveLock(UnderlyingExclusiveLock *lock)
 {
     return pthread_mutex_destroy(lock) == 0;
 }
@@ -1106,6 +1112,11 @@ void BindThreadToProcessor(unsigned processorNumber)
 unsigned GetNumberOfProcessors()
 {
     return (unsigned) sysconf(_SC_NPROCESSORS_ONLN);
+}
+
+void SleepForMillis(unsigned millis)
+{
+  usleep(millis*1000);
 }
 
 _int64 QueryFileSize(const char *fileName)
@@ -1695,7 +1706,7 @@ FileMapper::createMapping(size_t offset, size_t amountToMap, void** o_token)
     size_t beginRounding = offset % pagesize;
 
     size_t mapRequestSize = beginRounding + amountToMap;
-    _ASSERT(mapRequestSize % pagesize == 0);
+    //_ASSERT(mapRequestSize % pagesize == 0);
     if (mapRequestSize + offset >= fileSize) {
         mapRequestSize = 0; // Says to just map the whole thing.
     } 

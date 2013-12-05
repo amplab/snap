@@ -540,8 +540,13 @@ public:
     // Returns -1 if the edit distance exceeds k or -2 if we run out of space in cigarBuf.
     int computeEditDistance(const char* text, int textLen, const char* pattern, int patternLen, int k,
                             char* cigarBuf, int cigarBufLen, bool useM, std::vector<unsigned> &tokens,
+                            CigarFormat format = COMPACT_CIGAR_STRING, int* o_cigarBufUsed = NULL, int* o_textUsed = NULL);
+     
+    // same, but places indels as early as possible, following BWA & VCF conventions
+    int computeEditDistanceNormalized(const char* text, int textLen, const char* pattern, int patternLen, int k,
+                            char* cigarBuf, int cigarBufLen, bool useM,
                             CigarFormat format = COMPACT_CIGAR_STRING, int* cigarBufUsed = NULL);
-                            
+                       
     int insertSpliceJunctions(const GTFReader *gtf, std::vector<unsigned> tokens, std::string transcript_id, unsigned pos, char *cigarNew, int cigarNewLen, CigarFormat format = COMPACT_CIGAR_STRING);
                             
     // take a compact cigar binary format and turn it into one byte per reference base

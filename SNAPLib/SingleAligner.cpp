@@ -181,9 +181,7 @@ SingleAlignerContext::runIterationThread()
             stats,
             g_allocator);
 
-    g_allocator->assertAllMemoryUsed();
     g_allocator->checkCanaries();
-
     g_aligner->setExplorePopularSeeds(options->explorePopularSeeds);
     g_aligner->setStopOnFirstHit(options->stopOnFirstHit);
     
@@ -201,9 +199,7 @@ SingleAlignerContext::runIterationThread()
             stats,
             t_allocator);
 
-    t_allocator->assertAllMemoryUsed();
     t_allocator->checkCanaries();
-    
     t_aligner->setExplorePopularSeeds(options->explorePopularSeeds);
     t_aligner->setStopOnFirstHit(options->stopOnFirstHit);
 
@@ -326,21 +322,22 @@ SingleAlignerContext::updateStats(
     void 
 SingleAlignerContext::typeSpecificBeginIteration()
 {
-    readerContext.header = NULL;
-    options->inputs[0].readHeader(readerContext);
-
     if (1 == options->nInputs) {
         //
         // We've only got one input, so just connect it directly to the consumer.
         //
+        options->inputs[0].readHeader(readerContext);
         readSupplierGenerator = options->inputs[0].createReadSupplierGenerator(options->numThreads, readerContext);
     } else {
         //
         // We've got multiple inputs, so use a MultiInputReadSupplier to combine the individual inputs.
         //
         ReadSupplierGenerator **generators = new ReadSupplierGenerator *[options->nInputs];
+        // use separate context for each supplier, initialized from common
         for (int i = 0; i < options->nInputs; i++) {
-            generators[i] = options->inputs[i].createReadSupplierGenerator(options->numThreads, readerContext);
+            ReaderContext context(readerContext);
+            options->inputs[i].readHeader(context);
+            generators[i] = options->inputs[i].createReadSupplierGenerator(options->numThreads, context);
         }
         readSupplierGenerator = new MultiInputReadSupplierGenerator(options->nInputs,generators);
     }

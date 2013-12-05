@@ -72,7 +72,6 @@ struct AlignerOptions : public AbstractOptions
     bool                bindToProcessors;
     bool                ignoreMismatchedIDs;
     const char         *outputFileTemplate;
-    bool                doAlignerPrefetch;
     int                 nInputs;
     SNAPInput          *inputs;
     ReadClippingType    clipping;
@@ -93,6 +92,8 @@ struct AlignerOptions : public AbstractOptions
     bool                useTimingBarrier;
     unsigned            extraSearchDepth;
     const char         *defaultReadGroup; // if not specified in input
+    bool                ignoreSecondaryAlignments;
+    bool                preserveClipping;
 
     //Added this back in for now
     unsigned            confDiff;

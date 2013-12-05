@@ -92,6 +92,7 @@ struct ReaderContext
     const char*         defaultReadGroup;
     ReadClippingType    clipping;
     bool                paired;
+    bool                ignoreSecondaryAlignments;   // Should we just ignore reads with the Secondary Alignment bit set?
     const char*         header; // allocated buffer for header
     size_t              headerLength; // length of string
     size_t              headerBytes; // bytes used for header in file
@@ -199,7 +200,8 @@ public:
             localUnclippedDataBuffer(NULL), localUnclippedQualityBuffer(NULL), localBufferSize(0),
             originalUnclippedDataBuffer(NULL), originalUnclippedQualityBuffer(NULL), clippingState(NoClipping),
             upperCaseDataBuffer(NULL), upperCaseDataBufferLength(0), auxiliaryData(NULL), auxiliaryDataLength(0),
-            readGroup(NULL)
+            readGroup(NULL), originalAlignedLocation(-1), originalMAPQ(-1), originalSAMFlags(0),
+            originalFrontClipping(0), originalBackClipping(0), originalFrontHardClipping(0), originalBackHardClipping(0)
         {}
 
         Read(const Read& other) : 
@@ -214,7 +216,11 @@ public:
             clippingState(other.clippingState),
             batch(other.batch), 
             upperCaseDataBuffer(other.upperCaseDataBuffer), upperCaseDataBufferLength(other.upperCaseDataBufferLength),
-            auxiliaryData(other.auxiliaryData), auxiliaryDataLength(other.auxiliaryDataLength), readGroup(other.readGroup)
+            auxiliaryData(other.auxiliaryData), auxiliaryDataLength(other.auxiliaryDataLength), readGroup(other.readGroup),
+            originalAlignedLocation(other.originalAlignedLocation), originalMAPQ(other.originalMAPQ), 
+            originalSAMFlags(other.originalSAMFlags), originalFrontClipping(other.originalFrontClipping), 
+            originalBackClipping(other.originalBackClipping), originalFrontHardClipping(other.originalFrontHardClipping), 
+            originalBackHardClipping(other.originalBackHardClipping)
         {
             Read* o = (Read*) &other; // hack!
             o->localUnclippedDataBuffer = NULL;
@@ -276,6 +282,13 @@ public:
             readGroup = other.readGroup;
             auxiliaryData = other.auxiliaryData;
             auxiliaryDataLength = other.auxiliaryDataLength;
+            originalAlignedLocation = other.originalAlignedLocation;
+            originalMAPQ = other.originalMAPQ;
+            originalSAMFlags = other.originalSAMFlags;
+            originalFrontClipping = other.originalFrontClipping;
+            originalBackClipping = other.originalBackClipping;            
+            originalFrontHardClipping = other.originalFrontHardClipping;
+            originalBackHardClipping = other.originalBackHardClipping;
         }
 
         //
@@ -293,6 +306,23 @@ public:
                 const char *i_quality, 
                 unsigned i_dataLength)
         {
+            init(i_id, i_idLength, i_data, i_quality, i_dataLength, -1, -1, 0, 0, 0, 0, 0);
+        }
+
+        void init(
+                const char *i_id, 
+                unsigned i_idLength,
+                const char *i_data, 
+                const char *i_quality, 
+                unsigned i_dataLength,
+                unsigned i_originalAlignedLocation,
+                unsigned i_originalMAPQ,
+                unsigned i_originalSAMFlags,
+                unsigned i_originalFrontClipping,
+                unsigned i_originalBackClipping,
+                unsigned i_originalFrontHardClipping,
+                unsigned i_originalBackHardClipping)
+        {
             id = i_id;
             idLength = i_idLength;
             data = unclippedData = i_data;
@@ -303,6 +333,14 @@ public:
             originalUnclippedDataBuffer = NULL;
             originalUnclippedQualityBuffer = NULL;
             clippingState = NoClipping;
+            originalAlignedLocation = i_originalAlignedLocation;
+            originalMAPQ = i_originalMAPQ;
+            originalSAMFlags = i_originalSAMFlags;
+            originalFrontClipping = i_originalFrontClipping;
+            originalBackClipping = i_originalBackClipping;
+            originalFrontHardClipping = i_originalFrontHardClipping;
+            originalBackHardClipping = i_originalBackHardClipping;
+
 
             //
             // Check for lower case letters in the data, and convert to upper case if there are any.
@@ -345,6 +383,13 @@ public:
         inline void setBatch(DataBatch b) { batch = b; }
         inline const char* getReadGroup() const { return readGroup; }
         inline void setReadGroup(const char* rg) { readGroup = rg; }
+        inline unsigned getOriginalAlignedLocation() {return originalAlignedLocation;}
+        inline unsigned getOriginalMAPQ() {return originalMAPQ;}
+        inline unsigned getOriginalSAMFlags() {return originalSAMFlags;}
+        inline unsigned getOriginalFrontClipping() {return originalFrontClipping;}
+        inline unsigned getOriginalBackClipping() {return originalBackClipping;}
+        inline unsigned getOriginalFrontHardClipping() {return originalFrontHardClipping;}
+        inline unsigned getOriginalBackHardClipping() {return originalBackHardClipping;}
         inline char* getAuxiliaryData(unsigned* o_length, bool * o_isSAM) const
         {
             *o_length = auxiliaryDataLength;
@@ -354,7 +399,7 @@ public:
         inline void setAuxiliaryData(char* data, unsigned len)
         { auxiliaryData = data; auxiliaryDataLength = len; }
 
-        void clip(ReadClippingType clipping) {
+        void clip(ReadClippingType clipping, bool maintainOriginalClipping = false) {
             if (clipping == clippingState) {
                 //
                 // Already in the right state.
@@ -375,8 +420,14 @@ public:
             // First clip from the back.
             //
             if (ClipBack == clipping || ClipFrontAndBack == clipping) {
+                unsigned backClipping = 0;
                 while (dataLength > 0 && quality[dataLength - 1] == '#') {
                     dataLength--;
+                    backClipping++;
+                }
+
+                if (maintainOriginalClipping && backClipping < originalBackClipping) {
+                    dataLength -= (originalBackClipping - backClipping);
                 }
             }
 
@@ -388,18 +439,18 @@ public:
                 while (frontClippedLength < dataLength && quality[frontClippedLength] == '#') {
                     frontClippedLength++;
                 }
+
+                if (maintainOriginalClipping) {
+                    frontClippedLength = max(frontClippedLength, originalFrontClipping);
+                }
             }
 
-            if (dataLength-frontClippedLength < 50) {
-                // There are a lot of quality-2 bases in the read so just use all of it (IS THIS A GOOD IDEA? -BB)
-                dataLength = unclippedLength;
-                frontClippedLength = 0;
-            } else {
-                dataLength -= frontClippedLength;
-                data += frontClippedLength;
-                quality += frontClippedLength;
-            }
+            _ASSERT(frontClippedLength <= dataLength);
 
+            dataLength -= frontClippedLength;
+            data += frontClippedLength;
+            quality += frontClippedLength;
+ 
             clippingState = clipping;
         };
         
@@ -492,12 +543,49 @@ public:
             // The clipping reverses as we go to/from RC.
             //
             frontClippedLength = unclippedLength - dataLength - frontClippedLength;
+
+            unsigned temp = originalFrontClipping;
+            originalFrontClipping = originalBackClipping;
+            originalBackClipping = temp;
+            temp = originalFrontHardClipping;
+            originalFrontHardClipping = originalBackHardClipping;
+            originalBackHardClipping = temp;
             
             data = localUnclippedDataBuffer + frontClippedLength;
             quality = localUnclippedQualityBuffer + frontClippedLength;
         }
 
+
 		static void checkIdMatch(Read* read0, Read* read1);
+
+        static void computeClippingFromCigar(const char *cigarBuffer, unsigned *originalFrontClipping, unsigned *originalBackClipping, unsigned *originalFrontHardClipping, unsigned *originalBackHardClipping)
+        {
+            size_t cigarSize;
+            const size_t cigarLimit = 1000;
+            for (cigarSize = 0; cigarSize < cigarLimit && cigarBuffer[cigarSize] != '\0' && cigarBuffer[cigarSize] != '\t'; cigarSize++) {
+                 // This loop body intentionally left blank.
+            }
+
+            if (cigarSize == cigarLimit) {
+                fprintf(stderr, "Absurdly long cigar string.\n");
+                soft_exit(1);
+            }
+
+            size_t frontHardClippingChars, backHardClippingChars, frontClippingChars, backClippingChars;
+
+            //
+            // Pull off the hard clipping first.
+            //
+            ExtractClipping(cigarBuffer, cigarSize, originalFrontHardClipping, originalBackHardClipping, 'H', &frontHardClippingChars, &backHardClippingChars);
+            _ASSERT(frontHardClippingChars + backHardClippingChars <= cigarSize);
+
+            //
+            // Now look at what's left of the cigar string to see if there's soft clipping.
+            //
+            ExtractClipping(cigarBuffer + frontHardClippingChars, cigarSize - frontHardClippingChars - backHardClippingChars, originalFrontClipping, originalBackClipping,
+                'S', &frontClippingChars, &backClippingChars);
+
+        }
 
 private:
 
@@ -512,6 +600,18 @@ private:
         unsigned unclippedLength;
         unsigned frontClippedLength;
         ReadClippingType clippingState;
+
+        //
+        // Alignment data that was in the read when it was read from a file.  While this should probably also be the place to put
+        // information that'll be used by the read writer, for now it's not.  Hence, they're all called "original."
+        //
+        unsigned originalAlignedLocation;
+        unsigned originalMAPQ;
+        unsigned originalSAMFlags;
+        unsigned originalFrontClipping;
+        unsigned originalBackClipping;
+        unsigned originalFrontHardClipping;
+        unsigned originalBackHardClipping;
 
         //
         // Data stored in the read that's used if we RC ourself.  These are always unclipped.
@@ -540,6 +640,54 @@ private:
         // auxiliary data in BAM or SAM format (can tell by looking at 3rd byte), if available
         char* auxiliaryData;
         unsigned auxiliaryDataLength;
+
+        //
+        // Pull the clipping info from the front and back of a cigar string.  
+        static void ExtractClipping(const char *cigarBuffer, size_t cigarSize, unsigned *frontClipping, unsigned *backClipping, char clippingChar, size_t *frontClippingChars, size_t *backClippingChars)
+        {
+
+            *frontClipping = 0;
+            const size_t bufferSize = 20;
+            char buffer[bufferSize+1];  // +1 for trailing null
+            unsigned i;
+            for (i = 0; i < bufferSize && i < cigarSize && cigarBuffer[i] >= '0' && cigarBuffer[i] <= '9'; i++) {
+                buffer[i] = cigarBuffer[i];
+            }
+            if (cigarBuffer[i] == clippingChar) {
+                buffer[i] = '\0';
+                *frontClipping = atoi(buffer);
+                *frontClippingChars = i + 1;
+            } else {
+                *frontClippingChars = 0;
+            }
+
+            *backClipping = 0;
+            *backClippingChars = 0;
+            //
+            // Find the end of the cigar string by looking for either the end of the string or a tab. Just start where we
+            // were.
+            //
+            for (;i < cigarSize && cigarBuffer[i] != '\t' && cigarBuffer[i] != '\0'; i++) {
+                // This loop body intentionally left blank.
+            }
+            if (i > 1 && cigarBuffer[i-1] == clippingChar) {
+                for (i = i - 2; i >=0 && cigarBuffer[i] >= '0' && cigarBuffer[i] <= '9'; i--) {
+                    // This loop body intentionally left blank.
+                }
+                //
+                // If we've gotten back to the beginning of the string, then the whole thing is one big soft clip.  We arbitrarily
+                // select that to be front clipping, and so leave the back clipping alone.
+                if (i > 0) {
+                    unsigned stringStart = i + 1;
+                    for (i = stringStart; cigarBuffer[i] >= '0' && cigarBuffer[i] <= '9'; i++) {
+                        buffer[i - stringStart] = cigarBuffer[i];
+                    }
+                    buffer[i - stringStart] = '\0';
+                    *backClipping = atoi(buffer);
+                    *backClippingChars = i - stringStart + 1;
+                }
+            }
+        }
 };
 
 //

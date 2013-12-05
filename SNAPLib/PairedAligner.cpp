@@ -465,24 +465,26 @@ void PairedAlignerContext::runIterationThread()
     size_t g_memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), 
                                                                 numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize);
 
+    g_memoryPoolSize += ChimericPairedEndAligner::getBigAllocatorReservation(index, maxReadSize, maxHits, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxDist,
+                                                    extraSearchDepth, maxCandidatePoolSize);
+
     BigAllocator *g_allocator = new BigAllocator(g_memoryPoolSize);
     
-    IntersectingPairedEndAligner *g_intersectingAligner = new IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
+    IntersectingPairedEndAligner *g_intersectingAligner = new (g_allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
                                                                 maxCandidatePoolSize, g_allocator);
 
-    ChimericPairedEndAligner *g_aligner = new ChimericPairedEndAligner(
+    ChimericPairedEndAligner *aligner = new (g_allocator) ChimericPairedEndAligner(
         index,
         maxReadSize,
         maxHits,
         maxDist,
         numSeedsFromCommandLine,
         seedCoverage,
-        minSpacing,
-        maxSpacing,
         forceSpacing,
         extraSearchDepth,
-        g_intersectingAligner);
+        g_intersectingAligner,
+        g_allocator);
         
     BigAllocator *c_allocator = NULL;
     IntersectingPairedEndAligner *c_intersectingAligner = NULL;
@@ -494,11 +496,11 @@ void PairedAlignerContext::runIterationThread()
       size_t c_memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(contamination, intersectingAlignerMaxHits, maxReadSize, contamination->getSeedLength(),
                                                                   numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize);
       c_allocator = new BigAllocator(c_memoryPoolSize);
-      c_intersectingAligner = new IntersectingPairedEndAligner(contamination, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
+      c_intersectingAligner = new (c_allocator) IntersectingPairedEndAligner(contamination, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
                                                                   seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth,
                                                                   maxCandidatePoolSize, c_allocator);
 
-      c_aligner = new ChimericPairedEndAligner(
+      c_aligner = new (c_allocator) ChimericPairedEndAligner(
           contamination,
           maxReadSize,
           maxHits,
@@ -509,7 +511,8 @@ void PairedAlignerContext::runIterationThread()
           maxSpacing,
           forceSpacing,
           extraSearchDepth,
-          c_intersectingAligner);
+          c_intersectingAligner
+          c_allocator);
     }
 
     //Base aligner for transcriptome 
@@ -532,6 +535,8 @@ void PairedAlignerContext::runIterationThread()
             
     partialAligner->setExplorePopularSeeds(options->explorePopularSeeds);
     partialAligner->setStopOnFirstHit(options->stopOnFirstHit);
+
+    allocator->checkCanaries();
 
     ReadWriter *readWriter = this->readWriter;
 
@@ -654,7 +659,7 @@ void PairedAlignerContext::runIterationThread()
             result.status[0] = result.status[1] = NotFound;
             result.location[0] = result.location[1] = InvalidGenomeLocation;
         }
-#if 1       // cheese
+#if 0       // cheese
         if (result.score[0] + result.score[1] >= 5) {
             double divisor = __max(1,((result.score[0] + result.score[1]) *2.0) / 5.0);
             if (result.mapq[0] < 50) {
@@ -673,22 +678,21 @@ void PairedAlignerContext::runIterationThread()
 
     stats->lvCalls = g_aligner->getLocationsScored();
 
-    if (c_aligner != NULL) {
-      delete c_aligner;
-    }
-    if (c_intersectingAligner != NULL) {
-      c_intersectingAligner->~IntersectingPairedEndAligner();
-    }
     if (c_allocator != NULL) {
+      c_allocator->checkCanaries();
+      c_aligner->~ChimericPairedEndAligner();
+      c_intersectingAligner->~IntersectingPairedEndAligner();
       delete c_allocator;
     }
-    
-    delete g_aligner;
-    delete supplier;
+
+    g_allocator->checkCanaries();
+    g_aligner->~ChimericPairedEndAligner();
     g_intersectingAligner->~IntersectingPairedEndAligner();
+    delete g_allocator;
+    delete supplier;
+    
     transcriptomeAligner->~BaseAligner();
     partialAligner->~BaseAligner();       
-    delete g_allocator;
 }
 
 void PairedAlignerContext::writePair(Read* read0, Read* read1, PairedAlignmentResult* result)
@@ -745,25 +749,21 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
     void 
 PairedAlignerContext::typeSpecificBeginIteration()
 {
-    ReaderContext context;
-    context.clipping = options->clipping;
-    context.defaultReadGroup = options->defaultReadGroup;
-    context.genome = index ? index->getGenome() : NULL;
-    context.paired = true;
-    context.header = NULL;
-    options->inputs[0].readHeader(context);
-
     if (1 == options->nInputs) {
         //
         // We've only got one input, so just connect it directly to the consumer.
         //
-        pairedReadSupplierGenerator = options->inputs[0].createPairedReadSupplierGenerator(options->numThreads, context);
+        options->inputs[0].readHeader(readerContext);
+        pairedReadSupplierGenerator = options->inputs[0].createPairedReadSupplierGenerator(options->numThreads, readerContext);
     } else {
         //
         // We've got multiple inputs, so use a MultiInputReadSupplier to combine the individual inputs.
         //
         PairedReadSupplierGenerator **generators = new PairedReadSupplierGenerator *[options->nInputs];
+        // use separate context for each supplier, initialized from common
         for (int i = 0; i < options->nInputs; i++) {
+            ReaderContext context(readerContext);
+            options->inputs[i].readHeader(context);
             generators[i] = options->inputs[i].createPairedReadSupplierGenerator(options->numThreads, context);
         }
         pairedReadSupplierGenerator = new MultiInputPairedReadSupplierGenerator(options->nInputs,generators);

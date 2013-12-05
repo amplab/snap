@@ -71,6 +71,7 @@ public:
         if (encoder != NULL) {
             delete encoder;
         }
+        DestroyExclusiveLock(&lock);
     }
 
     virtual bool getBuffer(char** o_buffer, size_t* o_size);
@@ -244,7 +245,7 @@ FileEncoder::setEncodedBatchSize(
     size_t newSize)
 {
     size_t old = writer->batches[encoderBatch].used;
-    //printf("setEncodedBatchSize #%d %lld -> %lld\n", encoderBatch, old, newSize);
+//printf("setEncodedBatchSize #%d %lld -> %lld\n", encoderBatch, old, newSize);
     if (newSize != old) {
         AcquireExclusiveLock(lock);
         AsyncDataWriter::Batch* batch = &writer->batches[encoderBatch];
@@ -288,8 +289,9 @@ AsyncDataWriter::AsyncDataWriter(
             AllowEventWaitersToProceed(&batches[i].encoded); // initialize so empty bufs are available
         }
     }
+
+    InitializeExclusiveLock(&lock);
     if (encoder != NULL) {
-        InitializeExclusiveLock(&lock);
         encoder->initialize(this);
     }
 }
@@ -438,7 +440,6 @@ AsyncDataWriter::close()
         for (int i = 0; i < count; i++) {
             DestroyEventObject(&batches[i].encoded);
         }
-        DestroyExclusiveLock(&lock);
     }
     for (int i = 0; i < count; i++) {
         batches[i].file->close();

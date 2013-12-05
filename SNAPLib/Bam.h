@@ -28,6 +28,9 @@ Environment:
 #include "SAM.h"
 #include "DataReader.h"
 
+// for debugging file I/O, validate BAM records on input & output
+//#define VALIDATE_BAM
+
 // BAM format layout
 // SAM Format Specification v1.4-r985
 
@@ -134,6 +137,8 @@ struct BAMAlignment
     static const char* CodeToCigar;
     static _uint8 CigarToCode[256];
     static _uint8 CigarCodeToRefBase[9];
+    static int GetCigarOpCode(_uint32 op) { return op & 0xf; }
+    static int GetCigarOpCount(_uint32 op) { return op >> 4; }
     
     static void decodeSeq(char* o_sequence, _uint8* nibbles, int bases);
     static void decodeQual(char* o_qual, char* quality, int bases);
@@ -159,11 +164,17 @@ struct BAMAlignment
     // absoluate genome locations
 
     _uint32 getLocation(const Genome* genome) const
-    { return pos < 0 || refID < 0 || refID >= genome->getNumPieces() || (FLAG & SAM_UNMAPPED)
-        ? UINT32_MAX : (genome->getPieces()[refID].beginningOffset + pos); }
+    { return pos < 0 || refID < 0 || refID >= genome->getNumContigs() || (FLAG & SAM_UNMAPPED)
+        ? UINT32_MAX : (genome->getContigs()[refID].beginningOffset + pos); }
 
     _uint32 getNextLocation(const Genome* genome) const
-    { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? UINT32_MAX : (genome->getPieces()[next_refID].beginningOffset + next_pos); }
+    { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? UINT32_MAX : (genome->getContigs()[next_refID].beginningOffset + next_pos); }
+
+#ifdef VALIDATE_BAM
+    void validate();
+#else
+    inline void validate() {} // inline noop
+#endif
 };
 
 #define INT8_VAL_TYPE       'c'
@@ -410,6 +421,6 @@ private:
 
         DataReader*         data;
         //unsigned            n_ref; // number of reference sequences
-        //unsigned*           refOffset; // array mapping ref sequence ID to piece location
+        //unsigned*           refOffset; // array mapping ref sequence ID to contig location
         _int64              extraOffset; // offset into extra data
 };

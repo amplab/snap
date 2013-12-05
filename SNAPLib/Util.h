@@ -528,6 +528,10 @@ struct IdIntPair
     { return (((_uint64) id) << 32) | (_uint32) value; }
 };
 
+
+void memrevcpy(void* dst, const void* src, size_t bytes);
+
+
 } // namespace util
 
 int FirstPowerOf2GreaterThanOrEqualTo(int value);

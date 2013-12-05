@@ -218,10 +218,14 @@ BAMAlignment::decodeCigar(
     int ops)
 {
     int i = 0;
+    _uint32 lastOp = 99999;
     while (ops > 0 && i < cigarSize - 11) { // 9 decimal digits (28 bits) + 1 cigar char + null terminator
         i += sprintf(o_cigar + i, "%u", *cigar >> 4);
         _ASSERT((*cigar & 0xf) <= 8);
-        o_cigar[i++] = BAMAlignment::CodeToCigar[*cigar & 0xf];
+        _uint32 op = *cigar & 0xf;
+        o_cigar[i++] = BAMAlignment::CodeToCigar[op];
+        _ASSERT(op != lastOp);
+        lastOp = op;
         ops--;
         cigar++;
     }
@@ -307,6 +311,35 @@ BAMAlignment::reg2bins(
     return i;
 }
 
+#ifdef VALIDATE_BAM
+    void
+BAMAlignment::validate()
+{
+    _ASSERT(block_size < 0x100000); // sanity check, should be <1MB!
+    _ASSERT(size(l_read_name, n_cigar_op, l_seq, 0) <= block_size + sizeof(block_size));
+    _ASSERT(refID >= -1 && refID <= (int) 0x100000);
+    // todo: validate bin, requires more info
+    _ASSERT(MAPQ <= 80 || MAPQ == 255);
+    _ASSERT(FLAG <= 0x7ff);
+    _ASSERT(next_refID >= -1 && refID <= (int) 0x100000);
+    for (char* p = read_name(); p < read_name() + l_read_name - 1; p++) {
+        _ASSERT(*p >= ' ' && *p <= '~');
+    }
+    _ASSERT(read_name()[l_read_name - 1] == 0);
+    // can't validate seq, all values are valid (though some are unlikely!)
+    char* q = qual();
+    for (int i = 0; i < l_seq; i++) {
+        _ASSERT(q[i] >= -1 && q[i] <= 80);
+    }
+    BAMAlignAux* aux = firstAux();
+    for (; (char*)aux - (char*)firstAux() < auxLen(); aux = aux->next()) {
+        _ASSERT(aux->tag[0] >= ' ' && aux->tag[0] <= '~' && aux->tag[1] >= ' ' && aux->tag[1] <= '~');
+        _ASSERT(strchr("AcCsSiIfZHB", aux->val_type) != NULL);
+    }
+    _ASSERT((char*) aux - (char*) firstAux() == auxLen());
+}
+#endif
+
     bool
 BAMReader::getNextRead(
     Read *read,
@@ -318,35 +351,42 @@ BAMReader::getNextRead(
     bool ignoreEndOfRange,
     const char **cigar)
 {
-    char* buffer;
-    _int64 bytes;
-    if (! data->getData(&buffer, &bytes)) {
-        data->nextBatch();
+    unsigned local_flag;
+    if (NULL == flag) {
+        flag = &local_flag;
+    }
+
+    do {
+        char* buffer;
+        _int64 bytes;
         if (! data->getData(&buffer, &bytes)) {
-            return false;
+            data->nextBatch();
+            if (! data->getData(&buffer, &bytes)) {
+                return false;
+            }
+            extraOffset = 0;
         }
-        extraOffset = 0;
-    }
-    BAMAlignment* bam = (BAMAlignment*) buffer;
-    if ((unsigned _int64)bytes < sizeof(bam->block_size) || (unsigned _int64)bytes < bam->size()) {
-        fprintf(stderr, "Unexpected end of BAM file at %lld\n", data->getFileOffset());
-        soft_exit(1);
-    }
-    data->advance(bam->size());
-    size_t lineLength;
-    getReadFromLine(context.genome, buffer, buffer + bytes, read, alignmentResult, genomeLocation,
-        isRC, mapQ, &lineLength, flag, cigar, context.clipping);
-    unsigned auxLen = bam->auxLen();
-    read->setReadGroup(context.defaultReadGroup);
-    if (auxLen > 0) {
-        read->setAuxiliaryData((char*) bam->firstAux(), auxLen);
-        for (BAMAlignAux* aux = bam->firstAux(); aux < bam->endAux(); aux = aux->next()) {
-            if (aux->val_type == 'Z' && aux->tag[0] == 'R' && aux->tag[1] == 'G') {
-                read->setReadGroup(READ_GROUP_FROM_AUX);
-                break;
+        BAMAlignment* bam = (BAMAlignment*) buffer;
+        if ((unsigned _int64)bytes < sizeof(bam->block_size) || (unsigned _int64)bytes < bam->size()) {
+            fprintf(stderr, "Unexpected end of BAM file at %lld\n", data->getFileOffset());
+            soft_exit(1);
+        }
+        data->advance(bam->size());
+        size_t lineLength;
+        getReadFromLine(context.genome, buffer, buffer + bytes, read, alignmentResult, genomeLocation,
+            isRC, mapQ, &lineLength, flag, cigar, context.clipping);
+        unsigned auxLen = bam->auxLen();
+        read->setReadGroup(context.defaultReadGroup);
+        if (auxLen > 0) {
+            read->setAuxiliaryData((char*) bam->firstAux(), auxLen);
+            for (BAMAlignAux* aux = bam->firstAux(); aux < bam->endAux(); aux = aux->next()) {
+                if (aux->val_type == 'Z' && aux->tag[0] == 'R' && aux->tag[1] == 'G') {
+                    read->setReadGroup(READ_GROUP_FROM_AUX);
+                    break;
+                }
             }
         }
-    }
+    } while (context.ignoreSecondaryAlignments && (*flag & SAM_SECONDARY));
     return true;
 }
 
@@ -357,7 +397,7 @@ BAMReader::getReadFromLine(
     char *endOfBuffer,
     Read *read,
     AlignmentResult *alignmentResult,
-    unsigned *genomeLocation,
+    unsigned *out_genomeLocation,
     bool *isRC,
     unsigned *mapQ, 
     size_t *lineLength,
@@ -368,10 +408,23 @@ BAMReader::getReadFromLine(
     _ASSERT(endOfBuffer - line >= sizeof(BAMHeader));
     BAMAlignment* bam = (BAMAlignment*) line;
     _ASSERT((size_t)(endOfBuffer - line) >= bam->size());
+    bam->validate();
+
+    unsigned genomeLocation = bam->getLocation(genome);
     
-    if (NULL != genomeLocation) {
-        _ASSERT(-1 <= bam->refID && bam->refID < (int)genome->getNumPieces());
-        *genomeLocation = bam->getLocation(genome);
+    if (NULL != out_genomeLocation) {
+        _ASSERT(-1 <= bam->refID && bam->refID < (int)genome->getNumContigs());
+        *out_genomeLocation = genomeLocation;
+    }
+
+
+    char* cigarBuffer = getExtra(MAX_SEQ_LENGTH);
+    if (! BAMAlignment::decodeCigar(cigarBuffer, MAX_SEQ_LENGTH, bam->cigar(), bam->n_cigar_op)) {
+        cigarBuffer = ""; // todo: fail?
+    }
+
+    if (NULL != cigar) {
+        *cigar = cigarBuffer;
     }
 
     if (NULL != read) {
@@ -380,7 +433,12 @@ BAMReader::getReadFromLine(
         char* qualBuffer = getExtra(bam->l_seq);
         BAMAlignment::decodeSeq(seqBuffer, bam->seq(), bam->l_seq);
         BAMAlignment::decodeQual(qualBuffer, bam->qual(), bam->l_seq);
-        read->init(bam->read_name(), bam->l_read_name - 1, seqBuffer, qualBuffer, bam->l_seq);
+
+        unsigned originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping;
+        Read::computeClippingFromCigar(cigarBuffer, &originalFrontClipping, &originalBackClipping, &originalFrontHardClipping, &originalBackHardClipping);
+
+        read->init(bam->read_name(), bam->l_read_name - 1, seqBuffer, qualBuffer, bam->l_seq, genomeLocation, bam->MAPQ, bam->FLAG, 
+            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping);
         read->setBatch(data->getBatch());
         if (bam->FLAG & SAM_REVERSE_COMPLEMENT) {
             read->becomeRC();
@@ -405,13 +463,7 @@ BAMReader::getReadFromLine(
         *flag = bam->FLAG;
     }
 
-    if (NULL != cigar) {
-        char* cigarBuffer = getExtra(MAX_SEQ_LENGTH);
-        if (! BAMAlignment::decodeCigar(cigarBuffer, MAX_SEQ_LENGTH, bam->cigar(), bam->n_cigar_op)) {
-            *cigar = ""; // todo: fail?
-        }
-        *cigar = cigarBuffer;
-    }
+
 }
 
     char*
@@ -457,6 +509,7 @@ private:
     static int computeCigarOps(const Genome * genome, LandauVishkinWithCigar * lv,
         char * cigarBuf, int cigarBufLen,
         const char * data, unsigned dataLength, unsigned basesClippedBefore, unsigned extraBasesClippedBefore, unsigned basesClippedAfter,
+        unsigned extraBasesClippedAfter,     unsigned frontHardClipping, unsigned backHardClipping,
         unsigned genomeLocation, bool isRC, bool useM, int * editDistance, std::vector<unsigned> &tokens);
 
     const bool useM;
@@ -482,16 +535,16 @@ BAMFormat::getSortInfo(
 	int* o_pos) const
 {
     BAMAlignment* bam = (BAMAlignment*) buffer;
-    _ASSERT((size_t) bytes >= sizeof(BAMAlignment) && bam->size() <= (size_t) bytes && bam->refID < genome->getNumPieces());
+    _ASSERT((size_t) bytes >= sizeof(BAMAlignment) && bam->size() <= (size_t) bytes && bam->refID < genome->getNumContigs());
 	if (o_location != NULL) {
-		if (bam->refID < 0 || bam->refID >= genome->getNumPieces() || bam->pos < 0) {
-			if (bam->next_refID < 0 || bam->next_refID > genome->getNumPieces() || bam->next_pos < 0) {
+		if (bam->refID < 0 || bam->refID >= genome->getNumContigs() || bam->pos < 0) {
+			if (bam->next_refID < 0 || bam->next_refID > genome->getNumContigs() || bam->next_pos < 0) {
 				*o_location = UINT32_MAX;
 			} else {
-				*o_location = genome->getPieces()[bam->next_refID].beginningOffset + bam->next_pos;
+				*o_location = genome->getContigs()[bam->next_refID].beginningOffset + bam->next_pos;
 			}
 		} else {
-			*o_location = genome->getPieces()[bam->refID].beginningOffset + bam->pos;
+			*o_location = genome->getContigs()[bam->refID].beginningOffset + bam->pos;
 		}
 	}
 	if (o_readBytes != NULL) {
@@ -570,24 +623,24 @@ BAMFormat::writeHeader(
     bamHeader->l_text = (int)samHeaderSize;
     cursor = BAMHeader::size((int)samHeaderSize);
 
-    // Write a RefSeq record for each chromosome / piece in the genome
+    // Write a RefSeq record for each chromosome / contig in the genome
     // todo: handle null genome index case - reparse header & translate into BAM
 	if (context.genome != NULL) {
-		const Genome::Piece *pieces = context.genome->getPieces();
-		int numPieces = context.genome->getNumPieces();
-		bamHeader->n_ref() = numPieces;
+		const Genome::Contig *contigs = context.genome->getContigs();
+		int numContigs = context.genome->getNumContigs();
+		bamHeader->n_ref() = numContigs;
 		BAMHeaderRefSeq* refseq = bamHeader->firstRefSeq();
 		unsigned genomeLen = context.genome->getCountOfBases();
-		for (int i = 0; i < numPieces; i++) {
-			int len = (int)strlen(pieces[i].name) + 1;
+		for (int i = 0; i < numContigs; i++) {
+			int len = (int)strlen(contigs[i].name) + 1;
 			cursor += BAMHeaderRefSeq::size(len);
 			if (cursor > headerBufferSize) {
 				return false;
 			}
 			refseq->l_name = len;
-			memcpy(refseq->name(), pieces[i].name, len);
-			unsigned start = pieces[i].beginningOffset;
-            unsigned end = ((i + 1 < numPieces) ? pieces[i+1].beginningOffset : genomeLen) - context.genome->getChromosomePadding();
+			memcpy(refseq->name(), contigs[i].name, len);
+			unsigned start = contigs[i].beginningOffset;
+            unsigned end = ((i + 1 < numContigs) ? contigs[i+1].beginningOffset : genomeLen) - context.genome->getChromosomePadding();
             refseq->l_ref() = end - start;
 			refseq = refseq->next();
 			_ASSERT((char*) refseq - header == cursor);
@@ -629,13 +682,13 @@ BAMFormat::writeRead(
     _uint32 cigarNew[cigarBufSize];
 
     int flags = 0;
-    const char *pieceName = "*";
-    int pieceIndex = -1;
-    unsigned positionInPiece = 0;
+    const char *contigName = "*";
+    int contigIndex = -1;
+    unsigned positionInContig = 0;
     int cigarOps = 0;
-    const char *matePieceName = "*";
-    int matePieceIndex = -1;
-    unsigned matePositionInPiece = 0;
+    const char *mateContigName = "*";
+    int mateContigIndex = -1;
+    unsigned matePositionInContig = 0;
     _int64 templateLength = 0;
 
     char data[MAX_READ];
@@ -647,13 +700,15 @@ BAMFormat::writeRead(
     unsigned basesClippedBefore;
     unsigned extraBasesClippedBefore;
     unsigned basesClippedAfter;
+    unsigned extraBasesClippedAfter;
     int editDistance;
 
-    if (! SAMFormat::createSAMLine(genome, transcriptome, gtf, lv, data, quality, MAX_READ, pieceName, pieceIndex, 
-        flags, positionInPiece, mapQuality, matePieceName, matePieceIndex, matePositionInPiece, templateLength,
+    if (! SAMFormat::createSAMLine(genome, transcriptome, gtf, lv, data, quality, MAX_READ, contigName, contigIndex, 
+        flags, positionInPiece, mapQuality, mateContigName, mateContigIndex, matePositionInContig, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, isTranscriptome, useM,
-        hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection, mateIsTranscriptome, &extraBasesClippedBefore))
+        hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection, mateIsTranscriptome, 
+        &extraBasesClippedBefore, &extraBasesClippedAfter))
     {
         return false;
     }
@@ -662,15 +717,17 @@ BAMFormat::writeRead(
         std::vector<unsigned> tokens;
         if (!isTranscriptome) {
             cigarOps = computeCigarOps(genome, lv, (char*) cigarBuf, cigarBufSize * sizeof(_uint32),
-                                       clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter,
+                                       clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter, extraBasesClippedAfter,
+                                       read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
                                        genomeLocation, direction == RC, useM, &editDistance, tokens);
                                    
         } else {
         
             //Vector of tokens from CIGAR string for Transcriptome conversion
             cigarOps = computeCigarOps(transcriptome, lv, (char*) cigarNew, cigarBufSize * sizeof(_uint32),
-                                               clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter,
-                                               tlocation, direction == RC, useM, &editDistance, tokens);
+                                       clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter, extraBasesClippedAfter,
+                                       read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
+                                       tlocation, direction == RC, useM, &editDistance, tokens);
                                                           
             //We need the pieceName for conversion             
             const Genome::Piece *transcriptomePiece = transcriptome->getPieceAtLocation(tlocation);
@@ -715,15 +772,15 @@ BAMFormat::writeRead(
     if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
         bamSize += 4 + strlen(read->getReadGroup());
     }
-    bamSize += 3 + sizeof(_int32); // NM field
+    bamSize += 4; // NM:C field
     bamSize += strlen("PGZSNAP") + 1; // PG field
     if (bamSize > bufferSpace) {
         return false;
     }
     BAMAlignment* bam = (BAMAlignment*) buffer;
     bam->block_size = (int)bamSize - 4;
-    bam->refID = pieceIndex;
-    bam->pos = positionInPiece - 1;
+    bam->refID = contigIndex;
+    bam->pos = positionInContig - 1;
 
     if (qnameLen > 254) {
         fprintf(stderr, "BAM format: QNAME field must be less than 254 characters long, instead it's %lld\n", qnameLen);
@@ -735,16 +792,16 @@ BAMFormat::writeRead(
     for (int i = 0; i < cigarOps; i++) {
         refLength += BAMAlignment::CigarCodeToRefBase[cigarBuf[i] & 0xf] * (cigarBuf[i] >> 4);
     }
-    bam->bin = genomeLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(positionInPiece-1, positionInPiece-1 + refLength) :
+    bam->bin = genomeLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(positionInContig-1, positionInContig-1 + refLength) :
 		// unmapped is at mate's position, length 1
-		mateLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(matePositionInPiece-1, matePositionInPiece) :
+		mateLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(matePositionInContig-1, matePositionInContig) :
 		// otherwise at -1, length 1
 		BAMAlignment::reg2bin(-1, 0);
     bam->n_cigar_op = cigarOps;
     bam->FLAG = flags;
     bam->l_seq = fullLength;
-    bam->next_refID = matePieceIndex;
-    bam->next_pos = matePositionInPiece - 1;
+    bam->next_refID = mateContigIndex;
+    bam->next_pos = matePositionInContig - 1;
     bam->tlen = (int)templateLength;
     memcpy(bam->read_name(), read->getId(), qnameLen);
     bam->read_name()[qnameLen] = 0;
@@ -781,13 +838,14 @@ BAMFormat::writeRead(
     auxLen += (unsigned) pg->size();
     // NM
     BAMAlignAux* nm = (BAMAlignAux*) (auxLen + (char*) bam->firstAux());
-    nm->tag[0] = 'N'; nm->tag[1] = 'M'; nm->val_type = 'i';
-    *(_int32*)nm->value() = editDistance;
+    nm->tag[0] = 'N'; nm->tag[1] = 'M'; nm->val_type = 'C';
+    *(_uint8*)nm->value() = (_uint8)editDistance;
     auxLen += (unsigned) nm->size();
 
     if (NULL != spaceUsed) {
         *spaceUsed = bamSize;
     }
+    bam->validate();
     return true;
 }
 
@@ -804,6 +862,9 @@ BAMFormat::computeCigarOps(
     unsigned                    basesClippedBefore,
     unsigned                    extraBasesClippedBefore,
     unsigned                    basesClippedAfter,
+    unsigned                    extraBasesClippedAfter,
+    unsigned                    frontHardClipping,
+    unsigned                    backHardClipping,
     unsigned                    genomeLocation,
     bool                        isRC,
 	bool						useM,
@@ -818,17 +879,20 @@ BAMFormat::computeCigarOps(
     data += extraBasesClippedBefore;
     dataLength -= extraBasesClippedBefore;
 
+    unsigned clippingWordsBefore = ((basesClippedBefore + extraBasesClippedBefore > 0) ? 1 : 0) + ((frontHardClipping > 0) ? 1 : 0);
+    unsigned clippingWordsAfter = ((basesClippedAfter + extraBasesClippedAfter > 0) ? 1 : 0) + ((backHardClipping > 0) ? 1 : 0);
+
     const char *reference = genome->getSubstring(genomeLocation, dataLength);
     int used;
     if (NULL != reference) {
-        *editDistance = lv->computeEditDistance(
+        *editDistance = lv->computeEditDistanceNormalized(
                             reference,
-                            dataLength,
+                            dataLength - extraBasesClippedAfter,
                             data,
-                            dataLength,
+                            dataLength - extraBasesClippedAfter,
                             MAX_K - 1,
-                            cigarBuf + 4 * ((basesClippedBefore + extraBasesClippedBefore) > 0),
-                            cigarBufLen - 4 * (((basesClippedBefore + extraBasesClippedBefore) > 0) + (basesClippedAfter > 0)),
+                            cigarBuf + 4 * clippingWordsBefore,
+                            cigarBufLen - 4 * (clippingWordsBefore + clippingWordsAfter),
 						    useM, tokens, BAM_CIGAR_OPS, &used);
     } else {
         //
@@ -848,13 +912,25 @@ BAMFormat::computeCigarOps(
         }
         return 0;
     } else {
-        // Add some CIGAR instructions for soft-clipping if we've ignored some bases in the read.
-        if (basesClippedBefore + extraBasesClippedBefore > 0) {
-            *(_uint32*)cigarBuf = ((basesClippedBefore + extraBasesClippedBefore) << 4) | BAMAlignment::CigarToCode['S'];
+        //
+        // If we have hard clipping, add in the cigar string for it.
+        //
+        if (frontHardClipping > 0) {
+            *(_uint32*)cigarBuf = (frontHardClipping << 4) | BAMAlignment::CigarToCode['H'];
             used += 4;
         }
-        if (basesClippedAfter > 0) {
-            *(_uint32*)(cigarBuf + used) = (basesClippedAfter << 4) | BAMAlignment::CigarToCode['S'];
+        // Add some CIGAR instructions for soft-clipping if we've ignored some bases in the read.
+        if (basesClippedBefore + extraBasesClippedBefore > 0) {
+            *((_uint32*)cigarBuf + ((frontHardClipping > 0) ? 1 : 0))  = ((basesClippedBefore + extraBasesClippedBefore) << 4) | BAMAlignment::CigarToCode['S'];
+            used += 4;
+        }
+        if (basesClippedAfter + extraBasesClippedAfter > 0) {
+            *(_uint32*)(cigarBuf + used) = ((basesClippedAfter + extraBasesClippedAfter) << 4) | BAMAlignment::CigarToCode['S'];
+            used += 4;
+        }
+
+        if (backHardClipping > 0) {
+            *(_uint32*)(cigarBuf + used) = (backHardClipping << 4) | BAMAlignment::CigarToCode['H'];
             used += 4;
         }
         return used / 4;
@@ -1163,7 +1239,7 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                 }
                 offset = runOffset + (*i & RunOffset);
                 BAMAlignment* record = getRead(offset);
-                _ASSERT(record->refID >= -1 && record->refID < genome->getNumPieces()); // simple sanity check
+                _ASSERT(record->refID >= -1 && record->refID < genome->getNumContigs()); // simple sanity check
                 // skip adjacent half-mapped pairs, they're not really runs
                 if (i + 1 < run.end() && readIdsMatch(record->read_name(), getRead(runOffset + (*(i+1) & RunOffset))->read_name())) {
                     i++;
@@ -1359,7 +1435,7 @@ public:
         lastRefId(-1),
         lastBin(0), binStart(0), lastBamEnd(0)
     {
-        refs = genome ? new RefInfo[genome->getNumPieces()] : NULL;
+        refs = genome ? new RefInfo[genome->getNumContigs()] : NULL;
         readCounts[0] = readCounts[1] = 0;
     }
     
@@ -1464,21 +1540,12 @@ BAMIndexSupplier::onClosed(
         addChunk(lastRefId, BAMAlignment::BAM_EXTRA_BIN, firstBamStart, lastBamEnd);
         addChunk(lastRefId, BAMAlignment::BAM_EXTRA_BIN, readCounts[0], readCounts[1]);
     }
-    // extend interval indices to length of pices
-    for (int i = 0; i < genome->getNumPieces(); i++) {
-        RefInfo* ref = getRefInfo(i);
-        int end = i + 1 < genome->getNumPieces() ? genome->getPieces()[i + 1].beginningOffset : genome->getCountOfBases();
-        int last = (end - genome->getPieces()[i].beginningOffset - 1) / 16384;
-        for (int j = ref->intervals.size(); j <= last; j++) {
-            ref->intervals.push_back(0);
-        }
-    }
 
     // write out index file
     FILE* index = fopen(indexFileName, "wb");
     char magic[4] = {'B', 'A', 'I', 1};
     fwrite(magic, sizeof(magic), 1, index);
-    _int32 n_ref = genome->getNumPieces();
+    _int32 n_ref = genome->getNumContigs();
     fwrite(&n_ref, sizeof(n_ref), 1, index);
 
     for (int i = 0; i < n_ref; i++) {
@@ -1525,7 +1592,7 @@ BAMIndexSupplier::onClosed(
 BAMIndexSupplier::getRefInfo(
     int refId)
 {
-    return refId >= 0 && refId < genome->getNumPieces() ? &refs[refId] : NULL;
+    return refId >= 0 && refId < genome->getNumContigs() ? &refs[refId] : NULL;
 }
 
     void
@@ -1561,15 +1628,12 @@ BAMIndexSupplier::addInterval(
     if (info == NULL) {
         return;
     }
-    int slot = begin <= 0 ? 0 : ((begin - 1) / 16384);
-    //_uint32 slot2 = end <= 0 ? 0 : ((end - 1) / 16384);
-    if (slot/*2*/ >= info->intervals.size()) {
+    int slot = end <= 0 ? 0 : ((end - 1) / 16384);
+    if (slot >= info->intervals.size()) {
         for (int i = info->intervals.size(); i < slot; i++) {
             info->intervals.push_back(UINT64_MAX);
         }
-        //for (int i = slot; i <= slot2; i++) {
-            info->intervals.push_back(fileOffset);
-        //}
+        info->intervals.push_back(fileOffset);
     }
 }
 

@@ -26,6 +26,7 @@ Environment:
 #include "FileFormat.h"
 #include "PriorityQueue.h"
 #include "exit.h"
+#include "Bam.h"
 
 #define USE_DEVTEAM_OPTIONS 1
 //#define VALIDATE_SORT 1
@@ -406,6 +407,11 @@ SortedDataFilterSupplier::mergeSort()
                 }
             }
             memcpy(writeBuffer, b->data, b->length);
+#ifdef VALIDATE_BAM
+            if (format == FileFormat::BAM[0] || format == FileFormat::BAM[1]) {
+                ((BAMAlignment*)b->data)->validate();
+            }
+#endif
 #if VALIDATE_SORT
 			int refID, pos;
 			format->getSortInfo(genome, b->data, b->length, NULL, NULL, &refID, &pos);

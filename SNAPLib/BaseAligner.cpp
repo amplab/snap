@@ -533,7 +533,7 @@ Arguments:
     inputRead           - the read to align
     genomeLocation      - if this aligned to a SingleHit, the 0-based offset in the genome that this hit.  The aligner treats the entire
                           genome as a single string, even though it's really a set of chrosomes.  It just makes the code simpler.
-                          The caller can convert to chromosome+offset by looking up the piece boudaries using the Genome object.
+                          The caller can convert to chromosome+offset by looking up the contig boudaries using the Genome object.
     hitDirection        - the aligner tries to align both the given read and its reverse complement.  If we found a SingleHit this
                           is set to indicate whether that hit was on the forward or reverse complement.
     finalScore          - if a single or confident hit, this is the score of the hit (i.e., the LV distance from the read)
@@ -1166,16 +1166,16 @@ Return Value:
                     // long.  We're willing to reduce it to less than the length of a read, because the read could
                     // butt up against the end of the chromosome and have insertions in it.
                     //
-                    const Genome::Piece *piece = genome->getPieceAtLocation(genomeLocation);
+                    const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
                     
                     unsigned endOffset;
                     if (genomeLocation + readDataLength + MAX_K >= genome->getCountOfBases()) {
                         endOffset = genome->getCountOfBases();
                     } else {
-                        const Genome::Piece *nextPiece = genome->getNextPieceAfterLocation(genomeLocation);
-                        _ASSERT(NULL != piece && piece->beginningOffset <= genomeLocation && piece != nextPiece);
+                        const Genome::Contig *nextContig = genome->getNextContigAfterLocation(genomeLocation);
+                        _ASSERT(NULL != contig && contig->beginningOffset <= genomeLocation && contig != nextContig);
 
-                        endOffset = nextPiece->beginningOffset;
+                        endOffset = nextContig->beginningOffset;
                     }
                     genomeDataLength = endOffset - genomeLocation - 1;
                     if (genomeDataLength >= readDataLength - MAX_K) {
@@ -1740,6 +1740,7 @@ BaseAligner::getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsT
     size_t hashTableElementPoolSize = maxHitsToConsider * maxSeedsToUse * 2 ;   // *2 for RC
 
     return
+        sizeof(_uint64) * 14                                        + // allow for alignment
         sizeof(BaseAligner)                                         + // our own member variables
         (ownLandauVishkin ? 
             LandauVishkin<>::getBigAllocatorReservation() +

@@ -58,11 +58,10 @@ bool BigCommit(
 //
 class BigAllocator {
 public:
-    BigAllocator(size_t i_maxMemory);
+    BigAllocator(size_t i_maxMemory, size_t i_allocationGranularity = 8);
     ~BigAllocator();
 
     virtual void *allocate(size_t amountToAllocate);
-    virtual void assertAllMemoryUsed();
 
 #if     _DEBUG
     void checkCanaries();
@@ -74,6 +73,7 @@ private:
     char    *basePointer;
     char    *allocPointer;
     size_t  maxMemory;
+    size_t  allocationGranularity;
 
 #if     _DEBUG
     //
@@ -94,7 +94,7 @@ private:
 class CountingBigAllocator : public BigAllocator
 {
 public:
-    CountingBigAllocator() :size(0), allocations(NULL), BigAllocator(0) {}
+    CountingBigAllocator(size_t i_allocationGranularity = 8) :size(0), allocations(NULL), BigAllocator(0), allocationGranularity(i_allocationGranularity) {}
     ~CountingBigAllocator();
 
     virtual void *allocate(size_t amountToAllocate);
@@ -103,6 +103,7 @@ public:
 
 private:
     size_t  size;
+    size_t  allocationGranularity;
 
     struct Allocation {
         void *ptr;
