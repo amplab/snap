@@ -170,7 +170,12 @@ int LandauVishkinWithCigar::insertSpliceJunctions(
             }
             numCigarOps++;
         }
-        
+        else if (op == 'S') {
+            if (! writeCigar(&cigarNew, &cigarNewLen, length, op, format, final)) {
+                return -2;
+            }
+            numCigarOps++;
+        }
         else {
       
             //Get the end of this operator
@@ -179,8 +184,8 @@ int LandauVishkinWithCigar::insertSpliceJunctions(
             //Get the junctions
             //printf("Querying with pos: %d length: %d\n", prev, length);
             std::vector<junction> junctions;
-            gtf->GetTranscript(transcript_id).Junctions(prev, length+1, junctions);
-        
+            gtf->GetTranscript(transcript_id).Junctions(prev, length, junctions);
+
             //If this operator crosses a splice junction, we must add it into the CIGAR operator
             if (junctions.size() > 0) {
             
@@ -195,7 +200,7 @@ int LandauVishkinWithCigar::insertSpliceJunctions(
                     // Special case 1: the read begins right on the splice
                     // junction: in this case we do not insert the junction
                     if (jit->first == pos) {
-                        continue;
+                        continue; 
                     }
                                             
                     // Junction[0] is the position in transcript space where the
@@ -214,7 +219,7 @@ int LandauVishkinWithCigar::insertSpliceJunctions(
                     }   
                                                 
                     // Add in splice junction spacer only if this is not the first operator
-                    if (! writeCigar(&cigarNew, &cigarNewLen, jit->second, 'N', format, final)) {
+                    if (! writeCigar(&cigarNew, &cigarNewLen, jit->second->Length(), 'N', format, final)) {
                         return -2;
                     }
                     numCigarOps++;
@@ -587,7 +592,7 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
     char* bamBuf = (char*) alloca(bamBufLen);
     int bamBufUsed, textUsed;
     int score = computeEditDistance(text, textLen, pattern, patternLen, k, bamBuf, bamBufLen,
-        useM, BAM_CIGAR_OPS, tokens, &bamBufUsed, &textUsed);
+        useM, tokens, BAM_CIGAR_OPS, &bamBufUsed, &textUsed);
     if (score < 0) {
         return score;
     }
@@ -608,7 +613,7 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
         char* bamBuf2 = (char*) alloca(bamBufLen);
         int bamBufUsed2, textUsed2;
         int score2 = computeEditDistance(text2, textUsed, pattern2, patternLen, k, bamBuf2, bamBufLen,
-            useM, BAM_CIGAR_OPS, tokens, &bamBufUsed2, &textUsed2);
+            useM, tokens, BAM_CIGAR_OPS, &bamBufUsed2, &textUsed2);
         if (score == score2 /* && bamBufUsed2 == bamBufUsed && textUsed2 == textUsed*/) {
             bamBuf = bamBuf2;
             bamBufUsed = bamBufUsed2;

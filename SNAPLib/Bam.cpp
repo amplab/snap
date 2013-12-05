@@ -704,7 +704,7 @@ BAMFormat::writeRead(
     int editDistance;
 
     if (! SAMFormat::createSAMLine(genome, transcriptome, gtf, lv, data, quality, MAX_READ, contigName, contigIndex, 
-        flags, positionInPiece, mapQuality, mateContigName, mateContigIndex, matePositionInContig, templateLength,
+        flags, positionInContig, mapQuality, mateContigName, mateContigIndex, matePositionInContig, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, isTranscriptome, useM,
         hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection, mateIsTranscriptome, 
@@ -730,7 +730,7 @@ BAMFormat::writeRead(
                                        tlocation, direction == RC, useM, &editDistance, tokens);
                                                           
             //We need the pieceName for conversion             
-            const Genome::Piece *transcriptomePiece = transcriptome->getPieceAtLocation(tlocation);
+            const Genome::Contig *transcriptomePiece = transcriptome->getContigAtLocation(tlocation);
             const char* transcriptomePieceName = transcriptomePiece->name;
             unsigned transcriptomePositionInPiece = tlocation - transcriptomePiece->beginningOffset + 1; // SAM is 1-based
             
@@ -885,7 +885,7 @@ BAMFormat::computeCigarOps(
     const char *reference = genome->getSubstring(genomeLocation, dataLength);
     int used;
     if (NULL != reference) {
-        *editDistance = lv->computeEditDistanceNormalized(
+        *editDistance = lv->computeEditDistance(
                             reference,
                             dataLength - extraBasesClippedAfter,
                             data,

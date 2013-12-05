@@ -152,7 +152,7 @@ int AlignmentFilter::AddAlignment(unsigned location, Direction direction, int sc
     
         if (!isTranscriptome) {
     
-            const Genome::Piece *piece = genome->getPieceAtLocation(location);
+            const Genome::Contig *piece = genome->getContigAtLocation(location);
             rname = piece->name;
             pos_original = location - piece->beginningOffset + 1;
             pos = pos_original;
@@ -166,7 +166,7 @@ int AlignmentFilter::AddAlignment(unsigned location, Direction direction, int sc
         //If we have a transcriptome read, convert the coordinates to genomic coordinates
         } else {
         
-            const Genome::Piece *piece = transcriptome->getPieceAtLocation(location);
+            const Genome::Contig *piece = transcriptome->getContigAtLocation(location);
             rname = piece->name;           
             pos_original = location - piece->beginningOffset + 1;
             pos = pos_original;
@@ -238,7 +238,7 @@ AlignmentResult AlignmentFilter::FilterSingle(unsigned* location, Direction* dir
 		if (alignments[0].isTranscriptome) {
 			*tlocation = alignments[0].location;
 			unsigned offset;
-			genome->getOffsetOfPiece(alignments[0].rname.c_str(), &offset);
+			genome->getOffsetOfContig(alignments[0].rname.c_str(), &offset);
 			offset += alignments[0].pos - 1;
 			*location = offset;
 
@@ -265,7 +265,7 @@ AlignmentResult AlignmentFilter::FilterSingle(unsigned* location, Direction* dir
 		if (alignments[0].isTranscriptome) {
 			*tlocation = alignments[0].location;
 			unsigned offset;
-			genome->getOffsetOfPiece(alignments[0].rname.c_str(), &offset);
+			genome->getOffsetOfContig(alignments[0].rname.c_str(), &offset);
 			offset += alignments[0].pos - 1;
 			*location = offset;
 		} else {
@@ -757,7 +757,7 @@ void AlignmentFilter::UnalignedRead(Read *read, unsigned minDiff) {
 		unsigned length0 = (*(it->second).rbegin() - *(it->second).begin()) + seedLen;
 
 		//Convert segment to genomic coordinates
-		const Genome::Piece *piece0 = genome->getPieceAtLocation(it->first);
+		const Genome::Contig *piece0 = genome->getContigAtLocation(it->first);
 		string chr0 = piece0->name;
 		int pos0 = it->first - piece0->beginningOffset + 1; 
 		
@@ -778,7 +778,7 @@ void AlignmentFilter::UnalignedRead(Read *read, unsigned minDiff) {
 		unsigned length0 = (*(it->second).rbegin() - *(it->second).begin()) + seedLen;
 						
 		//Convert both segments to genomic coordinates
-		const Genome::Piece *piece0 = genome->getPieceAtLocation(it->first);
+		const Genome::Contig *piece0 = genome->getContigAtLocation(it->first);
 		string chr0 = piece0->name;
 		int pos0 = it->first - piece0->beginningOffset + 1; 
 		
@@ -995,11 +995,11 @@ void AlignmentFilter::FindPartialMatches(PairedAlignmentResult *result, Alignmen
     for (vector<unsigned>::iterator it0 = locs0.begin(); it0 != locs0.end(); ++it0) {
         for (vector<unsigned>::iterator it1 = locs1.begin(); it1 != locs1.end(); ++it1) {
 
-            const Genome::Piece *piece0 = genome->getPieceAtLocation(*it0);
+            const Genome::Contig *piece0 = genome->getContigAtLocation(*it0);
             string chr0 = piece0->name;
             int pos0 = (*it0) - piece0->beginningOffset + 1; 
             
-            const Genome::Piece *piece1 = genome->getPieceAtLocation(*it1);
+            const Genome::Contig *piece1 = genome->getContigAtLocation(*it1);
             string chr1 = piece1->name;
             int pos1 = (*it1) - piece1->beginningOffset + 1; 
             
@@ -1051,7 +1051,7 @@ void AlignmentFilter::ProcessPairs(PairedAlignmentResult* result, std::vector<Al
 
 			result->tlocation[0] = pairs[0].align1->location;
 			unsigned offset;
-			genome->getOffsetOfPiece(pairs[0].align1->rname.c_str(), &offset);
+			genome->getOffsetOfContig(pairs[0].align1->rname.c_str(), &offset);
 			offset += pairs[0].align1->pos - 1;
 			result->location[0] = offset;
 
@@ -1064,7 +1064,7 @@ void AlignmentFilter::ProcessPairs(PairedAlignmentResult* result, std::vector<Al
 
 			result->tlocation[1] = pairs[0].align2->location;
 			unsigned offset;
-			genome->getOffsetOfPiece(pairs[0].align2->rname.c_str(), &offset);
+			genome->getOffsetOfContig(pairs[0].align2->rname.c_str(), &offset);
 			offset += pairs[0].align2->pos - 1;
 			result->location[1] = offset;
 
@@ -1103,7 +1103,7 @@ void AlignmentFilter::ProcessPairs(PairedAlignmentResult* result, std::vector<Al
 
 			result->tlocation[0] = pairs[0].align1->location;
 			unsigned offset;
-			genome->getOffsetOfPiece(pairs[0].align1->rname.c_str(), &offset);
+			genome->getOffsetOfContig(pairs[0].align1->rname.c_str(), &offset);
 			offset += pairs[0].align1->pos - 1;
 			result->location[0] = offset;
 
@@ -1116,7 +1116,7 @@ void AlignmentFilter::ProcessPairs(PairedAlignmentResult* result, std::vector<Al
 
 			result->tlocation[1] = pairs[0].align2->location;
 			unsigned offset;
-			genome->getOffsetOfPiece(pairs[0].align2->rname.c_str(), &offset);
+			genome->getOffsetOfContig(pairs[0].align2->rname.c_str(), &offset);
 			offset += pairs[0].align2->pos - 1;
 			result->location[1] = offset;
 
@@ -1170,7 +1170,7 @@ void AlignmentFilter::PrintMaps(seed_map& map, seed_map& mapRC) {
     
         printf("Pos: %u\n", it->first);
     
-        const Genome::Piece *piece0 = genome->getPieceAtLocation(it->first);
+        const Genome::Contig *piece0 = genome->getContigAtLocation(it->first);
         const char* chr0 = piece0->name;
         unsigned pos0 = it->first - piece0->beginningOffset + 1; 
         
@@ -1185,7 +1185,7 @@ void AlignmentFilter::PrintMaps(seed_map& map, seed_map& mapRC) {
     
         printf("Pos: %u\n", it->first);
     
-        const Genome::Piece *piece0 = genome->getPieceAtLocation(it->first);
+        const Genome::Contig *piece0 = genome->getContigAtLocation(it->first);
         const char* chr0 = piece0->name;
         unsigned pos0 = it->first - piece0->beginningOffset + 1; 
         

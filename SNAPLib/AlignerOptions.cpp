@@ -65,7 +65,7 @@ AlignerOptions::AlignerOptions(
     seedCountSpecified(false),
     numSeedsFromCommandLine(0),
     ignoreSecondaryAlignments(true),
-    preserveClipping(false)
+    preserveClipping(false),
     confDiff(2),
     minPercentAbovePhred(90.0),
     minPhred(20),

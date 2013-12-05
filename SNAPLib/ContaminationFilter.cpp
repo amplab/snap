@@ -49,7 +49,7 @@ int ContaminationFilter::AddAlignment(unsigned location, Direction direction, in
     //If this is, in fact, aligned to something
     if (location != 0xFFFFFFFF) {
     
-      const Genome::Piece *piece = contamination->getPieceAtLocation(location);
+      const Genome::Contig *piece = contamination->getContigAtLocation(location);
       rname = piece->name;
       pos = location - piece->beginningOffset + 1;
     

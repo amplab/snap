@@ -1064,7 +1064,7 @@ SAMFormat::writeRead(
                                        read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(), genomeLocation, direction, useM, &editDistance, tokens);        
         
             //We need the pieceName for conversion             
-            const Genome::Piece *transcriptomePiece = transcriptome->getPieceAtLocation(tlocation);
+            const Genome::Contig *transcriptomePiece = transcriptome->getContigAtLocation(tlocation);
             const char* transcriptomePieceName = transcriptomePiece->name;
             unsigned transcriptomePositionInPiece = tlocation - transcriptomePiece->beginningOffset + 1; // SAM is 1-based
                                        

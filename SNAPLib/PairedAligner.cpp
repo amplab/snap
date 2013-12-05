@@ -474,7 +474,7 @@ void PairedAlignerContext::runIterationThread()
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
                                                                 maxCandidatePoolSize, g_allocator);
 
-    ChimericPairedEndAligner *aligner = new (g_allocator) ChimericPairedEndAligner(
+    ChimericPairedEndAligner *g_aligner = new (g_allocator) ChimericPairedEndAligner(
         index,
         maxReadSize,
         maxHits,
@@ -485,7 +485,9 @@ void PairedAlignerContext::runIterationThread()
         extraSearchDepth,
         g_intersectingAligner,
         g_allocator);
-        
+     
+    g_allocator->checkCanaries();
+   
     BigAllocator *c_allocator = NULL;
     IntersectingPairedEndAligner *c_intersectingAligner = NULL;
     ChimericPairedEndAligner *c_aligner = NULL;
@@ -507,12 +509,13 @@ void PairedAlignerContext::runIterationThread()
           maxDist,
           numSeedsFromCommandLine,
           seedCoverage,
-          minSpacing,
-          maxSpacing,
           forceSpacing,
           extraSearchDepth,
-          c_intersectingAligner
+          c_intersectingAligner,
           c_allocator);
+
+      c_allocator->checkCanaries();
+    
     }
 
     //Base aligner for transcriptome 
@@ -535,8 +538,6 @@ void PairedAlignerContext::runIterationThread()
             
     partialAligner->setExplorePopularSeeds(options->explorePopularSeeds);
     partialAligner->setStopOnFirstHit(options->stopOnFirstHit);
-
-    allocator->checkCanaries();
 
     ReadWriter *readWriter = this->readWriter;
 

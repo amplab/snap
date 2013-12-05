@@ -544,7 +544,7 @@ public:
      
     // same, but places indels as early as possible, following BWA & VCF conventions
     int computeEditDistanceNormalized(const char* text, int textLen, const char* pattern, int patternLen, int k,
-                            char* cigarBuf, int cigarBufLen, bool useM,
+                            char* cigarBuf, int cigarBufLen, bool useM, std::vector<unsigned> &tokens,
                             CigarFormat format = COMPACT_CIGAR_STRING, int* cigarBufUsed = NULL);
                        
     int insertSpliceJunctions(const GTFReader *gtf, std::vector<unsigned> tokens, std::string transcript_id, unsigned pos, char *cigarNew, int cigarNewLen, CigarFormat format = COMPACT_CIGAR_STRING);
