@@ -203,6 +203,32 @@ SingleAlignerContext::runIterationThread()
     t_aligner->setExplorePopularSeeds(options->explorePopularSeeds);
     t_aligner->setStopOnFirstHit(options->stopOnFirstHit);
 
+    BigAllocator *c_allocator = NULL;
+    BaseAligner *c_aligner = NULL;
+
+    if (contamination != NULL) {
+
+        c_allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, maxHits, maxReadSize, contamination->getSeedLength(), numSeedsFromCommandLine, seedCoverage));
+        c_aligner = new (c_allocator) BaseAligner(
+                contamination,
+                maxHits,
+                maxDist,
+                maxReadSize,
+                numSeedsFromCommandLine,
+                seedCoverage,
+                extraSearchDepth,
+                NULL,               // LV (no need to cache in the single aligner)
+                NULL,               // reverse LV
+                stats,
+                c_allocator);
+
+        c_allocator->checkCanaries();
+        c_aligner->setExplorePopularSeeds(options->explorePopularSeeds);
+        c_aligner->setStopOnFirstHit(options->stopOnFirstHit);
+
+    }
+
+
 #ifdef  _MSC_VER
     if (options->useTimingBarrier) {
         if (0 == InterlockedDecrementAndReturnNewValue(nThreadsAllocatingMemory)) {
@@ -252,6 +278,21 @@ SingleAlignerContext::runIterationThread()
         
         //Filter the results
         AlignmentResult result = filter.FilterSingle(&location, &direction, &score, &mapq, &isTranscriptome, &tlocation);
+
+        //If the read is still unaligned
+        if (result == NotFound) {
+
+            //If the contamination database is present
+            if (c_aligner != NULL) {
+
+                AlignmentResult c_result = c_aligner->AlignRead(read, &location, &direction, &score, &mapq);
+                c_allocator->checkCanaries();
+
+                if (c_result != NotFound) {
+                    c_filter->AddAlignment(location, direction, score, mapq, false, false);
+                }
+            }
+        }
 
         bool wasError = false;
         if (result != NotFound && computeError) {
