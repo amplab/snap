@@ -662,7 +662,7 @@ GTFFeature::GTFFeature(string line)
     pch = strtok(NULL,"'\t'"); score = pch;
     pch = strtok(NULL,"'\t'"); strand = *pch;
     pch = strtok(NULL,"'\t'"); frame = *pch;
-        
+       
     while (pch != NULL) {
     
         char *temp_key, *temp_value;
@@ -706,6 +706,10 @@ GTFFeature::GTFFeature(string line)
     } else {
         transcript_id = gene_id;
     }
+
+    //Prepend gene_id onto the feature name to prevent overlapping genes from conflicting
+    key = gene_id + key;
+
 }
 
 bool GTFFeature::GetAttribute(string key, string &value) const {
@@ -1177,7 +1181,7 @@ void GTFTranscript::Junctions(unsigned transcript_pos, unsigned span, std::vecto
 void GTFTranscript::WriteFASTA(const Genome *genome, std::ofstream &outfile) const {
 
     //Get the offset for this chromosome
-    unsigned offset, amountExceeded;
+    unsigned offset;
     bool isValid = genome->getOffsetOfContig(chr.c_str(), &offset);
 
     if (!isValid) {
@@ -1187,20 +1191,22 @@ void GTFTranscript::WriteFASTA(const Genome *genome, std::ofstream &outfile) con
     
     string sequence;
     for (feature_list::const_iterator it = exons.begin(); it != exons.end(); ++it) {
+
+        if ((*it)->type == EXON) {
     
-        //Get the sequence of this feature from the genome
-        const char* seq = genome->getSubstring((*it)->start+offset-1,  (*it)->Length());
+            //Get the sequence of this feature from the genome
+            const char* seq = genome->getSubstring((*it)->start+offset-1,  (*it)->Length());
         
-        if (seq == NULL) {
-            printf("Warning: transcript %s exceeds boundaries of chromosome %s. Truncating\n", transcript_id.c_str(), chr.c_str());
-            //const char* seq = genome->getSubstring((*it)->start+offset-1, (*it)->Length()-amountExceeded, amountExceeded);
-            exit(1);
+            if (seq == NULL) {
+                printf("Warning: transcript %s exceeds boundaries of chromosome %s. Truncating\n", transcript_id.c_str(), chr.c_str());
+                //const char* seq = genome->getSubstring((*it)->start+offset-1, (*it)->Length()-amountExceeded, amountExceeded);
+                exit(1);
+            }
+        
+            //Temp copy into string variable
+            string temp(seq, (*it)->Length());
+            sequence += temp;
         }
-        
-        //Temp copy into string variable
-        string temp(seq, (*it)->Length());
-        sequence += temp;
-    
     }
     outfile << ">" + transcript_id << endl;
     outfile << sequence << endl;
