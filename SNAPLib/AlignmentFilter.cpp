@@ -339,13 +339,16 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
     
     //Iterate through all mate0;
     for (alignment_map::iterator m0 = mate0.begin(); m0 != mate0.end(); ++m0) {
-            
+     
+        if (m0->second.score > maxDist) {
+            continue;
+        }
+       
         //Iterate through all mate1
         for (alignment_map::iterator m1 = mate1.begin(); m1 != mate1.end(); ++m1) {
         
             //If this read passes the maxDist cutoff
-            unsigned current_score = m0->second.score + m1->second.score;
-            if (current_score > maxDist) {
+            if (m1->second.score > maxDist) {
                 continue;
             }
             
