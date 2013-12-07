@@ -519,6 +519,8 @@ void PairedAlignerContext::runIterationThread()
     }
 
     unsigned singleAlignerMaxHits = 300;
+    unsigned p_numSeedsFromCommandLine = 0;
+    float p_seedCoverage = maxReadSize / index->getSeedLength();
     BigAllocator *t_allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, singleAlignerMaxHits, maxReadSize, transcriptome->getSeedLength(), numSeedsFromCommandLine, seedCoverage));
 
     BaseAligner *t_aligner = new (t_allocator) BaseAligner(
@@ -538,8 +540,6 @@ void PairedAlignerContext::runIterationThread()
     t_aligner->setExplorePopularSeeds(options->explorePopularSeeds);
     t_aligner->setStopOnFirstHit(options->stopOnFirstHit);
 
-    unsigned p_numSeedsFromCommandLine = 0;
-    float p_seedCoverage = maxReadSize / index->getSeedLength();
     BigAllocator *p_allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, singleAlignerMaxHits, maxReadSize, index->getSeedLength(), p_numSeedsFromCommandLine, p_seedCoverage));
 
     BaseAligner *p_aligner = new (p_allocator) BaseAligner(

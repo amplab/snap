@@ -316,8 +316,7 @@ void ReadIntervalMap::Print() const {
 
 void ReadIntervalMap::Consolidate(GTFReader *gtf, unsigned buffer, bool filterPromiscuousGenes=true) {
 
-    printf("Building interval tree of read pairs\n");
-    
+    //printf("Building interval tree of read pairs\n");
     //Print();
 
     //Get size of current interval set
@@ -1737,6 +1736,10 @@ bool GTFReader::InterchromosomalSplice(string chr0, unsigned start0, unsigned en
 
 void GTFReader::WriteReadCounts() {
 
+    printf("Writing gene and junction read counts... ");
+    fflush(stdout);
+    _int64 loadStart = timeInMillis();
+
     ofstream transcript_name_counts, transcript_id_counts;
     ofstream gene_name_counts, gene_id_counts;
     ofstream junction_name_counts, junction_id_counts;
@@ -1797,9 +1800,16 @@ void GTFReader::WriteReadCounts() {
     gene_name_counts.close();
     junction_name_counts.close();
 
+    _int64 loadTime = timeInMillis() - loadStart;
+    printf("%llds.\n", loadTime / 1000);
+    fflush(stdout);
 }
 
 void GTFReader::AnalyzeReadIntervals() {
+
+    printf("Calculating gene fusions... ");
+    fflush(stdout);
+    _int64 loadStart = timeInMillis();
 
     bool filterPromiscuousGenes = true;
     unsigned pairedBuffer = 100;
@@ -1811,17 +1821,17 @@ void GTFReader::AnalyzeReadIntervals() {
     //Open output file
     ofstream interchromosomal_file, intrachromosomal_file, unannotated_file, circular_file;
     ofstream logfile, readfile;
-    interchromosomal_file.open((prefix+".interchromosomal_intervals.gtf").c_str());
-    intrachromosomal_file.open((prefix+".intrachromosomal_intervals.gtf").c_str());
+    interchromosomal_file.open((prefix+".interchromosomal.fusions.gtf").c_str());
+    intrachromosomal_file.open((prefix+".intrachromosomal.fusions.gtf").c_str());
     //unannotated_file.open((prefix+".unannotated_intervals.gtf").c_str());
     //circular_file.open((prefix+".circular_intervals.gtf").c_str());
-    logfile.open((prefix+".read_intervals.txt").c_str());
+    logfile.open((prefix+".fusions.txt").c_str());
     //readfile.open((prefix+".read_ids.txt").c_str());
 
     interchromosomal_pairs.Consolidate(this, pairedBuffer);
     interchromosomal_splices.Consolidate(this, splicedBuffer);
     interchromosomal_splices.Intersect(interchromosomal_pairs, intersectionBuffer, minCount, this);
-    logfile << "Inter-Chromosomal Intervals" << endl;
+    logfile << "Inter-Chromosomal Fusions" << endl;
     interchromosomal_splices.WriteGTF(interchromosomal_file);
     interchromosomal_splices.WriteSplicedMatePairs(logfile, readfile);
     logfile << endl;
@@ -1830,7 +1840,7 @@ void GTFReader::AnalyzeReadIntervals() {
     intrachromosomal_pairs.Consolidate(this, pairedBuffer);
     intrachromosomal_splices.Consolidate(this, splicedBuffer);
     intrachromosomal_splices.Intersect(intrachromosomal_pairs, intersectionBuffer, minCount, this);
-    logfile << "Intra-Chromosomal Intervals" << endl;
+    logfile << "Intra-Chromosomal Fusions" << endl;
     intrachromosomal_splices.WriteGTF(intrachromosomal_file);
     intrachromosomal_splices.WriteSplicedMatePairs(logfile, readfile);
     logfile << endl;
@@ -1863,6 +1873,9 @@ void GTFReader::AnalyzeReadIntervals() {
     logfile.close();
     //readfile.close();
     
+    _int64 loadTime = timeInMillis() - loadStart;
+    printf("%llds.\n", loadTime / 1000);
+    fflush(stdout);
 }
 
 void GTFReader::BuildTranscriptome(const Genome *genome) {
