@@ -633,10 +633,10 @@ void ReadIntervalMap::WriteSplicedMatePairs(ofstream &logfile, ofstream &readfil
     //Write out each one to the output file
     for (spliced_mate::const_iterator it = spliced_mate_pairs.begin(); it != spliced_mate_pairs.end(); ++it) {
      
-        logfile << "Spliced" << '\t';  
+        logfile << "Mated" << '\t';  
         it->first.Write(logfile);
         logfile << endl;
-        logfile << "Mated" << '\t';
+        logfile << "Spliced" << '\t';
         it->second.Write(logfile);
         logfile << endl << endl;
         
@@ -1681,10 +1681,13 @@ void GTFReader::IntrachromosomalSplice(string chr0, unsigned start0, unsigned en
 
 bool GTFReader::InterchromosomalPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id) {
 
-  bool found = false;
+    interchromosomal_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, false);
+    bool found = false;
+  
   /*
-  string gene1 = "TTTY14";
-  string gene2 = "NoGene";
+  
+  string gene1 = "BCR";
+  string gene2 = "ABL1";
  
   std::vector<GTFGene> results0, results1;
    IntervalGenes(chr0, start0, end0, results0);
@@ -1695,18 +1698,41 @@ bool GTFReader::InterchromosomalPair(string chr0, unsigned start0, unsigned end0
        for (std::vector<GTFGene>::iterator it2 = results1.begin(); it2 != results1.end(); ++it2) {
          if ((it2->gene_name.compare(gene1) == 0) || (it2->gene_name.compare(gene2) == 0)) {
            found = true;
+           printf("MATE Found BCR_ABL\n");
          }
        }
      }
    }
    */
-    interchromosomal_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, false);
+   
     return found;
 }
 
 
-void GTFReader::InterchromosomalSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id) {
+bool GTFReader::InterchromosomalSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id) {
     interchromosomal_splices.AddInterval(chr0, start0, end0, chr1, start1, end1, id, true);
+
+  bool found = false;
+  /*
+  string gene1 = "BCR";
+  string gene2 = "ABL1";
+ 
+  std::vector<GTFGene> results0, results1;
+   IntervalGenes(chr0, start0, end0, results0);
+   IntervalGenes(chr1, start1, end1, results1);
+   for (std::vector<GTFGene>::iterator it = results0.begin(); it != results0.end(); ++it) {
+     if ((it->gene_name.compare(gene1) == 0) || (it->gene_name.compare(gene2) == 0)) {
+       
+       for (std::vector<GTFGene>::iterator it2 = results1.begin(); it2 != results1.end(); ++it2) {
+         if ((it2->gene_name.compare(gene1) == 0) || (it2->gene_name.compare(gene2) == 0)) {
+          found = true; 
+          printf("SPLICE Found BCR_ABL\n");
+         }
+       }
+     }
+   }
+  */
+  return found;
 }
 
 void GTFReader::WriteReadCounts() {

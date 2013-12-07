@@ -119,7 +119,7 @@ class AlignmentFilter {
         void FindPartialMatches(PairedAlignmentResult* result, AlignmentPair &pair);
         
         //Called on all unaligned reads to look for unknown splice junctions
-        void UnalignedRead(Read *read, unsigned minDiff);
+        void UnalignedRead(alignment_map &mate, Read *read, unsigned minDiff);
         bool ProcessSplices(std::vector<AlignmentPair> &pairs, unsigned minDiff);
               
         //Temp printing

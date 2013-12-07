@@ -301,7 +301,7 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
     std::vector<AlignmentPair> intrachromosomal_pairs;
     std::vector<AlignmentPair> interchromosomal_pairs;
         
-    /*
+    /*  
     printf("Align1\n");
     for (alignment_map::iterator m0 = mate0.begin(); m0 != mate0.end(); ++m0) {
         m0->second.Print();
@@ -328,13 +328,13 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
     } else if (mate0.size() == 0) {
         
         flag |= 1 << FIRST_NOT_ALIGNED;
-        UnalignedRead(read1, seedLen);
+        UnalignedRead(mate1, read1, seedLen);
     
     //If there are no alignments for mate1
     } else if (mate1.size() == 0) {
     
         flag |= 1 << SECOND_NOT_ALIGNED;
-        UnalignedRead(read0, seedLen);    
+        UnalignedRead(mate0, read0, seedLen);    
     }
     
     //Iterate through all mate0;
@@ -730,7 +730,7 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
           
 }
 
-void AlignmentFilter::UnalignedRead(Read *read, unsigned minDiff) {
+void AlignmentFilter::UnalignedRead(alignment_map &mate, Read *read, unsigned minDiff) {
 
     seed_map map, mapRC;
     
@@ -752,10 +752,56 @@ void AlignmentFilter::UnalignedRead(Read *read, unsigned minDiff) {
     //PrintMaps(map, mapRC);
 
 	std::vector<Alignment*> alignments;
-	
+        bool found = false;
+
+        for (seed_map::iterator it = map.begin(); it != map.end(); ++it) {
+
+                //Convert both segments to genomic coordinates
+                const Genome::Contig *piece0 = genome->getContigAtLocation(it->first);
+                string chr0 = piece0->name;
+                int pos0 = it->first - piece0->beginningOffset + 1;
+
+                //Make sure this location is near to at least one mate
+                for (alignment_map::iterator mit = mate.begin(); mit != mate.end(); ++mit) {
+
+                    //printf("%s %s %u %u\n", mit->second.rname.c_str(), chr0.c_str(), mit->second.pos, pos0);
+
+                    if (((mit->second.rname.compare(chr0)) == 0) &&
+                        (abs((int)mit->second.pos - (int)pos0) < 1000000)) {
+                        found = true;
+                        break;
+                    }
+                }
+          }
+
+        if (!found) {
+        for (seed_map::iterator it = mapRC.begin(); it != mapRC.end(); ++it) {
+
+                //Convert both segments to genomic coordinates
+                const Genome::Contig *piece0 = genome->getContigAtLocation(it->first);
+                string chr0 = piece0->name;
+                int pos0 = it->first - piece0->beginningOffset + 1;
+
+                //Make sure this location is near to at least one mate
+                for (alignment_map::iterator mit = mate.begin(); mit != mate.end(); ++mit) {
+
+                    //printf("%s %s %u %u\n", mit->second.rname.c_str(), chr0.c_str(), mit->second.pos, pos0);
+
+                    if (((mit->second.rname.compare(chr0)) == 0) &&
+                        (abs((int)mit->second.pos - (int)pos0) < 1000000)) {
+                        found = true;
+                        break;
+                    }
+                }
+          }
+
+       }
+
+       if (found) {
+
 	//Create partial alignments from map
 	for (seed_map::iterator it = map.begin(); it != map.end(); ++it) {
-	
+
 		// Get length of mapping segment
 		unsigned length0 = (*(it->second).rbegin() - *(it->second).begin()) + seedLen;
 
@@ -763,17 +809,18 @@ void AlignmentFilter::UnalignedRead(Read *read, unsigned minDiff) {
 		const Genome::Contig *piece0 = genome->getContigAtLocation(it->first);
 		string chr0 = piece0->name;
 		int pos0 = it->first - piece0->beginningOffset + 1; 
-		
+	
 		//Calculate the consecutive region of the genome that contains this segment
 		unsigned start0 = pos0 + *(it->second).begin();
 		unsigned end0 = start0 + length0 - 1;
 		//printf("0 [%s:%u-%u]\n", chr0.c_str(), start0, end0);
 										   
 		//Create new alignments for each segment
+                //printf("%s:%u-%u [%u]\n", chr0.c_str(), start0, end0, length0);
 		alignments.push_back(new Alignment(it->first, false, length0, 0, chr0, start0, end0, start0, "transcript_id", "gene_id", false));
 		
 	}
-	
+
 	//Create partial alignments from mapRC
 	for (seed_map::iterator it = mapRC.begin(); it != mapRC.end(); ++it) {
 			
@@ -784,22 +831,24 @@ void AlignmentFilter::UnalignedRead(Read *read, unsigned minDiff) {
 		const Genome::Contig *piece0 = genome->getContigAtLocation(it->first);
 		string chr0 = piece0->name;
 		int pos0 = it->first - piece0->beginningOffset + 1; 
-		
+
 		//Calculate the consecutive region of the genome that contains this segment
 		unsigned start0 = pos0 + read->getDataLength() - (*(it->second).rbegin() + seedLen);
 		unsigned end0 = start0 + length0 - 1;
 		//printf("RC0 [%s:%u-%u]\n", chr0.c_str(), start0, end0);
 		
 		//Create new alignments for each segment
+                //printf("%s:%u-%u [%u]\n", chr0.c_str(), start0, end0, length0);
 		alignments.push_back(new Alignment(it->first, true, length0, 0, chr0, start0, end0, start0, "transcript_id", "gene_id", false));
 
 	}
-	
+        }
+
 	//Now we go through all partial alignments that have been created
 	for (std::vector<Alignment*>::iterator it0 = alignments.begin(); it0 != alignments.end(); ++it0) {
 		for (std::vector<Alignment*>::iterator it1 = it0; it1 != alignments.end(); ++it1) {
 			
-	        Alignment *align0 = (*it0);
+	    Alignment *align0 = (*it0);
             Alignment *align1 = (*it1);
 	
             //Do not compare same alignments
@@ -807,6 +856,8 @@ void AlignmentFilter::UnalignedRead(Read *read, unsigned minDiff) {
                 continue;
             }	
             
+            //printf("SCORES: %u %u %u %u\n", align0->score, align1->score, read->getDataLength(), seedLen);
+
             //If not enough of the read is represented
             if ((align0->score + align1->score) < (read->getDataLength() - seedLen)) {
                 continue;
@@ -888,9 +939,20 @@ void AlignmentFilter::UnalignedRead(Read *read, unsigned minDiff) {
     } else if (interchromosomal_splices.size() > 0) {
     
         for (std::vector<AlignmentPair>::iterator it = interchromosomal_splices.begin(); it != interchromosomal_splices.end(); ++it) {
-            gtf->InterchromosomalSplice(it->align1->rname, it->align1->pos, it->align1->pos_end,
+            bool found = gtf->InterchromosomalSplice(it->align1->rname, it->align1->pos, it->align1->pos_end,
                                       it->align2->rname, it->align2->pos, it->align2->pos_end,
                                       string(read->getId(), read->getIdLength()));        
+
+              
+                if (found) {
+
+                 string id0(read->getId(), read->getIdLength());
+                 string data0(read->getData(), read->getDataLength());
+                printf("%s\n%s\n\n", id0.c_str(), data0.c_str());
+
+                }
+                
+
         }
 
     }
