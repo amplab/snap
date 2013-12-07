@@ -176,8 +176,11 @@ bool ReadInterval::Filter() const {
       return true;
    } 
 
-   for (std::set<string>::iterator it = gene_names.begin(); it != gene_names.end(); ++it) {
+   if (chr.find("GL") != std::string::npos) {
+      return true;
+   }
 
+   for (std::set<string>::iterator it = gene_names.begin(); it != gene_names.end(); ++it) {
       if (it->find("HLA-") != std::string::npos) {
          return true;
       }
