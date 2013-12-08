@@ -42,10 +42,10 @@ bool SplicedMateSort(const interval_pair &pair0, const interval_pair &pair1) {
 
 }
 
-ReadInterval::ReadInterval(string chr_, unsigned start_, unsigned end_, string id, bool is_spliced_) 
+ReadInterval::ReadInterval(string chr_, unsigned start_, unsigned end_, string id, string seq, bool is_spliced_) 
     : chr(chr_), start(start_), end(end_), is_spliced(is_spliced_), consolidated(false), counted(false)
 {
-    ids.insert(id);
+    ids.insert(read_map::value_type(id, seq));
 } 
     
 ReadInterval::ReadInterval(const ReadInterval &rhs) 
@@ -86,12 +86,12 @@ void ReadInterval::UpdateMatePointers(ReadInterval *new_pointer) {
     }
 }
 
-unsigned ReadInterval::Intersection(const ReadInterval *rhs, set<string> &intersection) const {
+unsigned ReadInterval::Intersection(const ReadInterval *rhs, read_map &intersection) const {
 
     //Return the size of the intersection between the two sets of IDs
-    for (set<string>::iterator it = ids.begin(); it != ids.end(); ++it) {
+    for (read_map::const_iterator it = ids.begin(); it != ids.end(); ++it) {
               
-        set<string>::iterator pos = rhs->ids.find(*it);
+        read_map::const_iterator pos = rhs->ids.find(it->first);
         if (pos != rhs->ids.end()) {
             intersection.insert(*it);
         }        
@@ -99,12 +99,12 @@ unsigned ReadInterval::Intersection(const ReadInterval *rhs, set<string> &inters
     return intersection.size();
 }
 
-unsigned ReadInterval::Difference(const ReadInterval *rhs, set<string> &difference) const {
+unsigned ReadInterval::Difference(const ReadInterval *rhs, read_map &difference) const {
 
     //Return the size of the intersection between the two sets of IDs
-    for (set<string>::iterator it = ids.begin(); it != ids.end(); ++it) {
+    for (read_map::const_iterator it = ids.begin(); it != ids.end(); ++it) {
         
-        set<string>::iterator pos = rhs->ids.find(*it);
+        read_map::const_iterator pos = rhs->ids.find(it->first);
         if (pos == rhs->ids.end()) {
             difference.insert(*it);
         }        
@@ -197,6 +197,15 @@ void ReadInterval::Write(ofstream &outfile) const {
     outfile << chr << ':' << start << '-' << end << '\t';
 }
 
+void ReadInterval::WriteReads(ofstream &outfile) const {
+
+    //Write reads to read file
+    for (read_map::const_iterator it = ids.begin(); it != ids.end(); ++it) {
+        outfile << ">" << it->first << "|" << GeneName() << endl;
+        outfile << it->second << endl;
+    }
+}
+
 void ReadInterval::Print() const {
     cout << chr << ':' << start << '-' << end << '\t' << GeneID() << '\t' << GeneName() << '\t' << ids.size() << '\t' << is_spliced;
     printf("\t%p [", this);
@@ -237,14 +246,16 @@ bool ReadIntervalPair::operator<(const ReadIntervalPair& rhs) const {
     return intersection.size() > rhs.intersection.size();
 }
 
-void ReadIntervalPair::Write(ofstream &outfile) const {
+void ReadIntervalPair::Write(ofstream &outfile, ofstream &readfile) const {
 
     outfile << intersection.size() << '\t';
     interval1->Write(outfile);
     outfile << interval1->GeneID() << '\t' << interval1->GeneName() << '\t';
     interval2->Write(outfile);
-    outfile << interval2->GeneID() << '\t' << interval2->GeneName();    
+    outfile << interval2->GeneID() << '\t' << interval2->GeneName();
 
+    interval1->WriteReads(readfile);
+    interval2->WriteReads(readfile);   
 }
 
 void ReadIntervalPair::Print() const {
@@ -287,13 +298,13 @@ ReadIntervalMap& ReadIntervalMap::operator=(const ReadIntervalMap &rhs) {
     exit(1);
 }
 
-void ReadIntervalMap::AddInterval(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, bool is_spliced) {
+void ReadIntervalMap::AddInterval(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq, bool is_spliced) {
 
     //Get the mutex
     AcquireExclusiveLock(&mutex);
     
-    ReadInterval *mate0 = new ReadInterval(chr0, start0, end0, id, is_spliced);
-    ReadInterval *mate1 = new ReadInterval(chr1, start1, end1, id, is_spliced);
+    ReadInterval *mate0 = new ReadInterval(chr0, start0, end0, id, seq, is_spliced);
+    ReadInterval *mate1 = new ReadInterval(chr1, start1, end1, id, seq, is_spliced);
 
     mate0->mate.insert(mate1);
     mate1->mate.insert(mate0);
@@ -636,10 +647,10 @@ void ReadIntervalMap::WriteSplicedMatePairs(ofstream &logfile, ofstream &readfil
     for (spliced_mate::const_iterator it = spliced_mate_pairs.begin(); it != spliced_mate_pairs.end(); ++it) {
      
         logfile << "Mated" << '\t';  
-        it->first.Write(logfile);
+        it->first.Write(logfile, readfile);
         logfile << endl;
         logfile << "Spliced" << '\t';
-        it->second.Write(logfile);
+        it->second.Write(logfile, readfile);
         logfile << endl << endl;
         
     }
@@ -1654,37 +1665,32 @@ void GTFReader::IntervalGenes(std::string chr, unsigned start, unsigned stop, st
     }
 }
 
-void GTFReader::IntrageneUnannotatedPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id) {
-    intragene_unannotated_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, false);
+void GTFReader::IntrageneUnannotatedPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq) {
+    intragene_unannotated_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq, false);
 }
 
-void GTFReader::IntrageneUnannotatedSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id) {
-    intragene_unannotated_splices.AddInterval(chr0, start0, end0, chr1, start1, end1, id, true);
+void GTFReader::IntrageneUnannotatedSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq) {
+    intragene_unannotated_splices.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq, true);
 }
 
-void GTFReader::IntrageneCircularPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id) {
-    intragene_circular_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, false);
+void GTFReader::IntrageneCircularPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq) {
+    intragene_circular_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq, false);
 }
 
-void GTFReader::IntrageneCircularSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id) {
-    intragene_circular_splices.AddInterval(chr0, start0, end0, chr1, start1, end1, id, true);
+void GTFReader::IntrageneCircularSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq) {
+    intragene_circular_splices.AddInterval(chr0, start0, end0, chr1, start1, end1, id,  seq, true);
 }
 
-bool GTFReader::IntrachromosomalPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id) {
- 
-  bool found = false;
-   intrachromosomal_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, false);
-   return found;
+void GTFReader::IntrachromosomalPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq) {
+   intrachromosomal_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq, false);
 }
 
-void GTFReader::IntrachromosomalSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id) {
-    intrachromosomal_splices.AddInterval(chr0, start0, end0, chr1, start1, end1, id, true);
+void GTFReader::IntrachromosomalSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq) {
+    intrachromosomal_splices.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq, true);
 }
 
-bool GTFReader::InterchromosomalPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id) {
-
-    interchromosomal_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, false);
-    bool found = false;
+void GTFReader::InterchromosomalPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq) {
+    interchromosomal_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq, false);
   
   /*
   
@@ -1706,15 +1712,11 @@ bool GTFReader::InterchromosomalPair(string chr0, unsigned start0, unsigned end0
      }
    }
    */
-   
-    return found;
 }
 
+void GTFReader::InterchromosomalSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq) {
+    interchromosomal_splices.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq, true);
 
-bool GTFReader::InterchromosomalSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id) {
-    interchromosomal_splices.AddInterval(chr0, start0, end0, chr1, start1, end1, id, true);
-
-  bool found = false;
   /*
   string gene1 = "BCR";
   string gene2 = "ABL1";
@@ -1734,7 +1736,6 @@ bool GTFReader::InterchromosomalSplice(string chr0, unsigned start0, unsigned en
      }
    }
   */
-  return found;
 }
 
 void GTFReader::WriteReadCounts() {
@@ -1829,7 +1830,7 @@ void GTFReader::AnalyzeReadIntervals() {
     //unannotated_file.open((prefix+".unannotated_intervals.gtf").c_str());
     //circular_file.open((prefix+".circular_intervals.gtf").c_str());
     logfile.open((prefix+".fusions.txt").c_str());
-    //readfile.open((prefix+".read_ids.txt").c_str());
+    readfile.open((prefix+".fusion.reads.fa").c_str());
 
     interchromosomal_pairs.Consolidate(this, pairedBuffer);
     interchromosomal_splices.Consolidate(this, splicedBuffer);

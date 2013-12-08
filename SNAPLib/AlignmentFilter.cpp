@@ -559,7 +559,6 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
             gtf->IncrementReadCount(intragene_pairs[0].align1->transcript_id, intragene_pairs[0].align1->pos_original, intragene_pairs[0].align1->pos, read1->getDataLength(),
                                     intragene_pairs[0].align2->transcript_id, intragene_pairs[0].align2->pos_original, intragene_pairs[0].align2->pos, read0->getDataLength());
 
-        
         }
         
         result->fromAlignTogether = false;
@@ -593,10 +592,12 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
 
         //If this is still a good hit, add this in as a chr link
         if (result->status[0] == SingleHit) {
+
             //Link these positions in the GTF object
             gtf->IntrachromosomalPair(intrachromosomal_pairs[0].align1->rname, intrachromosomal_pairs[0].align1->pos, intrachromosomal_pairs[0].align1->pos_end,
                                       intrachromosomal_pairs[0].align2->rname, intrachromosomal_pairs[0].align2->pos, intrachromosomal_pairs[0].align2->pos_end, 
-                                      string(read0->getId(), read0->getIdLength()));      
+                                      string(read0->getId(), read0->getIdLength()), 
+                                      string(read0->getData(), read0->getDataLength()));      
         }
         
         result->fromAlignTogether = false;
@@ -625,10 +626,12 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
         
         //If this is still a good hit, add this in as a gene link
         if (result->status[0] == SingleHit) {
+
             //Link these positions in the GTF object
             gtf->InterchromosomalPair(interchromosomal_pairs[0].align1->rname, interchromosomal_pairs[0].align1->pos, interchromosomal_pairs[0].align1->pos_end,
                                       interchromosomal_pairs[0].align2->rname, interchromosomal_pairs[0].align2->pos, interchromosomal_pairs[0].align2->pos_end, 
-                                      string(read0->getId(), read0->getIdLength()));
+                                      string(read0->getId(), read0->getIdLength()), 
+                                      string(read0->getData(), read0->getDataLength()));
         }
         
         result->fromAlignTogether = false;
@@ -657,37 +660,17 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
             if (no_rc[0].align1->rname.compare(no_rc[0].align2->rname) == 0) {
         
               //Link these positions in the GTF object
-              bool found = gtf->IntrachromosomalPair(no_rc[0].align1->rname, no_rc[0].align1->pos, no_rc[0].align1->pos_end,
+              gtf->IntrachromosomalPair(no_rc[0].align1->rname, no_rc[0].align1->pos, no_rc[0].align1->pos_end,
                                         no_rc[0].align2->rname, no_rc[0].align2->pos, no_rc[0].align2->pos_end,
-                                        string(read0->getId(), read0->getIdLength()));
-              /*      
-              if (found) {
-
-                 string id0(read0->getId(), read0->getIdLength());
-                 string data0(read0->getData(), read0->getDataLength());
-                 string id1(read1->getId(), read1->getIdLength());
-                 string data1(read1->getData(), read1->getDataLength());
-               printf("%s\n%s\n%s\n%s\n\n", id0.c_str(), data0.c_str(), id1.c_str(), data1.c_str());
-
-               }
-              */
+                                        string(read0->getId(), read0->getIdLength()), 
+                                        string(read0->getData(), read0->getDataLength()));
 
             } else {
 
                  //Link these positions in the GTF object              
-                 bool found = gtf->InterchromosomalPair(no_rc[0].align1->rname, no_rc[0].align1->pos, no_rc[0].align1->pos_end,                                        no_rc[0].align2->rname, no_rc[0].align2->pos, no_rc[0].align2->pos_end,
-                                            string(read0->getId(), read0->getIdLength()));
-                /*
-                if (found) {
-
-                 string id0(read0->getId(), read0->getIdLength());
-                 string data0(read0->getData(), read0->getDataLength());
-                 string id1(read1->getId(), read1->getIdLength());
-                 string data1(read1->getData(), read1->getDataLength());
-                printf("%s\n%s\n%s\n%s\n\n", id0.c_str(), data0.c_str(), id1.c_str(), data1.c_str());
-
-                }
-                */
+                 gtf->InterchromosomalPair(no_rc[0].align1->rname, no_rc[0].align1->pos, no_rc[0].align1->pos_end,                                            no_rc[0].align2->rname, no_rc[0].align2->pos, no_rc[0].align2->pos_end,
+                                           string(read0->getId(), read0->getIdLength()), 
+                                           string(read0->getData(), read0->getDataLength()));
             }
 
         }
@@ -931,30 +914,21 @@ void AlignmentFilter::UnalignedRead(alignment_map &mate, Read *read, unsigned mi
         
         for (std::vector<AlignmentPair>::iterator it = intrachromosomal_splices.begin(); it != intrachromosomal_splices.end(); ++it) {
             gtf->IntrachromosomalSplice(it->align1->rname, it->align1->pos, it->align1->pos_end,
-                                      it->align2->rname, it->align2->pos, it->align2->pos_end, 
-                                      string(read->getId(), read->getIdLength()));        
+                                        it->align2->rname, it->align2->pos, it->align2->pos_end, 
+                                        string(read->getId(), read->getIdLength()),
+                                        string(read->getData(), read->getDataLength()));        
 
         }
     
     } else if (interchromosomal_splices.size() > 0) {
     
         for (std::vector<AlignmentPair>::iterator it = interchromosomal_splices.begin(); it != interchromosomal_splices.end(); ++it) {
-            bool found = gtf->InterchromosomalSplice(it->align1->rname, it->align1->pos, it->align1->pos_end,
-                                      it->align2->rname, it->align2->pos, it->align2->pos_end,
-                                      string(read->getId(), read->getIdLength()));        
-
-              
-                if (found) {
-
-                 string id0(read->getId(), read->getIdLength());
-                 string data0(read->getData(), read->getDataLength());
-                printf("%s\n%s\n\n", id0.c_str(), data0.c_str());
-
-                }
-                
+            gtf->InterchromosomalSplice(it->align1->rname, it->align1->pos, it->align1->pos_end,
+                                        it->align2->rname, it->align2->pos, it->align2->pos_end,
+                                        string(read->getId(), read->getIdLength()),
+                                        string(read->getData(), read->getDataLength()));        
 
         }
-
     }
     
     //WHY ARE THESE POINTERS ANYWAY?
