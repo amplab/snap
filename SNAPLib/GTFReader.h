@@ -142,7 +142,7 @@ class ReadIntervalMap {
         virtual ~ReadIntervalMap();
         ReadIntervalMap& operator=(const ReadIntervalMap &rhs);
         
-        void AddInterval(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq, bool is_spliced);
+        void AddInterval(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq0, string seq1, bool is_spliced);
         void Consolidate(GTFReader *gtf, unsigned buffer, bool filterPromiscuousGenes);
         void Intersect(const ReadIntervalMap &map, unsigned buffer, unsigned minCount, GTFReader *gtf);
         
@@ -342,16 +342,16 @@ class GTFReader {
         //Functions for building the transcriptome file
         void BuildTranscriptome(const Genome *genome);
         
-        void IntrageneUnannotatedPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq);
+        void IntrageneUnannotatedPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq0, string seq1);
         void IntrageneUnannotatedSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq);
         
-        void IntrageneCircularPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq);
+        void IntrageneCircularPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq0, string seq1);
         void IntrageneCircularSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq);
         
-        void IntrachromosomalPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq);
+        void IntrachromosomalPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq0, string seq1);
         void IntrachromosomalSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq);
         
-        void InterchromosomalPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq);
+        void InterchromosomalPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq0, string seq1);
         void InterchromosomalSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq);
 
         void AnalyzeReadIntervals();

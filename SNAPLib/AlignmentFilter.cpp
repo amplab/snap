@@ -594,10 +594,15 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
         if (result->status[0] == SingleHit) {
 
             //Link these positions in the GTF object
-            gtf->IntrachromosomalPair(intrachromosomal_pairs[0].align1->rname, intrachromosomal_pairs[0].align1->pos, intrachromosomal_pairs[0].align1->pos_end,
-                                      intrachromosomal_pairs[0].align2->rname, intrachromosomal_pairs[0].align2->pos, intrachromosomal_pairs[0].align2->pos_end, 
+            gtf->IntrachromosomalPair(intrachromosomal_pairs[0].align1->rname, 
+                                      intrachromosomal_pairs[0].align1->pos, 
+                                      intrachromosomal_pairs[0].align1->pos_end,
+                                      intrachromosomal_pairs[0].align2->rname, 
+                                      intrachromosomal_pairs[0].align2->pos, 
+                                      intrachromosomal_pairs[0].align2->pos_end, 
                                       string(read0->getId(), read0->getIdLength()), 
-                                      string(read0->getData(), read0->getDataLength()));      
+                                      string(read0->getData(), read0->getDataLength()),
+                                      string(read1->getData(), read1->getDataLength()));      
         }
         
         result->fromAlignTogether = false;
@@ -628,10 +633,15 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
         if (result->status[0] == SingleHit) {
 
             //Link these positions in the GTF object
-            gtf->InterchromosomalPair(interchromosomal_pairs[0].align1->rname, interchromosomal_pairs[0].align1->pos, interchromosomal_pairs[0].align1->pos_end,
-                                      interchromosomal_pairs[0].align2->rname, interchromosomal_pairs[0].align2->pos, interchromosomal_pairs[0].align2->pos_end, 
+            gtf->InterchromosomalPair(interchromosomal_pairs[0].align1->rname, 
+                                      interchromosomal_pairs[0].align1->pos, 
+                                      interchromosomal_pairs[0].align1->pos_end,
+                                      interchromosomal_pairs[0].align2->rname, 
+                                      interchromosomal_pairs[0].align2->pos, 
+                                      interchromosomal_pairs[0].align2->pos_end, 
                                       string(read0->getId(), read0->getIdLength()), 
-                                      string(read0->getData(), read0->getDataLength()));
+                                      string(read0->getData(), read0->getDataLength()),
+                                      string(read1->getData(), read1->getDataLength()));
         }
         
         result->fromAlignTogether = false;
@@ -660,19 +670,29 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
             if (no_rc[0].align1->rname.compare(no_rc[0].align2->rname) == 0) {
         
               //Link these positions in the GTF object
-              gtf->IntrachromosomalPair(no_rc[0].align1->rname, no_rc[0].align1->pos, no_rc[0].align1->pos_end,
-                                        no_rc[0].align2->rname, no_rc[0].align2->pos, no_rc[0].align2->pos_end,
+              gtf->IntrachromosomalPair(no_rc[0].align1->rname, 
+                                        no_rc[0].align1->pos, 
+                                        no_rc[0].align1->pos_end,
+                                        no_rc[0].align2->rname, 
+                                        no_rc[0].align2->pos, 
+                                        no_rc[0].align2->pos_end,
                                         string(read0->getId(), read0->getIdLength()), 
-                                        string(read0->getData(), read0->getDataLength()));
+                                        string(read0->getData(), read0->getDataLength()),
+                                        string(read1->getData(), read1->getDataLength()));
 
             } else {
 
                  //Link these positions in the GTF object              
-                 gtf->InterchromosomalPair(no_rc[0].align1->rname, no_rc[0].align1->pos, no_rc[0].align1->pos_end,                                            no_rc[0].align2->rname, no_rc[0].align2->pos, no_rc[0].align2->pos_end,
+                 gtf->InterchromosomalPair(no_rc[0].align1->rname, 
+                                           no_rc[0].align1->pos, 
+                                           no_rc[0].align1->pos_end, 
+                                           no_rc[0].align2->rname, 
+                                           no_rc[0].align2->pos, 
+                                           no_rc[0].align2->pos_end,
                                            string(read0->getId(), read0->getIdLength()), 
-                                           string(read0->getData(), read0->getDataLength()));
+                                           string(read0->getData(), read0->getDataLength()),
+                                           string(read1->getData(), read1->getDataLength()));
             }
-
         }
 
         result->fromAlignTogether = false;
@@ -892,29 +912,43 @@ void AlignmentFilter::UnalignedRead(alignment_map &mate, Read *read, unsigned mi
 
     //Now we go through each of the three sets, prioritizing the cis-gene model, as before
     if (intragene_unannotated_splices.size() > 0) {
-        
+/*        
         //If this set of splices passes the quality filter
-//         if (ProcessSplices(intragene_unannotated_splices, minDiff)) {
-//         
-//             //We ignore this for now
-//             if (intragene_unannotated_splices[0].is_backspliced) {
-//                 gtf->IntrageneCircularSplice(intragene_unannotated_splices[0].align1->rname, intragene_unannotated_splices[0].align1->pos, intragene_unannotated_splices[0].align1->pos_end,
-//                                              intragene_unannotated_splices[0].align2->rname, intragene_unannotated_splices[0].align2->pos, intragene_unannotated_splices[0].align2->pos_end, 
-//                                              string(read->getId(), read->getIdLength()));   
-//             
-//             } else {   
-//             
-//                 gtf->IntrageneUnannotatedSplice(intragene_unannotated_splices[0].align1->rname, intragene_unannotated_splices[0].align1->pos, intragene_unannotated_splices[0].align1->pos_end,
-//                                                 intragene_unannotated_splices[0].align2->rname, intragene_unannotated_splices[0].align2->pos, intragene_unannotated_splices[0].align2->pos_end, 
-//                                                 string(read->getId(), read->getIdLength()));                              
-//             }
-//         } 
+         if (ProcessSplices(intragene_unannotated_splices, minDiff)) {
+        
+             //We ignore this for now
+             if (intragene_unannotated_splices[0].is_backspliced) {
+                 gtf->IntrageneCircularSplice(intragene_unannotated_splices[0].align1->rname, 
+                                              intragene_unannotated_splices[0].align1->pos, 
+                                              intragene_unannotated_splices[0].align1->pos_end,
+                                              intragene_unannotated_splices[0].align2->rname, 
+                                              intragene_unannotated_splices[0].align2->pos, 
+                                              intragene_unannotated_splices[0].align2->pos_end, 
+                                              string(read->getId(), read->getIdLength()));   
+             
+             } else {   
+             
+                 gtf->IntrageneUnannotatedSplice(intragene_unannotated_splices[0].align1->rname, 
+                                                 intragene_unannotated_splices[0].align1->pos, 
+                                                 intragene_unannotated_splices[0].align1->pos_end,
+                                                 intragene_unannotated_splices[0].align2->rname, 
+                                                 intragene_unannotated_splices[0].align2->pos, 
+                                                 intragene_unannotated_splices[0].align2->pos_end, 
+                                                 string(read->getId(), read->getIdLength()));                              
+             }
+         } 
+*/
           
     } else if (intrachromosomal_splices.size() > 0) {
         
         for (std::vector<AlignmentPair>::iterator it = intrachromosomal_splices.begin(); it != intrachromosomal_splices.end(); ++it) {
-            gtf->IntrachromosomalSplice(it->align1->rname, it->align1->pos, it->align1->pos_end,
-                                        it->align2->rname, it->align2->pos, it->align2->pos_end, 
+
+            gtf->IntrachromosomalSplice(it->align1->rname, 
+                                        it->align1->pos, 
+                                        it->align1->pos_end,
+                                        it->align2->rname, 
+                                        it->align2->pos, 
+                                        it->align2->pos_end, 
                                         string(read->getId(), read->getIdLength()),
                                         string(read->getData(), read->getDataLength()));        
 
@@ -923,9 +957,14 @@ void AlignmentFilter::UnalignedRead(alignment_map &mate, Read *read, unsigned mi
     } else if (interchromosomal_splices.size() > 0) {
     
         for (std::vector<AlignmentPair>::iterator it = interchromosomal_splices.begin(); it != interchromosomal_splices.end(); ++it) {
-            gtf->InterchromosomalSplice(it->align1->rname, it->align1->pos, it->align1->pos_end,
-                                        it->align2->rname, it->align2->pos, it->align2->pos_end,
-                                        string(read->getId(), read->getIdLength()),
+
+            gtf->InterchromosomalSplice(it->align1->rname, 
+                                        it->align1->pos, 
+                                        it->align1->pos_end,
+                                        it->align2->rname, 
+                                        it->align2->pos, it->align2->pos_end,
+                                        string(read->getId(), 
+                                        read->getIdLength()),
                                         string(read->getData(), read->getDataLength()));        
 
         }

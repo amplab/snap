@@ -198,11 +198,19 @@ void ReadInterval::Write(ofstream &outfile) const {
 }
 
 void ReadInterval::WriteReads(ofstream &outfile) const {
+ 
+    string type = "splice";
+    if (!is_spliced) {
+        type = "mate";
+    }
 
     //Write reads to read file
     for (read_map::const_iterator it = ids.begin(); it != ids.end(); ++it) {
-        outfile << ">" << it->first << "|" << GeneName() << endl;
-        outfile << it->second << endl;
+        //Only write out reads that have a finite length
+        if (it->second.size() > 0) {
+            outfile << ">" << it->first << "|" << GeneName() << "|" << type << endl;
+            outfile << it->second << endl;
+        }
     }
 }
 
@@ -298,13 +306,13 @@ ReadIntervalMap& ReadIntervalMap::operator=(const ReadIntervalMap &rhs) {
     exit(1);
 }
 
-void ReadIntervalMap::AddInterval(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq, bool is_spliced) {
+void ReadIntervalMap::AddInterval(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq0, string seq1, bool is_spliced) {
 
     //Get the mutex
     AcquireExclusiveLock(&mutex);
     
-    ReadInterval *mate0 = new ReadInterval(chr0, start0, end0, id, seq, is_spliced);
-    ReadInterval *mate1 = new ReadInterval(chr1, start1, end1, id, seq, is_spliced);
+    ReadInterval *mate0 = new ReadInterval(chr0, start0, end0, id, seq0, is_spliced);
+    ReadInterval *mate1 = new ReadInterval(chr1, start1, end1, id, seq1, is_spliced);
 
     mate0->mate.insert(mate1);
     mate1->mate.insert(mate0);
@@ -1665,57 +1673,36 @@ void GTFReader::IntervalGenes(std::string chr, unsigned start, unsigned stop, st
     }
 }
 
-void GTFReader::IntrageneUnannotatedPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq) {
-    intragene_unannotated_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq, false);
+void GTFReader::IntrageneUnannotatedPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq0, string seq1) {
+    intragene_unannotated_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq0, seq1, false);
 }
 
 void GTFReader::IntrageneUnannotatedSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq) {
-    intragene_unannotated_splices.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq, true);
+    intragene_unannotated_splices.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq, "", true);
 }
 
-void GTFReader::IntrageneCircularPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq) {
-    intragene_circular_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq, false);
+void GTFReader::IntrageneCircularPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq0, string seq1) {
+    intragene_circular_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq0, seq1, false);
 }
 
 void GTFReader::IntrageneCircularSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq) {
-    intragene_circular_splices.AddInterval(chr0, start0, end0, chr1, start1, end1, id,  seq, true);
+    intragene_circular_splices.AddInterval(chr0, start0, end0, chr1, start1, end1, id,  seq, "", true);
 }
 
-void GTFReader::IntrachromosomalPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq) {
-   intrachromosomal_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq, false);
+void GTFReader::IntrachromosomalPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq0, string seq1) {
+   intrachromosomal_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq0, seq1, false);
 }
 
 void GTFReader::IntrachromosomalSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq) {
-    intrachromosomal_splices.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq, true);
+    intrachromosomal_splices.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq, "", true);
 }
 
-void GTFReader::InterchromosomalPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq) {
-    interchromosomal_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq, false);
-  
-  /*
-  
-  string gene1 = "BCR";
-  string gene2 = "ABL1";
- 
-  std::vector<GTFGene> results0, results1;
-   IntervalGenes(chr0, start0, end0, results0);
-   IntervalGenes(chr1, start1, end1, results1);
-   for (std::vector<GTFGene>::iterator it = results0.begin(); it != results0.end(); ++it) {
-     if ((it->gene_name.compare(gene1) == 0) || (it->gene_name.compare(gene2) == 0)) {
-       
-       for (std::vector<GTFGene>::iterator it2 = results1.begin(); it2 != results1.end(); ++it2) {
-         if ((it2->gene_name.compare(gene1) == 0) || (it2->gene_name.compare(gene2) == 0)) {
-           found = true;
-           printf("MATE Found BCR_ABL\n");
-         }
-       }
-     }
-   }
-   */
+void GTFReader::InterchromosomalPair(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq0, string seq1) {
+    interchromosomal_pairs.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq0, seq1, false);
 }
 
 void GTFReader::InterchromosomalSplice(string chr0, unsigned start0, unsigned end0, string chr1, unsigned start1, unsigned end1, string id, string seq) {
-    interchromosomal_splices.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq, true);
+    interchromosomal_splices.AddInterval(chr0, start0, end0, chr1, start1, end1, id, seq, "", true);
 
   /*
   string gene1 = "BCR";
@@ -1830,7 +1817,7 @@ void GTFReader::AnalyzeReadIntervals() {
     //unannotated_file.open((prefix+".unannotated_intervals.gtf").c_str());
     //circular_file.open((prefix+".circular_intervals.gtf").c_str());
     logfile.open((prefix+".fusions.txt").c_str());
-    readfile.open((prefix+".fusion.reads.fa").c_str());
+    readfile.open((prefix+".fusions.reads.fa").c_str());
 
     interchromosomal_pairs.Consolidate(this, pairedBuffer);
     interchromosomal_splices.Consolidate(this, splicedBuffer);
