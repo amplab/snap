@@ -262,8 +262,37 @@ void ReadIntervalPair::Write(ofstream &outfile, ofstream &readfile) const {
     interval2->Write(outfile);
     outfile << interval2->GeneID() << '\t' << interval2->GeneName();
 
-    interval1->WriteReads(readfile);
-    interval2->WriteReads(readfile);   
+    string type1 = "splice";
+    if (!interval1->is_spliced) {
+        type1 = "mate";
+    }
+    string type2 = "splice";
+    if (!interval2->is_spliced) {
+        type2 = "mate";
+    }
+
+    read_map reads;
+    for (read_map::const_iterator it = interval1->ids.begin(); it != interval1->ids.end(); ++it) {
+        //Add all reads to the read_map
+        if (it->second.size() > 0) {
+            reads.insert(read_map::value_type(it->first+'|'+type1+'|'+interval1->GeneName(), it->second));
+        }
+    }    
+    for (read_map::const_iterator it = interval2->ids.begin(); it != interval2->ids.end(); ++it) {
+        //Add all reads to the read_map
+        if (it->second.size() > 0) {
+            reads.insert(read_map::value_type(it->first+'|'+type2+'|'+interval2->GeneName(), it->second));
+        }
+    }
+
+    //Write the sorted list to the output file
+    for (read_map::const_iterator it = reads.begin(); it != reads.end(); ++it) {
+        readfile << ">" << it->first << endl << it->second << endl;
+    }    
+
+
+    //interval1->WriteReads(readfile);
+    //interval2->WriteReads(readfile);   
 }
 
 void ReadIntervalPair::Print() const {

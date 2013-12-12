@@ -51,7 +51,7 @@ class Contaminant {
 
       void WriteReads(ofstream &outfile) const {
         for (read_map::const_iterator it = reads.begin(); it != reads.end(); ++it) {
-            outfile << ">"+it->first << endl << it->second << endl;
+            outfile << ">"+it->first+"|"+rname << endl << it->second << endl;
         }
       };
 

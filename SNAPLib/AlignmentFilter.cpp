@@ -1024,8 +1024,8 @@ void AlignmentFilter::FindPartialMatches(PairedAlignmentResult *result, Alignmen
     specialAligner->CharacterizeSeeds(read1, &location, &direction, &score, &mapq, 0, 0, FORWARD, map1, mapRC1);
     
     //Print these maps
-    //PrintMaps(map0);
-    //PrintMaps(map1); 
+    //PrintMaps(map0, mapRC0);
+    //PrintMaps(map1, mapRC1); 
     
     //The goal here is to look for possible partial alignments that could occur between
     //reads that are close together
