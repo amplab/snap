@@ -32,5 +32,5 @@ obj
 *.psess
 
 # Compiled binaries
-/snap-rna
+/snapr
 /unit_tests

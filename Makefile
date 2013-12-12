@@ -33,7 +33,7 @@ ALL_OBJ = $(LIB_OBJ) $(SNAP_OBJ) $(TEST_OBJ)
 
 DEPS = $(pathsubst %.o, %.d, $(ALL_OBJ))
 
-EXES = snap-rna unit_tests
+EXES = snapr unit_tests
 
 default: $(EXES)
 
@@ -42,7 +42,7 @@ default: $(EXES)
 $(OBJS): %.o : %.cpp
 	$(CXX) -o $@ $(CXXFLAGS) -c $< 
 
-snap-rna: $(LIB_OBJ) $(SNAP_OBJ)
+snapr: $(LIB_OBJ) $(SNAP_OBJ)
 	$(CXX) -o $@ $(CXXFLAGS) -Itests $(LDFLAGS) $^ $(LIBS)
 
 roc: $(LIB_OBJ) $(ROC_OBJ)

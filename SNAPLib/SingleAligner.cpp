@@ -60,7 +60,7 @@ SingleAlignerContext::parseOptions(
     version = i_version;
 
     AlignerOptions* options = new AlignerOptions(
-        "snap-rna single <genome-dir> <transcriptome-dir> <annotation> <inputFile(s)> [<options>]"
+        "snapr single <genome-dir> <transcriptome-dir> <annotation> <inputFile(s)> [<options>]"
 		"   where <input file(s)> is a list of files to process.\n",false);
     options->extra = extension->extraOptions();
     if (argc < 4) {
@@ -289,7 +289,8 @@ SingleAlignerContext::runIterationThread()
                 c_allocator->checkCanaries();
 
                 if (c_result != NotFound) {
-                    c_filter->AddAlignment(location, direction, score, mapq, false, false);
+                    c_filter->AddAlignment(location, string(read->getId(), read->getIdLength()), string(read->getData(), read->getDataLength()));
+
                 }
             }
         }

@@ -297,7 +297,7 @@ AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_ar
     version = i_version;
 
     PairedAlignerOptions* options = new PairedAlignerOptions(
-        "snap-rna paired <genome-dir> <transcriptome-dir> <annotation> <input file(s)> <read2.fq> [<options>]\n"
+        "snapr paired <genome-dir> <transcriptome-dir> <annotation> <input file(s)> <read2.fq> [<options>]\n"
         "   where <input file(s)> is a list of files to process.  FASTQ\n"
         "   files must come in pairs, since each read end is in a separate file.");
     options->extra = extension->extraOptions();
@@ -497,7 +497,12 @@ void PairedAlignerContext::runIterationThread()
       //Contamination database for paired end reads
       size_t c_memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(contamination, intersectingAlignerMaxHits, maxReadSize, contamination->getSeedLength(),
                                                                   numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize);
+
+      c_memoryPoolSize += ChimericPairedEndAligner::getBigAllocatorReservation(contamination, maxReadSize, maxHits, contamination->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize);
+
       c_allocator = new BigAllocator(c_memoryPoolSize);
+
+      
       c_intersectingAligner = new (c_allocator) IntersectingPairedEndAligner(contamination, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
                                                                   seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth,
                                                                   maxCandidatePoolSize, c_allocator);
@@ -505,7 +510,7 @@ void PairedAlignerContext::runIterationThread()
       c_aligner = new (c_allocator) ChimericPairedEndAligner(
           contamination,
           maxReadSize,
-          maxHits,
+          maxHits, 
           maxDist,
           numSeedsFromCommandLine,
           seedCoverage,
@@ -515,7 +520,7 @@ void PairedAlignerContext::runIterationThread()
           c_allocator);
 
       c_allocator->checkCanaries();
-    
+     
     }
 
     unsigned singleAlignerMaxHits = 300;
@@ -660,8 +665,8 @@ void PairedAlignerContext::runIterationThread()
             c_aligner->align(read0, read1, &contaminantResult);
             if ((contaminantResult.status[0] != NotFound) && (contaminantResult.status[1] != NotFound)) {
 
-              c_filter->AddAlignment(contaminantResult.location[0], contaminantResult.direction[0], contaminantResult.score[0], contaminantResult.mapq[0], false, false);
-              c_filter->AddAlignment(contaminantResult.location[1], contaminantResult.direction[1], contaminantResult.score[1], contaminantResult.mapq[1], false, true);
+              c_filter->AddAlignment(contaminantResult.location[0], string(read0->getId(), read0->getIdLength()), string(read0->getData(), read0->getDataLength()));
+              c_filter->AddAlignment(contaminantResult.location[1], string(read1->getId(), read1->getIdLength()), string(read1->getData(), read1->getDataLength()));
 
             }
           }

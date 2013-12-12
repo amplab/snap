@@ -40,7 +40,7 @@ const char *SNAP_VERSION = "0.16alpha.47";
 static void usage()
 {
     fprintf(stderr,
-            "Usage: snap-rna <command> [<options>]\n"
+            "Usage: snapr <command> [<options>]\n"
             "Commands:\n"
             "   index         build a genome index\n"
             "   transcriptome build a transcriptome index\n"
@@ -52,7 +52,7 @@ static void usage()
 
 int main(int argc, const char **argv)
 {
-    printf("Welcome to SNAP-RNA version %s.\n\n", SNAP_VERSION);
+    printf("Welcome to SNAPR version %s.\n\n", SNAP_VERSION);
 
     InitializeSeedSequencers();
 

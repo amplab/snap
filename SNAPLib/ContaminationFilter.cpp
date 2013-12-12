@@ -40,7 +40,7 @@ ContaminationFilter::~ContaminationFilter()
     DestroyExclusiveLock(&lock);
 }
 
-int ContaminationFilter::AddAlignment(unsigned location, Direction direction, int score, int mapq, bool isTranscriptome, bool isMate0) {
+int ContaminationFilter::AddAlignment(unsigned location, string header, string seq) {
 
     //Get the position and rname for this alignment
     string rname = "*";
@@ -61,17 +61,11 @@ int ContaminationFilter::AddAlignment(unsigned location, Direction direction, in
        //Lock the mutex
        AcquireExclusiveLock(&lock);
 
-       //Try to find this rname in the counts map
-       contamination_count::iterator pos = counts.find(rname);
+       //Get the existing element or insert a new one
+       contamination_count::iterator pos = counts.insert(counts.begin(), contamination_count::value_type(rname, Contaminant(rname)));
        
-       //If it is not found, then add it
-       if (pos == counts.end()) {
-         counts.insert(contamination_count::value_type(rname, Contaminant(rname, 1)));
-
-       //If it is found, then increment the count
-       } else {
-         pos->second.Increment();
-       }
+       //Add the reads to the list
+       pos->second.Add(header, seq);
 
        //Unlock the mutex
        ReleaseExclusiveLock(&lock);
@@ -82,19 +76,33 @@ int ContaminationFilter::AddAlignment(unsigned location, Direction direction, in
 
 void ContaminationFilter::Write() {
 
-    ofstream contaminant_file;
-    contaminant_file.open((prefix+".contaminants.txt").c_str());
+    printf("Writing contaminants... ");
+    fflush(stdout);
+    _int64 loadStart = timeInMillis();
 
+    ofstream contaminant_file, read_file;
+    contaminant_file.open((prefix+".contaminants.txt").c_str());
+    read_file.open((prefix+".contaminants.reads.fa").c_str());
+
+    //Sort the contaminants by the number of reads there are
     std::vector<Contaminant> temp;
     for (contamination_count::const_iterator it = counts.begin(); it != counts.end(); ++it) {
         temp.push_back(it->second);
     }
     sort(temp.rbegin(), temp.rend());
 
+    //Go through each one and output the reads
     for (std::vector<Contaminant>::const_iterator it = temp.begin(); it != temp.end(); ++it) {
       contaminant_file << it->Rname() << '\t' << it->Count() << endl;
+      it->WriteReads(read_file);
     }
     contaminant_file.close();
+    read_file.close();
+
+    _int64 loadTime = timeInMillis() - loadStart;
+    printf("%llds.\n", loadTime / 1000);
+    fflush(stdout);
+
 }
 
 void ContaminationFilter::Print() {

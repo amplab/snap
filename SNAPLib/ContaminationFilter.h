@@ -33,24 +33,32 @@ Revision History:
 
 using namespace std;
 
+typedef std::map<string, string> read_map;
+
 class Contaminant {
 
     public:
 
-      Contaminant(std::string rname_, unsigned count_=0) : rname(rname_), count(count_) {};
-      Contaminant(const Contaminant &rhs) : rname(rhs.rname), count(rhs.count) {};
-      Contaminant& operator=(const Contaminant &rhs) { rname = rhs.rname; count = rhs.count; };
-      bool operator<(const Contaminant &rhs) const { return count < rhs.count; };
+      Contaminant(std::string rname_) : rname(rname_) {};
+      Contaminant(const Contaminant &rhs) : rname(rhs.rname), reads(rhs.reads) {};
+      Contaminant& operator=(const Contaminant &rhs) { rname = rhs.rname; reads = rhs.reads; };
+      bool operator<(const Contaminant &rhs) const { return Count() < rhs.Count(); };
       virtual ~Contaminant() {};
       
-      void Increment() { count++; };
-      unsigned Count() const { return count; };
+      void Add(string header, string seq) { reads.insert(read_map::value_type(header, seq)); };
+      unsigned Count() const { return reads.size(); };
       std::string Rname() const { return rname; };
+
+      void WriteReads(ofstream &outfile) const {
+        for (read_map::const_iterator it = reads.begin(); it != reads.end(); ++it) {
+            outfile << ">"+it->first << endl << it->second << endl;
+        }
+      };
 
     private:
 
       std::string rname;
-      unsigned count;
+      read_map reads;
 };
 
 typedef std::map<std::string, Contaminant> contamination_count;
@@ -64,7 +72,7 @@ class ContaminationFilter {
         virtual ~ContaminationFilter();  
         
         //Functions
-        int AddAlignment(unsigned location, Direction direction, int score, int mapq, bool isTranscriptome, bool isMate0); 
+        int AddAlignment(unsigned location, string header, string seq); 
         void Print();     
         void Write();
 

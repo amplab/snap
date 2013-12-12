@@ -47,7 +47,7 @@ static const unsigned DEFAULT_KEY_BYTES = 4;
 static void tusage()
 {
     fprintf(stderr,
-            "Usage: snap-rna transcriptome <input.gtf> <input.fa> <output-dir> [<options>]\n"
+            "Usage: snapr transcriptome <input.gtf> <input.fa> <output-dir> [<options>]\n"
             "Options:\n"
             "  -s               Seed size (default: %d)\n"
             "  -h               Hash table slack (default: %.1f)\n"
@@ -73,7 +73,7 @@ static void tusage()
 static void usage()
 {
     fprintf(stderr,
-            "Usage: snap-rna index <input.fa> <output-dir> [<options>]\n"
+            "Usage: snapr index <input.fa> <output-dir> [<options>]\n"
             "Options:\n"
             "  -s               Seed size (default: %d)\n"
             "  -h               Hash table slack (default: %.1f)\n"

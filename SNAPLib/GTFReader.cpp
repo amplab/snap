@@ -224,7 +224,7 @@ void ReadInterval::Print() const {
 }
 
 void ReadInterval::WriteGTF(ofstream &outfile, unsigned intersection) const {
-    outfile << chr << '\t' << "snap-rna" << '\t' << "interval" << '\t' << start << '\t' << end << '\t' << '.' << '\t' << '.' << '\t' << '.' << '\t';
+    outfile << chr << '\t' << "snapr" << '\t' << "interval" << '\t' << start << '\t' << end << '\t' << '.' << '\t' << '.' << '\t' << '.' << '\t';
     outfile << "gene_id \"" << GeneID() << "\"; transcript_id \"" << GeneNameSpliced(intersection) << "\"; gene_name \"" << GeneName() << "\";" << endl;
 }
 
