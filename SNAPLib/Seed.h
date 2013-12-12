@@ -96,10 +96,6 @@ struct Seed {
         return rc;
     }
 
-    inline bool isBiggerThanItsReverseComplement() const {
-        return bases > reverseComplement;
-    }
-
     inline bool isOwnReverseComplement() const {
         return bases == reverseComplement;
     }

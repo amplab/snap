@@ -11,10 +11,10 @@ Abstract:
 
 Authors:
 
-    Matei Zaharia, February, 2012
+    Matei Zaharia & Bill Bolosky, February, 2012
 
 Environment:
-`
+
     User mode service.
 
 Revision History:
@@ -35,7 +35,7 @@ Revision History:
 
 using namespace std;
 
-const char *SNAP_VERSION = "0.16alpha.47"; 
+const char *SNAP_VERSION = "0.16alpha.48"; 
 
 static void usage()
 {

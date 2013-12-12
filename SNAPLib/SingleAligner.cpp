@@ -228,7 +228,6 @@ SingleAlignerContext::runIterationThread()
 
     }
 
-
 #ifdef  _MSC_VER
     if (options->useTimingBarrier) {
         if (0 == InterlockedDecrementAndReturnNewValue(nThreadsAllocatingMemory)) {

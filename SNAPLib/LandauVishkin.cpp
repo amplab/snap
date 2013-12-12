@@ -426,8 +426,8 @@ done1:
 								if (!writeCigar(&cigarBuf, &cigarBufLen, end - streakStart, '=', format, tokens)) {
 									return -2;
 								}
-                                    validateAction(lastAction, 'X');
 								if (patternLen > end) {
+                                    validateAction(lastAction, 'X');
 									if (!writeCigar(&cigarBuf, &cigarBufLen, patternLen - end, 'X', format, tokens)) {
 										return -2;
 									}
