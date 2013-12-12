@@ -150,7 +150,7 @@ SimpleReadWriter::writePair(
         char lastChar0, lastChar1;
         lastChar0 = read0->getId()[idLengths[0] - 1];
         lastChar1 = read1->getId()[idLengths[1] - 1];
-        if ((lastChar0 == '1' || lastChar0 == '2') && (lastChar0 == '1' || lastChar1 == '2') && 
+        if ((lastChar0 == '1' || lastChar0 == '2') && (lastChar1 == '1' || lastChar1 == '2') && 
             lastChar0 != lastChar1) {
                 idLengths[0] -= 2;
                 idLengths[1] -= 2;
