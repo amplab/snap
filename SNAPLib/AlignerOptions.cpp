@@ -63,7 +63,8 @@ AlignerOptions::AlignerOptions(
     seedCountSpecified(false),
     numSeedsFromCommandLine(0),
     ignoreSecondaryAlignments(true),
-    preserveClipping(false)
+    preserveClipping(false),
+    expansionFactor(1.0)
 {
     if (forPairedEnd) {
         maxDist                 = 15;
@@ -129,13 +130,15 @@ AlignerOptions::usageMessage()
         "  -rg  Specify the default read group if it is not specified in the input file\n"
         "  -sa  Include reads in SAM or BAM files with the secondary alignment (0x100) flag set; default is to drop them.\n"
         "  -pc  Preserve the soft clipping for reads coming from SAM or BAM files\n"
+        "  -xf  Increase expansion factor for BAM and GZ files (default %.1f)\n"
 
 // not written yet        "  -r   Specify the content of the @RG line in the SAM header.\n"
             ,
             commandLine,
             maxDist.start,
             seedCoverage,
-            maxHits.start);
+            maxHits.start,
+            expansionFactor);
 
     if (extra != NULL) {
         extra->usageMessage();
@@ -300,6 +303,12 @@ AlignerOptions::parse(
 	} else if (strcmp(argv[n], "-sa") == 0) {
 		ignoreSecondaryAlignments = false;
 		return true;
+	} else if (strcmp(argv[n], "-xf") == 0) {
+        if (n + 1 < argc) {
+            n++;
+            expansionFactor = atof(argv[n]);
+            return expansionFactor > 0;
+        }
 	} else if (strcmp(argv[n], "-pc") == 0) {
 		preserveClipping = true;
 		return true;

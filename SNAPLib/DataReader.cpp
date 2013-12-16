@@ -1005,7 +1005,7 @@ DecompressDataReader::decompress(
             soft_exit(1);
         }
         if (status < 0 && zstream->avail_out == 0 && zstream->avail_in > 0) {
-            fprintf(stderr, "GzipDataReader: insufficient decompression buffer space\n");
+            fprintf(stderr, "insufficient decompression buffer space - increase expansion factor, currently -xf %.1f\n", DataSupplier::ExpansionFactor);
             soft_exit(1);
         }
     } while (zstream->avail_in != 0 && (zstream->avail_out != oldAvailOut || zstream->avail_in != oldAvailIn) && mode != SingleBlock);
@@ -1339,14 +1339,15 @@ DecompressDataReaderSupplier::getDataReader(
     double extraFactor)
 {
     // adjust extra factor for compression ratio
-    double totalFactor = MAX_FACTOR * (1.0 + extraFactor);
+    double expand = MAX_FACTOR * DataSupplier::ExpansionFactor;
+    double totalFactor = expand * (1.0 + extraFactor);
     // get inner reader with no overflow since zlib can't deal with it
     DataReader* data = inner->getDataReader(blockSize, totalFactor);
     // compute how many extra bytes are owned by this layer
     char* p;
     _int64 totalExtra;
     data->getExtra(&p, &totalExtra);
-    _int64 mine = (_int64)(totalExtra * MAX_FACTOR / totalFactor);
+    _int64 mine = (_int64)(totalExtra * expand / totalFactor);
     // create new reader, telling it how many bytes it owns
     // it will subtract overflow off the end of each batch
     // batch count here is cheap, so make it high enough that it never hits the limit
@@ -1822,6 +1823,8 @@ DataSupplier* DataSupplier::GzipBamDefault[2] =
 { DataSupplier::GzipBam(DataSupplier::Default[false], false), DataSupplier::GzipBam(DataSupplier::Default[false], true) };
 
 int DataSupplier::ThreadCount = 1;
+
+double DataSupplier::ExpansionFactor = 1.0;
 
 volatile _int64 DataReader::ReadWaitTime = 0;
 volatile _int64 DataReader::ReleaseWaitTime = 0;

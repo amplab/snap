@@ -91,6 +91,7 @@ struct AlignerOptions : public AbstractOptions
     const char         *defaultReadGroup; // if not specified in input
     bool                ignoreSecondaryAlignments;
     bool                preserveClipping;
+    float               expansionFactor;
 
     void usage();
 
