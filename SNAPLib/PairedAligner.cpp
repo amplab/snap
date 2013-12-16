@@ -525,7 +525,7 @@ void PairedAlignerContext::runIterationThread()
 
     unsigned singleAlignerMaxHits = 300;
     unsigned p_numSeedsFromCommandLine = 0;
-    float p_seedCoverage = maxReadSize / index->getSeedLength();
+    float p_seedCoverage = maxReadSize / (index->getSeedLength()*2);
     BigAllocator *t_allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, singleAlignerMaxHits, maxReadSize, transcriptome->getSeedLength(), numSeedsFromCommandLine, seedCoverage));
 
     BaseAligner *t_aligner = new (t_allocator) BaseAligner(
