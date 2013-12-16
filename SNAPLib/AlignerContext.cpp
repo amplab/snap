@@ -318,6 +318,7 @@ AlignerContext::beginIteration()
     readerContext.gtf = gtf != NULL ? gtf : NULL;
     readerContext.paired = false;
     readerContext.ignoreSecondaryAlignments = options->ignoreSecondaryAlignments;
+    DataSupplier::ExpansionFactor = options->expansionFactor;
 	readerContext.header = NULL;
 	readerContext.headerLength = 0;
 	readerContext.headerBytes = 0;

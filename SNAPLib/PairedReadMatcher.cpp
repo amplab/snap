@@ -164,13 +164,12 @@ PairedReadMatcher::getNextReadPair(
                 //printf("warning: PairedReadMatcher overflow %d unpaired reads from %d:%d\n", unmatched[1].size(), batch[1].fileID, batch[1].batchID); //!!
                 //char* buf = (char*) alloca(500);
                 for (ReadMap::iterator r = unmatched[1].begin(); r != unmatched[1].end(); r = unmatched[1].next(r)) {
-                    //overflow.put(r->key, ReadWithOwnMemory(r->value));
+                    overflow.put(r->key, ReadWithOwnMemory(r->value));
                     //memcpy(buf, r->value.getId(), r->value.getIdLength());
                     //buf[r->value.getIdLength()] = 0;
                     //printf("overflow add %d:%d %s\n", batch[1].fileID, batch[1].batchID, buf);
                 }
             }
-
             for (ReadMap::iterator i = unmatched[1].begin(); i != unmatched[1].end(); i = unmatched[1].next(i)) {
                 i->value.dispose();
             }

@@ -174,6 +174,9 @@ public:
     // hack: must be set to communicate thread count into suppliers
     static int ThreadCount;
 
+    // hack: global for additional expansion factor
+    static double ExpansionFactor;
+
 protected:
     const bool autoRelease;
 };

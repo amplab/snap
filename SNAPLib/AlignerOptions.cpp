@@ -69,7 +69,8 @@ AlignerOptions::AlignerOptions(
     confDiff(2),
     minPercentAbovePhred(90.0),
     minPhred(20),
-    phredOffset(33)
+    phredOffset(33),
+    expansionFactor(1.0)
 {
     if (forPairedEnd) {
         maxDist                 = 15;
@@ -135,6 +136,7 @@ AlignerOptions::usageMessage()
         "  -rg  Specify the default read group if it is not specified in the input file\n"
         "  -sa  Include reads in SAM or BAM files with the secondary alignment (0x100) flag set; default is to drop them.\n"
         "  -pc  Preserve the soft clipping for reads coming from SAM or BAM files\n"
+        "  -xf  Increase expansion factor for BAM and GZ files (default %.1f)\n"
         "\n"
         "  -fm  Quality filtering: specify the minimum Phred score (default: %u)\n"
         "  -fp  Quality filtering: specify the minimum percent of bases >= the minimum Phred score (default: %lf)\n"
@@ -148,6 +150,7 @@ AlignerOptions::usageMessage()
             maxDist.start,
             seedCoverage,
             maxHits.start,
+            expansionFactor,
             confDiff,
             minPercentAbovePhred,
             minPhred,
@@ -333,6 +336,12 @@ AlignerOptions::parse(
 	} else if (strcmp(argv[n], "-sa") == 0) {
 		ignoreSecondaryAlignments = false;
 		return true;
+	} else if (strcmp(argv[n], "-xf") == 0) {
+        if (n + 1 < argc) {
+            n++;
+            expansionFactor = atof(argv[n]);
+            return expansionFactor > 0;
+        }
 	} else if (strcmp(argv[n], "-pc") == 0) {
 		preserveClipping = true;
 		return true;

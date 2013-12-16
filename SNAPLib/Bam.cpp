@@ -65,8 +65,8 @@ BAMReader::init(
     _int64 amountOfFileToProcess)
 {
     // todo: integrate supplier models
-    // might need up to 2x extra for expanded sequence + quality + cigar data
-    data = DataSupplier::GzipBamDefault[false]->getDataReader(MAX_RECORD_LENGTH, 2.5);
+    // might need up to 3x extra for expanded sequence + quality + cigar data
+    data = DataSupplier::GzipBamDefault[false]->getDataReader(MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
     if (! data->init(fileName)) {
         fprintf(stderr, "Unable to read file %s\n", fileName);
         soft_exit(1);
@@ -97,7 +97,7 @@ BAMReader::readHeader(
     ReaderContext& context)
 {
     _ASSERT(context.header == NULL);
-    DataReader* data = DataSupplier::GzipBamDefault[false]->getDataReader(MAX_RECORD_LENGTH, 2.5);
+    DataReader* data = DataSupplier::GzipBamDefault[false]->getDataReader(MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
     if (! data->init(fileName)) {
         fprintf(stderr, "Unable to read file %s\n", fileName);
         soft_exit(1);
@@ -473,7 +473,11 @@ BAMReader::getExtra(
     char* extra;
     _int64 limit;
     data->getExtra(&extra, &limit);
-    _ASSERT(extra != NULL && bytes >= 0 && limit - extraOffset >= 2 * bytes);
+    _ASSERT(extra != NULL && bytes >= 0 && limit - extraOffset >= bytes);
+    if (limit - extraOffset < bytes) {
+        fprintf(stderr, "error: not enough space for expanding BAM file - increase expansion factor, currently -xf %.1f\n", DataSupplier::ExpansionFactor);
+        soft_exit(1);
+    }
     char* result = extra + extraOffset;
     extraOffset += max((_int64) 0, bytes);
     return result;
