@@ -56,7 +56,7 @@ Arguments:
     for (unsigned i = 0; i < tableSize; i++) {
         Entry *entry = getEntry(i);
         clearKey(entry);
-        entry->value = InvalidGenomeLocation;
+        entry->value1 = InvalidGenomeLocation;
     }
 }
 
@@ -242,7 +242,7 @@ SNAPHashTable::getEntryForKey(__in _uint64 key) const
     // Chain through the table until we hit either a match on the key or an unused element
     //
     Entry *entry = getEntry(tableIndex);
-    while (!isKeyEqual(entry, key) && entry->value != InvalidGenomeLocation) {
+    while (!isKeyEqual(entry, key) && entry->value1 != InvalidGenomeLocation) {
         nProbesInGetEntryForKey++;
 
         if (nProbes < QUADRATIC_CHAINING_DEPTH) {
@@ -270,9 +270,9 @@ SNAPHashTable::getEntryForKey(__in _uint64 key) const
 }
 
 bool
-SNAPHashTable::Insert(_uint64 key, unsigned data)
+SNAPHashTable::Insert(_uint64 key, const unsigned *data)
 {
-    _ASSERT(data != InvalidGenomeLocation); // This is the unused value that represents an empty hash table.  You can't use it.
+    _ASSERT(data[0] != InvalidGenomeLocation); // This is the unused value that represents an empty hash table.  You can't use it.
 
     Entry *entry = getEntryForKey(key);
     if (NULL == entry) {
@@ -285,7 +285,8 @@ SNAPHashTable::Insert(_uint64 key, unsigned data)
         usedElementCount++;
     }
 
-    entry->value = data;
+    entry->value1 = data[0];
+    entry->value2 = data[1];
 
     return true;
 }
@@ -301,12 +302,12 @@ SNAPHashTable::SlowLookup(_uint64 key)
 {
     Entry *entry = getEntryForKey(key);
 
-    if (NULL == entry || entry->value == InvalidGenomeLocation) {
+    if (NULL == entry || entry->value1 == InvalidGenomeLocation) {
         return NULL;
     }
 
-    return &entry->value;
+    return &entry->value1;
 }
 
 const unsigned SNAPHashTable::magic = 0xb111b010;
-const unsigned SNAPHashTable::dataSizeInBytes = 4;
+const unsigned SNAPHashTable::dataSizeInBytes = 8;

@@ -306,7 +306,7 @@ AlignerOptions::parse(
 	} else if (strcmp(argv[n], "-xf") == 0) {
         if (n + 1 < argc) {
             n++;
-            expansionFactor = atof(argv[n]);
+            expansionFactor = (float)atof(argv[n]);
             return expansionFactor > 0;
         }
 	} else if (strcmp(argv[n], "-pc") == 0) {

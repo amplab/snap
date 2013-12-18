@@ -47,7 +47,7 @@ class SNAPHashTable {
         //
         // Fails if either the table is full or key already exists.
         //
-        bool Insert(_uint64 key, unsigned data);
+        bool Insert(_uint64 key, const unsigned *data);
 
         size_t GetUsedElementCount() const {return usedElementCount;}
         size_t GetTableSize() const {return tableSize;}
@@ -76,8 +76,8 @@ class SNAPHashTable {
             _ASSERT(keySizeInBytes == 8 || (key & ~((((_uint64)1) << (keySizeInBytes * 8)) - 1)) == 0);    // High bits of the key aren't set.
             _uint64 tableIndex = hash(key) % tableSize;
             Entry *entry = getEntry(tableIndex);
-            if (isKeyEqual(entry, key) && entry->value != InvalidGenomeLocation) {
-                return &(entry->value);
+            if (isKeyEqual(entry, key) && entry->value1 != InvalidGenomeLocation) {
+                return &(entry->value1);
             } else {
                 unsigned nProbes = 0;
                 Entry* entry;
@@ -93,7 +93,7 @@ class SNAPHashTable {
                         tableIndex = (tableIndex + 1) % tableSize;
                     }
                     entry = getEntry(tableIndex);
-                    value1 = entry->value;
+                    value1 = entry->value1;
                 } while (!isKeyEqual(entry, key) && value1 != InvalidGenomeLocation);
 
                 extern _int64 nProbesInGetEntryForKey;
@@ -102,7 +102,7 @@ class SNAPHashTable {
                 if (value1 == InvalidGenomeLocation) {
                     return NULL;
                 } else {
-                    return &(entry->value);
+                    return &(entry->value1);
                 }
             }
         }
@@ -120,7 +120,8 @@ private:
         static const unsigned QUADRATIC_CHAINING_DEPTH = 5; // Chain quadratically for this long, then linerarly  Set to 0 for linear chaining
 
         struct Entry {
-            unsigned        value;
+            unsigned        value1;
+            unsigned        value2;
             unsigned char   key[1]; // Actual size of key determined by keySizeInBytes
         };
 
