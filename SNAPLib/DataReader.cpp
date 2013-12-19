@@ -492,9 +492,9 @@ WindowsOverlappedDataReader::startIo()
         info->next = -1;
         info->previous = lastBufferForConsumer;
         lastBufferForConsumer = index;
-		if (nextBufferForConsumer == -1) {
-			nextBufferForConsumer = index;
-		}
+	if (nextBufferForConsumer == -1) {
+            nextBufferForConsumer = index;
+	}
 
         if (readOffset.QuadPart >= fileSize.QuadPart || readOffset.QuadPart >= endingOffset) {
             info->validBytes = 0;
@@ -985,7 +985,7 @@ DecompressDataReader::decompress(
     bool multiBlock = true;
     int status;
     do {
-	    if (mode != ContinueMultiBlock || block != 0) {
+            if (mode != ContinueMultiBlock || block != 0) {
             if (heap != NULL) {
                 heap->reset();
             }
@@ -1131,7 +1131,7 @@ DecompressDataReader::decompressThread(
             entry->decompressedValid = entry->decompressedStart = reader->overflowBytes;
             DataBatch b = reader->inner->getBatch();
             entry->batch = DataBatch(b.batchID + 1, b.fileID);
-	    // decompressed buffer is same as next-to-last batch, need to allocate own buffer
+            // decompressed buffer is same as next-to-last batch, need to allocate own buffer
             entry->decompressed = (char*) BigAlloc(reader->totalExtra);
             entry->allocated = true;
             stop = true;
@@ -1551,7 +1551,7 @@ MemMapDataReader::reinit(
     }
     _int64 oldAmount = amountOfFileToProcess;
     _int64 startSize = amountOfFileToProcess == 0 ? fileSize - i_startingOffset
-	: max((_int64) 0, min(fileSize - i_startingOffset, amountOfFileToProcess));
+        : max((_int64) 0, min(fileSize - i_startingOffset, amountOfFileToProcess));
     amountOfFileToProcess = max((_int64)0, min(startSize + overflowBytes, fileSize - i_startingOffset));
     currentMap = mapper->createMapping(i_startingOffset, amountOfFileToProcess, &currentMappedBase);
     if (currentMap == NULL) {
@@ -1667,7 +1667,7 @@ MemMapDataReader::releaseBatch(
             extraBatches[i].batchID = 0;
             _ASSERT(extraUsed > 0);
             extraUsed--;
-	    //printf("MemMap: releaseBatch %d:%d = index %d now using %d of %d\n", batch.fileID, batch.batchID, i, extraUsed, batchCount);
+            //printf("MemMap: releaseBatch %d:%d = index %d now using %d of %d\n", batch.fileID, batch.batchID, i, extraUsed, batchCount);
             if (extraUsed == batchCount - 1) {
                 SignalSingleWaiterObject(&waiter);
             }
