@@ -27,6 +27,8 @@ Revision History:
 #pragma once
 
 #include "Compat.h"
+#include "Read.h"
+#include "Genome.h"
 
 //
 // Utility class for letting multiple threads split chunks of a range to process.
@@ -50,3 +52,69 @@ private:
     volatile _int64 position;
     volatile _int64 startTime;
 };
+
+class RangeSplittingReadSupplier : public ReadSupplier {
+public:
+    RangeSplittingReadSupplier(RangeSplitter *i_splitter, ReadReader *i_underlyingReader) : 
+      splitter(i_splitter), underlyingReader(i_underlyingReader), read() {}
+
+    virtual ~RangeSplittingReadSupplier();
+
+    Read *getNextRead();
+ 
+    virtual void releaseBatch(DataBatch batch)
+    { underlyingReader->releaseBatch(batch); }
+
+private:
+    RangeSplitter *splitter;
+    ReadReader *underlyingReader;
+    Read read;
+};
+
+class RangeSplittingReadSupplierGenerator: public ReadSupplierGenerator {
+public:
+    RangeSplittingReadSupplierGenerator(const char *i_fileName, bool i_isSAM, unsigned numThreads, const ReaderContext& context);
+    ~RangeSplittingReadSupplierGenerator() {delete splitter; delete [] fileName;}
+
+    ReadSupplier *generateNewReadSupplier();
+
+private:
+    RangeSplitter *splitter;
+    char *fileName;
+    bool isSAM;
+    ReaderContext context;
+};
+
+
+class RangeSplittingPairedReadSupplier : public PairedReadSupplier {
+public:
+    RangeSplittingPairedReadSupplier(RangeSplitter *i_splitter, PairedReadReader *i_underlyingReader) : splitter(i_splitter), underlyingReader(i_underlyingReader) {}
+    virtual ~RangeSplittingPairedReadSupplier();
+
+    virtual bool getNextReadPair(Read **read1, Read **read2);
+       
+    virtual void releaseBatch(DataBatch batch)
+    { underlyingReader->releaseBatch(batch); }
+
+ private:
+    PairedReadReader *underlyingReader;
+    RangeSplitter *splitter;
+    Read internalRead1;
+    Read internalRead2;
+ };
+
+class RangeSplittingPairedReadSupplierGenerator: public PairedReadSupplierGenerator {
+public:
+    RangeSplittingPairedReadSupplierGenerator(const char *i_fileName1, const char *i_fileName2, bool i_isSAM, unsigned numThreads, const ReaderContext& context);
+    ~RangeSplittingPairedReadSupplierGenerator();
+
+    PairedReadSupplier *generateNewPairedReadSupplier();
+
+private:
+    RangeSplitter *splitter;
+    char *fileName1;
+    char *fileName2;
+    bool isSAM;
+    ReaderContext context;
+};
+

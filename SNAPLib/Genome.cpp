@@ -26,26 +26,29 @@ Revision History:
 #include "Genome.h"
 #include "Compat.h"
 #include "BigAlloc.h"
+#include "exit.h"
 
-Genome::Genome(unsigned i_maxBases, unsigned nBasesStored) : maxBases(i_maxBases), minOffset(0), maxOffset(i_maxBases)
+Genome::Genome(unsigned i_maxBases, unsigned nBasesStored, unsigned i_chromosomePadding)
+    : maxBases(i_maxBases), minOffset(0), maxOffset(i_maxBases), chromosomePadding(i_chromosomePadding)
 {
     bases = ((char *) BigAlloc(nBasesStored + 2 * N_PADDING)) + N_PADDING;
     if (NULL == bases) {
         fprintf(stderr,"Genome: unable to allocate memory for %llu bases\n",(_int64)maxBases);
-        exit(1);
+        soft_exit(1);
     }
 
     // Add N's for the N_PADDING bases before and after the genome itself
-    memset(bases - N_PADDING, 'N', N_PADDING);
-    memset(bases + nBasesStored, 'N', N_PADDING);
+    memset(bases - N_PADDING, 'n', N_PADDING);
+    memset(bases + nBasesStored, 'n', N_PADDING);
 
     nBases = 0;
 
-    maxPieces = 32; // A power of two that's bigger than the usual number of chromosomes, so we don't have to
+    maxContigs = 32; // A power of two that's bigger than the usual number of chromosomes, so we don't have to
                     // reallocate in practice.
 
-    nPieces = 0;
-    pieces = new Piece[maxPieces];
+    nContigs = 0;
+    contigs = new Contig[maxContigs];
+    contigsByName = NULL;
 }
 
     void
@@ -54,7 +57,7 @@ Genome::addData(const char *data, size_t len)
     if ((size_t)nBases + len > maxBases) {
         fprintf(stderr,"Tried to write beyond allocated genome size (or tried to write into a genome that was loaded from a file).\n");
         fprintf(stderr,"Size = %lld\n",(_int64)maxBases);
-        exit(1);
+        soft_exit(1);
     }
 
     memcpy(bases + nBases,data,len);
@@ -68,52 +71,55 @@ Genome::addData(const char *data)
 }
 
     void
-Genome::startPiece(const char *pieceName)
+Genome::startContig(const char *contigName)
 {
-    if (nPieces == maxPieces) {
+    if (nContigs == maxContigs) {
         //
         // Reallocate (maybe we're sequencing a tree that's got lots of chromosomes).
         //
-        int newMaxPieces = maxPieces * 2;
-        Piece *newPieces = new Piece[newMaxPieces];
-        if (NULL == newPieces) {
-            fprintf(stderr,"Genome: unable to reallocate piece array to size %d\n",newMaxPieces);
-            exit(1);
+        int newMaxContigs = maxContigs * 2;
+        Contig *newContigs = new Contig[newMaxContigs];
+        if (NULL == newContigs) {
+            fprintf(stderr,"Genome: unable to reallocate contig array to size %d\n",newMaxContigs);
+            soft_exit(1);
         }
-        for (int i = 0; i < nPieces; i++) {
-            newPieces[i] = pieces[i];
+        for (int i = 0; i < nContigs; i++) {
+            newContigs[i] = contigs[i];
         }
 
-        delete [] pieces;
-        pieces = newPieces;
-        maxPieces = newMaxPieces;
+        delete [] contigs;
+        contigs = newContigs;
+        maxContigs = newMaxContigs;
     }
 
-    pieces[nPieces].beginningOffset = nBases;
-    size_t len = strlen(pieceName) + 1;
-    pieces[nPieces].name = new char[len];
-    if (NULL == pieces[nPieces].name) {
-        fprintf(stderr,"Unable to allocate space for piece name\n");
-        exit(1);
+    contigs[nContigs].beginningOffset = nBases;
+    size_t len = strlen(contigName) + 1;
+    contigs[nContigs].name = new char[len];
+    if (NULL == contigs[nContigs].name) {
+        fprintf(stderr,"Unable to allocate space for contig name\n");
+        soft_exit(1);
     }
 
-    strncpy(pieces[nPieces].name,pieceName,len);
-    pieces[nPieces].name[len-1] = '\0';
+    strncpy(contigs[nContigs].name,contigName,len);
+    contigs[nContigs].name[len-1] = '\0';
 
-    nPieces++;
+    nContigs++;
 }
 
 
 Genome::~Genome()
 {
     BigDealloc(bases - N_PADDING);
-    for (int i = 0; i < nPieces; i++) {
-        delete [] pieces[i].name;
-        pieces[i].name = NULL;
+    for (int i = 0; i < nContigs; i++) {
+        delete [] contigs[i].name;
+        contigs[i].name = NULL;
     }
 
-    delete [] pieces;
-    pieces = NULL;
+    delete [] contigs;
+    if (contigsByName) {
+        delete [] contigsByName;
+    }
+    contigs = NULL;
 }
 
 
@@ -121,8 +127,8 @@ Genome::~Genome()
 Genome::saveToFile(const char *fileName) const
 {
     //
-    // Save file format is (in binary) the number of bases, the number of pieces, followed by
-    //  the pieces themselves, rounded up to 4K, followed by the bases.
+    // Save file format is (in binary) the number of bases, the number of contigs, followed by
+    //  the contigs themselves, rounded up to 4K, followed by the bases.
     //
 
     FILE *saveFile = fopen(fileName,"wb");
@@ -131,15 +137,15 @@ Genome::saveToFile(const char *fileName) const
         return false;
     } 
 
-    fprintf(saveFile,"%d %d\n",nBases,nPieces);
+    fprintf(saveFile,"%d %d\n",nBases,nContigs);
     char *curChar = NULL;
 
-    for (int i = 0; i < nPieces; i++) {
-        for (int n = 0; n < strlen(pieces[i].name); n++){
-         curChar = pieces[i].name + n;
+    for (int i = 0; i < nContigs; i++) {
+        for (int n = 0; n < strlen(contigs[i].name); n++){
+         curChar = contigs[i].name + n;
          if (*curChar == ' '){ *curChar = '_'; }
         }
-        fprintf(saveFile,"%d %s\n",pieces[i].beginningOffset,pieces[i].name);
+        fprintf(saveFile,"%d %s\n",contigs[i].beginningOffset,contigs[i].name);
     }
 
     if (nBases != fwrite(bases,1,nBases,saveFile)) {
@@ -153,12 +159,12 @@ Genome::saveToFile(const char *fileName) const
 }
 
     const Genome *
-Genome::loadFromFile(const char *fileName, unsigned i_minOffset, unsigned length)
+Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned i_minOffset, unsigned length)
 {    
     FILE *loadFile;
-    unsigned nBases,nPieces;
+    unsigned nBases,nContigs;
 
-    if (!openFileAndGetSizes(fileName,&loadFile,&nBases,&nPieces)) {
+    if (!openFileAndGetSizes(fileName,&loadFile,&nBases,&nContigs)) {
         //
         // It already printed an error.  Just fail.
         //
@@ -174,11 +180,11 @@ Genome::loadFromFile(const char *fileName, unsigned i_minOffset, unsigned length
         length = __min(length,nBases - i_minOffset);
     }
 
-    Genome *genome = new Genome(nBases,length);
+    Genome *genome = new Genome(nBases,length, chromosomePadding);
    
     genome->nBases = nBases;
-    genome->nPieces = genome->maxPieces = nPieces;
-    genome->pieces = new Piece[nPieces];
+    genome->nContigs = genome->maxContigs = nContigs;
+    genome->contigs = new Contig[nContigs];
     genome->minOffset = i_minOffset;
     if (i_minOffset >= nBases) {
         fprintf(stderr,"Genome::loadFromFile: specified minOffset %u >= nBases %u\n",i_minOffset,nBases);
@@ -188,36 +194,36 @@ Genome::loadFromFile(const char *fileName, unsigned i_minOffset, unsigned length
 
     genome->maxOffset = i_minOffset + length;
 
-    static const unsigned pieceNameBufferSize = 512;
-    char pieceNameBuffer[pieceNameBufferSize];
+    static const unsigned contigNameBufferSize = 512;
+    char contigNameBuffer[contigNameBufferSize];
     unsigned n;
-    size_t pieceSize;
+    size_t contigSize;
     char *curName;
-    for (unsigned i = 0; i < nPieces; i++) {
-        if (NULL == fgets(pieceNameBuffer, pieceNameBufferSize, loadFile)){
+    for (unsigned i = 0; i < nContigs; i++) {
+        if (NULL == fgets(contigNameBuffer, contigNameBufferSize, loadFile)){
 	  
-	  fprintf(stderr,"Unable to read piece description\n");
+	  fprintf(stderr,"Unable to read contig description\n");
             delete genome;
             return NULL;
         }
 
-	for (n = 0; n < pieceNameBufferSize; n++){
-	  if (pieceNameBuffer[n] == ' ') {
-	    pieceNameBuffer[n] = '\0'; 
+	for (n = 0; n < contigNameBufferSize; n++){
+	  if (contigNameBuffer[n] == ' ') {
+	    contigNameBuffer[n] = '\0'; 
 	    break;
 	  }
 	}
 
-    genome->pieces[i].beginningOffset = atoi(pieceNameBuffer);
-	pieceNameBuffer[n] = ' '; 
+    genome->contigs[i].beginningOffset = atoi(contigNameBuffer);
+	contigNameBuffer[n] = ' '; 
 	n++; // increment n so we start copying at the position after the space
-	pieceSize = strlen(pieceNameBuffer + n) - 1; //don't include the final \n
-        genome->pieces[i].name = new char[pieceSize + 1];
-	curName = genome->pieces[i].name;
-	for (unsigned pos = 0; pos < pieceSize; pos++) {
-	  curName[pos] = pieceNameBuffer[pos + n];
+	contigSize = strlen(contigNameBuffer + n) - 1; //don't include the final \n
+        genome->contigs[i].name = new char[contigSize + 1];
+	curName = genome->contigs[i].name;
+	for (unsigned pos = 0; pos < contigSize; pos++) {
+	  curName[pos] = contigNameBuffer[pos + n];
 	}
-        curName[pieceSize] = '\0';
+        curName[contigSize] = '\0';
     }
 
     //
@@ -239,7 +245,7 @@ Genome::loadFromFile(const char *fileName, unsigned i_minOffset, unsigned length
 
     if (0 != _fseek64bit(loadFile,i_minOffset,SEEK_CUR)) {
         fprintf(stderr,"Genome::loadFromFile: _fseek64bit failed\n");
-        exit(1);
+        soft_exit(1);
     }
 
     if (length != fread(genome->bases,1,length,loadFile)) {
@@ -250,11 +256,32 @@ Genome::loadFromFile(const char *fileName, unsigned i_minOffset, unsigned length
     }
 
     fclose(loadFile);
+    genome->fillInContigLengths();
+    genome->sortContigsByName();
     return genome;
 }
 
     bool
-Genome::openFileAndGetSizes(const char *filename, FILE **file, unsigned *nBases, unsigned *nPieces)
+contigComparator(
+    const Genome::Contig& a,
+    const Genome::Contig& b)
+{
+    return strcmp(a.name, b.name) < 0;
+}
+
+    void
+Genome::sortContigsByName()
+{
+    if (contigsByName) {
+        delete [] contigsByName;
+    }
+    contigsByName = new Contig[nContigs];
+    memcpy(contigsByName, contigs, nContigs * sizeof(Contig));
+    std::sort(contigsByName, contigsByName + nContigs, contigComparator);
+}
+
+    bool
+Genome::openFileAndGetSizes(const char *filename, FILE **file, unsigned *nBases, unsigned *nContigs)
 {
     *file = fopen(filename,"rb");
     if (*file == NULL) {
@@ -262,7 +289,7 @@ Genome::openFileAndGetSizes(const char *filename, FILE **file, unsigned *nBases,
         return false;
     } 
 
-    if (2 != fscanf(*file,"%d %d\n",nBases,nPieces)) {
+    if (2 != fscanf(*file,"%d %d\n",nBases,nContigs)) {
         fclose(*file);
         *file = NULL;
         fprintf(stderr,"Genome::openFileAndGetSizes: unable to read header\n");
@@ -273,12 +300,12 @@ Genome::openFileAndGetSizes(const char *filename, FILE **file, unsigned *nBases,
 
 
     bool 
-Genome::getSizeFromFile(const char *fileName, unsigned *nBases, unsigned *nPieces)
+Genome::getSizeFromFile(const char *fileName, unsigned *nBases, unsigned *nContigs)
 {
     FILE *file;
-    unsigned localNBases, localNPieces;
+    unsigned localNBases, localnContigs;
     
-    if (!openFileAndGetSizes(fileName,&file,nBases ? nBases : &localNBases, nPieces ? nPieces : &localNPieces)) {
+    if (!openFileAndGetSizes(fileName,&file,nBases ? nBases : &localNBases, nContigs ? nContigs : &localnContigs)) {
         return false;
     }
 
@@ -288,13 +315,38 @@ Genome::getSizeFromFile(const char *fileName, unsigned *nBases, unsigned *nPiece
 
 
     bool
-Genome::getOffsetOfPiece(const char *pieceName, unsigned *offset) const
+Genome::getOffsetOfContig(const char *contigName, unsigned *offset, int * index) const
 {
-    for (int i = 0; i < nPieces; i++) {
-        if (!strcmp(pieceName,pieces[i].name)) {
-            if (NULL != offset) {
-                *offset = pieces[i].beginningOffset;
+    if (contigsByName) {
+        int low = 0;
+        int high = nContigs - 1;
+        while (low <= high) {
+            int mid = (low + high) / 2;
+            int c = strcmp(contigsByName[mid].name, contigName);
+            if (c == 0) {
+                if (offset != NULL) {
+                    *offset = contigsByName[mid].beginningOffset;
+                }
+                if (index != NULL) {
+                    *index = mid;
+                }
+                return true;
+            } else if (c < 0) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
             }
+        }
+        return false;
+    }
+    for (int i = 0; i < nContigs; i++) {
+        if (!strcmp(contigName,contigs[i].name)) {
+            if (NULL != offset) {
+                *offset = contigs[i].beginningOffset;
+            }
+			if (index != NULL) {
+				*index = i;
+			}
             return true;
         }
     }
@@ -302,18 +354,18 @@ Genome::getOffsetOfPiece(const char *pieceName, unsigned *offset) const
 }
 
 
-    const Genome::Piece *
-Genome::getPieceAtLocation(unsigned location) const
+    const Genome::Contig *
+Genome::getContigAtLocation(unsigned location) const
 {
     _ASSERT(location < nBases);
     int low = 0;
-    int high = nPieces - 1;
+    int high = nContigs - 1;
     while (low <= high) {
         int mid = (low + high) / 2;
-        if (pieces[mid].beginningOffset <= location &&
-                (mid == nPieces-1 || pieces[mid+1].beginningOffset > location)) {
-            return &pieces[mid];
-        } else if (pieces[mid].beginningOffset <= location) {
+        if (contigs[mid].beginningOffset <= location &&
+                (mid == nContigs-1 || contigs[mid+1].beginningOffset > location)) {
+            return &contigs[mid];
+        } else if (contigs[mid].beginningOffset <= location) {
             low = mid + 1;
         } else {
             high = mid - 1;
@@ -322,25 +374,29 @@ Genome::getPieceAtLocation(unsigned location) const
     return NULL; // Should not be reached
 }
 
-    const Genome::Piece *
-Genome::getNextPieceAfterLocation(unsigned location) const
+    const Genome::Contig *
+Genome::getNextContigAfterLocation(unsigned location) const
 {
     _ASSERT(location < nBases);
+    if (nContigs > 0 && location < contigs[0].beginningOffset) {
+            return &contigs[0];
+    }
+
     int low = 0;
-    int high = nPieces - 1;
+    int high = nContigs - 1;
     while (low <= high) {
         int mid = (low + high) / 2;
-        if (pieces[mid].beginningOffset <= location &&
-                (mid == nPieces-1 || pieces[mid+1].beginningOffset > location)) {
-            if (mid >= nPieces - 1) {
+        if (contigs[mid].beginningOffset <= location &&
+                (mid == nContigs-1 || contigs[mid+1].beginningOffset > location)) {
+            if (mid >= nContigs - 1) {
                 //
-                // This location landed in the last piece, so return NULL for the next one.
+                // This location landed in the last contig, so return NULL for the next one.
                 //
                 return NULL;
             } else {
-                return &pieces[mid+1];
+                return &contigs[mid+1];
             }
-        } else if (pieces[mid].beginningOffset <= location) {
+        } else if (contigs[mid].beginningOffset <= location) {
             low = mid + 1;
         } else {
             high = mid - 1;
@@ -357,51 +413,51 @@ Genome::getNextPieceAfterLocation(unsigned location) const
     Genome *
 Genome::copy(bool copyX, bool copyY, bool copyM) const
 {
-    Genome *newCopy = new Genome(getCountOfBases(),getCountOfBases());
+    Genome *newCopy = new Genome(getCountOfBases(),getCountOfBases(), chromosomePadding);
 
     if (NULL == newCopy) {
         fprintf(stderr,"Genome::copy: failed to allocate space for copy.\n");
         return NULL;
     }
 
-    const Genome::Piece *currentPiece = NULL;
-    const Genome::Piece *nextPiece = getPieceAtLocation(0);
+    const Genome::Contig *currentContig = NULL;
+    const Genome::Contig *nextContig = getContigAtLocation(0);
 
     unsigned offsetInReference = 0;
     while (offsetInReference < getCountOfBases()) {
-        if (NULL != nextPiece && offsetInReference >= nextPiece->beginningOffset) {
+        if (NULL != nextContig && offsetInReference >= nextContig->beginningOffset) {
             //
-            // Start of a new piece.  See if we want to skip it.
+            // Start of a new contig.  See if we want to skip it.
             //
-            currentPiece = nextPiece;
-            nextPiece = getNextPieceAfterLocation(offsetInReference + 1);
-            if ((!copyX && !strcmp(currentPiece->name,"chrX")) ||
-                (!copyY && !strcmp(currentPiece->name,"chrY")) ||
-                (!copyM && !strcmp(currentPiece->name,"chrM"))) {
+            currentContig = nextContig;
+            nextContig = getNextContigAfterLocation(offsetInReference + 1);
+            if ((!copyX && !strcmp(currentContig->name,"chrX")) ||
+                (!copyY && !strcmp(currentContig->name,"chrY")) ||
+                (!copyM && !strcmp(currentContig->name,"chrM"))) {
                 //
-                // Yes, skip over this piece.
+                // Yes, skip over this contig.
                 //
-                nextPiece = getNextPieceAfterLocation(offsetInReference + 1);
-                if (NULL == nextPiece) {
+                nextContig = getNextContigAfterLocation(offsetInReference + 1);
+                if (NULL == nextContig) {
                     //
                     // The chromosome that we're skipping was the last one, so we're done.
                     //
                     break;
                 } else {
-                    offsetInReference = nextPiece->beginningOffset;
+                    offsetInReference = nextContig->beginningOffset;
                     continue;
                 }
             } // If skipping this chromosome
 
-            newCopy->startPiece(currentPiece->name);
-        } // If new piece beginning
+            newCopy->startContig(currentContig->name);
+        } // If new contig beginning
 
         const size_t maxCopySize = 10000;
         char dataBuffer[maxCopySize + 1];
 
         unsigned amountToCopy = maxCopySize;
-        if (nextPiece && nextPiece->beginningOffset < offsetInReference + amountToCopy) {
-            amountToCopy = nextPiece->beginningOffset - offsetInReference;
+        if (nextContig && nextContig->beginningOffset < offsetInReference + amountToCopy) {
+            amountToCopy = nextContig->beginningOffset - offsetInReference;
         }
 
         if (getCountOfBases() < offsetInReference + amountToCopy) {
@@ -416,175 +472,52 @@ Genome::copy(bool copyX, bool copyY, bool copyM) const
         offsetInReference += amountToCopy;
     }
 
+    newCopy->fillInContigLengths();
+    newCopy->sortContigsByName();
     return newCopy;
 }
 
-
-    DiploidGenome *
-DiploidGenome::Factory(const Genome *referenceGenome, bool isMale)
+unsigned DistanceBetweenGenomeLocations(unsigned locationA, unsigned locationB) 
 {
+    unsigned largerGenomeOffset = __max(locationA, locationB);
+    unsigned smallerGenomeOffset = __min(locationA, locationB);
+
+    return largerGenomeOffset - smallerGenomeOffset;
+}
+
+void Genome::fillInContigLengths()
+{
+    if (nContigs == 0) return;
+
+    for (int i = 0; i < nContigs - 1; i++) {
+        contigs[i].length =  contigs[i+1].beginningOffset - contigs[i].beginningOffset;
+    }
+
+    contigs[nContigs-1].length = nBases - contigs[nContigs-1].beginningOffset;
+}
+
+const Genome::Contig *Genome::getContigForRead(unsigned location, unsigned readLength, unsigned *extraBasesClippedBefore) const 
+{
+    const Contig *contig = getContigAtLocation(location);
+
     //
-    // This is just the special case where we use the same reference genome for both parents.
+    // Sometimes, a read aligns before the beginning of a chromosome (imagine prepending a few bases to the read).
+    // In that case, we want to handle it by soft-clipping the bases off of the beginning of the read.  We detect it
+    // here by looking to see if the aligned location plus the read length crosses a contig boundary.  It also might
+    // happen that it is aligned before the first contig, in which case contig will be NULL.
     //
-    return Factory(referenceGenome, referenceGenome, isMale);
-}
-
-    DiploidGenome *
-DiploidGenome::Factory(const Genome *motherReference, const Genome *fatherReference, bool isMale)
-{
-    //
-    // We have to create parent genomes that have the right set of chromosomes.  Make ParentA as the mother (i.e., include chrX and not
-    // chrY).
-    //
-    Genome *mom = motherReference->copyGenomeOneSex(false, true);   // Always get an X chromosome from mom
-    if (NULL == mom) {
-        fprintf(stderr,"DiploidGenome::Factory: Unable to allocate mom's genome.\n");
-        return NULL;
+     if (NULL == contig || location + readLength > contig->beginningOffset + contig->length) {
+        //
+        // We should never align over the end of a chromosome, only before the beginning.  So move this into the next
+        // chromosome.
+        //
+        contig = getNextContigAfterLocation(location);
+        _ASSERT(NULL != contig);
+        _ASSERT(contig->beginningOffset > location && contig->beginningOffset < location + readLength);
+        *extraBasesClippedBefore = contig->beginningOffset - location;
+    } else {
+        *extraBasesClippedBefore = 0;
     }
 
-    Genome *dad = fatherReference->copyGenomeOneSex(isMale, false);  // Get dad's Y if this is a male, otherwise dad's X
-    if (NULL == dad) {
-        fprintf(stderr,"DiploidGenome::Factory: Unable to allocate dad's genome.\n");
-        delete mom;
-        
-        return NULL;
-    }
-
-    DiploidGenome *diploidGenome = new DiploidGenome(mom, dad, true);
-    if (NULL == diploidGenome) {
-        fprintf(stderr,"DiploidGenome::Factory: Unable to allocate container.\n");  // Sometimes you write code that you just know will never execute.
-        delete mom;
-        delete dad;
-        return NULL;
-    }
-
-    return diploidGenome;
-}
-
-
-
-    DiploidGenome *
-DiploidGenome::Factory(const Genome *motherReference, const Genome *fatherReference)
-{
-    return new DiploidGenome(motherReference, fatherReference, false);
-}
-
-    DiploidGenome *
-DiploidGenome::CopyingFactory(const Genome *motherReference, const Genome *fatherReference)
-{
-    Genome *motherCopy = motherReference->copy();
-    if (NULL == motherCopy) {
-        fprintf(stderr,"DiploidGenome: unable to copy mother's genome\n");
-        return NULL;
-    }
-
-    Genome *fatherCopy = fatherReference->copy();
-    if (NULL == fatherCopy) {
-        fprintf(stderr,"DiploidGenome: unable to copy father's genome\n");
-        delete motherCopy;
-        return NULL;
-    }
-
-    DiploidGenome *diploidGenome = new DiploidGenome(motherCopy, fatherCopy, true);
-    if (NULL == diploidGenome) {
-        fprintf(stderr,"DiploidGenome: unable to allocate container.\n");
-        delete motherCopy;
-        delete fatherCopy;
-        return NULL;
-    }
-
-    return diploidGenome;
-}
-
-    const char *
-DiploidGenome::FilenameBase = "DiploidParent";
-
-
-    DiploidGenome *
-DiploidGenome::loadFromDirectory(const char *directoryName)
-{
-    size_t fileNameLen = strlen(directoryName) + 1 + strlen(FilenameBase) + 2;  // +1 is PATH_SEP, +2 is A/B and \0
-    char *filename = new char[fileNameLen];
-
-    if (NULL == filename) {
-        fprintf(stderr,"DiploidGenome::loadFromDirectory: failed to allocate filename buffer.\n");
-        return NULL;
-    }
-
-    sprintf(filename,"%s%c%s%c",directoryName,PATH_SEP,FilenameBase,'A');
-    const Genome *motherGenome = Genome::loadFromFile(filename);
-
-    if (NULL == motherGenome) {
-        fprintf(stderr,"DiploidGenome::loadFromDirectory: failed to load mother's genome.\n");
-        delete [] filename;
-        return NULL;
-    }
-
-    sprintf(filename,"%s%c%s%c",directoryName,PATH_SEP,FilenameBase,'B');
-    const Genome *fatherGenome = Genome::loadFromFile(filename);
-
-    if (NULL == fatherGenome) {
-        fprintf(stderr,"DiploidGenome::loadFromDirectory: failed to load father's genome.\n");
-        delete motherGenome;
-        delete [] filename;
-        return NULL;
-    }
-
-    delete [] filename;
-
-    DiploidGenome *diploidGenome = new DiploidGenome(motherGenome, fatherGenome, true);
-    if (NULL == diploidGenome) {
-        fprintf(stderr,"DiploidGenome::loadFromDirectory: failed to allocate DiploidGenome container.\n");
-        delete motherGenome;
-        delete fatherGenome;
-        return NULL;
-    }
-
-    return diploidGenome;
-}
-
-    bool
-DiploidGenome::saveToDirectory(const char *directoryName) const
-{
-
-    size_t fileNameLen = strlen(directoryName) + 1 + strlen(FilenameBase) + 2;  // +1 is PATH_SEP, +2 is A/B and \0
-    char *filename = new char[fileNameLen];
-
-    if (NULL == filename) {
-        fprintf(stderr,"DiploidGenome::saveToDirectory: failed to allocate filename buffer.\n");
-        return false;
-    }
-
-    sprintf(filename,"%s%c%s%c",directoryName,PATH_SEP,FilenameBase,'A');
-    if (!motherGenome->saveToFile(filename)) {
-        fprintf(stderr,"DiploidGenome::saveToDirectory: failed to save mother's genome.\n");
-        delete [] filename;
-        return false;
-    }
-
-    sprintf(filename,"%s%c%s%c",directoryName,PATH_SEP,FilenameBase,'B');
-    if (!fatherGenome->saveToFile(filename)) {
-        fprintf(stderr,"DiploidGenome::saveToDirectory: failed to save father's genome.\n");
-        delete motherGenome;
-        delete [] filename;
-        return false;
-    }
-
-    delete [] filename;
-    return true;
-}
-
-    const Genome *
-DiploidGenome::getGenome(bool fromMother) const
-{
-    if (fromMother) return motherGenome;
-    return fatherGenome;
-}
-
-DiploidGenome::~DiploidGenome()
-{
-    if (ownsGenomes) {
-        delete motherGenome;
-        delete fatherGenome;
-    }
+    return contig;
 }

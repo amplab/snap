@@ -4,7 +4,7 @@
 
 // Test fixture for all the Landau-Viskhin Tests
 struct LandauVishkinTest {
-    LandauVishkin lv;
+  LandauVishkin<> lv;
     LandauVishkinWithCigar lvc;
 };
 

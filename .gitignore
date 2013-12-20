@@ -29,4 +29,8 @@
 ipch
 obj
 *.vsp
+*.psess
 
+# Compiled binaries
+/snap
+/unit_tests

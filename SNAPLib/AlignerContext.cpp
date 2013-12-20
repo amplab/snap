@@ -29,35 +29,48 @@ Revision History:
 #include "AlignerOptions.h"
 #include "AlignerContext.h"
 #include "AlignerStats.h"
+#include "BaseAligner.h"
+#include "FileFormat.h"
+#include "exit.h"
 
 using std::max;
 using std::min;
 
+//
+// Save the index & index directory globally so that we don't need to reload them on multiple runs.
+//
+GenomeIndex *g_index = NULL;
+char *g_indexDirectory = NULL;
+
 AlignerContext::AlignerContext(int i_argc, const char **i_argv, const char *i_version, AlignerExtension* i_extension)
     :
     index(NULL),
-    parallelSamWriter(NULL),
-    fileSplitterState(0, 0),
+    writerSupplier(NULL),
     options(NULL),
     stats(NULL),
     extension(i_extension != NULL ? i_extension : new AlignerExtension()),
-    inputFilename(NULL),
-    fileSplitter(NULL),
-    samWriter(NULL),
+    readWriter(NULL),
     argc(i_argc),
     argv(i_argv),
-    version(i_version)
+    version(i_version),
+    perfFile(NULL)
 {
 }
 
 AlignerContext::~AlignerContext()
 {
     delete extension;
+    if (NULL != perfFile) {
+        fclose(perfFile);
+    }
 }
 
-void AlignerContext::runAlignment(int argc, const char **argv, const char *version)
+void AlignerContext::runAlignment(int argc, const char **argv, const char *version, unsigned *argsConsumed)
 {
-    options = parseOptions(argc, argv, version);
+    options = parseOptions(argc, argv, version, argsConsumed);
+#ifdef _MSC_VER
+    useTimingBarrier = options->useTimingBarrier;
+#endif
     initialize();
     extension->initialize();
     
@@ -77,6 +90,8 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
     }
 
     extension->finishAlignment();
+    PrintBigAllocProfile();
+    PrintWaitProfile();
 }
 
     void
@@ -84,11 +99,7 @@ AlignerContext::initializeThread()
 {
     stats = newStats(); // separate copy per thread
     stats->extra = extension->extraStats();
-    if (NULL != parallelSamWriter) {
-        samWriter = parallelSamWriter->getWriterForThread(threadNum);
-    } else {
-        samWriter = NULL;
-    }
+    readWriter = writerSupplier != NULL ? writerSupplier->getWriter() : NULL;
     extension = extension->copy();
 }
 
@@ -97,8 +108,9 @@ AlignerContext::runThread()
 {
     extension->beginThread();
     runIterationThread();
-    if (samWriter != NULL) {
-        samWriter->close();
+    if (readWriter != NULL) {
+        readWriter->close();
+        delete readWriter;
     }
     extension->finishThread();
 }
@@ -116,77 +128,106 @@ AlignerContext::finishThread(AlignerContext* common)
     void
 AlignerContext::initialize()
 {
-    printf("Loading index from directory... ");
-    fflush(stdout);
-    _int64 loadStart = timeInMillis();
-    index = GenomeIndex::loadFromDirectory((char*) options->indexDir);
-    if (index == NULL) {
-        fprintf(stderr, "Index load failed, aborting.\n");
-        exit(1);
-    }
-    _int64 loadTime = timeInMillis() - loadStart;
-    printf("%llds.  %u bases, seed size %d\n",
-        loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
+    if (g_indexDirectory == NULL || strcmp(g_indexDirectory, options->indexDir) != 0) {
+        delete g_index;
+        g_index = NULL;
+        delete g_indexDirectory;
+        g_indexDirectory = new char [strlen(options->indexDir) + 1];
+        strcpy(g_indexDirectory, options->indexDir);
 
-    if (options->samFileTemplate != NULL && (options->maxHits.size() > 1 || options->maxDist.size() > 1 || options->numSeeds.size() > 1
-                || options->confDiff.size() > 1 || options->adaptiveConfDiff.size() > 1)) {
+        if (strcmp(options->indexDir, "-") != 0) {
+            printf("Loading index from directory... ");
+            fflush(stdout);
+            _int64 loadStart = timeInMillis();
+            index = GenomeIndex::loadFromDirectory((char*) options->indexDir);
+            if (index == NULL) {
+                fprintf(stderr, "Index load failed, aborting.\n");
+                soft_exit(1);
+            }
+            g_index = index;
+
+            _int64 loadTime = timeInMillis() - loadStart;
+            printf("%llds.  %u bases, seed size %d\n",
+                loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
+        } else {
+            printf("no alignment, input/output only\n");
+        }
+    } else {
+        index = g_index;
+    }
+
+    if (options->outputFileTemplate != NULL && (options->maxHits.size() > 1 || options->maxDist.size() > 1)) {
         fprintf(stderr, "WARNING: You gave ranges for some parameters, so SAM files will be overwritten!\n");
     }
 
-    confDiff_ = options->confDiff.start;
     maxHits_ = options->maxHits.start;
     maxDist_ = options->maxDist.start;
-    numSeeds_ = options->numSeeds.start;
-    adaptiveConfDiff_ = options->adaptiveConfDiff.start;
+    extraSearchDepth = options->extraSearchDepth;
+
+    if (options->perfFileName != NULL) {
+        perfFile = fopen(options->perfFileName,"a");
+        if (NULL == perfFile) {
+            fprintf(stderr,"Unable to open perf file '%s'\n", options->perfFileName);
+            soft_exit(1);
+        }
+    }
+
+    DataSupplier::ThreadCount = options->numThreads;
 }
 
     void
 AlignerContext::printStatsHeader()
 {
-    printf("ConfDif\tMaxHits\tMaxDist\tMaxSeed\tConfAd\t%%Used\t%%Unique\t%%Multi\t%%!Found\t%%Error\tReads/s\n");
+    printf("MaxHits\tMaxDist\t%%Used\t%%Unique\t%%Multi\t%%!Found\t%%Error\t%%Pairs\tlvCalls\tNumReads\tReads/s\n");
 }
 
     void
 AlignerContext::beginIteration()
 {
-    parallelSamWriter = NULL;
-    // total mem in Gb if given; default 1 Gb/thread for human genome, scale down for smaller genomes
-    size_t totalMemory = options->sortMemory > 0
-        ? options->sortMemory * ((size_t) 1 << 30)
-        : options->numThreads * max(2 * ParallelSAMWriter::UnsortedBufferSize,
-                                    (size_t) index->getGenome()->getCountOfBases() / 3);
-    if (NULL != options->samFileTemplate) {
-        parallelSamWriter = ParallelSAMWriter::create(options->samFileTemplate,index->getGenome(),
-            options->numThreads, options->sortOutput, totalMemory, options->useM, options->gapPenalty, argc, argv, version, options->rgLineContents);
-        if (NULL == parallelSamWriter) {
-            fprintf(stderr,"Unable to create SAM file writer.  Just aligning for speed, no output will be generated.\n");
-        }
-    }
-
+    writerSupplier = NULL;
     alignStart = timeInMillis();
-    fileSplitterState = RangeSplitter(QueryFileSize(options->inputFilename), options->numThreads, 100);
-
     clipping = options->clipping;
     totalThreads = options->numThreads;
     computeError = options->computeError;
     bindToProcessors = options->bindToProcessors;
     maxDist = maxDist_;
     maxHits = maxHits_;
-    numSeeds = numSeeds_;
-    confDiff = confDiff_;
-    adaptiveConfDiff = adaptiveConfDiff_;
-    selectivity = options->selectivity;
-
-    inputFilename = options->inputFilename;
-    inputFileIsFASTQ = options->inputFileIsFASTQ;
-    fileSplitter = &fileSplitterState;
-
+    numSeedsFromCommandLine = options->numSeedsFromCommandLine;
+    seedCoverage = options->seedCoverage;
     if (stats != NULL) {
         delete stats;
     }
     stats = newStats();
     stats->extra = extension->extraStats();
     extension->beginIteration();
+    
+    readerContext.clipping = options->clipping;
+    readerContext.defaultReadGroup = options->defaultReadGroup;
+    readerContext.genome = index != NULL ? index->getGenome() : NULL;
+    readerContext.paired = false;
+    readerContext.ignoreSecondaryAlignments = options->ignoreSecondaryAlignments;
+    DataSupplier::ExpansionFactor = options->expansionFactor;
+	readerContext.header = NULL;
+	readerContext.headerLength = 0;
+	readerContext.headerBytes = 0;
+
+    typeSpecificBeginIteration();
+
+    if (NULL != options->outputFileTemplate) {
+        const FileFormat* format = 
+            FileFormat::SAM[0]->isFormatOf(options->outputFileTemplate) ? FileFormat::SAM[options->useM] :
+            FileFormat::BAM[0]->isFormatOf(options->outputFileTemplate) ? FileFormat::BAM[options->useM] :
+            NULL;
+        if (format != NULL) {
+            writerSupplier = format->getWriterSupplier(options, readerContext.genome);
+            ReadWriter* headerWriter = writerSupplier->getWriter();
+            headerWriter->writeHeader(readerContext, options->sortOutput, argc, argv, version, options->rgLineContents);
+            headerWriter->close();
+            delete headerWriter;
+        } else {
+            fprintf(stderr, "warning: no output, unable to determine format of output file %s\n", options->outputFileTemplate);
+        }
+    }
 }
 
     void
@@ -194,33 +235,26 @@ AlignerContext::finishIteration()
 {
     extension->finishIteration();
 
-    if (NULL != parallelSamWriter) {
-        parallelSamWriter->close();
-        delete parallelSamWriter;
-        parallelSamWriter = NULL;
+    if (NULL != writerSupplier) {
+        writerSupplier->close();
+        delete writerSupplier;
+        writerSupplier = NULL;
     }
 
-    alignTime = timeInMillis() - alignStart;
+    alignTime = /*timeInMillis() - alignStart -- use the time from ParallelTask.h, that may exclude memory allocation time*/ time;
 }
 
     bool
 AlignerContext::nextIteration()
 {
-    if ((adaptiveConfDiff_ += options->adaptiveConfDiff.step) > options->adaptiveConfDiff.end) {
-        adaptiveConfDiff_ = options->adaptiveConfDiff.start;
-        if ((numSeeds_ += options->numSeeds.step) > options->numSeeds.end) {
-            numSeeds_ = options->numSeeds.start;
-            if ((maxDist_ += options->maxDist.step) > options->maxDist.end) {
-                maxDist_ = options->maxDist.start;
-                if ((maxHits_ += options->maxHits.step) > options->maxHits.end) {
-                    maxHits_ = options->maxHits.start;
-                    if ((confDiff_ += options->confDiff.step) > options->confDiff.end) {
-                        return false;
-                    }
-                }
-            }
+    typeSpecificNextIteration();
+    if ((maxDist_ += options->maxDist.step) > options->maxDist.end) {
+        maxDist_ = options->maxDist.start;
+        if ((maxHits_ += options->maxHits.step) > options->maxHits.end) {
+            return false;
         }
     }
+
     return true;
 }
 
@@ -235,14 +269,55 @@ AlignerContext::printStats()
     } else {
         snprintf(errorRate, sizeof(errorRate), "-");
     }
-    printf("%d\t%d\t%d\t%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%.0f\n",
-            confDiff_, maxHits_, maxDist_, numSeeds_, adaptiveConfDiff_,
+    printf("%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%lld\t%lld\t%.0f (at: %lld)\n",
+            maxHits_, maxDist_, 
             100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
             100.0 * stats->singleHits / usefulReads,
             100.0 * stats->multiHits / usefulReads,
             100.0 * stats->notFound / usefulReads,
             errorRate,
-            (1000.0 * usefulReads) / max(alignTime, (_int64) 1));
+            100.0 * stats->alignedAsPairs / usefulReads,
+            stats->lvCalls,
+            stats->totalReads,
+            (1000.0 * usefulReads) / max(alignTime, (_int64) 1), 
+            alignTime);
+    if (NULL != perfFile) {
+        fprintf(perfFile, "%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%lld\t%lld\tt%.0f\n",
+                maxHits_, maxDist_, 
+                100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
+                100.0 * stats->singleHits / usefulReads,
+                100.0 * stats->multiHits / usefulReads,
+                100.0 * stats->notFound / usefulReads,
+                stats->lvCalls,
+                errorRate,
+                100.0 * stats->alignedAsPairs / usefulReads,
+                stats->totalReads,
+                (1000.0 * usefulReads) / max(alignTime, (_int64) 1));
+
+        fprintf(perfFile,"\n");
+    }
+    // Running counts to compute a ROC curve (with error rate and %aligned above a given MAPQ)
+    double totalAligned = 0;
+    double totalErrors = 0;
+    for (int i = AlignerStats::maxMapq; i >= 0; i--) {
+        totalAligned += stats->mapqHistogram[i];
+        totalErrors += stats->mapqErrors[i];
+        double truePositives = (totalAligned - totalErrors) / max(stats->totalReads, (_int64) 1);
+        double falsePositives = totalErrors / totalAligned;
+        if (i <= 10 || i % 2 == 0 || i == 69) {
+//            printf("%d\t%d\t%d\t%.3f\t%.2E\n", i, stats->mapqHistogram[i], stats->mapqErrors[i], truePositives, falsePositives);
+        }
+    }
+
+    stats->printHistograms(stdout);
+
+#ifdef  TIME_STRING_DISTANCE
+    printf("%llds, %lld calls in BSD noneClose, not -1\n",  stats->nanosTimeInBSD[0][1]/1000000000, stats->BSDCounts[0][1]);
+    printf("%llds, %lld calls in BSD noneClose, -1\n",      stats->nanosTimeInBSD[0][0]/1000000000, stats->BSDCounts[0][0]);
+    printf("%llds, %lld calls in BSD close, not -1\n",      stats->nanosTimeInBSD[1][1]/1000000000, stats->BSDCounts[1][1]);
+    printf("%llds, %lld calls in BSD close, -1\n",          stats->nanosTimeInBSD[1][0]/1000000000, stats->BSDCounts[1][0]);
+    printf("%llds, %lld calls in Hamming\n",                stats->hammingNanos/1000000000,         stats->hammingCount);
+#endif  // TIME_STRING_DISTANCE
 
     extension->printStats();
 }

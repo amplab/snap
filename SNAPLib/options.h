@@ -27,8 +27,6 @@ Revision History:
 
 #pragma once
 
-#define MAINTAIN_HISTOGRAMS     0
-
 #ifndef USE_DEVTEAM_OPTIONS
 #define USE_DEVTEAM_OPTIONS     1 // Options only for the development team, not for the release version
 #endif

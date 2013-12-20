@@ -35,6 +35,8 @@ struct AbstractStats
     virtual void printHistograms(FILE* out) = 0;
 };
 
+//#define TIME_STRING_DISTANCE    1
+
 struct AlignerStats : public AbstractStats
 {
     AlignerStats(AbstractStats* i_extra = NULL);
@@ -46,6 +48,17 @@ struct AlignerStats : public AbstractStats
     _int64 multiHits;
     _int64 notFound;
     _int64 errors;
+    _int64 alignedAsPairs;
+    _int64 lvCalls;
+    static const unsigned maxMapq = 70;
+    unsigned mapqHistogram[maxMapq+1];
+    unsigned mapqErrors[maxMapq+1];
+
+    static const unsigned maxMaxHits = 50;
+    unsigned countOfBestHitsByWeightDepth[maxMaxHits];
+    unsigned countOfAllHitsByWeightDepth[maxMaxHits];
+    double probabilityMassByWeightDepth[maxMaxHits];
+
     AbstractStats* extra;
 
     virtual ~AlignerStats();

@@ -24,31 +24,38 @@ Revision History:
 
 #include "stdafx.h"
 #include "WGsim.h"
+#include "exit.h"
 
 using namespace std;
 
 // Is a wgsim-generated read mapped to a given location misaligned, given the source
 // location encoded into its ID and a maximum edit distance maxK?
 // Also optionally outputs the low and high location encoded in the wgsim read's ID.
-bool wgsimReadMisaligned(Read *read, unsigned genomeLocation, GenomeIndex *index, int maxK,
+bool wgsimReadMisaligned(Read *read, unsigned location, GenomeIndex *index, int maxK,
+                         unsigned *lowOut, unsigned *highOut)
+{
+    return wgsimReadMisaligned(read, location, index->getGenome(), maxK, lowOut, highOut);
+}
+
+bool wgsimReadMisaligned(Read *read, unsigned genomeLocation, const Genome *genome, int maxK,
                          unsigned *lowOut, unsigned *highOut)
 {
     //
     // The read ID for wgsim-generated reads is of the format:
     //
-    //     piece_begin_end_:otherStuff
+    //     contig_begin_end_:otherStuff
     //
-    // In order to make it more complicated, "piece" may contain "_", and
+    // In order to make it more complicated, "contig" may contain "_", and
     // "otherStuff" may contain ":".  So we handle it by searching for the
     // first ":", then going back two "_" to find the offsets, and finally
     // deciding that everything after the before the "_" that we just found
-    // must be the piece name.  Sigh.
+    // must be the contig name.  Sigh.
     //
     unsigned offset1, offset2;
     char id[1024];
     if (read->getIdLength() > sizeof(id) - 1) {
       fprintf(stderr, "Got a read ID that was too long! It starts with %s\n", id);
-      exit(1);
+      soft_exit(1);
     }
     unsigned toCopy = min(read->getIdLength(), (unsigned) sizeof(id) - 1);
     strncpy(id, read->getId(), toCopy);
@@ -100,38 +107,43 @@ bool wgsimReadMisaligned(Read *read, unsigned genomeLocation, GenomeIndex *index
         return false;
     }
 
-    if (1 != sscanf(secondUnderscoreBeforeColon+1, "%d", &offset2)) {
-        fprintf(stderr,"Failed to parse read id '%s', couldn't parse offset2.\n",id);
-        return false;
+    if (underscoreBeforeColon == secondUnderscoreBeforeColon + 1) {
+        // No second offset given, since this is a single-end read; just use the first offset
+        offset2 = offset1;
+    } else {
+        if (1 != sscanf(secondUnderscoreBeforeColon+1, "%d", &offset2)) {
+            fprintf(stderr,"Failed to parse read id '%s', couldn't parse offset2.\n",id);
+            return false;
+        }
     }
     
     //
-    // Look up the piece to get its offset in the whole genome, and add that in to the offsets.
+    // Look up the contig to get its offset in the whole genome, and add that in to the offsets.
     // This is because our index treats the entire genome as one big thing, while the FASTQ file
-    // treats each piece separately.
+    // treats each contig separately.
     //
 
-    const size_t pieceNameMaxSize = 200;
-    char pieceName[pieceNameMaxSize];
+    const size_t contigNameMaxSize = 200;
+    char contigName[contigNameMaxSize];
 
-    size_t pieceNameLen = thirdUnderscoreBeforeColon - id;
+    size_t contigNameLen = thirdUnderscoreBeforeColon - id;
 
-    if (pieceNameLen >= pieceNameMaxSize) {
-        fprintf(stderr, "Piece name too big or misparsed, '%s'\n",id);
+    if (contigNameLen >= contigNameMaxSize) {
+        fprintf(stderr, "Contig name too big or misparsed, '%s'\n",id);
         return false;
     }
 
-    memcpy(pieceName, id, pieceNameLen);
-    pieceName[pieceNameLen] = '\0';
+    memcpy(contigName, id, contigNameLen);
+    contigName[contigNameLen] = '\0';
 
-    unsigned offsetOfPiece;
-    if (!index->getGenome()->getOffsetOfPiece(pieceName,&offsetOfPiece)) {
-        fprintf(stderr, "Couldn't find piece name '%s' in the genome.\n",pieceName);
+    unsigned offsetOfContig;
+    if (!genome->getOffsetOfContig(contigName,&offsetOfContig)) {
+        fprintf(stderr, "Couldn't find contig name '%s' in the genome.\n",contigName);
         return false;
     }
 
-    offset1 = offset1 + offsetOfPiece - 1;  // It's one-based and the Aligner is zero-based
-    offset2 = offset2 + offsetOfPiece - 1;  // It's one-based and the Aligner is zero-based
+    offset1 = offset1 + offsetOfContig - 1;  // It's one-based and the Aligner is zero-based
+    offset2 = offset2 + offsetOfContig - 1;  // It's one-based and the Aligner is zero-based
     
     unsigned high = max(offset1, offset2);
     unsigned low = min(offset1, offset2);
@@ -143,20 +155,20 @@ bool wgsimReadMisaligned(Read *read, unsigned genomeLocation, GenomeIndex *index
     return (genomeLocation > high + maxK || genomeLocation + maxK < low);
 }
 
-void wgsimGenerateIDString(const Genome::Piece *piece, unsigned offsetInPiece,
+void wgsimGenerateIDString(const Genome::Contig *contig, unsigned offsetInContig,
                            unsigned readLength, bool firstHalf, char *outputBuffer)
 {
     // This is a minimal ID string that works for our reader function
     
-    sprintf(outputBuffer, "%s_%d_%d_0::0:0_2:0:a0_0/%d", piece->name, offsetInPiece + 1,
-            offsetInPiece + readLength, firstHalf ? 1 : 2);
+    sprintf(outputBuffer, "%s_%d_%d_0::0:0_2:0:a0_0/%d", contig->name, offsetInContig + 1,
+            offsetInContig + readLength, firstHalf ? 1 : 2);
 }
 
 void wgsimGenerateIDString(const Genome *genome, unsigned genomeLocation,
                            unsigned readLength, bool firstHalf, char *outputBuffer)
 {
-    const Genome::Piece *piece = genome->getPieceAtLocation(genomeLocation);
+    const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
 
-    wgsimGenerateIDString(piece, genomeLocation - piece->beginningOffset,
+    wgsimGenerateIDString(contig, genomeLocation - contig->beginningOffset,
                           readLength, firstHalf, outputBuffer);
 }

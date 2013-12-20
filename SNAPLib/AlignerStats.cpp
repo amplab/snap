@@ -37,8 +37,21 @@ AlignerStats::AlignerStats(AbstractStats* i_extra)
     multiHits(0),
     notFound(0),
     errors(0),
-    extra(i_extra)
+    alignedAsPairs(0),
+    extra(i_extra),
+    lvCalls(0)
 {
+    for (int i = 0; i <= AlignerStats::maxMapq; i++) {
+        mapqHistogram[i] = 0;
+        mapqErrors[i] = 0;
+    }
+
+    for (int i = 0; i < maxMaxHits; i++) {
+        countOfBestHitsByWeightDepth[i] = 0;
+        countOfAllHitsByWeightDepth[i] = 0;
+        probabilityMassByWeightDepth[i] = 0;
+    }
+
 }
 
 AlignerStats::~AlignerStats()
@@ -69,7 +82,21 @@ AlignerStats::add(
     multiHits += other->multiHits;
     notFound += other->notFound;
     errors += other->errors;
+    alignedAsPairs += other->alignedAsPairs;
+    lvCalls += other->lvCalls;
+
     if (extra != NULL && other->extra != NULL) {
         extra->add(other->extra);
     }
+
+    for (int i = 0; i <= AlignerStats::maxMapq; i++) {
+        mapqHistogram[i] += other->mapqHistogram[i];
+        mapqErrors[i] += other->mapqErrors[i];
+    }
+    for (int i = 0; i < maxMaxHits; i++) {
+        countOfBestHitsByWeightDepth[i] += other->countOfBestHitsByWeightDepth[i];
+        countOfAllHitsByWeightDepth[i] += other->countOfAllHitsByWeightDepth[i];
+        probabilityMassByWeightDepth[i] = other->probabilityMassByWeightDepth[i];
+    }
+
 }

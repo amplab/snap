@@ -44,15 +44,17 @@ public:
     //
     static bool BuildIndexToDirectory(const Genome *genome, int seedLen, double slack,
                                       bool computeBias, const char *directory, _uint64 overflowTableFactor,
-                                      unsigned maxThreads);
+                                      unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, 
+                                      unsigned hashTableKeySize, const char *histogramFileName = NULL);
 
-    bool saveToDirectory(char *directoryName);
     static GenomeIndex *loadFromDirectory(char *directoryName);
 
     inline const Genome *getGenome() {return genome;}
 
     //
     // This looks up a seed and its reverse complement, and returns the number and list of hits for each.
+    // It guarantees that if the lookup succeeds that hits[-1] and rcHits[-1] are valid memory with 
+    // arbirtary values.
     //
     void lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits);
 
@@ -78,21 +80,18 @@ public:
     // Allocate set of hash tables indexed by seeds with bias
     //
     static SNAPHashTable** allocateHashTables(unsigned* o_nTables, size_t capacity, double slack,
-        int seedLen, double* biasTable = NULL);
+        int seedLen, unsigned hashTableKeySize, double* biasTable = NULL);
     
 private:
+
+    static const unsigned GenomeIndexFormatMajorVersion = 2;
+    static const unsigned GenomeIndexFormatMinorVersion = 0;
     
-    static double GetHashTableSizeBias(unsigned whichTable, int seedSize);
+    static const unsigned largestBiasTable = 32;    // Can't be bigger than the biggest seed size, which is set in Seed.h.  Bigger than 32 means a new Seed structure.
+    static const unsigned largestKeySize = 8;
+    static double *hg19_biasTables[largestKeySize+1][largestBiasTable+1];
 
-    static double biasTable17[];
-    static double biasTable18[];
-    static double biasTable19[];
-    static double biasTable20[];
-    static double biasTable21[];
-    static double biasTable22[];
-    static double biasTable23[];
-
-    static void ComputeBiasTable(const Genome* genome, int seedSize, double* table, unsigned maxThreads);
+    static void ComputeBiasTable(const Genome* genome, int seedSize, double* table, unsigned maxThreads, bool forceExact, unsigned hashTableKeySize);
 
     struct ComputeBiasTableThreadContext {
         SingleWaiterObject              *doneObject;
@@ -100,6 +99,7 @@ private:
         unsigned                         genomeChunkStart;
         unsigned                         genomeChunkEnd;
         unsigned                         nHashTables;
+        unsigned                         hashTableKeySize;
         std::vector<ApproximateCounter> *approxCounters;
         const Genome                    *genome;
         volatile _int64                 *nBasesProcessed;
@@ -133,13 +133,14 @@ private:
         unsigned                         nOverflowBackpointers;
         volatile unsigned               *nextOverflowBackpointer;
         volatile _int64                 *countOfDuplicateOverflows;
+        unsigned                         hashTableKeySize;
 
         ExclusiveLock                   *hashTableLocks;
         ExclusiveLock                   *overflowTableLock;
     };
 
     static void BuildHashTablesWorkerThreadMain(void *param);
-    static void ApplyHashTableUpdate(BuildHashTablesThreadContext *context, unsigned whichHashTable, unsigned genomeLocation, unsigned lowBases, bool usingComplement,
+    static void ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64 whichHashTable, unsigned genomeLocation, _uint64 lowBases, bool usingComplement,
                     _int64 *bothComplementsUsed, _int64 *countOfDuplicateOverflows);
 
     static int BackwardsUnsignedCompare(const void *, const void *);
@@ -147,6 +148,7 @@ private:
     GenomeIndex();
 
     int seedLen;
+    unsigned hashTableKeySize;
     unsigned nHashTables;
     SNAPHashTable **hashTables;
     const Genome *genome;

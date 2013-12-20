@@ -21,6 +21,7 @@ Environment:
 #pragma once
 
 #include "Compat.h"
+#include "Genome.h"
 
 
 class SNAPHashTable {
@@ -28,21 +29,25 @@ class SNAPHashTable {
 
         SNAPHashTable(
             unsigned      i_tableSize,
-            bool          i_useBigAlloc = true);
+            unsigned      i_keySizeInBytes);
 
         //
         // Load from file.
         //
-        SNAPHashTable(char *loadFileName);
+        static SNAPHashTable *loadFromFile(char *loadFileName);
+
+        static SNAPHashTable *loadFromFile(FILE *loadFile);
 
         ~SNAPHashTable();
 
         bool saveToFile(const char *saveFileName);
 
+        bool saveToFile(FILE *saveFile);
+
         //
         // Fails if either the table is full or key already exists.
         //
-        bool Insert(unsigned key, const unsigned *data);
+        bool Insert(_uint64 key, const unsigned *data);
 
         size_t GetUsedElementCount() const {return usedElementCount;}
         size_t GetTableSize() const {return tableSize;}
@@ -52,24 +57,27 @@ class SNAPHashTable {
         unsigned GetKeySizeInBytes() const {return keySizeInBytes;}
         unsigned GetDataSizeInBytes() const {return dataSizeInBytes;}
 
-        static inline unsigned hash(unsigned key) {
+        static inline _uint64 hash(_uint64 key) {
             //
             // Hash the key.  Use the hash finalizer from the 64 bit MurmurHash3, http://code.google.com/p/smhasher/wiki/MurmurHash3,
             // which is public domain code.
             //
-    
-            key ^= key >> 16; 
-            key *= 0x85ebca6b; 
-            key ^= key >> 13; 
-            key *= 0xc2b2ae35; 
-            key ^= key >> 16;
+           
+            key ^= key >> 33;
+            key *= 0xff51afd7ed558ccd;
+            key ^= key >> 33;
+            key *= 0xc4ceb9fe1a85ec53;
+            key ^= key >> 33;
+            
             return key;
         }
 
-        inline unsigned *Lookup(unsigned key) const {
-            unsigned tableIndex = hash(key) % tableSize;
-            if (table[tableIndex].key == key && table[tableIndex].value1 != 0xffffffff) {
-                return &(table[tableIndex].value1);
+        inline unsigned *Lookup(_uint64 key) const {
+            _ASSERT(keySizeInBytes == 8 || (key & ~((((_uint64)1) << (keySizeInBytes * 8)) - 1)) == 0);    // High bits of the key aren't set.
+            _uint64 tableIndex = hash(key) % tableSize;
+            Entry *entry = getEntry(tableIndex);
+            if (isKeyEqual(entry, key) && entry->value1 != InvalidGenomeLocation) {
+                return &(entry->value1);
             } else {
                 unsigned nProbes = 0;
                 Entry* entry;
@@ -84,14 +92,14 @@ class SNAPHashTable {
                     } else {
                         tableIndex = (tableIndex + 1) % tableSize;
                     }
-                    entry = &table[tableIndex];
+                    entry = getEntry(tableIndex);
                     value1 = entry->value1;
-                } while (entry->key != key && value1 != 0xffffffff);
+                } while (!isKeyEqual(entry, key) && value1 != InvalidGenomeLocation);
 
                 extern _int64 nProbesInGetEntryForKey;
                 nProbesInGetEntryForKey += nProbes;
 
-                if (value1 == 0xffffffff) {
+                if (value1 == InvalidGenomeLocation) {
                     return NULL;
                 } else {
                     return &(entry->value1);
@@ -103,40 +111,58 @@ class SNAPHashTable {
         // A version of Lookup that works properly when the table is (nearly) full and the key being looked up isn't
         // there.  It's, as you might imagine, slower than Lookup.
         //
-        unsigned *SlowLookup(unsigned key);
+        unsigned *SlowLookup(_uint64 key);
 
 private:
+
+        SNAPHashTable() {}
 
         static const unsigned QUADRATIC_CHAINING_DEPTH = 5; // Chain quadratically for this long, then linerarly  Set to 0 for linear chaining
 
         struct Entry {
-            unsigned        key;
             unsigned        value1;
             unsigned        value2;
+            unsigned char   key[1]; // Actual size of key determined by keySizeInBytes
         };
 
-        // Free Entries have value1 == 0xffffffff
+        // Free Entries have value1 == InvalidGenomeLocation
+        
+        inline Entry *getEntry(_uint64 whichEntry) const {
+            return (Entry *) ((char *)Table + elementSize * whichEntry);
+        }
 
 
-        Entry *table;
+        inline bool isKeyEqual(const Entry *entry, _uint64 key) const 
+        {
+            return !memcmp(entry->key, &key, keySizeInBytes);
+        }
+
+        inline void clearKey(Entry *entry)
+        {
+            memset(entry->key, 0 , keySizeInBytes);
+        }
+
+        inline void setKey(Entry *entry, _uint64 key)
+        {
+            memcpy(entry->key, &key, keySizeInBytes);
+        }
+ 
+        Entry *Table;
         size_t tableSize;
-        static const unsigned keySizeInBytes = 4;
-        static const unsigned dataSizeInBytes = 8;
-        static const unsigned elementSize = keySizeInBytes + dataSizeInBytes;
+        unsigned keySizeInBytes;
+        static const unsigned dataSizeInBytes;
+        unsigned elementSize;
         size_t usedElementCount;
 
         size_t virtualAllocSize;
-
-        bool useBigAlloc;
-
-    
-        unsigned bytesToCheckForUnusedEntry;
 
         //
         // Returns either the entry for this key, or else the entry where the key would be
         // inserted if it's not in the table.
         //
-        Entry* getEntryForKey(__in unsigned key) const;
+        Entry* getEntryForKey(__in _uint64 key) const;
 
         friend class SeedCountIterator;
+
+        static const unsigned magic;
 };

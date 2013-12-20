@@ -23,20 +23,32 @@ Revision History:
 #pragma once
 
 #include "Aligner.h"
+#include "directions.h"
+#include "LandauVishkin.h"
+
+const int NUM_READS_PER_PAIR = 2;    // This is just to make it clear what the array subscripts are, it doesn't ever make sense to change
 
 struct PairedAlignmentResult {
-    AlignmentResult status[2];  // SingleHit or CertainHit if aligned, MultipleHit if matches DB
-                                // but not confidently aligned, or NotFound.
+    AlignmentResult status[NUM_READS_PER_PAIR]; // SingleHit or CertainHit if aligned, MultipleHit if matches DB
+                                                // but not confidently aligned, or NotFound.
 
-    unsigned location[2];       // Genome location of each read.
+    unsigned location[NUM_READS_PER_PAIR];      // Genome location of each read.
     
-    bool isRC[2];               // Did we match the reverse complement? In general the two reads should have
-                                // opposite orientations because they're part of the same original fragment,
-                                // but it seems possible for a piece of the genome to get cut cleanly and flip
-                                // in a translocation event, which would cause both ends of a fragment aligning
-                                // there to be in the same orientation w.r.t. the reference genome.
+    Direction direction[NUM_READS_PER_PAIR];    // Did we match the reverse complement? In general the two reads should have
+                                                // opposite orientations because they're part of the same original fragment,
+                                                // but it seems possible for a piece of the genome to get cut cleanly and flip
+                                                // in a translocation event, which would cause both ends of a fragment aligning
+                                                // there to be in the same orientation w.r.t. the reference genome.
 
-    int score[2];               // score of each end if matched
+    int score[NUM_READS_PER_PAIR];              // score of each end if matched
+
+    int mapq[NUM_READS_PER_PAIR];               // mapping quality of each end, encoded like a Phred score (but as an integer, not ASCII Phred + 33).
+
+    bool fromAlignTogether;                     // Was this alignment created by aligning both reads together, rather than from some combination of single-end aligners?
+    bool alignedAsPair;                         // Were the reads aligned as a pair, or separately?
+    _int64 nanosInAlignTogether;
+    unsigned nLVCalls;
+    unsigned nSmallHits;
 };
 
 /**
@@ -45,10 +57,18 @@ struct PairedAlignmentResult {
 class PairedEndAligner
 {
 public:
-    virtual ~PairedEndAligner();
+    virtual ~PairedEndAligner() {}
     
     virtual void align(
         Read                  *read0,
         Read                  *read1,
         PairedAlignmentResult *result) = 0;
+
+    virtual void setLandauVishkin(
+        LandauVishkin<1>        *landauVishkin,
+        LandauVishkin<-1>       *reverseLandauVishkin)
+    {
+    }
+
+    virtual _int64 getLocationsScored() const  = 0;
 };

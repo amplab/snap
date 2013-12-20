@@ -13,7 +13,7 @@ Authors:
     Matei Zaharia, February, 2012
 
 Environment:
-`
+
     User mode service.
 
 Revision History:
@@ -26,6 +26,7 @@ Revision History:
 #include "stdafx.h"
 #include "AlignerContext.h"
 #include "AlignerStats.h"
+#include "ReadSupplierQueue.h"
 
 class SingleAlignerContext : public AlignerContext
 {
@@ -33,11 +34,12 @@ public:
 
     SingleAlignerContext(AlignerExtension* i_extension = NULL);
     
+
 protected:
 
     // AlignerContext overrides
 
-    virtual AlignerOptions* parseOptions(int i_argc, const char **i_argv, const char *i_version);
+    virtual AlignerOptions* parseOptions(int i_argc, const char **i_argv, const char *i_version, unsigned *argsUsed);
 
     virtual AlignerStats* newStats();
     
@@ -45,9 +47,18 @@ protected:
     
     virtual void runIterationThread();
 
+    virtual void typeSpecificBeginIteration();
+    virtual void typeSpecificNextIteration();
+
     // for subclasses
 
-    virtual void writeRead(Read* read, AlignmentResult result, unsigned location, bool isRC, int score);
+    virtual void writeRead(Read* read, AlignmentResult result, unsigned location, Direction direction, int score, int mapq);
 
-    virtual void updateStats(AlignerStats* stats, Read* read, AlignmentResult result, unsigned location, int score);
+    virtual void updateStats(AlignerStats* stats, Read* read, AlignmentResult result, unsigned location, int score, int mapq, bool wasError);
+
+    //RangeSplittingReadSupplierGenerator   *readSupplierGenerator;
+
+    ReadSupplierGenerator *readSupplierGenerator;
+
+	friend class AlignerContext2;
 };

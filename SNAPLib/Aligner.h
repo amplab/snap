@@ -32,13 +32,11 @@ Revision History:
 #include "Histogram.h"
 #include "Read.h"
 #include "Seed.h"
-
-enum AlignmentResult {NotFound, CertainHit, SingleHit, MultipleHits, UnknownAlignment}; // BB: Changed Unknown to UnknownAlignment because of a conflict w/Windows headers
+#include "directions.h"
 
 inline const char *AlignmentResultToString(AlignmentResult result) {
     switch (result) {
         case NotFound: return "NotFound";
-        case CertainHit: return "SingleHit";    // Just for now
         case SingleHit: return "SingleHit";
         case MultipleHits: return "MultipleHits";
         case UnknownAlignment: return "Unknown";
@@ -48,7 +46,7 @@ inline const char *AlignmentResultToString(AlignmentResult result) {
 
 // Does an AlignmentResult represent a single location?
 inline bool isOneLocation(AlignmentResult result) {
-    return result == SingleHit || result == CertainHit;
+    return result == SingleHit;
 }
 
 extern bool doAlignerPrefetch;
@@ -62,19 +60,9 @@ class Aligner {
     AlignRead(
         Read        *read,
         unsigned    *genomeLocation,
-        bool        *hitIsRC,
-        int         *finalScore = NULL) = 0;
-
-        virtual void
-    ComputeHitDistribution(
-        Read        *read,
-        unsigned     correctGenomeLocation,
-        bool         correctHitIsRC,
-        unsigned    *hitCountBySeed,
-        unsigned    *rcHitCountBySeed,
-        unsigned    &nSeedsApplied,
-        unsigned    &nRCSeedsApplied,
-        unsigned    *hitsCountsContainingCorrectLocation) = 0;
+        Direction   *hitDirection,
+        int         *finalScore = NULL,
+        int         *mapq = NULL) = 0;
 
     virtual _int64 getNHashTableLookups() const = 0;
     virtual _int64 getLocationsScored() const  = 0;
@@ -84,18 +72,9 @@ class Aligner {
 
     virtual void addIgnoredReads(_int64 newlyIgnoredReads) = 0;
 
-#if     MAINTAIN_HISTOGRAMS
-    virtual const Histogram *getLVHistogram() const  = 0;
-    virtual const Histogram *getLookupHistogram() const = 0;
-    virtual const Histogram *getLVHistogramForMulti() const = 0;
-    virtual const Histogram *getLVHistogramWhenBestFound() const = 0;
-#endif  // MAINTAIN_HISTOGRAMS
-
-
     virtual const char *getRCTranslationTable() const = 0;
 
     virtual int getMaxK() const = 0;
-    virtual int getConfDiff() const = 0;
 
     virtual const char *getName() const = 0;
 
