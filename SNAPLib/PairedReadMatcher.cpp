@@ -57,6 +57,7 @@ private:
     typedef _uint64 StringHash;
     typedef VariableSizeMap<StringHash,Read> ReadMap;
     DataBatch batch[2]; // 0 = current, 1 = previous
+    bool releasedBatch[2];  // whether each batch has been released
     ReadMap unmatched[2]; // read id -> Read
     typedef VariableSizeMap<StringHash,ReadWithOwnMemory> OverflowMap;
     OverflowMap overflow; // read id -> Read
@@ -91,6 +92,7 @@ PairedReadMatcher::PairedReadMatcher(
 {
     unmatched[0] = VariableSizeMap<_uint64,Read>(10000);
     unmatched[1] = VariableSizeMap<_uint64,Read>(10000);
+    releasedBatch[0] = releasedBatch[1] = false;
     if (! autoRelease) {
         InitializeExclusiveLock(&lock);
     }
@@ -156,7 +158,14 @@ PairedReadMatcher::getNextReadPair(
         char* s = new char[idLength+1];
         memcpy(s, id, idLength);
         s[idLength] = 0;
-        strings.put(key, s);
+        char** p = strings.tryFind(key);
+        if (p != NULL && strcmp(*p, s)) {
+          fprintf(stderr, "hash collision %ld of %s and %s\n", key, *p, s);
+          soft_exit(1);
+        }
+        if (p == NULL) {
+          strings.put(key, s);
+        }
 #endif
         if (one.getBatch() != batch[0]) {
             // roll over batches
@@ -165,6 +174,13 @@ PairedReadMatcher::getNextReadPair(
                 //char* buf = (char*) alloca(500);
                 for (ReadMap::iterator r = unmatched[1].begin(); r != unmatched[1].end(); r = unmatched[1].next(r)) {
                     overflow.put(r->key, ReadWithOwnMemory(r->value));
+#ifdef VALIDATE_MATCH
+                    char*s2 = *strings.tryFind(r->key);
+                    int len = strlen(s2);
+                    _ASSERT(! strncmp(s2, r->value.getId(), len));
+                    ReadWithOwnMemory* rd = overflow.tryFind(r->key);
+                    _ASSERT(! strncmp(s2, rd->getId(), len));
+#endif
                     //memcpy(buf, r->value.getId(), r->value.getIdLength());
                     //buf[r->value.getIdLength()] = 0;
                     //printf("overflow add %d:%d %s\n", batch[1].fileID, batch[1].batchID, buf);
@@ -179,9 +195,17 @@ PairedReadMatcher::getNextReadPair(
             if (autoRelease) {
                 single->releaseBatch(batch[1]);
             }
+            DataBatch overflowBatch = batch[1];
             batch[1] = batch[0];
+            bool releaseOverflowBatch = releasedBatch[1];
+            releasedBatch[1] = releasedBatch[0];
             batch[0] = one.getBatch();
+            releasedBatch[0] = false;
             dependents = false;
+            if (releaseOverflowBatch && ! autoRelease) {
+                //printf("release deferred batch %d:%d\n", overflowBatch.fileID, overflowBatch.batchID);
+                releaseBatch(overflowBatch);
+            }
         }
         ReadMap::iterator found = unmatched[0].find(key);
         if (found != unmatched[0].end()) {
@@ -239,6 +263,15 @@ PairedReadMatcher::releaseBatch(
 {
     if (autoRelease) {
         return;
+    }
+    for (int i = 0; i < 2; i++) {
+      if (batch == this->batch[i]) {
+        if (! releasedBatch[i]) {
+          releasedBatch[i] = true;
+          //printf("releaseBatch %d:%d active %d, deferred\n", batch.fileID, batch.batchID, i);
+        }
+        return;
+      }
     }
     // only release when both forward & backward dependent batches have been released
     AcquireExclusiveLock(&lock);

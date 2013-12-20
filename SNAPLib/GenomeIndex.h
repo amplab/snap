@@ -65,13 +65,6 @@ public:
     //
     void lookupSeed(Seed seed, unsigned minLocation, unsigned maxLocation,
                     unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits);
-
-    //
-    // Same thing, but doesn't get the reverse compliment.
-    //
-    void lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits);
-
-    void lookupSeed(Seed seed, unsigned minLocation, unsigned maxLocation, unsigned *nHits, const unsigned **hits);
     
     //
     // This issues a compiler prefetch for the genome data.
@@ -84,25 +77,24 @@ public:
 
     ~GenomeIndex();
 
-  
-private:
-
-  //
+    //
     // Allocate set of hash tables indexed by seeds with bias
     //
-    static SNAPHashTable** allocateHashTables(unsigned* o_nTables, double slack,
-        int seedLen, unsigned hashTableKeySize, unsigned* sizeTable);
+    static SNAPHashTable** allocateHashTables(unsigned* o_nTables, size_t capacity, double slack,
+        int seedLen, unsigned hashTableKeySize, double* biasTable = NULL);
     
-    static const unsigned GenomeIndexFormatMajorVersion = 3;
+private:
+
+    static const unsigned GenomeIndexFormatMajorVersion = 2;
     static const unsigned GenomeIndexFormatMinorVersion = 0;
     
-    static const unsigned largestSizeTable = 32;    // Can't be bigger than the biggest seed size, which is set in Seed.h.  Bigger than 32 means a new Seed structure.
+    static const unsigned largestBiasTable = 32;    // Can't be bigger than the biggest seed size, which is set in Seed.h.  Bigger than 32 means a new Seed structure.
     static const unsigned largestKeySize = 8;
-    static unsigned *hg19_sizeTables[largestKeySize+1][largestSizeTable+1];
+    static double *hg19_biasTables[largestKeySize+1][largestBiasTable+1];
 
-    static void ComputeSizeTable(const Genome* genome, int seedSize, unsigned* table, unsigned maxThreads, bool forceExact, unsigned hashTableKeySize);
+    static void ComputeBiasTable(const Genome* genome, int seedSize, double* table, unsigned maxThreads, bool forceExact, unsigned hashTableKeySize);
 
-    struct ComputeSizeTableThreadContext {
+    struct ComputeBiasTableThreadContext {
         SingleWaiterObject              *doneObject;
         volatile int                    *runningThreadCount;
         unsigned                         genomeChunkStart;
@@ -118,7 +110,7 @@ private:
         ExclusiveLock                   *approximateCounterLocks;
     };
 
-    static void ComputeSizeTableWorkerThreadMain(void *param);
+    static void ComputeBiasTableWorkerThreadMain(void *param);
 
     struct OverflowEntry;
     struct OverflowBackpointer;
@@ -134,6 +126,7 @@ private:
         volatile _int64                 *noBaseAvailable;
         volatile _int64                 *nonSeeds;
         volatile unsigned               *nextOverflowIndex;
+        volatile _int64                 *bothComplementsUsed;
         GenomeIndex                     *index;
         unsigned                         nOverflowEntries;
         OverflowEntry                   *overflowEntries;
@@ -148,7 +141,8 @@ private:
     };
 
     static void BuildHashTablesWorkerThreadMain(void *param);
-    static void ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64 whichHashTable, unsigned genomeLocation, _uint64 lowBases, _int64 *countOfDuplicateOverflows);
+    static void ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64 whichHashTable, unsigned genomeLocation, _uint64 lowBases, bool usingComplement,
+                    _int64 *bothComplementsUsed, _int64 *countOfDuplicateOverflows);
 
     static int BackwardsUnsignedCompare(const void *, const void *);
 
