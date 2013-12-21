@@ -41,12 +41,12 @@ class Contaminant {
 
       Contaminant(std::string rname_) : rname(rname_) {};
       Contaminant(const Contaminant &rhs) : rname(rhs.rname), reads(rhs.reads) {};
-      Contaminant& operator=(const Contaminant &rhs) { rname = rhs.rname; reads = rhs.reads; };
+      Contaminant& operator=(const Contaminant &rhs) { rname = rhs.rname; reads = rhs.reads; return *this; };
       bool operator<(const Contaminant &rhs) const { return Count() < rhs.Count(); };
       virtual ~Contaminant() {};
       
       void Add(string header, string seq) { reads.insert(read_map::value_type(header, seq)); };
-      unsigned Count() const { return reads.size(); };
+      unsigned Count() const { return (unsigned) reads.size(); };
       std::string Rname() const { return rname; };
 
       void WriteReads(ofstream &outfile) const {
@@ -72,7 +72,7 @@ class ContaminationFilter {
         virtual ~ContaminationFilter();  
         
         //Functions
-        int AddAlignment(unsigned location, string header, string seq); 
+        void AddAlignment(unsigned location, string header, string seq); 
         void Print();     
         void Write();
 

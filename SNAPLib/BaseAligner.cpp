@@ -1256,7 +1256,7 @@ Return Value:
                                     
                     // Remember the location of this hit because we don't have enough at this distance
                     hitLocations[score][hitCount[score]] = genomeLocation;
-                    hitRCs[score][hitCount[score]] = elementToScore->direction;
+                    hitRCs[score][hitCount[score]] = elementToScore->direction != 0;
                     hitCount[score]++;
                 }
 

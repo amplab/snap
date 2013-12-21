@@ -171,6 +171,15 @@
     <ClInclude Include="ChimericPairedEndAligner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="AlignmentFilter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ContaminationFilter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GTFReader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -303,6 +312,15 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ParallelTask.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GTFReader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AlignmentFilter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ContaminationFilter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -525,7 +525,7 @@ void PairedAlignerContext::runIterationThread()
 
     unsigned singleAlignerMaxHits = 300;
     unsigned p_numSeedsFromCommandLine = 0;
-    float p_seedCoverage = maxReadSize / (index->getSeedLength()*2);
+    float p_seedCoverage = (float) maxReadSize / (index->getSeedLength()*2);
     BigAllocator *t_allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, singleAlignerMaxHits, maxReadSize, transcriptome->getSeedLength(), numSeedsFromCommandLine, seedCoverage));
 
     BaseAligner *t_aligner = new (t_allocator) BaseAligner(
@@ -620,10 +620,10 @@ void PairedAlignerContext::runIterationThread()
 
         const unsigned maxHitsToGet = 1000;
         unsigned loc0, loc1;
-        Direction rc0, rc1, temp;
+        Direction rc0, rc1;
         int score0, score1;
         int mapq0, mapq1;
-        AlignmentResult status0, status1;
+        AlignmentResult status0;
         
         int       transcriptome_multiHitsFound0;
         unsigned  transcriptome_multiHitLocations0[maxHitsToGet];

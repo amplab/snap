@@ -283,7 +283,7 @@ AlignerOptions::parse(
         n++;
         return true;
     } else if (strcmp(argv[n], "-fp") == 0) {
-        minPercentAbovePhred = atof(argv[n+1]);
+        minPercentAbovePhred = (float) atof(argv[n+1]);
         n++;
         return true;
     } else if (strcmp(argv[n], "-fo") == 0) {

@@ -159,6 +159,7 @@
     <ClInclude Include="AlignerContext.h" />
     <ClInclude Include="AlignerOptions.h" />
     <ClInclude Include="AlignerStats.h" />
+    <ClInclude Include="AlignmentFilter.h" />
     <ClInclude Include="ApproximateCounter.h" />
     <ClInclude Include="Bam.h" />
     <ClInclude Include="BaseAligner.h" />
@@ -166,6 +167,7 @@
     <ClInclude Include="BufferedAsync.h" />
     <ClInclude Include="ChimericPairedEndAligner.h" />
     <ClInclude Include="Compat.h" />
+    <ClInclude Include="ContaminationFilter.h" />
     <ClInclude Include="DataReader.h" />
     <ClInclude Include="DataWriter.h" />
     <ClInclude Include="directions.h" />
@@ -178,6 +180,7 @@
     <ClInclude Include="FixedSizeVector.h" />
     <ClInclude Include="Genome.h" />
     <ClInclude Include="GenomeIndex.h" />
+    <ClInclude Include="GTFReader.h" />
     <ClInclude Include="GzipDataWriter.h" />
     <ClInclude Include="HashTable.h" />
     <ClInclude Include="Histogram.h" />
@@ -212,6 +215,7 @@
     <ClCompile Include="AlignerContext.cpp" />
     <ClCompile Include="AlignerOptions.cpp" />
     <ClCompile Include="AlignerStats.cpp" />
+    <ClCompile Include="AlignmentFilter.cpp" />
     <ClCompile Include="ApproximateCounter.cpp" />
     <ClCompile Include="Bam.cpp" />
     <ClCompile Include="BaseAligner.cpp" />
@@ -220,6 +224,7 @@
     <ClCompile Include="BufferedAsync.cpp" />
     <ClCompile Include="ChimericPairedEndAligner.cpp" />
     <ClCompile Include="Compat.cpp" />
+    <ClCompile Include="ContaminationFilter.cpp" />
     <ClCompile Include="DataReader.cpp" />
     <ClCompile Include="DataWriter.cpp" />
     <ClCompile Include="exit.cpp" />
@@ -227,6 +232,7 @@
     <ClCompile Include="FASTQ.cpp" />
     <ClCompile Include="Genome.cpp" />
     <ClCompile Include="GenomeIndex.cpp" />
+    <ClCompile Include="GTFReader.cpp" />
     <ClCompile Include="GzipDataWriter.cpp" />
     <ClCompile Include="HashTable.cpp" />
     <ClCompile Include="Histogram.cpp" />

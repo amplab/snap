@@ -18,15 +18,20 @@ Revision History:
 
 --*/
 
+#include "stdafx.h"
+
 //System includes
 #include <stdio.h>
-#include <sys/time.h>
+#include <time.h>
 #include <string.h>
 
 //Source includes
 #include "GTFReader.h"
 #include "Compat.h"
 #include "exit.h"
+
+using std::min;
+using std::max;
 
 bool IntervalNodeSort(const Interval<ReadInterval*> &interval0, const Interval<ReadInterval*> &interval1) { 
     return interval0.value->Start() < interval1.value->Start(); 
@@ -96,7 +101,7 @@ unsigned ReadInterval::Intersection(const ReadInterval *rhs, read_map &intersect
             intersection.insert(*it);
         }        
     }
-    return intersection.size();
+    return (unsigned) intersection.size();
 }
 
 unsigned ReadInterval::Difference(const ReadInterval *rhs, read_map &difference) const {
@@ -109,7 +114,7 @@ unsigned ReadInterval::Difference(const ReadInterval *rhs, read_map &difference)
             difference.insert(*it);
         }        
     }
-    return difference.size();
+    return (unsigned) difference.size();
 }
 
 bool ReadInterval::operator<(const ReadInterval& rhs) const {
@@ -301,8 +306,8 @@ void ReadIntervalPair::Print() const {
 }
 
 void ReadIntervalPair::WriteGTF(ofstream &outfile) const {
-    interval1->WriteGTF(outfile, intersection.size());
-    interval2->WriteGTF(outfile, intersection.size());
+    interval1->WriteGTF(outfile, (unsigned) intersection.size());
+    interval2->WriteGTF(outfile, (unsigned) intersection.size());
 }
 
 ReadIntervalMap::ReadIntervalMap() {   
@@ -371,11 +376,11 @@ void ReadIntervalMap::Consolidate(GTFReader *gtf, unsigned buffer, bool filterPr
     //Print();
 
     //Get size of current interval set
-    unsigned initial_size = read_intervals.size();
+    unsigned initial_size = (unsigned) read_intervals.size();
        
     //Repeatedly consolidate existing reads until it no longer changes
     do {
-        initial_size = read_intervals.size();
+        initial_size = (unsigned) read_intervals.size();
         ConsolidateReadIntervals(buffer);
         //printf("Initial Size: %u Current Size: %u\n", initial_size, read_intervals.size());
     } while (initial_size > read_intervals.size());
@@ -527,7 +532,7 @@ unsigned ReadIntervalMap::ConsolidateReadIntervals(unsigned buffer) {
     //Finally, assign set of new intervals to the old set, and return the size
    
     read_intervals = temp_intervals;
-    return read_intervals.size();
+    return (unsigned) read_intervals.size();
 
 }
 
@@ -900,8 +905,8 @@ bool GTFGene::operator<(const GTFGene &rhs) const {
 }
 
 void GTFGene::UpdateBoundaries(unsigned new_start, unsigned new_end) {
-    start = std::min(new_start, start);
-    end = std::max(new_end, end);
+    start = min(new_start, start);
+    end = max(new_end, end);
 }
 
 void GTFGene::Process(feature_map &all_features, transcript_map &all_transcripts) {
@@ -945,7 +950,7 @@ bool GTFGene::CheckBoundary(string query_chr, unsigned query_pos, unsigned buffe
     }
   
     //Compare position within buffered gene coordinates
-    if ((query_pos >= std::max(start-buffer+1, (unsigned)1)) && (query_pos <= end+buffer)) {
+    if ((query_pos >= max(start-buffer+1, (unsigned)1)) && (query_pos <= end+buffer)) {
         return true;
     }
     return false;
@@ -967,7 +972,7 @@ void GTFGene::WriteJunctionCountID(ofstream &outfile) const {
 
     for (feature_pointer_map::const_iterator it = features.begin(); it != features.end(); ++it) {
         if (it->second->Type() == INTRON) {
-            float gene_expression = ((float)read_count / 1000.0) + 1;
+            float gene_expression = ((float)read_count / (float) 1000.0) + 1;
             outfile << gene_id+":"+it->second->Chr()+':'+ToString(it->second->Start())+"-"+ToString(it->second->End()) << '\t' << round((float)it->second->ReadCount() / gene_expression) << endl;
         }
     }
@@ -1086,8 +1091,8 @@ void GTFTranscript::Process(feature_map &all_features, feature_list &gene_featur
 */
 
 void GTFTranscript::UpdateBoundaries(unsigned new_start, unsigned new_end) {
-    start = std::min(new_start, start);
-    end = std::max(new_end, end);
+    start = min(new_start, start);
+    end = max(new_end, end);
 }
 
 void GTFTranscript::Print() const {
@@ -1107,7 +1112,7 @@ unsigned GTFTranscript::SplicedLength() const {
 
     }
     //Don't ever return a length of zero
-    return std::max(length, (unsigned)1);
+    return max(length, (unsigned)1);
 }
 
 void GTFTranscript::IncrementReadCount(unsigned numPotentialTranscripts = 1) {
@@ -1294,7 +1299,7 @@ GTFReader::GTFReader(const char* output) {
 //Destructor
 GTFReader::~GTFReader() {}
 
-int GTFReader::Load(string _filename) {
+void GTFReader::Load(string _filename) {
 
     //Save the input filename
     filename = _filename;
@@ -1642,7 +1647,7 @@ void GTFReader::IncrementReadCount(string transcript_id0, unsigned transcript_st
         }
         gene_id = pos->second.GeneID();
         //We only increment once for a paired-end fragment
-        pos->second.IncrementReadCount(final_ids.size());
+        pos->second.IncrementReadCount((unsigned) final_ids.size());
     }
     
     //Increment the gene count for one of the transcripts

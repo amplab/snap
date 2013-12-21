@@ -18,6 +18,8 @@ Revision History:
 
 --*/
 
+#include "stdafx.h"
+
 #include <vector>
 #include "ContaminationFilter.h"
 
@@ -40,7 +42,7 @@ ContaminationFilter::~ContaminationFilter()
     DestroyExclusiveLock(&lock);
 }
 
-int ContaminationFilter::AddAlignment(unsigned location, string header, string seq) {
+void ContaminationFilter::AddAlignment(unsigned location, string header, string seq) {
 
     //Get the position and rname for this alignment
     string rname = "*";

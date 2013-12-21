@@ -47,6 +47,8 @@ const _int16 INT16_MIN = MININT16;
 static const double LOG10 = log(10.0);
 inline double exp10(double x) { return exp(x * LOG10); }
 
+inline int round(double x) { return (int) (x + 0.5); }
+
 const void* memmem(const void* data, const size_t dataLength, const void* pattern, const size_t patternLength);
 
 typedef CRITICAL_SECTION    UnderlyingExclusiveLock;

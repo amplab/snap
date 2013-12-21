@@ -1012,7 +1012,6 @@ SAMFormat::writeRead(
     const int MAX_READ = MAX_READ_LENGTH;
     const int cigarBufSize = MAX_READ * 2;
     char cigarBuf[cigarBufSize];
-    char cigarNew[cigarBufSize];
 
     const int cigarBufWithClippingSize = MAX_READ * 2 + 32;
     char cigarBufWithClipping[cigarBufWithClippingSize];

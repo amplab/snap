@@ -116,7 +116,7 @@ class ReadIntervalPair {
         virtual ~ReadIntervalPair();
         ReadIntervalPair& operator=(const ReadIntervalPair &rhs);
         bool operator<(const ReadIntervalPair &rhs) const;
-        unsigned Intersection() const { return intersection.size(); };
+        unsigned Intersection() const { return (unsigned) intersection.size(); };
  
         void Print() const;       
         void Write(ofstream &outfile, ofstream &readfile) const;
@@ -240,7 +240,7 @@ class GTFTranscript {
         string Chr() const { return chr; };
         string TranscriptID() const { return transcript_id; };
         string GeneID() const { return gene_id; };
-        unsigned ReadCount() const { return read_count; };
+        unsigned ReadCount() const { return (unsigned) read_count; };
         unsigned GenomicPosition(unsigned transcript_pos, unsigned span) const;
         void Junctions(unsigned start, unsigned span, std::vector<junction> &junctions) const;
         void WriteFASTA(const Genome *genome, std::ofstream &outfile) const;
@@ -325,10 +325,10 @@ class GTFReader {
         GTFReader(const char* output = NULL);
         virtual ~GTFReader();
         
-        int Load(string filename);
+        void Load(string filename);
         const GTFTranscript& GetTranscript(string transcript_id) const;
         const GTFGene& GetGene(string gene_id) const;
-        unsigned Size() const { return transcripts.size(); };
+        unsigned Size() const { return (unsigned) transcripts.size(); };
         
         void IntervalGenes(std::string chr, unsigned start, unsigned stop, std::vector<GTFGene> &results);
         void IntervalTranscripts(std::string chr, unsigned start, unsigned stop, std::vector<GTFTranscript> &results);
