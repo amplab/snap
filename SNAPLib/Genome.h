@@ -23,7 +23,6 @@ Revision History:
 --*/
 
 #pragma once
-#include <xmmintrin.h>
 #include "Compat.h"
 
 const unsigned InvalidGenomeLocation = 0xffffffff;
@@ -64,7 +63,7 @@ public:
         //
         // minOffset and length are used to read in only a part of a whole genome.
         //
-        static const Genome *loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned i_minOffset = 0, unsigned length = 0);  
+        static const Genome *loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned i_minOffset = 0, unsigned length = 0);
                                                                   // This loads from a genome save
                                                                   // file, not a FASTA file.  Use
                                                                   // FASTA.h for FASTA loads.
@@ -107,7 +106,7 @@ public:
                 //
                 return bases + (offset-minOffset);
             }
-    
+
                 int min = 0;
                 int max = nContigs - 2;
                 while (min <= max) {
@@ -126,7 +125,7 @@ public:
                         max = i-1;
                     }
                 }
-    
+
                 _ASSERT(false && "NOTREACHED");
                 return NULL;
             } else {
@@ -146,7 +145,7 @@ public:
                 _ASSERT(false && "NOTREACHED");
                 return NULL;
             }
-        } 
+        }
 
         inline unsigned getCountOfBases() const {return nBases;}
 
@@ -176,7 +175,7 @@ public:
 
         //
         // These are only public so creators of new genomes (i.e., FASTA) can use them.
-        // 
+        //
         void    fillInContigLengths();
         void    sortContigsByName();
 

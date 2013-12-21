@@ -82,6 +82,12 @@ int getpagesize();
 #include <sched.h>  // For sched_setaffinity
 #endif
 
+#ifndef __APPLE__
+#include <xmmintrin.h>  // This is currently (in Dec 2013) broken on Mac OS X 10.9 (Apple clang-500.2.79)
+#else
+#define _mm_prefetch(...) {}
+#endif
+
 typedef int64_t _int64;
 typedef uint64_t _uint64;
 typedef int32_t _int32;
@@ -265,9 +271,9 @@ void AllowEventWaitersToProceed(EventObject *eventObject);
 void PreventEventWaitersFromProceeding(EventObject *eventObject);
 #ifdef PROFILE_WAIT
 #define WaitForEvent(o) WaitForEventProfile((o), __FUNCTION__, __LINE__)
-void WaitForEventProfile(EventObject *eventObject, const char* fn, int line); 
+void WaitForEventProfile(EventObject *eventObject, const char* fn, int line);
 #else
-void WaitForEvent(EventObject *eventObject); 
+void WaitForEvent(EventObject *eventObject);
 #endif
 
 
@@ -398,7 +404,7 @@ int _fseek64bit(FILE *stream, _int64 offset, int origin);
 
 #endif
 
-// 
+//
 // Class for handling mapped files.  It's got the same interface for both platforms, but different implementations.
 //
 class FileMapper {
@@ -415,7 +421,7 @@ public:
     }
 
     // can get multiple mappings on the same file
-    char *createMapping(size_t offset, size_t amountToMap, void** o_token); 
+    char *createMapping(size_t offset, size_t amountToMap, void** o_token);
 
     // MUST call unmap on each token out of createMapping, the destructor WILL NOT cleanup
     void unmap(void* token);

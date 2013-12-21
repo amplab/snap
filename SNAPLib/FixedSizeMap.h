@@ -3,7 +3,6 @@
 #include "Compat.h"
 #include "BigAlloc.h"
 #include "exit.h"
-#include <xmmintrin.h>
 
 
 //
@@ -19,7 +18,7 @@ public:
 };
 
 
-// 
+//
 // A fixed-size hash map that allows for efficient clearing and reuse through epochs
 // and does not perform any memory allocation.
 //
@@ -40,7 +39,7 @@ public:
     ~FixedSizeMap() {
         delete[] entries;
     }
-    
+
     void reserve(unsigned capacity) {
         if (!isPowerOf2(capacity)) {
             fprintf(stderr, "FixedSizeMap capacity must be a power of 2\n");
@@ -63,7 +62,7 @@ public:
 
         clearBloomFilter();
     }
-    
+
     void clear() {
         size = 0;
         epoch += 2;
@@ -166,10 +165,10 @@ public:
     }
 
     inline int getSize() { return size; }
-    
+
     void *operator new(size_t size) {return BigAlloc(size);}
     void operator delete(void *ptr) {BigDealloc(ptr);}
-    
+
     typedef void* iterator;
 
     iterator begin()
@@ -215,13 +214,13 @@ private:
 
     unsigned char bloomFilter[bloomFilterSizeInChar];
 
-    static inline void getBloomFilterFeatures(K key, unsigned *feature0Word, unsigned *feature0Bit, unsigned *feature1Word, unsigned *feature1Bit) 
+    static inline void getBloomFilterFeatures(K key, unsigned *feature0Word, unsigned *feature0Bit, unsigned *feature1Word, unsigned *feature1Bit)
     {
         //
         // We know the bloom filter is 2^bloomFilterFeatureSizeInBits bits wide.  Use alternating bloomFilterFeatureSizeInBits bit chunks from the key to build up each of the features.
         //
         _uint64 feature[2] = {0, 0};
- 
+
         for (int i = 0; i < sizeof(K) * 8; i += bloomFilterFeatureSizeInBits * 2) {
             feature[0] ^= ((key >> i) & bloomFilterFeatureMask);
             feature[1] ^= ((key >> (i+bloomFilterFeatureSizeInBits)) & bloomFilterFeatureMask);
@@ -236,9 +235,9 @@ private:
     }
 
     //
-    // false means that this entry is NOT in the cache.  true means we can't say for sure.  
+    // false means that this entry is NOT in the cache.  true means we can't say for sure.
     //
-    inline bool checkBloomFilter(K key) 
+    inline bool checkBloomFilter(K key)
     {
         unsigned feature0Word, feature0Bit, feature1Word, feature1Bit;
 
@@ -270,7 +269,7 @@ private:
         void *operator new[](size_t size) {return BigAlloc(size);}
         void operator delete[](void *ptr) {BigDealloc(ptr);}
     };
-    
+
     Entry *entries;
     unsigned capacity;
     unsigned size;
@@ -279,7 +278,7 @@ private:
     Hash hash;
 
 
-    
+
     bool isPowerOf2(int n) {
         while (n > 0) {
             if (n == 1) {

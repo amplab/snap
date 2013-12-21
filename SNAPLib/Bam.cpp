@@ -140,7 +140,7 @@ BAMReader::create(
     reader->init(fileName, startingOffset, amountOfFileToProcess);
     return reader;
 }
-    
+
     void
 BAMReader::reinit(
     _int64 startingOffset,
@@ -175,7 +175,7 @@ BAMReader::createPairedReadSupplierGenerator(
     queue->startReaders();
     return queue;
 }
-    
+
 const char* BAMAlignment::CodeToSeq = "=ACMGRSVTWYHKDBN";
 _uint8 BAMAlignment::SeqToCode[256];
 const char* BAMAlignment::CodeToCigar = "MIDNSHP=X";
@@ -196,7 +196,7 @@ BAMAlignment::decodeSeq(
         *o_sequence++ = BAMAlignment::CodeToSeq[n];
     }
 }
-    
+
     void
 BAMAlignment::decodeQual(
     char* o_qual,
@@ -342,7 +342,7 @@ BAMAlignment::validate()
     bool
 BAMReader::getNextRead(
     Read *read,
-    AlignmentResult *alignmentResult, 
+    AlignmentResult *alignmentResult,
     unsigned *genomeLocation,
     bool *isRC,
     unsigned *mapQ,
@@ -366,7 +366,7 @@ BAMReader::getNextRead(
             extraOffset = 0;
         }
         BAMAlignment* bam = (BAMAlignment*) buffer;
-        if ((unsigned _int64)bytes < sizeof(bam->block_size) || (unsigned _int64)bytes < bam->size()) {
+        if ((_uint64)bytes < sizeof(bam->block_size) || (_uint64)bytes < bam->size()) {
             fprintf(stderr, "Unexpected end of BAM file at %lld\n", data->getFileOffset());
             soft_exit(1);
         }
@@ -398,7 +398,7 @@ BAMReader::getReadFromLine(
     AlignmentResult *alignmentResult,
     unsigned *out_genomeLocation,
     bool *isRC,
-    unsigned *mapQ, 
+    unsigned *mapQ,
     size_t *lineLength,
     unsigned *flag,
     const char **cigar,
@@ -410,7 +410,7 @@ BAMReader::getReadFromLine(
     bam->validate();
 
     unsigned genomeLocation = bam->getLocation(genome);
-    
+
     if (NULL != out_genomeLocation) {
         _ASSERT(-1 <= bam->refID && bam->refID < (int)genome->getNumContigs());
         *out_genomeLocation = genomeLocation;
@@ -436,7 +436,7 @@ BAMReader::getReadFromLine(
         unsigned originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping;
         Read::computeClippingFromCigar(cigarBuffer, &originalFrontClipping, &originalBackClipping, &originalFrontHardClipping, &originalBackHardClipping);
 
-        read->init(bam->read_name(), bam->l_read_name - 1, seqBuffer, qualBuffer, bam->l_seq, genomeLocation, bam->MAPQ, bam->FLAG, 
+        read->init(bam->read_name(), bam->l_read_name - 1, seqBuffer, qualBuffer, bam->l_seq, genomeLocation, bam->MAPQ, bam->FLAG,
             originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping);
         read->setBatch(data->getBatch());
         if (bam->FLAG & SAM_REVERSE_COMPLEMENT) {
@@ -482,16 +482,16 @@ BAMReader::getExtra(
     return result;
 }
 
-    
+
 class BAMFormat : public FileFormat
 {
 public:
     BAMFormat(bool i_useM) : useM(i_useM) {}
 
     virtual bool isFormatOf(const char* filename) const;
-    
+
     virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* o_location, unsigned* o_readBytes, int* o_refID, int* o_pos) const;
-    
+
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
 
     virtual bool writeHeader(
@@ -499,11 +499,11 @@ public:
         bool sorted, int argc, const char **argv, const char *version, const char *rgLine) const;
 
     virtual bool writeRead(
-        const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
-        size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
+        const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
+        size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
         int mapQuality, unsigned genomeLocation, Direction direction,
-        bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
-        AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD) const; 
+        bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
+        AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD) const;
 
 private:
 
@@ -524,7 +524,7 @@ BAMFormat::isFormatOf(
 {
     return util::stringEndsWith(filename, ".bam");
 }
-     
+
     void
 BAMFormat::getSortInfo(
     const Genome* genome,
@@ -654,17 +654,17 @@ BAMFormat::writeRead(
     const Genome * genome,
     LandauVishkinWithCigar * lv,
     char * buffer,
-    size_t bufferSpace, 
+    size_t bufferSpace,
     size_t * spaceUsed,
     size_t qnameLen,
     Read * read,
-    AlignmentResult result, 
+    AlignmentResult result,
     int mapQuality,
     unsigned genomeLocation,
     Direction direction,
     bool hasMate,
     bool firstInPair,
-    Read * mate, 
+    Read * mate,
     AlignmentResult mateResult,
     unsigned mateLocation,
     Direction mateDirection) const
@@ -695,18 +695,18 @@ BAMFormat::writeRead(
     unsigned extraBasesClippedAfter;
     int editDistance;
 
-    if (! SAMFormat::createSAMLine(genome, lv, data, quality, MAX_READ, contigName, contigIndex, 
+    if (! SAMFormat::createSAMLine(genome, lv, data, quality, MAX_READ, contigName, contigIndex,
         flags, positionInContig, mapQuality, mateContigName, mateContigIndex, matePositionInContig, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, useM,
-        hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection, 
+        hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection,
         &extraBasesClippedBefore, &extraBasesClippedAfter))
     {
         return false;
     }
     if (genomeLocation != InvalidGenomeLocation) {
         cigarOps = computeCigarOps(genome, lv, (char*) cigarBuf, cigarBufSize * sizeof(_uint32),
-                                   clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter, extraBasesClippedAfter, 
+                                   clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter, extraBasesClippedAfter,
                                    read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
                                    genomeLocation, direction == RC, useM, &editDistance);
     }
@@ -913,7 +913,7 @@ public:
     BAMFilter(DataWriter::FilterType i_type) : Filter(i_type), offsets(1000), header(false) {}
 
     virtual ~BAMFilter() {}
-	
+
 	virtual void inHeader(bool flag)
 	{ header = flag; }
 
@@ -927,7 +927,7 @@ protected:
     BAMAlignment* getRead(size_t fileOffset);
 
     BAMAlignment* getNextRead(BAMAlignment* read, size_t* o_fileOffset = NULL);
-    
+
     BAMAlignment* tryFindRead(size_t offset, size_t endOffset, const char* id, size_t* o_offset);
 
 private:
@@ -959,7 +959,7 @@ BAMFilter::onNextBatch(
     currentOffset = 0;
     return bytes;
 }
-    
+
     void
 BAMFilter::onAdvance(
     DataWriter* writer,
@@ -1070,18 +1070,18 @@ struct DuplicateReadKey
             }
         }
     }
-    
+
     bool operator==(const DuplicateReadKey& b) const
     {
         return locations[0] == b.locations[0] && locations[1] == b.locations[1] &&
             isRC[0] == b.isRC[0] && isRC[1] == b.isRC[1];
     }
-    
+
     bool operator!=(const DuplicateReadKey& b) const
     {
         return ! ((*this) == b);
     }
-    
+
     bool operator<(const DuplicateReadKey& b) const
     {
         return locations[0] < b.locations[0] ||
@@ -1090,7 +1090,7 @@ struct DuplicateReadKey
                     (locations[1] == b.locations[1] &&
                         isRC[0] * 2 + isRC[1] <  b.isRC[0] *2 + b.isRC[1])));
     }
-    
+
 
     // required for use as a key in VariableSizeMap template
     DuplicateReadKey(int x)
@@ -1185,7 +1185,7 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
             for (BAMAlignment* record = getRead(offset); record != NULL && record != lastBam; record = getNextRead(record, &offset)) {
                 // use opposite of logical location to sort records
                 _uint64 entry = record->getLocation(genome) == UINT32_MAX
-                    ? (((_uint64) UINT32_MAX) << 32) | 
+                    ? (((_uint64) UINT32_MAX) << 32) |
                         ((record->FLAG & SAM_REVERSE_COMPLEMENT) ? RunNextRC : 0) |
                         ((record->FLAG & SAM_NEXT_REVERSED) ? RunRC : 0)
                     : (((_uint64) record->getNextLocation(genome)) << 32) |
@@ -1362,7 +1362,7 @@ class BAMDupMarkSupplier : public DataWriter::FilterSupplier
 public:
     BAMDupMarkSupplier(const Genome* i_genome) :
         FilterSupplier(DataWriter::ReadFilter), genome(i_genome) {}
-    
+
     virtual DataWriter::Filter* getFilter()
     { return new BAMDupMarkFilter(genome); }
 
@@ -1408,7 +1408,7 @@ public:
         refs = genome ? new RefInfo[genome->getNumContigs()] : NULL;
         readCounts[0] = readCounts[1] = 0;
     }
-    
+
     virtual DataWriter::Filter* getFilter()
     { return new BAMIndexFilter(this); }
 
