@@ -893,10 +893,7 @@ DecompressDataReader::nextBatch()
         return;
     }
     Entry* next = peekReady();
-    _ASSERT(next->state == EntryReady);
-    for (int i = 0; i < count; i++) {
-        _ASSERT(next == &entries[i] || entries[i].state == EntryAvailable || entries[i].decompressed != next->decompressed);
-    }
+    _ASSERT(next->state == EntryReady && next->decompressed != NULL);
     _int64 copy = old->decompressedValid - max(offset, old->decompressedStart);
     memcpy(next->decompressed + overflowBytes - copy, old->decompressed + old->decompressedValid - copy, copy);
     offset = overflowBytes - copy;
@@ -1191,7 +1188,7 @@ DecompressDataReader::decompressThreadContinuous(
         bool ok = reader->inner->getData(&entry->compressed, &entry->compressedValid, &entry->compressedStart);
         int index = (int) (entry - reader->entries);
         if (! ok) {
-            //printf("decompressThread #%d %d:%d eof\n", index, reader->inner->getBatch().fileID, reader->inner->getBatch().batchID);
+            //printf("decompressThreadContinuous#%d %d:%d eof\n", index, reader->inner->getBatch().fileID, reader->inner->getBatch().batchID);
             if (! reader->inner->isEOF()) {
                 fprintf(stderr, "error reading file at offset %lld\n", reader->getFileOffset());
                 soft_exit(1);
@@ -1222,7 +1219,7 @@ DecompressDataReader::decompressThreadContinuous(
             first = false;
         }
         // make buffer available for clients & go on to next
-        //printf("decompressThread #%d %d:%d ready\n", index, entry->batch.fileID, entry->batch.batchID);
+        //printf("decompressThreadContinuous#%d %d:%d ready\n", index, entry->batch.fileID, entry->batch.batchID);
         reader->enqueueReady(entry);
     }
     AllowEventWaitersToProceed(&reader->decompressThreadDone);

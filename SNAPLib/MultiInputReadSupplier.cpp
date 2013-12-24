@@ -173,6 +173,7 @@ MultiInputPairedReadSupplier::getNextReadPair(Read **read0, Read **read1)
             // anyway). Can't delete because it might be retaining read data in use downstream.
             //
             activeReadSuppliers[nextReadSupplier] = activeReadSuppliers[nRemainingReadSuppliers];
+            nextReadSupplier = 0;   // (Bluntly) handles the case where nextReadSupplier is the last one.
         }
     }
     active->lastBatch[0] = (*read0)->getBatch();
