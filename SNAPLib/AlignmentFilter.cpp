@@ -114,7 +114,7 @@ AlignmentFilter::AlignmentFilter(Read *read0_, Read *read1_, const Genome* genom
 
 AlignmentFilter::~AlignmentFilter() {}
 
-int AlignmentFilter::HashAlignment(Alignment& alignment, alignment_map& hashtable) {
+void AlignmentFilter::HashAlignment(Alignment& alignment, alignment_map& hashtable) {
 
     //Try to find this transcript in the transcript_map
     alignment_map::iterator pos = hashtable.find(alignment.hashkey);
@@ -122,21 +122,18 @@ int AlignmentFilter::HashAlignment(Alignment& alignment, alignment_map& hashtabl
     //If this sequence is not found, create a new vector to store this sequence (and others like it)
     if ((pos == hashtable.end())) {
         hashtable.insert(alignment_map::value_type(alignment.hashkey, alignment));
-        return 0;
         
     } else {
     
         //Place alignment with the better score
         if (alignment.score < pos->second.score) {
             pos->second = alignment;
-            return 1;
         
         //If the two scores are equal, keep the transcriptome alignment (if any)
         } else if (alignment.score == pos->second.score) {
             if (alignment.isTranscriptome) {
                 pos->second = alignment;
             }
-            return 1;
         }
     }
 }

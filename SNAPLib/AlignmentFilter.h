@@ -112,7 +112,7 @@ class AlignmentFilter {
         
     protected:
     
-        int HashAlignment(Alignment& alignment, alignment_map& hashtable);
+        void HashAlignment(Alignment& alignment, alignment_map& hashtable);
         void ConvertToGenomic();
         void ProcessPairs(PairedAlignmentResult* result, std::vector<AlignmentPair> &pairs);
         void CheckNoRC(PairedAlignmentResult* result, std::vector<AlignmentPair> &pairs);

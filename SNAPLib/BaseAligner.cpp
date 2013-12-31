@@ -264,7 +264,7 @@ BaseAligner::CharacterizeSeeds(
         maxLocation = (searchLocation < 0xFFFFFFFF - searchRadius) ? searchLocation + searchRadius : 0xFFFFFFFF;
     }
 
-    AlignmentResult finalResult;
+    AlignmentResult finalResult = NotFound;
 
     //
     // A bitvector for used seeds, indexed on the starting location of the seed within the read.
@@ -504,6 +504,7 @@ BaseAligner::CharacterizeSeeds(
         nextSeedToTest += seedLen;
 
     }
+    return finalResult;
 
 }
 
