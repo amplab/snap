@@ -219,6 +219,10 @@ FASTQReader::getNextRead(Read *readToUpdate)
 
         char *newLine = strnchr(scan, '\n', validBytes - (scan - buffer));
         if (NULL == newLine) {
+            if (validBytes - (scan - buffer) == 1 && *scan == 0x1a && data->isEOF()) {
+                // sometimes DOS files will have extra ^Z at end
+                return false;
+            }
             //
             // There was no next newline
             //
@@ -229,7 +233,7 @@ FASTQReader::getNextRead(Read *readToUpdate)
             }
             fprintf(stderr, "FASTQ record larger than buffer size at %s:%lld\n", fileName, data->getFileOffset());
             soft_exit(1);
-        }            //
+        }
 
         const size_t lineLen = newLine - scan;
         if (0 == lineLen) {
