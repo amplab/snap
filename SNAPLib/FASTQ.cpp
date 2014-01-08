@@ -283,16 +283,12 @@ FASTQReader::_init::_init()
     // The second line is the read itself and must start with a base or an
     // 'N' in either case.
     //
-    isValidStartingCharacterForNextLine[0]['A'] = true;
-    isValidStartingCharacterForNextLine[0]['C'] = true;
-    isValidStartingCharacterForNextLine[0]['T'] = true;
-    isValidStartingCharacterForNextLine[0]['G'] = true;
-    isValidStartingCharacterForNextLine[0]['N'] = true;
-    isValidStartingCharacterForNextLine[0]['a'] = true;
-    isValidStartingCharacterForNextLine[0]['c'] = true;
-    isValidStartingCharacterForNextLine[0]['t'] = true;
-    isValidStartingCharacterForNextLine[0]['g'] = true;
-    isValidStartingCharacterForNextLine[0]['n'] = true;
+    for (char*p = "ACTGNURYKMSWBDHVNX"; *p; p++) {
+        isValidStartingCharacterForNextLine[0][*p] = true;
+        isValidStartingCharacterForNextLine[0][tolower(*p)] = true;
+    }
+
+    //
 
     //
     // The third line is additional sequence idenfitier info and must
