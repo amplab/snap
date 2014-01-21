@@ -108,6 +108,10 @@ ReadFASTAGenome(
             if (NULL != terminator) {
                 *terminator = '\0';
             }
+            terminator = strchr(lineBuffer, '\r');
+            if (NULL != terminator) {
+                *terminator = '\0';
+            }
             genome->startContig(lineBuffer+1);
         } else {
             //
