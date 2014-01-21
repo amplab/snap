@@ -150,7 +150,12 @@ void addIfAbsent(std::vector<T> *v, const T &e)
 
 inline FILE *fopenOrDie(const char *fileName, const char *mode)
 {
+#ifdef _MSC_VER
+    FILE *file = NULL;
+    fopen_s(&file, fileName, mode);
+#else
     FILE *file = fopen(fileName, mode);
+#endif
     if (!file)
         die("Unable to open file '%s'.");
     return file;

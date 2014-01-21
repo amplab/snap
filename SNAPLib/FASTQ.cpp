@@ -219,6 +219,10 @@ FASTQReader::getNextRead(Read *readToUpdate)
 
         char *newLine = strnchr(scan, '\n', validBytes - (scan - buffer));
         if (NULL == newLine) {
+            if (validBytes - (scan - buffer) == 1 && *scan == 0x1a && data->isEOF()) {
+                // sometimes DOS files will have extra ^Z at end
+                return false;
+            }
             //
             // There was no next newline
             //
@@ -229,7 +233,7 @@ FASTQReader::getNextRead(Read *readToUpdate)
             }
             fprintf(stderr, "FASTQ record larger than buffer size at %s:%lld\n", fileName, data->getFileOffset());
             soft_exit(1);
-        }            //
+        }
 
         const size_t lineLen = newLine - scan;
         if (0 == lineLen) {
@@ -279,16 +283,12 @@ FASTQReader::_init::_init()
     // The second line is the read itself and must start with a base or an
     // 'N' in either case.
     //
-    isValidStartingCharacterForNextLine[0]['A'] = true;
-    isValidStartingCharacterForNextLine[0]['C'] = true;
-    isValidStartingCharacterForNextLine[0]['T'] = true;
-    isValidStartingCharacterForNextLine[0]['G'] = true;
-    isValidStartingCharacterForNextLine[0]['N'] = true;
-    isValidStartingCharacterForNextLine[0]['a'] = true;
-    isValidStartingCharacterForNextLine[0]['c'] = true;
-    isValidStartingCharacterForNextLine[0]['t'] = true;
-    isValidStartingCharacterForNextLine[0]['g'] = true;
-    isValidStartingCharacterForNextLine[0]['n'] = true;
+    for (char*p = "ACTGNURYKMSWBDHVNX"; *p; p++) {
+        isValidStartingCharacterForNextLine[0][*p] = true;
+        isValidStartingCharacterForNextLine[0][tolower(*p)] = true;
+    }
+
+    //
 
     //
     // The third line is additional sequence idenfitier info and must

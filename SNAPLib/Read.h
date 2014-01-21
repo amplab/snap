@@ -40,10 +40,13 @@ struct PairedAlignmentResult;
 enum AlignmentResult {NotFound, SingleHit, MultipleHits, UnknownAlignment}; // BB: Changed Unknown to UnknownAlignment because of a conflict w/Windows headers
 
 bool isAValidAlignmentResult(AlignmentResult result);
-// constant for small/medium/large reads
+
+//#define LONG_READS
+#ifdef LONG_READS
+#define MAX_READ_LENGTH 100000
+#else
 #define MAX_READ_LENGTH 500
-//#define MAX_READ_LENGTH 1000
-///#define MAX_READ_LENGTH 20000
+#endif
 
 //
 // Here's a brief description of the classes for input in SNAP:
