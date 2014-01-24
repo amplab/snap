@@ -105,7 +105,7 @@ public:
 
 class RangeSplittingPairedReadSupplierGenerator: public PairedReadSupplierGenerator {
 public:
-    RangeSplittingPairedReadSupplierGenerator(const char *i_fileName1, const char *i_fileName2, bool i_isSAM, unsigned numThreads, const ReaderContext& context);
+    RangeSplittingPairedReadSupplierGenerator(const char *i_fileName1, const char *i_fileName2, bool i_isSAM, unsigned numThreads, bool i_quicklyDropUnpairedReads, const ReaderContext& context);
     ~RangeSplittingPairedReadSupplierGenerator();
 
     PairedReadSupplier *generateNewPairedReadSupplier();
@@ -116,5 +116,6 @@ private:
     char *fileName2;
     bool isSAM;
     ReaderContext context;
+    bool quicklyDropUnpairedReads;
 };
 

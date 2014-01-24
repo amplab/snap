@@ -231,7 +231,8 @@ PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
     maxSpacing(DEFAULT_MAX_SPACING),
     forceSpacing(false),
     intersectingAlignerMaxHits(DEFAULT_INTERSECTING_ALIGNER_MAX_HITS),
-    maxCandidatePoolSize(DEFAULT_MAX_CANDIDATE_POOL_SIZE)
+    maxCandidatePoolSize(DEFAULT_MAX_CANDIDATE_POOL_SIZE),
+    quicklyDropUnpairedReads(true)
 {
 }
 
@@ -239,12 +240,18 @@ void PairedAlignerOptions::usageMessage()
 {
     AlignerOptions::usageMessage();
     printf(
-        "  -s   min and max spacing to allow between paired ends (default: %d %d)\n"
-        "  -fs  force spacing to lie between min and max\n"
-        "  -H   max hits for intersecting aligner (default: %d)\n"
+        "  -s   min and max spacing to allow between paired ends (default: %d %d).\n"
+        "  -fs  force spacing to lie between min and max.\n"
+        "  -H   max hits for intersecting aligner (default: %d).\n"
         "  -mcp specifies the maximum candidate pool size (An internal data structure. \n"
         "       Only increase this if you get an error message saying to do so. If you're running\n"
-        "       out of memory, you may want to reduce it.  Default: %d)\n",
+        "       out of memory, you may want to reduce it.  Default: %d).\n"
+        "  -ku  Keep unpaired-looking reads in SAM/BAM input.  Ordinarily, if a read doesn't specify\n"
+        "       mate information (RNEXT field is * and/or PNEXT is 0) then the code that matches reads will immdeiately\n"
+        "       discard it.  Specifying this flag may cause large memory usage for some input files,\n"
+        "       but may be necessary for some strangely formatted input files.  You'll also need to specify this\n"
+        "       flag for SAM/BAM files that were aligned by a single-end aligner.\n"
+        ,
         DEFAULT_MIN_SPACING,
         DEFAULT_MAX_SPACING,
         DEFAULT_INTERSECTING_ALIGNER_MAX_HITS,
@@ -272,6 +279,9 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
         return false;
     } else if (strcmp(argv[n], "-fs") == 0) {
         forceSpacing = true;
+        return true;    
+    } else if (strcmp(argv[n], "-ku") == 0) {
+        quicklyDropUnpairedReads = false;
         return true;
     } else if (strcmp(argv[n], "-mcp") == 0) {
         if (n + 1 < argc) {
@@ -405,6 +415,7 @@ void PairedAlignerContext::initialize()
     maxCandidatePoolSize = options2->maxCandidatePoolSize;
     intersectingAlignerMaxHits = options2->intersectingAlignerMaxHits;
     ignoreMismatchedIDs = options2->ignoreMismatchedIDs;
+    quicklyDropUnpairedReads = options2->quicklyDropUnpairedReads;
 }
 
 AlignerStats* PairedAlignerContext::newStats()
@@ -622,7 +633,7 @@ PairedAlignerContext::typeSpecificBeginIteration()
         // We've only got one input, so just connect it directly to the consumer.
         //
         options->inputs[0].readHeader(readerContext);
-        pairedReadSupplierGenerator = options->inputs[0].createPairedReadSupplierGenerator(options->numThreads, readerContext);
+        pairedReadSupplierGenerator = options->inputs[0].createPairedReadSupplierGenerator(options->numThreads, quicklyDropUnpairedReads, readerContext);
     } else {
         //
         // We've got multiple inputs, so use a MultiInputReadSupplier to combine the individual inputs.
@@ -632,7 +643,7 @@ PairedAlignerContext::typeSpecificBeginIteration()
         for (int i = 0; i < options->nInputs; i++) {
             ReaderContext context(readerContext);
             options->inputs[i].readHeader(context);
-            generators[i] = options->inputs[i].createPairedReadSupplierGenerator(options->numThreads, context);
+            generators[i] = options->inputs[i].createPairedReadSupplierGenerator(options->numThreads, quicklyDropUnpairedReads, context);
         }
         pairedReadSupplierGenerator = new MultiInputPairedReadSupplierGenerator(options->nInputs,generators);
     }

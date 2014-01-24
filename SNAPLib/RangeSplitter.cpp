@@ -183,8 +183,9 @@ RangeSplittingPairedReadSupplier::getNextReadPair(Read **read1, Read **read2)
 }
 
 RangeSplittingPairedReadSupplierGenerator::RangeSplittingPairedReadSupplierGenerator(
-    const char *i_fileName1, const char *i_fileName2, bool i_isSAM, unsigned numThreads, const ReaderContext& i_context) :
-        isSAM(i_isSAM), context(i_context)
+    const char *i_fileName1, const char *i_fileName2, bool i_isSAM, unsigned numThreads, 
+    bool i_quicklyDropUnpairedReads, const ReaderContext& i_context) :
+        isSAM(i_isSAM), context(i_context), quicklyDropUnpairedReads(i_quicklyDropUnpairedReads)
 {
     fileName1 = new char[strlen(i_fileName1) + 1];
     strcpy(fileName1, i_fileName1); 
@@ -216,7 +217,7 @@ RangeSplittingPairedReadSupplierGenerator::generateNewPairedReadSupplier()
 
     PairedReadReader *underlyingReader;
     if (isSAM) {
-        underlyingReader = SAMReader::createPairedReader(DataSupplier::Default[true], fileName1, rangeStart, rangeLength, true, context); 
+        underlyingReader = SAMReader::createPairedReader(DataSupplier::Default[true], fileName1, rangeStart, rangeLength, true, quicklyDropUnpairedReads, context); 
     } else {
         underlyingReader = PairedFASTQReader::create(DataSupplier::Default[true], fileName1, fileName2, rangeStart, rangeLength, context);
     }

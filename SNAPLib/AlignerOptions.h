@@ -48,7 +48,7 @@ struct SNAPInput {
     FileType             fileType;
 
     void readHeader(ReaderContext& context);
-    PairedReadSupplierGenerator *createPairedReadSupplierGenerator(int numThreads, const ReaderContext& context);
+    PairedReadSupplierGenerator *createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context);
     ReadSupplierGenerator *createReadSupplierGenerator(int numThreads, const ReaderContext& context);
 };
 
