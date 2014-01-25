@@ -244,7 +244,8 @@ void PairedAlignerOptions::usageMessage()
         "  -H   max hits for intersecting aligner (default: %d)\n"
         "  -mcp specifies the maximum candidate pool size (An internal data structure. \n"
         "       Only increase this if you get an error message saying to do so. If you're running\n"
-        "       out of memory, you may want to reduce it.  Default: %d)\n",
+        "       out of memory, you may want to reduce it.  Default: %d)\n"
+        "  -F b additional option to -F to require both mates to satisfy filter (default is just one)\n",
         DEFAULT_MIN_SPACING,
         DEFAULT_MAX_SPACING,
         DEFAULT_INTERSECTING_ALIGNER_MAX_HITS,
@@ -280,6 +281,14 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
             return true;
         } 
         return false;
+    } else if (strcmp(argv[n], "-F") == 0) {
+        if (n + 1 < argc) {
+            n++;
+            if (strcmp(argv[n], "b") == 0) {
+                filterFlags |= FilterBothMatesMatch;
+            }
+            return true;
+        }
     }
     return AlignerOptions::parse(argv, argc, n, done);
 }
@@ -565,7 +574,11 @@ void PairedAlignerContext::runIterationThread()
 
 void PairedAlignerContext::writePair(Read* read0, Read* read1, PairedAlignmentResult* result)
 {
-    if (readWriter != NULL && (options->passFilter(read0, result->status[0]) || options->passFilter(read1, result->status[1]))) {
+    bool pass0 = options->passFilter(read0, result->status[0]);
+    bool pass1 = options->passFilter(read1, result->status[1]);
+    bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
+        ? (pass0 && pass1) : (pass0 || pass1);
+    if (readWriter != NULL && pass) {
         readWriter->writePair(read0, read1, result);
     }
 }
