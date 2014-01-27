@@ -204,7 +204,6 @@ AlignerContext::beginIteration()
     readerContext.clipping = options->clipping;
     readerContext.defaultReadGroup = options->defaultReadGroup;
     readerContext.genome = index != NULL ? index->getGenome() : NULL;
-    readerContext.paired = false;
     readerContext.ignoreSecondaryAlignments = options->ignoreSecondaryAlignments;
     DataSupplier::ExpansionFactor = options->expansionFactor;
 	readerContext.header = NULL;

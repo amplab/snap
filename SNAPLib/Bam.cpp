@@ -166,11 +166,12 @@ BAMReader::createReadSupplierGenerator(
 BAMReader::createPairedReadSupplierGenerator(
     const char *fileName,
     int numThreads,
+    bool quicklyDropUnmatchedReads,
     const ReaderContext& context,
     int matchBufferSize)
 {
     BAMReader* reader = create(fileName, 0, 0, context);
-    PairedReadReader* matcher = PairedReadReader::PairMatcher(reader, false);
+    PairedReadReader* matcher = PairedReadReader::PairMatcher(reader, false, quicklyDropUnmatchedReads);
     ReadSupplierQueue* queue = new ReadSupplierQueue(matcher);
     queue->startReaders();
     return queue;
@@ -436,8 +437,17 @@ BAMReader::getReadFromLine(
         unsigned originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping;
         Read::computeClippingFromCigar(cigarBuffer, &originalFrontClipping, &originalBackClipping, &originalFrontHardClipping, &originalBackHardClipping);
 
+        const char *rnext;
+        unsigned rnextLen;
+        if (bam->next_refID < 0 || bam->next_refID >= genome->getNumContigs()) {
+            rnext = "*";
+            rnextLen = 1;
+        } else {
+            rnext = genome->getContigs()[bam->next_refID].name;
+            rnextLen = genome->getContigs()[bam->next_refID].nameLength;
+        }
         read->init(bam->read_name(), bam->l_read_name - 1, seqBuffer, qualBuffer, bam->l_seq, genomeLocation, bam->MAPQ, bam->FLAG,
-            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping);
+            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping, rnext, rnextLen, bam->next_pos + 1);
         read->setBatch(data->getBatch());
         if (bam->FLAG & SAM_REVERSE_COMPLEMENT) {
             read->becomeRC();

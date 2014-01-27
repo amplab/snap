@@ -159,6 +159,7 @@ public:
         struct Contig {
             unsigned     beginningOffset;
             unsigned     length;
+            unsigned     nameLength;
             char        *name;
         };
 

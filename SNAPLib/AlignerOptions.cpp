@@ -449,16 +449,16 @@ SNAPInput::readHeader(ReaderContext& context)
 }
 
     PairedReadSupplierGenerator *
-SNAPInput::createPairedReadSupplierGenerator(int numThreads, const ReaderContext& context)
+SNAPInput::createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context)
 {
     _ASSERT(fileType == SAMFile || fileType == BAMFile || secondFileName != NULL); // Caller's responsibility to check this
 
     switch (fileType) {
     case SAMFile:
-        return SAMReader::createPairedReadSupplierGenerator(fileName, numThreads, context);
+        return SAMReader::createPairedReadSupplierGenerator(fileName, numThreads, quicklyDropUnpairedReads, context);
         
     case BAMFile:
-        return BAMReader::createPairedReadSupplierGenerator(fileName,numThreads,context);
+        return BAMReader::createPairedReadSupplierGenerator(fileName,numThreads, quicklyDropUnpairedReads, context);
 
     case FASTQFile:
         return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, context);

@@ -366,7 +366,6 @@ int main(int argc, char * argv[])
     readerContext.clipping = NoClipping;
     readerContext.defaultReadGroup = "";
     readerContext.genome = genome;
-    readerContext.paired = false;
     readerContext.ignoreSecondaryAlignments = true;
 	readerContext.header = NULL;
 	readerContext.headerLength = 0;

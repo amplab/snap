@@ -95,10 +95,7 @@ Genome::startContig(const char *contigName)
     contigs[nContigs].beginningOffset = nBases;
     size_t len = strlen(contigName) + 1;
     contigs[nContigs].name = new char[len];
-    if (NULL == contigs[nContigs].name) {
-        fprintf(stderr,"Unable to allocate space for contig name\n");
-        soft_exit(1);
-    }
+    contigs[nContigs].nameLength = (unsigned)len-1;
 
     strncpy(contigs[nContigs].name,contigName,len);
     contigs[nContigs].name[len-1] = '\0';
@@ -218,7 +215,8 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned 
 	contigNameBuffer[n] = ' '; 
 	n++; // increment n so we start copying at the position after the space
 	contigSize = strlen(contigNameBuffer + n) - 1; //don't include the final \n
-        genome->contigs[i].name = new char[contigSize + 1];
+    genome->contigs[i].name = new char[contigSize + 1];
+    genome->contigs[i].nameLength = (unsigned)contigSize;
 	curName = genome->contigs[i].name;
 	for (unsigned pos = 0; pos < contigSize; pos++) {
 	  curName[pos] = contigNameBuffer[pos + n];

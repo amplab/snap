@@ -22,6 +22,12 @@ Revision History:
 
 #pragma once
 
+inline unsigned RoundUpToPageSize(unsigned size)
+{
+    const unsigned pageSize = 4096;
+    return ((size + pageSize - 1) / pageSize) * pageSize;
+}
+
 //#define PROFILE_BIGALLOC
 
 #ifdef PROFILE_BIGALLOC

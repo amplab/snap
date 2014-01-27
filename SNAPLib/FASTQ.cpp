@@ -421,7 +421,7 @@ PairedFASTQReader::createPairedReadSupplierGenerator(
         return queue;
     } else {
         fprintf(stderr,"FASTQ using range splitter\n");
-        return new RangeSplittingPairedReadSupplierGenerator(fileName0,fileName1,false,numThreads,context);
+        return new RangeSplittingPairedReadSupplierGenerator(fileName0,fileName1,false,numThreads,false,context);
     }
 }
 
