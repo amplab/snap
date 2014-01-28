@@ -302,7 +302,7 @@ public:
                 //
                 data = localBuffer + (other.data - other.localBuffer);
                 _ASSERT(other.quality >= other.localBuffer && other.quality <= other.localBuffer + other.localBufferAllocationOffset - dataLength);
-                quality = localBuffer + (other.data - other.localBuffer);
+                quality = localBuffer + (other.quality - other.localBuffer);
                 _ASSERT(other.unclippedData >= other.localBuffer && other.unclippedData <= other.localBuffer + other.localBufferAllocationOffset - unclippedLength);
                 unclippedData = localBuffer + (other.unclippedData - other.localBuffer);
                 _ASSERT(other.unclippedQuality >= other.localBuffer && other.unclippedQuality <= other.localBuffer + other.localBufferAllocationOffset - unclippedLength);
