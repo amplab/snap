@@ -32,6 +32,9 @@ Revision History:
 // turn on to debug matching process
 //#define VALIDATE_MATCH
 
+// turn on to gather paired stats
+//#define STATISTICS
+
 using std::pair;
 
 class PairedReadMatcher: public PairedReadReader
@@ -83,6 +86,21 @@ private:
     _uint64 nReadsQuicklyDropped;
 
     Read localRead;
+
+#ifdef STATISTICS
+    typedef struct
+    {
+        _int64 oldPairs; // # pairs matched from overflow
+        _int64 oldBatches; // # distinct matches matched from overflow
+        _int64 internalPairs; // #pairs matched within batch
+        _int64 previousPairs; // #pairs matched with previous batch
+        _int64 overflowPairs; // #pairs left over
+        _int64 totalReads; // total reads in batch
+        void clear() { memset(this, 0, sizeof(*this)); }
+    } BatchStats;
+    BatchStats currentStats, totalStats;
+    VariableSizeMap<_int64,int> currentBatches;
+#endif
 };
 
 PairedReadMatcher::PairedReadMatcher(
@@ -104,6 +122,10 @@ PairedReadMatcher::PairedReadMatcher(
     if (! autoRelease) {
         InitializeExclusiveLock(&lock);
     }
+#ifdef STATISTICS
+    currentStats.clear();
+    totalStats.clear();
+#endif
 }
     
 PairedReadMatcher::~PairedReadMatcher()
@@ -187,6 +209,22 @@ PairedReadMatcher::getNextReadPair(
         }
 #endif
         if (localRead.getBatch() != batch[0]) {
+#ifdef STATISTICS
+            currentStats.oldBatches = currentBatches.size();
+            currentStats.overflowPairs = unmatched[1].size();
+            totalStats.internalPairs += currentStats.internalPairs;
+            totalStats.previousPairs += currentStats.previousPairs;
+            totalStats.oldBatches += currentStats.oldBatches;
+            totalStats.oldPairs += currentStats.oldPairs;
+            totalStats.overflowPairs += currentStats.overflowPairs;
+            totalStats.totalReads += currentStats.totalReads;
+            printf("batch %d:%d: internal %d pairs, previous %d pairs, old %d pairs from %d batches, overflow %d pairs\n"
+                "cumulative: internal %d pairs, previous %d pairs, old %d pairs from %d batches, overflow %d pairs\n",
+                batch[0].fileID, batch[0].batchID, currentStats.internalPairs, currentStats.previousPairs, currentStats.oldPairs, currentStats.oldBatches, currentStats.overflowPairs,
+                totalStats.internalPairs, totalStats.previousPairs, totalStats.oldPairs, totalStats.oldBatches, totalStats.overflowPairs);
+            currentStats.clear();
+            currentBatches.clear();
+#endif
             // roll over batches
             if (unmatched[1].size() > 0) {
                 //printf("warning: PairedReadMatcher overflow %d unpaired reads from %d:%d\n", unmatched[1].size(), batch[1].fileID, batch[1].batchID); //!!
@@ -226,11 +264,17 @@ PairedReadMatcher::getNextReadPair(
                 releaseBatch(overflowBatch);
             }
         }
+#ifdef STATISTICS
+        currentStats.totalReads++;
+#endif
         ReadMap::iterator found = unmatched[0].find(key);
         if (found != unmatched[0].end()) {
             *read2 = found->value;
             //printf("current matched %d:%d->%d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, batch[0].fileID, batch[0].batchID, read2->getId()); //!!
             unmatched[0].erase(found->key);
+#ifdef STATISTICS
+            currentStats.internalPairs++;
+#endif
         } else {
             // try previous batch
             found = unmatched[1].find(key);
@@ -252,6 +296,10 @@ PairedReadMatcher::getNextReadPair(
 #endif
                     //printf("overflow matched %d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, read2->getId()); //!!
                     read2->setBatch(batch[0]); // overwrite batch so both reads have same batch, will track deps instead
+#ifdef STATISTICS
+                    currentStats.oldPairs++;
+                    currentBatches.put(read2->getBatch().asKey(), 1);
+#endif
                 }
             } else {
                 // found, remember dependency
@@ -267,6 +315,9 @@ PairedReadMatcher::getNextReadPair(
                 //printf("prior matched %d:%d->%d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, batch[0].fileID, batch[0].batchID, read2->getId()); //!!
                 read2->setBatch(batch[0]); // overwrite batch so both reads have same batch, will track deps instead
                 unmatched[1].erase(found->key);
+#ifdef STATISTICS
+                currentStats.previousPairs++;
+#endif
             }
         }
 
