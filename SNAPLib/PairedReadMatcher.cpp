@@ -119,14 +119,18 @@ PairedReadMatcher::getNextReadPair(
     Read *read1,
     Read *read2)
 {
-    int BJBReadsDropped = 0;
     int skipped = 0;
+    DataBatch currentBatch;
+    bool allDroppedInCurrentBatch = false;
     while (true) {
         if (skipped++ == 10000) {
             fprintf(stderr, "warning: no matching read pairs in 10,000 reads, input file might be unsorted or have unexpected read id format\n");
         }
 
         if (! single->getNextRead(&localRead)) {
+            if (allDroppedInCurrentBatch) {
+                single->releaseBatch(currentBatch);
+            }
             int n = unmatched[0].size() + unmatched[1].size();
             int n2 = (int) (overflow.size() - overflowMatched);
             if (n + n2 > 0) {
@@ -157,6 +161,21 @@ PairedReadMatcher::getNextReadPair(
             return false;
         }
 
+        if (quicklyDropUnpairedReads) {
+            if (localRead.getBatch() != currentBatch) {
+                if (allDroppedInCurrentBatch) {
+                    single->releaseBatch(currentBatch);
+                }
+                currentBatch = localRead.getBatch();
+                allDroppedInCurrentBatch = true;
+            }
+            if (localRead.getOriginalPNEXT() == 0 || localRead.getOriginalRNEXTLength() == 1 && localRead.getOriginalRNEXT()[0] == '*') {
+                nReadsQuicklyDropped++;
+                skipped--;
+                continue;
+            }
+            allDroppedInCurrentBatch = false;
+        }
 
         // build key for pending read table, removing /1 or /2 at end
         const char* id = localRead.getId();
@@ -228,7 +247,6 @@ PairedReadMatcher::getNextReadPair(
         if (quicklyDropUnpairedReads && (localRead.getOriginalPNEXT() == 0 || localRead.getOriginalRNEXTLength() == 1 && localRead.getOriginalRNEXT()[0] == '*')) {
             nReadsQuicklyDropped++;
             skipped--;
-            BJBReadsDropped++;
             continue;
         }
 
