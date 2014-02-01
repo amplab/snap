@@ -498,8 +498,6 @@ class BAMFormat : public FileFormat
 public:
     BAMFormat(bool i_useM) : useM(i_useM) {}
 
-    virtual bool isFormatOf(const char* filename) const;
-
     virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* o_location, unsigned* o_readBytes, int* o_refID, int* o_pos) const;
 
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
@@ -527,13 +525,6 @@ private:
 };
 
 const FileFormat* FileFormat::BAM[] = { new BAMFormat(false), new BAMFormat(true) };
-
-    bool
-BAMFormat::isFormatOf(
-    const char* filename) const
-{
-    return util::stringEndsWith(filename, ".bam");
-}
 
     void
 BAMFormat::getSortInfo(
@@ -579,10 +570,10 @@ BAMFormat::getWriterSupplier(
         DataWriterSupplier::gzip(true, BAM_BLOCK, max(1, options->numThreads - 1), false, options->sortOutput);
         // (leave a thread free for main, and let OS map threads to cores to allow system IO etc.)
     if (options->sortOutput) {
-        size_t len = strlen(options->outputFileTemplate);
+        size_t len = strlen(options->outputFile.fileName);
         // todo: this is going to leak, but there's no easy way to free it, and it's small...
         char* tempFileName = (char*) malloc(5 + len);
-        strcpy(tempFileName, options->outputFileTemplate);
+        strcpy(tempFileName, options->outputFile.fileName);
         strcpy(tempFileName + len, ".tmp");
         // todo: make markDuplicates optional?
         DataWriter::FilterSupplier* filters = gzipSupplier;
@@ -591,16 +582,16 @@ BAMFormat::getWriterSupplier(
         }
         if (! options->noIndex) {
             char* indexFileName = (char*) malloc(5 + len);
-            strcpy(indexFileName, options->outputFileTemplate);
+            strcpy(indexFileName, options->outputFile.fileName);
             strcpy(indexFileName + len, ".bai");
             filters = DataWriterSupplier::bamIndex(indexFileName, genome, gzipSupplier)->compose(filters);
         }
         dataSupplier = DataWriterSupplier::sorted(this, genome, tempFileName,
             options->sortMemory * (1ULL << 30),
-            options->numThreads, options->outputFileTemplate, filters,
+            options->numThreads, options->outputFile.fileName, filters,
             FileEncoder::gzip(gzipSupplier, options->numThreads, options->bindToProcessors));
     } else {
-        dataSupplier = DataWriterSupplier::create(options->outputFileTemplate, gzipSupplier);
+        dataSupplier = DataWriterSupplier::create(options->outputFile.fileName, gzipSupplier);
     }
     return ReadWriterSupplier::create(this, dataSupplier, genome);
 }

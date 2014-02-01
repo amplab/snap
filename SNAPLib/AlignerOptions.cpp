@@ -30,6 +30,7 @@ Revision History:
 #include "Bam.h"
 #include "exit.h"
 
+
 AlignerOptions::AlignerOptions(
     const char* i_commandLine,
     bool forPairedEnd)
@@ -41,7 +42,6 @@ AlignerOptions::AlignerOptions(
     computeError(false),
     bindToProcessors(false),
     ignoreMismatchedIDs(false),
-    outputFileTemplate(NULL),
     clipping(ClipBack),
     sortOutput(false),
     noIndex(false),
@@ -93,7 +93,8 @@ AlignerOptions::usageMessage()
     fprintf(stderr,
         "Usage: \n%s\n"
         "Options:\n"
-        "  -o   filename  output alignments to filename in SAM or BAM format, depending on the file extension\n"
+        "  -o   filename  output alignments to filename in SAM or BAM format, depending on the file extension or\n"
+        "       explicit type specifier (see below)\n"
         "  -d   maximum edit distance allowed per read or pair (default: %d)\n"
         "  -n   number of seeds to use per read\n"
         "  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default: %lf)\n"
@@ -135,9 +136,9 @@ AlignerOptions::usageMessage()
 // not written yet        "  -r   Specify the content of the @RG line in the SAM header.\n"
             ,
             commandLine,
-            maxDist.start,
+            maxDist,
             seedCoverage,
-            maxHits.start,
+            maxHits,
             expansionFactor);
 
     if (extra != NULL) {
@@ -154,7 +155,25 @@ AlignerOptions::usageMessage()
                 "and it would not reload the index between the single and paired alignments.\n",
                 "SNAP doesn't parse the options for later runs until the earlier ones have completed, so if you make\n"
                 "an error in one, it may take a while for you to notice.  So, be careful (or check back shortly after\n"
-                "you think each run will have completed).\n");
+                "you think each run will have completed).\n\n");
+
+    fprintf(stderr, "When specifying an input or output file, you can simply list the filename, in which case\n");
+    fprintf(stderr, "SNAP will infer the type of the file from the file extension (.sam or .bam for example),\n");
+    fprintf(stderr, "or you can explicitly specify the file type by preceeding the filename with one of the\n");
+    fprintf(stderr," following type specifiers (which are case sensitive):\n");
+    fprintf(stderr,"    -fastq\n");
+    fprintf(stderr,"    -compressedFastq\n");
+    fprintf(stderr,"    -sam\n");
+    fprintf(stderr,"    -bam\n");
+    fprintf(stderr,"    -pairedFastq\n");
+    fprintf(stderr,"    -pairedCompressedFastq\n");
+    fprintf(stderr,"    -pairedInterleavedFastq\n");
+    fprintf(stderr,"    -pairedCompressedInterleavedFastq\n");
+    fprintf(stderr,"\nSo, for example, you could specify -bam input.file to make SNAP treat input.file as a BAM file,\n");
+    fprintf(stderr,"even though it would ordinarily assume a FASTQ file for input or a SAM file for output when it\n");
+    fprintf(stderr,"doens't recoginize the file extension.\n");
+    fprintf(stderr,"In order to use a file name that begins with a '-' and not have SNAP treat it as a switch, you must\n");
+    fprintf(stderr,"explicitly specify the type.  But really, that's just confusing and you shouldn't do it.\n");
 }
 
     bool
@@ -168,7 +187,7 @@ AlignerOptions::parse(
 
     if (strcmp(argv[n], "-d") == 0) {
         if (n + 1 < argc) {
-            maxDist = Range::parse(argv[n+1]);
+            maxDist = atoi(argv[n+1]);
             n++;
             return true;
         }
@@ -197,7 +216,7 @@ AlignerOptions::parse(
         }
     } else if (strcmp(argv[n], "-h") == 0) {
         if (n + 1 < argc) {
-            maxHits = Range::parse(argv[n+1]);
+            maxHits = atoi(argv[n+1]);
             n++;
             return true;
         }
@@ -218,11 +237,13 @@ AlignerOptions::parse(
             return true;
         }
     } else if (strcmp(argv[n], "-o") == 0) {
-        if (n + 1 < argc) {
-            outputFileTemplate = argv[n+1];
-            n++;
-            return true;
+        int argsConsumed;
+        if (!SNAPFile::generateFromCommandLine(argv + n + 1, argc - n - 1, &argsConsumed, &outputFile, false, false)) {
+            fprintf(stderr,"Must have a file specifier after -o\n");
+            soft_exit(1);
         }
+        n += argsConsumed;
+        return true;
     } else if (strcmp(argv[n], "-e") == 0) {
         computeError = true;
         return true;
@@ -428,7 +449,7 @@ AlignerOptions::passFilter(
 }
 
     void
-SNAPInput::readHeader(ReaderContext& context)
+SNAPFile::readHeader(ReaderContext& context)
 {
     switch (fileType) {
     case SAMFile:
@@ -440,8 +461,8 @@ SNAPInput::readHeader(ReaderContext& context)
     case FASTQFile:
         return FASTQReader::readHeader(fileName,  context);
         
-    case GZipFASTQFile:
-        return FASTQReader::readHeader(fileName,  context);
+    case InterleavedFASTQFile:
+        return PairedInterleavedFASTQReader::readHeader(fileName,  context);
 
     default:
         _ASSERT(false);
@@ -449,9 +470,9 @@ SNAPInput::readHeader(ReaderContext& context)
 }
 
     PairedReadSupplierGenerator *
-SNAPInput::createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context)
+SNAPFile::createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context)
 {
-    _ASSERT(fileType == SAMFile || fileType == BAMFile || secondFileName != NULL); // Caller's responsibility to check this
+    _ASSERT(fileType == SAMFile || fileType == BAMFile || fileType == InterleavedFASTQFile || secondFileName != NULL); // Caller's responsibility to check this
 
     switch (fileType) {
     case SAMFile:
@@ -461,19 +482,21 @@ SNAPInput::createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnp
         return BAMReader::createPairedReadSupplierGenerator(fileName,numThreads, quicklyDropUnpairedReads, context);
 
     case FASTQFile:
-        return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, context);
-        
-    case GZipFASTQFile:
-        return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, context, true);
+        return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, context, isCompressed);
 
+    case InterleavedFASTQFile:
+        return PairedInterleavedFASTQReader::createPairedReadSupplierGenerator(fileName, numThreads, context, isCompressed);
+        
     default:
         _ASSERT(false);
+        fprintf(stderr,"SNAPFile::createPairedReadSupplierGenerator: invalid file type (%d)\n", fileType);
+        soft_exit(1);
         return NULL;
     }
 }
 
     ReadSupplierGenerator *
-SNAPInput::createReadSupplierGenerator(int numThreads, const ReaderContext& context)
+SNAPFile::createReadSupplierGenerator(int numThreads, const ReaderContext& context)
 {
     _ASSERT(secondFileName == NULL);
     switch (fileType) {
@@ -484,13 +507,116 @@ SNAPInput::createReadSupplierGenerator(int numThreads, const ReaderContext& cont
         return BAMReader::createReadSupplierGenerator(fileName,numThreads, context);
 
     case FASTQFile:
-        return FASTQReader::createReadSupplierGenerator(fileName, numThreads, context);
-        
-    case GZipFASTQFile:
-        return FASTQReader::createReadSupplierGenerator(fileName, numThreads, context, true);
+        return FASTQReader::createReadSupplierGenerator(fileName, numThreads, context, isCompressed);
 
     default:
         _ASSERT(false);
+        fprintf(stderr,"SNAPFile::createReadSupplierGenerator: invalid file type (%d)\n", fileType);
+        soft_exit(1);
         return NULL;
     }
+}
+
+        bool 
+SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsumed, SNAPFile *snapFile, bool paired, bool isInput)
+{
+    snapFile->fileName = NULL;
+    snapFile->secondFileName = NULL;
+    snapFile->isCompressed = false;
+    *argsConsumed = 0;
+
+    if (0 == nArgs) {
+        return false;
+    }
+
+    //
+    // Check to see if this is an explicit file type.
+    //
+    if ('-' == args[0][0]) {
+        if (1 == nArgs) {
+            return false;
+        }
+
+        if (!strcmp(args[0], "-fastq") || !strcmp(args[0], "-compressedFastq")) {
+            if (!isInput) {
+                fprintf(stderr,"%s is not a valid output file type.\n", args[0]);
+                soft_exit(1);
+            }
+
+            if (paired && nArgs < 3) {
+                fprintf(stderr,"Expected a pair of fastQ files, but instead just got one\n");
+                soft_exit(1);
+            }
+
+ 
+            snapFile->isCompressed = !strcmp(args[0], "-compressedFastq");
+
+            if (paired) {
+                snapFile->fileType = FASTQFile;
+                snapFile->secondFileName = args[2];
+                *argsConsumed = 3;
+            } else {
+               snapFile->fileType = FASTQFile;
+               *argsConsumed = 2;
+            }
+        } else if (!strcmp(args[0], "-sam")) {
+            snapFile->fileType = SAMFile;
+            *argsConsumed = 2;
+        } else if (!strcmp(args[0], "-bam")) {
+            snapFile->fileType = BAMFile;
+            snapFile->isCompressed = true;
+            *argsConsumed = 2;
+        } else if (!strcmp(args[0], "-pairedInterleavedFastq") || !strcmp(args[0], "-pairedCompressedInterleavedFastq")) {
+            if (!paired) {
+                fprintf(stderr,"Specified %s for a single-end alignment.  To treat it as single-end, just use ordinary fastq (or compressed fastq, as appropriate)\n", args[0]);
+                soft_exit(1);
+            }
+
+            snapFile->fileType = InterleavedFASTQFile;
+            snapFile->isCompressed = !strcmp(args[0], "-pairedCompressedInterleavedFastq");
+            *argsConsumed = 2;
+        } else {
+            //
+            // starts with '-' but isn't a file-type specifier
+            //
+            return false;
+        }
+        snapFile->fileName = args[1];
+        return true;
+    }
+
+    //
+    // Just a filename.  Infer the type.
+    //
+
+    *argsConsumed = 1;
+    snapFile->fileName = args[0];
+
+    if (util::stringEndsWith(args[0], ".sam")) {
+        snapFile->fileType = SAMFile;
+        snapFile->isCompressed = false;
+    } else if (util::stringEndsWith(args[0], ".bam")) {
+        snapFile->fileType = BAMFile;
+        snapFile->isCompressed = true;
+    } else if (!isInput) {
+        //
+        // No default output file type.
+        //
+        fprintf(stderr,"You specified an output file with name '%s', which doesn't end in .sam or .bam, and doesn't have an explicit type\n", args[0]);
+        fprintf(stderr,"specifier.  There is no default output file type.  Consider doing something like '-o -bam %s'\n", args[0]);
+        soft_exit(1);
+    } else {
+        // 
+        // It's a fastq input file (either by default or because it's got a .fq or .fastq extension, we don't
+        // need to check).  See if it's also compressed.
+        //
+        snapFile->fileType= FASTQFile;
+        if (util::stringEndsWith(args[0], ".gz") || util::stringEndsWith(args[0], ".gzip")) {
+            snapFile->isCompressed = true;
+        } else {
+            snapFile->isCompressed = false;
+        }
+    }
+
+    return true;
 }

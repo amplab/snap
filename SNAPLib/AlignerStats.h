@@ -22,6 +22,8 @@ Revision History:
 
 --*/
 
+#define     TIME_HISTOGRAM  0
+
 #pragma once
 #include "stdafx.h"
 #include "Compat.h"
@@ -53,6 +55,16 @@ struct AlignerStats : public AbstractStats
     static const unsigned maxMapq = 70;
     unsigned mapqHistogram[maxMapq+1];
     unsigned mapqErrors[maxMapq+1];
+
+#if TIME_HISTOGRAM
+    //
+    // Histogram of alignment times.  Time buckets are divided by powers-of-two nanoseconds, so time bucket 0 is 
+    // <= 1 ns, time bucket 10 is <= 1.024 us, etc.  Time bucket 30 is > 1s.
+    //
+    _int64 countByTimeBucket[31];
+    _int64 nanosByTimeBucket[31];
+#endif // TIME_HISTOGRAM
+
 
     static const unsigned maxMaxHits = 50;
     unsigned countOfBestHitsByWeightDepth[maxMaxHits];

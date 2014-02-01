@@ -3,6 +3,7 @@
 #include "exit.h"
 
 using namespace std;
+#if 0
 
 
 Range Range::parse(const char *str)
@@ -37,3 +38,5 @@ Range Range::parse(const char *str)
     }
     return Range(start, end, step);
 }
+
+#endif // 0
