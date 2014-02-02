@@ -871,6 +871,9 @@ SAMFormat::createSAMLine(
     if (fullLength > dataSize) {
         return false;
     }
+    if (result == SecondaryHit) {
+        flags |= SAM_SECONDARY;
+    }
     if (direction == RC) {
       for (unsigned i = 0; i < fullLength; i++) {
         data[fullLength - 1 - i] = COMPLEMENT[read->getUnclippedData()[i]];

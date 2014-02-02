@@ -37,7 +37,7 @@ class Genome;
 
 struct PairedAlignmentResult;
 
-enum AlignmentResult {NotFound, SingleHit, MultipleHits, UnknownAlignment}; // BB: Changed Unknown to UnknownAlignment because of a conflict w/Windows headers
+enum AlignmentResult {NotFound, SingleHit, MultipleHits, SecondaryHit, UnknownAlignment}; // BB: Changed Unknown to UnknownAlignment because of a conflict w/Windows headers
 
 bool isAValidAlignmentResult(AlignmentResult result);
 

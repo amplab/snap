@@ -60,7 +60,8 @@ public:
         unsigned    *genomeLocation,
         Direction   *hitDirection,
         int         *finalScore = NULL,
-        int         *mapq = NULL);
+        int         *mapq = NULL,
+        IdPairVector*secondary = NULL);
         
     //
     // A richer version of AlignRead that allows for searching near a given location.
@@ -74,6 +75,7 @@ public:
         Direction   *hitDirection,
         int         *finalScore,
         int         *mapq,
+        IdPairVector*secondary,
         unsigned     searchRadius,       // If non-zero, constrain search around searchLocation in direction searchRC.
         unsigned     searchLocation,
         Direction    searchDirection);
@@ -265,7 +267,8 @@ private:
         int             *finalScore,
         unsigned        *singleHitGenomeLocation,
         Direction       *hitDirection,
-        int             *mapq);
+        int             *mapq,
+        IdPairVector    *secondary = NULL);
     
     void clearCandidates();
 

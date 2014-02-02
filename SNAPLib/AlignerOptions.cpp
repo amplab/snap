@@ -63,6 +63,7 @@ AlignerOptions::AlignerOptions(
     seedCountSpecified(false),
     numSeedsFromCommandLine(0),
     ignoreSecondaryAlignments(true),
+    outputMultipleAlignments(false),
     preserveClipping(false),
     expansionFactor(1.0)
 {
@@ -128,11 +129,10 @@ AlignerOptions::usageMessage()
         "  --hp Indicates not to use huge pages (this may speed up index load and slow down alignment)\n"
         "  -D   Specifies the extra search depth (the edit distance beyond the best hit that SNAP uses to compute MAPQ).  Default 2\n"
         "  -rg  Specify the default read group if it is not specified in the input file\n"
-        "  -sa  Include reads in SAM or BAM files with the secondary alignment (0x100) flag set; default is to drop them.\n"
+        "  -sa  Include reads from SAM or BAM files with the secondary alignment (0x100) flag set; default is to drop them.\n"
+        "  -om  Output multiple equivalent alignment locations if they exist\n"
         "  -pc  Preserve the soft clipping for reads coming from SAM or BAM files\n"
         "  -xf  Increase expansion factor for BAM and GZ files (default %.1f)\n"
-
-// not written yet        "  -r   Specify the content of the @RG line in the SAM header.\n"
             ,
             commandLine,
             maxDist.start,
@@ -302,6 +302,9 @@ AlignerOptions::parse(
 		return true;
 	} else if (strcmp(argv[n], "-sa") == 0) {
 		ignoreSecondaryAlignments = false;
+		return true;
+	} else if (strcmp(argv[n], "-om") == 0) {
+		outputMultipleAlignments = true;
 		return true;
 	} else if (strcmp(argv[n], "-xf") == 0) {
         if (n + 1 < argc) {

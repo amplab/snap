@@ -62,7 +62,8 @@ public:
     virtual void align(
         Read                  *read0,
         Read                  *read1,
-        PairedAlignmentResult *result) = 0;
+        PairedAlignmentResult *result,
+        IdPairVector          *secondary = NULL) = 0;
 
     virtual void setLandauVishkin(
         LandauVishkin<1>        *landauVishkin,

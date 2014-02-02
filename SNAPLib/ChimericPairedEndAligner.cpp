@@ -84,7 +84,7 @@ extern bool _DumpAlignments;
 #endif // _DEBUG
 
 
-void ChimericPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentResult *result)
+void ChimericPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentResult *result, IdPairVector* secondary)
 {
 	result->status[0] = result->status[1] = NotFound;
      if (read0->getDataLength() < 50 && read1->getDataLength() < 50) {
@@ -96,7 +96,7 @@ void ChimericPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRe
     //
     // Let the LVs use the cache that we built up.
     //
-    underlyingPairedEndAligner->align(read0, read1, result); 
+    underlyingPairedEndAligner->align(read0, read1, result, secondary); 
     _int64 end = timeInNanos();
 
     result->nanosInAlignTogether = end - start;
@@ -124,9 +124,34 @@ void ChimericPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRe
     // chimeric and so we should just align them with the single end aligner and apply a MAPQ penalty.
     //
     Read *read[NUM_READS_PER_PAIR] = {read0, read1};
+    IdPairVector* singleSecondary[2] = {NULL, NULL};
+    if (secondary != NULL) {
+        singleSecondary[0] = new IdPairVector;
+        singleSecondary[1] = new IdPairVector;
+    }
     for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
-        result->status[r] = singleAligner->AlignRead(read[r], &result->location[r], &result->direction[r], &result->score[r], &result->mapq[r]);
+        result->status[r] = singleAligner->AlignRead(read[r], &result->location[r], &result->direction[r], &result->score[r], &result->mapq[r], singleSecondary[r]);
         result->mapq[r] /= 3;   // Heavy quality penalty for chimeric reads
+    }
+    if (secondary != NULL && singleSecondary[0]->size() + singleSecondary[1]->size() > 0) {
+        // loop through all combinations of secondary alignments
+        secondary->clear();
+        for (int i = -1; i < singleSecondary[0]->size(); i++) {
+            for (int j = -1; j < singleSecondary[1]->size(); j++) {
+                if (i > -1 || j > -1) {
+                    if (i == -1) {
+                        secondary->push_back(IdPair(result->location[0], result->direction[0]));
+                    } else {
+                        secondary->push_back((*singleSecondary[0])[i]);
+                    }
+                    if (j == -1) {
+                        secondary->push_back(IdPair(result->location[1], result->direction[1]));
+                    } else {
+                        secondary->push_back((*singleSecondary[1])[j]);
+                    }
+                }
+            }
+        }
     }
     result->fromAlignTogether = false;
     result->alignedAsPair = false;

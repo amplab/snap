@@ -512,6 +512,7 @@ void PairedAlignerContext::runIterationThread()
     // Align the reads.
     Read *read0;
     Read *read1;
+    IdPairVector* secondary = options->outputMultipleAlignments ? new IdPairVector : NULL;
     while (supplier->getNextReadPair(&read0,&read1)) {
         // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
         if (!ignoreMismatchedIDs) {
@@ -539,7 +540,7 @@ void PairedAlignerContext::runIterationThread()
 
         PairedAlignmentResult result;
 
-        aligner->align(read0, read1, &result);
+        aligner->align(read0, read1, &result, secondary);
 
         if (forceSpacing && isOneLocation(result.status[0]) != isOneLocation(result.status[1])) {
             // either both align or neither do
@@ -561,6 +562,24 @@ void PairedAlignerContext::runIterationThread()
         writePair(read0, read1, &result);
 
         updateStats((PairedAlignerStats*) stats, read0, read1, &result);
+
+        if (secondary != NULL && secondary->size() > 0) {
+            // write secondary alignments
+            _ASSERT(secondary->size() % 2 == 0);
+            if (result.status[0] != NotFound) {
+                result.status[0] = SecondaryHit;
+            }
+            if (result.status[1] != NotFound) {
+                result.status[1] = SecondaryHit;
+            }
+            for (IdPairVector::iterator i = secondary->begin(); i != secondary->end(); i += 2) {
+                result.location[0] = i->id;
+                result.direction[0] = i->value;
+                result.location[1] = (i+1)->id;
+                result.direction[1] = (i+1)->value;
+                writePair(read0, read1, &result);
+            }
+        }
     }
 
     stats->lvCalls = aligner->getLocationsScored();

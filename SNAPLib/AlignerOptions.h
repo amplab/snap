@@ -89,7 +89,8 @@ struct AlignerOptions : public AbstractOptions
     bool                useTimingBarrier;
     unsigned            extraSearchDepth;
     const char         *defaultReadGroup; // if not specified in input
-    bool                ignoreSecondaryAlignments;
+    bool                ignoreSecondaryAlignments; // on input, default true
+    bool                outputMultipleAlignments;
     bool                preserveClipping;
     float               expansionFactor;
 

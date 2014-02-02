@@ -62,7 +62,8 @@ public:
     virtual void align(
         Read                  *read0,
         Read                  *read1,
-        PairedAlignmentResult *result);
+        PairedAlignmentResult *result,
+        IdPairVector          *secondary);
 
     static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxBigHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsFromCommandLine, 
                                              double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize);

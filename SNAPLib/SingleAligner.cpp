@@ -194,6 +194,7 @@ SingleAlignerContext::runIterationThread()
 #endif  // _MSC_VER
 
     // Align the reads.
+    IdPairVector* secondary = options->outputMultipleAlignments ? new IdPairVector : NULL;
     Read *read;
     while (NULL != (read = supplier->getNextRead())) {
         stats->totalReads++;
@@ -212,8 +213,8 @@ SingleAlignerContext::runIterationThread()
         Direction direction;
         int score;
         int mapq;
-
-        AlignmentResult result = aligner->AlignRead(read, &location, &direction, &score, &mapq);
+        
+        AlignmentResult result = aligner->AlignRead(read, &location, &direction, &score, &mapq, secondary);
 
         allocator->checkCanaries();
 
@@ -225,6 +226,13 @@ SingleAlignerContext::runIterationThread()
         writeRead(read, result, location, direction, score, mapq);
         
         updateStats(stats, read, result, location, score, mapq, wasError);
+
+        if (secondary != NULL && secondary->size() > 0) {
+            // write secondary alignments
+            for (IdPairVector::iterator i = secondary->begin(); i != secondary->end(); i++) {
+                writeRead(read, SecondaryHit, i->id, i->value, score, mapq);
+            }
+        }
     }
 
     aligner->~BaseAligner(); // This calls the destructor without calling operator delete, allocator owns the memory.
