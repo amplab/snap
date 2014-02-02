@@ -628,13 +628,6 @@ SAMReader::createPairedReadSupplierGenerator(
 
 const FileFormat* FileFormat::SAM[] = { new SAMFormat(false), new SAMFormat(true) };
 
-    bool
-SAMFormat::isFormatOf(
-    const char* filename) const
-{
-    return util::stringEndsWith(filename, ".sam");
-}
-    
     void
 SAMFormat::getSortInfo(
     const Genome* genome,
@@ -691,15 +684,15 @@ SAMFormat::getWriterSupplier(
 {
     DataWriterSupplier* dataSupplier;
     if (options->sortOutput) {
-        size_t len = strlen(options->outputFileTemplate);
+        size_t len = strlen(options->outputFile.fileName);
         // todo: this is going to leak, but there's no easy way to free it, and it's small...
         char* tempFileName = (char*) malloc(5 + len);
-        strcpy(tempFileName, options->outputFileTemplate);
+        strcpy(tempFileName, options->outputFile.fileName);
         strcpy(tempFileName + len, ".tmp");
         dataSupplier = DataWriterSupplier::sorted(this, genome, tempFileName, options->sortMemory * (1ULL << 30),
-            options->numThreads, options->outputFileTemplate, NULL);
+            options->numThreads, options->outputFile.fileName, NULL);
     } else {
-        dataSupplier = DataWriterSupplier::create(options->outputFileTemplate);
+        dataSupplier = DataWriterSupplier::create(options->outputFile.fileName);
     }
     return ReadWriterSupplier::create(this, dataSupplier, genome);
 }

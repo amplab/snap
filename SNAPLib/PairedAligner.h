@@ -39,8 +39,6 @@ protected:
 
     // AlignerContext
     
-    virtual AlignerOptions* parseOptions(int argc, const char **argv, const char *version, unsigned *argsConsumed);
-
     virtual void initialize();
 
     virtual AlignerStats* newStats();
@@ -54,6 +52,8 @@ protected:
     virtual void writePair(Read* read0, Read* read1, PairedAlignmentResult* result);
 
     virtual void updateStats(PairedAlignerStats* stats, Read* read0, Read* read1, PairedAlignmentResult* result);
+
+    bool isPaired() {return true;}
 
 protected:
 

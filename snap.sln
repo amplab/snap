@@ -30,6 +30,11 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wc", "apps\wc\wc.vcxproj", 
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ExtractReads", "apps\ExtractReads\ExtractReads.vcxproj", "{FD52DC05-194B-4BD8-828E-A5679777D6C8}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ToFASTQ", "apps\ToFASTQ\ToFASTQ.vcxproj", "{E58705DB-9DFF-4892-B3BD-C76A352F9F37}"
+	ProjectSection(ProjectDependencies) = postProject
+		{E620DC13-195C-41EF-B33B-8FE7DE9F8ADC} = {E620DC13-195C-41EF-B33B-8FE7DE9F8ADC}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Mixed Platforms = Debug|Mixed Platforms
@@ -103,6 +108,17 @@ Global
 		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Release|Win32.ActiveCfg = Release|Win32
 		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Release|Win32.Build.0 = Release|Win32
 		{FD52DC05-194B-4BD8-828E-A5679777D6C8}.Release|x64.ActiveCfg = Release|x64
+		{E58705DB-9DFF-4892-B3BD-C76A352F9F37}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
+		{E58705DB-9DFF-4892-B3BD-C76A352F9F37}.Debug|Mixed Platforms.Build.0 = Debug|Win32
+		{E58705DB-9DFF-4892-B3BD-C76A352F9F37}.Debug|Win32.ActiveCfg = Debug|Win32
+		{E58705DB-9DFF-4892-B3BD-C76A352F9F37}.Debug|Win32.Build.0 = Debug|Win32
+		{E58705DB-9DFF-4892-B3BD-C76A352F9F37}.Debug|x64.ActiveCfg = Debug|x64
+		{E58705DB-9DFF-4892-B3BD-C76A352F9F37}.Debug|x64.Build.0 = Debug|x64
+		{E58705DB-9DFF-4892-B3BD-C76A352F9F37}.Release|Mixed Platforms.ActiveCfg = Release|Win32
+		{E58705DB-9DFF-4892-B3BD-C76A352F9F37}.Release|Mixed Platforms.Build.0 = Release|Win32
+		{E58705DB-9DFF-4892-B3BD-C76A352F9F37}.Release|Win32.ActiveCfg = Release|Win32
+		{E58705DB-9DFF-4892-B3BD-C76A352F9F37}.Release|Win32.Build.0 = Release|Win32
+		{E58705DB-9DFF-4892-B3BD-C76A352F9F37}.Release|x64.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

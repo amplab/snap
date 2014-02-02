@@ -105,14 +105,14 @@ FASTQReader::reinit(
     // who got the previous range will process; advance past that. This is fairly tricky because
     // there can be '@' signs in the quality string (and maybe even in read names?).
     if (startingOffset != 0) {
-        if (!skipPartialRecord()) {
+        if (!skipPartialRecord(data)) {
             return;
         }
     }
 }
 
     bool
-FASTQReader::skipPartialRecord()
+FASTQReader::skipPartialRecord(DataReader *data)
 {
     //
     // Just assume that a single FASTQ read is smaller than our buffer, so we won't exceed the buffer here.
@@ -207,7 +207,16 @@ FASTQReader::getNextRead(Read *readToUpdate)
             return false;
         }
     }
+    
+    _int64 bytesConsumed = getReadFromBuffer(buffer, validBytes, readToUpdate, fileName, data, context);
 
+    data->advance(bytesConsumed);
+    return true;
+}
+
+    _int64
+FASTQReader::getReadFromBuffer(char *buffer, _int64 validBytes, Read *readToUpdate, const char *fileName, DataReader *data, const ReaderContext &context)
+{
     //
     // Get the next four lines.
     //
@@ -254,8 +263,8 @@ FASTQReader::getNextRead(Read *readToUpdate)
     readToUpdate->clip(context.clipping);
     readToUpdate->setBatch(data->getBatch());
     readToUpdate->setReadGroup(context.defaultReadGroup);
-    data->advance(scan - buffer);
-    return true;
+
+    return scan - buffer;
 
 }
 
@@ -266,6 +275,7 @@ FASTQReader::getNextRead(Read *readToUpdate)
 bool FASTQReader::isValidStartingCharacterForNextLine[FASTQReader::nLinesPerFastqQuery][256];
 
 FASTQReader::_init FASTQReader::_initializer;
+
 
 FASTQReader::_init::_init()
 {
@@ -307,6 +317,131 @@ FASTQReader::_init::_init()
 }
 
 //
+// PairedInterleavedFASTQReader
+//
+
+PairedInterleavedFASTQReader::PairedInterleavedFASTQReader(
+    DataReader* i_data,
+    const ReaderContext& i_context) :
+    data(i_data), context(i_context)
+{
+}
+
+    PairedInterleavedFASTQReader* 
+PairedInterleavedFASTQReader::create(DataSupplier* supplier, const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess,
+                                        const ReaderContext& context)
+{
+    DataReader* data = supplier->getDataReader(2 * maxReadSizeInBytes); // 2* because we read in pairs
+    PairedInterleavedFASTQReader* fastq = new PairedInterleavedFASTQReader(data, context);
+    if (! fastq->init(fileName)) {
+        fprintf(stderr, "Unable to initialize PairedInterleavedFASTQReader for file %s\n", fileName);
+        soft_exit(1);
+    }
+    fastq->reinit(startingOffset, amountOfFileToProcess);
+    return fastq;
+}
+
+
+        bool 
+PairedInterleavedFASTQReader::init(const char* i_fileName)
+{
+    fileName = i_fileName;
+    return data->init(fileName);
+}
+
+        bool 
+PairedInterleavedFASTQReader::getNextReadPair(Read *read0, Read *read1)
+{
+   //
+    // Find the next newline.
+    //
+
+    char* buffer;
+    _int64 validBytes;
+    if (! data->getData(&buffer, &validBytes)) {
+        data->nextBatch();
+        if (! data->getData(&buffer, &validBytes)) {
+            return false;
+        }
+    }
+    
+    _int64 bytesConsumed = FASTQReader::getReadFromBuffer(buffer, validBytes, read0, fileName, data, context);
+    bytesConsumed += FASTQReader::getReadFromBuffer(buffer + bytesConsumed, validBytes - bytesConsumed, read1, fileName, data, context);
+
+    //
+    // Validate the Read IDs.
+    //
+    if (read0->getIdLength() < 2 || memcmp(read0->getId() + read0->getIdLength() - 2, "/1", 2)) {
+        fprintf(stderr,"PairedInterleavedFASTQReader: first read of batch doesn't have ID ending with /1: '%.*s'\n", read0->getIdLength(), read0->getId());
+        soft_exit(1);
+    }
+
+    if (read1->getIdLength() < 2 || memcmp(read1->getId() + read1->getIdLength() - 2, "/2", 2)) {
+        fprintf(stderr,"PairedInterleavedFASTQReader: second read of batch doesn't have ID ending with /2: '%.*s'\n", read1->getIdLength(), read1->getId());
+        soft_exit(1);
+    }
+
+    data->advance(bytesConsumed);
+    return true;
+}
+
+    void 
+PairedInterleavedFASTQReader::reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
+{
+    data->reinit(startingOffset, amountOfFileToProcess);
+    char* buffer;
+    _int64 bytes;
+    if (! data->getData(&buffer, &bytes)) {
+        return;
+    }
+
+    // If we're not at the start of the file, we might have the tail end of a read that someone
+    // who got the previous range will process; advance past that. This is fairly tricky because
+    // there can be '@' signs in the quality string (and maybe even in read names?).
+    if (startingOffset != 0) {
+        if (!FASTQReader::skipPartialRecord(data)) {
+            return;
+        }
+    }
+
+    //
+    // Grab the first read from the buffer, and see if it's /1 or /2.
+    //
+    if (!data->getData(&buffer, &bytes)) {
+        return;
+    }
+
+    Read read;
+    _int64 bytesForFirstRead = FASTQReader::getReadFromBuffer(buffer, bytes, &read, fileName, data, context);
+    if (read.getIdLength() < 2 || read.getId()[read.getIdLength() - 2] != '/' || (read.getId()[read.getIdLength() - 1] != '1' && read.getId()[read.getIdLength() -1] != '2') ) {
+        fprintf(stderr, "PairedInterleavedFASTQReader: read ID doesn't appear to end with /1 or /2, you can't use this as a paired FASTQ file: '%.*s'\n", read.getIdLength(), read.getId());
+        soft_exit(1);
+    }
+
+    if (read.getId()[read.getIdLength()-1] == '2') {
+        //
+        // This is the second half of a pair.  Skip it.
+        //
+        data->advance(bytesForFirstRead);
+
+        //
+        // Now make sure that the next read is /1.
+        //
+        if (!data->getData(&buffer, &bytes)) {
+            fprintf(stderr, "PairedInterleavedFASTQReader: file (or chunk) appears to end with the first half of a read pair, ID: '%.*s'\n", read.getIdLength(), read.getId());
+            soft_exit(1);
+        }
+
+        FASTQReader::getReadFromBuffer(buffer, bytes, &read, fileName, data, context);
+        if (read.getIdLength() < 2 || read.getId()[read.getIdLength()-2] != '/' || read.getId()[read.getIdLength()-1] != '1') {
+            fprintf(stderr,"PairedInterleavedFASTQReader: first read of pair doesn't appear to have an ID that ends in /1: '%.*s'\n", read.getIdLength(), read.getId());
+            soft_exit(1);
+        }
+    }
+}
+
+
+//
 // FASTQWriter
 //
 
@@ -324,29 +459,16 @@ FASTQWriter::Factory(const char *filename)
     bool
 FASTQWriter::writeRead(Read *read)
 {
-    size_t len = __max(read->getIdLength(),read->getDataLength());
-    char *buffer = new char [len + 1];
-    if (NULL == buffer) {
-        fprintf(stderr,"FASTQWriter: out of memory\n");
-        soft_exit(1);
+    size_t len = read->getIdLength() + 2 * (read->getDataLength() + 2) /* @ and + */ + 10 /* crlf + padding + null */;
+
+    if (bufferSize - bufferOffset <= len) {
+        flushBuffer();
     }
 
-    memcpy(buffer,read->getId(),read->getIdLength());
-    buffer[read->getIdLength()] = 0;
-    bool worked = fprintf(outputFile,"@%s\n",buffer) > 0;
-
-    memcpy(buffer,read->getData(),read->getDataLength());
-    buffer[read->getDataLength()] = 0;
-    worked &= fprintf(outputFile,"%s\n+\n",buffer) > 0;
-
-    memcpy(buffer,read->getQuality(), read->getDataLength());   // The FASTQ format spec requires the same number of characters in the quality and data strings
-    // Null is already in place from writing data
-
-    worked &= fprintf(outputFile,"%s\n",buffer) > 0;
-
-    delete [] buffer;    
-
-    return worked;
+    size_t bytesUsed = snprintf(buffer + bufferOffset, bufferSize - bufferOffset, "@%.*s\n%.*s\n+\n%.*s\n", read->getIdLength(), read->getId(), read->getDataLength(), read->getData(), read->getDataLength(), read->getQuality());
+ 
+    bufferOffset += bytesUsed;
+    return true;
 }
 
 
@@ -421,7 +543,7 @@ PairedFASTQReader::createPairedReadSupplierGenerator(
         return queue;
     } else {
         fprintf(stderr,"FASTQ using range splitter\n");
-        return new RangeSplittingPairedReadSupplierGenerator(fileName0,fileName1,false,numThreads,false,context);
+        return new RangeSplittingPairedReadSupplierGenerator(fileName0, fileName1, FASTQFile, numThreads, false, context);
     }
 }
 
@@ -449,3 +571,30 @@ FASTQReader::createReadSupplierGenerator(
     }
 }
     
+        PairedReadSupplierGenerator *
+PairedInterleavedFASTQReader::createPairedReadSupplierGenerator(
+    const char *fileName,
+    int numThreads,
+    const ReaderContext& context,
+    bool gzip)
+{
+    //
+    // Decide whether to use the range splitter or a queue based on whether the files are the same size.
+    //
+    if (gzip) {
+        fprintf(stderr,"PairedInterleavedFASTQ using supplier queue\n");
+        DataSupplier* dataSupplier = DataSupplier::GzipDefault[false];
+        PairedReadReader *reader = PairedInterleavedFASTQReader::create(dataSupplier, fileName,0,QueryFileSize(fileName),context);
+ 
+        if (NULL == reader ) {
+            delete reader;
+            return NULL;
+        }
+        ReadSupplierQueue *queue = new ReadSupplierQueue(reader); 
+        queue->startReaders();
+        return queue;
+    } else {
+        fprintf(stderr,"PairedInterleavedFASTQ using range splitter\n");
+        return new RangeSplittingPairedReadSupplierGenerator(fileName, NULL, InterleavedFASTQFile, numThreads, false, context);
+    }
+}

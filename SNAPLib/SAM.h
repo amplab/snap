@@ -144,8 +144,6 @@ class SAMFormat : public FileFormat
 public:
     SAMFormat(bool i_useM) : useM(i_useM) {}
 
-    virtual bool isFormatOf(const char* filename) const;
-    
     virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* o_location, unsigned* o_readBytes, int* o_refID, int* o_pos) const;
 
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
