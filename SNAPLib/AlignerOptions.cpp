@@ -608,7 +608,10 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
         fprintf(stderr,"You specified an output file with name '%s', which doesn't end in .sam or .bam, and doesn't have an explicit type\n", args[0]);
         fprintf(stderr,"specifier.  There is no default output file type.  Consider doing something like '-o -bam %s'\n", args[0]);
         soft_exit(1);
-    } else {
+    } else if (util::stringEndsWith(args[0], ".fq") || util::stringEndsWith(args[0], ".fastq") ||
+        util::stringEndsWith(args[0], ".fq.gz") || util::stringEndsWith(args[0], ".fastq.gz") ||
+        util::stringEndsWith(args[0], ".fq.gzip") || util::stringEndsWith(args[0], ".fastq.gzip")) {
+
         // 
         // It's a fastq input file (either by default or because it's got a .fq or .fastq extension, we don't
         // need to check).  See if it's also compressed.
@@ -619,6 +622,14 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
         } else {
             snapFile->isCompressed = false;
         }
+
+        if (paired) {
+            snapFile->secondFileName = args[1];
+            *argsConsumed = 2;
+        }
+    } else {
+        fprintf(stderr, "Unknown file type, please specify file type with -fastq, -sam, -bam, etc.\n");
+        soft_exit(1);
     }
 
     return true;
