@@ -434,15 +434,11 @@ void PairedAlignerContext::runIterationThread()
 
         PairedAlignmentResult result;
 
-<<<<<<< HEAD
-        aligner->align(read0, read1, &result, secondary);
-=======
 #if     TIME_HISTOGRAM
         _int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
 
-        aligner->align(read0, read1, &result);
->>>>>>> 832b312034e6ef107d75f4ad256201c98eff4231
+        aligner->align(read0, read1, &result, secondary);
 
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;

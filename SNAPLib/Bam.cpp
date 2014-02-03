@@ -1168,6 +1168,9 @@ private:
     void
 BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
 {
+    if ((lastBam->FLAG & SAM_SECONDARY) != 0) {
+        return; // ignore secondary aliignments; todo: mark them as dups too?
+    }
     unsigned location = lastBam->getLocation(genome);
     unsigned nextLocation = lastBam->getNextLocation(genome);
     unsigned logicalLocation = location != UINT32_MAX ? location : nextLocation;

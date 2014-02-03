@@ -298,6 +298,10 @@ Return Value:
 
     AlignmentResult finalResult;
 
+    if (secondary != NULL) {
+        secondary->clear();
+    }
+
     //
     // A bitvector for used seeds, indexed on the starting location of the seed within the read.
     //
@@ -688,6 +692,7 @@ Arguments:
     hitDirection                            - if we return a single hit, indicates its direction
     candidates                              - in/out the array of candidates that have hit and possibly been scored
     mapq                                    - returns the map quality if we've reached a final result
+    secondary                               - returns secondary alignment locations & directions (optional)
 
 Return Value:
 
