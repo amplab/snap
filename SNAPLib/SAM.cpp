@@ -1060,7 +1060,7 @@ SAMFormat::writeRead(
         
             cigar = computeCigarString(transcriptome, lv, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize, 
                                        clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter, extraBasesClippedAfter,
-                                       read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(), genomeLocation, direction, useM, &editDistance, tokens);        
+                                       read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(), tlocation, direction, useM, &editDistance, tokens);        
         
             //We need the pieceName for conversion             
             const Genome::Contig *transcriptomePiece = transcriptome->getContigAtLocation(tlocation);
@@ -1195,7 +1195,7 @@ SAMFormat::computeCigarString(
 
     const char *reference = genome->getSubstring(genomeLocation, dataLength);
     if (NULL != reference) {
-        *editDistance = lv->computeEditDistanceNormalized(
+        *editDistance = lv->computeEditDistance(
                             reference,
                             dataLength - extraBasesClippedAfter,
                             data,

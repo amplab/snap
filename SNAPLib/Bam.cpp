@@ -732,7 +732,7 @@ BAMFormat::writeRead(
                                        clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter, extraBasesClippedAfter,
                                        read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
                                        tlocation, direction == RC, useM, &editDistance, tokens);
-                                                          
+                                             
             //We need the pieceName for conversion             
             const Genome::Contig *transcriptomePiece = transcriptome->getContigAtLocation(tlocation);
             const char* transcriptomePieceName = transcriptomePiece->name;
@@ -889,7 +889,7 @@ BAMFormat::computeCigarOps(
     const char *reference = genome->getSubstring(genomeLocation, dataLength);
     int used;
     if (NULL != reference) {
-        *editDistance = lv->computeEditDistanceNormalized(
+        *editDistance = lv->computeEditDistance(
                             reference,
                             dataLength - extraBasesClippedAfter,
                             data,

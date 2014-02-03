@@ -501,7 +501,7 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
         }
     }
     
-    /*
+    /*   
     printf("No RC Pairs: %u\n", no_rc.size());
     for (vector<AlignmentPair>::iterator it = no_rc.begin(); it != no_rc.end(); ++it) {
         it->Print();
@@ -522,7 +522,6 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
         it->Print();
     }
     */
-
 
     //Gene pairs always get priority.  If there is a paired end alignment
     if (intragene_pairs.size() > 0) {
@@ -578,7 +577,6 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
         //result->nanosInAlignTogether;
         //result->nLVCalls;
         //result->nSmallHits;
-        
         return 1;
     }
         
