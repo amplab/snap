@@ -432,13 +432,22 @@ FASTQReader::createReadSupplierGenerator(
     const ReaderContext& context,
     bool gzip)
 {
-    if (! gzip) {
+    bool isStdin = !strcmp(fileName,"-");
+    if (! gzip && !isStdin) {
         //
         // Single ended uncompressed FASTQ files can be handled by a range splitter.
         //
         return new RangeSplittingReadSupplierGenerator(fileName, false, numThreads, context);
     } else {
-        ReadReader* fastq = FASTQReader::create(DataSupplier::GzipDefault[false], fileName, 0, QueryFileSize(fileName), context);
+        ReadReader* fastq;
+        //
+        // Because we can only have one stdin reader, we need to use a queue if we're reading from stdin
+        //
+        if (stdin) {
+            fastq = FASTQReader::create(DataSupplier::Stdio[false], fileName, 0, 0, context);
+        } else {
+            fastq = FASTQReader::create(DataSupplier::GzipDefault[false], fileName, 0, QueryFileSize(fileName), context);
+        }
         if (fastq == NULL) {
             delete fastq;
             return NULL;

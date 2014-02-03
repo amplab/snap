@@ -71,7 +71,7 @@ SingleAlignerContext::parseOptions(
 
 	int nInputs = 0;
 	for (int i = 1; i < argc; i++) {
-		if (argv[i][0] == '-' || argv[i][0] == ',' && argv[i][1] == '\0') {
+		if (argv[i][0] == '-' && argv[i][1] != '\0'|| argv[i][0] == ',' && argv[i][1] == '\0') {
 			break;
 		}
 		nInputs++;
@@ -86,7 +86,7 @@ SingleAlignerContext::parseOptions(
 	options->inputs = new SNAPInput[nInputs];
 
 	for (int i = 1; i < argc; i++) {
-		if (argv[i][0] == '-' || argv[i][0] == ',' && argv[i][1] == '\0') {
+		if (argv[i][0] == '-' && argv[i][1] != '\0'|| argv[i][0] == ',' && argv[i][1] == '\0') {
 			break;
 		}
 
