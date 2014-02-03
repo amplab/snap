@@ -875,7 +875,7 @@ GTFGene::GTFGene(string _chr, string _gene_id, unsigned _start, unsigned _end, s
 }
 
 GTFGene::GTFGene(const GTFGene& rhs) 
-    : chr(rhs.chr), gene_id(rhs.gene_id), start(rhs.start), end(rhs.end), gene_name(rhs.gene_name), features(rhs.features), read_count(rhs.read_count)
+    : chr(rhs.chr), gene_id(rhs.gene_id), start(rhs.start), end(rhs.end), gene_name(rhs.gene_name), features(rhs.features), transcript_ids(rhs.transcript_ids), read_count(rhs.read_count)
 {
     InitializeExclusiveLock(&mutex);
 }
@@ -893,6 +893,7 @@ GTFGene& GTFGene::operator=(const GTFGene& rhs) {
         end = rhs.end;
         gene_name = rhs.gene_name;
         features = rhs.features;
+        transcript_ids = rhs.transcript_ids;
         read_count = rhs.read_count;
         InitializeExclusiveLock(&mutex);
     }
