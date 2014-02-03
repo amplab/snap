@@ -39,6 +39,17 @@ int FirstPowerOf2GreaterThanOrEqualTo(int value)
     return 1 << (highestBitSet + 1);
 }
 
+int cheezyLogBase2(_int64 value)
+{
+    int retVal = 0;
+    value /= 2; // Since 2^0 = 1; we'll also define cheezyLogBase2(x) = 0 where x<= 0.
+    while (value > 0) {
+        retVal++;
+        value /= 2;
+    }
+    return retVal;
+}
+
     void
 util::memrevcpy(
     void* dst,

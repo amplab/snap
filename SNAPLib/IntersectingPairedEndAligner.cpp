@@ -131,7 +131,8 @@ IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, uns
 IntersectingPairedEndAligner::align(
         Read                  *read0,
         Read                  *read1,
-        PairedAlignmentResult *result)
+        PairedAlignmentResult *result,
+        IdPairVector          *secondary)
 {
     result->nLVCalls = 0;
     result->nSmallHits = 0;
@@ -658,7 +659,9 @@ IntersectingPairedEndAligner::align(
 
                             bool isBestHit = false;
 
-                            if (pairScore <= maxK && (pairScore < bestPairScore || pairScore == bestPairScore && pairProbability > probabilityOfBestPair)) {
+                            const double EPSILON = 1e-14;
+                            if (pairScore <= maxK && (pairScore < bestPairScore ||
+                                (pairScore == bestPairScore && pairProbability > probabilityOfBestPair + EPSILON))) {
                                 //
                                 // A new best hit.
                                 //
@@ -674,6 +677,19 @@ IntersectingPairedEndAligner::align(
                                 scoreLimit = bestPairScore + extraSearchDepth;
 
                                 isBestHit = true;
+
+                                if (secondary != NULL) {
+                                    secondary->clear();
+                                }
+                            } else if (secondary != NULL && pairScore <= maxK && pairScore == bestPairScore && pairProbability >= probabilityOfBestPair - EPSILON) {
+                                // equivalent to best, add to secondary alignment list
+                                IdPair pairs[2];
+                                pairs[readWithFewerHits].id = candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset;
+                                pairs[readWithMoreHits].id = mate->readWithMoreHitsGenomeLocation + mate->genomeOffset;
+                                pairs[readWithFewerHits].value = setPairDirection[candidate->whichSetPair][readWithFewerHits];
+                                pairs[readWithMoreHits].value = setPairDirection[candidate->whichSetPair][readWithMoreHits];
+                                secondary->push_back(pairs[0]);
+                                secondary->push_back(pairs[1]);
                             }
 
                             probabilityOfAllPairs += pairProbability;

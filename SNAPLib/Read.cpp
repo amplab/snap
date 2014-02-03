@@ -47,3 +47,6 @@ Read::checkIdMatch(
         soft_exit(1);
     }
 }
+
+    
+const unsigned Read::localBufferLength = 3 * MAX_READ_LENGTH;

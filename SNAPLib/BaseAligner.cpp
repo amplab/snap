@@ -201,9 +201,9 @@ Arguments:
 }
 
     AlignmentResult
-BaseAligner::AlignRead(Read *inputRead, unsigned *genomeLocation, Direction *hitDirection, int *finalScore, int *mapq)
+BaseAligner::AlignRead(Read *inputRead, unsigned *genomeLocation, Direction *hitDirection, int *finalScore, int *mapq, IdPairVector* secondary)
 {
-    return AlignRead(inputRead, genomeLocation, hitDirection, finalScore, mapq, 0, 0, FORWARD /*This is ignored when searchRadius = 0*/);
+    return AlignRead(inputRead, genomeLocation, hitDirection, finalScore, mapq, secondary, 0, 0, FORWARD /*This is ignored when searchRadius = 0*/);
 }
 
 
@@ -218,6 +218,7 @@ BaseAligner::AlignRead(
     Direction *hitDirection,
     int       *finalScore,
     int       *mapq,
+    IdPairVector* secondary,
     unsigned   searchRadius,
     unsigned   searchLocation,
     Direction  searchDirection)
@@ -237,6 +238,7 @@ Arguments:
                           is set to indicate whether that hit was on the forward or reverse complement.
     finalScore          - if a single or confident hit, this is the score of the hit (i.e., the LV distance from the read)
     mapq                - return the mapping quality
+    secondary           - optional output vector for secondary alignments
     searchRadius        - if non-zero, constrain the search to this distance around searchLocation, in orientation searchRC
     searchLocation      - location to search around if searchRadius is given
     searchDirection     - whether to search in forward or reverse complement orientation if searchRadius is given
@@ -295,6 +297,10 @@ Return Value:
     }
 
     AlignmentResult finalResult;
+
+    if (secondary != NULL) {
+        secondary->clear();
+    }
 
     //
     // A bitvector for used seeds, indexed on the starting location of the seed within the read.
@@ -420,7 +426,8 @@ Return Value:
                     finalScore,
                     genomeLocation,
                     hitDirection,
-                    mapq);
+                    mapq,
+                    secondary);
 
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates)  at %u\n", *finalScore, *mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, *genomeLocation);
@@ -609,7 +616,8 @@ Return Value:
                         finalScore,
                         genomeLocation,
                         hitDirection,
-                        mapq)) {
+                        mapq,
+                        secondary)) {
 
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", *finalScore, *mapq, *genomeLocation);
@@ -631,7 +639,8 @@ Return Value:
             finalScore,
             genomeLocation,
             hitDirection,
-            mapq);
+            mapq,
+            secondary);
 
 #ifdef  _DEBUG
     if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates) at %u\n", *finalScore, *mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, *genomeLocation);
@@ -648,7 +657,8 @@ BaseAligner::score(
     int             *finalScore,
     unsigned        *singleHitGenomeLocation,
     Direction       *hitDirection,
-    int             *mapq)
+    int             *mapq,
+    IdPairVector    *secondary)
 /*++
 
 Routine Description:
@@ -682,6 +692,7 @@ Arguments:
     hitDirection                            - if we return a single hit, indicates its direction
     candidates                              - in/out the array of candidates that have hit and possibly been scored
     mapq                                    - returns the map quality if we've reached a final result
+    secondary                               - returns secondary alignment locations & directions (optional)
 
 Return Value:
 
@@ -759,7 +770,7 @@ Return Value:
                         *result = MultipleHits;
                     }
                     return true;
-                } else if (bestScore > maxK) {
+                } else {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
                     // report it as NotFound
                     *result = (nSeedsApplied[FORWARD] == 0 && nSeedsApplied[RC] == 0) ? MultipleHits : NotFound;
@@ -992,8 +1003,9 @@ Return Value:
                 elementToScore->matchProbabilityForBestScore = matchProbability;
                 elementToScore->bestScore = score;
 
+                const double EPSILON = 1e-14;
                 if (bestScore > score ||
-                    bestScore == score && matchProbability > probabilityOfBestCandidate) {
+                    (bestScore == score && matchProbability > probabilityOfBestCandidate + EPSILON)) {
 
                     //
                     // We have a new best score.  The old best score becomes the second best score, unless this is the same as the best or second best score
@@ -1018,13 +1030,22 @@ Return Value:
 
                     lvScoresAfterBestFound = 0;
 
-                } else if (secondBestScore > score) {
-                    //
-                    // A new second best.
-                    //
-                    secondBestScore = score;
-                    secondBestScoreGenomeLocation = genomeLocation;
-                    secondBestScoreDirection = elementToScore->direction;
+                    if (secondary != NULL) {
+                        secondary->clear();
+                    }
+
+                } else {
+                    if (secondary != NULL && bestScore == score && matchProbability >= probabilityOfBestCandidate - EPSILON) {
+                        secondary->push_back(IdPair(genomeLocation, elementToScore->direction));
+                    }
+                    if (secondBestScore > score) {
+                        //
+                        // A new second best.
+                        //
+                        secondBestScore = score;
+                        secondBestScoreGenomeLocation = genomeLocation;
+                        secondBestScoreDirection = elementToScore->direction;
+                    }
                 }
 
                 if (stopOnFirstHit && bestScore <= maxK) {

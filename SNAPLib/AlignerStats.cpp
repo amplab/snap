@@ -52,6 +52,12 @@ AlignerStats::AlignerStats(AbstractStats* i_extra)
         probabilityMassByWeightDepth[i] = 0;
     }
 
+#if     TIME_HISTOGRAM
+    for (unsigned i = 0; i < 31; i++) {
+        countByTimeBucket[i] = nanosByTimeBucket[i] = 0;
+    }
+#endif  // TIME_HISTOGRAM
+
 }
 
 AlignerStats::~AlignerStats()
@@ -99,4 +105,10 @@ AlignerStats::add(
         probabilityMassByWeightDepth[i] = other->probabilityMassByWeightDepth[i];
     }
 
+#if TIME_HISTOGRAM
+    for (unsigned i = 0; i < 31; i++) {
+        countByTimeBucket[i] += other->countByTimeBucket[i];
+        nanosByTimeBucket[i] += other->nanosByTimeBucket[i];
+    }
+#endif // TIME_HISTOGRAM
 }

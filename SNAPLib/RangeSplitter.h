@@ -29,6 +29,7 @@ Revision History:
 #include "Compat.h"
 #include "Read.h"
 #include "Genome.h"
+#include "AlignerOptions.h"
 
 //
 // Utility class for letting multiple threads split chunks of a range to process.
@@ -105,7 +106,7 @@ public:
 
 class RangeSplittingPairedReadSupplierGenerator: public PairedReadSupplierGenerator {
 public:
-    RangeSplittingPairedReadSupplierGenerator(const char *i_fileName1, const char *i_fileName2, bool i_isSAM, unsigned numThreads, const ReaderContext& context);
+    RangeSplittingPairedReadSupplierGenerator(const char *i_fileName1, const char *i_fileName2, enum FileType i_fileType, unsigned numThreads, bool i_quicklyDropUnpairedReads, const ReaderContext& context);
     ~RangeSplittingPairedReadSupplierGenerator();
 
     PairedReadSupplier *generateNewPairedReadSupplier();
@@ -114,7 +115,8 @@ private:
     RangeSplitter *splitter;
     char *fileName1;
     char *fileName2;
-    bool isSAM;
+    enum FileType fileType;
     ReaderContext context;
+    bool quicklyDropUnpairedReads;
 };
 

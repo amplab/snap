@@ -540,6 +540,7 @@ void memrevcpy(void* dst, const void* src, size_t bytes);
 } // namespace util
 
 int FirstPowerOf2GreaterThanOrEqualTo(int value);
+int cheezyLogBase2(_int64 value);
 
 //
 // Check if a is within distance of b, coping properly with the varagies of unsigneds.
