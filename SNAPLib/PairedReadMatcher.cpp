@@ -28,6 +28,7 @@ Revision History:
 #include "Read.h"
 #include "DataReader.h"
 #include "VariableSizeMap.h"
+#include "DynamicList.h"
 
 // turn on to debug matching process
 //#define VALIDATE_MATCH
@@ -36,6 +37,7 @@ Revision History:
 //#define STATISTICS
 
 using std::pair;
+
 
 class PairedReadMatcher: public PairedReadReader
 {
@@ -58,11 +60,13 @@ private:
     const bool autoRelease;
     ReadReader* single; // reader for single reads
     typedef _uint64 StringHash;
-    typedef VariableSizeMap<StringHash,Read> ReadMap;
+    typedef VariableSizeMapBig<StringHash,Read> ReadMap;
     DataBatch batch[2]; // 0 = current, 1 = previous
     bool releasedBatch[2];  // whether each batch has been released
     ReadMap unmatched[2]; // read id -> Read
-    typedef VariableSizeMap<StringHash,ReadWithOwnMemory> OverflowMap;
+    DynamicList overflowReads;
+    DynamicListWriter overflowReadWriter;
+    typedef VariableSizeMap<PairedReadMatcher::StringHash,ReadWithOwnMemory*,150,MapNumericHash<PairedReadMatcher::StringHash>,80,0,true> OverflowMap;
     OverflowMap overflow; // read id -> Read
 #ifdef VALIDATE_MATCH
     typedef VariableSizeMap<StringHash,char*> StringMap;
@@ -114,10 +118,13 @@ PairedReadMatcher::PairedReadMatcher(
     autoRelease(i_autoRelease),
     overflowMatched(0),
     quicklyDropUnpairedReads(i_quicklyDropUnpairedReads),
-    nReadsQuicklyDropped(0)
+    nReadsQuicklyDropped(0),
+    overflowReads(1000000000, 1000000, 10000, sizeof(ReadWithOwnMemory)),
+    overflowReadWriter(&overflowReads)
 {
-    unmatched[0] = VariableSizeMap<_uint64,Read>(10000);
-    unmatched[1] = VariableSizeMap<_uint64,Read>(10000);
+    new (&unmatched[0]) VariableSizeMapBig<StringHash,Read>(10000);
+    new (&unmatched[1]) VariableSizeMapBig<StringHash,Read>(10000);
+
     releasedBatch[0] = releasedBatch[1] = false;
     if (! autoRelease) {
         InitializeExclusiveLock(&lock);
@@ -230,7 +237,9 @@ PairedReadMatcher::getNextReadPair(
                 //printf("warning: PairedReadMatcher overflow %d unpaired reads from %d:%d\n", unmatched[1].size(), batch[1].fileID, batch[1].batchID); //!!
                 //char* buf = (char*) alloca(500);
                 for (ReadMap::iterator r = unmatched[1].begin(); r != unmatched[1].end(); r = unmatched[1].next(r)) {
-                    overflow.put(r->key, ReadWithOwnMemory(r->value));
+                    ReadWithOwnMemory* p = (ReadWithOwnMemory*) overflowReadWriter.next();
+                    new (p) ReadWithOwnMemory(r->value);
+                    overflow.put(r->key, p);
 #ifdef VALIDATE_MATCH
                     char*s2 = *strings.tryFind(r->key);
                     int len = strlen(s2);
@@ -246,8 +255,7 @@ PairedReadMatcher::getNextReadPair(
             for (ReadMap::iterator i = unmatched[1].begin(); i != unmatched[1].end(); i = unmatched[1].next(i)) {
                 i->value.dispose();
             }
-            unmatched[1].clear();
-            unmatched[1] = unmatched[0];
+            unmatched[1].assign(&unmatched[0]);
             unmatched[0].clear();
             if (autoRelease) {
                 single->releaseBatch(batch[1]);
@@ -288,8 +296,7 @@ PairedReadMatcher::getNextReadPair(
                     continue;
                 } else {
                     // copy data into read, keep in overflow table indefinitely to preserve memory
-                    *read2 = * (Read*) &found2->value;
-                    _ASSERT(read2->getData()[0]);
+                    *read2 = * (Read*) found2->value;
                     overflowMatched++;
 #ifdef VALIDATE_MATCH
                     overflowUsed.put(key, 1);

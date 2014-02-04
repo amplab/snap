@@ -192,8 +192,9 @@ BAMAlignment::decodeSeq(
     int bases)
 {
     for (int i = 0; i < bases; i++) {
-        int n = (i & 1) ? *nibbles & 0xf : *nibbles >> 4;
-        nibbles += i & 1;
+        int bit = i & 1;
+        int n = (*nibbles >> (bit << 2)) & 0xf; // extract nibble without branches
+        nibbles += bit;
         *o_sequence++ = BAMAlignment::CodeToSeq[n];
     }
 }
@@ -205,8 +206,7 @@ BAMAlignment::decodeQual(
     int bases)
 {
     for (int i = 0; i < bases; i++) {
-        char q = quality[i];
-        o_qual[i] = q < 0 || q >= 64 ? '!' : q + '!';
+        o_qual[i] = CIGAR_QUAL_TO_SAM[((_uint8*)quality)[i]];
     }
 }
 
@@ -417,7 +417,7 @@ BAMReader::getReadFromLine(
         *out_genomeLocation = genomeLocation;
     }
 
-
+    // todo: only convert to text if needed, compute clipping directly from binary
     char* cigarBuffer = getExtra(MAX_SEQ_LENGTH);
     if (! BAMAlignment::decodeCigar(cigarBuffer, MAX_SEQ_LENGTH, bam->cigar(), bam->n_cigar_op)) {
         cigarBuffer = ""; // todo: fail?
@@ -447,7 +447,7 @@ BAMReader::getReadFromLine(
             rnextLen = genome->getContigs()[bam->next_refID].nameLength;
         }
         read->init(bam->read_name(), bam->l_read_name - 1, seqBuffer, qualBuffer, bam->l_seq, genomeLocation, bam->MAPQ, bam->FLAG,
-            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping, rnext, rnextLen, bam->next_pos + 1);
+            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping, rnext, rnextLen, bam->next_pos + 1, true);
         read->setBatch(data->getBatch());
         if (bam->FLAG & SAM_REVERSE_COMPLEMENT) {
             read->becomeRC();

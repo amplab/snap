@@ -1106,7 +1106,7 @@ DecompressDataReader::decompressThread(
     DecompressDataReader* reader = (DecompressDataReader*) context;
     OffsetVector inputs, outputs;
     DecompressManager manager(&inputs, &outputs);
-    ParallelCoworker coworker(min(4, DataSupplier::ThreadCount), false, &manager);
+    ParallelCoworker coworker(min(8, DataSupplier::ThreadCount), false, &manager);
     coworker.start();
     // keep reading & decompressing entries until stopped
     bool stop = false;

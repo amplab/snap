@@ -13,8 +13,9 @@ const char *PACKED_BASE_VALUE = tables.getPackedBaseValue();
 const char *PACKED_QUALITY_MASK = tables.getPackedQualityMask();
 const char *PACKED_VALUE_BASE = tables.getPackedValueBase();
 const unsigned *IS_LOWER_CASE = tables.getIsLowerCase();
-extern const char *TO_UPPER_CASE = tables.getToUpperCase();
+const char *TO_UPPER_CASE = tables.getToUpperCase();
 const char *PACKED_VALUE_BASE_RC = tables.getPackedValueBaseRC();
+const char *CIGAR_QUAL_TO_SAM = tables.getCigarQualToSam();
 
 
 Tables::Tables()
@@ -77,5 +78,9 @@ Tables::Tables()
     for (unsigned i = 0x61; i <= 0x7a; i++) {
         isLowerCase[i] = 1;
         toUpperCase[i] = i - 0x20;
+    }
+
+    for (unsigned i = 0; i < 256; i++) {
+        cigarQualToSam[i] = (i == 0 || i > 63) ? '!' : ' ' + i;
     }
 }

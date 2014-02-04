@@ -169,6 +169,8 @@
     <ClInclude Include="DataReader.h" />
     <ClInclude Include="DataWriter.h" />
     <ClInclude Include="directions.h" />
+    <ClInclude Include="DynamicList.h" />
+    <ClInclude Include="DynamicMemory.h" />
     <ClInclude Include="exit.h" />
     <ClInclude Include="FASTA.h" />
     <ClInclude Include="FASTQ.h" />
@@ -222,6 +224,8 @@
     <ClCompile Include="Compat.cpp" />
     <ClCompile Include="DataReader.cpp" />
     <ClCompile Include="DataWriter.cpp" />
+    <ClCompile Include="DynamicList.cpp" />
+    <ClCompile Include="DynamicMemory.cpp" />
     <ClCompile Include="exit.cpp" />
     <ClCompile Include="FASTA.cpp" />
     <ClCompile Include="FASTQ.cpp" />

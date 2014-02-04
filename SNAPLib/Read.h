@@ -359,7 +359,8 @@ public:
                 unsigned i_originalBackHardClipping,
                 const char *i_originalRNEXT,
                 unsigned i_originalRNEXTLength,
-                unsigned i_originalPNEXT)
+                unsigned i_originalPNEXT,
+                bool allUpper = false)
         {
             id = i_id;
             idLength = i_idLength;
@@ -387,20 +388,22 @@ public:
             //
             // Check for lower case letters in the data, and convert to upper case if there are any.
             //
-            unsigned anyLowerCase = 0;
-            for (unsigned i = 0; i < dataLength; i++) {
-                anyLowerCase |= IS_LOWER_CASE[data[i]];
-            }
-
-            if (anyLowerCase) {
-                assureLocalBufferLargeEnough();
-                upcaseForwardRead = localBuffer;
-                localBufferAllocationOffset += unclippedLength;
+            if (! allUpper) {
+                unsigned anyLowerCase = 0;
                 for (unsigned i = 0; i < dataLength; i++) {
-                    upcaseForwardRead[i] = TO_UPPER_CASE[data[i]];
+                    anyLowerCase |= IS_LOWER_CASE[data[i]];
                 }
 
-                unclippedData = data = upcaseForwardRead;
+                if (anyLowerCase) {
+                    assureLocalBufferLargeEnough();
+                    upcaseForwardRead = localBuffer;
+                    localBufferAllocationOffset += unclippedLength;
+                    for (unsigned i = 0; i < dataLength; i++) {
+                        upcaseForwardRead[i] = TO_UPPER_CASE[data[i]];
+                    }
+
+                    unclippedData = data = upcaseForwardRead;
+                }
             }
         }
 
@@ -734,7 +737,7 @@ private:
 //
 class ReadWithOwnMemory : public Read {
 public:
-    ReadWithOwnMemory() : Read(), dataBuffer(NULL), idBuffer(NULL), qualityBuffer(NULL), auxBuffer(NULL) {}
+    ReadWithOwnMemory() : Read(), extraBuffer(NULL), dataBuffer(NULL), idBuffer(NULL), qualityBuffer(NULL), auxBuffer(NULL) {}
 
     ReadWithOwnMemory(const Read &baseRead) {
         set(baseRead);
@@ -742,20 +745,50 @@ public:
     
     // must manually call destructor!
     void dispose() {
-        delete [] dataBuffer;
-        delete [] idBuffer;
-        delete [] qualityBuffer;
-        delete [] auxBuffer;
+        if (extraBuffer != NULL) {
+            delete [] extraBuffer;
+        }
     }
 
 private:
 
     void set(const Read &baseRead)
     {
-        idBuffer = new char[baseRead.getIdLength()+1];
-        dataBuffer = new char[baseRead.getUnclippedLength()+1];
-        qualityBuffer = new char[baseRead.getUnclippedLength() + 1];
+        // allocate space in ownBuffer if possible; id/aux might need extraBuffer
+        dataBuffer = ownBuffer;
+        int ownBufferUsed = baseRead.getUnclippedLength() + 1;
+        qualityBuffer = ownBuffer + ownBufferUsed;
+        ownBufferUsed += baseRead.getUnclippedLength() + 1;
+        unsigned auxLen;
+        bool auxSam;
+        char* aux = baseRead.getAuxiliaryData(&auxLen, &auxSam);
+        if (baseRead.getIdLength() + 1 < sizeof(ownBuffer) - ownBufferUsed) {
+            idBuffer = ownBuffer + ownBufferUsed;
+            ownBufferUsed += baseRead.getIdLength() + 1;
+        } else {
+            idBuffer = NULL;
+        }
+        if (auxLen > 0 && auxLen < sizeof(ownBuffer) - ownBufferUsed) {
+            auxBuffer = ownBuffer + ownBufferUsed;
+            ownBufferUsed += auxLen;
+        } else {
+            auxBuffer = NULL;
+        }
+        if (idBuffer == NULL || (auxLen > 0 && auxBuffer == NULL)) {
+            extraBuffer = new char[(idBuffer == NULL ? baseRead.getIdLength() + 1 : 0) + auxLen];
+            int extraBufferUsed = 0;
+            if (idBuffer == NULL) {
+                idBuffer = extraBuffer;
+                extraBufferUsed += baseRead.getIdLength() + 1;
+            }
+            if (auxLen > 0 && auxBuffer == NULL) {
+                auxBuffer = extraBuffer + extraBufferUsed;
+            }
+        } else {
+            extraBuffer = NULL;
+        }
 
+        // copy data into buffers
         memcpy(idBuffer,baseRead.getId(),baseRead.getIdLength());
         idBuffer[baseRead.getIdLength()] = '\0';    // Even though it doesn't need to be null terminated, it seems like a good idea.
 
@@ -770,18 +803,18 @@ private:
 
         setReadGroup(baseRead.getReadGroup());
         
-        unsigned auxlen;
-        bool auxsam;
-        char* aux = baseRead.getAuxiliaryData(&auxlen, &auxsam);
-        if (aux != NULL && auxlen > 0) {
-            auxBuffer = new char[auxlen];
-            memcpy(auxBuffer, aux, auxlen);
-            setAuxiliaryData(auxBuffer, auxlen);
+        if (aux != NULL && auxLen > 0) {
+            memcpy(auxBuffer, aux, auxLen);
+            setAuxiliaryData(auxBuffer, auxLen);
         } else {
             setAuxiliaryData(NULL, 0);
         }
     }
         
+    char ownBuffer[MAX_READ_LENGTH * 2 + 1000]; // internal buffer for copied data
+    char* extraBuffer; // extra buffer if internal buffer not big enough
+
+    // should all point into ownBuffer or extraBuffer
     char *idBuffer;
     char *dataBuffer;
     char *qualityBuffer;
