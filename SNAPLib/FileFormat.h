@@ -41,9 +41,6 @@ public:
     // files
     //
 
-    // return true if the filename is for this format based on extension etc.
-    virtual bool isFormatOf(const char* filename) const = 0;
-    
     // reading
     //
 

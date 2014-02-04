@@ -593,7 +593,7 @@ WindowsOverlappedDataReader::waitForBuffer(
 WindowsOverlappedDataReader::addBuffer()
 {
     if (nBuffers == maxBuffers) {
-        //printf("WindowsOverlappedDataReader: addBuffer at limit\n");
+        fprintf(stderr, "WindowsOverlappedDataReader: addBuffer at limit\n");
         return;
     }
     _ASSERT(nBuffers < maxBuffers);

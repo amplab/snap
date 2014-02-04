@@ -376,7 +376,7 @@ int main(int argc, char * argv[])
         readSupplierGenerator = BAMReader::createReadSupplierGenerator(inputFileName, nThreads, readerContext);
     } else {
         SAMReader::readHeader(inputFileName, readerContext);
-       readSupplierGenerator = SAMReader::createReadSupplierGenerator(inputFileName, nThreads, readerContext);
+        readSupplierGenerator = SAMReader::createReadSupplierGenerator(inputFileName, nThreads, readerContext);
     }
 
     CreateSingleWaiterObject(&allThreadsDone);

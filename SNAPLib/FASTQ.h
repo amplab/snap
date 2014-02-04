@@ -40,11 +40,10 @@ public:
 
         virtual ~FASTQReader();
 
-
         static FASTQReader* create(DataSupplier* supplier, const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess,
                                    const ReaderContext& i_context);
 
-        static void readHeader(const char* fileName, ReaderContext& i_context);
+        static void readHeader(const char* fileName, ReaderContext& context);
 
         bool init(const char* i_fileName);
 
@@ -57,14 +56,16 @@ public:
         void releaseBatch(DataBatch batch)
         { data->releaseBatch(batch); }
 
+        static _int64 getReadFromBuffer(char *buffer, _int64 bufferSize, Read *readToUpdate, const char *fileName, DataReader *data, const ReaderContext &context);    // Returns the number of bytes consumed.
+
+        static bool skipPartialRecord(DataReader *data);
+
 private:
-    
-        bool skipPartialRecord();
+
+        static const int maxReadSizeInBytes = MAX_READ_LENGTH * 2 + 1000;    // Read as in sequencer read, not read-from-the-filesystem.  +1000 is for ID string, + line, newlines, etc.
 
         DataReader*         data;
         const char*         fileName;
-
-        static const int maxReadSizeInBytes = MAX_READ_LENGTH * 2 + 1000;    // Read as in sequencer read, not read-from-the-filesystem.
 
         static const unsigned maxLineLen = MAX_READ_LENGTH + 500;
         static const unsigned nLinesPerFastqQuery = 4;
@@ -75,6 +76,44 @@ private:
         public:
             _init();
         } _initializer;
+};
+
+//
+// Get read pairs from an interleaved FASTQ.  It's the same as an ordinary FASTQ reader, except that it has a different version of
+// skipPartialRecord() that goes until it hits the first read in a pair.  It identifies the pairs by looking for /1 and /2 at the
+// end of the read IDs.
+//
+class PairedInterleavedFASTQReader : public PairedReadReader {
+public:
+        PairedInterleavedFASTQReader(DataReader* data, const ReaderContext& i_context);
+
+        virtual ~PairedInterleavedFASTQReader() {}
+
+        static PairedInterleavedFASTQReader* create(DataSupplier* supplier, const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess,
+                                   const ReaderContext& i_context);
+
+        static void readHeader(const char* fileName, ReaderContext& context) {
+            FASTQReader::readHeader(fileName, context);
+        }
+
+        bool init(const char* i_fileName);
+
+        static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName, int numThreads, const ReaderContext& context, bool gzip);
+
+        virtual bool getNextReadPair(Read *read0, Read *read1);
+
+        virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
+        
+        void releaseBatch(DataBatch batch)
+        { data->releaseBatch(batch); }
+
+private:
+
+    static const int maxReadSizeInBytes = MAX_READ_LENGTH * 2 + 1000;    // Read as in sequencer read, not read-from-the-filesystem.  +1000 is for ID string, + line, newlines, etc.
+
+        DataReader*             data;
+        const char*             fileName;
+        const ReaderContext &   context;
 };
 
 class PairedFASTQReader: public PairedReadReader {
@@ -116,19 +155,39 @@ private:
         FASTQReader *readers[2];
 };
 
+
 class FASTQWriter { 
 public:
-        ~FASTQWriter() {fclose(outputFile);};
-
+        ~FASTQWriter() {flushBuffer(); delete [] buffer; fclose(outputFile);}
         static FASTQWriter *Factory(const char *filename);
 
         bool writeRead(Read *readToWrite);
 
 private:
 
-        FASTQWriter(FILE *i_outputFile) : outputFile(i_outputFile) {}
+        void flushBuffer()
+        {
+            if (0 == bufferOffset) {
+                return;
+            }
+            if (1 != fwrite(buffer, bufferOffset, 1, outputFile)) {
+                fprintf(stderr,"FASTQWriter: error writing file\n");
+            }
+
+            bufferOffset = 0;
+        }
+
+        FASTQWriter(FILE *i_outputFile) : outputFile(i_outputFile) {
+            bufferSize = 20 * 1024 * 1024;
+            buffer = new char[bufferSize];
+            bufferOffset = 0;
+        }
 
         FILE *outputFile;
+
+        char *buffer;
+        size_t bufferSize;
+        size_t bufferOffset;
 };
 
 
