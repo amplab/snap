@@ -176,6 +176,13 @@ int LandauVishkinWithCigar::insertSpliceJunctions(
             }
             numCigarOps++;
         }
+        else if (op == 'H') {
+            if (! writeCigar(&cigarNew, &cigarNewLen, length, op, format, final)) {
+                return -2;
+            }
+            numCigarOps++;
+        }
+
         else {
       
             //Get the end of this operator

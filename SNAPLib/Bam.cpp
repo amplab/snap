@@ -922,20 +922,28 @@ BAMFormat::computeCigarOps(
         if (frontHardClipping > 0) {
             *(_uint32*)cigarBuf = (frontHardClipping << 4) | BAMAlignment::CigarToCode['H'];
             used += 4;
+            tokens.insert(tokens.begin(), 'H');
+            tokens.insert(tokens.begin(), frontHardClipping);
         }
         // Add some CIGAR instructions for soft-clipping if we've ignored some bases in the read.
         if (basesClippedBefore + extraBasesClippedBefore > 0) {
             *((_uint32*)cigarBuf + ((frontHardClipping > 0) ? 1 : 0))  = ((basesClippedBefore + extraBasesClippedBefore) << 4) | BAMAlignment::CigarToCode['S'];
             used += 4;
+            tokens.insert(tokens.begin(), 'S');
+            tokens.insert(tokens.begin(), basesClippedBefore + extraBasesClippedBefore);
         }
         if (basesClippedAfter + extraBasesClippedAfter > 0) {
             *(_uint32*)(cigarBuf + used) = ((basesClippedAfter + extraBasesClippedAfter) << 4) | BAMAlignment::CigarToCode['S'];
             used += 4;
+            tokens.push_back(basesClippedAfter + extraBasesClippedAfter);
+            tokens.push_back('S');
         }
 
         if (backHardClipping > 0) {
             *(_uint32*)(cigarBuf + used) = (backHardClipping << 4) | BAMAlignment::CigarToCode['H'];
             used += 4;
+            tokens.push_back(backHardClipping);
+            tokens.push_back('H');
         }
         return used / 4;
     }
