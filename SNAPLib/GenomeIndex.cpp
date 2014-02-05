@@ -639,7 +639,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     fclose(tablesFile);
 
     delete index;
-    if (biasTable != NULL) {
+    if (computeBias && biasTable != NULL) {
         delete[] biasTable;
     }
     
