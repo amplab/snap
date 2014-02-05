@@ -384,6 +384,15 @@ public:
             }
         }
     }
+
+    void exchange(VariableSizeMap& other)
+    {
+        Entry* e = entries; entries = other.entries; other.entries = e;
+        int x = capacity; capacity = other.capacity; other.capacity = x;
+        x = count; count = other.count; other.count = x;
+        x = limit; limit = other.limit; other.limit = x;
+        x = occupied; occupied = other.occupied; other.occupied = x;
+    }
 };
 
 template< typename K, typename V>
