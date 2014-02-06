@@ -57,8 +57,6 @@ public:
 
 private:
 
-    void validateList();
-
     ReadWithOwnMemory* allocOverflowRead();
     void freeOverflowRead(ReadWithOwnMemory* read);
     
@@ -71,9 +69,6 @@ private:
     DataBatch batch[2]; // 0 = current, 1 = previous
     bool releasedBatch[2];  // whether each batch has been released
     ReadMap unmatched[2]; // read id -> Read
-    DynamicList overflowReads;
-    DynamicListWriter overflowReadWriter;
-    ReadWithOwnMemory* overflowReadsFreeList;
     typedef VariableSizeMap<PairedReadMatcher::StringHash,ReadWithOwnMemory*,150,MapNumericHash<PairedReadMatcher::StringHash>,80,0,true> OverflowMap;
     OverflowMap overflow; // read id -> Read
     typedef VariableSizeVector<ReadWithOwnMemory*> OverflowReadVector;
@@ -130,10 +125,7 @@ PairedReadMatcher::PairedReadMatcher(
     overflowMatched(0),
     quicklyDropUnpairedReads(i_quicklyDropUnpairedReads),
     nReadsQuicklyDropped(0),
-    overflowReads(1000000000, 1000000, 10000, sizeof(ReadWithOwnMemory)),
-    overflowReadWriter(&overflowReads),
-    currentBatch(0, 0), allDroppedInCurrentBatch(false),
-    overflowReadsFreeList(NULL)
+    currentBatch(0, 0), allDroppedInCurrentBatch(false)
 {
     new (&unmatched[0]) VariableSizeMap<StringHash,Read>(10000);
     new (&unmatched[1]) VariableSizeMap<StringHash,Read>(10000);
@@ -156,40 +148,17 @@ PairedReadMatcher::~PairedReadMatcher()
     delete single;
 }
 
-void PairedReadMatcher::validateList()
-{
-    for (ReadWithOwnMemory* p = overflowReadsFreeList; p != NULL; p = * (ReadWithOwnMemory**) p) {
-        _ASSERT(p >= (ReadWithOwnMemory*) overflowReads.getBase() &&
-            p < ((ReadWithOwnMemory*) overflowReads.getBase()) + overflowReads.getAllocated());
-    }
-}
-
     ReadWithOwnMemory*
 PairedReadMatcher::allocOverflowRead()
 {
-    validateList();
-    if (overflowReadsFreeList != NULL) {
-        _ASSERT(overflowReadsFreeList >= (ReadWithOwnMemory*) overflowReads.getBase() &&
-            overflowReadsFreeList < ((ReadWithOwnMemory*) overflowReads.getBase()) + overflowReads.getAllocated());
-        ReadWithOwnMemory* result = overflowReadsFreeList;
-        overflowReadsFreeList = * (ReadWithOwnMemory**) overflowReadsFreeList;
-        _ASSERT(overflowReadsFreeList == NULL ||
-            (overflowReadsFreeList >= (ReadWithOwnMemory*) overflowReads.getBase() &&
-            overflowReadsFreeList < ((ReadWithOwnMemory*) overflowReads.getBase()) + overflowReads.getAllocated()));
-        return result;
-    } else {
-        return (ReadWithOwnMemory*) overflowReadWriter.next();
-    }
+    return new ReadWithOwnMemory();
 }
 
     void
 PairedReadMatcher::freeOverflowRead(
     ReadWithOwnMemory* read)
 {
-    memset(read, 0xda, sizeof(*read));
-    * (ReadWithOwnMemory**) read = overflowReadsFreeList;
-    overflowReadsFreeList = read;
-    validateList();
+    delete read;
 }
 
     bool
@@ -298,14 +267,11 @@ PairedReadMatcher::getNextReadPair(
 #endif
             // roll over batches
             if (unmatched[1].size() > 0) {
-                printf("warning: PairedReadMatcher overflow %d unpaired reads from %d:%d\n", unmatched[1].size(), batch[1].fileID, batch[1].batchID); //!!
+                //printf("warning: PairedReadMatcher overflow %d unpaired reads from %d:%d\n", unmatched[1].size(), batch[1].fileID, batch[1].batchID); //!!
                 char* buf = (char*) alloca(500);
                 for (ReadMap::iterator r = unmatched[1].begin(); r != unmatched[1].end(); r = unmatched[1].next(r)) {
-                    validateList();
                     ReadWithOwnMemory* p = allocOverflowRead();
-                    validateList();
                     new (p) ReadWithOwnMemory(r->value);
-                    validateList();
                     overflow.put(r->key, p);
 #ifdef VALIDATE_MATCH
                     char*s2 = *strings.tryFind(r->key);
@@ -335,7 +301,7 @@ PairedReadMatcher::getNextReadPair(
             releasedBatch[0] = false;
             dependents = false;
             if (releaseOverflowBatch && ! autoRelease) {
-                printf("release deferred batch %d:%d\n", overflowBatch.fileID, overflowBatch.batchID);
+                //printf("release deferred batch %d:%d\n", overflowBatch.fileID, overflowBatch.batchID);
                 releaseBatch(overflowBatch);
             }
         }
@@ -345,12 +311,9 @@ PairedReadMatcher::getNextReadPair(
 
         ReadMap::iterator found = unmatched[0].find(key);
         if (found != unmatched[0].end()) {
-                    validateList();
             *read2 = found->value;
-                    validateList();
             //printf("current matched %d:%d->%d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, batch[0].fileID, batch[0].batchID, read2->getId()); //!!
             unmatched[0].erase(found->key);
-                    validateList();
 #ifdef STATISTICS
             currentStats.internalPairs++;
 #endif
@@ -362,28 +325,22 @@ PairedReadMatcher::getNextReadPair(
                 OverflowMap::iterator found2 = overflow.find(key);
                 if (found2 == overflow.end()) {
                     // no match, remember it for later matching
-                    validateList();
                     unmatched[0].put(key, localRead);
-                    validateList();
                     //printf("unmatched add %d:%d %lx\n", batch[0].fileID, batch[0].batchID, key); //!!
                     continue;
                 } else {
                     // copy data into read, remember to release when this batch is released
-                    validateList();
                     new (read2) Read(*(Read*)found2->value);
-                    validateList();
                     overflowMatched++;
                     OverflowReadVector* v;
                     if (! overflowRelease.tryGet(batch[0].asKey(), &v)) {
                         v = new OverflowReadVector();
                         overflowRelease.put(batch[0].asKey(), v);
-                        printf("overflow fetch into %d:%d\n", batch[0].fileID, batch[0].batchID);
+                        //printf("overflow fetch into %d:%d\n", batch[0].fileID, batch[0].batchID);
                     }
-                    validateList();
                     v->push_back(found2->value);
-                    printf("overflow matched %d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, read2->getId()); //!!
+                    //printf("overflow matched %d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, read2->getId()); //!!
                     read2->setBatch(batch[0]); // overwrite batch so both reads have same batch, will track deps instead
-                    validateList();
 #ifdef VALIDATE_MATCH
                     overflowUsed.put(key, 1);
 #endif
@@ -397,7 +354,7 @@ PairedReadMatcher::getNextReadPair(
                 if ((! autoRelease) && (! dependents)) {
                     dependents = true;
                     AcquireExclusiveLock(&lock);
-                    printf("add dependency %d:%d->%d:%d\n", batch[0].fileID, batch[0].batchID, batch[1].fileID, batch[1].batchID);
+                    //printf("add dependency %d:%d->%d:%d\n", batch[0].fileID, batch[0].batchID, batch[1].fileID, batch[1].batchID);
                     forward.put(batch[1].asKey(), batch[0]);
                     backward.put(batch[0].asKey(), batch[1]);
                     ReleaseExclusiveLock(&lock);
@@ -413,9 +370,7 @@ PairedReadMatcher::getNextReadPair(
         }
 
         // found a match
-                    validateList();
         *read1 = localRead;
-        validateList();
         return true;
     }
 }
@@ -427,13 +382,12 @@ PairedReadMatcher::releaseBatch(
     if (autoRelease) {
         return;
     }
-    validateList();
     DataBatch released(0,0);
     for (int i = 0; i < 2; i++) {
       if (batch == this->batch[i]) {
         if (! releasedBatch[i]) {
           releasedBatch[i] = true;
-          printf("releaseBatch %d:%d active %d, deferred\n", batch.fileID, batch.batchID, i);
+          //printf("releaseBatch %d:%d active %d, deferred\n", batch.fileID, batch.batchID, i);
         }
         return;
       }
@@ -447,12 +401,12 @@ PairedReadMatcher::releaseBatch(
         DataBatch* bf = forward.tryFind(b->asKey());
         if (bf == NULL) {
             // batch I depend on already released, can release it now
-            printf("release older batch %d:%d->%d:%d\n", batch.fileID, batch.batchID, b->fileID, b->batchID);
+            //printf("release older batch %d:%d->%d:%d\n", batch.fileID, batch.batchID, b->fileID, b->batchID);
             released = *b;
             single->releaseBatch(released);
         } else {
             // forget dependency so older batch can be released later
-            printf("forget newer batch dependency %d:%d->%d:%d\n", batch.fileID, batch.batchID, b->fileID, b->batchID);
+            //printf("forget newer batch dependency %d:%d->%d:%d\n", batch.fileID, batch.batchID, b->fileID, b->batchID);
             forward.erase(b->asKey());
         }
         backward.erase(key);
@@ -461,17 +415,17 @@ PairedReadMatcher::releaseBatch(
     DataBatch* f = forward.tryFind(key);
     if (f != NULL) {
         // someone depends on me, signal that I've been released
-        printf("keep older batch %d:%d->%d:%d\n", f->fileID, f->batchID, batch.fileID, batch.batchID);
+        //printf("keep older batch %d:%d->%d:%d\n", f->fileID, f->batchID, batch.fileID, batch.batchID);
         forward.erase(key);
     } else {
         // noone depends on me, I can be released
-        printf("release independent batch %d:%d\n", batch.fileID, batch.batchID);
+        //printf("release independent batch %d:%d\n", batch.fileID, batch.batchID);
         released = batch;
         single->releaseBatch(released);
     }
     OverflowReadVector* v;
     if (released != DataBatch(0, 0) && overflowRelease.tryGet(released.asKey(), &v)) {
-        printf("release %d overflow reads from %d:%d\n", v->size(), released.fileID, released.batchID);
+        //printf("release %d overflow reads from %d:%d\n", v->size(), released.fileID, released.batchID);
         for (OverflowReadVector::iterator i = v->begin(); i != v->end(); i++) {
             freeOverflowRead(*i);
         }

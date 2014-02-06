@@ -30,6 +30,13 @@ ipch
 obj
 *.vsp
 *.psess
+*.tlog
+*.lastbuildstate
+*.pch
+*.idb
+*.pdb
+*.log
+*.unsuccessfulbuild
 
 # Compiled binaries
 /snap
