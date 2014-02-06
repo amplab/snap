@@ -2103,7 +2103,7 @@ MemMapDataSupplier::getDataReader(
         // break up into 4Mb batches
         _int64 batch = 4 * 1024 * 1024;
         _int64 extra = (_int64)(batch * extraFactor);
-        return new MemMapDataReader(this, autoRelease ? 2 : ThreadCount + min(ThreadCount * 3 / 4, 3), batch, overflowBytes, extra, autoRelease);
+        return new MemMapDataReader(this, autoRelease ? 3 : (ThreadCount * 2 + 3), batch, overflowBytes, extra, autoRelease);
     }
 }
 
