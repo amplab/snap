@@ -62,7 +62,8 @@ class Aligner {
         unsigned    *genomeLocation,
         Direction   *hitDirection,
         int         *finalScore = NULL,
-        int         *mapq = NULL) = 0;
+        int         *mapq = NULL,
+        IdPairVector*secondary = NULL) = 0;
 
     virtual _int64 getNHashTableLookups() const = 0;
     virtual _int64 getLocationsScored() const  = 0;

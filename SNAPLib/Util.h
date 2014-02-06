@@ -150,7 +150,12 @@ void addIfAbsent(std::vector<T> *v, const T &e)
 
 inline FILE *fopenOrDie(const char *fileName, const char *mode)
 {
+#ifdef _MSC_VER
+    FILE *file = NULL;
+    fopen_s(&file, fileName, mode);
+#else
     FILE *file = fopen(fileName, mode);
+#endif
     if (!file)
         die("Unable to open file '%s'.");
     return file;
@@ -535,6 +540,7 @@ void memrevcpy(void* dst, const void* src, size_t bytes);
 } // namespace util
 
 int FirstPowerOf2GreaterThanOrEqualTo(int value);
+int cheezyLogBase2(_int64 value);
 
 //
 // Check if a is within distance of b, coping properly with the varagies of unsigneds.

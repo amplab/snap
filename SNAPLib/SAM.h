@@ -75,13 +75,13 @@ public:
         
         static PairedReadReader* createPairedReader(const DataSupplier* supplier,
                 const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess, 
-                bool autoRelease, const ReaderContext& context);
+                bool autoRelease, bool quicklyDropUnpairedReads, const ReaderContext& context);
 
         static ReadSupplierGenerator *createReadSupplierGenerator(
             const char *fileName, int numThreads, const ReaderContext& context);
 
         static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(
-            const char *fileName, int numThreads, const ReaderContext& context);
+            const char *fileName, int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context);
         
         // result and fieldLengths must be of size nSAMFields
         static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, _int64 *o_headerSize, bool* o_headerMatchesIndex);
@@ -144,8 +144,6 @@ class SAMFormat : public FileFormat
 public:
     SAMFormat(bool i_useM) : useM(i_useM) {}
 
-    virtual bool isFormatOf(const char* filename) const;
-    
     virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* o_location, unsigned* o_readBytes, int* o_refID, int* o_pos) const;
 
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;

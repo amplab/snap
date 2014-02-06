@@ -231,7 +231,8 @@ PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
     maxSpacing(DEFAULT_MAX_SPACING),
     forceSpacing(false),
     intersectingAlignerMaxHits(DEFAULT_INTERSECTING_ALIGNER_MAX_HITS),
-    maxCandidatePoolSize(DEFAULT_MAX_CANDIDATE_POOL_SIZE)
+    maxCandidatePoolSize(DEFAULT_MAX_CANDIDATE_POOL_SIZE),
+    quicklyDropUnpairedReads(true)
 {
 }
 
@@ -239,12 +240,18 @@ void PairedAlignerOptions::usageMessage()
 {
     AlignerOptions::usageMessage();
     printf(
-        "  -s   min and max spacing to allow between paired ends (default: %d %d)\n"
-        "  -fs  force spacing to lie between min and max\n"
-        "  -H   max hits for intersecting aligner (default: %d)\n"
+        "  -s   min and max spacing to allow between paired ends (default: %d %d).\n"
+        "  -fs  force spacing to lie between min and max.\n"
+        "  -H   max hits for intersecting aligner (default: %d).\n"
         "  -mcp specifies the maximum candidate pool size (An internal data structure. \n"
         "       Only increase this if you get an error message saying to do so. If you're running\n"
-        "       out of memory, you may want to reduce it.  Default: %d)\n",
+        "       out of memory, you may want to reduce it.  Default: %d).\n"
+        "  -ku  Keep unpaired-looking reads in SAM/BAM input.  Ordinarily, if a read doesn't specify\n"
+        "       mate information (RNEXT field is * and/or PNEXT is 0) then the code that matches reads will immdeiately\n"
+        "       discard it.  Specifying this flag may cause large memory usage for some input files,\n"
+        "       but may be necessary for some strangely formatted input files.  You'll also need to specify this\n"
+        "       flag for SAM/BAM files that were aligned by a single-end aligner.\n"
+        ,
         DEFAULT_MIN_SPACING,
         DEFAULT_MAX_SPACING,
         DEFAULT_INTERSECTING_ALIGNER_MAX_HITS,
@@ -272,6 +279,9 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
         return false;
     } else if (strcmp(argv[n], "-fs") == 0) {
         forceSpacing = true;
+        return true;    
+    } else if (strcmp(argv[n], "-ku") == 0) {
+        quicklyDropUnpairedReads = false;
         return true;
     } else if (strcmp(argv[n], "-mcp") == 0) {
         if (n + 1 < argc) {
@@ -289,112 +299,6 @@ PairedAlignerContext::PairedAlignerContext(AlignerExtension* i_extension)
 {
 }
 
-AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_argv, const char *i_version, unsigned *argsConsumed)
-{
-    argc = i_argc;
-    argv = i_argv;
-    version = i_version;
-
-    PairedAlignerOptions* options = new PairedAlignerOptions(
-        "snap paired <index-dir> <input file(s)> <read2.fq> [<options>]\n"
-        "   where <input file(s)> is a list of files to process.  FASTQ\n"
-        "   files must come in pairs, since each read end is in a separate file.");
-    options->extra = extension->extraOptions();
-    if (argc < 2) {
-        fprintf(stderr, "Too few parameters\n");
-        options->usage();
-    }
-
-    options->indexDir = argv[0];
-    //
-    // Figure out how many inputs there are.  All options begin with a '-', so count the
-    // args until we hit an option.  FASTQ files come in pairs, and each pair only counts
-    // as one input.
-    //
-    int nInputs = 0;
-    bool foundFirstHalfOfFASTQ = false;
-    for (int i = 1; i < argc; i++) {
-        if (argv[i][0] == '-' || argv[i][0] == ',' && argv[i][1] == '\0') {
-                break;
-        }
-        
-        if (stringEndsWith(argv[i],".sam") || stringEndsWith(argv[i],".bam")) {
-            if (foundFirstHalfOfFASTQ) {
-                fprintf(stderr,"For the paired aligner, FASTQ files must come in pairs.  I found SAM/BAM file '%s' after first half FASTQ file '%s'.\n",
-                    argv[i],argv[i-1]);
-                soft_exit(1);
-            }
-            nInputs++;
-        } else {
-            if (foundFirstHalfOfFASTQ) {
-                nInputs++;
-            }
-            foundFirstHalfOfFASTQ = !foundFirstHalfOfFASTQ;
-        }
-    }
-    if (foundFirstHalfOfFASTQ) {
-        fprintf(stderr,"For the paired aligner, FASTQ files must come in pairs.  The last one is unmatched.\n");
-        soft_exit(1);
-    }
-    if (0 == nInputs) {
-        fprintf(stderr,"Didn't see any input files\n");
-        options->usage();
-    }
-    //
-    // Now build the input array.
-    //
-    options->nInputs = nInputs;
-    options->inputs = new SNAPInput[nInputs];
-    int i;
-    int whichInput = 0;
-    for (i = 1; i < argc; i++) {
-        if (argv[i][0] == '-') {
-                break;
-        }
-
-        if (stringEndsWith(argv[i],".sam") || stringEndsWith(argv[i],".bam")) {
-            _ASSERT(!foundFirstHalfOfFASTQ);
-            options->inputs[whichInput].fileType = stringEndsWith(argv[i],".sam") ? SAMFile : BAMFile;
-            options->inputs[whichInput].fileName = argv[i];
-            whichInput++;
-        } else {
-            if (foundFirstHalfOfFASTQ) {
-                options->inputs[whichInput].fileType =
-                    stringEndsWith(argv[i],".gzip") || stringEndsWith(argv[i], ".gz") // todo: more suffixes?
-                        ? GZipFASTQFile : FASTQFile;
-                options->inputs[whichInput].secondFileName = argv[i];
-                whichInput++;
-            } else {
-                options->inputs[whichInput].fileName = argv[i];
-            }
-            foundFirstHalfOfFASTQ = !foundFirstHalfOfFASTQ;
-        }
-    }
-
-    for (/* i initialized by previous loop*/; i < argc; i++) {
-        bool done;
-        int oldI = i;
-        if (!options->parse(argv, argc, i, &done)) {
-            fprintf(stderr, "Didn't understand options starting at %s\n", argv[oldI]);
-            options->usage();
-        }
-
-        if (done) {
-            i++;    // For the ',' arg
-            break;
-        }
-    }
-
-    if (options->maxDist.end + options->extraSearchDepth >= MAX_K) {
-        fprintf(stderr,"You specified too large of a maximum edit distance combined with extra search depth.  The must add up to less than %d.\n", MAX_K);
-        fprintf(stderr,"Either reduce their sum, or change MAX_K in LandauVishkin.h and recompile.\n");
-        soft_exit(1);
-    }
-        
-    *argsConsumed = i;
-    return options;
-}
-
 void PairedAlignerContext::initialize()
 {
     AlignerContext::initialize();
@@ -405,6 +309,7 @@ void PairedAlignerContext::initialize()
     maxCandidatePoolSize = options2->maxCandidatePoolSize;
     intersectingAlignerMaxHits = options2->intersectingAlignerMaxHits;
     ignoreMismatchedIDs = options2->ignoreMismatchedIDs;
+    quicklyDropUnpairedReads = options2->quicklyDropUnpairedReads;
 }
 
 AlignerStats* PairedAlignerContext::newStats()
@@ -501,6 +406,7 @@ void PairedAlignerContext::runIterationThread()
     // Align the reads.
     Read *read0;
     Read *read1;
+    IdPairVector* secondary = options->outputMultipleAlignments ? new IdPairVector : NULL;
     while (supplier->getNextReadPair(&read0,&read1)) {
         // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
         if (!ignoreMismatchedIDs) {
@@ -528,28 +434,46 @@ void PairedAlignerContext::runIterationThread()
 
         PairedAlignmentResult result;
 
-        aligner->align(read0, read1, &result);
+#if     TIME_HISTOGRAM
+        _int64 startTime = timeInNanos();
+#endif // TIME_HISTOGRAM
+
+        aligner->align(read0, read1, &result, secondary);
+
+#if     TIME_HISTOGRAM
+        _int64 runTime = timeInNanos() - startTime;
+        int timeBucket = min(30, cheezyLogBase2(runTime));
+        stats->countByTimeBucket[timeBucket]++;
+        stats->nanosByTimeBucket[timeBucket] += runTime;
+#endif // TIME_HISTOGRAM
 
         if (forceSpacing && isOneLocation(result.status[0]) != isOneLocation(result.status[1])) {
             // either both align or neither do
             result.status[0] = result.status[1] = NotFound;
             result.location[0] = result.location[1] = InvalidGenomeLocation;
         }
-#if 0       // cheese
-        if (result.score[0] + result.score[1] >= 5) {
-            double divisor = __max(1,((result.score[0] + result.score[1]) *2.0) / 5.0);
-            if (result.mapq[0] < 50) {
-                result.mapq[0] /= 2;
-            }
-            if (result.mapq[1] < 50) {
-                result.mapq[1] /= 2;
-            }
-        }
-#endif // 0
 
         writePair(read0, read1, &result);
 
         updateStats((PairedAlignerStats*) stats, read0, read1, &result);
+
+        if (secondary != NULL && secondary->size() > 0) {
+            // write secondary alignments
+            _ASSERT(secondary->size() % 2 == 0);
+            if (result.status[0] != NotFound) {
+                result.status[0] = SecondaryHit;
+            }
+            if (result.status[1] != NotFound) {
+                result.status[1] = SecondaryHit;
+            }
+            for (IdPairVector::iterator i = secondary->begin(); i != secondary->end(); i += 2) {
+                result.location[0] = i->id;
+                result.direction[0] = i->value;
+                result.location[1] = (i+1)->id;
+                result.direction[1] = (i+1)->value;
+                writePair(read0, read1, &result);
+            }
+        }
     }
 
     stats->lvCalls = aligner->getLocationsScored();
@@ -622,7 +546,7 @@ PairedAlignerContext::typeSpecificBeginIteration()
         // We've only got one input, so just connect it directly to the consumer.
         //
         options->inputs[0].readHeader(readerContext);
-        pairedReadSupplierGenerator = options->inputs[0].createPairedReadSupplierGenerator(options->numThreads, readerContext);
+        pairedReadSupplierGenerator = options->inputs[0].createPairedReadSupplierGenerator(options->numThreads, quicklyDropUnpairedReads, readerContext);
     } else {
         //
         // We've got multiple inputs, so use a MultiInputReadSupplier to combine the individual inputs.
@@ -632,7 +556,7 @@ PairedAlignerContext::typeSpecificBeginIteration()
         for (int i = 0; i < options->nInputs; i++) {
             ReaderContext context(readerContext);
             options->inputs[i].readHeader(context);
-            generators[i] = options->inputs[i].createPairedReadSupplierGenerator(options->numThreads, context);
+            generators[i] = options->inputs[i].createPairedReadSupplierGenerator(options->numThreads, quicklyDropUnpairedReads, context);
         }
         pairedReadSupplierGenerator = new MultiInputPairedReadSupplierGenerator(options->nInputs,generators);
     }

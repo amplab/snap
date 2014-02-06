@@ -171,10 +171,14 @@ public:
     static DataSupplier* Default[2];
     static DataSupplier* GzipDefault[2];
     static DataSupplier* GzipBamDefault[2];
+    static DataSupplier* GzipStdio[2];
     static DataSupplier* Stdio[2];
 
     // hack: must be set to communicate thread count into suppliers
     static int ThreadCount;
+
+    // hack: global for additional expansion factor
+    static double ExpansionFactor;
 
 protected:
     const bool autoRelease;

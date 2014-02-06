@@ -1,5 +1,7 @@
 #pragma once
 
+#if 0
+
 
 //
 // An inclusive range class, used mostly to iterate over algorithm parameter settings.
@@ -31,3 +33,5 @@ public:
 // Macro for iterating over a Range.
 //
 #define FOR_RANGE(elem, range) for (int elem = range.start; elem <= range.end; elem += range.step)
+
+#endif // 0

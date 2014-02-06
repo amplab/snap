@@ -30,8 +30,10 @@
 #include <windows.h>
 #include <direct.h>
 #include <wincrypt.h>
+#include <fcntl.h>
+#include <io.h>
 
-#else
+#else // _MSC_VER
 
 #include <assert.h>
 #include <fcntl.h>
@@ -46,5 +48,5 @@
 #define MAP_ANONYMOUS MAP_ANON
 #endif
 
-#endif
+#endif // _MSC_VER
 

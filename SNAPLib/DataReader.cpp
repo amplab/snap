@@ -488,6 +488,14 @@ StdioDataReader::init(const char * i_fileName)
         soft_exit(1);
     }
 
+#ifdef _MSC_VER
+    int result = _setmode( _fileno( stdin ), _O_BINARY );  // puts stdin in to non-translated mode, so if we're reading compressed data windows' CRLF processing doesn't destroy it.
+    if (-1 == result) {
+        fprintf(stderr,"StdioDataReader::freopen to change to untranslated mode failed\n");
+        soft_exit(1);
+    }
+#endif // _MSC_VER
+
     return true;
 }
 
@@ -521,13 +529,13 @@ StdioDataReader::readHeader(_int64 *io_headerSize)
     info->next = info->previous = -1;
 
     if (*io_headerSize > bufferSize) {
-        fprintf(stderr,"WindowsOverlappedDataReader: trying to read too many bytes at once: %lld\n", *io_headerSize);
+        fprintf(stderr,"StdioDataReader: trying to read too many bytes at once: %lld\n", *io_headerSize);
         soft_exit(1);
     }
 
     info->validBytes = (unsigned)fread(info->buffer, 1, *io_headerSize, stdin); // Cast OK because of comparison above
     if (info->validBytes == 0) {
-        fprintf(stderr,"StdinDataReader: unable to read any bytes for header\n");
+        fprintf(stderr,"StdioDataReader: unable to read any bytes for header\n");
         return NULL;
     }
 
@@ -878,9 +886,9 @@ WindowsOverlappedDataReader::startIo()
         info->next = -1;
         info->previous = lastBufferForConsumer;
         lastBufferForConsumer = index;
-		if (nextBufferForConsumer == -1) {
-			nextBufferForConsumer = index;
-		}
+	if (nextBufferForConsumer == -1) {
+            nextBufferForConsumer = index;
+	}
 
         if (readOffset.QuadPart >= fileSize.QuadPart || readOffset.QuadPart >= endingOffset) {
             info->validBytes = 0;
@@ -984,7 +992,7 @@ void
 WindowsOverlappedDataReader::addBuffer()
 {
     if (nBuffers == maxBuffers) {
-        //printf("WindowsOverlappedDataReader: addBuffer at limit\n");
+        fprintf(stderr, "WindowsOverlappedDataReader: addBuffer at limit\n");
         return;
     }
     _ASSERT(nBuffers < maxBuffers);
@@ -1266,7 +1274,7 @@ DecompressDataReader::nextBatch()
         return;
     }
     Entry* next = peekReady();
-    _ASSERT(next->state == EntryReady);
+    _ASSERT(next->state == EntryReady && next->decompressed != NULL);
     _int64 copy = old->decompressedValid - max(offset, old->decompressedStart);
     memcpy(next->decompressed + overflowBytes - copy, old->decompressed + old->decompressedValid - copy, copy);
     offset = overflowBytes - copy;
@@ -1355,7 +1363,7 @@ DecompressDataReader::decompress(
     bool multiBlock = true;
     int status;
     do {
-	    if (mode != ContinueMultiBlock || block != 0) {
+            if (mode != ContinueMultiBlock || block != 0) {
             if (heap != NULL) {
                 heap->reset();
             }
@@ -1375,7 +1383,7 @@ DecompressDataReader::decompress(
             soft_exit(1);
         }
         if (status < 0 && zstream->avail_out == 0 && zstream->avail_in > 0) {
-            fprintf(stderr, "GzipDataReader: insufficient decompression buffer space\n");
+            fprintf(stderr, "insufficient decompression buffer space - increase expansion factor, currently -xf %.1f\n", DataSupplier::ExpansionFactor);
             soft_exit(1);
         }
     } while (zstream->avail_in != 0 && (zstream->avail_out != oldAvailOut || zstream->avail_in != oldAvailIn) && mode != SingleBlock);
@@ -1501,10 +1509,9 @@ DecompressDataReader::decompressThread(
             entry->decompressedValid = entry->decompressedStart = reader->overflowBytes;
             DataBatch b = reader->inner->getBatch();
             entry->batch = DataBatch(b.batchID + 1, b.fileID);
-            if (entry->decompressed == NULL) {
-                entry->decompressed = (char*) BigAlloc(reader->totalExtra);
-                entry->allocated = true;
-            }
+            // decompressed buffer is same as next-to-last batch, need to allocate own buffer
+            entry->decompressed = (char*) BigAlloc(reader->totalExtra);
+            entry->allocated = true;
             stop = true;
         } else {
             _int64 ignore;
@@ -1562,7 +1569,7 @@ DecompressDataReader::decompressThreadContinuous(
         bool ok = reader->inner->getData(&entry->compressed, &entry->compressedValid, &entry->compressedStart);
         int index = (int) (entry - reader->entries);
         if (! ok) {
-            //printf("decompressThread #%d %d:%d eof\n", index, reader->inner->getBatch().fileID, reader->inner->getBatch().batchID);
+            //printf("decompressThreadContinuous#%d %d:%d eof\n", index, reader->inner->getBatch().fileID, reader->inner->getBatch().batchID);
             if (! reader->inner->isEOF()) {
                 fprintf(stderr, "error reading file at offset %lld\n", reader->getFileOffset());
                 soft_exit(1);
@@ -1571,10 +1578,8 @@ DecompressDataReader::decompressThreadContinuous(
             entry->decompressedValid = entry->decompressedStart = reader->overflowBytes;
             DataBatch b = reader->inner->getBatch();
             entry->batch = DataBatch(b.batchID + 1, b.fileID);
-            if (entry->decompressed == NULL) {
-                entry->decompressed = (char*) BigAlloc(reader->totalExtra);
-                entry->allocated = true;
-            }
+            entry->decompressed = (char*) BigAlloc(reader->totalExtra);
+            entry->allocated = true;
             stop = true;
         } else {
             // figure out offsets and advance inner data
@@ -1595,7 +1600,7 @@ DecompressDataReader::decompressThreadContinuous(
             first = false;
         }
         // make buffer available for clients & go on to next
-        //printf("decompressThread #%d %d:%d ready\n", index, entry->batch.fileID, entry->batch.batchID);
+        //printf("decompressThreadContinuous#%d %d:%d ready\n", index, entry->batch.fileID, entry->batch.batchID);
         reader->enqueueReady(entry);
     }
     AllowEventWaitersToProceed(&reader->decompressThreadDone);
@@ -1712,14 +1717,15 @@ DecompressDataReaderSupplier::getDataReader(
     double extraFactor)
 {
     // adjust extra factor for compression ratio
-    double totalFactor = MAX_FACTOR * (1.0 + extraFactor);
+    double expand = MAX_FACTOR * DataSupplier::ExpansionFactor;
+    double totalFactor = expand * (1.0 + extraFactor);
     // get inner reader with no overflow since zlib can't deal with it
     DataReader* data = inner->getDataReader(blockSize, totalFactor);
     // compute how many extra bytes are owned by this layer
     char* p;
     _int64 totalExtra;
     data->getExtra(&p, &totalExtra);
-    _int64 mine = (_int64)(totalExtra * MAX_FACTOR / totalFactor);
+    _int64 mine = (_int64)(totalExtra * expand / totalFactor);
     // create new reader, telling it how many bytes it owns
     // it will subtract overflow off the end of each batch
     // batch count here is cheap, so make it high enough that it never hits the limit
@@ -1927,7 +1933,7 @@ MemMapDataReader::reinit(
     }
     _int64 oldAmount = amountOfFileToProcess;
     _int64 startSize = amountOfFileToProcess == 0 ? fileSize - i_startingOffset
-	: max((_int64) 0, min(fileSize - i_startingOffset, amountOfFileToProcess));
+        : max((_int64) 0, min(fileSize - i_startingOffset, amountOfFileToProcess));
     amountOfFileToProcess = max((_int64)0, min(startSize + overflowBytes, fileSize - i_startingOffset));
     currentMap = mapper->createMapping(i_startingOffset, amountOfFileToProcess, &currentMappedBase);
     if (currentMap == NULL) {
@@ -2043,7 +2049,7 @@ MemMapDataReader::releaseBatch(
             extraBatches[i].batchID = 0;
             _ASSERT(extraUsed > 0);
             extraUsed--;
-	    //printf("MemMap: releaseBatch %d:%d = index %d now using %d of %d\n", batch.fileID, batch.batchID, i, extraUsed, batchCount);
+            //printf("MemMap: releaseBatch %d:%d = index %d now using %d of %d\n", batch.fileID, batch.batchID, i, extraUsed, batchCount);
             if (extraUsed == batchCount - 1) {
                 SignalSingleWaiterObject(&waiter);
             }
@@ -2201,8 +2207,13 @@ DataSupplier* DataSupplier::GzipBamDefault[2] =
 DataSupplier* DataSupplier::Stdio[2] = 
 { DataSupplier::StdioSupplier(false), DataSupplier::StdioSupplier(true)};
 
+DataSupplier* DataSupplier::GzipStdio[2] = 
+{ DataSupplier::Gzip(DataSupplier::Stdio[false], false), DataSupplier::Gzip(DataSupplier::Stdio[false], true) };
+
 
 int DataSupplier::ThreadCount = 1;
+
+double DataSupplier::ExpansionFactor = 1.0;
 
 volatile _int64 DataReader::ReadWaitTime = 0;
 volatile _int64 DataReader::ReleaseWaitTime = 0;

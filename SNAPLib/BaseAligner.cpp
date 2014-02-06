@@ -44,8 +44,8 @@ using std::min;
 #endif
 
 BaseAligner::BaseAligner(
-    GenomeIndex    *i_genomeIndex, 
-    unsigned        i_maxHitsToConsider, 
+    GenomeIndex    *i_genomeIndex,
+    unsigned        i_maxHitsToConsider,
     unsigned        i_maxK,
     unsigned        i_maxReadSize,
     unsigned        i_maxSeedsToUseFromCommandLine,
@@ -54,9 +54,9 @@ BaseAligner::BaseAligner(
     LandauVishkin<1>*i_landauVishkin,
     LandauVishkin<-1>*i_reverseLandauVishkin,
     AlignerStats   *i_stats,
-    BigAllocator   *allocator) : 
-        genomeIndex(i_genomeIndex), maxHitsToConsider(i_maxHitsToConsider), maxK(i_maxK), 
-        maxReadSize(i_maxReadSize), maxSeedsToUseFromCommandLine(i_maxSeedsToUseFromCommandLine), 
+    BigAllocator   *allocator) :
+        genomeIndex(i_genomeIndex), maxHitsToConsider(i_maxHitsToConsider), maxK(i_maxK),
+        maxReadSize(i_maxReadSize), maxSeedsToUseFromCommandLine(i_maxSeedsToUseFromCommandLine),
         maxSeedCoverage(i_maxSeedCoverage), readId(-1), extraSearchDepth(i_extraSearchDepth),
         explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats)
 /*++
@@ -81,7 +81,7 @@ Arguments:
     i_stats             - an object into which we report out statistics
     allocator           - an allocator that's used to allocate our local memory.  This is useful for TLB optimization.  If this is supplied, the caller
                           is responsible for deallocation, we'll not deallocate any dynamic memory in our destructor.
- 
+
  --*/
 {
     hadBigAllocator = allocator != NULL;
@@ -128,13 +128,13 @@ Arguments:
 
     candidateHashTablesSize = (maxHitsToConsider * maxSeedsToUse * 3)/2;    // *1.5 for hash table slack
     hashTableElementPoolSize = maxHitsToConsider * maxSeedsToUse * 2 ;   // *2 for RC
-   
+
     if (allocator) {
         rcReadData = (char *)allocator->allocate(sizeof(char) * maxReadSize * 2); // The *2 is to allocte space for the quality string
     } else {
         rcReadData = (char *)BigAlloc(sizeof(char) * maxReadSize * 2); // The *2 is to allocte space for the quality string
     }
- 
+
     rcReadQuality = rcReadData + maxReadSize;
 
     if (allocator) {
@@ -143,6 +143,13 @@ Arguments:
         reversedRead[FORWARD] = (char *)BigAlloc(sizeof(char) * maxReadSize * 4 + 2 * MAX_K); // Times 4 to also hold RC version and genome data (+2MAX_K is for genome data)
     }
 
+    rcReadData = (char *)BigAlloc(sizeof(char) * maxReadSize);
+
+    // treat everything but ACTG like N
+    for (unsigned i = 0; i < 256; i++) {
+        nTable[i] = 1;
+        rcTranslationTable[i] = 'N';
+    }
     reversedRead[RC] = reversedRead[FORWARD] + maxReadSize;
 
     rcTranslationTable['A'] = 'T';
@@ -156,9 +163,9 @@ Arguments:
     nTable['N'] = 1;
 
     if (allocator) {
-        seedUsed = (BYTE *)allocator->allocate((sizeof(BYTE) * (maxReadSize + 7 + 128) / 8));    // +128 to make sure it extends at both 
+        seedUsed = (BYTE *)allocator->allocate((sizeof(BYTE) * (maxReadSize + 7 + 128) / 8));    // +128 to make sure it extends at both
     } else {
-        seedUsed = (BYTE *)BigAlloc((sizeof(BYTE) * (maxReadSize + 7 + 128) / 8));    // +128 to make sure it extends at both  
+        seedUsed = (BYTE *)BigAlloc((sizeof(BYTE) * (maxReadSize + 7 + 128) / 8));    // +128 to make sure it extends at both
     }
 
     seedUsedAsAllocated = seedUsed; // Save the pointer for the delete.
@@ -194,9 +201,9 @@ Arguments:
 }
 
     AlignmentResult
-BaseAligner::AlignRead(Read *inputRead, unsigned *genomeLocation, Direction *hitDirection, int *finalScore, int *mapq)
+BaseAligner::AlignRead(Read *inputRead, unsigned *genomeLocation, Direction *hitDirection, int *finalScore, int *mapq, IdPairVector* secondary)
 {
-    return AlignRead(inputRead, genomeLocation, hitDirection, finalScore, mapq, 0, 0, FORWARD /*This is ignored when searchRadius = 0*/);
+    return AlignRead(inputRead, genomeLocation, hitDirection, finalScore, mapq, secondary, 0, 0, FORWARD /*This is ignored when searchRadius = 0*/);
 }
 
 
@@ -211,9 +218,10 @@ BaseAligner::AlignRead(
     Direction *hitDirection,
     int       *finalScore,
     int       *mapq,
+    IdPairVector* secondary,
     unsigned   searchRadius,
     unsigned   searchLocation,
-    Direction  searchDirection)  
+    Direction  searchDirection)
 /*++
 
 Routine Description:
@@ -230,6 +238,7 @@ Arguments:
                           is set to indicate whether that hit was on the forward or reverse complement.
     finalScore          - if a single or confident hit, this is the score of the hit (i.e., the LV distance from the read)
     mapq                - return the mapping quality
+    secondary           - optional output vector for secondary alignments
     searchRadius        - if non-zero, constrain the search to this distance around searchLocation, in orientation searchRC
     searchLocation      - location to search around if searchRadius is given
     searchDirection     - whether to search in forward or reverse complement orientation if searchRadius is given
@@ -289,6 +298,10 @@ Return Value:
 
     AlignmentResult finalResult;
 
+    if (secondary != NULL) {
+        secondary->clear();
+    }
+
     //
     // A bitvector for used seeds, indexed on the starting location of the seed within the read.
     //
@@ -338,6 +351,24 @@ Return Value:
     if (countOfNs > maxK) {
         nReadsIgnoredBecauseOfTooManyNs++;
         return NotFound;
+    }
+
+    //
+    // Block off any seeds that would contain an N.
+    //
+    if (countOfNs > 0) {
+        int minSeedToConsiderNing = 0; // In English, any word can be verbed. Including, apparently, "N."
+        for (int i = 0; i < (int) readLen; i++) {
+            if (BASE_VALUE[readData[i]] > 3) {
+                int limit = __min(i + seedLen - 1, readLen-1);
+                for (int j = __max(minSeedToConsiderNing, i - (int) seedLen + 1); j <= limit; j++) {
+                    SetSeedUsed(j);
+                }
+                minSeedToConsiderNing = limit+1;
+                if (minSeedToConsiderNing >= (int) readLen)
+                    break;
+            }
+        }
     }
 
     Read reverseComplimentRead;
@@ -395,7 +426,8 @@ Return Value:
                     finalScore,
                     genomeLocation,
                     hitDirection,
-                    mapq);
+                    mapq,
+                    secondary);
 
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates)  at %u\n", *finalScore, *mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, *genomeLocation);
@@ -432,7 +464,7 @@ Return Value:
 
         unsigned        nHits[NUM_DIRECTIONS];      // Number of times this seed hits in the genome
         const unsigned  *hits[NUM_DIRECTIONS];      // The actual hits (of size nHits)
-    
+
         unsigned minSeedLoc = (minLocation < readLen ? 0 : minLocation - readLen);
         unsigned maxSeedLoc = (maxLocation > 0xFFFFFFFF - readLen ? 0xFFFFFFFF : maxLocation + readLen);
         genomeIndex->lookupSeed(seed, minSeedLoc, maxSeedLoc, &nHits[0], &hits[0], &nHits[1], &hits[1]);
@@ -533,10 +565,10 @@ Return Value:
                         unsigned genomeLocationOfThisHit = hits[direction][i] - offset;
                         if (genomeLocationOfThisHit < minLocation ||
                                 genomeLocationOfThisHit > maxLocation ||
-                                hits[direction][i] < offset) { 
+                                hits[direction][i] < offset) {
                             continue;
                         }
-    
+
                         Candidate *candidate = NULL;
                         HashTableElement *hashTableElement;
 
@@ -555,7 +587,7 @@ Return Value:
                 nSeedsApplied[direction]++;
                 appliedEitherSeed = true;
             } // not too popular
-        }   // directions 
+        }   // directions
 
 #if 1
         nextSeedToTest += seedLen;
@@ -570,7 +602,7 @@ Return Value:
         } else {
             nextSeedToTest += seedLen;
         }
-        
+
 #endif // 0
 
 
@@ -584,7 +616,8 @@ Return Value:
                         finalScore,
                         genomeLocation,
                         hitDirection,
-                        mapq)) {
+                        mapq,
+                        secondary)) {
 
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", *finalScore, *mapq, *genomeLocation);
@@ -606,7 +639,8 @@ Return Value:
             finalScore,
             genomeLocation,
             hitDirection,
-            mapq);
+            mapq,
+            secondary);
 
 #ifdef  _DEBUG
     if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates) at %u\n", *finalScore, *mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, *genomeLocation);
@@ -623,7 +657,8 @@ BaseAligner::score(
     int             *finalScore,
     unsigned        *singleHitGenomeLocation,
     Direction       *hitDirection,
-    int             *mapq)
+    int             *mapq,
+    IdPairVector    *secondary)
 /*++
 
 Routine Description:
@@ -657,6 +692,7 @@ Arguments:
     hitDirection                            - if we return a single hit, indicates its direction
     candidates                              - in/out the array of candidates that have hit and possibly been scored
     mapq                                    - returns the map quality if we've reached a final result
+    secondary                               - returns secondary alignment locations & directions (optional)
 
 Return Value:
 
@@ -694,8 +730,8 @@ Return Value:
     //
     for (Direction direction = 0; direction < 2; direction++) {
         if (0 != mostSeedsContainingAnyParticularBase[direction]) {
-            lowestPossibleScoreOfAnyUnseenLocation[direction] = 
-                __max(lowestPossibleScoreOfAnyUnseenLocation[direction], 
+            lowestPossibleScoreOfAnyUnseenLocation[direction] =
+                __max(lowestPossibleScoreOfAnyUnseenLocation[direction],
                       nSeedsApplied[direction] / mostSeedsContainingAnyParticularBase[direction]);
         }
     }
@@ -734,7 +770,7 @@ Return Value:
                         *result = MultipleHits;
                     }
                     return true;
-                } else if (bestScore > maxK) {
+                } else {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
                     // report it as NotFound
                     *result = (nSeedsApplied[FORWARD] == 0 && nSeedsApplied[RC] == 0) ? MultipleHits : NotFound;
@@ -783,7 +819,7 @@ Return Value:
                 elementToScore->candidatesScored |= candidateBit;
                 _ASSERT(candidateIndexToScore < hashTableElementSize);
                 Candidate *candidateToScore = &elementToScore->candidates[candidateIndexToScore];
- 
+
                 unsigned genomeLocation = elementToScore->baseGenomeLocation + candidateIndexToScore;
                 unsigned elementGenomeLocation = genomeLocation;    // This is the genome location prior to any adjustments for indels
 
@@ -794,7 +830,7 @@ Return Value:
                 if (doAlignerPrefetch) {
                     genomeIndex->prefetchGenomeData(genomeLocation);
                 }
- 
+
                 unsigned score = -1;
                 double matchProbability = 0;
                 unsigned readDataLength = read[elementToScore->direction]->getDataLength();
@@ -807,7 +843,7 @@ Return Value:
                     // butt up against the end of the chromosome and have insertions in it.
                     //
                     const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
-                    
+
                     unsigned endOffset;
                     if (genomeLocation + readDataLength + MAX_K >= genome->getCountOfBases()) {
                         endOffset = genome->getCountOfBases();
@@ -828,7 +864,7 @@ Return Value:
                     Read *readToScore = read[elementToScore->direction];
 
                     _ASSERT(candidateToScore->seedOffset + seedLen <= readToScore->getDataLength());
-      
+
                     //
                     // Compute the distance separately in the forward and backward directions from the seed, to allow
                     // arbitrary offsets at both the start and end.
@@ -889,7 +925,7 @@ Return Value:
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("Scored %9u weight %2d limit %d, result %2d %s\n", genomeLocation, elementToScore->weight, scoreLimit, score, elementToScore->direction ? "RC" : "");
 #endif  // _DEBUG
-                
+
                 candidateToScore->score = score;
 
                 nLocationsScored++;
@@ -901,7 +937,7 @@ Return Value:
                 // there are indels in the read.  In this case, we want to treat them as a single aignment, not two different ones (which would
                 // cause us to lose confidence in the alignment, since they're probably both pretty good).
                 //
-                if (anyNearbyCandidatesAlreadyScored) { 
+                if (anyNearbyCandidatesAlreadyScored) {
                     if (elementToScore->bestScore < score || elementToScore->bestScore == score && matchProbability <= elementToScore->matchProbabilityForBestScore) {
                         //
                         // This is a no better mapping than something nearby that we already tried.  Just ignore it.
@@ -942,13 +978,13 @@ Return Value:
                     //
                     if (!(nearbyElement->baseGenomeLocation > elementToScore->baseGenomeLocation && genomeLocation - nearbyElement->bestScoreGenomeLocation <= maxMergeDist ||
                         nearbyElement->baseGenomeLocation < elementToScore->baseGenomeLocation && nearbyElement->bestScoreGenomeLocation <= maxMergeDist)) {
- 
+
                         //
                         // There's a nearby element, but its best score is too far away to merge.  Forget it.
                         //
                         nearbyElement = NULL;
                     }
-                
+
                     if (NULL != nearbyElement) {
                         if (nearbyElement->bestScore < score || nearbyElement->bestScore == score && nearbyElement->matchProbabilityForBestScore >= matchProbability) {
                             //
@@ -966,13 +1002,14 @@ Return Value:
                 probabilityOfAllCandidates += matchProbability; // Don't combine this with the previous line, it introduces floating point unhappiness.
                 elementToScore->matchProbabilityForBestScore = matchProbability;
                 elementToScore->bestScore = score;
-    
+
+                const double EPSILON = 1e-14;
                 if (bestScore > score ||
-                    bestScore == score && matchProbability > probabilityOfBestCandidate) {
+                    (bestScore == score && matchProbability > probabilityOfBestCandidate + EPSILON)) {
 
                     //
                     // We have a new best score.  The old best score becomes the second best score, unless this is the same as the best or second best score
-                    //                    
+                    //
 
                     if ((secondBestScore == UnusedScoreValue || !(secondBestScoreGenomeLocation + maxMergeDist > genomeLocation && secondBestScoreGenomeLocation < genomeLocation + maxMergeDist)) &&
                         (bestScore == UnusedScoreValue || !(bestScoreGenomeLocation + maxMergeDist > genomeLocation && bestScoreGenomeLocation < genomeLocation + maxMergeDist)) &&
@@ -982,7 +1019,7 @@ Return Value:
                             secondBestScoreGenomeLocation = bestScoreGenomeLocation;
                             secondBestScoreDirection = *hitDirection;
                     }
-  
+
                     bestScore = score;
                     probabilityOfBestCandidate = matchProbability;
                     _ASSERT(probabilityOfBestCandidate <= probabilityOfAllCandidates);
@@ -990,18 +1027,27 @@ Return Value:
                     *singleHitGenomeLocation = bestScoreGenomeLocation;
                     *finalScore = bestScore;
                     *hitDirection = elementToScore->direction;
-    
+
                     lvScoresAfterBestFound = 0;
-    
-                } else if (secondBestScore > score) {
-                    //
-                    // A new second best.
-                    //
-                    secondBestScore = score;
-                    secondBestScoreGenomeLocation = genomeLocation;
-                    secondBestScoreDirection = elementToScore->direction;
+
+                    if (secondary != NULL) {
+                        secondary->clear();
+                    }
+
+                } else {
+                    if (secondary != NULL && bestScore == score && matchProbability >= probabilityOfBestCandidate - EPSILON) {
+                        secondary->push_back(IdPair(genomeLocation, elementToScore->direction));
+                    }
+                    if (secondBestScore > score) {
+                        //
+                        // A new second best.
+                        //
+                        secondBestScore = score;
+                        secondBestScoreGenomeLocation = genomeLocation;
+                        secondBestScoreDirection = elementToScore->direction;
+                    }
                 }
- 
+
                 if (stopOnFirstHit && bestScore <= maxK) {
                     // The user just wanted to find reads that match the database within some distance, but doesn't
                     // care about the best alignment. Stop now but mark the result as MultipleHits because we're not
@@ -1024,7 +1070,7 @@ Return Value:
         elementToScore->weightNext->weightPrev = elementToScore->weightPrev;
         elementToScore->weightPrev->weightNext = elementToScore->weightNext;
         elementToScore->weightNext = elementToScore->weightPrev = elementToScore;
-        
+
     } while (forceResult);
 
     return false;
@@ -1046,7 +1092,7 @@ BaseAligner::prefetchHashTableBucket(unsigned genomeLocation, Direction directio
 
     bool
 BaseAligner::findElement(
-    unsigned         genomeLocation, 
+    unsigned         genomeLocation,
     Direction        direction,
     HashTableElement **hashTableElement)
 {
@@ -1076,7 +1122,7 @@ BaseAligner::findElement(
 
     void
 BaseAligner::findCandidate(
-    unsigned         genomeLocation, 
+    unsigned         genomeLocation,
     Direction        direction,
     Candidate        **candidate,
     HashTableElement **hashTableElement)
@@ -1106,7 +1152,7 @@ Arguments:
     _uint64 bitForThisCandidate = (_uint64)1 << lowOrderGenomeLocation;
 
     *candidate = &(*hashTableElement)->candidates[lowOrderGenomeLocation];
- 
+
     (*hashTableElement)->allExtantCandidatesScored = (*hashTableElement)->allExtantCandidatesScored && ((*hashTableElement)->candidatesUsed & bitForThisCandidate);
     (*hashTableElement)->candidatesUsed |= bitForThisCandidate;
 
@@ -1269,7 +1315,7 @@ Return Value:
 
         BigDealloc(candidateHashTable[FORWARD]);
         candidateHashTable[FORWARD] = NULL;
-                
+
         BigDealloc(candidateHashTable[RC]);
         candidateHashTable[RC] = NULL;
 
@@ -1287,7 +1333,7 @@ BaseAligner::HashTableElement::HashTableElement()
 }
 
     void
-BaseAligner::HashTableElement::init() 
+BaseAligner::HashTableElement::init()
 {
     weightNext = NULL;
     weightPrev = NULL;
@@ -1308,7 +1354,7 @@ BaseAligner::Candidate::init()
     score = UnusedScoreValue;
 }
 
-    void 
+    void
 BaseAligner::clearCandidates() {
     hashTableEpoch++;
     nUsedHashTableElements = 0;
@@ -1359,7 +1405,7 @@ BaseAligner::incrementWeight(HashTableElement *element)
 }
 
     size_t
-BaseAligner::getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize, 
+BaseAligner::getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize,
                 unsigned seedLen, unsigned numSeedsFromCommandLine, double seedCoverage)
 {
     unsigned maxSeedsToUse;
@@ -1374,7 +1420,7 @@ BaseAligner::getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsT
     return
         sizeof(_uint64) * 14                                        + // allow for alignment
         sizeof(BaseAligner)                                         + // our own member variables
-        (ownLandauVishkin ? 
+        (ownLandauVishkin ?
             LandauVishkin<>::getBigAllocatorReservation() +
             LandauVishkin<-1>::getBigAllocatorReservation() : 0)    + // our LandauVishkin objects
         sizeof(char) * maxReadSize * 2                              + // rcReadData

@@ -358,8 +358,10 @@ SAMReader::getReadFromLine(
         unsigned originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping;
         Read::computeClippingFromCigar(field[CIGAR], &originalFrontClipping, &originalBackClipping, &originalFrontHardClipping, &originalBackHardClipping);
 
+        unsigned pnext = atoi(field[PNEXT]);    // Relies on atoi() returning 0 for non-numeric fields (i.e., *)
+
         read->init(field[QNAME],(unsigned)fieldLength[QNAME],field[SEQ],field[QUAL],(unsigned)fieldLength[SEQ], genomeLocation, atoi(field[MAPQ]), _flag, 
-            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping);
+            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping, field[RNEXT], (unsigned)fieldLength[RNEXT], pnext);
         //
         // If this read is RC in the SAM file, we need to reverse it here, since Reads are always the sense that they were as they came
         // out of the base caller.
@@ -590,6 +592,7 @@ SAMReader::createPairedReader(
     _int64 startingOffset,
     _int64 amountOfFileToProcess, 
     bool autoRelease,
+    bool quicklyDropUnpairedReads,
     const ReaderContext& context)
 {
 
@@ -597,7 +600,7 @@ SAMReader::createPairedReader(
     if (reader == NULL) {
         return NULL;
     }
-    return PairedReadReader::PairMatcher(reader, autoRelease);
+    return PairedReadReader::PairMatcher(reader, autoRelease, quicklyDropUnpairedReads);
 }
 
 
@@ -605,13 +608,14 @@ SAMReader::createPairedReader(
 SAMReader::createPairedReadSupplierGenerator(
     const char *fileName,
     int numThreads,
+    bool quicklyDropUnpairedReads, 
     const ReaderContext& context)
 {
     //
     // need to use a queue so that pairs can be matched
     //
 
-    PairedReadReader* paired = SAMReader::createPairedReader(DataSupplier::Default[false], fileName, 0, 0, false, context);
+    PairedReadReader* paired = SAMReader::createPairedReader(DataSupplier::Default[false], fileName, 0, 0, false, quicklyDropUnpairedReads, context);
     if (paired == NULL) {
         fprintf(stderr, "Cannot create reader on %s\n", fileName);
         soft_exit(1);
@@ -624,13 +628,6 @@ SAMReader::createPairedReadSupplierGenerator(
 
 const FileFormat* FileFormat::SAM[] = { new SAMFormat(false), new SAMFormat(true) };
 
-    bool
-SAMFormat::isFormatOf(
-    const char* filename) const
-{
-    return util::stringEndsWith(filename, ".sam");
-}
-    
     void
 SAMFormat::getSortInfo(
     const Genome* genome,
@@ -687,15 +684,15 @@ SAMFormat::getWriterSupplier(
 {
     DataWriterSupplier* dataSupplier;
     if (options->sortOutput) {
-        size_t len = strlen(options->outputFileTemplate);
+        size_t len = strlen(options->outputFile.fileName);
         // todo: this is going to leak, but there's no easy way to free it, and it's small...
         char* tempFileName = (char*) malloc(5 + len);
-        strcpy(tempFileName, options->outputFileTemplate);
+        strcpy(tempFileName, options->outputFile.fileName);
         strcpy(tempFileName + len, ".tmp");
         dataSupplier = DataWriterSupplier::sorted(this, genome, tempFileName, options->sortMemory * (1ULL << 30),
-            options->numThreads, options->outputFileTemplate, NULL);
+            options->numThreads, options->outputFile.fileName, NULL);
     } else {
-        dataSupplier = DataWriterSupplier::create(options->outputFileTemplate);
+        dataSupplier = DataWriterSupplier::create(options->outputFile.fileName);
     }
     return ReadWriterSupplier::create(this, dataSupplier, genome);
 }
@@ -866,6 +863,9 @@ SAMFormat::createSAMLine(
     fullLength = read->getUnclippedLength();
     if (fullLength > dataSize) {
         return false;
+    }
+    if (result == SecondaryHit) {
+        flags |= SAM_SECONDARY;
     }
     if (direction == RC) {
       for (unsigned i = 0; i < fullLength; i++) {

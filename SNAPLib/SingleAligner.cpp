@@ -47,81 +47,6 @@ SingleAlignerContext::SingleAlignerContext(AlignerExtension* i_extension)
 {
 }
 
-    AlignerOptions*
-SingleAlignerContext::parseOptions(
-    int i_argc,
-    const char **i_argv,
-    const char *i_version,
-    unsigned *argsConsumed)
-{
-    argc = i_argc;
-    argv = i_argv;
-    version = i_version;
-
-    AlignerOptions* options = new AlignerOptions(
-        "snap single <index-dir> <inputFile(s)> [<options>]"
-		"   where <input file(s)> is a list of files to process.\n",false);
-    options->extra = extension->extraOptions();
-    if (argc < 2) {
-        fprintf(stderr,"Too few parameters\n");
-        options->usage();
-    }
-
-    options->indexDir = argv[0];
-
-	int nInputs = 0;
-	for (int i = 1; i < argc; i++) {
-		if (argv[i][0] == '-' && argv[i][1] != '\0'|| argv[i][0] == ',' && argv[i][1] == '\0') {
-			break;
-		}
-		nInputs++;
-	}
-
-	if (0 == nInputs) {
-        fprintf(stderr,"Didn't see any input files\n");
-		options->usage();
-	}
-
-	options->nInputs = nInputs;
-	options->inputs = new SNAPInput[nInputs];
-
-	for (int i = 1; i < argc; i++) {
-		if (argv[i][0] == '-' && argv[i][1] != '\0'|| argv[i][0] == ',' && argv[i][1] == '\0') {
-			break;
-		}
-
-		options->inputs[i-1].fileName = argv[i];
-		options->inputs[i-1].fileType =
-            stringEndsWith(argv[i],".sam") ? SAMFile :
-            stringEndsWith(argv[i],".bam") ? BAMFile :
-            stringEndsWith(argv[i], ".fastq.gz") || stringEndsWith(argv[i], ".fq.gz") ? GZipFASTQFile :
-            FASTQFile;
-	}
-
-    int n;
-    for (n = 1 + nInputs; n < argc; n++) {
-        bool done;
-        int oldN = n;
-        if (!options->parse(argv, argc, n, &done)) {
-            fprintf(stderr,"Didn't understand options starting at %s\n", argv[oldN]);
-            options->usage();
-        }
-
-        if (done) {
-            n++;    // for the ',' arg
-            break;
-        }
-    }
-    
-    if (options->maxDist.end + options->extraSearchDepth >= MAX_K) {
-        fprintf(stderr,"You specified too large of a maximum edit distance combined with extra search depth.  The must add up to less than %d.\n", MAX_K);
-        fprintf(stderr,"Either reduce their sum, or change MAX_K in LandauVishkin.h and recompile.\n");
-        soft_exit(1);
-    }
-
-    *argsConsumed = n;
-    return options;
-}
 
     AlignerStats*
 SingleAlignerContext::newStats()
@@ -194,6 +119,7 @@ SingleAlignerContext::runIterationThread()
 #endif  // _MSC_VER
 
     // Align the reads.
+    IdPairVector* secondary = options->outputMultipleAlignments ? new IdPairVector : NULL;
     Read *read;
     while (NULL != (read = supplier->getNextRead())) {
         stats->totalReads++;
@@ -213,7 +139,18 @@ SingleAlignerContext::runIterationThread()
         int score;
         int mapq;
 
-        AlignmentResult result = aligner->AlignRead(read, &location, &direction, &score, &mapq);
+#if     TIME_HISTOGRAM
+        _int64 startTime = timeInNanos();
+#endif // TIME_HISTOGRAM
+
+        AlignmentResult result = aligner->AlignRead(read, &location, &direction, &score, &mapq, secondary);
+
+#if     TIME_HISTOGRAM
+        _int64 runTime = timeInNanos() - startTime;
+        int timeBucket = min(30, cheezyLogBase2(runTime));
+        stats->countByTimeBucket[timeBucket]++;
+        stats->nanosByTimeBucket[timeBucket] += runTime;
+#endif // TIME_HISTOGRAM
 
         allocator->checkCanaries();
 
@@ -225,6 +162,13 @@ SingleAlignerContext::runIterationThread()
         writeRead(read, result, location, direction, score, mapq);
         
         updateStats(stats, read, result, location, score, mapq, wasError);
+
+        if (secondary != NULL && secondary->size() > 0) {
+            // write secondary alignments
+            for (IdPairVector::iterator i = secondary->begin(); i != secondary->end(); i++) {
+                writeRead(read, SecondaryHit, i->id, i->value, score, mapq);
+            }
+        }
     }
 
     aligner->~BaseAligner(); // This calls the destructor without calling operator delete, allocator owns the memory.

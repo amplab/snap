@@ -366,7 +366,6 @@ int main(int argc, char * argv[])
     readerContext.clipping = NoClipping;
     readerContext.defaultReadGroup = "";
     readerContext.genome = genome;
-    readerContext.paired = false;
     readerContext.ignoreSecondaryAlignments = true;
 	readerContext.header = NULL;
 	readerContext.headerLength = 0;
@@ -377,7 +376,7 @@ int main(int argc, char * argv[])
         readSupplierGenerator = BAMReader::createReadSupplierGenerator(inputFileName, nThreads, readerContext);
     } else {
         SAMReader::readHeader(inputFileName, readerContext);
-       readSupplierGenerator = SAMReader::createReadSupplierGenerator(inputFileName, nThreads, readerContext);
+        readSupplierGenerator = SAMReader::createReadSupplierGenerator(inputFileName, nThreads, readerContext);
     }
 
     CreateSingleWaiterObject(&allThreadsDone);

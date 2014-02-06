@@ -400,7 +400,8 @@ public:
         
         static ReadSupplierGenerator *createReadSupplierGenerator(const char *fileName, int numThreads, const ReaderContext& context);
         
-        static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName, int numThreads, const ReaderContext& context, int matchBufferSize = 5000);
+        static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName, int numThreads, bool quicklyDropUnmatchedReads, 
+            const ReaderContext& context, int matchBufferSize = 5000);
 
         static const int MAX_SEQ_LENGTH = MAX_READ_LENGTH;
 

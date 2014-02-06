@@ -32,6 +32,7 @@ Revision History:
 #include "BaseAligner.h"
 #include "FileFormat.h"
 #include "exit.h"
+#include "PairedAligner.h"
 
 using std::max;
 using std::min;
@@ -67,7 +68,7 @@ AlignerContext::~AlignerContext()
 
 void AlignerContext::runAlignment(int argc, const char **argv, const char *version, unsigned *argsConsumed)
 {
-    options = parseOptions(argc, argv, version, argsConsumed);
+    options = parseOptions(argc, argv, version, argsConsumed, isPaired());
 #ifdef _MSC_VER
     useTimingBarrier = options->useTimingBarrier;
 #endif
@@ -156,12 +157,8 @@ AlignerContext::initialize()
         index = g_index;
     }
 
-    if (options->outputFileTemplate != NULL && (options->maxHits.size() > 1 || options->maxDist.size() > 1)) {
-        fprintf(stderr, "WARNING: You gave ranges for some parameters, so SAM files will be overwritten!\n");
-    }
-
-    maxHits_ = options->maxHits.start;
-    maxDist_ = options->maxDist.start;
+    maxHits_ = options->maxHits;
+    maxDist_ = options->maxDist;
     extraSearchDepth = options->extraSearchDepth;
 
     if (options->perfFileName != NULL) {
@@ -204,28 +201,34 @@ AlignerContext::beginIteration()
     readerContext.clipping = options->clipping;
     readerContext.defaultReadGroup = options->defaultReadGroup;
     readerContext.genome = index != NULL ? index->getGenome() : NULL;
-    readerContext.paired = false;
     readerContext.ignoreSecondaryAlignments = options->ignoreSecondaryAlignments;
+    DataSupplier::ExpansionFactor = options->expansionFactor;
 	readerContext.header = NULL;
 	readerContext.headerLength = 0;
 	readerContext.headerBytes = 0;
 
     typeSpecificBeginIteration();
 
-    if (NULL != options->outputFileTemplate) {
-        const FileFormat* format = 
-            FileFormat::SAM[0]->isFormatOf(options->outputFileTemplate) ? FileFormat::SAM[options->useM] :
-            FileFormat::BAM[0]->isFormatOf(options->outputFileTemplate) ? FileFormat::BAM[options->useM] :
-            NULL;
-        if (format != NULL) {
-            writerSupplier = format->getWriterSupplier(options, readerContext.genome);
-            ReadWriter* headerWriter = writerSupplier->getWriter();
-            headerWriter->writeHeader(readerContext, options->sortOutput, argc, argv, version, options->rgLineContents);
-            headerWriter->close();
-            delete headerWriter;
+    if (UnknownFileType != options->outputFile.fileType) {
+        const FileFormat* format;
+        if (SAMFile == options->outputFile.fileType) {
+            format = FileFormat::SAM[options->useM];
+        } else if (BAMFile == options->outputFile.fileType) {
+            format = FileFormat::BAM[options->useM];
         } else {
-            fprintf(stderr, "warning: no output, unable to determine format of output file %s\n", options->outputFileTemplate);
+            //
+            // This shouldn't happen, because the command line parser should catch it.  Perhaps you've added a new output file format and just
+            // forgoten to add it here.
+            //
+            fprintf(stderr, "AlignerContext::beginIteration(): unknown file type %d for '%s'\n", options->outputFile.fileType, options->outputFile.fileName);
+            soft_exit(1);
         }
+
+        writerSupplier = format->getWriterSupplier(options, readerContext.genome);
+        ReadWriter* headerWriter = writerSupplier->getWriter();
+        headerWriter->writeHeader(readerContext, options->sortOutput, argc, argv, version, options->rgLineContents);
+        headerWriter->close();
+        delete headerWriter;
     }
 }
 
@@ -246,15 +249,11 @@ AlignerContext::finishIteration()
     bool
 AlignerContext::nextIteration()
 {
+    //
+    // This thing is a vestage of when we used to allow parameter ranges.
+    //
     typeSpecificNextIteration();
-    if ((maxDist_ += options->maxDist.step) > options->maxDist.end) {
-        maxDist_ = options->maxDist.start;
-        if ((maxHits_ += options->maxHits.step) > options->maxHits.end) {
-            return false;
-        }
-    }
-
-    return true;
+    return false;
 }
 
     void
@@ -308,6 +307,14 @@ AlignerContext::printStats()
         }
     }
 
+#if TIME_HISTOGRAM
+    printf("Per-read alignment time histogram:\nlog2(ns)\tcount\ttotal time (ns)\n");
+    for (int i = 0; i < 31; i++) {
+        printf("%d\t%lld\t%lld\n", i, stats->countByTimeBucket[i], stats->nanosByTimeBucket[i]);
+    }
+#endif // TIME_HISTOGRAM
+
+
     stats->printHistograms(stdout);
 
 #ifdef  TIME_STRING_DISTANCE
@@ -321,3 +328,113 @@ AlignerContext::printStats()
     extension->printStats();
 }
 
+
+
+        AlignerOptions*
+AlignerContext::parseOptions(
+    int i_argc,
+    const char **i_argv,
+    const char *i_version,
+    unsigned *argsConsumed,
+    bool      paired)
+{
+    argc = i_argc;
+    argv = i_argv;
+    version = i_version;
+
+    AlignerOptions *options;
+
+    if (paired) {
+        options = new PairedAlignerOptions("snap paired <index-dir> <inputFile(s)> [<options>] where <input file(s)> is a list of files to process.\n");
+    } else {
+        options = new AlignerOptions("snap single <index-dir> <inputFile(s)> [<options>] where <input file(s)> is a list of files to process.\n");
+    }
+
+    options->extra = extension->extraOptions();
+    if (argc < 2) {
+        fprintf(stderr,"Too few parameters\n");
+        options->usage();
+    }
+
+    options->indexDir = argv[0];
+    struct InputList {
+        SNAPFile    input;
+        InputList*  next;
+    } *inputList = NULL;
+
+    //
+    // Now build the input array and parse options.
+    //
+
+    bool inputFromStdio = false;
+
+    int i;
+    int nInputs = 0;
+    for (i = 1; i < argc; i++) {
+
+        if (',' == argv[i][0]  && '\0' == argv[i][1]) {
+            i++;    // Consume the comma
+            break;
+        }
+
+        int argsConsumed;
+        SNAPFile input;
+        if (SNAPFile::generateFromCommandLine(argv+i, argc-i, &argsConsumed, &input, paired, true)) {
+            if (input.isStdio) {
+                if (inputFromStdio) {
+                    fprintf(stderr,"You specified stdin ('-') specified for more than one input, which isn't permitted.\n");
+                    soft_exit(1);
+                } else {
+                    inputFromStdio = true;
+                }
+            }
+
+            InputList *listEntry = new InputList;
+            listEntry->input = input;
+            listEntry->next = inputList;
+            inputList = listEntry;      // Yes, this puts them in backwards.  a) We reverse them at the end and b) it doesn't matter anyway
+
+            nInputs++;
+            i += argsConsumed - 1;
+            continue;
+        }
+
+        bool done;
+        int oldI = i;
+        if (!options->parse(argv, argc, i, &done)) {
+            fprintf(stderr, "Didn't understand options starting at %s\n", argv[oldI]);
+            options->usage();
+        }
+
+        if (done) {
+            i++;    // For the ',' arg
+            break;
+        }
+    }
+
+    if (0 == nInputs) {
+        fprintf(stderr,"No input files specified.\n");
+        soft_exit(1);
+    }
+
+    if (options->maxDist + options->extraSearchDepth >= MAX_K) {
+        fprintf(stderr,"You specified too large of a maximum edit distance combined with extra search depth.  The must add up to less than %d.\n", MAX_K);
+        fprintf(stderr,"Either reduce their sum, or change MAX_K in LandauVishkin.h and recompile.\n");
+        soft_exit(1);
+    }
+
+    options->nInputs = nInputs;
+    options->inputs = new SNAPFile[nInputs];
+    for (int j = nInputs - 1; j >= 0; j --) {
+        // The loop runs backwards so that we reverse the reversing that we did when we built it.  Not that it matters anyway.
+        _ASSERT(NULL != inputList);
+        options->inputs[j] = inputList->input;
+        InputList *dying = inputList;
+        inputList = inputList->next;
+        delete dying;
+    }
+    _ASSERT(NULL == inputList);
+
+    *argsConsumed = i;
+    return options;
+}

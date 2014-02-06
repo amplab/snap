@@ -82,6 +82,12 @@ int getpagesize();
 #include <sched.h>  // For sched_setaffinity
 #endif
 
+#ifndef __APPLE__
+#include <xmmintrin.h>  // This is currently (in Dec 2013) broken on Mac OS X 10.9 (Apple clang-500.2.79)
+#else
+#define _mm_prefetch(...) {}
+#endif
+
 typedef int64_t _int64;
 typedef uint64_t _uint64;
 typedef int32_t _int32;
@@ -118,6 +124,8 @@ inline double exp10(double x) { return exp(x * LOG10); }
 #endif
 #define MAX_PATH 4096
 #define __cdecl __attribute__((__cdecl__))
+
+#define _stricmp strcasecmp
 
 inline bool _BitScanForward64(unsigned long *result, _uint64 x) {
     *result = __builtin_ctzll(x);
@@ -263,9 +271,9 @@ void AllowEventWaitersToProceed(EventObject *eventObject);
 void PreventEventWaitersFromProceeding(EventObject *eventObject);
 #ifdef PROFILE_WAIT
 #define WaitForEvent(o) WaitForEventProfile((o), __FUNCTION__, __LINE__)
-void WaitForEventProfile(EventObject *eventObject, const char* fn, int line); 
+void WaitForEventProfile(EventObject *eventObject, const char* fn, int line);
 #else
-void WaitForEvent(EventObject *eventObject); 
+void WaitForEvent(EventObject *eventObject);
 #endif
 bool WaitForEventWithTimeout(EventObject *eventObject, _int64 timeoutInMillis); // Returns true if the event was set, false if the timeout happened
 
@@ -288,8 +296,10 @@ void BindThreadToProcessor(unsigned processorNumber); // This hard binds a threa
 #ifdef  _MSC_VER
 #define GetThreadId() GetCurrentThreadId()
 #else   // _MSC_VER
-#define GetThreadId() 0 // Fill this in later if you ever care.  For now, it's just for debugging/tuning
+#define GetThreadId() pthread_self()
 #endif  // _MSC_VER
+
+void SleepForMillis(unsigned millis);
 
 unsigned GetNumberOfProcessors();
 
@@ -394,7 +404,7 @@ int _fseek64bit(FILE *stream, _int64 offset, int origin);
 
 #endif
 
-// 
+//
 // Class for handling mapped files.  It's got the same interface for both platforms, but different implementations.
 //
 class FileMapper {
@@ -411,7 +421,7 @@ public:
     }
 
     // can get multiple mappings on the same file
-    char *createMapping(size_t offset, size_t amountToMap, void** o_token); 
+    char *createMapping(size_t offset, size_t amountToMap, void** o_token);
 
     // MUST call unmap on each token out of createMapping, the destructor WILL NOT cleanup
     void unmap(void* token);

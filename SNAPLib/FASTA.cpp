@@ -29,7 +29,11 @@ Revision History:
 using namespace std;
 
     const Genome *
-ReadFASTAGenome(const char *fileName, unsigned chromosomePaddingSize)
+ReadFASTAGenome(
+    const char *fileName,
+    const char *pieceNameTerminatorCharacters,
+    bool spaceIsAPieceNameTerminator,
+    unsigned chromosomePaddingSize)
 {
     //
     // We need to know a bound on the size of the genome before we create the Genome object.
@@ -82,13 +86,28 @@ ReadFASTAGenome(const char *fileName, unsigned chromosomePaddingSize)
             //
             // Now supply the chromosome name.
             //
-            char* space = strchr(lineBuffer, ' ');
-            char* tab = strchr(lineBuffer, '\t');
-            char* end = space !=NULL ? (tab != NULL ? min(space, tab) : space)
-                : tab != NULL ? tab : NULL;
-            // Go up to blank, or remove the trailing newline from fgets
-            end = end != NULL ? end : (lineBuffer + strlen(lineBuffer) - 1);
-            *end = '\0';
+            if (NULL != pieceNameTerminatorCharacters) {
+                for (int i = 0; i < strlen(pieceNameTerminatorCharacters); i++) {
+                    char *terminator = strchr(lineBuffer+1, pieceNameTerminatorCharacters[i]);
+                    if (NULL != terminator) {
+                        *terminator = '\0';
+                    }
+                }
+            }
+            if (spaceIsAPieceNameTerminator) {
+                char *terminator = strchr(lineBuffer, ' ');
+                if (NULL != terminator) {
+                    *terminator = '\0';
+                }
+                terminator = strchr(lineBuffer, '\t');
+                if (NULL != terminator) {
+                    *terminator = '\0';
+                }
+            }
+            char *terminator = strchr(lineBuffer, '\n');
+            if (NULL != terminator) {
+                *terminator = '\0';
+            }
             genome->startContig(lineBuffer+1);
         } else {
             //
