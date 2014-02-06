@@ -530,7 +530,7 @@ PairedFASTQReader::createPairedReadSupplierGenerator(
     //
     if (QueryFileSize(fileName0) != QueryFileSize(fileName1) || gzip) {
         fprintf(stderr,"FASTQ using supplier queue\n");
-        DataSupplier* dataSupplier = gzip ? DataSupplier::GzipDefault[false] : DataSupplier::Default[false];
+        DataSupplier* dataSupplier = gzip ? DataSupplier::GzipDefault : DataSupplier::Default;
         ReadReader *reader1 = FASTQReader::create(dataSupplier, fileName0,0,QueryFileSize(fileName0),context);
         ReadReader *reader2 = FASTQReader::create(dataSupplier, fileName1,0,QueryFileSize(fileName1),context);
         if (NULL == reader1 || NULL == reader2) {
@@ -560,7 +560,7 @@ FASTQReader::createReadSupplierGenerator(
         //
         return new RangeSplittingReadSupplierGenerator(fileName, false, numThreads, context);
     } else {
-        ReadReader* fastq = FASTQReader::create(DataSupplier::GzipDefault[false], fileName, 0, QueryFileSize(fileName), context);
+        ReadReader* fastq = FASTQReader::create(DataSupplier::GzipDefault, fileName, 0, QueryFileSize(fileName), context);
         if (fastq == NULL) {
             delete fastq;
             return NULL;
@@ -583,7 +583,7 @@ PairedInterleavedFASTQReader::createPairedReadSupplierGenerator(
     //
     if (gzip) {
         fprintf(stderr,"PairedInterleavedFASTQ using supplier queue\n");
-        DataSupplier* dataSupplier = DataSupplier::GzipDefault[false];
+        DataSupplier* dataSupplier = DataSupplier::GzipDefault;
         PairedReadReader *reader = PairedInterleavedFASTQReader::create(dataSupplier, fileName,0,QueryFileSize(fileName),context);
  
         if (NULL == reader ) {

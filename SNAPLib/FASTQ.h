@@ -53,9 +53,12 @@ public:
 
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
         
-        void releaseBatch(DataBatch batch)
-        { data->releaseBatch(batch); }
+        virtual void holdBatch(DataBatch batch)
+        { data->holdBatch(batch); }
 
+        virtual bool releaseBatch(DataBatch batch)
+        { return data->releaseBatch(batch); }
+        
         static _int64 getReadFromBuffer(char *buffer, _int64 bufferSize, Read *readToUpdate, const char *fileName, DataReader *data, const ReaderContext &context);    // Returns the number of bytes consumed.
 
         static bool skipPartialRecord(DataReader *data);
@@ -104,8 +107,11 @@ public:
 
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
         
-        void releaseBatch(DataBatch batch)
-        { data->releaseBatch(batch); }
+        virtual void holdBatch(DataBatch batch)
+        { data->holdBatch(batch); }
+
+        virtual bool releaseBatch(DataBatch batch)
+        { return data->releaseBatch(batch); }
 
 private:
 
@@ -140,8 +146,11 @@ public:
 
         static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName0, const char *fileName1, int numThreads, const ReaderContext& context, bool gzip = false);
  
-        void releaseBatch(DataBatch batch)
+        virtual void holdBatch(DataBatch batch)
         { _ASSERT(false); /* not supported */ }
+
+        virtual bool releaseBatch(DataBatch batch)
+        { _ASSERT(false); /* not supported */ return false; }
 
 private:
 

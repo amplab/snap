@@ -130,7 +130,7 @@ SAMReader::readHeader(
     const char* fileName,
     ReaderContext& context)
 {
-    DataReader* data = DataSupplier::Default[false]->getDataReader(maxLineLen);
+    DataReader* data = DataSupplier::Default->getDataReader(maxLineLen);
     if (! data->init(fileName)) {
         fprintf(stderr, "Unable to read file %s\n", fileName);
         soft_exit(1);
@@ -591,16 +591,15 @@ SAMReader::createPairedReader(
     const char *fileName,
     _int64 startingOffset,
     _int64 amountOfFileToProcess, 
-    bool autoRelease,
     bool quicklyDropUnpairedReads,
     const ReaderContext& context)
 {
 
-    SAMReader* reader = SAMReader::create(DataSupplier::Default[false], fileName, context, 0, 0);
+    SAMReader* reader = SAMReader::create(DataSupplier::Default, fileName, context, 0, 0);
     if (reader == NULL) {
         return NULL;
     }
-    return PairedReadReader::PairMatcher(reader, autoRelease, quicklyDropUnpairedReads);
+    return PairedReadReader::PairMatcher(reader, quicklyDropUnpairedReads);
 }
 
 
@@ -615,7 +614,7 @@ SAMReader::createPairedReadSupplierGenerator(
     // need to use a queue so that pairs can be matched
     //
 
-    PairedReadReader* paired = SAMReader::createPairedReader(DataSupplier::Default[false], fileName, 0, 0, false, quicklyDropUnpairedReads, context);
+    PairedReadReader* paired = SAMReader::createPairedReader(DataSupplier::Default, fileName, 0, 0, quicklyDropUnpairedReads, context);
     if (paired == NULL) {
         fprintf(stderr, "Cannot create reader on %s\n", fileName);
         soft_exit(1);
