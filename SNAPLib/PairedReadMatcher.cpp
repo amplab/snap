@@ -56,6 +56,8 @@ private:
     ReadReader* single; // reader for single reads
     typedef _uint64 StringHash;
     typedef VariableSizeMap<StringHash,Read> ReadMap;
+    DataBatch currentBatch; // for dropped reads
+    bool allDroppedInCurrentBatch;
     DataBatch batch[2]; // 0 = current, 1 = previous
     bool releasedBatch[2];  // whether each batch has been released
     ReadMap unmatched[2]; // read id -> Read
@@ -96,7 +98,8 @@ PairedReadMatcher::PairedReadMatcher(
     autoRelease(i_autoRelease),
     overflowMatched(0),
     quicklyDropUnpairedReads(i_quicklyDropUnpairedReads),
-    nReadsQuicklyDropped(0)
+    nReadsQuicklyDropped(0),
+    currentBatch(0, 0), allDroppedInCurrentBatch(false)
 {
     unmatched[0] = VariableSizeMap<_uint64,Read>(10000);
     unmatched[1] = VariableSizeMap<_uint64,Read>(10000);
@@ -120,8 +123,6 @@ PairedReadMatcher::getNextReadPair(
     Read *read2)
 {
     int skipped = 0;
-    DataBatch currentBatch;
-    bool allDroppedInCurrentBatch = false;
     while (true) {
         if (skipped++ == 10000) {
             fprintf(stderr, "warning: no matching read pairs in 10,000 reads, input file might be unsorted or have unexpected read id format\n");
