@@ -42,9 +42,12 @@ public:
     {
         // return getNextRead(read,alignmentResult,genomeLocation,isRC,mapQ,flag,false,cigar);
     }
+    
+    virtual void holdBatch(DataBatch batch)
+    { data->holdBatch(batch); }
 
-    void releaseBatch(DataBatch batch)
-    { data->releaseBatch(batch); }
+    virtual bool releaseBatch(DataBatch batch)
+    { return data->releaseBatch(batch); }
 
 
 private:

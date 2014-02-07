@@ -63,8 +63,11 @@ public:
 
     Read *getNextRead();
  
-    virtual void releaseBatch(DataBatch batch)
-    { underlyingReader->releaseBatch(batch); }
+    virtual void holdBatch(DataBatch batch)
+    { underlyingReader->holdBatch(batch); }
+    
+    virtual bool releaseBatch(DataBatch batch)
+    { return underlyingReader->releaseBatch(batch); }
 
 private:
     RangeSplitter *splitter;
@@ -94,8 +97,11 @@ public:
 
     virtual bool getNextReadPair(Read **read1, Read **read2);
        
-    virtual void releaseBatch(DataBatch batch)
+    virtual void holdBatch(DataBatch batch)
     { underlyingReader->releaseBatch(batch); }
+
+    virtual bool releaseBatch(DataBatch batch)
+    { return underlyingReader->releaseBatch(batch); }
 
  private:
     PairedReadReader *underlyingReader;

@@ -65,7 +65,7 @@ BAMReader::init(
 {
     // todo: integrate supplier models
     // might need up to 3x extra for expanded sequence + quality + cigar data
-    data = DataSupplier::GzipBamDefault[false]->getDataReader(MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
+    data = DataSupplier::GzipBamDefault->getDataReader(MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
     if (! data->init(fileName)) {
         fprintf(stderr, "Unable to read file %s\n", fileName);
         soft_exit(1);
@@ -96,7 +96,7 @@ BAMReader::readHeader(
     ReaderContext& context)
 {
     _ASSERT(context.header == NULL);
-    DataReader* data = DataSupplier::GzipBamDefault[false]->getDataReader(MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
+    DataReader* data = DataSupplier::GzipBamDefault->getDataReader(MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
     if (! data->init(fileName)) {
         fprintf(stderr, "Unable to read file %s\n", fileName);
         soft_exit(1);
@@ -171,7 +171,7 @@ BAMReader::createPairedReadSupplierGenerator(
     int matchBufferSize)
 {
     BAMReader* reader = create(fileName, 0, 0, context);
-    PairedReadReader* matcher = PairedReadReader::PairMatcher(reader, false, quicklyDropUnmatchedReads);
+    PairedReadReader* matcher = PairedReadReader::PairMatcher(reader, quicklyDropUnmatchedReads);
     ReadSupplierQueue* queue = new ReadSupplierQueue(matcher);
     queue->startReaders();
     return queue;

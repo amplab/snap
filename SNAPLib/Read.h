@@ -110,7 +110,12 @@ public:
     virtual bool getNextRead(Read *readToUpdate) = 0;
     virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
 
-    virtual void releaseBatch(DataBatch batch) = 0;
+    // if you keep a read after the next call to getNextRead, you must call holdBatch
+    // this increments the reference count to the batch
+    virtual void holdBatch(DataBatch batch) = 0;
+
+    // decremens hold refcount, when all holds are released the batch is no longer valid
+    virtual bool releaseBatch(DataBatch batch) = 0;
 
 protected:
     ReaderContext context;
@@ -125,10 +130,11 @@ public:
     virtual bool getNextReadPair(Read *read1, Read *read2) = 0;
     virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
 
-    virtual void releaseBatch(DataBatch batch) = 0;
+    virtual void holdBatch(DataBatch batch) = 0;
+    virtual bool releaseBatch(DataBatch batch) = 0;
 
     // wrap a single read source with a matcher that buffers reads until their mate is found
-    static PairedReadReader* PairMatcher(ReadReader* single, bool autoRelease, bool quicklyDropUnpairedReads);
+    static PairedReadReader* PairMatcher(ReadReader* single, bool quicklyDropUnpairedReads);
 };
 
 class ReadSupplier {
@@ -136,7 +142,8 @@ public:
     virtual Read *getNextRead() = 0;    // This read is valid until you call getNextRead, then it's done.  Don't worry about deallocating it.
     virtual ~ReadSupplier() {}
 
-    virtual void releaseBatch(DataBatch batch) = 0;
+    virtual void holdBatch(DataBatch batch) = 0;
+    virtual bool releaseBatch(DataBatch batch) = 0;
 };
 
 class PairedReadSupplier {
@@ -145,7 +152,8 @@ public:
     virtual bool getNextReadPair(Read **read0, Read **read1) = 0;
     virtual ~PairedReadSupplier() {}
 
-    virtual void releaseBatch(DataBatch batch) = 0;
+    virtual void holdBatch(DataBatch batch) = 0;
+    virtual bool releaseBatch(DataBatch batch) = 0;
 };
 
 class ReadSupplierGenerator {

@@ -387,9 +387,12 @@ public:
         {
             return getNextReadPair(read1,read2,NULL,NULL,NULL);
         }
+        
+        void holdBatch(DataBatch batch)
+        { data->holdBatch(batch); }
 
-        void releaseBatch(DataBatch batch)
-        { data->releaseBatch(batch); }
+        bool releaseBatch(DataBatch batch)
+        { return data->releaseBatch(batch); }
 
         static void readHeader(const char* fileName, ReaderContext& i_context);
 

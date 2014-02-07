@@ -32,6 +32,8 @@ using std::pair;
 class ReadSupplierFromQueue;
 class PairedReadSupplierFromQueue;
 
+typedef VariableSizeVector<DataBatch> BatchVector;
+
 struct ReadQueueElement {
     ReadQueueElement()
         : next(NULL), prev(NULL)
@@ -51,7 +53,7 @@ struct ReadQueueElement {
     ReadQueueElement    *prev;
     int                 totalReads;
     Read*               reads;
-    VariableSizeVector<DataBatch> batches;
+    BatchVector         batches;
 
     void addToTail(ReadQueueElement *queueHead) {
         next = queueHead;
@@ -110,9 +112,12 @@ public:
     void doneWithElement(ReadQueueElement *element);
     void supplierFinished();
 
-    void releaseBatch(DataBatch batch);
+    void holdBatch(DataBatch batch);
+    bool releaseBatch(DataBatch batch);
 
 private:
+
+    static const int BatchesPerElement = 6;
 
     void commonInit();
 
@@ -169,7 +174,11 @@ public:
 
     Read *getNextRead();
     
-    void releaseBatch(DataBatch batch);
+    virtual void holdBatch(DataBatch batch)
+    { queue->holdBatch(batch); }
+
+    virtual bool releaseBatch(DataBatch batch)
+    { return queue->releaseBatch(batch); }
 
 private:
     bool                done;
@@ -186,7 +195,11 @@ public:
 
     bool getNextReadPair(Read **read0, Read **read1);
 
-    void releaseBatch(DataBatch batch);
+    virtual void holdBatch(DataBatch batch)
+    { queue->holdBatch(batch); }
+
+    virtual bool releaseBatch(DataBatch batch)
+    { return queue->releaseBatch(batch); }
 
 private:
     ReadSupplierQueue   *queue;
