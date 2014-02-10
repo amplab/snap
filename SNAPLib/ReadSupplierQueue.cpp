@@ -244,9 +244,36 @@ ReadSupplierQueue::getElements(ReadQueueElement **element1, ReadQueueElement **e
     }
 
     *element1 = readyQueue[0].next;
-    (*element1)->removeFromQueue();
     *element2 = readyQueue[1].next;
-    (*element2)->removeFromQueue();
+    if ((*element1)->totalReads == (*element2)->totalReads) {
+        (*element1)->removeFromQueue();
+        (*element2)->removeFromQueue();
+    } else {
+        printf("getElements different sizes %d %d\n", (*element1)->totalReads, (*element2)->totalReads);
+        // need to balance out reads between the two
+        // make a copy of the min# of reads from larger element
+        // shrink the larger element and leave it there
+        ReadQueueElement* elements[2] = {*element1, *element2};
+        int largerOne = elements[1]->totalReads > elements[0]->totalReads;
+        int minReads = elements[1-largerOne]->totalReads;
+        ReadQueueElement* copyOut = getEmptyElement();
+        memcpy(copyOut->reads, elements[largerOne]->reads, minReads * sizeof(Read));
+        copyOut->totalReads = minReads;
+        memmove(elements[largerOne]->reads, &elements[largerOne]->reads[minReads],
+            (elements[largerOne]->totalReads - minReads) * sizeof(Read));
+        elements[largerOne]->totalReads -= minReads;
+        copyOut->batches.append(&elements[largerOne]->batches);
+        for (BatchVector::iterator i = copyOut->batches.begin(); i != copyOut->batches.end(); i++) {
+            holdBatch(*i);
+        }
+        if (largerOne == 0) {
+            *element1 = copyOut;
+            (*element2)->removeFromQueue();
+        } else {
+            (*element1)->removeFromQueue();
+            *element2 = copyOut;
+        }
+    }
     printf("getElements %x/%x with %d/%d reads\n", (int) (*element1), (int) (*element2), (*element1)->totalReads, (*element2)->totalReads);
 
     if (!areAnyReadsReady() && !allReadsQueued) {
@@ -279,11 +306,7 @@ ReadSupplierQueue::doneWithElement(ReadQueueElement *element)
     printf("Thread %u: doneWithElement wait acquire lock\n", GetThreadId());
     AcquireExclusiveLock(&lock);
     printf("Thread %u: doneWithElement acquired lock\n", GetThreadId());
-    _ASSERT(element->totalReads > 0 && element->batches.size() > 0);
-    /*
-    for (int i = 0; i < element->totalReads; i++) {
-        element->reads[i].dispose();
-    }*/
+    _ASSERT(element->totalReads > 0);
     VariableSizeVector<DataBatch> batches = element->batches;
     element->batches.clear();
     element->addToTail(emptyQueue);
@@ -345,6 +368,25 @@ ReadSupplierQueue::ReaderThreadMain(void *param)
     delete params;
 }
 
+    ReadQueueElement*
+ReadSupplierQueue::getEmptyElement()
+{
+    while (emptyQueue->next == emptyQueue) {
+        // Wait for a buffer.
+        ReleaseExclusiveLock(&lock);
+        WaitForEvent(&emptyBuffersAvailable);
+        AcquireExclusiveLock(&lock);
+    }
+
+    ReadQueueElement *element = emptyQueue->next;
+    element->removeFromQueue();
+    if (emptyQueue->next == emptyQueue) {
+        PreventEventWaitersFromProceeding(&emptyBuffersAvailable);
+    }
+
+    return element;
+}
+
     void
 ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
 {
@@ -369,10 +411,6 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
     // may pass reads forward from element loops to maintain batching or element size
     Read firstReadForNextElement[2];
     bool hasFirstReadForNextElement = false;
-    bool fixedElementSize = false;
-    Read* extraReads = NULL;
-    int extraReadCount = 0;
-    BatchVector extraBatches;
 
     while (!done) {
         if ((!isSingleReader) && balance * balanceIncrement > MaxImbalance) {
@@ -395,28 +433,14 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
             _ASSERT(balance * balanceIncrement <= MaxImbalance);
         }
 
-        while (emptyQueue->next == emptyQueue) {
-            // Wait for a buffer.
-            ReleaseExclusiveLock(&lock);
-
-            _int64 now = timeInNanos();
-            processingTime += now - startTime;
-            startTime = now;
-
-            WaitForEvent(&emptyBuffersAvailable);
-
-            now = timeInNanos();
-            bufferWaitTime += now - startTime;
-            startTime = now;
-
-            AcquireExclusiveLock(&lock);
-        }
-
-        ReadQueueElement *element = emptyQueue->next;
-        element->removeFromQueue();
-        if (emptyQueue->next == emptyQueue) {
-            PreventEventWaitersFromProceeding(&emptyBuffersAvailable);
-        }
+        // pull an empty element from the queue
+        _int64 now = timeInNanos();
+        processingTime += now - startTime;
+        startTime = now;
+        ReadQueueElement* element = getEmptyElement();
+        now = timeInNanos();
+        bufferWaitTime += now - startTime;
+        startTime = now;
 
         //
         // Now fill in the reads from the reader into the element until it's
@@ -424,34 +448,11 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
         //
         ReleaseExclusiveLock(&lock);
         element->totalReads = 0;
-read_loop: // might return here once with goto to ensure both threads have same #reads per element
         for (; element->totalReads <= (int) elementSize - increment; element->totalReads += increment) {
             
             if (NULL != reader) {
                 Read* read = &element->reads[element->totalReads];
-                // check for extraReads used to even out read count between paired readers
-                if (extraReadCount > 0) {
-                    _ASSERT(extraReadCount < (int) elementSize);
-                    int copy = min((unsigned) extraReadCount, elementSize - element->totalReads);
-                    memcpy(read, extraReads, copy * sizeof(Read));
-                    if (copy < extraReadCount) {
-                        memmove(extraReads, extraReads + copy, (extraReadCount - copy) * sizeof(Read));
-                    }
-                    extraReadCount -= copy;
-                    if (extraReadCount == 0) {
-                        free(extraReads);
-                        extraReads = NULL;
-                        extraBatches.clear();
-                    } else {
-                        // hold batches again until next element (conservative, since some might be only in this element)
-                        for (BatchVector::iterator i = extraBatches.begin(); i != extraBatches.end(); i++) {
-                            holdBatch(*i);
-                        }
-                    }
-                    // batches already held, add to current element so they will be released (append allows dups so refcounts work)
-                    element->batches.append(&extraBatches);
-                    element->totalReads += copy;
-                } else if (hasFirstReadForNextElement) {
+                if (hasFirstReadForNextElement) {
                     _ASSERT(element->totalReads == 0);
                     *read = firstReadForNextElement[0];
                     // already called holdBatch when firstReadForNextElement set
@@ -523,35 +524,6 @@ read_loop: // might return here once with goto to ensure both threads have same 
                     printf("ReadSupplierQueue::ReaderThread element %x batches %d:%d, %d:%d\n", (int) element, b[0].fileID, b[0].batchID, b[1].fileID, b[1].batchID);
                 }
            }
-        }
-        if ((! isSingleReader) && (! fixedElementSize)) {
-            // one of two paired threads finished first element, try setting shared element size limit
-            unsigned n = InterlockedCompareExchange32AndReturnOldValue(&elementSize, element->totalReads, ReadQueueElement::MaxReadsPerElement);
-            if (n != ReadQueueElement::MaxReadsPerElement && element->totalReads != n) {
-                // other thread updated it, ensure I produce elements of same size
-                if (element->totalReads < (int) n) {
-                    // go back and fill in more reads
-                    fixedElementSize = true;
-                    goto read_loop;
-                } else {
-                    // keep extra reads for next element(s)
-                    extraReadCount = element->totalReads - n;
-                    extraReads = (Read*) malloc(extraReadCount * sizeof(Read));
-                    memcpy(extraReads, &element->reads[n], extraReadCount * sizeof(Read));
-                    memset(&element->reads[n], 0, extraReadCount * sizeof(Read));
-                    element->totalReads = n;
-                    // hold batches for them
-                    extraBatches.clear();
-                    for (int i = 0; i < extraReadCount; i++) {
-                        if (i == 0 || extraReads[i].getBatch() != extraReads[i-1].getBatch()) {
-                            if (extraBatches.add(extraReads[i].getBatch())) {
-                                holdBatch(extraReads[i].getBatch());
-                            }
-                        }
-                    }
-                }
-            }
-            fixedElementSize = true;
         }
 
         printf("ReadSupplierQueue element[%d] %x with %d reads %d batches\n", firstOrSecond, (int) element, element->totalReads, element->batches.size());
@@ -659,10 +631,11 @@ PairedReadSupplierFromQueue::getNextReadPair(Read **read0, Read **read1)
     }
 
     if (NULL != currentElement && nextReadIndex >= currentElement->totalReads) {
-        printf("PairedReadSupplierFromQueue finished element %x with %d reads %d batches: %d %d\n", (int) currentElement, currentElement->totalReads, currentElement->batches.size(), currentElement->batches[0].batchID, currentElement->batches.size() > 1 ? currentElement->batches[1].batchID : 0);
+        printf("PairedReadSupplierFromQueue finished element %x with %d reads %d batches:", (int) currentElement, currentElement->totalReads, currentElement->batches.size()); for (BatchVector::iterator i = currentElement->batches.begin(); i != currentElement->batches.end(); i++) { printf(" %d:%d", i->fileID, i->batchID); } printf("\n");
         queue->doneWithElement(currentElement);
         currentElement = NULL;
         if (twoFiles) {
+            printf("PairedReadSupplierFromQueue finished 2nd element %x with %d reads %d batches:", (int) currentSecondElement, currentSecondElement->totalReads, currentSecondElement->batches.size()); for (BatchVector::iterator i = currentSecondElement->batches.begin(); i != currentSecondElement->batches.end(); i++) { printf(" %d:%d", i->fileID, i->batchID); } printf("\n");
             queue->doneWithElement(currentSecondElement);
             currentSecondElement = NULL;
         }

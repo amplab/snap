@@ -216,11 +216,7 @@ WindowsOverlappedDataReader::readHeader(
     nextBufferForReader = 1;
     nextBufferForConsumer = lastBufferForConsumer = 0;
     info->next = info->previous = -1;
-
-    if (*io_headerSize > 0xffffffff) {
-        fprintf(stderr,"WindowsOverlappedDataReader: trying to read too many bytes at once: %lld\n", *io_headerSize);
-        soft_exit(1);
-    }
+    *io_headerSize = min(*io_headerSize, bufferSize);
 
     if (!ReadFile(hFile,info->buffer,(DWORD)*io_headerSize,&info->validBytes,&info->lap)) {
         if (GetLastError() != ERROR_IO_PENDING) {
@@ -407,7 +403,7 @@ WindowsOverlappedDataReader::holdBatch(
         BufferInfo* info = &bufferInfo[i];
         if (info->batchID == batch.batchID) {
             info->holds++;
-            printf("holdBatch batch %d, holds on buffer %d now %d\n", batch.batchID, i, info->holds);
+            printf("%x holdBatch batch %d, holds on buffer %d now %d\n", (unsigned) this, batch.batchID, i, info->holds);
             break;
         }
     }
@@ -444,7 +440,7 @@ WindowsOverlappedDataReader::releaseBatch(
                     info->holds--;
                 }
                 if (info->holds == 0) {
-                    printf("releaseBatch batch %d, releasing %s buffer %d\n", batch.batchID, info->state == InUse ? "InUse" : "Full", i);
+                    printf("%x releaseBatch batch %d, releasing %s buffer %d\n", (unsigned) this, batch.batchID, info->state == InUse ? "InUse" : "Full", i);
                     info->state = Empty;
                     // remove from ready list
                     if (i == nextBufferForConsumer) {
@@ -462,10 +458,13 @@ WindowsOverlappedDataReader::releaseBatch(
                     // add to head of free list
                     info->next = nextBufferForReader;
                     info->batchID = 0;
+#ifdef _DEBUG
+                    memset(info->buffer, 0xde, bufferSize + extraBytes);
+#endif
                     nextBufferForReader = i;
                     result = true;
                 } else {
-                    printf("releaseBatch batch %d, holds on buffer %d now %d\n", batch.batchID, i, info->holds);
+                    printf("%x releaseBatch batch %d, holds on buffer %d now %d\n", (unsigned) this, batch.batchID, i, info->holds);
                     result = false;
                 }
                 break;
@@ -856,6 +855,7 @@ DecompressDataReader::readHeader(
     _int64 headerSize = 0;
     while (headerSize < *io_headerSize && compressedBytes > 0) {
         _int64 compressedBlockSize, decompressedBlockSize;
+        printf("decompress chunkSize %d compressedBytes %d headerSize %d totalExtra %d\n", chunkSize, compressedBytes, headerSize, totalExtra);
         decompress(&zstream, chunkSize != 0 ? &heap : NULL,
             compressed, compressedBytes, &compressedBlockSize,
             header + headerSize, totalExtra - headerSize, &decompressedBlockSize,
@@ -1027,7 +1027,7 @@ DecompressDataReader::decompress(
     bool multiBlock = true;
     int status;
     do {
-            if (mode != ContinueMultiBlock || block != 0) {
+        if (mode != ContinueMultiBlock || block != 0) {
             if (heap != NULL) {
                 heap->reset();
             }
@@ -1038,7 +1038,7 @@ DecompressDataReader::decompress(
             }
         }
         oldAvailOut = zstream->avail_out;
-        oldAvailIn = zstream->avail_out;
+        oldAvailIn = zstream->avail_in;
         status = inflate(zstream, mode == SingleBlock ? Z_NO_FLUSH : Z_FINISH);
         // printf("decompress block #%d %lld -> %lld = %d\n", block, zstream.next_in - lastIn, zstream.next_out - lastOut, status);
         block++;

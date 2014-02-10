@@ -138,6 +138,8 @@ private:
     int                 nSuppliersRunning;
     volatile bool       allReadsQueued;
 
+    ReadQueueElement* getEmptyElement(); // must hold the lock to call this
+
     bool areAnyReadsReady(); // must hold the lock to call this.
 
     //
