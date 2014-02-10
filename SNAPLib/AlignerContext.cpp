@@ -361,9 +361,12 @@ AlignerContext::parseOptions(
         SNAPFile    input;
         InputList*  next;
     } *inputList = NULL;
+
     //
     // Now build the input array and parse options.
     //
+
+    bool inputFromStdio = false;
 
     int i;
     int nInputs = 0;
@@ -377,6 +380,15 @@ AlignerContext::parseOptions(
         int argsConsumed;
         SNAPFile input;
         if (SNAPFile::generateFromCommandLine(argv+i, argc-i, &argsConsumed, &input, paired, true)) {
+            if (input.isStdio) {
+                if (inputFromStdio) {
+                    fprintf(stderr,"You specified stdin ('-') specified for more than one input, which isn't permitted.\n");
+                    soft_exit(1);
+                } else {
+                    inputFromStdio = true;
+                }
+            }
+
             InputList *listEntry = new InputList;
             listEntry->input = input;
             listEntry->next = inputList;

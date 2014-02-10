@@ -199,6 +199,19 @@ void DestroyEventObject(EventObject *eventObject) {DestroySingleWaiterObject(eve
 void AllowEventWaitersToProceed(EventObject *eventObject) {SignalSingleWaiterObject(eventObject);}
 void PreventEventWaitersFromProceeding(EventObject *eventObject) {ResetSingleWaiterObject(eventObject);}
 void WaitForEvent(EventObject *eventObject) {WaitForSingleWaiterObject(eventObject);}
+bool WaitForEventWithTimeout(EventObject *eventObject, _int64 timeoutInMillis)
+{
+    DWORD retVal = WaitForSingleObjectEx(*eventObject, (unsigned)timeoutInMillis, FALSE);
+
+    if (retVal == WAIT_OBJECT_0) {
+        return true;
+    } else if (retVal == WAIT_TIMEOUT) {
+        return false;
+    }
+    fprintf(stderr, "WaitForSingleObject returned unexpected result %d (error %d)\n", retVal, GetLastError());
+    soft_exit(1);
+    return false;   // NOTREACHED: Just to avoid the compiler complaining.
+}
 
 
 void BindThreadToProcessor(unsigned processorNumber) // This hard binds a thread to a processor.  You can no-op it at some perf hit.
@@ -952,6 +965,27 @@ public:
         pthread_mutex_unlock(&lock);
     }
 
+    bool waitWithTimeout(_int64 timeoutInMillis) {
+        struct timespec wakeTime;
+        clock_gettime(CLOCK_REALTIME, &wakeTime);
+        wakeTime.tv_nsec += timeoutInMillis * 1000000;
+        wakeTime.tv_sec += wakeTime.tv_nsec / 1000000000;
+        wakeTime.tv_nsec = wakeTime.tv_nsec % 1000000000;
+
+        bool timedOut = false;
+
+        pthread_mutex_lock(&lock);
+        while (!set) {
+            int retVal = pthread_cond_timedwait(&cond, &lock, &wakeTime);
+            if (retVal == ETIMEDOUT) {
+                timedOut = true;
+                break;
+            }
+        }
+        pthread_mutex_unlock(&lock);
+        return !timedOut;
+    }
+
     bool destroy() {
         pthread_cond_destroy(&cond);
         pthread_mutex_destroy(&lock);
@@ -1007,7 +1041,7 @@ public:
     void blockAll()
     {
         pthread_mutex_lock(&lock);
-	set = false;
+	    set = false;
         pthread_mutex_unlock(&lock);
     }
 };
@@ -1044,6 +1078,11 @@ void PreventEventWaitersFromProceeding(EventObject *eventObject)
 void WaitForEvent(EventObject *eventObject)
 {
   (*eventObject)->wait();
+}
+
+bool WaitForEventWithTimeout(EventObject *eventObject, _int64 timeoutInMillis)
+{
+    return (*eventObject)->waitWithTimeout(timeoutInMillis);
 }
 
 int InterlockedIncrementAndReturnNewValue(volatile int *valueToDecrement)

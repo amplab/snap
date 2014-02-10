@@ -275,7 +275,7 @@ void WaitForEventProfile(EventObject *eventObject, const char* fn, int line);
 #else
 void WaitForEvent(EventObject *eventObject);
 #endif
-
+bool WaitForEventWithTimeout(EventObject *eventObject, _int64 timeoutInMillis); // Returns true if the event was set, false if the timeout happened
 
 //
 // Thread-safe read-modify-write operations

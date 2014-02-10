@@ -639,7 +639,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     fclose(tablesFile);
 
     delete index;
-    if (biasTable != NULL) {
+    if (computeBias && biasTable != NULL) {
         delete[] biasTable;
     }
     
@@ -804,7 +804,7 @@ GenomeIndex::loadFromDirectory(char *directoryName)
                         "allowed building indices with too small of a seed size, and this appears to be such\n"
                         "an index.  You can no longer build indices like this, and you also can't use them\n"
                         "because they are corrupt and would produce incorrect results.  Please use an index\n"
-                        "built with a larger seed size.  For hg19, the seed size must be in the range of 19-23.\n"
+                        "built with a larger seed size.  For hg19, the seed size must be at least 19.\n"
                         "For other reference genomes this quantity will vary.\n");
         soft_exit(1);
     }
