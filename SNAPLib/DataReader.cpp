@@ -131,7 +131,7 @@ ReadBasedDataReader::ReadBasedDataReader(
     // NOTE: buffers are not null-terminated (since memmap version can't do it)
     _ASSERT(extraFactor >= 0 && i_nBuffers > 0);
     bufferInfo = new BufferInfo[maxBuffers];
-    extraBytes = max(0LL, (_int64) ((bufferSize + overflowBytes) * extraFactor));
+    extraBytes = max((_int64) 0, (_int64) ((bufferSize + overflowBytes) * extraFactor));
     char* allocated = (char*) BigAlloc(maxBuffers * (bufferSize + extraBytes + overflowBytes));
     if (NULL == allocated) {
         fprintf(stderr,"ReadBasedDataReader: unable to allocate IO buffer\n");
@@ -248,7 +248,7 @@ ReadBasedDataReader::advance(
 {
     BufferInfo* info = &bufferInfo[nextBufferForConsumer];
     _ASSERT(info->validBytes >= info->offset && bytes >= 0 && bytes <= info->validBytes - info->offset);
-    info->offset += min(info->validBytes - info->offset, (unsigned)max(0, bytes));
+    info->offset += min(info->validBytes - info->offset, (unsigned)max((_int64)0, bytes));
 }
 
     void
@@ -267,7 +267,7 @@ ReadBasedDataReader::nextBatch()
     DataBatch priorBatch = DataBatch(info->batchID);
 
     info->state = InUse;
-    _uint32 overflow = max((DWORD) info->offset, info->nBytesThatMayBeginARead) - info->nBytesThatMayBeginARead;
+    _uint32 overflow = max((unsigned) info->offset, info->nBytesThatMayBeginARead) - info->nBytesThatMayBeginARead;
     _int64 nextStart = info->fileOffset + info->nBytesThatMayBeginARead; // for validation
 
     nextBufferForConsumer = info->next;
@@ -372,7 +372,7 @@ ReadBasedDataReader::releaseBatch(
 
     if (released) {
         //printf("releaseBatch set releaseEvent\n");
-        SetEvent(releaseEvent);
+        AllowEventWaitersToProceed(&releaseEvent);
     }
 
     ReleaseExclusiveLock(&lock);
@@ -463,7 +463,7 @@ private:
     bool    started;
     bool    hitEOF;
 
-    __int64 readOffset;
+    _int64 readOffset;
 };
 
 StdioDataReader::StdioDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor, bool autoRelease) :
@@ -638,7 +638,7 @@ StdioDataReader::startIo()
 
     if (nextBufferForConsumer == -1) {
         //printf("startIo thread %x reset releaseEvent\n", GetCurrentThreadId());
-        ResetEvent(releaseEvent);
+        PreventEventWaitersFromProceeding(&releaseEvent);
     }
     ReleaseExclusiveLock(&lock);
 }
@@ -654,20 +654,27 @@ StdioDataReader::waitForBuffer(
         //printf("WindowsOverlappedDataReader::waitForBuffer %d InUse...\n", bufferNumber);
         // must already have lock to call, release & wait & reacquire
         ReleaseExclusiveLock(&lock);
+	// TODO: implement timed wait on Linux
+#ifdef _MSC_VER
         _int64 start = timeInNanos();
-        DWORD waitTime;
+        _uint32 waitTime;
         if (releaseWaitInMillis > 0xffffffff) {
             waitTime = INFINITE;
         } else {
-            waitTime = (DWORD)releaseWaitInMillis;
+            waitTime = (_uint32)releaseWaitInMillis;
         }
-        DWORD result = WaitForSingleObject(releaseEvent, waitTime);
+        _uint32 result = WaitForSingleObject(releaseEvent, waitTime);
         InterlockedAdd64AndReturnNewValue(&ReleaseWaitTime, timeInNanos() - start);
+#else
+	WaitForEvent(&releaseEvent);
+#endif
         AcquireExclusiveLock(&lock);
+#ifdef _MSC_VER
         if (result == WAIT_TIMEOUT) {
             // this isn't going to directly make this buffer available, but will reduce pressure
             addBuffer();
         }
+#endif
     }
 
     if (info->state == Full) {
