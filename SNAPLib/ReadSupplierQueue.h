@@ -115,9 +115,12 @@ public:
     void holdBatch(DataBatch batch);
     bool releaseBatch(DataBatch batch);
 
+    static int BufferCount(int numThreads)
+    { return (numThreads + 1) * BatchesPerElement; }
+
 private:
 
-    static const int BatchesPerElement = 6;
+    static const int BatchesPerElement = 4;
 
     void commonInit();
 

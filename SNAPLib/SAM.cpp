@@ -115,11 +115,12 @@ SAMReader::skipToBeyondNextRunOfSpacesAndTabs(char *str, const char *endOfBuffer
 SAMReader::create(
     DataSupplier* supplier,
     const char *fileName,
+    int bufferCount,
     const ReaderContext& context,
     _int64 startingOffset, 
     _int64 amountOfFileToProcess)
 {
-    DataReader* data = supplier->getDataReader(maxLineLen);
+    DataReader* data = supplier->getDataReader(bufferCount, maxLineLen, 0.0);
     SAMReader *reader = new SAMReader(data, context);
     reader->init(fileName, startingOffset, amountOfFileToProcess);
     return reader;
@@ -130,7 +131,7 @@ SAMReader::readHeader(
     const char* fileName,
     ReaderContext& context)
 {
-    DataReader* data = DataSupplier::Default->getDataReader(maxLineLen);
+    DataReader* data = DataSupplier::Default->getDataReader(1, maxLineLen, 0.0);
     if (! data->init(fileName)) {
         fprintf(stderr, "Unable to read file %s\n", fileName);
         soft_exit(1);
@@ -589,13 +590,15 @@ SAMReader::createReadSupplierGenerator(
 SAMReader::createPairedReader(
     const DataSupplier* supplier,
     const char *fileName,
+    int bufferCount,
     _int64 startingOffset,
     _int64 amountOfFileToProcess, 
     bool quicklyDropUnpairedReads,
     const ReaderContext& context)
 {
 
-    SAMReader* reader = SAMReader::create(DataSupplier::Default, fileName, context, 0, 0);
+    SAMReader* reader = SAMReader::create(DataSupplier::Default, fileName,
+        bufferCount + PairedReadReader::MatchBuffers, context, 0, 0);
     if (reader == NULL) {
         return NULL;
     }
@@ -614,7 +617,8 @@ SAMReader::createPairedReadSupplierGenerator(
     // need to use a queue so that pairs can be matched
     //
 
-    PairedReadReader* paired = SAMReader::createPairedReader(DataSupplier::Default, fileName, 0, 0, quicklyDropUnpairedReads, context);
+    PairedReadReader* paired = SAMReader::createPairedReader(DataSupplier::Default, fileName,
+        ReadSupplierQueue::BufferCount(numThreads), 0, 0, quicklyDropUnpairedReads, context);
     if (paired == NULL) {
         fprintf(stderr, "Cannot create reader on %s\n", fileName);
         soft_exit(1);

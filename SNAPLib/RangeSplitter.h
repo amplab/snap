@@ -85,7 +85,8 @@ public:
 private:
     RangeSplitter *splitter;
     char *fileName;
-    bool isSAM;
+    const bool isSAM;
+    const int numThreads;
     ReaderContext context;
 };
 
@@ -121,6 +122,7 @@ private:
     RangeSplitter *splitter;
     char *fileName1;
     char *fileName2;
+    const int numThreads;
     enum FileType fileType;
     ReaderContext context;
     bool quicklyDropUnpairedReads;

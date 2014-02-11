@@ -362,7 +362,7 @@ public:
 
         virtual ~BAMReader();
 
-        void init(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess);
+        void init(const char *fileName, int bufferCount, _int64 startingOffset, _int64 amountOfFileToProcess);
 
         virtual bool getNextRead(Read *readToUpdate)
         {
@@ -396,8 +396,9 @@ public:
 
         static void readHeader(const char* fileName, ReaderContext& i_context);
 
-        static BAMReader* create(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess, 
-                                 const ReaderContext& context);
+        static BAMReader* create(const char *fileName, int bufferCount,
+            _int64 startingOffset, _int64 amountOfFileToProcess, 
+            const ReaderContext& context);
         
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
         

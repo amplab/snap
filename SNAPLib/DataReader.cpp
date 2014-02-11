@@ -134,6 +134,7 @@ WindowsOverlappedDataReader::WindowsOverlappedDataReader(
     // allocate all the data in one big block
     // NOTE: buffers are not null-terminated (since memmap version can't do it)
     _ASSERT(extraFactor >= 0 && i_nBuffers > 0);
+    printf("!! allocating %d buffers\n", nBuffers);
     bufferInfo = new BufferInfo[maxBuffers];
     extraBytes = max(0LL, (_int64) ((bufferSize + overflowBytes) * extraFactor));
     char* allocated = (char*) BigReserve(maxBuffers * (bufferSize + extraBytes + overflowBytes));
@@ -663,10 +664,10 @@ class WindowsOverlappedDataSupplier : public DataSupplier
 {
 public:
     WindowsOverlappedDataSupplier() : DataSupplier() {}
-    virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0)
+    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor)
     {
-        int buffers = ThreadCount + max(ThreadCount * 3 / 4, 3);
-        return new WindowsOverlappedDataReader(buffers, overflowBytes, extraFactor);
+        // add some buffers for read-ahead
+        return new WindowsOverlappedDataReader(bufferCount + 4, overflowBytes, extraFactor);
     }
 };
 
@@ -971,7 +972,11 @@ DecompressDataReader::releaseBatch(DataBatch batch)
         Entry* entry = &entries[i];
         if (entry->batch == batch) {
             printf("DecompressDataReader releaseBatch %d:%d #%d\n", batch.fileID, batch.batchID, i);
-            enqueueAvailable(entry);
+            if (entry->state == EntryHeld) {
+                enqueueAvailable(entry);
+            } else {
+                _ASSERT(entry->state == EntryAvailable);
+            }
             break;
         }
     }
@@ -1370,7 +1375,7 @@ public:
         : DataSupplier(), inner(i_inner), blockSize(i_blockSize)
     {}
 
-    virtual DataReader* getDataReader(_int64 overflowBytes = 0, double extraFactor = 0.0);
+    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor);
 
 private:
     DataSupplier* inner;
@@ -1379,6 +1384,7 @@ private:
 
     DataReader*
 DecompressDataReaderSupplier::getDataReader(
+    int bufferCount,
     _int64 overflowBytes,
     double extraFactor)
 {
@@ -1386,7 +1392,8 @@ DecompressDataReaderSupplier::getDataReader(
     double expand = MAX_FACTOR * DataSupplier::ExpansionFactor;
     double totalFactor = expand * (1.0 + extraFactor);
     // get inner reader with no overflow since zlib can't deal with it
-    DataReader* data = inner->getDataReader(blockSize, totalFactor);
+    // add 2 buffers for compression thread
+    DataReader* data = inner->getDataReader(bufferCount + 2, blockSize, totalFactor);
     // compute how many extra bytes are owned by this layer
     char* p;
     _int64 totalExtra;
@@ -1394,8 +1401,7 @@ DecompressDataReaderSupplier::getDataReader(
     _int64 mine = (_int64)(totalExtra * expand / totalFactor);
     // create new reader, telling it how many bytes it owns
     // it will subtract overflow off the end of each batch
-    // batch count here is cheap, so make it high enough that it never hits the limit
-    return new DecompressDataReader(data, max(8, DataSupplier::ThreadCount*4), totalExtra, mine, overflowBytes, blockSize);
+    return new DecompressDataReader(data, bufferCount, totalExtra, mine, overflowBytes, blockSize);
 }
     
     DataSupplier*
@@ -1423,7 +1429,7 @@ public:
 
     virtual ~MemMapDataSupplier();
 
-    virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0);
+    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor);
 
     FileMapper* getMapper(const char* fileName);
     void releaseMapper(const char* fileName);
@@ -1784,6 +1790,7 @@ MemMapDataSupplier::~MemMapDataSupplier()
 
     DataReader* 
 MemMapDataSupplier::getDataReader(
+    int bufferCount,
     _int64 overflowBytes,
     double extraFactor)
 {
@@ -1795,7 +1802,7 @@ MemMapDataSupplier::getDataReader(
         // break up into 4Mb batches
         _int64 batch = 4 * 1024 * 1024;
         _int64 extra = (_int64)(batch * extraFactor);
-        return new MemMapDataReader(this, ThreadCount + min(ThreadCount * 3 / 4, 3), batch, overflowBytes, extra);
+        return new MemMapDataReader(this, bufferCount, batch, overflowBytes, extra);
     }
 }
 
@@ -1884,8 +1891,7 @@ DataSupplier* DataSupplier::MemMap = new MemMapDataSupplier();
 #ifdef _MSC_VER
 DataSupplier* DataSupplier::Default = DataSupplier::WindowsOverlapped;
 #else
-DataSupplier* DataSupplier::Default[2] = 
-{ DataSupplier::MemMap[false], DataSupplier::MemMap[true] };
+DataSupplier* DataSupplier::Default = DataSupplier::MemMap;
 #endif
 
 // inner supplier must NOT be autorelease since wrapper keeps multiple buffers alive

@@ -135,6 +135,7 @@ public:
 
     // wrap a single read source with a matcher that buffers reads until their mate is found
     static PairedReadReader* PairMatcher(ReadReader* single, bool quicklyDropUnpairedReads);
+    static const int MatchBuffers = 2;
 };
 
 class ReadSupplier {

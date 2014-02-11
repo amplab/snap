@@ -60,12 +60,13 @@ BAMReader::getNextReadPair(
     void
 BAMReader::init(
     const char *fileName,
+    int bufferCount,
     _int64 startingOffset,
     _int64 amountOfFileToProcess)
 {
     // todo: integrate supplier models
     // might need up to 3x extra for expanded sequence + quality + cigar data
-    data = DataSupplier::GzipBamDefault->getDataReader(MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
+    data = DataSupplier::GzipBamDefault->getDataReader(bufferCount, MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
     if (! data->init(fileName)) {
         fprintf(stderr, "Unable to read file %s\n", fileName);
         soft_exit(1);
@@ -96,7 +97,7 @@ BAMReader::readHeader(
     ReaderContext& context)
 {
     _ASSERT(context.header == NULL);
-    DataReader* data = DataSupplier::GzipBamDefault->getDataReader(MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
+    DataReader* data = DataSupplier::GzipBamDefault->getDataReader(1, MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
     if (! data->init(fileName)) {
         fprintf(stderr, "Unable to read file %s\n", fileName);
         soft_exit(1);
@@ -132,12 +133,13 @@ BAMReader::readHeader(
     BAMReader*
 BAMReader::create(
     const char *fileName,
+    int bufferCount,
     _int64 startingOffset,
     _int64 amountOfFileToProcess,
     const ReaderContext& context)
 {
     BAMReader* reader = new BAMReader(context);
-    reader->init(fileName, startingOffset, amountOfFileToProcess);
+    reader->init(fileName, bufferCount, startingOffset, amountOfFileToProcess);
     return reader;
 }
 
@@ -156,7 +158,7 @@ BAMReader::createReadSupplierGenerator(
     int numThreads,
     const ReaderContext& context)
 {
-    BAMReader* reader = create(fileName, 0, 0, context);
+    BAMReader* reader = create(fileName, ReadSupplierQueue::BufferCount(numThreads), 0, 0, context);
     ReadSupplierQueue* queue = new ReadSupplierQueue((ReadReader*)reader);
     queue->startReaders();
     return queue;
@@ -170,7 +172,8 @@ BAMReader::createPairedReadSupplierGenerator(
     const ReaderContext& context,
     int matchBufferSize)
 {
-    BAMReader* reader = create(fileName, 0, 0, context);
+    BAMReader* reader = create(fileName, 
+        ReadSupplierQueue::BufferCount(numThreads) + PairedReadReader::MatchBuffers, 0, 0, context);
     PairedReadReader* matcher = PairedReadReader::PairMatcher(reader, quicklyDropUnmatchedReads);
     ReadSupplierQueue* queue = new ReadSupplierQueue(matcher);
     queue->startReaders();

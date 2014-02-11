@@ -322,7 +322,7 @@ SortedDataFilterSupplier::mergeSort()
     DataSupplier* readerSupplier = DataSupplier::Default; // autorelease
     // setup - open all files, read first block, begin read for second
     for (SortBlockVector::iterator i = blocks.begin(); i != blocks.end(); i++) {
-        i->reader = readerSupplier->getDataReader(MAX_READ_LENGTH * 8); // todo: standardize max length
+        i->reader = readerSupplier->getDataReader(1, MAX_READ_LENGTH * 8, 0.0); // todo: standardize max length
         i->reader->init(tempFileName);
         i->reader->reinit(i->start, i->bytes);
     }

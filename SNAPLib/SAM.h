@@ -73,11 +73,11 @@ public:
         static void readHeader(const char* fileName, ReaderContext& i_context);
 
         static SAMReader* create(DataSupplier* supplier, const char *fileName,
-                const ReaderContext& i_context,
+                int bufferCount, const ReaderContext& i_context,
                 _int64 startingOffset, _int64 amountOfFileToProcess);
         
         static PairedReadReader* createPairedReader(const DataSupplier* supplier,
-                const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess, 
+                const char *fileName, int bufferCount, _int64 startingOffset, _int64 amountOfFileToProcess, 
                 bool quicklyDropUnpairedReads, const ReaderContext& context);
 
         static ReadSupplierGenerator *createReadSupplierGenerator(
