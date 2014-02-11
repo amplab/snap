@@ -187,6 +187,7 @@ RangeSplittingPairedReadSupplierGenerator::RangeSplittingPairedReadSupplierGener
     bool i_quicklyDropUnpairedReads, const ReaderContext& i_context) :
         fileType(i_fileType), context(i_context), quicklyDropUnpairedReads(i_quicklyDropUnpairedReads)
 {
+    _ASSERT(strcmp(i_fileName1, "-") && (NULL == i_fileName2 || strcmp(i_fileName2, "-"))); // Can't use range splitter on stdin, because you can't seek or query size
     fileName1 = new char[strlen(i_fileName1) + 1];
     strcpy(fileName1, i_fileName1); 
 

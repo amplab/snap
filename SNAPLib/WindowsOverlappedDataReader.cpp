@@ -356,11 +356,11 @@ WindowsOverlappedDataReader::nextBatch()
         nextStart = 0; // can no longer count on getting sequential buffers from file
         ReleaseExclusiveLock(&lock);
         if (! first) {
-            //printf("WindowsOverlappedDataReader::nextBatch thread %d wait for release\n", GetCurrentThreadId());
+            //fprintf(stderr, "WindowsOverlappedDataReader::nextBatch thread %d wait for release\n", GetCurrentThreadId());
             _int64 start = timeInNanos();
             DWORD result = WaitForSingleObject(releaseEvent, releaseWait);
             InterlockedAdd64AndReturnNewValue(&ReleaseWaitTime, timeInNanos() - start);
-            //printf("WindowsOverlappedDataReader::nextBatch thread %d released\n", GetCurrentThreadId());
+            //fprintf(stderr, "WindowsOverlappedDataReader::nextBatch thread %d released\n", GetCurrentThreadId());
             if (result == WAIT_TIMEOUT) {
                 AcquireExclusiveLock(&lock);
                 addBuffer();
@@ -420,7 +420,7 @@ WindowsOverlappedDataReader::releaseBatch(
                 released = true;
                 // fall through
             case Full:
-                //printf("releaseBatch batch %d, releasing %s buffer %d\n", batch.batchID, info->state == InUse ? "InUse" : "Full", i);
+                //fprintf(stderr, "releaseBatch batch %d, releasing %s buffer %d\n", batch.batchID, info->state == InUse ? "InUse" : "Full", i);
                 info->state = Empty;
                 // remove from ready list
                 if (i == nextBufferForConsumer) {
@@ -450,7 +450,7 @@ WindowsOverlappedDataReader::releaseBatch(
     startIo();
 
     if (released) {
-        //printf("releaseBatch set releaseEvent\n");
+        //fprintf(stderr, "releaseBatch set releaseEvent\n");
         SetEvent(releaseEvent);
     }
 
@@ -526,7 +526,7 @@ WindowsOverlappedDataReader::startIo()
         info->state = Reading;
         info->offset = 0;
          
-        //printf("startIo on %d at %lld for %uB\n", index, readOffset, amountToRead);
+        //fprintf(stderr, "startIo on %d at %lld for %uB\n", index, readOffset, amountToRead);
         ReleaseExclusiveLock(&lock);
         if (!ReadFile(
                 hFile,
@@ -544,7 +544,7 @@ WindowsOverlappedDataReader::startIo()
     }
     if (nextBufferForConsumer == -1) {
         if (nextBufferForConsumer == -1) {
-            //printf("startIo thread %x reset releaseEvent\n", GetCurrentThreadId());
+            //fprintf(stderr, "startIo thread %x reset releaseEvent\n", GetCurrentThreadId());
             ResetEvent(releaseEvent);
         }
     }
@@ -559,7 +559,7 @@ WindowsOverlappedDataReader::waitForBuffer(
     BufferInfo *info = &bufferInfo[bufferNumber];
 
     while (info->state == InUse) {
-        //printf("WindowsOverlappedDataReader::waitForBuffer %d InUse...\n", bufferNumber);
+        //fprintf(stderr, "WindowsOverlappedDataReader::waitForBuffer %d InUse...\n", bufferNumber);
         // must already have lock to call, release & wait & reacquire
         ReleaseExclusiveLock(&lock);
         _int64 start = timeInNanos();
@@ -596,11 +596,11 @@ WindowsOverlappedDataReader::waitForBuffer(
 WindowsOverlappedDataReader::addBuffer()
 {
     if (nBuffers == maxBuffers) {
-        //printf("WindowsOverlappedDataReader: addBuffer at limit\n");
+        //fprintf(stderr, "WindowsOverlappedDataReader: addBuffer at limit\n");
         return;
     }
     _ASSERT(nBuffers < maxBuffers);
-    //printf("WindowsOverlappedDataReader: addBuffer %d of %d\n", nBuffers, maxBuffers);
+    //fprintf(stderr, "WindowsOverlappedDataReader: addBuffer %d of %d\n", nBuffers, maxBuffers);
     size_t bytes = bufferSize + extraBytes + overflowBytes;
     bufferInfo[nBuffers].buffer = bufferInfo[nBuffers-1].buffer + bytes;
     if (! BigCommit(bufferInfo[nBuffers].buffer, bytes)) {

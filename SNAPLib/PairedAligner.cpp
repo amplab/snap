@@ -239,7 +239,7 @@ PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
 void PairedAlignerOptions::usageMessage()
 {
     AlignerOptions::usageMessage();
-    printf(
+    fprintf(stderr,
         "  -s   min and max spacing to allow between paired ends (default: %d %d).\n"
         "  -fs  force spacing to lie between min and max.\n"
         "  -H   max hits for intersecting aligner (default: %d).\n"

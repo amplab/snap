@@ -643,7 +643,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         delete[] biasTable;
     }
     
-    printf("%llds\n", (timeInMillis() + 500 - start) / 1000);
+    fprintf(stderr, "%llds\n", (timeInMillis() + 500 - start) / 1000);
     
     return true;
 }
@@ -968,7 +968,7 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
  */
 {
     _int64 start = timeInMillis();
-    printf("Computing bias table.\n");
+    fprintf(stderr, "Computing bias table.\n");
 
     unsigned nHashTables = ((unsigned)seedLen <= (hashTableKeySize * 4) ? 1 : 1 << (((unsigned)seedLen - hashTableKeySize * 4) * 2));
     unsigned countOfBases = genome->getCountOfBases();
@@ -989,7 +989,7 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
         FixedSizeSet<_int64> exactSeedsSeen(2 * (forceExact ? FirstPowerOf2GreaterThanOrEqualTo(countOfBases) : GENOME_SIZE_FOR_EXACT_COUNT));
         for (unsigned i = 0; i < (unsigned)(countOfBases - seedLen); i++) {
             if (i % 10000000 == 0) {
-                printf("Bias computation: %lld / %lld\n",(_int64)i, (_int64)countOfBases);
+                fprintf(stderr, "Bias computation: %lld / %lld\n",(_int64)i, (_int64)countOfBases);
             }
             const char *bases = genome->getSubstring(i,seedLen);
             //
@@ -1090,7 +1090,7 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
     //     printf("%u -> %lf\n", i, table[i]);
     // }
 
-    printf("Computed bias table in %llds\n", (timeInMillis() + 500 - start) / 1000);
+    fprintf(stderr, "Computed bias table in %llds\n", (timeInMillis() + 500 - start) / 1000);
 }
 
 struct PerCounterBatch {
@@ -1178,7 +1178,7 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
                 _int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, PerCounterBatch::nSeedsPerBatch + unrecordedSkippedSeeds);
 
                 if ((_uint64)basesProcessed / printBatchSize > ((_uint64)basesProcessed - PerCounterBatch::nSeedsPerBatch - unrecordedSkippedSeeds)/printBatchSize) {
-                    printf("Bias computation: %lld / %lld\n",(basesProcessed/printBatchSize)*printBatchSize, (_int64)countOfBases);
+                    fprintf(stderr, "Bias computation: %lld / %lld\n",(basesProcessed/printBatchSize)*printBatchSize, (_int64)countOfBases);
                 }
                 unrecordedSkippedSeeds= 0;  // We've now recorded them.
             }
@@ -1188,7 +1188,7 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
         _int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[i].nUsed + unrecordedSkippedSeeds);
 
         if ((_uint64)basesProcessed / printBatchSize > ((_uint64)basesProcessed - batches[i].nUsed - unrecordedSkippedSeeds)/printBatchSize) {
-            printf("Bias computation: %lld / %lld\n",(basesProcessed/printBatchSize)*printBatchSize, (_int64)countOfBases);
+            fprintf(stderr, "Bias computation: %lld / %lld\n",(basesProcessed/printBatchSize)*printBatchSize, (_int64)countOfBases);
         }
 
         unrecordedSkippedSeeds = 0; // All except the first time through the loop this will be 0.
@@ -1311,7 +1311,7 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
             _int64 newNBasesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[whichHashTable].nUsed + unrecordedSkippedSeeds);
 
             if ((unsigned)(newNBasesProcessed / printPeriod) > (unsigned)((newNBasesProcessed - batches[whichHashTable].nUsed - unrecordedSkippedSeeds) / printPeriod)) {
-                printf("Indexing %lld / %lld\n", (newNBasesProcessed / printPeriod) * printPeriod, countOfBases);
+                fprintf(stderr, "Indexing %lld / %lld\n", (newNBasesProcessed / printPeriod) * printPeriod, countOfBases);
             }
             unrecordedSkippedSeeds = 0;
             batches[whichHashTable].clear();
@@ -1326,7 +1326,7 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
         _int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[whichHashTable].nUsed + unrecordedSkippedSeeds);
 
         if ((_uint64)basesProcessed / printPeriod > ((_uint64)basesProcessed - batches[whichHashTable].nUsed - unrecordedSkippedSeeds)/printPeriod) {
-            printf("Indexing %lld / %lld\n",(basesProcessed/printPeriod)*printPeriod, (_int64)countOfBases);
+            fprintf(stderr, "Indexing %lld / %lld\n",(basesProcessed/printPeriod)*printPeriod, (_int64)countOfBases);
         }
 
         unrecordedSkippedSeeds = 0; // All except the first time through the loop this will be 0.        
@@ -1376,9 +1376,9 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
 
         if (!hashTable->Insert(lowBases, newEntry)) {
             for (unsigned j = 0; j < index->nHashTables; j++) {
-                printf("HashTable[%d] has %lld used elements\n",j,(_int64)index->hashTables[j]->GetUsedElementCount());
+                fprintf(stderr, "HashTable[%d] has %lld used elements\n",j,(_int64)index->hashTables[j]->GetUsedElementCount());
             }
-            printf("IndexBuilder: exceeded size of hash table %d.\n"
+            fprintf(stderr, "IndexBuilder: exceeded size of hash table %d.\n"
                     "If you're indexing a non-human genome, make sure not to pass the -hg19 option.  Otheriwse, use -exact or increase slack with -h.\n",
                     whichHashTable);
             soft_exit(1);

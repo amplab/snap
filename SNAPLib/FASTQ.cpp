@@ -250,7 +250,7 @@ FASTQReader::getReadFromBuffer(char *buffer, _int64 validBytes, Read *readToUpda
             soft_exit(1);
         }
         if (! isValidStartingCharacterForNextLine[(i + 3) % 4][*scan]) {
-            fprintf(stderr, "FASTQ file has invalid starting character at offset %lld", data->getFileOffset());
+            fprintf(stderr, "FASTQ file has invalid starting character at offset %lld\n", data->getFileOffset());
             soft_exit(1);
         }
         lines[i] = scan;
@@ -366,6 +366,10 @@ PairedInterleavedFASTQReader::getNextReadPair(Read *read0, Read *read1)
     }
     
     _int64 bytesConsumed = FASTQReader::getReadFromBuffer(buffer, validBytes, read0, fileName, data, context);
+    if (bytesConsumed == validBytes) {
+        fprintf(stderr, "Input file seems to have an odd number of reads.  Ignoring the last one.");
+        return false;
+    }
     bytesConsumed += FASTQReader::getReadFromBuffer(buffer + bytesConsumed, validBytes - bytesConsumed, read1, fileName, data, context);
 
     //
@@ -591,13 +595,22 @@ PairedInterleavedFASTQReader::createPairedReadSupplierGenerator(
     const ReaderContext& context,
     bool gzip)
 {
-    //
-    // Decide whether to use the range splitter or a queue based on whether the files are the same size.
-    //
-    if (gzip) {
+     bool isStdin = !strcmp(fileName,"-");
+ 
+     if (gzip || isStdin) {
         fprintf(stderr,"PairedInterleavedFASTQ using supplier queue\n");
-        DataSupplier* dataSupplier = DataSupplier::GzipDefault[false];
-        PairedReadReader *reader = PairedInterleavedFASTQReader::create(dataSupplier, fileName,0,QueryFileSize(fileName),context);
+        DataSupplier *dataSupplier;
+        if (isStdin) {
+            if (gzip) {
+                dataSupplier = DataSupplier::GzipStdio[false];
+            } else {
+                dataSupplier = DataSupplier::Stdio[false];
+            }
+        } else {
+            dataSupplier = DataSupplier::GzipDefault[false];
+        }
+        
+        PairedReadReader *reader = PairedInterleavedFASTQReader::create(dataSupplier, fileName,0,(stdin ? 0 : QueryFileSize(fileName)),context);
  
         if (NULL == reader ) {
             delete reader;

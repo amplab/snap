@@ -173,7 +173,7 @@ GzipCompressWorker::step()
         zstream.zfree = zfree;
         zstream.opaque = heap;
     }
-    //printf("zip task thread %d begin\n", GetCurrentThreadId());
+    //fprintf(stderr, "zip task thread %d begin\n", GetCurrentThreadId());
     _int64 start = timeInMillis();
     int begin = (getThreadNum() * supplier->nChunks) / getNumThreads();
     int end = ((1 + getThreadNum()) * supplier->nChunks) / getNumThreads();

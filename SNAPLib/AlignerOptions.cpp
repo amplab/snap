@@ -653,10 +653,12 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
 
 
     } else {
-        fprintf(stderr, "Unknown file type, please specify file type with -fastq, -sam, -bam, etc.\n");
         if (snapFile->isStdio) {
             fprintf(stderr,"Stdio IO always requires an explicit file type.  So, for example, do 'snap single index-directory -fastq -' to read FASTQ from stdin\n");
+        } else {
+            fprintf(stderr, "Unknown file type, please specify file type with -fastq, -sam, -bam, etc.\n");
         }
+
         soft_exit(1);
     }
 

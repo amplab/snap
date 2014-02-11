@@ -304,7 +304,7 @@ bool BigCommit(
 {
     void* allocatedMemory = VirtualAlloc(memoryToCommit, sizeToCommit, MEM_COMMIT, PAGE_READWRITE);
     if (allocatedMemory == NULL) {
-        printf("BigCommit VirtualAlloc failed with error 0x%x\n", GetLastError());
+        fprintf(stderr, "BigCommit VirtualAlloc failed with error 0x%x\n", GetLastError());
     }
     return allocatedMemory != NULL;
 }
@@ -492,9 +492,9 @@ CountingBigAllocator::~CountingBigAllocator()
 void PrintBigAllocProfile()
 {
 #ifdef PROFILE_BIGALLOC
-    printf("BigAlloc usage\n");
+    fprintf(stderr, "BigAlloc usage\n");
     for (int i = 0; i < NCallers; i++) {
-        printf("%7.1f Mb %7lld %s\n", 
+        fprintf(stderr, "%7.1f Mb %7lld %s\n", 
             AllocProfile[i].total * 1e-6, AllocProfile[i].count, AllocProfile[i].caller);
     }
 #endif
@@ -506,7 +506,7 @@ void* zalloc(void* opaque, unsigned items, unsigned size)
     void* result = ((ThreadHeap*) opaque)->alloc(bytes);
     static int printed = 0;
     if ((! result) && printed++ < 10) {
-        printf("warning: zalloc using malloc for %lld bytes\n", bytes);
+        fprintf(stderr, "warning: zalloc using malloc for %lld bytes\n", bytes);
     }
     return result ? result : malloc(bytes);
 }

@@ -303,7 +303,7 @@ SortedDataFilterSupplier::mergeSort()
 {
     // merge sort from temp file into sorted file
 #if USE_DEVTEAM_OPTIONS
-    printf("sorting...");
+    fprintf(stderr, "sorting...");
     _int64 start = timeInMillis();
     _int64 startReadWaitTime = DataReader::ReadWaitTime;
     _int64 startReleaseWaitTime = DataReader::ReleaseWaitTime;
@@ -453,11 +453,11 @@ SortedDataFilterSupplier::mergeSort()
     writerSupplier->close();
     delete writerSupplier;
     if (! DeleteSingleFile(tempFileName)) {
-        printf("warning: failure deleting temp file %s\n", tempFileName);
+        fprintf(stderr, "warning: failure deleting temp file %s\n", tempFileName);
     }
 
 #if USE_DEVTEAM_OPTIONS
-    printf("sorted %lld reads in %u blocks, %lld s\n"
+    fprintf(stderr, "sorted %lld reads in %u blocks, %lld s\n"
         "read wait align %.3f s + merge %.3f s, read release align %.3f s + merge %.3f s\n"
         "write wait %.3f s align + %.3f s merge, write filter %.3f s align + %.3f s merge\n",
         total, blocks.size(), (timeInMillis() - start)/1000,

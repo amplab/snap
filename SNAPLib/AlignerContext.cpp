@@ -72,6 +72,7 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
 #ifdef _MSC_VER
     useTimingBarrier = options->useTimingBarrier;
 #endif
+
     initialize();
     extension->initialize();
     
@@ -137,7 +138,8 @@ AlignerContext::initialize()
         strcpy(g_indexDirectory, options->indexDir);
 
         if (strcmp(options->indexDir, "-") != 0) {
-            printf("Loading index from directory... ");
+            fprintf(stderr, "Loading index from directory... ");
+ 
             fflush(stdout);
             _int64 loadStart = timeInMillis();
             index = GenomeIndex::loadFromDirectory((char*) options->indexDir);
@@ -148,10 +150,10 @@ AlignerContext::initialize()
             g_index = index;
 
             _int64 loadTime = timeInMillis() - loadStart;
-            printf("%llds.  %u bases, seed size %d\n",
-                loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
-        } else {
-            printf("no alignment, input/output only\n");
+             fprintf(stderr, "%llds.  %u bases, seed size %d\n",
+                    loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
+         } else {
+            fprintf(stderr, "no alignment, input/output only\n");
         }
     } else {
         index = g_index;
@@ -175,7 +177,7 @@ AlignerContext::initialize()
     void
 AlignerContext::printStatsHeader()
 {
-    printf("MaxHits\tMaxDist\t%%Used\t%%Unique\t%%Multi\t%%!Found\t%%Error\t%%Pairs\tlvCalls\tNumReads\tReads/s\n");
+    fprintf(stderr, "MaxHits\tMaxDist\t%%Used\t%%Unique\t%%Multi\t%%!Found\t%%Error\t%%Pairs\tlvCalls\tNumReads\tReads/s\n");
 }
 
     void
@@ -267,7 +269,7 @@ AlignerContext::printStats()
     } else {
         snprintf(errorRate, sizeof(errorRate), "-");
     }
-    printf("%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%lld\t%lld\t%.0f (at: %lld)\n",
+    fprintf(stderr, "%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%lld\t%lld\t%.0f (at: %lld)\n",
             maxHits_, maxDist_, 
             100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
             100.0 * stats->singleHits / usefulReads,
@@ -303,14 +305,14 @@ AlignerContext::printStats()
         double truePositives = (totalAligned - totalErrors) / max(stats->totalReads, (_int64) 1);
         double falsePositives = totalErrors / totalAligned;
         if (i <= 10 || i % 2 == 0 || i == 69) {
-//            printf("%d\t%d\t%d\t%.3f\t%.2E\n", i, stats->mapqHistogram[i], stats->mapqErrors[i], truePositives, falsePositives);
+//            fprintf(stderr, "%d\t%d\t%d\t%.3f\t%.2E\n", i, stats->mapqHistogram[i], stats->mapqErrors[i], truePositives, falsePositives);
         }
     }
 
 #if TIME_HISTOGRAM
-    printf("Per-read alignment time histogram:\nlog2(ns)\tcount\ttotal time (ns)\n");
+    fprintf(stderr, "Per-read alignment time histogram:\nlog2(ns)\tcount\ttotal time (ns)\n");
     for (int i = 0; i < 31; i++) {
-        printf("%d\t%lld\t%lld\n", i, stats->countByTimeBucket[i], stats->nanosByTimeBucket[i]);
+        fprintf(stderr, "%d\t%lld\t%lld\n", i, stats->countByTimeBucket[i], stats->nanosByTimeBucket[i]);
     }
 #endif // TIME_HISTOGRAM
 
@@ -318,11 +320,11 @@ AlignerContext::printStats()
     stats->printHistograms(stdout);
 
 #ifdef  TIME_STRING_DISTANCE
-    printf("%llds, %lld calls in BSD noneClose, not -1\n",  stats->nanosTimeInBSD[0][1]/1000000000, stats->BSDCounts[0][1]);
-    printf("%llds, %lld calls in BSD noneClose, -1\n",      stats->nanosTimeInBSD[0][0]/1000000000, stats->BSDCounts[0][0]);
-    printf("%llds, %lld calls in BSD close, not -1\n",      stats->nanosTimeInBSD[1][1]/1000000000, stats->BSDCounts[1][1]);
-    printf("%llds, %lld calls in BSD close, -1\n",          stats->nanosTimeInBSD[1][0]/1000000000, stats->BSDCounts[1][0]);
-    printf("%llds, %lld calls in Hamming\n",                stats->hammingNanos/1000000000,         stats->hammingCount);
+    fprintf(stderr, ""%llds, %lld calls in BSD noneClose, not -1\n",  stats->nanosTimeInBSD[0][1]/1000000000, stats->BSDCounts[0][1]);
+    fprintf(stderr, ""%llds, %lld calls in BSD noneClose, -1\n",      stats->nanosTimeInBSD[0][0]/1000000000, stats->BSDCounts[0][0]);
+    fprintf(stderr, ""%llds, %lld calls in BSD close, not -1\n",      stats->nanosTimeInBSD[1][1]/1000000000, stats->BSDCounts[1][1]);
+    fprintf(stderr, ""%llds, %lld calls in BSD close, -1\n",          stats->nanosTimeInBSD[1][0]/1000000000, stats->BSDCounts[1][0]);
+    fprintf(stderr, ""%llds, %lld calls in Hamming\n",                stats->hammingNanos/1000000000,         stats->hammingCount);
 #endif  // TIME_STRING_DISTANCE
 
     extension->printStats();

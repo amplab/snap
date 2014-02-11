@@ -277,11 +277,11 @@ ReadBasedDataReader::nextBatch()
         nextStart = 0; // can no longer count on getting sequential buffers from file
         ReleaseExclusiveLock(&lock);
         if (! first) {
-            //printf("WindowsOverlappedDataReader::nextBatch thread %d wait for release\n", GetCurrentThreadId());
+            //fprintf(stderr, "WindowsOverlappedDataReader::nextBatch thread %d wait for release\n", GetCurrentThreadId());
             _int64 start = timeInNanos();
             bool waitSucceeded = WaitForEventWithTimeout(&releaseEvent, releaseWaitInMillis);
              InterlockedAdd64AndReturnNewValue(&ReleaseWaitTime, timeInNanos() - start);
-            //printf("WindowsOverlappedDataReader::nextBatch thread %d released\n", GetCurrentThreadId());
+            //fprintf(stderr, "WindowsOverlappedDataReader::nextBatch thread %d released\n", GetCurrentThreadId());
             if (!waitSucceeded) {
                 AcquireExclusiveLock(&lock);
                 addBuffer();
@@ -296,6 +296,8 @@ ReadBasedDataReader::nextBatch()
         waitForBuffer(nextBufferForConsumer);
     }
     bufferInfo[nextBufferForConsumer].offset = overflow;
+    //fprintf(stderr,"emitting buffer starting at 0x%llx\n", info->fileOffset);
+    //if (nextStart != 0) fprintf(stderr, "checking NextStart 0x%llx\n", nextStart);  
     _ASSERT(nextStart == 0 || nextStart == bufferInfo[nextBufferForConsumer].fileOffset);
 
     ReleaseExclusiveLock(&lock);
@@ -341,7 +343,7 @@ ReadBasedDataReader::releaseBatch(
                 released = true;
                 // fall through
             case Full:
-                //printf("releaseBatch batch %d, releasing %s buffer %d\n", batch.batchID, info->state == InUse ? "InUse" : "Full", i);
+                //fprintf(stderr, "releaseBatch batch %d, releasing %s buffer %d\n", batch.batchID, info->state == InUse ? "InUse" : "Full", i);
                 info->state = Empty;
                 // remove from ready list
                 if (i == nextBufferForConsumer) {
@@ -371,7 +373,7 @@ ReadBasedDataReader::releaseBatch(
     startIo();
 
     if (released) {
-        //printf("releaseBatch set releaseEvent\n");
+        //fprintf(stderr, "releaseBatch set releaseEvent\n");
         SetEvent(releaseEvent);
     }
 
@@ -399,11 +401,11 @@ ReadBasedDataReader::getExtra(
 ReadBasedDataReader::addBuffer()
 {
     if (nBuffers == maxBuffers) {
-        //printf("WindowsOverlappedDataReader: addBuffer at limit\n");
+        //fprintf(stderr, "WindowsOverlappedDataReader: addBuffer at limit\n");
         return;
     }
     _ASSERT(nBuffers < maxBuffers);
-    //printf("WindowsOverlappedDataReader: addBuffer %d of %d\n", nBuffers, maxBuffers);
+    //fprintf(stderr, "WindowsOverlappedDataReader: addBuffer %d of %d\n", nBuffers, maxBuffers);
     size_t bytes = bufferSize + extraBytes + overflowBytes;
     bufferInfo[nBuffers].buffer = bufferInfo[nBuffers-1].buffer + bytes;
     if (! BigCommit(bufferInfo[nBuffers].buffer, bytes)) {
@@ -600,11 +602,12 @@ StdioDataReader::startIo()
             info->fileOffset = readOffset;
         }
 
-        ReleaseExclusiveLock(&lock);
+        //
+        // We have to run this holding the lock, because otherwise there's no way to make the overflow buffer work properly.  
+        //
 
         size_t bytesRead = fread(info->buffer + bufferOffset, 1, amountToRead, stdin);
-
-        AcquireExclusiveLock(&lock);
+        //fprintf(stderr,"StdioDataReader:startIO(): Read offset 0x%llx into buffer at 0x%llx, size %d, copied 0x%x overflow bytes, start at 0x%llx, tid %d\n", readOffset, info->buffer, bytesRead, bufferOffset, readOffset - bufferOffset, GetCurrentThreadId());
 
         readOffset += bytesRead;
 
@@ -637,7 +640,7 @@ StdioDataReader::startIo()
     }
 
     if (nextBufferForConsumer == -1) {
-        //printf("startIo thread %x reset releaseEvent\n", GetCurrentThreadId());
+        //fprintf(stderr, "startIo thread %x reset releaseEvent\n", GetCurrentThreadId());
         ResetEvent(releaseEvent);
     }
     ReleaseExclusiveLock(&lock);
@@ -651,7 +654,7 @@ StdioDataReader::waitForBuffer(
     BufferInfo *info = &bufferInfo[bufferNumber];
 
     while (info->state == InUse) {
-        //printf("WindowsOverlappedDataReader::waitForBuffer %d InUse...\n", bufferNumber);
+        //fprintf(stderr, "WindowsOverlappedDataReader::waitForBuffer %d InUse...\n", bufferNumber);
         // must already have lock to call, release & wait & reacquire
         ReleaseExclusiveLock(&lock);
         _int64 start = timeInNanos();
@@ -917,7 +920,7 @@ WindowsOverlappedDataReader::startIo()
         info->state = Reading;
         info->offset = 0;
          
-        //printf("startIo on %d at %lld for %uB\n", index, readOffset, amountToRead);
+        //fprintf(stderr, "startIo on %d at %lld for %uB\n", index, readOffset, amountToRead);
         ReleaseExclusiveLock(&lock);
         if (!ReadFile(
                 hFile,
@@ -934,7 +937,7 @@ WindowsOverlappedDataReader::startIo()
         AcquireExclusiveLock(&lock);
     }
     if (nextBufferForConsumer == -1) {
-        //printf("startIo thread %x reset releaseEvent\n", GetCurrentThreadId());
+        //fprintf(stderr, "startIo thread %x reset releaseEvent\n", GetCurrentThreadId());
         ResetEvent(releaseEvent);
     }
     ReleaseExclusiveLock(&lock);
@@ -949,7 +952,7 @@ WindowsOverlappedDataReader::waitForBuffer(
     OVERLAPPED *bufferLap = &bufferLaps[bufferNumber];
 
     while (info->state == InUse) {
-        //printf("WindowsOverlappedDataReader::waitForBuffer %d InUse...\n", bufferNumber);
+        //fprintf(stderr, "WindowsOverlappedDataReader::waitForBuffer %d InUse...\n", bufferNumber);
         // must already have lock to call, release & wait & reacquire
         ReleaseExclusiveLock(&lock);
         _int64 start = timeInNanos();
@@ -1278,7 +1281,7 @@ DecompressDataReader::nextBatch()
     _int64 copy = old->decompressedValid - max(offset, old->decompressedStart);
     memcpy(next->decompressed + overflowBytes - copy, old->decompressed + old->decompressedValid - copy, copy);
     offset = overflowBytes - copy;
-    //printf("DecompressDataReader nextBatch %d:%d #%d -> %d:%d #%d copy %lld + %lld/%lld\n", old->batch.fileID, old->batch.batchID, old-entries, next->batch.fileID, next->batch.batchID, next-entries, copy, next->decompressedStart, next->decompressedValid);
+    //fprintf(stderr, "DecompressDataReader nextBatch %d:%d #%d -> %d:%d #%d copy %lld + %lld/%lld\n", old->batch.fileID, old->batch.batchID, old-entries, next->batch.fileID, next->batch.batchID, next-entries, copy, next->decompressedStart, next->decompressedValid);
     if (autoRelease) {
         releaseBatch(old->batch);
     }
@@ -1307,7 +1310,7 @@ DecompressDataReader::releaseBatch(DataBatch batch)
     for (int i = 0; i < count; i++) {
         Entry* entry = &entries[i];
         if (entry->batch == batch) {
-            //printf("DecompressDataReader releaseBatch %d:%d #%d\n", batch.fileID, batch.batchID, i);
+            //fprintf(stderr, "DecompressDataReader releaseBatch %d:%d #%d\n", batch.fileID, batch.batchID, i);
             enqueueAvailable(entry);
             break;
         }
@@ -1376,7 +1379,7 @@ DecompressDataReader::decompress(
         oldAvailOut = zstream->avail_out;
         oldAvailIn = zstream->avail_out;
         status = inflate(zstream, mode == SingleBlock ? Z_NO_FLUSH : Z_FINISH);
-        // printf("decompress block #%d %lld -> %lld = %d\n", block, zstream.next_in - lastIn, zstream.next_out - lastOut, status);
+        // fprintf(stderr, "decompress block #%d %lld -> %lld = %d\n", block, zstream.next_in - lastIn, zstream.next_out - lastOut, status);
         block++;
         if (status < 0 && status != Z_BUF_ERROR) {
             fprintf(stderr, "GzipDataReader: inflate failed with %d\n", status);
@@ -1387,7 +1390,7 @@ DecompressDataReader::decompress(
             soft_exit(1);
         }
     } while (zstream->avail_in != 0 && (zstream->avail_out != oldAvailOut || zstream->avail_in != oldAvailIn) && mode != SingleBlock);
-    // printf("end decompress status=%d, avail_in=%lld, last block=%lld->%lld, avail_out=%lld\n", status, zstream.avail_in, zstream.next_in - lastIn, zstream.next_out - lastOut, zstream.avail_out);
+    // fprintf(stderr, "end decompress status=%d, avail_in=%lld, last block=%lld->%lld, avail_out=%lld\n", status, zstream.avail_in, zstream.next_in - lastIn, zstream.next_out - lastOut, zstream.avail_out);
     if (o_inputRead) {
         *o_inputRead = inputBytes - zstream->avail_in;
     }
@@ -1500,7 +1503,7 @@ DecompressDataReader::decompressThread(
         bool ok = reader->inner->getData(&entry->compressed, &entry->compressedValid, &entry->compressedStart);
         int index = (int) (entry - reader->entries);
         if (! ok) {
-            //printf("decompressThread #%d %d:%d eof\n", index, reader->inner->getBatch().fileID, reader->inner->getBatch().batchID);
+            //fprintf(stderr, "decompressThread #%d %d:%d eof\n", index, reader->inner->getBatch().fileID, reader->inner->getBatch().batchID);
             if (! reader->inner->isEOF()) {
                 fprintf(stderr, "error reading file at offset %lld\n", reader->getFileOffset());
                 soft_exit(1);
@@ -1534,7 +1537,7 @@ DecompressDataReader::decompressThread(
             // append final offsets
             inputs.push_back(input);
             outputs.push_back(output);
-            //printf("decompressThread read #%d %lld->%lld\n", index, input, output);
+            //fprintf(stderr, "decompressThread read #%d %lld->%lld\n", index, input, output);
             reader->inner->advance(input);
             entry->decompressedValid = output;
             entry->decompressedStart = output - reader->overflowBytes;
@@ -1545,7 +1548,7 @@ DecompressDataReader::decompressThread(
             coworker.step();
         }
         // make buffer available for clients & go on to next
-        //printf("decompressThread #%d %d:%d ready\n", index, entry->batch.fileID, entry->batch.batchID);
+        //fprintf(stderr, "decompressThread #%d %d:%d ready\n", index, entry->batch.fileID, entry->batch.batchID);
         reader->enqueueReady(entry);
     }
     coworker.stop();
@@ -1569,7 +1572,7 @@ DecompressDataReader::decompressThreadContinuous(
         bool ok = reader->inner->getData(&entry->compressed, &entry->compressedValid, &entry->compressedStart);
         int index = (int) (entry - reader->entries);
         if (! ok) {
-            //printf("decompressThreadContinuous#%d %d:%d eof\n", index, reader->inner->getBatch().fileID, reader->inner->getBatch().batchID);
+            //fprintf(stderr, "decompressThreadContinuous#%d %d:%d eof\n", index, reader->inner->getBatch().fileID, reader->inner->getBatch().batchID);
             if (! reader->inner->isEOF()) {
                 fprintf(stderr, "error reading file at offset %lld\n", reader->getFileOffset());
                 soft_exit(1);
@@ -1600,7 +1603,7 @@ DecompressDataReader::decompressThreadContinuous(
             first = false;
         }
         // make buffer available for clients & go on to next
-        //printf("decompressThreadContinuous#%d %d:%d ready\n", index, entry->batch.fileID, entry->batch.batchID);
+        //fprintf(stderr, "decompressThreadContinuous#%d %d:%d ready\n", index, entry->batch.fileID, entry->batch.batchID);
         reader->enqueueReady(entry);
     }
     AllowEventWaitersToProceed(&reader->decompressThreadDone);
@@ -1624,7 +1627,7 @@ DecompressDataReader::popReady()
         AcquireExclusiveLock(&lock);
         if (first != NULL) {
             _ASSERT(first->state == EntryReady);
-            //printf("popReady %d:%d #%d -> held\n", first->batch.fileID, first->batch.batchID, first - entries);
+            //fprintf(stderr, "popReady %d:%d #%d -> held\n", first->batch.fileID, first->batch.batchID, first - entries);
             first->state = EntryHeld;
             if (first->next == NULL) {
                 _ASSERT(last == first);
@@ -1663,7 +1666,7 @@ DecompressDataReader::dequeueAvailable()
 {
     while (true) {
         AcquireExclusiveLock(&lock);
-        //printf("dequeueAvailable #%d\n", available == NULL ? -1 : available - entries);
+        //fprintf(stderr, "dequeueAvailable #%d\n", available == NULL ? -1 : available - entries);
         if (available!= NULL) {
             _ASSERT(available->state == EntryAvailable);
             available->state = EntryReading;
@@ -2007,7 +2010,7 @@ MemMapDataReader::nextBatch()
                 }
                 _ASSERT(found);
                 extraUsed++;
-                //printf("MemMap nextBatch %d:%d = index %d used %d of %d\n", 0, currentBatch, currentExtraIndex, extraUsed, batchCount); 
+                //fprintf(stderr, "MemMap nextBatch %d:%d = index %d used %d of %d\n", 0, currentBatch, currentExtraIndex, extraUsed, batchCount); 
                 if (extraUsed == batchCount) {
                     ResetSingleWaiterObject(&waiter);
                 }
@@ -2049,7 +2052,7 @@ MemMapDataReader::releaseBatch(
             extraBatches[i].batchID = 0;
             _ASSERT(extraUsed > 0);
             extraUsed--;
-            //printf("MemMap: releaseBatch %d:%d = index %d now using %d of %d\n", batch.fileID, batch.batchID, i, extraUsed, batchCount);
+            //fprintf(stderr, "MemMap: releaseBatch %d:%d = index %d now using %d of %d\n", batch.fileID, batch.batchID, i, extraUsed, batchCount);
             if (extraUsed == batchCount - 1) {
                 SignalSingleWaiterObject(&waiter);
             }
@@ -2159,7 +2162,7 @@ BatchTracker::addRead(
     }
     //_ASSERT(pending.tryFind(DataBatch(batch.batchID, 1^batch.fileID).asKey) != p);
     //unsigned* q = pending.tryFind(key); _ASSERT(q && (p == NULL || p == q) && *q == n);
-    //printf("thread %d tracker %lx addRead %u:%u = %d\n", GetCurrentThreadId(), this, batch.fileID, batch.batchID, n);
+    //fprintf(stderr, "thread %d tracker %lx addRead %u:%u = %d\n", GetCurrentThreadId(), this, batch.fileID, batch.batchID, n);
 }
 
     bool
@@ -2168,7 +2171,7 @@ BatchTracker::removeRead(
 {
     DataBatch::Key key = removed.asKey();
     unsigned* p = pending.tryFind(key);
-    //printf("thread %d tracker %lx removeRead %u:%u = %d\n", GetCurrentThreadId(), this, removed.fileID, removed.batchID, p ? *p - 1 : -1);
+    //fprintf(stderr, "thread %d tracker %lx removeRead %u:%u = %d\n", GetCurrentThreadId(), this, removed.fileID, removed.batchID, p ? *p - 1 : -1);
     _ASSERT(p != NULL && *p > 0);
     if (p != NULL) {
         if (*p > 1) {

@@ -378,6 +378,7 @@ public:
     virtual Reader* getReader() = 0;
 };
 
+
 //
 // Macro for counting trailing zeros of a 64-bit value
 //
