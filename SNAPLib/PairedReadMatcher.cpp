@@ -2,7 +2,7 @@
 
 Module Name:
 
-    MultiInputReadSupplier.cp
+    MultiInputReadSupplier.cpp
 
 Abstract:
 
@@ -28,6 +28,8 @@ Revision History:
 #include "Read.h"
 #include "DataReader.h"
 #include "VariableSizeMap.h"
+#include "PairedEndAligner.h"
+#include "SAM.h"
 
 // turn on to debug matching process
 //#define VALIDATE_MATCH
@@ -111,6 +113,12 @@ PairedReadMatcher::getNextReadPair(
     Read *read1,
     Read *read2)
 {
+    Read *outputReads[NUM_READS_PER_PAIR];
+    outputReads[0] = read1;
+    outputReads[1] = read2;
+    int readOneToOutputRead;    // This is used to determine which of the output reads corresponds to one (the read that just came from getNextRead())
+                                // That, in turn, is determined by the S/BAM flags in the read saying whether it was first-in-template.
+
     int skipped = 0;
     while (true) {
         if (skipped++ == 10000) {
@@ -140,6 +148,12 @@ PairedReadMatcher::getNextReadPair(
 #endif
             }
             return false;
+        }
+
+        if (one.getOriginalSAMFlags() & SAM_FIRST_SEGMENT) {
+            readOneToOutputRead = 0;
+        } else {
+            readOneToOutputRead = 1;
         }
         // build key for pending read table, removing /1 or /2 at end
         const char* id = one.getId();
@@ -209,8 +223,8 @@ PairedReadMatcher::getNextReadPair(
         }
         ReadMap::iterator found = unmatched[0].find(key);
         if (found != unmatched[0].end()) {
-            *read2 = found->value;
-            //printf("current matched %d:%d->%d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, batch[0].fileID, batch[0].batchID, read2->getId()); //!!
+            *outputReads[1-readOneToOutputRead] = found->value;
+            //printf("current matched %d:%d->%d:%d %s\n", outputReads[1-readOneToOutputRead]->getBatch().fileID, outputReads[1-readOneToOutputRead]->getBatch().batchID, batch[0].fileID, batch[0].batchID, outputReads[1-readOneToOutputRead]->getId()); //!!
             unmatched[0].erase(found->key);
         } else {
             // try previous batch
@@ -225,14 +239,14 @@ PairedReadMatcher::getNextReadPair(
                     continue;
                 } else {
                     // copy data into read, keep in overflow table indefinitely to preserve memory
-                    *read2 = * (Read*) &found2->value;
-                    _ASSERT(read2->getData()[0]);
+                    *outputReads[1-readOneToOutputRead] = * (Read*) &found2->value;
+                    _ASSERT(outputReads[1-readOneToOutputRead]->getData()[0]);
                     overflowMatched++;
 #ifdef VALIDATE_MATCH
                     overflowUsed.put(key, 1);
 #endif
-                    //printf("overflow matched %d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, read2->getId()); //!!
-                    read2->setBatch(batch[0]); // overwrite batch so both reads have same batch, will track deps instead
+                    //printf("overflow matched %d:%d %s\n", outputReads[1-readOneToOutputRead]->getBatch().fileID, outputReads[1-readOneToOutputRead]->getBatch().batchID, outputReads[1-readOneToOutputRead]->getId()); //!!
+                    outputReads[1-readOneToOutputRead]->setBatch(batch[0]); // overwrite batch so both reads have same batch, will track deps instead
                 }
             } else {
                 // found, remember dependency
@@ -244,15 +258,15 @@ PairedReadMatcher::getNextReadPair(
                     backward.put(batch[0].asKey(), batch[1]);
                     ReleaseExclusiveLock(&lock);
                 }
-                *read2 = found->value;
-                //printf("prior matched %d:%d->%d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, batch[0].fileID, batch[0].batchID, read2->getId()); //!!
-                read2->setBatch(batch[0]); // overwrite batch so both reads have same batch, will track deps instead
+                *outputReads[1-readOneToOutputRead] = found->value;
+                //printf("prior matched %d:%d->%d:%d %s\n", outputReads[1-readOneToOutputRead]->getBatch().fileID, outputReads[1-readOneToOutputRead]->getBatch().batchID, batch[0].fileID, batch[0].batchID, outputReads[1-readOneToOutputRead]->getId()); //!!
+                outputReads[1-readOneToOutputRead]->setBatch(batch[0]); // overwrite batch so both reads have same batch, will track deps instead
                 unmatched[1].erase(found->key);
             }
         }
 
         // found a match
-        *read1 = one;
+        *outputReads[readOneToOutputRead] = one;
         return true;
     }
 }

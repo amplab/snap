@@ -171,12 +171,12 @@ SimpleReadWriter::writePair(
         }
 
         bool writesFit = format->writeRead(genome, &lvc, buffer, size, &sizeUsed[first],
-                            idLengths[first], reads[first], result->status[first], result->mapq[first], locations[first], result->direction[first], true, true,
+                            idLengths[first], reads[first], result->status[first], result->mapq[first], locations[first], result->direction[first], true, first == 0,
                             reads[second], result->status[second], locations[second], result->direction[second]);
 
         if (writesFit) {
             writesFit = format->writeRead(genome, &lvc, buffer + sizeUsed[first], size - sizeUsed[first], &sizeUsed[second],
-                idLengths[second], reads[second], result->status[second], result->mapq[second], locations[second], result->direction[second], true, false,
+                idLengths[second], reads[second], result->status[second], result->mapq[second], locations[second], result->direction[second], true, first != 0,
                 reads[first], result->status[first], locations[first], result->direction[first]);
             if (writesFit) {
                 break;
