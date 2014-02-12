@@ -73,41 +73,44 @@ Arguments:
 
 --*/
 {
-    FILE *loadFile = fopen(loadFileName,"rb");
-    if (loadFile == NULL) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable(%s) fopen failed\n",loadFileName);
+	GenericFile *loadFile = GenericFile::open(loadFileName, GenericFile::Mode::ReadOnly);
+
+    if (NULL == loadFile) {
+        fprintf(stderr,"SNAPHashTable::SNAPHashTable(%s) open failed\n",loadFileName);
         soft_exit(1);
     }
 
     SNAPHashTable *table = loadFromFile(loadFile);
-    fclose (loadFile);
+
+	loadFile->close();
+	delete loadFile;
 
     return table;
 }
 
-SNAPHashTable *SNAPHashTable::loadFromFile(FILE *loadFile)
+SNAPHashTable *SNAPHashTable::loadFromFile(GenericFile *loadFile)
 {
     SNAPHashTable *table = new SNAPHashTable();
 
     unsigned fileMagic;
-    if (1 != fread(&fileMagic, sizeof(magic), 1, loadFile)) {
+	if (sizeof(magic) != loadFile->read(&fileMagic, sizeof(magic))) {
         fprintf(stderr,"Magic number mismatch on hash table load.  %d != %d\n", fileMagic, magic);
         soft_exit(1);
     }
  
-    if (1 != fread(&table->tableSize, sizeof(table->tableSize), 1, loadFile)) {
+	if (sizeof(table->tableSize) != loadFile->read(&table->tableSize, sizeof(table->tableSize))) {
         fprintf(stderr,"SNAPHashTable::SNAPHashTable fread table size failed\n");
         soft_exit(1);
     }
 
 
-    if (1 != fread(&table->usedElementCount, sizeof(table->usedElementCount), 1, loadFile)) {
+	if (sizeof(table->usedElementCount) != loadFile->read(&table->usedElementCount, sizeof(table->usedElementCount))) {
         fprintf(stderr,"SNAPHashTable::SNAPHashTable fread used element count size failed\n");
         soft_exit(1);
 
     }
 
-    if (1 != fread(&table->keySizeInBytes, sizeof(table->keySizeInBytes), 1, loadFile)) {
+	if (sizeof(table->keySizeInBytes) != loadFile->read(&table->keySizeInBytes, sizeof(table->keySizeInBytes))) {
         fprintf(stderr,"SNAPHashTable::SNAPHashTable fread keySizeInBytes size failed.  Perhaps this is an old format hash table and needs to be rebuilt.\n");
         soft_exit(1);
     }
@@ -118,7 +121,7 @@ SNAPHashTable *SNAPHashTable::loadFromFile(FILE *loadFile)
     }
 
     unsigned dataSize;
-    if (1 != fread(&dataSize, sizeof(dataSize), 1, loadFile)) {
+    if (sizeof(dataSize) != loadFile->read(&dataSize, sizeof(dataSize))) {
         fprintf(stderr,"SNAPHashTable::SNAPHashTable fread dataSizeInBytes size failed.  Perhaps this is an old format hash table and needs to be rebuilt.\n");
         soft_exit(1);
     }
@@ -148,10 +151,10 @@ SNAPHashTable *SNAPHashTable::loadFromFile(FILE *loadFile)
         size_t amountToRead = __min(table->tableSize * table->elementSize - readOffset,
 			__min(maxReadSize,table->virtualAllocSize - readOffset));
 
-        size_t bytesRead = fread((char*)table->Table + readOffset, 1, amountToRead, loadFile);
+        size_t bytesRead = loadFile->read((char*)table->Table + readOffset, amountToRead);
 
         if (bytesRead < amountToRead) {
-            fprintf(stderr,"SNAPHashTable::SNAPHashTable: fread failed, %d, %lu, %lu\n", errno, bytesRead, amountToRead);
+            fprintf(stderr,"SNAPHashTable::SNAPHashTable: generic io read failed, %d, %lu, %lu\n", errno, bytesRead, amountToRead);
             soft_exit(1);
         }
  

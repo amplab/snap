@@ -29,6 +29,7 @@ Revision History:
 #include "FASTA.h"
 #include "FixedSizeSet.h"
 #include "FixedSizeVector.h"
+#include "GenericFile.h"
 #include "Genome.h"
 #include "GenomeIndex.h"
 #include "HashTable.h"
@@ -700,26 +701,32 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     
     snprintf(filenameBuffer,filenameBufferSize,"%s%cGenomeIndex",directoryName,PATH_SEP);
 
-    FILE *indexFile = fopen(filenameBuffer,"r");
-    if (indexFile == NULL) {
+	GenericFile *indexFile = GenericFile::open(filenameBuffer, GenericFile::Mode::ReadOnly);
+
+    if (NULL == indexFile) {
         fprintf(stderr,"Unable to open file '%s' for read.\n",filenameBuffer);
-        return false;
+        return NULL;
     }
+
+	char indexFileBuf[1000];
+	indexFile->read(indexFileBuf, sizeof(indexFileBuf));
 
     unsigned seedLen;
     unsigned majorVersion, minorVersion, chromosomePadding;
     int nRead;
-    if (7 != (nRead = fscanf(indexFile,"%d %d %d %d %d %d %d", &majorVersion, &minorVersion, &index->nHashTables, &index->overflowTableSize, &seedLen, &chromosomePadding, &index->hashTableKeySize))) {
+    if (7 != (nRead = sscanf(indexFileBuf,"%d %d %d %d %d %d %d", &majorVersion, &minorVersion, &index->nHashTables, &index->overflowTableSize, &seedLen, &chromosomePadding, &index->hashTableKeySize))) {
         if (3 == nRead || 6 == nRead) {
             fprintf(stderr, "Indices built by versions before 0.16.28 are no longer supported.  Please rebuild your index.\n");
         } else {
             fprintf(stderr,"GenomeIndex::LoadFromDirectory: didn't read initial values\n");
         }
-        fclose(indexFile);
+		indexFile->close();		
+		delete indexFile;
         delete index;
         return NULL;
     }
-    fclose(indexFile);
+	indexFile->close();
+	delete indexFile;
 
     if (majorVersion != GenomeIndexFormatMajorVersion) {
         fprintf(stderr,"This genome index appears to be from a different version of SNAP than this, and so we can't read it.  Index version %d, SNAP index format version %d\n",
@@ -733,12 +740,12 @@ GenomeIndex::loadFromDirectory(char *directoryName)
         return NULL;
     }
     index->seedLen = seedLen;
-
     index->overflowTable = (unsigned *)BigAlloc(index->overflowTableSize * sizeof(*(index->overflowTable)),&index->overflowTableVirtualAllocSize);
 
     snprintf(filenameBuffer,filenameBufferSize,"%s%cOverflowTable",directoryName,PATH_SEP);
-    FILE* fOverflowTable = fopen(filenameBuffer, "rb");
-    if (fOverflowTable == NULL) {
+    GenericFile *fOverflowTable = GenericFile::open(filenameBuffer, GenericFile::Mode::ReadOnly);
+
+    if (NULL == fOverflowTable) {
         fprintf(stderr,"Unable to open overflow table file, '%s', %d\n",filenameBuffer,errno);
         delete index;
         return NULL;
@@ -756,16 +763,19 @@ GenomeIndex::loadFromDirectory(char *directoryName)
             }
         }
 #endif
-        int amountRead = (int)fread(((char*) index->overflowTable) + readOffset, 1, amountToRead, fOverflowTable);   
+        int amountRead = fOverflowTable->read(((char*) index->overflowTable) + readOffset, amountToRead);
         if (amountRead < amountToRead) {
-            fprintf(stderr,"GenomeIndex::loadFromDirectory: fread failed (amountToRead = %d, amountRead = %d, readOffset %lld), %d\n",amountToRead, amountRead, readOffset, errno);
-            fclose(fOverflowTable);
+            fprintf(stderr,"GenomeIndex::loadFromDirectory: read failed (amountToRead = %d, amountRead = %d, readOffset %lld), %d\n",amountToRead, amountRead, readOffset, errno);
+			fOverflowTable->close();
+			delete fOverflowTable;
             delete index;
             return NULL;
         }
         readOffset += amountRead;
     }
-    fclose(fOverflowTable);
+
+	fOverflowTable->close();
+	delete fOverflowTable;
     fOverflowTable = NULL;
 
     index->hashTables = new SNAPHashTable*[index->nHashTables];
@@ -775,7 +785,7 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     }
 
     snprintf(filenameBuffer,filenameBufferSize,"%s%cGenomeIndexHash",directoryName,PATH_SEP);
-    FILE *tablesFile = fopen(filenameBuffer, "rb");
+	GenericFile *tablesFile = GenericFile::open(filenameBuffer, GenericFile::Mode::ReadOnly);
     if (NULL == tablesFile) {
         fprintf(stderr,"Unable to open genome hash table file '%s'\n", filenameBuffer);
         soft_exit(1);
@@ -789,7 +799,8 @@ GenomeIndex::loadFromDirectory(char *directoryName)
         }
     }
 
-    fclose(tablesFile);
+	tablesFile->close();
+	delete tablesFile;
     tablesFile = NULL;
 
     snprintf(filenameBuffer,filenameBufferSize,"%s%cGenome",directoryName,PATH_SEP);
