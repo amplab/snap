@@ -2,7 +2,7 @@
 
 Module Name:
 
-    MultiInputReadSupplier.cp
+    MultiInputReadSupplier.cpp
 
 Abstract:
 
@@ -28,7 +28,8 @@ Revision History:
 #include "Read.h"
 #include "DataReader.h"
 #include "VariableSizeMap.h"
-#include "DynamicList.h"
+#include "PairedEndAligner.h"
+#include "SAM.h"
 
 // turn on to debug matching process
 //#define VALIDATE_MATCH
@@ -146,6 +147,12 @@ PairedReadMatcher::getNextReadPair(
     Read *read1,
     Read *read2)
 {
+    Read *outputReads[NUM_READS_PER_PAIR];
+    outputReads[0] = read1;
+    outputReads[1] = read2;
+    int readOneToOutputRead;    // This is used to determine which of the output reads corresponds to one (the read that just came from getNextRead())
+                                // That, in turn, is determined by the S/BAM flags in the read saying whether it was first-in-template.
+
     int skipped = 0;
     while (true) {
         if (skipped++ == 10000) {
@@ -192,6 +199,12 @@ PairedReadMatcher::getNextReadPair(
             }
         }
 
+        if (localRead.getOriginalSAMFlags() & SAM_FIRST_SEGMENT) {
+            readOneToOutputRead = 0;
+        } else {
+            readOneToOutputRead = 1;
+        }
+
         // build key for pending read table, removing /1 or /2 at end
         const char* id = localRead.getId();
         unsigned idLength = localRead.getIdLength();
@@ -228,7 +241,7 @@ PairedReadMatcher::getNextReadPair(
             totalStats.oldPairs += currentStats.oldPairs;
             totalStats.overflowPairs += currentStats.overflowPairs;
             totalStats.totalReads += currentStats.totalReads;
-            printf("batch %d:%d: internal %d pairs, previous %d pairs, old %d pairs from %d batches, overflow %d pairs\n"
+            fprintf(stderr,"batch %d:%d: internal %d pairs, previous %d pairs, old %d pairs from %d batches, overflow %d pairs\n"
                 "cumulative: internal %d pairs, previous %d pairs, old %d pairs from %d batches, overflow %d pairs\n",
                 batch[0].fileID, batch[0].batchID, currentStats.internalPairs, currentStats.previousPairs, currentStats.oldPairs, currentStats.oldBatches, currentStats.overflowPairs,
                 totalStats.internalPairs, totalStats.previousPairs, totalStats.oldPairs, totalStats.oldBatches, totalStats.overflowPairs);
@@ -238,8 +251,8 @@ PairedReadMatcher::getNextReadPair(
             // roll over batches
             if (unmatched[1].size() > 0) {
                 // copy remaining reads into overflow map
-                //printf("warning: PairedReadMatcher overflow %d unpaired reads from %d:%d\n", unmatched[1].size(), batch[1].fileID, batch[1].batchID); //!!
-                char* buf = (char*) alloca(500);
+                //fprintf(stderr,"warning: PairedReadMatcher overflow %d unpaired reads from %d:%d\n", unmatched[1].size(), batch[1].fileID, batch[1].batchID); //!!
+                //char* buf = (char*) alloca(500);
                 for (ReadMap::iterator r = unmatched[1].begin(); r != unmatched[1].end(); r = unmatched[1].next(r)) {
                     ReadWithOwnMemory* p = allocOverflowRead();
                     new (p) ReadWithOwnMemory(r->value);
@@ -251,9 +264,9 @@ PairedReadMatcher::getNextReadPair(
                     ReadWithOwnMemory* rd = overflow.tryFind(r->key);
                     _ASSERT(! strncmp(s2, rd->getId(), len));
 #endif
-                    memcpy(buf, r->value.getId(), r->value.getIdLength());
-                    buf[r->value.getIdLength()] = 0;
-                    //printf("overflow add %d:%d %s\n", batch[1].fileID, batch[1].batchID, buf);
+                    //memcpy(buf, r->value.getId(), r->value.getIdLength());
+                    //buf[r->value.getIdLength()] = 0;
+                    //fprintf(stderr, "overflow add %d:%d %s\n", batch[1].fileID, batch[1].batchID, buf);
                 }
             }
             for (ReadMap::iterator i = unmatched[1].begin(); i != unmatched[1].end(); i = unmatched[1].next(i)) {
@@ -272,8 +285,8 @@ PairedReadMatcher::getNextReadPair(
 
         ReadMap::iterator found = unmatched[0].find(key);
         if (found != unmatched[0].end()) {
-            *read2 = found->value;
-            //printf("current matched %d:%d->%d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, batch[0].fileID, batch[0].batchID, read2->getId()); //!!
+            *outputReads[1-readOneToOutputRead] = found->value;
+             //fprintf(stderr, "current matched %d:%d->%d:%d %s\n", outputReads[1-readOneToOutputRead]->getBatch().fileID, outputReads[1-readOneToOutputRead]->getBatch().batchID, batch[0].fileID, batch[0].batchID, outputReads[1-readOneToOutputRead]->getId()); //!!
             unmatched[0].erase(found->key);
 #ifdef STATISTICS
             currentStats.internalPairs++;
@@ -287,20 +300,21 @@ PairedReadMatcher::getNextReadPair(
                 if (found2 == overflow.end()) {
                     // no match, remember it for later matching
                     unmatched[0].put(key, localRead);
-                    //printf("unmatched add %d:%d %lx\n", batch[0].fileID, batch[0].batchID, key); //!!
+                    //fprintf(stderr, "unmatched add %d:%d %lx\n", batch[0].fileID, batch[0].batchID, key); //!!
                     continue;
                 } else {
-                    // copy data into read, remember to release when this batch is released
-                    new (read2) Read(*(Read*)found2->value);
+                    // copy data into read, keep in overflow table indefinitely to preserve memory
+                    *outputReads[1-readOneToOutputRead] = * (Read*) &found2->value;
+                    _ASSERT(outputReads[1-readOneToOutputRead]->getData()[0]);
                     overflowMatched++;
                     OverflowReadVector* v;
                     if (! overflowRelease.tryGet(batch[0].asKey(), &v)) {
                         v = new OverflowReadVector();
                         overflowRelease.put(batch[0].asKey(), v);
-                        //printf("overflow fetch into %d:%d\n", batch[0].fileID, batch[0].batchID);
+                        //fprintf(stderr,"overflow fetch into %d:%d\n", batch[0].fileID, batch[0].batchID);
                     }
                     v->push_back(found2->value);
-                    //printf("overflow matched %d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, read2->getId()); //!!
+                    //fprintf(stderr,"overflow matched %d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, read2->getId()); //!!
                     read2->setBatch(batch[0]); // overwrite batch so both reads have same batch, will track deps instead
 #ifdef VALIDATE_MATCH
                     overflowUsed.put(key, 1);
@@ -312,8 +326,8 @@ PairedReadMatcher::getNextReadPair(
                 }
             } else {
                 // found a match in preceding batch
-                *read2 = found->value;
-                //printf("prior matched %d:%d->%d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, batch[0].fileID, batch[0].batchID, read2->getId()); //!!
+                *outputReads[1-readOneToOutputRead] = found->value;
+                //fprintf(stderr,"prior matched %d:%d->%d:%d %s\n", found->value.getBatch().fileID, found->gvalue.etBatch().batchID, batch[0].fileID, batch[0].batchID, found->value.getId()); //!!
                 unmatched[1].erase(found->key);
 #ifdef STATISTICS
                 currentStats.previousPairs++;
@@ -322,7 +336,7 @@ PairedReadMatcher::getNextReadPair(
         }
 
         // found a match
-        *read1 = localRead;
+        *outputReads[readOneToOutputRead] = localRead;
         return true;
     }
 }

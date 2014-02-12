@@ -527,6 +527,7 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
     snapFile->secondFileName = NULL;
     snapFile->isCompressed = false;
     *argsConsumed = 0;
+    snapFile->isStdio = false;
 
     if (0 == nArgs) {
         return false;
@@ -535,9 +536,13 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
     //
     // Check to see if this is an explicit file type.
     //
-    if ('-' == args[0][0]) {
+    if ('-' == args[0][0] && '\0' != args[0][1]) { // starts with - but isn't just a - (which means to use stdio without a type specifier)
         if (1 == nArgs) {
             return false;
+        }
+
+        if (!strcmp(args[1], "-")) {
+            snapFile->isStdio = true;
         }
 
         if (!strcmp(args[0], "-fastq") || !strcmp(args[0], "-compressedFastq")) {
@@ -557,6 +562,13 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
             if (paired) {
                 snapFile->fileType = FASTQFile;
                 snapFile->secondFileName = args[2];
+                if (!strcmp("-", args[2])) {
+                    if (snapFile->isStdio) {
+                        fprintf(stderr,"Can't have both halves of paired FASTQ files be stdin ('-').  Did you mean to use the interleaved FASTQ type?\n");
+                        soft_exit(1);
+                    }
+                    snapFile->isStdio = true;
+                }
                 *argsConsumed = 3;
             } else {
                snapFile->fileType = FASTQFile;
@@ -594,6 +606,7 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
 
     *argsConsumed = 1;
     snapFile->fileName = args[0];
+    snapFile->isStdio = '-' == args[0][0] && '\0' == args[0][1];
 
     if (util::stringEndsWith(args[0], ".sam")) {
         snapFile->fileType = SAMFile;
@@ -623,12 +636,29 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
             snapFile->isCompressed = false;
         }
 
+        snapFile->isStdio = !strcmp(args[0], "-");
+
         if (paired) {
             snapFile->secondFileName = args[1];
+            if (!strcmp(args[1], "-")) {
+                if (snapFile->isStdio) {
+                    fprintf(stderr,"Can't have both halves of paired FASTQ files be stdin ('-').  Did you mean to use the interleaved FASTQ type?\n");
+                    soft_exit(1);
+                }
+                snapFile->isStdio = true;
+            }
+
             *argsConsumed = 2;
         }
+
+
     } else {
-        fprintf(stderr, "Unknown file type, please specify file type with -fastq, -sam, -bam, etc.\n");
+        if (snapFile->isStdio) {
+            fprintf(stderr,"Stdio IO always requires an explicit file type.  So, for example, do 'snap single index-directory -fastq -' to read FASTQ from stdin\n");
+        } else {
+            fprintf(stderr, "Unknown file type, please specify file type with -fastq, -sam, -bam, etc.\n");
+        }
+
         soft_exit(1);
     }
 

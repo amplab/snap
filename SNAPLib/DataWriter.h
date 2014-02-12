@@ -209,3 +209,60 @@ private:
 
     friend class AsyncDataWriter;
 };
+
+class StdoutAsyncFile : public AsyncFile
+{
+public:
+    StdoutAsyncFile();
+    virtual ~StdoutAsyncFile();
+
+    bool close();
+
+    static StdoutAsyncFile *open(const char *filename, bool write);
+
+    AsyncFile::Writer* getWriter();
+    AsyncFile::Reader* getReader();
+
+    void beginWrite(void *buffer, size_t length, size_t offset, size_t *o_bytesWritten);
+    void waitForCompletion(size_t offset);
+
+private:
+    ExclusiveLock   lock;
+
+    struct WriteElement {
+        void                *buffer;
+        size_t               length;
+        size_t               offset;
+        size_t              *o_bytesWritten;
+
+        WriteElement        *next;
+        WriteElement        *prev;
+
+        void enqueue(WriteElement *previous);
+        void dequeue();
+    };
+
+    bool isQueueEmpty() {
+        return writeElementQueue->next == writeElementQueue;
+    }
+
+    size_t          highestOffsetCompleted;
+
+    //
+    // The queue is kept in order, and the writer writes without gaps, so if you put on blocks 10 and 12, the writer will write
+    // 10, and then leave 12 on the queue and wait for 11 to be added and written before processing 12.
+    //
+    WriteElement writeElementQueue[1];
+
+    EventObject  unexaminedElementsOnQueue;     // This gets set when a writer puts a block on the queue, and cleared when the consumer has seen it.
+    EventObject  elementsCompleted;             // This gets set when any element is completed by the consumer, and reset when a waiter starts
+
+    SingleWaiterObject  consumerThreadDone;
+
+    bool                closing;
+
+    static void ConsumerThreadMain(void *param);
+    void runConsumer();
+
+    static bool anyCreated;              // Because there's no way to multiplex stdout, you only get one per run of SNAP
+};

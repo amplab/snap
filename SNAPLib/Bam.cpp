@@ -1136,9 +1136,9 @@ public:
     {
 #ifdef USE_DEVTEAM_OPTIONS
         if (mates.size() > 0) {
-            printf("duplicate matching ended with %d unmatched reads:\n", mates.size());
+            fprintf(stderr, "duplicate matching ended with %d unmatched reads:\n", mates.size());
             for (MateMap::iterator i = mates.begin(); i != mates.end(); i = mates.next(i)) {
-                printf("%u%s/%u%s\n", i->key.locations[0], i->key.isRC[0] ? "rc" : "", i->key.locations[1], i->key.isRC[1] ? "rc" : "");
+                fprintf(stderr, "%u%s/%u%s\n", i->key.locations[0], i->key.isRC[0] ? "rc" : "", i->key.locations[1], i->key.isRC[1] ? "rc" : "");
             }
         }
 #endif
@@ -1229,7 +1229,7 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                 if (f == mates.end()) {
                     mates.put(key, DuplicateMateInfo());
                     info = &mates[key];
-                    //printf("add %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
+                    //fprintf(stderr, "add %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
                     info->firstRunOffset = runOffset;
                     info->firstRunEndOffset = lastOffset;
                 } else {
@@ -1339,7 +1339,7 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                 MateMap::iterator m = mates.find(key);
                 if (m != mates.end() && m->value.firstRunOffset != runOffset) {
                     mates.erase(key);
-                    //printf("erase %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
+                    //fprintf(stderr, "erase %u%s/%u%s -> %d\n", key.locations[0], key.isRC[0] ? "rc" : "", key.locations[1], key.isRC[1] ? "rc" : "", mates.size());
                 }
             }
         }
@@ -1484,7 +1484,7 @@ BAMIndexSupplier::onRead(
     size_t fileOffset,
     int batchIndex)
 {
-    //printf("index onRead %d:%d+%d @ %lld %d\n", bam->refID, bam->pos, bam->l_ref(), fileOffset, batchIndex);
+    //fprintf(stderr, "index onRead %d:%d+%d @ %lld %d\n", bam->refID, bam->pos, bam->l_ref(), fileOffset, batchIndex);
     if (bam->refID != lastRefId) {
         if (lastRefId != -1) {
             addChunk(lastRefId, BAMAlignment::BAM_EXTRA_BIN, firstBamStart, lastBamEnd);

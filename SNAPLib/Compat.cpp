@@ -35,6 +35,7 @@ Revision History:
 #ifdef PROFILE_WAIT
 #include <map>
 #endif
+#include "DataWriter.h"
 
 using std::min;
 using std::max;
@@ -199,6 +200,19 @@ void DestroyEventObject(EventObject *eventObject) {DestroySingleWaiterObject(eve
 void AllowEventWaitersToProceed(EventObject *eventObject) {SignalSingleWaiterObject(eventObject);}
 void PreventEventWaitersFromProceeding(EventObject *eventObject) {ResetSingleWaiterObject(eventObject);}
 void WaitForEvent(EventObject *eventObject) {WaitForSingleWaiterObject(eventObject);}
+bool WaitForEventWithTimeout(EventObject *eventObject, _int64 timeoutInMillis)
+{
+    DWORD retVal = WaitForSingleObjectEx(*eventObject, (unsigned)timeoutInMillis, FALSE);
+
+    if (retVal == WAIT_OBJECT_0) {
+        return true;
+    } else if (retVal == WAIT_TIMEOUT) {
+        return false;
+    }
+    fprintf(stderr, "WaitForSingleObject returned unexpected result %d (error %d)\n", retVal, GetLastError());
+    soft_exit(1);
+    return false;   // NOTREACHED: Just to avoid the compiler complaining.
+}
 
 
 void BindThreadToProcessor(unsigned processorNumber) // This hard binds a thread to a processor.  You can no-op it at some perf hit.
@@ -413,13 +427,13 @@ OpenMemoryMappedFile(
     result->fileHandle = CreateFile(filename, (write ? GENERIC_WRITE : 0) | GENERIC_READ, 0, NULL, OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL | (sequential ? FILE_FLAG_SEQUENTIAL_SCAN : FILE_FLAG_RANDOM_ACCESS), NULL);
     if (result->fileHandle == NULL) {
-        printf("unable to open mapped file %s error 0x%x\n", filename, GetLastError());
+        fprintf(stderr, "unable to open mapped file %s error 0x%x\n", filename, GetLastError());
         delete result;
         return NULL;
     }
     result->fileMapping = CreateFileMapping(result->fileHandle, NULL, write ? PAGE_READWRITE : PAGE_READONLY, 0, 0, NULL);
     if (result->fileMapping == NULL) {
-        printf("unable to create file mapping %s error 0x%x\n", filename, GetLastError());
+        fprintf(stderr, "unable to create file mapping %s error 0x%x\n", filename, GetLastError());
         delete result;
         return NULL;
     }
@@ -429,7 +443,7 @@ OpenMemoryMappedFile(
         (DWORD) offset,
         length);
     if (*o_contents == NULL) {
-        printf("unable to map file %s error 0x%x\n", filename, GetLastError());
+        fprintf(stderr, "unable to map file %s error 0x%x\n", filename, GetLastError());
         delete result;
         return NULL;
     }
@@ -446,7 +460,7 @@ CloseMemoryMappedFile(
     if (ok) {
         delete (void*) mappedFile;
     } else {
-        printf("unable to close memory mapped file, error 0x%x\n", GetLastError());
+        fprintf(stderr, "unable to close memory mapped file, error 0x%x\n", GetLastError());
     }
 }
 
@@ -798,7 +812,7 @@ FileMapper::~FileMapper()
 #endif
     CloseHandle(hMapping);
     CloseHandle(hFile);
-    printf("FileMapper: %lld immediate completions, %lld delayed completions, %lld failures, %lld ms in readfile (%lld ms/call)\n",countOfImmediateCompletions, countOfDelayedCompletions, countOfFailures, millisSpentInReadFile, 
+    fprintf(stderr, "FileMapper: %lld immediate completions, %lld delayed completions, %lld failures, %lld ms in readfile (%lld ms/call)\n",countOfImmediateCompletions, countOfDelayedCompletions, countOfFailures, millisSpentInReadFile, 
         millisSpentInReadFile/max(1, countOfImmediateCompletions + countOfDelayedCompletions + countOfFailures));
 }
     
@@ -952,6 +966,27 @@ public:
         pthread_mutex_unlock(&lock);
     }
 
+    bool waitWithTimeout(_int64 timeoutInMillis) {
+        struct timespec wakeTime;
+        clock_gettime(CLOCK_REALTIME, &wakeTime);
+        wakeTime.tv_nsec += timeoutInMillis * 1000000;
+        wakeTime.tv_sec += wakeTime.tv_nsec / 1000000000;
+        wakeTime.tv_nsec = wakeTime.tv_nsec % 1000000000;
+
+        bool timedOut = false;
+
+        pthread_mutex_lock(&lock);
+        while (!set) {
+            int retVal = pthread_cond_timedwait(&cond, &lock, &wakeTime);
+            if (retVal == ETIMEDOUT) {
+                timedOut = true;
+                break;
+            }
+        }
+        pthread_mutex_unlock(&lock);
+        return !timedOut;
+    }
+
     bool destroy() {
         pthread_cond_destroy(&cond);
         pthread_mutex_destroy(&lock);
@@ -1007,7 +1042,7 @@ public:
     void blockAll()
     {
         pthread_mutex_lock(&lock);
-	set = false;
+	    set = false;
         pthread_mutex_unlock(&lock);
     }
 };
@@ -1044,6 +1079,11 @@ void PreventEventWaitersFromProceeding(EventObject *eventObject)
 void WaitForEvent(EventObject *eventObject)
 {
   (*eventObject)->wait();
+}
+
+bool WaitForEventWithTimeout(EventObject *eventObject, _int64 timeoutInMillis)
+{
+    return (*eventObject)->waitWithTimeout(timeoutInMillis);
 }
 
 int InterlockedIncrementAndReturnNewValue(volatile int *valueToDecrement)
@@ -1771,6 +1811,9 @@ FileMapper::prefetch(size_t currentRead)
 
 AsyncFile* AsyncFile::open(const char* filename, bool write)
 {
+    if (!strcmp("-", filename) && write) {
+        return StdoutAsyncFile::open("-", true);
+    }
 #ifdef _MSC_VER
     return WindowsAsyncFile::open(filename, write);
 #else

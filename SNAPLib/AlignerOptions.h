@@ -42,11 +42,12 @@ struct AbstractOptions
 enum FileType {UnknownFileType, SAMFile, FASTQFile, BAMFile, InterleavedFASTQFile, CRAMFile};  // Add more as needed
 
 struct SNAPFile {
-    SNAPFile() : fileName(NULL), secondFileName(NULL), fileType(UnknownFileType) {}
+    SNAPFile() : fileName(NULL), secondFileName(NULL), fileType(UnknownFileType), isStdio(false) {}
     const char          *fileName;
     const char          *secondFileName;
     FileType             fileType;
     bool                 isCompressed;
+    bool                 isStdio;           // Only applies to the first file for two-file inputs
 
     void readHeader(ReaderContext& context);
     PairedReadSupplierGenerator *createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context);

@@ -251,7 +251,7 @@ FASTQReader::getReadFromBuffer(char *buffer, _int64 validBytes, Read *readToUpda
             soft_exit(1);
         }
         if (! isValidStartingCharacterForNextLine[(i + 3) % 4][*scan]) {
-            fprintf(stderr, "FASTQ file has invalid starting character at offset %lld", data->getFileOffset());
+            fprintf(stderr, "FASTQ file has invalid starting character at offset %lld\n", data->getFileOffset());
             soft_exit(1);
         }
         lines[i] = scan;
@@ -367,6 +367,10 @@ PairedInterleavedFASTQReader::getNextReadPair(Read *read0, Read *read1)
     }
     
     _int64 bytesConsumed = FASTQReader::getReadFromBuffer(buffer, validBytes, read0, fileName, data, context);
+    if (bytesConsumed == validBytes) {
+        fprintf(stderr, "Input file seems to have an odd number of reads.  Ignoring the last one.");
+        return false;
+    }
     bytesConsumed += FASTQReader::getReadFromBuffer(buffer + bytesConsumed, validBytes - bytesConsumed, read1, fileName, data, context);
 
     //
@@ -557,14 +561,26 @@ FASTQReader::createReadSupplierGenerator(
     const ReaderContext& context,
     bool gzip)
 {
-    if (! gzip) {
+    bool isStdin = !strcmp(fileName,"-");
+    if (! gzip && !isStdin) {
         //
         // Single ended uncompressed FASTQ files can be handled by a range splitter.
         //
         return new RangeSplittingReadSupplierGenerator(fileName, false, numThreads, context);
     } else {
-        ReadReader* fastq = FASTQReader::create(DataSupplier::GzipDefault, fileName,
-            ReadSupplierQueue::BufferCount(numThreads), 0, QueryFileSize(fileName), context);
+        ReadReader* fastq;
+        //
+        // Because we can only have one stdin reader, we need to use a queue if we're reading from stdin
+        //
+        if (isStdin) {
+            if (gzip) {
+                fastq = FASTQReader::create(DataSupplier::GzipStdio, fileName, ReadSupplierQueue::BufferCount(numThreads), 0, 0, context);
+            } else {
+                fastq = FASTQReader::create(DataSupplier::Stdio, fileName, ReadSupplierQueue::BufferCount(numThreads), 0, 0, context);
+            }
+        } else {
+            fastq = FASTQReader::create(DataSupplier::GzipDefault, fileName, ReadSupplierQueue::BufferCount(numThreads), 0, QueryFileSize(fileName), context);
+        }
         if (fastq == NULL) {
             delete fastq;
             return NULL;
@@ -582,14 +598,23 @@ PairedInterleavedFASTQReader::createPairedReadSupplierGenerator(
     const ReaderContext& context,
     bool gzip)
 {
-    //
-    // Decide whether to use the range splitter or a queue based on whether the files are the same size.
-    //
-    if (gzip) {
+     bool isStdin = !strcmp(fileName,"-");
+ 
+     if (gzip || isStdin) {
         fprintf(stderr,"PairedInterleavedFASTQ using supplier queue\n");
-        DataSupplier* dataSupplier = DataSupplier::GzipDefault;
+        DataSupplier *dataSupplier;
+        if (isStdin) {
+            if (gzip) {
+                dataSupplier = DataSupplier::GzipStdio;
+            } else {
+                dataSupplier = DataSupplier::Stdio;
+            }
+        } else {
+            dataSupplier = DataSupplier::GzipDefault;
+        }
+        
         PairedReadReader *reader = PairedInterleavedFASTQReader::create(dataSupplier, fileName,
-            ReadSupplierQueue::BufferCount(numThreads), 0,QueryFileSize(fileName),context);
+            ReadSupplierQueue::BufferCount(numThreads), 0,(stdin ? 0 : QueryFileSize(fileName)),context);
  
         if (NULL == reader ) {
             delete reader;

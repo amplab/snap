@@ -37,7 +37,7 @@ Revision History:
 
 using std::min;
 
-#ifdef TRACE_ALIGNER
+#ifdef TRACE_ALIGNER    // If you turn this on, then stdout writing won't work.
 #define TRACE printf
 #else
 #define TRACE(...) {}
@@ -417,7 +417,7 @@ Return Value:
                 // exceed our seed count.  Do the best we can with what we have.
                 //
 #ifdef TRACE_ALIGNER
-                printf("Calling score with force=true because we wrapped around enough\n");
+                printf(stderr, "Calling score with force=true because we wrapped around enough\n");
 #endif
                 score(
                     true,

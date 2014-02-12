@@ -262,6 +262,7 @@
     <ClCompile Include="Tables.cpp" />
     <ClCompile Include="Util.cpp" />
     <ClCompile Include="WGsim.cpp" />
+    <ClCompile Include="WindowsOverlappedDataReader.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

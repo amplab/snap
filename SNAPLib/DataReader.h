@@ -160,6 +160,7 @@ public:
     // 
     static DataSupplier* GzipBam(DataSupplier* inner);
     static DataSupplier* Gzip(DataSupplier* inner);
+    static DataSupplier* StdioSupplier();
 
     // memmap works on both platforms (but better on Linux)
     static DataSupplier* MemMap;
@@ -173,6 +174,9 @@ public:
     static DataSupplier* Default;
     static DataSupplier* GzipDefault;
     static DataSupplier* GzipBamDefault;
+
+    static DataSupplier* GzipStdio;
+    static DataSupplier* Stdio;
 
     // hack: must be set to communicate thread count into suppliers
     static int ThreadCount;
@@ -199,3 +203,4 @@ private:
     typedef VariableSizeMap<DataBatch::Key,unsigned> BatchMap;
     BatchMap pending;
 };
+
