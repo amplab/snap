@@ -757,7 +757,7 @@ StdoutAsyncFile::beginWrite(void *buffer, size_t length, size_t offset, size_t *
         // It isn't the first thing on the queue.  Figure out where it goes.
         //
         WriteElement *possiblePredecessor = writeElementQueue->next;
-        while (possiblePredecessor->next != writeElementQueue && possiblePredecessor->next->offset > offset) {
+        while (possiblePredecessor->next != writeElementQueue && possiblePredecessor->next->offset < offset) {
             possiblePredecessor = possiblePredecessor->next;
         }
         _ASSERT(possiblePredecessor->offset < offset);
