@@ -171,12 +171,6 @@
     <ClInclude Include="ChimericPairedEndAligner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="DynamicList.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="DynamicMemory.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -309,12 +303,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ParallelTask.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="DynamicList.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="DynamicMemory.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="WindowsOverlappedDataReader.cpp">
