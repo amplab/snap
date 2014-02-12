@@ -123,9 +123,9 @@ RangeSplittingReadSupplierGenerator::generateNewReadSupplier()
     ReadReader *underlyingReader;
     // todo: implement layered factory model
     if (isSAM) {
-        underlyingReader = SAMReader::create(DataSupplier::Default, fileName, numThreads, context, rangeStart, rangeLength);
+        underlyingReader = SAMReader::create(DataSupplier::Default, fileName, 1, context, rangeStart, rangeLength);
     } else {
-        underlyingReader = FASTQReader::create(DataSupplier::Default, fileName, numThreads, rangeStart, rangeLength, context);
+        underlyingReader = FASTQReader::create(DataSupplier::Default, fileName, 1, rangeStart, rangeLength, context);
     }
     return new RangeSplittingReadSupplier(splitter,underlyingReader);
 }
@@ -218,15 +218,15 @@ RangeSplittingPairedReadSupplierGenerator::generateNewPairedReadSupplier()
     PairedReadReader *underlyingReader;
     switch (fileType) {
     case SAMFile:
-         underlyingReader = SAMReader::createPairedReader(DataSupplier::Default, fileName1, numThreads, rangeStart, rangeLength, quicklyDropUnpairedReads, context);
+         underlyingReader = SAMReader::createPairedReader(DataSupplier::Default, fileName1, 1, rangeStart, rangeLength, quicklyDropUnpairedReads, context);
          break;
 
     case FASTQFile:
-         underlyingReader = PairedFASTQReader::create(DataSupplier::Default, fileName1, fileName2, numThreads, rangeStart, rangeLength, context);
+         underlyingReader = PairedFASTQReader::create(DataSupplier::Default, fileName1, fileName2, 1, rangeStart, rangeLength, context);
          break;
 
     case InterleavedFASTQFile:
-        underlyingReader = PairedInterleavedFASTQReader::create(DataSupplier::Default, fileName1, numThreads, rangeStart, rangeLength, context);
+        underlyingReader = PairedInterleavedFASTQReader::create(DataSupplier::Default, fileName1, 1, rangeStart, rangeLength, context);
         break;
 
     default:

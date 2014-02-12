@@ -134,7 +134,6 @@ WindowsOverlappedDataReader::WindowsOverlappedDataReader(
     // allocate all the data in one big block
     // NOTE: buffers are not null-terminated (since memmap version can't do it)
     _ASSERT(extraFactor >= 0 && i_nBuffers > 0);
-    printf("!! allocating %d buffers\n", nBuffers);
     bufferInfo = new BufferInfo[maxBuffers];
     extraBytes = max(0LL, (_int64) ((bufferSize + overflowBytes) * extraFactor));
     char* allocated = (char*) BigReserve(maxBuffers * (bufferSize + extraBytes + overflowBytes));
