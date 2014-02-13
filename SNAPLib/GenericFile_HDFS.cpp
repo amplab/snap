@@ -21,7 +21,11 @@ Revision History:
 
 --*/
 
+#ifdef SNAP_HDFS
+
 #include "stdafx.h"
+#include "Compat.h"
+#include "GenericFile.h"
 #include "GenericFile_HDFS.h"
 
 GenericFile_HDFS::GenericFile_HDFS()
@@ -39,7 +43,9 @@ GenericFile_HDFS *GenericFile_HDFS::open(const char *filename, Mode mode)
 {
 	GenericFile_HDFS *retval = new GenericFile_HDFS();
 
+#ifdef _MSC_VER
 	staticLibInit();
+#endif
 
 	retval->_fs = hdfsConnect("default", 0);
 
@@ -95,10 +101,10 @@ size_t GenericFile_HDFS::read(void *ptr, size_t count)
 		size_t desiredRead = count - totalRead;
 		tSize readSize;
 
-		if (desiredRead >= LONG_MAX) {
-			readSize = LONG_MAX;
+		if (desiredRead > INT32_MAX) {
+			readSize = INT32_MAX;
 		} else {
-			readSize = desiredRead;
+			readSize = (tSize) desiredRead;
 		}
 			
 		tSize retval = hdfsRead(_fs, _file, ((char *) ptr) + totalRead, readSize);
@@ -163,7 +169,7 @@ int GenericFile_HDFS::advance(long offset)
 
 void GenericFile_HDFS::close()
 {
-	if (_mode == Mode::WriteOnly) {
+	if (_mode == GenericFile::WriteOnly) {
 		if (hdfsFlush(_fs, _file)) {
 			fprintf(stderr, "Failed to flush %s!\n", _filename);
 		}
@@ -171,3 +177,6 @@ void GenericFile_HDFS::close()
 
 	hdfsCloseFile(_fs, _file);
 }
+
+
+#endif // SNAP_HDFS

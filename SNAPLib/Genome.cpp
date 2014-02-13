@@ -286,7 +286,7 @@ Genome::sortContigsByName()
     bool
 Genome::openFileAndGetSizes(const char *filename, GenericFile **file, unsigned *nBases, unsigned *nContigs)
 {
-	*file = GenericFile::open(filename, GenericFile::Mode::ReadOnly);
+	*file = GenericFile::open(filename, GenericFile::ReadOnly);
     if (*file == NULL) {
         fprintf(stderr,"Genome::openFileAndGetSizes: unable to open file '%s'\n",filename);
         return false;

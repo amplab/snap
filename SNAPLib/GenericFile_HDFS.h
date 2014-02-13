@@ -25,7 +25,7 @@ Revision History:
 
 #include "GenericFile.h"
 
-#include "pdclibhdfs/inc/hdfs.h"
+#include "hdfs.h"
 
 class GenericFile_HDFS : public GenericFile
 {

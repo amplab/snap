@@ -6,6 +6,11 @@ CXXFLAGS += -MMD -ISNAPLib -msse
 
 LDFLAGS += -pthread
 
+ifdef HADOOP_HOME
+  CXXFLAGS += -DSNAP_HDFS -I$(HADOOP_HOME)/include
+  LDFLAGS += -lhdfs -L$(HADOOP_HOME)/lib -L$(HADOOP_HOME)/lib/native
+endif
+
 UNAME := $(shell uname)
 
 ifeq ($(UNAME), Linux)

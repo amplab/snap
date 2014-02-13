@@ -701,7 +701,7 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     
     snprintf(filenameBuffer,filenameBufferSize,"%s%cGenomeIndex",directoryName,PATH_SEP);
 
-	GenericFile *indexFile = GenericFile::open(filenameBuffer, GenericFile::Mode::ReadOnly);
+	GenericFile *indexFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
 
     if (NULL == indexFile) {
         fprintf(stderr,"Unable to open file '%s' for read.\n",filenameBuffer);
@@ -743,7 +743,7 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     index->overflowTable = (unsigned *)BigAlloc(index->overflowTableSize * sizeof(*(index->overflowTable)),&index->overflowTableVirtualAllocSize);
 
     snprintf(filenameBuffer,filenameBufferSize,"%s%cOverflowTable",directoryName,PATH_SEP);
-    GenericFile *fOverflowTable = GenericFile::open(filenameBuffer, GenericFile::Mode::ReadOnly);
+    GenericFile *fOverflowTable = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
 
     if (NULL == fOverflowTable) {
         fprintf(stderr,"Unable to open overflow table file, '%s', %d\n",filenameBuffer,errno);
@@ -785,7 +785,7 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     }
 
     snprintf(filenameBuffer,filenameBufferSize,"%s%cGenomeIndexHash",directoryName,PATH_SEP);
-	GenericFile *tablesFile = GenericFile::open(filenameBuffer, GenericFile::Mode::ReadOnly);
+	GenericFile *tablesFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
     if (NULL == tablesFile) {
         fprintf(stderr,"Unable to open genome hash table file '%s'\n", filenameBuffer);
         soft_exit(1);

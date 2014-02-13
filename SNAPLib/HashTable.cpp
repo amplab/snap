@@ -73,7 +73,7 @@ Arguments:
 
 --*/
 {
-	GenericFile *loadFile = GenericFile::open(loadFileName, GenericFile::Mode::ReadOnly);
+	GenericFile *loadFile = GenericFile::open(loadFileName, GenericFile::ReadOnly);
 
     if (NULL == loadFile) {
         fprintf(stderr,"SNAPHashTable::SNAPHashTable(%s) open failed\n",loadFileName);

@@ -25,8 +25,11 @@ Revision History:
 #include <string.h>
 
 #include "GenericFile.h"
-#include "GenericFile_HDFS.h"
 #include "GenericFile_stdio.h"
+
+#ifdef SNAP_HDFS
+# include "GenericFile_HDFS.h"
+#endif
 
 const char *GenericFile::HDFS_PREFIX = "hdfs:/";
 
@@ -49,13 +52,18 @@ GenericFile *GenericFile::open(const char *filename, Mode mode)
 	GenericFile *retval = NULL;
 
 	if (0 == strncmp(filename, HDFS_PREFIX, strlen(HDFS_PREFIX))) {
+#ifdef SNAP_HDFS
 		retval = GenericFile_HDFS::open(filename, mode);
+#else
+		fprintf(stderr, "SNAP not compiled with HDFS support. Set HADOOP_HOME and recompile.\n");
+		retval = NULL;
+#endif
 	} else {
 		retval = GenericFile_stdio::open(filename, mode);
 	}
 
 	if (NULL != retval) {
-		retval->_filename = _strdup(filename);
+		retval->_filename = strdup(filename);
 		retval->_mode = mode;
 	}
 
