@@ -248,7 +248,7 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned 
         soft_exit(1);
     }
 
-	long retval;
+	size_t retval;
     if (length != (retval = loadFile->read(genome->bases,length))) {
         fprintf(stderr,"Genome::loadFromFile: fread of bases failed; wanted %u, got %d\n", length, retval);
 		loadFile->close();

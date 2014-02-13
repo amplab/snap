@@ -21,9 +21,10 @@ Revision History:
 
 --*/
 
+#include "stdafx.h"
+
 #ifdef SNAP_HDFS
 
-#include "stdafx.h"
 #include "Compat.h"
 #include "GenericFile.h"
 #include "GenericFile_HDFS.h"
@@ -53,14 +54,6 @@ GenericFile_HDFS *GenericFile_HDFS::open(const char *filename, Mode mode)
 		fprintf(stderr, "can't open HDFS");
 		goto fail;
 	}
-
-#if 0
-	int numEntries;
-	hdfsFileInfo *dirList = hdfsListDirectory(retval->_fs, "hdfs:/", &numEntries);
-	for (int i = 0; i < numEntries; i++) {
-		fprintf(stderr, "enumerated file: %s\n", dirList[i].mName);
-	}
-#endif
 
 	switch (mode) {
 	case ReadOnly:

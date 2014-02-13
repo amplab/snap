@@ -24,6 +24,7 @@ Revision History:
 #include "stdafx.h"
 #include <string.h>
 
+#include "Compat.h"
 #include "GenericFile.h"
 #include "GenericFile_stdio.h"
 
