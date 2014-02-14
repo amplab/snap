@@ -292,14 +292,10 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
             return true;
         } 
         return false;
-    } else if (strcmp(argv[n], "-F") == 0) {
-        if (n + 1 < argc) {
-            n++;
-            if (strcmp(argv[n], "b") == 0) {
-                filterFlags |= FilterBothMatesMatch;
-            }
-            return true;
-        }
+    } else if (strcmp(argv[n], "-F") == 0 && n + 1 < argc && strcmp(argv[n + 1],"b") == 0) {
+        filterFlags |= FilterBothMatesMatch;
+        n += 1;
+        return true;
     }
     return AlignerOptions::parse(argv, argc, n, done);
 }
