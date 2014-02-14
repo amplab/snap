@@ -121,8 +121,17 @@ SingleAlignerContext::runIterationThread()
     // Align the reads.
     IdPairVector* secondary = options->outputMultipleAlignments ? new IdPairVector : NULL;
     Read *read;
+    _uint64 lastReportTime = timeInMillis();
+    _uint64 readsWhenLastReported = 0;
+
     while (NULL != (read = supplier->getNextRead())) {
         stats->totalReads++;
+
+        if (AlignerOptions::useHadoopErrorMessages && stats->totalReads % 10000 == 0 && timeInMillis() - lastReportTime > 10000) {
+            fprintf(stderr,"reporter:counter:SNAP,readsAligned,%d\n",stats->totalReads - readsWhenLastReported);
+            readsWhenLastReported = stats->totalReads;
+            lastReportTime = timeInMillis();
+        }
 
         // Skip the read if it has too many Ns or trailing 2 quality scores.
         if (read->getDataLength() < 50 || read->countOfNs() > maxDist) {

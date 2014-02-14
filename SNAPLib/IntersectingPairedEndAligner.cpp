@@ -25,6 +25,7 @@ Revision History:
 #include "SeedSequencer.h"
 #include "mapq.h"
 #include "exit.h"
+#include "Error.h"
 
 #ifdef  _DEBUG
 extern bool _DumpAlignments;    // From BaseAligner.cpp
@@ -199,8 +200,8 @@ IntersectingPairedEndAligner::align(
         }
 
         if (readLen[whichRead] > maxReadSize) {
-            fprintf(stderr,"IntersectingPairedEndAligner:: got too big read (%d > %d)\n", readLen[whichRead], maxReadSize);
-            fprintf(stderr,"Change MAX_READ_LENTH at the beginning of Read.h and recompile.\n");
+            WriteErrorMessage("IntersectingPairedEndAligner:: got too big read (%d > %d)\n"
+                              "Change MAX_READ_LENTH at the beginning of Read.h and recompile.\n", readLen[whichRead], maxReadSize);
             soft_exit(1);
         }
 
@@ -432,7 +433,7 @@ IntersectingPairedEndAligner::align(
                 unsigned bestPossibleScoreForReadWithMoreHits = setPair[readWithMoreHits]->computeBestPossibleScoreForCurrentHit();
 
                 if (lowestFreeScoringMateCandidate[whichSetPair] >= scoringCandidatePoolSize / NUM_READS_PER_PAIR) {
-                    fprintf(stderr,"Ran out of scoring candidate pool entries.  Perhaps trying with a larger value of -mcp will help.\n");
+                    WriteErrorMessage("Ran out of scoring candidate pool entries.  Perhaps trying with a larger value of -mcp will help.\n");
                     soft_exit(1);
                 }
                 scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair]].init(
@@ -478,7 +479,7 @@ IntersectingPairedEndAligner::align(
                 // correct weight list.
                 //
                 if (lowestFreeScoringCandidatePoolEntry >= scoringCandidatePoolSize) {
-                    fprintf(stderr,"Ran out of scoring candidate pool entries.  Perhaps rerunning with a larger value of -mcp will help.\n");
+                    WriteErrorMessage("Ran out of scoring candidate pool entries.  Perhaps rerunning with a larger value of -mcp will help.\n");
                     soft_exit(1);
                 }
 
@@ -630,7 +631,7 @@ IntersectingPairedEndAligner::align(
 
                         if (NULL == mergeAnchor) {
                             if (firstFreeMergeAnchor >= mergeAnchorPoolSize) {
-                                fprintf(stderr,"Ran out of merge anchor pool entries.  Perhaps rerunning with a larger value of -mcp will help\n");
+                                WriteErrorMessage("Ran out of merge anchor pool entries.  Perhaps rerunning with a larger value of -mcp will help\n");
                                 soft_exit(1);
                             }
 

@@ -34,10 +34,6 @@ Histogram::Histogram(unsigned i_nBuckets, bool i_isExponential) :
     _ASSERT(nBuckets > 0);
 
     buckets = new Bucket[nBuckets];
-    if (NULL == buckets) {
-        fprintf(stderr,"Histogram: unable to allocate buckets.\n");
-        soft_exit(1);
-    }
 
     buckets[0].maxValue = 1;
     buckets[0].count = 0;

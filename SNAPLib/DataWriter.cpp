@@ -23,6 +23,7 @@ Environment:
 #include "ParallelTask.h"
 #include "exit.h"
 #include "Bam.h"
+#include "Error.h"
 
 using std::min;
 using std::max;
@@ -179,7 +180,7 @@ FileEncoder::outputReady()
     writer->supplier->advance(write->used, 0, &write->fileOffset, &write->logicalOffset);
     //fprintf(stderr, "outputReady write batch %d @%lld:%lld\n", encoderBatch, write->fileOffset, write->used);
     if (! write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
-        fprintf(stderr, "error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
+        WriteErrorMessage("error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
         soft_exit(1);
     }
     AllowEventWaitersToProceed(&write->encoded);
@@ -273,7 +274,7 @@ AsyncDataWriter::AsyncDataWriter(
     _ASSERT(count >= 2);
     char* block = (char*) BigAlloc(count * bufferSize);
     if (block == NULL) {
-        fprintf(stderr, "Unable to allocate %lld bytes for write buffers\n", count * bufferSize);
+        WriteErrorMessage("Unable to allocate %lld bytes for write buffers\n", count * bufferSize);
         soft_exit(1);
     }
     batches = new Batch[count];
@@ -416,7 +417,7 @@ AsyncDataWriter::nextBatch()
         //fprintf(stderr, "nextBatch beginWrite #%d @%lld: %lld bytes\n", write-batches, write->fileOffset, write->used);
         //_ASSERT(BgzfHeader::validate(write->buffer, write->used)); //!! remove before checkin
         if (! write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
-            fprintf(stderr, "error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
+            WriteErrorMessage("error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
             soft_exit(1);
         }
     } else {
@@ -424,7 +425,7 @@ AsyncDataWriter::nextBatch()
         encoder->inputReady();
     }
     if (! batches[current].file->waitForCompletion()) {
-        fprintf(stderr, "error: file write failed\n");
+        WriteErrorMessage("error: file write failed\n");
         soft_exit(1);
     }
     InterlockedAdd64AndReturnNewValue(&WaitTime, timeInNanos() - start2);
@@ -464,7 +465,7 @@ AsyncDataWriterSupplier::AsyncDataWriterSupplier(
 {
     file = AsyncFile::open(filename, true);
     if (file == NULL) {
-        fprintf(stderr, "failed to open %s for write\n", filename);
+        WriteErrorMessage("failed to open %s for write\n", filename);
         soft_exit(1);
     }
     InitializeExclusiveLock(&lock);
@@ -594,7 +595,7 @@ volatile _int64 DataWriter::FilterTime = 0;
 StdoutAsyncFile::StdoutAsyncFile()
 {
     if (anyCreated) {
-        fprintf(stderr,"You can only ever write to stdout once per SNAP run (even if you're doing multiple runs with the comma syntax\n");
+        WriteErrorMessage("You can only ever write to stdout once per SNAP run (even if you're doing multiple runs with the comma syntax\n");
         soft_exit(1);
     }
     anyCreated = true;
@@ -602,7 +603,7 @@ StdoutAsyncFile::StdoutAsyncFile()
 #ifdef _MSC_VER
     int result = _setmode( _fileno( stdout ), _O_BINARY );  // puts stdout in to non-translated mode, so if we're writing compressed data windows' CRLF processing doesn't destroy it.
     if (-1 == result) {
-        fprintf(stderr,"StdoutAsyncFile::freopen to change to untranslated mode failed\n");
+        WriteErrorMessage("StdoutAsyncFile::freopen to change to untranslated mode failed\n");
         soft_exit(1);
     }
 #endif // _MSC_VER
@@ -625,7 +626,7 @@ StdoutAsyncFile::StdoutAsyncFile()
 StdoutAsyncFile::open(const char *filename, bool write)
 {
     if (strcmp("-", filename) || !write) {
-        fprintf(stderr, "StdoutAsynFile must be named - and must be opened for write.\n");
+        WriteErrorMessage("StdoutAsynFile must be named - and must be opened for write.\n");
         soft_exit(1);
     }
 
@@ -717,7 +718,7 @@ StdoutAsyncFile::getWriter()
     AsyncFile::Reader* 
 StdoutAsyncFile::getReader()
 {
-    fprintf(stderr,"StdoutAsyncFile::getReader() called.\n");
+    WriteErrorMessage("StdoutAsyncFile::getReader() called.\n");
     soft_exit(1);
     return NULL;
 }
@@ -826,7 +827,7 @@ StdoutAsyncFile::runConsumer()
                     //
                     maxWriteSize /= 2;
                 } else {
-                    fprintf(stderr,"StdoutAsyncFile::runConsumer(): fwrite failed %d\n", errno);
+                    WriteErrorMessage("StdoutAsyncFile::runConsumer(): fwrite failed %d\n", errno);
                     soft_exit(1);
                 }
             }

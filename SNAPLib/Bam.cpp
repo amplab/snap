@@ -33,6 +33,7 @@ Environment:
 #include "VariableSizeMap.h"
 #include "PairedAligner.h"
 #include "GzipDataWriter.h"
+#include "Error.h"
 
 using std::max;
 using std::min;
@@ -67,7 +68,7 @@ BAMReader::init(
     // might need up to 3x extra for expanded sequence + quality + cigar data
     data = DataSupplier::GzipBamDefault[false]->getDataReader(MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
     if (! data->init(fileName)) {
-        fprintf(stderr, "Unable to read file %s\n", fileName);
+        WriteErrorMessage("Unable to read file %s\n", fileName);
         soft_exit(1);
     }
     _ASSERT(context.headerBytes > 0);
@@ -77,7 +78,7 @@ BAMReader::init(
         _int64 valid, start;
         bool ok = data->getData(&p, &valid, &start);
         if (! ok) {
-            fprintf(stderr, "failure reading file %s\n", fileName);
+            WriteErrorMessage("failure reading file %s\n", fileName);
             soft_exit(1);
         }
         _int64 skip = context.headerBytes - startingOffset;
@@ -98,19 +99,19 @@ BAMReader::readHeader(
     _ASSERT(context.header == NULL);
     DataReader* data = DataSupplier::GzipBamDefault[false]->getDataReader(MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
     if (! data->init(fileName)) {
-        fprintf(stderr, "Unable to read file %s\n", fileName);
+        WriteErrorMessage("Unable to read file %s\n", fileName);
         soft_exit(1);
     }
     _int64 headerSize = 1024 * 1024; // 1M header max
     char* buffer = data->readHeader(&headerSize);
     BAMHeader* header = (BAMHeader*) buffer;
     if (header->magic != BAMHeader::BAM_MAGIC) {
-        fprintf(stderr, "BAMReader: Not a valid BAM file\n");
+        WriteErrorMessage("BAMReader: Not a valid BAM file\n");
         soft_exit(1);
     }
     _int64 textHeaderSize = header->l_text;
     if (!SAMReader::parseHeader(fileName, header->text(), header->text() + textHeaderSize, context.genome, &textHeaderSize, &context.headerMatchesIndex)) {
-        fprintf(stderr,"BAMReader: failed to parse header on '%s'\n",fileName);
+        WriteErrorMessage("BAMReader: failed to parse header on '%s'\n",fileName);
         soft_exit(1);
     }
     int n_ref = header->n_ref();
@@ -368,7 +369,7 @@ BAMReader::getNextRead(
         }
         BAMAlignment* bam = (BAMAlignment*) buffer;
         if ((_uint64)bytes < sizeof(bam->block_size) || (_uint64)bytes < bam->size()) {
-            fprintf(stderr, "Unexpected end of BAM file at %lld\n", data->getFileOffset());
+            WriteErrorMessage("Unexpected end of BAM file at %lld\n", data->getFileOffset());
             soft_exit(1);
         }
         data->advance(bam->size());
@@ -484,7 +485,7 @@ BAMReader::getExtra(
     data->getExtra(&extra, &limit);
     _ASSERT(extra != NULL && bytes >= 0 && limit - extraOffset >= bytes);
     if (limit - extraOffset < bytes) {
-        fprintf(stderr, "error: not enough space for expanding BAM file - increase expansion factor, currently -xf %.1f\n", DataSupplier::ExpansionFactor);
+        WriteErrorMessage("error: not enough space for expanding BAM file - increase expansion factor, currently -xf %.1f\n", DataSupplier::ExpansionFactor);
         soft_exit(1);
     }
     char* result = extra + extraOffset;
@@ -721,7 +722,7 @@ BAMFormat::writeRead(
     if (aux != NULL && auxSAM) {
         if (! warningPrinted) {
             warningPrinted = true;
-            fprintf(stderr, "warning: translating optional data from SAM->BAM is not yet implemented, optional data will not appear in BAM\n");
+            WriteErrorMessage("warning: translating optional data from SAM->BAM is not yet implemented, optional data will not appear in BAM\n");
         }
         if (read->getReadGroup() == READ_GROUP_FROM_AUX) {
             for (char* p = aux; p != NULL && p < aux + auxLen; p = SAMReader::skipToBeyondNextRunOfSpacesAndTabs(p, aux + auxLen)) {
@@ -755,7 +756,7 @@ BAMFormat::writeRead(
     bam->pos = positionInContig - 1;
 
     if (qnameLen > 254) {
-        fprintf(stderr, "BAM format: QNAME field must be less than 254 characters long, instead it's %lld\n", qnameLen);
+        WriteErrorMessage("BAM format: QNAME field must be less than 254 characters long, instead it's %lld\n", qnameLen);
         soft_exit(1);
     }
     bam->l_read_name = (_uint8)qnameLen + 1;
@@ -873,12 +874,12 @@ BAMFormat::computeCigarOps(
     }
 
     if (*editDistance == -2) {
-        fprintf(stderr, "WARNING: computeEditDistance returned -2; cigarBuf may be too small\n");
+        WriteErrorMessage("WARNING: computeEditDistance returned -2; cigarBuf may be too small\n");
         return 0;
     } else if (*editDistance == -1) {
         static bool warningPrinted = false;
         if (!warningPrinted) {
-            fprintf(stderr, "WARNING: computeEditDistance returned -1; this shouldn't happen\n");
+            WriteErrorMessage("WARNING: computeEditDistance returned -1; this shouldn't happen\n");
             warningPrinted = true;
         }
         return 0;
@@ -1133,9 +1134,9 @@ public:
     {
 #ifdef USE_DEVTEAM_OPTIONS
         if (mates.size() > 0) {
-            fprintf(stderr, "duplicate matching ended with %d unmatched reads:\n", mates.size());
+            WriteErrorMessage("duplicate matching ended with %d unmatched reads:\n", mates.size());
             for (MateMap::iterator i = mates.begin(); i != mates.end(); i = mates.next(i)) {
-                fprintf(stderr, "%u%s/%u%s\n", i->key.locations[0], i->key.isRC[0] ? "rc" : "", i->key.locations[1], i->key.isRC[1] ? "rc" : "");
+                WriteErrorMessage("%u%s/%u%s\n", i->key.locations[0], i->key.isRC[0] ? "rc" : "", i->key.locations[1], i->key.isRC[1] ? "rc" : "");
             }
         }
 #endif
