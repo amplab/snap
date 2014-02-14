@@ -229,7 +229,7 @@ ReadSupplierQueue::getElements(ReadQueueElement **element1, ReadQueueElement **e
     //fprintf(stderr, "Thread %u: getElements acquired lock\n", GetThreadId());
     while (!areAnyReadsReady()) {
         ReleaseExclusiveLock(&lock);
-        //fprintf("Thread %u: getElements loop released lock\n", GetThreadId());
+        //fprintf(stderr,"Thread %u: getElements loop released lock\n", GetThreadId());
         if (allReadsQueued) {
             //
             // Everything's queued and the queue is empty.  No more work.

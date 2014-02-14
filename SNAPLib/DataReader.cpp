@@ -419,15 +419,6 @@ ReadBasedDataReader::releaseBatch(
                 if (info->holds > 0) {
                     info->holds--;
                 }
-                //fprintf(stderr, "releaseBatch batch %d, releasing %s buffer %d\n", batch.batchID, info->state == InUse ? "InUse" : "Full", i);
-                info->state = Empty;
-                // remove from ready list
-                if (i == nextBufferForConsumer) {
-                    nextBufferForConsumer = info->next;
-                }
-                if (i == lastBufferForConsumer) {
-                    lastBufferForConsumer = info->previous;
-                }
                 if (info->holds == 0) {
                     //fprintf(stderr,"%x releaseBatch batch %d, releasing %s buffer %d\n", (unsigned) this, batch.batchID, info->state == InUse ? "InUse" : "Full", i);
                     info->state = Empty;
