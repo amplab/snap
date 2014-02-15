@@ -391,8 +391,6 @@ public:
         void releaseBatch(DataBatch batch)
         { data->releaseBatch(batch); }
 
-        static void readHeader(const char* fileName, ReaderContext& i_context);
-
         static BAMReader* create(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess, 
                                  const ReaderContext& context);
         
@@ -417,6 +415,8 @@ protected:
                         size_t *lineLength, unsigned *flag, const char **cigar, ReadClippingType clipping);
 
 private:
+        void readHeader(const char* fileName);
+
 
         char* getExtra(_int64 bytes);
 

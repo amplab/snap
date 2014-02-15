@@ -561,7 +561,6 @@ PairedAlignerContext::typeSpecificBeginIteration()
         //
         // We've only got one input, so just connect it directly to the consumer.
         //
-        options->inputs[0].readHeader(readerContext);
         pairedReadSupplierGenerator = options->inputs[0].createPairedReadSupplierGenerator(options->numThreads, quicklyDropUnpairedReads, readerContext);
     } else {
         //
@@ -571,7 +570,6 @@ PairedAlignerContext::typeSpecificBeginIteration()
         // use separate context for each supplier, initialized from common
         for (int i = 0; i < options->nInputs; i++) {
             ReaderContext context(readerContext);
-            options->inputs[i].readHeader(context);
             generators[i] = options->inputs[i].createPairedReadSupplierGenerator(options->numThreads, quicklyDropUnpairedReads, context);
         }
         pairedReadSupplierGenerator = new MultiInputPairedReadSupplierGenerator(options->nInputs,generators);

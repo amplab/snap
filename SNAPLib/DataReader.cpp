@@ -458,10 +458,16 @@ private:
     // That doesn't work for stdio, since it can't rewind.  So, instead, we allocate
     // storage on the side to hold a copy of the last overflowBytes
     // and then just copy those bytes into the beginning of the next buffer to read.
+    // We also use this buffer to hold the header (the first read), and to allow
+    // reading the header plus some extra data, parsing the header, and then seeking
+    // backward to the actual end of the header.
     //
 
     char    *overflowBuffer;
-    bool     overflowBufferFilled;   // For the very first read, there is no overlap buffer data.
+    bool     overflowBufferFilled;   // For the very first read, there may be no overlap buffer data.
+    _int64   headerSize;             // The amount of header that's in the overflow buffer
+    _int64   headerOverrunSize;      // After we reinit() after reading the header, this describes how many bytes are left
+    bool     overflowBufferContainsHeaderOverrun;
 
     bool    started;
     bool    hitEOF;
@@ -471,10 +477,8 @@ private:
 
 StdioDataReader::StdioDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor, bool autoRelease) :
     ReadBasedDataReader(i_nBuffers, i_overflowBytes, extraFactor, autoRelease), started(false), hitEOF(false), overflowBufferFilled(false),
-    readOffset(0)
+    readOffset(0), overflowBuffer(NULL), headerSize(0), overflowBufferContainsHeaderOverrun(false), headerOverrunSize(0)
 {
-    overflowBuffer = (char *)BigAlloc(overflowBytes);
-
 }
 
 StdioDataReader::~StdioDataReader()
@@ -505,7 +509,15 @@ StdioDataReader::init(const char * i_fileName)
 void
 StdioDataReader::reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
 {
-    if (started || startingOffset != 0 || amountOfFileToProcess != 0) {
+    if (0 != headerSize && startingOffset <= headerSize && !overflowBufferFilled) {
+        //
+        // We're rewinding over the actual header part of the header.
+        // Copy the relevant bytes into the beginning of the overflow buffer.
+        //
+        memmove(overflowBuffer, overflowBuffer + startingOffset, headerSize - startingOffset);  // memmove because this copies onto itself
+        overflowBufferContainsHeaderOverrun = true;
+        headerOverrunSize = headerSize - startingOffset;
+    } else if (started || startingOffset != 0 || amountOfFileToProcess != 0) {
         WriteErrorMessage("StdioDataReader: invalid reinit (%lld, %lld), started = %d\n", startingOffset, amountOfFileToProcess, started);
         soft_exit(1);
     }
@@ -520,6 +532,9 @@ StdioDataReader::readHeader(_int64 *io_headerSize)
         WriteErrorMessage("StdioDataReader: readHeader called after already started\n");
         soft_exit(1);
     }
+
+    _ASSERT(NULL == overflowBuffer);
+    overflowBuffer = (char *)BigAlloc(__max(*io_headerSize, overflowBytes));
 
     started = true;
 
@@ -543,8 +558,11 @@ StdioDataReader::readHeader(_int64 *io_headerSize)
     }
 
     info->buffer[info->validBytes] = '\0';
-    *io_headerSize = info->validBytes;
+    headerSize = *io_headerSize = info->validBytes;
 
+    _ASSERT(!overflowBufferFilled);
+    memcpy(overflowBuffer, info->buffer, headerSize);   // Squirrel it away in case we seek back into it.
+     
     readOffset = info->validBytes;
     return info->buffer;
 }
@@ -589,14 +607,24 @@ StdioDataReader::startIo()
 
         size_t amountToRead;
         size_t bufferOffset;
-        if (overflowBufferFilled) {
+        if (overflowBufferFilled || 0 != headerOverrunSize) {
             //
             // Copy the bytes from the overflow buffer into our buffer.
             //
-            memcpy(info->buffer, overflowBuffer, overflowBytes);
-            bufferOffset = overflowBytes;
-            amountToRead = bufferSize - overflowBytes;
-            info->fileOffset = readOffset - overflowBytes;
+            _ASSERT(0 == headerOverrunSize || !overflowBufferFilled);  // One or the other
+
+            _int64 bytesToCopy;
+            if (0 != headerOverrunSize) {
+                bytesToCopy = headerOverrunSize;
+                headerOverrunSize = 0;
+            } else {
+                bytesToCopy = overflowBytes;
+            }
+
+            memcpy(info->buffer, overflowBuffer, bytesToCopy);
+            bufferOffset = bytesToCopy;
+            amountToRead = bufferSize - bytesToCopy;
+            info->fileOffset = readOffset - bytesToCopy;
         } else {
             amountToRead = bufferSize;
             bufferOffset = 0;
@@ -634,6 +662,13 @@ StdioDataReader::startIo()
             //
             // Fill the overflow buffer with the last bytes from this buffer.
             //
+            if (NULL == overflowBuffer) {
+                //
+                // We can get here if we never called readHeader().  If so, we know we never will and so
+                // we can just allocate the overflow buffer to be the size of the header.
+                //
+                overflowBuffer = (char *)BigAlloc(overflowBytes);
+            }
             memcpy(overflowBuffer, info->buffer + bufferOffset + bytesRead - overflowBytes, overflowBytes);
             overflowBufferFilled = true;
         }
@@ -757,7 +792,7 @@ WindowsOverlappedDataReader::WindowsOverlappedDataReader(unsigned i_nBuffers, _i
     ReadBasedDataReader(i_nBuffers, i_overflowBytes, extraFactor, autoRelease), fileName(NULL), hFile(INVALID_HANDLE_VALUE), endingOffset(0)
 {
     readOffset.QuadPart = 0;
-    bufferLaps = (OVERLAPPED *)BigAlloc(sizeof(OVERLAPPED) * i_nBuffers);
+    bufferLaps = (OVERLAPPED *)BigAlloc(sizeof(OVERLAPPED) * maxBuffers);
     for (unsigned i = 0; i < i_nBuffers; i++) {
         bufferLaps[i].hEvent = CreateEvent(NULL,TRUE,FALSE,NULL);
         if (NULL == bufferLaps[i].hEvent) {
@@ -2220,6 +2255,9 @@ DataSupplier* DataSupplier::Stdio[2] =
 
 DataSupplier* DataSupplier::GzipStdio[2] = 
 { DataSupplier::Gzip(DataSupplier::Stdio[false], false), DataSupplier::Gzip(DataSupplier::Stdio[false], true) };
+
+DataSupplier* DataSupplier::GzipBamStdio[2] = 
+{ DataSupplier::GzipBam(DataSupplier::Stdio[false], false), DataSupplier::GzipBam(DataSupplier::Stdio[false], true) };
 
 
 int DataSupplier::ThreadCount = 1;

@@ -66,11 +66,21 @@ BAMReader::init(
 {
     // todo: integrate supplier models
     // might need up to 3x extra for expanded sequence + quality + cigar data
-    data = DataSupplier::GzipBamDefault[false]->getDataReader(MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
+    if (!strcmp("-", fileName)) {
+        data = DataSupplier::GzipBamStdio[false]->getDataReader(MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
+    } else {
+        data = DataSupplier::GzipBamDefault[false]->getDataReader(MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
+    }
+
     if (! data->init(fileName)) {
         WriteErrorMessage("Unable to read file %s\n", fileName);
         soft_exit(1);
     }
+
+    if (startingOffset == 0) {
+        readHeader(fileName);
+    }
+
     _ASSERT(context.headerBytes > 0);
     reinit(startingOffset, amountOfFileToProcess);
     if ((size_t) startingOffset < context.headerBytes) {
@@ -93,15 +103,10 @@ BAMReader::init(
 
     void
 BAMReader::readHeader(
-    const char* fileName,
-    ReaderContext& context)
+    const char* fileName)
 {
     _ASSERT(context.header == NULL);
-    DataReader* data = DataSupplier::GzipBamDefault[false]->getDataReader(MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
-    if (! data->init(fileName)) {
-        WriteErrorMessage("Unable to read file %s\n", fileName);
-        soft_exit(1);
-    }
+
     _int64 headerSize = 1024 * 1024; // 1M header max
     char* buffer = data->readHeader(&headerSize);
     BAMHeader* header = (BAMHeader*) buffer;
@@ -126,8 +131,6 @@ BAMReader::readHeader(
     context.header = p;
     context.headerLength = textHeaderSize;
     context.headerBytes = (char*) refSeq - buffer;
-
-    delete data;
 }
 
     BAMReader*

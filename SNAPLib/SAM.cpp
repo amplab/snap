@@ -126,15 +126,8 @@ SAMReader::create(
 }
 
     void
-SAMReader::readHeader(
-    const char* fileName,
-    ReaderContext& context)
+SAMReader::readHeader(const char *fileName)
 {
-    DataReader* data = DataSupplier::Default[false]->getDataReader(maxLineLen);
-    if (! data->init(fileName)) {
-        WriteErrorMessage( "Unable to read file %s\n", fileName);
-        soft_exit(1);
-    }
     // todo: allow for larger headers
     _int64 headerSize = 1024 * 1024; // 1M header max
     char* buffer = data->readHeader(&headerSize);
@@ -148,7 +141,6 @@ SAMReader::readHeader(
     p[headerSize] = 0;
     context.header = p;
     context.headerBytes = context.headerLength = headerSize;
-    delete data;
 }
 
 SAMReader::SAMReader(
@@ -494,6 +486,11 @@ SAMReader::init(
         WriteErrorMessage( "Unable to read file %s\n", fileName);
         soft_exit(1);
     }
+
+    if (0 == startingOffset) {
+        readHeader(fileName);
+    }
+
     headerSize = context.headerBytes;
     reinit(max(startingOffset, (_int64) context.headerBytes),
         amountOfFileToProcess == 0 || startingOffset >= (_int64) context.headerBytes ? amountOfFileToProcess
@@ -581,8 +578,26 @@ SAMReader::createReadSupplierGenerator(
     //
     // single-ended SAM files always can be read with the range splitter.
     //
-    RangeSplitter *splitter = new RangeSplitter(QueryFileSize(fileName), numThreads, 100);
-    return new RangeSplittingReadSupplierGenerator(fileName, true, numThreads, context);
+    if (!strcmp(fileName, "-")) {
+        //
+        // Stdin must run from a queue, not range splitter.
+        //
+        ReadReader* reader;
+        //
+        // Because we can only have one stdin reader, we need to use a queue if we're reading from stdin
+        //
+        reader = SAMReader::create(DataSupplier::Stdio[false], "-", context, 0, 0);
+   
+        if (reader == NULL) {
+            return NULL;
+        }
+        ReadSupplierQueue *queue = new ReadSupplierQueue(reader);
+        queue->startReaders();
+        return queue;
+    } else {
+        RangeSplitter *splitter = new RangeSplitter(QueryFileSize(fileName), numThreads, 100);
+        return new RangeSplittingReadSupplierGenerator(fileName, true, numThreads, context);
+    }
 }
     
     PairedReadReader*
@@ -595,8 +610,14 @@ SAMReader::createPairedReader(
     bool quicklyDropUnpairedReads,
     const ReaderContext& context)
 {
+    DataSupplier *data;
+    if (!strcmp("-", fileName)) {
+        data = DataSupplier::Stdio[false];
+    } else {
+        data = DataSupplier::Default[false];
+    }
 
-    SAMReader* reader = SAMReader::create(DataSupplier::Default[false], fileName, context, 0, 0);
+    SAMReader* reader = SAMReader::create(data, fileName, context, 0, 0);
     if (reader == NULL) {
         return NULL;
     }

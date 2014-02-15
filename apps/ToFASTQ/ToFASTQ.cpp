@@ -180,10 +180,8 @@ int main(int argc, char * argv[])
 
         PairedReadSupplierGenerator *pairedReadSupplierGenerator;
         if (NULL != strrchr(inputFileName, '.') && !_stricmp(strrchr(inputFileName, '.'), ".bam")) {
-            BAMReader::readHeader(inputFileName, readerContext);
             pairedReadSupplierGenerator = BAMReader::createPairedReadSupplierGenerator(inputFileName, nThreads, true, readerContext);
         } else {
-            SAMReader::readHeader(inputFileName, readerContext);
             pairedReadSupplierGenerator = SAMReader::createPairedReadSupplierGenerator(inputFileName, nThreads, true, readerContext);
         }
 
@@ -196,11 +194,9 @@ int main(int argc, char * argv[])
         }
     } else {
         if (NULL != strrchr(inputFileName, '.') && !_stricmp(strrchr(inputFileName, '.'), ".bam")) {
-            BAMReader::readHeader(inputFileName, readerContext);
             readSupplierGenerator = BAMReader::createReadSupplierGenerator(inputFileName, nThreads, readerContext);
         } else {
-           SAMReader::readHeader(inputFileName, readerContext);
-           readSupplierGenerator = SAMReader::createReadSupplierGenerator(inputFileName, nThreads, readerContext);
+            readSupplierGenerator = SAMReader::createReadSupplierGenerator(inputFileName, nThreads, readerContext);
         }
 
         CreateSingleWaiterObject(&allThreadsDone);

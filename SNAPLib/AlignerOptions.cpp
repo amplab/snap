@@ -246,6 +246,9 @@ AlignerOptions::parse(
             WriteErrorMessage("Must have a file specifier after -o\n");
             soft_exit(1);
         }
+        if (outputFile.isStdio) {
+            AlignerOptions::outputToStdout = true;
+        }
         n += argsConsumed;
         return true;
     } else if (strcmp(argv[n], "-e") == 0) {
@@ -458,27 +461,6 @@ AlignerOptions::passFilter(
     }
 }
 
-    void
-SNAPFile::readHeader(ReaderContext& context)
-{
-    switch (fileType) {
-    case SAMFile:
-        return SAMReader::readHeader(fileName, context);
-        
-    case BAMFile:
-        return BAMReader::readHeader(fileName, context);
-
-    case FASTQFile:
-        return FASTQReader::readHeader(fileName,  context);
-        
-    case InterleavedFASTQFile:
-        return PairedInterleavedFASTQReader::readHeader(fileName,  context);
-
-    default:
-        _ASSERT(false);
-    }
-}
-
     PairedReadSupplierGenerator *
 SNAPFile::createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context)
 {
@@ -674,4 +656,7 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
 
     bool         
 AlignerOptions::useHadoopErrorMessages= false;
+
+    bool
+AlignerOptions::outputToStdout = false;
 

@@ -530,14 +530,36 @@ PairedFASTQReader::createPairedReadSupplierGenerator(
     const ReaderContext& context,
     bool gzip)
 {
+    const char *fileNames[2] = {fileName0, fileName1};
     //
     // Decide whether to use the range splitter or a queue based on whether the files are the same size.
     //
-    if (QueryFileSize(fileName0) != QueryFileSize(fileName1) || gzip) {
+    if (!strcmp("-", fileNames[0]) || !strcmp("-", fileNames[1]) || QueryFileSize(fileNames[0]) != QueryFileSize(fileNames[1]) || gzip) {
         WriteErrorMessage("FASTQ using supplier queue\n");
-        DataSupplier* dataSupplier = gzip ? DataSupplier::GzipDefault[false] : DataSupplier::Default[false];
-        ReadReader *reader1 = FASTQReader::create(dataSupplier, fileName0,0,QueryFileSize(fileName0),context);
-        ReadReader *reader2 = FASTQReader::create(dataSupplier, fileName1,0,QueryFileSize(fileName1),context);
+        DataSupplier* dataSupplier[2];
+        size_t fileSize[2];
+
+        for (int i = 0; i < 2; i++) {
+            if (!strcmp(fileNames[i], "-")) {
+                fileSize[i] = 0;
+                if (gzip) {
+                    dataSupplier[i] = DataSupplier::GzipStdio[false];
+                } else {
+                    dataSupplier[i] = DataSupplier::Stdio[false];
+                }
+            } else {
+                fileSize[i] = QueryFileSize(fileNames[i]);
+                if (gzip) {
+                    dataSupplier[i] = DataSupplier::GzipDefault[false];
+                } else {
+                    dataSupplier[i] = DataSupplier::Default[false];
+                }
+            }
+        }
+        
+        
+        ReadReader *reader1 = FASTQReader::create(dataSupplier[0], fileName0, 0, fileSize[0],context);
+        ReadReader *reader2 = FASTQReader::create(dataSupplier[1], fileName1, 0, fileSize[1],context);
         if (NULL == reader1 || NULL == reader2) {
             delete reader1;
             delete reader2;

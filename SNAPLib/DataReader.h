@@ -173,6 +173,7 @@ public:
     static DataSupplier* GzipBamDefault[2];
     static DataSupplier* GzipStdio[2];
     static DataSupplier* Stdio[2];
+    static DataSupplier* GzipBamStdio[2];
 
     // hack: must be set to communicate thread count into suppliers
     static int ThreadCount;
