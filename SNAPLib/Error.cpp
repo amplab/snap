@@ -22,6 +22,7 @@ Revision History:
 --*/
 
 #include "stdafx.h"
+#include "Compat.h"
 #include "Error.h"
 #include "AlignerOptions.h"
 
