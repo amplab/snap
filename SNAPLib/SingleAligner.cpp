@@ -121,8 +121,17 @@ SingleAlignerContext::runIterationThread()
     // Align the reads.
     IdPairVector* secondary = options->outputMultipleAlignments ? new IdPairVector : NULL;
     Read *read;
+    _uint64 lastReportTime = timeInMillis();
+    _uint64 readsWhenLastReported = 0;
+
     while (NULL != (read = supplier->getNextRead())) {
         stats->totalReads++;
+
+        if (AlignerOptions::useHadoopErrorMessages && stats->totalReads % 10000 == 0 && timeInMillis() - lastReportTime > 10000) {
+            fprintf(stderr,"reporter:counter:SNAP,readsAligned,%d\n",stats->totalReads - readsWhenLastReported);
+            readsWhenLastReported = stats->totalReads;
+            lastReportTime = timeInMillis();
+        }
 
         // Skip the read if it has too many Ns or trailing 2 quality scores.
         if (read->getDataLength() < 50 || read->countOfNs() > maxDist) {
@@ -230,7 +239,6 @@ SingleAlignerContext::typeSpecificBeginIteration()
         //
         // We've only got one input, so just connect it directly to the consumer.
         //
-        options->inputs[0].readHeader(readerContext);
         readSupplierGenerator = options->inputs[0].createReadSupplierGenerator(options->numThreads, readerContext);
     } else {
         //
@@ -240,7 +248,6 @@ SingleAlignerContext::typeSpecificBeginIteration()
         // use separate context for each supplier, initialized from common
         for (int i = 0; i < options->nInputs; i++) {
             ReaderContext context(readerContext);
-            options->inputs[i].readHeader(context);
             generators[i] = options->inputs[i].createReadSupplierGenerator(options->numThreads, context);
         }
         readSupplierGenerator = new MultiInputReadSupplierGenerator(options->nInputs,generators);

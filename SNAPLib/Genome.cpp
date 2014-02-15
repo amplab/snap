@@ -28,13 +28,14 @@ Revision History:
 #include "Compat.h"
 #include "BigAlloc.h"
 #include "exit.h"
+#include "Error.h"
 
 Genome::Genome(unsigned i_maxBases, unsigned nBasesStored, unsigned i_chromosomePadding)
     : maxBases(i_maxBases), minOffset(0), maxOffset(i_maxBases), chromosomePadding(i_chromosomePadding)
 {
     bases = ((char *) BigAlloc(nBasesStored + 2 * N_PADDING)) + N_PADDING;
     if (NULL == bases) {
-        fprintf(stderr,"Genome: unable to allocate memory for %llu bases\n",(_int64)maxBases);
+        WriteErrorMessage("Genome: unable to allocate memory for %llu bases\n",(_int64)maxBases);
         soft_exit(1);
     }
 
@@ -56,8 +57,8 @@ Genome::Genome(unsigned i_maxBases, unsigned nBasesStored, unsigned i_chromosome
 Genome::addData(const char *data, size_t len)
 {
     if ((size_t)nBases + len > maxBases) {
-        fprintf(stderr,"Tried to write beyond allocated genome size (or tried to write into a genome that was loaded from a file).\n");
-        fprintf(stderr,"Size = %lld\n",(_int64)maxBases);
+        WriteErrorMessage("Tried to write beyond allocated genome size (or tried to write into a genome that was loaded from a file).\n"
+                          "Size = %lld\n",(_int64)maxBases);
         soft_exit(1);
     }
 
@@ -81,7 +82,7 @@ Genome::startContig(const char *contigName)
         int newMaxContigs = maxContigs * 2;
         Contig *newContigs = new Contig[newMaxContigs];
         if (NULL == newContigs) {
-            fprintf(stderr,"Genome: unable to reallocate contig array to size %d\n",newMaxContigs);
+            WriteErrorMessage("Genome: unable to reallocate contig array to size %d\n",newMaxContigs);
             soft_exit(1);
         }
         for (int i = 0; i < nContigs; i++) {
@@ -131,7 +132,7 @@ Genome::saveToFile(const char *fileName) const
 
     FILE *saveFile = fopen(fileName,"wb");
     if (saveFile == NULL) {
-        fprintf(stderr,"Genome::saveToFile: unable to open file '%s'\n",fileName);
+        WriteErrorMessage("Genome::saveToFile: unable to open file '%s'\n",fileName);
         return false;
     } 
 
@@ -147,7 +148,7 @@ Genome::saveToFile(const char *fileName) const
     }
 
     if (nBases != fwrite(bases,1,nBases,saveFile)) {
-        fprintf(stderr,"Genome::saveToFile: fwrite failed\n");
+        WriteErrorMessage("Genome::saveToFile: fwrite failed\n");
         fclose(saveFile);
         return false;
     }
@@ -185,7 +186,7 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned 
     genome->contigs = new Contig[nContigs];
     genome->minOffset = i_minOffset;
     if (i_minOffset >= nBases) {
-        fprintf(stderr,"Genome::loadFromFile: specified minOffset %u >= nBases %u\n",i_minOffset,nBases);
+        WriteErrorMessage("Genome::loadFromFile: specified minOffset %u >= nBases %u\n",i_minOffset,nBases);
     }
 
  
@@ -200,7 +201,7 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned 
     for (unsigned i = 0; i < nContigs; i++) {
         if (NULL == loadFile->gets(contigNameBuffer, contigNameBufferSize)){
 	  
-	  fprintf(stderr,"Unable to read contig description\n");
+	  WriteErrorMessage("Unable to read contig description\n");
             delete genome;
             return NULL;
         }
@@ -230,35 +231,34 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned 
     //
     /*  char newline;
     if (1 != fread(&newline,1,1,loadFile)) {
-        fprintf(stderr,"Genome::loadFromFile: Unable to read expected newline\n");
+        WriteErrorMessage("Genome::loadFromFile: Unable to read expected newline\n");
         delete genome;
         return NULL;
     }
 
     if (newline != 10) {
-        fprintf(stderr,"Genome::loadFromFile: Expected newline to be 0x0a, got 0x%02x\n",newline);
+        WriteErrorMessage("Genome::loadFromFile: Expected newline to be 0x0a, got 0x%02x\n",newline);
         delete genome;
         return NULL;
     }
     */
 
-	printf("advancing %u\n", i_minOffset);
-	if (0 != loadFile->advance(i_minOffset)) {
-        fprintf(stderr,"Genome::loadFromFile: _fseek64bit failed\n");
+    if (0 != loadFile->advance(i_minOffset)) {
+        WriteErrorMessage("Genome::loadFromFile: _fseek64bit failed\n");
         soft_exit(1);
     }
 
-	size_t retval;
+    size_t retval;
     if (length != (retval = loadFile->read(genome->bases,length))) {
-        fprintf(stderr,"Genome::loadFromFile: fread of bases failed; wanted %u, got %d\n", length, retval);
-		loadFile->close();
-		delete loadFile;
+        WriteErrorMessage("Genome::loadFromFile: fread of bases failed; wanted %u, got %d\n", length, retval);
+        loadFile->close();
+        delete loadFile;
         delete genome;
         return NULL;
     }
 
-	loadFile->close();
-	delete loadFile;
+    loadFile->close();
+    delete loadFile;
     genome->fillInContigLengths();
     genome->sortContigsByName();
     return genome;
@@ -286,20 +286,20 @@ Genome::sortContigsByName()
     bool
 Genome::openFileAndGetSizes(const char *filename, GenericFile **file, unsigned *nBases, unsigned *nContigs)
 {
-	*file = GenericFile::open(filename, GenericFile::ReadOnly);
+    *file = GenericFile::open(filename, GenericFile::ReadOnly);
     if (*file == NULL) {
-        fprintf(stderr,"Genome::openFileAndGetSizes: unable to open file '%s'\n",filename);
+        WriteErrorMessage("Genome::openFileAndGetSizes: unable to open file '%s'\n",filename);
         return false;
     } 
 
     char linebuf[2000];
-	char *retval = (*file)->gets(linebuf, sizeof(linebuf));
+    char *retval = (*file)->gets(linebuf, sizeof(linebuf));
 
     if (NULL == retval || 2 != sscanf(linebuf,"%d %d\n",nBases,nContigs)) {
-		(*file)->close();
-		delete *file;
+        (*file)->close();
+        delete *file;
         *file = NULL;
-        fprintf(stderr,"Genome::openFileAndGetSizes: unable to read header\n");
+        WriteErrorMessage("Genome::openFileAndGetSizes: unable to read header\n");
         return false;
     }
     return true;
@@ -309,15 +309,15 @@ Genome::openFileAndGetSizes(const char *filename, GenericFile **file, unsigned *
     bool 
 Genome::getSizeFromFile(const char *fileName, unsigned *nBases, unsigned *nContigs)
 {
-	GenericFile *file;
+    GenericFile *file;
     unsigned localNBases, localnContigs;
     
     if (!openFileAndGetSizes(fileName,&file,nBases ? nBases : &localNBases, nContigs ? nContigs : &localnContigs)) {
         return false;
     }
 
-	file->close();
-	delete file;
+    file->close();
+    delete file;
     return true;
 }
 
@@ -424,7 +424,7 @@ Genome::copy(bool copyX, bool copyY, bool copyM) const
     Genome *newCopy = new Genome(getCountOfBases(),getCountOfBases(), chromosomePadding);
 
     if (NULL == newCopy) {
-        fprintf(stderr,"Genome::copy: failed to allocate space for copy.\n");
+        WriteErrorMessage("Genome::copy: failed to allocate space for copy.\n");
         return NULL;
     }
 

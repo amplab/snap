@@ -49,7 +49,6 @@ struct SNAPFile {
     bool                 isCompressed;
     bool                 isStdio;           // Only applies to the first file for two-file inputs
 
-    void readHeader(ReaderContext& context);
     PairedReadSupplierGenerator *createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context);
     ReadSupplierGenerator *createReadSupplierGenerator(int numThreads, const ReaderContext& context);
     static bool generateFromCommandLine(const char **args, int nArgs, int *argsConsumed, SNAPFile *snapFile, bool paired, bool isInput);
@@ -96,6 +95,9 @@ struct AlignerOptions : public AbstractOptions
     bool                outputMultipleAlignments;
     bool                preserveClipping;
     float               expansionFactor;
+    
+    static bool         useHadoopErrorMessages; // This is static because it's global (and I didn't want to push the options object to every place in the code)
+    static bool         outputToStdout;         // Likewise
 
     void usage();
 

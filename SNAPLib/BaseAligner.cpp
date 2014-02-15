@@ -34,6 +34,7 @@ Revision History:
 #include "SeedSequencer.h"
 #include "exit.h"
 #include "AlignerOptions.h"
+#include "Error.h"
 
 using std::min;
 
@@ -98,7 +99,7 @@ Arguments:
     probDistance = new ProbabilityDistance(SNP_PROB, GAP_OPEN_PROB, GAP_EXTEND_PROB);  // Match Mason
 
     if ((i_landauVishkin == NULL) != (i_reverseLandauVishkin == NULL)) {
-        fprintf(stderr,"Must supply both or neither of forward & reverse Landau-Vishkin objects.  You tried exactly one.\n");
+        WriteErrorMessage("Must supply both or neither of forward & reverse Landau-Vishkin objects.  You tried exactly one.\n");
         soft_exit(1);
     }
 
@@ -306,8 +307,8 @@ Return Value:
     // A bitvector for used seeds, indexed on the starting location of the seed within the read.
     //
     if (inputRead->getDataLength() > maxReadSize) {
-        fprintf(stderr,"BaseAligner:: got too big read (%d > %d)\n", inputRead->getDataLength(), maxReadSize);
-        fprintf(stderr,"Increase MAX_READ_LENGTH at the beginning of Read.h and recompile\n");
+        WriteErrorMessage("BaseAligner:: got too big read (%d > %d)\n" 
+                          "Increase MAX_READ_LENGTH at the beginning of Read.h and recompile\n", inputRead->getDataLength(), maxReadSize);
         soft_exit(1);
     }
 

@@ -36,7 +36,7 @@ Revision History:
 
 using namespace std;
 
-const char *SNAP_VERSION = "1.0dev.7"; 
+const char *SNAP_VERSION = "1.0dev.9"; 
 
 static void usage()
 {
@@ -52,7 +52,7 @@ static void usage()
 
 int main(int argc, const char **argv)
 {
-    fprintf(stderr, "Welcome to SNAP version %s.\n\n", SNAP_VERSION);
+    fprintf(stderr, "Welcome to SNAP version %s.\n\n", SNAP_VERSION);       // Can't use WriteStatusMessage, because we haven't parsed args yet to determine if -hdp is specified.  Just stick with stderr.
 
     InitializeSeedSequencers();
 

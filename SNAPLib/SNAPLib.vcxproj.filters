@@ -171,13 +171,7 @@
     <ClInclude Include="ChimericPairedEndAligner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GenericFile.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="GenericFile_HDFS.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="GenericFile_stdio.h">
+    <ClInclude Include="Error.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -314,13 +308,7 @@
     <ClCompile Include="ParallelTask.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GenericFile.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="GenericFile_HDFS.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="GenericFile_stdio.cpp">
+    <ClCompile Include="Error.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

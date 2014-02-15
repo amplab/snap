@@ -29,6 +29,7 @@ Revision History:
 #include "SAM.h"
 #include "Bam.h"
 #include "exit.h"
+#include "Error.h"
 
 
 AlignerOptions::AlignerOptions(
@@ -91,7 +92,7 @@ AlignerOptions::usage()
     void
 AlignerOptions::usageMessage()
 {
-    fprintf(stderr,
+    WriteErrorMessage(
         "Usage: \n%s\n"
         "Options:\n"
         "  -o   filename  output alignments to filename in SAM or BAM format, depending on the file extension or\n"
@@ -134,6 +135,7 @@ AlignerOptions::usageMessage()
         "  -om  Output multiple equivalent alignment locations if they exist\n"
         "  -pc  Preserve the soft clipping for reads coming from SAM or BAM files\n"
         "  -xf  Increase expansion factor for BAM and GZ files (default %.1f)\n"
+        "  -hdp Use Hadoop-style prefixes (reporter:status:...) on error messages, and emit hadoop-style progress messages\n"
             ,
             commandLine,
             maxDist,
@@ -145,7 +147,7 @@ AlignerOptions::usageMessage()
         extra->usageMessage();
     }
 
-    fprintf(stderr, "\n\n"
+    WriteErrorMessage("\n\n"
                 "You may process more than one alignment without restarting SNAP, and if possible without reloading\n"
                 "the index.  In order to do this, list on the command line all of the parameters for the first\n"
                 "alignment, followed by a comma (separated by a space from the other parameters) followed by the\n"
@@ -157,23 +159,25 @@ AlignerOptions::usageMessage()
                 "an error in one, it may take a while for you to notice.  So, be careful (or check back shortly after\n"
                 "you think each run will have completed).\n\n");
 
-    fprintf(stderr, "When specifying an input or output file, you can simply list the filename, in which case\n");
-    fprintf(stderr, "SNAP will infer the type of the file from the file extension (.sam or .bam for example),\n");
-    fprintf(stderr, "or you can explicitly specify the file type by preceeding the filename with one of the\n");
-    fprintf(stderr," following type specifiers (which are case sensitive):\n");
-    fprintf(stderr,"    -fastq\n");
-    fprintf(stderr,"    -compressedFastq\n");
-    fprintf(stderr,"    -sam\n");
-    fprintf(stderr,"    -bam\n");
-    fprintf(stderr,"    -pairedFastq\n");
-    fprintf(stderr,"    -pairedCompressedFastq\n");
-    fprintf(stderr,"    -pairedInterleavedFastq\n");
-    fprintf(stderr,"    -pairedCompressedInterleavedFastq\n");
-    fprintf(stderr,"\nSo, for example, you could specify -bam input.file to make SNAP treat input.file as a BAM file,\n");
-    fprintf(stderr,"even though it would ordinarily assume a FASTQ file for input or a SAM file for output when it\n");
-    fprintf(stderr,"doens't recoginize the file extension.\n");
-    fprintf(stderr,"In order to use a file name that begins with a '-' and not have SNAP treat it as a switch, you must\n");
-    fprintf(stderr,"explicitly specify the type.  But really, that's just confusing and you shouldn't do it.\n");
+    WriteErrorMessage("When specifying an input or output file, you can simply list the filename, in which case\n"
+                      "SNAP will infer the type of the file from the file extension (.sam or .bam for example),\n"
+                      "or you can explicitly specify the file type by preceeding the filename with one of the\n"
+                      " following type specifiers (which are case sensitive):\n"
+                      "    -fastq\n"
+                      "    -compressedFastq\n"
+                      "    -sam\n"
+                      "    -bam\n"
+                      "    -pairedFastq\n"
+                      "    -pairedCompressedFastq\n"
+                      "    -pairedInterleavedFastq\n"
+                      "    -pairedCompressedInterleavedFastq\n"
+                      "\n"
+                      "So, for example, you could specify -bam input.file to make SNAP treat input.file as a BAM file,\n"
+                      "even though it would ordinarily assume a FASTQ file for input or a SAM file for output when it\n"
+                      "doens't recoginize the file extension.\n"
+                      "In order to use a file name that begins with a '-' and not have SNAP treat it as a switch, you must\n"
+                      "explicitly specify the type.  But really, that's just confusing and you shouldn't do it.\n"
+    );
 }
 
     bool
@@ -194,7 +198,7 @@ AlignerOptions::parse(
     } else if (strcmp(argv[n], "-n") == 0) {
         if (n + 1 < argc) {
             if (seedCountSpecified) {
-                fprintf(stderr,"-sc and -n are mutually exclusive.  Please use only one.\n");
+                WriteErrorMessage("-sc and -n are mutually exclusive.  Please use only one.\n");
                 soft_exit(1);
             }
             seedCountSpecified = true;
@@ -205,7 +209,7 @@ AlignerOptions::parse(
     } else if (strcmp(argv[n], "-sc") == 0) {
         if (n + 1 < argc) {
             if (seedCountSpecified) {
-                fprintf(stderr,"-sc and -n are mutually exclusive.  Please use only one.\n");
+                WriteErrorMessage("-sc and -n are mutually exclusive.  Please use only one.\n");
                 soft_exit(1);
             }
             seedCountSpecified = true;
@@ -239,8 +243,11 @@ AlignerOptions::parse(
     } else if (strcmp(argv[n], "-o") == 0) {
         int argsConsumed;
         if (!SNAPFile::generateFromCommandLine(argv + n + 1, argc - n - 1, &argsConsumed, &outputFile, false, false)) {
-            fprintf(stderr,"Must have a file specifier after -o\n");
+            WriteErrorMessage("Must have a file specifier after -o\n");
             soft_exit(1);
+        }
+        if (outputFile.isStdio) {
+            AlignerOptions::outputToStdout = true;
         }
         n += argsConsumed;
         return true;
@@ -340,13 +347,13 @@ AlignerOptions::parse(
         if (n + 1 < argc) {
             gapPenalty = atoi(argv[n+1]);
             if (gapPenalty < 1) {
-                fprintf(stderr,"Gap penalty must be at least 1.\n");
+                WriteErrorMessage("Gap penalty must be at least 1.\n");
                 soft_exit(1);
             }
             n++;
             return true;
         } else {
-            fprintf(stderr,"Must have the gap penalty value after -G\n");
+            WriteErrorMessage("Must have the gap penalty value after -G\n");
         }
     } else if (strcmp(argv[n], "-r") == 0) {
 #if 0   // This isn't ready yet.
@@ -372,7 +379,7 @@ AlignerOptions::parse(
             n++;
             return true;
         } else {
-            fprintf(stderr,"Must specify the name of the perf file after -pf\n");
+            WriteErrorMessage("Must specify the name of the perf file after -pf\n");
         }
 	} else if (strcmp(argv[n], "-rg") == 0) {
         if (n + 1 < argc) {
@@ -383,10 +390,13 @@ AlignerOptions::parse(
             rgLineContents = s;
             return true;
         } else {
-            fprintf(stderr,"Must specify the default read group after -rg\n");
+            WriteErrorMessage("Must specify the default read group after -rg\n");
         }
     } else if (strcmp(argv[n], "--hp") == 0) {
         BigAllocUseHugePages = false;
+        return true;    
+    } else if (strcmp(argv[n], "-hdp") == 0) {
+        AlignerOptions::useHadoopErrorMessages = true;
         return true;
 	} else if (strcmp(argv[n], "-D") == 0) {
         if (n + 1 < argc) {
@@ -394,13 +404,13 @@ AlignerOptions::parse(
             n++;
             return true;
         } else {
-            fprintf(stderr,"Must specify the desired extra search depth after -D\n");
+            WriteErrorMessage("Must specify the desired extra search depth after -D\n");
         }
     } else if (strlen(argv[n]) >= 2 && '-' == argv[n][0] && 'C' == argv[n][1]) {
         if (strlen(argv[n]) != 4 || '-' != argv[n][2] && '+' != argv[n][2] ||
             '-' != argv[n][3] && '+' != argv[n][3]) {
 
-            fprintf(stderr,"Invalid -C argument.\n\n");
+            WriteErrorMessage("Invalid -C argument.\n\n");
             return false;
         }
 
@@ -451,27 +461,6 @@ AlignerOptions::passFilter(
     }
 }
 
-    void
-SNAPFile::readHeader(ReaderContext& context)
-{
-    switch (fileType) {
-    case SAMFile:
-        return SAMReader::readHeader(fileName, context);
-        
-    case BAMFile:
-        return BAMReader::readHeader(fileName, context);
-
-    case FASTQFile:
-        return FASTQReader::readHeader(fileName,  context);
-        
-    case InterleavedFASTQFile:
-        return PairedInterleavedFASTQReader::readHeader(fileName,  context);
-
-    default:
-        _ASSERT(false);
-    }
-}
-
     PairedReadSupplierGenerator *
 SNAPFile::createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context)
 {
@@ -492,7 +481,7 @@ SNAPFile::createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnpa
         
     default:
         _ASSERT(false);
-        fprintf(stderr,"SNAPFile::createPairedReadSupplierGenerator: invalid file type (%d)\n", fileType);
+        WriteErrorMessage("SNAPFile::createPairedReadSupplierGenerator: invalid file type (%d)\n", fileType);
         soft_exit(1);
         return NULL;
     }
@@ -514,7 +503,7 @@ SNAPFile::createReadSupplierGenerator(int numThreads, const ReaderContext& conte
 
     default:
         _ASSERT(false);
-        fprintf(stderr,"SNAPFile::createReadSupplierGenerator: invalid file type (%d)\n", fileType);
+        WriteErrorMessage("SNAPFile::createReadSupplierGenerator: invalid file type (%d)\n", fileType);
         soft_exit(1);
         return NULL;
     }
@@ -547,12 +536,12 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
 
         if (!strcmp(args[0], "-fastq") || !strcmp(args[0], "-compressedFastq")) {
             if (!isInput) {
-                fprintf(stderr,"%s is not a valid output file type.\n", args[0]);
+                WriteErrorMessage("%s is not a valid output file type.\n", args[0]);
                 soft_exit(1);
             }
 
             if (paired && nArgs < 3) {
-                fprintf(stderr,"Expected a pair of fastQ files, but instead just got one\n");
+                WriteErrorMessage("Expected a pair of fastQ files, but instead just got one\n");
                 soft_exit(1);
             }
 
@@ -564,7 +553,7 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
                 snapFile->secondFileName = args[2];
                 if (!strcmp("-", args[2])) {
                     if (snapFile->isStdio) {
-                        fprintf(stderr,"Can't have both halves of paired FASTQ files be stdin ('-').  Did you mean to use the interleaved FASTQ type?\n");
+                        WriteErrorMessage("Can't have both halves of paired FASTQ files be stdin ('-').  Did you mean to use the interleaved FASTQ type?\n");
                         soft_exit(1);
                     }
                     snapFile->isStdio = true;
@@ -583,7 +572,7 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
             *argsConsumed = 2;
         } else if (!strcmp(args[0], "-pairedInterleavedFastq") || !strcmp(args[0], "-pairedCompressedInterleavedFastq")) {
             if (!paired) {
-                fprintf(stderr,"Specified %s for a single-end alignment.  To treat it as single-end, just use ordinary fastq (or compressed fastq, as appropriate)\n", args[0]);
+                WriteErrorMessage("Specified %s for a single-end alignment.  To treat it as single-end, just use ordinary fastq (or compressed fastq, as appropriate)\n", args[0]);
                 soft_exit(1);
             }
 
@@ -618,8 +607,8 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
         //
         // No default output file type.
         //
-        fprintf(stderr,"You specified an output file with name '%s', which doesn't end in .sam or .bam, and doesn't have an explicit type\n", args[0]);
-        fprintf(stderr,"specifier.  There is no default output file type.  Consider doing something like '-o -bam %s'\n", args[0]);
+        WriteErrorMessage("You specified an output file with name '%s', which doesn't end in .sam or .bam, and doesn't have an explicit type\n"
+                          "specifier.  There is no default output file type.  Consider doing something like '-o -bam %s'\n", args[0], args[0]);
         soft_exit(1);
     } else if (util::stringEndsWith(args[0], ".fq") || util::stringEndsWith(args[0], ".fastq") ||
         util::stringEndsWith(args[0], ".fq.gz") || util::stringEndsWith(args[0], ".fastq.gz") ||
@@ -642,7 +631,7 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
             snapFile->secondFileName = args[1];
             if (!strcmp(args[1], "-")) {
                 if (snapFile->isStdio) {
-                    fprintf(stderr,"Can't have both halves of paired FASTQ files be stdin ('-').  Did you mean to use the interleaved FASTQ type?\n");
+                    WriteErrorMessage("Can't have both halves of paired FASTQ files be stdin ('-').  Did you mean to use the interleaved FASTQ type?\n");
                     soft_exit(1);
                 }
                 snapFile->isStdio = true;
@@ -654,9 +643,9 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
 
     } else {
         if (snapFile->isStdio) {
-            fprintf(stderr,"Stdio IO always requires an explicit file type.  So, for example, do 'snap single index-directory -fastq -' to read FASTQ from stdin\n");
+            WriteErrorMessage("Stdio IO always requires an explicit file type.  So, for example, do 'snap single index-directory -fastq -' to read FASTQ from stdin\n");
         } else {
-            fprintf(stderr, "Unknown file type, please specify file type with -fastq, -sam, -bam, etc.\n");
+            WriteErrorMessage("Unknown file type, please specify file type with -fastq, -sam, -bam, etc.\n");
         }
 
         soft_exit(1);
@@ -664,3 +653,10 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
 
     return true;
 }
+
+    bool         
+AlignerOptions::useHadoopErrorMessages= false;
+
+    bool
+AlignerOptions::outputToStdout = false;
+

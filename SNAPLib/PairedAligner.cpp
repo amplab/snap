@@ -48,6 +48,7 @@ Revision History:
 #include "Util.h"
 #include "IntersectingPairedEndAligner.h"
 #include "exit.h"
+#include "Error.h"
 
 using namespace std;
 
@@ -239,7 +240,7 @@ PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
 void PairedAlignerOptions::usageMessage()
 {
     AlignerOptions::usageMessage();
-    fprintf(stderr,
+    WriteErrorMessage(
         "  -s   min and max spacing to allow between paired ends (default: %d %d).\n"
         "  -fs  force spacing to lie between min and max.\n"
         "  -H   max hits for intersecting aligner (default: %d).\n"
@@ -338,7 +339,9 @@ void PairedAlignerContext::runIterationThread()
         delete supplier;
 		return;
 	}
-	if (index == NULL) {
+
+
+ 	if (index == NULL) {
         // no alignment, just input/output
         Read *read0;
         Read *read1;
@@ -353,10 +356,12 @@ void PairedAlignerContext::runIterationThread()
                 char* p[2] = {(char*) alloca(n[0] + 1), (char*) alloca(n[1] + 1)};
                 memcpy(p[0], read0->getId(), n[0]); p[0][n[0]] = 0;
                 memcpy(p[1], read1->getId(), n[1]); p[1][n[1]] = 0;
-                fprintf(stderr, "Unmatched read IDs '%s' and '%s'.  Use the -I option to ignore this.\n", p[0], p[1]);
+                WriteErrorMessage( "Unmatched read IDs '%s' and '%s'.  Use the -I option to ignore this.\n", p[0], p[1]);
                 soft_exit(1);
             }
             stats->totalReads += 2;
+
+
             writePair(read0, read1, &result);
         }
         delete supplier;
@@ -407,6 +412,10 @@ void PairedAlignerContext::runIterationThread()
     Read *read0;
     Read *read1;
     IdPairVector* secondary = options->outputMultipleAlignments ? new IdPairVector : NULL;
+
+    _uint64 lastReportTime = timeInMillis();
+    _uint64 readsWhenLastReported = 0;
+
     while (supplier->getNextReadPair(&read0,&read1)) {
         // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
         if (!ignoreMismatchedIDs) {
@@ -431,6 +440,13 @@ void PairedAlignerContext::runIterationThread()
             // Here one the reads might still be hopeless, but maybe we can align the other.
             stats->usefulReads += (useful0 && useful1) ? 2 : 1;
         }
+
+        if (AlignerOptions::useHadoopErrorMessages && stats->totalReads % 10000 == 0 && timeInMillis() - lastReportTime > 10000) {
+            fprintf(stderr,"reporter:counter:SNAP,readsAligned,%d\n",stats->totalReads - readsWhenLastReported);
+            readsWhenLastReported = stats->totalReads;
+            lastReportTime = timeInMillis();
+        }
+
 
         PairedAlignmentResult result;
 
@@ -545,7 +561,6 @@ PairedAlignerContext::typeSpecificBeginIteration()
         //
         // We've only got one input, so just connect it directly to the consumer.
         //
-        options->inputs[0].readHeader(readerContext);
         pairedReadSupplierGenerator = options->inputs[0].createPairedReadSupplierGenerator(options->numThreads, quicklyDropUnpairedReads, readerContext);
     } else {
         //
@@ -555,7 +570,6 @@ PairedAlignerContext::typeSpecificBeginIteration()
         // use separate context for each supplier, initialized from common
         for (int i = 0; i < options->nInputs; i++) {
             ReaderContext context(readerContext);
-            options->inputs[i].readHeader(context);
             generators[i] = options->inputs[i].createPairedReadSupplierGenerator(options->numThreads, quicklyDropUnpairedReads, context);
         }
         pairedReadSupplierGenerator = new MultiInputPairedReadSupplierGenerator(options->nInputs,generators);

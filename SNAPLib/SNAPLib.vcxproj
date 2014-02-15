@@ -104,12 +104,12 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_LIB;SNAP_HDFS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <WholeProgramOptimization>true</WholeProgramOptimization>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <AdditionalIncludeDirectories>..\import\;..\import\pdclibhdfs\inc</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\import\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -169,6 +169,7 @@
     <ClInclude Include="DataReader.h" />
     <ClInclude Include="DataWriter.h" />
     <ClInclude Include="directions.h" />
+    <ClInclude Include="Error.h" />
     <ClInclude Include="exit.h" />
     <ClInclude Include="FASTA.h" />
     <ClInclude Include="FASTQ.h" />
@@ -176,9 +177,6 @@
     <ClInclude Include="FixedSizeMap.h" />
     <ClInclude Include="FixedSizeSet.h" />
     <ClInclude Include="FixedSizeVector.h" />
-    <ClInclude Include="GenericFile.h" />
-    <ClInclude Include="GenericFile_HDFS.h" />
-    <ClInclude Include="GenericFile_stdio.h" />
     <ClInclude Include="Genome.h" />
     <ClInclude Include="GenomeIndex.h" />
     <ClInclude Include="GzipDataWriter.h" />
@@ -225,12 +223,10 @@
     <ClCompile Include="Compat.cpp" />
     <ClCompile Include="DataReader.cpp" />
     <ClCompile Include="DataWriter.cpp" />
+    <ClCompile Include="Error.cpp" />
     <ClCompile Include="exit.cpp" />
     <ClCompile Include="FASTA.cpp" />
     <ClCompile Include="FASTQ.cpp" />
-    <ClCompile Include="GenericFile.cpp" />
-    <ClCompile Include="GenericFile_HDFS.cpp" />
-    <ClCompile Include="GenericFile_stdio.cpp" />
     <ClCompile Include="Genome.cpp" />
     <ClCompile Include="GenomeIndex.cpp" />
     <ClCompile Include="GzipDataWriter.cpp" />

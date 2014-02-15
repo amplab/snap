@@ -67,8 +67,6 @@ public:
         void releaseBatch(DataBatch batch)
         { data->releaseBatch(batch); }
 
-        static void readHeader(const char* fileName, ReaderContext& i_context);
-
         static SAMReader* create(DataSupplier* supplier, const char *fileName,
                 const ReaderContext& i_context,
                 _int64 startingOffset, _int64 amountOfFileToProcess);
@@ -128,6 +126,8 @@ protected:
 
 
 private:
+        void readHeader(const char* fileName);
+
         void init(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess);
 
         DataReader*         data;

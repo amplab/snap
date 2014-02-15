@@ -16,6 +16,7 @@ Environment:
 
 #include "stdafx.h"
 #include "ParallelTask.h"
+#include "Error.h"
 
 using std::max;
 
@@ -87,7 +88,7 @@ void ParallelCoworker::stop()
         AllowEventWaitersToProceed(&workReady[i]);
     }
     if (!WaitForSingleWaiterObject(&finished)) {
-        fprintf(stderr, "Waiting for all threads to finish failed\n");
+        WriteErrorMessage("Waiting for all threads to finish failed\n");
         soft_exit(1);
     }
 }
