@@ -8,7 +8,9 @@
 using std::max;
 using std::min;
 
-template <typename P, typename V, int _empty=0>
+// adapted from http://visualstudiomagazine.com/articles/2012/11/01/priority-queues-with-c.aspx
+
+template <typename P, typename V>
 class PriorityQueue
 {
 private:
@@ -19,89 +21,63 @@ private:
         void operator=(const Entry& e) { value = e.value; priority = e.priority; }
         V value;
         P priority;
-        static bool comparator(const Entry& a, const Entry& b)
-        { return a.priority > b.priority; }
     };
     typedef VariableSizeVector<Entry> EntryVector;
 
-public:
-    // add an element with specific priority, or set priority if exists
-    // todo: array is not the most efficient implementation, but it's easy
-    // return true if added, false if exists
-    bool put(V value, P pri)
-    {
-        P* p = priority.tryFind(value);
-        if (p == NULL) {
-            priority.put(value, pri);
-            Entry e(value, pri);
-            queue.insert(e, Entry::comparator);
-            return true;
-        } else if (*p != pri) {
-            // find where it is in the queue
-            P old = *p;
-            Entry e(value, old);
-            typename EntryVector::iterator i = std::lower_bound(queue.begin(), queue.end(), e, Entry::comparator);
-            _ASSERT(i != queue.end());
-            while (i->value != value) {
-                i++;
-                _ASSERT(i != queue.end());
-            }
-            Entry e2(value, pri);
-            if (pri > old) {
-                // move towards front
-                Entry* j = std::upper_bound(queue.begin(), i, e2, Entry::comparator);
-                if (j < i) {
-                    memmove(j + 1, j, (i - j) * sizeof(Entry));
-                }
-                *j = e2;
-            } else {
-                // move towards back
-                typename EntryVector::iterator j = std::lower_bound(i, queue.end(), e2, Entry::comparator);
-                if (j == queue.end()) {
-                    _ASSERT(i == j - 1);
-                    j = i;
-                } else if (i < j) {
-                    memmove(i, i + 1, (j - i) * sizeof(Entry));
-                }
-                *j = e2;
-            }
-            *p = pri;
-        }
-#if 1
-        _ASSERT(queue.size() == priority.size());
-        for (Entry* i = queue.begin(); i != queue.end(); i++) {
-            _ASSERT(priority[i->value] == i->priority);
-            if (i != queue.begin()) {
-                _ASSERT(i->priority <= (i-1)->priority);
-            }
-        }
+#if 0
+    inline void check()
+    { _ASSERT(validate()); }
+#else
+    inline void check() {}
 #endif
-        return false;
-    }
 
-    // increment priority of element, or add with priority 1 if not there, return new priority
-    int increment(V value)
+public:
+    // add an element with specific priority
+    void add(V value, P pri)
     {
-        P* p = priority.tryFind(value);
-        P n = p ? *p + 1 : 1;
-        put(value, n);
-        return n;
+        queue.push_back(Entry(value, pri));
+        int ci = queue.size() - 1;
+        while (ci > 0) {
+            int pi = (ci - 1) / 2; // parent index
+            if (queue[ci].priority >= queue[pi].priority) {
+                break; // child >= parent so stop
+            }
+            Entry tmp = queue[ci]; queue[ci] = queue[pi]; queue[pi] = tmp;
+            ci = pi;
+        }
+        check();
     }
 
-    // check if an element is in the list
-    bool contains(V value) const
-    { return priority.tryFind(value) != NULL; }
-
-    // remove an element with the highest priority from the queue
     V pop(P* o_priority = NULL)
     {
-        Entry result = queue[0];
-        queue.remove(queue.begin());
-        priority.erase(result.value);
-        if (o_priority != NULL) {
-            *o_priority = result.priority;
+        int li = queue.size() - 1; // last index (before removal)
+        Entry frontItem = queue[0];   // fetch the front
+        queue[0] = queue[li];
+        queue.erase(li);
+
+        --li; // last index (after removal)
+        int pi = 0; // parent index. start at front of pq
+        while (true) {
+            int ci = pi * 2 + 1; // left child index of parent
+            if (ci > li) {
+                break;  // no children so done
+            }
+            int rc = ci + 1;     // right child
+            if (rc <= li && queue[rc].priority < queue[ci].priority) {
+                // if there is a rc (ci + 1), and it is smaller than left child, use the rc instead
+                ci = rc;
+            }
+            if (queue[pi].priority <= queue[ci].priority) {
+                break; // parent is smaller than (or equal to) smallest child so done
+            }
+            Entry tmp = queue[pi]; queue[pi] = queue[ci]; queue[ci] = tmp; // swap parent and child
+            pi = ci;
         }
-        return result.value;
+        check();
+        if (o_priority != NULL) {
+            *o_priority = frontItem.priority;
+        }
+        return frontItem.value;
     }
 
     V peek(P* o_priority = NULL) const
@@ -112,18 +88,30 @@ public:
         return queue[0].value;
     }
 
-    // clear all elements
     void clear()
-    {
-        priority.clear();
-        queue.clear();
-    }
+    { queue.clear(); }
 
     int size() const
     { return queue.size(); }
 
+    bool validate()
+    {
+        // is the heap property true for all queue?
+        if (queue.size() == 0) {
+            return true;
+        }
+        int li = queue.size() - 1; // last index
+        for (int pi = 0; pi <= li; ++pi) {
+            int lci = 2 * pi + 1; // left child index
+            int rci = 2 * pi + 2; // right child index
+
+            if (lci <= li && queue[pi].priority > queue[lci].priority) return false; // if lc exists and it's greater than parent then bad.
+            if (rci <= li && queue[pi].priority > queue[rci].priority) return false; // check the right child too.
+        }
+        return true;
+    }
+
 private:
 
-    VariableSizeMap<V,P,150,MapNumericHash<V>,90,_empty> priority; // value -> priority
     EntryVector queue; // sorted list
 };

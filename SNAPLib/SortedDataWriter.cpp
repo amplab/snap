@@ -369,14 +369,13 @@ SortedDataFilterSupplier::mergeSort()
     // merge temp blocks into output
     _int64 total = 0;
     // get initial merge sort data
-    // queue using complement of location since priority queue is largest first
-    typedef PriorityQueue<unsigned,int,-3> BlockQueue;
+    typedef PriorityQueue<unsigned,int> BlockQueue;
     BlockQueue queue;
     for (SortBlockVector::iterator b = blocks.begin(); b != blocks.end(); b++) {
         _int64 bytes;
         b->reader->getData(&b->data, &bytes);
         format->getSortInfo(genome, b->data, bytes, &b->location, &b->length);
-        queue.put((_uint32) (b - blocks.begin()), ~b->location); 
+        queue.add((_uint32) (b - blocks.begin()), b->location); 
     }
     unsigned current = 0; // current location for validation
 	int lastRefID = -1, lastPos = 0;
@@ -384,12 +383,12 @@ SortedDataFilterSupplier::mergeSort()
 #if VALIDATE_SORT
 		unsigned check;
 		queue.peek(&check);
-		_ASSERT(~check >= current);
+		_ASSERT(check >= current);
 #endif
         unsigned secondLocation;
         int smallestIndex = queue.pop();
         int secondIndex = queue.size() > 0 ? queue.peek(&secondLocation) : -1;
-        unsigned limit = secondIndex != -1 ? ~secondLocation : UINT32_MAX;
+        unsigned limit = secondIndex != -1 ? secondLocation : UINT32_MAX;
         SortBlock* b = &blocks[smallestIndex];
         char* writeBuffer;
         size_t writeBytes;
@@ -443,7 +442,7 @@ SortedDataFilterSupplier::mergeSort()
             _ASSERT(b->length <= readBytes && b->location >= previous);
         }
         if (b->reader != NULL) {
-            queue.put(smallestIndex, ~b->location);
+            queue.add(smallestIndex, b->location);
         }
     }
     
