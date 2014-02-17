@@ -56,6 +56,8 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
                                     maxSeedsFromCommandLine,  seedCoverage, extraSearchDepth, &lv, &reverseLV, NULL, allocator);
     
     underlyingPairedEndAligner->setLandauVishkin(&lv, &reverseLV);
+
+    singleSecondary[0] = singleSecondary[1] = NULL;
 }
 
     size_t 
@@ -127,10 +129,20 @@ void ChimericPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRe
     // chimeric and so we should just align them with the single end aligner and apply a MAPQ penalty.
     //
     Read *read[NUM_READS_PER_PAIR] = {read0, read1};
-    IdPairVector* singleSecondary[2] = {NULL, NULL};
     if (secondary != NULL) {
-        singleSecondary[0] = new IdPairVector;
-        singleSecondary[1] = new IdPairVector;
+        if (singleSecondary[0] == NULL) {
+            singleSecondary[0] = new IdPairVector;
+            singleSecondary[1] = new IdPairVector;
+        } else {
+            singleSecondary[0]->clear();
+            singleSecondary[1]->clear();
+        }
+    } else {
+        if (singleSecondary[0] != NULL) {
+            delete singleSecondary[0];
+            delete singleSecondary[1];
+            singleSecondary[0] = singleSecondary[1] = NULL;
+        }
     }
     for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
         result->status[r] = singleAligner->AlignRead(read[r], &result->location[r], &result->direction[r], &result->score[r], &result->mapq[r], singleSecondary[r]);
