@@ -256,6 +256,9 @@ Return Value:
 
     if (NULL == allocatedMemory) {
         fprintf(stderr,"BigAlloc of size %lld failed.\n", sizeToAllocate);
+#ifdef PROFILE_BIGALLOC
+        PrintBigAllocProfile();
+#endif
         soft_exit(1);
     }
 

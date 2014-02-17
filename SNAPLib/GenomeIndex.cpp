@@ -473,7 +473,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     // onto the backpointer list when the overflow entry was first created.
     //
     index->overflowTableSize = nextOverflowIndex * 3 + (unsigned)countOfDuplicateOverflows;
-    index->overflowTable = (unsigned *)BigAlloc(index->overflowTableSize * sizeof(*index->overflowTable),&index->overflowTableVirtualAllocSize);
+    index->overflowTable = (unsigned *)BigAlloc2(index->overflowTableSize * sizeof(*index->overflowTable),&index->overflowTableVirtualAllocSize);
 
     unsigned nBackpointersProcessed = 0;
     _int64 lastPrintTime = timeInMillis();
@@ -734,7 +734,7 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     }
     index->seedLen = seedLen;
 
-    index->overflowTable = (unsigned *)BigAlloc(index->overflowTableSize * sizeof(*(index->overflowTable)),&index->overflowTableVirtualAllocSize);
+    index->overflowTable = (unsigned *)BigAlloc2(index->overflowTableSize * sizeof(*(index->overflowTable)),&index->overflowTableVirtualAllocSize);
 
     snprintf(filenameBuffer,filenameBufferSize,"%s%cOverflowTable",directoryName,PATH_SEP);
     FILE* fOverflowTable = fopen(filenameBuffer, "rb");

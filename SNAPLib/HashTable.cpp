@@ -46,7 +46,7 @@ Arguments:
         return;
     }
 
-    Table = (Entry *)BigAlloc(tableSize * elementSize,&virtualAllocSize);
+    Table = (Entry *)BigAlloc2(tableSize * elementSize,&virtualAllocSize);
 
     //
     // Run through the table and set all of the value1s to InvalidGenomeLocation, which means
@@ -139,7 +139,7 @@ SNAPHashTable *SNAPHashTable::loadFromFile(FILE *loadFile)
 
     table->elementSize = table->keySizeInBytes + table->dataSizeInBytes;
 
-    table->Table = (Entry *)BigAlloc(table->tableSize * table->elementSize, &table->virtualAllocSize);
+    table->Table = (Entry *)BigAlloc2(table->tableSize * table->elementSize, &table->virtualAllocSize);
 
     size_t maxReadSize = 100 * 1024 * 1024;
     size_t readOffset = 0;

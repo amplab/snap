@@ -32,6 +32,7 @@ inline unsigned RoundUpToPageSize(unsigned size)
 
 #ifdef PROFILE_BIGALLOC
 #define BigAlloc(s) BigAllocProfile((s), NULL, __FUNCTION__)
+#define BigAlloc2(s,p) BigAllocProfile((s), (p), __FUNCTION__)
 
 void *BigAllocProfile(
         size_t      sizeToAllocate,
@@ -42,6 +43,7 @@ void *BigAllocProfile(
 void *BigAlloc(
         size_t      sizeToAllocate,
         size_t      *sizeAllocated = NULL);
+#define BigAlloc2(s,p) BigAlloc((s), (p))
 #endif
 
 void PrintBigAllocProfile();
