@@ -123,7 +123,7 @@ ReadBasedDataReader::ReadBasedDataReader(
     unsigned i_nBuffers,
     _int64 i_overflowBytes,
     double extraFactor)
-    : DataReader(), nBuffers(i_nBuffers), overflowBytes(i_overflowBytes), maxBuffers(4 * i_nBuffers)
+    : DataReader(), nBuffers(i_nBuffers), overflowBytes(i_overflowBytes), maxBuffers(i_nBuffers * (i_nBuffers == 1 ? 2 : 4))
 {
     //
     // Initialize the buffer info struct.
@@ -888,7 +888,7 @@ WindowsOverlappedDataReader::readHeader(
     info->offset = 0;
     bufferLaps[0].Offset = 0;
     bufferLaps[0].OffsetHigh = 0;
-    _ASSERT(nextBufferForReader == 0 && nextBufferForConsumer == -1 && lastBufferForConsumer == -1 && info->next == 1 && info->previous == -1);
+    _ASSERT(nextBufferForReader == 0 && nextBufferForConsumer == -1 && lastBufferForConsumer == -1 && info->previous == -1);
     nextBufferForReader = 1;
     nextBufferForConsumer = lastBufferForConsumer = 0;
     info->next = info->previous = -1;
@@ -1110,7 +1110,7 @@ public:
     virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor)
     {
         // add some buffers for read-ahead
-        return new WindowsOverlappedDataReader(bufferCount + 4, overflowBytes, extraFactor);
+        return new WindowsOverlappedDataReader(bufferCount + (bufferCount > 1 ? 4 : 0), overflowBytes, extraFactor);
     }
 };
 
