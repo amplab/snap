@@ -29,6 +29,7 @@ Revision History:
 #include "VariableSizeVector.h"
 #include "stdafx.h"
 #include "zlib.h"
+#include "Error.h"
 
 using std::pair;
 
@@ -72,7 +73,7 @@ public:
             if (delta < 65536 && physical < ((_uint64) 1 << 48)) {
                 return (physical << 16) | delta;
             }
-            fprintf(stderr, "Invalid virtual file offset, logical=%llu, start=%llu, delta=%llu\n", logical, physical, delta);
+            WriteErrorMessage( "Invalid virtual file offset, logical=%llu, start=%llu, delta=%llu\n", logical, physical, delta);
         }
         return 0;
     }

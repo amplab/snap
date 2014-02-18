@@ -32,6 +32,7 @@ Revision History:
 #include "ReadSupplierQueue.h"
 #include "RangeSplitter.h"
 #include "DataReader.h"
+#include "Error.h"
 
 class   FASTQReader : public ReadReader {
 public:
@@ -184,7 +185,7 @@ private:
                 return;
             }
             if (1 != fwrite(buffer, bufferOffset, 1, outputFile)) {
-                fprintf(stderr,"FASTQWriter: error writing file\n");
+                WriteErrorMessage("FASTQWriter: error writing file\n");
             }
 
             bufferOffset = 0;

@@ -30,6 +30,7 @@ Revision History:
 #include "DataReader.h"
 #include "DataWriter.h"
 #include "directions.h"
+#include "Error.h"
 
 class FileFormat;
 
@@ -604,7 +605,7 @@ public:
             }
 
             if (cigarSize == cigarLimit) {
-                fprintf(stderr, "Absurdly long cigar string.\n");
+                WriteErrorMessage( "Absurdly long cigar string.\n");
                 soft_exit(1);
             }
 

@@ -21,6 +21,7 @@ Environment:
 #include "Compat.h"
 #include "BigAlloc.h"
 #include "BufferedAsync.h"
+#include "Error.h"
 
 using std::min;
 
@@ -45,7 +46,7 @@ BufferedAsyncReader::open(
     buffer[0] = (char*) (buffer0 != NULL ? buffer0 : BigAlloc(bufferSize));
     buffer[1] = (char*) (buffer1 != NULL ? buffer1 : BigAlloc(bufferSize));
     if (reader[0] == NULL || reader[1] == NULL || buffer[0] == NULL || buffer[1] == NULL) {
-        fprintf(stderr, "unable to setup temp file reader\n");
+        WriteErrorMessage("unable to setup temp file reader\n");
         return false;
     }
     length[0] = min(bytes, bufferSize);
@@ -106,7 +107,7 @@ BufferedAsyncReader::read(
             // copy second part of read segment
             // todo: allow for longer reads
             if (readOffset > length[reading]) {
-                fprintf(stderr, "read length too big\n");
+                WriteErrorMessage("read length too big\n");
                 return false;
             }
             memcpy((char*) data + first, buffer[reading], readOffset);
@@ -186,7 +187,7 @@ BufferedAsyncWriter::forWrite(
         waitTime += timeInNanos() - start;
         writing = 1 - writing;
         if (! ok) {
-            fprintf(stderr, "BufferedAsyncWriter write failed\n");
+            WriteErrorMessage("BufferedAsyncWriter write failed\n");
             return NULL;
         }
         if (bytes <= bufferSize) {
@@ -194,7 +195,7 @@ BufferedAsyncWriter::forWrite(
             return buffer[writing];
         } else {
             // too big to be async
-            fprintf(stderr, "BufferedAsyncWriter write too large\n");
+            WriteErrorMessage("BufferedAsyncWriter write too large\n");
             return NULL;
         }
     }

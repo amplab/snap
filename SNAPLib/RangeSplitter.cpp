@@ -231,7 +231,7 @@ RangeSplittingPairedReadSupplierGenerator::generateNewPairedReadSupplier()
         break;
 
     default:
-        fprintf(stderr,"RangeSplittingPairedReadSupplierGenerator::generateNewPairedReadSupplier(): unknown file type %d\n", fileType);
+        WriteErrorMessage("RangeSplittingPairedReadSupplierGenerator::generateNewPairedReadSupplier(): unknown file type %d\n", fileType);
         soft_exit(1);
     }
  

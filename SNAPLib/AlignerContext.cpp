@@ -33,6 +33,7 @@ Revision History:
 #include "FileFormat.h"
 #include "exit.h"
 #include "PairedAligner.h"
+#include "Error.h"
 
 using std::max;
 using std::min;
@@ -138,22 +139,22 @@ AlignerContext::initialize()
         strcpy(g_indexDirectory, options->indexDir);
 
         if (strcmp(options->indexDir, "-") != 0) {
-            fprintf(stderr, "Loading index from directory... ");
+            WriteStatusMessage("Loading index from directory... ");
  
             fflush(stdout);
             _int64 loadStart = timeInMillis();
             index = GenomeIndex::loadFromDirectory((char*) options->indexDir);
             if (index == NULL) {
-                fprintf(stderr, "Index load failed, aborting.\n");
+                WriteErrorMessage("Index load failed, aborting.\n");
                 soft_exit(1);
             }
             g_index = index;
 
             _int64 loadTime = timeInMillis() - loadStart;
-             fprintf(stderr, "%llds.  %u bases, seed size %d\n",
+             WriteStatusMessage("%llds.  %u bases, seed size %d\n",
                     loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
          } else {
-            fprintf(stderr, "no alignment, input/output only\n");
+            WriteStatusMessage("no alignment, input/output only\n");
         }
     } else {
         index = g_index;
@@ -166,7 +167,7 @@ AlignerContext::initialize()
     if (options->perfFileName != NULL) {
         perfFile = fopen(options->perfFileName,"a");
         if (NULL == perfFile) {
-            fprintf(stderr,"Unable to open perf file '%s'\n", options->perfFileName);
+            WriteErrorMessage("Unable to open perf file '%s'\n", options->perfFileName);
             soft_exit(1);
         }
     }
@@ -177,7 +178,7 @@ AlignerContext::initialize()
     void
 AlignerContext::printStatsHeader()
 {
-    fprintf(stderr, "MaxHits\tMaxDist\t%%Used\t%%Unique\t%%Multi\t%%!Found\t%%Error\t%%Pairs\tlvCalls\tNumReads\tReads/s\n");
+    WriteStatusMessage("MaxHits\tMaxDist\t%%Used\t%%Unique\t%%Multi\t%%!Found\t%%Error\t%%Pairs\tlvCalls\tNumReads\tReads/s\n");
 }
 
     void
@@ -222,7 +223,7 @@ AlignerContext::beginIteration()
             // This shouldn't happen, because the command line parser should catch it.  Perhaps you've added a new output file format and just
             // forgoten to add it here.
             //
-            fprintf(stderr, "AlignerContext::beginIteration(): unknown file type %d for '%s'\n", options->outputFile.fileType, options->outputFile.fileName);
+            WriteErrorMessage("AlignerContext::beginIteration(): unknown file type %d for '%s'\n", options->outputFile.fileType, options->outputFile.fileName);
             soft_exit(1);
         }
 
@@ -269,7 +270,7 @@ AlignerContext::printStats()
     } else {
         snprintf(errorRate, sizeof(errorRate), "-");
     }
-    fprintf(stderr, "%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%lld\t%lld\t%.0f (at: %lld)\n",
+    WriteStatusMessage("%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%lld\t%lld\t%.0f (at: %lld)\n",
             maxHits_, maxDist_, 
             100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
             100.0 * stats->singleHits / usefulReads,
@@ -305,14 +306,14 @@ AlignerContext::printStats()
         double truePositives = (totalAligned - totalErrors) / max(stats->totalReads, (_int64) 1);
         double falsePositives = totalErrors / totalAligned;
         if (i <= 10 || i % 2 == 0 || i == 69) {
-//            fprintf(stderr, "%d\t%d\t%d\t%.3f\t%.2E\n", i, stats->mapqHistogram[i], stats->mapqErrors[i], truePositives, falsePositives);
+//            WriteStatusMessage("%d\t%d\t%d\t%.3f\t%.2E\n", i, stats->mapqHistogram[i], stats->mapqErrors[i], truePositives, falsePositives);
         }
     }
 
 #if TIME_HISTOGRAM
-    fprintf(stderr, "Per-read alignment time histogram:\nlog2(ns)\tcount\ttotal time (ns)\n");
+    WriteStatusMessage("Per-read alignment time histogram:\nlog2(ns)\tcount\ttotal time (ns)\n");
     for (int i = 0; i < 31; i++) {
-        fprintf(stderr, "%d\t%lld\t%lld\n", i, stats->countByTimeBucket[i], stats->nanosByTimeBucket[i]);
+        WriteStatusMessage("%d\t%lld\t%lld\n", i, stats->countByTimeBucket[i], stats->nanosByTimeBucket[i]);
     }
 #endif // TIME_HISTOGRAM
 
@@ -320,11 +321,11 @@ AlignerContext::printStats()
     stats->printHistograms(stdout);
 
 #ifdef  TIME_STRING_DISTANCE
-    fprintf(stderr, ""%llds, %lld calls in BSD noneClose, not -1\n",  stats->nanosTimeInBSD[0][1]/1000000000, stats->BSDCounts[0][1]);
-    fprintf(stderr, ""%llds, %lld calls in BSD noneClose, -1\n",      stats->nanosTimeInBSD[0][0]/1000000000, stats->BSDCounts[0][0]);
-    fprintf(stderr, ""%llds, %lld calls in BSD close, not -1\n",      stats->nanosTimeInBSD[1][1]/1000000000, stats->BSDCounts[1][1]);
-    fprintf(stderr, ""%llds, %lld calls in BSD close, -1\n",          stats->nanosTimeInBSD[1][0]/1000000000, stats->BSDCounts[1][0]);
-    fprintf(stderr, ""%llds, %lld calls in Hamming\n",                stats->hammingNanos/1000000000,         stats->hammingCount);
+    WriteStatusMessage("%llds, %lld calls in BSD noneClose, not -1\n",  stats->nanosTimeInBSD[0][1]/1000000000, stats->BSDCounts[0][1]);
+    WriteStatusMessage("%llds, %lld calls in BSD noneClose, -1\n",      stats->nanosTimeInBSD[0][0]/1000000000, stats->BSDCounts[0][0]);
+    WriteStatusMessage("%llds, %lld calls in BSD close, not -1\n",      stats->nanosTimeInBSD[1][1]/1000000000, stats->BSDCounts[1][1]);
+    WriteStatusMessage("%llds, %lld calls in BSD close, -1\n",          stats->nanosTimeInBSD[1][0]/1000000000, stats->BSDCounts[1][0]);
+    WriteStatusMessage("%llds, %lld calls in Hamming\n",                stats->hammingNanos/1000000000,         stats->hammingCount);
 #endif  // TIME_STRING_DISTANCE
 
     extension->printStats();
@@ -354,7 +355,7 @@ AlignerContext::parseOptions(
 
     options->extra = extension->extraOptions();
     if (argc < 2) {
-        fprintf(stderr,"Too few parameters\n");
+        WriteErrorMessage("Too few parameters\n");
         options->usage();
     }
 
@@ -384,7 +385,7 @@ AlignerContext::parseOptions(
         if (SNAPFile::generateFromCommandLine(argv+i, argc-i, &argsConsumed, &input, paired, true)) {
             if (input.isStdio) {
                 if (inputFromStdio) {
-                    fprintf(stderr,"You specified stdin ('-') specified for more than one input, which isn't permitted.\n");
+                    WriteErrorMessage("You specified stdin ('-') specified for more than one input, which isn't permitted.\n");
                     soft_exit(1);
                 } else {
                     inputFromStdio = true;
@@ -404,7 +405,7 @@ AlignerContext::parseOptions(
         bool done;
         int oldI = i;
         if (!options->parse(argv, argc, i, &done)) {
-            fprintf(stderr, "Didn't understand options starting at %s\n", argv[oldI]);
+            WriteErrorMessage("Didn't understand options starting at %s\n", argv[oldI]);
             options->usage();
         }
 
@@ -415,13 +416,13 @@ AlignerContext::parseOptions(
     }
 
     if (0 == nInputs) {
-        fprintf(stderr,"No input files specified.\n");
+        WriteErrorMessage("No input files specified.\n");
         soft_exit(1);
     }
 
     if (options->maxDist + options->extraSearchDepth >= MAX_K) {
-        fprintf(stderr,"You specified too large of a maximum edit distance combined with extra search depth.  The must add up to less than %d.\n", MAX_K);
-        fprintf(stderr,"Either reduce their sum, or change MAX_K in LandauVishkin.h and recompile.\n");
+        WriteErrorMessage("You specified too large of a maximum edit distance combined with extra search depth.  The must add up to less than %d.\n", MAX_K);
+        WriteErrorMessage("Either reduce their sum, or change MAX_K in LandauVishkin.h and recompile.\n");
         soft_exit(1);
     }
 

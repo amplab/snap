@@ -25,6 +25,7 @@ Revision History:
 #include "stdafx.h"
 #include "Compat.h"
 #include "FASTA.h"
+#include "Error.h"
 
 using namespace std;
 
@@ -43,13 +44,13 @@ ReadFASTAGenome(
     _int64 fileSize = QueryFileSize(fileName);
 
     if (fileSize >> 32 != 0) {
-        fprintf(stderr,"This tool only works with genomes with 2^32 bases or fewer.\n");
+        WriteErrorMessage("This tool only works with genomes with 2^32 bases or fewer.\n");
         return NULL;
     }
 
     FILE *fastaFile = fopen(fileName, "r");
     if (fastaFile == NULL) {
-        fprintf(stderr,"Unable to open FASTA file '%s' (even though we already got its size)\n",fileName);
+        WriteErrorMessage("Unable to open FASTA file '%s' (even though we already got its size)\n",fileName);
         return NULL;
     }
 

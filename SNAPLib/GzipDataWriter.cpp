@@ -25,6 +25,7 @@ Environment:
 #include "Bam.h"
 #include "zlib.h"
 #include "exit.h"
+#include "Error.h"
 
 using std::min;
 using std::max;
@@ -197,7 +198,7 @@ GzipCompressWorker::compressChunk(
     size_t fromUsed)
 {
     if (bamFormat && fromUsed > BAM_BLOCK) {
-        fprintf(stderr, "exceeded BAM chunk size\n");
+        WriteErrorMessage("exceeded BAM chunk size\n");
         soft_exit(1);
     }
     if (zstream.opaque != NULL) {
@@ -229,7 +230,7 @@ GzipCompressWorker::compressChunk(
     }
 
     if (fromUsed > 0xffffffff || toSize > 0xffffffff) {
-        fprintf(stderr,"GZipDataWriter: fromUsed or toSize too big\n");
+        WriteErrorMessage("GZipDataWriter: fromUsed or toSize too big\n");
         soft_exit(1);
     }
 
@@ -245,35 +246,35 @@ GzipCompressWorker::compressChunk(
 
     status = deflateInit2(&zstream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, windowBits | GZIP_ENCODING, 8, Z_DEFAULT_STRATEGY);
     if (status < 0) {
-        fprintf(stderr, "GzipWriterFilter: deflateInit2 failed with %d\n", status);
+        WriteErrorMessage("GzipWriterFilter: deflateInit2 failed with %d\n", status);
         soft_exit(1);
     }
     if (bamFormat) {
         status = deflateSetHeader(&zstream, &header);
         if (status != Z_OK) {
-            fprintf(stderr, "GzipWriterFilter: defaultSetHeader failed with %d\n", status);
+            WriteErrorMessage("GzipWriterFilter: defaultSetHeader failed with %d\n", status);
             soft_exit(1);
         }
     }
     oldAvail = zstream.avail_out;
     status = deflate(&zstream, Z_FINISH);
     if (status < 0 && status != Z_BUF_ERROR) {
-        fprintf(stderr, "GzipWriterFilter: deflate failed with %d\n", status);
+        WriteErrorMessage("GzipWriterFilter: deflate failed with %d\n", status);
         soft_exit(1);
     }
 
     // make sure it all got written out in a single compressed block
     if (zstream.avail_in != 0) {
-        fprintf(stderr, "GzipWriterFilter: default failed to read all input\n");
+        WriteErrorMessage("GzipWriterFilter: default failed to read all input\n");
         soft_exit(1);
     }
     if (zstream.avail_out == oldAvail) {
-        fprintf(stderr, "GzipWriterFilter: default failed to write output\n");
+        WriteErrorMessage("GzipWriterFilter: default failed to write output\n");
         soft_exit(1);
     }
     status = deflateEnd(&zstream);
     if (status < 0) {
-        fprintf(stderr, "GzipWriterFilter: deflateEnd failed with %d\n", status);
+        WriteErrorMessage("GzipWriterFilter: deflateEnd failed with %d\n", status);
         soft_exit(1);
     }
 
@@ -281,7 +282,7 @@ GzipCompressWorker::compressChunk(
     if (bamFormat) {
         // backpatch compressed block size into gzip header
         if (toUsed >= BAM_BLOCK) {
-            fprintf(stderr, "exceeded BAM chunk size\n");
+            WriteErrorMessage("exceeded BAM chunk size\n");
             soft_exit(1);
         }
         * (_uint16*) (toBuffer + 16) = (_uint16) (toUsed - 1);
@@ -366,7 +367,7 @@ GzipWriterFilterSupplier::onClosing(
         char* buffer;
         size_t bytes;
         if (! (writer->getBuffer(&buffer, &bytes) && bytes >= sizeof(eof))) {
-            fprintf(stderr, "no space to write eof marker\n");
+            WriteErrorMessage("no space to write eof marker\n");
             soft_exit(1);
         }
         memcpy(buffer, eof, sizeof(eof));

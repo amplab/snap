@@ -34,6 +34,7 @@ Revision History:
 #include "HashTable.h"
 #include "Seed.h"
 #include "exit.h"
+#include "Error.h"
 
 using namespace std;
 
@@ -45,7 +46,7 @@ static const unsigned DEFAULT_KEY_BYTES = 4;
 
 static void usage()
 {
-    fprintf(stderr,
+    WriteErrorMessage(
             "Usage: snap index <input.fa> <output-dir> [<options>]\n"
             "Options:\n"
             "  -s               Seed size (default: %d)\n"
@@ -125,26 +126,26 @@ GenomeIndex::runIndexer(
         } else if (argv[n][0] == '-' && argv[n][1] == 'O') {
             overflowTableFactor = atoi(argv[n]+2);
             if (overflowTableFactor < 1 || overflowTableFactor > 1000) {
-                fprintf(stderr,"Overflow table factor must be between 1 and 1000 inclusive (and you need to not leave a space after '-O')\n");
+                WriteErrorMessage("Overflow table factor must be between 1 and 1000 inclusive (and you need to not leave a space after '-O')\n");
                 soft_exit(1);
             }
         } else if (argv[n][0] == '-' && argv[n][1] == 't') {
             maxThreads = atoi(argv[n]+2);
             if (maxThreads < 1 || maxThreads > 100) {
-                fprintf(stderr,"maxThreads must be between 1 and 100 inclusive (and you need to not leave a space after '-t')\n");
+                WriteErrorMessage("maxThreads must be between 1 and 100 inclusive (and you need to not leave a space after '-t')\n");
                 soft_exit(1);
             }
         } else if (argv[n][0] == '-' && argv[n][1] == 'p') {
             chromosomePadding = atoi(argv[n]+2);
             if (0 == chromosomePadding) {
-                fprintf(stderr,"Invalid chromosome padding specified, must be at least one (and in practice as large as any max edit distance you might use).\n");
+                WriteErrorMessage("Invalid chromosome padding specified, must be at least one (and in practice as large as any max edit distance you might use).\n");
                 soft_exit(1);
             }
         } else if (strcmp(argv[n], "-keysize") == 0) {
             if (n + 1 < argc) {
                 keySizeInBytes = atoi(argv[n+1]);
                 if (keySizeInBytes < 4 || keySizeInBytes > 8) {
-                    fprintf(stderr, "Key size must be between 4 and 8 inclusive\n");
+                    WriteErrorMessage("Key size must be between 4 and 8 inclusive\n");
                     soft_exit(1);
                 }
                 n++;
@@ -156,37 +157,37 @@ GenomeIndex::runIndexer(
         } else if (!strcmp(argv[n], "-bSpace")) {
             spaceIsAPieceNameTerminator = true;
         } else {
-            fprintf(stderr, "Invalid argument: %s\n\n", argv[n]);
+            WriteErrorMessage("Invalid argument: %s\n\n", argv[n]);
             usage();
         }
     }
 
     if (seedLen < 16 || seedLen > 32) {
         // Seeds are stored in 64 bits, so they can't be larger than 32 bases for now.
-        fprintf(stderr, "Seed length must be between 16 and 32, inclusive\n");
+        WriteErrorMessage("Seed length must be between 16 and 32, inclusive\n");
         soft_exit(1);
     }
 
     if (seedLen < 19 && !computeBias) {
-        fprintf(stderr,"For hg19, you must use seed sizes between 19 and 25 (and not specifying -hg19 won't help, it'll just take longer to fail).\n");
+        WriteErrorMessage("For hg19, you must use seed sizes between 19 and 25 (and not specifying -hg19 won't help, it'll just take longer to fail).\n");
         soft_exit(1);
     }
 
-    printf("Hash table slack %lf\nLoading FASTA file '%s' into memory...", slack, fastaFile);
+    WriteStatusMessage("Hash table slack %lf\nLoading FASTA file '%s' into memory...", slack, fastaFile);
     _int64 start = timeInMillis();
     const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator, chromosomePadding);
     if (NULL == genome) {
-        fprintf(stderr, "Unable to read FASTA file\n");
+        WriteErrorMessage("Unable to read FASTA file\n");
         soft_exit(1);
     }
-    printf("%llds\n", (timeInMillis() + 500 - start) / 1000);
+    WriteStatusMessage("%llds\n", (timeInMillis() + 500 - start) / 1000);
     unsigned nBases = genome->getCountOfBases();
     if (!GenomeIndex::BuildIndexToDirectory(genome, seedLen, slack, computeBias, outputDir, overflowTableFactor, maxThreads, chromosomePadding, forceExact, keySizeInBytes, histogramFileName)) {
-        fprintf(stderr, "Genome index build failed\n");
+        WriteErrorMessage("Genome index build failed\n");
         soft_exit(1);
     }
     _int64 end = timeInMillis();
-    printf("Index build and save took %llds (%lld bases/s)\n",
+    WriteStatusMessage("Index build and save took %llds (%lld bases/s)\n",
            (end - start) / 1000, (_int64) nBases / max((end - start) / 1000, (_int64) 1)); 
 }
 
@@ -203,27 +204,27 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
     BigAllocUseHugePages = false;   // Huge pages just slow down allocation and don't help much for hash table build, so don't use them.
 
     if (slack <= 0) {
-        fprintf(stderr, "allocateHashTables: must have positive slack for the hash table to work.  0.3 is probably OK, 0.1 is minimal, less will wreak havoc with perf.\n");
+        WriteErrorMessage("allocateHashTables: must have positive slack for the hash table to work.  0.3 is probably OK, 0.1 is minimal, less will wreak havoc with perf.\n");
         soft_exit(1);
     }
 
     if (seedLen <= 0) {
-        fprintf(stderr, "allocateHashTables: seedLen is too small (must be > 0, and practically should be >= 15 or so.\n");
+        WriteErrorMessage("allocateHashTables: seedLen is too small (must be > 0, and practically should be >= 15 or so.\n");
         soft_exit(1);
     }
 
     if (hashTableKeySize < 4 || hashTableKeySize > 8) {
-        fprintf(stderr, "allocateHashTables: key size must be 4-8 inclusive\n");
+        WriteErrorMessage("allocateHashTables: key size must be 4-8 inclusive\n");
         soft_exit(1);
     }
 
     if ((unsigned)seedLen < hashTableKeySize * 4) {
-        fprintf(stderr, "allocateHashTables: key size too large for seedLen.\n");
+        WriteErrorMessage("allocateHashTables: key size too large for seedLen.\n");
         soft_exit(1);
     }
 
     if ((unsigned)seedLen > hashTableKeySize * 4 + 9) {
-        fprintf(stderr, "allocateHashTables: key size too small for seeLen.\n");
+        WriteErrorMessage("allocateHashTables: key size too small for seeLen.\n");
         soft_exit(1);
     }
     
@@ -235,7 +236,7 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
     unsigned nHashTablesToBuild = 1 << ((seedLen - hashTableKeySize * 4) * 2);
 
     if (nHashTablesToBuild > 256 * 1024) {
-        fprintf(stderr, "allocateHashTables: key size too small for seedLen.  Try specifying -keySize and giving it a larger value.\n");
+        WriteErrorMessage("allocateHashTables: key size too small for seedLen.  Try specifying -keySize and giving it a larger value.\n");
         soft_exit(1);
     }
     //
@@ -259,7 +260,7 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
         hashTables[i] = new SNAPHashTable(biasedSize, hashTableKeySize);
 
         if (NULL == hashTables[i]) {
-            fprintf(stderr, "IndexBuilder: unable to allocate HashTable %d of %d\n", i+1, nHashTablesToBuild);
+            WriteErrorMessage("IndexBuilder: unable to allocate HashTable %d of %d\n", i+1, nHashTablesToBuild);
             soft_exit(1);
         }
     }
@@ -277,14 +278,14 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     if (buildHistogram) {
         histogramFile = fopen(histogramFileName, "w");
         if (NULL == histogramFile) {
-            fprintf(stderr,"Unable to open histogram file '%s', skipping it.\n", histogramFileName);
+            WriteErrorMessage("Unable to open histogram file '%s', skipping it.\n", histogramFileName);
             buildHistogram = false;
         }
     }
 
 
     if (mkdir(directoryName, 0777) != 0 && errno != EEXIST) {
-        fprintf(stderr,"BuildIndex: failed to create directory %s\n",directoryName);
+        WriteErrorMessage("BuildIndex: failed to create directory %s\n",directoryName);
         return false;
     }
 
@@ -293,7 +294,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 
     unsigned countOfBases = genome->getCountOfBases();
     if (countOfBases > 0xfffffff0) {
-        fprintf(stderr, "Genome is too big for SNAP.  Must be some headroom beneath 2^32 bases.\n");
+        WriteErrorMessage("Genome is too big for SNAP.  Must be some headroom beneath 2^32 bases.\n");
         return false;
     }
 
@@ -306,12 +307,12 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     } else {
         biasTable = hg19_biasTables[hashTableKeySize][seedLen];
         if (NULL == biasTable) {
-            fprintf(stderr, "-hg19 not available for this seed length/key size pair.\n");
+            WriteErrorMessage("-hg19 not available for this seed length/key size pair.\n");
             return false;
         }
     }
 
-    printf("Allocating memory for hash and overflow tables...");
+    WriteStatusMessage("Allocating memory for hash and overflow tables...");
     _int64 start = timeInMillis();
     unsigned nHashTables;
     SNAPHashTable** hashTables = index->hashTables =
@@ -346,17 +347,17 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
   
     OverflowEntry *overflowEntries = new OverflowEntry[nOverflowEntries];
     if (NULL == overflowEntries) {
-        fprintf(stderr,"Unable to allocate oveflow entries.\n");
+        WriteErrorMessage("Unable to allocate oveflow entries.\n");
         soft_exit(1);
     }
 
     OverflowBackpointer *overflowBackpointers = new OverflowBackpointer[nOverflowBackpointers];
     if (NULL == overflowBackpointers) {
-        fprintf(stderr,"Unable to allocate overflow backpointers\n");
+        WriteErrorMessage("Unable to allocate overflow backpointers\n");
         soft_exit(1);
     }
   
-    printf("%llds\n%d nOverflowEntries, %lld bytes, %u nOverflowBackpointers, %lld bytes\nBuilding hash tables.\n", 
+    WriteStatusMessage("%llds\n%d nOverflowEntries, %lld bytes, %u nOverflowBackpointers, %lld bytes\nBuilding hash tables.\n", 
         (timeInMillis() + 500 - start) / 1000,
         nOverflowEntries, (_int64)nOverflowEntries * sizeof(OverflowEntry), nOverflowBackpointers, (_int64) nOverflowBackpointers * sizeof(OverflowBackpointer));
   
@@ -419,7 +420,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     DestroySingleWaiterObject(&doneObject);
 
     if ((_int64)nextOverflowIndex * 3 + (_int64)countOfDuplicateOverflows + (_int64)genome->getCountOfBases() > 0xfffffff0) {
-        fprintf(stderr,"Ran out of overflow table namespace. This genome cannot be indexed with this seed size.  Try a larger one.\n");
+        WriteErrorMessage("Ran out of overflow table namespace. This genome cannot be indexed with this seed size.  Try a larger one.\n");
         exit(1);
     }
 
@@ -430,7 +431,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 //                (_int64)hashTables[j]->GetUsedElementCount() * 100 / (_int64)hashTables[j]->GetTableSize());
     }
 
-    printf("%d(%lld%%) overflow entries, %d overflow backpointers, %d(%lld%%) duplicate overflows, %d(%lld%%) bad seeds, %d both complements used %d no string\n",
+    WriteStatusMessage("%d(%lld%%) overflow entries, %d overflow backpointers, %d(%lld%%) duplicate overflows, %d(%lld%%) bad seeds, %d both complements used %d no string\n",
         nextOverflowIndex,
         ((_int64)nextOverflowIndex)*100 / countOfBases,
         nextOverflowBackpointer,
@@ -441,7 +442,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         bothComplementsUsed,
         noBaseAvailable);
 
-    printf("Hash table build took %llds\nSaving genome...",(timeInMillis() + 500 - start) / 1000);
+    WriteStatusMessage("Hash table build took %llds\nSaving genome...",(timeInMillis() + 500 - start) / 1000);
     start = timeInMillis();
 
     //
@@ -453,14 +454,14 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     
     snprintf(filenameBuffer,filenameBufferSize,"%s%cGenome",directoryName,PATH_SEP);
     if (!genome->saveToFile(filenameBuffer)) {
-        fprintf(stderr,"GenomeIndex::saveToDirectory: Failed to save the genome itself\n");
+        WriteErrorMessage("GenomeIndex::saveToDirectory: Failed to save the genome itself\n");
         return false;
     }
 
     delete genome;
     genome = NULL;
 
-    printf("%llds\nBuilding overflow table.\n", (timeInMillis() + 500 - start) / 1000);
+    WriteStatusMessage("%llds\nBuilding overflow table.\n", (timeInMillis() + 500 - start) / 1000);
     start = timeInMillis();
     fflush(stdout);
 
@@ -498,7 +499,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         _ASSERT(overflowEntry->nInstances >= 2);
 
         if (timeInMillis() - lastPrintTime > 60 * 1000) {
-            printf("%d/%d duplicate seeds, %d/%d backpointers processed\n",i,nextOverflowIndex,nBackpointersProcessed,nextOverflowBackpointer-1);
+            WriteStatusMessage("%d/%d duplicate seeds, %d/%d backpointers processed\n",i,nextOverflowIndex,nBackpointersProcessed,nextOverflowBackpointer-1);
             lastPrintTime = timeInMillis();
         }
 
@@ -569,7 +570,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     //
     // Now save out the part of the index that's independent of the genome itself.
     //
-    printf("Overflow table build took %llds\nSaving genome index...", (timeInMillis() + 500 - start)/1000);
+    WriteStatusMessage("Overflow table build took %llds\nSaving genome index...", (timeInMillis() + 500 - start)/1000);
     start = timeInMillis();
 
     //
@@ -584,7 +585,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 
     FILE *indexFile = fopen(filenameBuffer,"w");
     if (indexFile == NULL) {
-        fprintf(stderr,"Unable to open file '%s' for write.\n",filenameBuffer);
+        WriteErrorMessage("Unable to open file '%s' for write.\n",filenameBuffer);
         return false;
     }
 
@@ -595,7 +596,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     snprintf(filenameBuffer,filenameBufferSize,"%s%cOverflowTable",directoryName,PATH_SEP);
     FILE* fOverflowTable = fopen(filenameBuffer, "wb");
     if (fOverflowTable == NULL) {
-        fprintf(stderr,"Unable to open overflow table file, '%s', %d\n",filenameBuffer,errno);
+        WriteErrorMessage("Unable to open overflow table file, '%s', %d\n",filenameBuffer,errno);
         return false;
     }
 
@@ -606,14 +607,14 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         if (amountToWrite % 4096) {
             amountToWrite = ((amountToWrite + 4095) / 4096) * 4096;
             if (amountToWrite + writeOffset > index->overflowTableVirtualAllocSize) {
-                fprintf(stderr,"GenomeIndex::saveToDirectory: overflow table virtual alloc size doesn't appear to be a multiple of the page size %lld\n",
+                WriteErrorMessage("GenomeIndex::saveToDirectory: overflow table virtual alloc size doesn't appear to be a multiple of the page size %lld\n",
                     (_int64) index->overflowTableVirtualAllocSize);
             }
         }
 #endif
         size_t amountWritten = fwrite(((char *)index->overflowTable) + writeOffset, 1, amountToWrite, fOverflowTable);
         if (amountWritten < amountToWrite) {
-            fprintf(stderr,"GenomeIndex::saveToDirectory: fwrite failed, %d\n",errno);
+            WriteErrorMessage("GenomeIndex::saveToDirectory: fwrite failed, %d\n",errno);
             fclose(fOverflowTable);
             return false;
         }
@@ -625,13 +626,13 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     snprintf(filenameBuffer,filenameBufferSize,"%s%cGenomeIndexHash",directoryName,PATH_SEP);
     FILE *tablesFile = fopen(filenameBuffer, "wb");
     if (NULL == tablesFile) {
-        fprintf(stderr, "Unable to open hash table file '%s'\n", filenameBuffer);
+        WriteErrorMessage("Unable to open hash table file '%s'\n", filenameBuffer);
         soft_exit(1);
     }
 
     for (unsigned i = 0; i < index->nHashTables; i++) {
         if (!hashTables[i]->saveToFile(tablesFile)) {
-            fprintf(stderr,"GenomeIndex::saveToDirectory: Failed to save hash table %d\n",i);
+            WriteErrorMessage("GenomeIndex::saveToDirectory: Failed to save hash table %d\n",i);
             return false;
         }
     }
@@ -643,7 +644,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         delete[] biasTable;
     }
     
-    fprintf(stderr, "%llds\n", (timeInMillis() + 500 - start) / 1000);
+    WriteStatusMessage("%llds\n", (timeInMillis() + 500 - start) / 1000);
     
     return true;
 }
@@ -674,7 +675,7 @@ GenomeIndex::AddOverflowBackpointer(
 {
     unsigned overflowBackpointerIndex = (unsigned)InterlockedIncrementAndReturnNewValue((volatile int *)nextOverflowBackpointer) - 1;
     if (nOverflowBackpointers <= overflowBackpointerIndex) {
-        fprintf(stderr,"Ran out of overflow backpointers.  Consider using the -O switch with a larger value to increase space.\n");
+        WriteErrorMessage("Ran out of overflow backpointers.  Consider using the -O switch with a larger value to increase space.\n");
         soft_exit(1);
     }
     OverflowBackpointer *newBackpointer = &overflowBackpointers[overflowBackpointerIndex];
@@ -702,7 +703,7 @@ GenomeIndex::loadFromDirectory(char *directoryName)
 
     FILE *indexFile = fopen(filenameBuffer,"r");
     if (indexFile == NULL) {
-        fprintf(stderr,"Unable to open file '%s' for read.\n",filenameBuffer);
+        WriteErrorMessage("Unable to open file '%s' for read.\n",filenameBuffer);
         return false;
     }
 
@@ -711,9 +712,9 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     int nRead;
     if (7 != (nRead = fscanf(indexFile,"%d %d %d %d %d %d %d", &majorVersion, &minorVersion, &index->nHashTables, &index->overflowTableSize, &seedLen, &chromosomePadding, &index->hashTableKeySize))) {
         if (3 == nRead || 6 == nRead) {
-            fprintf(stderr, "Indices built by versions before 0.16.28 are no longer supported.  Please rebuild your index.\n");
+            WriteErrorMessage("Indices built by versions before 0.16.28 are no longer supported.  Please rebuild your index.\n");
         } else {
-            fprintf(stderr,"GenomeIndex::LoadFromDirectory: didn't read initial values\n");
+            WriteErrorMessage("GenomeIndex::LoadFromDirectory: didn't read initial values\n");
         }
         fclose(indexFile);
         delete index;
@@ -722,13 +723,13 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     fclose(indexFile);
 
     if (majorVersion != GenomeIndexFormatMajorVersion) {
-        fprintf(stderr,"This genome index appears to be from a different version of SNAP than this, and so we can't read it.  Index version %d, SNAP index format version %d\n",
+        WriteErrorMessage("This genome index appears to be from a different version of SNAP than this, and so we can't read it.  Index version %d, SNAP index format version %d\n",
             majorVersion, GenomeIndexFormatMajorVersion);
         soft_exit(1);
     }
 
     if (0 == seedLen) {
-        fprintf(stderr,"GenomeIndex::LoadFromDirectory: saw seed size of 0.\n");
+        WriteErrorMessage("GenomeIndex::LoadFromDirectory: saw seed size of 0.\n");
         delete index;
         return NULL;
     }
@@ -739,7 +740,7 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     snprintf(filenameBuffer,filenameBufferSize,"%s%cOverflowTable",directoryName,PATH_SEP);
     FILE* fOverflowTable = fopen(filenameBuffer, "rb");
     if (fOverflowTable == NULL) {
-        fprintf(stderr,"Unable to open overflow table file, '%s', %d\n",filenameBuffer,errno);
+        WriteErrorMessage("Unable to open overflow table file, '%s', %d\n",filenameBuffer,errno);
         delete index;
         return NULL;
     }
@@ -751,14 +752,14 @@ GenomeIndex::loadFromDirectory(char *directoryName)
         if (amountToRead % 4096) {
             amountToRead = ((amountToRead + 4095) / 4096) * 4096;
             if (amountToRead + readOffset > index->overflowTableVirtualAllocSize) {
-                fprintf(stderr,"GenomeIndex::loadFromDirectory: overflow table virtual alloc size doesn't appear to be a multiple of the page size %lld\n",
+                WriteErrorMessage("GenomeIndex::loadFromDirectory: overflow table virtual alloc size doesn't appear to be a multiple of the page size %lld\n",
                     (_int64) index->overflowTableVirtualAllocSize);
             }
         }
 #endif
         int amountRead = (int)fread(((char*) index->overflowTable) + readOffset, 1, amountToRead, fOverflowTable);   
         if (amountRead < amountToRead) {
-            fprintf(stderr,"GenomeIndex::loadFromDirectory: fread failed (amountToRead = %d, amountRead = %d, readOffset %lld), %d\n",amountToRead, amountRead, readOffset, errno);
+            WriteErrorMessage("GenomeIndex::loadFromDirectory: fread failed (amountToRead = %d, amountRead = %d, readOffset %lld), %d\n",amountToRead, amountRead, readOffset, errno);
             fclose(fOverflowTable);
             delete index;
             return NULL;
@@ -777,13 +778,13 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     snprintf(filenameBuffer,filenameBufferSize,"%s%cGenomeIndexHash",directoryName,PATH_SEP);
     FILE *tablesFile = fopen(filenameBuffer, "rb");
     if (NULL == tablesFile) {
-        fprintf(stderr,"Unable to open genome hash table file '%s'\n", filenameBuffer);
+        WriteErrorMessage("Unable to open genome hash table file '%s'\n", filenameBuffer);
         soft_exit(1);
     }
 
     for (unsigned i = 0; i < index->nHashTables; i++) {
         if (NULL == (index->hashTables[i] = SNAPHashTable::loadFromFile(tablesFile))) {
-            fprintf(stderr,"GenomeIndex::loadFromDirectory: Failed to load hash table %d\n",i);
+            WriteErrorMessage("GenomeIndex::loadFromDirectory: Failed to load hash table %d\n",i);
             delete index;
             return NULL;
         }
@@ -794,13 +795,13 @@ GenomeIndex::loadFromDirectory(char *directoryName)
 
     snprintf(filenameBuffer,filenameBufferSize,"%s%cGenome",directoryName,PATH_SEP);
     if (NULL == (index->genome = Genome::loadFromFile(filenameBuffer, chromosomePadding))) {
-        fprintf(stderr,"GenomeIndex::loadFromDirectory: Failed to load the genome itself\n");
+        WriteErrorMessage("GenomeIndex::loadFromDirectory: Failed to load the genome itself\n");
         delete index;
         return NULL;
     }
 
     if ((_int64)index->genome->getCountOfBases() + (_int64)index->overflowTableSize > 0xfffffff0) {
-        fprintf(stderr,"\nThis index has too many overflow entries to be valid.  Some early versions of SNAP\n"
+        WriteErrorMessage("\nThis index has too many overflow entries to be valid.  Some early versions of SNAP\n"
                         "allowed building indices with too small of a seed size, and this appears to be such\n"
                         "an index.  You can no longer build indices like this, and you also can't use them\n"
                         "because they are corrupt and would produce incorrect results.  Please use an index\n"
@@ -968,7 +969,7 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
  */
 {
     _int64 start = timeInMillis();
-    fprintf(stderr, "Computing bias table.\n");
+    WriteStatusMessage("Computing bias table.\n");
 
     unsigned nHashTables = ((unsigned)seedLen <= (hashTableKeySize * 4) ? 1 : 1 << (((unsigned)seedLen - hashTableKeySize * 4) * 2));
     unsigned countOfBases = genome->getCountOfBases();
@@ -977,7 +978,7 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
 
     bool computeExactly = (countOfBases < GENOME_SIZE_FOR_EXACT_COUNT) || forceExact;
     if (countOfBases >= (1 << 30) && forceExact) {
-        fprintf(stderr,"You can't use -exact for genomes with >= 2^30 bases.\n");
+        WriteErrorMessage("You can't use -exact for genomes with >= 2^30 bases.\n");
         soft_exit(1);
     }
     FixedSizeVector<int> numExactSeeds(nHashTables, 0);
@@ -989,7 +990,7 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
         FixedSizeSet<_int64> exactSeedsSeen(2 * (forceExact ? FirstPowerOf2GreaterThanOrEqualTo(countOfBases) : GENOME_SIZE_FOR_EXACT_COUNT));
         for (unsigned i = 0; i < (unsigned)(countOfBases - seedLen); i++) {
             if (i % 10000000 == 0) {
-                fprintf(stderr, "Bias computation: %lld / %lld\n",(_int64)i, (_int64)countOfBases);
+                WriteStatusMessage("Bias computation: %lld / %lld\n",(_int64)i, (_int64)countOfBases);
             }
             const char *bases = genome->getSubstring(i,seedLen);
             //
@@ -1090,7 +1091,7 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
     //     printf("%u -> %lf\n", i, table[i]);
     // }
 
-    fprintf(stderr, "Computed bias table in %llds\n", (timeInMillis() + 500 - start) / 1000);
+    WriteStatusMessage("Computed bias table in %llds\n", (timeInMillis() + 500 - start) / 1000);
 }
 
 struct PerCounterBatch {
@@ -1178,7 +1179,7 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
                 _int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, PerCounterBatch::nSeedsPerBatch + unrecordedSkippedSeeds);
 
                 if ((_uint64)basesProcessed / printBatchSize > ((_uint64)basesProcessed - PerCounterBatch::nSeedsPerBatch - unrecordedSkippedSeeds)/printBatchSize) {
-                    fprintf(stderr, "Bias computation: %lld / %lld\n",(basesProcessed/printBatchSize)*printBatchSize, (_int64)countOfBases);
+                    WriteStatusMessage("Bias computation: %lld / %lld\n",(basesProcessed/printBatchSize)*printBatchSize, (_int64)countOfBases);
                 }
                 unrecordedSkippedSeeds= 0;  // We've now recorded them.
             }
@@ -1188,7 +1189,7 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
         _int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[i].nUsed + unrecordedSkippedSeeds);
 
         if ((_uint64)basesProcessed / printBatchSize > ((_uint64)basesProcessed - batches[i].nUsed - unrecordedSkippedSeeds)/printBatchSize) {
-            fprintf(stderr, "Bias computation: %lld / %lld\n",(basesProcessed/printBatchSize)*printBatchSize, (_int64)countOfBases);
+            WriteStatusMessage("Bias computation: %lld / %lld\n",(basesProcessed/printBatchSize)*printBatchSize, (_int64)countOfBases);
         }
 
         unrecordedSkippedSeeds = 0; // All except the first time through the loop this will be 0.
@@ -1311,7 +1312,7 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
             _int64 newNBasesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[whichHashTable].nUsed + unrecordedSkippedSeeds);
 
             if ((unsigned)(newNBasesProcessed / printPeriod) > (unsigned)((newNBasesProcessed - batches[whichHashTable].nUsed - unrecordedSkippedSeeds) / printPeriod)) {
-                fprintf(stderr, "Indexing %lld / %lld\n", (newNBasesProcessed / printPeriod) * printPeriod, countOfBases);
+                WriteStatusMessage("Indexing %lld / %lld\n", (newNBasesProcessed / printPeriod) * printPeriod, countOfBases);
             }
             unrecordedSkippedSeeds = 0;
             batches[whichHashTable].clear();
@@ -1326,7 +1327,7 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
         _int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[whichHashTable].nUsed + unrecordedSkippedSeeds);
 
         if ((_uint64)basesProcessed / printPeriod > ((_uint64)basesProcessed - batches[whichHashTable].nUsed - unrecordedSkippedSeeds)/printPeriod) {
-            fprintf(stderr, "Indexing %lld / %lld\n",(basesProcessed/printPeriod)*printPeriod, (_int64)countOfBases);
+            WriteStatusMessage("Indexing %lld / %lld\n",(basesProcessed/printPeriod)*printPeriod, (_int64)countOfBases);
         }
 
         unrecordedSkippedSeeds = 0; // All except the first time through the loop this will be 0.        
@@ -1376,9 +1377,9 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
 
         if (!hashTable->Insert(lowBases, newEntry)) {
             for (unsigned j = 0; j < index->nHashTables; j++) {
-                fprintf(stderr, "HashTable[%d] has %lld used elements\n",j,(_int64)index->hashTables[j]->GetUsedElementCount());
+                WriteErrorMessage("HashTable[%d] has %lld used elements\n",j,(_int64)index->hashTables[j]->GetUsedElementCount());
             }
-            fprintf(stderr, "IndexBuilder: exceeded size of hash table %d.\n"
+            WriteErrorMessage("IndexBuilder: exceeded size of hash table %d.\n"
                     "If you're indexing a non-human genome, make sure not to pass the -hg19 option.  Otheriwse, use -exact or increase slack with -h.\n",
                     whichHashTable);
             soft_exit(1);
@@ -1400,9 +1401,9 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
             unsigned overflowIndex = (unsigned)InterlockedIncrementAndReturnNewValue((volatile int *)context->nextOverflowIndex) - 1;
             if (overflowIndex >= context->nOverflowEntries) {
                 if (0xffffffff - overflowIndex < 10) {
-                    fprintf(stderr,"You've run out of index overflow address space.  Perhaps a larger seed size will help.\n");
+                    WriteErrorMessage("You've run out of index overflow address space.  Perhaps a larger seed size will help.\n");
                 } else {
-                    fprintf(stderr,"Index builder: Overflowed overflow table.  Consider using the -O switch with a larger value to make more space.\n");
+                    WriteErrorMessage("Index builder: Overflowed overflow table.  Consider using the -O switch with a larger value to make more space.\n");
                 }
                 soft_exit(1);
             }

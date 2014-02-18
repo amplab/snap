@@ -27,6 +27,7 @@ Environment:
 #include "PriorityQueue.h"
 #include "exit.h"
 #include "Bam.h"
+#include "Error.h"
 
 #define USE_DEVTEAM_OPTIONS 1
 //#define VALIDATE_SORT 1
@@ -205,7 +206,7 @@ SortedDataFilter::onNextBatch(
     if (! (writer->getBatch(-1, &fromBuffer, &fromSize, &fromUsed) &&
         writer->getBatch(0, &toBuffer, &toSize, &toUsed)))
     {
-        fprintf(stderr, "SortedDataFilter::onNextBatch getBatch failed\n");
+        WriteErrorMessage( "SortedDataFilter::onNextBatch getBatch failed\n");
         soft_exit(1);
     }
     size_t target = 0;
@@ -257,14 +258,14 @@ SortedDataFilterSupplier::onClosed(
         // just rename/move temp file to real file, we're done
         DeleteSingleFile(sortedFileName); // if it exists
         if (! MoveSingleFile(tempFileName, sortedFileName)) {
-            fprintf(stderr, "unable to move temp file %s to final sorted file %s\n", tempFileName, sortedFileName);
+            WriteErrorMessage( "unable to move temp file %s to final sorted file %s\n", tempFileName, sortedFileName);
             soft_exit(1);
         }
         return;
     }
     // merge sort into final file
     if (! mergeSort()) {
-        fprintf(stderr, "merge sort failed\n");
+        WriteErrorMessage( "merge sort failed\n");
         soft_exit(1);
     }
 }
@@ -303,7 +304,7 @@ SortedDataFilterSupplier::mergeSort()
 {
     // merge sort from temp file into sorted file
 #if USE_DEVTEAM_OPTIONS
-    fprintf(stderr, "sorting...");
+    WriteStatusMessage("sorting...");
     _int64 start = timeInMillis();
     _int64 startReadWaitTime = DataReader::ReadWaitTime;
     _int64 startReleaseWaitTime = DataReader::ReleaseWaitTime;
@@ -316,7 +317,7 @@ SortedDataFilterSupplier::mergeSort()
         encoder, encoder != NULL ? 6 : 4); // use more buffers to let encoder run async
     DataWriter* writer = writerSupplier->getWriter();
     if (writer == NULL) {
-        fprintf(stderr, "open sorted file for write failed\n");
+        WriteErrorMessage( "open sorted file for write failed\n");
         return false;
     }
     DataSupplier* readerSupplier = DataSupplier::Default; // autorelease
@@ -329,7 +330,7 @@ SortedDataFilterSupplier::mergeSort()
 
     // write out header
     if (headerSize > 0xffffffff) {
-        fprintf(stderr,"SortedDataFilterSupplier: headerSize too big\n");
+        WriteErrorMessage("SortedDataFilterSupplier: headerSize too big\n");
         soft_exit(1);
     }
     if (headerSize > 0) {
@@ -343,14 +344,14 @@ SortedDataFilterSupplier::mergeSort()
 			if ((! blocks[0].reader->getData(&rbuffer, &rbytes)) || rbytes == 0) {
 				blocks[0].reader->nextBatch();
 				if (! blocks[0].reader->getData(&rbuffer, &rbytes)) {
-					fprintf(stderr, "read header failed\n");
+					WriteErrorMessage( "read header failed\n");
 					soft_exit(1);
 				}
 			}
 			if ((! writer->getBuffer(&wbuffer, &wbytes)) || wbytes == 0) {
 				writer->nextBatch();
 				if (! writer->getBuffer(&wbuffer, &wbytes)) {
-					fprintf(stderr, "write header failed\n");
+					WriteErrorMessage( "write header failed\n");
 					soft_exit(1);
 				}
 			}
@@ -401,7 +402,7 @@ SortedDataFilterSupplier::mergeSort()
                 writer->nextBatch();
                 writer->getBuffer(&writeBuffer, &writeBytes);
                 if (writeBytes < b->length) {
-                    fprintf(stderr, "mergeSort: buffer size too small\n");
+                    WriteErrorMessage( "mergeSort: buffer size too small\n");
                     return false;
                 }
             }
@@ -452,11 +453,11 @@ SortedDataFilterSupplier::mergeSort()
     writerSupplier->close();
     delete writerSupplier;
     if (! DeleteSingleFile(tempFileName)) {
-        fprintf(stderr, "warning: failure deleting temp file %s\n", tempFileName);
+        WriteErrorMessage( "warning: failure deleting temp file %s\n", tempFileName);
     }
 
 #if USE_DEVTEAM_OPTIONS
-    fprintf(stderr, "sorted %lld reads in %u blocks, %lld s\n"
+    WriteStatusMessage("sorted %lld reads in %u blocks, %lld s\n"
         "read wait align %.3f s + merge %.3f s, read release align %.3f s + merge %.3f s\n"
         "write wait %.3f s align + %.3f s merge, write filter %.3f s align + %.3f s merge\n",
         total, blocks.size(), (timeInMillis() - start)/1000,

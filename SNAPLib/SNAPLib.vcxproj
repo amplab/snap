@@ -169,6 +169,7 @@
     <ClInclude Include="DataReader.h" />
     <ClInclude Include="DataWriter.h" />
     <ClInclude Include="directions.h" />
+    <ClInclude Include="Error.h" />
     <ClInclude Include="exit.h" />
     <ClInclude Include="FASTA.h" />
     <ClInclude Include="FASTQ.h" />
@@ -222,6 +223,7 @@
     <ClCompile Include="Compat.cpp" />
     <ClCompile Include="DataReader.cpp" />
     <ClCompile Include="DataWriter.cpp" />
+    <ClCompile Include="Error.cpp" />
     <ClCompile Include="exit.cpp" />
     <ClCompile Include="FASTA.cpp" />
     <ClCompile Include="FASTQ.cpp" />
@@ -258,7 +260,6 @@
     <ClCompile Include="Tables.cpp" />
     <ClCompile Include="Util.cpp" />
     <ClCompile Include="WGsim.cpp" />
-    <ClCompile Include="WindowsOverlappedDataReader.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

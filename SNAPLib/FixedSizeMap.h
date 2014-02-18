@@ -3,6 +3,7 @@
 #include "Compat.h"
 #include "BigAlloc.h"
 #include "exit.h"
+#include "Error.h"
 
 
 //
@@ -42,12 +43,12 @@ public:
 
     void reserve(unsigned capacity) {
         if (!isPowerOf2(capacity)) {
-            fprintf(stderr, "FixedSizeMap capacity must be a power of 2\n");
+            WriteErrorMessage("FixedSizeMap capacity must be a power of 2\n");
             soft_exit(1);
         }
         if (entries != NULL) {
             if (size > 0) {
-                fprintf(stderr, "reserve() called on a non-empty FixedSizeMap\n");
+                WriteErrorMessage("reserve() called on a non-empty FixedSizeMap\n");
                 soft_exit(1);
             }
             delete[] entries;

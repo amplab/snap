@@ -28,6 +28,7 @@ Environment:
 #include "ReadSupplierQueue.h"
 #include "FileFormat.h"
 #include "exit.h"
+#include "Error.h"
 
 class SimpleReadWriter : public ReadWriter
 {
@@ -75,7 +76,7 @@ SimpleReadWriter::writeHeader(
     }
 
     if (! format->writeHeader(context, buffer, size, &used, sorted, argc, argv, version, rgLine)) {
-        fprintf(stderr, "Failed to write header into fresh buffer\n");
+        WriteErrorMessage( "Failed to write header into fresh buffer\n");
         return false;
     }
 
@@ -107,7 +108,7 @@ SimpleReadWriter::writeRead(
             _ASSERT(used <= size);
 
         if (used > 0xffffffff) {
-            fprintf(stderr,"SimpleReadWriter:writeRead: used too big\n");
+            WriteErrorMessage("SimpleReadWriter:writeRead: used too big\n");
             soft_exit(1);
         }
 
@@ -115,7 +116,7 @@ SimpleReadWriter::writeRead(
             return true;
         }
         if (pass == 1) {
-            fprintf(stderr, "Failed to write into fresh buffer\n");
+            WriteErrorMessage( "Failed to write into fresh buffer\n");
             soft_exit(1);
         }
         if (! writer->nextBatch()) {
@@ -184,7 +185,7 @@ SimpleReadWriter::writePair(
         }
 
         if (pass == 1) {
-            fprintf(stderr,"ReadWriter: write into fresh buffer failed\n");
+            WriteErrorMessage("ReadWriter: write into fresh buffer failed\n");
             return false;
         }
 
@@ -194,7 +195,7 @@ SimpleReadWriter::writePair(
     }
 
     if (sizeUsed[0] > 0xffffffff || sizeUsed[1] > 0xffffffff) {
-        fprintf(stderr,"SimpleReadWriter::writePair: one or the other (or both) sizeUsed too big\n");
+        WriteErrorMessage("SimpleReadWriter::writePair: one or the other (or both) sizeUsed too big\n");
         soft_exit(1);
     }
 
