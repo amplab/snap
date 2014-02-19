@@ -38,7 +38,7 @@ GenericFile_stdio *GenericFile_stdio::open(const char *filename, Mode mode)
 {
 	GenericFile_stdio *retval = new GenericFile_stdio();
 
-	char *fMode = NULL;
+	const char *fMode = NULL;
 
 	switch (mode) {
 	case ReadOnly:
