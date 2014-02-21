@@ -832,20 +832,31 @@ static JNIEnv* getGlobalJNIEnv(void)
     #else
 
     if (hdfs_hinstLib == NULL) {
-		wchar_t *JVMPath;
+		wchar_t *env_libhdfs_jvm_path;
+		size_t env_libhdfs_jvm_path_size;
+
 		wchar_t jvmPath[2000];
-		size_t size;
     
         fprintf (stderr, "libhdfs: loading jvm\n" );
         
-		_wdupenv_s(&JVMPath, &size, L"LIBHDFS_JVM_PATH");
+		_wdupenv_s(&env_libhdfs_jvm_path, &env_libhdfs_jvm_path_size, L"LIBHDFS_JVM_PATH");
 
-        if (JVMPath) {
-			fprintf(stderr, "using value from LIBHDFS_JVM_PATH: %S\n", JVMPath);
-            wcscpy_s (jvmPath, sizeof(jvmPath), JVMPath);
+        if (env_libhdfs_jvm_path != NULL) {
+			fprintf(stderr, "using value from LIBHDFS_JVM_PATH: %S\n", env_libhdfs_jvm_path);
+			wcscpy_s (jvmPath, _countof(jvmPath), env_libhdfs_jvm_path);
         } else {
-			fprintf(stderr, "LIBHDFS_JVM_PATH not set; using default\n");
-            wcscpy_s (jvmPath, sizeof(jvmPath), L"jvm.dll");
+			wchar_t *env_java_home;
+			size_t env_java_home_size;
+
+			_wdupenv_s(&env_java_home, &env_java_home_size, L"JAVA_HOME");
+
+			if (env_java_home != NULL) {
+				_snwprintf(jvmPath, _countof(jvmPath), L"%s\\jre\\bin\\server\\jvm.dll", env_java_home);
+				fprintf(stderr, "Found JAVA_HOME of %S; trying jvm path of '%S'\n", env_java_home, jvmPath);
+			} else {
+				wcscpy_s (jvmPath, _countof(jvmPath), L"c:\\program files\\java\\jre\\bin\\server\\jvm.dll");
+				fprintf(stderr, "LIBHDFS_JVM_PATH and JAVA_HOME both not set; blindingly trying %S\n", jvmPath);
+			}
         }
         
         hdfs_hinstLib = LoadLibrary ( jvmPath );
