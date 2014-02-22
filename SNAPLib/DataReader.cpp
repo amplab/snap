@@ -575,7 +575,6 @@ StdioDataReader::startIo()
     //
     // Synchronously read data into whatever buffers are ready.
     //
-    AcquireExclusiveLock(&lock);
     while (nextBufferForReader != -1) {
         // remove from free list
         BufferInfo* info = &bufferInfo[nextBufferForReader];
@@ -601,7 +600,6 @@ StdioDataReader::startIo()
             info->nBytesThatMayBeginARead = 0;
             info->isEOF = true;
             info->state = Full;
-            ReleaseExclusiveLock(&lock);
             return;
         }
 
@@ -679,7 +677,6 @@ StdioDataReader::startIo()
         //fprintf(stderr, "startIo thread %x reset releaseEvent\n", GetCurrentThreadId());
         PreventEventWaitersFromProceeding(&releaseEvent);
     }
-    ReleaseExclusiveLock(&lock);
 }
  
     void
