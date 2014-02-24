@@ -517,6 +517,8 @@ StdioDataReader::reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
         memmove(overflowBuffer, overflowBuffer + startingOffset, headerSize - startingOffset);  // memmove because this copies onto itself
         overflowBufferContainsHeaderOverrun = true;
         headerOverrunSize = headerSize - startingOffset;
+/*BJB - this is for Frank's debugging*/ WriteErrorMessage("StdioDataReader::reinit: first bytes are %.*s\n", 10, overflowBuffer);
+
     } else if (started || startingOffset != 0 || amountOfFileToProcess != 0) {
         WriteErrorMessage("StdioDataReader: invalid reinit (%lld, %lld), started = %d\n", startingOffset, amountOfFileToProcess, started);
         soft_exit(1);
@@ -532,6 +534,7 @@ StdioDataReader::readHeader(_int64 *io_headerSize)
         WriteErrorMessage("StdioDataReader: readHeader called after already started\n");
         soft_exit(1);
     }
+/*BJB - this is for Frank's debugging*/ WriteErrorMessage("StdioDataReader::readHeader(%lld): \n", *io_headerSize);
 
     _ASSERT(NULL == overflowBuffer);
     overflowBuffer = (char *)BigAlloc(__max(*io_headerSize, overflowBytes));
