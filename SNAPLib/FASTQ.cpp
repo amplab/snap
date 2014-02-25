@@ -252,7 +252,8 @@ FASTQReader::getReadFromBuffer(char *buffer, _int64 validBytes, Read *readToUpda
             soft_exit(1);
         }
         if (! isValidStartingCharacterForNextLine[(i + 3) % 4][*scan]) {
-            WriteErrorMessage("FASTQ file has invalid starting character at offset %lld\n", data->getFileOffset());
+            WriteErrorMessage("FASTQ file has invalid starting character at offset %lld, line type %d, char %c\n", data->getFileOffset(), (i + 3) % 4, *scan);
+            WriteErrorMessage("Line in question: '%.*s'\n", lineLen, scan);
             soft_exit(1);
         }
         lines[i] = scan;
@@ -394,6 +395,7 @@ PairedInterleavedFASTQReader::getNextReadPair(Read *read0, Read *read1)
     void 
 PairedInterleavedFASTQReader::reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
 {
+/*BJB - this is for Frank's debugging*/ WriteErrorMessage("PairedInterleavedFASTQReader::reinit(%lld, %lld)\n", startingOffset, amountOfFileToProcess);
     data->reinit(startingOffset, amountOfFileToProcess);
     char* buffer;
     _int64 bytes;
@@ -419,6 +421,7 @@ PairedInterleavedFASTQReader::reinit(_int64 startingOffset, _int64 amountOfFileT
 
     Read read;
     _int64 bytesForFirstRead = FASTQReader::getReadFromBuffer(buffer, bytes, &read, fileName, data, context);
+/*BJB - this is for Frank's debugging*/ WriteErrorMessage("PairedInterleavedFASTQReader::reinit: first read ID %.*s\n", read.getIdLength(), read.getId());
     if (read.getIdLength() < 2 || read.getId()[read.getIdLength() - 2] != '/' || (read.getId()[read.getIdLength() - 1] != '1' && read.getId()[read.getIdLength() -1] != '2') ) {
         WriteErrorMessage("PairedInterleavedFASTQReader: read ID doesn't appear to end with /1 or /2, you can't use this as a paired FASTQ file: '%.*s'\n", read.getIdLength(), read.getId());
         soft_exit(1);
