@@ -290,8 +290,8 @@ ReadBasedDataReader::nextBatch()
             }
         }
         first = false;
-        startIo();
         AcquireExclusiveLock(&lock);
+        startIo();
     }
     if (bufferInfo[nextBufferForConsumer].state != Full) {
         waitForBuffer(nextBufferForConsumer);
@@ -517,8 +517,6 @@ StdioDataReader::reinit(_int64 startingOffset, _int64 amountOfFileToProcess)
         memmove(overflowBuffer, overflowBuffer + startingOffset, headerSize - startingOffset);  // memmove because this copies onto itself
         overflowBufferContainsHeaderOverrun = true;
         headerOverrunSize = headerSize - startingOffset;
-/*BJB - this is for Frank's debugging*/ WriteErrorMessage("StdioDataReader::reinit: first bytes are %.*s\n", 10, overflowBuffer);
-
     } else if (started || startingOffset != 0 || amountOfFileToProcess != 0) {
         WriteErrorMessage("StdioDataReader: invalid reinit (%lld, %lld), started = %d\n", startingOffset, amountOfFileToProcess, started);
         soft_exit(1);
@@ -534,7 +532,6 @@ StdioDataReader::readHeader(_int64 *io_headerSize)
         WriteErrorMessage("StdioDataReader: readHeader called after already started\n");
         soft_exit(1);
     }
-/*BJB - this is for Frank's debugging*/ WriteErrorMessage("StdioDataReader::readHeader(%lld): \n", *io_headerSize);
 
     _ASSERT(NULL == overflowBuffer);
     overflowBuffer = (char *)BigAlloc(__max(*io_headerSize, overflowBytes));
@@ -578,7 +575,6 @@ StdioDataReader::startIo()
     //
     // Synchronously read data into whatever buffers are ready.
     //
-    AcquireExclusiveLock(&lock);
     while (nextBufferForReader != -1) {
         // remove from free list
         BufferInfo* info = &bufferInfo[nextBufferForReader];
@@ -604,7 +600,6 @@ StdioDataReader::startIo()
             info->nBytesThatMayBeginARead = 0;
             info->isEOF = true;
             info->state = Full;
-            ReleaseExclusiveLock(&lock);
             return;
         }
 
@@ -682,7 +677,6 @@ StdioDataReader::startIo()
         //fprintf(stderr, "startIo thread %x reset releaseEvent\n", GetCurrentThreadId());
         PreventEventWaitersFromProceeding(&releaseEvent);
     }
-    ReleaseExclusiveLock(&lock);
 }
  
     void
@@ -918,7 +912,6 @@ WindowsOverlappedDataReader::startIo()
     //
     // Launch reads on whatever buffers are ready.
     //
-    AcquireExclusiveLock(&lock);
     while (nextBufferForReader != -1) {
         // remove from free list
         BufferInfo* info = &bufferInfo[nextBufferForReader];
@@ -967,7 +960,6 @@ WindowsOverlappedDataReader::startIo()
         info->offset = 0;
          
         //fprintf(stderr, "startIo on %d at %lld for %uB\n", index, readOffset, amountToRead);
-        ReleaseExclusiveLock(&lock);
         if (!ReadFile(
                 hFile,
                 info->buffer,
@@ -980,13 +972,11 @@ WindowsOverlappedDataReader::startIo()
                 soft_exit(1);
             }
         }
-        AcquireExclusiveLock(&lock);
     }
     if (nextBufferForConsumer == -1) {
         //fprintf(stderr, "startIo thread %x reset releaseEvent\n", GetCurrentThreadId());
         ResetEvent(releaseEvent);
     }
-    ReleaseExclusiveLock(&lock);
 }
 
     void
