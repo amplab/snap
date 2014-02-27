@@ -58,8 +58,7 @@ public:
     virtual void holdBatch(DataBatch batch)
     { single->holdBatch(batch); }
 
-    virtual bool releaseBatch(DataBatch batch)
-    { return single->releaseBatch(batch); }
+    virtual bool releaseBatch(DataBatch batch);
 
 private:
 
@@ -84,7 +83,7 @@ private:
     typedef VariableSizeMap<StringHash,int> HashSet;
     HashSet overflowUsed;
 #endif
-    _int64 overflowMatched;
+    int overflowTotal, overflowPeak;
 
     bool quicklyDropUnpairedReads;
     _uint64 nReadsQuicklyDropped;
@@ -111,7 +110,7 @@ PairedReadMatcher::PairedReadMatcher(
     ReadReader* i_single,
     bool i_quicklyDropUnpairedReads)
     : single(i_single),
-    overflowMatched(0),
+    overflowTotal(0), overflowPeak(0),
     quicklyDropUnpairedReads(i_quicklyDropUnpairedReads),
     nReadsQuicklyDropped(0),
     currentBatch(0, 0), allDroppedInCurrentBatch(false)
@@ -161,10 +160,23 @@ PairedReadMatcher::getNextReadPair(
         }
 
         if (! single->getNextRead(&localRead)) {
-            int n = unmatched[0].size() + unmatched[1].size();
-            int n2 = (int) (overflow.size() - overflowMatched);
-            if (n + n2 > 0) {
-                WriteErrorMessage( " warning: PairedReadMatcher discarding %d+%d unpaired reads at eof\n", n, n2);
+#ifdef USE_DEVTEAM_OPTIONS
+            WriteErrorMessage("overflow total %d, peak %d\n", overflowTotal, overflowPeak);
+#endif
+            int n = unmatched[0].size() + unmatched[1].size() + overflow.size();
+            if (n > 0) {
+                WriteErrorMessage( " warning: PairedReadMatcher discarding %d unpaired reads at eof\n", n);
+#ifdef USE_DEVTEAM_OPTIONS
+                int printed = 0;
+                char buffer[200];
+                for (OverflowMap::iterator i = overflow.begin(); i != overflow.end() && printed < 10; i = overflow.next(i)) {
+                    int l = min(sizeof(buffer)-1, i->value->getIdLength());
+                    memcpy(buffer, i->value->getId(), l);
+                    buffer[l] = 0;
+                    WriteErrorMessage("%s\n", buffer);
+                    printed++;
+                }
+#endif
 #ifdef VALIDATE_MATCH
                 for (int i = 0; i < 2; i++) {
                     fprintf(stdout, "unmatched[%d]\n", i);
@@ -257,6 +269,7 @@ PairedReadMatcher::getNextReadPair(
                 for (ReadMap::iterator r = unmatched[1].begin(); r != unmatched[1].end(); r = unmatched[1].next(r)) {
                     ReadWithOwnMemory* p = allocOverflowRead();
                     new (p) ReadWithOwnMemory(r->value);
+                    _ASSERT(p->getData()[0]);
                     overflow.put(r->key, p);
 #ifdef VALIDATE_MATCH
                     char*s2 = *strings.tryFind(r->key);
@@ -269,6 +282,9 @@ PairedReadMatcher::getNextReadPair(
                     //buf[r->value.getIdLength()] = 0;
                     //fprintf(stderr, "overflow add %d:%d %s\n", batch[1].fileID, batch[1].batchID, buf);
                 }
+                WriteErrorMessage("!! overflow add %d = %d\n", unmatched[1].size(), overflow.size());
+                overflowTotal += unmatched[1].size();
+                overflowPeak = max(overflow.size(), overflowPeak);
             }
             for (ReadMap::iterator i = unmatched[1].begin(); i != unmatched[1].end(); i = unmatched[1].next(i)) {
                 i->value.dispose();
@@ -301,13 +317,14 @@ PairedReadMatcher::getNextReadPair(
                 if (found2 == overflow.end()) {
                     // no match, remember it for later matching
                     unmatched[0].put(key, localRead);
+                    _ASSERT(localRead.getData()[0] && unmatched[0][key].getData()[0]);
                     //fprintf(stderr, "unmatched add %d:%d %lx\n", batch[0].fileID, batch[0].batchID, key); //!!
                     continue;
                 } else {
-                    // copy data into read, keep in overflow table indefinitely to preserve memory
+                    // copy data into read, move from overflow table to release vector for current batch
+                    found2->value->setBatch(batch[0]); // overwrite batch to match current
                     *outputReads[1-readOneToOutputRead] = * (Read*) found2->value;
                     _ASSERT(outputReads[1-readOneToOutputRead]->getData()[0]);
-                    overflowMatched++;
                     OverflowReadVector* v;
                     if (! overflowRelease.tryGet(batch[0].asKey(), &v)) {
                         v = new OverflowReadVector();
@@ -315,8 +332,8 @@ PairedReadMatcher::getNextReadPair(
                         //fprintf(stderr,"overflow fetch into %d:%d\n", batch[0].fileID, batch[0].batchID);
                     }
                     v->push_back(found2->value);
+                    overflow.erase(key);
                     //fprintf(stderr,"overflow matched %d:%d %s\n", read2->getBatch().fileID, read2->getBatch().batchID, read2->getId()); //!!
-                    read2->setBatch(batch[0]); // overwrite batch so both reads have same batch, will track deps instead
 #ifdef VALIDATE_MATCH
                     overflowUsed.put(key, 1);
 #endif
@@ -339,6 +356,30 @@ PairedReadMatcher::getNextReadPair(
         // found a match
         *outputReads[readOneToOutputRead] = localRead;
         return true;
+    }
+}
+
+    bool
+PairedReadMatcher::releaseBatch(
+    DataBatch batch)
+{
+    if (batch.asKey() == 0) {
+        return true;
+    } else if (single->releaseBatch(batch)) {
+        OverflowReadVector* v = NULL;
+        if (overflowRelease.tryGet(batch.asKey(), &v)) {
+            WriteErrorMessage("!! overflow release %d = %d\n", v->size(), overflow.size());
+            // free memory for overflow reads
+            //fprintf(stderr, "PairedReadMatcher release %d overflow reads for batch %d:%d\n", v->size(), batch.fileID, batch.batchID);
+            for (OverflowReadVector::iterator i = v->begin(); i != v->end(); i++) {
+                delete *i;
+            }
+            delete v;
+            overflowRelease.erase(batch.asKey());
+        }
+        return true;
+    } else {
+        return false;
     }
 }
 

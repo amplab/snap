@@ -50,7 +50,7 @@ struct SortEntry
 };
 #pragma pack(pop)
 
-typedef VariableSizeVector<SortEntry> SortVector;
+typedef VariableSizeVector<SortEntry,150,true> SortVector;
 
 struct SortBlock
 {
@@ -97,7 +97,7 @@ class SortedDataFilter : public DataWriter::Filter
 {
 public:
     SortedDataFilter(SortedDataFilterSupplier* i_parent)
-        : Filter(DataWriter::CopyFilter), parent(i_parent), locations()
+        : Filter(DataWriter::CopyFilter), parent(i_parent), locations(10000000)
     {}
 
     virtual ~SortedDataFilter() {}

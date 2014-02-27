@@ -799,14 +799,17 @@ SAMFormat::writeHeader(
         const Genome::Contig *contigs = context.genome->getContigs();
         int numContigs = context.genome->getNumContigs();
         unsigned genomeLen = context.genome->getCountOfBases();
+        size_t originalBytesConsumed = bytesConsumed;
         for (int i = 0; i < numContigs; i++) {
             unsigned start = contigs[i].beginningOffset;
             unsigned end = ((i + 1 < numContigs) ? contigs[i+1].beginningOffset : genomeLen) - context.genome->getChromosomePadding();
             bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%u\n", contigs[i].name, end - start);
 
             if (bytesConsumed >= headerBufferSize) {
-                WriteErrorMessage("SAMWriter: header buffer too small\n");
-                return false;
+                // todo: increase buffer size (or change to write in batch
+                bytesConsumed = originalBytesConsumed;
+                WriteErrorMessage("SAMWriter: header buffer too small, skipping @SQ lines\n");
+                break;
             }
         }
     }

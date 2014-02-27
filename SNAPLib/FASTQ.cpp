@@ -211,6 +211,9 @@ FASTQReader::getNextRead(Read *readToUpdate)
     }
     
     _int64 bytesConsumed = getReadFromBuffer(buffer, validBytes, readToUpdate, fileName, data, context);
+    if (bytesConsumed == 0) {
+        return false;
+    }
 
     data->advance(bytesConsumed);
     return true;

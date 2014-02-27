@@ -588,9 +588,6 @@ public:
             temp = originalFrontHardClipping;
             originalFrontHardClipping = originalBackHardClipping;
             originalBackHardClipping = temp;
-            
-            data = unclippedData + frontClippedLength;
-            quality = unclippedQuality + frontClippedLength;
         }
 
 

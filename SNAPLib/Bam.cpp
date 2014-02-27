@@ -198,9 +198,9 @@ BAMAlignment::decodeSeq(
     int bases)
 {
     for (int i = 0; i < bases; i++) {
-        int bit = i & 1;
+        int bit = 1 ^ (i & 1);
         int n = (*nibbles >> (bit << 2)) & 0xf; // extract nibble without branches
-        nibbles += bit;
+        nibbles += 1^bit;
         *o_sequence++ = BAMAlignment::CodeToSeq[n];
     }
 }
@@ -393,6 +393,7 @@ BAMReader::getNextRead(
             }
         }
     } while (context.ignoreSecondaryAlignments && (*flag & SAM_SECONDARY));
+    _ASSERT(read->getData()[0]);
     return true;
 }
 
@@ -454,10 +455,12 @@ BAMReader::getReadFromLine(
         }
         read->init(bam->read_name(), bam->l_read_name - 1, seqBuffer, qualBuffer, bam->l_seq, genomeLocation, bam->MAPQ, bam->FLAG,
             originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping, rnext, rnextLen, bam->next_pos + 1, true);
+        _ASSERT(read->getData()[0]); //!! remove
         read->setBatch(data->getBatch());
         if (bam->FLAG & SAM_REVERSE_COMPLEMENT) {
             read->becomeRC();
         }
+        _ASSERT(read->getData()[0]); //!! remove
         read->clip(clipping);
     }
 
@@ -631,6 +634,7 @@ BAMFormat::writeHeader(
 
     // Write a RefSeq record for each chromosome / contig in the genome
     // todo: handle null genome index case - reparse header & translate into BAM
+    bamHeader->n_ref() = 0; // in case of overflow or no genome
 	if (context.genome != NULL) {
 		const Genome::Contig *contigs = context.genome->getContigs();
 		int numContigs = context.genome->getNumContigs();
