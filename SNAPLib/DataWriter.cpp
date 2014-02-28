@@ -616,6 +616,8 @@ StdoutAsyncFile::StdoutAsyncFile()
     CreateEventObject(&elementsCompleted);
     PreventEventWaitersFromProceeding(&unexaminedElementsOnQueue);
     PreventEventWaitersFromProceeding(&elementsCompleted);
+    CreateSingleWaiterObject(&consumerThreadDone);
+    
 
     closing = false;
 
@@ -727,12 +729,17 @@ StdoutAsyncFile::getReader()
 StdoutAsyncFile::ConsumerThreadMain(void *param)
 {
     StdoutAsyncFile *file = (StdoutAsyncFile *)param;
+    SingleWaiterObject *doneObject = &file->consumerThreadDone;
     file->runConsumer();
+    SignalSingleWaiterObject(doneObject);
 }
 
     void 
 StdoutAsyncFile::beginWrite(void *buffer, size_t length, size_t offset, size_t *o_bytesWritten)
 {
+    if (0 == length) {
+        return;
+    }
     WriteElement *element = new WriteElement;
     element->buffer = buffer;
     element->length = length;
@@ -790,9 +797,8 @@ StdoutAsyncFile::runConsumer()
         if (isQueueEmpty() && closing) {
             ReleaseExclusiveLock(&lock);
             //
-            // Done.
+            // Done.  The caller is responsible for signalling the consumerThreadDone object.
             //
-            SignalSingleWaiterObject(&consumerThreadDone);  // "this" is now an invalid pointer!
             return;
         }
 

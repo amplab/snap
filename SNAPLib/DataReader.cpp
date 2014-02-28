@@ -290,8 +290,8 @@ ReadBasedDataReader::nextBatch()
             }
         }
         first = false;
-        startIo();
         AcquireExclusiveLock(&lock);
+        startIo();
     }
     if (bufferInfo[nextBufferForConsumer].state != Full) {
         waitForBuffer(nextBufferForConsumer);
@@ -575,7 +575,6 @@ StdioDataReader::startIo()
     //
     // Synchronously read data into whatever buffers are ready.
     //
-    AcquireExclusiveLock(&lock);
     while (nextBufferForReader != -1) {
         // remove from free list
         BufferInfo* info = &bufferInfo[nextBufferForReader];
@@ -601,7 +600,6 @@ StdioDataReader::startIo()
             info->nBytesThatMayBeginARead = 0;
             info->isEOF = true;
             info->state = Full;
-            ReleaseExclusiveLock(&lock);
             return;
         }
 
@@ -679,7 +677,6 @@ StdioDataReader::startIo()
         //fprintf(stderr, "startIo thread %x reset releaseEvent\n", GetCurrentThreadId());
         PreventEventWaitersFromProceeding(&releaseEvent);
     }
-    ReleaseExclusiveLock(&lock);
 }
  
     void
@@ -915,7 +912,6 @@ WindowsOverlappedDataReader::startIo()
     //
     // Launch reads on whatever buffers are ready.
     //
-    AcquireExclusiveLock(&lock);
     while (nextBufferForReader != -1) {
         // remove from free list
         BufferInfo* info = &bufferInfo[nextBufferForReader];
@@ -964,7 +960,6 @@ WindowsOverlappedDataReader::startIo()
         info->offset = 0;
          
         //fprintf(stderr, "startIo on %d at %lld for %uB\n", index, readOffset, amountToRead);
-        ReleaseExclusiveLock(&lock);
         if (!ReadFile(
                 hFile,
                 info->buffer,
@@ -977,13 +972,11 @@ WindowsOverlappedDataReader::startIo()
                 soft_exit(1);
             }
         }
-        AcquireExclusiveLock(&lock);
     }
     if (nextBufferForConsumer == -1) {
         //fprintf(stderr, "startIo thread %x reset releaseEvent\n", GetCurrentThreadId());
         ResetEvent(releaseEvent);
     }
-    ReleaseExclusiveLock(&lock);
 }
 
     void
