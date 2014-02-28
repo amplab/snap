@@ -181,6 +181,12 @@ ReadSupplierQueue::generateNewPairedReadSupplier()
     return new PairedReadSupplierFromQueue(this, singleReader[1] != NULL);
 }
 
+    ReaderContext*
+ReadSupplierQueue::getContext()
+{
+    return singleReader[0] != NULL ? singleReader[0]->getContext() : pairedReader->getContext();
+}
+
     ReadQueueElement *
 ReadSupplierQueue::getElement()
 {

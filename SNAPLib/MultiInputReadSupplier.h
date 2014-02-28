@@ -87,6 +87,7 @@ public:
     virtual ~MultiInputReadSupplierGenerator();
 
     virtual ReadSupplier *generateNewReadSupplier();
+    virtual ReaderContext* getContext();
 
 private:
 
@@ -101,6 +102,7 @@ public:
     virtual ~MultiInputPairedReadSupplierGenerator();
 
     virtual PairedReadSupplier *generateNewPairedReadSupplier();
+    virtual ReaderContext* getContext();
 
 private:
 

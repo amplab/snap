@@ -118,6 +118,8 @@ public:
     // decremens hold refcount, when all holds are released the batch is no longer valid
     virtual bool releaseBatch(DataBatch batch) = 0;
 
+    ReaderContext* getContext() { return &context; }
+
 protected:
     ReaderContext context;
 };
@@ -133,6 +135,8 @@ public:
 
     virtual void holdBatch(DataBatch batch) = 0;
     virtual bool releaseBatch(DataBatch batch) = 0;
+
+    virtual ReaderContext* getContext() = 0;
 
     // wrap a single read source with a matcher that buffers reads until their mate is found
     static PairedReadReader* PairMatcher(ReadReader* single, bool quicklyDropUnpairedReads);
@@ -161,12 +165,14 @@ public:
 class ReadSupplierGenerator {
 public:
     virtual ReadSupplier *generateNewReadSupplier() = 0;
+    virtual ReaderContext* getContext() = 0;
     virtual ~ReadSupplierGenerator() {}
 };
 
 class PairedReadSupplierGenerator {
 public:
     virtual PairedReadSupplier *generateNewPairedReadSupplier() = 0;
+    virtual ReaderContext* getContext() = 0;
     virtual ~PairedReadSupplierGenerator() {}
 };
 

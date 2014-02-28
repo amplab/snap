@@ -118,13 +118,16 @@ public:
         virtual bool releaseBatch(DataBatch batch)
         { return data->releaseBatch(batch); }
 
+        virtual ReaderContext* getContext()
+        { return &context; }
+
 private:
 
     static const int maxReadSizeInBytes = MAX_READ_LENGTH * 2 + 1000;    // Read as in sequencer read, not read-from-the-filesystem.  +1000 is for ID string, + line, newlines, etc.
 
         DataReader*             data;
         const char*             fileName;
-        const ReaderContext &   context;
+        ReaderContext           context;
 };
 
 class PairedFASTQReader: public PairedReadReader {
@@ -156,6 +159,9 @@ public:
 
         virtual bool releaseBatch(DataBatch batch)
         { _ASSERT(false); /* not supported */ return false; }
+
+        virtual ReaderContext* getContext()
+        { return readers[0]->getContext(); }
 
 private:
 

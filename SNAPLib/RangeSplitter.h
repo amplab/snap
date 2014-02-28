@@ -81,6 +81,7 @@ public:
     ~RangeSplittingReadSupplierGenerator() {delete splitter; delete [] fileName;}
 
     ReadSupplier *generateNewReadSupplier();
+    ReaderContext* getContext() { return &context; }
 
 private:
     RangeSplitter *splitter;
@@ -117,6 +118,7 @@ public:
     ~RangeSplittingPairedReadSupplierGenerator();
 
     PairedReadSupplier *generateNewPairedReadSupplier();
+    ReaderContext* getContext() { return &context; }
 
 private:
     RangeSplitter *splitter;

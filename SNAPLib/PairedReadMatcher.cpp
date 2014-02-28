@@ -60,6 +60,9 @@ public:
 
     virtual bool releaseBatch(DataBatch batch);
 
+    virtual ReaderContext* getContext()
+    { return single->getContext(); }
+
 private:
 
     ReadWithOwnMemory* allocOverflowRead();
@@ -282,7 +285,6 @@ PairedReadMatcher::getNextReadPair(
                     //buf[r->value.getIdLength()] = 0;
                     //fprintf(stderr, "overflow add %d:%d %s\n", batch[1].fileID, batch[1].batchID, buf);
                 }
-                WriteErrorMessage("!! overflow add %d = %d\n", unmatched[1].size(), overflow.size());
                 overflowTotal += unmatched[1].size();
                 overflowPeak = max(overflow.size(), overflowPeak);
             }
@@ -368,7 +370,6 @@ PairedReadMatcher::releaseBatch(
     } else if (single->releaseBatch(batch)) {
         OverflowReadVector* v = NULL;
         if (overflowRelease.tryGet(batch.asKey(), &v)) {
-            WriteErrorMessage("!! overflow release %d = %d\n", v->size(), overflow.size());
             // free memory for overflow reads
             //fprintf(stderr, "PairedReadMatcher release %d overflow reads for batch %d:%d\n", v->size(), batch.fileID, batch.batchID);
             for (OverflowReadVector::iterator i = v->begin(); i != v->end(); i++) {

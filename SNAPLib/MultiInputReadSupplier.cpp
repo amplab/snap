@@ -248,6 +248,12 @@ MultiInputReadSupplierGenerator::generateNewReadSupplier()
     return new MultiInputReadSupplier(nReadSuppliers,readSuppliers);    // The Supplier owns the array and suppliers we created
 }
 
+    
+    ReaderContext*
+MultiInputReadSupplierGenerator::getContext()
+{
+    return readSupplierGenerators[0]->getContext();
+}
 
 
 MultiInputPairedReadSupplierGenerator::MultiInputPairedReadSupplierGenerator(int i_nReadSuppliers, PairedReadSupplierGenerator **i_readSupplierGenerators)
@@ -283,4 +289,10 @@ MultiInputPairedReadSupplierGenerator::generateNewPairedReadSupplier()
 		return NULL;
 	}
     return new MultiInputPairedReadSupplier(nReadSuppliers,readSuppliers);
+}
+
+    ReaderContext*
+MultiInputPairedReadSupplierGenerator::getContext()
+{
+    return readSupplierGenerators[0]->getContext();
 }

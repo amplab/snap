@@ -48,7 +48,11 @@ struct ReadQueueElement {
     }
 
     // note this should be about read buffer size for input reads
+#ifdef LONG_READS
+    static const int    MaxReadsPerElement = 400; 
+#else
     static const int    MaxReadsPerElement = 40000; 
+#endif
     ReadQueueElement    *next;
     ReadQueueElement    *prev;
     int                 totalReads;
@@ -106,6 +110,7 @@ public:
     void waitUntilFinished();
     ReadSupplier *generateNewReadSupplier();
     PairedReadSupplier *generateNewPairedReadSupplier();
+    ReaderContext* getContext();
 
     ReadQueueElement *getElement();     // Called from the supplier threads
     bool getElements(ReadQueueElement **element1, ReadQueueElement **element2);   // Called from supplier threads

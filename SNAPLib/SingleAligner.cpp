@@ -252,6 +252,11 @@ SingleAlignerContext::typeSpecificBeginIteration()
         }
         readSupplierGenerator = new MultiInputReadSupplierGenerator(options->nInputs,generators);
     }
+    ReaderContext* context = readSupplierGenerator->getContext();
+    readerContext.header = context->header;
+    readerContext.headerBytes = context->headerBytes;
+    readerContext.headerLength = context->headerLength;
+    readerContext.headerMatchesIndex = context->headerMatchesIndex;
 }
     void 
 SingleAlignerContext::typeSpecificNextIteration()
@@ -260,6 +265,7 @@ SingleAlignerContext::typeSpecificNextIteration()
         delete [] readerContext.header;
         readerContext.header = NULL;
         readerContext.headerLength = readerContext.headerBytes = 0;
+        readerContext.headerMatchesIndex = false;
     }
     delete readSupplierGenerator;
     readSupplierGenerator = NULL;

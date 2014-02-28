@@ -455,12 +455,10 @@ BAMReader::getReadFromLine(
         }
         read->init(bam->read_name(), bam->l_read_name - 1, seqBuffer, qualBuffer, bam->l_seq, genomeLocation, bam->MAPQ, bam->FLAG,
             originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping, rnext, rnextLen, bam->next_pos + 1, true);
-        _ASSERT(read->getData()[0]); //!! remove
         read->setBatch(data->getBatch());
         if (bam->FLAG & SAM_REVERSE_COMPLEMENT) {
             read->becomeRC();
         }
-        _ASSERT(read->getData()[0]); //!! remove
         read->clip(clipping);
     }
 

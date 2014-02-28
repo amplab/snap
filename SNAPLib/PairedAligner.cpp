@@ -584,10 +584,21 @@ PairedAlignerContext::typeSpecificBeginIteration()
         }
         pairedReadSupplierGenerator = new MultiInputPairedReadSupplierGenerator(options->nInputs,generators);
     }
+    ReaderContext* context = pairedReadSupplierGenerator->getContext();
+    readerContext.header = context->header;
+    readerContext.headerBytes = context->headerBytes;
+    readerContext.headerLength = context->headerLength;
+    readerContext.headerMatchesIndex = context->headerMatchesIndex;
 }
     void 
 PairedAlignerContext::typeSpecificNextIteration()
 {
+    if (readerContext.header != NULL) {
+        delete [] readerContext.header;
+        readerContext.header = NULL;
+        readerContext.headerLength = readerContext.headerBytes = 0;
+        readerContext.headerMatchesIndex = false;
+    }
     delete pairedReadSupplierGenerator;
     pairedReadSupplierGenerator = NULL;
 }

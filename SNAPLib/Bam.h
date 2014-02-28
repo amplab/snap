@@ -394,6 +394,9 @@ public:
         bool releaseBatch(DataBatch batch)
         { return data->releaseBatch(batch); }
 
+        virtual ReaderContext* getContext()
+        { return ((ReadReader*)this)->getContext(); }
+
         static BAMReader* create(const char *fileName, int bufferCount,
             _int64 startingOffset, _int64 amountOfFileToProcess, 
             const ReaderContext& context);
