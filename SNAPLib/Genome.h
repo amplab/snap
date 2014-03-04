@@ -24,6 +24,7 @@ Revision History:
 
 #pragma once
 #include "Compat.h"
+#include "GenericFile.h"
 
 const unsigned InvalidGenomeLocation = 0xffffffff;
 
@@ -205,7 +206,7 @@ private:
         Contig      *contigsByName;
         Genome *copy(bool copyX, bool copyY, bool copyM) const;
 
-        static bool openFileAndGetSizes(const char *filename, FILE **file, unsigned *nBases, unsigned *nContigs);
+        static bool openFileAndGetSizes(const char *filename, GenericFile **file, unsigned *nBases, unsigned *nContigs);
 
 
         const unsigned chromosomePadding;
