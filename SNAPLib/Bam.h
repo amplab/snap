@@ -164,7 +164,7 @@ struct BAMAlignment
     // absoluate genome locations
 
     _uint32 getLocation(const Genome* genome) const
-    { return pos < 0 || refID < 0 || refID >= genome->getNumContigs() || (FLAG & SAM_UNMAPPED)
+    { return genome == NULL || pos < 0 || refID < 0 || refID >= genome->getNumContigs() || (FLAG & SAM_UNMAPPED)
         ? UINT32_MAX : (genome->getContigs()[refID].beginningOffset + pos); }
 
     _uint32 getNextLocation(const Genome* genome) const
