@@ -56,6 +56,7 @@ typedef HANDLE EventObject;
 #define PATH_SEP '\\'
 #define snprintf _snprintf
 #define mkdir(path, mode) _mkdir(path)
+#define strdup(s) _strdup(s)
 
 // <http://stackoverflow.com/questions/9021502/whats-the-difference-between-strtok-r-and-strtok-s-in-c>
 #define strtok_r strtok_s

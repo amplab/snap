@@ -34,6 +34,7 @@ WriteMessageToFile(FILE *file, const char *message, va_list args)
         char buffer[bufferSize];
         vsnprintf(buffer, bufferSize - 1, message, args);
         fprintf(stderr,"reporter:status:%s", buffer);           // Always use stderr in Hadoop mode, regardless of whether this is an error
+        fprintf(stderr, "%s", buffer);                          // And also print without the prefix, so it shows up in both logs
     } else {
         if (AlignerOptions::outputToStdout && stdout == file) {
             vfprintf(stderr, message, args);

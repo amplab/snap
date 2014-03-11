@@ -21,6 +21,7 @@ Environment:
 #pragma once
 
 #include "Compat.h"
+#include "GenericFile.h"
 #include "Genome.h"
 
 
@@ -36,7 +37,7 @@ class SNAPHashTable {
         //
         static SNAPHashTable *loadFromFile(char *loadFileName);
 
-        static SNAPHashTable *loadFromFile(FILE *loadFile);
+        static SNAPHashTable *loadFromFile(GenericFile *loadFile);
 
         ~SNAPHashTable();
 

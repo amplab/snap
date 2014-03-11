@@ -24,6 +24,7 @@ Revision History:
 
 #include "stdafx.h"
 #include "Genome.h"
+#include "GenericFile.h"
 #include "Compat.h"
 #include "BigAlloc.h"
 #include "exit.h"
@@ -159,7 +160,7 @@ Genome::saveToFile(const char *fileName) const
     const Genome *
 Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned i_minOffset, unsigned length)
 {    
-    FILE *loadFile;
+    GenericFile *loadFile;
     unsigned nBases,nContigs;
 
     if (!openFileAndGetSizes(fileName,&loadFile,&nBases,&nContigs)) {
@@ -198,7 +199,7 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned 
     size_t contigSize;
     char *curName;
     for (unsigned i = 0; i < nContigs; i++) {
-        if (NULL == fgets(contigNameBuffer, contigNameBufferSize, loadFile)){
+        if (NULL == loadFile->gets(contigNameBuffer, contigNameBufferSize)){
 	  
 	  WriteErrorMessage("Unable to read contig description\n");
             delete genome;
@@ -242,19 +243,22 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned 
     }
     */
 
-    if (0 != _fseek64bit(loadFile,i_minOffset,SEEK_CUR)) {
+    if (0 != loadFile->advance(i_minOffset)) {
         WriteErrorMessage("Genome::loadFromFile: _fseek64bit failed\n");
         soft_exit(1);
     }
 
-    if (length != fread(genome->bases,1,length,loadFile)) {
-        WriteErrorMessage("Genome::loadFromFile: fread of bases failed\n");
-        fclose(loadFile);
+    size_t retval;
+    if (length != (retval = loadFile->read(genome->bases,length))) {
+        WriteErrorMessage("Genome::loadFromFile: fread of bases failed; wanted %u, got %d\n", length, retval);
+        loadFile->close();
+        delete loadFile;
         delete genome;
         return NULL;
     }
 
-    fclose(loadFile);
+    loadFile->close();
+    delete loadFile;
     genome->fillInContigLengths();
     genome->sortContigsByName();
     return genome;
@@ -280,16 +284,20 @@ Genome::sortContigsByName()
 }
 
     bool
-Genome::openFileAndGetSizes(const char *filename, FILE **file, unsigned *nBases, unsigned *nContigs)
+Genome::openFileAndGetSizes(const char *filename, GenericFile **file, unsigned *nBases, unsigned *nContigs)
 {
-    *file = fopen(filename,"rb");
+    *file = GenericFile::open(filename, GenericFile::ReadOnly);
     if (*file == NULL) {
         WriteErrorMessage("Genome::openFileAndGetSizes: unable to open file '%s'\n",filename);
         return false;
     } 
 
-    if (2 != fscanf(*file,"%d %d\n",nBases,nContigs)) {
-        fclose(*file);
+    char linebuf[2000];
+    char *retval = (*file)->gets(linebuf, sizeof(linebuf));
+
+    if (NULL == retval || 2 != sscanf(linebuf,"%d %d\n",nBases,nContigs)) {
+        (*file)->close();
+        delete *file;
         *file = NULL;
         WriteErrorMessage("Genome::openFileAndGetSizes: unable to read header\n");
         return false;
@@ -301,14 +309,15 @@ Genome::openFileAndGetSizes(const char *filename, FILE **file, unsigned *nBases,
     bool 
 Genome::getSizeFromFile(const char *fileName, unsigned *nBases, unsigned *nContigs)
 {
-    FILE *file;
+    GenericFile *file;
     unsigned localNBases, localnContigs;
     
     if (!openFileAndGetSizes(fileName,&file,nBases ? nBases : &localNBases, nContigs ? nContigs : &localnContigs)) {
         return false;
     }
 
-    fclose(file);
+    file->close();
+    delete file;
     return true;
 }
 
