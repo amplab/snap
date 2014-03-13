@@ -387,11 +387,11 @@ public:
 
     void exchange(VariableSizeMap& other)
     {
-        Entry* e = entries; entries = other.entries; other.entries = e;
-        int x = capacity; capacity = other.capacity; other.capacity = x;
-        x = count; count = other.count; other.count = x;
-        x = limit; limit = other.limit; other.limit = x;
-        x = occupied; occupied = other.occupied; other.occupied = x;
+        Entry* e = this->entries; this->entries = other.entries; other.entries = e;
+        int x = this->capacity; this->capacity = other.capacity; other.capacity = x;
+        x = this->count; this->count = other.count; other.count = x;
+        x = this->limit; this->limit = other.limit; other.limit = x;
+        x = this->occupied; this->occupied = other.occupied; other.occupied = x;
     }
 };
 
@@ -400,20 +400,20 @@ class VariableSizeMapBig
     : public VariableSizeMap<K,V,150,MapNumericHash<K>,80,0,-1,true>
 {
 public:
-    VariableSizeMapBig(int n = 10000) : VariableSizeMap(n) {}
+    VariableSizeMapBig(int n = 10000) : VariableSizeMap<K,V,150,MapNumericHash<K>,80,0,-1,true>(n) {}
 
     void assign(VariableSizeMapBig<K,V>* other)
     {
         // todo: avoid copying from base class, c++ inheritance is nonsensical
-        if (entries != NULL) {
-            BigDealloc(entries);
+        if (this->entries != NULL) {
+            BigDealloc(this->entries);
         }
-        entries = other->entries;
-        capacity = other->capacity;
-        count = other->count;
-        limit = other->limit;
-        hash = other->hash;
-        occupied = other->occupied;
+        this->entries = other->entries;
+        this->capacity = other->capacity;
+        this->count = other->count;
+        this->limit = other->limit;
+        this->hash = other->hash;
+        this->occupied = other->occupied;
         other->entries = NULL;
         other->count = 0;
     }
