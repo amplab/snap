@@ -842,6 +842,7 @@ SAMFormat::createSAMLine(
     AlignmentResult result, 
     unsigned genomeLocation,
     Direction direction,
+    bool secondaryAlignment,
     bool useM,
     bool hasMate,
     bool firstInPair,
@@ -856,6 +857,10 @@ SAMFormat::createSAMLine(
     positionInContig = 0;
     const char *cigar = "*";
     templateLength = 0;
+
+    if (secondaryAlignment) {
+        flags |= SAM_SECONDARY;
+    }
     
     if (0 == qnameLen) {
          qnameLen = read->getIdLength();
@@ -885,9 +890,7 @@ SAMFormat::createSAMLine(
     if (fullLength > dataSize) {
         return false;
     }
-    if (result == SecondaryHit) {
-        flags |= SAM_SECONDARY;
-    }
+
     if (direction == RC) {
       for (unsigned i = 0; i < fullLength; i++) {
         data[fullLength - 1 - i] = COMPLEMENT[read->getUnclippedData()[i]];
@@ -1010,12 +1013,14 @@ SAMFormat::writeRead(
     int mapQuality,
     unsigned genomeLocation,
     Direction direction,
+    bool secondaryAlignment,
     bool hasMate,
     bool firstInPair,
     Read * mate, 
     AlignmentResult mateResult,
     unsigned mateLocation,
-    Direction mateDirection) const
+    Direction mateDirection
+    ) const
 {
     const int MAX_READ = MAX_READ_LENGTH;
     const int cigarBufSize = MAX_READ * 2;
@@ -1049,7 +1054,7 @@ SAMFormat::writeRead(
     if (! createSAMLine(genome, lv, data, quality, MAX_READ, contigName, contigIndex, 
         flags, positionInContig, mapQuality, matecontigName, mateContigIndex, matePositionInContig, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
-        qnameLen, read, result, genomeLocation, direction, useM,
+        qnameLen, read, result, genomeLocation, direction, secondaryAlignment, useM,
         hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection, 
         &extraBasesClippedBefore, &extraBasesClippedAfter))
     {
@@ -1183,7 +1188,7 @@ SAMFormat::computeCigarString(
     if (NULL != reference) {
         *editDistance = lv->computeEditDistanceNormalized(
                             reference,
-                            dataLength - extraBasesClippedAfter,
+                            dataLength - extraBasesClippedAfter + MAX_K, // Add space incase of indels.  We know there's enough, because the reference is padded.
                             data,
                             dataLength - extraBasesClippedAfter,
                             MAX_K - 1,

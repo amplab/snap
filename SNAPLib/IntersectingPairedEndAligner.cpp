@@ -43,10 +43,12 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         unsigned      maxBigHits_,
         unsigned      extraSearchDepth_,
         unsigned      maxCandidatePoolSize,
-        BigAllocator  *allocator) :
+        BigAllocator  *allocator,
+        bool          noUkkonen_,
+        bool          noOrderedEvaluation_) :
     index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), numSeedsFromCommandLine(__min(MAX_MAX_SEEDS,numSeedsFromCommandLine_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
-    landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), maxMergeDistance(31), seedCoverage(seedCoverage_) /*also should be a parameter*/,
-    extraSearchDepth(extraSearchDepth_), nLocationsScored(0)
+    landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), maxMergeDistance(31), seedCoverage(seedCoverage_) /*also should be a parameter*/, 
+    extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_)
 {
     unsigned maxSeedsToUse;
     if (0 != numSeedsFromCommandLine) {
@@ -133,10 +135,22 @@ IntersectingPairedEndAligner::align(
         Read                  *read0,
         Read                  *read1,
         PairedAlignmentResult *result,
-        IdPairVector          *secondary)
+        int                    maxEditDistanceForSecondaryResults,
+        int                    secondaryResultBufferSize,
+        int                   *nSecondaryResults,
+        PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
+        int                    singleSecondaryBufferSize,
+        int                   *nSingleEndSecondaryResultsForFirstRead,
+        int                   *nSingleEndSecondaryResultsForSecondRead,
+        SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
+        )
 {
     result->nLVCalls = 0;
     result->nSmallHits = 0;
+
+    *nSecondaryResults = 0;
+    *nSingleEndSecondaryResultsForFirstRead = 0;
+    *nSingleEndSecondaryResultsForSecondRead = 0;
 
     unsigned maxSeeds;
     if (numSeedsFromCommandLine != 0) {
@@ -483,12 +497,18 @@ IntersectingPairedEndAligner::align(
                     soft_exit(1);
                 }
 
+                //
+                // If we have noOrderedEvaluation set, just stick everything on list 0, regardless of what it really is.  This will cause us to
+                // evaluate the candidates in more-or-less inverse genome order.
+                //
+                unsigned bestPossibleScore = noOrderedEvaluation ? 0 : lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits;
+
                 scoringCandidatePool[lowestFreeScoringCandidatePoolEntry].init(lastGenomeLocationForReadWithFewerHits, whichSetPair, lowestFreeScoringMateCandidate[whichSetPair] - 1,
                                                                                 lastSeedOffsetForReadWithFewerHits, bestPossibleScoreForReadWithFewerHits,
-                                                                                scoringCandidates[lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits]);
+                                                                                scoringCandidates[bestPossibleScore]);
 
 
-                scoringCandidates[lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits] = &scoringCandidatePool[lowestFreeScoringCandidatePoolEntry];
+                scoringCandidates[bestPossibleScore] = &scoringCandidatePool[lowestFreeScoringCandidatePoolEntry];
 
 #ifdef _DEBUG
                 if (_DumpAlignments) {
@@ -500,7 +520,7 @@ IntersectingPairedEndAligner::align(
 #endif // _DEBUG
 
                 lowestFreeScoringCandidatePoolEntry++;
-                maxUsedBestPossibleScoreList = max(maxUsedBestPossibleScoreList, lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits);
+                maxUsedBestPossibleScoreList = max(maxUsedBestPossibleScoreList, bestPossibleScore);
             }
 
             if (!setPair[readWithFewerHits]->getNextLowerHit(&lastGenomeLocationForReadWithFewerHits, &lastSeedOffsetForReadWithFewerHits)) {
@@ -508,6 +528,7 @@ IntersectingPairedEndAligner::align(
             }
         }
     } // For each set pair
+
 
     //
     // Phase 3: score and merge the candidates we've found.
@@ -660,12 +681,37 @@ IntersectingPairedEndAligner::align(
 
                             bool isBestHit = false;
 
-                            const double EPSILON = 1e-14;
                             if (pairScore <= maxK && (pairScore < bestPairScore ||
-                                (pairScore == bestPairScore && pairProbability > probabilityOfBestPair + EPSILON))) {
+                                (pairScore == bestPairScore && pairProbability > probabilityOfBestPair))) {
                                 //
                                 // A new best hit.
                                 //
+                                if (maxEditDistanceForSecondaryResults != -1 && (unsigned)maxEditDistanceForSecondaryResults >= pairScore - bestPairScore) {
+                                    //
+                                    // Move the old best to be a secondary alignment.  This won't happen on the first time we get a valid alignment,
+                                    // because bestPairScore is initialized to be very large.
+                                    //
+                                    //
+                                    if (*nSecondaryResults >= secondaryResultBufferSize) {
+                                        WriteErrorMessage("IntersectingPairedEndAligner::align(): out of secondary result buffer\n");
+                                        soft_exit(1);
+                                    }
+
+                                    PairedAlignmentResult *result = &secondaryResults[*nSecondaryResults];
+                                    result->alignedAsPair = true;
+                                    result->fromAlignTogether = true;
+
+                                    for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
+                                        result->direction[r] = bestResultDirection[r];
+                                        result->location[r] = bestResultGenomeLocation[r];
+                                        result->mapq[r] = 0;
+                                        result->score[r] = bestResultScore[r];
+                                        result->status[r] = MultipleHits;
+                                    }
+ 
+                                    (*nSecondaryResults)++;
+
+                                }
                                 bestPairScore = pairScore;
                                 probabilityOfBestPair = pairProbability;
                                 bestResultGenomeLocation[readWithFewerHits] = candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset;
@@ -675,22 +721,35 @@ IntersectingPairedEndAligner::align(
                                 bestResultDirection[readWithFewerHits] = setPairDirection[candidate->whichSetPair][readWithFewerHits];
                                 bestResultDirection[readWithMoreHits] = setPairDirection[candidate->whichSetPair][readWithMoreHits];
 
-                                scoreLimit = bestPairScore + extraSearchDepth;
+                                if (!noUkkonen) {
+                                    scoreLimit = bestPairScore + extraSearchDepth;
+                                }
 
                                 isBestHit = true;
+                            } else {
+                                if (maxEditDistanceForSecondaryResults != -1 && (unsigned)maxEditDistanceForSecondaryResults >= pairScore - bestPairScore) {
+                                    //
+                                    // A secondary result to save.
+                                    //
+                                    if (*nSecondaryResults >= secondaryResultBufferSize) {
+                                        WriteErrorMessage("IntersectingPairedEndAligner::align(): out of secondary result buffer\n");
+                                        soft_exit(1);
+                                    }
 
-                                if (secondary != NULL) {
-                                    secondary->clear();
+                                    PairedAlignmentResult *result = &secondaryResults[*nSecondaryResults];
+                                    result->alignedAsPair = true;
+                                    result->direction[readWithMoreHits] = setPairDirection[candidate->whichSetPair][readWithMoreHits];
+                                    result->direction[readWithFewerHits] = setPairDirection[candidate->whichSetPair][readWithFewerHits];
+                                    result->fromAlignTogether = true;
+                                    result->location[readWithMoreHits] = mate->readWithMoreHitsGenomeLocation + mate->genomeOffset;
+                                    result->location[readWithFewerHits] = candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset;
+                                    result->mapq[0] = result->mapq[1] = 0;
+                                    result->score[readWithMoreHits] = mate->score;
+                                    result->score[readWithFewerHits] = fewerEndScore;
+                                    result->status[readWithFewerHits] = result->status[readWithMoreHits] = MultipleHits;
+
+                                    (*nSecondaryResults)++;
                                 }
-                            } else if (secondary != NULL && pairScore <= maxK && pairScore == bestPairScore && pairProbability >= probabilityOfBestPair - EPSILON) {
-                                // equivalent to best, add to secondary alignment list
-                                IdPair pairs[2];
-                                pairs[readWithFewerHits].id = candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset;
-                                pairs[readWithMoreHits].id = mate->readWithMoreHitsGenomeLocation + mate->genomeOffset;
-                                pairs[readWithFewerHits].value = setPairDirection[candidate->whichSetPair][readWithFewerHits];
-                                pairs[readWithMoreHits].value = setPairDirection[candidate->whichSetPair][readWithMoreHits];
-                                secondary->push_back(pairs[0]);
-                                secondary->push_back(pairs[1]);
                             }
 
                             probabilityOfAllPairs += pairProbability;
@@ -704,7 +763,7 @@ IntersectingPairedEndAligner::align(
                             }
     #endif  // _DEBUG
 
-                            if (probabilityOfAllPairs >= 4.9) {
+                            if (probabilityOfAllPairs >= 4.9 && -1 == maxEditDistanceForSecondaryResults) {
                                 //
                                 // Nothing will rescue us from a 0 MAPQ, so just stop looking.
                                 //
@@ -763,6 +822,19 @@ doneScoring:
                     probabilityOfAllPairs, probabilityOfBestPair);
             }
 #endif  // DEBUG
+    }
+
+    //
+    // Get rid of any secondary results that are too far away from the best score.
+    //
+    int i = 0;
+    while (i < *nSecondaryResults) {
+        if ((int)(secondaryResults[i].score[0] + secondaryResults[i].score[1]) > (int)bestPairScore + maxEditDistanceForSecondaryResults) {
+            secondaryResults[i] = secondaryResults[(*nSecondaryResults) - 1];
+            (*nSecondaryResults)--;
+        } else {
+            i++;
+        }
     }
 }
 

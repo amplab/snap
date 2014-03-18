@@ -114,6 +114,9 @@ public:
     const char                         **argv;
     const char                          *version;
     FILE                                *perfFile;
+    bool                                 noUkkonen;
+    bool                                 noOrderedEvaluation;
+    int                                  maxSecondaryAligmmentAdditionalEditDistance;
 
 
     // iteration variables

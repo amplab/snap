@@ -163,6 +163,9 @@ AlignerContext::initialize()
     maxHits_ = options->maxHits;
     maxDist_ = options->maxDist;
     extraSearchDepth = options->extraSearchDepth;
+    noUkkonen = options->noUkkonen;
+    noOrderedEvaluation = options->noOrderedEvaluation;
+    maxSecondaryAligmmentAdditionalEditDistance = options->maxSecondaryAligmmentAdditionalEditDistance;
 
     if (options->perfFileName != NULL) {
         perfFile = fopen(options->perfFileName,"a");
@@ -423,6 +426,11 @@ AlignerContext::parseOptions(
     if (options->maxDist + options->extraSearchDepth >= MAX_K) {
         WriteErrorMessage("You specified too large of a maximum edit distance combined with extra search depth.  The must add up to less than %d.\n", MAX_K);
         WriteErrorMessage("Either reduce their sum, or change MAX_K in LandauVishkin.h and recompile.\n");
+        soft_exit(1);
+    }
+
+    if (options->maxSecondaryAligmmentAdditionalEditDistance > (int)options->extraSearchDepth) {
+        WriteErrorMessage("You can't have the max edit distance for secondary alignments (-om) be bigger than the max search depth (-D)\n");
         soft_exit(1);
     }
 

@@ -80,15 +80,30 @@ SingleAlignerContext::runIterationThread()
         Read *read;
         while (NULL != (read = supplier->getNextRead())) {
             stats->totalReads++;
-            writeRead(read, NotFound, InvalidGenomeLocation, FORWARD, 0, 0);
+            SingleAlignmentResult result;
+            result.status = NotFound;
+            result.direction = FORWARD;
+            result.mapq = 0;
+            result.score = 0;
+            result.location = InvalidGenomeLocation;
+            writeRead(read, result, false);
         }
         delete supplier;
         return;
     }
 
     int maxReadSize = MAX_READ_LENGTH;
+
+    SingleAlignmentResult *secondaryAlignments = NULL;
+    unsigned secondaryAlignmentBufferCount;
+    if (maxSecondaryAligmmentAdditionalEditDistance < 0) {
+        secondaryAlignmentBufferCount = 0;
+    } else {
+        secondaryAlignmentBufferCount = BaseAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, index->getSeedLength());
+    }
+    size_t secondaryAlignmentBufferSize = sizeof(*secondaryAlignments) * secondaryAlignmentBufferCount;
  
-    BigAllocator *allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, maxHits, maxReadSize, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage));
+    BigAllocator *allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, maxHits, maxReadSize, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage) + secondaryAlignmentBufferSize);
    
     BaseAligner *aligner = new (allocator) BaseAligner(
             index,
@@ -98,10 +113,16 @@ SingleAlignerContext::runIterationThread()
             numSeedsFromCommandLine,
             seedCoverage,
             extraSearchDepth,
+            noUkkonen,
+            noOrderedEvaluation,
             NULL,               // LV (no need to cache in the single aligner)
             NULL,               // reverse LV
             stats,
             allocator);
+
+    if (maxSecondaryAligmmentAdditionalEditDistance >= 0) {
+        secondaryAlignments = (SingleAlignmentResult *)allocator->allocate(secondaryAlignmentBufferSize);
+    }
 
     allocator->checkCanaries();
 
@@ -119,7 +140,6 @@ SingleAlignerContext::runIterationThread()
 #endif  // _MSC_VER
 
     // Align the reads.
-    IdPairVector* secondary = options->outputMultipleAlignments ? new IdPairVector : NULL;
     Read *read;
     _uint64 lastReportTime = timeInMillis();
     _uint64 readsWhenLastReported = 0;
@@ -136,23 +156,21 @@ SingleAlignerContext::runIterationThread()
         // Skip the read if it has too many Ns or trailing 2 quality scores.
         if (read->getDataLength() < 50 || read->countOfNs() > maxDist) {
             if (readWriter != NULL && options->passFilter(read, NotFound)) {
-                readWriter->writeRead(read, NotFound, 0, InvalidGenomeLocation, false);
+                readWriter->writeRead(read, NotFound, 0, InvalidGenomeLocation, FORWARD, false);
             }
             continue;
         } else {
             stats->usefulReads++;
         }
 
-        unsigned location = InvalidGenomeLocation;
-        Direction direction;
-        int score;
-        int mapq;
-
 #if     TIME_HISTOGRAM
         _int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
 
-        AlignmentResult result = aligner->AlignRead(read, &location, &direction, &score, &mapq, secondary);
+        SingleAlignmentResult result;
+        int nSecondaryResults = 0;
+
+        aligner->AlignRead(read, &result, maxSecondaryAligmmentAdditionalEditDistance, secondaryAlignmentBufferCount, &nSecondaryResults, secondaryAlignments);
 
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;
@@ -164,20 +182,17 @@ SingleAlignerContext::runIterationThread()
         allocator->checkCanaries();
 
         bool wasError = false;
-        if (result != NotFound && computeError) {
-            wasError = wgsimReadMisaligned(read, location, index, options->misalignThreshold);
+        if (result.status != NotFound && computeError) {
+            wasError = wgsimReadMisaligned(read, result.location, index, options->misalignThreshold);
         }
 
-        writeRead(read, result, location, direction, score, mapq);
+        writeRead(read, result, false);
+
+        for (int i = 0; i < nSecondaryResults; i++) {
+            writeRead(read, secondaryAlignments[i], true);
+        }
         
-        updateStats(stats, read, result, location, score, mapq, wasError);
-
-        if (secondary != NULL && secondary->size() > 0) {
-            // write secondary alignments
-            for (IdPairVector::iterator i = secondary->begin(); i != secondary->end(); i++) {
-                writeRead(read, SecondaryHit, i->id, i->value, score, mapq);
-            }
-        }
+        updateStats(stats, read, result.status, result.location, result.score, result.mapq, wasError);
     }
 
     aligner->~BaseAligner(); // This calls the destructor without calling operator delete, allocator owns the memory.
@@ -192,14 +207,12 @@ SingleAlignerContext::runIterationThread()
     void
 SingleAlignerContext::writeRead(
     Read* read,
-    AlignmentResult result,
-    unsigned location,
-    Direction direction,
-    int score,
-    int mapq)
+    const SingleAlignmentResult &result,
+    bool secondaryAlignment
+    )
 {
-    if (readWriter != NULL && options->passFilter(read, result)) {
-        readWriter->writeRead(read, result, mapq, location, direction);
+    if (readWriter != NULL && options->passFilter(read, result.status)) {
+        readWriter->writeRead(read, result.status, result.mapq, result.location, result.direction, secondaryAlignment);
     }
 }
 
@@ -264,3 +277,5 @@ SingleAlignerContext::typeSpecificNextIteration()
     delete readSupplierGenerator;
     readSupplierGenerator = NULL;
 }
+
+ 
