@@ -57,11 +57,12 @@ FASTQReader::~FASTQReader()
 FASTQReader::create(
     DataSupplier* supplier,
     const char *fileName,
+    int bufferCount,
     _int64 startingOffset,
     _int64 amountOfFileToProcess,
     const ReaderContext& context)
 {
-    DataReader* data = supplier->getDataReader(maxReadSizeInBytes);
+    DataReader* data = supplier->getDataReader(bufferCount, maxReadSizeInBytes, 0.0);
     FASTQReader* fastq = new FASTQReader(data, context);
     if (! fastq->init(fileName)) {
         WriteErrorMessage("Unable to initialize FASTQReader for file %s\n", fileName);
@@ -210,6 +211,9 @@ FASTQReader::getNextRead(Read *readToUpdate)
     }
     
     _int64 bytesConsumed = getReadFromBuffer(buffer, validBytes, readToUpdate, fileName, data, context);
+    if (bytesConsumed == 0) {
+        return false;
+    }
 
     data->advance(bytesConsumed);
     return true;
@@ -330,10 +334,10 @@ PairedInterleavedFASTQReader::PairedInterleavedFASTQReader(
 }
 
     PairedInterleavedFASTQReader* 
-PairedInterleavedFASTQReader::create(DataSupplier* supplier, const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess,
+PairedInterleavedFASTQReader::create(DataSupplier* supplier, const char *fileName, int bufferCount, _int64 startingOffset, _int64 amountOfFileToProcess,
                                         const ReaderContext& context)
 {
-    DataReader* data = supplier->getDataReader(2 * maxReadSizeInBytes); // 2* because we read in pairs
+    DataReader* data = supplier->getDataReader(bufferCount, 2 * maxReadSizeInBytes, 0.0); // 2* because we read in pairs
     PairedInterleavedFASTQReader* fastq = new PairedInterleavedFASTQReader(data, context);
     if (! fastq->init(fileName)) {
         WriteErrorMessage("Unable to initialize PairedInterleavedFASTQReader for file %s\n", fileName);
@@ -491,13 +495,14 @@ PairedFASTQReader::create(
     DataSupplier* supplier,
     const char *fileName0,
     const char *fileName1,
+    int bufferCount,
     _int64 startingOffset,
     _int64 amountOfFileToProcess,
     const ReaderContext& context)
 {
     PairedFASTQReader *reader = new PairedFASTQReader;
-    reader->readers[0] = FASTQReader::create(supplier, fileName0,startingOffset,amountOfFileToProcess,context);
-    reader->readers[1] = FASTQReader::create(supplier, fileName1,startingOffset,amountOfFileToProcess,context);
+    reader->readers[0] = FASTQReader::create(supplier, fileName0, bufferCount, startingOffset, amountOfFileToProcess, context);
+    reader->readers[1] = FASTQReader::create(supplier, fileName1, bufferCount, startingOffset, amountOfFileToProcess, context);
 
     for (int i = 0; i < 2; i++) {
         if (NULL == reader->readers[i]) {
@@ -544,23 +549,24 @@ PairedFASTQReader::createPairedReadSupplierGenerator(
             if (!strcmp(fileNames[i], "-")) {
                 fileSize[i] = 0;
                 if (gzip) {
-                    dataSupplier[i] = DataSupplier::GzipStdio[false];
+                    dataSupplier[i] = DataSupplier::GzipStdio;
                 } else {
-                    dataSupplier[i] = DataSupplier::Stdio[false];
+                    dataSupplier[i] = DataSupplier::Stdio;
                 }
             } else {
                 fileSize[i] = QueryFileSize(fileNames[i]);
                 if (gzip) {
-                    dataSupplier[i] = DataSupplier::GzipDefault[false];
+                    dataSupplier[i] = DataSupplier::GzipDefault;
                 } else {
-                    dataSupplier[i] = DataSupplier::Default[false];
+                    dataSupplier[i] = DataSupplier::Default;
                 }
             }
         }
         
         
-        ReadReader *reader1 = FASTQReader::create(dataSupplier[0], fileName0, 0, fileSize[0],context);
-        ReadReader *reader2 = FASTQReader::create(dataSupplier[1], fileName1, 0, fileSize[1],context);
+        int bufferCount = ReadSupplierQueue::BufferCount(numThreads);
+        ReadReader *reader1 = FASTQReader::create(dataSupplier[0], fileName0, bufferCount, 0, fileSize[0],context);
+        ReadReader *reader2 = FASTQReader::create(dataSupplier[1], fileName1, bufferCount, 0, fileSize[1],context);
         if (NULL == reader1 || NULL == reader2) {
             delete reader1;
             delete reader2;
@@ -595,12 +601,12 @@ FASTQReader::createReadSupplierGenerator(
         //
         if (isStdin) {
             if (gzip) {
-                fastq = FASTQReader::create(DataSupplier::GzipStdio[false], fileName, 0, 0, context);
+                fastq = FASTQReader::create(DataSupplier::GzipStdio, fileName, ReadSupplierQueue::BufferCount(numThreads), 0, 0, context);
             } else {
-                fastq = FASTQReader::create(DataSupplier::Stdio[false], fileName, 0, 0, context);
+                fastq = FASTQReader::create(DataSupplier::Stdio, fileName, ReadSupplierQueue::BufferCount(numThreads), 0, 0, context);
             }
         } else {
-            fastq = FASTQReader::create(DataSupplier::GzipDefault[false], fileName, 0, QueryFileSize(fileName), context);
+            fastq = FASTQReader::create(DataSupplier::GzipDefault, fileName, ReadSupplierQueue::BufferCount(numThreads), 0, QueryFileSize(fileName), context);
         }
         if (fastq == NULL) {
             delete fastq;
@@ -626,15 +632,16 @@ PairedInterleavedFASTQReader::createPairedReadSupplierGenerator(
         DataSupplier *dataSupplier;
         if (isStdin) {
             if (gzip) {
-                dataSupplier = DataSupplier::GzipStdio[false];
+                dataSupplier = DataSupplier::GzipStdio;
             } else {
-                dataSupplier = DataSupplier::Stdio[false];
+                dataSupplier = DataSupplier::Stdio;
             }
         } else {
-            dataSupplier = DataSupplier::GzipDefault[false];
+            dataSupplier = DataSupplier::GzipDefault;
         }
         
-        PairedReadReader *reader = PairedInterleavedFASTQReader::create(dataSupplier, fileName,0,(stdin ? 0 : QueryFileSize(fileName)),context);
+        PairedReadReader *reader = PairedInterleavedFASTQReader::create(dataSupplier, fileName,
+            ReadSupplierQueue::BufferCount(numThreads), 0,(stdin ? 0 : QueryFileSize(fileName)),context);
  
         if (NULL == reader ) {
             delete reader;

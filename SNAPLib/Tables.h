@@ -26,6 +26,8 @@ class Tables
     char packedValueBase[256];
     char packedValueBaseRC[256];
 
+    char cigarQualToSam[256];
+
 public:
     Tables();
 
@@ -40,7 +42,8 @@ public:
     const char* getPackedValueBase() const { return packedValueBase; }
     const char* getPackedValueBaseRC() const { return packedValueBaseRC; }
     const unsigned *getIsLowerCase() const {return isLowerCase; }
-    const char *getToUpperCase() const {return toUpperCase; }
+    const char *getToUpperCase() const { return toUpperCase; }
+    const char *getCigarQualToSam() const { return cigarQualToSam; }
 };
 
 extern const char *COMPLEMENT;
@@ -54,3 +57,5 @@ extern const char *PACKED_VALUE_BASE_RC;
 extern const int  *BASE_VALUE_NO_N;
 extern const unsigned *IS_LOWER_CASE;
 extern const char *TO_UPPER_CASE;
+extern const char *CIGAR_QUAL_TO_SAM;
+

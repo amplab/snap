@@ -47,7 +47,7 @@ Arguments:
         return;
     }
 
-    Table = (Entry *)BigAlloc(tableSize * elementSize,&virtualAllocSize);
+    Table = (Entry *)BigAlloc2(tableSize * elementSize,&virtualAllocSize);
 
     //
     // Run through the table and set all of the value1s to InvalidGenomeLocation, which means
@@ -74,41 +74,41 @@ Arguments:
 
 --*/
 {
-    FILE *loadFile = fopen(loadFileName,"rb");
-    if (loadFile == NULL) {
-        WriteErrorMessage("SNAPHashTable::SNAPHashTable(%s) fopen failed\n",loadFileName);
+    GenericFile *loadFile = GenericFile::open(loadFileName, GenericFile::ReadOnly);
+
+    if (NULL == loadFile) {
+        WriteErrorMessage("SNAPHashTable::SNAPHashTable(%s) open failed\n",loadFileName);
         soft_exit(1);
     }
 
     SNAPHashTable *table = loadFromFile(loadFile);
-    fclose (loadFile);
+    loadFile->close();
+    delete loadFile;
 
     return table;
 }
 
-SNAPHashTable *SNAPHashTable::loadFromFile(FILE *loadFile)
+SNAPHashTable *SNAPHashTable::loadFromFile(GenericFile *loadFile)
 {
     SNAPHashTable *table = new SNAPHashTable();
 
     unsigned fileMagic;
-    if (1 != fread(&fileMagic, sizeof(magic), 1, loadFile)) {
+    if (sizeof(magic) != loadFile->read(&fileMagic, sizeof(magic))) {
         WriteErrorMessage("Magic number mismatch on hash table load.  %d != %d\n", fileMagic, magic);
         soft_exit(1);
     }
  
-    if (1 != fread(&table->tableSize, sizeof(table->tableSize), 1, loadFile)) {
+    if (sizeof(table->tableSize) != loadFile->read(&table->tableSize, sizeof(table->tableSize))) {
         WriteErrorMessage("SNAPHashTable::SNAPHashTable fread table size failed\n");
         soft_exit(1);
     }
 
-
-    if (1 != fread(&table->usedElementCount, sizeof(table->usedElementCount), 1, loadFile)) {
+    if (sizeof(table->usedElementCount) != loadFile->read(&table->usedElementCount, sizeof(table->usedElementCount))) {
         WriteErrorMessage("SNAPHashTable::SNAPHashTable fread used element count size failed\n");
         soft_exit(1);
-
     }
 
-    if (1 != fread(&table->keySizeInBytes, sizeof(table->keySizeInBytes), 1, loadFile)) {
+    if (sizeof(table->keySizeInBytes) != loadFile->read(&table->keySizeInBytes, sizeof(table->keySizeInBytes))) {
         WriteErrorMessage("SNAPHashTable::SNAPHashTable fread keySizeInBytes size failed.  Perhaps this is an old format hash table and needs to be rebuilt.\n");
         soft_exit(1);
     }
@@ -119,7 +119,7 @@ SNAPHashTable *SNAPHashTable::loadFromFile(FILE *loadFile)
     }
 
     unsigned dataSize;
-    if (1 != fread(&dataSize, sizeof(dataSize), 1, loadFile)) {
+    if (sizeof(dataSize) != loadFile->read(&dataSize, sizeof(dataSize))) {
         WriteErrorMessage("SNAPHashTable::SNAPHashTable fread dataSizeInBytes size failed.  Perhaps this is an old format hash table and needs to be rebuilt.\n");
         soft_exit(1);
     }
@@ -140,7 +140,7 @@ SNAPHashTable *SNAPHashTable::loadFromFile(FILE *loadFile)
 
     table->elementSize = table->keySizeInBytes + table->dataSizeInBytes;
 
-    table->Table = (Entry *)BigAlloc(table->tableSize * table->elementSize, &table->virtualAllocSize);
+    table->Table = (Entry *)BigAlloc2(table->tableSize * table->elementSize, &table->virtualAllocSize);
 
     size_t maxReadSize = 100 * 1024 * 1024;
     size_t readOffset = 0;
@@ -149,7 +149,7 @@ SNAPHashTable *SNAPHashTable::loadFromFile(FILE *loadFile)
         size_t amountToRead = __min(table->tableSize * table->elementSize - readOffset,
 			__min(maxReadSize,table->virtualAllocSize - readOffset));
 
-        size_t bytesRead = fread((char*)table->Table + readOffset, 1, amountToRead, loadFile);
+        size_t bytesRead = loadFile->read((char*)table->Table + readOffset, amountToRead);
 
         if (bytesRead < amountToRead) {
             WriteErrorMessage("SNAPHashTable::SNAPHashTable: fread failed, %d, %lu, %lu\n", errno, bytesRead, amountToRead);

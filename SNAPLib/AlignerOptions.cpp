@@ -308,7 +308,7 @@ AlignerOptions::parse(
             } else if (strcmp(argv[n], "u") == 0) {
                 filterFlags = FilterUnaligned;
             } else {
-                return false;
+                // ignore since might be other options for paired
             }
             return true;
         }

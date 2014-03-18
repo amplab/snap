@@ -246,6 +246,8 @@ void PairedAlignerOptions::usageMessage()
         "  -H   max hits for intersecting aligner (default: %d).\n"
         "  -mcp specifies the maximum candidate pool size (An internal data structure. \n"
         "       Only increase this if you get an error message saying to do so. If you're running\n"
+        "       out of memory, you may want to reduce it.  Default: %d)\n"
+        "  -F b additional option to -F to require both mates to satisfy filter (default is just one)\n",
         "       out of memory, you may want to reduce it.  Default: %d).\n"
         "  -ku  Keep unpaired-looking reads in SAM/BAM input.  Ordinarily, if a read doesn't specify\n"
         "       mate information (RNEXT field is * and/or PNEXT is 0) then the code that matches reads will immdeiately\n"
@@ -291,6 +293,10 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
             return true;
         } 
         return false;
+    } else if (strcmp(argv[n], "-F") == 0 && n + 1 < argc && strcmp(argv[n + 1],"b") == 0) {
+        filterFlags |= FilterBothMatesMatch;
+        n += 1;
+        return true;
     }
     return AlignerOptions::parse(argv, argc, n, done);
 }
@@ -522,7 +528,11 @@ void PairedAlignerContext::runIterationThread()
 
 void PairedAlignerContext::writePair(Read* read0, Read* read1, PairedAlignmentResult* result, bool secondary)
 {
-    if (readWriter != NULL && (options->passFilter(read0, result->status[0]) || options->passFilter(read1, result->status[1]))) {
+    bool pass0 = options->passFilter(read0, result->status[0]);
+    bool pass1 = options->passFilter(read1, result->status[1]);
+    bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
+        ? (pass0 && pass1) : (pass0 || pass1);
+    if (readWriter != NULL && pass) {
         readWriter->writePair(read0, read1, result, secondary);
     }
 }
@@ -591,10 +601,21 @@ PairedAlignerContext::typeSpecificBeginIteration()
         }
         pairedReadSupplierGenerator = new MultiInputPairedReadSupplierGenerator(options->nInputs,generators);
     }
+    ReaderContext* context = pairedReadSupplierGenerator->getContext();
+    readerContext.header = context->header;
+    readerContext.headerBytes = context->headerBytes;
+    readerContext.headerLength = context->headerLength;
+    readerContext.headerMatchesIndex = context->headerMatchesIndex;
 }
     void 
 PairedAlignerContext::typeSpecificNextIteration()
 {
+    if (readerContext.header != NULL) {
+        delete [] readerContext.header;
+        readerContext.header = NULL;
+        readerContext.headerLength = readerContext.headerBytes = 0;
+        readerContext.headerMatchesIndex = false;
+    }
     delete pairedReadSupplierGenerator;
     pairedReadSupplierGenerator = NULL;
 }

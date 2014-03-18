@@ -84,6 +84,9 @@ private:
     BaseAligner *singleAligner;
     PairedEndAligner *underlyingPairedEndAligner;
 
+    // avoid allocation in aligner calls
+    IdPairVector* singleSecondary[2];
+
     LandauVishkin<1> lv;
     LandauVishkin<-1> reverseLV;
 };

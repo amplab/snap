@@ -63,17 +63,20 @@ public:
         {
             return getNextRead(read, alignmentResult, genomeLocation, direction, mapQ, flag, false, cigar);
         }
+        
+        virtual void holdBatch(DataBatch batch)
+        { data->holdBatch(batch); }
 
-        void releaseBatch(DataBatch batch)
-        { data->releaseBatch(batch); }
-
+        virtual bool releaseBatch(DataBatch batch)
+        { return data->releaseBatch(batch); }
+        
         static SAMReader* create(DataSupplier* supplier, const char *fileName,
-                const ReaderContext& i_context,
+                int bufferCount, const ReaderContext& i_context,
                 _int64 startingOffset, _int64 amountOfFileToProcess);
         
         static PairedReadReader* createPairedReader(const DataSupplier* supplier,
-                const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess, 
-                bool autoRelease, bool quicklyDropUnpairedReads, const ReaderContext& context);
+                const char *fileName, int bufferCount, _int64 startingOffset, _int64 amountOfFileToProcess, 
+                bool quicklyDropUnpairedReads, const ReaderContext& context);
 
         static ReadSupplierGenerator *createReadSupplierGenerator(
             const char *fileName, int numThreads, const ReaderContext& context);

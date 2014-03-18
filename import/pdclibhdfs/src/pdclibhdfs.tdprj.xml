@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="US-ASCII" ?>
+
+<!--
+******************************************************************************
+*                                                                            *
+* TITLE: pdclibhdfs.tdprj.xml                                                  *
+*                                                                            *
+* Copyright 2005-2006, 2008-2010 by Teradata Corporation.                    *
+*                                                                            *
+* ALL RIGHTS RESERVED.                                                       *
+*                                                                            *
+* TERADATA CONFIDENTIAL AND TRADE SECRET                                     *
+*                                                                            *
+*  Purpose:     To create makefiles used by SCM build process.               *
+*                                                                            *
+*  Description: A XML file.                                                  *
+*                                                                            *
+* Revision    Date     DR        DID      Comments                           *
+* =========== ======== ========= ======== ================================== *
+* 15.00.00.01 11062013 TPT17170  SJB      Initial version                    *
+*                                                                            *
+******************************************************************************
+-->
+
+<Project Name="dclibhdfs"
+	ProductGroupName="Msg_Build"
+    >
+    <Package Package="No"/>
+
+    <Set SetName="Defines" Name="TWBResource">
+       BUILDPRODUCTNAME="\"Teradata Parallel Transporter\""
+       BUILDPROJECT="\"Teradata PT Hdfs Library\""
+       BUILDVERSION=$(CNFP_TBUILD_VERSION)
+    </Set>
+    
+    <ToolClassConfiguration ToolClass="CCompiler">
+
+        <HaTaVar OsType="Unix">
+
+            <OptionValues
+                PositionIndependentCode="Yes"
+            />
+       </HaTaVar>
+
+        <HaTaVar OsType="Windows">
+            <Set SetName="Defines" Order="10">
+                _CRT_NONSTDC_NO_DEPRECATE
+                WIN32_EXP
+            </Set>
+            <OptionValues
+                RequiredLibraryType="MultiThreadedShared"
+            />
+        </HaTaVar>
+
+		<HaTaVar Ta="aix-power.32"> 
+			<Set SetName="IncludePath" Order="10">          
+				$(CNFP_TOPDIR)../java/aix-power.32/include          
+			</Set>
+		</HaTaVar>
+		<HaTaVar Ta="aix-power"> 
+			<Set SetName="IncludePath" Order="10" Name="64inc">
+				$(CNFP_TOPDIR)../java/aix-power/include
+			</Set>
+		</HaTaVar>
+		<HaTaVar Ta="hpux-pa.32,hpux-pa">
+			<Set SetName="IncludePath" Order="10">
+			   $(CNFP_TOPDIR)../java/hpux-pa/include 	
+			   $(CNFP_TOPDIR)../java/hpux-pa/include/hp-ux              
+			</Set>
+		</HaTaVar>
+		<HaTaVar Ta="hpux-pa"> 
+			<Set SetName="IncludePath" Order="10" Name="64inc">
+				$(CNFP_TOPDIR)../java/hpux-pa/include
+				$(CNFP_TOPDIR)../java/hpux-pa/include/hp-ux
+			</Set>
+		</HaTaVar>
+		<HaTaVar Ta="hpux-ia64.32">
+			<Set SetName="IncludePath" Order="10">
+				$(CNFP_TOPDIR)../java/hpux-ia64/include
+				$(CNFP_TOPDIR)../java/hpux-ia64/include/hp-ux 
+			</Set>
+		</HaTaVar>
+		<HaTaVar Ta="hpux-ia64"> 
+			<Set SetName="IncludePath" Order="10" Name="64inc">
+				$(CNFP_TOPDIR)../java/hpux-ia64/include
+				$(CNFP_TOPDIR)../java/hpux-ia64/include/hp-ux
+			</Set>
+		</HaTaVar>
+		<HaTaVar Ta="redhatlinux-i386,redhatlinux-ia64,suselinux-i386"> 
+			<Set SetName="IncludePath" Order="10">
+				$(CNFP_TOPDIR)../java/redhatlinux-i386/include
+				$(CNFP_TOPDIR)../java/redhatlinux-i386/include/linux
+			</Set>
+		</HaTaVar>
+		<HaTaVar Ta="redhatlinux-x8664,suselinux-x8664"> 
+			<Set SetName="IncludePath" Order="10" Name="64inc">
+				$(CNFP_TOPDIR)../java/redhatlinux-x8664/include
+				$(CNFP_TOPDIR)../java/redhatlinux-x8664/include/linux
+			</Set>
+		</HaTaVar>
+		<HaTaVar Ta="macos-x8664,macos-x64,macos-i386"> 
+			<Set SetName="IncludePath" Order="10">
+				$(CNFP_TOPDIR)../java/macos-x8664/include
+				$(CNFP_TOPDIR)../java/macos-x8664/include/linux
+			</Set>
+		</HaTaVar> 
+		<HaTaVar Ta="suselinux-390.32">
+			<Set SetName="IncludePath" Order="10">
+				$(CNFP_TOPDIR)../java/suselinux-390.32/include
+			</Set>
+		</HaTaVar>
+		<HaTaVar Ta="suselinux-390"> 
+			<Set SetName="IncludePath" Order="10" Name="64inc">
+				$(CNFP_TOPDIR)../java/suselinux-390/include
+			</Set>
+		</HaTaVar>
+		<HaTaVar Ta="solaris-sparc.32"> 
+			<Set SetName="IncludePath" Order="10">
+				$(CNFP_TOPDIR)../java/solaris-sparc/include
+				$(CNFP_TOPDIR)../java/solaris-sparc/include/include
+				$(CNFP_TOPDIR)../java/solaris-sparc/include/solaris
+			</Set>
+		</HaTaVar>
+		<HaTaVar Ta="solaris-sparc"> 
+			<Set SetName="IncludePath" Order="10" Name="64inc">
+				$(CNFP_TOPDIR)../java/solaris-sparc/include
+				$(CNFP_TOPDIR)../java/solaris-sparc/include/include
+				$(CNFP_TOPDIR)../java/solaris-sparc/include/solaris
+			</Set>
+		</HaTaVar>
+		<HaTaVar Ta="solaris-i386">
+			<Set SetName="IncludePath" Order="10">
+				$(CNFP_TOPDIR)../java/solaris-i386/include
+				$(CNFP_TOPDIR)../java/solaris-i386/include/solaris
+		   </Set>
+		</HaTaVar>
+		<HaTaVar Ta="solaris-x8664"> 
+			<Set SetName="IncludePath" Order="10" Name="64inc">
+				$(CNFP_TOPDIR)../java/solaris-x8664/include
+				$(CNFP_TOPDIR)../java/solaris-x8664/include/solaris
+			</Set>
+		</HaTaVar>       
+        <HaTaVar OsType="Windows">
+            <Set SetName="IncludePath" Order="10">
+                $(CNFP_TOPDIR)../java/$(TARGET_ARCH)/include
+                $(CNFP_TOPDIR)../java/$(TARGET_ARCH)/include/win32
+            </Set>
+        </HaTaVar>      
+        
+    </ToolClassConfiguration>   
+        
+    <ToolClassConfiguration ToolClass="MicrosoftResourceCompiler">
+        <Set SetName="IncludePath" Order="50">
+            $(CNFP_TOPDIR)../java/$(TARGET_ARCH)/include
+            $(CNFP_TOPDIR)../java/$(TARGET_ARCH)/include/win32
+        </Set>
+    </ToolClassConfiguration>			    
+    
+    <ToolClassConfiguration ToolClass="Linker">
+        <HaTaVar OsType="Windows">
+            <Set SetName="LinkLibraries" Order="20">
+                oldnames
+            </Set>
+        </HaTaVar>
+
+        <HaTaVar Ta="hpux-pa,hpux-ia64">
+            <Set SetName="LinkLibraries" Order="20">
+              dld
+            </Set>
+        </HaTaVar>
+
+        <HaTaVar Ta="redhatlinux-i386,suselinux-390,suselinux-390.32,suselinux-i386,suselinux-x8664">
+            <Set SetName="LinkLibraries" Order="20">
+                dl
+                pthread                           
+            </Set>
+        </HaTaVar>
+
+        <HaTaVar Ta="solaris-sparc,solaris-x8664">
+            <Set SetName="LinkLibraries" Order="20">
+                dl
+            </Set>
+        </HaTaVar>        
+                
+    </ToolClassConfiguration>    
+        
+    <FileDefinitions>
+       <File Path="hdfs.c"/>
+       <File Path="exception.c"/>
+       <File Path="jni_helper.c"/>
+       <HaTaVar OsType="Windows">
+          <File Path="$(CNFP_TOPDIR)pcommon/src/version.opprc"/>
+       </HaTaVar>
+    </FileDefinitions>
+
+</Project>

@@ -204,14 +204,12 @@ AlignerContext::beginIteration()
     stats->extra = extension->extraStats();
     extension->beginIteration();
     
+    memset(&readerContext, 0, sizeof(readerContext));
     readerContext.clipping = options->clipping;
     readerContext.defaultReadGroup = options->defaultReadGroup;
     readerContext.genome = index != NULL ? index->getGenome() : NULL;
     readerContext.ignoreSecondaryAlignments = options->ignoreSecondaryAlignments;
     DataSupplier::ExpansionFactor = options->expansionFactor;
-	readerContext.header = NULL;
-	readerContext.headerLength = 0;
-	readerContext.headerBytes = 0;
 
     typeSpecificBeginIteration();
 

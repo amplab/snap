@@ -112,6 +112,7 @@ struct AlignerOptions : public AbstractOptions
         FilterUnaligned =           0x0001,
         FilterSingleHit =           0x0002,
         FilterMultipleHits =        0x0004,
+        FilterBothMatesMatch =      0x0008,
     };
 
     bool passFilter(Read* read, AlignmentResult result);

@@ -61,15 +61,16 @@ BAMReader::getNextReadPair(
     void
 BAMReader::init(
     const char *fileName,
+    int bufferCount,
     _int64 startingOffset,
     _int64 amountOfFileToProcess)
 {
     // todo: integrate supplier models
     // might need up to 3x extra for expanded sequence + quality + cigar data
     if (!strcmp("-", fileName)) {
-        data = DataSupplier::GzipBamStdio[false]->getDataReader(MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
+        data = DataSupplier::GzipBamStdio->getDataReader(bufferCount, MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
     } else {
-        data = DataSupplier::GzipBamDefault[false]->getDataReader(MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
+        data = DataSupplier::GzipBamDefault->getDataReader(bufferCount, MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
     }
 
     if (! data->init(fileName)) {
@@ -106,7 +107,6 @@ BAMReader::readHeader(
     const char* fileName)
 {
     _ASSERT(context.header == NULL);
-
     _int64 headerSize = 1024 * 1024; // 1M header max
     char* buffer = data->readHeader(&headerSize);
     BAMHeader* header = (BAMHeader*) buffer;
@@ -136,12 +136,13 @@ BAMReader::readHeader(
     BAMReader*
 BAMReader::create(
     const char *fileName,
+    int bufferCount,
     _int64 startingOffset,
     _int64 amountOfFileToProcess,
     const ReaderContext& context)
 {
     BAMReader* reader = new BAMReader(context);
-    reader->init(fileName, startingOffset, amountOfFileToProcess);
+    reader->init(fileName, bufferCount, startingOffset, amountOfFileToProcess);
     return reader;
 }
 
@@ -160,7 +161,7 @@ BAMReader::createReadSupplierGenerator(
     int numThreads,
     const ReaderContext& context)
 {
-    BAMReader* reader = create(fileName, 0, 0, context);
+    BAMReader* reader = create(fileName, ReadSupplierQueue::BufferCount(numThreads), 0, 0, context);
     ReadSupplierQueue* queue = new ReadSupplierQueue((ReadReader*)reader);
     queue->startReaders();
     return queue;
@@ -174,8 +175,9 @@ BAMReader::createPairedReadSupplierGenerator(
     const ReaderContext& context,
     int matchBufferSize)
 {
-    BAMReader* reader = create(fileName, 0, 0, context);
-    PairedReadReader* matcher = PairedReadReader::PairMatcher(reader, false, quicklyDropUnmatchedReads);
+    BAMReader* reader = create(fileName, 
+        ReadSupplierQueue::BufferCount(numThreads) + PairedReadReader::MatchBuffers, 0, 0, context);
+    PairedReadReader* matcher = PairedReadReader::PairMatcher(reader, quicklyDropUnmatchedReads);
     ReadSupplierQueue* queue = new ReadSupplierQueue(matcher);
     queue->startReaders();
     return queue;
@@ -196,8 +198,9 @@ BAMAlignment::decodeSeq(
     int bases)
 {
     for (int i = 0; i < bases; i++) {
-        int n = (i & 1) ? *nibbles & 0xf : *nibbles >> 4;
-        nibbles += i & 1;
+        int bit = 1 ^ (i & 1);
+        int n = (*nibbles >> (bit << 2)) & 0xf; // extract nibble without branches
+        nibbles += 1^bit;
         *o_sequence++ = BAMAlignment::CodeToSeq[n];
     }
 }
@@ -209,8 +212,7 @@ BAMAlignment::decodeQual(
     int bases)
 {
     for (int i = 0; i < bases; i++) {
-        char q = quality[i];
-        o_qual[i] = q < 0 || q >= 64 ? '!' : q + '!';
+        o_qual[i] = CIGAR_QUAL_TO_SAM[((_uint8*)quality)[i]];
     }
 }
 
@@ -391,6 +393,7 @@ BAMReader::getNextRead(
             }
         }
     } while (context.ignoreSecondaryAlignments && (*flag & SAM_SECONDARY));
+    _ASSERT(read->getData()[0]);
     return true;
 }
 
@@ -421,7 +424,7 @@ BAMReader::getReadFromLine(
         *out_genomeLocation = genomeLocation;
     }
 
-
+    // todo: only convert to text if needed, compute clipping directly from binary
     char* cigarBuffer = getExtra(MAX_SEQ_LENGTH);
     if (! BAMAlignment::decodeCigar(cigarBuffer, MAX_SEQ_LENGTH, bam->cigar(), bam->n_cigar_op)) {
         cigarBuffer = ""; // todo: fail?
@@ -451,7 +454,7 @@ BAMReader::getReadFromLine(
             rnextLen = genome->getContigs()[bam->next_refID].nameLength;
         }
         read->init(bam->read_name(), bam->l_read_name - 1, seqBuffer, qualBuffer, bam->l_seq, genomeLocation, bam->MAPQ, bam->FLAG,
-            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping, rnext, rnextLen, bam->next_pos + 1);
+            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping, rnext, rnextLen, bam->next_pos + 1, true);
         read->setBatch(data->getBatch());
         if (bam->FLAG & SAM_REVERSE_COMPLEMENT) {
             read->becomeRC();
@@ -629,6 +632,7 @@ BAMFormat::writeHeader(
 
     // Write a RefSeq record for each chromosome / contig in the genome
     // todo: handle null genome index case - reparse header & translate into BAM
+    bamHeader->n_ref() = 0; // in case of overflow or no genome
 	if (context.genome != NULL) {
 		const Genome::Contig *contigs = context.genome->getContigs();
 		int numContigs = context.genome->getNumContigs();

@@ -45,7 +45,7 @@ class ReadBasedDataReader : public DataReader
 {
 public:
 
-    ReadBasedDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor, bool autoRelease);
+    ReadBasedDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor);
 
     virtual ~ReadBasedDataReader();
     
@@ -65,7 +65,9 @@ public:
 
     virtual DataBatch getBatch();
 
-    virtual void releaseBatch(DataBatch batch);
+    virtual void holdBatch(DataBatch batch);
+
+    virtual bool releaseBatch(DataBatch batch);
 
     virtual _int64 getFileOffset();
 
@@ -81,7 +83,7 @@ protected:
 
     // must hold the lock to call
     virtual void addBuffer();
-
+  
     static const unsigned bufferSize = 4 * 1024 * 1024 - 4096;
 
     enum BufferState {Empty, Reading, Full, InUse};
@@ -96,6 +98,7 @@ protected:
         unsigned        offset;     // How far has the consumer gotten in current buffer
         _int64          fileOffset;
         _uint32         batchID;
+        int             holds;
         char*           extra;
         int             next, previous; // index of next/previous in free/ready list, -1 if end
     };
@@ -120,9 +123,8 @@ protected:
 ReadBasedDataReader::ReadBasedDataReader(
     unsigned i_nBuffers,
     _int64 i_overflowBytes,
-    double extraFactor,
-    bool autoRelease)
-    : DataReader(autoRelease), nBuffers(i_nBuffers), overflowBytes(i_overflowBytes), maxBuffers(4 * i_nBuffers)
+    double extraFactor)
+    : DataReader(), nBuffers(i_nBuffers), overflowBytes(i_overflowBytes), maxBuffers(i_nBuffers * (i_nBuffers == 1 ? 2 : 4))
 {
     //
     // Initialize the buffer info struct.
@@ -133,7 +135,8 @@ ReadBasedDataReader::ReadBasedDataReader(
     _ASSERT(extraFactor >= 0 && i_nBuffers > 0);
     bufferInfo = new BufferInfo[maxBuffers];
     extraBytes = max((_int64) 0, (_int64) ((bufferSize + overflowBytes) * extraFactor));
-    char* allocated = (char*) BigAlloc(maxBuffers * (bufferSize + extraBytes + overflowBytes));
+    char* allocated = (char*) BigReserve(maxBuffers * (bufferSize + extraBytes + overflowBytes));
+    BigCommit(allocated, nBuffers * (bufferSize + extraBytes + overflowBytes));
     if (NULL == allocated) {
         WriteErrorMessage("ReadBasedDataReader: unable to allocate IO buffer\n");
         soft_exit(1);
@@ -149,6 +152,7 @@ ReadBasedDataReader::ReadBasedDataReader(
         bufferInfo[i].offset = 0;
         bufferInfo[i].next = i < nBuffers - 1 ? i + 1 : -1;
         bufferInfo[i].previous = i > 0 ? i - 1 : -1;
+        bufferInfo[i].holds = 0;
     }
     nextBatchID = 1;
  
@@ -170,7 +174,57 @@ ReadBasedDataReader::~ReadBasedDataReader()
     DestroyExclusiveLock(&lock);
     DestroyEventObject(&releaseEvent);
 }
-    
+
+// todo: delete before checkin
+#if 0
+    bool
+WindowsOverlappedDataReader::init(
+    const char* i_fileName)
+{
+    fileName = i_fileName;
+    hFile = CreateFile(fileName,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_FLAG_OVERLAPPED,NULL);
+    if (INVALID_HANDLE_VALUE == hFile) {
+        return false;
+    }
+
+    if (!GetFileSizeEx(hFile,&fileSize)) {
+        fprintf(stderr,"WindowsOverlappedDataReader: unable to get file size of '%s', %d\n",fileName,GetLastError());
+        return false;
+    }
+    return true;
+}
+
+    char*
+WindowsOverlappedDataReader::readHeader(
+    _int64* io_headerSize)
+{
+    BufferInfo *info = &bufferInfo[0];
+    info->fileOffset = 0;
+    info->offset = 0;
+    info->lap.Offset = 0;
+    info->lap.OffsetHigh = 0;
+    _ASSERT(nextBufferForReader == 0 && nextBufferForConsumer == -1 && lastBufferForConsumer == -1 && info->next == 1 && info->previous == -1);
+    nextBufferForReader = 1;
+    nextBufferForConsumer = lastBufferForConsumer = 0;
+    info->next = info->previous = -1;
+    *io_headerSize = min(*io_headerSize, bufferSize);
+
+    if (!ReadFile(hFile,info->buffer,(DWORD)*io_headerSize,&info->validBytes,&info->lap)) {
+        if (GetLastError() != ERROR_IO_PENDING) {
+            fprintf(stderr,"WindowsOverlappedSAMReader::init: unable to read header of '%s', %d\n",fileName,GetLastError());
+            return false;
+        }
+    }
+
+    if (!GetOverlappedResult(hFile,&info->lap,&info->validBytes,TRUE)) {
+        fprintf(stderr,"WindowsOverlappedSAMReader::init: error reading header of '%s', %d\n",fileName,GetLastError());
+        return false;
+    }
+
+    *io_headerSize = info->validBytes;
+    return info->buffer;
+}
+#endif
  
      void
 ReadBasedDataReader::reinit(
@@ -191,6 +245,7 @@ ReadBasedDataReader::reinit(
         bufferInfo[i].offset = 0;
         bufferInfo[i].next = i < nBuffers - 1 ? i + 1 : -1;
         bufferInfo[i].previous = i > 0 ? i - 1 : -1;
+        bufferInfo[i].holds = 0;
     }
 
     nextBufferForConsumer = -1; 
@@ -260,7 +315,7 @@ ReadBasedDataReader::nextBatch()
     BufferInfo* info = &bufferInfo[nextBufferForConsumer];
     if (info->isEOF) {
         ReleaseExclusiveLock(&lock);
-        if (autoRelease) {
+        if (info->holds == 0) {
             releaseBatch(DataBatch(info->batchID));
         }
         return;
@@ -297,13 +352,14 @@ ReadBasedDataReader::nextBatch()
         waitForBuffer(nextBufferForConsumer);
     }
     bufferInfo[nextBufferForConsumer].offset = overflow;
+    bufferInfo[nextBufferForConsumer].holds = 0;
     //fprintf(stderr,"emitting buffer starting at 0x%llx\n", info->fileOffset);
     //if (nextStart != 0) fprintf(stderr, "checking NextStart 0x%llx\n", nextStart);  
     _ASSERT(nextStart == 0 || nextStart == bufferInfo[nextBufferForConsumer].fileOffset);
 
     ReleaseExclusiveLock(&lock);
 
-    if (autoRelease) {
+    if (info->holds == 0) {
         releaseBatch(priorBatch);
     }
 }
@@ -321,47 +377,78 @@ ReadBasedDataReader::getBatch()
 }
 
     void
+ReadBasedDataReader::holdBatch(
+    DataBatch batch)
+{
+    AcquireExclusiveLock(&lock);
+    for (unsigned i = 0; i < nBuffers; i++) {
+        BufferInfo* info = &bufferInfo[i];
+        if (info->batchID == batch.batchID) {
+            info->holds++;
+            //fprintf(stderr,"%x holdBatch batch %d, holds on buffer %d now %d\n", (unsigned) this, batch.batchID, i, info->holds);
+            break;
+        }
+    }
+    ReleaseExclusiveLock(&lock);
+}
+
+    bool
 ReadBasedDataReader::releaseBatch(
     DataBatch batch)
 {
     AcquireExclusiveLock(&lock);
 
     bool released = false;
+    bool result = true;
     for (unsigned i = 0; i < nBuffers; i++) {
         BufferInfo* info = &bufferInfo[i];
         if (info->batchID == batch.batchID) {
             switch (info->state) {
             case Empty:
-                // nothing
+                // should never happen
                 break;
 
             case Reading:
-                // todo: cancel read operation?
+                // should never happen
                 _ASSERT(false);
                 break;
 
             case InUse:
-                released = true;
+                released = info->holds <= 1;
                 // fall through
+
             case Full:
-                //fprintf(stderr, "releaseBatch batch %d, releasing %s buffer %d\n", batch.batchID, info->state == InUse ? "InUse" : "Full", i);
-                info->state = Empty;
-                // remove from ready list
-                if (i == nextBufferForConsumer) {
-                    nextBufferForConsumer = info->next;
+                if (info->holds > 0) {
+                    info->holds--;
                 }
-                if (i == lastBufferForConsumer) {
-                    lastBufferForConsumer = info->previous;
+                if (info->holds == 0) {
+                    //fprintf(stderr,"%x releaseBatch batch %d, releasing %s buffer %d\n", (unsigned) this, batch.batchID, info->state == InUse ? "InUse" : "Full", i);
+                    info->state = Empty;
+                    // remove from ready list
+                    if (i == nextBufferForConsumer) {
+                        nextBufferForConsumer = info->next;
+                    }
+                    if (i == lastBufferForConsumer) {
+                        lastBufferForConsumer = info->previous;
+                    }
+                    if (info->next != -1) {
+                        bufferInfo[info->next].previous = info->previous;
+                    }
+                    if (info->previous != -1) {
+                        bufferInfo[info->previous].next = info->next;
+                    }
+                    // add to head of free list
+                    info->next = nextBufferForReader;
+                    info->batchID = 0;
+#ifdef _DEBUG
+                    memset(info->buffer, 0xde, bufferSize + extraBytes);
+#endif
+                    nextBufferForReader = i;
+                    result = true;
+                } else {
+                    //fprintf(stderr,"%x releaseBatch batch %d, holds on buffer %d now %d\n", (unsigned) this, batch.batchID, i, info->holds);
+                    result = false;
                 }
-                if (info->next != -1) {
-                    bufferInfo[info->next].previous = info->previous;
-                }
-                if (info->previous != -1) {
-                    bufferInfo[info->previous].next = info->next;
-                }
-                // add to head of free list
-                info->next = nextBufferForReader;
-                nextBufferForReader = i;
                 break;
 
             default:
@@ -379,6 +466,8 @@ ReadBasedDataReader::releaseBatch(
     }
 
     ReleaseExclusiveLock(&lock);
+
+    return result;
 }
 
     _int64
@@ -432,7 +521,7 @@ ReadBasedDataReader::addBuffer()
 class StdioDataReader : public ReadBasedDataReader 
 {
 public:
-    StdioDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor, bool autoRelease);
+    StdioDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor);
     ~StdioDataReader();
 
     virtual bool init(const char* i_fileName);
@@ -475,8 +564,8 @@ private:
     _int64 readOffset;
 };
 
-StdioDataReader::StdioDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor, bool autoRelease) :
-    ReadBasedDataReader(i_nBuffers, i_overflowBytes, extraFactor, autoRelease), started(false), hitEOF(false), overflowBufferFilled(false),
+StdioDataReader::StdioDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor) :
+    ReadBasedDataReader(i_nBuffers, i_overflowBytes, extraFactor), started(false), hitEOF(false), overflowBufferFilled(false),
     readOffset(0), overflowBuffer(NULL), headerSize(0), overflowBufferContainsHeaderOverrun(false), headerOverrunSize(0)
 {
 }
@@ -727,8 +816,8 @@ StdioDataReader::waitForBuffer(
 class StdioDataSupplier : public DataSupplier
 {
 public:
-    StdioDataSupplier(bool autoRelease) : DataSupplier(autoRelease) {}
-    virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0)
+    StdioDataSupplier() : DataSupplier() {}
+    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor = 0.0)
     {
         if (supplied) {
             WriteErrorMessage("You can only use stdin input for one run per execution of SNAP (i.e., if you use ',' to run SNAP more than once without reloading the index, you can only use stdin once)\n");
@@ -737,8 +826,7 @@ public:
 
         supplied = true;
 
-        int buffers = autoRelease ? 2 : (ThreadCount + max(ThreadCount * 3 / 4, 3));
-        return new StdioDataReader(buffers, overflowBytes, extraFactor, autoRelease);
+        return new StdioDataReader(bufferCount, overflowBytes, extraFactor);
     }
 private:
 
@@ -753,7 +841,7 @@ class WindowsOverlappedDataReader : public ReadBasedDataReader
 {
 public:
 
-    WindowsOverlappedDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor, bool autoRelease);
+    WindowsOverlappedDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor);
 
     virtual ~WindowsOverlappedDataReader();
     
@@ -785,8 +873,8 @@ public:
 
 };
 
-WindowsOverlappedDataReader::WindowsOverlappedDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor, bool autoRelease) :
-    ReadBasedDataReader(i_nBuffers, i_overflowBytes, extraFactor, autoRelease), fileName(NULL), hFile(INVALID_HANDLE_VALUE), endingOffset(0)
+WindowsOverlappedDataReader::WindowsOverlappedDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor) :
+    ReadBasedDataReader(i_nBuffers, i_overflowBytes, extraFactor), fileName(NULL), hFile(INVALID_HANDLE_VALUE), endingOffset(0)
 {
     readOffset.QuadPart = 0;
     bufferLaps = (OVERLAPPED *)BigAlloc(sizeof(OVERLAPPED) * maxBuffers);
@@ -834,7 +922,7 @@ WindowsOverlappedDataReader::readHeader(
     info->offset = 0;
     bufferLaps[0].Offset = 0;
     bufferLaps[0].OffsetHigh = 0;
-    _ASSERT(nextBufferForReader == 0 && nextBufferForConsumer == -1 && lastBufferForConsumer == -1 && info->next == 1 && info->previous == -1);
+    _ASSERT(nextBufferForReader == 0 && nextBufferForConsumer == -1 && lastBufferForConsumer == -1 && info->previous == -1);
     nextBufferForReader = 1;
     nextBufferForConsumer = lastBufferForConsumer = 0;
     info->next = info->previous = -1;
@@ -1048,16 +1136,15 @@ WindowsOverlappedDataReader::addBuffer()
 class WindowsOverlappedDataSupplier : public DataSupplier
 {
 public:
-    WindowsOverlappedDataSupplier(bool autoRelease) : DataSupplier(autoRelease) {}
-    virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0)
+    WindowsOverlappedDataSupplier() : DataSupplier() {}
+    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor)
     {
-        int buffers = autoRelease ? 2 : (ThreadCount + max(ThreadCount * 3 / 4, 3));
-        return new WindowsOverlappedDataReader(buffers, overflowBytes, extraFactor, autoRelease);
+        // add some buffers for read-ahead
+        return new WindowsOverlappedDataReader(bufferCount + (bufferCount > 1 ? 4 : 0), overflowBytes, extraFactor);
     }
 };
 
-DataSupplier* DataSupplier::WindowsOverlapped[2] =
-{ new WindowsOverlappedDataSupplier(false), new WindowsOverlappedDataSupplier(true) };
+DataSupplier* DataSupplier::WindowsOverlapped = new WindowsOverlappedDataSupplier();
 
 #endif // _MSC_VER
 
@@ -1075,7 +1162,7 @@ class DecompressDataReader : public DataReader
 {
 public:
 
-    DecompressDataReader(bool autoRelease, DataReader* i_inner, int i_count, _int64 totalExtra, _int64 i_extraBytes, _int64 i_overflowBytes, int i_chunkSize = BAM_BLOCK);
+    DecompressDataReader(DataReader* i_inner, int i_count, _int64 totalExtra, _int64 i_extraBytes, _int64 i_overflowBytes, int i_chunkSize = BAM_BLOCK);
 
     virtual ~DecompressDataReader();
 
@@ -1095,7 +1182,9 @@ public:
 
     virtual DataBatch getBatch();
 
-    virtual void releaseBatch(DataBatch batch);
+    virtual void holdBatch(DataBatch batch);
+
+    virtual bool releaseBatch(DataBatch batch);
 
     virtual _int64 getFileOffset();
 
@@ -1172,14 +1261,13 @@ private:
 
 
 DecompressDataReader::DecompressDataReader(
-    bool autoRelease,
     DataReader* i_inner,
     int i_count,
     _int64 i_totalExtra,
     _int64 i_extraBytes,
     _int64 i_overflowBytes,
     int i_chunkSize)
-    : DataReader(autoRelease), inner(i_inner), count(i_count), offset(i_overflowBytes),
+    : DataReader(), inner(i_inner), count(i_count), offset(i_overflowBytes),
     totalExtra(i_totalExtra), extraBytes(i_extraBytes), overflowBytes(i_overflowBytes),
     chunkSize(i_chunkSize), threadStarted(false), eof(false), stopping(false)
 {
@@ -1190,6 +1278,7 @@ DecompressDataReader::DecompressDataReader(
         entry->next = i < count - 1 ? &entries[i + 1] : NULL;
         entry->decompressed = NULL;
         entry->allocated = false;
+        entry->batch = DataBatch(0, 0);
     }
     available = entries;
     first = last = NULL;
@@ -1240,6 +1329,7 @@ DecompressDataReader::readHeader(
     _int64 headerSize = 0;
     while (headerSize < *io_headerSize && compressedBytes > 0) {
         _int64 compressedBlockSize, decompressedBlockSize;
+        //fprintf(stderr,"decompress chunkSize %d compressedBytes %d headerSize %d totalExtra %d\n", chunkSize, compressedBytes, headerSize, totalExtra);
         decompress(&zstream, chunkSize != 0 ? &heap : NULL,
             compressed, compressedBytes, &compressedBlockSize,
             header + headerSize, totalExtra - headerSize, &decompressedBlockSize,
@@ -1317,10 +1407,8 @@ DecompressDataReader::nextBatch()
     _int64 copy = old->decompressedValid - max(offset, old->decompressedStart);
     memcpy(next->decompressed + overflowBytes - copy, old->decompressed + old->decompressedValid - copy, copy);
     offset = overflowBytes - copy;
-    //fprintf(stderr, "DecompressDataReader nextBatch %d:%d #%d -> %d:%d #%d copy %lld + %lld/%lld\n", old->batch.fileID, old->batch.batchID, old-entries, next->batch.fileID, next->batch.batchID, next-entries, copy, next->decompressedStart, next->decompressedValid);
-    if (autoRelease) {
-        releaseBatch(old->batch);
-    }
+    //fprintf(stderr,"DecompressDataReader nextBatch %d:%d #%d -> %d:%d #%d copy %lld + %lld/%lld\n", old->batch.fileID, old->batch.batchID, old-entries, next->batch.fileID, next->batch.batchID, next-entries, copy, next->decompressedStart, next->decompressedValid);
+    releaseBatch(old->batch); // holdBatch was called in decompress thread, release now if no customers added holds
     if (offset == next->decompressedValid) {
         eof = true;
         _ASSERT(inner->isEOF());
@@ -1340,18 +1428,33 @@ DecompressDataReader::getBatch()
 }
 
     void
+DecompressDataReader::holdBatch(DataBatch batch)
+{
+    inner->holdBatch(batch);
+}
+
+    bool
 DecompressDataReader::releaseBatch(DataBatch batch)
 {
-    // loop backward from previous since that is most likely to be released
+    if (! inner->releaseBatch(batch)) {
+        return false;
+    }
+    // truly released, find matching entry & put back on available list
+    AcquireExclusiveLock(&lock);
     for (int i = 0; i < count; i++) {
         Entry* entry = &entries[i];
         if (entry->batch == batch) {
-            //fprintf(stderr, "DecompressDataReader releaseBatch %d:%d #%d\n", batch.fileID, batch.batchID, i);
-            enqueueAvailable(entry);
+            //fprintf(stderr,"DecompressDataReader releaseBatch %d:%d #%d\n", batch.fileID, batch.batchID, i);
+            if (entry->state == EntryHeld) {
+                enqueueAvailable(entry);
+            } else {
+                _ASSERT(entry->state == EntryAvailable);
+            }
             break;
         }
     }
-    inner->releaseBatch(batch);
+    ReleaseExclusiveLock(&lock);
+    return true;
 }
 
     _int64
@@ -1402,7 +1505,7 @@ DecompressDataReader::decompress(
     bool multiBlock = true;
     int status;
     do {
-            if (mode != ContinueMultiBlock || block != 0) {
+        if (mode != ContinueMultiBlock || block != 0) {
             if (heap != NULL) {
                 heap->reset();
             }
@@ -1413,7 +1516,7 @@ DecompressDataReader::decompress(
             }
         }
         oldAvailOut = zstream->avail_out;
-        oldAvailIn = zstream->avail_out;
+        oldAvailIn = zstream->avail_in;
         status = inflate(zstream, mode == SingleBlock ? Z_NO_FLUSH : Z_FINISH);
         // fprintf(stderr, "decompress block #%d %lld -> %lld = %d\n", block, zstream.next_in - lastIn, zstream.next_out - lastOut, status);
         block++;
@@ -1526,7 +1629,7 @@ DecompressDataReader::decompressThread(
     DecompressDataReader* reader = (DecompressDataReader*) context;
     OffsetVector inputs, outputs;
     DecompressManager manager(&inputs, &outputs);
-    ParallelCoworker coworker(min(4, DataSupplier::ThreadCount), false, &manager);
+    ParallelCoworker coworker(min(8, DataSupplier::ThreadCount), false, &manager);
     coworker.start();
     // keep reading & decompressing entries until stopped
     bool stop = false;
@@ -1578,6 +1681,7 @@ DecompressDataReader::decompressThread(
             entry->decompressedValid = output;
             entry->decompressedStart = output - reader->overflowBytes;
             entry->batch = reader->inner->getBatch();
+            reader->holdBatch(entry->batch); // hold batch while decompressing
             reader->inner->nextBatch(); // start reading next batch
             // decompress all chunks synchronously on multiple threads
             manager.entry = entry;
@@ -1627,6 +1731,7 @@ DecompressDataReader::decompressThreadContinuous(
             _ASSERT(ignore >= reader->extraBytes && ignore >= reader->overflowBytes);
             _int64 compressedRead, decompressedWritten;
             entry->batch = reader->inner->getBatch();
+            reader->holdBatch(entry->batch); // hold batch while decompressing
             reader->inner->advance(entry->compressedValid);
             reader->inner->nextBatch(); // start reading next batch
             decompress(&zstream, NULL,
@@ -1739,11 +1844,11 @@ DecompressDataReader::enqueueAvailable(Entry* entry)
 class DecompressDataReaderSupplier : public DataSupplier
 {
 public:
-    DecompressDataReaderSupplier(DataSupplier* i_inner, bool autoRelease, int i_blockSize = BAM_BLOCK)
-        : DataSupplier(autoRelease), inner(i_inner), blockSize(i_blockSize)
+    DecompressDataReaderSupplier(DataSupplier* i_inner, int i_blockSize = BAM_BLOCK)
+        : DataSupplier(), inner(i_inner), blockSize(i_blockSize)
     {}
 
-    virtual DataReader* getDataReader(_int64 overflowBytes = 0, double extraFactor = 0.0);
+    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor);
 
 private:
     DataSupplier* inner;
@@ -1752,6 +1857,7 @@ private:
 
     DataReader*
 DecompressDataReaderSupplier::getDataReader(
+    int bufferCount,
     _int64 overflowBytes,
     double extraFactor)
 {
@@ -1759,7 +1865,8 @@ DecompressDataReaderSupplier::getDataReader(
     double expand = MAX_FACTOR * DataSupplier::ExpansionFactor;
     double totalFactor = expand * (1.0 + extraFactor);
     // get inner reader with no overflow since zlib can't deal with it
-    DataReader* data = inner->getDataReader(blockSize, totalFactor);
+    // add 2 buffers for compression thread
+    DataReader* data = inner->getDataReader(bufferCount + 2, blockSize, totalFactor);
     // compute how many extra bytes are owned by this layer
     char* p;
     _int64 totalExtra;
@@ -1767,29 +1874,26 @@ DecompressDataReaderSupplier::getDataReader(
     _int64 mine = (_int64)(totalExtra * expand / totalFactor);
     // create new reader, telling it how many bytes it owns
     // it will subtract overflow off the end of each batch
-    // batch count here is cheap, so make it high enough that it never hits the limit
-    return new DecompressDataReader(autoRelease, data, max(8, DataSupplier::ThreadCount*4), totalExtra, mine, overflowBytes, blockSize);
+    return new DecompressDataReader(data, bufferCount, totalExtra, mine, overflowBytes, blockSize);
 }
     
     DataSupplier*
 DataSupplier::GzipBam(
-    DataSupplier* inner,
-    bool autoRelease)
+    DataSupplier* inner)
 {
-    return new DecompressDataReaderSupplier(inner, autoRelease, BAM_BLOCK);
+    return new DecompressDataReaderSupplier(inner, BAM_BLOCK);
 }
     
     DataSupplier*
 DataSupplier::Gzip(
-    DataSupplier* inner,
-    bool autoRelease)
+    DataSupplier* inner)
 {
-    return new DecompressDataReaderSupplier(inner, autoRelease, 0);
+    return new DecompressDataReaderSupplier(inner, 0);
 }
     DataSupplier* 
-DataSupplier::StdioSupplier(bool autoRelease)
+DataSupplier::StdioSupplier()
 {
-    return new StdioDataSupplier(autoRelease);
+    return new StdioDataSupplier();
 }
 //
 // MemMap
@@ -1798,11 +1902,11 @@ DataSupplier::StdioSupplier(bool autoRelease)
 class MemMapDataSupplier : public DataSupplier
 {
 public:
-    MemMapDataSupplier(bool autoRelease);
+    MemMapDataSupplier();
 
     virtual ~MemMapDataSupplier();
 
-    virtual DataReader* getDataReader(_int64 overflowBytes, double extraFactor = 0.0);
+    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor);
 
     FileMapper* getMapper(const char* fileName);
     void releaseMapper(const char* fileName);
@@ -1817,7 +1921,7 @@ class MemMapDataReader : public DataReader
 {
 public:
 
-    MemMapDataReader(MemMapDataSupplier* i_supplier, int i_batchCount, _int64 i_batchSize, _int64 i_overflowBytes, _int64 i_batchExtra, bool autoRelease);
+    MemMapDataReader(MemMapDataSupplier* i_supplier, int i_batchCount, _int64 i_batchSize, _int64 i_overflowBytes, _int64 i_batchExtra);
 
     virtual ~MemMapDataReader();
     
@@ -1837,7 +1941,9 @@ public:
 
     virtual DataBatch getBatch();
 
-    virtual void releaseBatch(DataBatch batch);
+    virtual void holdBatch(DataBatch batch);
+
+    virtual bool releaseBatch(DataBatch batch);
 
     virtual _int64 getFileOffset();
 
@@ -1874,6 +1980,7 @@ private:
     char*           extra; // extra data buffer
     int             extraUsed; // number of extra data buffers in use
     DataBatch*      extraBatches; // non-zero for each extra buffer that is in use
+    int*            extraHolds; // keeps hold count for each extra buffer
     int             currentExtraIndex; // index of extra block for current batch
     _int64          offset; // into current batch
     _uint32         currentBatch; // current batch number starting at 1
@@ -1886,8 +1993,8 @@ private:
 };
  
 
-MemMapDataReader::MemMapDataReader(MemMapDataSupplier* i_supplier, int i_batchCount, _int64 i_batchSize, _int64 i_overflowBytes, _int64 i_batchExtra, bool autoRelease)
-    : DataReader(autoRelease),
+MemMapDataReader::MemMapDataReader(MemMapDataSupplier* i_supplier, int i_batchCount, _int64 i_batchSize, _int64 i_overflowBytes, _int64 i_batchExtra)
+    : DataReader(),
     batchCount(i_batchCount),
         batchSizeParam(i_batchSize),
         overflowBytes(i_overflowBytes),
@@ -1905,7 +2012,9 @@ MemMapDataReader::MemMapDataReader(MemMapDataSupplier* i_supplier, int i_batchCo
     if (batchExtra > 0) {
         extra = (char*) BigAlloc(batchCount * batchExtra);
         extraBatches = new DataBatch[batchCount];
-        memset(extraBatches, 0, sizeof(DataBatch));
+        memset(extraBatches, 0, batchCount * sizeof(DataBatch));
+        extraHolds = new int[batchCount];
+        memset(extraHolds, 0, batchCount * sizeof(int));
     } else {
         extra = NULL;
         extraBatches = NULL;
@@ -1992,6 +2101,7 @@ MemMapDataReader::reinit(
     if (extraBatches != NULL) {
         memset(extraBatches, 0, sizeof(DataBatch) * batchCount);
         extraBatches[currentExtraIndex] = currentBatch;
+        memset(extraHolds, 0, sizeof(int) * batchCount);
     }
     releaseLock();
     if (batchCount != 1) {
@@ -2074,9 +2184,9 @@ MemMapDataReader::getBatch()
 {
     return DataBatch(currentBatch);
 }
-
+    
     void
-MemMapDataReader::releaseBatch(
+MemMapDataReader::holdBatch(
     DataBatch batch)
 {
     if (extraBatches == NULL) {
@@ -2085,17 +2195,44 @@ MemMapDataReader::releaseBatch(
     acquireLock();
     for (int i = 0; i < batchCount; i++) {
         if (extraBatches[i] == batch) {
-            extraBatches[i].batchID = 0;
-            _ASSERT(extraUsed > 0);
-            extraUsed--;
-            //fprintf(stderr, "MemMap: releaseBatch %d:%d = index %d now using %d of %d\n", batch.fileID, batch.batchID, i, extraUsed, batchCount);
-            if (extraUsed == batchCount - 1) {
-                SignalSingleWaiterObject(&waiter);
+            extraHolds[i]++;
+            break;
+        }
+    }
+    releaseLock();
+}
+
+    bool
+MemMapDataReader::releaseBatch(
+    DataBatch batch)
+{
+    if (extraBatches == NULL) {
+        return true;
+    }
+    bool result = true;
+    acquireLock();
+    for (int i = 0; i < batchCount; i++) {
+        if (extraBatches[i] == batch) {
+            if (extraHolds[i] > 0) {
+                extraHolds[i]--;
+            }
+            if (extraHolds[i] == 0) {
+                extraBatches[i].batchID = 0;
+                _ASSERT(extraUsed > 0);
+                extraUsed--;
+                //fprintf(stderr,"MemMap: releaseBatch %d:%d = index %d now using %d of %d\n", batch.fileID, batch.batchID, i, extraUsed, batchCount);
+                if (extraUsed == batchCount - 1) {
+                    SignalSingleWaiterObject(&waiter);
+                }
+                releaseLock();
+            } else {
+                result = false;
             }
             break;
         }
     }
     releaseLock();
+    return result;
 }
 
     _int64
@@ -2118,8 +2255,7 @@ MemMapDataReader::getExtra(
     }
 }
 
-MemMapDataSupplier::MemMapDataSupplier(bool autoRelease)
-    : DataSupplier(autoRelease)
+MemMapDataSupplier::MemMapDataSupplier() : DataSupplier()
 {
     InitializeExclusiveLock(&lock);
 }
@@ -2131,18 +2267,19 @@ MemMapDataSupplier::~MemMapDataSupplier()
 
     DataReader* 
 MemMapDataSupplier::getDataReader(
+    int bufferCount,
     _int64 overflowBytes,
     double extraFactor)
 {
     _ASSERT(extraFactor >= 0 && overflowBytes >= 0);
     if (extraFactor == 0) {
         // no per-batch expansion factor, so can read entire file as a batch
-        return new MemMapDataReader(this, 1, 0, overflowBytes, 0, autoRelease);
+        return new MemMapDataReader(this, 1, 0, overflowBytes, 0);
     } else {
         // break up into 4Mb batches
         _int64 batch = 4 * 1024 * 1024;
         _int64 extra = (_int64)(batch * extraFactor);
-        return new MemMapDataReader(this, autoRelease ? 3 : (ThreadCount * 2 + 3), batch, overflowBytes, extra, autoRelease);
+        return new MemMapDataReader(this, bufferCount, batch, overflowBytes, extra);
     }
 }
 
@@ -2184,8 +2321,8 @@ BatchTracker::BatchTracker(int i_capacity)
 {
 }
 
-    void
-BatchTracker::addRead(
+    bool
+BatchTracker::holdBatch(
     DataBatch batch)
 {
     DataBatch::Key key = batch.asKey();
@@ -2199,10 +2336,11 @@ BatchTracker::addRead(
     //_ASSERT(pending.tryFind(DataBatch(batch.batchID, 1^batch.fileID).asKey) != p);
     //unsigned* q = pending.tryFind(key); _ASSERT(q && (p == NULL || p == q) && *q == n);
     //fprintf(stderr, "thread %d tracker %lx addRead %u:%u = %d\n", GetCurrentThreadId(), this, batch.fileID, batch.batchID, n);
+    return p == NULL;
 }
 
     bool
-BatchTracker::removeRead(
+BatchTracker::releaseBatch(
     DataBatch removed)
 {
     DataBatch::Key key = removed.asKey();
@@ -2225,32 +2363,23 @@ BatchTracker::removeRead(
 // public static suppliers
 //
 
-DataSupplier* DataSupplier::MemMap[] =
-{ new MemMapDataSupplier(false), new MemMapDataSupplier(true) };
+DataSupplier* DataSupplier::MemMap = new MemMapDataSupplier();
 
 #ifdef _MSC_VER
-DataSupplier* DataSupplier::Default[2] =
-{ DataSupplier::WindowsOverlapped[false], DataSupplier::WindowsOverlapped[true] };
+DataSupplier* DataSupplier::Default = DataSupplier::WindowsOverlapped;
 #else
-DataSupplier* DataSupplier::Default[2] = 
-{ DataSupplier::MemMap[false], DataSupplier::MemMap[true] };
+DataSupplier* DataSupplier::Default = DataSupplier::MemMap;
 #endif
 
-// inner supplier must NOT be autorelease since wrapper keeps multiple buffers alive
-DataSupplier* DataSupplier::GzipDefault[2] =
-{ DataSupplier::Gzip(DataSupplier::Default[false], false), DataSupplier::Gzip(DataSupplier::Default[false], true) };
+DataSupplier* DataSupplier::GzipDefault = DataSupplier::Gzip(DataSupplier::Default);
 
-DataSupplier* DataSupplier::GzipBamDefault[2] =
-{ DataSupplier::GzipBam(DataSupplier::Default[false], false), DataSupplier::GzipBam(DataSupplier::Default[false], true) };
+DataSupplier* DataSupplier::GzipBamDefault = DataSupplier::GzipBam(DataSupplier::Default);
 
-DataSupplier* DataSupplier::Stdio[2] = 
-{ DataSupplier::StdioSupplier(false), DataSupplier::StdioSupplier(true)};
+DataSupplier* DataSupplier::Stdio = DataSupplier::StdioSupplier();
 
-DataSupplier* DataSupplier::GzipStdio[2] = 
-{ DataSupplier::Gzip(DataSupplier::Stdio[false], false), DataSupplier::Gzip(DataSupplier::Stdio[false], true) };
+DataSupplier* DataSupplier::GzipStdio = DataSupplier::Gzip(DataSupplier::Stdio);
 
-DataSupplier* DataSupplier::GzipBamStdio[2] = 
-{ DataSupplier::GzipBam(DataSupplier::Stdio[false], false), DataSupplier::GzipBam(DataSupplier::Stdio[false], true) };
+DataSupplier* DataSupplier::GzipBamStdio = DataSupplier::GzipBam(DataSupplier::Stdio);
 
 
 int DataSupplier::ThreadCount = 1;

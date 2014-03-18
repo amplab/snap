@@ -164,7 +164,7 @@ struct BAMAlignment
     // absoluate genome locations
 
     _uint32 getLocation(const Genome* genome) const
-    { return pos < 0 || refID < 0 || refID >= genome->getNumContigs() || (FLAG & SAM_UNMAPPED)
+    { return genome == NULL || pos < 0 || refID < 0 || refID >= genome->getNumContigs() || (FLAG & SAM_UNMAPPED)
         ? UINT32_MAX : (genome->getContigs()[refID].beginningOffset + pos); }
 
     _uint32 getNextLocation(const Genome* genome) const
@@ -362,7 +362,7 @@ public:
 
         virtual ~BAMReader();
 
-        void init(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess);
+        void init(const char *fileName, int bufferCount, _int64 startingOffset, _int64 amountOfFileToProcess);
 
         virtual bool getNextRead(Read *readToUpdate)
         {
@@ -387,12 +387,19 @@ public:
         {
             return getNextReadPair(read1,read2,NULL,NULL,NULL);
         }
+        
+        void holdBatch(DataBatch batch)
+        { data->holdBatch(batch); }
 
-        void releaseBatch(DataBatch batch)
-        { data->releaseBatch(batch); }
+        bool releaseBatch(DataBatch batch)
+        { return data->releaseBatch(batch); }
 
-        static BAMReader* create(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess, 
-                                 const ReaderContext& context);
+        virtual ReaderContext* getContext()
+        { return ((ReadReader*)this)->getContext(); }
+
+        static BAMReader* create(const char *fileName, int bufferCount,
+            _int64 startingOffset, _int64 amountOfFileToProcess, 
+            const ReaderContext& context);
         
         virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
         

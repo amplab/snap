@@ -837,19 +837,21 @@ Return Value:
                     //
                     const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
 
-                    unsigned endOffset;
-                    if (genomeLocation + readDataLength + MAX_K >= genome->getCountOfBases()) {
-                        endOffset = genome->getCountOfBases();
-                    } else {
-                        const Genome::Contig *nextContig = genome->getNextContigAfterLocation(genomeLocation);
-                        _ASSERT(NULL != contig && contig->beginningOffset <= genomeLocation && contig != nextContig);
+                    if (contig != NULL) {
+                        unsigned endOffset;
+                        if (genomeLocation + readDataLength + MAX_K >= genome->getCountOfBases()) {
+                            endOffset = genome->getCountOfBases();
+                        } else {
+                            const Genome::Contig *nextContig = genome->getNextContigAfterLocation(genomeLocation);
+                            _ASSERT(NULL != contig && contig->beginningOffset <= genomeLocation && contig != nextContig);
 
-                        endOffset = nextContig->beginningOffset;
-                    }
-                    genomeDataLength = endOffset - genomeLocation - 1;
-                    if (genomeDataLength >= readDataLength - MAX_K) {
-                        data = genome->getSubstring(genomeLocation, genomeDataLength);
-                        _ASSERT(NULL != data);
+                            endOffset = nextContig->beginningOffset;
+                        }
+                        genomeDataLength = endOffset - genomeLocation - 1;
+                        if (genomeDataLength >= readDataLength - MAX_K) {
+                            data = genome->getSubstring(genomeLocation, genomeDataLength);
+                            _ASSERT(NULL != data);
+                        }
                     }
                 }
 
@@ -1055,7 +1057,7 @@ Return Value:
                     //
                     // If this is close enough, record it as a secondary alignment.
                     //
-                    if (NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults && score != -1) {
+                    if (-1 != maxEditDistanceForSecondaryResults && NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults && score != -1) {
                          if (secondaryResultBufferSize <= *nSecondaryResults) {
                             WriteErrorMessage("Out of secondary result buffer in BaseAliner::score(), which shouldn't be possible");
                             soft_exit(1);

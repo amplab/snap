@@ -63,8 +63,11 @@ public:
 
     Read *getNextRead();
  
-    virtual void releaseBatch(DataBatch batch)
-    { underlyingReader->releaseBatch(batch); }
+    virtual void holdBatch(DataBatch batch)
+    { underlyingReader->holdBatch(batch); }
+    
+    virtual bool releaseBatch(DataBatch batch)
+    { return underlyingReader->releaseBatch(batch); }
 
 private:
     RangeSplitter *splitter;
@@ -78,11 +81,13 @@ public:
     ~RangeSplittingReadSupplierGenerator() {delete splitter; delete [] fileName;}
 
     ReadSupplier *generateNewReadSupplier();
+    ReaderContext* getContext() { return &context; }
 
 private:
     RangeSplitter *splitter;
     char *fileName;
-    bool isSAM;
+    const bool isSAM;
+    const int numThreads;
     ReaderContext context;
 };
 
@@ -94,8 +99,11 @@ public:
 
     virtual bool getNextReadPair(Read **read1, Read **read2);
        
-    virtual void releaseBatch(DataBatch batch)
+    virtual void holdBatch(DataBatch batch)
     { underlyingReader->releaseBatch(batch); }
+
+    virtual bool releaseBatch(DataBatch batch)
+    { return underlyingReader->releaseBatch(batch); }
 
  private:
     PairedReadReader *underlyingReader;
@@ -110,11 +118,13 @@ public:
     ~RangeSplittingPairedReadSupplierGenerator();
 
     PairedReadSupplier *generateNewPairedReadSupplier();
+    ReaderContext* getContext() { return &context; }
 
 private:
     RangeSplitter *splitter;
     char *fileName1;
     char *fileName2;
+    const int numThreads;
     enum FileType fileType;
     ReaderContext context;
     bool quicklyDropUnpairedReads;

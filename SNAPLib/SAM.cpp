@@ -115,11 +115,12 @@ SAMReader::skipToBeyondNextRunOfSpacesAndTabs(char *str, const char *endOfBuffer
 SAMReader::create(
     DataSupplier* supplier,
     const char *fileName,
+    int bufferCount,
     const ReaderContext& context,
     _int64 startingOffset, 
     _int64 amountOfFileToProcess)
 {
-    DataReader* data = supplier->getDataReader(maxLineLen);
+    DataReader* data = supplier->getDataReader(bufferCount, maxLineLen, 0.0);
     SAMReader *reader = new SAMReader(data, context);
     reader->init(fileName, startingOffset, amountOfFileToProcess);
     return reader;
@@ -586,7 +587,7 @@ SAMReader::createReadSupplierGenerator(
         //
         // Because we can only have one stdin reader, we need to use a queue if we're reading from stdin
         //
-        reader = SAMReader::create(DataSupplier::Stdio[false], "-", context, 0, 0);
+        reader = SAMReader::create(DataSupplier::Stdio, "-", ReadSupplierQueue::BufferCount(numThreads), context, 0, 0);
    
         if (reader == NULL) {
             return NULL;
@@ -604,24 +605,24 @@ SAMReader::createReadSupplierGenerator(
 SAMReader::createPairedReader(
     const DataSupplier* supplier,
     const char *fileName,
+    int bufferCount,
     _int64 startingOffset,
     _int64 amountOfFileToProcess, 
-    bool autoRelease,
     bool quicklyDropUnpairedReads,
     const ReaderContext& context)
 {
     DataSupplier *data;
     if (!strcmp("-", fileName)) {
-        data = DataSupplier::Stdio[false];
+        data = DataSupplier::Stdio;
     } else {
-        data = DataSupplier::Default[false];
+        data = DataSupplier::Default;
     }
 
-    SAMReader* reader = SAMReader::create(data, fileName, context, 0, 0);
+    SAMReader* reader = SAMReader::create(data, fileName, bufferCount + PairedReadReader::MatchBuffers, context, 0, 0);
     if (reader == NULL) {
         return NULL;
     }
-    return PairedReadReader::PairMatcher(reader, autoRelease, quicklyDropUnpairedReads);
+    return PairedReadReader::PairMatcher(reader, quicklyDropUnpairedReads);
 }
 
 
@@ -636,7 +637,8 @@ SAMReader::createPairedReadSupplierGenerator(
     // need to use a queue so that pairs can be matched
     //
 
-    PairedReadReader* paired = SAMReader::createPairedReader(DataSupplier::Default[false], fileName, 0, 0, false, quicklyDropUnpairedReads, context);
+    PairedReadReader* paired = SAMReader::createPairedReader(DataSupplier::Default, fileName,
+        ReadSupplierQueue::BufferCount(numThreads), 0, 0, quicklyDropUnpairedReads, context);
     if (paired == NULL) {
         WriteErrorMessage( "Cannot create reader on %s\n", fileName);
         soft_exit(1);
@@ -797,14 +799,17 @@ SAMFormat::writeHeader(
         const Genome::Contig *contigs = context.genome->getContigs();
         int numContigs = context.genome->getNumContigs();
         unsigned genomeLen = context.genome->getCountOfBases();
+        size_t originalBytesConsumed = bytesConsumed;
         for (int i = 0; i < numContigs; i++) {
             unsigned start = contigs[i].beginningOffset;
             unsigned end = ((i + 1 < numContigs) ? contigs[i+1].beginningOffset : genomeLen) - context.genome->getChromosomePadding();
             bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%u\n", contigs[i].name, end - start);
 
             if (bytesConsumed >= headerBufferSize) {
-                WriteErrorMessage("SAMWriter: header buffer too small\n");
-                return false;
+                // todo: increase buffer size (or change to write in batch
+                bytesConsumed = originalBytesConsumed;
+                WriteErrorMessage("SAMWriter: header buffer too small, skipping @SQ lines\n");
+                break;
             }
         }
     }
