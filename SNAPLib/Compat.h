@@ -195,7 +195,12 @@ public:
     UnderlyingExclusiveLock lock;
     bool                    initialized;
 
-    ExclusiveLock() : initialized(false) {}
+#ifdef _MSC_VER
+    DWORD                   holderThreadId;
+#endif // _MSC_VER
+
+
+    ExclusiveLock() : initialized(false), holderThreadId(0) {}
     ~ExclusiveLock() {_ASSERT(!initialized);}   // Must DestroyExclusiveLock first
 };
 
@@ -203,6 +208,21 @@ inline void AcquireExclusiveLock(ExclusiveLock *lock)
 {
     _ASSERT(lock->initialized);
     AcquireUnderlyingExclusiveLock(&lock->lock);
+#ifdef _MSC_VER
+    // If you see this go off, you're probably trying a recursive lock acquisition (i.e., twice on the same thead), 
+    // which is legal in Windows and a deadlock in Linux.
+    _ASSERT(lock->holderThreadId == 0);                
+    lock->holderThreadId = GetCurrentThreadId();
+#endif // _MSC_VER
+
+}
+
+inline void AssertExclusiveLockHeld(ExclusiveLock *lock)
+{
+#ifdef _MSC_VER
+    _ASSERT(GetCurrentThreadId() == lock->holderThreadId);
+#endif // _MSC_VER
+
 }
 
 inline bool InitializeExclusiveLock(ExclusiveLock *lock)
@@ -215,11 +235,20 @@ inline bool InitializeExclusiveLock(ExclusiveLock *lock)
 inline void ReleaseExclusiveLock (ExclusiveLock *lock)
 {
     _ASSERT(lock->initialized);
+#ifdef _MSC_VER
+    _ASSERT(GetCurrentThreadId() == lock->holderThreadId);
+    lock->holderThreadId = 0;
+#endif // _MSC_VER
+
     ReleaseUnderlyingExclusiveLock(&lock->lock);
 }
 
 inline void DestroyExclusiveLock(ExclusiveLock *lock)
 {
+#ifdef _MSC_VER
+    _ASSERT(lock->holderThreadId == 0);
+#endif // _MSC_VER
+
     _ASSERT(lock->initialized);
     lock->initialized = false;
     DestroyUnderlyingExclusiveLock(&lock->lock);
@@ -229,6 +258,7 @@ inline void DestroyExclusiveLock(ExclusiveLock *lock)
 #define InitializeExclusiveLock InitializeUnderlyingExclusiveLock
 #define ReleaseExclusiveLock ReleaseUnderlyingExclusiveLock
 #define DestroyExclusiveLock DestroyUnderlyingExclusiveLock
+#define AssertExclusiveLockHeld(l) /* nothing */
 #endif // _DEBUG
 
 #ifdef PROFILE_WAIT
