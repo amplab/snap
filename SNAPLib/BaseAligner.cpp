@@ -52,6 +52,8 @@ BaseAligner::BaseAligner(
     unsigned        i_maxSeedsToUseFromCommandLine,
     double          i_maxSeedCoverage,
     unsigned        i_extraSearchDepth,
+    bool            i_noUkkonen,
+    bool            i_noOrderedEvaluation,
     LandauVishkin<1>*i_landauVishkin,
     LandauVishkin<-1>*i_reverseLandauVishkin,
     AlignerStats   *i_stats,
@@ -59,7 +61,8 @@ BaseAligner::BaseAligner(
         genomeIndex(i_genomeIndex), maxHitsToConsider(i_maxHitsToConsider), maxK(i_maxK),
         maxReadSize(i_maxReadSize), maxSeedsToUseFromCommandLine(i_maxSeedsToUseFromCommandLine),
         maxSeedCoverage(i_maxSeedCoverage), readId(-1), extraSearchDepth(i_extraSearchDepth),
-        explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats)
+        explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats), 
+        noUkkonen(i_noUkkonen), noOrderedEvaluation(i_noOrderedEvaluation)
 /*++
 
 Routine Description:
@@ -77,6 +80,8 @@ Arguments:
                           hits).  Once we've looked up this many seeds, we just score what we've got.
     i_maxSeedCoverage   - The maximum number of seeds to use expressed as readSize/seedSize
     i_extraSearchDepth  - How deeply beyond bestScore do we search?
+    i_noUkkonen         - Don't use Ukkonen's algorithm (i.e., don't reduce the max edit distance depth as we score candidates)
+    i_noOrderedEvaluation-Don't order evaluating the reads by the hit count in order to drive down the max edit distance more quickly
     i_landauVishkin     - an externally supplied LandauVishkin string edit distance object.  This is useful if we're expecting repeated computations and use the LV cache.
     i_reverseLandauVishkin - the same for the reverse direction.
     i_stats             - an object into which we report out statistics
@@ -179,13 +184,14 @@ Arguments:
         candidateHashTable[RC] = (HashTableAnchor *)allocator->allocate(sizeof(HashTableAnchor) * candidateHashTablesSize);
         weightLists = (HashTableElement *)allocator->allocate(sizeof(HashTableElement) * numWeightLists);
         hashTableElementPool = (HashTableElement *)allocator->allocate(sizeof(HashTableElement) * hashTableElementPoolSize); // Allocte last, because it's biggest and usually unused.  This puts all of the commonly used stuff into one large page.
+        hitCountByExtraSearchDepth = (unsigned *)allocator->allocate(sizeof(*hitCountByExtraSearchDepth) * extraSearchDepth);
     } else {
         candidateHashTable[FORWARD] = (HashTableAnchor *)BigAlloc(sizeof(HashTableAnchor) * candidateHashTablesSize);
         candidateHashTable[RC] = (HashTableAnchor *)BigAlloc(sizeof(HashTableAnchor) * candidateHashTablesSize);
         weightLists = (HashTableElement *)BigAlloc(sizeof(HashTableElement) * numWeightLists);
         hashTableElementPool = (HashTableElement *)BigAlloc(sizeof(HashTableElement) * hashTableElementPoolSize);
+        hitCountByExtraSearchDepth = (unsigned *)BigAlloc(sizeof(*hitCountByExtraSearchDepth) * extraSearchDepth);
     }
-
 
     for (unsigned i = 0; i < hashTableElementPoolSize; i++) {
         hashTableElementPool[i].init();
@@ -199,12 +205,8 @@ Arguments:
         memset(candidateHashTable[rc],0,sizeof(HashTableAnchor) * candidateHashTablesSize);
     }
     hashTableEpoch = 0;
-}
 
-    AlignmentResult
-BaseAligner::AlignRead(Read *inputRead, unsigned *genomeLocation, Direction *hitDirection, int *finalScore, int *mapq, IdPairVector* secondary)
-{
-    return AlignRead(inputRead, genomeLocation, hitDirection, finalScore, mapq, secondary, 0, 0, FORWARD /*This is ignored when searchRadius = 0*/);
+ 
 }
 
 
@@ -212,17 +214,16 @@ BaseAligner::AlignRead(Read *inputRead, unsigned *genomeLocation, Direction *hit
 bool _DumpAlignments = false;
 #endif  // _DEBUG
 
-    AlignmentResult
+    void
 BaseAligner::AlignRead(
-    Read      *inputRead,
-    unsigned  *genomeLocation,
-    Direction *hitDirection,
-    int       *finalScore,
-    int       *mapq,
-    IdPairVector* secondary,
-    unsigned   searchRadius,
-    unsigned   searchLocation,
-    Direction  searchDirection)
+        Read                    *inputRead,
+        SingleAlignmentResult   *primaryResult,
+        int                      maxEditDistanceForSecondaryResults,
+        int                      secondaryResultBufferSize,
+        int                     *nSecondaryResults,
+        SingleAlignmentResult   *secondaryResults             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
+    )      // Retun value is true if there was enough room in the secondary alignment buffer for everything that was found.
+
 /*++
 
 Routine Description:
@@ -231,36 +232,37 @@ Routine Description:
 
 Arguments:
 
-    inputRead           - the read to align
-    genomeLocation      - if this aligned to a SingleHit, the 0-based offset in the genome that this hit.  The aligner treats the entire
-                          genome as a single string, even though it's really a set of chrosomes.  It just makes the code simpler.
-                          The caller can convert to chromosome+offset by looking up the contig boudaries using the Genome object.
-    hitDirection        - the aligner tries to align both the given read and its reverse complement.  If we found a SingleHit this
-                          is set to indicate whether that hit was on the forward or reverse complement.
-    finalScore          - if a single or confident hit, this is the score of the hit (i.e., the LV distance from the read)
-    mapq                - return the mapping quality
-    secondary           - optional output vector for secondary alignments
-    searchRadius        - if non-zero, constrain the search to this distance around searchLocation, in orientation searchRC
-    searchLocation      - location to search around if searchRadius is given
-    searchDirection     - whether to search in forward or reverse complement orientation if searchRadius is given
+    read                                - the read to align
+    primaryResult                       - the best alignment result found
+    maxEditDistanceForSecondaryResults  - How much worse than the primary result should we look?
+    secondaryResultBufferSize           - the size of the secondaryResults buffer.  If provided, it must be at least maxK * maxSeeds * 2.
+    nRescondaryResults                  - returns the number of secondary results found
+    secondaryResults                    - returns the secondary results
+
 
 Return Value:
 
-    ConfidentHit, SingleHit, MultiHit or NotFound depending on how the alignment went.
+    true if there was enough space in secondaryResults, false otherwise
 
 --*/
-{
-    //
-    // mapq and finalScore are optional parameters.  Rather than checking all over the code to see if
-    // they're null, we just point them at locals if they're not passed in.
-    //
-    int unusedMapq;
-    int unusedFinalScore;
+{  
+    // These used to be parameters that were used by the old version of the paired-end aligner when it wanted to search for
+    // a limited set of single-end alignments.  That turned out to produce not-so-good results, so it went away but stayed
+    // in the AlignRead interface for a while. Now, it's still in the code just in case someone wants it some day, but
+    // to get it back will require changing the interface again.
+    unsigned   searchRadius = 0;
+    unsigned   searchLocation = 0;
+    Direction  searchDirection = RC;
+
+    memset(hitCountByExtraSearchDepth, 0, sizeof(*hitCountByExtraSearchDepth) * extraSearchDepth);
+
+    if (NULL != nSecondaryResults) {
+        *nSecondaryResults = 0;
+    }
+
     firstPassSeedsNotSkipped[FORWARD] = firstPassSeedsNotSkipped[RC] = 0;
     smallestSkippedSeed[FORWARD] = smallestSkippedSeed[RC] = InvalidGenomeLocation;
     highestWeightListChecked = 0;
-
-    Direction localHitDirection; // This is just a place to write into if the caller didn't want to know the direction
 
     unsigned maxSeedsToUse;
     if (0 != maxSeedsToUseFromCommandLine) {
@@ -269,21 +271,10 @@ Return Value:
         maxSeedsToUse = (int)(maxSeedCoverage * inputRead->getDataLength() / genomeIndex->getSeedLength());
     }
 
-    if (NULL == hitDirection) {
-        hitDirection = &localHitDirection;
-    }
-
-    if (NULL == mapq) {
-        mapq = &unusedMapq;
-    }
-
-    if (NULL == finalScore) {
-        finalScore = &unusedFinalScore;
-    }
-
-    *genomeLocation = InvalidGenomeLocation; // Value to return if we don't find a location.
-    *hitDirection = FORWARD;             // So we deterministically print the read forward in this case.
-    *finalScore = UnusedScoreValue;
+    primaryResult->location = InvalidGenomeLocation; // Value to return if we don't find a location.
+    primaryResult->direction = FORWARD;              // So we deterministically print the read forward in this case.
+    primaryResult->score = UnusedScoreValue;
+    primaryResult->status = NotFound;
 
     unsigned lookupsThisRun = 0;
 
@@ -295,12 +286,6 @@ Return Value:
     if (searchRadius != 0) {
         minLocation = (searchLocation > searchRadius) ? searchLocation - searchRadius : 0;
         maxLocation = (searchLocation < 0xFFFFFFFF - searchRadius) ? searchLocation + searchRadius : 0xFFFFFFFF;
-    }
-
-    AlignmentResult finalResult;
-
-    if (secondary != NULL) {
-        secondary->clear();
     }
 
     //
@@ -315,8 +300,9 @@ Return Value:
     if ((int)inputRead->getDataLength() < seedLen) {
         //
         // Too short to have any seeds, it's hopeless.
+        // No need to finalize secondary results, since we don't have any.
         //
-        return NotFound;
+        return;
     }
 
 #ifdef TRACE_ALIGNER
@@ -351,7 +337,8 @@ Return Value:
 
     if (countOfNs > maxK) {
         nReadsIgnoredBecauseOfTooManyNs++;
-        return NotFound;
+        // No need to finalize secondary results, since we don't have any.
+        return;
     }
 
     //
@@ -423,17 +410,18 @@ Return Value:
                 score(
                     true,
                     read,
-                    &finalResult,
-                    finalScore,
-                    genomeLocation,
-                    hitDirection,
-                    mapq,
-                    secondary);
+                    primaryResult,
+                    maxEditDistanceForSecondaryResults,
+                    secondaryResultBufferSize,
+                    nSecondaryResults,
+                    secondaryResults);
 
 #ifdef  _DEBUG
-                if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates)  at %u\n", *finalScore, *mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, *genomeLocation);
+                if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates)  at %u\n", 
+                                            primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, primaryResult->location);
 #endif  // _DEBUG
-                return finalResult;
+                finalizeSecondaryResults(nSecondaryResults, secondaryResults, maxEditDistanceForSecondaryResults, bestScore);
+                return;
             }
             nextSeedToTest = GetWrappedNextSeedToTest(seedLen, wrapCount);
 
@@ -575,7 +563,9 @@ Return Value:
 
                         findCandidate(genomeLocationOfThisHit, direction, &candidate, &hashTableElement);
                         if (NULL != hashTableElement) {
-                            incrementWeight(hashTableElement);
+                            if (!noOrderedEvaluation) {     // If noOrderedEvaluation, just leave them all on the one-hit weight list so they get evaluated in whatever order
+                                incrementWeight(hashTableElement);
+                            }
                             candidate->seedOffset = offset;
                             _ASSERT((unsigned)candidate->seedOffset <= readLen - seedLen);
                         } else if (lowestPossibleScoreOfAnyUnseenLocation[direction] <= scoreLimit) {
@@ -611,19 +601,21 @@ Return Value:
             //
             // And finally, try scoring.
             //
-            if (score(  false,
-                        read,
-                        &finalResult,
-                        finalScore,
-                        genomeLocation,
-                        hitDirection,
-                        mapq,
-                        secondary)) {
+            if (score(
+                    false,
+                    read,
+                    primaryResult,
+                    maxEditDistanceForSecondaryResults,
+                    secondaryResultBufferSize,
+                    nSecondaryResults,
+                    secondaryResults)) {
 
 #ifdef  _DEBUG
-                if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", *finalScore, *mapq, *genomeLocation);
+                if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", primaryResult->score, primaryResult->mapq, primaryResult->location);
 #endif  // _DEBUG
-                return finalResult;
+
+                finalizeSecondaryResults(nSecondaryResults, secondaryResults, maxEditDistanceForSecondaryResults, bestScore);
+                return;
             }
         }
     }
@@ -634,32 +626,32 @@ Return Value:
 #ifdef TRACE_ALIGNER
     printf("Calling score with force=true because we ran out of seeds\n");
 #endif
-    score(  true,
-            read,
-            &finalResult,
-            finalScore,
-            genomeLocation,
-            hitDirection,
-            mapq,
-            secondary);
+    score(
+        true,
+        read,
+        primaryResult,
+        maxEditDistanceForSecondaryResults,
+        secondaryResultBufferSize,
+        nSecondaryResults,
+        secondaryResults);
 
 #ifdef  _DEBUG
-    if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates) at %u\n", *finalScore, *mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, *genomeLocation);
+    if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates) at %u\n", primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, primaryResult->location);
 #endif  // _DEBUG
 
-        return finalResult;
+    finalizeSecondaryResults(nSecondaryResults, secondaryResults, maxEditDistanceForSecondaryResults, bestScore);
+    return;
 }
 
     bool
 BaseAligner::score(
-    bool             forceResult,
-    Read            *read[NUM_DIRECTIONS],
-    AlignmentResult *result,
-    int             *finalScore,
-    unsigned        *singleHitGenomeLocation,
-    Direction       *hitDirection,
-    int             *mapq,
-    IdPairVector    *secondary)
+        bool                     forceResult,
+        Read                    *read[NUM_DIRECTIONS],
+        SingleAlignmentResult   *primaryResult,
+        int                      maxEditDistanceForSecondaryResults,
+        int                      secondaryResultBufferSize,
+        int                     *nSecondaryResults,
+        SingleAlignmentResult   *secondaryResults)
 /*++
 
 Routine Description:
@@ -721,8 +713,8 @@ Return Value:
         // a multi hit and give up.
         //
         _ASSERT(forceResult);
-        *result = MultipleHits;
-        *mapq = 0;
+        primaryResult->status = MultipleHits;
+        primaryResult->mapq = 0;
         return true;
     }
 
@@ -761,21 +753,21 @@ Return Value:
                 // We've scored all live candidates and excluded all non-candidates, or we've checked enough that we've hit the cutoff.  We have our
                 // answer.
                 //
-                *finalScore = bestScore;
+                primaryResult->score = bestScore;
                 if (bestScore <= maxK) {
-                    *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    *mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, popularSeedsSkipped);
-                    if (*mapq >= MAPQ_LIMIT_FOR_SINGLE_HIT) {
-                        *result = SingleHit;
+                    primaryResult->location = bestScoreGenomeLocation;
+                    primaryResult->mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, popularSeedsSkipped);
+                    if (primaryResult->mapq >= MAPQ_LIMIT_FOR_SINGLE_HIT) {
+                        primaryResult->status = SingleHit;
                     } else {
-                        *result = MultipleHits;
+                        primaryResult->status = MultipleHits;
                     }
                     return true;
                 } else {
                     // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
                     // report it as NotFound
-                    *result = (nSeedsApplied[FORWARD] == 0 && nSeedsApplied[RC] == 0) ? MultipleHits : NotFound;
-                    *mapq = 0;
+                    primaryResult->status = (nSeedsApplied[FORWARD] == 0 && nSeedsApplied[RC] == 0) ? MultipleHits : NotFound;
+                    primaryResult->mapq = 0;
                     return true;
                 }
             }
@@ -845,19 +837,21 @@ Return Value:
                     //
                     const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
 
-                    unsigned endOffset;
-                    if (genomeLocation + readDataLength + MAX_K >= genome->getCountOfBases()) {
-                        endOffset = genome->getCountOfBases();
-                    } else {
-                        const Genome::Contig *nextContig = genome->getNextContigAfterLocation(genomeLocation);
-                        _ASSERT(NULL != contig && contig->beginningOffset <= genomeLocation && contig != nextContig);
+                    if (contig != NULL) {
+                        unsigned endOffset;
+                        if (genomeLocation + readDataLength + MAX_K >= genome->getCountOfBases()) {
+                            endOffset = genome->getCountOfBases();
+                        } else {
+                            const Genome::Contig *nextContig = genome->getNextContigAfterLocation(genomeLocation);
+                            _ASSERT(NULL != contig && contig->beginningOffset <= genomeLocation && contig != nextContig);
 
-                        endOffset = nextContig->beginningOffset;
-                    }
-                    genomeDataLength = endOffset - genomeLocation - 1;
-                    if (genomeDataLength >= readDataLength - MAX_K) {
-                        data = genome->getSubstring(genomeLocation, genomeDataLength);
-                        _ASSERT(NULL != data);
+                            endOffset = nextContig->beginningOffset;
+                        }
+                        genomeDataLength = endOffset - genomeLocation - 1;
+                        if (genomeDataLength >= readDataLength - MAX_K) {
+                            data = genome->getSubstring(genomeLocation, genomeDataLength);
+                            _ASSERT(NULL != data);
+                        }
                     }
                 }
 
@@ -889,7 +883,7 @@ Return Value:
                     if (score1 == -1) {
                         score = -1;
                     } else {
-                        // The tail of the read matched; now let's reverse the reference genome data and match the head
+                        // The tail of the read matched; now let's reverse match the reference genome and the head
                         int limitLeft = scoreLimit - score1;
                         int genomeLocationOffset;
                         score2 = reverseLandauVishkin->computeEditDistance(data + seedOffset, seedOffset + MAX_K, reversedRead[elementToScore->direction] + readLen - seedOffset,
@@ -1004,9 +998,8 @@ Return Value:
                 elementToScore->matchProbabilityForBestScore = matchProbability;
                 elementToScore->bestScore = score;
 
-                const double EPSILON = 1e-14;
                 if (bestScore > score ||
-                    (bestScore == score && matchProbability > probabilityOfBestCandidate + EPSILON)) {
+                    (bestScore == score && matchProbability > probabilityOfBestCandidate)) {
 
                     //
                     // We have a new best score.  The old best score becomes the second best score, unless this is the same as the best or second best score
@@ -1018,27 +1011,40 @@ Return Value:
                                                                secondBestScoreGenomeLocation / maxMergeDist != genomeLocation / maxMergeDist))) {
                             secondBestScore = bestScore;
                             secondBestScoreGenomeLocation = bestScoreGenomeLocation;
-                            secondBestScoreDirection = *hitDirection;
+                            secondBestScoreDirection = primaryResult->direction;
+                    }
+
+                    //
+                    // If we're tracking secondary alignments, put the old best score in as a new secondary alignment
+                    //
+                    if (NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults) { // bestScore is initialized to UnusedScoreValue, which is large, so this won't fire if this is the first candidate
+                        if (secondaryResultBufferSize <= *nSecondaryResults) {
+                            WriteErrorMessage("Out of secondary result buffer in BaseAliner::score(), which shouldn't be possible");
+                            soft_exit(1);
+                        }
+
+                        SingleAlignmentResult *result = &secondaryResults[*nSecondaryResults];
+                        result->direction = primaryResult->direction;
+                        result->location = bestScoreGenomeLocation;
+                        result->mapq = 0;
+                        result->score = bestScore;
+                        result->status = MultipleHits;
+
+                        _ASSERT(result->score != -1);
+
+                        (*nSecondaryResults)++;
                     }
 
                     bestScore = score;
                     probabilityOfBestCandidate = matchProbability;
                     _ASSERT(probabilityOfBestCandidate <= probabilityOfAllCandidates);
                     bestScoreGenomeLocation = genomeLocation;
-                    *singleHitGenomeLocation = bestScoreGenomeLocation;
-                    *finalScore = bestScore;
-                    *hitDirection = elementToScore->direction;
+                    primaryResult->location = bestScoreGenomeLocation;
+                    primaryResult->score = bestScore;
+                    primaryResult->direction = elementToScore->direction;
 
                     lvScoresAfterBestFound = 0;
-
-                    if (secondary != NULL) {
-                        secondary->clear();
-                    }
-
                 } else {
-                    if (secondary != NULL && bestScore == score && matchProbability >= probabilityOfBestCandidate - EPSILON) {
-                        secondary->push_back(IdPair(genomeLocation, elementToScore->direction));
-                    }
                     if (secondBestScore > score) {
                         //
                         // A new second best.
@@ -1047,6 +1053,27 @@ Return Value:
                         secondBestScoreGenomeLocation = genomeLocation;
                         secondBestScoreDirection = elementToScore->direction;
                     }
+
+                    //
+                    // If this is close enough, record it as a secondary alignment.
+                    //
+                    if (-1 != maxEditDistanceForSecondaryResults && NULL != secondaryResults && (int)(bestScore - score) <= maxEditDistanceForSecondaryResults && score != -1) {
+                         if (secondaryResultBufferSize <= *nSecondaryResults) {
+                            WriteErrorMessage("Out of secondary result buffer in BaseAliner::score(), which shouldn't be possible");
+                            soft_exit(1);
+                        }
+
+                        SingleAlignmentResult *result = &secondaryResults[*nSecondaryResults];
+                        result->direction = elementToScore->direction;
+                        result->location = genomeLocation;
+                        result->mapq = 0;
+                        result->score = score;
+                        result->status = MultipleHits;
+
+                        _ASSERT(result->score != -1);
+
+                        (*nSecondaryResults)++;
+                    }
                 }
 
                 if (stopOnFirstHit && bestScore <= maxK) {
@@ -1054,13 +1081,17 @@ Return Value:
                     // care about the best alignment. Stop now but mark the result as MultipleHits because we're not
                     // confident that it's the best one.  We don't support mapq in this secnario, because we haven't
                     // explored enough to compute it.
-                    *result = MultipleHits;
-                    *mapq = 0;
+                    primaryResult->status = MultipleHits;
+                    primaryResult->mapq = 0;
                     return true;
                 }
 
                 // Update scoreLimit since we may have improved bestScore or secondBestScore
-                scoreLimit = min(bestScore, maxK) + extraSearchDepth;
+                if (!noUkkonen) {   // If we've turned off Ukkonen, then don't drop the score limit, just leave it at maxK + extraSearchDepth always
+                    scoreLimit = min(bestScore, maxK) + extraSearchDepth;
+                } else {
+                    _ASSERT(scoreLimit == maxK + extraSearchDepth);
+                }
             }   // While candidates exist in the element
         }   // If the element could possibly affect the result
 
@@ -1430,4 +1461,46 @@ BaseAligner::getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsT
         sizeof(HashTableElement) * hashTableElementPoolSize         + // hash table element pool
         sizeof(HashTableAnchor) * candidateHashTablesSize * 2       + // candidate hash table (both)
         sizeof(HashTableElement) * (maxSeedsToUse + 1);               // weight lists
+}
+
+    void 
+BaseAligner::finalizeSecondaryResults(
+    int                     *nSecondaryResults,                     // in/out
+    SingleAlignmentResult   *secondaryResults,
+    int                      maxEditDistanceForSecondaryResults,
+    int                      bestScore)
+{
+    //
+    // There's no guarantee that the results are actually within the bound; the aligner records anything that's
+    // within the bound when it's scored, but if we subsequently found a better fit, then it may no longer be
+    // close enough.  Get rid of those now.
+    //
+
+    int worstScoreToKeep = bestScore + maxEditDistanceForSecondaryResults;
+
+    int i = 0;
+    while (i < *nSecondaryResults) {
+        if (secondaryResults[i].score > worstScoreToKeep) {
+            //
+            // This one is too bad to keep.  Move the last one from the array here and decrement the
+            // count.  Don't move up i, because the one we just moved in may also be too
+            // bad.
+            //
+            secondaryResults[i] = secondaryResults[(*nSecondaryResults)-1];
+            (*nSecondaryResults)--;
+        } else {
+            i++;
+        }
+    }
+}
+
+    unsigned 
+BaseAligner::getMaxSecondaryResults(unsigned maxSeedsToUse, double maxSeedCoverage, unsigned maxReadSize, unsigned maxHits, unsigned seedLength)
+{
+
+    if (0 != maxSeedsToUse) {
+        return maxHits * maxSeedsToUse * 2; // Can't have more alignments than total possible hits (*2 is for forward/RC)
+    } else {
+        return (unsigned)((maxSeedCoverage * maxReadSize + seedLength) / seedLength) * maxHits * 2;
+    }
 }

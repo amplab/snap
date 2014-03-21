@@ -90,11 +90,13 @@ struct AlignerOptions : public AbstractOptions
     const char         *perfFileName;
     bool                useTimingBarrier;
     unsigned            extraSearchDepth;
-    const char         *defaultReadGroup; // if not specified in input
+    char               *defaultReadGroup; // if not specified in input
     bool                ignoreSecondaryAlignments; // on input, default true
-    bool                outputMultipleAlignments;
+    int                 maxSecondaryAligmmentAdditionalEditDistance;
     bool                preserveClipping;
     float               expansionFactor;
+    bool                noUkkonen;
+    bool                noOrderedEvaluation;
     
     static bool         useHadoopErrorMessages; // This is static because it's global (and I didn't want to push the options object to every place in the code)
     static bool         outputToStdout;         // Likewise

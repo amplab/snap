@@ -38,7 +38,7 @@ class Genome;
 
 struct PairedAlignmentResult;
 
-enum AlignmentResult {NotFound, SingleHit, MultipleHits, SecondaryHit, UnknownAlignment}; // BB: Changed Unknown to UnknownAlignment because of a conflict w/Windows headers
+enum AlignmentResult {NotFound, SingleHit, MultipleHits, UnknownAlignment}; // BB: Changed Unknown to UnknownAlignment because of a conflict w/Windows headers
 
 bool isAValidAlignmentResult(AlignmentResult result);
 
@@ -185,10 +185,10 @@ public:
     virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine) = 0;
 
     // write a single read, return true if successful
-    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, unsigned genomeLocation, Direction direction) = 0;
+    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, unsigned genomeLocation, Direction direction, bool secondaryAlignment) = 0;
 
     // write a pair of reads, return true if successful
-    virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result) = 0;
+    virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result, bool secondaryAlignment) = 0;
 
     // close out this thread
     virtual void close() = 0;

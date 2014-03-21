@@ -39,11 +39,18 @@ public:
         double              seedCoverage,
         bool                forceSpacing_,
         unsigned            extraSearchDepth,
+        bool                noUkkonen,
+        bool                noOrderedEvaluation,
         PairedEndAligner    *underlyingPairedEndAligner_,
         BigAllocator        *allocator);
     
     virtual ~ChimericPairedEndAligner();
     
+    static unsigned getMaxSingleEndSecondaryResults(unsigned maxSeedsToUse, double maxSeedCoverage, unsigned maxReadSize, unsigned maxHits, unsigned seedLength)
+    {
+        return BaseAligner::getMaxSecondaryResults(maxSeedsToUse, maxSeedCoverage, maxReadSize, maxHits, seedLength) * 2;   // *2 for each end
+    }
+
     static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxReadSize, unsigned maxHits, unsigned seedLen, unsigned maxSeedsFromCommandLine, 
                                              double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize);
 
@@ -54,7 +61,15 @@ public:
         Read                  *read0,
         Read                  *read1,
         PairedAlignmentResult *result,
-        IdPairVector          *secondary = NULL);
+        int                    maxEditDistanceForSecondaryResults,
+        int                    secondaryResultBufferSize,
+        int                   *nSecondaryResults,
+        PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
+        int                    singleSecondaryBufferSize,
+        int                   *nSingleEndSecondaryResultsForFirstRead,
+        int                   *nSingleEndSecondaryResultsForSecondRead,
+        SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
+        );
 
     void *operator new(size_t size) {return BigAlloc(size);}
     void operator delete(void *ptr) {BigDealloc(ptr);}

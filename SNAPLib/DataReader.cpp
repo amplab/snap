@@ -1000,6 +1000,8 @@ WindowsOverlappedDataReader::startIo()
     //
     // Launch reads on whatever buffers are ready.
     //
+    AssertExclusiveLockHeld(&lock);
+
     while (nextBufferForReader != -1) {
         // remove from free list
         BufferInfo* info = &bufferInfo[nextBufferForReader];
@@ -1026,7 +1028,6 @@ WindowsOverlappedDataReader::startIo()
             info->isEOF = true;
             info->state = Full;
             SetEvent(bufferLap->hEvent);
-            ReleaseExclusiveLock(&lock);
             return;
         }
 
@@ -1830,7 +1831,7 @@ DecompressDataReader::dequeueAvailable()
     void
 DecompressDataReader::enqueueAvailable(Entry* entry)
 {
-    AcquireExclusiveLock(&lock);
+    AssertExclusiveLockHeld(&lock);
     _ASSERT(entry->state == EntryHeld);
     entry->state = EntryAvailable;
     entry->next = available;
@@ -1838,7 +1839,6 @@ DecompressDataReader::enqueueAvailable(Entry* entry)
     if (entry->next == NULL) {
         AllowEventWaitersToProceed(&availableEvent);
     }
-    ReleaseExclusiveLock(&lock);
 }
 
 class DecompressDataReaderSupplier : public DataSupplier

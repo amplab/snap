@@ -173,7 +173,7 @@ PairedReadMatcher::getNextReadPair(
                 int printed = 0;
                 char buffer[200];
                 for (OverflowMap::iterator i = overflow.begin(); i != overflow.end() && printed < 10; i = overflow.next(i)) {
-                    int l = min(sizeof(buffer)-1, i->value->getIdLength());
+                    int l = min((unsigned) sizeof(buffer)-1, i->value->getIdLength());
                     memcpy(buffer, i->value->getId(), l);
                     buffer[l] = 0;
                     WriteErrorMessage("%s\n", buffer);

@@ -516,7 +516,7 @@ public:
     virtual bool writeRead(
         const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
-        int mapQuality, unsigned genomeLocation, Direction direction,
+        int mapQuality, unsigned genomeLocation, Direction direction, bool secondaryAlignment,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
         AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD) const;
 
@@ -671,6 +671,7 @@ BAMFormat::writeRead(
     int mapQuality,
     unsigned genomeLocation,
     Direction direction,
+    bool secondaryAlignment,
     bool hasMate,
     bool firstInPair,
     Read * mate,
@@ -707,7 +708,7 @@ BAMFormat::writeRead(
     if (! SAMFormat::createSAMLine(genome, lv, data, quality, MAX_READ, contigName, contigIndex,
         flags, positionInContig, mapQuality, mateContigName, mateContigIndex, matePositionInContig, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
-        qnameLen, read, result, genomeLocation, direction, useM,
+        qnameLen, read, result, genomeLocation, direction, secondaryAlignment, useM,
         hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection,
         &extraBasesClippedBefore, &extraBasesClippedAfter))
     {

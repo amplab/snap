@@ -47,38 +47,27 @@ public:
         unsigned        i_maxSeedsToUse,
         double          i_maxSeedCoverage,
         unsigned        i_extraSearchDepth,
+        bool            i_noUkkonen,
+        bool            i_noOrderedEvaluation,
         LandauVishkin<1>*i_landauVishkin = NULL,
         LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
         AlignerStats   *i_stats = NULL,
         BigAllocator    *allocator = NULL);
 
+    static unsigned getMaxSecondaryResults(unsigned maxSeedsToUse, double maxSeedCoverage, unsigned maxReadSize, unsigned maxHits, unsigned seedLength);
+
     virtual ~BaseAligner();
 
-        virtual AlignmentResult
+        void
     AlignRead(
-        Read        *inputRead,
-        unsigned    *genomeLocation,
-        Direction   *hitDirection,
-        int         *finalScore = NULL,
-        int         *mapq = NULL,
-        IdPairVector*secondary = NULL);
-        
-    //
-    // A richer version of AlignRead that allows for searching near a given location.
-    // If searchRadius is not 0, constrain the search to distance maxSpacing around
-    // searchLocation in the orientation given by searchRC.
-    //
-        AlignmentResult
-    AlignRead(
-        Read        *inputRead,
-        unsigned    *genomeLocation,
-        Direction   *hitDirection,
-        int         *finalScore,
-        int         *mapq,
-        IdPairVector*secondary,
-        unsigned     searchRadius,       // If non-zero, constrain search around searchLocation in direction searchRC.
-        unsigned     searchLocation,
-        Direction    searchDirection);
+        Read                    *read,
+        SingleAlignmentResult   *primaryResult,
+        int                      maxEditDistanceForSecondaryResults,
+        int                      secondaryResultBufferSize,
+        int                     *nSecondaryResults,
+        SingleAlignmentResult   *secondaryResults             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
+    );      // Retun value is true if there was enough room in the secondary alignment buffer for everything that was found.
+
         
     //
     // Statistics gathering.
@@ -261,15 +250,14 @@ private:
 
         bool
     score(
-        bool             forceResult,
-        Read            *read[NUM_DIRECTIONS],
-        AlignmentResult *result,
-        int             *finalScore,
-        unsigned        *singleHitGenomeLocation,
-        Direction       *hitDirection,
-        int             *mapq,
-        IdPairVector    *secondary = NULL);
-    
+        bool                     forceResult,
+        Read                    *read[NUM_DIRECTIONS],
+        SingleAlignmentResult   *primaryResult,
+        int                      maxEditDistanceForSecondaryResults,
+        int                      secondaryResultBufferSize,
+        int                     *nSecondaryResults,
+        SingleAlignmentResult   *secondaryResults);
+
     void clearCandidates();
 
     bool findElement(unsigned genomeLocation, Direction direction, HashTableElement **hashTableElement);
@@ -288,6 +276,8 @@ private:
     double   maxSeedCoverage;  // Max seeds to used expressed as readSize/seedSize this is mutually exclusive with maxSeedsToUseFromCommandLine
     unsigned extraSearchDepth;
     unsigned numWeightLists;
+    bool     noUkkonen;
+    bool     noOrderedEvaluation;
 
     char *rcReadData;
     char *rcReadQuality;
@@ -308,4 +298,15 @@ private:
                               // maxK edit distance (useful when using SNAP for filtering only).
 
     AlignerStats *stats;
+
+    unsigned *hitCountByExtraSearchDepth;   // How many hits at each depth bigger than the current best edit distance.
+                                            // So if the current best hit has edit distance 2, then hitCountByExtraSearchDepth[0] would
+                                            // be the count of hits at edit distance 2, while hitCountByExtraSearchDepth[2] would be the count
+                                            // of hits at edit distance 4.
+
+    void finalizeSecondaryResults(
+        int                     *nSecondaryResults,                     // in/out
+        SingleAlignmentResult   *secondaryResults,
+        int                      maxEditDistanceForSecondaryResults,
+        int                      bestScore);
 };

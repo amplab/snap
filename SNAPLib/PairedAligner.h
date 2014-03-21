@@ -49,7 +49,7 @@ protected:
 
     // for subclasses
 
-    virtual void writePair(Read* read0, Read* read1, PairedAlignmentResult* result);
+    virtual void writePair(Read* read0, Read* read1, PairedAlignmentResult* result, bool secondary);
 
     virtual void updateStats(PairedAlignerStats* stats, Read* read0, Read* read1, PairedAlignmentResult* result);
 

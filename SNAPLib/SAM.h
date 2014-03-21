@@ -158,7 +158,7 @@ public:
     virtual bool writeRead(
         const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
-        int mapQuality, unsigned genomeLocation, Direction direction,
+        int mapQuality, unsigned genomeLocation, Direction direction, bool secondaryAlignment,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
         AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD) const; 
 
@@ -194,6 +194,7 @@ public:
         AlignmentResult result, 
         unsigned genomeLocation,
         Direction direction,
+        bool secondaryAlignment,
         bool useM,
         bool hasMate,
         bool firstInPair,

@@ -27,6 +27,7 @@ Revision History:
 #include "AlignerContext.h"
 #include "AlignerStats.h"
 #include "ReadSupplierQueue.h"
+#include "Aligner.h"
 
 class SingleAlignerContext : public AlignerContext
 {
@@ -50,7 +51,7 @@ protected:
 
     // for subclasses
 
-    virtual void writeRead(Read* read, AlignmentResult result, unsigned location, Direction direction, int score, int mapq);
+    virtual void writeRead(Read* read, const SingleAlignmentResult &result, bool secondaryAlignment);
 
     virtual void updateStats(AlignerStats* stats, Read* read, AlignmentResult result, unsigned location, int score, int mapq, bool wasError);
 

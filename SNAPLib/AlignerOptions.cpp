@@ -64,9 +64,11 @@ AlignerOptions::AlignerOptions(
     seedCountSpecified(false),
     numSeedsFromCommandLine(0),
     ignoreSecondaryAlignments(true),
-    outputMultipleAlignments(false),
+    maxSecondaryAligmmentAdditionalEditDistance(-1),
     preserveClipping(false),
-    expansionFactor(1.0)
+    expansionFactor(1.0),
+    noUkkonen(false),
+    noOrderedEvaluation(false)
 {
     if (forPairedEnd) {
         maxDist                 = 15;
@@ -131,11 +133,22 @@ AlignerOptions::usageMessage()
         "  --hp Indicates not to use huge pages (this may speed up index load and slow down alignment)\n"
         "  -D   Specifies the extra search depth (the edit distance beyond the best hit that SNAP uses to compute MAPQ).  Default 2\n"
         "  -rg  Specify the default read group if it is not specified in the input file\n"
+        "  -R   Specify the entire read group line for the SAM/BAM output.  This must include an ID tag.  If it doesn't start with\n"
+        "       '@RG' SNAP will add that.  Specify tabs by \\t.  Two backslashes will generate a single backslash.\n"
+        "        backslash followed by anything else is illegal.  So, '-R @RG\\tID:foo\\tDS:my data' would generate reads\n"
+        "        with defualt tag foo, and an @RG line that also included the DS:my data field.\n"
         "  -sa  Include reads from SAM or BAM files with the secondary alignment (0x100) flag set; default is to drop them.\n"
-        "  -om  Output multiple equivalent alignment locations if they exist\n"
+        "  -om  Output multiple alignments.  Takes as a parameter the maximum extra edit distance relative to the best alignment\n"
+        "       to allow for secondary alignments\n"
         "  -pc  Preserve the soft clipping for reads coming from SAM or BAM files\n"
         "  -xf  Increase expansion factor for BAM and GZ files (default %.1f)\n"
         "  -hdp Use Hadoop-style prefixes (reporter:status:...) on error messages, and emit hadoop-style progress messages\n"
+        "  -nu  No Ukkonen: don't reduce edit distance search based on prior candidates. This option is purely for\n"
+        "       evalutating the performance effect of using Ukkonen's algorithm rather than Smith-Waterman, and specifying\n"
+        "       it will slow down execution without improving the alignments.\n"
+        "  -no  No Ordering: don't order the evalutation of reads so as to select more likely candidates first.  This option\n"
+        "       is purely for evaluating the performance effect of the read evaluation order, and specifying it will slow\n"
+        "       down execution without improving alignments.\n"
             ,
             commandLine,
             maxDist,
@@ -174,7 +187,7 @@ AlignerOptions::usageMessage()
                       "\n"
                       "So, for example, you could specify -bam input.file to make SNAP treat input.file as a BAM file,\n"
                       "even though it would ordinarily assume a FASTQ file for input or a SAM file for output when it\n"
-                      "doens't recoginize the file extension.\n"
+                      "doesn't recoginize the file extension.\n"
                       "In order to use a file name that begins with a '-' and not have SNAP treat it as a switch, you must\n"
                       "explicitly specify the type.  But really, that's just confusing and you shouldn't do it.\n"
     );
@@ -332,7 +345,22 @@ AlignerOptions::parse(
 		ignoreSecondaryAlignments = false;
 		return true;
 	} else if (strcmp(argv[n], "-om") == 0) {
-		outputMultipleAlignments = true;
+		if (n + 1 >= argc) {
+            WriteErrorMessage("-om requires an additional value\n");
+            soft_exit(1);
+        }
+        //
+        // Check that the parameters is actually numeric.  This is to avoid having someone do "-om -anotherSwitch" and
+        // having the additional switche silently consumed here.
+        //
+        if (argv[n+1][0] < '0' || argv[n+1][0] > '9') {
+            WriteErrorMessage("-om requires a numerical parameter.\n");
+            soft_exit(1);
+        }
+        maxSecondaryAligmmentAdditionalEditDistance = atoi(argv[n+1]);
+
+        n++;
+
 		return true;
 	} else if (strcmp(argv[n], "-xf") == 0) {
         if (n + 1 < argc) {
@@ -355,8 +383,7 @@ AlignerOptions::parse(
         } else {
             WriteErrorMessage("Must have the gap penalty value after -G\n");
         }
-    } else if (strcmp(argv[n], "-r") == 0) {
-#if 0   // This isn't ready yet.
+    } else if (strcmp(argv[n], "-R") == 0) {
         if (n + 1 < argc) {
             //
             // Check the line for sanity.  It must consist either of @RG\t<fields> or just <fields> (in which
@@ -364,15 +391,123 @@ AlignerOptions::parse(
             // We don't require that the fields be things that are listed in the SAM spec, however, because
             // new ones might be added.
             //
-            const char *parsePointer = argv[n+1];
-            if (*parsePointer == '@') {
+            bool needsRG = !(argv[n+1][0] == '@' && argv[n+1][1] == 'R' && argv[n+1][2] == 'G' && argv[n+1][3] == '\\' && argv[n+1][4] == 't');
+            char *buffer = new char[strlen(argv[n+1]) + 1 + needsRG ? 4 : 0];
+            char *copyToPtr = buffer;
+            const char *copyFromPtr = argv[n+1];
+            if (needsRG) {
+                memcpy(copyToPtr, "@RG\t", 4);
+                copyToPtr += 4;
             }
 
-            rgLineContents = argv[n+1];
+            //
+            // First copy the line, converting \t into tabs.
+            //
+
+            bool pendingBackslash = false;
+
+            while (*copyFromPtr != '\0') {
+                if (pendingBackslash) {
+                    if (*copyFromPtr == 't' || *copyFromPtr == '\\') {
+                        *copyToPtr = (*copyFromPtr == 't') ? '\t' : '\\';
+                        copyToPtr++;
+                        copyFromPtr++;
+                        pendingBackslash = false;
+                    } else {
+                        WriteErrorMessage("Unrecognized escape character in -R parameter.  A backslash must be followed by a t or another backslash.\n");
+                        soft_exit(1);
+                    }
+                } else {
+                    //
+                    // Emit the character literally unless it's a backslash.
+                    //
+                    pendingBackslash = *copyFromPtr == '\\';
+
+                    if (!pendingBackslash) {
+                       *copyToPtr = *copyFromPtr;
+                        copyToPtr++;
+                    }
+
+                    copyFromPtr++;
+                }
+            } // while
+            *copyToPtr = '\0';  // Null terminate the string
+
+            //
+            // Now run through the line looking for <tab>ID:..., and use that to set the default read group.
+            //
+            int bytesAlong = 0;
+            defaultReadGroup = NULL;
+            for (int i = 0; NULL == defaultReadGroup && i < strlen(buffer); i++) {
+                switch (bytesAlong) {
+                case 0: 
+                    if (buffer[i] == '\t') {
+                        bytesAlong = 1;
+                    }
+                    break;
+
+                case 1:
+                    if (buffer[i] == 'I') {
+                        bytesAlong = 2;
+                    } else {
+                        bytesAlong = 0;
+                    }
+                    break;
+
+                case 2:
+                    if (buffer[i] == 'D') {
+                        bytesAlong = 3;
+                    } else {
+                        bytesAlong = 0;
+                    }
+                    break;
+
+                case 3: 
+                    if (buffer[i] == ':') {
+                        if (NULL != defaultReadGroup) {
+                            WriteErrorMessage("read group string specified with -R contained more than one ID field.\n");
+                            soft_exit(1);
+                        }
+                        //
+                        // The ID tag starts at i+1.
+                        //
+                        int idTagSize = 0;
+                        for (idTagSize = 0; buffer[i + 1 + idTagSize] != '\t' && buffer[i + 1 + idTagSize] != '\0'; idTagSize++) {
+                            // This loop body intentionally left blank.
+                        }
+ 
+                        if (0 == idTagSize) {
+                            WriteErrorMessage("The ID tag on the read group line specified by -R must not be empty\n");
+                            soft_exit(1);
+                        }
+                        defaultReadGroup = new char[idTagSize + 1]; // +1 for null.
+                        memcpy(defaultReadGroup, buffer + i + 1, idTagSize);
+                        defaultReadGroup[idTagSize] = '\0';
+
+                    } else {
+                        bytesAlong = 0;
+                    }
+                    break;
+
+                default:
+                    WriteErrorMessage("Invalid bytesAlong = %d", bytesAlong);
+                    soft_exit(1);
+                } // switch
+            } // for
+
+            if (NULL == defaultReadGroup) {
+                WriteErrorMessage("The string specified after -R must include an ID field.\n");
+                soft_exit(1);
+            }
+
+            rgLineContents = buffer;    // This leaks, but so what?
             n++;
             return true;
+                
+        } else {
+            WriteErrorMessage("-R requires a value");
+            soft_exit(1);
         }
-#endif  // 0
 	} else if (strcmp(argv[n], "-pf") == 0) {
         if (n + 1 < argc) {
             perfFileName = argv[n+1];
@@ -383,7 +518,8 @@ AlignerOptions::parse(
         }
 	} else if (strcmp(argv[n], "-rg") == 0) {
         if (n + 1 < argc) {
-            defaultReadGroup = argv[n+1];
+            defaultReadGroup = new char[strlen(argv[n+1]) + 1];
+            strcpy(defaultReadGroup, argv[n+1]);
             n++;
             char* s = new char[1 + strlen(defaultReadGroup) + strlen("@RG\tID:\tSM:sample")];
             sprintf(s, "@RG\tID:%s\tSM:sample", defaultReadGroup);
@@ -397,6 +533,12 @@ AlignerOptions::parse(
         return true;    
     } else if (strcmp(argv[n], "-hdp") == 0) {
         AlignerOptions::useHadoopErrorMessages = true;
+        return true;    
+    } else if (strcmp(argv[n], "-nu") == 0) {
+        noUkkonen = true;
+        return true;
+    } else if (strcmp(argv[n], "-no") == 0) {
+        noOrderedEvaluation = true;
         return true;
 	} else if (strcmp(argv[n], "-D") == 0) {
         if (n + 1 < argc) {
@@ -645,7 +787,7 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
         if (snapFile->isStdio) {
             WriteErrorMessage("Stdio IO always requires an explicit file type.  So, for example, do 'snap single index-directory -fastq -' to read FASTQ from stdin\n");
         } else {
-            WriteErrorMessage("Unknown file type, please specify file type with -fastq, -sam, -bam, etc.\n");
+            WriteErrorMessage("Unknown file type for file name '%s', please specify file type with -fastq, -sam, -bam, etc.\n", snapFile->fileName);
         }
 
         soft_exit(1);

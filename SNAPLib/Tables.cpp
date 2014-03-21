@@ -81,6 +81,6 @@ Tables::Tables()
     }
 
     for (unsigned i = 0; i < 256; i++) {
-        cigarQualToSam[i] = (i == 0 || i > 63) ? '!' : ' ' + i;
+        cigarQualToSam[i] = i > ('~' - '!') ? '!' : '!' + i;
     }
 }
