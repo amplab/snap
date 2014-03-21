@@ -77,13 +77,13 @@ NWaiter::NWaiter(size_t n)
 	_signalsRequired = n;
 	_signalsReceived = 0;
 	InitializeExclusiveLock(&_lock);
-	CreateSingleWaiterObject(&_waiter);
+	CreateEventObject(&_waiter);
 }
 
 NWaiter::~NWaiter()
 {
 	DestroyExclusiveLock(&_lock);
-	DestroySingleWaiterObject(&_waiter);
+	DestroyEventObject(&_waiter);
 }
 
 

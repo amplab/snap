@@ -576,7 +576,7 @@ public:
 private:
 	size_t _signalsRequired;
 	size_t _signalsReceived;
-	SingleWaiterObject _waiter;
+	EventObject _waiter;
 	ExclusiveLock _lock;
 };
 
