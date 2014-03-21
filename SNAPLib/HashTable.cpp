@@ -142,7 +142,7 @@ SNAPHashTable *SNAPHashTable::loadFromFile(GenericFile *loadFile)
 
     table->Table = (Entry *)BigAlloc2(table->tableSize * table->elementSize, &table->virtualAllocSize);
 
-    size_t maxReadSize = 100 * 1024 * 1024;
+    size_t maxReadSize = 100 * 1024 * 1024 * (size_t) 1024;
     size_t readOffset = 0;
     while (readOffset < table->tableSize * table->elementSize) {
 
@@ -152,7 +152,7 @@ SNAPHashTable *SNAPHashTable::loadFromFile(GenericFile *loadFile)
         size_t bytesRead = loadFile->read((char*)table->Table + readOffset, amountToRead);
 
         if (bytesRead < amountToRead) {
-            WriteErrorMessage("SNAPHashTable::SNAPHashTable: fread failed, %d, %lu, %lu\n", errno, bytesRead, amountToRead);
+            WriteErrorMessage("SNAPHashTable::SNAPHashTable: fread failed, expected %lu, got %lu, errno %d\n", amountToRead, bytesRead, errno);
             soft_exit(1);
         }
  

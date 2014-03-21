@@ -49,10 +49,13 @@ public:
 	virtual char *gets(char *buf, size_t count) = 0;
 
 	// Advance forward or back by byteOffset bytes in the file.
-	virtual int advance(long byteOffset) = 0;
+	virtual int advance(long long byteOffset) = 0;
 
     // Close the file.
 	virtual void close() = 0;
+
+	// Return the name of the file.
+	char *getFilename() { return _filename; }
 
 	virtual ~GenericFile();
 

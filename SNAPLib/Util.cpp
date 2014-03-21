@@ -72,3 +72,43 @@ util::memrevcpy(
     }
 }
 
+NWaiter::NWaiter(size_t n)
+{
+	_signalsRequired = n;
+	_signalsReceived = 0;
+	InitializeExclusiveLock(&_lock);
+	CreateSingleWaiterObject(&_waiter);
+}
+
+NWaiter::~NWaiter()
+{
+	DestroyExclusiveLock(&_lock);
+	DestroySingleWaiterObject(&_waiter);
+}
+
+
+void NWaiter::wait()
+{
+	while (true) {
+		bool done;
+
+		AcquireExclusiveLock(&_lock);
+		done = (_signalsReceived >= _signalsRequired);
+		ReleaseExclusiveLock(&_lock);
+
+		if (done)
+			return;
+		else {
+			WaitForEvent(&_waiter);
+		}
+	}
+}
+
+void NWaiter::signal()
+{
+	AcquireExclusiveLock(&_lock);
+	_signalsReceived += 1;
+	ReleaseExclusiveLock(&_lock);
+
+	AllowEventWaitersToProceed(&_waiter);
+}

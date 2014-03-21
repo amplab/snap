@@ -752,9 +752,9 @@ GenomeIndex::loadFromDirectory(char *directoryName)
         return NULL;
     }
 
-    const unsigned readSize = 32 * 1024 * 1024;
+    const size_t readSize = 10 * 1024 * 1024 * (size_t) 1024;
     for (size_t readOffset = 0; readOffset < index->overflowTableSize * sizeof(*(index->overflowTable)); ) {
-        int amountToRead = (unsigned)__min((size_t)readSize,(size_t)index->overflowTableSize * sizeof(*(index->overflowTable)) - readOffset);
+        size_t amountToRead = __min(readSize, index->overflowTableSize * sizeof(*(index->overflowTable)) - readOffset);
 #ifdef _MSC_VER
         if (amountToRead % 4096) {
             amountToRead = ((amountToRead + 4095) / 4096) * 4096;
@@ -764,7 +764,7 @@ GenomeIndex::loadFromDirectory(char *directoryName)
             }
         }
 #endif
-        int amountRead = fOverflowTable->read(((char*) index->overflowTable) + readOffset, amountToRead);
+        size_t amountRead = fOverflowTable->read(((char*) index->overflowTable) + readOffset, amountToRead);
         if (amountRead < amountToRead) {
             WriteErrorMessage("GenomeIndex::loadFromDirectory: fread failed (amountToRead = %d, amountRead = %d, readOffset %lld), %d\n",amountToRead, amountRead, readOffset, errno);
             fOverflowTable->close();
