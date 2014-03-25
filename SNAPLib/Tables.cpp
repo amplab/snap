@@ -9,6 +9,7 @@ const char *IS_N = tables.getIsN();
 const int  *BASE_VALUE = tables.getBaseValue();
 const int  *BASE_VALUE_NO_N = tables.getBaseValueNoN();
 const char *VALUE_BASE = tables.getValueBase();
+const unsigned char *VALUE4_RC = tables.getValue4RC();
 const char *PACKED_BASE_VALUE = tables.getPackedBaseValue();
 const char *PACKED_QUALITY_MASK = tables.getPackedQualityMask();
 const char *PACKED_VALUE_BASE = tables.getPackedValueBase();
@@ -55,6 +56,11 @@ Tables::Tables()
     baseValueNoN['G'] = 1;
     baseValueNoN['C'] = 2;
     baseValueNoN['T'] = 3;
+
+    // reverse complement of a byte of 4x2-bit values
+    for (int i = 0; i < 256; i++) {
+        value4RC[i] = 0xff ^ (((i & 0x03) << 6) | ((i & 0x0c) << 2) | ((i & 0x30) >> 2) | ((i & 0xc0) >> 6));
+    }
 
     // packed base tables
     for (int i = 0; i < 256; i++) {
