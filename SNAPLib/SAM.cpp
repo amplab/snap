@@ -82,24 +82,24 @@ strnchrs(char *str, char charToFind, char charToFind2, size_t maxLen) // Hokey v
 }
 
     char *
-SAMReader::skipToBeyondNextRunOfSpacesAndTabs(char *str, const char *endOfBuffer, size_t *charsUntilFirstSpaceOrTab)
+SAMReader::skipToBeyondNextFieldSeparator(char *str, const char *endOfBuffer, size_t *o_charsUntilFirstSeparator)
 {
     if (NULL == str) return NULL;
 
     char *nextChar = str;
-    while (nextChar < endOfBuffer && *nextChar != ' ' && *nextChar != '\n' && *nextChar != '\t' && *nextChar != '\r' /* for Windows CRLF text */) {
+    while (nextChar < endOfBuffer && *nextChar != '\n' && *nextChar != '\t' && *nextChar != '\r' /* for Windows CRLF text */) {
         nextChar++;
     }
 
-    if (NULL != charsUntilFirstSpaceOrTab) {
-        *charsUntilFirstSpaceOrTab = nextChar - str;
+    if (NULL != o_charsUntilFirstSeparator) {
+        *o_charsUntilFirstSeparator = nextChar - str;
     }
 
     if (nextChar >= endOfBuffer || *nextChar == '\n') {
         return NULL;
     }
 
-    while (nextChar < endOfBuffer && (' ' == *nextChar || '\t' == *nextChar || '\r' == *nextChar)) {
+    while (nextChar < endOfBuffer && ('\t' == *nextChar || '\r' == *nextChar)) {
         nextChar++;
     }
 
@@ -278,7 +278,7 @@ SAMReader::parseLine(char *line, char *endOfBuffer, char *result[], size_t *line
             break;
         }
 
-        next = skipToBeyondNextRunOfSpacesAndTabs(next,endOfLine,&fieldLengths[i]);
+        next = skipToBeyondNextFieldSeparator(next,endOfLine,&fieldLengths[i]);
     }
 
     *linelength =  endOfLine - line + 1;    // +1 skips over the \n
@@ -371,7 +371,7 @@ SAMReader::getReadFromLine(
                 n--;
             }
             read->setAuxiliaryData(field[OPT], n);
-            for (char* p = field[OPT]; p != NULL && p < field[OPT] + fieldLength[OPT]; p = SAMReader::skipToBeyondNextRunOfSpacesAndTabs(p, field[OPT] + fieldLength[OPT])) {
+            for (char* p = field[OPT]; p != NULL && p < field[OPT] + fieldLength[OPT]; p = SAMReader::skipToBeyondNextFieldSeparator(p, field[OPT] + fieldLength[OPT])) {
                 if (strncmp(p, "RG:Z:", 5) == 0) {
                     read->setReadGroup(READ_GROUP_FROM_AUX);
                     break;
