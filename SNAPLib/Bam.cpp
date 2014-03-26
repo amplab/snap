@@ -425,10 +425,16 @@ BAMReader::getReadFromLine(
     }
 
     // todo: only convert to text if needed, compute clipping directly from binary
-    char* cigarBuffer = getExtra(min(MAX_K * 5, MAX_SEQ_LENGTH));
-    if (! BAMAlignment::decodeCigar(cigarBuffer, MAX_SEQ_LENGTH, bam->cigar(), bam->n_cigar_op)) {
-        cigarBuffer = ""; // todo: fail?
+    const char* cigarBuffer;
+    {
+        char *writableCigarBuffer = getExtra(min(MAX_K * 5, MAX_SEQ_LENGTH));
+        if (! BAMAlignment::decodeCigar(writableCigarBuffer, MAX_SEQ_LENGTH, bam->cigar(), bam->n_cigar_op)) {
+            cigarBuffer = ""; // todo: fail?
+        } else {
+            cigarBuffer = writableCigarBuffer;
+        }
     }
+
 
     if (NULL != cigar) {
         *cigar = cigarBuffer;

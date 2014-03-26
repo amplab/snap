@@ -1234,7 +1234,7 @@ CloseLargeFile(
     LargeFileHandle* file)
 {
     if (0 == fclose(file->file)) {
-        delete (void*) file;
+        delete file;
     }
 }
 
