@@ -103,6 +103,10 @@ WorkerThreadMain(void *param)
         unsigned genomeLocation = read->getOriginalAlignedLocation();
         unsigned flag = read->getOriginalSAMFlags();
 
+        if (flag & SAM_UNMAPPED) {
+            genomeLocation = 0xffffffff;
+        }
+
         if (mapQ < 0 || mapQ > MaxMAPQ) {
             fprintf(stderr,"Invalid MAPQ: %d\n",mapQ);
             exit(1);
