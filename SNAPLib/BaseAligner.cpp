@@ -263,7 +263,7 @@ Return Value:
     if (0 != maxSeedsToUseFromCommandLine) {
         maxSeedsToUse = maxSeedsToUseFromCommandLine;
     } else {
-        maxSeedsToUse = (int)(maxSeedCoverage * inputRead->getDataLength() / genomeIndex->getSeedLength());
+        maxSeedsToUse = (int)(2 * maxSeedCoverage * inputRead->getDataLength() / genomeIndex->getSeedLength()); // 2x is for FORWARD/RC
     }
 
     if (NULL == hitDirection) {
