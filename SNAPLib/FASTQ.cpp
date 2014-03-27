@@ -438,8 +438,10 @@ PairedInterleavedFASTQReader::reinit(_int64 startingOffset, _int64 amountOfFileT
         // Now make sure that the next read is /1.
         //
         if (!data->getData(&buffer, &bytes)) {
-            WriteErrorMessage("PairedInterleavedFASTQReader: file (or chunk) appears to end with the first half of a read pair, ID: '%.*s'\n", read.getIdLength(), read.getId());
-            soft_exit(1);
+            //
+            // This was the last read in the file.
+            //
+            return;
         }
 
         FASTQReader::getReadFromBuffer(buffer, bytes, &read, fileName, data, context);
