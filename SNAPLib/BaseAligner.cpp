@@ -268,7 +268,7 @@ Return Value:
     if (0 != maxSeedsToUseFromCommandLine) {
         maxSeedsToUse = maxSeedsToUseFromCommandLine;
     } else {
-        maxSeedsToUse = (int)(maxSeedCoverage * inputRead->getDataLength() / genomeIndex->getSeedLength());
+        maxSeedsToUse = (int)(2 * maxSeedCoverage * inputRead->getDataLength() / genomeIndex->getSeedLength()); // 2x is for FORWARD/RC
     }
 
     primaryResult->location = InvalidGenomeLocation; // Value to return if we don't find a location.
