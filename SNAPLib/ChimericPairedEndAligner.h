@@ -37,6 +37,7 @@ public:
         unsigned            maxK,
         unsigned            maxSeedsFromCommandLine,
         double              seedCoverage,
+	unsigned            minWeightToCheck,
         bool                forceSpacing_,
         unsigned            extraSearchDepth,
         PairedEndAligner    *underlyingPairedEndAligner_,

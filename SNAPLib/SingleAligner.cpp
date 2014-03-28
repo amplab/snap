@@ -172,6 +172,7 @@ SingleAlignerContext::runIterationThread()
             maxReadSize,
             numSeedsFromCommandLine,
             seedCoverage,
+	    minWeightToCheck,
             extraSearchDepth,
             NULL,               // LV (no need to cache in the single aligner)
             NULL,               // reverse LV

@@ -45,6 +45,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         unsigned            maxK,
         unsigned            maxSeedsFromCommandLine,
         double              seedCoverage,
+	unsigned            minWeightToCheck,
         bool                forceSpacing_,
         unsigned            extraSearchDepth,
         PairedEndAligner    *underlyingPairedEndAligner_,
@@ -53,7 +54,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
-                                    maxSeedsFromCommandLine,  seedCoverage, extraSearchDepth, &lv, &reverseLV, NULL, allocator);
+	maxSeedsFromCommandLine,  seedCoverage, minWeightToCheck, extraSearchDepth, &lv, &reverseLV, NULL, allocator);
     
     underlyingPairedEndAligner->setLandauVishkin(&lv, &reverseLV);
 }

@@ -43,7 +43,7 @@ bool isAValidAlignmentResult(AlignmentResult result);
 
 //#define LONG_READS
 #ifdef LONG_READS
-#define MAX_READ_LENGTH 100000
+#define MAX_READ_LENGTH 20000
 #else
 #define MAX_READ_LENGTH 500
 #endif

@@ -61,6 +61,7 @@ AlignerOptions::AlignerOptions(
     extraSearchDepth(2),
     defaultReadGroup("FASTQ"),
     seedCountSpecified(false),
+    minWeightToCheck(1),
     numSeedsFromCommandLine(0),
     ignoreSecondaryAlignments(true),
     preserveClipping(false),
@@ -98,6 +99,7 @@ AlignerOptions::usageMessage()
         "  -n   number of seeds to use per read\n"
         "  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default: %lf)\n"
         "  -h   maximum hits to consider per seed (default: %d)\n"
+	"  -ms  minimum seed matches per location (default: %d)\n"
         "  -c   Deprecated parameter; this is ignored.  Consumes one extra arg.\n"
         "  -a   Deprecated parameter; this is ignored.  Consumes one extra arg.\n"
         "  -t   number of threads (default is one per core)\n"
@@ -192,6 +194,16 @@ AlignerOptions::parse(
             seedCountSpecified = true;
             seedCoverage = atof(argv[n+1]);
             numSeedsFromCommandLine = 0;
+            n++;
+            return true;
+        }
+    } else if (strcmp(argv[n], "-ms") == 0) {
+        if (n + 1 < argc) {
+	    minWeightToCheck = (unsigned) atoi(argv[n+1]);
+	    if (minWeightToCheck > 1000) {
+	      fprintf(stderr, "-ms must be between 1 and 1000\n");
+	      soft_exit(1);
+	    }
             n++;
             return true;
         }

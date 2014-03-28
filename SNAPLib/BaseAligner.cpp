@@ -50,6 +50,7 @@ BaseAligner::BaseAligner(
     unsigned        i_maxReadSize,
     unsigned        i_maxSeedsToUseFromCommandLine,
     double          i_maxSeedCoverage,
+    unsigned        i_minWeightToCheck,
     unsigned        i_extraSearchDepth,
     LandauVishkin<1>*i_landauVishkin,
     LandauVishkin<-1>*i_reverseLandauVishkin,
@@ -57,7 +58,8 @@ BaseAligner::BaseAligner(
     BigAllocator   *allocator) :
         genomeIndex(i_genomeIndex), maxHitsToConsider(i_maxHitsToConsider), maxK(i_maxK),
         maxReadSize(i_maxReadSize), maxSeedsToUseFromCommandLine(i_maxSeedsToUseFromCommandLine),
-        maxSeedCoverage(i_maxSeedCoverage), readId(-1), extraSearchDepth(i_extraSearchDepth),
+        maxSeedCoverage(i_maxSeedCoverage), minWeightToCheck(max(1u,i_minWeightToCheck)),
+	readId(-1), extraSearchDepth(i_extraSearchDepth),
         explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats)
 /*++
 
@@ -744,7 +746,7 @@ Return Value:
         }
 
         if (__min(lowestPossibleScoreOfAnyUnseenLocation[FORWARD],lowestPossibleScoreOfAnyUnseenLocation[RC]) > scoreLimit || forceResult) {
-            if (weightListToCheck == 0) {
+            if (weightListToCheck < minWeightToCheck) {
                 //
                 // We've scored all live candidates and excluded all non-candidates, or we've checked enough that we've hit the cutoff.  We have our
                 // answer.

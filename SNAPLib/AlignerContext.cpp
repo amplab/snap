@@ -194,6 +194,7 @@ AlignerContext::beginIteration()
     maxHits = maxHits_;
     numSeedsFromCommandLine = options->numSeedsFromCommandLine;
     seedCoverage = options->seedCoverage;
+    minWeightToCheck = options->minWeightToCheck;
     if (stats != NULL) {
         delete stats;
     }

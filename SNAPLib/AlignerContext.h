@@ -103,6 +103,7 @@ public:
     unsigned                             maxDist;
     unsigned                             numSeedsFromCommandLine;
     double                               seedCoverage;
+    unsigned                             minWeightToCheck;
     int                                  maxHits;
     bool                                 computeError;
     bool                                 detailedStats;
