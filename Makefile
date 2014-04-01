@@ -45,6 +45,12 @@ $(OBJS): %.o : %.cpp
 snap: $(LIB_OBJ) $(SNAP_OBJ)
 	$(CXX) -o $@ $(CXXFLAGS) -Itests $(LDFLAGS) $^ $(LIBS)
 
+snapxl:
+	make clean
+	make snap CXXFLAGS="-DLONG_READS $(CXXFLAGS)"
+	mv snap snapxl
+	make clean
+
 roc: $(LIB_OBJ) $(ROC_OBJ)
 	$(CXX) -o $@ $(CXXFLAGS) -Itests $(LDFLAGS) $^ $(LIBS)
 
