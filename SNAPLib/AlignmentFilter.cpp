@@ -154,40 +154,49 @@ int AlignmentFilter::AddAlignment(unsigned location, Direction direction, int sc
         if (!isTranscriptome) {
     
             const Genome::Contig *piece = genome->getContigAtLocation(location);
-            rname = piece->name;
-            pos_original = location - piece->beginningOffset + 1;
-            pos = pos_original;
+
+            //Check that piece is not NULL
+            if (piece != NULL) {
+
+                rname = piece->name;
+                pos_original = location - piece->beginningOffset + 1;
+                pos = pos_original;
             
-            if (isMate0) {
-                pos_end = pos+read1->getDataLength()-1;
-            } else {
-                pos_end = pos+read0->getDataLength()-1;
+                if (isMate0) {
+                    pos_end = pos+read1->getDataLength()-1;
+                } else {
+                    pos_end = pos+read0->getDataLength()-1;
+                }
             }
         
         //If we have a transcriptome read, convert the coordinates to genomic coordinates
         } else {
         
             const Genome::Contig *piece = transcriptome->getContigAtLocation(location);
-            rname = piece->name;           
-            pos_original = location - piece->beginningOffset + 1;
-            pos = pos_original;
+
+            //Check that piece is not NULL
+            if (piece != NULL) {
             
-            //Convert the transcript rname and pos into genomic coordinates
-            const GTFTranscript& transcript = gtf->GetTranscript(rname);
-            transcript_id = transcript.TranscriptID();
-            gene_id = transcript.GeneID();
+                rname = piece->name;           
+                pos_original = location - piece->beginningOffset + 1;
+                pos = pos_original;
+            
+                //Convert the transcript rname and pos into genomic coordinates
+                const GTFTranscript& transcript = gtf->GetTranscript(rname);
+                transcript_id = transcript.TranscriptID();
+                gene_id = transcript.GeneID();
                         
-            //RName is the chromosome name in genomic coordinates!
-            rname = transcript.Chr();
+                //RName is the chromosome name in genomic coordinates!
+                rname = transcript.Chr();
             
-            if (isMate0) {
-                pos_end = transcript.GenomicPosition(pos+read1->getDataLength()-1, 0);
-                pos = transcript.GenomicPosition(pos, read1->getDataLength());     
-            } else {
-                pos_end = transcript.GenomicPosition(pos+read0->getDataLength()-1, 0);
-                pos = transcript.GenomicPosition(pos, read0->getDataLength()); 
+                if (isMate0) {
+                    pos_end = transcript.GenomicPosition(pos+read1->getDataLength()-1, 0);
+                    pos = transcript.GenomicPosition(pos, read1->getDataLength());     
+                } else {
+                    pos_end = transcript.GenomicPosition(pos+read0->getDataLength()-1, 0);
+                    pos = transcript.GenomicPosition(pos, read0->getDataLength()); 
+                }
             }
-            
         }
     } 
     
