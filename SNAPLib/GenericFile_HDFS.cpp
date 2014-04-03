@@ -31,21 +31,16 @@ Revision History:
 #include "GenericFile_HDFS.h"
 #include "Util.h"
 
-// _initFlag exists only so I can call _staticInit() --
-// to ensure _staticLock is initialized before any thread tries
-// to use it
 ExclusiveLock GenericFile_HDFS::_staticLock;
 hdfsFS GenericFile_HDFS::_fs;
-int GenericFile_HDFS::_initFlag = GenericFile_HDFS::_staticInit(); // this goes last so staticInit runs after others are initialized
+
+// this goes last so staticInit runs after others are initialized;
+// it has side-effects that initialize the other members
+int GenericFile_HDFS::_initFlag = GenericFile_HDFS::_staticInit(); 
 
 int GenericFile_HDFS::_staticInit()
 {
 	InitializeExclusiveLock(&_staticLock);
-
-#ifdef _MSC_VER
-	// WriteErrorMessage("Initializing HDFS library\n");
-	staticLibInit();
-#endif
 
 	_fs = NULL;
 	srand(unsigned(time(NULL)));

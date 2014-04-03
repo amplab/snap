@@ -412,12 +412,20 @@ BOOL WINAPI DllMain (
 
 }
 
-// jelson
-void staticLibInit()
+// jelson changes: start
+INIT_ONCE g_InitOnce = INIT_ONCE_STATIC_INIT;
+
+BOOL CALLBACK staticLibInit(PINIT_ONCE InitOnce, PVOID Parameter, PVOID *lpContext)
 {
 	DllMain(NULL, DLL_PROCESS_ATTACH, NULL);
-	DllMain(NULL, DLL_THREAD_ATTACH, NULL);
 }
+
+void maybePerformStaticLibInit()
+{
+	InitOnceExecuteOnce(&g_InitOnce, staticLibInit, NULL, NULL);
+}
+// jelson changes: end
+
 
 #endif
 
@@ -1083,6 +1091,7 @@ static JNIEnv* getGlobalJNIEnv(void)
  * @param: None.
  * @return The JNIEnv* corresponding to the thread.
  */
+
 JNIEnv* getJNIEnv(void)
 {
     JNIEnv *env = NULL;
@@ -1092,7 +1101,10 @@ JNIEnv* getJNIEnv(void)
     
 #ifdef WIN32
     DWORD dwWaitResult; 
-    tls = TlsGetValue(hdfs_dwTlsIndex1); 
+
+	maybePerformStaticLibInit();
+
+	tls = TlsGetValue(hdfs_dwTlsIndex1); 
     if (tls) return tls->env;
 #endif
 
