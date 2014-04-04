@@ -60,7 +60,7 @@ GenericFile *GenericFile::open(const char *filename, Mode mode)
 		retval = NULL;
 #endif
 	} else {
-		retval = GenericFile_stdio::open(filename, mode);
+        retval = GenericFile_stdio::open(filename, mode);
 	}
 
 	if (NULL != retval) {
@@ -70,6 +70,31 @@ GenericFile *GenericFile::open(const char *filename, Mode mode)
 
 	return retval;
 }
+
+// gets -- read until a newline. Based on the K&R implementation, but
+// a zillion times slower because we're going all the way out to the JVM
+// for each character. We can buffer locally if perf hurts too much.
+char *GenericFile::gets(char *buf, size_t count)
+{
+	int c;
+	char *next;
+
+	if (count == 0) {
+		return NULL;
+	}
+
+	next = buf;
+	while (--count > 0 && (c = getchar()) != EOF) {
+		// put the input char into the current pointer position, then increment it.
+		// if a newline is encountered, break
+		if ((*next++ = c) == '\n')
+			break;
+	}
+
+	*next = '\0';
+	return (c == EOF && next == buf) ? NULL : buf;
+}
+
 
 
 

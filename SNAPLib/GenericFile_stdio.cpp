@@ -24,6 +24,7 @@ Revision History:
 #include "stdafx.h"
 #include "Compat.h"
 #include "GenericFile_stdio.h"
+#include "Error.h"
 
 GenericFile_stdio::GenericFile_stdio()
 {
@@ -62,7 +63,9 @@ GenericFile_stdio *GenericFile_stdio::open(const char *filename, Mode mode)
 
 size_t GenericFile_stdio::read(void *ptr, size_t count)
 {
+
 	return fread(ptr, 1, count, _file);
+
 }
 
 char *GenericFile_stdio::gets(char *buf, size_t count)

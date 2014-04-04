@@ -178,6 +178,7 @@
     <ClInclude Include="FixedSizeSet.h" />
     <ClInclude Include="FixedSizeVector.h" />
     <ClInclude Include="GenericFile.h" />
+    <ClInclude Include="GenericFile_Blob.h" />
     <ClInclude Include="GenericFile_HDFS.h" />
     <ClInclude Include="GenericFile_stdio.h" />
     <ClInclude Include="Genome.h" />
@@ -231,6 +232,7 @@
     <ClCompile Include="FASTA.cpp" />
     <ClCompile Include="FASTQ.cpp" />
     <ClCompile Include="GenericFile.cpp" />
+    <ClCompile Include="GenericFile_Blob.cpp" />
     <ClCompile Include="GenericFile_HDFS.cpp" />
     <ClCompile Include="GenericFile_stdio.cpp" />
     <ClCompile Include="Genome.cpp" />

@@ -43,6 +43,7 @@ static const int DEFAULT_SEED_SIZE = 20;
 static const double DEFAULT_SLACK = 0.3;
 static const unsigned DEFAULT_PADDING = 500;
 static const unsigned DEFAULT_KEY_BYTES = 4;
+static const unsigned DEFAULT_OVERFLOW_TABLE_FACTOR = 50;
 
 
 static void usage()
@@ -56,7 +57,7 @@ static void usage()
             "  -Ofactor         Specify the size of the overflow space.  This will change the memory footprint, but may be needed for some genomes.\n"
             "                   Larger numbers use more memory but work better with more repetitive genomes.  Smaller numbers reduce the memory\n"
             "                   footprint, but may cause the index build to fail.  Making -O larger than necessary will not affect the resuting\n"
-            "                   index.  Factor must be between 1 and 1000, and the default is 50.\n"
+            "                   index.  Factor must be between 1 and 1000, and the default is %d.\n"
             " -tMaxThreads      Specify the maximum number of threads to use. Default is the number of cores.\n"
             " -B<chars>     Specify characters to use as chromosome name terminators in the FASTA header line; these characters and anything after are\n"
             "               not part of the chromosome name.  You must specify all characters on a single -B switch.  So, for example, with -B_|,\n"
@@ -72,6 +73,7 @@ static void usage()
             " -keysize          The number of bytes to use for the hash table key.  Larger values increase SNAP's memory footprint, but allow larger seeds.  Default: %d\n",
             DEFAULT_SEED_SIZE,
             DEFAULT_SLACK,
+            DEFAULT_OVERFLOW_TABLE_FACTOR,
             DEFAULT_PADDING,
             DEFAULT_KEY_BYTES);
     soft_exit(1);
@@ -95,7 +97,7 @@ GenomeIndex::runIndexer(
     int seedLen = DEFAULT_SEED_SIZE;
     double slack = DEFAULT_SLACK;
     bool computeBias = true;
-    _uint64 overflowTableFactor = 50;
+    _uint64 overflowTableFactor = DEFAULT_OVERFLOW_TABLE_FACTOR;
     const char *pieceNameTerminatorCharacters = NULL;
     bool spaceIsAPieceNameTerminator = false;
     const char *histogramFileName = NULL;
@@ -175,6 +177,9 @@ GenomeIndex::runIndexer(
     }
 
     WriteStatusMessage("Hash table slack %lf\nLoading FASTA file '%s' into memory...", slack, fastaFile);
+
+    BigAllocUseHugePages = false;
+
     _int64 start = timeInMillis();
     const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator, chromosomePadding);
     if (NULL == genome) {
@@ -258,8 +263,8 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
         if (biasedSize < 100) {
             biasedSize = 100;
         }
-        hashTables[i] = new SNAPHashTable(biasedSize, hashTableKeySize);
-
+        hashTables[i] = new SNAPHashTable(biasedSize, hashTableKeySize, sizeof(unsigned), 2, InvalidGenomeLocation);
+ 
         if (NULL == hashTables[i]) {
             WriteErrorMessage("IndexBuilder: unable to allocate HashTable %d of %d\n", i+1, nHashTablesToBuild);
             soft_exit(1);
@@ -290,7 +295,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         return false;
     }
 
-    GenomeIndex *index = new GenomeIndex();
+    GenomeIndex *index = new GenomeIndexLarge();
     index->genome = NULL;   // We always delete the index when we're done, but we delete the genome first to save space during the overflow table build.
 
     unsigned countOfBases = genome->getCountOfBases();
@@ -475,7 +480,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     // onto the backpointer list when the overflow entry was first created.
     //
     index->overflowTableSize = nextOverflowIndex * 3 + (unsigned)countOfDuplicateOverflows;
-    index->overflowTable = (unsigned *)BigAlloc2(index->overflowTableSize * sizeof(*index->overflowTable),&index->overflowTableVirtualAllocSize);
+    index->overflowTable = (unsigned *)BigAlloc(index->overflowTableSize * sizeof(*index->overflowTable));
 
     unsigned nBackpointersProcessed = 0;
     _int64 lastPrintTime = timeInMillis();
@@ -574,25 +579,6 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     WriteStatusMessage("Overflow table build took %llds\nSaving genome index...", (timeInMillis() + 500 - start)/1000);
     start = timeInMillis();
 
-    //
-    // The save format is:
-    //  file 'GenomeIndex' contains in order major version, minor version, nHashTables, overflowTableSize, seedLen, chromosomePaddingSize.
-    //  File 'overflowTable' overflowTableSize bytes of the overflow table.
-    //  Each hash table is saved in file base name 'GenomeIndexHash%d' where %d is the
-    //  table number.
-    //  And the genome itself is already saved in the same directory in its own format.
-    //
-    snprintf(filenameBuffer,filenameBufferSize,"%s%cGenomeIndex",directoryName,PATH_SEP);
-
-    FILE *indexFile = fopen(filenameBuffer,"w");
-    if (indexFile == NULL) {
-        WriteErrorMessage("Unable to open file '%s' for write.\n",filenameBuffer);
-        return false;
-    }
-
-    fprintf(indexFile,"%d %d %d %d %d %d %d", GenomeIndexFormatMajorVersion, GenomeIndexFormatMinorVersion, index->nHashTables, index->overflowTableSize, seedLen, chromosomePaddingSize, hashTableKeySize);
-
-    fclose(indexFile);
 
     snprintf(filenameBuffer,filenameBufferSize,"%s%cOverflowTable",directoryName,PATH_SEP);
     FILE* fOverflowTable = fopen(filenameBuffer, "wb");
@@ -604,15 +590,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     const unsigned writeSize = 32 * 1024 * 1024;
     for (size_t writeOffset = 0; writeOffset < index->overflowTableSize * sizeof(*index->overflowTable); ) {
         unsigned amountToWrite = (unsigned)__min((size_t)writeSize,(size_t)index->overflowTableSize * sizeof(*index->overflowTable) - writeOffset);
-#ifdef _MSC_VER
-        if (amountToWrite % 4096) {
-            amountToWrite = ((amountToWrite + 4095) / 4096) * 4096;
-            if (amountToWrite + writeOffset > index->overflowTableVirtualAllocSize) {
-                WriteErrorMessage("GenomeIndex::saveToDirectory: overflow table virtual alloc size doesn't appear to be a multiple of the page size %lld\n",
-                    (_int64) index->overflowTableVirtualAllocSize);
-            }
-        }
-#endif
+ 
         size_t amountWritten = fwrite(((char *)index->overflowTable) + writeOffset, 1, amountToWrite, fOverflowTable);
         if (amountWritten < amountToWrite) {
             WriteErrorMessage("GenomeIndex::saveToDirectory: fwrite failed, %d\n",errno);
@@ -631,20 +609,46 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         soft_exit(1);
     }
 
+    size_t totalBytesWritten = 0;
+
     for (unsigned i = 0; i < index->nHashTables; i++) {
-        if (!hashTables[i]->saveToFile(tablesFile)) {
+        size_t bytesWrittenThisHashTable;
+        if (!hashTables[i]->saveToFile(tablesFile, &bytesWrittenThisHashTable)) {
             WriteErrorMessage("GenomeIndex::saveToDirectory: Failed to save hash table %d\n",i);
             return false;
         }
+        totalBytesWritten += bytesWrittenThisHashTable;
+    }
+   fclose(tablesFile);
+
+    //
+    // The save format is:
+    //  file 'GenomeIndex' contains in order major version, minor version, nHashTables, overflowTableSize, seedLen, chromosomePaddingSize.
+    //  File 'overflowTable' overflowTableSize bytes of the overflow table.
+    //  Each hash table is saved in file base name 'GenomeIndexHash%d' where %d is the
+    //  table number.
+    //  And the genome itself is already saved in the same directory in its own format.
+    //
+    snprintf(filenameBuffer,filenameBufferSize,"%s%cGenomeIndex",directoryName,PATH_SEP);
+
+    FILE *indexFile = fopen(filenameBuffer,"w");
+    if (indexFile == NULL) {
+        WriteErrorMessage("Unable to open file '%s' for write.\n",filenameBuffer);
+        return false;
     }
 
-    fclose(tablesFile);
+    fprintf(indexFile,"%d %d %d %d %d %d %d %lld 0", GenomeIndexFormatMajorVersion, GenomeIndexFormatMinorVersion, index->nHashTables, 
+        index->overflowTableSize, seedLen, chromosomePaddingSize, hashTableKeySize, totalBytesWritten); // trailing 0 is "small hash"
 
+    fclose(indexFile);
+ 
     delete index;
     if (computeBias && biasTable != NULL) {
         delete[] biasTable;
     }
     
+
+
     WriteStatusMessage("%llds\n", (timeInMillis() + 500 - start) / 1000);
     
     return true;
@@ -695,7 +699,6 @@ GenomeIndex::GenomeIndex() : nHashTables(0), hashTables(NULL), overflowTable(NUL
     GenomeIndex *
 GenomeIndex::loadFromDirectory(char *directoryName)
 {
-    GenomeIndex *index = new GenomeIndex();
 
     const unsigned filenameBufferSize = MAX_PATH+1;
     char filenameBuffer[filenameBufferSize];
@@ -715,15 +718,19 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     unsigned seedLen;
     unsigned majorVersion, minorVersion, chromosomePadding;
     int nRead;
-    if (7 != (nRead = sscanf(indexFileBuf,"%d %d %d %d %d %d %d", &majorVersion, &minorVersion, &index->nHashTables, &index->overflowTableSize, &seedLen, &chromosomePadding, &index->hashTableKeySize))) {
-        if (3 == nRead || 6 == nRead) {
-            WriteErrorMessage("Indices built by versions before 0.16.28 are no longer supported.  Please rebuild your index.\n");
+    size_t hashTablesFileSize;
+    unsigned nHashTables;
+    unsigned overflowTableSize;
+    unsigned hashTableKeySize;
+    unsigned smallHashTable;
+    if (9 != (nRead = sscanf(indexFileBuf,"%d %d %d %d %d %d %d %lld %d", &majorVersion, &minorVersion, &nHashTables, &overflowTableSize, &seedLen, &chromosomePadding, &hashTableKeySize, &hashTablesFileSize, &smallHashTable))) {
+        if (3 == nRead || 6 == nRead || 7 == nRead) {
+            WriteErrorMessage("Indices built by versions before 1.0dev.17 are no longer supported.  Please rebuild your index.\n");
         } else {
             WriteErrorMessage("GenomeIndex::LoadFromDirectory: didn't read initial values\n");
         }
         indexFile->close();		
         delete indexFile;
-        delete index;
         return NULL;
     }
     indexFile->close();
@@ -737,11 +744,22 @@ GenomeIndex::loadFromDirectory(char *directoryName)
 
     if (0 == seedLen) {
         WriteErrorMessage("GenomeIndex::LoadFromDirectory: saw seed size of 0.\n");
-        delete index;
         return NULL;
     }
+
+    if (smallHashTable) {
+        WriteErrorMessage("Small hash tables not yet supported.\n");
+        return NULL;
+    }
+
+    GenomeIndex *index = new GenomeIndexLarge();
+    index->nHashTables = nHashTables;
+    index->overflowTableSize = overflowTableSize;
+    index->hashTableKeySize = hashTableKeySize;
     index->seedLen = seedLen;
-    index->overflowTable = (unsigned *)BigAlloc2(index->overflowTableSize * sizeof(*(index->overflowTable)),&index->overflowTableVirtualAllocSize);
+
+    size_t overflowTableSizeInBytes = (size_t)index->overflowTableSize * sizeof(*(index->overflowTable));
+    index->overflowTable = (unsigned *)BigAlloc(overflowTableSizeInBytes);
 
     snprintf(filenameBuffer,filenameBufferSize,"%s%cOverflowTable",directoryName,PATH_SEP);
     GenericFile *fOverflowTable = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
@@ -752,27 +770,10 @@ GenomeIndex::loadFromDirectory(char *directoryName)
         return NULL;
     }
 
-    const unsigned readSize = 32 * 1024 * 1024;
-    for (size_t readOffset = 0; readOffset < index->overflowTableSize * sizeof(*(index->overflowTable)); ) {
-        int amountToRead = (unsigned)__min((size_t)readSize,(size_t)index->overflowTableSize * sizeof(*(index->overflowTable)) - readOffset);
-#ifdef _MSC_VER
-        if (amountToRead % 4096) {
-            amountToRead = ((amountToRead + 4095) / 4096) * 4096;
-            if (amountToRead + readOffset > index->overflowTableVirtualAllocSize) {
-                WriteErrorMessage("GenomeIndex::loadFromDirectory: overflow table virtual alloc size doesn't appear to be a multiple of the page size %lld\n",
-                    (_int64) index->overflowTableVirtualAllocSize);
-            }
-        }
-#endif
-        int amountRead = (int)fOverflowTable->read(((char*) index->overflowTable) + readOffset, amountToRead);
-        if (amountRead < amountToRead) {
-            WriteErrorMessage("GenomeIndex::loadFromDirectory: fread failed (amountToRead = %d, amountRead = %d, readOffset %lld), %d\n",amountToRead, amountRead, readOffset, errno);
-            fOverflowTable->close();
-            delete fOverflowTable;
-            delete index;
-            return NULL;
-        }
-        readOffset += amountRead;
+    size_t amountRead = fOverflowTable->read(index->overflowTable, overflowTableSizeInBytes);
+    if (amountRead != overflowTableSizeInBytes) {
+        WriteErrorMessage("Error reading overflow table, %lld != %lld bytes read.\n", amountRead, overflowTableSizeInBytes);
+        soft_exit(1);
     }
 
     fOverflowTable->close();
@@ -792,9 +793,30 @@ GenomeIndex::loadFromDirectory(char *directoryName)
         soft_exit(1);
     }
 
+    index->tablesBlob = BigAlloc(hashTablesFileSize);
+    amountRead = tablesFile->read(index->tablesBlob, hashTablesFileSize);
+    if (amountRead != hashTablesFileSize) {
+        WriteErrorMessage("Read incorrect amount for GenomeIndexHash file, %lld != %lld\n", hashTablesFileSize, amountRead);
+        soft_exit(1);
+    }
+
+    GenericFile_Blob *blobFile = GenericFile_Blob::open(index->tablesBlob, hashTablesFileSize);
+
     for (unsigned i = 0; i < index->nHashTables; i++) {
-        if (NULL == (index->hashTables[i] = SNAPHashTable::loadFromFile(tablesFile))) {
+        if (NULL == (index->hashTables[i] = SNAPHashTable::loadFromBlob(blobFile))) {
             WriteErrorMessage("GenomeIndex::loadFromDirectory: Failed to load hash table %d\n",i);
+            delete index;
+            return NULL;
+        }
+
+        if (index->hashTables[i]->GetValueCount() != 2) {
+            WriteErrorMessage("Expected loaded hash table to have value count of 2, but it had %d.  This version of SNAP is too old to work with 'small' indices.\n", index->hashTables[i]->GetValueCount());
+            delete index;
+            return NULL;
+        }
+
+        if (index->hashTables[i]->GetKeySizeInBytes() != 4) {
+            WriteErrorMessage("Expected loaded hash table to have key size in bytes of 4, but it had %d.  This version of SNAP is too old to work with this index.\n", index->hashTables[i]->GetKeySizeInBytes());
             delete index;
             return NULL;
         }
@@ -803,6 +825,10 @@ GenomeIndex::loadFromDirectory(char *directoryName)
 	tablesFile->close();
 	delete tablesFile;
     tablesFile = NULL;
+
+    blobFile->close();
+    delete blobFile;
+    blobFile = NULL;
 
     snprintf(filenameBuffer,filenameBufferSize,"%s%cGenome",directoryName,PATH_SEP);
     if (NULL == (index->genome = Genome::loadFromFile(filenameBuffer, chromosomePadding))) {
@@ -825,13 +851,13 @@ GenomeIndex::loadFromDirectory(char *directoryName)
 }
 
     void
-GenomeIndex::lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits)
+GenomeIndexLarge::lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits)
 {
     return lookupSeed(seed, 0, 0xFFFFFFFF, nHits, hits, nRCHits, rcHits);
 }
 
     void
-GenomeIndex::lookupSeed(
+GenomeIndexLarge::lookupSeed(
     Seed              seed,
     unsigned          minLocation,
     unsigned          maxLocation,
@@ -849,7 +875,8 @@ GenomeIndex::lookupSeed(
 
     _ASSERT(seed.getHighBases(hashTableKeySize) < nHashTables);
     _uint64 lowBases = seed.getLowBases(hashTableKeySize);
-    unsigned *entry = hashTables[seed.getHighBases(hashTableKeySize)]->Lookup(lowBases);
+    _ASSERT(hashTables[seed.getHighBases(hashTableKeySize)]->GetValueSizeInBytes() == 4);
+    unsigned *entry = (unsigned int *)hashTables[seed.getHighBases(hashTableKeySize)]->GetFirstValueForKey(lowBases);   // Cast OK because valueSize == 4
     if (NULL == entry) {
         *nHits = 0;
         *nRCHits = 0;
@@ -966,6 +993,11 @@ GenomeIndex::~GenomeIndex()
 
     delete genome;
     genome = NULL;
+
+    if (NULL == tablesBlob) {
+        BigDealloc(tablesBlob);
+        tablesBlob = NULL;
+    }
 }
 
     void
@@ -1167,7 +1199,6 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
             Seed seed(bases, context->seedLen);
             validSeeds++;
 
-
             //
             // Figure out if we're using this base or its complement.
             //
@@ -1221,35 +1252,6 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
     }
 }
 
-struct PerHashTableBatch {
-    PerHashTableBatch() : nUsed(0) {}
-
-    static const unsigned nSeedsPerBatch = 1000;
-
-    unsigned nUsed;
-
-    struct Entry {
-        bool usingComplement;
-        _uint64 lowBases;
-        unsigned genomeLocation;
-    };
-
-    Entry entries[nSeedsPerBatch];
-
-    bool addSeed(unsigned genomeLocation, _uint64 seedLowBases, bool seedUsingComplement) {
-        _ASSERT(nUsed < nSeedsPerBatch);
-        entries[nUsed].lowBases = seedLowBases;
-        entries[nUsed].usingComplement = seedUsingComplement;
-        entries[nUsed].genomeLocation = genomeLocation;
-        nUsed++;
-        return nUsed >= nSeedsPerBatch;
-    }
-
-    void clear()
-    {
-        nUsed = 0;
-    }
-};
 
 
     void 
@@ -1257,26 +1259,23 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
 {
     BuildHashTablesThreadContext *context = (BuildHashTablesThreadContext *)param;
 
+    context->index->BuildHashTablesWorkerThread(context);
+}
+    
+    void
+GenomeIndex::BuildHashTablesWorkerThread(BuildHashTablesThreadContext *context)
+{
     unsigned countOfBases = context->genome->getCountOfBases();
     const Genome *genome = context->genome;
     unsigned seedLen = context->seedLen;
-    _int64 noBaseAvailable = 0;
-    _int64 nonSeeds = 0;
-    _int64 bothComplementsUsed = 0;
-    _int64 countOfDuplicateOverflows = 0;
  
-    GenomeIndex *index = context->index;
-    unsigned nHashTables = index->nHashTables;
-
     //
     // Batch the insertions into the hash tables, because otherwise we spend all of
     // our time acquiring and releasing locks.
     //
  
-    PerHashTableBatch *batches = new PerHashTableBatch[index->nHashTables];
-
-    const _int64 printPeriod = 100000000;
-    _uint64 unrecordedSkippedSeeds = 0;
+    PerHashTableBatch *batches = new PerHashTableBatch[nHashTables];
+    IndexBuildStats stats;
 
     for (unsigned genomeLocation = context->genomeChunkStart; genomeLocation < context->genomeChunkEnd; genomeLocation++) {
         const char *bases = genome->getSubstring(genomeLocation, seedLen);
@@ -1284,8 +1283,8 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
         // Check it for NULL, because Genome won't return strings that cross contig boundaries.
         //
         if (NULL == bases) {
-            noBaseAvailable++;
-            unrecordedSkippedSeeds++;
+            stats.noBaseAvailable++;
+            stats.unrecordedSkippedSeeds++;
             continue;
         }
 
@@ -1293,68 +1292,27 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
         // We don't build seeds out of sections of the genome that contain 'N.'  If this is one, skip it.
         //
         if (!Seed::DoesTextRepresentASeed(bases, seedLen)) {
-            nonSeeds++;
-            unrecordedSkippedSeeds++;
+            stats.nonSeeds++;
+            stats.unrecordedSkippedSeeds++;
             continue;
         }
 
         Seed seed(bases, seedLen);
 
-        //
-        // Figure out if we're using this base or its complement.
-        //
-        bool usingComplement = seed.isBiggerThanItsReverseComplement();
-        if (usingComplement) {
-            seed = ~seed;       // Couldn't resist using ~ for this.
-        }
-
-       unsigned whichHashTable = seed.getHighBases(context->hashTableKeySize);
-       _ASSERT(whichHashTable < index->nHashTables);
- 
-         if (batches[whichHashTable].addSeed(genomeLocation, seed.getLowBases(context->hashTableKeySize), usingComplement)) {
-            AcquireExclusiveLock(&context->hashTableLocks[whichHashTable]);
-            for (unsigned i = 0; i < batches[whichHashTable].nUsed; i++) {
-                ApplyHashTableUpdate(context, whichHashTable, batches[whichHashTable].entries[i].genomeLocation, 
-                    batches[whichHashTable].entries[i].lowBases, batches[whichHashTable].entries[i].usingComplement,
-                    &bothComplementsUsed, &countOfDuplicateOverflows);
-            }
-            ReleaseExclusiveLock(&context->hashTableLocks[whichHashTable]);
-
-            _int64 newNBasesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[whichHashTable].nUsed + unrecordedSkippedSeeds);
-
-            if ((unsigned)(newNBasesProcessed / printPeriod) > (unsigned)((newNBasesProcessed - batches[whichHashTable].nUsed - unrecordedSkippedSeeds) / printPeriod)) {
-                WriteStatusMessage("Indexing %lld / %lld\n", (newNBasesProcessed / printPeriod) * printPeriod, countOfBases);
-            }
-            unrecordedSkippedSeeds = 0;
-            batches[whichHashTable].clear();
-        } // If we filled a batch
+        indexSeed(genomeLocation, seed, batches, context, &stats);
     } // For each genome base in our area
 
     //
     // Now apply the updates from the batches that were left over
     //
 
-    for (unsigned whichHashTable = 0; whichHashTable < nHashTables; whichHashTable++) {
-        _int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[whichHashTable].nUsed + unrecordedSkippedSeeds);
+    completeIndexing(batches, context, &stats);
 
-        if ((_uint64)basesProcessed / printPeriod > ((_uint64)basesProcessed - batches[whichHashTable].nUsed - unrecordedSkippedSeeds)/printPeriod) {
-            WriteStatusMessage("Indexing %lld / %lld\n",(basesProcessed/printPeriod)*printPeriod, (_int64)countOfBases);
-        }
 
-        unrecordedSkippedSeeds = 0; // All except the first time through the loop this will be 0.        
-        AcquireExclusiveLock(&context->hashTableLocks[whichHashTable]);
-        for (unsigned i = 0; i < batches[whichHashTable].nUsed; i++) {
-            ApplyHashTableUpdate(context, whichHashTable, batches[whichHashTable].entries[i].genomeLocation, 
-                batches[whichHashTable].entries[i].lowBases, batches[whichHashTable].entries[i].usingComplement,
-                &bothComplementsUsed, &countOfDuplicateOverflows);
-        }
-        ReleaseExclusiveLock(&context->hashTableLocks[whichHashTable]);
-    }
-
-    InterlockedAdd64AndReturnNewValue(context->noBaseAvailable, noBaseAvailable);
-    InterlockedAdd64AndReturnNewValue(context->nonSeeds, nonSeeds);
-    InterlockedAdd64AndReturnNewValue(context->bothComplementsUsed, bothComplementsUsed);
-    InterlockedAdd64AndReturnNewValue(context->countOfDuplicateOverflows, countOfDuplicateOverflows);
+    InterlockedAdd64AndReturnNewValue(context->noBaseAvailable, stats.noBaseAvailable);
+    InterlockedAdd64AndReturnNewValue(context->nonSeeds, stats.nonSeeds);
+    InterlockedAdd64AndReturnNewValue(context->bothComplementsUsed, stats.bothComplementsUsed);
+    InterlockedAdd64AndReturnNewValue(context->countOfDuplicateOverflows, stats.countOfDuplicateOverflows);
 
     delete [] batches;
 
@@ -1363,6 +1321,8 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
     }
 
 }
+    
+const _int64 GenomeIndex::printPeriod = 100000000;
 
     void 
 GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64 whichHashTable, unsigned genomeLocation, _uint64 lowBases, bool usingComplement,
@@ -1371,13 +1331,14 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
     GenomeIndex *index = context->index;
     unsigned countOfBases = context->genome->getCountOfBases();
     SNAPHashTable *hashTable = index->hashTables[whichHashTable];
-    unsigned *entry = hashTable->SlowLookup(lowBases);  // use SlowLookup because we might have overflowed the table.
+    _ASSERT(hashTable->GetValueSizeInBytes() == 4);
+    unsigned *entry = (unsigned *)hashTable->SlowLookup(lowBases);  // use SlowLookup because we might have overflowed the table.  Cast is OK because valueSize == 4
     if (NULL == entry) {
         //
         // We haven't yet seen either this seed or its complement.  Make a new hash table
         // entry.
         //
-        unsigned newEntry[2];
+        SNAPHashTable::ValueType newEntry[2];
         if (!usingComplement) {
             newEntry[0] = genomeLocation;
             newEntry[1] = 0xfffffffe; // Use 0xfffffffe for unused, because we gave 0xffffffff to the hash table package.
@@ -1385,6 +1346,8 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
             newEntry[0] = 0xfffffffe; // Use 0xfffffffe for unused, because we gave 0xffffffff to the hash table package.
             newEntry[1] = genomeLocation;
         }
+
+        _ASSERT(0 != genomeLocation);
 
         if (!hashTable->Insert(lowBases, newEntry)) {
             for (unsigned j = 0; j < index->nHashTables; j++) {
@@ -1446,4 +1409,60 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
             (*countOfDuplicateOverflows)++;    // Should add extra stuff to the overflow table here.
         } // If the existing entry had the complement empty, needed a new overflow entry or extended an old one
     } // If new or existing entry.
+}
+
+GenomeIndexLarge::~GenomeIndexLarge() {}
+
+    void
+GenomeIndexLarge::indexSeed(unsigned genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats)
+{
+        //
+        // Figure out if we're using this base or its complement.
+        //
+        bool usingComplement = seed.isBiggerThanItsReverseComplement();
+        if (usingComplement) {
+            seed = ~seed;       // Couldn't resist using ~ for this.
+        }
+
+       unsigned whichHashTable = seed.getHighBases(context->hashTableKeySize);
+       _ASSERT(whichHashTable < nHashTables);
+ 
+        if (batches[whichHashTable].addSeed(genomeLocation, seed.getLowBases(context->hashTableKeySize), usingComplement)) {
+            AcquireExclusiveLock(&context->hashTableLocks[whichHashTable]);
+            for (unsigned i = 0; i < batches[whichHashTable].nUsed; i++) {
+                ApplyHashTableUpdate(context, whichHashTable, batches[whichHashTable].entries[i].genomeLocation, 
+                    batches[whichHashTable].entries[i].lowBases, batches[whichHashTable].entries[i].usingComplement,
+                    &stats->bothComplementsUsed, &stats->countOfDuplicateOverflows);
+            }
+            ReleaseExclusiveLock(&context->hashTableLocks[whichHashTable]);
+
+            _int64 newNBasesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[whichHashTable].nUsed + stats->unrecordedSkippedSeeds);
+
+            if ((unsigned)(newNBasesProcessed / printPeriod) > (unsigned)((newNBasesProcessed - batches[whichHashTable].nUsed - stats->unrecordedSkippedSeeds) / printPeriod)) {
+                WriteStatusMessage("Indexing %lld / %lld\n", (newNBasesProcessed / printPeriod) * printPeriod, context->genome->getCountOfBases());
+            }
+            stats->unrecordedSkippedSeeds = 0;
+            batches[whichHashTable].clear();
+        } // If we filled a batch
+}
+
+    void 
+GenomeIndexLarge::completeIndexing(PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats)
+{
+    for (unsigned whichHashTable = 0; whichHashTable < nHashTables; whichHashTable++) {
+        _int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[whichHashTable].nUsed + stats->unrecordedSkippedSeeds);
+
+        if ((_uint64)basesProcessed / printPeriod > ((_uint64)basesProcessed - batches[whichHashTable].nUsed - stats->unrecordedSkippedSeeds)/printPeriod) {
+            WriteStatusMessage("Indexing %lld / %lld\n",(basesProcessed/printPeriod)*printPeriod, (_int64)context->genome->getCountOfBases());
+        }
+
+        stats->unrecordedSkippedSeeds = 0; // All except the first time through the loop this will be 0.        
+        AcquireExclusiveLock(&context->hashTableLocks[whichHashTable]);
+        for (unsigned i = 0; i < batches[whichHashTable].nUsed; i++) {
+            ApplyHashTableUpdate(context, whichHashTable, batches[whichHashTable].entries[i].genomeLocation, 
+                batches[whichHashTable].entries[i].lowBases, batches[whichHashTable].entries[i].usingComplement,
+                &stats->bothComplementsUsed, &stats->countOfDuplicateOverflows);
+        }
+        ReleaseExclusiveLock(&context->hashTableLocks[whichHashTable]);
+    }
 }

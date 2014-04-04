@@ -31,11 +31,77 @@ Revision History:
 
 class GenomeIndex {
 public:
+    const Genome *getGenome() {return genome;}
+
+    //
+    // This looks up a seed and its reverse complement, and returns the number and list of hits for each.
+    // It guarantees that if the lookup succeeds that hits[-1] and rcHits[-1] are valid memory with 
+    // arbirtary values.
+    //
+    virtual void lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits) = 0;
+
+    //
+    // Looks up a seed and its reverse complement, restricting the search to a given range of locations,
+    // and returns the number and list of hits for each.
+    //
+    virtual void lookupSeed(Seed seed, unsigned minLocation, unsigned maxLocation,
+                    unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits) = 0;
+  
+    //
+    // This issues a compiler prefetch for the genome data.
+    //
+    inline void prefetchGenomeData(unsigned genomeOffset) const {
+        genome->prefetchData(genomeOffset);
+    }
+
+    inline int getSeedLength() const { return seedLen; }
+
+    virtual ~GenomeIndex();
 
     //
     // run the indexer from command line arguments
     //
     static void runIndexer(int argc, const char **argv);
+
+    static GenomeIndex *GenomeIndex::loadFromDirectory(char *directoryName);
+
+protected:
+
+    int seedLen;
+    unsigned hashTableKeySize;
+    unsigned nHashTables;
+    const Genome *genome;
+
+    //
+    // The overflow table is indexed by numbers > than the number of bases in the genome.
+    // The hash table(s) point into the overflow table when they have a seed that's got more
+    // than one instance in the genome.
+    //
+    unsigned overflowTableSize;
+    unsigned *overflowTable;
+
+    void *tablesBlob;   // All of the hash tables in one giant blob
+
+    //
+    // We have to build the overflow table in two stages.  While we're walking the genome, we first
+    // assign tentative overflow table locations, and build up a list of places where each repeated
+    // occurs.  Once we've read the whole thing (and so know the exact number of instances of each
+    // repeated seed) we build the actual overflow table and go back and update the entries in the
+    // hash table.  The next two structs hold the state while we're scanning the genome and are used
+    // to build the final overflow table, and then are deleted.  They're only in the header file because
+    // AddOverflowBackpointer needs them.
+    //
+
+    struct OverflowBackpointer {
+        unsigned                 nextIndex;
+        unsigned                 genomeOffset;
+    };
+
+    struct OverflowEntry {
+        unsigned                *hashTableEntry;
+        unsigned                 backpointerIndex;
+        unsigned                 nInstances;
+    };
 
     //
     // Build a genome index and write it to a directory.  If you don't already have a saved index
@@ -47,44 +113,14 @@ public:
                                       unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, 
                                       unsigned hashTableKeySize, const char *histogramFileName = NULL);
 
-    static GenomeIndex *loadFromDirectory(char *directoryName);
-
-    inline const Genome *getGenome() {return genome;}
-
-    //
-    // This looks up a seed and its reverse complement, and returns the number and list of hits for each.
-    // It guarantees that if the lookup succeeds that hits[-1] and rcHits[-1] are valid memory with 
-    // arbirtary values.
-    //
-    void lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits);
-
-    //
-    // Looks up a seed and its reverse complement, restricting the search to a given range of locations,
-    // and returns the number and list of hits for each.
-    //
-    void lookupSeed(Seed seed, unsigned minLocation, unsigned maxLocation,
-                    unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits);
-    
-    //
-    // This issues a compiler prefetch for the genome data.
-    //
-    inline void prefetchGenomeData(unsigned genomeOffset) const {
-        genome->prefetchData(genomeOffset);
-    }
-
-    inline int getSeedLength() const { return seedLen; }
-
-    ~GenomeIndex();
-
+ 
     //
     // Allocate set of hash tables indexed by seeds with bias
     //
     static SNAPHashTable** allocateHashTables(unsigned* o_nTables, size_t capacity, double slack,
         int seedLen, unsigned hashTableKeySize, double* biasTable = NULL);
     
-private:
-
-    static const unsigned GenomeIndexFormatMajorVersion = 2;
+    static const unsigned GenomeIndexFormatMajorVersion = 4;
     static const unsigned GenomeIndexFormatMinorVersion = 0;
     
     static const unsigned largestBiasTable = 32;    // Can't be bigger than the biggest seed size, which is set in Seed.h.  Bigger than 32 means a new Seed structure.
@@ -139,7 +175,53 @@ private:
         ExclusiveLock                   *overflowTableLock;
     };
 
+    struct PerHashTableBatch {
+        PerHashTableBatch() : nUsed(0) {}
+
+        static const unsigned nSeedsPerBatch = 1000;
+
+        unsigned nUsed;
+
+        struct Entry {
+            bool usingComplement;
+            _uint64 lowBases;
+            unsigned genomeLocation;
+        };
+
+        Entry entries[nSeedsPerBatch];
+
+        bool addSeed(unsigned genomeLocation, _uint64 seedLowBases, bool seedUsingComplement) {
+            _ASSERT(nUsed < nSeedsPerBatch);
+            entries[nUsed].lowBases = seedLowBases;
+            entries[nUsed].usingComplement = seedUsingComplement;
+            entries[nUsed].genomeLocation = genomeLocation;
+            nUsed++;
+            return nUsed >= nSeedsPerBatch;
+        }
+
+        void clear()
+        {
+            nUsed = 0;
+        }
+    };
+
+    struct IndexBuildStats {
+        IndexBuildStats() : noBaseAvailable(0), nonSeeds(0), bothComplementsUsed(0), countOfDuplicateOverflows(0),
+                            unrecordedSkippedSeeds(0) {}
+        _int64 noBaseAvailable;
+        _int64 nonSeeds;
+        _int64 bothComplementsUsed;
+        _int64 countOfDuplicateOverflows;
+        _uint64 unrecordedSkippedSeeds;
+    };
+
+    static const _int64 printPeriod;
+
+    virtual void indexSeed(unsigned genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats) = 0;
+    virtual void completeIndexing(PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats) = 0;
+
     static void BuildHashTablesWorkerThreadMain(void *param);
+    void BuildHashTablesWorkerThread(BuildHashTablesThreadContext *context);
     static void ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64 whichHashTable, unsigned genomeLocation, _uint64 lowBases, bool usingComplement,
                     _int64 *bothComplementsUsed, _int64 *countOfDuplicateOverflows);
 
@@ -147,41 +229,8 @@ private:
 
     GenomeIndex();
 
-    int seedLen;
-    unsigned hashTableKeySize;
-    unsigned nHashTables;
+
     SNAPHashTable **hashTables;
-    const Genome *genome;
-
-    //
-    // The overflow table is indexed by numbers > than the number of bases in the genome.
-    // The hash table(s) point into the overflow table when they have a seed that's got more
-    // than one instance in the genome.
-    //
-    unsigned overflowTableSize;
-    size_t overflowTableVirtualAllocSize;
-    unsigned *overflowTable;
-
-    //
-    // We have to build the overflow table in two stages.  While we're walking the genome, we first
-    // assign tentative overflow table locations, and build up a list of places where each repeated
-    // occurs.  Once we've read the whole thing (and so know the exact number of instances of each
-    // repeated seed) we build the actual overflow table and go back and update the entries in the
-    // hash table.  The next two structs hold the state while we're scanning the genome and are used
-    // to build the final overflow table, and then are deleted.  They're only in the header file because
-    // AddOverflowBackpointer needs them.
-    //
-
-    struct OverflowBackpointer {
-        unsigned                 nextIndex;
-        unsigned                 genomeOffset;
-    };
-
-    struct OverflowEntry {
-        unsigned                *hashTableEntry;
-        unsigned                 backpointerIndex;
-        unsigned                 nInstances;
-    };
 
     static void AddOverflowBackpointer(
                     OverflowEntry       *overflowEntries, 
@@ -192,6 +241,34 @@ private:
 
     void fillInLookedUpResults(unsigned *subEntry, unsigned minLocation, unsigned maxLocation,
                                unsigned *nHits, const unsigned **hits);
+};
+
+class GenomeIndexLarge : public GenomeIndex {
+public:
+
+
+
+    //
+    // This looks up a seed and its reverse complement, and returns the number and list of hits for each.
+    // It guarantees that if the lookup succeeds that hits[-1] and rcHits[-1] are valid memory with 
+    // arbirtary values.
+    //
+    void lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits);
+
+    //
+    // Looks up a seed and its reverse complement, restricting the search to a given range of locations,
+    // and returns the number and list of hits for each.
+    //
+    void lookupSeed(Seed seed, unsigned minLocation, unsigned maxLocation,
+                    unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits);
+    
+
+    virtual ~GenomeIndexLarge();
+
+protected:
+
+    virtual void indexSeed(unsigned genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats);
+    virtual void completeIndexing(PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats);
 
 };
 

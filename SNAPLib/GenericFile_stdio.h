@@ -37,5 +37,6 @@ public:
 
 private:
 	GenericFile_stdio();
+
 	FILE *_file;
 };

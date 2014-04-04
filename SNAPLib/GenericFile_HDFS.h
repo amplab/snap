@@ -33,7 +33,6 @@ public:
 	static GenericFile_HDFS *open(const char *filename, Mode mode);
 
 	virtual size_t read(void *ptr, size_t count);
-	virtual char *gets(char *buf, size_t count);
 	virtual int advance(long offset);
 	virtual void close();
 	virtual ~GenericFile_HDFS();
