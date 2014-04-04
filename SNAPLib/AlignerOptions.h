@@ -90,7 +90,7 @@ struct AlignerOptions : public AbstractOptions
     const char         *perfFileName;
     bool                useTimingBarrier;
     unsigned            extraSearchDepth;
-    char               *defaultReadGroup; // if not specified in input
+    const char         *defaultReadGroup; // if not specified in input
     bool                ignoreSecondaryAlignments; // on input, default true
     int                 maxSecondaryAligmmentAdditionalEditDistance;
     bool                preserveClipping;

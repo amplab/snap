@@ -424,7 +424,7 @@ typedef VariableSizeMap<unsigned,int> IdIntMap;
 // 
 // Single-valued map
 //
-template< typename K, typename V, int growth = 150, typename Hash = MapNumericHash<K>, int fill = 80, K _empty = K(), K _tombstone = K(-1), bool _big = false >
+template< typename K, typename V, int growth = 150, typename Hash = MapNumericHash<K>, int fill = 80, int _empty = 0, int _tombstone = -1, bool _big = false >
 class VariableSizeMultiMap
     : public VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,true, _big >
 {

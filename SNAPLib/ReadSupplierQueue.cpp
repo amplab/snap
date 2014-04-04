@@ -598,7 +598,7 @@ ReadSupplierFromQueue::ReadSupplierFromQueue(
 ReadSupplierFromQueue::getNextRead()
 {
     if (done) {
-        return false;
+        return NULL;
     }
 
     if (NULL != currentElement && nextReadIndex >= currentElement->totalReads) {

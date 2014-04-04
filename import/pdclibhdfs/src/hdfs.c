@@ -1057,6 +1057,7 @@ hdfsFile hdfsOpenFile(hdfsFS fs, const char* path, int flags,
 
     if ((flags & O_WRONLY) == 0) {
         /* Try a test read to see if we can do direct reads */
+#if 0
         char buf;
         if (readDirect(fs, file, &buf, 0) == 0) {
             /* Success - 0-byte read should return 0 */
@@ -1067,6 +1068,7 @@ hdfsFile hdfsOpenFile(hdfsFS fs, const char* path, int flags,
                   "hdfsOpenFile(%s): WARN: Unexpected error %d when testing "
                   "for direct read compatibility\n", path, errno);
         }
+#endif
     }
     
     ret = 0;

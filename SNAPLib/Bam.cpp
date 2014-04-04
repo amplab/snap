@@ -425,10 +425,16 @@ BAMReader::getReadFromLine(
     }
 
     // todo: only convert to text if needed, compute clipping directly from binary
-    char* cigarBuffer = getExtra(MAX_SEQ_LENGTH);
-    if (! BAMAlignment::decodeCigar(cigarBuffer, MAX_SEQ_LENGTH, bam->cigar(), bam->n_cigar_op)) {
-        cigarBuffer = ""; // todo: fail?
+    const char* cigarBuffer;
+    {
+        char *writableCigarBuffer = getExtra(min(MAX_K * 5, MAX_SEQ_LENGTH));
+        if (! BAMAlignment::decodeCigar(writableCigarBuffer, MAX_SEQ_LENGTH, bam->cigar(), bam->n_cigar_op)) {
+            cigarBuffer = ""; // todo: fail?
+        } else {
+            cigarBuffer = writableCigarBuffer;
+        }
     }
+
 
     if (NULL != cigar) {
         *cigar = cigarBuffer;
@@ -733,10 +739,10 @@ BAMFormat::writeRead(
             WriteErrorMessage("warning: translating optional data from SAM->BAM is not yet implemented, optional data will not appear in BAM\n");
         }
         if (read->getReadGroup() == READ_GROUP_FROM_AUX) {
-            for (char* p = aux; p != NULL && p < aux + auxLen; p = SAMReader::skipToBeyondNextRunOfSpacesAndTabs(p, aux + auxLen)) {
+            for (char* p = aux; p != NULL && p < aux + auxLen; p = SAMReader::skipToBeyondNextFieldSeparator(p, aux + auxLen)) {
                 if (strncmp(p, "RG:Z:", 5) == 0) {
                     size_t fieldLen;
-                    SAMReader::skipToBeyondNextRunOfSpacesAndTabs(p, aux + auxLen, &fieldLen);
+                    SAMReader::skipToBeyondNextFieldSeparator(p, aux + auxLen, &fieldLen);
                     aux = p;
                     auxLen = (unsigned) fieldLen - 1;
                     translateReadGroupFromSAM = true;
@@ -1058,7 +1064,8 @@ BAMFilter::tryFindRead(
 
 struct DuplicateReadKey
 {
-    DuplicateReadKey() { memset(this, 0, sizeof(DuplicateReadKey)); }
+    DuplicateReadKey()
+    { memset(this, 0, sizeof(DuplicateReadKey)); }
 
     DuplicateReadKey(const BAMAlignment* bam, const Genome* genome)
     {

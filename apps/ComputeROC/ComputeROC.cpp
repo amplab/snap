@@ -103,6 +103,10 @@ WorkerThreadMain(void *param)
         unsigned genomeLocation = read->getOriginalAlignedLocation();
         unsigned flag = read->getOriginalSAMFlags();
 
+        if (flag & SAM_UNMAPPED) {
+            genomeLocation = 0xffffffff;
+        }
+
         if (mapQ < 0 || mapQ > MaxMAPQ) {
             fprintf(stderr,"Invalid MAPQ: %d\n",mapQ);
             exit(1);
@@ -366,16 +370,14 @@ int main(int argc, char * argv[])
     readerContext.clipping = NoClipping;
     readerContext.defaultReadGroup = "";
     readerContext.genome = genome;
-    readerContext.ignoreSecondaryAlignments = true;
+    readerContext.ignoreSecondaryAlignments = false;
 	readerContext.header = NULL;
 	readerContext.headerLength = 0;
 	readerContext.headerBytes = 0;
 
     if (NULL != strrchr(inputFileName, '.') && !_stricmp(strrchr(inputFileName, '.'), ".bam")) {
-        BAMReader::readHeader(inputFileName, readerContext);
         readSupplierGenerator = BAMReader::createReadSupplierGenerator(inputFileName, nThreads, readerContext);
     } else {
-        SAMReader::readHeader(inputFileName, readerContext);
         readSupplierGenerator = SAMReader::createReadSupplierGenerator(inputFileName, nThreads, readerContext);
     }
 
@@ -396,7 +398,7 @@ int main(int argc, char * argv[])
         nUnaligned += contexts[i].nUnaligned;
         totalReads += contexts[i].totalReads;
     }
-    printf("%lld reads, %lld unaligned (%0.2f%%)\n", totalReads, nUnaligned, 100. * (double)nUnaligned / (double)totalReads);
+    printf("%lld reads, %lld unaligned (%0.2f%%)\n", (long long)totalReads, (long long)nUnaligned, 100. * (double)nUnaligned / (double)totalReads);
 
     printf("MAPQ\tnReads\tnMisaligned");
     if (printBetterErrors) {
@@ -412,9 +414,9 @@ int main(int argc, char * argv[])
             nMisaligned += contexts[j].countOfMisalignments[i];
             betterMisaligned += contexts[j].countOfMisalignetsWithBetterEditDistance[i];
         }
-        printf("%d\t%lld\t%lld", i, nReads, nMisaligned);
+        printf("%d\t%lld\t%lld", i, (long long)nReads,  (long long)nMisaligned);
         if (printBetterErrors) {
-            printf("\t%lld", betterMisaligned);
+            printf("\t%lld",  (long long)betterMisaligned);
         }
         printf("\n");
     }

@@ -25,4 +25,4 @@ set LIBHDFS_CLASSPATH=!LIBHDFS_CLASSPATH!;%%i
 
 set LIBHDFS_CLASSPATH=!LIBHDFS_CLASSPATH!;%HADOOP_HOME%\conf
 
-..\obj\bin\Release\x64\snap paired hdfs:///scratch/moonshot/indices/hg19-20 example.bam
+..\obj\bin\Debug\x64\snap paired hdfs:///scratch/moonshot/indices/hg19-20-5 example.bam

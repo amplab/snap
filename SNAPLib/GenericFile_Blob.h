@@ -39,7 +39,7 @@ public:
 	static GenericFile_Blob *open(void *i_blob, size_t i_blobSize);
 
 	virtual size_t read(void *ptr, size_t count);
-	virtual int advance(long offset);
+	virtual int advance(long long offset);
 	virtual void close();
 	virtual ~GenericFile_Blob();
     virtual size_t getAmountUsed();

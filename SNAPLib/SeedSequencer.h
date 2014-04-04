@@ -34,12 +34,12 @@ public:
 
     inline unsigned SeedOffset(unsigned wrapCount) {
         _ASSERT(wrapCount < seedSize);
-        return offsets[seedSize];
+        return offsets[wrapCount];
     }
 
     inline unsigned GetWrappedNextSeedToTest(unsigned wrapCount) {
         _ASSERT(wrapCount < seedSize);
-        return(offsets[seedSize]);
+        return(offsets[wrapCount]);
     }
 
 private:

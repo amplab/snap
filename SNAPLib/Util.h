@@ -559,3 +559,24 @@ inline int getSignBit32(int value)
 {
     return (value >> 31) & 1;
 }
+
+
+// Utility class for synchronization: NWaiter.
+// This class is initialized with a number, n.
+// It has two public methods: wait() and signal().
+// wait() will block until signal() has been called n times.
+class NWaiter
+{
+public:
+	void wait();
+	void signal();
+	NWaiter(size_t n);
+	~NWaiter();
+
+private:
+	size_t _signalsRequired;
+	size_t _signalsReceived;
+	EventObject _waiter;
+	ExclusiveLock _lock;
+};
+

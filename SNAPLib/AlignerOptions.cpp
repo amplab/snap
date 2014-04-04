@@ -480,9 +480,10 @@ AlignerOptions::parse(
                             WriteErrorMessage("The ID tag on the read group line specified by -R must not be empty\n");
                             soft_exit(1);
                         }
-                        defaultReadGroup = new char[idTagSize + 1]; // +1 for null.
-                        memcpy(defaultReadGroup, buffer + i + 1, idTagSize);
-                        defaultReadGroup[idTagSize] = '\0';
+                        char *newReadGroup = new char[idTagSize + 1]; // +1 for null.
+                        memcpy(newReadGroup, buffer + i + 1, idTagSize);
+                        newReadGroup[idTagSize] = '\0';
+                        defaultReadGroup = newReadGroup; // +1 for null.
 
                     } else {
                         bytesAlong = 0;
@@ -518,8 +519,9 @@ AlignerOptions::parse(
         }
 	} else if (strcmp(argv[n], "-rg") == 0) {
         if (n + 1 < argc) {
-            defaultReadGroup = new char[strlen(argv[n+1]) + 1];
-            strcpy(defaultReadGroup, argv[n+1]);
+            char *newReadGroup = new char[strlen(argv[n+1]) + 1];
+            strcpy(newReadGroup, argv[n+1]);
+            defaultReadGroup = newReadGroup;
             n++;
             char* s = new char[1 + strlen(defaultReadGroup) + strlen("@RG\tID:\tSM:sample")];
             sprintf(s, "@RG\tID:%s\tSM:sample", defaultReadGroup);

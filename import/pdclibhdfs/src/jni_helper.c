@@ -412,12 +412,20 @@ BOOL WINAPI DllMain (
 
 }
 
-// jelson
-void staticLibInit()
+// jelson changes: start
+INIT_ONCE g_InitOnce = INIT_ONCE_STATIC_INIT;
+
+BOOL CALLBACK staticLibInit(PINIT_ONCE InitOnce, PVOID Parameter, PVOID *lpContext)
 {
 	DllMain(NULL, DLL_PROCESS_ATTACH, NULL);
-	DllMain(NULL, DLL_THREAD_ATTACH, NULL);
 }
+
+void maybePerformStaticLibInit()
+{
+	InitOnceExecuteOnce(&g_InitOnce, staticLibInit, NULL, NULL);
+}
+// jelson changes: end
+
 
 #endif
 
@@ -889,7 +897,7 @@ static JNIEnv* getGlobalJNIEnv(void)
     if (hdfs_hinstLib)
     {
     
-        fprintf (stderr, "dll: get proc addresses\n" );
+        // fprintf (stderr, "dll: get proc addresses\n" );
         
         fpGetVM = (FGetVMS) GetProcAddress ( hdfs_hinstLib,
                                "JNI_GetCreatedJavaVMs" );
@@ -1044,7 +1052,7 @@ static JNIEnv* getGlobalJNIEnv(void)
 
     }
 
-    fprintf (stderr, "dll: attach current thread \n" );
+    // fprintf (stderr, "dll: attach current thread \n" );
     
     /*Attach this thread to the VM */       
   /*vm = vmBuf[0];
@@ -1059,7 +1067,7 @@ static JNIEnv* getGlobalJNIEnv(void)
         return NULL;
     }
 
-    fprintf (stderr, "dll: return from GetEnv attach \n" );
+    // fprintf (stderr, "dll: return from GetEnv attach \n" );
     return env;
     
 }
@@ -1083,6 +1091,7 @@ static JNIEnv* getGlobalJNIEnv(void)
  * @param: None.
  * @return The JNIEnv* corresponding to the thread.
  */
+
 JNIEnv* getJNIEnv(void)
 {
     JNIEnv *env = NULL;
@@ -1092,7 +1101,10 @@ JNIEnv* getJNIEnv(void)
     
 #ifdef WIN32
     DWORD dwWaitResult; 
-    tls = TlsGetValue(hdfs_dwTlsIndex1); 
+
+	maybePerformStaticLibInit();
+
+	tls = TlsGetValue(hdfs_dwTlsIndex1); 
     if (tls) return tls->env;
 #endif
 
@@ -1143,7 +1155,7 @@ JNIEnv* getJNIEnv(void)
     tls->env = env;
 
 #ifdef WIN32
-    fprintf (stderr, "dll: save environment\n" );
+    // fprintf (stderr, "dll: save environment\n" );
     if (!TlsSetValue(hdfs_dwTlsIndex1, tls))
          return NULL;    
     return env;

@@ -51,7 +51,7 @@ GenericFile_Blob::read(void *ptr, size_t count)
 }
 
 int
-GenericFile_Blob::advance(long offset)
+GenericFile_Blob::advance(long long offset)
 {
     if (offset < 0) {
         if (readPointer - blob > -1 * offset) {
@@ -61,7 +61,7 @@ GenericFile_Blob::advance(long offset)
         return 0;
     }
 
-    size_t amountRemaining = blobEnd - readPointer;
+    long long amountRemaining = blobEnd - readPointer;
     if (amountRemaining < offset) {
         return EOF;
     }

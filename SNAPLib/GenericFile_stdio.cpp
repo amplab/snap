@@ -73,7 +73,7 @@ char *GenericFile_stdio::gets(char *buf, size_t count)
 	return fgets(buf, (int) count, _file);
 }
 
-int GenericFile_stdio::advance(long offset)
+int GenericFile_stdio::advance(long long offset)
 {
 	return _fseek64bit(_file, offset, SEEK_CUR);
 }
