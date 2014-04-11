@@ -63,7 +63,7 @@ public:
     //
     static void runIndexer(int argc, const char **argv);
 
-    static GenomeIndex *GenomeIndex::loadFromDirectory(char *directoryName);
+    static GenomeIndex *loadFromDirectory(char *directoryName);
 
 protected:
 
