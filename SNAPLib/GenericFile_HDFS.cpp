@@ -41,6 +41,7 @@ int GenericFile_HDFS::_initFlag = GenericFile_HDFS::_staticInit();
 int GenericFile_HDFS::_staticInit()
 {
 	InitializeExclusiveLock(&_staticLock);
+	SetExclusiveLockWholeProgramScope(&_staticLock);
 
 	_fs = NULL;
 	srand(unsigned(time(NULL)));

@@ -194,15 +194,21 @@ class ExclusiveLock {
 public:
     UnderlyingExclusiveLock lock;
     bool                    initialized;
+	bool					wholeProgramScope;
 
 #ifdef _MSC_VER
     DWORD                   holderThreadId;
 #endif // _MSC_VER
 
 
-    ExclusiveLock() : initialized(false), holderThreadId(0) {}
-    ~ExclusiveLock() {_ASSERT(!initialized);}   // Must DestroyExclusiveLock first
+    ExclusiveLock() : initialized(false), holderThreadId(0), wholeProgramScope(false) {}
+    ~ExclusiveLock() {_ASSERT(!initialized || wholeProgramScope);}   // Must DestroyExclusiveLock first
 };
+
+inline void SetExclusiveLockWholeProgramScope(ExclusiveLock *lock)
+{
+	lock->wholeProgramScope = true;
+}
 
 inline void AcquireExclusiveLock(ExclusiveLock *lock)
 {
@@ -249,6 +255,7 @@ inline void DestroyExclusiveLock(ExclusiveLock *lock)
     _ASSERT(lock->holderThreadId == 0);
 #endif // _MSC_VER
 
+	_ASSERT(!lock->wholeProgramScope);
     _ASSERT(lock->initialized);
     lock->initialized = false;
     DestroyUnderlyingExclusiveLock(&lock->lock);
@@ -259,6 +266,7 @@ inline void DestroyExclusiveLock(ExclusiveLock *lock)
 #define ReleaseExclusiveLock ReleaseUnderlyingExclusiveLock
 #define DestroyExclusiveLock DestroyUnderlyingExclusiveLock
 #define AssertExclusiveLockHeld(l) /* nothing */
+#define SetExclusiveLockWholeProgramScope(l) /*nothing*/
 #endif // _DEBUG
 
 #ifdef PROFILE_WAIT

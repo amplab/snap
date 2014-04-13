@@ -111,14 +111,14 @@ protected:
     static bool BuildIndexToDirectory(const Genome *genome, int seedLen, double slack,
                                       bool computeBias, const char *directory, _uint64 overflowTableFactor,
                                       unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, 
-                                      unsigned hashTableKeySize, const char *histogramFileName = NULL);
+                                      unsigned hashTableKeySize, bool large, const char *histogramFileName);
 
  
     //
     // Allocate set of hash tables indexed by seeds with bias
     //
-    static SNAPHashTable** allocateHashTables(unsigned* o_nTables, size_t capacity, double slack,
-        int seedLen, unsigned hashTableKeySize, double* biasTable = NULL);
+    static SNAPHashTable** allocateHashTables(unsigned* o_nTables, size_t countOfBases, double slack,
+        int seedLen, unsigned hashTableKeySize, bool large, double* biasTable = NULL);
     
     static const unsigned GenomeIndexFormatMajorVersion = 4;
     static const unsigned GenomeIndexFormatMinorVersion = 0;
@@ -127,7 +127,7 @@ protected:
     static const unsigned largestKeySize = 8;
     static double *hg19_biasTables[largestKeySize+1][largestBiasTable+1];
 
-    static void ComputeBiasTable(const Genome* genome, int seedSize, double* table, unsigned maxThreads, bool forceExact, unsigned hashTableKeySize);
+    static void ComputeBiasTable(const Genome* genome, int seedSize, double* table, unsigned maxThreads, bool forceExact, unsigned hashTableKeySize, bool large);
 
     struct ComputeBiasTableThreadContext {
         SingleWaiterObject              *doneObject;
@@ -141,6 +141,7 @@ protected:
         volatile _int64                 *nBasesProcessed;
         unsigned                         seedLen;
         volatile _int64                 *validSeeds;
+		bool							 large;
 
         ExclusiveLock                   *approximateCounterLocks;
     };
@@ -170,6 +171,7 @@ protected:
         volatile unsigned               *nextOverflowBackpointer;
         volatile _int64                 *countOfDuplicateOverflows;
         unsigned                         hashTableKeySize;
+		bool							 large;
 
         ExclusiveLock                   *hashTableLocks;
         ExclusiveLock                   *overflowTableLock;
@@ -217,13 +219,13 @@ protected:
 
     static const _int64 printPeriod;
 
-    virtual void indexSeed(unsigned genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats) = 0;
-    virtual void completeIndexing(PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats) = 0;
+    virtual void indexSeed(unsigned genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large);
+    virtual void completeIndexing(PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large);
 
     static void BuildHashTablesWorkerThreadMain(void *param);
     void BuildHashTablesWorkerThread(BuildHashTablesThreadContext *context);
     static void ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64 whichHashTable, unsigned genomeLocation, _uint64 lowBases, bool usingComplement,
-                    _int64 *bothComplementsUsed, _int64 *countOfDuplicateOverflows);
+                    _int64 *bothComplementsUsed, _int64 *countOfDuplicateOverflows, bool large);
 
     static int BackwardsUnsignedCompare(const void *, const void *);
 
@@ -245,9 +247,6 @@ protected:
 
 class GenomeIndexLarge : public GenomeIndex {
 public:
-
-
-
     //
     // This looks up a seed and its reverse complement, and returns the number and list of hits for each.
     // It guarantees that if the lookup succeeds that hits[-1] and rcHits[-1] are valid memory with 
@@ -264,11 +263,25 @@ public:
     
 
     virtual ~GenomeIndexLarge();
+};
 
-protected:
+class GenomeIndexSmall : public GenomeIndex {
+public:
+    //
+    // This looks up a seed and its reverse complement, and returns the number and list of hits for each.
+    // It guarantees that if the lookup succeeds that hits[-1] and rcHits[-1] are valid memory with 
+    // arbirtary values.
+    //
+    void lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits);
 
-    virtual void indexSeed(unsigned genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats);
-    virtual void completeIndexing(PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats);
+    //
+    // Looks up a seed and its reverse complement, restricting the search to a given range of locations,
+    // and returns the number and list of hits for each.
+    //
+    void lookupSeed(Seed seed, unsigned minLocation, unsigned maxLocation,
+                    unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits);
+    
 
+    virtual ~GenomeIndexSmall();
 };
 
