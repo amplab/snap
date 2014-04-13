@@ -742,7 +742,7 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     if (9 != (nRead = sscanf(indexFileBuf,"%d %d %d %d %d %d %d %lld %d", &majorVersion, &minorVersion, &nHashTables, &overflowTableSize, &seedLen, &chromosomePadding, 
 											&hashTableKeySize, &hashTablesFileSize, &smallHashTable))) {
         if (3 == nRead || 6 == nRead || 7 == nRead) {
-            WriteErrorMessage("Indices built by versions before 1.0dev.19 are no longer supported.  Please rebuild your index.\n");
+            WriteErrorMessage("Indices built by versions before 1.0dev.21 are no longer supported.  Please rebuild your index.\n");
         } else {
             WriteErrorMessage("GenomeIndex::LoadFromDirectory: didn't read initial values\n");
         }
