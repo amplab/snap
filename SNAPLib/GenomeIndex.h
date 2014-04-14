@@ -84,12 +84,15 @@ protected:
 
     //
     // We have to build the overflow table in two stages.  While we're walking the genome, we first
-    // assign tentative overflow table locations, and build up a list of places where each repeated
+    // assign tentative overflow table locations, and build up a list of places where each repeat
     // occurs.  Once we've read the whole thing (and so know the exact number of instances of each
     // repeated seed) we build the actual overflow table and go back and update the entries in the
-    // hash table.  The next two structs hold the state while we're scanning the genome and are used
-    // to build the final overflow table, and then are deleted.  They're only in the header file because
-    // AddOverflowBackpointer needs them.
+    // hash table.
+	//
+	// The list of repeats works as a singly linked list, headed by the hash table entry.  The entries
+	// use the index in the overflow table as links, rather than using real pointers, in order to save
+	// space.  So that we can dynamically allocate overflow entries while still using indices to
+	// find them, they're built in a two level table.
     //
 
     struct OverflowBackpointer {
@@ -97,11 +100,21 @@ protected:
         unsigned                 genomeOffset;
     };
 
-    struct OverflowEntry {
-        unsigned                *hashTableEntry;
-        unsigned                 backpointerIndex;
-        unsigned                 nInstances;
-    };
+	class OverflowBackpointerAnchor {
+	public:
+		OverflowBackpointerAnchor(unsigned maxOverflowEntries_);
+		~OverflowBackpointerAnchor();
+
+		OverflowBackpointer *getBackpointer(unsigned index);
+
+	private:
+
+		static const unsigned batchSize;
+		unsigned maxOverflowEntries;
+
+		OverflowBackpointer **table;
+	};
+
 
     //
     // Build a genome index and write it to a directory.  If you don't already have a saved index
@@ -164,10 +177,7 @@ protected:
         volatile unsigned               *nextOverflowIndex;
         volatile _int64                 *bothComplementsUsed;
         GenomeIndex                     *index;
-        unsigned                         nOverflowEntries;
-        OverflowEntry                   *overflowEntries;
-        OverflowBackpointer             *overflowBackpointers;
-        unsigned                         nOverflowBackpointers;
+		OverflowBackpointerAnchor		*overflowAnchor;
         volatile unsigned               *nextOverflowBackpointer;
         volatile _int64                 *countOfDuplicateOverflows;
         unsigned                         hashTableKeySize;

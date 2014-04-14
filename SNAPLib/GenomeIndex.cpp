@@ -44,7 +44,6 @@ static const int DEFAULT_SEED_SIZE = 20;
 static const double DEFAULT_SLACK = 0.3;
 static const unsigned DEFAULT_PADDING = 500;
 static const unsigned DEFAULT_KEY_BYTES = 4;
-static const unsigned DEFAULT_OVERFLOW_TABLE_FACTOR = 50;
 
 
 static void usage()
@@ -55,10 +54,7 @@ static void usage()
             "  -s               Seed size (default: %d)\n"
             "  -h               Hash table slack (default: %.1f)\n"
             "  -hg19            Use pre-computed table bias for hg19, which results in better speed, balance, and memory footprint but may not work for other references.\n"
-            "  -Ofactor         Specify the size of the overflow space.  This will change the memory footprint, but may be needed for some genomes.\n"
-            "                   Larger numbers use more memory but work better with more repetitive genomes.  Smaller numbers reduce the memory\n"
-            "                   footprint, but may cause the index build to fail.  Making -O larger than necessary will not affect the resuting\n"
-            "                   index.  Factor must be between 1 and 1000, and the default is %d.\n"
+            "  -Ofactor         This parameter is deprecated and will be ignored.\n"
             " -tMaxThreads      Specify the maximum number of threads to use. Default is the number of cores.\n"
             " -B<chars>     Specify characters to use as chromosome name terminators in the FASTA header line; these characters and anything after are\n"
             "               not part of the chromosome name.  You must specify all characters on a single -B switch.  So, for example, with -B_|,\n"
@@ -77,7 +73,6 @@ static void usage()
 			,
             DEFAULT_SEED_SIZE,
             DEFAULT_SLACK,
-            DEFAULT_OVERFLOW_TABLE_FACTOR,
             DEFAULT_PADDING,
             DEFAULT_KEY_BYTES);
     soft_exit(1);
@@ -101,7 +96,6 @@ GenomeIndex::runIndexer(
     int seedLen = DEFAULT_SEED_SIZE;
     double slack = DEFAULT_SLACK;
     bool computeBias = true;
-    _uint64 overflowTableFactor = DEFAULT_OVERFLOW_TABLE_FACTOR;
     const char *pieceNameTerminatorCharacters = NULL;
     bool spaceIsAPieceNameTerminator = false;
     const char *histogramFileName = NULL;
@@ -134,15 +128,11 @@ GenomeIndex::runIndexer(
         } else if (argv[n][0] == '-' && argv[n][1] == 'H') {
             histogramFileName = argv[n] + 2;
         } else if (argv[n][0] == '-' && argv[n][1] == 'O') {
-            overflowTableFactor = atoi(argv[n]+2);
-            if (overflowTableFactor < 1 || overflowTableFactor > 1000) {
-                WriteErrorMessage("Overflow table factor must be between 1 and 1000 inclusive (and you need to not leave a space after '-O')\n");
-                soft_exit(1);
-            }
+			// Deprecated, ignored parameter
         } else if (argv[n][0] == '-' && argv[n][1] == 't') {
             maxThreads = atoi(argv[n]+2);
             if (maxThreads < 1 || maxThreads > 100) {
-                WriteErrorMessage("maxThreads must be between 1 and 100 inclusive (and you need to not leave a space after '-t')\n");
+                WriteErrorMessage("maxThreads must be between 1 and 100 inclusive (and you need not to leave a space after '-t')\n");
                 soft_exit(1);
             }
         } else if (argv[n][0] == '-' && argv[n][1] == 'p') {
@@ -310,7 +300,19 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         return false;
     }
 
-    GenomeIndex *index = new GenomeIndexLarge();
+    const unsigned filenameBufferSize = MAX_PATH+1;
+    char filenameBuffer[filenameBufferSize];
+    
+	fprintf(stderr,"Saving genome...");
+	_int64 start = timeInMillis();
+    snprintf(filenameBuffer,filenameBufferSize,"%s%cGenome",directoryName,PATH_SEP);
+    if (!genome->saveToFile(filenameBuffer)) {
+        WriteErrorMessage("GenomeIndex::saveToDirectory: Failed to save the genome itself\n");
+        return false;
+    }
+	fprintf(stderr,"%llds\n", (timeInMillis() + 500 - start) / 1000);
+
+	GenomeIndex *index = new GenomeIndexLarge();
     index->genome = NULL;   // We always delete the index when we're done, but we delete the genome first to save space during the overflow table build.
 
     unsigned countOfBases = genome->getCountOfBases();
@@ -334,7 +336,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     }
 
     WriteStatusMessage("Allocating memory for hash and overflow tables...");
-    _int64 start = timeInMillis();
+    start = timeInMillis();
     unsigned nHashTables;
     SNAPHashTable** hashTables = index->hashTables =
         allocateHashTables(&nHashTables, countOfBases, slack, seedLen, hashTableKeySize, large, biasTable);
@@ -360,27 +362,9 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     unusedDataValue[0] = InvalidGenomeLocation;
     unusedDataValue[1] = InvalidGenomeLocation;
 
-    // Don't create *too* many overflow entries because they consume significant memory.
-    // It would be good to grow these dynamically instead of living with a fixed-size array.
-    unsigned nOverflowEntries = __min((unsigned)((_uint64)countOfBases * overflowTableFactor / (_uint64) 1000), 0xfffffffd - countOfBases);
-    unsigned nOverflowBackpointers = (unsigned)__min((_uint64)countOfBases, (_uint64)nOverflowEntries * (_uint64)6);
-
-  
-    OverflowEntry *overflowEntries = new OverflowEntry[nOverflowEntries];
-    if (NULL == overflowEntries) {
-        WriteErrorMessage("Unable to allocate oveflow entries.\n");
-        soft_exit(1);
-    }
-
-    OverflowBackpointer *overflowBackpointers = new OverflowBackpointer[nOverflowBackpointers];
-    if (NULL == overflowBackpointers) {
-        WriteErrorMessage("Unable to allocate overflow backpointers\n");
-        soft_exit(1);
-    }
-  
-    WriteStatusMessage("%llds\n%d nOverflowEntries, %lld bytes, %u nOverflowBackpointers, %lld bytes\nBuilding hash tables.\n", 
-        (timeInMillis() + 500 - start) / 1000,
-        nOverflowEntries, (_int64)nOverflowEntries * sizeof(OverflowEntry), nOverflowBackpointers, (_int64) nOverflowBackpointers * sizeof(OverflowBackpointer));
+	OverflowBackpointerAnchor *overflowAnchor = new OverflowBackpointerAnchor((unsigned)((_uint64)countOfBases) * 8 / 10);
+   
+    WriteStatusMessage("%llds\nBuilding hash tables.\n", (timeInMillis() + 500 - start) / 1000);
   
     start = timeInMillis();
     volatile unsigned nextOverflowBackpointer = 0;
@@ -426,10 +410,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         threadContexts[i].nextOverflowIndex = &nextOverflowIndex;
         threadContexts[i].countOfDuplicateOverflows = &countOfDuplicateOverflows;
         threadContexts[i].bothComplementsUsed = &bothComplementsUsed;
-        threadContexts[i].nOverflowEntries = nOverflowEntries;
-        threadContexts[i].overflowEntries = overflowEntries;
-        threadContexts[i].overflowBackpointers = overflowBackpointers;
-        threadContexts[i].nOverflowBackpointers = nOverflowBackpointers;
+		threadContexts[i].overflowAnchor = overflowAnchor;
         threadContexts[i].nextOverflowBackpointer = &nextOverflowBackpointer;
         threadContexts[i].hashTableLocks = hashTableLocks;
         threadContexts[i].hashTableKeySize = hashTableKeySize;
@@ -464,22 +445,12 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         bothComplementsUsed,
         noBaseAvailable);
 
-    WriteStatusMessage("Hash table build took %llds\nSaving genome...",(timeInMillis() + 500 - start) / 1000);
-    start = timeInMillis();
+    WriteStatusMessage("Hash table build took %llds\n",(timeInMillis() + 500 - start) / 1000);
 
     //
-    // Save the genome to the directory and delete it to free up a little memory for the overflow table build.  We need all we can get.
+    // We're done with the raw genome.  Delete it to save some memory.
     //
-    
-    const unsigned filenameBufferSize = MAX_PATH+1;
-    char filenameBuffer[filenameBufferSize];
-    
-    snprintf(filenameBuffer,filenameBufferSize,"%s%cGenome",directoryName,PATH_SEP);
-    if (!genome->saveToFile(filenameBuffer)) {
-        WriteErrorMessage("GenomeIndex::saveToDirectory: Failed to save the genome itself\n");
-        return false;
-    }
-
+  
     delete genome;
     genome = NULL;
 
@@ -498,6 +469,11 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     index->overflowTableSize = nextOverflowIndex * 3 + (unsigned)countOfDuplicateOverflows;
     index->overflowTable = (unsigned *)BigAlloc(index->overflowTableSize * sizeof(*index->overflowTable));
 
+	if ((_uint64)index->overflowTableSize + (_uint64)countOfBases >= 0xfffffff0) {
+		WriteErrorMessage("Not enough address space to index this genome with this seed size.  Try a larger seed size.\n");
+		soft_exit(1);
+	}
+
     unsigned nBackpointersProcessed = 0;
     _int64 lastPrintTime = timeInMillis();
 
@@ -514,68 +490,110 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         }
     }
 
-    unsigned overflowTableIndex = 0;
-    for (unsigned i = 0 ; i < nextOverflowIndex; i++) {
-        OverflowEntry *overflowEntry = &overflowEntries[i];
-
-        _ASSERT(overflowEntry->nInstances >= 2);
-
-        if (timeInMillis() - lastPrintTime > 60 * 1000) {
-            WriteStatusMessage("%d/%d duplicate seeds, %d/%d backpointers processed\n",i,nextOverflowIndex,nBackpointersProcessed,nextOverflowBackpointer-1);
-            lastPrintTime = timeInMillis();
-        }
-
-        //
-        // If we're building a histogram, update it.
-        //
-        if (buildHistogram) {
-            totalNonSingletonSeeds += overflowEntry->nInstances;
-            if (overflowEntry->nInstances > maxHistogramEntry) {
-                countOfTooBigForHistogram++;
-                sumOfTooBigForHistogram += overflowEntry->nInstances;
-            } else {
-                histogram[overflowEntry->nInstances]++;
-            }
-            largestSeed = __max(largestSeed, overflowEntry->nInstances);
-        }
-
-        //
-        // Start by patching up the hash table.
-        //
-        *overflowEntry->hashTableEntry = overflowTableIndex + countOfBases;
-
-        //
-        // Now fill in the overflow table. First, the count of instances of this seed in the genome.
-        //
-        _ASSERT(overflowTableIndex + overflowEntry->nInstances + 1 <= index->overflowTableSize);
-        index->overflowTable[overflowTableIndex] = overflowEntry->nInstances;
-        overflowTableIndex++;
-
-        //
-        // Followed by the actual addresses in the genome.
-        //
-        nBackpointersProcessed += overflowEntry->nInstances;
-        for (unsigned j = 0; j < overflowEntry->nInstances; j++) {
-            _ASSERT(-1 != overflowEntry->backpointerIndex);
-            OverflowBackpointer *backpointer = &overflowBackpointers[overflowEntry->backpointerIndex];
-            index->overflowTable[overflowTableIndex] = backpointer->genomeOffset;
-            overflowTableIndex++;
-            
-            overflowEntry->backpointerIndex = backpointer->nextIndex;
-        }
-
-        //
-        // Now sort them, because the multi thread insertion results in random order, but SNAP expects them to be in descending order.
-        //
-        qsort(&index->overflowTable[overflowTableIndex - overflowEntry->nInstances], overflowEntry->nInstances, sizeof(index->overflowTable[0]), BackwardsUnsignedCompare);
+	//
+	// Build the overflow table by walking each of the hash tables and looking for elements to fix up.
+	// Write the hash tables as we go so that we can free their memory on the fly.
+	//
+	snprintf(filenameBuffer,filenameBufferSize,"%s%cGenomeIndexHash",directoryName,PATH_SEP);
+    FILE *tablesFile = fopen(filenameBuffer, "wb");
+    if (NULL == tablesFile) {
+        WriteErrorMessage("Unable to open hash table file '%s'\n", filenameBuffer);
+        soft_exit(1);
     }
+
+    size_t totalBytesWritten = 0;
+    unsigned overflowTableIndex = 0;
+	unsigned duplicateSeedsProcessed = 0;
+
+	for (unsigned whichHashTable = 0; whichHashTable < nHashTables; whichHashTable++) {
+		for (unsigned whichEntry = 0; whichEntry < hashTables[whichHashTable]->GetTableSize(); whichEntry++) {
+			unsigned *values = (unsigned *)hashTables[whichHashTable]->getEntryValues(whichEntry);
+			for (int i = 0; i < (large ? NUM_DIRECTIONS : 1); i++) {
+				if (values[i] >= countOfBases) {
+					//
+					// This is an overflow pointer.  Fix it up.  Count the number of occurrences of this
+					// seed by walking the overflow chain.
+					//
+					duplicateSeedsProcessed++;
+
+					unsigned nOccurrences = 0;
+					unsigned backpointerIndex = values[i];
+					while (backpointerIndex != 0xffffffff) {
+						nOccurrences++;
+						OverflowBackpointer *backpointer = overflowAnchor->getBackpointer(backpointerIndex);
+						_ASSERT(overflowTableIndex + nOccurrences < index->overflowTableSize);
+						index->overflowTable[overflowTableIndex + nOccurrences] = backpointer->genomeOffset;
+						backpointerIndex = backpointer->nextIndex;
+					}
+
+					_ASSERT(nOccurrences > 1);
+
+					//
+					// Fill the count in as the first thing in the overflow table.
+					//
+					index->overflowTable[overflowTableIndex] = nOccurrences;
+
+					//
+					// And patch the value into the hash table.
+					//
+					values[i] = overflowTableIndex;
+					overflowTableIndex += 1 + nOccurrences;
+					nBackpointersProcessed += nOccurrences;
+
+					//
+					// Sort the overflow table entries, because the paired-end aligner relies on this.  Sort them backwards, because that's
+					// what it expects.  For those who are desparately curious, this is because it was originally built this way by accident
+					// before there was any concept of doing binary search over a seed's hits.  When the binary search was built, it relied
+					// on this.  Then, when the index build was parallelized it was easier just to preserve the old order than to change the
+					// code in the aligner.  So now you know.
+					//
+					qsort(&index->overflowTable[overflowTableIndex -nOccurrences], nOccurrences, sizeof(index->overflowTable[0]), BackwardsUnsignedCompare);
+
+					if (timeInMillis() - lastPrintTime > 60 * 1000) {
+						WriteStatusMessage("%d/%d duplicate seeds, %d/%d backpointers, %d/%d hash tables processed\n", 
+							duplicateSeedsProcessed, nextOverflowIndex, nBackpointersProcessed, nextOverflowBackpointer-1,
+							whichHashTable, nHashTables);
+						lastPrintTime = timeInMillis();
+					}
+
+					//
+					// If we're building a histogram, update it.
+					//
+					if (buildHistogram) {
+						totalNonSingletonSeeds += nOccurrences;
+						if (nOccurrences > maxHistogramEntry) {
+							countOfTooBigForHistogram++;
+							sumOfTooBigForHistogram += nOccurrences;
+						} else {
+							histogram[nOccurrences]++;
+						}
+						largestSeed = __max(largestSeed, nOccurrences);
+					}
+
+				} // If this entry needs patching
+			} // forward and RC if large table
+		} // for each entry in the hash table
+
+		//
+		// We're done with this hash table, free it to releive memory pressure.
+		//
+		size_t bytesWrittenThisHashTable;
+        if (!hashTables[whichHashTable]->saveToFile(tablesFile, &bytesWrittenThisHashTable)) {
+            WriteErrorMessage("GenomeIndex::saveToDirectory: Failed to save hash table %d\n", whichHashTable);
+            return false;
+        }
+        totalBytesWritten += bytesWrittenThisHashTable;
+
+		delete hashTables[whichHashTable];
+		hashTables[whichHashTable] = NULL;
+	} // for each hash table
+
+    fclose(tablesFile);
+
     _ASSERT(overflowTableIndex == index->overflowTableSize);    // We used exactly what we expected to use.
 
-    delete [] overflowEntries;
-    overflowEntries = NULL;
-
-    delete [] overflowBackpointers;
-    overflowBackpointers = NULL;
+    delete overflowAnchor;
+    overflowAnchor = NULL;
 
     if (buildHistogram) {
         histogram[1] = (unsigned)(totalUsedHashTableElements - totalNonSingletonSeeds);
@@ -592,7 +610,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     //
     // Now save out the part of the index that's independent of the genome itself.
     //
-    WriteStatusMessage("Overflow table build took %llds\nSaving genome index...", (timeInMillis() + 500 - start)/1000);
+    WriteStatusMessage("Overflow table build and hash table save took %llds\nSaving overflow table...", (timeInMillis() + 500 - start)/1000);
     start = timeInMillis();
 
 
@@ -617,25 +635,6 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     }
     fclose(fOverflowTable);
     fOverflowTable = NULL;
-
-    snprintf(filenameBuffer,filenameBufferSize,"%s%cGenomeIndexHash",directoryName,PATH_SEP);
-    FILE *tablesFile = fopen(filenameBuffer, "wb");
-    if (NULL == tablesFile) {
-        WriteErrorMessage("Unable to open hash table file '%s'\n", filenameBuffer);
-        soft_exit(1);
-    }
-
-    size_t totalBytesWritten = 0;
-
-    for (unsigned i = 0; i < index->nHashTables; i++) {
-        size_t bytesWrittenThisHashTable;
-        if (!hashTables[i]->saveToFile(tablesFile, &bytesWrittenThisHashTable)) {
-            WriteErrorMessage("GenomeIndex::saveToDirectory: Failed to save hash table %d\n",i);
-            return false;
-        }
-        totalBytesWritten += bytesWrittenThisHashTable;
-    }
-   fclose(tablesFile);
 
     //
     // The save format is:
@@ -662,9 +661,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     if (computeBias && biasTable != NULL) {
         delete[] biasTable;
     }
-    
-
-
+ 
     WriteStatusMessage("%llds\n", (timeInMillis() + 500 - start) / 1000);
     
     return true;
@@ -1527,3 +1524,43 @@ GenomeIndex::completeIndexing(PerHashTableBatch *batches, BuildHashTablesThreadC
         ReleaseExclusiveLock(&context->hashTableLocks[whichHashTable]);
     }
 }
+
+GenomeIndex::OverflowBackpointerAnchor::OverflowBackpointerAnchor(unsigned maxOverflowEntries_)
+{
+	maxOverflowEntries = (maxOverflowEntries + batchSize - 1) / batchSize * batchSize;	// Round up to the next batch size
+
+	table = new OverflowBackpointer *[maxOverflowEntries / batchSize];
+
+	for (unsigned i = 0; i < maxOverflowEntries / batchSize; i++) {
+		table[i] = NULL;
+	}
+}
+
+GenomeIndex::OverflowBackpointerAnchor::~OverflowBackpointerAnchor()
+{
+	for (unsigned i = 0; i < maxOverflowEntries / batchSize; i++) {
+		if (table[i] != NULL) {
+			BigDealloc(table[i]);
+			table[i] = NULL;
+		}
+	}
+
+	delete [] table;
+	table = NULL;
+}
+
+	GenomeIndex::OverflowBackpointer *
+GenomeIndex::OverflowBackpointerAnchor::getBackpointer(unsigned index)
+{
+	unsigned tableSlot = index / batchSize;
+	if (table[tableSlot] == NULL) {
+		table[tableSlot] = (OverflowBackpointer *)BigAlloc(batchSize * sizeof(OverflowBackpointer));
+		for (int i = 0; i < batchSize; i++) {
+			table[tableSlot][i].genomeOffset = 0xffffffff;
+			table[tableSlot][i].nextIndex = 0xffffffff;
+		}
+	}
+	return &table[tableSlot][index % batchSize];
+}
+
+const unsigned GenomeIndex::OverflowBackpointerAnchor::batchSize = 1024 * 1024;

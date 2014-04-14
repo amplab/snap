@@ -62,6 +62,12 @@ class SNAPHashTable {
         unsigned GetValueSizeInBytes() const {return valueSizeInBytes;}
         unsigned GetValueCount() const {return valueCount;}
 
+		void *getEntryValues(unsigned whichEntry) 
+		{
+			_ASSERT(whichEntry < GetTableSize());
+			return (void *)getValueFromEntry(getEntry(whichEntry), 0);
+		}
+
         static inline _uint64 hash(_uint64 key) {
             //
             // Hash the key.  Use the hash finalizer from the 64 bit MurmurHash3, http://code.google.com/p/smhasher/wiki/MurmurHash3,
