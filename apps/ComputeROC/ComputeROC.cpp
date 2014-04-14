@@ -370,7 +370,7 @@ int main(int argc, char * argv[])
     readerContext.clipping = NoClipping;
     readerContext.defaultReadGroup = "";
     readerContext.genome = genome;
-    readerContext.ignoreSecondaryAlignments = false;
+    readerContext.ignoreSecondaryAlignments = true;
 	readerContext.header = NULL;
 	readerContext.headerLength = 0;
 	readerContext.headerBytes = 0;
