@@ -190,7 +190,7 @@ GenomeIndex::runIndexer(
     }
     WriteStatusMessage("%llds\n", (timeInMillis() + 500 - start) / 1000);
     unsigned nBases = genome->getCountOfBases();
-    if (!GenomeIndex::BuildIndexToDirectory(genome, seedLen, slack, computeBias, outputDir, overflowTableFactor, maxThreads, chromosomePadding, forceExact, keySizeInBytes, 
+    if (!GenomeIndex::BuildIndexToDirectory(genome, seedLen, slack, computeBias, outputDir, maxThreads, chromosomePadding, forceExact, keySizeInBytes, 
 		large, histogramFileName)) {
         WriteErrorMessage("Genome index build failed\n");
         soft_exit(1);
@@ -280,7 +280,7 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
 }
 
     bool
-GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double slack, bool computeBias, const char *directoryName, _uint64 overflowTableFactor,
+GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double slack, bool computeBias, const char *directoryName,
                                     unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, unsigned hashTableKeySize, 
 									bool large, const char *histogramFileName)
 {
@@ -362,7 +362,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     unusedDataValue[0] = InvalidGenomeLocation;
     unusedDataValue[1] = InvalidGenomeLocation;
 
-	OverflowBackpointerAnchor *overflowAnchor = new OverflowBackpointerAnchor((unsigned)((_uint64)countOfBases) * 8 / 10);
+	OverflowBackpointerAnchor *overflowAnchor = new OverflowBackpointerAnchor(0xfffffff0 - countOfBases);   // i.e., as much as the address space will allow.
    
     WriteStatusMessage("%llds\nBuilding hash tables.\n", (timeInMillis() + 500 - start) / 1000);
   
@@ -683,25 +683,20 @@ GenomeIndex::BackwardsUnsignedCompare(const void *first, const void *second)
     }
 }
 
-    void
+    unsigned
 GenomeIndex::AddOverflowBackpointer(
-    OverflowEntry       *overflowEntry,
-    OverflowBackpointer *overflowBackpointers,
-    unsigned             nOverflowBackpointers,
-    volatile unsigned   *nextOverflowBackpointer,
-    unsigned             genomeOffset)
+    unsigned                     previousOverflowBackpointer,
+    OverflowBackpointerAnchor   *overflowAnchor,
+    volatile unsigned           *nextOverflowBackpointer,
+    unsigned                     genomeOffset)
 {
     unsigned overflowBackpointerIndex = (unsigned)InterlockedIncrementAndReturnNewValue((volatile int *)nextOverflowBackpointer) - 1;
-    if (nOverflowBackpointers <= overflowBackpointerIndex) {
-        WriteErrorMessage("Ran out of overflow backpointers.  Consider using the -O switch with a larger value to increase space.\n");
-        soft_exit(1);
-    }
-    OverflowBackpointer *newBackpointer = &overflowBackpointers[overflowBackpointerIndex];
+    OverflowBackpointer *newBackpointer = overflowAnchor->getBackpointer(overflowBackpointerIndex);
  
-    newBackpointer->nextIndex = overflowEntry->backpointerIndex;
+    newBackpointer->nextIndex = previousOverflowBackpointer;
     newBackpointer->genomeOffset = genomeOffset;
-    overflowEntry->backpointerIndex = overflowBackpointerIndex;
-    overflowEntry->nInstances++;
+
+    return overflowBackpointerIndex;
 }
 
 
@@ -1390,7 +1385,7 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
     _ASSERT(hashTable->GetValueSizeInBytes() == 4);
     unsigned *entry = (unsigned *)hashTable->SlowLookup(lowBases);  // use SlowLookup because we might have overflowed the table.  Cast is OK because valueSize == 4
     if (NULL == entry) {
-        SNAPHashTable::ValueType newEntry[2];	// We only use [0] is !large, but it doesn't hurt to declare two
+        SNAPHashTable::ValueType newEntry[2];	// We only use [0] if !large, but it doesn't hurt to declare two
 		if (large) {
 			//
 			// We haven't yet seen either this seed or its complement.  Make a new hash table
@@ -1429,42 +1424,18 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
             entry[entryIndex] = genomeLocation;
             (*bothComplementsUsed)++;
         } else if (entry[entryIndex] < countOfBases) {
-            //
-            // Allocate an overflow table entry.
-            //
-            unsigned overflowIndex = (unsigned)InterlockedIncrementAndReturnNewValue((volatile int *)context->nextOverflowIndex) - 1;
-            if (overflowIndex >= context->nOverflowEntries) {
-                if (0xffffffff - overflowIndex < 10) {
-                    WriteErrorMessage("You've run out of index overflow address space.  Perhaps a larger seed size will help.\n");
-                } else {
-                    WriteErrorMessage("Index builder: Overflowed overflow table.  Consider using the -O switch with a larger value to make more space.\n");
-                }
-                soft_exit(1);
-            }
-            //
-            // And add two backpointers: one for what was already in the hash table and one
-            // for the index we're processing now.
-            //
-            OverflowEntry *overflowEntry = &context->overflowEntries[overflowIndex];
 
-            overflowEntry->hashTableEntry = entry + entryIndex;
-            overflowEntry->nInstances = 0;
-            overflowEntry->backpointerIndex = -1;
-
-            AddOverflowBackpointer(overflowEntry, context->overflowBackpointers, context->nOverflowBackpointers, context->nextOverflowBackpointer, entry[entryIndex]);
-            AddOverflowBackpointer(overflowEntry, context->overflowBackpointers, context->nOverflowBackpointers, context->nextOverflowBackpointer, genomeLocation);
+            unsigned overflowIndex = AddOverflowBackpointer(0xffffffff, context->overflowAnchor, context->nextOverflowBackpointer, entry[entryIndex]);
+            overflowIndex = AddOverflowBackpointer(overflowIndex, context->overflowAnchor, context->nextOverflowBackpointer, genomeLocation);
 
             entry[entryIndex] = overflowIndex + countOfBases;
         } else {
             //
             // Stick another entry in the existing overflow bucket.
             //
-            _ASSERT(entry[entryIndex] - countOfBases < context->nOverflowEntries && entry[entryIndex] >= countOfBases);
-            OverflowEntry *overflowEntry = &context->overflowEntries[entry[entryIndex] - countOfBases];
 
-            _ASSERT(overflowEntry->hashTableEntry == entry + entryIndex);
-
-            AddOverflowBackpointer(overflowEntry, context->overflowBackpointers, context->nOverflowBackpointers, context->nextOverflowBackpointer, genomeLocation);
+            unsigned overflowIndex = AddOverflowBackpointer(entry[entryIndex] - countOfBases, context->overflowAnchor, context->nextOverflowBackpointer, genomeLocation);
+            entry[entryIndex] = overflowIndex + countOfBases;
 
             (*countOfDuplicateOverflows)++;    // Should add extra stuff to the overflow table here.
         } // If the existing entry had the complement empty, needed a new overflow entry or extended an old one
@@ -1525,11 +1496,11 @@ GenomeIndex::completeIndexing(PerHashTableBatch *batches, BuildHashTablesThreadC
     }
 }
 
-GenomeIndex::OverflowBackpointerAnchor::OverflowBackpointerAnchor(unsigned maxOverflowEntries_)
+GenomeIndex::OverflowBackpointerAnchor::OverflowBackpointerAnchor(unsigned maxOverflowEntries_) : maxOverflowEntries(maxOverflowEntries_)
 {
-	maxOverflowEntries = (maxOverflowEntries + batchSize - 1) / batchSize * batchSize;	// Round up to the next batch size
+	unsigned roundedUpMaxOverflowEntries = (maxOverflowEntries + batchSize - 1) / batchSize * batchSize;	// Round up to the next batch size
 
-	table = new OverflowBackpointer *[maxOverflowEntries / batchSize];
+	table = new OverflowBackpointer *[roundedUpMaxOverflowEntries / batchSize];
 
 	for (unsigned i = 0; i < maxOverflowEntries / batchSize; i++) {
 		table[i] = NULL;
@@ -1552,10 +1523,14 @@ GenomeIndex::OverflowBackpointerAnchor::~OverflowBackpointerAnchor()
 	GenomeIndex::OverflowBackpointer *
 GenomeIndex::OverflowBackpointerAnchor::getBackpointer(unsigned index)
 {
+    if (index >= maxOverflowEntries) {
+        WriteErrorMessage("Trying to use too many overflow entries.  You can't index this reference genome with this seed size.  Try a larger one.\n");
+        soft_exit(1);
+    }
 	unsigned tableSlot = index / batchSize;
 	if (table[tableSlot] == NULL) {
 		table[tableSlot] = (OverflowBackpointer *)BigAlloc(batchSize * sizeof(OverflowBackpointer));
-		for (int i = 0; i < batchSize; i++) {
+		for (unsigned i = 0; i < batchSize; i++) {
 			table[tableSlot][i].genomeOffset = 0xffffffff;
 			table[tableSlot][i].nextIndex = 0xffffffff;
 		}

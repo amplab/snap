@@ -122,7 +122,7 @@ protected:
     // NB: This deletes the Genome that's passed into it.
     //
     static bool BuildIndexToDirectory(const Genome *genome, int seedLen, double slack,
-                                      bool computeBias, const char *directory, _uint64 overflowTableFactor,
+                                      bool computeBias, const char *directory,
                                       unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, 
                                       unsigned hashTableKeySize, bool large, const char *histogramFileName);
 
@@ -161,7 +161,6 @@ protected:
 
     static void ComputeBiasTableWorkerThreadMain(void *param);
 
-    struct OverflowEntry;
     struct OverflowBackpointer;
 
     struct BuildHashTablesThreadContext {
@@ -244,12 +243,11 @@ protected:
 
     SNAPHashTable **hashTables;
 
-    static void AddOverflowBackpointer(
-                    OverflowEntry       *overflowEntries, 
-                    OverflowBackpointer *overflowBackpointers,
-                    unsigned             nOverflowBackpointers,
-                    volatile unsigned   *nextOverflowBackpointer,
-                    unsigned             genomeOffset);
+    static unsigned AddOverflowBackpointer(
+                    unsigned                     previousOverflowBackpointer,
+                    OverflowBackpointerAnchor   *overflowAnchor,
+                    volatile unsigned           *nextOverflowBackpointer,
+                    unsigned                     genomeOffset);
 
     void fillInLookedUpResults(unsigned *subEntry, unsigned minLocation, unsigned maxLocation,
                                unsigned *nHits, const unsigned **hits);
