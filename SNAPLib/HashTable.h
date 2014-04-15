@@ -65,7 +65,7 @@ class SNAPHashTable {
 		void *getEntryValues(unsigned whichEntry) 
 		{
 			_ASSERT(whichEntry < GetTableSize());
-			return (void *)getValueFromEntry(getEntry(whichEntry), 0);
+			return getEntry(whichEntry);
 		}
 
         static inline _uint64 hash(_uint64 key) {

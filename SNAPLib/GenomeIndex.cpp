@@ -173,11 +173,6 @@ GenomeIndex::runIndexer(
         soft_exit(1);
     }
 
-	if (!large && !computeBias) {
-		WriteErrorMessage("There are not yet any bias tables for small indices.  We'll ignore -hg19 and compute them.\n");
-		computeBias = true;
-	}
-
     WriteStatusMessage("Hash table slack %lf\nLoading FASTA file '%s' into memory...", slack, fastaFile);
 
     BigAllocUseHugePages = false;
@@ -328,14 +323,19 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         biasTable = new double[nHashTables];
         ComputeBiasTable(genome, seedLen, biasTable, maxThreads, forceExact, hashTableKeySize, large);
     } else {
-        biasTable = hg19_biasTables[hashTableKeySize][seedLen];
+        if (large) {
+            biasTable = hg19_biasTables_large[hashTableKeySize][seedLen];
+        } else {
+            biasTable = hg19_biasTables[hashTableKeySize][seedLen];
+        }
+
         if (NULL == biasTable) {
-            WriteErrorMessage("-hg19 not available for this seed length/key size pair.\n");
+            WriteErrorMessage("-hg19 not available for this seed length/key size/small-or-large combo.\n");
             return false;
         }
     }
 
-    WriteStatusMessage("Allocating memory for hash and overflow tables...");
+    WriteStatusMessage("Allocating memory for hash tables...");
     start = timeInMillis();
     unsigned nHashTables;
     SNAPHashTable** hashTables = index->hashTables =
@@ -370,8 +370,8 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     volatile unsigned nextOverflowBackpointer = 0;
 
     volatile _int64 nonSeeds = 0;
-    volatile unsigned nextOverflowIndex = 0;
-    volatile _int64 countOfDuplicateOverflows = 0;     // Number of extra hits on duplicate indices.  This should come out once we implement the overflow table.
+    volatile _int64 seedsWithMultipleOccurrences = 0;
+    volatile _int64 genomeLocationsInOverflowTable = 0;     // Number of extra hits on duplicate indices.  This should come out once we implement the overflow table.
     volatile _int64 bothComplementsUsed = 0;    // Number of hash buckets where both complements are used
     volatile _int64 noBaseAvailable = 0;        // Number of places where getSubstring returned null.
     volatile _int64 nBasesProcessed = 0;
@@ -407,8 +407,8 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         threadContexts[i].seedLen = seedLen;
         threadContexts[i].noBaseAvailable = &noBaseAvailable;
         threadContexts[i].nonSeeds = &nonSeeds;
-        threadContexts[i].nextOverflowIndex = &nextOverflowIndex;
-        threadContexts[i].countOfDuplicateOverflows = &countOfDuplicateOverflows;
+        threadContexts[i].seedsWithMultipleOccurrences = &seedsWithMultipleOccurrences;
+        threadContexts[i].genomeLocationsInOverflowTable = &genomeLocationsInOverflowTable;
         threadContexts[i].bothComplementsUsed = &bothComplementsUsed;
 		threadContexts[i].overflowAnchor = overflowAnchor;
         threadContexts[i].nextOverflowBackpointer = &nextOverflowBackpointer;
@@ -422,7 +422,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     WaitForSingleWaiterObject(&doneObject);
     DestroySingleWaiterObject(&doneObject);
 
-    if ((_int64)nextOverflowIndex * 3 + (_int64)countOfDuplicateOverflows + (_int64)genome->getCountOfBases() > 0xfffffff0) {
+    if (seedsWithMultipleOccurrences + genomeLocationsInOverflowTable + (_int64)genome->getCountOfBases() > 0xfffffff0) {
         WriteErrorMessage("Ran out of overflow table namespace. This genome cannot be indexed with this seed size.  Try a larger one.\n");
         exit(1);
     }
@@ -434,14 +434,13 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 //                (_int64)hashTables[j]->GetUsedElementCount() * 100 / (_int64)hashTables[j]->GetTableSize());
     }
 
-    WriteStatusMessage("%d(%lld%%) overflow entries, %d overflow backpointers, %d(%lld%%) duplicate overflows, %d(%lld%%) bad seeds, %d both complements used %d no string\n",
-        nextOverflowIndex,
-        ((_int64)nextOverflowIndex)*100 / countOfBases,
-        nextOverflowBackpointer,
-        countOfDuplicateOverflows,
-        (_int64)countOfDuplicateOverflows * 100 / countOfBases,
+    WriteStatusMessage("%lld(%lld%%) seeds occur more than once, total of %lld(%lld%%) genome locations are not unique, %d(%lld%%) bad seeds, %lld both complements used %lld no string\n",
+        seedsWithMultipleOccurrences,
+        ((_int64)seedsWithMultipleOccurrences)*100 / countOfBases,
+        genomeLocationsInOverflowTable,
+        genomeLocationsInOverflowTable * 100 / countOfBases,
         (int) nonSeeds,
-        (_int64)nonSeeds *100 / countOfBases,
+        ((_int64)nonSeeds *100) / countOfBases,
         bothComplementsUsed,
         noBaseAvailable);
 
@@ -454,22 +453,24 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     delete genome;
     genome = NULL;
 
-    WriteStatusMessage("%llds\nBuilding overflow table.\n", (timeInMillis() + 500 - start) / 1000);
+    WriteStatusMessage("Building overflow table.\n");
     start = timeInMillis();
     fflush(stdout);
 
     //
     // Now build the real overflow table and simultaneously fixup the hash table entries.
     // Its format is one unsigned of the number of genome locations matching the
-    // particular seed, followed by that many genome offsets.  The count of entries is
-    // 3 * the entries in our overflow builder table, plus the number of surplus
-    // overflows.  The 3 is one for the count, and one for each of the entries that went
-    // onto the backpointer list when the overflow entry was first created.
+    // particular seed, followed by that many genome offsets.  An overflow table
+    // entry is a count followed by a reverse sorted list of genome locations.
+    // For each seed with multiple occurrences in the genome, there is one count.
+    // For each genome location that's not unique, there is one list entry.  So, the size
+    // of the overflow table is the number of non-unique seeds plus the number of non-unique
+    // genome locations.
     //
-    index->overflowTableSize = nextOverflowIndex * 3 + (unsigned)countOfDuplicateOverflows;
+    index->overflowTableSize = seedsWithMultipleOccurrences  + genomeLocationsInOverflowTable;
     index->overflowTable = (unsigned *)BigAlloc(index->overflowTableSize * sizeof(*index->overflowTable));
 
-	if ((_uint64)index->overflowTableSize + (_uint64)countOfBases >= 0xfffffff0) {
+ 	if ((_uint64)index->overflowTableSize + (_uint64)countOfBases >= 0xfffffff0) {
 		WriteErrorMessage("Not enough address space to index this genome with this seed size.  Try a larger seed size.\n");
 		soft_exit(1);
 	}
@@ -481,7 +482,6 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     unsigned countOfTooBigForHistogram = 0;
     unsigned sumOfTooBigForHistogram = 0;
     unsigned largestSeed = 0;
-    unsigned totalNonSingletonSeeds = 0;
     unsigned *histogram = NULL;
     if (buildHistogram) {
         histogram = new unsigned[maxHistogramEntry+1];
@@ -503,13 +503,13 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 
     size_t totalBytesWritten = 0;
     unsigned overflowTableIndex = 0;
-	unsigned duplicateSeedsProcessed = 0;
+	_uint64 duplicateSeedsProcessed = 0;
 
 	for (unsigned whichHashTable = 0; whichHashTable < nHashTables; whichHashTable++) {
 		for (unsigned whichEntry = 0; whichEntry < hashTables[whichHashTable]->GetTableSize(); whichEntry++) {
 			unsigned *values = (unsigned *)hashTables[whichHashTable]->getEntryValues(whichEntry);
 			for (int i = 0; i < (large ? NUM_DIRECTIONS : 1); i++) {
-				if (values[i] >= countOfBases) {
+				if (values[i] >= countOfBases && values[i] != 0xffffffff && values[i] != 0xfffffffe) {
 					//
 					// This is an overflow pointer.  Fix it up.  Count the number of occurrences of this
 					// seed by walking the overflow chain.
@@ -517,7 +517,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 					duplicateSeedsProcessed++;
 
 					unsigned nOccurrences = 0;
-					unsigned backpointerIndex = values[i];
+					unsigned backpointerIndex = values[i] - countOfBases;
 					while (backpointerIndex != 0xffffffff) {
 						nOccurrences++;
 						OverflowBackpointer *backpointer = overflowAnchor->getBackpointer(backpointerIndex);
@@ -531,6 +531,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 					//
 					// Fill the count in as the first thing in the overflow table.
 					//
+                    _ASSERT(overflowTableIndex < index->overflowTableSize);
 					index->overflowTable[overflowTableIndex] = nOccurrences;
 
 					//
@@ -538,6 +539,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 					//
 					values[i] = overflowTableIndex;
 					overflowTableIndex += 1 + nOccurrences;
+                    _ASSERT(overflowTableIndex <= index->overflowTableSize);
 					nBackpointersProcessed += nOccurrences;
 
 					//
@@ -550,8 +552,8 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 					qsort(&index->overflowTable[overflowTableIndex -nOccurrences], nOccurrences, sizeof(index->overflowTable[0]), BackwardsUnsignedCompare);
 
 					if (timeInMillis() - lastPrintTime > 60 * 1000) {
-						WriteStatusMessage("%d/%d duplicate seeds, %d/%d backpointers, %d/%d hash tables processed\n", 
-							duplicateSeedsProcessed, nextOverflowIndex, nBackpointersProcessed, nextOverflowBackpointer-1,
+						WriteStatusMessage("%lld/%lld duplicate seeds, %d/%d backpointers, %d/%d hash tables processed\n", 
+							duplicateSeedsProcessed, seedsWithMultipleOccurrences, nBackpointersProcessed, genomeLocationsInOverflowTable,
 							whichHashTable, nHashTables);
 						lastPrintTime = timeInMillis();
 					}
@@ -560,7 +562,6 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 					// If we're building a histogram, update it.
 					//
 					if (buildHistogram) {
-						totalNonSingletonSeeds += nOccurrences;
 						if (nOccurrences > maxHistogramEntry) {
 							countOfTooBigForHistogram++;
 							sumOfTooBigForHistogram += nOccurrences;
@@ -574,7 +575,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 			} // forward and RC if large table
 		} // for each entry in the hash table
 
-		//
+ 		//
 		// We're done with this hash table, free it to releive memory pressure.
 		//
 		size_t bytesWrittenThisHashTable;
@@ -596,7 +597,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     overflowAnchor = NULL;
 
     if (buildHistogram) {
-        histogram[1] = (unsigned)(totalUsedHashTableElements - totalNonSingletonSeeds);
+        histogram[1] = (unsigned)(totalUsedHashTableElements - seedsWithMultipleOccurrences);
         for (unsigned i = 0; i <= maxHistogramEntry; i++) {
             if (histogram[i] != 0) {
                 fprintf(histogramFile,"%d\t%d\n", i, histogram[i]);
@@ -1362,7 +1363,8 @@ GenomeIndex::BuildHashTablesWorkerThread(BuildHashTablesThreadContext *context)
     InterlockedAdd64AndReturnNewValue(context->noBaseAvailable, stats.noBaseAvailable);
     InterlockedAdd64AndReturnNewValue(context->nonSeeds, stats.nonSeeds);
     InterlockedAdd64AndReturnNewValue(context->bothComplementsUsed, stats.bothComplementsUsed);
-    InterlockedAdd64AndReturnNewValue(context->countOfDuplicateOverflows, stats.countOfDuplicateOverflows);
+    InterlockedAdd64AndReturnNewValue(context->genomeLocationsInOverflowTable, stats.genomeLocationsInOverflowTable);
+    InterlockedAdd64AndReturnNewValue(context->seedsWithMultipleOccurrences, stats.seedsWithMultipleOccurrences);
 
     delete [] batches;
 
@@ -1376,7 +1378,7 @@ const _int64 GenomeIndex::printPeriod = 100000000;
 
     void 
 GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64 whichHashTable, unsigned genomeLocation, _uint64 lowBases, bool usingComplement,
-                _int64 *bothComplementsUsed, _int64 *countOfDuplicateOverflows, bool large)
+                _int64 *bothComplementsUsed, _int64 *genomeLocationsInOverflowTable, _int64 *seedsWithMultipleOccurrences, bool large)
 {
 	_ASSERT(large || !usingComplement);
     GenomeIndex *index = context->index;
@@ -1425,6 +1427,9 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
             (*bothComplementsUsed)++;
         } else if (entry[entryIndex] < countOfBases) {
 
+            (*seedsWithMultipleOccurrences)++;
+            (*genomeLocationsInOverflowTable) += 2;    
+
             unsigned overflowIndex = AddOverflowBackpointer(0xffffffff, context->overflowAnchor, context->nextOverflowBackpointer, entry[entryIndex]);
             overflowIndex = AddOverflowBackpointer(overflowIndex, context->overflowAnchor, context->nextOverflowBackpointer, genomeLocation);
 
@@ -1437,7 +1442,7 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
             unsigned overflowIndex = AddOverflowBackpointer(entry[entryIndex] - countOfBases, context->overflowAnchor, context->nextOverflowBackpointer, genomeLocation);
             entry[entryIndex] = overflowIndex + countOfBases;
 
-            (*countOfDuplicateOverflows)++;    // Should add extra stuff to the overflow table here.
+            (*genomeLocationsInOverflowTable)++;
         } // If the existing entry had the complement empty, needed a new overflow entry or extended an old one
     } // If new or existing entry.
 }
@@ -1461,7 +1466,7 @@ GenomeIndex::indexSeed(unsigned genomeLocation, Seed seed, PerHashTableBatch *ba
 		for (unsigned i = 0; i < batches[whichHashTable].nUsed; i++) {
 			ApplyHashTableUpdate(context, whichHashTable, batches[whichHashTable].entries[i].genomeLocation, 
 				batches[whichHashTable].entries[i].lowBases, batches[whichHashTable].entries[i].usingComplement,
-				&stats->bothComplementsUsed, &stats->countOfDuplicateOverflows, large);
+				&stats->bothComplementsUsed, &stats->genomeLocationsInOverflowTable, &stats->seedsWithMultipleOccurrences, large);
 		}
 		ReleaseExclusiveLock(&context->hashTableLocks[whichHashTable]);
 
@@ -1490,7 +1495,8 @@ GenomeIndex::completeIndexing(PerHashTableBatch *batches, BuildHashTablesThreadC
         for (unsigned i = 0; i < batches[whichHashTable].nUsed; i++) {
             ApplyHashTableUpdate(context, whichHashTable, batches[whichHashTable].entries[i].genomeLocation, 
                 batches[whichHashTable].entries[i].lowBases, batches[whichHashTable].entries[i].usingComplement,
-                &stats->bothComplementsUsed, &stats->countOfDuplicateOverflows, large);
+                &stats->bothComplementsUsed, &stats->genomeLocationsInOverflowTable, 
+                &stats->seedsWithMultipleOccurrences, large);
         }
         ReleaseExclusiveLock(&context->hashTableLocks[whichHashTable]);
     }
@@ -1505,6 +1511,8 @@ GenomeIndex::OverflowBackpointerAnchor::OverflowBackpointerAnchor(unsigned maxOv
 	for (unsigned i = 0; i < maxOverflowEntries / batchSize; i++) {
 		table[i] = NULL;
 	}
+
+    InitializeExclusiveLock(&lock);
 }
 
 GenomeIndex::OverflowBackpointerAnchor::~OverflowBackpointerAnchor()
@@ -1518,6 +1526,8 @@ GenomeIndex::OverflowBackpointerAnchor::~OverflowBackpointerAnchor()
 
 	delete [] table;
 	table = NULL;
+
+    DestroyExclusiveLock(&lock);
 }
 
 	GenomeIndex::OverflowBackpointer *
@@ -1529,13 +1539,83 @@ GenomeIndex::OverflowBackpointerAnchor::getBackpointer(unsigned index)
     }
 	unsigned tableSlot = index / batchSize;
 	if (table[tableSlot] == NULL) {
-		table[tableSlot] = (OverflowBackpointer *)BigAlloc(batchSize * sizeof(OverflowBackpointer));
-		for (unsigned i = 0; i < batchSize; i++) {
-			table[tableSlot][i].genomeOffset = 0xffffffff;
-			table[tableSlot][i].nextIndex = 0xffffffff;
-		}
+        AcquireExclusiveLock(&lock);
+        if (table[tableSlot] == NULL) {
+		    table[tableSlot] = (OverflowBackpointer *)BigAlloc(batchSize * sizeof(OverflowBackpointer));
+		    for (unsigned i = 0; i < batchSize; i++) {
+			    table[tableSlot][i].genomeOffset = 0xffffffff;
+			    table[tableSlot][i].nextIndex = 0xffffffff;
+		    }
+        }
+        ReleaseExclusiveLock(&lock);
 	}
 	return &table[tableSlot][index % batchSize];
 }
 
 const unsigned GenomeIndex::OverflowBackpointerAnchor::batchSize = 1024 * 1024;
+
+    void
+GenomeIndex::printBiasTables()
+{
+    for (int keySize = 0; keySize <= largestKeySize; keySize++) {
+        for (int seedSize = 0; seedSize <= largestBiasTable; seedSize++) {
+            if (NULL != hg19_biasTables_large[keySize][seedSize]) {
+                printf("static double hg19_biasTable%d_%d_large[] = {\n", seedSize, keySize);
+                unsigned bitsOfSeed = seedSize * 2;
+                unsigned bitsOfKey = keySize * 8;   // 8 == nBits / byte
+                unsigned numHashTables = 1 << (bitsOfSeed - bitsOfKey);
+                for (unsigned hashTable = 0; hashTable < numHashTables; hashTable++) {
+                    if (hg19_biasTables_large[keySize][seedSize][hashTable] == 0) {
+                        printf("0");
+                    } else if (hg19_biasTables_large[keySize][seedSize][hashTable] > 1000 || hg19_biasTables_large[keySize][seedSize][hashTable] < .01) {
+                        printf("%1.2e", hg19_biasTables_large[keySize][seedSize][hashTable]);
+                    } else if (hg19_biasTables_large[keySize][seedSize][hashTable] > 10) {
+                        printf("%1.1f", hg19_biasTables_large[keySize][seedSize][hashTable]);
+                    } else {
+                        printf("%1.3f", hg19_biasTables_large[keySize][seedSize][hashTable]);
+                    }
+
+                    if (hashTable != numHashTables-1) {
+                        printf(",");
+                    }
+
+                    if (hashTable % 10 == 9) {
+                        printf("\n");
+                    }
+                } // for each hash table
+                printf("\n};\n\n");
+            } // if there is a bias entry for this key * seed size
+        } // for each seed size
+    } // for each key size
+
+    for (int keySize = 0; keySize <= largestKeySize; keySize++) {
+        for (int seedSize = 0; seedSize <= largestBiasTable; seedSize++) {
+            if (NULL != hg19_biasTables[keySize][seedSize]) {
+                printf("static double hg19_biasTable%d_%d[] = {\n", seedSize, keySize);
+                unsigned bitsOfSeed = seedSize * 2;
+                unsigned bitsOfKey = keySize * 8;   // 8 == nBits / byte
+                unsigned numHashTables = 1 << (bitsOfSeed - bitsOfKey);
+                for (unsigned hashTable = 0; hashTable < numHashTables; hashTable++) {
+                    if (hg19_biasTables[keySize][seedSize][hashTable] == 0) {
+                        printf("0");
+                    } else if (hg19_biasTables[keySize][seedSize][hashTable] > 1000 || hg19_biasTables[keySize][seedSize][hashTable] < .01) {
+                        printf("%1.2e", hg19_biasTables[keySize][seedSize][hashTable]);
+                    } else if (hg19_biasTables[keySize][seedSize][hashTable] > 10) {
+                        printf("%1.1f", hg19_biasTables[keySize][seedSize][hashTable]);
+                    } else {
+                        printf("%1.3f", hg19_biasTables[keySize][seedSize][hashTable]);
+                    }
+
+                    if (hashTable != numHashTables-1) {
+                        printf(",");
+                    }
+
+                    if (hashTable % 10 == 9) {
+                        printf("\n");
+                    }
+                } // for each hash table
+                printf("\n};\n\n");
+            } // if there is a bias entry for this key * seed size
+        } // for each seed size
+    } // for each key size
+}

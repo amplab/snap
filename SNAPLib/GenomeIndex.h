@@ -65,6 +65,8 @@ public:
 
     static GenomeIndex *loadFromDirectory(char *directoryName);
 
+    static void printBiasTables();
+
 protected:
 
     int seedLen;
@@ -77,7 +79,7 @@ protected:
     // The hash table(s) point into the overflow table when they have a seed that's got more
     // than one instance in the genome.
     //
-    unsigned overflowTableSize;
+    _uint64 overflowTableSize;
     unsigned *overflowTable;
 
     void *tablesBlob;   // All of the hash tables in one giant blob
@@ -109,6 +111,8 @@ protected:
 
 	private:
 
+        ExclusiveLock lock;
+
 		static const unsigned batchSize;
 		unsigned maxOverflowEntries;
 
@@ -139,6 +143,7 @@ protected:
     static const unsigned largestBiasTable = 32;    // Can't be bigger than the biggest seed size, which is set in Seed.h.  Bigger than 32 means a new Seed structure.
     static const unsigned largestKeySize = 8;
     static double *hg19_biasTables[largestKeySize+1][largestBiasTable+1];
+    static double *hg19_biasTables_large[largestKeySize+1][largestBiasTable+1];
 
     static void ComputeBiasTable(const Genome* genome, int seedSize, double* table, unsigned maxThreads, bool forceExact, unsigned hashTableKeySize, bool large);
 
@@ -173,12 +178,12 @@ protected:
         unsigned                         seedLen;
         volatile _int64                 *noBaseAvailable;
         volatile _int64                 *nonSeeds;
-        volatile unsigned               *nextOverflowIndex;
+        volatile _int64                 *seedsWithMultipleOccurrences;
         volatile _int64                 *bothComplementsUsed;
         GenomeIndex                     *index;
 		OverflowBackpointerAnchor		*overflowAnchor;
         volatile unsigned               *nextOverflowBackpointer;
-        volatile _int64                 *countOfDuplicateOverflows;
+        volatile _int64                 *genomeLocationsInOverflowTable;
         unsigned                         hashTableKeySize;
 		bool							 large;
 
@@ -217,12 +222,13 @@ protected:
     };
 
     struct IndexBuildStats {
-        IndexBuildStats() : noBaseAvailable(0), nonSeeds(0), bothComplementsUsed(0), countOfDuplicateOverflows(0),
-                            unrecordedSkippedSeeds(0) {}
+        IndexBuildStats() : noBaseAvailable(0), nonSeeds(0), bothComplementsUsed(0), genomeLocationsInOverflowTable(0),
+                            unrecordedSkippedSeeds(0), seedsWithMultipleOccurrences(0) {}
         _int64 noBaseAvailable;
         _int64 nonSeeds;
         _int64 bothComplementsUsed;
-        _int64 countOfDuplicateOverflows;
+        _int64 genomeLocationsInOverflowTable;
+        _int64 seedsWithMultipleOccurrences;
         _uint64 unrecordedSkippedSeeds;
     };
 
@@ -234,7 +240,7 @@ protected:
     static void BuildHashTablesWorkerThreadMain(void *param);
     void BuildHashTablesWorkerThread(BuildHashTablesThreadContext *context);
     static void ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64 whichHashTable, unsigned genomeLocation, _uint64 lowBases, bool usingComplement,
-                    _int64 *bothComplementsUsed, _int64 *countOfDuplicateOverflows, bool large);
+                    _int64 *bothComplementsUsed, _int64 *genomeLocationsInOverflowTable, _int64 *seedsWithMultipleOccurrences, bool large);
 
     static int BackwardsUnsignedCompare(const void *, const void *);
 
