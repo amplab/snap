@@ -137,7 +137,7 @@ class SNAPHashTable {
         //
         ValueType *SlowLookup(KeyType key);
 
-private:
+//bjb private:
 
         SNAPHashTable() {}
 

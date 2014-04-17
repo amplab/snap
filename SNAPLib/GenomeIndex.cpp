@@ -195,85 +195,6 @@ GenomeIndex::runIndexer(
            (end - start) / 1000, (_int64) nBases / max((end - start) / 1000, (_int64) 1)); 
 }
 
-SNAPHashTable** GenomeIndex::allocateHashTables(
-    unsigned*       o_nTables,
-    size_t          countOfBases,
-    double          slack,
-    int             seedLen,
-    unsigned        hashTableKeySize,
-	bool			large,
-    double*         biasTable)
-{
-    _ASSERT(NULL != biasTable);
-
-    BigAllocUseHugePages = false;   // Huge pages just slow down allocation and don't help much for hash table build, so don't use them.
-
-    if (slack <= 0) {
-        WriteErrorMessage("allocateHashTables: must have positive slack for the hash table to work.  0.3 is probably OK, 0.1 is minimal, less will wreak havoc with perf.\n");
-        soft_exit(1);
-    }
-
-    if (seedLen <= 0) {
-        WriteErrorMessage("allocateHashTables: seedLen is too small (must be > 0, and practically should be >= 15 or so.\n");
-        soft_exit(1);
-    }
-
-    if (hashTableKeySize < 4 || hashTableKeySize > 8) {
-        WriteErrorMessage("allocateHashTables: key size must be 4-8 inclusive\n");
-        soft_exit(1);
-    }
-
-    if ((unsigned)seedLen < hashTableKeySize * 4) {
-        WriteErrorMessage("allocateHashTables: key size too large for seedLen.\n");
-        soft_exit(1);
-    }
-
-    if ((unsigned)seedLen > hashTableKeySize * 4 + 9) {
-        WriteErrorMessage("allocateHashTables: key size too small for seeLen.\n");
-        soft_exit(1);
-    }
-    
-    //
-    // Make an array of HashTables, size depending on the seed size.  The way the index works is that we use
-    // the low bits of the seed as a hash key.  Any remaining bases are used as an index into the
-    // particular hash table in question.  The division between "low" and "high" depends on the hash table key size.
-    //
-    unsigned nHashTablesToBuild = 1 << ((seedLen - hashTableKeySize * 4) * 2);
-
-    if (nHashTablesToBuild > 256 * 1024) {
-        WriteErrorMessage("allocateHashTables: key size too small for seedLen.  Try specifying -keySize and giving it a larger value.\n");
-        soft_exit(1);
-    }
-    //
-    // Average size of the hash table.  We bias this later based on the actual content of the genome.
-    //
-    size_t hashTableSize = (size_t) ((double)countOfBases * (slack + 1.0) / nHashTablesToBuild);
-    
-    SNAPHashTable **hashTables = new SNAPHashTable*[nHashTablesToBuild];
-    
-    for (unsigned i = 0; i < nHashTablesToBuild; i++) {
-        //
-        // Create the actual hash tables.  It turns out that the human genome is highly non-uniform in its
-        // sequences of bases, so we bias the hash table sizes based on their popularity (which is emperically
-        // measured), or use the estimates that we generated and passed in as "biasTable."
-        //
-        double bias = biasTable[i];
-        unsigned biasedSize = (unsigned) (hashTableSize * bias);
-        if (biasedSize < 100) {
-            biasedSize = 100;
-        }
-        hashTables[i] = new SNAPHashTable(biasedSize, hashTableKeySize, sizeof(unsigned), large ? 2 : 1, InvalidGenomeLocation);
- 
-        if (NULL == hashTables[i]) {
-            WriteErrorMessage("IndexBuilder: unable to allocate HashTable %d of %d\n", i+1, nHashTablesToBuild);
-            soft_exit(1);
-        }
-    }
-
-    *o_nTables = nHashTablesToBuild;
-    return hashTables;
-}
-
     bool
 GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double slack, bool computeBias, const char *directoryName,
                                     unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, unsigned hashTableKeySize, 
@@ -537,7 +458,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 					//
 					// And patch the value into the hash table.
 					//
-					values[i] = overflowTableIndex;
+					values[i] = overflowTableIndex + countOfBases;
 					overflowTableIndex += 1 + nOccurrences;
                     _ASSERT(overflowTableIndex <= index->overflowTableSize);
 					nBackpointersProcessed += nOccurrences;
@@ -668,6 +589,86 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     return true;
 }
 
+SNAPHashTable** GenomeIndex::allocateHashTables(
+    unsigned*       o_nTables,
+    size_t          countOfBases,
+    double          slack,
+    int             seedLen,
+    unsigned        hashTableKeySize,
+	bool			large,
+    double*         biasTable)
+{
+    _ASSERT(NULL != biasTable);
+
+    BigAllocUseHugePages = false;   // Huge pages just slow down allocation and don't help much for hash table build, so don't use them.
+
+    if (slack <= 0) {
+        WriteErrorMessage("allocateHashTables: must have positive slack for the hash table to work.  0.3 is probably OK, 0.1 is minimal, less will wreak havoc with perf.\n");
+        soft_exit(1);
+    }
+
+    if (seedLen <= 0) {
+        WriteErrorMessage("allocateHashTables: seedLen is too small (must be > 0, and practically should be >= 15 or so.\n");
+        soft_exit(1);
+    }
+
+    if (hashTableKeySize < 4 || hashTableKeySize > 8) {
+        WriteErrorMessage("allocateHashTables: key size must be 4-8 inclusive\n");
+        soft_exit(1);
+    }
+
+    if ((unsigned)seedLen < hashTableKeySize * 4) {
+        WriteErrorMessage("allocateHashTables: key size too large for seedLen.\n");
+        soft_exit(1);
+    }
+
+    if ((unsigned)seedLen > hashTableKeySize * 4 + 9) {
+        WriteErrorMessage("allocateHashTables: key size too small for seeLen.\n");
+        soft_exit(1);
+    }
+    
+    //
+    // Make an array of HashTables, size depending on the seed size.  The way the index works is that we use
+    // the low bits of the seed as a hash key.  Any remaining bases are used as an index into the
+    // particular hash table in question.  The division between "low" and "high" depends on the hash table key size.
+    //
+    unsigned nHashTablesToBuild = 1 << ((seedLen - hashTableKeySize * 4) * 2);
+
+    if (nHashTablesToBuild > 256 * 1024) {
+        WriteErrorMessage("allocateHashTables: key size too small for seedLen.  Try specifying -keySize and giving it a larger value.\n");
+        soft_exit(1);
+    }
+    //
+    // Average size of the hash table.  We bias this later based on the actual content of the genome.
+    //
+    size_t hashTableSize = (size_t) ((double)countOfBases * (slack + 1.0) / nHashTablesToBuild);
+    
+    SNAPHashTable **hashTables = new SNAPHashTable*[nHashTablesToBuild];
+    
+    for (unsigned i = 0; i < nHashTablesToBuild; i++) {
+        //
+        // Create the actual hash tables.  It turns out that the human genome is highly non-uniform in its
+        // sequences of bases, so we bias the hash table sizes based on their popularity (which is emperically
+        // measured), or use the estimates that we generated and passed in as "biasTable."
+        //
+        double bias = biasTable[i];
+        unsigned biasedSize = (unsigned) (hashTableSize * bias);
+        if (biasedSize < 100) {
+            biasedSize = 100;
+        }
+        hashTables[i] = new SNAPHashTable(biasedSize, hashTableKeySize, sizeof(unsigned), large ? 2 : 1, InvalidGenomeLocation);
+ 
+        if (NULL == hashTables[i]) {
+            WriteErrorMessage("IndexBuilder: unable to allocate HashTable %d of %d\n", i+1, nHashTablesToBuild);
+            soft_exit(1);
+        }
+    }
+
+    *o_nTables = nHashTablesToBuild;
+    return hashTables;
+}
+
+
 //
 // A comparison method for qsort that sorts unsigned ints backwards (SNAP expects them to be backwards due to 
 // a historical artifact).
@@ -705,327 +706,6 @@ GenomeIndex::GenomeIndex() : nHashTables(0), hashTables(NULL), overflowTable(NUL
 {
 }
 
-    GenomeIndex *
-GenomeIndex::loadFromDirectory(char *directoryName)
-{
-
-    const unsigned filenameBufferSize = MAX_PATH+1;
-    char filenameBuffer[filenameBufferSize];
-    
-    snprintf(filenameBuffer,filenameBufferSize,"%s%cGenomeIndex",directoryName,PATH_SEP);
-
-    GenericFile *indexFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
-
-    if (NULL == indexFile) {
-        WriteErrorMessage("Unable to open file '%s' for read.\n",filenameBuffer);
-        return NULL;
-    }
-
-    char indexFileBuf[1000];
-    indexFile->read(indexFileBuf, sizeof(indexFileBuf));
-
-    unsigned seedLen;
-    unsigned majorVersion, minorVersion, chromosomePadding;
-    int nRead;
-    size_t hashTablesFileSize;
-    unsigned nHashTables;
-    unsigned overflowTableSize;
-    unsigned hashTableKeySize;
-    unsigned smallHashTable;
-    if (9 != (nRead = sscanf(indexFileBuf,"%d %d %d %d %d %d %d %lld %d", &majorVersion, &minorVersion, &nHashTables, &overflowTableSize, &seedLen, &chromosomePadding, 
-											&hashTableKeySize, &hashTablesFileSize, &smallHashTable))) {
-        if (3 == nRead || 6 == nRead || 7 == nRead) {
-            WriteErrorMessage("Indices built by versions before 1.0dev.21 are no longer supported.  Please rebuild your index.\n");
-        } else {
-            WriteErrorMessage("GenomeIndex::LoadFromDirectory: didn't read initial values\n");
-        }
-        indexFile->close();		
-        delete indexFile;
-        return NULL;
-    }
-    indexFile->close();
-    delete indexFile;
-
-    if (majorVersion != GenomeIndexFormatMajorVersion) {
-        WriteErrorMessage("This genome index appears to be from a different version of SNAP than this, and so we can't read it.  Index version %d, SNAP index format version %d\n",
-            majorVersion, GenomeIndexFormatMajorVersion);
-        soft_exit(1);
-    }
-
-    if (0 == seedLen) {
-        WriteErrorMessage("GenomeIndex::LoadFromDirectory: saw seed size of 0.\n");
-        return NULL;
-    }
-
-    GenomeIndex *index;
-	if (smallHashTable) {
-		index = new GenomeIndexSmall();
-	} else {
-		index = new GenomeIndexLarge();
-	}
-    index->nHashTables = nHashTables;
-    index->overflowTableSize = overflowTableSize;
-    index->hashTableKeySize = hashTableKeySize;
-    index->seedLen = seedLen;
-
-    size_t overflowTableSizeInBytes = (size_t)index->overflowTableSize * sizeof(*(index->overflowTable));
-    index->overflowTable = (unsigned *)BigAlloc(overflowTableSizeInBytes);
-
-    snprintf(filenameBuffer,filenameBufferSize,"%s%cOverflowTable",directoryName,PATH_SEP);
-    GenericFile *fOverflowTable = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
-
-    if (NULL == fOverflowTable) {
-        WriteErrorMessage("Unable to open overflow table file, '%s', %d\n",filenameBuffer,errno);
-        delete index;
-        return NULL;
-    }
-
-    size_t amountRead = fOverflowTable->read(index->overflowTable, overflowTableSizeInBytes);
-    if (amountRead != overflowTableSizeInBytes) {
-        WriteErrorMessage("Error reading overflow table, %lld != %lld bytes read.\n", amountRead, overflowTableSizeInBytes);
-        soft_exit(1);
-    }
-
-    fOverflowTable->close();
-    delete fOverflowTable;
-    fOverflowTable = NULL;
-
-    index->hashTables = new SNAPHashTable*[index->nHashTables];
-
-    for (unsigned i = 0; i < index->nHashTables; i++) {
-        index->hashTables[i] = NULL; // We need to do this so the destructor doesn't crash if loading a hash table fails.
-    }
-
-    snprintf(filenameBuffer,filenameBufferSize,"%s%cGenomeIndexHash",directoryName,PATH_SEP);
-	GenericFile *tablesFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
-    if (NULL == tablesFile) {
-        WriteErrorMessage("Unable to open genome hash table file '%s'\n", filenameBuffer);
-        soft_exit(1);
-    }
-
-    index->tablesBlob = BigAlloc(hashTablesFileSize);
-    amountRead = tablesFile->read(index->tablesBlob, hashTablesFileSize);
-    if (amountRead != hashTablesFileSize) {
-        WriteErrorMessage("Read incorrect amount for GenomeIndexHash file, %lld != %lld\n", hashTablesFileSize, amountRead);
-        soft_exit(1);
-    }
-
-    GenericFile_Blob *blobFile = GenericFile_Blob::open(index->tablesBlob, hashTablesFileSize);
-
-    for (unsigned i = 0; i < index->nHashTables; i++) {
-        if (NULL == (index->hashTables[i] = SNAPHashTable::loadFromBlob(blobFile))) {
-            WriteErrorMessage("GenomeIndex::loadFromDirectory: Failed to load hash table %d\n",i);
-            delete index;
-            return NULL;
-        }
-
-		unsigned expectedValueCount;
-		if (smallHashTable) {
-			expectedValueCount = 1;
-		} else {
-			expectedValueCount = 2;
-		}
-
-        if (index->hashTables[i]->GetValueCount() != expectedValueCount) {
-            WriteErrorMessage("Expected loaded hash table to have value count of %d, but it had %d.  Index corrupt\n", expectedValueCount, index->hashTables[i]->GetValueCount());
-            delete index;
-            return NULL;
-        }
-
-        if (index->hashTables[i]->GetKeySizeInBytes() != 4) {
-            WriteErrorMessage("Expected loaded hash table to have key size in bytes of 4, but it had %d.  This version of SNAP is too old to work with this index.\n", index->hashTables[i]->GetKeySizeInBytes());
-            delete index;
-            return NULL;
-        }
-    }
-
-	tablesFile->close();
-	delete tablesFile;
-    tablesFile = NULL;
-
-    blobFile->close();
-    delete blobFile;
-    blobFile = NULL;
-
-    snprintf(filenameBuffer,filenameBufferSize,"%s%cGenome",directoryName,PATH_SEP);
-    if (NULL == (index->genome = Genome::loadFromFile(filenameBuffer, chromosomePadding))) {
-        WriteErrorMessage("GenomeIndex::loadFromDirectory: Failed to load the genome itself\n");
-        delete index;
-        return NULL;
-    }
-
-    if ((_int64)index->genome->getCountOfBases() + (_int64)index->overflowTableSize > 0xfffffff0) {
-        WriteErrorMessage("\nThis index has too many overflow entries to be valid.  Some early versions of SNAP\n"
-                        "allowed building indices with too small of a seed size, and this appears to be such\n"
-                        "an index.  You can no longer build indices like this, and you also can't use them\n"
-                        "because they are corrupt and would produce incorrect results.  Please use an index\n"
-                        "built with a larger seed size.  For hg19, the seed size must be at least 19.\n"
-                        "For other reference genomes this quantity will vary.\n");
-        soft_exit(1);
-    }
-
-    return index;
-}
-
-    void
-GenomeIndexLarge::lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits)
-{
-    return lookupSeed(seed, 0, 0xFFFFFFFF, nHits, hits, nRCHits, rcHits);
-}
-
-    void
-GenomeIndexLarge::lookupSeed(
-    Seed              seed,
-    unsigned          minLocation,
-    unsigned          maxLocation,
-    unsigned         *nHits,
-    const unsigned  **hits,
-    unsigned         *nRCHits,
-    const unsigned  **rcHits)
-{
-    bool lookedUpComplement;
-
-    lookedUpComplement = seed.isBiggerThanItsReverseComplement();
-    if (lookedUpComplement) {
-        seed = ~seed;
-    }
-
-    _ASSERT(seed.getHighBases(hashTableKeySize) < nHashTables);
-    _uint64 lowBases = seed.getLowBases(hashTableKeySize);
-    _ASSERT(hashTables[seed.getHighBases(hashTableKeySize)]->GetValueSizeInBytes() == 4);
-    unsigned *entry = (unsigned int *)hashTables[seed.getHighBases(hashTableKeySize)]->GetFirstValueForKey(lowBases);   // Cast OK because valueSize == 4
-    if (NULL == entry) {
-        *nHits = 0;
-        *nRCHits = 0;
-        return;
-    }
-
-    //
-    // Fill in the caller's answers for the main and complement of the seed looked up.
-    // Because of our hash table design, we may have had to take the complement before the
-    // lookup, in which case we reverse the results so the caller gets the right thing.
-    // Also, if the seed is its own reverse complement, we need to fill the same hits
-    // in both return arrays.
-    //
-    fillInLookedUpResults((lookedUpComplement ? entry + 1 : entry), minLocation, maxLocation, nHits, hits);
-    if (seed.isOwnReverseComplement()) {
-      *nRCHits = *nHits;
-      *rcHits = *hits;
-    } else {
-      fillInLookedUpResults((lookedUpComplement ? entry : entry + 1), minLocation, maxLocation, nRCHits, rcHits);
-    }
-}
-
-	    void
-GenomeIndexSmall::lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits)
-{
-    return lookupSeed(seed, 0, 0xFFFFFFFF, nHits, hits, nRCHits, rcHits);
-}
-
-    void
-GenomeIndexSmall::lookupSeed(
-    Seed              seed,
-    unsigned          minLocation,
-    unsigned          maxLocation,
-    unsigned         *nHits,
-    const unsigned  **hits,
-    unsigned         *nRCHits,
-    const unsigned  **rcHits)
-{
-	for (int dir = 0; dir < NUM_DIRECTIONS; dir++) {
-		_ASSERT(seed.getHighBases(hashTableKeySize) < nHashTables);
-		_uint64 lowBases = seed.getLowBases(hashTableKeySize);
-		_ASSERT(hashTables[seed.getHighBases(hashTableKeySize)]->GetValueSizeInBytes() == 4);
-		unsigned *entry = (unsigned int *)hashTables[seed.getHighBases(hashTableKeySize)]->GetFirstValueForKey(lowBases);   // Cast OK because valueSize == 4
-		if (NULL == entry) {
-			if (FORWARD == dir) {
-				*nHits = 0;
-			} else {
-				*nRCHits = 0;
-			}
-		} else if (FORWARD == dir) {
-			fillInLookedUpResults(entry, minLocation, maxLocation, nHits, hits);
-		} else {
-			fillInLookedUpResults(entry, minLocation, maxLocation, nRCHits, rcHits);
-		}
-		seed = ~seed;
-    }	// For each direction
-}
-
-    void
-GenomeIndex::fillInLookedUpResults(
-    unsigned        *subEntry,
-    unsigned         minLocation,
-    unsigned         maxLocation,
-    unsigned        *nHits, 
-    const unsigned **hits)
-{
-    //
-    // WARNING: the code in the IntersectingPairedEndAligner relies on being able to look at 
-    // hits[-1].  It doesn't care about the value, but it must not be a bogus pointer.  This
-    // is true with the current layout (where it will either be the hit count, the key or
-    // forward pointer in the hash table entry or some intermediate hit in the case where the
-    // search is constrained by minLocation/maxLocation).  If you change this, be sure to look
-    // at the code and fix it.
-    //
-    if (*subEntry < genome->getCountOfBases()) {
-        //
-        // It's a singleton.
-        //
-        *nHits = (*subEntry >= minLocation && *subEntry <= maxLocation) ? 1 : 0;
-        *hits = subEntry;
-    } else if (*subEntry == 0xfffffffe) {
-        //
-        // It's unused, the other complement must exist.
-        //
-        *nHits = 0;
-    } else {
-        //
-        // Multiple hits.  Recall that the overflow table format is first a count of
-        // the number of hits for that seed, followed by the list of hits.
-        //
-        unsigned overflowTableOffset = *subEntry - genome->getCountOfBases();
-
-        _ASSERT(overflowTableOffset < overflowTableSize);
-
-        int hitCount = overflowTable[overflowTableOffset];
-
-        _ASSERT(hitCount >= 2);
-        _ASSERT(hitCount + overflowTableOffset < overflowTableSize);
-
-        if (minLocation == 0 && maxLocation == InvalidGenomeLocation) {
-            // Return all the hits
-            *nHits = hitCount;
-            *hits = &overflowTable[overflowTableOffset + 1];
-        } else {
-            // Do a binary search to find hits in the right range of locations, taking advantage
-            // of the knowledge that the hit list is sorted in descending order. Specifically,
-            // we'll do a binary search to find the first hit that is <= maxLocation, and then
-            // a linear search forward from that to find the other ones (assuming they are few).
-            unsigned *allHits = &overflowTable[overflowTableOffset + 1];
-            int low = 0;
-            int high = hitCount - 1;
-            while (low < high - 32) {
-                int mid = low + (high - low) / 2;
-                if (allHits[mid] <= maxLocation) {
-                    high = mid;
-                } else {
-                    low = mid + 1;
-                }
-            }
-            // We stop the binary search early and do a linear scan for speed (to avoid branches).
-            while (low < hitCount && allHits[low] > maxLocation) {
-                low++;
-            }
-            int end = low;
-            while (end < hitCount && allHits[end] >= minLocation) {
-                end++;
-            }
-            *nHits = end - low;
-            *hits = allHits + low;
-        }
-    }
-}
 
 GenomeIndex::~GenomeIndex()
 {
@@ -1618,4 +1298,326 @@ GenomeIndex::printBiasTables()
             } // if there is a bias entry for this key * seed size
         } // for each seed size
     } // for each key size
+}
+
+        GenomeIndex *
+GenomeIndex::loadFromDirectory(char *directoryName)
+{
+
+    const unsigned filenameBufferSize = MAX_PATH+1;
+    char filenameBuffer[filenameBufferSize];
+    
+    snprintf(filenameBuffer,filenameBufferSize,"%s%cGenomeIndex",directoryName,PATH_SEP);
+
+    GenericFile *indexFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
+
+    if (NULL == indexFile) {
+        WriteErrorMessage("Unable to open file '%s' for read.\n",filenameBuffer);
+        return NULL;
+    }
+
+    char indexFileBuf[1000];
+    indexFile->read(indexFileBuf, sizeof(indexFileBuf));
+
+    unsigned seedLen;
+    unsigned majorVersion, minorVersion, chromosomePadding;
+    int nRead;
+    size_t hashTablesFileSize;
+    unsigned nHashTables;
+    unsigned overflowTableSize;
+    unsigned hashTableKeySize;
+    unsigned smallHashTable;
+    if (9 != (nRead = sscanf(indexFileBuf,"%d %d %d %d %d %d %d %lld %d", &majorVersion, &minorVersion, &nHashTables, &overflowTableSize, &seedLen, &chromosomePadding, 
+											&hashTableKeySize, &hashTablesFileSize, &smallHashTable))) {
+        if (3 == nRead || 6 == nRead || 7 == nRead) {
+            WriteErrorMessage("Indices built by versions before 1.0dev.21 are no longer supported.  Please rebuild your index.\n");
+        } else {
+            WriteErrorMessage("GenomeIndex::LoadFromDirectory: didn't read initial values\n");
+        }
+        indexFile->close();		
+        delete indexFile;
+        return NULL;
+    }
+    indexFile->close();
+    delete indexFile;
+
+    if (majorVersion != GenomeIndexFormatMajorVersion) {
+        WriteErrorMessage("This genome index appears to be from a different version of SNAP than this, and so we can't read it.  Index version %d, SNAP index format version %d\n",
+            majorVersion, GenomeIndexFormatMajorVersion);
+        soft_exit(1);
+    }
+
+    if (0 == seedLen) {
+        WriteErrorMessage("GenomeIndex::LoadFromDirectory: saw seed size of 0.\n");
+        return NULL;
+    }
+
+    GenomeIndex *index;
+	if (smallHashTable) {
+		index = new GenomeIndexSmall();
+	} else {
+		index = new GenomeIndexLarge();
+	}
+    index->nHashTables = nHashTables;
+    index->overflowTableSize = overflowTableSize;
+    index->hashTableKeySize = hashTableKeySize;
+    index->seedLen = seedLen;
+
+    size_t overflowTableSizeInBytes = (size_t)index->overflowTableSize * sizeof(*(index->overflowTable));
+    index->overflowTable = (unsigned *)BigAlloc(overflowTableSizeInBytes);
+
+    snprintf(filenameBuffer,filenameBufferSize,"%s%cOverflowTable",directoryName,PATH_SEP);
+    GenericFile *fOverflowTable = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
+
+    if (NULL == fOverflowTable) {
+        WriteErrorMessage("Unable to open overflow table file, '%s', %d\n",filenameBuffer,errno);
+        delete index;
+        return NULL;
+    }
+
+    size_t amountRead = fOverflowTable->read(index->overflowTable, overflowTableSizeInBytes);
+    if (amountRead != overflowTableSizeInBytes) {
+        WriteErrorMessage("Error reading overflow table, %lld != %lld bytes read.\n", amountRead, overflowTableSizeInBytes);
+        soft_exit(1);
+    }
+
+    fOverflowTable->close();
+    delete fOverflowTable;
+    fOverflowTable = NULL;
+
+    index->hashTables = new SNAPHashTable*[index->nHashTables];
+
+    for (unsigned i = 0; i < index->nHashTables; i++) {
+        index->hashTables[i] = NULL; // We need to do this so the destructor doesn't crash if loading a hash table fails.
+    }
+
+    snprintf(filenameBuffer,filenameBufferSize,"%s%cGenomeIndexHash",directoryName,PATH_SEP);
+	GenericFile *tablesFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
+    if (NULL == tablesFile) {
+        WriteErrorMessage("Unable to open genome hash table file '%s'\n", filenameBuffer);
+        soft_exit(1);
+    }
+
+    index->tablesBlob = BigAlloc(hashTablesFileSize);
+    amountRead = tablesFile->read(index->tablesBlob, hashTablesFileSize);
+    if (amountRead != hashTablesFileSize) {
+        WriteErrorMessage("Read incorrect amount for GenomeIndexHash file, %lld != %lld\n", hashTablesFileSize, amountRead);
+        soft_exit(1);
+    }
+
+    GenericFile_Blob *blobFile = GenericFile_Blob::open(index->tablesBlob, hashTablesFileSize);
+
+    for (unsigned i = 0; i < index->nHashTables; i++) {
+        if (NULL == (index->hashTables[i] = SNAPHashTable::loadFromBlob(blobFile))) {
+            WriteErrorMessage("GenomeIndex::loadFromDirectory: Failed to load hash table %d\n",i);
+            delete index;
+            return NULL;
+        }
+
+		unsigned expectedValueCount;
+		if (smallHashTable) {
+			expectedValueCount = 1;
+		} else {
+			expectedValueCount = 2;
+		}
+
+        if (index->hashTables[i]->GetValueCount() != expectedValueCount) {
+            WriteErrorMessage("Expected loaded hash table to have value count of %d, but it had %d.  Index corrupt\n", expectedValueCount, index->hashTables[i]->GetValueCount());
+            delete index;
+            return NULL;
+        }
+
+        if (index->hashTables[i]->GetKeySizeInBytes() != 4) {
+            WriteErrorMessage("Expected loaded hash table to have key size in bytes of 4, but it had %d.  This version of SNAP is too old to work with this index.\n", index->hashTables[i]->GetKeySizeInBytes());
+            delete index;
+            return NULL;
+        }
+    }
+
+	tablesFile->close();
+	delete tablesFile;
+    tablesFile = NULL;
+
+    blobFile->close();
+    delete blobFile;
+    blobFile = NULL;
+
+    snprintf(filenameBuffer,filenameBufferSize,"%s%cGenome",directoryName,PATH_SEP);
+    if (NULL == (index->genome = Genome::loadFromFile(filenameBuffer, chromosomePadding))) {
+        WriteErrorMessage("GenomeIndex::loadFromDirectory: Failed to load the genome itself\n");
+        delete index;
+        return NULL;
+    }
+
+    if ((_int64)index->genome->getCountOfBases() + (_int64)index->overflowTableSize > 0xfffffff0) {
+        WriteErrorMessage("\nThis index has too many overflow entries to be valid.  Some early versions of SNAP\n"
+                        "allowed building indices with too small of a seed size, and this appears to be such\n"
+                        "an index.  You can no longer build indices like this, and you also can't use them\n"
+                        "because they are corrupt and would produce incorrect results.  Please use an index\n"
+                        "built with a larger seed size.  For hg19, the seed size must be at least 19.\n"
+                        "For other reference genomes this quantity will vary.\n");
+        soft_exit(1);
+    }
+
+    return index;
+}
+
+        void
+GenomeIndexLarge::lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits)
+{
+    return lookupSeed(seed, 0, 0xFFFFFFFF, nHits, hits, nRCHits, rcHits);
+}
+
+    void
+GenomeIndexLarge::lookupSeed(
+    Seed              seed,
+    unsigned          minLocation,
+    unsigned          maxLocation,
+    unsigned         *nHits,
+    const unsigned  **hits,
+    unsigned         *nRCHits,
+    const unsigned  **rcHits)
+{
+    bool lookedUpComplement;
+
+    lookedUpComplement = seed.isBiggerThanItsReverseComplement();
+    if (lookedUpComplement) {
+        seed = ~seed;
+    }
+
+    _ASSERT(seed.getHighBases(hashTableKeySize) < nHashTables);
+    _uint64 lowBases = seed.getLowBases(hashTableKeySize);
+    _ASSERT(hashTables[seed.getHighBases(hashTableKeySize)]->GetValueSizeInBytes() == 4);
+    unsigned *entry = (unsigned int *)hashTables[seed.getHighBases(hashTableKeySize)]->GetFirstValueForKey(lowBases);   // Cast OK because valueSize == 4
+    if (NULL == entry) {
+        *nHits = 0;
+        *nRCHits = 0;
+        return;
+    }
+
+    //
+    // Fill in the caller's answers for the main and complement of the seed looked up.
+    // Because of our hash table design, we may have had to take the complement before the
+    // lookup, in which case we reverse the results so the caller gets the right thing.
+    // Also, if the seed is its own reverse complement, we need to fill the same hits
+    // in both return arrays.
+    //
+    fillInLookedUpResults((lookedUpComplement ? entry + 1 : entry), minLocation, maxLocation, nHits, hits);
+    if (seed.isOwnReverseComplement()) {
+      *nRCHits = *nHits;
+      *rcHits = *hits;
+    } else {
+      fillInLookedUpResults((lookedUpComplement ? entry : entry + 1), minLocation, maxLocation, nRCHits, rcHits);
+    }
+}
+
+	    void
+GenomeIndexSmall::lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits)
+{
+    return lookupSeed(seed, 0, 0xFFFFFFFF, nHits, hits, nRCHits, rcHits);
+}
+
+    void
+GenomeIndexSmall::lookupSeed(
+    Seed              seed,
+    unsigned          minLocation,
+    unsigned          maxLocation,
+    unsigned         *nHits,
+    const unsigned  **hits,
+    unsigned         *nRCHits,
+    const unsigned  **rcHits)
+{
+	for (int dir = 0; dir < NUM_DIRECTIONS; dir++) {
+		_ASSERT(seed.getHighBases(hashTableKeySize) < nHashTables);
+		_uint64 lowBases = seed.getLowBases(hashTableKeySize);
+		_ASSERT(hashTables[seed.getHighBases(hashTableKeySize)]->GetValueSizeInBytes() == 4);
+		unsigned *entry = (unsigned int *)hashTables[seed.getHighBases(hashTableKeySize)]->GetFirstValueForKey(lowBases);   // Cast OK because valueSize == 4
+		if (NULL == entry) {
+			if (FORWARD == dir) {
+				*nHits = 0;
+			} else {
+				*nRCHits = 0;
+			}
+		} else if (FORWARD == dir) {
+			fillInLookedUpResults(entry, minLocation, maxLocation, nHits, hits);
+		} else {
+			fillInLookedUpResults(entry, minLocation, maxLocation, nRCHits, rcHits);
+		}
+		seed = ~seed;
+    }	// For each direction
+}
+
+    void
+GenomeIndex::fillInLookedUpResults(
+    unsigned        *subEntry,
+    unsigned         minLocation,
+    unsigned         maxLocation,
+    unsigned        *nHits, 
+    const unsigned **hits)
+{
+    //
+    // WARNING: the code in the IntersectingPairedEndAligner relies on being able to look at 
+    // hits[-1].  It doesn't care about the value, but it must not be a bogus pointer.  This
+    // is true with the current layout (where it will either be the hit count, the key or
+    // forward pointer in the hash table entry or some intermediate hit in the case where the
+    // search is constrained by minLocation/maxLocation).  If you change this, be sure to look
+    // at the code and fix it.
+    //
+    if (*subEntry < genome->getCountOfBases()) {
+        //
+        // It's a singleton.
+        //
+        *nHits = (*subEntry >= minLocation && *subEntry <= maxLocation) ? 1 : 0;
+        *hits = subEntry;
+    } else if (*subEntry == 0xfffffffe) {
+        //
+        // It's unused, the other complement must exist.
+        //
+        *nHits = 0;
+    } else {
+        //
+        // Multiple hits.  Recall that the overflow table format is first a count of
+        // the number of hits for that seed, followed by the list of hits.
+        //
+        unsigned overflowTableOffset = *subEntry - genome->getCountOfBases();
+
+        _ASSERT(overflowTableOffset < overflowTableSize);
+
+        int hitCount = overflowTable[overflowTableOffset];
+
+        _ASSERT(hitCount >= 2);
+        _ASSERT(hitCount + overflowTableOffset < overflowTableSize);
+
+        if (minLocation == 0 && maxLocation == InvalidGenomeLocation) {
+            // Return all the hits
+            *nHits = hitCount;
+            *hits = &overflowTable[overflowTableOffset + 1];
+        } else {
+            // Do a binary search to find hits in the right range of locations, taking advantage
+            // of the knowledge that the hit list is sorted in descending order. Specifically,
+            // we'll do a binary search to find the first hit that is <= maxLocation, and then
+            // a linear search forward from that to find the other ones (assuming they are few).
+            unsigned *allHits = &overflowTable[overflowTableOffset + 1];
+            int low = 0;
+            int high = hitCount - 1;
+            while (low < high - 32) {
+                int mid = low + (high - low) / 2;
+                if (allHits[mid] <= maxLocation) {
+                    high = mid;
+                } else {
+                    low = mid + 1;
+                }
+            }
+            // We stop the binary search early and do a linear scan for speed (to avoid branches).
+            while (low < hitCount && allHits[low] > maxLocation) {
+                low++;
+            }
+            int end = low;
+            while (end < hitCount && allHits[end] >= minLocation) {
+                end++;
+            }
+            *nHits = end - low;
+            *hits = allHits + low;
+        }
+    }
 }
