@@ -392,7 +392,8 @@ BAMReader::getNextRead(
                 }
             }
         }
-    } while (context.ignoreSecondaryAlignments && (*flag & SAM_SECONDARY));
+    } while ((context.ignoreSecondaryAlignments && (*flag & SAM_SECONDARY)) || 
+             (context.ignoreSupplementaryAlignments && (*flag & SAM_SUPPLEMENTARY)));
     _ASSERT(read->getData()[0]);
     return true;
 }
