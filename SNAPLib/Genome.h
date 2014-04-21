@@ -26,7 +26,51 @@ Revision History:
 #include "Compat.h"
 #include "GenericFile.h"
 
-const unsigned InvalidGenomeLocation = 0xffffffff;
+typedef _int64 GenomeDistance;
+
+class GenomeLocation {
+public:
+    GenomeLocation(_int64 i_location) : location(i_location) {}
+    GenomeLocation(const GenomeLocation &peer) : location(peer.location) {}
+
+    inline GenomeLocation operator=(const GenomeLocation &peer) {
+        location = peer.location;
+    }
+
+    inline bool operator==(const GenomeLocation &peer) const {
+        return location == peer.location;
+    }
+
+    inline bool operator>=(const GenomeLocation &peer) const {
+        return location >= peer.location;
+    }
+
+    inline bool operator>(const GenomeLocation &peer) const {
+        return location > peer.location;
+    }
+
+    inline bool operator<=(const GenomeLocation &peer) const {
+        return location <= peer.location;
+    }
+
+    inline bool operator<(const GenomeLocation &peer) const {
+        return location < peer.location;
+    }
+
+    inline bool operator!=(const GenomeLocation &peer) const {
+        return location != peer.location;
+    }
+
+    inline GenomeLocation operator+(GenomeDistance distance) const {
+        GenomeLocation retVal(location + distance);
+    }
+
+    _int64         location;
+};
+
+typedef _int64 GenomeDistance;
+
+const GenomeLocation InvalidGenomeLocation = -1000000000000;   // -1 * 10^12
 
 class Genome {
 public:
@@ -40,9 +84,9 @@ public:
         // to the bound.
         //
         Genome(
-            unsigned             i_maxBases,
-            unsigned             nBasesStored,
-            unsigned             i_chromosomePadding);
+            GenomeDistance          i_maxBases,
+            GenomeDistance          nBasesStored,
+            unsigned                i_chromosomePadding);
 
         void startContig(
             const char          *contigName);
@@ -64,7 +108,7 @@ public:
         //
         // minOffset and length are used to read in only a part of a whole genome.
         //
-        static const Genome *loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned i_minOffset = 0, unsigned length = 0);
+        static const Genome *loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLocation i_minOffset = 0, GenomeDistance length = 0);
                                                                   // This loads from a genome save
                                                                   // file, not a FASTA file.  Use
                                                                   // FASTA.h for FASTA loads.
@@ -76,7 +120,7 @@ public:
         //
         // Methods to read the genome.
         //
-        inline const char *getSubstring(size_t offset, size_t lengthNeeded) const {
+        inline const char *getSubstring(GenomeLocation offset, GenomeDistance lengthNeeded) const {
             if (offset > nBases || offset + lengthNeeded > nBases + N_PADDING) {
                 // The first part of the test is for the unsigned version of a negative offset.
                 return NULL;
@@ -152,9 +196,9 @@ public:
 
         bool getOffsetOfContig(const char *contigName, unsigned *offset, int* index = NULL) const;
 
-        inline void prefetchData(unsigned genomeOffset) const {
-            _mm_prefetch(bases + genomeOffset,_MM_HINT_T2);
-            _mm_prefetch(bases + genomeOffset + 64,_MM_HINT_T2);
+        inline void prefetchData(GenomeLocation genomeLocation) const {
+            _mm_prefetch(bases + genomeLocation,_MM_HINT_T2);
+            _mm_prefetch(bases + genomeLocation + 64,_MM_HINT_T2);
         }
 
         struct Contig {
@@ -187,12 +231,12 @@ private:
 
         //
         // The actual genome.
-        char        *bases;       // Will point to offset N_PADDING in an array of nBases + 2 * N_PADDING
-        unsigned     nBases;
-        unsigned     maxBases;
+        char                *bases;       // Will point to offset N_PADDING in an array of nBases + 2 * N_PADDING
+        GenomeDistance       nBases;
+        GenomeLocation       maxBases;
 
-        unsigned     minOffset;
-        unsigned     maxOffset;
+        GenomeLocation       minOffset;
+        GenomeLocation       maxOffset;
 
         //
         // A genome is made up of a bunch of contigs, typically chromosomes.  Contigs have names,
@@ -208,8 +252,7 @@ private:
 
         static bool openFileAndGetSizes(const char *filename, GenericFile **file, unsigned *nBases, unsigned *nContigs);
 
-
         const unsigned chromosomePadding;
 };
 
-unsigned DistanceBetweenGenomeLocations(unsigned locationA, unsigned locationB);
+GenomeDistance DistanceBetweenGenomeLocations(GenomeLocation locationA, GenomeLocation locationB);

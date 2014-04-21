@@ -36,22 +36,27 @@ public:
     //
     // This looks up a seed and its reverse complement, and returns the number and list of hits for each.
     // It guarantees that if the lookup succeeds that hits[-1] and rcHits[-1] are valid memory with 
-    // arbirtary values.
+    // arbirtary values.  The -32 version is used for indices with 32 bit genome offsets; using the version
+    // that doesn't match the genome index GenomeLocation size is an error.  Check the index type with
+    // doesGenomeIndexHave64BitLocations();
     //
-    virtual void lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits) = 0;
+    virtual void lookupSeed(Seed seed, unsigned *nHits, const GenomeLocation **hits, GenomeDistance *nRCHits, const GenomeDistance **rcHits) = 0;
+    virtual void lookupSeed32(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits) = 0;
+
+    bool doesGenomeIndexHave64BitLocations() const;
 
     //
     // Looks up a seed and its reverse complement, restricting the search to a given range of locations,
     // and returns the number and list of hits for each.
     //
-    virtual void lookupSeed(Seed seed, unsigned minLocation, unsigned maxLocation,
-                    unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits) = 0;
+//    virtual void lookupSeed(Seed seed, unsigned minLocation, unsigned maxLocation,
+//                    unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits) = 0;
   
     //
     // This issues a compiler prefetch for the genome data.
     //
-    inline void prefetchGenomeData(unsigned genomeOffset) const {
-        genome->prefetchData(genomeOffset);
+    inline void prefetchGenomeData(GenomeLocation genomeLocation) const {
+        genome->prefetchData(genomeLocation);
     }
 
     inline int getSeedLength() const { return seedLen; }
