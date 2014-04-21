@@ -47,6 +47,7 @@ const int SAM_LAST_SEGMENT       = 0x080; // This is the last segment in the rea
 const int SAM_SECONDARY          = 0x100; // Secondary alignment for a read with multiple hits.
 const int SAM_FAILED_QC          = 0x200; // Not passing quality controls.
 const int SAM_DUPLICATE          = 0x400; // PCR or optical duplicate.
+const int SAM_SUPPLEMENTARY      = 0x800; // Supplementary alignment
 
 class SAMReader : public ReadReader {
 public:

@@ -163,6 +163,7 @@ int main(int argc, char * argv[])
     readerContext.defaultReadGroup = "";
     readerContext.genome = genome;
     readerContext.ignoreSecondaryAlignments = true;
+    readerContext.ignoreSupplementaryAlignments = true;
 	readerContext.header = NULL;
 	readerContext.headerLength = 0;
 	readerContext.headerBytes = 0;

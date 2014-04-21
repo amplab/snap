@@ -565,7 +565,8 @@ SAMReader::getNextRead(
         getReadFromLine(context.genome, buffer,buffer + bytes, read, alignmentResult, genomeLocation, direction, mapQ, &lineLength, flag, cigar, clipping);
         read->setBatch(data->getBatch());
         data->advance((newLine + 1) - buffer);
-    } while (context.ignoreSecondaryAlignments && ((*flag) & SAM_SECONDARY));
+    } while ((context.ignoreSecondaryAlignments && ((*flag) & SAM_SECONDARY)) ||
+             (context.ignoreSupplementaryAlignments && ((*flag) & SAM_SUPPLEMENTARY)));
 
     return true;
 }

@@ -209,6 +209,7 @@ AlignerContext::beginIteration()
     readerContext.defaultReadGroup = options->defaultReadGroup;
     readerContext.genome = index != NULL ? index->getGenome() : NULL;
     readerContext.ignoreSecondaryAlignments = options->ignoreSecondaryAlignments;
+    readerContext.ignoreSupplementaryAlignments = options->ignoreSecondaryAlignments;   // Maybe we should split them out
     DataSupplier::ExpansionFactor = options->expansionFactor;
 
     typeSpecificBeginIteration();
