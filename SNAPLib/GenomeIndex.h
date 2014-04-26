@@ -40,8 +40,8 @@ public:
     // that doesn't match the genome index GenomeLocation size is an error.  Check the index type with
     // doesGenomeIndexHave64BitLocations();
     //
-    virtual void lookupSeed(Seed seed, unsigned *nHits, const GenomeLocation **hits, GenomeDistance *nRCHits, const GenomeDistance **rcHits) = 0;
-    virtual void lookupSeed32(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits) = 0;
+    void lookupSeed(Seed seed, unsigned *nHits, const GenomeLocation **hits, GenomeDistance *nRCHits, const GenomeDistance **rcHits);
+    void lookupSeed32(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits);
 
     bool doesGenomeIndexHave64BitLocations() const;
 
@@ -78,6 +78,9 @@ protected:
     unsigned hashTableKeySize;
     unsigned nHashTables;
     const Genome *genome;
+
+    bool largeHashTable;
+    bool bigOffsets;
 
     //
     // The overflow table is indexed by numbers > than the number of bases in the genome.
@@ -133,14 +136,15 @@ protected:
     static bool BuildIndexToDirectory(const Genome *genome, int seedLen, double slack,
                                       bool computeBias, const char *directory,
                                       unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, 
-                                      unsigned hashTableKeySize, bool large, const char *histogramFileName);
+                                      unsigned hashTableKeySize, bool large, const char *histogramFileName,
+                                      unsigned locationSize);
 
  
     //
     // Allocate set of hash tables indexed by seeds with bias
     //
-    static SNAPHashTable** allocateHashTables(unsigned* o_nTables, size_t countOfBases, double slack,
-        int seedLen, unsigned hashTableKeySize, bool large, double* biasTable = NULL);
+    static SNAPHashTable** allocateHashTables(unsigned* o_nTables, GenomeDistance countOfBases, double slack,
+        int seedLen, unsigned hashTableKeySize, bool large, unsigned locationSize, double* biasTable = NULL);
     
     static const unsigned GenomeIndexFormatMajorVersion = 4;
     static const unsigned GenomeIndexFormatMinorVersion = 0;
@@ -260,47 +264,5 @@ protected:
                     volatile unsigned           *nextOverflowBackpointer,
                     unsigned                     genomeOffset);
 
-    void fillInLookedUpResults(unsigned *subEntry, unsigned minLocation, unsigned maxLocation,
-                               unsigned *nHits, const unsigned **hits);
+    void fillInLookedUpResults32(unsigned *subEntry, unsigned *nHits, const unsigned **hits);
 };
-
-class GenomeIndexLarge : public GenomeIndex {
-public:
-    //
-    // This looks up a seed and its reverse complement, and returns the number and list of hits for each.
-    // It guarantees that if the lookup succeeds that hits[-1] and rcHits[-1] are valid memory with 
-    // arbirtary values.
-    //
-    void lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits);
-
-    //
-    // Looks up a seed and its reverse complement, restricting the search to a given range of locations,
-    // and returns the number and list of hits for each.
-    //
-    void lookupSeed(Seed seed, unsigned minLocation, unsigned maxLocation,
-                    unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits);
-    
-
-    virtual ~GenomeIndexLarge();
-};
-
-class GenomeIndexSmall : public GenomeIndex {
-public:
-    //
-    // This looks up a seed and its reverse complement, and returns the number and list of hits for each.
-    // It guarantees that if the lookup succeeds that hits[-1] and rcHits[-1] are valid memory with 
-    // arbirtary values.
-    //
-    void lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits);
-
-    //
-    // Looks up a seed and its reverse complement, restricting the search to a given range of locations,
-    // and returns the number and list of hits for each.
-    //
-    void lookupSeed(Seed seed, unsigned minLocation, unsigned maxLocation,
-                    unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits);
-    
-
-    virtual ~GenomeIndexSmall();
-};
-

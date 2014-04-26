@@ -44,6 +44,7 @@ static const int DEFAULT_SEED_SIZE = 20;
 static const double DEFAULT_SLACK = 0.3;
 static const unsigned DEFAULT_PADDING = 500;
 static const unsigned DEFAULT_KEY_BYTES = 4;
+static const unsigned DEFAULT_LOCATION_SIZE = 4;
 
 
 static void usage()
@@ -56,12 +57,12 @@ static void usage()
             "  -hg19            Use pre-computed table bias for hg19, which results in better speed, balance, and memory footprint but may not work for other references.\n"
             "  -Ofactor         This parameter is deprecated and will be ignored.\n"
             " -tMaxThreads      Specify the maximum number of threads to use. Default is the number of cores.\n"
-            " -B<chars>     Specify characters to use as chromosome name terminators in the FASTA header line; these characters and anything after are\n"
-            "               not part of the chromosome name.  You must specify all characters on a single -B switch.  So, for example, with -B_|,\n"
-            "               the FASTA header line '>chr1|Chromosome 1' would generate a chromosome named 'chr1'.  There's a separate flag for\n"
-            "               indicating that a space is a terminator.\n"
-            " -bSpace       Indicates that the space character is a terminator for chromosome names (see -B above).  This may be used in addition\n"
-            "               to other terminators specified by -B.  -B and -bSpace are case sensitive.\n"
+            " -B<chars>         Specify characters to use as chromosome name terminators in the FASTA header line; these characters and anything after are\n"
+            "                   not part of the chromosome name.  You must specify all characters on a single -B switch.  So, for example, with -B_|,\n"
+            "                   the FASTA header line '>chr1|Chromosome 1' would generate a chromosome named 'chr1'.  There's a separate flag for\n"
+            "                   indicating that a space is a terminator.\n"
+            " -bSpace           Indicates that the space character is a terminator for chromosome names (see -B above).  This may be used in addition\n"
+            "                   to other terminators specified by -B.  -B and -bSpace are case sensitive.\n"
             " -pPadding         Specify the number of Ns to put as padding between chromosomes.  This must be as large as the largest\n"
             "                   edit distance you'll ever use, and there's a performance advantage to have it be bigger than any\n"
             "                   read you'll process.  Default is %d\n"
@@ -70,11 +71,17 @@ static void usage()
             " -keysize          The number of bytes to use for the hash table key.  Larger values increase SNAP's memory footprint, but allow larger seeds.  Default: %d\n"
 			" -large            Build a larger index that's a little faster, particualrly for runs with quick/inaccurate parameters.  Increases index size by\n"
 			"                   about 30%%, depending on the other index parameters and the contents of the reference genome\n"
+            " -locationSize     The size of the genome locations stored in the index.  This can be from 4 to 8 bytes.  The locations need to be big enough\n"
+            "                   not only to index the genome, but also to allow some space for representing seeds that occur multiple times.  For the\n"
+            "                   human genome, it will fint with four byte locations if the seed size is 19 or larger, but needs 5 (or more) for smaller\n"
+            "                   seeds.  Making the location size bigger than necessary will just waste (lots of) space, so unless you're doing something\n"
+            "                   quite unusual, the right answer is 4 or 5.  Default is %d\n"
 			,
             DEFAULT_SEED_SIZE,
             DEFAULT_SLACK,
             DEFAULT_PADDING,
-            DEFAULT_KEY_BYTES);
+            DEFAULT_KEY_BYTES,
+            DEFAULT_LOCATION_SIZE);
     soft_exit(1);
 }
 
@@ -103,6 +110,7 @@ GenomeIndex::runIndexer(
     bool forceExact = false;
     unsigned keySizeInBytes = DEFAULT_KEY_BYTES;
 	bool large = false;
+    unsigned locationSize = DEFAULT_LOCATION_SIZE;
 
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
@@ -122,7 +130,18 @@ GenomeIndex::runIndexer(
         } else if (strcmp(argv[n], "-exact") == 0) {
             forceExact = true;
         } else if (strcmp(argv[n], "-hg19") == 0) {
-            computeBias = false;
+            computeBias = false;        
+        } else if (strcmp(argv[n], "-locationSize") == 0) {
+            if (n + 1 < argc) {
+                locationSize = atoi(argv[n+1]);
+                if (locationSize < 4 || locationSize > 8) {
+                    WriteErrorMessage("Location size must be between 4 and 8 inclusive\n");
+                    soft_exit(1);
+                }
+                n++;
+            } else {
+                usage();
+            }
         } else if (strcmp(argv[n], "-large") == 0) {
             large = true;
         } else if (argv[n][0] == '-' && argv[n][1] == 'H') {
@@ -168,9 +187,11 @@ GenomeIndex::runIndexer(
         soft_exit(1);
     }
 
-    if (seedLen < 19 && !computeBias) {
-        WriteErrorMessage("For hg19, you must use seed sizes between 19 and 25 (and not specifying -hg19 won't help, it'll just take longer to fail).\n");
-        soft_exit(1);
+    if (seedLen < 19 && !computeBias && locationSize < 5) {
+        WriteErrorMessage("For hg19, there are no bias tables for seed lengths < 19, and furthermore you'll need to use 64 bit genome offsets, which will increase memory use.\n");
+        WriteErrorMessage("Setting those options for you.\n");
+        computeBias = false;
+        locationSize = 5;
     }
 
     WriteStatusMessage("Hash table slack %lf\nLoading FASTA file '%s' into memory...", slack, fastaFile);
@@ -184,21 +205,21 @@ GenomeIndex::runIndexer(
         soft_exit(1);
     }
     WriteStatusMessage("%llds\n", (timeInMillis() + 500 - start) / 1000);
-    unsigned nBases = genome->getCountOfBases();
+
     if (!GenomeIndex::BuildIndexToDirectory(genome, seedLen, slack, computeBias, outputDir, maxThreads, chromosomePadding, forceExact, keySizeInBytes, 
-		large, histogramFileName)) {
+		large, histogramFileName, locationSize)) {
         WriteErrorMessage("Genome index build failed\n");
         soft_exit(1);
     }
     _int64 end = timeInMillis();
     WriteStatusMessage("Index build and save took %llds (%lld bases/s)\n",
-           (end - start) / 1000, (_int64) nBases / max((end - start) / 1000, (_int64) 1)); 
+           (end - start) / 1000, genome->getCountOfBases() / max((end - start) / 1000, (_int64) 1)); 
 }
 
     bool
 GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double slack, bool computeBias, const char *directoryName,
                                     unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, unsigned hashTableKeySize, 
-									bool large, const char *histogramFileName)
+									bool large, const char *histogramFileName, unsigned locationSize)
 {
     bool buildHistogram = (histogramFileName != NULL);
     FILE *histogramFile;
@@ -209,7 +230,6 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
             buildHistogram = false;
         }
     }
-
 
     if (mkdir(directoryName, 0777) != 0 && errno != EEXIST) {
         WriteErrorMessage("BuildIndex: failed to create directory %s\n",directoryName);
@@ -228,22 +248,18 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     }
 	fprintf(stderr,"%llds\n", (timeInMillis() + 500 - start) / 1000);
 
-	GenomeIndex *index = new GenomeIndexLarge();
+	GenomeIndex *index = new GenomeIndex();
     index->genome = NULL;   // We always delete the index when we're done, but we delete the genome first to save space during the overflow table build.
 
-    unsigned countOfBases = genome->getCountOfBases();
-    if (countOfBases > 0xfffffff0) {
-        WriteErrorMessage("Genome is too big for SNAP.  Must be some headroom beneath 2^32 bases.\n");
-        return false;
+    GenomeDistance countOfBases = genome->getCountOfBases();
+    if (locationSize != 8 && countOfBases > ((_int64) 1 << (locationSize*8)) - 16) {
+        WriteErrorMessage("Genome is too big for %d byte genome locations.  Specify a larger location size with -locationSize\n", locationSize);
+        soft_exit(1);
     }
 
     // Compute bias table sizes, unless we're using the precomputed ones hardcoded in BiasTables.cpp
     double *biasTable = NULL;
-    if (computeBias) {
-        unsigned nHashTables = 1 << ((max((unsigned)seedLen, hashTableKeySize * 4) - hashTableKeySize * 4) * 2);
-        biasTable = new double[nHashTables];
-        ComputeBiasTable(genome, seedLen, biasTable, maxThreads, forceExact, hashTableKeySize, large);
-    } else {
+    if (!computeBias) {
         if (large) {
             biasTable = hg19_biasTables_large[hashTableKeySize][seedLen];
         } else {
@@ -251,16 +267,22 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         }
 
         if (NULL == biasTable) {
-            WriteErrorMessage("-hg19 not available for this seed length/key size/small-or-large combo.\n");
-            return false;
+            WriteErrorMessage("-hg19 not available for this seed length/key size/small-or-large combo.  Computing bias tables the hard way.\n");
+            computeBias = true;
         }
+    }
+    
+    if (computeBias) {
+        unsigned nHashTables = 1 << ((max((unsigned)seedLen, hashTableKeySize * 4) - hashTableKeySize * 4) * 2);
+        biasTable = new double[nHashTables];
+        ComputeBiasTable(genome, seedLen, biasTable, maxThreads, forceExact, hashTableKeySize, large);
     }
 
     WriteStatusMessage("Allocating memory for hash tables...");
     start = timeInMillis();
     unsigned nHashTables;
     SNAPHashTable** hashTables = index->hashTables =
-        allocateHashTables(&nHashTables, countOfBases, slack, seedLen, hashTableKeySize, large, biasTable);
+        allocateHashTables(&nHashTables, countOfBases, slack, seedLen, hashTableKeySize, large, locationSize, biasTable);
     index->nHashTables = nHashTables;
 
     //
@@ -591,11 +613,12 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 
 SNAPHashTable** GenomeIndex::allocateHashTables(
     unsigned*       o_nTables,
-    size_t          countOfBases,
+    GenomeDistance  countOfBases,
     double          slack,
     int             seedLen,
     unsigned        hashTableKeySize,
 	bool			large,
+    unsigned        locationSize,
     double*         biasTable)
 {
     _ASSERT(NULL != biasTable);
@@ -626,6 +649,11 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
         WriteErrorMessage("allocateHashTables: key size too small for seeLen.\n");
         soft_exit(1);
     }
+
+    if (locationSize < 4 || locationSize > 8) {
+        WriteErrorMessage("Location size must be between 4 and 8 inclusive.\n");
+        soft_exit(1);
+    }
     
     //
     // Make an array of HashTables, size depending on the seed size.  The way the index works is that we use
@@ -645,6 +673,13 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
     
     SNAPHashTable **hashTables = new SNAPHashTable*[nHashTablesToBuild];
     
+    _int64 invalidValueValue;
+    if (locationSize == 8) {
+        invalidValueValue = 0xffffffffffffffff;
+    } else {
+        invalidValueValue = ((_int64) 1 << (locationSize * 8)) - 1;
+    }
+
     for (unsigned i = 0; i < nHashTablesToBuild; i++) {
         //
         // Create the actual hash tables.  It turns out that the human genome is highly non-uniform in its
@@ -656,7 +691,8 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
         if (biasedSize < 100) {
             biasedSize = 100;
         }
-        hashTables[i] = new SNAPHashTable(biasedSize, hashTableKeySize, sizeof(unsigned), large ? 2 : 1, InvalidGenomeLocation);
+        
+        hashTables[i] = new SNAPHashTable(biasedSize, hashTableKeySize, locationSize, large ? 2 : 1, invalidValueValue);
  
         if (NULL == hashTables[i]) {
             WriteErrorMessage("IndexBuilder: unable to allocate HashTable %d of %d\n", i+1, nHashTablesToBuild);
@@ -1462,96 +1498,73 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     return index;
 }
 
-        void
-GenomeIndexLarge::lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits)
-{
-    return lookupSeed(seed, 0, 0xFFFFFFFF, nHits, hits, nRCHits, rcHits);
-}
-
     void
-GenomeIndexLarge::lookupSeed(
+GenomeIndex::lookupSeed32(
     Seed              seed,
-    unsigned          minLocation,
-    unsigned          maxLocation,
     unsigned         *nHits,
     const unsigned  **hits,
     unsigned         *nRCHits,
     const unsigned  **rcHits)
 {
-    bool lookedUpComplement;
+    _ASSERT(!bigOffsets);   // This is the caller's responsibility to check.
 
-    lookedUpComplement = seed.isBiggerThanItsReverseComplement();
-    if (lookedUpComplement) {
-        seed = ~seed;
-    }
+    if (largeHashTable) {
+        bool lookedUpComplement;
 
-    _ASSERT(seed.getHighBases(hashTableKeySize) < nHashTables);
-    _uint64 lowBases = seed.getLowBases(hashTableKeySize);
-    _ASSERT(hashTables[seed.getHighBases(hashTableKeySize)]->GetValueSizeInBytes() == 4);
-    unsigned *entry = (unsigned int *)hashTables[seed.getHighBases(hashTableKeySize)]->GetFirstValueForKey(lowBases);   // Cast OK because valueSize == 4
-    if (NULL == entry) {
-        *nHits = 0;
-        *nRCHits = 0;
-        return;
-    }
+        lookedUpComplement = seed.isBiggerThanItsReverseComplement();
+        if (lookedUpComplement) {
+            seed = ~seed;
+        }
 
-    //
-    // Fill in the caller's answers for the main and complement of the seed looked up.
-    // Because of our hash table design, we may have had to take the complement before the
-    // lookup, in which case we reverse the results so the caller gets the right thing.
-    // Also, if the seed is its own reverse complement, we need to fill the same hits
-    // in both return arrays.
-    //
-    fillInLookedUpResults((lookedUpComplement ? entry + 1 : entry), minLocation, maxLocation, nHits, hits);
-    if (seed.isOwnReverseComplement()) {
-      *nRCHits = *nHits;
-      *rcHits = *hits;
+        _ASSERT(seed.getHighBases(hashTableKeySize) < nHashTables);
+        _uint64 lowBases = seed.getLowBases(hashTableKeySize);
+        _ASSERT(hashTables[seed.getHighBases(hashTableKeySize)]->GetValueSizeInBytes() == 4);
+        unsigned *entry = (unsigned int *)hashTables[seed.getHighBases(hashTableKeySize)]->GetFirstValueForKey(lowBases);   // Cast OK because valueSize == 4
+        if (NULL == entry) {
+            *nHits = 0;
+            *nRCHits = 0;
+            return;
+        }
+
+        //
+        // Fill in the caller's answers for the main and complement of the seed looked up.
+        // Because of our hash table design, we may have had to take the complement before the
+        // lookup, in which case we reverse the results so the caller gets the right thing.
+        // Also, if the seed is its own reverse complement, we need to fill the same hits
+        // in both return arrays.
+        //
+        fillInLookedUpResults32((lookedUpComplement ? entry + 1 : entry), nHits, hits);
+        if (seed.isOwnReverseComplement()) {
+          *nRCHits = *nHits;
+          *rcHits = *hits;
+        } else {
+          fillInLookedUpResults32((lookedUpComplement ? entry : entry + 1), nRCHits, rcHits);
+        }
     } else {
-      fillInLookedUpResults((lookedUpComplement ? entry : entry + 1), minLocation, maxLocation, nRCHits, rcHits);
+	    for (int dir = 0; dir < NUM_DIRECTIONS; dir++) {
+		    _ASSERT(seed.getHighBases(hashTableKeySize) < nHashTables);
+		    _uint64 lowBases = seed.getLowBases(hashTableKeySize);
+		    _ASSERT(hashTables[seed.getHighBases(hashTableKeySize)]->GetValueSizeInBytes() == 4);
+		    unsigned *entry = (unsigned int *)hashTables[seed.getHighBases(hashTableKeySize)]->GetFirstValueForKey(lowBases);   // Cast OK because valueSize == 4
+		    if (NULL == entry) {
+			    if (FORWARD == dir) {
+				    *nHits = 0;
+			    } else {
+				    *nRCHits = 0;
+			    }
+		    } else if (FORWARD == dir) {
+			    fillInLookedUpResults32(entry,  nHits, hits);
+		    } else {
+			    fillInLookedUpResults32(entry,  nRCHits, rcHits);
+		    }
+		    seed = ~seed;
+        }	// For each direction    
     }
 }
 
-	    void
-GenomeIndexSmall::lookupSeed(Seed seed, unsigned *nHits, const unsigned **hits, unsigned *nRCHits, const unsigned **rcHits)
-{
-    return lookupSeed(seed, 0, 0xFFFFFFFF, nHits, hits, nRCHits, rcHits);
-}
-
     void
-GenomeIndexSmall::lookupSeed(
-    Seed              seed,
-    unsigned          minLocation,
-    unsigned          maxLocation,
-    unsigned         *nHits,
-    const unsigned  **hits,
-    unsigned         *nRCHits,
-    const unsigned  **rcHits)
-{
-	for (int dir = 0; dir < NUM_DIRECTIONS; dir++) {
-		_ASSERT(seed.getHighBases(hashTableKeySize) < nHashTables);
-		_uint64 lowBases = seed.getLowBases(hashTableKeySize);
-		_ASSERT(hashTables[seed.getHighBases(hashTableKeySize)]->GetValueSizeInBytes() == 4);
-		unsigned *entry = (unsigned int *)hashTables[seed.getHighBases(hashTableKeySize)]->GetFirstValueForKey(lowBases);   // Cast OK because valueSize == 4
-		if (NULL == entry) {
-			if (FORWARD == dir) {
-				*nHits = 0;
-			} else {
-				*nRCHits = 0;
-			}
-		} else if (FORWARD == dir) {
-			fillInLookedUpResults(entry, minLocation, maxLocation, nHits, hits);
-		} else {
-			fillInLookedUpResults(entry, minLocation, maxLocation, nRCHits, rcHits);
-		}
-		seed = ~seed;
-    }	// For each direction
-}
-
-    void
-GenomeIndex::fillInLookedUpResults(
+GenomeIndex::fillInLookedUpResults32(
     unsigned        *subEntry,
-    unsigned         minLocation,
-    unsigned         maxLocation,
     unsigned        *nHits, 
     const unsigned **hits)
 {
@@ -1567,12 +1580,13 @@ GenomeIndex::fillInLookedUpResults(
         //
         // It's a singleton.
         //
-        *nHits = (*subEntry >= minLocation && *subEntry <= maxLocation) ? 1 : 0;
+        *nHits = 1;
         *hits = subEntry;
     } else if (*subEntry == 0xfffffffe) {
         //
         // It's unused, the other complement must exist.
         //
+        _ASSERT(largeHashTable);
         *nHits = 0;
     } else {
         //
@@ -1588,36 +1602,7 @@ GenomeIndex::fillInLookedUpResults(
         _ASSERT(hitCount >= 2);
         _ASSERT(hitCount + overflowTableOffset < overflowTableSize);
 
-        if (minLocation == 0 && maxLocation == InvalidGenomeLocation) {
-            // Return all the hits
-            *nHits = hitCount;
-            *hits = &overflowTable[overflowTableOffset + 1];
-        } else {
-            // Do a binary search to find hits in the right range of locations, taking advantage
-            // of the knowledge that the hit list is sorted in descending order. Specifically,
-            // we'll do a binary search to find the first hit that is <= maxLocation, and then
-            // a linear search forward from that to find the other ones (assuming they are few).
-            unsigned *allHits = &overflowTable[overflowTableOffset + 1];
-            int low = 0;
-            int high = hitCount - 1;
-            while (low < high - 32) {
-                int mid = low + (high - low) / 2;
-                if (allHits[mid] <= maxLocation) {
-                    high = mid;
-                } else {
-                    low = mid + 1;
-                }
-            }
-            // We stop the binary search early and do a linear scan for speed (to avoid branches).
-            while (low < hitCount && allHits[low] > maxLocation) {
-                low++;
-            }
-            int end = low;
-            while (end < hitCount && allHits[end] >= minLocation) {
-                end++;
-            }
-            *nHits = end - low;
-            *hits = allHits + low;
-        }
+        *nHits = hitCount;
+        *hits = &overflowTable[overflowTableOffset + 1];
     }
 }

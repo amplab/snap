@@ -30,12 +30,12 @@ Revision History:
 #include "exit.h"
 #include "Error.h"
 
-Genome::Genome(unsigned i_maxBases, unsigned nBasesStored, unsigned i_chromosomePadding)
-    : maxBases(i_maxBases), minOffset(0), maxOffset(i_maxBases), chromosomePadding(i_chromosomePadding)
+Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned i_chromosomePadding)
+    : maxBases(i_maxBases), minLocation(0), maxLocation(i_maxBases), chromosomePadding(i_chromosomePadding)
 {
     bases = ((char *) BigAlloc(nBasesStored + 2 * N_PADDING)) + N_PADDING;
     if (NULL == bases) {
-        WriteErrorMessage("Genome: unable to allocate memory for %llu bases\n",(_int64)maxBases);
+        WriteErrorMessage("Genome: unable to allocate memory for %llu bases\n", maxBases.AsInt64());
         soft_exit(1);
     }
 
@@ -54,11 +54,11 @@ Genome::Genome(unsigned i_maxBases, unsigned nBasesStored, unsigned i_chromosome
 }
 
     void
-Genome::addData(const char *data, size_t len)
+Genome::addData(const char *data, GenomeDistance len)
 {
-    if ((size_t)nBases + len > maxBases) {
+    if (nBases + len > maxBases.AsInt64()) {
         WriteErrorMessage("Tried to write beyond allocated genome size (or tried to write into a genome that was loaded from a file).\n"
-                          "Size = %lld\n",(_int64)maxBases);
+                          "Size = %lld\n", maxBases.AsInt64());
         soft_exit(1);
     }
 
@@ -82,7 +82,7 @@ Genome::startContig(const char *contigName)
         int newMaxContigs = maxContigs * 2;
         Contig *newContigs = new Contig[newMaxContigs];
         if (NULL == newContigs) {
-            WriteErrorMessage("Genome: unable to reallocate contig array to size %d\n",newMaxContigs);
+            WriteErrorMessage("Genome: unable to reallocate contig array to size %d\n", newMaxContigs);
             soft_exit(1);
         }
         for (int i = 0; i < nContigs; i++) {
@@ -94,7 +94,7 @@ Genome::startContig(const char *contigName)
         maxContigs = newMaxContigs;
     }
 
-    contigs[nContigs].beginningOffset = nBases;
+    contigs[nContigs].beginningLocation = nBases;
     size_t len = strlen(contigName) + 1;
     contigs[nContigs].name = new char[len];
     contigs[nContigs].nameLength = (unsigned)len-1;
@@ -136,7 +136,7 @@ Genome::saveToFile(const char *fileName) const
         return false;
     } 
 
-    fprintf(saveFile,"%d %d\n",nBases,nContigs);
+    fprintf(saveFile,"%lld %d\n",nBases, nContigs);
     char *curChar = NULL;
 
     for (int i = 0; i < nContigs; i++) {
@@ -144,10 +144,10 @@ Genome::saveToFile(const char *fileName) const
          curChar = contigs[i].name + n;
          if (*curChar == ' '){ *curChar = '_'; }
         }
-        fprintf(saveFile,"%d %s\n",contigs[i].beginningOffset,contigs[i].name);
+        fprintf(saveFile,"%lld %s\n",contigs[i].beginningLocation, contigs[i].name);
     }
 
-    if (nBases != fwrite(bases,1,nBases,saveFile)) {
+    if (nBases != fwrite(bases, 1, nBases, saveFile)) {
         WriteErrorMessage("Genome::saveToFile: fwrite failed\n");
         fclose(saveFile);
         return false;
@@ -158,40 +158,43 @@ Genome::saveToFile(const char *fileName) const
 }
 
     const Genome *
-Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned i_minOffset, unsigned length)
+Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLocation minLocation, GenomeDistance length)
 {    
     GenericFile *loadFile;
-    unsigned nBases,nContigs;
+    GenomeDistance nBases;
+    unsigned nContigs;
 
-    if (!openFileAndGetSizes(fileName,&loadFile,&nBases,&nContigs)) {
+    if (!openFileAndGetSizes(fileName, &loadFile, &nBases, &nContigs)) {
         //
         // It already printed an error.  Just fail.
         //
         return NULL;
     }
 
+    GenomeLocation maxLocation(nBases);
+
     if (0 == length) {
-        length = nBases - i_minOffset;
+        length = maxLocation - minLocation;
     } else {
         //
         // Don't let length go beyond nBases.
         //
-        length = __min(length,nBases - i_minOffset);
+        length = __min(length, maxLocation - minLocation);
+        maxLocation = minLocation + length;
     }
 
-    Genome *genome = new Genome(nBases,length, chromosomePadding);
+    Genome *genome = new Genome(nBases, length, chromosomePadding);
    
     genome->nBases = nBases;
     genome->nContigs = genome->maxContigs = nContigs;
     genome->contigs = new Contig[nContigs];
-    genome->minOffset = i_minOffset;
-    if (i_minOffset >= nBases) {
-        WriteErrorMessage("Genome::loadFromFile: specified minOffset %u >= nBases %u\n",i_minOffset,nBases);
+    genome->minLocation = minLocation;
+    if (minLocation.AsInt64() >= nBases) {
+        WriteErrorMessage("Genome::loadFromFile: specified minOffset %u >= nBases %u\n", minLocation.AsInt64(), nBases);
+        soft_exit(-1);
     }
 
- 
-
-    genome->maxOffset = i_minOffset + length;
+    genome->maxLocation = maxLocation;
 
     static const unsigned contigNameBufferSize = 512;
     char contigNameBuffer[contigNameBufferSize];
@@ -213,7 +216,12 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned 
 	  }
 	}
 
-    genome->contigs[i].beginningOffset = atoi(contigNameBuffer);
+    _int64 contigStart;
+    if (1 != sscanf(contigNameBuffer, "%lld", &contigStart)) {
+        WriteErrorMessage("Unable to parse contig start in genome file '%s', '%s%'\n", fileName, contigNameBuffer);
+        soft_exit(1);
+    }
+    genome->contigs[i].beginningLocation = GenomeLocation(contigStart);
 	contigNameBuffer[n] = ' '; 
 	n++; // increment n so we start copying at the position after the space
 	contigSize = strlen(contigNameBuffer + n) - 1; //don't include the final \n
@@ -243,13 +251,13 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned 
     }
     */
 
-    if (0 != loadFile->advance(i_minOffset)) {
+    if (0 != loadFile->advance(minLocation.AsInt64())) {
         WriteErrorMessage("Genome::loadFromFile: _fseek64bit failed\n");
         soft_exit(1);
     }
 
     size_t retval;
-    if (length != (retval = loadFile->read(genome->bases,length))) {
+    if (length != (retval = loadFile->read(genome->bases, length))) {
         WriteErrorMessage("Genome::loadFromFile: fread of bases failed; wanted %u, got %d\n", length, retval);
         loadFile->close();
         delete loadFile;
@@ -284,7 +292,7 @@ Genome::sortContigsByName()
 }
 
     bool
-Genome::openFileAndGetSizes(const char *filename, GenericFile **file, unsigned *nBases, unsigned *nContigs)
+Genome::openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs)
 {
     *file = GenericFile::open(filename, GenericFile::ReadOnly);
     if (*file == NULL) {
@@ -295,7 +303,7 @@ Genome::openFileAndGetSizes(const char *filename, GenericFile **file, unsigned *
     char linebuf[2000];
     char *retval = (*file)->gets(linebuf, sizeof(linebuf));
 
-    if (NULL == retval || 2 != sscanf(linebuf,"%d %d\n",nBases,nContigs)) {
+    if (NULL == retval || 2 != sscanf(linebuf,"%lld %d\n", nBases, nContigs)) {
         (*file)->close();
         delete *file;
         *file = NULL;
@@ -307,12 +315,13 @@ Genome::openFileAndGetSizes(const char *filename, GenericFile **file, unsigned *
 
 
     bool 
-Genome::getSizeFromFile(const char *fileName, unsigned *nBases, unsigned *nContigs)
+Genome::getSizeFromFile(const char *fileName, GenomeDistance *nBases, unsigned *nContigs)
 {
     GenericFile *file;
-    unsigned localNBases, localnContigs;
+    GenomeDistance localNBases;
+    unsigned localnContigs;
     
-    if (!openFileAndGetSizes(fileName,&file,nBases ? nBases : &localNBases, nContigs ? nContigs : &localnContigs)) {
+    if (!openFileAndGetSizes(fileName,&file, nBases ? nBases : &localNBases, nContigs ? nContigs : &localnContigs)) {
         return false;
     }
 
@@ -323,7 +332,7 @@ Genome::getSizeFromFile(const char *fileName, unsigned *nBases, unsigned *nConti
 
 
     bool
-Genome::getOffsetOfContig(const char *contigName, unsigned *offset, int * index) const
+Genome::getLocationOfContig(const char *contigName, GenomeLocation *location, int * index) const
 {
     if (contigsByName) {
         int low = 0;
@@ -332,8 +341,8 @@ Genome::getOffsetOfContig(const char *contigName, unsigned *offset, int * index)
             int mid = (low + high) / 2;
             int c = strcmp(contigsByName[mid].name, contigName);
             if (c == 0) {
-                if (offset != NULL) {
-                    *offset = contigsByName[mid].beginningOffset;
+                if (location != NULL) {
+                    *location = contigsByName[mid].beginningLocation;
                 }
                 if (index != NULL) {
                     *index = mid;
@@ -349,8 +358,8 @@ Genome::getOffsetOfContig(const char *contigName, unsigned *offset, int * index)
     }
     for (int i = 0; i < nContigs; i++) {
         if (!strcmp(contigName,contigs[i].name)) {
-            if (NULL != offset) {
-                *offset = contigs[i].beginningOffset;
+            if (NULL != location) {
+                *location = contigs[i].beginningLocation;
             }
 			if (index != NULL) {
 				*index = i;
@@ -363,17 +372,17 @@ Genome::getOffsetOfContig(const char *contigName, unsigned *offset, int * index)
 
 
     const Genome::Contig *
-Genome::getContigAtLocation(unsigned location) const
+Genome::getContigAtLocation(GenomeLocation location) const
 {
     _ASSERT(location < nBases);
     int low = 0;
     int high = nContigs - 1;
     while (low <= high) {
         int mid = (low + high) / 2;
-        if (contigs[mid].beginningOffset <= location &&
-                (mid == nContigs-1 || contigs[mid+1].beginningOffset > location)) {
+        if (contigs[mid].beginningLocation <= location &&
+                (mid == nContigs-1 || contigs[mid+1].beginningLocation > location)) {
             return &contigs[mid];
-        } else if (contigs[mid].beginningOffset <= location) {
+        } else if (contigs[mid].beginningLocation <= location) {
             low = mid + 1;
         } else {
             high = mid - 1;
@@ -383,10 +392,10 @@ Genome::getContigAtLocation(unsigned location) const
 }
 
     const Genome::Contig *
-Genome::getNextContigAfterLocation(unsigned location) const
+Genome::getNextContigAfterLocation(GenomeLocation location) const
 {
     _ASSERT(location < nBases);
-    if (nContigs > 0 && location < contigs[0].beginningOffset) {
+    if (nContigs > 0 && location < contigs[0].beginningLocation) {
             return &contigs[0];
     }
 
@@ -394,8 +403,8 @@ Genome::getNextContigAfterLocation(unsigned location) const
     int high = nContigs - 1;
     while (low <= high) {
         int mid = (low + high) / 2;
-        if (contigs[mid].beginningOffset <= location &&
-                (mid == nContigs-1 || contigs[mid+1].beginningOffset > location)) {
+        if (contigs[mid].beginningLocation <= location &&
+                (mid == nContigs-1 || contigs[mid+1].beginningLocation > location)) {
             if (mid >= nContigs - 1) {
                 //
                 // This location landed in the last contig, so return NULL for the next one.
@@ -404,7 +413,7 @@ Genome::getNextContigAfterLocation(unsigned location) const
             } else {
                 return &contigs[mid+1];
             }
-        } else if (contigs[mid].beginningOffset <= location) {
+        } else if (contigs[mid].beginningLocation <= location) {
             low = mid + 1;
         } else {
             high = mid - 1;
@@ -412,6 +421,8 @@ Genome::getNextContigAfterLocation(unsigned location) const
     }
     return NULL; // Should not be reached
 }
+
+#if 0   // unused
 
 //
 // Makes a copy of a Genome, but with only one of the sex chromosomes.
@@ -421,7 +432,7 @@ Genome::getNextContigAfterLocation(unsigned location) const
     Genome *
 Genome::copy(bool copyX, bool copyY, bool copyM) const
 {
-    Genome *newCopy = new Genome(getCountOfBases(),getCountOfBases(), chromosomePadding);
+    Genome *newCopy = new Genome(getCountOfBases(), getCountOfBases(), chromosomePadding);
 
     if (NULL == newCopy) {
         WriteErrorMessage("Genome::copy: failed to allocate space for copy.\n");
@@ -431,28 +442,28 @@ Genome::copy(bool copyX, bool copyY, bool copyM) const
     const Genome::Contig *currentContig = NULL;
     const Genome::Contig *nextContig = getContigAtLocation(0);
 
-    unsigned offsetInReference = 0;
-    while (offsetInReference < getCountOfBases()) {
-        if (NULL != nextContig && offsetInReference >= nextContig->beginningOffset) {
+    GenomeLocation locationInReference = 0;
+    while (locationInReference < getCountOfBases()) {
+        if (NULL != nextContig && locationInReference >= nextContig->beginningLocation) {
             //
             // Start of a new contig.  See if we want to skip it.
             //
             currentContig = nextContig;
-            nextContig = getNextContigAfterLocation(offsetInReference + 1);
+            nextContig = getNextContigAfterLocation(locationInReference + 1);
             if ((!copyX && !strcmp(currentContig->name,"chrX")) ||
                 (!copyY && !strcmp(currentContig->name,"chrY")) ||
                 (!copyM && !strcmp(currentContig->name,"chrM"))) {
                 //
                 // Yes, skip over this contig.
                 //
-                nextContig = getNextContigAfterLocation(offsetInReference + 1);
+                nextContig = getNextContigAfterLocation(locationInReference + 1);
                 if (NULL == nextContig) {
                     //
                     // The chromosome that we're skipping was the last one, so we're done.
                     //
                     break;
                 } else {
-                    offsetInReference = nextContig->beginningOffset;
+                    locationInReference = nextContig->beginningLocation;
                     continue;
                 }
             } // If skipping this chromosome
@@ -463,34 +474,33 @@ Genome::copy(bool copyX, bool copyY, bool copyM) const
         const size_t maxCopySize = 10000;
         char dataBuffer[maxCopySize + 1];
 
-        unsigned amountToCopy = maxCopySize;
-        if (nextContig && nextContig->beginningOffset < offsetInReference + amountToCopy) {
-            amountToCopy = nextContig->beginningOffset - offsetInReference;
+        GenomeDistance amountToCopy = maxCopySize;
+        if (nextContig && nextContig->beginningLocation < locationInReference + amountToCopy) {
+            amountToCopy = nextContig->beginningLocation - locationInReference;
         }
 
-        if (getCountOfBases() < offsetInReference + amountToCopy) {
-            amountToCopy = getCountOfBases() - offsetInReference;
+        if (getCountOfBases() < (locationInReference + amountToCopy).AsInt64()) {
+            amountToCopy = getCountOfBases() - locationInReference;
         }
 
-        memcpy(dataBuffer,getSubstring(offsetInReference,amountToCopy), amountToCopy);
+        memcpy(dataBuffer,getSubstring(locationInReference, amountToCopy), amountToCopy);
         dataBuffer[amountToCopy] = '\0';
 
         newCopy->addData(dataBuffer);
 
-        offsetInReference += amountToCopy;
+        locationInReference += amountToCopy;
     }
 
     newCopy->fillInContigLengths();
     newCopy->sortContigsByName();
     return newCopy;
 }
+#endif // 0
 
-unsigned DistanceBetweenGenomeLocations(unsigned locationA, unsigned locationB) 
+GenomeDistance DistanceBetweenGenomeLocations(GenomeLocation locationA, GenomeLocation locationB) 
 {
-    unsigned largerGenomeOffset = __max(locationA, locationB);
-    unsigned smallerGenomeOffset = __min(locationA, locationB);
-
-    return largerGenomeOffset - smallerGenomeOffset;
+    if (locationA > locationB) return locationA - locationB;
+    return locationB - locationA;
 }
 
 void Genome::fillInContigLengths()
@@ -498,13 +508,13 @@ void Genome::fillInContigLengths()
     if (nContigs == 0) return;
 
     for (int i = 0; i < nContigs - 1; i++) {
-        contigs[i].length =  contigs[i+1].beginningOffset - contigs[i].beginningOffset;
+        contigs[i].length =  contigs[i+1].beginningLocation - contigs[i].beginningLocation;
     }
 
-    contigs[nContigs-1].length = nBases - contigs[nContigs-1].beginningOffset;
+    contigs[nContigs-1].length = nBases - contigs[nContigs-1].beginningLocation.AsInt64();
 }
 
-const Genome::Contig *Genome::getContigForRead(unsigned location, unsigned readLength, unsigned *extraBasesClippedBefore) const 
+const Genome::Contig *Genome::getContigForRead(GenomeLocation location, unsigned readLength, GenomeDistance *extraBasesClippedBefore) const 
 {
     const Contig *contig = getContigAtLocation(location);
 
@@ -514,18 +524,20 @@ const Genome::Contig *Genome::getContigForRead(unsigned location, unsigned readL
     // here by looking to see if the aligned location plus the read length crosses a contig boundary.  It also might
     // happen that it is aligned before the first contig, in which case contig will be NULL.
     //
-     if (NULL == contig || location + readLength > contig->beginningOffset + contig->length) {
+     if (NULL == contig || location + readLength > contig->beginningLocation + contig->length) {
         //
         // We should never align over the end of a chromosome, only before the beginning.  So move this into the next
         // chromosome.
         //
         contig = getNextContigAfterLocation(location);
         _ASSERT(NULL != contig);
-        _ASSERT(contig->beginningOffset > location && contig->beginningOffset < location + readLength);
-        *extraBasesClippedBefore = contig->beginningOffset - location;
+        _ASSERT(contig->beginningLocation > location && contig->beginningLocation < location + readLength);
+        *extraBasesClippedBefore = contig->beginningLocation - location;
     } else {
         *extraBasesClippedBefore = 0;
     }
 
     return contig;
 }
+
+const GenomeLocation InvalidGenomeLocation((_int64)1 << 62);    // Should be plenty big enough that it won't occur in practice.

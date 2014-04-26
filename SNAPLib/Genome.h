@@ -26,6 +26,12 @@ Revision History:
 #include "Compat.h"
 #include "GenericFile.h"
 
+//
+// We have two different classes to represent a place in a genome and a distance between places in a genome.
+// In reality, they're both just 64 bit ints, but the classes are set up to encourage the user to keep
+// in mind the difference (while enouraging the compiler not to :-)).  So, a genome location might be something
+// like "chromosome 12, base 12345" which would be represented in (0-based) genome coordinates as some 
+
 typedef _int64 GenomeDistance;
 
 class GenomeLocation {
@@ -61,8 +67,31 @@ public:
         return location != peer.location;
     }
 
-    inline GenomeLocation operator+(GenomeDistance distance) const {
+    inline GenomeLocation operator+(const GenomeDistance distance) const {
         GenomeLocation retVal(location + distance);
+        return retVal;
+    }
+
+    inline GenomeDistance operator-(const GenomeLocation &otherLoc) const {
+        return location - otherLoc.location;
+    }
+
+    inline GenomeLocation operator-(const GenomeDistance distance) const {
+        return location - distance;
+    }
+
+    inline GenomeLocation operator+=(const GenomeDistance distance)  {
+        location += distance;
+        return *this;
+    }
+
+    inline GenomeLocation operator-=(const GenomeDistance distance) {
+        location -= distance;
+        return *this;
+    }
+
+    inline _int64 AsInt64() const {
+        return location;
     }
 
     _int64         location;
@@ -70,7 +99,7 @@ public:
 
 typedef _int64 GenomeDistance;
 
-const GenomeLocation InvalidGenomeLocation = -1000000000000;   // -1 * 10^12
+extern const GenomeLocation InvalidGenomeLocation;
 
 class Genome {
 public:
@@ -94,7 +123,7 @@ public:
         void addData(
             const char          *data);
 
-        void addData(const char *data, size_t len);
+        void addData(const char *data, GenomeDistance len);
 
         const unsigned getChromosomePadding() const {return chromosomePadding;}
 
@@ -108,32 +137,32 @@ public:
         //
         // minOffset and length are used to read in only a part of a whole genome.
         //
-        static const Genome *loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLocation i_minOffset = 0, GenomeDistance length = 0);
+        static const Genome *loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLocation i_minLocation = 0, GenomeDistance length = 0);
                                                                   // This loads from a genome save
                                                                   // file, not a FASTA file.  Use
                                                                   // FASTA.h for FASTA loads.
 
-        static bool getSizeFromFile(const char *fileName, unsigned *nBases, unsigned *nContigs);
+        static bool getSizeFromFile(const char *fileName, GenomeDistance *nBases, unsigned *nContigs);
 
         bool saveToFile(const char *fileName) const;
 
         //
         // Methods to read the genome.
         //
-        inline const char *getSubstring(GenomeLocation offset, GenomeDistance lengthNeeded) const {
-            if (offset > nBases || offset + lengthNeeded > nBases + N_PADDING) {
+        inline const char *getSubstring(GenomeLocation location, GenomeDistance lengthNeeded) const {
+            if (location > nBases || location + lengthNeeded > nBases + N_PADDING) {
                 // The first part of the test is for the unsigned version of a negative offset.
                 return NULL;
             }
 
             if (lengthNeeded <= chromosomePadding) {
-                return bases + (offset - minOffset);
+                return bases + (location - minLocation);
             }
 
-            _ASSERT(offset >= minOffset && offset + lengthNeeded <= maxOffset + N_PADDING); // If the caller asks for a genome slice, it's only legal to look within it.
+            _ASSERT(location >= minLocation && location + lengthNeeded <= maxLocation + N_PADDING); // If the caller asks for a genome slice, it's only legal to look within it.
 
             if (lengthNeeded == 0) {
-                return bases + (offset - minOffset);
+                return bases + (location - minLocation);
             }
 
             //
@@ -144,24 +173,24 @@ public:
                 //
                 // Start by special casing the last contig (it makes the rest of the code easier).
                 //
-                if (contigs[nContigs - 1].beginningOffset <= offset) {
+                if (contigs[nContigs - 1].beginningLocation <= location) {
                     //
                     // Because it starts in the last contig, it's OK because we already checked overflow
                 // of the whole genome.
                 //
-                return bases + (offset-minOffset);
+                return bases + (location - minLocation);
             }
 
                 int min = 0;
                 int max = nContigs - 2;
                 while (min <= max) {
                     int i = (min + max) / 2;
-                    if (contigs[i].beginningOffset <= offset) {
-                        if (contigs[i+1].beginningOffset > offset) {
-                            if (contigs[i+1].beginningOffset <= offset + lengthNeeded - 1) {
+                    if (contigs[i].beginningLocation <= location) {
+                        if (contigs[i+1].beginningLocation > location) {
+                            if (contigs[i+1].beginningLocation <= location + lengthNeeded - 1) {
                                 return NULL;    // This crosses a contig boundary.
                             } else {
-                                return bases + (offset-minOffset);
+                                return bases + (location - minLocation);
                             }
                         } else {
                             min = i+1;
@@ -179,11 +208,11 @@ public:
                 // confuses the branch predictor, and so is slower even though it uses many fewer instructions.
                 //
                 for (int i = 0 ; i < nContigs; i++) {
-                    if (offset + lengthNeeded - 1 >= contigs[i].beginningOffset) {
-                        if (offset < contigs[i].beginningOffset) {
+                    if (location + lengthNeeded - 1 >= contigs[i].beginningLocation) {
+                        if (location < contigs[i].beginningLocation) {
                             return NULL;        // crosses a contig boundary.
                         } else {
-                            return bases + (offset-minOffset);
+                            return bases + (location - minLocation);
                         }
                     }
                 }
@@ -192,32 +221,33 @@ public:
             }
         }
 
-        inline unsigned getCountOfBases() const {return nBases;}
+        inline GenomeDistance getCountOfBases() const {return nBases;}
 
-        bool getOffsetOfContig(const char *contigName, unsigned *offset, int* index = NULL) const;
+        bool getLocationOfContig(const char *contigName, GenomeLocation *location, int* index = NULL) const;
 
         inline void prefetchData(GenomeLocation genomeLocation) const {
-            _mm_prefetch(bases + genomeLocation,_MM_HINT_T2);
-            _mm_prefetch(bases + genomeLocation + 64,_MM_HINT_T2);
+            _mm_prefetch(bases + genomeLocation.AsInt64(), _MM_HINT_T2);
+            _mm_prefetch(bases + genomeLocation.AsInt64() + 64, _MM_HINT_T2);
         }
 
         struct Contig {
-            unsigned     beginningOffset;
-            unsigned     length;
-            unsigned     nameLength;
-            char        *name;
+            Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL) {}
+            GenomeLocation     beginningLocation;
+            GenomeDistance     length;
+            unsigned           nameLength;
+            char              *name;
         };
 
         inline const Contig *getContigs() const { return contigs; }
 
         inline int getNumContigs() const { return nContigs; }
 
-        const Contig *getContigAtLocation(unsigned location) const;
-        const Contig *getContigForRead(unsigned location, unsigned readLength, unsigned *extraBasesClippedBefore) const;
-        const Contig *getNextContigAfterLocation(unsigned location) const;
+        const Contig *getContigAtLocation(GenomeLocation location) const;
+        const Contig *getContigForRead(GenomeLocation location, unsigned readLength, GenomeDistance *extraBasesClippedBefore) const;
+        const Contig *getNextContigAfterLocation(GenomeLocation location) const;
 
-        Genome *copy() const {return copy(true,true,true);}
-        Genome *copyGenomeOneSex(bool useY, bool useM) const {return copy(!useY,useY,useM);}
+// unused        Genome *copy() const {return copy(true,true,true);}
+// unused        Genome *copyGenomeOneSex(bool useY, bool useM) const {return copy(!useY,useY,useM);}
 
         //
         // These are only public so creators of new genomes (i.e., FASTA) can use them.
@@ -235,8 +265,8 @@ private:
         GenomeDistance       nBases;
         GenomeLocation       maxBases;
 
-        GenomeLocation       minOffset;
-        GenomeLocation       maxOffset;
+        GenomeLocation       minLocation;
+        GenomeLocation       maxLocation;
 
         //
         // A genome is made up of a bunch of contigs, typically chromosomes.  Contigs have names,
@@ -250,7 +280,7 @@ private:
         Contig      *contigsByName;
         Genome *copy(bool copyX, bool copyY, bool copyM) const;
 
-        static bool openFileAndGetSizes(const char *filename, GenericFile **file, unsigned *nBases, unsigned *nContigs);
+        static bool openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs);
 
         const unsigned chromosomePadding;
 };
