@@ -36,7 +36,7 @@ Revision History:
     commonInit();
 
     singleReader[0] = reader;
- }
+}
 
 ReadSupplierQueue::ReadSupplierQueue(ReadReader *firstHalfReader, ReadReader *secondHalfReader)
      : tracker(64)
@@ -181,28 +181,35 @@ ReadSupplierQueue::generateNewPairedReadSupplier()
     return new PairedReadSupplierFromQueue(this, singleReader[1] != NULL);
 }
 
+    ReaderContext*
+ReadSupplierQueue::getContext()
+{
+    return singleReader[0] != NULL ? singleReader[0]->getContext() : pairedReader->getContext();
+}
+
     ReadQueueElement *
 ReadSupplierQueue::getElement()
 {
     _ASSERT(singleReader[1] == NULL);   // i.e., we're doing file (but possibly single or paired end) reads
-    //printf("Thread %u: getElement wait acquire lock\n", GetThreadId());
+    //WriteErrorMessage("Thread %u: getElement wait acquire lock\n", GetThreadId());
     AcquireExclusiveLock(&lock);
-    //printf("Thread %u: getElement acquired lock\n", GetThreadId());
+    //WriteErrorMessage("Thread %u: getElement acquired lock\n", GetThreadId());
     while (!areAnyReadsReady()) {
+        //WriteErrorMessage("Thread %u: getElement loop releasing lock\n", GetThreadId());
+        ReleaseExclusiveLock(&lock);
+        //WriteErrorMessage("Thread %u: getElement loop released lock\n", GetThreadId());
         if (allReadsQueued) {
             //
             // Everything's queued and the queue is empty.  No more work.
             //
-            ReleaseExclusiveLock(&lock);
+            //WriteErrorMessage("Thread %u: getElement loop exit allReadsQueued\n", GetThreadId());
             return NULL;
         }
-        ReleaseExclusiveLock(&lock);
-        //printf("Thread %u: getElement loop released lock\n", GetThreadId());
-        //printf("Thread %u: getElement loop wait readsReady\n", GetThreadId());
+        //WriteErrorMessage("Thread %u: getElement loop wait readsReady\n", GetThreadId());
         WaitForEvent(&readsReady);
-        //printf("Thread %u: getElement loop wait acquire lock\n", GetThreadId());
+        //WriteErrorMessage("Thread %u: getElement loop wait acquire lock\n", GetThreadId());
         AcquireExclusiveLock(&lock);
-        //printf("Thread %u: getElement loop acquired lock\n", GetThreadId());
+        //WriteErrorMessage("Thread %u: getElement loop acquired lock\n", GetThreadId());
     }
 
     ReadQueueElement *element = readyQueue[0].next;
@@ -210,11 +217,11 @@ ReadSupplierQueue::getElement()
     element->removeFromQueue();
 
     if (!areAnyReadsReady() && !allReadsQueued) {
-        //printf("Thread %u: getElement block readsReady\n", GetThreadId());
+        //WriteErrorMessage("Thread %u: getElement block readsReady\n", GetThreadId());
         PreventEventWaitersFromProceeding(&readsReady);
     }
     ReleaseExclusiveLock(&lock);
-    //printf("Thread %u: getElement released lock\n", GetThreadId());
+    //WriteErrorMessage("Thread %u: getElement released lock\n", GetThreadId());
 
     return element;
 }
@@ -224,38 +231,81 @@ ReadSupplierQueue::getElements(ReadQueueElement **element1, ReadQueueElement **e
 {
    _ASSERT(singleReader[1] != NULL);   // i.e., we're doing paired file reads
 
-    //printf("Thread %u: getElements wait acquire lock\n", GetThreadId());
+   //WriteErrorMessage("Thread %u: getElements wait acquire lock %llx %d @%llu\n", GetThreadId(), (_uint64) &lock.lock, lock.holderThreadId, timeInNanos());
     AcquireExclusiveLock(&lock);
-    //printf("Thread %u: getElements acquired lock\n", GetThreadId());
+    //WriteErrorMessage("Thread %u: getElements acquired lock %llx %d @%llu\n", GetThreadId(), (_uint64) &lock.lock, lock.holderThreadId, timeInNanos());
     while (!areAnyReadsReady()) {
+        //WriteErrorMessage("Thread %u: getElements loop releasing lock\n", GetThreadId());
         ReleaseExclusiveLock(&lock);
-        //printf("Thread %u: getElements loop released lock\n", GetThreadId());
+        //WriteErrorMessage("Thread %u: getElements loop released lock\n", GetThreadId());
         if (allReadsQueued) {
             //
             // Everything's queued and the queue is empty.  No more work.
             //
+            //WriteErrorMessage("Thread %u: getElement loop exit allReadsQueued\n", GetThreadId());
             return NULL;
         }
-        //printf("Thread %u: getElements loop wait readsReady\n", GetThreadId());
+        //WriteErrorMessage("Thread %u: getElements loop wait readsReady %x\n", GetThreadId(), (unsigned) &lock.lock);
         WaitForEvent(&readsReady);
-        //printf("Thread %u: getElements loop wait acquire lock\n", GetThreadId());
+        //WriteErrorMessage("Thread %u: getElements loop wait acquire lock %x\n", GetThreadId(), (unsigned) &lock.lock);
         AcquireExclusiveLock(&lock);
-        //printf("Thread %u: getElements loop acquired lock\n", GetThreadId());
+        //WriteErrorMessage("Thread %u: getElements loop acquired lock %x\n", GetThreadId(), (unsigned) &lock.lock);
     }
 
+    ReadQueueElement* copyOut = NULL; // for adjusting sizes
     *element1 = readyQueue[0].next;
-    (*element1)->removeFromQueue();
     *element2 = readyQueue[1].next;
-    (*element2)->removeFromQueue();
-    //printf("getElements %x/%x with %d/%d reads\n", (int) (*element1), (int) (*element2), (*element1)->totalReads, (*element2)->totalReads);
+    if ((*element1)->totalReads != (*element2)->totalReads) {
+        copyOut = getEmptyElement(); // might release/acquire lock so state could change!
+        *element1 = readyQueue[0].next;
+        *element2 = readyQueue[1].next;
+        if ((*element1)->totalReads == (*element2)->totalReads) {
+            doneWithElement(copyOut);
+        }
+    }
+
+    if ((*element1)->totalReads == (*element2)->totalReads) {
+        (*element1)->removeFromQueue();
+        (*element2)->removeFromQueue();
+    } else {
+        //fprintf(stderr,"getElements different sizes %d %d\n", (*element1)->totalReads, (*element2)->totalReads);
+        // need to balance out reads between the two
+        // make a copy of the min# of reads from larger element
+        // shrink the larger element and leave it there
+        ReadQueueElement* elements[2] = {*element1, *element2};
+        int sizes[2] = {elements[0]->totalReads, elements[1]->totalReads};
+        int largerOne = elements[1]->totalReads > elements[0]->totalReads;
+        int minReads = elements[1-largerOne]->totalReads;
+        memcpy(copyOut->reads, elements[largerOne]->reads, minReads * sizeof(Read));
+        _ASSERT(elements[0]->totalReads == sizes[0] && elements[1]->totalReads == sizes[1] && elements[largerOne]->totalReads > elements[1-largerOne]->totalReads);
+        copyOut->totalReads = minReads;
+        _ASSERT(elements[0]->totalReads == sizes[0] && elements[1]->totalReads == sizes[1] && elements[largerOne]->totalReads > elements[1-largerOne]->totalReads);
+        memmove(elements[largerOne]->reads, &elements[largerOne]->reads[minReads],
+            (elements[largerOne]->totalReads - minReads) * sizeof(Read));
+        elements[largerOne]->totalReads -= minReads;
+        copyOut->batches.append(&elements[largerOne]->batches);
+        for (BatchVector::iterator i = copyOut->batches.begin(); i != copyOut->batches.end(); i++) {
+            holdBatch(*i);
+        }
+        if (largerOne == 0) {
+            *element1 = copyOut;
+            (*element2)->removeFromQueue();
+        } else {
+            (*element1)->removeFromQueue();
+            *element2 = copyOut;
+        }
+        //WriteErrorMessage("Thread %u: balanced sizes %d %d\n", GetThreadId(), sizes[0], sizes[1]);
+    }
+    //fprintf(stderr,"getElements %x/%x with %d/%d reads\n", (int) (*element1), (int) (*element2), (*element1)->totalReads, (*element2)->totalReads);
 
     if (!areAnyReadsReady() && !allReadsQueued) {
-        //printf("Thread %u: getElements block readsReady\n", GetThreadId());
+        //WriteErrorMessage("Thread %u: getElements block readsReady\n", GetThreadId());
         PreventEventWaitersFromProceeding(&readsReady);
     }
  
+    //WriteErrorMessage("Thread %u: getElements releasing lock %llx %u @%llu\n", GetThreadId(), (_uint64) &lock.lock, lock.holderThreadId, timeInNanos());
     ReleaseExclusiveLock(&lock);
-    //printf("Thread %u: getElements released lock\n", GetThreadId());
+    //WriteErrorMessage("Thread %u: getElements released lock %llx %u @%llu\n", GetThreadId(), (_uint64) &lock.lock, lock.holderThreadId, timeInNanos());
     return true;
 }
 
@@ -276,20 +326,17 @@ ReadSupplierQueue::areAnyReadsReady() // must hold the lock to call this.
     void 
 ReadSupplierQueue::doneWithElement(ReadQueueElement *element)
 {
-    //printf("Thread %u: doneWithElement wait acquire lock\n", GetThreadId());
+    //WriteErrorMessage("Thread %u: doneWithElement wait acquire lock %llx\n", GetThreadId(), &lock.lock);
     AcquireExclusiveLock(&lock);
-    //printf("Thread %u: doneWithElement acquired lock\n", GetThreadId());
-    _ASSERT(element->totalReads > 0 && element->batches.size() > 0);
-    /*
-    for (int i = 0; i < element->totalReads; i++) {
-        element->reads[i].dispose();
-    }*/
+    //WriteErrorMessage("Thread %u: doneWithElement acquired lock %llx\n", GetThreadId(), &lock.lock);
+    _ASSERT(element->totalReads > 0);
     VariableSizeVector<DataBatch> batches = element->batches;
     element->batches.clear();
     element->addToTail(emptyQueue);
     AllowEventWaitersToProceed(&emptyBuffersAvailable);
+    //WriteErrorMessage("Thread %u: doneWithElement releasing lock %llx\n", GetThreadId(), &lock.lock);
     ReleaseExclusiveLock(&lock);
-    //printf("Thread %u: doneWithElement released lock\n", GetThreadId());
+    //WriteErrorMessage("Thread %u: doneWithElement released lock %llx\n", GetThreadId(), &lock.lock);
     for (VariableSizeVector<DataBatch>::iterator b = batches.begin(); b != batches.end(); b++) {
         releaseBatch(*b);
     }
@@ -298,39 +345,43 @@ ReadSupplierQueue::doneWithElement(ReadQueueElement *element)
     void 
 ReadSupplierQueue::supplierFinished()
 {
-    //printf("Thread %u: supplierFinished wait acquire lock\n", GetThreadId());
+    //WriteErrorMessage("Thread %u: supplierFinished wait acquire lock %llx\n", GetThreadId(), &lock.lock);
     AcquireExclusiveLock(&lock);
-    //printf("Thread %u: supplierFinished acquired lock\n", GetThreadId());
+    //WriteErrorMessage("Thread %u: supplierFinished acquired lock %llx\n", GetThreadId(), &lock.lock);
     _ASSERT(allReadsQueued);
     _ASSERT(nSuppliersRunning > 0);
     nSuppliersRunning--;
     if (0 == nSuppliersRunning) {
         AllowEventWaitersToProceed(&allReadsConsumed);
     }
+    //WriteErrorMessage("Thread %u: supplierFinished releasing lock %llx\n", GetThreadId()), &lock.lock;
     ReleaseExclusiveLock(&lock);
-    //printf("Thread %u: supplierFinished released lock\n", GetThreadId());
+    //WriteErrorMessage("Thread %u: supplierFinished released lock %llx\n", GetThreadId(), &lock.lock);
+}
+    
+    void
+ReadSupplierQueue::holdBatch(
+    DataBatch batch)
+{
+    if (pairedReader != NULL) {
+        pairedReader->holdBatch(batch);
+    } else if (singleReader[1] == NULL) {
+        singleReader[0]->holdBatch(batch);
+    } else {
+        singleReader[batch.fileID % 2]->holdBatch(DataBatch(batch.batchID, batch.fileID / 2));
+    }
 }
 
-    void
+    bool
 ReadSupplierQueue::releaseBatch(
     DataBatch batch)
 {
-    //printf("Thread %u: releaseBatch wait acquire lock\n", GetThreadId());
-    AcquireExclusiveLock(&lock);
-    //printf("Thread %u: releaseBatch acquired lock\n", GetThreadId());
-    bool removed = tracker.removeRead(batch);
-    ReleaseExclusiveLock(&lock);
-    //printf("Thread %u: releaseBatch released lock\n", GetThreadId());
-    //printf("ReadSupplierQueue thread %u releaseBatch %d:%d%s\n", GetThreadId(), batch.fileID, batch.batchID, removed ? " done" : " pending");
-
-    if (removed) {
-        if (pairedReader != NULL) {
-            pairedReader->releaseBatch(batch);
-        } else if (singleReader[1] == NULL) {
-            singleReader[0]->releaseBatch(batch);
-        } else {
-            singleReader[batch.fileID % 2]->releaseBatch(DataBatch(batch.batchID, batch.fileID / 2));
-        }
+    if (pairedReader != NULL) {
+        return pairedReader->releaseBatch(batch);
+    } else if (singleReader[1] == NULL) {
+        return singleReader[0]->releaseBatch(batch);
+    } else {
+        return singleReader[batch.fileID % 2]->releaseBatch(DataBatch(batch.batchID, batch.fileID / 2));
     }
 }
 
@@ -340,6 +391,29 @@ ReadSupplierQueue::ReaderThreadMain(void *param)
     ReaderThreadParams *params = (ReaderThreadParams *)param;
     params->queue->ReaderThread(params);
     delete params;
+}
+
+    ReadQueueElement*
+ReadSupplierQueue::getEmptyElement()
+{
+    while (emptyQueue->next == emptyQueue) {
+        // Wait for a buffer.
+        //WriteErrorMessage("Thread %u: getEmptyElement releasing lock %llx\n", GetThreadId());
+        ReleaseExclusiveLock(&lock);
+        //WriteErrorMessage("Thread %u: getEmptyElement released lock %llx\n", GetThreadId());
+        WaitForEvent(&emptyBuffersAvailable);
+        //WriteErrorMessage("Thread %u: getEmptyElement acquiring lock %llx\n", GetThreadId());
+        AcquireExclusiveLock(&lock);
+        //WriteErrorMessage("Thread %u: getEmptyElement acquired lock %llx\n", GetThreadId());
+    }
+
+    ReadQueueElement *element = emptyQueue->next;
+    element->removeFromQueue();
+    if (emptyQueue->next == emptyQueue) {
+        PreventEventWaitersFromProceeding(&emptyBuffersAvailable);
+    }
+
+    return element;
 }
 
     void
@@ -366,9 +440,6 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
     // may pass reads forward from element loops to maintain batching or element size
     Read firstReadForNextElement[2];
     bool hasFirstReadForNextElement = false;
-    bool fixedElementSize = false;
-    Read* extraReads = NULL;
-    int extraReadCount = 0;
 
     while (!done) {
         if ((!isSingleReader) && balance * balanceIncrement > MaxImbalance) {
@@ -391,58 +462,30 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
             _ASSERT(balance * balanceIncrement <= MaxImbalance);
         }
 
-        while (emptyQueue->next == emptyQueue) {
-            // Wait for a buffer.
-            ReleaseExclusiveLock(&lock);
-
-            _int64 now = timeInNanos();
-            processingTime += now - startTime;
-            startTime = now;
-
-            WaitForEvent(&emptyBuffersAvailable);
-
-            now = timeInNanos();
-            bufferWaitTime += now - startTime;
-            startTime = now;
-
-            AcquireExclusiveLock(&lock);
-        }
-
-        ReadQueueElement *element = emptyQueue->next;
-        element->removeFromQueue();
-        if (emptyQueue->next == emptyQueue) {
-            PreventEventWaitersFromProceeding(&emptyBuffersAvailable);
-        }
+        // pull an empty element from the queue
+        _int64 now = timeInNanos();
+        processingTime += now - startTime;
+        startTime = now;
+        ReadQueueElement* element = getEmptyElement();
+        now = timeInNanos();
+        bufferWaitTime += now - startTime;
+        startTime = now;
 
         //
         // Now fill in the reads from the reader into the element until it's
-        // full or the reader finishes or it starts a new batch.
+        // full or the reader finishes or it exceeds batch count
         //
         ReleaseExclusiveLock(&lock);
         element->totalReads = 0;
-read_loop: // might return here once with goto to ensure both threads have same #reads per element
         for (; element->totalReads <= (int) elementSize - increment; element->totalReads += increment) {
             
             if (NULL != reader) {
                 Read* read = &element->reads[element->totalReads];
-                if (extraReadCount > 0) {
-                    int copy = min((unsigned) extraReadCount, elementSize - element->totalReads);
-                    memcpy(read, extraReads, copy * sizeof(Read));
-                    if (copy < extraReadCount) {
-                        memmove(extraReads, extraReads + copy, (extraReadCount - copy) * sizeof(Read));
-                    }
-                    extraReadCount -= copy;
-                    if (extraReadCount == 0) {
-                        free(extraReads);
-                        extraReads = NULL;
-                    }
-                    element->totalReads = copy - increment;
-                    element->batches.push_back(read->getBatch());
-                    AcquireExclusiveLock(&lock);
-                    tracker.addRead(read->getBatch());
-                    ReleaseExclusiveLock(&lock);
-                } else if (hasFirstReadForNextElement) {
+                if (hasFirstReadForNextElement) {
+                    _ASSERT(element->totalReads == 0);
                     *read = firstReadForNextElement[0];
+                    // already called holdBatch when firstReadForNextElement set
+                    element->batches.push_back(read->getBatch());
                     hasFirstReadForNextElement = false;
                 } else {
                     done = ! reader->getNextRead(read);
@@ -452,87 +495,73 @@ read_loop: // might return here once with goto to ensure both threads have same 
                     if (! isSingleReader) {
                         read->setBatch(DataBatch(read->getBatch().batchID, read->getBatch().fileID * 2 + firstOrSecond));
                     }
-                }
-                if (element->totalReads == 0 || element->reads[element->totalReads-1].getBatch() != element->reads[element->totalReads].getBatch()) {
-                    // ensure only one batch per element, except when using fixedElementSize in paired single readers
-                    if (element->batches.size() == 0 || fixedElementSize) {
-                        element->batches.push_back(read->getBatch());
-                        AcquireExclusiveLock(&lock);
-                        tracker.addRead(read->getBatch());
-                        ReleaseExclusiveLock(&lock);
-                        //printf("ReadSupplierQueue::ReaderThread[%d] element %x batch %d:%d\n", firstOrSecond, (int) element, read->getBatch().fileID, read->getBatch().batchID);
+                    bool newBatch = element->totalReads == 0 ||
+                        (read->getBatch() != read[-1].getBatch() && element->batches.search(read->getBatch()) == element->batches.end());
+                    if (element->batches.size() + newBatch <= BatchesPerElement) {
+                        // won't exceed limit for this element
+                        if (newBatch && element->batches.add(read->getBatch())) {
+                            holdBatch(read->getBatch());
+                        }
                     } else {
+                        // too many batches, hold for next queue element
                         firstReadForNextElement[0] = *read;
                         hasFirstReadForNextElement = true;
+                        holdBatch(read->getBatch());
                         break;
                     }
                 }
             } else if (NULL != pairedReader) {
                 Read* read = &element->reads[element->totalReads];
                 if (hasFirstReadForNextElement) {
+                    _ASSERT(element->totalReads == 0);
                     read[0] = firstReadForNextElement[0];
                     read[1] = firstReadForNextElement[1];
+                    // already called holdBatch when firstReadForNextElement set
+                    element->batches.push_back(read[0].getBatch());
+                    if (read[1].getBatch() != read[0].getBatch()) {
+                        element->batches.push_back(read[1].getBatch());
+                    }
                     hasFirstReadForNextElement = false;
                 } else {
                     done = !pairedReader->getNextReadPair(&read[0], &read[1]);
                     if (done) {
                         break;
                     }
-                }
-                DataBatch b[2] = {read[0].getBatch(), read[1].getBatch()};
-                bool newBatch[2] = {element->totalReads == 0 || read[-2].getBatch() != b[0],
-                    b[0] != b[1] && (element->totalReads == 0 || read[-1].getBatch() != b[1])};
-                if (newBatch[0] || newBatch[1]) {
-                    // allow 3 batch ids per element - 2 from one reader, one from the other
-                    if (element->batches.size() + newBatch[0] + newBatch[1] < 4) {
-                        AcquireExclusiveLock(&lock);
-                        if (newBatch[0]) {
-                            element->batches.push_back(b[0]);
-                            tracker.addRead(b[0]);
+                    DataBatch b[2] = {read[0].getBatch(), read[1].getBatch()};
+                    bool newBatch[2] =
+                        {(element->totalReads == 0 || read[-2].getBatch() != b[0]) &&
+                            element->batches.search(b[0]) == element->batches.end(),
+                        b[0] != b[1] && (element->totalReads == 0 || read[-1].getBatch() != b[1]) &&
+                            element->batches.search(b[1]) == element->batches.end()};
+                    if (element->batches.size() + newBatch[0] + newBatch[1] <= BatchesPerElement) {
+                        if (newBatch[0] && element->batches.add(b[0])) {
+                            holdBatch(b[0]);
                         }
-                        if (newBatch[1]) {
-                            element->batches.push_back(b[1]);
-                            tracker.addRead(b[1]);
+                        if (newBatch[1] && element->batches.add(b[1])) {
+                            holdBatch(b[1]);
                         }
-                        ReleaseExclusiveLock(&lock);
                     } else {
                         firstReadForNextElement[0] = read[0];
                         firstReadForNextElement[1] = read[1];
+                        holdBatch(b[0]);
+                        if (b[1] != b[0]) {
+                            holdBatch(b[1]);
+                        }
                         hasFirstReadForNextElement = true;
                         break;
                     }
-                    //printf("ReadSupplierQueue::ReaderThread element %x batches %d:%d, %d:%d\n", (int) element, b[0].fileID, b[0].batchID, b[1].fileID, b[1].batchID);
+                    //WriteErrorMessage("ReadSupplierQueue::ReaderThread element %x batches %d:%d, %d:%d\n", (int) element, b[0].fileID, b[0].batchID, b[1].fileID, b[1].batchID);
                 }
            }
         }
-        if ((! isSingleReader) && (! fixedElementSize)) {
-            // one of two paired threads finished first element, try setting shared element size limit
-            unsigned n = InterlockedCompareExchange32AndReturnOldValue(&elementSize, element->totalReads, ReadQueueElement::MaxReadsPerElement);
-            if (n != ReadQueueElement::MaxReadsPerElement && element->totalReads != n) {
-                // other thread updated it, ensure I produce elements of same size
-                if (element->totalReads < (int) n) {
-                    // go back and fill in more reads
-                    fixedElementSize = true;
-                    goto read_loop;
-                } else {
-                    // keep extra reads for next element(s)
-                    extraReadCount = element->totalReads - n;
-                    extraReads = (Read*) malloc(extraReadCount * sizeof(Read));
-                    memcpy(extraReads, &element->reads[n], extraReadCount * sizeof(Read));
-                    memset(&element->reads[n], 0, extraReadCount * sizeof(Read));
-                    element->totalReads = n;
-                }
-            }
-            fixedElementSize = true;
-        }
 
-        //printf("ReadSupplierQueue element[%d] %x with %d reads %d batches\n", firstOrSecond, (int) element, element->totalReads, element->batches.size());
+        //WriteErrorMessage("ReadSupplierQueue element[%d] %x with %d reads %d batches\n", firstOrSecond, (int) element, element->totalReads, element->batches.size());
         
         AcquireExclusiveLock(&lock);
         
         // do this before AllowEventWaitersToProceed to avoid race condition
         if (done && 1 == nReadersRunning) {
-            //printf("Thread %u: set allReadsQueued (%d) in ReaderThread...\n", GetThreadId(), element->totalReads);
+            //WriteErrorMessage("Thread %u: set allReadsQueued (%d) in ReaderThread...\n", GetThreadId(), element->totalReads);
             allReadsQueued = true;
             AllowEventWaitersToProceed(&readsReady);    // Even if we have nothing to queue, allow the consumers to wake up so they can exit
         }
@@ -543,7 +572,7 @@ read_loop: // might return here once with goto to ensure both threads have same 
                 //
                 // Signal that an element is ready.
                 //
-                //printf("Thread %u: signal readsReady in ReaderThread...\n", GetThreadId());
+                //WriteErrorMessage("Thread %u: signal readsReady in ReaderThread...\n", GetThreadId());
                 AllowEventWaitersToProceed(&readsReady);
             }
 
@@ -554,14 +583,14 @@ read_loop: // might return here once with goto to ensure both threads have same 
                     //
                     // We're too far ahead.  Close our throttle.
                     //
-		    //printf("Thread %u: close throttle %d in ReaderThread...\n", GetThreadId(), firstOrSecond);
+		    //WriteErrorMessage("Thread %u: close throttle %d in ReaderThread...\n", GetThreadId(), firstOrSecond);
                     PreventEventWaitersFromProceeding(&throttle[firstOrSecond]);
                 } else if (balance * -1 * balanceIncrement == MaxImbalance) {
                     //
                     // We just pushed it back into balance (barely) for the other guy.  Allow him to
                     // proceed.
                     //
-		    //printf("Thread %u: release throttle %d in ReaderThread...\n", GetThreadId(), 1-firstOrSecond);
+		    //WriteErrorMessage("Thread %u: release throttle %d in ReaderThread...\n", GetThreadId(), 1-firstOrSecond);
                     AllowEventWaitersToProceed(&throttle[1-firstOrSecond]);
                 }
             }
@@ -570,7 +599,7 @@ read_loop: // might return here once with goto to ensure both threads have same 
 
     processingTime += timeInNanos() - startTime;
 
-    //printf("ReadSupplier: %llds processing, %llds waiting for balance, %llds waiting for buffer\n", processingTime / 1000000000, balanceTime / 1000000000, bufferWaitTime / 1000000000);
+    //WriteErrorMessage("ReadSupplier: %llds processing, %llds waiting for balance, %llds waiting for buffer\n", processingTime / 1000000000, balanceTime / 1000000000, bufferWaitTime / 1000000000);
 
     _ASSERT(nReadersRunning > 0);
     nReadersRunning--;
@@ -592,7 +621,7 @@ ReadSupplierFromQueue::ReadSupplierFromQueue(
 ReadSupplierFromQueue::getNextRead()
 {
     if (done) {
-        return false;
+        return NULL;
     }
 
     if (NULL != currentElement && nextReadIndex >= currentElement->totalReads) {
@@ -613,13 +642,6 @@ ReadSupplierFromQueue::getNextRead()
     return &currentElement->reads[nextReadIndex++]; // Note the post increment.
 }
 
-    void
-ReadSupplierFromQueue::releaseBatch(
-    DataBatch batch)
-{
-    queue->releaseBatch(batch);
-}
-
 PairedReadSupplierFromQueue::PairedReadSupplierFromQueue(ReadSupplierQueue *i_queue, bool i_twoFiles) :
     queue(i_queue), twoFiles(i_twoFiles), done(false), 
     currentElement(NULL), currentSecondElement(NULL), nextReadIndex(0) {}
@@ -638,10 +660,11 @@ PairedReadSupplierFromQueue::getNextReadPair(Read **read0, Read **read1)
     }
 
     if (NULL != currentElement && nextReadIndex >= currentElement->totalReads) {
-        //printf("PairedReadSupplierFromQueue finished element %x with %d reads %d batches: %d %d\n", (int) currentElement, currentElement->totalReads, currentElement->batches.size(), currentElement->batches[0].batchID, currentElement->batches.size() > 1 ? currentElement->batches[1].batchID : 0);
+        //fprintf(stderr,"PairedReadSupplierFromQueue finished element %x with %d reads %d batches:", (int) currentElement, currentElement->totalReads, currentElement->batches.size()); for (BatchVector::iterator i = currentElement->batches.begin(); i != currentElement->batches.end(); i++) { fprintf(stderr," %d:%d", i->fileID, i->batchID); } fprintf(stderr,"\n");
         queue->doneWithElement(currentElement);
         currentElement = NULL;
         if (twoFiles) {
+            //fprintf(stderr,"PairedReadSupplierFromQueue finished 2nd element %x with %d reads %d batches:", (int) currentSecondElement, currentSecondElement->totalReads, currentSecondElement->batches.size()); for (BatchVector::iterator i = currentSecondElement->batches.begin(); i != currentSecondElement->batches.end(); i++) { printf(" %d:%d", i->fileID, i->batchID); } printf("\n");
             queue->doneWithElement(currentSecondElement);
             currentSecondElement = NULL;
         }
@@ -698,9 +721,3 @@ PairedReadSupplierFromQueue::getNextReadPair(Read **read0, Read **read1)
     return true;
 }
     
-    void
-PairedReadSupplierFromQueue::releaseBatch(
-    DataBatch batch)
-{
-    queue->releaseBatch(batch);
-}

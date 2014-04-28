@@ -66,7 +66,16 @@ public:
     virtual void align(
         Read                  *read0,
         Read                  *read1,
-        PairedAlignmentResult *result) = 0;
+        PairedAlignmentResult *result,
+        int                    maxEditDistanceForSecondaryResults,
+        int                    secondaryResultBufferSize,
+        int                   *nSecondaryResults,
+        PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
+        int                    singleSecondaryBufferSize,
+        int                   *nSingleEndSecondaryResultsForFirstRead,
+        int                   *nSingleEndSecondaryResultsForSecondRead,
+        SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
+        ) = 0;
 
     virtual void setLandauVishkin(
         LandauVishkin<1>        *landauVishkin,

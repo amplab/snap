@@ -28,7 +28,7 @@ Revision History:
 #include "options.h"
 #include "Range.h"
 #include "Genome.h"
-#include "RangeSplitter.h"
+#include "Read.h"
 
 #define MAPQ_LIMIT_FOR_SINGLE_HIT 10
 
@@ -39,17 +39,19 @@ struct AbstractOptions
     virtual bool parse(const char** argv, int argc, int& n, bool *done) = 0;
 };
 
-enum FileType {UnknownFileType, SAMFile, FASTQFile, BAMFile, GZipFASTQFile, CRAMFile};  // As more as needed
+enum FileType {UnknownFileType, SAMFile, FASTQFile, BAMFile, InterleavedFASTQFile, CRAMFile};  // Add more as needed
 
-struct SNAPInput {
-    SNAPInput() : fileName(NULL), secondFileName(NULL), fileType(UnknownFileType) {}
+struct SNAPFile {
+    SNAPFile() : fileName(NULL), secondFileName(NULL), fileType(UnknownFileType), isStdio(false) {}
     const char          *fileName;
     const char          *secondFileName;
     FileType             fileType;
+    bool                 isCompressed;
+    bool                 isStdio;           // Only applies to the first file for two-file inputs
 
-    void readHeader(ReaderContext& context);
-    PairedReadSupplierGenerator *createPairedReadSupplierGenerator(int numThreads, const ReaderContext& context);
+    PairedReadSupplierGenerator *createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context);
     ReadSupplierGenerator *createReadSupplierGenerator(int numThreads, const ReaderContext& context);
+    static bool generateFromCommandLine(const char **args, int nArgs, int *argsConsumed, SNAPFile *snapFile, bool paired, bool isInput);
 };
 
 struct AlignerOptions : public AbstractOptions
@@ -63,17 +65,17 @@ struct AlignerOptions : public AbstractOptions
     const char         *annotation;
     const char         *similarityMapFile;
     int                 numThreads;
-    Range               maxDist;
+    unsigned            maxDist;
     unsigned            numSeedsFromCommandLine;
     double              seedCoverage;       // Exclusive with numSeeds; this is readSize/seedSize
     bool                seedCountSpecified; // Has either -n or -sc been specified?  This bool is used to make sure they're not both specified on the command line
-    Range               maxHits;
+    unsigned            maxHits;
     bool                computeError;
     bool                bindToProcessors;
     bool                ignoreMismatchedIDs;
-    const char         *outputFileTemplate;
+    SNAPFile            outputFile;
     int                 nInputs;
-    SNAPInput          *inputs;
+    SNAPFile           *inputs;
     ReadClippingType    clipping;
     bool                sortOutput;
     bool                noIndex;
@@ -92,9 +94,15 @@ struct AlignerOptions : public AbstractOptions
     bool                useTimingBarrier;
     unsigned            extraSearchDepth;
     const char         *defaultReadGroup; // if not specified in input
-    bool                ignoreSecondaryAlignments;
+    bool                ignoreSecondaryAlignments; // on input, default true
+    int                 maxSecondaryAligmmentAdditionalEditDistance;
     bool                preserveClipping;
     float               expansionFactor;
+    bool                noUkkonen;
+    bool                noOrderedEvaluation;
+    
+    static bool         useHadoopErrorMessages; // This is static because it's global (and I didn't want to push the options object to every place in the code)
+    static bool         outputToStdout;         // Likewise
 
     //Added this back in for now
     unsigned            confDiff;
@@ -115,6 +123,7 @@ struct AlignerOptions : public AbstractOptions
         FilterUnaligned =           0x0001,
         FilterSingleHit =           0x0002,
         FilterMultipleHits =        0x0004,
+        FilterBothMatesMatch =      0x0008,
     };
 
     bool passFilter(Read* read, AlignmentResult result);

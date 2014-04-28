@@ -35,6 +35,8 @@ Revision History:
 #ifdef PROFILE_WAIT
 #include <map>
 #endif
+#include "DataWriter.h"
+#include "Error.h"
 
 using std::min;
 using std::max;
@@ -199,12 +201,25 @@ void DestroyEventObject(EventObject *eventObject) {DestroySingleWaiterObject(eve
 void AllowEventWaitersToProceed(EventObject *eventObject) {SignalSingleWaiterObject(eventObject);}
 void PreventEventWaitersFromProceeding(EventObject *eventObject) {ResetSingleWaiterObject(eventObject);}
 void WaitForEvent(EventObject *eventObject) {WaitForSingleWaiterObject(eventObject);}
+bool WaitForEventWithTimeout(EventObject *eventObject, _int64 timeoutInMillis)
+{
+    DWORD retVal = WaitForSingleObjectEx(*eventObject, (unsigned)timeoutInMillis, FALSE);
+
+    if (retVal == WAIT_OBJECT_0) {
+        return true;
+    } else if (retVal == WAIT_TIMEOUT) {
+        return false;
+    }
+    WriteErrorMessage("WaitForSingleObject returned unexpected result %d (error %d)\n", retVal, GetLastError());
+    soft_exit(1);
+    return false;   // NOTREACHED: Just to avoid the compiler complaining.
+}
 
 
 void BindThreadToProcessor(unsigned processorNumber) // This hard binds a thread to a processor.  You can no-op it at some perf hit.
 {
     if (!SetThreadAffinityMask(GetCurrentThread(),((unsigned _int64)1) << processorNumber)) {
-        fprintf(stderr,"Binding thread to processor %d failed, %d\n",processorNumber,GetLastError());
+        WriteErrorMessage("Binding thread to processor %d failed, %d\n",processorNumber,GetLastError());
     }
 }
 
@@ -258,7 +273,7 @@ bool StartNewThread(ThreadMainFunction threadMainFunction, void *threadMainFunct
     DWORD threadId;
     hThread = CreateThread(NULL,0,WrapperThreadMain,context,0,&threadId);
     if (NULL == hThread) {
-        fprintf(stderr,"Create thread failed, %d\n",GetLastError());
+        WriteErrorMessage("Create thread failed, %d\n",GetLastError());
         delete context;
         context = NULL;
         return false;
@@ -285,12 +300,12 @@ unsigned GetNumberOfProcessors()
 _int64 QueryFileSize(const char *fileName) {
     HANDLE hFile = CreateFile(fileName,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
     if (INVALID_HANDLE_VALUE == hFile) {
-        fprintf(stderr,"Unable to open file '%s' for QueryFileSize, %d\n", fileName, GetLastError());
+        WriteErrorMessage("Unable to open file '%s' for QueryFileSize, %d\n", fileName, GetLastError());
         soft_exit(1);
     }
     LARGE_INTEGER fileSize;
     if (!GetFileSizeEx(hFile,&fileSize)) {
-        fprintf(stderr,"GetFileSize failed, %d\n",GetLastError());
+        WriteErrorMessage("GetFileSize failed, %d\n",GetLastError());
         soft_exit(1);
     }
     CloseHandle(hFile);
@@ -336,7 +351,7 @@ OpenLargeFile(
         FILE_FLAG_SEQUENTIAL_SCAN,
         NULL);
     if (result->handle == NULL) {
-        fprintf(stderr, "open large file %s failed with 0x%x\n", filename, GetLastError());
+        WriteErrorMessage("open large file %s failed with 0x%x\n", filename, GetLastError());
         delete (void*) result;
         return NULL;
     }
@@ -353,7 +368,7 @@ WriteLargeFile(
     while (count > 0) {
         DWORD step = 0;
         if ((! WriteFile(file->handle, buffer, (DWORD) min(count, (size_t) 0x2000000), &step, NULL)) || step == 0) {
-            fprintf(stderr, "WriteLargeFile failed at %lu of %lu bytes with 0x%x\n", bytes - count, bytes, GetLastError());
+            WriteErrorMessage("WriteLargeFile failed at %lu of %lu bytes with 0x%x\n", bytes - count, bytes, GetLastError());
             return bytes - count;
         }
         count -= step;
@@ -373,7 +388,7 @@ ReadLargeFile(
     while (count > 0) {
         DWORD step = 0;
         if ((! ReadFile(file->handle, buffer, (DWORD) min(count, (size_t) 0x1000000), &step, NULL)) || step == 0) {
-            fprintf(stderr, "ReadLargeFile failed at %lu of %lu bytes with 0x%x\n", bytes - count, bytes, GetLastError());
+            WriteErrorMessage("ReadLargeFile failed at %lu of %lu bytes with 0x%x\n", bytes - count, bytes, GetLastError());
             return bytes - count;
         }
         count -= step;
@@ -413,13 +428,13 @@ OpenMemoryMappedFile(
     result->fileHandle = CreateFile(filename, (write ? GENERIC_WRITE : 0) | GENERIC_READ, 0, NULL, OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL | (sequential ? FILE_FLAG_SEQUENTIAL_SCAN : FILE_FLAG_RANDOM_ACCESS), NULL);
     if (result->fileHandle == NULL) {
-        printf("unable to open mapped file %s error 0x%x\n", filename, GetLastError());
+        WriteErrorMessage("unable to open mapped file %s error 0x%x\n", filename, GetLastError());
         delete result;
         return NULL;
     }
     result->fileMapping = CreateFileMapping(result->fileHandle, NULL, write ? PAGE_READWRITE : PAGE_READONLY, 0, 0, NULL);
     if (result->fileMapping == NULL) {
-        printf("unable to create file mapping %s error 0x%x\n", filename, GetLastError());
+        WriteErrorMessage("unable to create file mapping %s error 0x%x\n", filename, GetLastError());
         delete result;
         return NULL;
     }
@@ -429,7 +444,7 @@ OpenMemoryMappedFile(
         (DWORD) offset,
         length);
     if (*o_contents == NULL) {
-        printf("unable to map file %s error 0x%x\n", filename, GetLastError());
+        WriteErrorMessage("unable to map file %s error 0x%x\n", filename, GetLastError());
         delete result;
         return NULL;
     }
@@ -446,7 +461,7 @@ CloseMemoryMappedFile(
     if (ok) {
         delete (void*) mappedFile;
     } else {
-        printf("unable to close memory mapped file, error 0x%x\n", GetLastError());
+        WriteErrorMessage("unable to close memory mapped file, error 0x%x\n", GetLastError());
     }
 }
 
@@ -514,7 +529,7 @@ WindowsAsyncFile::open(
         FILE_FLAG_OVERLAPPED,
         NULL);
     if (INVALID_HANDLE_VALUE == hFile) {
-        fprintf(stderr,"Unable to create SAM file '%s', %d\n",filename,GetLastError());
+        WriteErrorMessage("Unable to create SAM file '%s', %d\n",filename,GetLastError());
         return NULL;
     }
     return new WindowsAsyncFile(hFile);
@@ -565,7 +580,7 @@ WindowsAsyncFile::Writer::beginWrite(
     lap.Offset = (DWORD) offset;
     if (!WriteFile(file->hFile,buffer, (DWORD) length, (LPDWORD) bytesWritten, &lap)) {
         if (ERROR_IO_PENDING != GetLastError()) {
-            fprintf(stderr,"WindowsAsyncFile: WriteFile failed, %d\n",GetLastError());
+            WriteErrorMessage("WindowsAsyncFile: WriteFile failed, %d\n",GetLastError());
             return false;
         }
     }
@@ -619,7 +634,7 @@ WindowsAsyncFile::Reader::beginRead(
     lap.Offset = (DWORD) offset;
     if (!ReadFile(file->hFile, buffer,(DWORD) length, (LPDWORD) bytesRead, &lap)) {
         if (ERROR_IO_PENDING != GetLastError()) {
-            fprintf(stderr,"WindowsSAMWriter: WriteFile failed, %d\n",GetLastError());
+            WriteErrorMessage("WindowsSAMWriter: WriteFile failed, %d\n",GetLastError());
             return false;
         }
     }
@@ -684,7 +699,7 @@ FileMapper::init(const char *i_fileName)
 {
     if (initialized) {
         if (strcmp(fileName, i_fileName)) {
-            fprintf(stderr, "FileMapper already initialized with %s, cannot init with %s\n", fileName, i_fileName);
+            WriteErrorMessage("FileMapper already initialized with %s, cannot init with %s\n", fileName, i_fileName);
             return false;
         }
         return true;
@@ -692,14 +707,14 @@ FileMapper::init(const char *i_fileName)
     fileName = i_fileName;
     hFile = CreateFile(fileName, GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN,NULL);
     if (INVALID_HANDLE_VALUE == hFile) {
-        fprintf(stderr,"Failed to open '%s', error %d\n",fileName, GetLastError());
+        WriteErrorMessage("Failed to open '%s', error %d\n",fileName, GetLastError());
         return false;
     }
 
 #if 0
     hFilePrefetch = CreateFile(fileName, GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_FLAG_OVERLAPPED,NULL);
     if (INVALID_HANDLE_VALUE == hFilePrefetch) {
-        fprintf(stderr,"Failed to open '%s' for prefetch, error %d\n",fileName, GetLastError());
+        WriteErrorMessage("Failed to open '%s' for prefetch, error %d\n",fileName, GetLastError());
         CloseHandle(hFile);
         return false;
     }
@@ -707,7 +722,7 @@ FileMapper::init(const char *i_fileName)
 
     BY_HANDLE_FILE_INFORMATION fileInfo;
     if (!GetFileInformationByHandle(hFile,&fileInfo)) {
-        fprintf(stderr,"Unable to get file information for '%s', error %d\n", fileName, GetLastError());
+        WriteErrorMessage("Unable to get file information for '%s', error %d\n", fileName, GetLastError());
         CloseHandle(hFile);
 #if 0
         CloseHandle(hFilePrefetch);
@@ -721,7 +736,7 @@ FileMapper::init(const char *i_fileName)
 
     hMapping = CreateFileMapping(hFile,NULL,PAGE_READONLY,0,0,NULL);
     if (NULL == hMapping) {
-        fprintf(stderr,"Unable to create mapping to file '%s', %d\n", fileName, GetLastError());
+        WriteErrorMessage("Unable to create mapping to file '%s', %d\n", fileName, GetLastError());
         CloseHandle(hFile);
 #if 0
         CloseHandle(hFilePrefetch);
@@ -756,7 +771,7 @@ FileMapper::createMapping(size_t offset, size_t amountToMap, void** o_mappedBase
 
     char* mappedBase = (char *)MapViewOfFile(hMapping,FILE_MAP_READ,liStartingOffset.HighPart,liStartingOffset.LowPart, mapRequestSize);
     if (NULL == mappedBase) {
-        fprintf(stderr,"Unable to map file, %d\n", GetLastError());
+        WriteErrorMessage("Unable to map file, %d\n", GetLastError());
         return NULL;
     } 
     char* mappedRegion = mappedBase + beginRounding;
@@ -778,7 +793,7 @@ FileMapper::unmap(void* mappedBase)
         int n = InterlockedDecrementAndReturnNewValue(&mapCount);
         _ASSERT(n >= 0);
         if (!UnmapViewOfFile(mappedBase)) {
-            fprintf(stderr,"Unmap of file failed, %d\n", GetLastError());
+            WriteErrorMessage("Unmap of file failed, %d\n", GetLastError());
         }
     }
 }
@@ -798,7 +813,7 @@ FileMapper::~FileMapper()
 #endif
     CloseHandle(hMapping);
     CloseHandle(hFile);
-    printf("FileMapper: %lld immediate completions, %lld delayed completions, %lld failures, %lld ms in readfile (%lld ms/call)\n",countOfImmediateCompletions, countOfDelayedCompletions, countOfFailures, millisSpentInReadFile, 
+    WriteErrorMessage("FileMapper: %lld immediate completions, %lld delayed completions, %lld failures, %lld ms in readfile (%lld ms/call)\n",countOfImmediateCompletions, countOfDelayedCompletions, countOfFailures, millisSpentInReadFile, 
         millisSpentInReadFile/max(1, countOfImmediateCompletions + countOfDelayedCompletions + countOfFailures));
 }
     
@@ -823,7 +838,7 @@ FileMapper::prefetch(size_t currentRead)
         } else {
 #if     DBG
             if (GetLastError() != ERROR_IO_PENDING) {
-                fprintf(stderr,"mapped file prefetcher: GetOverlappedResult failed, %d\n", GetLastError());
+                WriteErrorMessage("mapped file prefetcher: GetOverlappedResult failed, %d\n", GetLastError());
             }
 #endif  // DBG
             return;  // There's still IO on outstanding, we can't start more.
@@ -848,7 +863,7 @@ FileMapper::prefetch(size_t currentRead)
            InterlockedAdd64AndReturnNewValue(&countOfFailures,1);
 #if     DBG
             if (GetLastError() != ERROR_IO_PENDING) {
-                fprintf(stderr,"mapped file prefetcher: ReadFile failed, %d\n", GetLastError());
+                WriteErrorMessage("mapped file prefetcher: ReadFile failed, %d\n", GetLastError());
             }
 #endif  // DBG
             isPrefetchOutstanding = false; // Just ignore it
@@ -952,6 +967,27 @@ public:
         pthread_mutex_unlock(&lock);
     }
 
+    bool waitWithTimeout(_int64 timeoutInMillis) {
+        struct timespec wakeTime;
+        clock_gettime(CLOCK_REALTIME, &wakeTime);
+        wakeTime.tv_nsec += timeoutInMillis * 1000000;
+        wakeTime.tv_sec += wakeTime.tv_nsec / 1000000000;
+        wakeTime.tv_nsec = wakeTime.tv_nsec % 1000000000;
+
+        bool timedOut = false;
+
+        pthread_mutex_lock(&lock);
+        while (!set) {
+            int retVal = pthread_cond_timedwait(&cond, &lock, &wakeTime);
+            if (retVal == ETIMEDOUT) {
+                timedOut = true;
+                break;
+            }
+        }
+        pthread_mutex_unlock(&lock);
+        return !timedOut;
+    }
+
     bool destroy() {
         pthread_cond_destroy(&cond);
         pthread_mutex_destroy(&lock);
@@ -1007,7 +1043,7 @@ public:
     void blockAll()
     {
         pthread_mutex_lock(&lock);
-	set = false;
+	    set = false;
         pthread_mutex_unlock(&lock);
     }
 };
@@ -1044,6 +1080,11 @@ void PreventEventWaitersFromProceeding(EventObject *eventObject)
 void WaitForEvent(EventObject *eventObject)
 {
   (*eventObject)->wait();
+}
+
+bool WaitForEventWithTimeout(EventObject *eventObject, _int64 timeoutInMillis)
+{
+    return (*eventObject)->waitWithTimeout(timeoutInMillis);
 }
 
 int InterlockedIncrementAndReturnNewValue(volatile int *valueToDecrement)
@@ -1193,7 +1234,7 @@ CloseLargeFile(
     LargeFileHandle* file)
 {
     if (0 == fclose(file->file)) {
-        delete (void*) file;
+        delete file;
     }
 }
 
@@ -1247,7 +1288,7 @@ CloseMemoryMappedFile(
     int e = munmap(mappedFile->map, mappedFile->length);
     int e2 = close(mappedFile->fd);
     if (e != 0 || e2 != 0) {
-        fprintf(stderr, "CloseMemoryMapped file failed\n");
+        WriteErrorMessage("CloseMemoryMapped file failed\n");
     }
 }
 
@@ -1315,7 +1356,7 @@ PosixAsyncFile::open(
 {
     int fd = ::open(filename, write ? O_CREAT | O_RDWR | O_TRUNC : O_RDONLY, write ? S_IRWXU | S_IRGRP : 0);
     if (fd < 0) {
-        fprintf(stderr,"Unable to create SAM file '%s', %d\n",filename,errno);
+        WriteErrorMessage("Unable to create SAM file '%s', %d\n",filename,errno);
         return NULL;
     }
     return new PosixAsyncFile(fd);
@@ -1344,7 +1385,7 @@ PosixAsyncFile::Writer::Writer(PosixAsyncFile* i_file)
 {
     memset(&aiocb, 0, sizeof(aiocb));
     if (! CreateSingleWaiterObject(&ready)) {
-        fprintf(stderr, "PosixAsyncFile: cannot create waiter\n");
+        WriteErrorMessage("PosixAsyncFile: cannot create waiter\n");
         soft_exit(1);
     }
 }
@@ -1434,7 +1475,7 @@ PosixAsyncFile::Reader::Reader(
 {
     memset(&aiocb, 0, sizeof(aiocb));
     if (! CreateSingleWaiterObject(&ready)) {
-        fprintf(stderr, "PosixAsyncFile cannot create waiter\n");
+        WriteErrorMessage("PosixAsyncFile cannot create waiter\n");
         soft_exit(1);
     }
 }
@@ -1549,7 +1590,7 @@ OsxAsyncFile::open(
 {
     int fd = ::open(filename, write ? O_CREAT | O_RDWR | O_TRUNC : O_RDONLY, write ? S_IRWXU | S_IRGRP : 0);
     if (fd < 0) {
-        fprintf(stderr,"Unable to create SAM file '%s', %d\n",filename,errno);
+        WriteErrorMessage("Unable to create SAM file '%s', %d\n",filename,errno);
         return NULL;
     }
     return new OsxAsyncFile(fd);
@@ -1675,7 +1716,7 @@ FileMapper::init(const char *i_fileName)
 {
     if (initialized) {
         if (strcmp(fileName, i_fileName)) {
-            fprintf(stderr, "FileMapper already initialized with %s, cannot init with %s\n", fileName, i_fileName);
+            WriteErrorMessage("FileMapper already initialized with %s, cannot init with %s\n", fileName, i_fileName);
             return false;
         }
         return true;
@@ -1683,14 +1724,14 @@ FileMapper::init(const char *i_fileName)
     fileName = i_fileName;
     fd = open(fileName, O_RDONLY);
     if (fd == -1) {
-	    fprintf(stderr, "Failed to open %s\n", fileName);
+	    WriteErrorMessage("Failed to open %s\n", fileName);
 	    return false;
     }
 
     struct stat sb;
     int r = fstat(fd, &sb);
     if (r == -1) {
-	    fprintf(stderr, "Failed to stat %s\n", fileName);
+	    WriteErrorMessage("Failed to stat %s\n", fileName);
 	    return false;
     }
     fileSize = sb.st_size;
@@ -1713,7 +1754,7 @@ FileMapper::createMapping(size_t offset, size_t amountToMap, void** o_token)
 
     char* mappedBase = (char *) mmap(NULL, amountToMap + beginRounding, PROT_READ, MAP_SHARED, fd, offset - beginRounding);
     if (mappedBase == MAP_FAILED) {
-	    fprintf(stderr, "mmap failed.\n");
+	    WriteErrorMessage("mmap failed.\n");
 	    return NULL;
     }
 
@@ -1771,6 +1812,9 @@ FileMapper::prefetch(size_t currentRead)
 
 AsyncFile* AsyncFile::open(const char* filename, bool write)
 {
+    if (!strcmp("-", filename) && write) {
+        return StdoutAsyncFile::open("-", true);
+    }
 #ifdef _MSC_VER
     return WindowsAsyncFile::open(filename, write);
 #else

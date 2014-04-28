@@ -24,6 +24,7 @@ Revision History:
 #include "BigAlloc.h"
 #include "Compat.h"
 #include "exit.h"
+#include "Error.h"
 
 bool BigAllocUseHugePages = true;
 
@@ -220,7 +221,7 @@ Return Value:
             if (!VirtualProtect((char *)allocatedMemory + virtualAllocSize, systemInfo->dwPageSize, PAGE_NOACCESS, &oldProtect)) {
                 static bool printedVirtualProtectedWarning = false;
                 if (! printedVirtualProtectedWarning) {
-                    fprintf(stderr,"VirtualProtect for guard page failed, %d\n", GetLastError());
+                    WriteErrorMessage("VirtualProtect for guard page failed, %d\n", GetLastError());
                     printedVirtualProtectedWarning = true;
                 }
             }
@@ -238,12 +239,12 @@ Return Value:
             // if multiple threads fail at the same time.
             //
             warningPrinted = true;
-            fprintf(stderr,"BigAlloc: WARNING: Unable to allocate large page memory, %d.  Falling back to VirtualAlloc.  Performance may be adversely affected.  Size = %lld\n", GetLastError(), largePageSizeToAllocate);
+            WriteErrorMessage("BigAlloc: WARNING: Unable to allocate large page memory, %d.  Falling back to VirtualAlloc.  Performance may be adversely affected.  Size = %lld\n", GetLastError(), largePageSizeToAllocate);
             if (!assertPrivilegeWorked || GetLastError() == 1314) { // TODO: Look up the error code name for 1314.
-                fprintf(stderr,"BigAlloc: Unable to assert the SeLockMemoryPrivilege (%d), which is probably why it failed.\n",assertPrivilegeError);
-                fprintf(stderr,"Try secpol.msc, then SecuritySettings, Local Policies, User Rights Assignment.\n");
-                fprintf(stderr,"Then double click 'Lock Pages in Memory,' add the current user directly or by being\n");
-                fprintf(stderr,"In a group and then reboot (you MUST reboot) for it to work.\n");
+                WriteErrorMessage("BigAlloc: Unable to assert the SeLockMemoryPrivilege (%d), which is probably why it failed.\n"
+                                  "Try secpol.msc, then SecuritySettings, Local Policies, User Rights Assignment.\n"
+                                  "Then double click 'Lock Pages in Memory,' add the current user directly or by being\n"
+                                  "In a group and then reboot (you MUST reboot) for it to work.\n", GetLastError());
             }
         }
     }
@@ -255,7 +256,10 @@ Return Value:
     }
 
     if (NULL == allocatedMemory) {
-        fprintf(stderr,"BigAlloc of size %lld failed.\n", sizeToAllocate);
+        WriteErrorMessage("BigAlloc of size %lld failed.\n", sizeToAllocate);
+#ifdef PROFILE_BIGALLOC
+        PrintBigAllocProfile();
+#endif
         soft_exit(1);
     }
 
@@ -304,7 +308,7 @@ bool BigCommit(
 {
     void* allocatedMemory = VirtualAlloc(memoryToCommit, sizeToCommit, MEM_COMMIT, PAGE_READWRITE);
     if (allocatedMemory == NULL) {
-        printf("BigCommit VirtualAlloc failed with error 0x%x\n", GetLastError());
+        WriteErrorMessage("BigCommit VirtualAlloc failed with error 0x%x\n", GetLastError());
     }
     return allocatedMemory != NULL;
 }
@@ -345,7 +349,7 @@ void *BigAlloc(
     // Tell Linux to use huge pages for this range
     if (BigAllocUseHugePages) {
         if (madvise(mem, sizeToAllocate, MADV_HUGEPAGE) == -1) {
-            fprintf(stderr, "WARNING: failed to enable huge pages -- your kernel may not support it\n"); 
+            WriteErrorMessage("WARNING: failed to enable huge pages -- your kernel may not support it\n"); 
         }
     }
 #endif
@@ -432,7 +436,7 @@ BigAllocator::allocate(size_t amountToAllocate)
     }
 
     if (allocPointer + amountToAllocate > basePointer + maxMemory) {
-        fprintf(stderr, "BigAllocator: allocating too much memory, %lld > %lld\n", allocPointer + amountToAllocate  - basePointer , maxMemory);
+        WriteErrorMessage("BigAllocator: allocating too much memory, %lld > %lld\n", allocPointer + amountToAllocate  - basePointer , maxMemory);
         soft_exit(1);
     }
  
@@ -458,7 +462,7 @@ BigAllocator::checkCanaries()
     bool allOK = true;
     for (unsigned i = 0; i < nCanaries; i++) {
         if (*canaries[i] != canaryValue) {
-            fprintf(stderr,"Memory corruption detected: canary at 0x%llx has value 0x%llx\n",canaries[i], *canaries[i]);
+            WriteErrorMessage("Memory corruption detected: canary at 0x%llx has value 0x%llx\n",canaries[i], *canaries[i]);
             allOK = false;
         }
     }
@@ -492,9 +496,9 @@ CountingBigAllocator::~CountingBigAllocator()
 void PrintBigAllocProfile()
 {
 #ifdef PROFILE_BIGALLOC
-    printf("BigAlloc usage\n");
+    WriteStatusMessage("BigAlloc usage\n");
     for (int i = 0; i < NCallers; i++) {
-        printf("%7.1f Mb %7lld %s\n", 
+        WriteStatusMessage("%7.1f Mb %7lld %s\n", 
             AllocProfile[i].total * 1e-6, AllocProfile[i].count, AllocProfile[i].caller);
     }
 #endif
@@ -506,7 +510,7 @@ void* zalloc(void* opaque, unsigned items, unsigned size)
     void* result = ((ThreadHeap*) opaque)->alloc(bytes);
     static int printed = 0;
     if ((! result) && printed++ < 10) {
-        printf("warning: zalloc using malloc for %lld bytes\n", bytes);
+        WriteErrorMessage("warning: zalloc using malloc for %lld bytes\n", bytes);
     }
     return result ? result : malloc(bytes);
 }

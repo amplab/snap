@@ -83,24 +83,24 @@ strnchrs(char *str, char charToFind, char charToFind2, size_t maxLen) // Hokey v
 }
 
     char *
-SAMReader::skipToBeyondNextRunOfSpacesAndTabs(char *str, const char *endOfBuffer, size_t *charsUntilFirstSpaceOrTab)
+SAMReader::skipToBeyondNextFieldSeparator(char *str, const char *endOfBuffer, size_t *o_charsUntilFirstSeparator)
 {
     if (NULL == str) return NULL;
 
     char *nextChar = str;
-    while (nextChar < endOfBuffer && *nextChar != ' ' && *nextChar != '\n' && *nextChar != '\t' && *nextChar != '\r' /* for Windows CRLF text */) {
+    while (nextChar < endOfBuffer && *nextChar != '\n' && *nextChar != '\t' && *nextChar != '\r' /* for Windows CRLF text */) {
         nextChar++;
     }
 
-    if (NULL != charsUntilFirstSpaceOrTab) {
-        *charsUntilFirstSpaceOrTab = nextChar - str;
+    if (NULL != o_charsUntilFirstSeparator) {
+        *o_charsUntilFirstSeparator = nextChar - str;
     }
 
     if (nextChar >= endOfBuffer || *nextChar == '\n') {
         return NULL;
     }
 
-    while (nextChar < endOfBuffer && (' ' == *nextChar || '\t' == *nextChar || '\r' == *nextChar)) {
+    while (nextChar < endOfBuffer && ('\t' == *nextChar || '\r' == *nextChar)) {
         nextChar++;
     }
 
@@ -116,31 +116,25 @@ SAMReader::skipToBeyondNextRunOfSpacesAndTabs(char *str, const char *endOfBuffer
 SAMReader::create(
     DataSupplier* supplier,
     const char *fileName,
+    int bufferCount,
     const ReaderContext& context,
     _int64 startingOffset, 
     _int64 amountOfFileToProcess)
 {
-    DataReader* data = supplier->getDataReader(maxLineLen);
+    DataReader* data = supplier->getDataReader(bufferCount, maxLineLen, 0.0);
     SAMReader *reader = new SAMReader(data, context);
     reader->init(fileName, startingOffset, amountOfFileToProcess);
     return reader;
 }
 
     void
-SAMReader::readHeader(
-    const char* fileName,
-    ReaderContext& context)
+SAMReader::readHeader(const char *fileName)
 {
-    DataReader* data = DataSupplier::Default[false]->getDataReader(maxLineLen);
-    if (! data->init(fileName)) {
-        fprintf(stderr, "Unable to read file %s\n", fileName);
-        soft_exit(1);
-    }
     // todo: allow for larger headers
     _int64 headerSize = 1024 * 1024; // 1M header max
     char* buffer = data->readHeader(&headerSize);
     if (!parseHeader(fileName, buffer, buffer + headerSize, context.genome, &headerSize, &context.headerMatchesIndex)) {
-        fprintf(stderr,"SAMReader: failed to parse header on '%s'\n",fileName);
+        WriteErrorMessage("SAMReader: failed to parse header on '%s'\n",fileName);
         soft_exit(1);
     }
     _ASSERT(context.header == NULL);
@@ -149,7 +143,6 @@ SAMReader::readHeader(
     p[headerSize] = 0;
     context.header = p;
     context.headerBytes = context.headerLength = headerSize;
-    delete data;
 }
 
 SAMReader::SAMReader(
@@ -195,7 +188,7 @@ SAMReader::parseHeader(
             //
             numSQLines++;
             if (nextLineToProcess + 3 >= endOfBuffer || ' ' != nextLineToProcess[3] && '\t' != nextLineToProcess[3]) {
-                fprintf(stderr,"Malformed SAM file '%s' has @SQ without a following space or tab.\n",fileName);
+                WriteErrorMessage("Malformed SAM file '%s' has @SQ without a following space or tab.\n",fileName);
                 return false;
             }
 
@@ -205,7 +198,7 @@ SAMReader::parseHeader(
             }
 
             if (snStart >= endOfBuffer || *snStart == '\n' || *snStart == 0) {
-                fprintf(stderr,"Malformed @SQ line doesn't have 'SN:' in file '%s'\n",fileName);
+                WriteErrorMessage("Malformed @SQ line doesn't have 'SN:' in file '%s'\n",fileName);
                 return false;
             }
 
@@ -229,7 +222,7 @@ SAMReader::parseHeader(
             // Ignore these lines.
             //
         } else {
-            fprintf(stderr,"Unrecognized header line in SAM file.\n");
+            WriteErrorMessage("Unrecognized header line in SAM file.\n");
             return false;
         }
 		char * p = strnchr(nextLineToProcess,'\n',endOfBuffer-nextLineToProcess);
@@ -286,7 +279,7 @@ SAMReader::parseLine(char *line, char *endOfBuffer, char *result[], size_t *line
             break;
         }
 
-        next = skipToBeyondNextRunOfSpacesAndTabs(next,endOfLine,&fieldLengths[i]);
+        next = skipToBeyondNextFieldSeparator(next,endOfLine,&fieldLengths[i]);
     }
 
     *linelength =  endOfLine - line + 1;    // +1 skips over the \n
@@ -313,7 +306,7 @@ SAMReader::getReadFromLine(
     size_t fieldLength[nSAMFields];
 
     if (!parseLine(line, endOfBuffer, field, lineLength, fieldLength)) {
-        fprintf(stderr, "Failed to parse SAM line:\n%.*s\n", lineLength, line);
+        WriteErrorMessage( "Failed to parse SAM line:\n%.*s\n", lineLength, line);
         soft_exit(1);
     }
 
@@ -333,7 +326,7 @@ SAMReader::getReadFromLine(
     }
 
     if (fieldLength[SEQ] != fieldLength[QUAL]) {
-        fprintf(stderr,"SAMReader: QUAL string unequal in length to SEQ string.\n");
+        WriteErrorMessage("SAMReader: QUAL string unequal in length to SEQ string.\n");
         soft_exit(1);
     }
 
@@ -341,13 +334,13 @@ SAMReader::getReadFromLine(
     const size_t flagBufferSize = 20;   // More than enough
     char flagBuffer[flagBufferSize];
     if (fieldLength[FLAG] >= flagBufferSize) {
-        fprintf(stderr,"SAMReader: flag field is too long.\n");
+        WriteErrorMessage("SAMReader: flag field is too long.\n");
         soft_exit(1);
     }
     memcpy(flagBuffer,field[FLAG],fieldLength[FLAG]);
     flagBuffer[fieldLength[FLAG]] = '\0';
     if (1 != sscanf(flagBuffer,"%d",&_flag)) {
-        fprintf(stderr,"SAMReader: couldn't parse FLAG field.\n");
+        WriteErrorMessage("SAMReader: couldn't parse FLAG field.\n");
         soft_exit(1);
     }
 
@@ -359,8 +352,10 @@ SAMReader::getReadFromLine(
         unsigned originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping;
         Read::computeClippingFromCigar(field[CIGAR], &originalFrontClipping, &originalBackClipping, &originalFrontHardClipping, &originalBackHardClipping);
 
+        unsigned pnext = atoi(field[PNEXT]);    // Relies on atoi() returning 0 for non-numeric fields (i.e., *)
+
         read->init(field[QNAME],(unsigned)fieldLength[QNAME],field[SEQ],field[QUAL],(unsigned)fieldLength[SEQ], genomeLocation, atoi(field[MAPQ]), _flag, 
-            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping);
+            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping, field[RNEXT], (unsigned)fieldLength[RNEXT], pnext);
         //
         // If this read is RC in the SAM file, we need to reverse it here, since Reads are always the sense that they were as they came
         // out of the base caller.
@@ -377,7 +372,7 @@ SAMReader::getReadFromLine(
                 n--;
             }
             read->setAuxiliaryData(field[OPT], n);
-            for (char* p = field[OPT]; p != NULL && p < field[OPT] + fieldLength[OPT]; p = SAMReader::skipToBeyondNextRunOfSpacesAndTabs(p, field[OPT] + fieldLength[OPT])) {
+            for (char* p = field[OPT]; p != NULL && p < field[OPT] + fieldLength[OPT]; p = SAMReader::skipToBeyondNextFieldSeparator(p, field[OPT] + fieldLength[OPT])) {
                 if (strncmp(p, "RG:Z:", 5) == 0) {
                     read->setReadGroup(READ_GROUP_FROM_AUX);
                     break;
@@ -391,7 +386,7 @@ SAMReader::getReadFromLine(
             *alignmentResult = NotFound;
         } else {
             if ('*' == contigName[0]) {
-                fprintf(stderr,"SAMReader: mapped read didn't have RNAME filled in.\n");
+                WriteErrorMessage("SAMReader: mapped read didn't have RNAME filled in.\n");
                 soft_exit(1);
             }
             *alignmentResult = SingleHit;   // NB: This isn't quite right, we should look at MAPQ.
@@ -405,7 +400,7 @@ SAMReader::getReadFromLine(
     if (NULL != mapQ) {
         *mapQ = atoi(field[MAPQ]);
         if (*mapQ > 255) {
-            fprintf(stderr,"SAMReader: MAPQ field has bogus value\n");
+            WriteErrorMessage("SAMReader: MAPQ field has bogus value\n");
             soft_exit(1);
         }
     }
@@ -431,7 +426,7 @@ SAMReader::parseContigName(
 	unsigned rfield)
 {
     if (fieldLength[rfield] >= contigNameBufferSize) {  // >= because we need a byte for the \0
-        fprintf(stderr,"SAMReader: too long an RNAME.  Can't parse.\n");
+        WriteErrorMessage("SAMReader: too long an RNAME.  Can't parse.\n");
         soft_exit(1);
     }
     
@@ -440,7 +435,7 @@ SAMReader::parseContigName(
 
     *o_offsetOfContig = 0;
     if ('*' != contigName[0] && genome != NULL && !genome->getOffsetOfContig(contigName,o_offsetOfContig, o_indexOfContig)) {
-        //fprintf(stderr,"Unable to find contig '%s' in genome.  SAM file malformed.\n",contigName);
+        //WriteErrorMessage("Unable to find contig '%s' in genome.  SAM file malformed.\n",contigName);
         //soft_exit(1);
     }
 }
@@ -464,17 +459,17 @@ SAMReader::parseLocation(
         const unsigned posBufferSize = 20;
         char posBuffer[posBufferSize];
         if (fieldLength[posfield] >= posBufferSize) {
-            fprintf(stderr,"SAMReader: POS field too long.\n");
+            WriteErrorMessage("SAMReader: POS field too long.\n");
             soft_exit(1);
         }
         memcpy(posBuffer,field[posfield],fieldLength[posfield]);
         posBuffer[fieldLength[posfield]] = '\0';
         if (0 == sscanf(posBuffer,"%d",&oneBasedOffsetWithinContig)) {
-            fprintf(stderr,"SAMReader: Unable to parse position when it was expected.\n");
+            WriteErrorMessage("SAMReader: Unable to parse position when it was expected.\n");
             soft_exit(1);
         }
         if (0 == oneBasedOffsetWithinContig) {
-            fprintf(stderr,"SAMReader: Position parsed as 0 when it was expected.\n");
+            WriteErrorMessage("SAMReader: Position parsed as 0 when it was expected.\n");
             soft_exit(1);
         }
         return offsetOfContig + oneBasedOffsetWithinContig - 1; // -1 is because our offset is 0 based, while SAM is 1 based.
@@ -490,9 +485,14 @@ SAMReader::init(
     _int64 amountOfFileToProcess)
 {
     if (! data->init(fileName)) {
-        fprintf(stderr, "Unable to read file %s\n", fileName);
+        WriteErrorMessage( "Unable to read file %s\n", fileName);
         soft_exit(1);
     }
+
+    if (0 == startingOffset) {
+        readHeader(fileName);
+    }
+
     headerSize = context.headerBytes;
     reinit(max(startingOffset, (_int64) context.headerBytes),
         amountOfFileToProcess == 0 || startingOffset >= (_int64) context.headerBytes ? amountOfFileToProcess
@@ -557,7 +557,7 @@ SAMReader::getNextRead(
             // There is no newline, so the line crosses the end of the buffer.
             // This should never happen since underlying reader manages overflow between chunks.
             //
-            fprintf(stderr,"SAM file has too long a line, or doesn't end with a newline!  Failing.  fileOffset = %lld\n", data->getFileOffset());
+            WriteErrorMessage("SAM file has too long a line, or doesn't end with a newline!  Failing.  fileOffset = %lld\n", data->getFileOffset());
             soft_exit(1);
         }
 
@@ -566,7 +566,8 @@ SAMReader::getNextRead(
         getReadFromLine(context.genome, buffer,buffer + bytes, read, alignmentResult, genomeLocation, direction, mapQ, &lineLength, flag, cigar, clipping);
         read->setBatch(data->getBatch());
         data->advance((newLine + 1) - buffer);
-    } while (context.ignoreSecondaryAlignments && ((*flag) & SAM_SECONDARY));
+    } while ((context.ignoreSecondaryAlignments && ((*flag) & SAM_SECONDARY)) ||
+             (context.ignoreSupplementaryAlignments && ((*flag) & SAM_SUPPLEMENTARY)));
 
     return true;
 }
@@ -580,25 +581,50 @@ SAMReader::createReadSupplierGenerator(
     //
     // single-ended SAM files always can be read with the range splitter.
     //
-    RangeSplitter *splitter = new RangeSplitter(QueryFileSize(fileName), numThreads, 100);
-    return new RangeSplittingReadSupplierGenerator(fileName, true, numThreads, context);
+    if (!strcmp(fileName, "-")) {
+        //
+        // Stdin must run from a queue, not range splitter.
+        //
+        ReadReader* reader;
+        //
+        // Because we can only have one stdin reader, we need to use a queue if we're reading from stdin
+        //
+        reader = SAMReader::create(DataSupplier::Stdio, "-", ReadSupplierQueue::BufferCount(numThreads), context, 0, 0);
+   
+        if (reader == NULL) {
+            return NULL;
+        }
+        ReadSupplierQueue *queue = new ReadSupplierQueue(reader);
+        queue->startReaders();
+        return queue;
+    } else {
+        RangeSplitter *splitter = new RangeSplitter(QueryFileSize(fileName), numThreads, 100);
+        return new RangeSplittingReadSupplierGenerator(fileName, true, numThreads, context);
+    }
 }
     
     PairedReadReader*
 SAMReader::createPairedReader(
     const DataSupplier* supplier,
     const char *fileName,
+    int bufferCount,
     _int64 startingOffset,
     _int64 amountOfFileToProcess, 
-    bool autoRelease,
+    bool quicklyDropUnpairedReads,
     const ReaderContext& context)
 {
+    DataSupplier *data;
+    if (!strcmp("-", fileName)) {
+        data = DataSupplier::Stdio;
+    } else {
+        data = DataSupplier::Default;
+    }
 
-    SAMReader* reader = SAMReader::create(DataSupplier::Default[false], fileName, context, 0, 0);
+    SAMReader* reader = SAMReader::create(data, fileName, bufferCount + PairedReadReader::MatchBuffers, context, 0, 0);
     if (reader == NULL) {
         return NULL;
     }
-    return PairedReadReader::PairMatcher(reader, autoRelease);
+    return PairedReadReader::PairMatcher(reader, quicklyDropUnpairedReads);
 }
 
 
@@ -606,15 +632,17 @@ SAMReader::createPairedReader(
 SAMReader::createPairedReadSupplierGenerator(
     const char *fileName,
     int numThreads,
+    bool quicklyDropUnpairedReads, 
     const ReaderContext& context)
 {
     //
     // need to use a queue so that pairs can be matched
     //
 
-    PairedReadReader* paired = SAMReader::createPairedReader(DataSupplier::Default[false], fileName, 0, 0, false, context);
+    PairedReadReader* paired = SAMReader::createPairedReader(DataSupplier::Default, fileName,
+        ReadSupplierQueue::BufferCount(numThreads), 0, 0, quicklyDropUnpairedReads, context);
     if (paired == NULL) {
-        fprintf(stderr, "Cannot create reader on %s\n", fileName);
+        WriteErrorMessage( "Cannot create reader on %s\n", fileName);
         soft_exit(1);
     }
     ReadSupplierQueue* queue = new ReadSupplierQueue(paired);
@@ -625,13 +653,6 @@ SAMReader::createPairedReadSupplierGenerator(
 
 const FileFormat* FileFormat::SAM[] = { new SAMFormat(false), new SAMFormat(true) };
 
-    bool
-SAMFormat::isFormatOf(
-    const char* filename) const
-{
-    return util::stringEndsWith(filename, ".sam");
-}
-    
     void
 SAMFormat::getSortInfo(
     const Genome* genome,
@@ -690,15 +711,15 @@ SAMFormat::getWriterSupplier(
 {
     DataWriterSupplier* dataSupplier;
     if (options->sortOutput) {
-        size_t len = strlen(options->outputFileTemplate);
+        size_t len = strlen(options->outputFile.fileName);
         // todo: this is going to leak, but there's no easy way to free it, and it's small...
         char* tempFileName = (char*) malloc(5 + len);
-        strcpy(tempFileName, options->outputFileTemplate);
+        strcpy(tempFileName, options->outputFile.fileName);
         strcpy(tempFileName + len, ".tmp");
         dataSupplier = DataWriterSupplier::sorted(this, genome, tempFileName, options->sortMemory * (1ULL << 30),
-            options->numThreads, options->outputFileTemplate, NULL);
+            options->numThreads, options->outputFile.fileName, NULL);
     } else {
-        dataSupplier = DataWriterSupplier::create(options->outputFileTemplate);
+        dataSupplier = DataWriterSupplier::create(options->outputFile.fileName);
     }
     return ReadWriterSupplier::create(this, dataSupplier, genome, transcriptome, gtf);
 }
@@ -739,7 +760,7 @@ SAMFormat::writeHeader(
 	delete [] commandLine;
 	commandLine = NULL;
     if (bytesConsumed >= headerBufferSize) {
-        fprintf(stderr,"SAMWriter: header buffer too small\n");
+        WriteErrorMessage("SAMWriter: header buffer too small\n");
         return false;
     }
 
@@ -757,7 +778,7 @@ SAMFormat::writeHeader(
                     (context.headerMatchesIndex || strncmp(p, "@SQ", 3) != 0) &&
                     strncmp(p, "@PG\tID:SNAP\t", 12) != 0) {
                 if (bytesConsumed + (newline - p) + 1 >= headerBufferSize) {
-                    fprintf(stderr,"SAMWriter: header buffer too small\n");
+                    WriteErrorMessage("SAMWriter: header buffer too small\n");
                     return false;
                 }
                 memcpy(header + bytesConsumed, p, (newline - p));
@@ -770,7 +791,7 @@ SAMFormat::writeHeader(
 			int n = snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "%s\n",
 				rgLine == NULL ? "@RG\tID:FASTQ\tSM:sample" : rgLine);
 			if (n > headerBufferSize - bytesConsumed) {
-				fprintf(stderr, "SAMWriter: header buffer too small\n");
+				WriteErrorMessage( "SAMWriter: header buffer too small\n");
                 return false;
             }
 			bytesConsumed += n;
@@ -782,14 +803,17 @@ SAMFormat::writeHeader(
         const Genome::Contig *contigs = context.genome->getContigs();
         int numContigs = context.genome->getNumContigs();
         unsigned genomeLen = context.genome->getCountOfBases();
+        size_t originalBytesConsumed = bytesConsumed;
         for (int i = 0; i < numContigs; i++) {
             unsigned start = contigs[i].beginningOffset;
             unsigned end = ((i + 1 < numContigs) ? contigs[i+1].beginningOffset : genomeLen) - context.genome->getChromosomePadding();
             bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%u\n", contigs[i].name, end - start);
 
             if (bytesConsumed >= headerBufferSize) {
-                fprintf(stderr,"SAMWriter: header buffer too small\n");
-                return false;
+                // todo: increase buffer size (or change to write in batch
+                bytesConsumed = originalBytesConsumed;
+                WriteErrorMessage("SAMWriter: header buffer too small, skipping @SQ lines\n");
+                break;
             }
         }
     }
@@ -829,6 +853,7 @@ SAMFormat::createSAMLine(
     AlignmentResult result, 
     unsigned genomeLocation,
     Direction direction,
+    bool secondaryAlignment,
     bool isTranscriptome,
     bool useM,
     bool hasMate,
@@ -845,6 +870,10 @@ SAMFormat::createSAMLine(
     positionInContig = 0;
     const char *cigar = "*";
     templateLength = 0;
+
+    if (secondaryAlignment) {
+        flags |= SAM_SECONDARY;
+    }
     
     if (0 == qnameLen) {
          qnameLen = read->getIdLength();
@@ -874,6 +903,7 @@ SAMFormat::createSAMLine(
     if (fullLength > dataSize) {
         return false;
     }
+
     if (direction == RC) {
       for (unsigned i = 0; i < fullLength; i++) {
         data[fullLength - 1 - i] = COMPLEMENT[read->getUnclippedData()[i]];
@@ -998,6 +1028,7 @@ SAMFormat::writeRead(
     int mapQuality,
     unsigned genomeLocation,
     Direction direction,
+    bool secondaryAlignment,
     bool isTranscriptome,
     unsigned tlocation,
     bool hasMate,
@@ -1007,7 +1038,8 @@ SAMFormat::writeRead(
     unsigned mateLocation,
     Direction mateDirection,
     bool mateIsTranscriptome,
-    unsigned mateTlocation) const
+    unsigned mateTlocation
+    ) const
 {
     const int MAX_READ = MAX_READ_LENGTH;
     const int cigarBufSize = MAX_READ * 2;
@@ -1041,7 +1073,7 @@ SAMFormat::writeRead(
     if (! createSAMLine(genome, transcriptome, gtf, lv, data, quality, MAX_READ, contigName, contigIndex, 
         flags, positionInContig, mapQuality, matecontigName, mateContigIndex, matePositionInContig, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
-        qnameLen, read, result, genomeLocation, direction, isTranscriptome, useM,
+        qnameLen, read, result, genomeLocation, direction, secondaryAlignment, isTranscriptome, useM,
         hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection, mateIsTranscriptome, 
         &extraBasesClippedBefore, &extraBasesClippedAfter))
     {
@@ -1108,7 +1140,7 @@ SAMFormat::writeRead(
     const char* readGroupString = "";
     if (aux != NULL && (! auxSAM)) {
         if (! warningPrinted) {
-            fprintf(stderr, "warning: translating optional fields from BAM->SAM not yet implemented, optional fields will not be included in output\n");
+            WriteErrorMessage( "warning: translating optional fields from BAM->SAM not yet implemented, optional fields will not be included in output\n");
             warningPrinted = true;
         }
         if (read->getReadGroup() == READ_GROUP_FROM_AUX) {
@@ -1197,7 +1229,7 @@ SAMFormat::computeCigarString(
     if (NULL != reference) {
         *editDistance = lv->computeEditDistance(
                             reference,
-                            dataLength - extraBasesClippedAfter,
+                            dataLength - extraBasesClippedAfter + MAX_K, // Add space incase of indels.  We know there's enough, because the reference is padded.
                             data,
                             dataLength - extraBasesClippedAfter,
                             MAX_K - 1,
@@ -1213,12 +1245,12 @@ SAMFormat::computeCigarString(
     }
 
     if (*editDistance == -2) {
-        fprintf(stderr, "WARNING: computeEditDistance returned -2; cigarBuf may be too small\n");
+        WriteErrorMessage( "WARNING: computeEditDistance returned -2; cigarBuf may be too small\n");
         return "*";
     } else if (*editDistance == -1) {
         static bool warningPrinted = false;
         if (!warningPrinted) {
-            fprintf(stderr, "WARNING: computeEditDistance returned -1; this shouldn't happen\n");
+            WriteErrorMessage( "WARNING: computeEditDistance returned -1; this shouldn't happen\n");
             warningPrinted = true;
         }
         return "*";

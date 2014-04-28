@@ -25,6 +25,7 @@ Revision History:
 #include "stdafx.h"
 #include "WGsim.h"
 #include "exit.h"
+#include "Error.h"
 
 using namespace std;
 
@@ -54,7 +55,7 @@ bool wgsimReadMisaligned(Read *read, unsigned genomeLocation, const Genome *geno
     unsigned offset1, offset2;
     char id[1024];
     if (read->getIdLength() > sizeof(id) - 1) {
-      fprintf(stderr, "Got a read ID that was too long! It starts with %s\n", id);
+      WriteErrorMessage( "Got a read ID that was too long! It starts with %s\n", id);
       soft_exit(1);
     }
     unsigned toCopy = min(read->getIdLength(), (unsigned) sizeof(id) - 1);
@@ -62,7 +63,7 @@ bool wgsimReadMisaligned(Read *read, unsigned genomeLocation, const Genome *geno
     id[toCopy] = '\0';
     const char *firstColon = strchr(id, ':');
     if (firstColon == NULL) {
-        fprintf(stderr, "Failed to parse read id '%s', couldn't find a colon.\n",id);
+        WriteErrorMessage( "Failed to parse read id '%s', couldn't find a colon.\n",id);
         return false;
     }
 
@@ -74,7 +75,7 @@ bool wgsimReadMisaligned(Read *read, unsigned genomeLocation, const Genome *geno
     }
 
     if (underscoreBeforeColon < id) {
-        fprintf(stderr,"Failed to parse read id '%s', couldn't find underscore before colon.\n",id);
+        WriteErrorMessage("Failed to parse read id '%s', couldn't find underscore before colon.\n",id);
         return false;
     }
 
@@ -86,7 +87,7 @@ bool wgsimReadMisaligned(Read *read, unsigned genomeLocation, const Genome *geno
     }
 
     if (secondUnderscoreBeforeColon < id) {
-        fprintf(stderr, "Failed to parse read id '%s', couldn't find second underscore before colon.\n",id);
+        WriteErrorMessage( "Failed to parse read id '%s', couldn't find second underscore before colon.\n",id);
         return false;
     }
 
@@ -98,12 +99,12 @@ bool wgsimReadMisaligned(Read *read, unsigned genomeLocation, const Genome *geno
     }
 
     if (thirdUnderscoreBeforeColon < id) {
-        fprintf(stderr,"Failed to parse read id '%s', couldn't find third underscore before colon.\n",id);
+        WriteErrorMessage("Failed to parse read id '%s', couldn't find third underscore before colon.\n",id);
         return false;
     }
 
     if (1 != sscanf(thirdUnderscoreBeforeColon+1, "%d", &offset1)) {
-        fprintf(stderr,"Failed to parse read id '%s', couldn't parse offset1.\n",id);
+        WriteErrorMessage("Failed to parse read id '%s', couldn't parse offset1.\n",id);
         return false;
     }
 
@@ -112,7 +113,7 @@ bool wgsimReadMisaligned(Read *read, unsigned genomeLocation, const Genome *geno
         offset2 = offset1;
     } else {
         if (1 != sscanf(secondUnderscoreBeforeColon+1, "%d", &offset2)) {
-            fprintf(stderr,"Failed to parse read id '%s', couldn't parse offset2.\n",id);
+            WriteErrorMessage("Failed to parse read id '%s', couldn't parse offset2.\n",id);
             return false;
         }
     }
@@ -129,7 +130,7 @@ bool wgsimReadMisaligned(Read *read, unsigned genomeLocation, const Genome *geno
     size_t contigNameLen = thirdUnderscoreBeforeColon - id;
 
     if (contigNameLen >= contigNameMaxSize) {
-        fprintf(stderr, "Contig name too big or misparsed, '%s'\n",id);
+        WriteErrorMessage( "Contig name too big or misparsed, '%s'\n",id);
         return false;
     }
 
@@ -138,7 +139,7 @@ bool wgsimReadMisaligned(Read *read, unsigned genomeLocation, const Genome *geno
 
     unsigned offsetOfContig;
     if (!genome->getOffsetOfContig(contigName,&offsetOfContig)) {
-        fprintf(stderr, "Couldn't find contig name '%s' in the genome.\n",contigName);
+        WriteErrorMessage( "Couldn't find contig name '%s' in the genome.\n",contigName);
         return false;
     }
 

@@ -74,7 +74,7 @@ public:
     // overrideable by concrete single/paired alignment subclasses
     
     // parse options from the command line
-    virtual AlignerOptions* parseOptions(int argc, const char **argv, const char *version, unsigned *argsConsumed) = 0;
+    AlignerOptions* parseOptions(int argc, const char **argv, const char *version, unsigned *argsConsumed, bool paired);
     
     // initialize from options
     virtual void initialize();
@@ -90,6 +90,8 @@ public:
 
     virtual void typeSpecificBeginIteration() = 0;
     virtual void typeSpecificNextIteration() = 0;
+
+    virtual bool isPaired() = 0;
 
     friend class AlignerContext2;
  
@@ -118,6 +120,9 @@ public:
     const char                         **argv;
     const char                          *version;
     FILE                                *perfFile;
+    bool                                 noUkkonen;
+    bool                                 noOrderedEvaluation;
+    int                                  maxSecondaryAligmmentAdditionalEditDistance;
 
 
     // iteration variables

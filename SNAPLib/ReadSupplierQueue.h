@@ -32,6 +32,8 @@ using std::pair;
 class ReadSupplierFromQueue;
 class PairedReadSupplierFromQueue;
 
+typedef VariableSizeVector<DataBatch> BatchVector;
+
 struct ReadQueueElement {
     ReadQueueElement()
         : next(NULL), prev(NULL)
@@ -46,12 +48,16 @@ struct ReadQueueElement {
     }
 
     // note this should be about read buffer size for input reads
-    static const int    MaxReadsPerElement = 40000; 
+#ifdef LONG_READS
+    static const int    MaxReadsPerElement = 400; 
+#else
+    static const int    MaxReadsPerElement = 1000; 
+#endif
     ReadQueueElement    *next;
     ReadQueueElement    *prev;
     int                 totalReads;
     Read*               reads;
-    VariableSizeVector<DataBatch> batches;
+    BatchVector         batches;
 
     void addToTail(ReadQueueElement *queueHead) {
         next = queueHead;
@@ -104,15 +110,22 @@ public:
     void waitUntilFinished();
     ReadSupplier *generateNewReadSupplier();
     PairedReadSupplier *generateNewPairedReadSupplier();
+    ReaderContext* getContext();
 
     ReadQueueElement *getElement();     // Called from the supplier threads
     bool getElements(ReadQueueElement **element1, ReadQueueElement **element2);   // Called from supplier threads
     void doneWithElement(ReadQueueElement *element);
     void supplierFinished();
 
-    void releaseBatch(DataBatch batch);
+    void holdBatch(DataBatch batch);
+    bool releaseBatch(DataBatch batch);
+
+    static int BufferCount(int numThreads)
+    { return (numThreads + 1) * BatchesPerElement; }
 
 private:
+
+    static const int BatchesPerElement = 4;
 
     void commonInit();
 
@@ -132,6 +145,8 @@ private:
     int                 nReadersRunning;
     int                 nSuppliersRunning;
     volatile bool       allReadsQueued;
+
+    ReadQueueElement* getEmptyElement(); // must hold the lock to call this
 
     bool areAnyReadsReady(); // must hold the lock to call this.
 
@@ -169,7 +184,11 @@ public:
 
     Read *getNextRead();
     
-    void releaseBatch(DataBatch batch);
+    virtual void holdBatch(DataBatch batch)
+    { queue->holdBatch(batch); }
+
+    virtual bool releaseBatch(DataBatch batch)
+    { return queue->releaseBatch(batch); }
 
 private:
     bool                done;
@@ -186,7 +205,11 @@ public:
 
     bool getNextReadPair(Read **read0, Read **read1);
 
-    void releaseBatch(DataBatch batch);
+    virtual void holdBatch(DataBatch batch)
+    { queue->holdBatch(batch); }
+
+    virtual bool releaseBatch(DataBatch batch)
+    { return queue->releaseBatch(batch); }
 
 private:
     ReadSupplierQueue   *queue;

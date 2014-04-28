@@ -48,6 +48,7 @@ const int SAM_LAST_SEGMENT       = 0x080; // This is the last segment in the rea
 const int SAM_SECONDARY          = 0x100; // Secondary alignment for a read with multiple hits.
 const int SAM_FAILED_QC          = 0x200; // Not passing quality controls.
 const int SAM_DUPLICATE          = 0x400; // PCR or optical duplicate.
+const int SAM_SUPPLEMENTARY      = 0x800; // Supplementary alignment
 
 class SAMReader : public ReadReader {
 public:
@@ -64,30 +65,31 @@ public:
         {
             return getNextRead(read, alignmentResult, genomeLocation, direction, mapQ, flag, false, cigar);
         }
+        
+        virtual void holdBatch(DataBatch batch)
+        { data->holdBatch(batch); }
 
-        void releaseBatch(DataBatch batch)
-        { data->releaseBatch(batch); }
-
-        static void readHeader(const char* fileName, ReaderContext& i_context);
-
+        virtual bool releaseBatch(DataBatch batch)
+        { return data->releaseBatch(batch); }
+        
         static SAMReader* create(DataSupplier* supplier, const char *fileName,
-                const ReaderContext& i_context,
+                int bufferCount, const ReaderContext& i_context,
                 _int64 startingOffset, _int64 amountOfFileToProcess);
         
         static PairedReadReader* createPairedReader(const DataSupplier* supplier,
-                const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess, 
-                bool autoRelease, const ReaderContext& context);
+                const char *fileName, int bufferCount, _int64 startingOffset, _int64 amountOfFileToProcess, 
+                bool quicklyDropUnpairedReads, const ReaderContext& context);
 
         static ReadSupplierGenerator *createReadSupplierGenerator(
             const char *fileName, int numThreads, const ReaderContext& context);
 
         static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(
-            const char *fileName, int numThreads, const ReaderContext& context);
+            const char *fileName, int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context);
         
         // result and fieldLengths must be of size nSAMFields
         static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, _int64 *o_headerSize, bool* o_headerMatchesIndex);
         
-        static char* skipToBeyondNextRunOfSpacesAndTabs(char *str, const char *endOfBuffer, size_t *charsUntilFirstSpaceOrTab = NULL);
+        static char* skipToBeyondNextFieldSeparator(char *str, const char *endOfBuffer, size_t *o_charsUntilFirstSeparator = NULL);
 
 
 protected:
@@ -129,6 +131,8 @@ protected:
 
 
 private:
+        void readHeader(const char* fileName);
+
         void init(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess);
 
         DataReader*         data;
@@ -145,8 +149,6 @@ class SAMFormat : public FileFormat
 public:
     SAMFormat(bool i_useM) : useM(i_useM) {}
 
-    virtual bool isFormatOf(const char* filename) const;
-    
     virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* o_location, unsigned* o_readBytes, int* o_refID, int* o_pos) const;
 
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome, const Genome* transcriptome, const GTFReader* gtf) const;
@@ -158,7 +160,7 @@ public:
     virtual bool writeRead(
         const Genome * genome, const Genome * transcriptome, const GTFReader * gtf, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
-        int mapQuality, unsigned genomeLocation, Direction direction, bool isTranscriptome, unsigned tlocation,
+        int mapQuality, unsigned genomeLocation, Direction direction, bool secondaryAlignment, bool isTranscriptome, unsigned tlocation,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
         AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD, bool mateIsTranscriptome = false, unsigned mateTlocation = 0) const; 
 
@@ -196,6 +198,7 @@ public:
         AlignmentResult result, 
         unsigned genomeLocation,
         Direction direction,
+        bool secondaryAlignment,
         bool isTranscriptome,
         bool useM,
         bool hasMate,

@@ -47,9 +47,22 @@ public:
         unsigned      maxBigHits_,
         unsigned      extraSearchDepth_,
         unsigned      maxCandidatePoolSize,
-        BigAllocator  *allocator);
+        BigAllocator  *allocator,
+        bool          noUkkonen_,
+        bool          noOrderedEvaluation_);
 
-    void setLandauVishkin(
+     static unsigned getMaxSecondaryResults(unsigned numSeedsFromCommandLine, double seedCoverage, unsigned maxReadSize, unsigned maxHits, unsigned seedLength)
+     {
+        unsigned maxSeedsToUse;
+        if (0 != numSeedsFromCommandLine) {
+            maxSeedsToUse = numSeedsFromCommandLine;
+        } else {
+            maxSeedsToUse = (unsigned)(maxReadSize * seedCoverage / seedLength);
+        }
+        return 2 * maxHits * maxSeedsToUse;
+     }
+
+     void setLandauVishkin(
         LandauVishkin<1> *landauVishkin_,
         LandauVishkin<-1> *reverseLandauVishkin_) 
     {
@@ -62,7 +75,16 @@ public:
     virtual void align(
         Read                  *read0,
         Read                  *read1,
-        PairedAlignmentResult *result);
+        PairedAlignmentResult *result,
+        int                    maxEditDistanceForSecondaryResults,
+        int                    secondaryResultBufferSize,
+        int                   *nSecondaryResults,
+        PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
+        int                    singleSecondaryBufferSize,
+        int                   *nSingleEndSecondaryResultsForFirstRead,
+        int                   *nSingleEndSecondaryResultsForSecondRead,
+        SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
+        );
 
     static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxBigHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsFromCommandLine, 
                                              double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize);
@@ -103,7 +125,8 @@ private:
     unsigned        seedLen;
     unsigned        maxMergeDistance;
     _int64          nLocationsScored;
-
+    bool            noUkkonen;
+    bool            noOrderedEvaluation;
 
     struct HashTableLookup {
         unsigned        seedOffset;

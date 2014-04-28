@@ -42,9 +42,6 @@ public:
     // files
     //
 
-    // return true if the filename is for this format based on extension etc.
-    virtual bool isFormatOf(const char* filename) const = 0;
-    
     // reading
     //
 
@@ -86,7 +83,7 @@ public:
         const Genome * genome, const Genome * transcriptome, const GTFReader * gtf, 
         LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
-        int mapQuality, unsigned genomeLocation, Direction direction, bool isTranscriptome = false, unsigned tlocation = 0,
+        int mapQuality, unsigned genomeLocation, Direction direction, bool secondaryAlignment, bool isTranscriptome = false, unsigned tlocation = 0,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
         AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD,
         bool mateIsTranscriptome = false, unsigned mateTlocation= 0) const = 0; 

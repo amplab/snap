@@ -16,6 +16,7 @@ Environment:
 
 #include "stdafx.h"
 #include "ParallelTask.h"
+#include "Error.h"
 
 using std::max;
 
@@ -87,7 +88,7 @@ void ParallelCoworker::stop()
         AllowEventWaitersToProceed(&workReady[i]);
     }
     if (!WaitForSingleWaiterObject(&finished)) {
-        fprintf(stderr, "Waiting for all threads to finish failed\n");
+        WriteErrorMessage("Waiting for all threads to finish failed\n");
         soft_exit(1);
     }
 }
@@ -102,16 +103,16 @@ WorkerContext::initializeThread()
 WorkerContext::runThread()
 {
     while (true) {
-        //printf("worker task thread %d waiting to begin\n", GetCurrentThreadId());
+        //fprintf(stderr, "worker task thread %d waiting to begin\n", GetCurrentThreadId());
         WaitForEvent(&shared->workReady[threadNum]);
         PreventEventWaitersFromProceeding(&shared->workReady[threadNum]);
         if (shared->stopped) {
             return;
         }
-        //printf("worker task thread %d begin\n", GetCurrentThreadId());
+        //fprintf(stderr, "worker task thread %d begin\n", GetCurrentThreadId());
         _int64 start = timeInMillis();
         shared->workers[threadNum]->step();
-        //printf("zip task thread %d done %lld ms\n", GetCurrentThreadId(), timeInMillis() - start);
+        //fprintf(stderr, "zip task thread %d done %lld ms\n", GetCurrentThreadId(), timeInMillis() - start);
         AllowEventWaitersToProceed(&shared->workDone[threadNum]);
         
         // if async, thread 0 will wait for everyone to finish and invoke callback

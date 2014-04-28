@@ -44,6 +44,18 @@ inline const char *AlignmentResultToString(AlignmentResult result) {
     }
 }
 
+struct SingleAlignmentResult {
+    AlignmentResult status;  
+
+    unsigned location;          // Aligned genome location.
+    Direction direction;        // Did we match the reverse complement? 
+    int score;                  // score of each end if matched
+
+    int mapq;                   // mapping quality, encoded like a Phred score (but as an integer, not ASCII Phred + 33).
+    bool isTranscriptome;       //is this alignment a transcriptome alignment or genome alignment
+    unsigned tlocation;         //pos of the transcriptome alignment
+};
+
 // Does an AlignmentResult represent a single location?
 inline bool isOneLocation(AlignmentResult result) {
     return result == SingleHit;
@@ -56,13 +68,15 @@ class Aligner {
    
     virtual ~Aligner() {}
 
-        virtual AlignmentResult
+        virtual void
     AlignRead(
-        Read        *read,
-        unsigned    *genomeLocation,
-        Direction   *hitDirection,
-        int         *finalScore = NULL,
-        int         *mapq = NULL) = 0;
+        Read                    *read,
+        SingleAlignmentResult   *primaryResult,
+        int                      maxEditDistanceForSecondaryResults,
+        int                      secondaryResultBufferSize,
+        int                     *nSecondaryResults,
+        SingleAlignmentResult   *secondaryResults             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
+    ) = 0;      // Retun value is true if there was enough room in the secondary alignment buffer for everything that was found.
 
     virtual _int64 getNHashTableLookups() const = 0;
     virtual _int64 getLocationsScored() const  = 0;

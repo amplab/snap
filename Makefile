@@ -6,6 +6,15 @@ CXXFLAGS += -MMD -ISNAPLib -msse
 
 LDFLAGS += -pthread
 
+#LIBHDFS_HOME = ../hadoop-2.2.0-src/hadoop-hdfs-project/hadoop-hdfs/src/main/native/libhdfs
+#JAVA_HOME = /usr/lib/jvm/java-7-oracle
+
+ifdef LIBHDFS_HOME
+  CXXFLAGS += -DSNAP_HDFS -I$(LIBHDFS_HOME)
+  LDFLAGS += -L$(LIBHDFS_HOME) -L$(JAVA_HOME)/jre/lib/amd64/server -L$(JAVA_HOME)/jre/lib/amd64
+  LIBS +=  -lhdfs -ljvm
+endif
+
 UNAME := $(shell uname)
 
 ifeq ($(UNAME), Linux)

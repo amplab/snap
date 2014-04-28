@@ -103,9 +103,9 @@ bool RangeSplitter::getNextRange(_int64 *rangeStart, _int64 *rangeLength)
 RangeSplittingReadSupplierGenerator::RangeSplittingReadSupplierGenerator(
     const char *i_fileName,
     bool i_isSAM, 
-    unsigned numThreads,
+    unsigned i_numThreads,
     const ReaderContext& i_context)
-    : isSAM(i_isSAM), context(i_context)
+    : isSAM(i_isSAM), context(i_context), numThreads(i_numThreads)
 {
     fileName = new char[strlen(i_fileName) + 1];
     strcpy(fileName, i_fileName);
@@ -123,9 +123,9 @@ RangeSplittingReadSupplierGenerator::generateNewReadSupplier()
     ReadReader *underlyingReader;
     // todo: implement layered factory model
     if (isSAM) {
-        underlyingReader = SAMReader::create(DataSupplier::Default[true], fileName, context, rangeStart, rangeLength);
+        underlyingReader = SAMReader::create(DataSupplier::Default, fileName, 2, context, rangeStart, rangeLength);
     } else {
-        underlyingReader = FASTQReader::create(DataSupplier::Default[true], fileName, rangeStart, rangeLength, context);
+        underlyingReader = FASTQReader::create(DataSupplier::Default, fileName, 2, rangeStart, rangeLength, context);
     }
     return new RangeSplittingReadSupplier(splitter,underlyingReader);
 }
@@ -183,13 +183,15 @@ RangeSplittingPairedReadSupplier::getNextReadPair(Read **read1, Read **read2)
 }
 
 RangeSplittingPairedReadSupplierGenerator::RangeSplittingPairedReadSupplierGenerator(
-    const char *i_fileName1, const char *i_fileName2, bool i_isSAM, unsigned numThreads, const ReaderContext& i_context) :
-        isSAM(i_isSAM), context(i_context)
+    const char *i_fileName1, const char *i_fileName2, FileType i_fileType, unsigned i_numThreads, 
+    bool i_quicklyDropUnpairedReads, const ReaderContext& i_context) :
+        fileType(i_fileType), numThreads(i_numThreads), context(i_context), quicklyDropUnpairedReads(i_quicklyDropUnpairedReads)
 {
+    _ASSERT(strcmp(i_fileName1, "-") && (NULL == i_fileName2 || strcmp(i_fileName2, "-"))); // Can't use range splitter on stdin, because you can't seek or query size
     fileName1 = new char[strlen(i_fileName1) + 1];
     strcpy(fileName1, i_fileName1); 
 
-    if (!isSAM) {
+    if (FASTQFile == fileType) {
         fileName2 = new char[strlen(i_fileName2) + 1];
         strcpy(fileName2, i_fileName2);
     } else {
@@ -215,12 +217,24 @@ RangeSplittingPairedReadSupplierGenerator::generateNewPairedReadSupplier()
     }
 
     PairedReadReader *underlyingReader;
-    if (isSAM) {
-        underlyingReader = SAMReader::createPairedReader(DataSupplier::Default[true], fileName1, rangeStart, rangeLength, true, context); 
-    } else {
-        underlyingReader = PairedFASTQReader::create(DataSupplier::Default[true], fileName1, fileName2, rangeStart, rangeLength, context);
-    }
+    switch (fileType) {
+    case SAMFile:
+         underlyingReader = SAMReader::createPairedReader(DataSupplier::Default, fileName1, 2, rangeStart, rangeLength, quicklyDropUnpairedReads, context);
+         break;
 
+    case FASTQFile:
+         underlyingReader = PairedFASTQReader::create(DataSupplier::Default, fileName1, fileName2, 2, rangeStart, rangeLength, context);
+         break;
+
+    case InterleavedFASTQFile:
+        underlyingReader = PairedInterleavedFASTQReader::create(DataSupplier::Default, fileName1, 2, rangeStart, rangeLength, context);
+        break;
+
+    default:
+        WriteErrorMessage("RangeSplittingPairedReadSupplierGenerator::generateNewPairedReadSupplier(): unknown file type %d\n", fileType);
+        soft_exit(1);
+    }
+ 
     return new RangeSplittingPairedReadSupplier(splitter,underlyingReader);
 }
 

@@ -6,6 +6,7 @@
 #include "BaseAligner.h"
 #include "Bam.h"
 #include "exit.h"
+#include "Error.h"
 #include <vector>
 
 using std::make_pair;
@@ -85,7 +86,7 @@ bool writeCigar(char** o_buf, int* o_buflen, int count, char code, CigarFormat f
         *o_buflen -= 4;
         return true;
     default:
-        printf("invalid cigar format %d\n", format);
+        WriteErrorMessage( "invalid cigar format %d\n", format);
         soft_exit(1);
         return false;        // Not reached.  This is just here to suppress a compiler warning.
     } // switch
@@ -592,7 +593,7 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
     CigarFormat format, int* cigarBufUsed)
 {
     if (format != BAM_CIGAR_OPS && format != COMPACT_CIGAR_STRING) {
-        fprintf(stderr, "LandauVishkinWithCigar::computeEditDistanceNormalized invalid parameter\n");
+        WriteErrorMessage( "LandauVishkinWithCigar::computeEditDistanceNormalized invalid parameter\n");
         soft_exit(1);
     }
     int bamBufLen = (format == BAM_CIGAR_OPS ? 1 : 2) * cigarBufLen; // should be enough
@@ -633,13 +634,13 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
         } else if (false) { // debugging
             text2[textUsed2] = 0;
             pattern2[patternLen] = 0;
-            printf("inconsistent forward/reverse comparison\nreverse score %d, textUsed %d, bamUsed %d, text/pattern:\n%s\n%s\n",
+            WriteErrorMessage( "inconsistent forward/reverse comparison\nreverse score %d, textUsed %d, bamUsed %d, text/pattern:\n%s\n%s\n",
                 score2, textUsed2, bamBufUsed2, text2, pattern2);
             memcpy(text2, text, textLen);
             text2[textLen] = 0;
             memcpy(pattern2, pattern, patternLen);
             pattern2[patternLen] = 0;
-            printf("forward score %d, textUsed %d, bamUsed %d, text/pattern:\n%s\n%s\n",
+            WriteErrorMessage( "forward score %d, textUsed %d, bamUsed %d, text/pattern:\n%s\n%s\n",
                 score, textUsed, bamBufUsed, text2, pattern2);
         }
     }

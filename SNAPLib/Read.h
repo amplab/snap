@@ -30,6 +30,7 @@ Revision History:
 #include "DataReader.h"
 #include "DataWriter.h"
 #include "directions.h"
+#include "Error.h"
 
 class FileFormat;
 
@@ -41,10 +42,13 @@ struct PairedAlignmentResult;
 enum AlignmentResult {NotFound, SingleHit, MultipleHits, UnknownAlignment}; // BB: Changed Unknown to UnknownAlignment because of a conflict w/Windows headers
 
 bool isAValidAlignmentResult(AlignmentResult result);
-// constant for small/medium/large reads
-#define MAX_READ_LENGTH 500
-//#define MAX_READ_LENGTH 1000
-///#define MAX_READ_LENGTH 20000
+
+//#define LONG_READS
+#ifdef LONG_READS
+#define MAX_READ_LENGTH 100000
+#else
+#define MAX_READ_LENGTH 4096
+#endif
 
 //
 // Here's a brief description of the classes for input in SNAP:
@@ -93,6 +97,7 @@ struct ReaderContext
     ReadClippingType    clipping;
     bool                paired;
     bool                ignoreSecondaryAlignments;   // Should we just ignore reads with the Secondary Alignment bit set?
+    bool                ignoreSupplementaryAlignments;  // Should we just ignore reads with the Supplementary Alignment bit set?
     const char*         header; // allocated buffer for header
     size_t              headerLength; // length of string
     size_t              headerBytes; // bytes used for header in file
@@ -110,7 +115,14 @@ public:
     virtual bool getNextRead(Read *readToUpdate) = 0;
     virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
 
-    virtual void releaseBatch(DataBatch batch) = 0;
+    // if you keep a read after the next call to getNextRead, you must call holdBatch
+    // this increments the reference count to the batch
+    virtual void holdBatch(DataBatch batch) = 0;
+
+    // decremens hold refcount, when all holds are released the batch is no longer valid
+    virtual bool releaseBatch(DataBatch batch) = 0;
+
+    ReaderContext* getContext() { return &context; }
 
 protected:
     ReaderContext context;
@@ -125,10 +137,14 @@ public:
     virtual bool getNextReadPair(Read *read1, Read *read2) = 0;
     virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess) = 0;
 
-    virtual void releaseBatch(DataBatch batch) = 0;
+    virtual void holdBatch(DataBatch batch) = 0;
+    virtual bool releaseBatch(DataBatch batch) = 0;
+
+    virtual ReaderContext* getContext() = 0;
 
     // wrap a single read source with a matcher that buffers reads until their mate is found
-    static PairedReadReader* PairMatcher(ReadReader* single, bool autoRelease);
+    static PairedReadReader* PairMatcher(ReadReader* single, bool quicklyDropUnpairedReads);
+    static const int MatchBuffers = 2;
 };
 
 class ReadSupplier {
@@ -136,7 +152,8 @@ public:
     virtual Read *getNextRead() = 0;    // This read is valid until you call getNextRead, then it's done.  Don't worry about deallocating it.
     virtual ~ReadSupplier() {}
 
-    virtual void releaseBatch(DataBatch batch) = 0;
+    virtual void holdBatch(DataBatch batch) = 0;
+    virtual bool releaseBatch(DataBatch batch) = 0;
 };
 
 class PairedReadSupplier {
@@ -145,18 +162,21 @@ public:
     virtual bool getNextReadPair(Read **read0, Read **read1) = 0;
     virtual ~PairedReadSupplier() {}
 
-    virtual void releaseBatch(DataBatch batch) = 0;
+    virtual void holdBatch(DataBatch batch) = 0;
+    virtual bool releaseBatch(DataBatch batch) = 0;
 };
 
 class ReadSupplierGenerator {
 public:
     virtual ReadSupplier *generateNewReadSupplier() = 0;
+    virtual ReaderContext* getContext() = 0;
     virtual ~ReadSupplierGenerator() {}
 };
 
 class PairedReadSupplierGenerator {
 public:
     virtual PairedReadSupplier *generateNewPairedReadSupplier() = 0;
+    virtual ReaderContext* getContext() = 0;
     virtual ~PairedReadSupplierGenerator() {}
 };
 
@@ -169,10 +189,10 @@ public:
     virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine) = 0;
 
     // write a single read, return true if successful
-    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, unsigned genomeLocation, Direction direction, bool isTranscriptome, unsigned tlocation) = 0;
+    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, unsigned genomeLocation, Direction direction, bool secondaryAlignment, bool isTranscriptome, unsigned tlocation) = 0;
 
     // write a pair of reads, return true if successful
-    virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result) = 0;
+    virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result, bool secondaryAlignment) = 0;
 
     // close out this thread
     virtual void close() = 0;
@@ -197,88 +217,120 @@ class Read {
 public:
         Read() :    
             id(NULL), data(NULL), quality(NULL), 
-            localUnclippedDataBuffer(NULL), localUnclippedQualityBuffer(NULL), localBufferSize(0),
-            originalUnclippedDataBuffer(NULL), originalUnclippedQualityBuffer(NULL), clippingState(NoClipping),
-            upperCaseDataBuffer(NULL), upperCaseDataBufferLength(0), auxiliaryData(NULL), auxiliaryDataLength(0),
+            localBufferAllocationOffset(0),
+            clippingState(NoClipping), currentReadDirection(FORWARD),
+            upcaseForwardRead(NULL), auxiliaryData(NULL), auxiliaryDataLength(0),
             readGroup(NULL), originalAlignedLocation(-1), originalMAPQ(-1), originalSAMFlags(0),
-            originalFrontClipping(0), originalBackClipping(0), originalFrontHardClipping(0), originalBackHardClipping(0)
+            originalFrontClipping(0), originalBackClipping(0), originalFrontHardClipping(0), originalBackHardClipping(0),
+            originalRNEXT(NULL), originalRNEXTLength(0), originalPNEXT(0)
         {}
 
-        Read(const Read& other) : 
-            id(other.id), data(other.data), quality(other.quality), 
-            idLength(other.idLength), frontClippedLength(other.frontClippedLength), dataLength(other.dataLength),
-            unclippedData(other.unclippedData), unclippedLength(other.unclippedLength), unclippedQuality(other.unclippedQuality),
-            localUnclippedDataBuffer(other.localUnclippedDataBuffer),
-            localUnclippedQualityBuffer(other.localUnclippedQualityBuffer),
-            localBufferSize(other.localBufferSize),
-            originalUnclippedDataBuffer(other.originalUnclippedDataBuffer),
-            originalUnclippedQualityBuffer(other.originalUnclippedQualityBuffer),
-            clippingState(other.clippingState),
-            batch(other.batch), 
-            upperCaseDataBuffer(other.upperCaseDataBuffer), upperCaseDataBufferLength(other.upperCaseDataBufferLength),
-            auxiliaryData(other.auxiliaryData), auxiliaryDataLength(other.auxiliaryDataLength), readGroup(other.readGroup),
-            originalAlignedLocation(other.originalAlignedLocation), originalMAPQ(other.originalMAPQ), 
-            originalSAMFlags(other.originalSAMFlags), originalFrontClipping(other.originalFrontClipping), 
-            originalBackClipping(other.originalBackClipping), originalFrontHardClipping(other.originalFrontHardClipping), 
-            originalBackHardClipping(other.originalBackHardClipping)
+        Read(const Read& other) :  localBufferAllocationOffset(0)
         {
-            Read* o = (Read*) &other; // hack!
-            o->localUnclippedDataBuffer = NULL;
-            o->localUnclippedQualityBuffer = NULL;
-            o->localBufferSize = 0;
-            o->originalUnclippedDataBuffer = NULL;
-            o->originalUnclippedQualityBuffer = NULL;
-            o->upperCaseDataBuffer = NULL;
-            o->upperCaseDataBufferLength = 0;
+            copyFromOtherRead(other);
         }
 
         ~Read()
         {
-            delete [] localUnclippedDataBuffer;
-            delete [] localUnclippedQualityBuffer;
-            BigDealloc(upperCaseDataBuffer);
         }
 
         void dispose()
         {
-            delete [] localUnclippedDataBuffer;
-            localUnclippedDataBuffer = NULL;
-            delete [] localUnclippedQualityBuffer;
-            localUnclippedQualityBuffer = NULL;
-            BigDealloc(upperCaseDataBuffer);
-            upperCaseDataBuffer = NULL;
+            localBufferAllocationOffset = 0;
+            data = quality = unclippedData = unclippedQuality = externalData = NULL;
+         }
+
+        void operator=(const Read& other)
+        {
+            copyFromOtherRead(other);
         }
 
-        void operator=(Read& other)
+        void copyFromOtherRead(const Read& other)
         {
             id = other.id;
-            data = other.data;
-            quality = other.quality;
             idLength = other.idLength;
             frontClippedLength = other.frontClippedLength;
             dataLength = other.dataLength;
-            unclippedData = other.unclippedData;
+            externalData = other.externalData;
+            externalQuality = other.externalQuality;
+            currentReadDirection = other.currentReadDirection;
+            localBufferAllocationOffset = 0;    // Clears out any allocations that might previously have been in the buffer
+            upcaseForwardRead = rcData = rcQuality = NULL;
             unclippedLength = other.unclippedLength;
-            unclippedQuality = other.unclippedQuality;
-            delete [] localUnclippedDataBuffer;
-            localUnclippedDataBuffer = other.localUnclippedDataBuffer;
-            delete [] localUnclippedQualityBuffer;
-            localUnclippedQualityBuffer = other.localUnclippedQualityBuffer;
-            localBufferSize = other.localBufferSize;
-            other.localUnclippedDataBuffer = NULL;
-            other.localUnclippedQualityBuffer = NULL;
-            other.localBufferSize = 0;
-            originalUnclippedDataBuffer = other.originalUnclippedDataBuffer;
-            originalUnclippedQualityBuffer = other.originalUnclippedQualityBuffer;
-            other.originalUnclippedDataBuffer = NULL;
-            other.originalUnclippedQualityBuffer = NULL;
+
+            if (other.localBufferAllocationOffset != 0) {
+                //
+                // Copy the other read's local buffer to us.
+                //
+                assureLocalBufferLargeEnough();
+                _ASSERT(other.localBufferAllocationOffset <= localBufferLength);
+                memcpy(localBuffer, other.localBuffer, other.localBufferAllocationOffset);
+                localBufferAllocationOffset = other.localBufferAllocationOffset;
+
+                if (NULL != other.upcaseForwardRead) {
+                    //
+                    // Assert that it's in the other read's local buffer.
+                    //
+                    _ASSERT(other.upcaseForwardRead >= other.localBuffer && other.upcaseForwardRead <= other.localBuffer + other.localBufferAllocationOffset - unclippedLength);
+
+                    //
+                    // And put ours at the same offset in our local buffer.
+                    //
+                    upcaseForwardRead = localBuffer + (other.upcaseForwardRead - other.localBuffer);
+                }
+
+                if (NULL != other.rcData) {
+                    //
+                    // Assert that it's in the other read's local buffer.
+                    //
+                    _ASSERT(other.rcData >= other.localBuffer && other.rcData <= other.localBuffer + other.localBufferAllocationOffset - unclippedLength);
+
+                    //
+                    // And put ours at the same offset in our local buffer.
+                    //
+                    rcData = localBuffer + (other.rcData - other.localBuffer);
+
+                    //
+                    // And the same for RC quality.
+                    //
+                    _ASSERT(other.rcQuality >= other.localBuffer && other.rcQuality <= other.localBuffer + other.localBufferAllocationOffset - unclippedLength);
+                    rcQuality = localBuffer + (other.rcQuality - other.localBuffer);
+                } else {
+                    _ASSERT(NULL == other.rcQuality);
+                }
+            } else {
+                _ASSERT(other.upcaseForwardRead == NULL && other.rcData == NULL && other.rcQuality == NULL);
+            }
+
+            //
+            // Now set up the data, unclippedData, quality and unclippedQuality pointers.
+            //
+            if (NULL == other.localBuffer || other.data < other.localBuffer || other.data >= other.localBuffer + other.localBufferAllocationOffset - dataLength) {
+                //
+                // Not in the other read's local buffer, so it must be external.  Copy it.
+                //
+                data = other.data;
+                _ASSERT(NULL == other.localBuffer || other.quality < other.localBuffer || other.quality >= other.localBuffer + other.localBufferAllocationOffset);
+                quality = other.quality;
+                _ASSERT(NULL == other.localBuffer || other.unclippedData < other.localBuffer || other.unclippedData >= other.localBuffer + other.localBufferAllocationOffset);
+                unclippedData = other.unclippedData;
+                _ASSERT(NULL == other.localBuffer || other.unclippedQuality < other.localBuffer || other.unclippedQuality >= other.localBuffer + other.localBufferAllocationOffset);
+                unclippedQuality = other.unclippedQuality;
+            } else {
+                //
+                // It is in the other read's local buffer.  Copy the local buffer offsets from the other read into this one.
+                //
+                data = localBuffer + (other.data - other.localBuffer);
+                _ASSERT(other.quality >= other.localBuffer && other.quality <= other.localBuffer + other.localBufferAllocationOffset - dataLength);
+                quality = localBuffer + (other.quality - other.localBuffer);
+                _ASSERT(other.unclippedData >= other.localBuffer && other.unclippedData <= other.localBuffer + other.localBufferAllocationOffset - unclippedLength);
+                unclippedData = localBuffer + (other.unclippedData - other.localBuffer);
+                _ASSERT(other.unclippedQuality >= other.localBuffer && other.unclippedQuality <= other.localBuffer + other.localBufferAllocationOffset - unclippedLength);
+                unclippedQuality = localBuffer + (other.unclippedQuality - other.localBuffer);
+            }
+
             clippingState = other.clippingState;
             batch = other.batch;
-            BigDealloc(upperCaseDataBuffer);
-            upperCaseDataBuffer = other.upperCaseDataBuffer;
-            upperCaseDataBufferLength = other.upperCaseDataBufferLength;
-            other.upperCaseDataBuffer = NULL;
-            other.upperCaseDataBufferLength = 0;
             readGroup = other.readGroup;
             auxiliaryData = other.auxiliaryData;
             auxiliaryDataLength = other.auxiliaryDataLength;
@@ -289,6 +341,9 @@ public:
             originalBackClipping = other.originalBackClipping;            
             originalFrontHardClipping = other.originalFrontHardClipping;
             originalBackHardClipping = other.originalBackHardClipping;
+            originalRNEXT = other.originalRNEXT;
+            originalRNEXTLength = other.originalRNEXTLength;
+            originalPNEXT = other.originalPNEXT;
         }
 
         //
@@ -306,7 +361,7 @@ public:
                 const char *i_quality, 
                 unsigned i_dataLength)
         {
-            init(i_id, i_idLength, i_data, i_quality, i_dataLength, -1, -1, 0, 0, 0, 0, 0);
+            init(i_id, i_idLength, i_data, i_quality, i_dataLength, -1, -1, 0, 0, 0, 0, 0, NULL, 0, 0);
         }
 
         void init(
@@ -321,17 +376,19 @@ public:
                 unsigned i_originalFrontClipping,
                 unsigned i_originalBackClipping,
                 unsigned i_originalFrontHardClipping,
-                unsigned i_originalBackHardClipping)
+                unsigned i_originalBackHardClipping,
+                const char *i_originalRNEXT,
+                unsigned i_originalRNEXTLength,
+                unsigned i_originalPNEXT,
+                bool allUpper = false)
         {
             id = i_id;
             idLength = i_idLength;
-            data = unclippedData = i_data;
-            quality = unclippedQuality = i_quality;
+            data = unclippedData = externalData = i_data;
+            quality = unclippedQuality = externalQuality = i_quality;
             dataLength = i_dataLength;
             unclippedLength = dataLength;
             frontClippedLength = 0;
-            originalUnclippedDataBuffer = NULL;
-            originalUnclippedQualityBuffer = NULL;
             clippingState = NoClipping;
             originalAlignedLocation = i_originalAlignedLocation;
             originalMAPQ = i_originalMAPQ;
@@ -340,28 +397,33 @@ public:
             originalBackClipping = i_originalBackClipping;
             originalFrontHardClipping = i_originalFrontHardClipping;
             originalBackHardClipping = i_originalBackHardClipping;
+            originalRNEXT = i_originalRNEXT;
+            originalRNEXTLength = i_originalRNEXTLength;
+            originalPNEXT = i_originalPNEXT;
+            currentReadDirection = FORWARD;
 
+            localBufferAllocationOffset = 0;    // Clears out any allocations that might previously have been in the buffer
+            upcaseForwardRead = rcData = rcQuality = NULL;
 
             //
             // Check for lower case letters in the data, and convert to upper case if there are any.
             //
-            unsigned anyLowerCase = 0;
-            for (unsigned i = 0; i < dataLength; i++) {
-                anyLowerCase |= IS_LOWER_CASE[data[i]];
-            }
-
-            if (anyLowerCase) {
-                if (upperCaseDataBufferLength < dataLength) {
-                    BigDealloc(upperCaseDataBuffer);
-                    upperCaseDataBuffer = (char *)BigAlloc(dataLength);
-                    upperCaseDataBufferLength = dataLength;
-                }
-
+            if (! allUpper) {
+                unsigned anyLowerCase = 0;
                 for (unsigned i = 0; i < dataLength; i++) {
-                    upperCaseDataBuffer[i] = TO_UPPER_CASE[data[i]];
+                    anyLowerCase |= IS_LOWER_CASE[data[i]];
                 }
 
-                unclippedData = data = upperCaseDataBuffer;
+                if (anyLowerCase) {
+                    assureLocalBufferLargeEnough();
+                    upcaseForwardRead = localBuffer;
+                    localBufferAllocationOffset += unclippedLength;
+                    for (unsigned i = 0; i < dataLength; i++) {
+                        upcaseForwardRead[i] = TO_UPPER_CASE[data[i]];
+                    }
+
+                    unclippedData = data = upcaseForwardRead;
+                }
             }
         }
 
@@ -390,6 +452,10 @@ public:
         inline unsigned getOriginalBackClipping() {return originalBackClipping;}
         inline unsigned getOriginalFrontHardClipping() {return originalFrontHardClipping;}
         inline unsigned getOriginalBackHardClipping() {return originalBackHardClipping;}
+        inline const char *getOriginalRNEXT() {return originalRNEXT;}
+        inline unsigned getOriginalRNEXTLength() {return originalRNEXTLength;}
+        inline unsigned getOriginalPNEXT() {return originalPNEXT;}
+
         inline char* getAuxiliaryData(unsigned* o_length, bool * o_isSAM) const
         {
             *o_length = auxiliaryDataLength;
@@ -491,58 +557,53 @@ public:
 
         void becomeRC()
         {
-            if (NULL != originalUnclippedDataBuffer) {
+            if (RC == currentReadDirection) {
                 //
                 // We've already RCed ourself.  Switch back.
                 //
-                unclippedData = originalUnclippedDataBuffer;
-                unclippedQuality = originalUnclippedQualityBuffer;
+                if (NULL != upcaseForwardRead) {
+                    unclippedData = upcaseForwardRead;
+                  } else {
+                    unclippedData = externalData;
+                }
+                unclippedQuality = externalQuality;
 
-                //
-                // The clipping reverses as we go to/from RC.
-                //
-                frontClippedLength = unclippedLength - dataLength - frontClippedLength;
-                data = unclippedData + frontClippedLength;
-                quality = unclippedQuality + frontClippedLength;
+                currentReadDirection = FORWARD;
+            } else {
 
-                originalUnclippedDataBuffer = NULL;
-                originalUnclippedQualityBuffer = NULL;
+                if (rcData != NULL) {
+                    //
+                    // We've already been RC, just switch back.
+                    //
+                    unclippedData = rcData;
+                    unclippedQuality = rcQuality;
+                } else {
+                    assureLocalBufferLargeEnough();
+                    rcData = localBuffer + localBufferAllocationOffset;
+                    localBufferAllocationOffset += unclippedLength;
+                    rcQuality = localBuffer + localBufferAllocationOffset;
+                    localBufferAllocationOffset += unclippedLength;
 
-                return;
+                    _ASSERT(localBufferAllocationOffset <= localBufferLength);
+
+                    for (unsigned i = 0; i < unclippedLength; i++) {
+                        rcData[i] = COMPLEMENT[unclippedData[unclippedLength - i - 1]];
+                        rcQuality[unclippedLength-i-1] = unclippedQuality[i];
+                    }
+
+                    unclippedData = rcData;
+                    unclippedQuality = rcQuality;
+                }
+
+                currentReadDirection = RC;
             }
-
-            //
-            // If we don't have local space to store the RC (and the quality RC) then allocate
-            // it.  This preserves the buffer space (but not content) across calls to init().
-            //
-            if (unclippedLength > localBufferSize) {
-                delete [] localUnclippedDataBuffer;
-                delete [] localUnclippedQualityBuffer;
-
-                localUnclippedDataBuffer = new char[unclippedLength];
-                localUnclippedQualityBuffer =new char[unclippedLength];
-                localBufferSize = unclippedLength;
-            }
-
-            //
-            // We can't just call computeReverseCompliment() because we need to reverse the
-            // unclipped portion of the buffer.
-            //
-            for (unsigned i = 0; i < unclippedLength; i++) {
-                localUnclippedDataBuffer[i] = COMPLEMENT[unclippedData[unclippedLength - i - 1]];
-                localUnclippedQualityBuffer[unclippedLength-i-1] = unclippedQuality[i];
-            }
-
-            originalUnclippedDataBuffer = unclippedData;
-            originalUnclippedQualityBuffer = unclippedQuality;
-
-            unclippedData = localUnclippedDataBuffer;
-            unclippedQuality = localUnclippedQualityBuffer;
 
             //
             // The clipping reverses as we go to/from RC.
             //
             frontClippedLength = unclippedLength - dataLength - frontClippedLength;
+            data = unclippedData + frontClippedLength;
+            quality = unclippedQuality + frontClippedLength;
 
             unsigned temp = originalFrontClipping;
             originalFrontClipping = originalBackClipping;
@@ -550,9 +611,6 @@ public:
             temp = originalFrontHardClipping;
             originalFrontHardClipping = originalBackHardClipping;
             originalBackHardClipping = temp;
-            
-            data = localUnclippedDataBuffer + frontClippedLength;
-            quality = localUnclippedQualityBuffer + frontClippedLength;
         }
 
 
@@ -567,7 +625,7 @@ public:
             }
 
             if (cigarSize == cigarLimit) {
-                fprintf(stderr, "Absurdly long cigar string.\n");
+                WriteErrorMessage( "Absurdly long cigar string.\n");
                 soft_exit(1);
             }
 
@@ -612,32 +670,44 @@ private:
         unsigned originalBackClipping;
         unsigned originalFrontHardClipping;
         unsigned originalBackHardClipping;
+        const char *originalRNEXT;
+        unsigned originalRNEXTLength;
+        unsigned originalPNEXT;
+
 
         //
-        // Data stored in the read that's used if we RC ourself.  These are always unclipped.
+        // Memory that's local to this read and that is used to contain an upcased version of the read as well as 
+        // RC read & quality strings.  It survives init() so as to avoid memory allocation overhead.
         //
-        char *localUnclippedDataBuffer;
-        char *localUnclippedQualityBuffer;
-        unsigned localBufferSize;
+        char localBuffer[MAX_READ_LENGTH * 3];
+        static const unsigned localBufferLength;
+        unsigned localBufferAllocationOffset;   // The next location to allocate in the local buffer.
+        char *upcaseForwardRead;                // Either NULL or points into localBuffer.  Used when the incoming read isn't all capitalized.  Unclipped.
+        char *rcData;                           // Either NULL or points into localBuffer.  Used when we've computed a reverse complement of the read, whether we're using it or not.  Unclipped.
+        char *rcQuality;                        // Ditto for quality.
+        const char *externalData;               // The data that was passed in at init() time, memory doesn't belong to this.
+        const char *externalQuality;            // The quality that was passed in at init() time, memory doens't belong to this.
+        Direction currentReadDirection;
 
-        //
-        // If we've switched to RC, then the original data and quality are pointed to by these.
-        // This allows us to switch back by just flipping pointers.
-        //
-        const char *originalUnclippedDataBuffer;
-        const char *originalUnclippedQualityBuffer;
+        inline void assureLocalBufferLargeEnough()
+        {
+#if 0   // Always true with static allocation
+            if (localBufferLength < 3 * unclippedLength) {
+                _ASSERT(0 == localBufferAllocationOffset);  // Can only do this when the buffer is empty
+                if (NULL != localBuffer) {
+                    BigDealloc(localBuffer);
+                }
+                localBufferLength = RoundUpToPageSize(3 * unclippedLength);
+                localBuffer = (char *)BigAlloc(localBufferLength);
+            }
+
+#endif // 0
+        }
 
         // batch for managing lifetime during input
         DataBatch batch;
 
-        //
-        // If the read comes in with lower case letters, we need to convert it to upper case.  This buffer is used to store that
-        // data.
-        //
-        char *upperCaseDataBuffer;
-        unsigned upperCaseDataBufferLength;
-
-        // auxiliary data in BAM or SAM format (can tell by looking at 3rd byte), if available
+         // auxiliary data in BAM or SAM format (can tell by looking at 3rd byte), if available
         char* auxiliaryData;
         unsigned auxiliaryDataLength;
 
@@ -697,7 +767,7 @@ private:
 //
 class ReadWithOwnMemory : public Read {
 public:
-    ReadWithOwnMemory() : Read(), dataBuffer(NULL), idBuffer(NULL), qualityBuffer(NULL), auxBuffer(NULL) {}
+    ReadWithOwnMemory() : Read(), extraBuffer(NULL), dataBuffer(NULL), idBuffer(NULL), qualityBuffer(NULL), auxBuffer(NULL) {}
 
     ReadWithOwnMemory(const Read &baseRead) {
         set(baseRead);
@@ -705,20 +775,50 @@ public:
     
     // must manually call destructor!
     void dispose() {
-        delete [] dataBuffer;
-        delete [] idBuffer;
-        delete [] qualityBuffer;
-        delete [] auxBuffer;
+        if (extraBuffer != NULL) {
+            delete [] extraBuffer;
+        }
     }
 
 private:
 
     void set(const Read &baseRead)
     {
-        idBuffer = new char[baseRead.getIdLength()+1];
-        dataBuffer = new char[baseRead.getUnclippedLength()+1];
-        qualityBuffer = new char[baseRead.getUnclippedLength() + 1];
+        // allocate space in ownBuffer if possible; id/aux might need extraBuffer
+        dataBuffer = ownBuffer;
+        int ownBufferUsed = baseRead.getUnclippedLength() + 1;
+        qualityBuffer = ownBuffer + ownBufferUsed;
+        ownBufferUsed += baseRead.getUnclippedLength() + 1;
+        unsigned auxLen;
+        bool auxSam;
+        char* aux = baseRead.getAuxiliaryData(&auxLen, &auxSam);
+        if (baseRead.getIdLength() + 1 < sizeof(ownBuffer) - ownBufferUsed) {
+            idBuffer = ownBuffer + ownBufferUsed;
+            ownBufferUsed += baseRead.getIdLength() + 1;
+        } else {
+            idBuffer = NULL;
+        }
+        if (auxLen > 0 && auxLen < sizeof(ownBuffer) - ownBufferUsed) {
+            auxBuffer = ownBuffer + ownBufferUsed;
+            ownBufferUsed += auxLen;
+        } else {
+            auxBuffer = NULL;
+        }
+        if (idBuffer == NULL || (auxLen > 0 && auxBuffer == NULL)) {
+            extraBuffer = new char[(idBuffer == NULL ? baseRead.getIdLength() + 1 : 0) + auxLen];
+            int extraBufferUsed = 0;
+            if (idBuffer == NULL) {
+                idBuffer = extraBuffer;
+                extraBufferUsed += baseRead.getIdLength() + 1;
+            }
+            if (auxLen > 0 && auxBuffer == NULL) {
+                auxBuffer = extraBuffer + extraBufferUsed;
+            }
+        } else {
+            extraBuffer = NULL;
+        }
 
+        // copy data into buffers
         memcpy(idBuffer,baseRead.getId(),baseRead.getIdLength());
         idBuffer[baseRead.getIdLength()] = '\0';    // Even though it doesn't need to be null terminated, it seems like a good idea.
 
@@ -733,18 +833,18 @@ private:
 
         setReadGroup(baseRead.getReadGroup());
         
-        unsigned auxlen;
-        bool auxsam;
-        char* aux = baseRead.getAuxiliaryData(&auxlen, &auxsam);
-        if (aux != NULL && auxlen > 0) {
-            auxBuffer = new char[auxlen];
-            memcpy(auxBuffer, aux, auxlen);
-            setAuxiliaryData(auxBuffer, auxlen);
+        if (aux != NULL && auxLen > 0) {
+            memcpy(auxBuffer, aux, auxLen);
+            setAuxiliaryData(auxBuffer, auxLen);
         } else {
             setAuxiliaryData(NULL, 0);
         }
     }
         
+    char ownBuffer[MAX_READ_LENGTH * 2 + 1000]; // internal buffer for copied data
+    char* extraBuffer; // extra buffer if internal buffer not big enough
+
+    // should all point into ownBuffer or extraBuffer
     char *idBuffer;
     char *dataBuffer;
     char *qualityBuffer;

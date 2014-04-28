@@ -21,10 +21,15 @@ Environment:
 #include "BigAlloc.h"
 #include "exit.h"
 #include "Genome.h"
+#include "Error.h"
+#include "GenericFile_Blob.h"
 
 SNAPHashTable::SNAPHashTable(
-    unsigned i_tableSize,
-    unsigned i_keySizeInBytes)
+    unsigned    i_tableSize,
+    unsigned    i_keySizeInBytes,
+    unsigned    i_valueSizeInBytes,
+    unsigned    i_valueCount,
+    _uint64     i_invalidValueValue)
 /*++
 
 Routine Description:
@@ -36,7 +41,10 @@ Arguments:
 --*/
 {
     keySizeInBytes = i_keySizeInBytes;
-    elementSize = keySizeInBytes + dataSizeInBytes;
+    valueSizeInBytes = i_valueSizeInBytes;
+    valueCount = i_valueCount;
+    invalidValueValue = i_invalidValueValue;
+    elementSize = keySizeInBytes + valueSizeInBytes * valueCount;
     tableSize = i_tableSize;
     usedElementCount = 0;
     Table = NULL;
@@ -46,180 +54,186 @@ Arguments:
         return;
     }
 
-    Table = (Entry *)BigAlloc(tableSize * elementSize,&virtualAllocSize);
+    Table = BigAlloc(tableSize * elementSize);
+    ownsMemoryForTable = true;
 
     //
-    // Run through the table and set all of the value1s to InvalidGenomeLocation, which means
+    // Run through the table and set all of the first values to invalidValueValue, which means
     // unused.
     //
 
     for (unsigned i = 0; i < tableSize; i++) {
-        Entry *entry = getEntry(i);
+        void *entry = getEntry(i);
         clearKey(entry);
-        entry->value1 = InvalidGenomeLocation;
+        memcpy(getEntry(i), &invalidValueValue, valueSizeInBytes);
     }
 }
 
-SNAPHashTable *SNAPHashTable::loadFromFile(char *loadFileName)
-/*++
-
-Routine Description:
-
-    Constructor to load a previously saved hash table.
-
-Arguments:
-
-    loadFileName    - the base file name you want to load (the saver actually makes two files and both are needed to load)
-
---*/
-{
-    FILE *loadFile = fopen(loadFileName,"rb");
-    if (loadFile == NULL) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable(%s) fopen failed\n",loadFileName);
-        soft_exit(1);
-    }
-
-    SNAPHashTable *table = loadFromFile(loadFile);
-    fclose (loadFile);
-
-    return table;
-}
-
-SNAPHashTable *SNAPHashTable::loadFromFile(FILE *loadFile)
+SNAPHashTable *SNAPHashTable::loadFromBlob(GenericFile_Blob *loadFile)
 {
     SNAPHashTable *table = new SNAPHashTable();
 
     unsigned fileMagic;
-    if (1 != fread(&fileMagic, sizeof(magic), 1, loadFile)) {
-        fprintf(stderr,"Magic number mismatch on hash table load.  %d != %d\n", fileMagic, magic);
+    if (sizeof(magic) != loadFile->read(&fileMagic, sizeof(magic))) {
+        WriteErrorMessage("Magic number mismatch on hash table load.  %d != %d\n", fileMagic, magic);
+        soft_exit(1);
+    }
+
+    if (fileMagic != magic) {
+        WriteErrorMessage("SNAPHashTable: magic number mismatch.  Perhaps you have a corruped index.  %d != %d\n", fileMagic, magic);
         soft_exit(1);
     }
  
-    if (1 != fread(&table->tableSize, sizeof(table->tableSize), 1, loadFile)) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable fread table size failed\n");
+    if (sizeof(table->tableSize) != loadFile->read(&table->tableSize, sizeof(table->tableSize))) {
+        WriteErrorMessage("SNAPHashTable::SNAPHashTable fread table size failed\n");
         soft_exit(1);
     }
 
-
-    if (1 != fread(&table->usedElementCount, sizeof(table->usedElementCount), 1, loadFile)) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable fread used element count size failed\n");
+    if (sizeof(table->usedElementCount) != loadFile->read(&table->usedElementCount, sizeof(table->usedElementCount))) {
+        WriteErrorMessage("SNAPHashTable::SNAPHashTable fread used element count failed\n");
         soft_exit(1);
-
     }
 
-    if (1 != fread(&table->keySizeInBytes, sizeof(table->keySizeInBytes), 1, loadFile)) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable fread keySizeInBytes size failed.  Perhaps this is an old format hash table and needs to be rebuilt.\n");
+    if (sizeof(table->keySizeInBytes) != loadFile->read(&table->keySizeInBytes, sizeof(table->keySizeInBytes))) {
+        WriteErrorMessage("SNAPHashTable::SNAPHashTable fread keySizeInBytes size failed.  Perhaps this is an old format hash table and needs to be rebuilt.\n");
         soft_exit(1);
     }
 
     if (table->keySizeInBytes < 4 || table->keySizeInBytes > 8) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable Key size must be between 4 and 8 inclusive.  Perhaps this is an old format hash table and needs to be rebuilt.\n");
+        WriteErrorMessage("SNAPHashTable::SNAPHashTable Key size must be between 4 and 8 inclusive.  Perhaps this is an old format hash table and needs to be rebuilt.\n");
         soft_exit(1);
     }
 
-    unsigned dataSize;
-    if (1 != fread(&dataSize, sizeof(dataSize), 1, loadFile)) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable fread dataSizeInBytes size failed.  Perhaps this is an old format hash table and needs to be rebuilt.\n");
+    if (sizeof(table->valueSizeInBytes) != loadFile->read(&table->valueSizeInBytes, sizeof(table->valueSizeInBytes))) {
+        WriteErrorMessage("SNAPHashTable::SNAPHashTable fread dataSizeInBytes size failed.  Perhaps this is an old format hash table and needs to be rebuilt.\n");
         soft_exit(1);
     }
 
-    if (dataSizeInBytes != dataSize) {
+    if (table->valueSizeInBytes == 0 || table->valueSizeInBytes > sizeof(_uint64)) {
         //
-        // DataSizeInBytes is in the file in order to support bigger genome locations if we ever want to handle genomes larger than ~3B bases.
-        // For now, the code doesn't support it, so just fail because it wasn't what was expected.
+        // It must be at least one byte, because we need that much for the unused value value. The code stuffs
+        // values into _uint64, so it can't be bigger than that.
         //
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable data size in bytes must be 8.  Perhaps you have a hash table from a future version of SNAP?  Or else it's corrupt.\n");
+        WriteErrorMessage(
+            "SNAPHashTable::SNAPHashTable value size in bytes (%d) must be between 1 and 8.  Perhaps you have a hash table from a future version of SNAP?  Or else it's corrupt.\n", table->valueSizeInBytes);
+        soft_exit(1);
+    }
+
+    if (sizeof(table->valueCount) != loadFile->read(&table->valueCount, sizeof(table->valueCount))) {
+        WriteErrorMessage("SNAPHashTable::SNAPHashTable: value count failed to read.\n");
+        soft_exit(1);
+    }
+
+    if (table->valueCount == 0 || table->valueCount > 2) {
+        // Technically, > 2 would work fine with the code, but SNAP doesn't use it, so the check is here to detect corruption.
+        WriteErrorMessage("SNAPHashTable::SNAPHashTable: invalid value count (%d), possible corruption or bad file format.\n", table->valueCount);
+        soft_exit(1);
+    }
+
+    table->invalidValueValue = 0;   // Need this in case valueSizeInBytes < sizeof(ValueType)
+    if (table->valueSizeInBytes != loadFile->read(&table->invalidValueValue, table->valueSizeInBytes)) {
+        WriteErrorMessage("SNAPHashTable::SNAPHashTable: unable to read invalid value value\n");
         soft_exit(1);
     }
 
     if (table->tableSize <= 0) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable Zero or negative hash table size\n");
+        WriteErrorMessage("SNAPHashTable::SNAPHashTable Zero or negative hash table size\n");
         soft_exit(1);
     }
 
-    table->elementSize = table->keySizeInBytes + table->dataSizeInBytes;
+    table->elementSize = table->keySizeInBytes + table->valueSizeInBytes * table->valueCount;
 
-    table->Table = (Entry *)BigAlloc(table->tableSize * table->elementSize, &table->virtualAllocSize);
-
-    size_t maxReadSize = 100 * 1024 * 1024;
-    size_t readOffset = 0;
-    while (readOffset < table->tableSize * table->elementSize) {
-
-        size_t amountToRead = __min(table->tableSize * table->elementSize - readOffset,
-			__min(maxReadSize,table->virtualAllocSize - readOffset));
-
-        size_t bytesRead = fread((char*)table->Table + readOffset, 1, amountToRead, loadFile);
-
-        if (bytesRead < amountToRead) {
-            fprintf(stderr,"SNAPHashTable::SNAPHashTable: fread failed, %d, %lu, %lu\n", errno, bytesRead, amountToRead);
-            soft_exit(1);
-        }
- 
-        readOffset += bytesRead;
+    size_t bytesMapped;
+    table->Table = loadFile->mapAndAdvance(table->tableSize * table->elementSize, &bytesMapped);
+    if (bytesMapped != table->tableSize * table->elementSize) {
+        WriteErrorMessage("SNAPHashTable: unable to map table\n");
+        soft_exit(1);
     }
+    table->ownsMemoryForTable = false;
 
     return table;
 }
 
 SNAPHashTable::~SNAPHashTable()
 {
-    BigDealloc(Table);
+    if (ownsMemoryForTable) {
+        BigDealloc(Table);
+    }
 }
 
     bool
-SNAPHashTable::saveToFile(const char *saveFileName)
+SNAPHashTable::saveToFile(const char *saveFileName, size_t *bytesWritten)
 {
     FILE *saveFile = fopen(saveFileName,"wb");
     if (saveFile == NULL) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable(%s) fopen failed\n",saveFileName);
+        WriteErrorMessage("SNAPHashTable::SNAPHashTable(%s) fopen failed\n",saveFileName);
         return false;
     }
 
-    bool worked = saveToFile(saveFile);
+    bool worked = saveToFile(saveFile, bytesWritten);
     fclose(saveFile);
 
     return worked;
 }
 
 bool
-SNAPHashTable::saveToFile(FILE *saveFile) 
+SNAPHashTable::saveToFile(FILE *saveFile, size_t *bytesWritten) 
 {
+    *bytesWritten = 0;
     if (1 != fwrite(&magic,sizeof(magic), 1, saveFile)) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable fwrite magic number failed\n");
+        WriteErrorMessage("SNAPHashTable::SNAPHashTable fwrite magic number failed\n");
         return false;
     }    
+    (*bytesWritten) += sizeof(magic);
     
     if (1 != fwrite(&tableSize,sizeof(tableSize), 1, saveFile)) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable fwrite table size failed\n");
+        WriteErrorMessage("SNAPHashTable::SNAPHashTable fwrite table size failed\n");
         return false;
     }
+    (*bytesWritten) += sizeof(tableSize);
 
     if (1 != fwrite(&usedElementCount,sizeof(usedElementCount), 1, saveFile)) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable fwrite used element count size failed\n");
+        WriteErrorMessage("SNAPHashTable::SNAPHashTable fwrite used element count size failed\n");
         return false;
     }
+    (*bytesWritten) += sizeof(usedElementCount);
 
     if (1 != fwrite(&keySizeInBytes, sizeof(keySizeInBytes), 1, saveFile)) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable fwrite key size failed\n");
+        WriteErrorMessage("SNAPHashTable::SNAPHashTable fwrite key size failed\n");
         return false;
     }
+    (*bytesWritten) += sizeof(keySizeInBytes);
 
-    if (1 != fwrite(&dataSizeInBytes, sizeof(dataSizeInBytes), 1, saveFile)) {
-        fprintf(stderr,"SNAPHashTable::SNAPHashTable fwrite data size failed\n");
+    if (1 != fwrite(&valueSizeInBytes, sizeof(valueSizeInBytes), 1, saveFile)) {
+        WriteErrorMessage("SNAPHashTable::SNAPHashTable fwrite data size failed\n");
         return false;
     }
+    (*bytesWritten) += sizeof(valueSizeInBytes);
+
+    if (1 != fwrite(&valueCount, sizeof(valueCount), 1, saveFile)) {
+        WriteErrorMessage("SNAPHashTable: fwrite value count failed\n");
+        return false;
+    }
+    (*bytesWritten) += sizeof(valueCount);
+
+    if (1 != fwrite(&invalidValueValue, valueSizeInBytes, 1, saveFile)) {
+        WriteErrorMessage("SNAPHashTable: fwrite invalid value value failed\n");
+        return false;
+    }
+    (*bytesWritten) += valueSizeInBytes;
 
     size_t maxWriteSize = 100 * 1024 * 1024;
     size_t writeOffset = 0;
     while (writeOffset < tableSize * elementSize) {
         size_t amountToWrite = __min(maxWriteSize,tableSize * elementSize - writeOffset);
-        size_t bytesWritten = fwrite((char*)Table + writeOffset, 1, amountToWrite, saveFile);
-        if (bytesWritten < amountToWrite) {
-            fprintf(stderr,"SNAPHashTable::saveToFile: fwrite failed, %d\n",errno);
-            fprintf(stderr,"handle %p, addr %p, atr: %lu, &bw %p\n",saveFile,(char*)Table + writeOffset, amountToWrite, &bytesWritten);
+        size_t thisWrite = fwrite((char*)Table + writeOffset, 1, amountToWrite, saveFile);
+        if (thisWrite < amountToWrite) {
+            WriteErrorMessage("SNAPHashTable::saveToFile: fwrite failed, %d\n"
+                              "handle %p, addr %p, atr: %lu, &bw %p\n",errno, saveFile,(char*)Table + writeOffset, amountToWrite, &bytesWritten);
             return false;
         }
-        writeOffset += bytesWritten;
+        writeOffset += thisWrite;
+        (*bytesWritten) += thisWrite;
     }
 
     return true;
@@ -228,8 +242,8 @@ SNAPHashTable::saveToFile(FILE *saveFile)
 _int64 nCallsToGetEntryForKey = 0;
 _int64 nProbesInGetEntryForKey = 0;
 
-SNAPHashTable::Entry *
-SNAPHashTable::getEntryForKey(__in _uint64 key) const
+void *
+SNAPHashTable::getEntryForKey(KeyType key) const
 {
     nCallsToGetEntryForKey++;
 
@@ -241,8 +255,8 @@ SNAPHashTable::getEntryForKey(__in _uint64 key) const
     //
     // Chain through the table until we hit either a match on the key or an unused element
     //
-    Entry *entry = getEntry(tableIndex);
-    while (!isKeyEqual(entry, key) && entry->value1 != InvalidGenomeLocation) {
+    void *entry = getEntry(tableIndex);
+    while (!isKeyEqual(entry, key) && !doesEntryHaveInvalidValue(entry)) {
         nProbesInGetEntryForKey++;
 
         if (nProbes < QUADRATIC_CHAINING_DEPTH) {
@@ -269,45 +283,37 @@ SNAPHashTable::getEntryForKey(__in _uint64 key) const
     return entry;
 }
 
-bool
-SNAPHashTable::Insert(_uint64 key, const unsigned *data)
-{
-    _ASSERT(data[0] != InvalidGenomeLocation); // This is the unused value that represents an empty hash table.  You can't use it.
 
-    Entry *entry = getEntryForKey(key);
+
+    SNAPHashTable::ValueType * 
+SNAPHashTable::SlowLookup(KeyType key)
+{
+    void *entry = getEntryForKey(key);
+
+    if (NULL == entry || doesEntryHaveInvalidValue(entry)) {
+        return NULL;
+    }
+
+    return (ValueType *)entry;
+}
+
+    bool 
+SNAPHashTable::Insert(KeyType key, ValueType *data)
+{
+    void *entry = getEntryForKey(key);
+
     if (NULL == entry) {
         return false;
     }
 
-    if (!isKeyEqual(entry, key)) {
-        _ASSERT(isKeyEqual(entry, 0));
-        setKey(entry, key);
-        usedElementCount++;
+    setKey(entry, key);
+    for (unsigned i = 0; i < valueCount; i++) {
+        memcpy((char *)entry + i * valueSizeInBytes, &data[i], valueSizeInBytes);   // Assumes little endian
     }
-
-    entry->value1 = data[0];
-    entry->value2 = data[1];
 
     return true;
 }
 
-_uint64
-SNAPHashTable::GetHashTableMemorySize()
-{
-    return virtualAllocSize;
-}
 
-unsigned *
-SNAPHashTable::SlowLookup(_uint64 key)
-{
-    Entry *entry = getEntryForKey(key);
-
-    if (NULL == entry || entry->value1 == InvalidGenomeLocation) {
-        return NULL;
-    }
-
-    return &entry->value1;
-}
 
 const unsigned SNAPHashTable::magic = 0xb111b010;
-const unsigned SNAPHashTable::dataSizeInBytes = 8;

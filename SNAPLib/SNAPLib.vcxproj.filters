@@ -171,13 +171,19 @@
     <ClInclude Include="ChimericPairedEndAligner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="AlignmentFilter.h">
+    <ClInclude Include="Error.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ContaminationFilter.h">
+    <ClInclude Include="GenericFile.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GTFReader.h">
+    <ClInclude Include="GenericFile_HDFS.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GenericFile_stdio.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GenericFile_Blob.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -314,13 +320,19 @@
     <ClCompile Include="ParallelTask.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GTFReader.cpp">
+    <ClCompile Include="Error.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="AlignmentFilter.cpp">
+    <ClCompile Include="GenericFile.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ContaminationFilter.cpp">
+    <ClCompile Include="GenericFile_HDFS.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GenericFile_stdio.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GenericFile_Blob.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

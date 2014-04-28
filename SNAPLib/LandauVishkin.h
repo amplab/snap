@@ -161,7 +161,7 @@ public:
     LandauVishkin(int cacheSize = 0)
 {
     if (TEXT_DIRECTION != 1 && TEXT_DIRECTION != -1) {
-        printf("You can't possibly be serious.\n");
+        fprintf(stderr, "You can't possibly be serious.\n");
         soft_exit(1);
     }
 

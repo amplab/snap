@@ -96,12 +96,21 @@ MultiInputReadSupplier::getNextRead()
 }
 
     void
+MultiInputReadSupplier::holdBatch(
+    DataBatch batch)
+{
+    int index = batch.fileID % nReadSuppliers;
+    _ASSERT(index >= 0 && index < nReadSuppliers);
+    readSuppliers[index]->holdBatch(DataBatch(batch.batchID, batch.fileID / nReadSuppliers));
+}
+    
+    bool
 MultiInputReadSupplier::releaseBatch(
     DataBatch batch)
 {
     int index = batch.fileID % nReadSuppliers;
     _ASSERT(index >= 0 && index < nReadSuppliers);
-    readSuppliers[index]->releaseBatch(DataBatch(batch.batchID, batch.fileID / nReadSuppliers));
+    return readSuppliers[index]->releaseBatch(DataBatch(batch.batchID, batch.fileID / nReadSuppliers));
 }
 
 MultiInputPairedReadSupplier::MultiInputPairedReadSupplier(int i_nReadSuppliers, PairedReadSupplier **i_pairedReadSuppliers)
@@ -173,6 +182,7 @@ MultiInputPairedReadSupplier::getNextReadPair(Read **read0, Read **read1)
             // anyway). Can't delete because it might be retaining read data in use downstream.
             //
             activeReadSuppliers[nextReadSupplier] = activeReadSuppliers[nRemainingReadSuppliers];
+            nextReadSupplier = 0;   // (Bluntly) handles the case where nextReadSupplier is the last one.
         }
     }
     active->lastBatch[0] = (*read0)->getBatch();
@@ -184,12 +194,21 @@ MultiInputPairedReadSupplier::getNextReadPair(Read **read0, Read **read1)
 }
 
     void
+MultiInputPairedReadSupplier::holdBatch(
+    DataBatch batch)
+{
+    int index = batch.fileID % nReadSuppliers;
+    _ASSERT(index >= 0 && index < nReadSuppliers);
+    pairedReadSuppliers[index]->holdBatch(DataBatch(batch.batchID, batch.fileID / nReadSuppliers));
+}
+    
+    bool
 MultiInputPairedReadSupplier::releaseBatch(
     DataBatch batch)
 {
     int index = batch.fileID % nReadSuppliers;
     _ASSERT(index >= 0 && index < nReadSuppliers);
-    pairedReadSuppliers[index]->releaseBatch(DataBatch(batch.batchID, batch.fileID / nReadSuppliers));
+    return pairedReadSuppliers[index]->releaseBatch(DataBatch(batch.batchID, batch.fileID / nReadSuppliers));
 }
 
 
@@ -229,6 +248,12 @@ MultiInputReadSupplierGenerator::generateNewReadSupplier()
     return new MultiInputReadSupplier(nReadSuppliers,readSuppliers);    // The Supplier owns the array and suppliers we created
 }
 
+    
+    ReaderContext*
+MultiInputReadSupplierGenerator::getContext()
+{
+    return readSupplierGenerators[0]->getContext();
+}
 
 
 MultiInputPairedReadSupplierGenerator::MultiInputPairedReadSupplierGenerator(int i_nReadSuppliers, PairedReadSupplierGenerator **i_readSupplierGenerators)
@@ -264,4 +289,10 @@ MultiInputPairedReadSupplierGenerator::generateNewPairedReadSupplier()
 		return NULL;
 	}
     return new MultiInputPairedReadSupplier(nReadSuppliers,readSuppliers);
+}
+
+    ReaderContext*
+MultiInputPairedReadSupplierGenerator::getContext()
+{
+    return readSupplierGenerators[0]->getContext();
 }

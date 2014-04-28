@@ -27,6 +27,7 @@ Environment:
 #include "PriorityQueue.h"
 #include "exit.h"
 #include "Bam.h"
+#include "Error.h"
 
 #define USE_DEVTEAM_OPTIONS 1
 //#define VALIDATE_SORT 1
@@ -49,7 +50,7 @@ struct SortEntry
 };
 #pragma pack(pop)
 
-typedef VariableSizeVector<SortEntry> SortVector;
+typedef VariableSizeVector<SortEntry,150,true> SortVector;
 
 struct SortBlock
 {
@@ -96,7 +97,7 @@ class SortedDataFilter : public DataWriter::Filter
 {
 public:
     SortedDataFilter(SortedDataFilterSupplier* i_parent)
-        : Filter(DataWriter::CopyFilter), parent(i_parent), locations()
+        : Filter(DataWriter::CopyFilter), parent(i_parent), locations(10000000)
     {}
 
     virtual ~SortedDataFilter() {}
@@ -205,7 +206,7 @@ SortedDataFilter::onNextBatch(
     if (! (writer->getBatch(-1, &fromBuffer, &fromSize, &fromUsed) &&
         writer->getBatch(0, &toBuffer, &toSize, &toUsed)))
     {
-        fprintf(stderr, "SortedDataFilter::onNextBatch getBatch failed\n");
+        WriteErrorMessage( "SortedDataFilter::onNextBatch getBatch failed\n");
         soft_exit(1);
     }
     size_t target = 0;
@@ -257,14 +258,14 @@ SortedDataFilterSupplier::onClosed(
         // just rename/move temp file to real file, we're done
         DeleteSingleFile(sortedFileName); // if it exists
         if (! MoveSingleFile(tempFileName, sortedFileName)) {
-            fprintf(stderr, "unable to move temp file %s to final sorted file %s\n", tempFileName, sortedFileName);
+            WriteErrorMessage( "unable to move temp file %s to final sorted file %s\n", tempFileName, sortedFileName);
             soft_exit(1);
         }
         return;
     }
     // merge sort into final file
     if (! mergeSort()) {
-        fprintf(stderr, "merge sort failed\n");
+        WriteErrorMessage( "merge sort failed\n");
         soft_exit(1);
     }
 }
@@ -303,7 +304,7 @@ SortedDataFilterSupplier::mergeSort()
 {
     // merge sort from temp file into sorted file
 #if USE_DEVTEAM_OPTIONS
-    printf("sorting...");
+    WriteStatusMessage("sorting...");
     _int64 start = timeInMillis();
     _int64 startReadWaitTime = DataReader::ReadWaitTime;
     _int64 startReleaseWaitTime = DataReader::ReleaseWaitTime;
@@ -316,20 +317,20 @@ SortedDataFilterSupplier::mergeSort()
         encoder, encoder != NULL ? 6 : 4); // use more buffers to let encoder run async
     DataWriter* writer = writerSupplier->getWriter();
     if (writer == NULL) {
-        fprintf(stderr, "open sorted file for write failed\n");
+        WriteErrorMessage( "open sorted file for write failed\n");
         return false;
     }
-    DataSupplier* readerSupplier = DataSupplier::Default[true]; // autorelease
+    DataSupplier* readerSupplier = DataSupplier::Default; // autorelease
     // setup - open all files, read first block, begin read for second
     for (SortBlockVector::iterator i = blocks.begin(); i != blocks.end(); i++) {
-        i->reader = readerSupplier->getDataReader(MAX_READ_LENGTH * 8); // todo: standardize max length
+        i->reader = readerSupplier->getDataReader(1, MAX_READ_LENGTH * 8, 0.0); // todo: standardize max length
         i->reader->init(tempFileName);
         i->reader->reinit(i->start, i->bytes);
     }
 
     // write out header
     if (headerSize > 0xffffffff) {
-        fprintf(stderr,"SortedDataFilterSupplier: headerSize too big\n");
+        WriteErrorMessage("SortedDataFilterSupplier: headerSize too big\n");
         soft_exit(1);
     }
     if (headerSize > 0) {
@@ -343,14 +344,14 @@ SortedDataFilterSupplier::mergeSort()
 			if ((! blocks[0].reader->getData(&rbuffer, &rbytes)) || rbytes == 0) {
 				blocks[0].reader->nextBatch();
 				if (! blocks[0].reader->getData(&rbuffer, &rbytes)) {
-					fprintf(stderr, "read header failed\n");
+					WriteErrorMessage( "read header failed\n");
 					soft_exit(1);
 				}
 			}
 			if ((! writer->getBuffer(&wbuffer, &wbytes)) || wbytes == 0) {
 				writer->nextBatch();
 				if (! writer->getBuffer(&wbuffer, &wbytes)) {
-					fprintf(stderr, "write header failed\n");
+					WriteErrorMessage( "write header failed\n");
 					soft_exit(1);
 				}
 			}
@@ -369,14 +370,13 @@ SortedDataFilterSupplier::mergeSort()
     // merge temp blocks into output
     _int64 total = 0;
     // get initial merge sort data
-    // queue using complement of location since priority queue is largest first
-    typedef PriorityQueue<unsigned,int,-3> BlockQueue;
+    typedef PriorityQueue<unsigned,int> BlockQueue;
     BlockQueue queue;
     for (SortBlockVector::iterator b = blocks.begin(); b != blocks.end(); b++) {
         _int64 bytes;
         b->reader->getData(&b->data, &bytes);
         format->getSortInfo(genome, b->data, bytes, &b->location, &b->length);
-        queue.put((_uint32) (b - blocks.begin()), ~b->location); 
+        queue.add((_uint32) (b - blocks.begin()), b->location); 
     }
     unsigned current = 0; // current location for validation
 	int lastRefID = -1, lastPos = 0;
@@ -384,12 +384,12 @@ SortedDataFilterSupplier::mergeSort()
 #if VALIDATE_SORT
 		unsigned check;
 		queue.peek(&check);
-		_ASSERT(~check >= current);
+		_ASSERT(check >= current);
 #endif
         unsigned secondLocation;
         int smallestIndex = queue.pop();
         int secondIndex = queue.size() > 0 ? queue.peek(&secondLocation) : -1;
-        unsigned limit = secondIndex != -1 ? ~secondLocation : UINT32_MAX;
+        unsigned limit = secondIndex != -1 ? secondLocation : UINT32_MAX;
         SortBlock* b = &blocks[smallestIndex];
         char* writeBuffer;
         size_t writeBytes;
@@ -402,7 +402,7 @@ SortedDataFilterSupplier::mergeSort()
                 writer->nextBatch();
                 writer->getBuffer(&writeBuffer, &writeBytes);
                 if (writeBytes < b->length) {
-                    fprintf(stderr, "mergeSort: buffer size too small\n");
+                    WriteErrorMessage( "mergeSort: buffer size too small\n");
                     return false;
                 }
             }
@@ -443,7 +443,7 @@ SortedDataFilterSupplier::mergeSort()
             _ASSERT(b->length <= readBytes && b->location >= previous);
         }
         if (b->reader != NULL) {
-            queue.put(smallestIndex, ~b->location);
+            queue.add(smallestIndex, b->location);
         }
     }
     
@@ -453,11 +453,11 @@ SortedDataFilterSupplier::mergeSort()
     writerSupplier->close();
     delete writerSupplier;
     if (! DeleteSingleFile(tempFileName)) {
-        printf("warning: failure deleting temp file %s\n", tempFileName);
+        WriteErrorMessage( "warning: failure deleting temp file %s\n", tempFileName);
     }
 
 #if USE_DEVTEAM_OPTIONS
-    printf("sorted %lld reads in %u blocks, %lld s\n"
+    WriteStatusMessage("sorted %lld reads in %u blocks, %lld s\n"
         "read wait align %.3f s + merge %.3f s, read release align %.3f s + merge %.3f s\n"
         "write wait %.3f s align + %.3f s merge, write filter %.3f s align + %.3f s merge\n",
         total, blocks.size(), (timeInMillis() - start)/1000,

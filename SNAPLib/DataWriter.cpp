@@ -23,6 +23,7 @@ Environment:
 #include "ParallelTask.h"
 #include "exit.h"
 #include "Bam.h"
+#include "Error.h"
 
 using std::min;
 using std::max;
@@ -177,9 +178,9 @@ FileEncoder::outputReady()
     // begin writing the buffer to disk
     AsyncDataWriter::Batch* write = &writer->batches[encoderBatch];
     writer->supplier->advance(write->used, 0, &write->fileOffset, &write->logicalOffset);
-    //printf("outputReady write batch %d @%lld:%lld\n", encoderBatch, write->fileOffset, write->used);
+    //fprintf(stderr, "outputReady write batch %d @%lld:%lld\n", encoderBatch, write->fileOffset, write->used);
     if (! write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
-        fprintf(stderr, "error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
+        WriteErrorMessage("error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
         soft_exit(1);
     }
     AllowEventWaitersToProceed(&write->encoded);
@@ -226,7 +227,7 @@ FileEncoder::getEncodeBatch(
     *o_batch = batch->buffer;
     *o_batchSize = writer->bufferSize;
     *o_batchUsed = batch->used;
-    //printf("getEncodeBatch #%d: %lld/%lld\n", encoderBatch, batch->used, writer->bufferSize);
+    //fprintf(stderr, "getEncodeBatch #%d: %lld/%lld\n", encoderBatch, batch->used, writer->bufferSize);
 }
 
     void
@@ -245,7 +246,7 @@ FileEncoder::setEncodedBatchSize(
     size_t newSize)
 {
     size_t old = writer->batches[encoderBatch].used;
-//printf("setEncodedBatchSize #%d %lld -> %lld\n", encoderBatch, old, newSize);
+//fprintf(stderr, "setEncodedBatchSize #%d %lld -> %lld\n", encoderBatch, old, newSize);
     if (newSize != old) {
         AcquireExclusiveLock(lock);
         AsyncDataWriter::Batch* batch = &writer->batches[encoderBatch];
@@ -273,7 +274,7 @@ AsyncDataWriter::AsyncDataWriter(
     _ASSERT(count >= 2);
     char* block = (char*) BigAlloc(count * bufferSize);
     if (block == NULL) {
-        fprintf(stderr, "Unable to allocate %lld bytes for write buffers\n", count * bufferSize);
+        WriteErrorMessage("Unable to allocate %lld bytes for write buffers\n", count * bufferSize);
         soft_exit(1);
     }
     batches = new Batch[count];
@@ -377,7 +378,7 @@ AsyncDataWriter::nextBatch()
     Batch* write = &batches[written];
     write->logicalUsed = write->used;
     current = (current + 1) % count;
-    //printf("nextBatch reset %d used=0\n", current);
+    //fprintf(stderr, "nextBatch reset %d used=0\n", current);
     batches[current].used = 0;
     bool newBuffer = filter != NULL && (filter->filterType == CopyFilter || filter->filterType == TransformFilter);
     bool newSize = filter != NULL && (filter->filterType == TransformFilter || filter->filterType == ResizeFilter);
@@ -413,10 +414,10 @@ AsyncDataWriter::nextBatch()
 
     InterlockedAdd64AndReturnNewValue(&FilterTime, start2 - start);
     if (encoder == NULL) {
-        //printf("nextBatch beginWrite #%d @%lld: %lld bytes\n", write-batches, write->fileOffset, write->used);
+        //fprintf(stderr, "nextBatch beginWrite #%d @%lld: %lld bytes\n", write-batches, write->fileOffset, write->used);
         //_ASSERT(BgzfHeader::validate(write->buffer, write->used)); //!! remove before checkin
         if (! write->file->beginWrite(write->buffer, write->used, write->fileOffset, NULL)) {
-            fprintf(stderr, "error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
+            WriteErrorMessage("error: file write %lld bytes at offset %lld failed\n", write->used, write->fileOffset);
             soft_exit(1);
         }
     } else {
@@ -424,7 +425,7 @@ AsyncDataWriter::nextBatch()
         encoder->inputReady();
     }
     if (! batches[current].file->waitForCompletion()) {
-        fprintf(stderr, "error: file write failed\n");
+        WriteErrorMessage("error: file write failed\n");
         soft_exit(1);
     }
     InterlockedAdd64AndReturnNewValue(&WaitTime, timeInNanos() - start2);
@@ -464,7 +465,7 @@ AsyncDataWriterSupplier::AsyncDataWriterSupplier(
 {
     file = AsyncFile::open(filename, true);
     if (file == NULL) {
-        fprintf(stderr, "failed to open %s for write\n", filename);
+        WriteErrorMessage("failed to open %s for write\n", filename);
         soft_exit(1);
     }
     InitializeExclusiveLock(&lock);
@@ -503,7 +504,7 @@ AsyncDataWriterSupplier::advance(
     sharedOffset += physical;
     *o_logical = sharedLogical;
     sharedLogical += logical;
-    //printf("advance %lld + %lld = %lld, logical %lld + %lld = %lld\n", *o_physical, physical, sharedOffset, *o_logical, logical, sharedLogical);
+    //fprintf(stderr, "advance %lld + %lld = %lld, logical %lld + %lld = %lld\n", *o_physical, physical, sharedOffset, *o_logical, logical, sharedLogical);
     ReleaseExclusiveLock(&lock);
 }
 
@@ -589,3 +590,287 @@ DataWriter::FilterSupplier::compose(
 
 volatile _int64 DataWriter::WaitTime = 0;
 volatile _int64 DataWriter::FilterTime = 0;
+
+
+StdoutAsyncFile::StdoutAsyncFile()
+{
+    if (anyCreated) {
+        WriteErrorMessage("You can only ever write to stdout once per SNAP run (even if you're doing multiple runs with the comma syntax\n");
+        soft_exit(1);
+    }
+    anyCreated = true;
+
+#ifdef _MSC_VER
+    int result = _setmode( _fileno( stdout ), _O_BINARY );  // puts stdout in to non-translated mode, so if we're writing compressed data windows' CRLF processing doesn't destroy it.
+    if (-1 == result) {
+        WriteErrorMessage("StdoutAsyncFile::freopen to change to untranslated mode failed\n");
+        soft_exit(1);
+    }
+#endif // _MSC_VER
+
+    writeElementQueue->next = writeElementQueue->prev = writeElementQueue;
+    highestOffsetCompleted = 0;
+
+    InitializeExclusiveLock(&lock);
+    CreateEventObject(&unexaminedElementsOnQueue);
+    CreateEventObject(&elementsCompleted);
+    PreventEventWaitersFromProceeding(&unexaminedElementsOnQueue);
+    PreventEventWaitersFromProceeding(&elementsCompleted);
+    CreateSingleWaiterObject(&consumerThreadDone);
+    
+
+    closing = false;
+
+    StartNewThread(ConsumerThreadMain, this);
+}
+
+    StdoutAsyncFile *
+StdoutAsyncFile::open(const char *filename, bool write)
+{
+    if (strcmp("-", filename) || !write) {
+        WriteErrorMessage("StdoutAsynFile must be named - and must be opened for write.\n");
+        soft_exit(1);
+    }
+
+    return new StdoutAsyncFile();
+}
+class StdoutAsyncFileWriter : public AsyncFile::Writer
+{
+public:
+    StdoutAsyncFileWriter(StdoutAsyncFile *i_asyncFile);
+    ~StdoutAsyncFileWriter() {}
+
+    // waits for all writes to complete, frees resources
+    bool close();
+
+    // begin a write; if there is already a write in progress, might wait for it to complete
+    bool beginWrite(void* buffer, size_t length, size_t offset, size_t *bytesWritten);
+
+    // wait for all prior beginWrites to complete
+    bool waitForCompletion();
+
+private:
+    bool                  anyWritesStarted;
+    size_t                highestOffsetWritten;
+    StdoutAsyncFile     *asyncFile;
+};
+
+StdoutAsyncFileWriter::StdoutAsyncFileWriter(StdoutAsyncFile *i_asyncFile)
+{
+    asyncFile = i_asyncFile;
+    highestOffsetWritten = 0;
+    anyWritesStarted = false;
+}
+
+    bool
+StdoutAsyncFileWriter::close()
+ {
+     return waitForCompletion();
+ }
+
+    bool
+StdoutAsyncFileWriter::beginWrite(void* buffer, size_t length, size_t offset, size_t *bytesWritten)
+{
+    _ASSERT(offset > highestOffsetWritten || !anyWritesStarted);
+    //fprintf(stderr, "StdoutAsyncFileWriter::beginWrite(0x%llx, %lld, %lld)\n", buffer, length, offset);
+    asyncFile->beginWrite(buffer, length, offset, bytesWritten);
+    highestOffsetWritten = offset + length;
+    anyWritesStarted = true;
+
+    return true;
+}
+
+    bool
+StdoutAsyncFileWriter::waitForCompletion()
+{
+    if (!anyWritesStarted) {
+        return true;
+    }
+    asyncFile->waitForCompletion(highestOffsetWritten);
+
+    return true;
+}
+
+StdoutAsyncFile::~StdoutAsyncFile() 
+{
+    DestroyExclusiveLock(&lock);
+    DestroyEventObject(&unexaminedElementsOnQueue);
+    DestroyEventObject(&elementsCompleted);
+}
+
+    bool 
+StdoutAsyncFile::close()
+{
+    AcquireExclusiveLock(&lock);
+    closing = true;
+    AllowEventWaitersToProceed(&unexaminedElementsOnQueue);
+    ReleaseExclusiveLock(&lock);
+
+    WaitForSingleWaiterObject(&consumerThreadDone);
+
+    return true;
+}
+
+    AsyncFile::Writer* 
+StdoutAsyncFile::getWriter()
+{
+    return new StdoutAsyncFileWriter(this);
+}
+    
+    AsyncFile::Reader* 
+StdoutAsyncFile::getReader()
+{
+    WriteErrorMessage("StdoutAsyncFile::getReader() called.\n");
+    soft_exit(1);
+    return NULL;
+}
+
+    void
+StdoutAsyncFile::ConsumerThreadMain(void *param)
+{
+    StdoutAsyncFile *file = (StdoutAsyncFile *)param;
+    SingleWaiterObject *doneObject = &file->consumerThreadDone;
+    file->runConsumer();
+    SignalSingleWaiterObject(doneObject);
+}
+
+    void 
+StdoutAsyncFile::beginWrite(void *buffer, size_t length, size_t offset, size_t *o_bytesWritten)
+{
+    if (0 == length) {
+        return;
+    }
+    WriteElement *element = new WriteElement;
+    element->buffer = buffer;
+    element->length = length;
+    element->offset = offset;
+    element->o_bytesWritten = o_bytesWritten;
+
+    AcquireExclusiveLock(&lock);
+    _ASSERT(offset >= highestOffsetCompleted);
+    //
+    // The queue is in order.  See if this element goes first.
+    //
+    if (isQueueEmpty() || offset < writeElementQueue->next->offset) {
+        _ASSERT(isQueueEmpty() || offset <= writeElementQueue->next->offset);  // It fits entirely before the next element
+        element->enqueue(writeElementQueue);
+        if (element->offset == highestOffsetCompleted) {
+            //
+            // Wake the consumer, this is ready to write.
+            //
+            AllowEventWaitersToProceed(&unexaminedElementsOnQueue);
+        }
+    } else {
+        //
+        // It isn't the first thing on the queue.  Figure out where it goes.
+        //
+        WriteElement *possiblePredecessor = writeElementQueue->next;
+        while (possiblePredecessor->next != writeElementQueue && possiblePredecessor->next->offset < offset) {
+            possiblePredecessor = possiblePredecessor->next;
+        }
+        _ASSERT(possiblePredecessor->offset < offset);
+
+        element->enqueue(possiblePredecessor);
+    }
+    ReleaseExclusiveLock(&lock);
+}
+    void 
+StdoutAsyncFile::waitForCompletion(size_t offset)
+{
+    AcquireExclusiveLock(&lock);
+    while (offset > highestOffsetCompleted) {
+        PreventEventWaitersFromProceeding(&elementsCompleted);
+        ReleaseExclusiveLock(&lock);
+        WaitForEvent(&elementsCompleted);
+        AcquireExclusiveLock(&lock);
+    }
+    ReleaseExclusiveLock(&lock);
+}
+
+    void
+StdoutAsyncFile::runConsumer()
+{
+    size_t maxWriteSize = 1024 * 1024;
+
+    AcquireExclusiveLock(&lock);
+    for (;;) {
+        if (isQueueEmpty() && closing) {
+            ReleaseExclusiveLock(&lock);
+            //
+            // Done.  The caller is responsible for signalling the consumerThreadDone object.
+            //
+            return;
+        }
+
+        if (isQueueEmpty() || writeElementQueue->next->offset != highestOffsetCompleted) {
+            //
+            // Wait for work.
+            //
+            ReleaseExclusiveLock(&lock);
+            WaitForEvent(&unexaminedElementsOnQueue);
+            AcquireExclusiveLock(&lock);
+            PreventEventWaitersFromProceeding(&unexaminedElementsOnQueue);
+            continue;
+        }
+
+        //
+        // We have the next write queued.  Write it.  Use a loop in case fwrite doesn't take the whole thing at once.
+        //
+        WriteElement *element = writeElementQueue->next;
+        //fprintf(stderr,"StdoutAsyncFile::runConsumer(): writing buffer at 0x%llx, size %lld\n", element->buffer, element->length);
+        ReleaseExclusiveLock(&lock);
+        size_t bytesLeftToWrite = element->length;
+        size_t totalBytesWritten = 0;
+        while (bytesLeftToWrite > 0) {
+            size_t bytesToWrite = __min(bytesLeftToWrite, maxWriteSize);
+            size_t bytesWritten = fwrite((char *)element->buffer + totalBytesWritten, 1, bytesToWrite, stdout);
+            _ASSERT(bytesWritten <= bytesToWrite);
+            if (0 == bytesWritten) {
+                if (ENOMEM == errno && maxWriteSize > 1024) {
+                    //
+                    // For whatever reason, sometimes trying to write too much to stdout generates an ENOMEM (though we have tons of memory).  
+                    // If we see that and we're not already at a small size, just reduce our max write size and try again.
+                    //
+                    maxWriteSize /= 2;
+                } else {
+                    WriteErrorMessage("StdoutAsyncFile::runConsumer(): fwrite failed %d\n", errno);
+                    soft_exit(1);
+                }
+            }
+            bytesLeftToWrite -= bytesWritten;
+            totalBytesWritten += bytesWritten;
+        }
+
+        if (NULL != element->o_bytesWritten) {
+            *element->o_bytesWritten = totalBytesWritten;
+        }
+        
+        AcquireExclusiveLock(&lock);
+        _ASSERT(writeElementQueue->next == element);
+        element->dequeue();
+        highestOffsetCompleted = element->offset + element->length;
+
+        AllowEventWaitersToProceed(&elementsCompleted);
+        delete element;
+    }
+    /*NOTREACHED*/
+}
+    void
+StdoutAsyncFile::WriteElement::enqueue(WriteElement *previous)
+{
+    next = previous->next;
+    prev = previous;
+    prev->next = this;
+    next->prev = this;
+}
+
+    void
+StdoutAsyncFile::WriteElement::dequeue()
+{
+    next->prev = prev;
+    prev->next = next;
+
+    next = prev = NULL;
+}
+
+bool StdoutAsyncFile::anyCreated = false;

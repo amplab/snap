@@ -1,0 +1,5 @@
+#############################################
+# DO NOT HAND-EDIT THIS GENERATED FILE!!!!! #
+#############################################
+CLEARCASE_MAKE_COMPAT = gnu
+sinclude makefile.twb.options_myown

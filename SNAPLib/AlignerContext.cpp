@@ -32,6 +32,8 @@ Revision History:
 #include "BaseAligner.h"
 #include "FileFormat.h"
 #include "exit.h"
+#include "PairedAligner.h"
+#include "Error.h"
 
 using std::max;
 using std::min;
@@ -96,10 +98,11 @@ AlignerContext::~AlignerContext()
 
 void AlignerContext::runAlignment(int argc, const char **argv, const char *version, unsigned *argsConsumed)
 {
-    options = parseOptions(argc, argv, version, argsConsumed);
+    options = parseOptions(argc, argv, version, argsConsumed, isPaired());
 #ifdef _MSC_VER
     useTimingBarrier = options->useTimingBarrier;
 #endif
+
     initialize();
     extension->initialize();
     
@@ -174,21 +177,22 @@ AlignerContext::initialize()
         strcpy(g_indexDirectory, options->indexDir);
 
         if (strcmp(options->indexDir, "-") != 0) {
-            printf("Loading index from directory... ");
+            WriteStatusMessage("Loading index from directory... ");
+ 
             fflush(stdout);
             _int64 loadStart = timeInMillis();
             index = GenomeIndex::loadFromDirectory((char*) options->indexDir);
             if (index == NULL) {
-                fprintf(stderr, "Index load failed, aborting.\n");
+                WriteErrorMessage("Index load failed, aborting.\n");
                 soft_exit(1);
             }
             g_index = index;
 
             _int64 loadTime = timeInMillis() - loadStart;
-            printf("%llds.  %u bases, seed size %d\n",
-                loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
-        } else {
-            printf("no alignment, input/output only\n");
+             WriteStatusMessage("%llds.  %u bases, seed size %d\n",
+                    loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
+         } else {
+            WriteStatusMessage("no alignment, input/output only\n");
         }
     } else {
         index = g_index;
@@ -234,12 +238,12 @@ AlignerContext::initialize()
         strcpy(c_indexDirectory, options->contaminationDir);
 
         if (strcmp(options->contaminationDir, "-") != 0) {
-            printf("Loading contamination index from directory... ");
+            printf("Loading secondary index from directory... ");
             fflush(stdout);
             _int64 loadStart = timeInMillis();
             contamination = GenomeIndex::loadFromDirectory((char*) options->contaminationDir);
             if (contamination == NULL) {
-                fprintf(stderr, "Contamination index load failed, aborting.\n");
+                fprintf(stderr, "Secondary index load failed, aborting.\n");
                 soft_exit(1);
             }
             c_index = contamination;
@@ -270,14 +274,17 @@ AlignerContext::initialize()
         fprintf(stderr, "WARNING: You gave ranges for some parameters, so SAM files will be overwritten!\n");
     }
 
-    maxHits_ = options->maxHits.start;
-    maxDist_ = options->maxDist.start;
+    maxHits_ = options->maxHits;
+    maxDist_ = options->maxDist;
     extraSearchDepth = options->extraSearchDepth;
+    noUkkonen = options->noUkkonen;
+    noOrderedEvaluation = options->noOrderedEvaluation;
+    maxSecondaryAligmmentAdditionalEditDistance = options->maxSecondaryAligmmentAdditionalEditDistance;
 
     if (options->perfFileName != NULL) {
         perfFile = fopen(options->perfFileName,"a");
         if (NULL == perfFile) {
-            fprintf(stderr,"Unable to open perf file '%s'\n", options->perfFileName);
+            WriteErrorMessage("Unable to open perf file '%s'\n", options->perfFileName);
             soft_exit(1);
         }
     }
@@ -288,7 +295,7 @@ AlignerContext::initialize()
     void
 AlignerContext::printStatsHeader()
 {
-    printf("MaxHits\tMaxDist\t%%Used\t%%Unique\t%%Multi\t%%!Found\t%%Error\t%%Pairs\tlvCalls\tNumReads\tReads/s\n");
+    WriteStatusMessage("MaxHits\tMaxDist\t%%Used\t%%Unique\t%%Multi\t%%!Found\t%%Error\t%%Pairs\tlvCalls\tNumReads\tReads/s\n");
 }
 
     void
@@ -311,34 +318,38 @@ AlignerContext::beginIteration()
     stats->extra = extension->extraStats();
     extension->beginIteration();
     
+    memset(&readerContext, 0, sizeof(readerContext));
     readerContext.clipping = options->clipping;
     readerContext.defaultReadGroup = options->defaultReadGroup;
     readerContext.genome = index != NULL ? index->getGenome() : NULL;
     readerContext.transcriptome = transcriptome != NULL ? transcriptome->getGenome() : NULL;
     readerContext.gtf = gtf != NULL ? gtf : NULL;
-    readerContext.paired = false;
     readerContext.ignoreSecondaryAlignments = options->ignoreSecondaryAlignments;
+    readerContext.ignoreSupplementaryAlignments = options->ignoreSecondaryAlignments;   // Maybe we should split them out
     DataSupplier::ExpansionFactor = options->expansionFactor;
-	readerContext.header = NULL;
-	readerContext.headerLength = 0;
-	readerContext.headerBytes = 0;
 
     typeSpecificBeginIteration();
 
-    if (NULL != options->outputFileTemplate) {
-        const FileFormat* format = 
-            FileFormat::SAM[0]->isFormatOf(options->outputFileTemplate) ? FileFormat::SAM[options->useM] :
-            FileFormat::BAM[0]->isFormatOf(options->outputFileTemplate) ? FileFormat::BAM[options->useM] :
-            NULL;
-        if (format != NULL) {
-            writerSupplier = format->getWriterSupplier(options, readerContext.genome, readerContext.transcriptome, readerContext.gtf);
-            ReadWriter* headerWriter = writerSupplier->getWriter();
-            headerWriter->writeHeader(readerContext, options->sortOutput, argc, argv, version, options->rgLineContents);
-            headerWriter->close();
-            delete headerWriter;
+    if (UnknownFileType != options->outputFile.fileType) {
+        const FileFormat* format;
+        if (SAMFile == options->outputFile.fileType) {
+            format = FileFormat::SAM[options->useM];
+        } else if (BAMFile == options->outputFile.fileType) {
+            format = FileFormat::BAM[options->useM];
         } else {
-            fprintf(stderr, "warning: no output, unable to determine format of output file %s\n", options->outputFileTemplate);
+            //
+            // This shouldn't happen, because the command line parser should catch it.  Perhaps you've added a new output file format and just
+            // forgoten to add it here.
+            //
+            WriteErrorMessage("AlignerContext::beginIteration(): unknown file type %d for '%s'\n", options->outputFile.fileType, options->outputFile.fileName);
+            soft_exit(1);
         }
+
+        writerSupplier = format->getWriterSupplier(options, readerContext.genome, readerContext.transcriptome, readerContext.gtf);
+        ReadWriter* headerWriter = writerSupplier->getWriter();
+        headerWriter->writeHeader(readerContext, options->sortOutput, argc, argv, version, options->rgLineContents);
+        headerWriter->close();
+        delete headerWriter;
     }
 }
 
@@ -359,15 +370,11 @@ AlignerContext::finishIteration()
     bool
 AlignerContext::nextIteration()
 {
+    //
+    // This thing is a vestage of when we used to allow parameter ranges.
+    //
     typeSpecificNextIteration();
-    if ((maxDist_ += options->maxDist.step) > options->maxDist.end) {
-        maxDist_ = options->maxDist.start;
-        if ((maxHits_ += options->maxHits.step) > options->maxHits.end) {
-            return false;
-        }
-    }
-
-    return true;
+    return false;
 }
 
     void
@@ -381,7 +388,7 @@ AlignerContext::printStats()
     } else {
         snprintf(errorRate, sizeof(errorRate), "-");
     }
-    printf("%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%lld\t%lld\t%.0f (at: %lld)\n",
+    WriteStatusMessage("%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%lld\t%lld\t%.0f (at: %lld)\n",
             maxHits_, maxDist_, 
             100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
             100.0 * stats->singleHits / usefulReads,
@@ -417,19 +424,141 @@ AlignerContext::printStats()
         double truePositives = (totalAligned - totalErrors) / max(stats->totalReads, (_int64) 1);
         double falsePositives = totalErrors / totalAligned;
         if (i <= 10 || i % 2 == 0 || i == 69) {
-//            printf("%d\t%d\t%d\t%.3f\t%.2E\n", i, stats->mapqHistogram[i], stats->mapqErrors[i], truePositives, falsePositives);
+//            WriteStatusMessage("%d\t%d\t%d\t%.3f\t%.2E\n", i, stats->mapqHistogram[i], stats->mapqErrors[i], truePositives, falsePositives);
         }
     }
+
+#if TIME_HISTOGRAM
+    WriteStatusMessage("Per-read alignment time histogram:\nlog2(ns)\tcount\ttotal time (ns)\n");
+    for (int i = 0; i < 31; i++) {
+        WriteStatusMessage("%d\t%lld\t%lld\n", i, stats->countByTimeBucket[i], stats->nanosByTimeBucket[i]);
+    }
+#endif // TIME_HISTOGRAM
+
 
     stats->printHistograms(stdout);
 
 #ifdef  TIME_STRING_DISTANCE
-    printf("%llds, %lld calls in BSD noneClose, not -1\n",  stats->nanosTimeInBSD[0][1]/1000000000, stats->BSDCounts[0][1]);
-    printf("%llds, %lld calls in BSD noneClose, -1\n",      stats->nanosTimeInBSD[0][0]/1000000000, stats->BSDCounts[0][0]);
-    printf("%llds, %lld calls in BSD close, not -1\n",      stats->nanosTimeInBSD[1][1]/1000000000, stats->BSDCounts[1][1]);
-    printf("%llds, %lld calls in BSD close, -1\n",          stats->nanosTimeInBSD[1][0]/1000000000, stats->BSDCounts[1][0]);
-    printf("%llds, %lld calls in Hamming\n",                stats->hammingNanos/1000000000,         stats->hammingCount);
+    WriteStatusMessage("%llds, %lld calls in BSD noneClose, not -1\n",  stats->nanosTimeInBSD[0][1]/1000000000, stats->BSDCounts[0][1]);
+    WriteStatusMessage("%llds, %lld calls in BSD noneClose, -1\n",      stats->nanosTimeInBSD[0][0]/1000000000, stats->BSDCounts[0][0]);
+    WriteStatusMessage("%llds, %lld calls in BSD close, not -1\n",      stats->nanosTimeInBSD[1][1]/1000000000, stats->BSDCounts[1][1]);
+    WriteStatusMessage("%llds, %lld calls in BSD close, -1\n",          stats->nanosTimeInBSD[1][0]/1000000000, stats->BSDCounts[1][0]);
+    WriteStatusMessage("%llds, %lld calls in Hamming\n",                stats->hammingNanos/1000000000,         stats->hammingCount);
 #endif  // TIME_STRING_DISTANCE
 
     extension->printStats();
+}
+
+        AlignerOptions*
+AlignerContext::parseOptions(
+    int i_argc,
+    const char **i_argv,
+    const char *i_version,
+    unsigned *argsConsumed,
+    bool      paired)
+{
+    argc = i_argc;
+    argv = i_argv;
+    version = i_version;
+
+    AlignerOptions *options;
+
+    if (paired) {
+        options = new PairedAlignerOptions("snapr paired <index-dir> <transcriptome-dir> <annotation> <inputFile(s)> [<options>] where <input file(s)> is a list of files to process.\n");
+    } else {
+        options = new AlignerOptions("snapr single <index-dir> <transcriptome-dir> <annotation> <inputFile(s)> [<options>] where <input file(s)> is a list of files to process.\n");
+    }
+
+    options->extra = extension->extraOptions();
+    if (argc < 2) {
+        WriteErrorMessage("Too few parameters\n");
+        options->usage();
+    }
+
+    options->indexDir = argv[0];
+    struct InputList {
+        SNAPFile    input;
+        InputList*  next;
+    } *inputList = NULL;
+
+    //
+    // Now build the input array and parse options.
+    //
+
+    bool inputFromStdio = false;
+
+    int i;
+    int nInputs = 0;
+    for (i = 1; i < argc; i++) {
+
+        if (',' == argv[i][0]  && '\0' == argv[i][1]) {
+            i++;    // Consume the comma
+            break;
+        }
+
+        int argsConsumed;
+        SNAPFile input;
+        if (SNAPFile::generateFromCommandLine(argv+i, argc-i, &argsConsumed, &input, paired, true)) {
+            if (input.isStdio) {
+                if (inputFromStdio) {
+                    WriteErrorMessage("You specified stdin ('-') specified for more than one input, which isn't permitted.\n");
+                    soft_exit(1);
+                } else {
+                    inputFromStdio = true;
+                }
+            }
+
+            InputList *listEntry = new InputList;
+            listEntry->input = input;
+            listEntry->next = inputList;
+            inputList = listEntry;      // Yes, this puts them in backwards.  a) We reverse them at the end and b) it doesn't matter anyway
+
+            nInputs++;
+            i += argsConsumed - 1;
+            continue;
+        }
+
+        bool done;
+        int oldI = i;
+        if (!options->parse(argv, argc, i, &done)) {
+            WriteErrorMessage("Didn't understand options starting at %s\n", argv[oldI]);
+            options->usage();
+        }
+
+        if (done) {
+            i++;    // For the ',' arg
+            break;
+        }
+    }
+
+    if (0 == nInputs) {
+        WriteErrorMessage("No input files specified.\n");
+        soft_exit(1);
+    }
+
+    if (options->maxDist + options->extraSearchDepth >= MAX_K) {
+        WriteErrorMessage("You specified too large of a maximum edit distance combined with extra search depth.  The must add up to less than %d.\n", MAX_K);
+        WriteErrorMessage("Either reduce their sum, or change MAX_K in LandauVishkin.h and recompile.\n");
+        soft_exit(1);
+    }
+
+    if (options->maxSecondaryAligmmentAdditionalEditDistance > (int)options->extraSearchDepth) {
+        WriteErrorMessage("You can't have the max edit distance for secondary alignments (-om) be bigger than the max search depth (-D)\n");
+        soft_exit(1);
+    }
+
+    options->nInputs = nInputs;
+    options->inputs = new SNAPFile[nInputs];
+    for (int j = nInputs - 1; j >= 0; j --) {
+        // The loop runs backwards so that we reverse the reversing that we did when we built it.  Not that it matters anyway.
+        _ASSERT(NULL != inputList);
+        options->inputs[j] = inputList->input;
+        InputList *dying = inputList;
+        inputList = inputList->next;
+        delete dying;
+    }
+    _ASSERT(NULL == inputList);
+
+    *argsConsumed = i;
+    return options;
 }

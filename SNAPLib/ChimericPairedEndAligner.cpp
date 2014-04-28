@@ -47,15 +47,19 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         double              seedCoverage,
         bool                forceSpacing_,
         unsigned            extraSearchDepth,
-        PairedEndAligner    *underlyingPairedEndAligner_,
+        bool                noUkkonen,
+        bool                noOrderedEvaluation,
+       PairedEndAligner    *underlyingPairedEndAligner_,
         BigAllocator        *allocator)
  :  underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), lv(0), reverseLV(0)
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
-                                    maxSeedsFromCommandLine,  seedCoverage, extraSearchDepth, &lv, &reverseLV, NULL, allocator);
+                                    maxSeedsFromCommandLine,  seedCoverage, extraSearchDepth, noUkkonen, noOrderedEvaluation, &lv, &reverseLV, NULL, allocator);
     
     underlyingPairedEndAligner->setLandauVishkin(&lv, &reverseLV);
+
+    singleSecondary[0] = singleSecondary[1] = NULL;
 }
 
     size_t 
@@ -84,9 +88,25 @@ extern bool _DumpAlignments;
 #endif // _DEBUG
 
 
-void ChimericPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentResult *result)
+void ChimericPairedEndAligner::align(
+        Read                  *read0,
+        Read                  *read1,
+        PairedAlignmentResult *result,
+        int                    maxEditDistanceForSecondaryResults,
+        int                    secondaryResultBufferSize,
+        int                   *nSecondaryResults,
+        PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
+        int                    singleSecondaryBufferSize,
+        int                   *nSingleEndSecondaryResultsForFirstRead,
+        int                   *nSingleEndSecondaryResultsForSecondRead,
+        SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly        
+        )
 {
 	result->status[0] = result->status[1] = NotFound;
+    *nSecondaryResults = 0;
+    *nSingleEndSecondaryResultsForFirstRead = 0;
+    *nSingleEndSecondaryResultsForSecondRead = 0;
+
      if (read0->getDataLength() < 50 && read1->getDataLength() < 50) {
         TRACE("Reads are both too short -- returning");
         return;
@@ -96,7 +116,8 @@ void ChimericPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRe
     //
     // Let the LVs use the cache that we built up.
     //
-    underlyingPairedEndAligner->align(read0, read1, result); 
+    underlyingPairedEndAligner->align(read0, read1, result, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults, 
+        singleSecondaryBufferSize, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead, singleEndSecondaryResults);
     _int64 end = timeInNanos();
 
     result->nanosInAlignTogether = end - start;
@@ -124,10 +145,26 @@ void ChimericPairedEndAligner::align(Read *read0, Read *read1, PairedAlignmentRe
     // chimeric and so we should just align them with the single end aligner and apply a MAPQ penalty.
     //
     Read *read[NUM_READS_PER_PAIR] = {read0, read1};
+    int *resultCount[2] = {nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead};
+
     for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
-        result->status[r] = singleAligner->AlignRead(read[r], &result->location[r], &result->direction[r], &result->score[r], &result->mapq[r]);
-        result->mapq[r] /= 3;   // Heavy quality penalty for chimeric reads
+        SingleAlignmentResult singleResult;
+        int singleEndSecondaryResultsThisTime = 0;
+
+        // We're using *nSingleEndSecondaryResultsForFirstRead because it's either 0 or what all we've seen (i.e., we know NUM_READS_PER_PAIR is 2)
+        singleAligner->AlignRead(read[r], &singleResult, maxEditDistanceForSecondaryResults, 
+            singleSecondaryBufferSize - *nSingleEndSecondaryResultsForFirstRead, &singleEndSecondaryResultsThisTime, 
+            singleEndSecondaryResults + *nSingleEndSecondaryResultsForFirstRead);   
+
+        *(resultCount[r]) = singleEndSecondaryResultsThisTime;
+
+        result->status[r] = singleResult.status;
+        result->mapq[r] = singleResult.mapq/3;   // Heavy quality penalty for chimeric reads
+        result->direction[r] = singleResult.direction;
+        result->location[r] = singleResult.location;
+        result->score[r] = singleResult.score;
     }
+
     result->fromAlignTogether = false;
     result->alignedAsPair = false;
 

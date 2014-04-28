@@ -58,6 +58,7 @@ typedef HANDLE EventObject;
 #define PATH_SEP '\\'
 #define snprintf _snprintf
 #define mkdir(path, mode) _mkdir(path)
+#define strdup(s) _strdup(s)
 
 // <http://stackoverflow.com/questions/9021502/whats-the-difference-between-strtok-r-and-strtok-s-in-c>
 #define strtok_r strtok_s
@@ -85,6 +86,12 @@ int getpagesize();
 
 #ifdef __linux__
 #include <sched.h>  // For sched_setaffinity
+#endif
+
+#ifndef __APPLE__
+#include <xmmintrin.h>  // This is currently (in Dec 2013) broken on Mac OS X 10.9 (Apple clang-500.2.79)
+#else
+#define _mm_prefetch(...) {}
 #endif
 
 typedef int64_t _int64;
@@ -192,15 +199,41 @@ class ExclusiveLock {
 public:
     UnderlyingExclusiveLock lock;
     bool                    initialized;
+	bool					wholeProgramScope;
 
-    ExclusiveLock() : initialized(false) {}
-    ~ExclusiveLock() {_ASSERT(!initialized);}   // Must DestroyExclusiveLock first
+#ifdef _MSC_VER
+    DWORD                   holderThreadId;
+#endif // _MSC_VER
+
+
+    ExclusiveLock() : initialized(false), holderThreadId(0), wholeProgramScope(false) {}
+    ~ExclusiveLock() {_ASSERT(!initialized || wholeProgramScope);}   // Must DestroyExclusiveLock first
 };
+
+inline void SetExclusiveLockWholeProgramScope(ExclusiveLock *lock)
+{
+	lock->wholeProgramScope = true;
+}
 
 inline void AcquireExclusiveLock(ExclusiveLock *lock)
 {
     _ASSERT(lock->initialized);
     AcquireUnderlyingExclusiveLock(&lock->lock);
+#ifdef _MSC_VER
+    // If you see this go off, you're probably trying a recursive lock acquisition (i.e., twice on the same thead), 
+    // which is legal in Windows and a deadlock in Linux.
+    _ASSERT(lock->holderThreadId == 0);                
+    lock->holderThreadId = GetCurrentThreadId();
+#endif // _MSC_VER
+
+}
+
+inline void AssertExclusiveLockHeld(ExclusiveLock *lock)
+{
+#ifdef _MSC_VER
+    _ASSERT(GetCurrentThreadId() == lock->holderThreadId);
+#endif // _MSC_VER
+
 }
 
 inline bool InitializeExclusiveLock(ExclusiveLock *lock)
@@ -213,11 +246,21 @@ inline bool InitializeExclusiveLock(ExclusiveLock *lock)
 inline void ReleaseExclusiveLock (ExclusiveLock *lock)
 {
     _ASSERT(lock->initialized);
+#ifdef _MSC_VER
+    _ASSERT(GetCurrentThreadId() == lock->holderThreadId);
+    lock->holderThreadId = 0;
+#endif // _MSC_VER
+
     ReleaseUnderlyingExclusiveLock(&lock->lock);
 }
 
 inline void DestroyExclusiveLock(ExclusiveLock *lock)
 {
+#ifdef _MSC_VER
+    _ASSERT(lock->holderThreadId == 0);
+#endif // _MSC_VER
+
+	_ASSERT(!lock->wholeProgramScope);
     _ASSERT(lock->initialized);
     lock->initialized = false;
     DestroyUnderlyingExclusiveLock(&lock->lock);
@@ -227,6 +270,8 @@ inline void DestroyExclusiveLock(ExclusiveLock *lock)
 #define InitializeExclusiveLock InitializeUnderlyingExclusiveLock
 #define ReleaseExclusiveLock ReleaseUnderlyingExclusiveLock
 #define DestroyExclusiveLock DestroyUnderlyingExclusiveLock
+#define AssertExclusiveLockHeld(l) /* nothing */
+#define SetExclusiveLockWholeProgramScope(l) /*nothing*/
 #endif // _DEBUG
 
 #ifdef PROFILE_WAIT
@@ -270,11 +315,11 @@ void AllowEventWaitersToProceed(EventObject *eventObject);
 void PreventEventWaitersFromProceeding(EventObject *eventObject);
 #ifdef PROFILE_WAIT
 #define WaitForEvent(o) WaitForEventProfile((o), __FUNCTION__, __LINE__)
-void WaitForEventProfile(EventObject *eventObject, const char* fn, int line); 
+void WaitForEventProfile(EventObject *eventObject, const char* fn, int line);
 #else
-void WaitForEvent(EventObject *eventObject); 
+void WaitForEvent(EventObject *eventObject);
 #endif
-
+bool WaitForEventWithTimeout(EventObject *eventObject, _int64 timeoutInMillis); // Returns true if the event was set, false if the timeout happened
 
 //
 // Thread-safe read-modify-write operations
@@ -377,6 +422,7 @@ public:
     virtual Reader* getReader() = 0;
 };
 
+
 //
 // Macro for counting trailing zeros of a 64-bit value
 //
@@ -403,7 +449,7 @@ int _fseek64bit(FILE *stream, _int64 offset, int origin);
 
 #endif
 
-// 
+//
 // Class for handling mapped files.  It's got the same interface for both platforms, but different implementations.
 //
 class FileMapper {
@@ -420,7 +466,7 @@ public:
     }
 
     // can get multiple mappings on the same file
-    char *createMapping(size_t offset, size_t amountToMap, void** o_token); 
+    char *createMapping(size_t offset, size_t amountToMap, void** o_token);
 
     // MUST call unmap on each token out of createMapping, the destructor WILL NOT cleanup
     void unmap(void* token);

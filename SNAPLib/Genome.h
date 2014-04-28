@@ -23,8 +23,8 @@ Revision History:
 --*/
 
 #pragma once
-#include <xmmintrin.h>
 #include "Compat.h"
+#include "GenericFile.h"
 
 const unsigned InvalidGenomeLocation = 0xffffffff;
 
@@ -64,7 +64,7 @@ public:
         //
         // minOffset and length are used to read in only a part of a whole genome.
         //
-        static const Genome *loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned i_minOffset = 0, unsigned length = 0);  
+        static const Genome *loadFromFile(const char *fileName, unsigned chromosomePadding, unsigned i_minOffset = 0, unsigned length = 0);
                                                                   // This loads from a genome save
                                                                   // file, not a FASTA file.  Use
                                                                   // FASTA.h for FASTA loads.
@@ -107,7 +107,7 @@ public:
                 //
                 return bases + (offset-minOffset);
             }
-    
+
                 int min = 0;
                 int max = nContigs - 2;
                 while (min <= max) {
@@ -126,7 +126,7 @@ public:
                         max = i-1;
                     }
                 }
-    
+
                 _ASSERT(false && "NOTREACHED");
                 return NULL;
             } else {
@@ -146,7 +146,7 @@ public:
                 _ASSERT(false && "NOTREACHED");
                 return NULL;
             }
-        } 
+        }
 
         inline unsigned getCountOfBases() const {return nBases;}
 
@@ -160,6 +160,7 @@ public:
         struct Contig {
             unsigned     beginningOffset;
             unsigned     length;
+            unsigned     nameLength;
             char        *name;
         };
 
@@ -176,7 +177,7 @@ public:
 
         //
         // These are only public so creators of new genomes (i.e., FASTA) can use them.
-        // 
+        //
         void    fillInContigLengths();
         void    sortContigsByName();
 
@@ -205,7 +206,7 @@ private:
         Contig      *contigsByName;
         Genome *copy(bool copyX, bool copyY, bool copyM) const;
 
-        static bool openFileAndGetSizes(const char *filename, FILE **file, unsigned *nBases, unsigned *nContigs);
+        static bool openFileAndGetSizes(const char *filename, GenericFile **file, unsigned *nBases, unsigned *nContigs);
 
 
         const unsigned chromosomePadding;

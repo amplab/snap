@@ -32,7 +32,8 @@ public:
 
     virtual Read *getNextRead();
 
-    virtual void releaseBatch(DataBatch batch);
+    virtual void holdBatch(DataBatch batch);
+    virtual bool releaseBatch(DataBatch batch);
 
 private:
 
@@ -58,7 +59,9 @@ public:
 
     virtual bool getNextReadPair(Read **read0, Read **read1);
 
-    virtual void releaseBatch(DataBatch batch);
+    virtual void holdBatch(DataBatch batch);
+
+    virtual bool releaseBatch(DataBatch batch);
 
 private:
     
@@ -84,6 +87,7 @@ public:
     virtual ~MultiInputReadSupplierGenerator();
 
     virtual ReadSupplier *generateNewReadSupplier();
+    virtual ReaderContext* getContext();
 
 private:
 
@@ -98,6 +102,7 @@ public:
     virtual ~MultiInputPairedReadSupplierGenerator();
 
     virtual PairedReadSupplier *generateNewPairedReadSupplier();
+    virtual ReaderContext* getContext();
 
 private:
 

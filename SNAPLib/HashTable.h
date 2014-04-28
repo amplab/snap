@@ -21,41 +21,52 @@ Environment:
 #pragma once
 
 #include "Compat.h"
+#include "GenericFile_Blob.h"
 #include "Genome.h"
 
 
 class SNAPHashTable {
     public:
 
+        typedef _uint64 ValueType;  // Values can be smaller than this, but they're expanded in the interface
+        typedef _uint64 KeyType;    // Likewise for keys.
+
         SNAPHashTable(
-            unsigned      i_tableSize,
-            unsigned      i_keySizeInBytes);
+            unsigned    i_tableSize,
+            unsigned    i_keySizeInBytes,
+            unsigned    i_valueSizeInBytes,
+            unsigned    i_valueCount,
+            ValueType   i_invalidValueValue);
 
         //
         // Load from file.
         //
-        static SNAPHashTable *loadFromFile(char *loadFileName);
-
-        static SNAPHashTable *loadFromFile(FILE *loadFile);
+        static SNAPHashTable *loadFromBlob(GenericFile_Blob *loadFile);
 
         ~SNAPHashTable();
 
-        bool saveToFile(const char *saveFileName);
+        bool saveToFile(const char *saveFileName, size_t *bytesWritten);
 
-        bool saveToFile(FILE *saveFile);
+        bool saveToFile(FILE *saveFile, size_t *bytesWritten);
 
         //
-        // Fails if either the table is full or key already exists.
+        // Fails if either the table is full or key already exists.  Inserts ALL
+        // values for a key.
         //
-        bool Insert(_uint64 key, const unsigned *data);
+        bool Insert(KeyType key, ValueType *data);
 
         size_t GetUsedElementCount() const {return usedElementCount;}
         size_t GetTableSize() const {return tableSize;}
 
-        _uint64 GetHashTableMemorySize();
-
         unsigned GetKeySizeInBytes() const {return keySizeInBytes;}
-        unsigned GetDataSizeInBytes() const {return dataSizeInBytes;}
+        unsigned GetValueSizeInBytes() const {return valueSizeInBytes;}
+        unsigned GetValueCount() const {return valueCount;}
+
+		void *getEntryValues(unsigned whichEntry) 
+		{
+			_ASSERT(whichEntry < GetTableSize());
+			return getEntry(whichEntry);
+		}
 
         static inline _uint64 hash(_uint64 key) {
             //
@@ -72,16 +83,15 @@ class SNAPHashTable {
             return key;
         }
 
-        inline unsigned *Lookup(_uint64 key) const {
+        inline ValueType *GetFirstValueForKey(KeyType key) const {
             _ASSERT(keySizeInBytes == 8 || (key & ~((((_uint64)1) << (keySizeInBytes * 8)) - 1)) == 0);    // High bits of the key aren't set.
             _uint64 tableIndex = hash(key) % tableSize;
-            Entry *entry = getEntry(tableIndex);
-            if (isKeyEqual(entry, key) && entry->value1 != InvalidGenomeLocation) {
-                return &(entry->value1);
+            void *entry = getEntry(tableIndex);
+            if (isKeyEqual(entry, key) && !doesEntryHaveInvalidValue(entry)) {
+                return (ValueType *)entry;
             } else {
                 unsigned nProbes = 0;
-                Entry* entry;
-                unsigned value1;
+                void* entry;
                 do {
                     nProbes++;
                     if (nProbes > tableSize + QUADRATIC_CHAINING_DEPTH) {
@@ -93,74 +103,108 @@ class SNAPHashTable {
                         tableIndex = (tableIndex + 1) % tableSize;
                     }
                     entry = getEntry(tableIndex);
-                    value1 = entry->value1;
-                } while (!isKeyEqual(entry, key) && value1 != InvalidGenomeLocation);
+                } while (!isKeyEqual(entry, key) && !doesEntryHaveInvalidValue(entry));
 
                 extern _int64 nProbesInGetEntryForKey;
                 nProbesInGetEntryForKey += nProbes;
 
-                if (value1 == InvalidGenomeLocation) {
+                if (doesEntryHaveInvalidValue(entry)) {
                     return NULL;
                 } else {
-                    return &(entry->value1);
+                    return (ValueType *)entry;
                 }
             }
         }
 
+
+        inline bool Lookup(KeyType key, unsigned nValuesToFill, ValueType *values) const {
+            _ASSERT(nValuesToFill <= valueCount);
+            char *entry = (char *)GetFirstValueForKey(key);
+            if (NULL == entry) {
+                return false;
+            }
+
+            for (unsigned i = 0; i < nValuesToFill; i++) {
+                values[i] = 0;
+                memcpy(values + i, entry + i * valueSizeInBytes, valueSizeInBytes);
+            }
+
+            return true;
+        }
         //
         // A version of Lookup that works properly when the table is (nearly) full and the key being looked up isn't
         // there.  It's, as you might imagine, slower than Lookup.
         //
-        unsigned *SlowLookup(_uint64 key);
+        ValueType *SlowLookup(KeyType key);
 
-private:
+//bjb private:
 
         SNAPHashTable() {}
 
         static const unsigned QUADRATIC_CHAINING_DEPTH = 5; // Chain quadratically for this long, then linerarly  Set to 0 for linear chaining
 
+        //
+        // A hash table entry consists of a set of valueCount values, each of valueSizeInBytes bytes, followed by
+        // a key of keySizeInBytes bytes.  The key size must be between 4 and 8 bytes, inclusive.
+        //
+#if 0
         struct Entry {
             unsigned        value1;
             unsigned        value2;
             unsigned char   key[1]; // Actual size of key determined by keySizeInBytes
         };
+#endif // 0
 
-        // Free Entries have value1 == InvalidGenomeLocation
+        // Free Entries have the first valueSizeInByes bytes of value == invalidValueValue.  The following methods
+        // understand the format and try to make it less opaque to use them.
         
-        inline Entry *getEntry(_uint64 whichEntry) const {
-            return (Entry *) ((char *)Table + elementSize * whichEntry);
+        inline void *getEntry(_uint64 whichEntry) const {
+            return ((char *)Table + elementSize * whichEntry);
         }
 
-
-        inline bool isKeyEqual(const Entry *entry, _uint64 key) const 
+        inline bool doesEntryHaveInvalidValue(void *entry) const
         {
-            return !memcmp(entry->key, &key, keySizeInBytes);
+            return !memcmp(entry, &invalidValueValue, valueSizeInBytes);
         }
 
-        inline void clearKey(Entry *entry)
+        inline ValueType getValueFromEntry(void *entry, unsigned whichValue) const
         {
-            memset(entry->key, 0 , keySizeInBytes);
+            _ASSERT(whichValue < valueCount);
+            ValueType value = 0;    // Need =0 because valueSizeInBytes might be < sizeeof(ValueType)
+            memcpy(&value, (char *)entry + whichValue * valueSizeInBytes, valueSizeInBytes);    // Assumes little-endian
+            return value;
         }
 
-        inline void setKey(Entry *entry, _uint64 key)
+        inline bool isKeyEqual(const void *entry, KeyType key) const 
         {
-            memcpy(entry->key, &key, keySizeInBytes);
+            return !memcmp((const char *)entry + valueSizeInBytes * valueCount, &key, keySizeInBytes);
+        }
+
+        inline void clearKey(void *entry)
+        {
+            memset((char *)entry + valueSizeInBytes * valueCount, 0 , keySizeInBytes);
+        }
+
+        inline void setKey(void *entry, KeyType key)
+        {
+            memcpy((char *)entry + valueSizeInBytes * valueCount, &key, keySizeInBytes);
         }
  
-        Entry *Table;
+        void *Table;
         size_t tableSize;
         unsigned keySizeInBytes;
-        static const unsigned dataSizeInBytes;
         unsigned elementSize;
         size_t usedElementCount;
-
-        size_t virtualAllocSize;
-
+        bool ownsMemoryForTable;
+        unsigned valueSizeInBytes;
+        unsigned valueCount;
+        ValueType invalidValueValue;
+ 
         //
         // Returns either the entry for this key, or else the entry where the key would be
         // inserted if it's not in the table.
         //
-        Entry* getEntryForKey(__in _uint64 key) const;
+        void* getEntryForKey(__in KeyType key) const;
 
         friend class SeedCountIterator;
 

@@ -84,10 +84,11 @@ struct DataBatch
 };
 
 // read data from a file or other source
-// should all be called from a single thread, except for releaseBatch which is thread-safe
+// should all be called from a single thread, except for hold/releaseBatch which are thread-safe
 class DataReader
 {
 public:
+    DataReader() {}
 
     virtual ~DataReader() {}
     
@@ -119,11 +120,17 @@ public:
 
     // get current batch identifier
     virtual DataBatch getBatch() = 0;
-
-    // release buffers associated with this batch for reuse
+    
+    // hold buffers associated with this batch for reuse, increments refcount
     // NOTE: this may be called from another thread,
     // so anything it touches must be thread-safe!
-    virtual void releaseBatch(DataBatch batch) = 0;
+    virtual void holdBatch(DataBatch batch) = 0;
+
+    // release buffers associated with this batch for reuse
+    // decrements refcount, returns true if last release
+    // NOTE: this may be called from another thread,
+    // so anything it touches must be thread-safe!
+    virtual bool releaseBatch(DataBatch batch) = 0;
 
     // get current offset into file
     virtual _int64 getFileOffset() = 0;
@@ -135,50 +142,48 @@ public:
     // timing for performance tuning (in nanos)
     static volatile _int64 ReadWaitTime;
     static volatile _int64 ReleaseWaitTime;
-
-protected:
-    DataReader(bool i_autoRelease) : autoRelease(i_autoRelease) {}
-    const bool autoRelease;
 };
 
 class DataSupplier
 {
 public:
-    DataSupplier(bool i_autoRelease) : autoRelease(i_autoRelease) {}
+    DataSupplier() {}
     
     virtual ~DataSupplier() {}
 
-    virtual DataReader* getDataReader(_int64 overflowBytes = 0, double extraFactor = 0.0) = 0;
+    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor) = 0;
 
     //
     // creating specific factories
     //
 
     // 
-    static DataSupplier* GzipBam(DataSupplier* inner, bool autoRelease);
-    static DataSupplier* Gzip(DataSupplier* inner, bool autoRelease);
+    static DataSupplier* GzipBam(DataSupplier* inner);
+    static DataSupplier* Gzip(DataSupplier* inner);
+    static DataSupplier* StdioSupplier();
 
     // memmap works on both platforms (but better on Linux)
-    static DataSupplier* MemMap[2];
+    static DataSupplier* MemMap;
 
 #ifdef _MSC_VER
     // overlapped is only on Windows
-    static DataSupplier* WindowsOverlapped[2];
+    static DataSupplier* WindowsOverlapped;
 #endif
 
     // default raw data supplier for platform
-    static DataSupplier* Default[2];
-    static DataSupplier* GzipDefault[2];
-    static DataSupplier* GzipBamDefault[2];
+    static DataSupplier* Default;
+    static DataSupplier* GzipDefault;
+    static DataSupplier* GzipBamDefault;
+
+    static DataSupplier* GzipStdio;
+    static DataSupplier* Stdio;
+    static DataSupplier* GzipBamStdio;
 
     // hack: must be set to communicate thread count into suppliers
     static int ThreadCount;
 
     // hack: global for additional expansion factor
     static double ExpansionFactor;
-
-protected:
-    const bool autoRelease;
 };
 
 // manages lifetime tracking for batches of reads
@@ -187,14 +192,16 @@ class BatchTracker
 public:
     BatchTracker(int i_capacity);
 
-    // read was added from a batch, increment reference count
-    void addRead(DataBatch batch);
+    // reference was added from a batch, increment reference count
+    // return true if first hold
+    bool holdBatch(DataBatch batch);
 
-    // read was removed from a batch
-    // returns true if the batch was released
-    bool removeRead(DataBatch batch);
+    // reference was removed from a batch
+    // returns true if the batch has no more references
+    bool releaseBatch(DataBatch batch);
 
 private:
     typedef VariableSizeMap<DataBatch::Key,unsigned> BatchMap;
     BatchMap pending;
 };
+

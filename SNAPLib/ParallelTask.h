@@ -24,6 +24,7 @@ Revision History:
 #include "stdafx.h"
 #include "Compat.h"
 #include "exit.h"
+#include "Error.h"
 
 /*++
     Simple class to handle parallelized algorithms.
@@ -108,7 +109,7 @@ ParallelTask<TContext>::run()
     _int64 start = timeInMillis();
     SingleWaiterObject doneWaiter;
     if (!CreateSingleWaiterObject(&doneWaiter)) {
-        fprintf(stderr, "Failed to create single waiter object for thread completion.\n");
+        WriteErrorMessage( "Failed to create single waiter object for thread completion.\n");
         soft_exit(1);
     }
 
@@ -131,7 +132,7 @@ ParallelTask<TContext>::run()
         contexts[i].initializeThread();
 
         if (!StartNewThread(ParallelTask<TContext>::threadWorker, &contexts[i])) {
-            fprintf(stderr, "Unable to start worker thread.\n");
+            WriteErrorMessage( "Unable to start worker thread.\n");
             soft_exit(1);
         }
     }
@@ -139,13 +140,13 @@ ParallelTask<TContext>::run()
 #ifdef  _MSC_VER
     if (common->useTimingBarrier) {
         WaitForEvent(&memoryAllocationCompleteBarrier);
-        printf("Cleared timing barrier.\n");
+        WriteStatusMessage("Cleared timing barrier.\n");
         start = timeInMillis();
     }
 #endif  // _MSC_VER
 
     if (!WaitForSingleWaiterObject(&doneWaiter)) {
-        fprintf(stderr, "Waiting for all threads to finish failed\n");
+        WriteErrorMessage( "Waiting for all threads to finish failed\n");
         soft_exit(1);
     }
     DestroySingleWaiterObject(&doneWaiter);
@@ -165,7 +166,7 @@ ParallelTask<TContext>::run()
 ParallelTask<TContext>::fork()
 {
     if (!StartNewThread(ParallelTask<TContext>::forkWorker, this)) {
-        fprintf(stderr, "Unable to fork task thread.\n");
+        WriteErrorMessage( "Unable to fork task thread.\n");
         soft_exit(1);
     }
 }

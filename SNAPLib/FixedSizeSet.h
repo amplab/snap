@@ -4,6 +4,7 @@
 #include "BigAlloc.h"
 #include "FixedSizeMap.h"
 #include "exit.h"
+#include "Error.h"
 
 
 // 
@@ -26,12 +27,12 @@ public:
     
     void reserve(int capacity) {
         if (!isPowerOf2(capacity)) {
-            fprintf(stderr, "FixedSizeSet capacity must be a power of 2\n");
+            WriteErrorMessage("FixedSizeSet capacity must be a power of 2\n");
             soft_exit(1);
         }
         if (entries != NULL) {
             if (size > 0) {
-                fprintf(stderr, "reserve() called on a non-empty FixedSizeSet\n");
+                WriteErrorMessage("reserve() called on a non-empty FixedSizeSet\n");
                 soft_exit(1);
             }
             delete[] entries;
@@ -82,7 +83,7 @@ public:
                 entries[pos].epoch = epoch;
                 size++;
                 if (size >= capacity) { // Can't be exactly equal, because then contains with a non-existant element infinite loops
-                    fprintf(stderr,"FixedSizeSet overflowed.  Code bug.\n");
+                    WriteErrorMessage("FixedSizeSet overflowed.  Code bug.\n");
                     soft_exit(1);
                 }
                 return;

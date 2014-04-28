@@ -41,7 +41,8 @@ template<
     int fill = 80,
     int _empty = 0,
     int _tombstone = -1,
-    bool multi = false>
+    bool multi = false,
+    bool _big = false>
 class VariableSizeMapBase
 {
 protected:
@@ -60,11 +61,23 @@ protected:
     {
         *data = ((char*)*data) + (size_t) i_capacity * sizeof(Entry) + 3 * sizeof(_int64);
     }
-    
+
+    inline void grow()
+    {
+        _ASSERT(growth > 100);
+        _int64 larger = ((_int64) capacity * growth) / 100;
+        _ASSERT(larger < INT32_MAX);
+        reserve((int) larger);
+    }
+
     inline void assign(VariableSizeMapBase<K,V>* other)
     {
         if (entries != NULL) {
-            delete [] entries;
+            if (_big) {
+                BigDealloc(entries);
+            } else {
+                delete [] entries;
+            }
         }
         entries = other->entries;
         capacity = other->capacity;
@@ -75,16 +88,9 @@ protected:
         other->entries = NULL;
         other->count = 0;
     }
-
-    inline void grow()
-    {
-        _ASSERT(growth > 100);
-        _int64 larger = ((_int64) capacity * growth) / 100;
-        _ASSERT(larger < INT32_MAX);
-        reserve((int) larger);
-    }
-
+    
 public:
+    
     inline int size()
     { return count; }
 
@@ -94,7 +100,11 @@ public:
     ~VariableSizeMapBase()
     {
         if (entries != NULL) {
-            delete [] entries;
+            if (_big) {
+                BigDealloc(entries);
+            } else {
+                delete [] entries;
+            }
         }
         entries = NULL;
         count = 0;
@@ -105,7 +115,11 @@ public:
         Entry* old = entries;
         int small = capacity;
         capacity = larger;
-        entries = new Entry[larger];
+        if (_big) {
+            entries = (Entry*) BigAlloc(larger * sizeof(Entry));
+        } else {
+            entries = new Entry[larger];
+        }
         _ASSERT(entries != NULL);
         clear();
         count = 0;
@@ -124,14 +138,18 @@ public:
                 }
             }
             occupied = count;
-            delete[] old;
+            if (_big) {
+                BigDealloc(old);
+            } else {
+                delete [] old;
+            }
         }
     }
     
     void clear()
     {
         if (entries != NULL) {
-            if (_empty == 0) {
+            if (_empty == 0 && sizeof(Entry) < 4 * sizeof(K) && ! _big) {
                 // optimize zero case
                 memset(entries, 0, capacity * sizeof(Entry));
             } else {
@@ -196,8 +214,7 @@ protected:
         pos = hash(key) % capacity;
         i = 1;
         if (entries == NULL) {
-            entries = new Entry[capacity];
-            clear();
+            reserve(capacity);
         }
     }
 
@@ -247,13 +264,13 @@ protected:
 // Single-valued map
 //
 template< typename K, typename V, int growth = 150, typename Hash = MapNumericHash<K>,
-    int fill = 80, int _empty = 0, int _tombstone = -1 >
+    int fill = 80, int _empty = 0, int _tombstone = -1, bool _big = false >
 class VariableSizeMap
-    : public VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,false>
+    : public VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,false,_big>
 {
 public:
     VariableSizeMap(int i_capacity = 16)
-        : VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,false>(i_capacity)
+        : VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,false,_big>(i_capacity)
     {}
 
     VariableSizeMap(const VariableSizeMap<K,V>& other)
@@ -367,6 +384,39 @@ public:
             }
         }
     }
+
+    void exchange(VariableSizeMap& other)
+    {
+        Entry* e = this->entries; this->entries = other.entries; other.entries = e;
+        int x = this->capacity; this->capacity = other.capacity; other.capacity = x;
+        x = this->count; this->count = other.count; other.count = x;
+        x = this->limit; this->limit = other.limit; other.limit = x;
+        x = this->occupied; this->occupied = other.occupied; other.occupied = x;
+    }
+};
+
+template< typename K, typename V>
+class VariableSizeMapBig
+    : public VariableSizeMap<K,V,150,MapNumericHash<K>,80,0,-1,true>
+{
+public:
+    VariableSizeMapBig(int n = 10000) : VariableSizeMap<K,V,150,MapNumericHash<K>,80,0,-1,true>(n) {}
+
+    void assign(VariableSizeMapBig<K,V>* other)
+    {
+        // todo: avoid copying from base class, c++ inheritance is nonsensical
+        if (this->entries != NULL) {
+            BigDealloc(this->entries);
+        }
+        this->entries = other->entries;
+        this->capacity = other->capacity;
+        this->count = other->count;
+        this->limit = other->limit;
+        this->hash = other->hash;
+        this->occupied = other->occupied;
+        other->entries = NULL;
+        other->count = 0;
+    }
 };
 
 typedef VariableSizeMap<unsigned,unsigned> IdMap;
@@ -374,9 +424,9 @@ typedef VariableSizeMap<unsigned,int> IdIntMap;
 // 
 // Single-valued map
 //
-template< typename K, typename V, int growth = 150, typename Hash = MapNumericHash<K>, int fill = 80, K _empty = K(), K _tombstone = K(-1) >
+template< typename K, typename V, int growth = 150, typename Hash = MapNumericHash<K>, int fill = 80, int _empty = 0, int _tombstone = -1, bool _big = false >
 class VariableSizeMultiMap
-    : public VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,true>
+    : public VariableSizeMapBase<K,V,growth,Hash,fill,_empty,_tombstone,true, _big >
 {
 public:
     VariableSizeMultiMap(int i_capacity = 16)

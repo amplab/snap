@@ -39,8 +39,6 @@ protected:
 
     // AlignerContext
     
-    virtual AlignerOptions* parseOptions(int argc, const char **argv, const char *version, unsigned *argsConsumed);
-
     virtual void initialize();
 
     virtual AlignerStats* newStats();
@@ -51,9 +49,11 @@ protected:
 
     // for subclasses
 
-    virtual void writePair(Read* read0, Read* read1, PairedAlignmentResult* result);
+    virtual void writePair(Read* read0, Read* read1, PairedAlignmentResult* result, bool secondary);
 
     virtual void updateStats(PairedAlignerStats* stats, Read* read0, Read* read1, PairedAlignmentResult* result);
+
+    bool isPaired() {return true;}
 
 protected:
 
@@ -69,6 +69,7 @@ protected:
     unsigned            maxCandidatePoolSize;
     const char         *fastqFile1;
     bool                ignoreMismatchedIDs;
+    bool                quicklyDropUnpairedReads;
 
 	friend class AlignerContext2;
 };
@@ -88,4 +89,5 @@ struct PairedAlignerOptions : public AlignerOptions
     bool        forceSpacing;
     unsigned    intersectingAlignerMaxHits;
     unsigned    maxCandidatePoolSize;
+    bool        quicklyDropUnpairedReads;
 };

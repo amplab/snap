@@ -25,6 +25,7 @@ Revision History:
 #pragma once
 #include "exit.h"
 #include "Seed.h"
+#include "Error.h"
 
 
 class SeedSequencer {
@@ -33,12 +34,12 @@ public:
 
     inline unsigned SeedOffset(unsigned wrapCount) {
         _ASSERT(wrapCount < seedSize);
-        return offsets[seedSize];
+        return offsets[wrapCount];
     }
 
     inline unsigned GetWrappedNextSeedToTest(unsigned wrapCount) {
         _ASSERT(wrapCount < seedSize);
-        return(offsets[seedSize]);
+        return(offsets[wrapCount]);
     }
 
 private:
@@ -380,7 +381,7 @@ unsigned GetWrappedNextSeedToTest(unsigned seedLen, unsigned wrapCount)
                 default: _ASSERT(!"NOTREACHED");
             }
         } // inner switch
-        default: fprintf(stderr,"SeedSequencer: Not set up to run with this seed size\n"); soft_exit(1);
+        default: WriteErrorMessage("SeedSequencer: Not set up to run with this seed size\n"); soft_exit(1);
     } // outer switch
     return 0;
 } 

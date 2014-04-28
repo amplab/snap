@@ -25,6 +25,7 @@ Environment:
 #include "Bam.h"
 #include "zlib.h"
 #include "exit.h"
+#include "Error.h"
 
 using std::min;
 using std::max;
@@ -49,7 +50,7 @@ public:
     virtual void beginStep();
 
     virtual void finishStep();
-    
+
 private:
     VariableSizeVector<size_t> sizes;
     volatile int nChunks;
@@ -74,7 +75,7 @@ public:
     virtual ~GzipCompressWorker() { delete heap; }
 
     virtual void step();
-    
+
     static size_t compressChunk(z_stream& zstream, bool bamFormat, char* toBuffer, size_t toSize, char* fromBuffer, size_t fromUsed);
 
 private:
@@ -82,7 +83,7 @@ private:
     ThreadHeap* heap;
 };
 
-// used for case where each thread compresses by itself 
+// used for case where each thread compresses by itself
 
 class GzipWriterFilter : public DataWriter::Filter
 {
@@ -133,7 +134,7 @@ GzipCompressWorkerManager::beginStep()
     nChunks = (int) ((inputUsed + chunkSize - 1) / chunkSize);
     sizes.clear();
     sizes.extend(nChunks);
- 
+
     if (buffer == NULL) {
         buffer = (char*) BigAlloc(inputSize);
     }
@@ -173,20 +174,20 @@ GzipCompressWorker::step()
         zstream.zfree = zfree;
         zstream.opaque = heap;
     }
-    //printf("zip task thread %d begin\n", GetCurrentThreadId());
+    //fprintf(stderr, "zip task thread %d begin\n", GetCurrentThreadId());
     _int64 start = timeInMillis();
     int begin = (getThreadNum() * supplier->nChunks) / getNumThreads();
     int end = ((1 + getThreadNum()) * supplier->nChunks) / getNumThreads();
     for (int i = begin; i < end; i++) {
         size_t bytes = min(supplier->chunkSize, supplier->inputUsed - i * supplier->chunkSize);
         supplier->sizes[i] = compressChunk(zstream, supplier->bam,
-            supplier->buffer + i * supplier->chunkSize, supplier->chunkSize, 
+            supplier->buffer + i * supplier->chunkSize, supplier->chunkSize,
             supplier->input + i * supplier->chunkSize, bytes);
         _ASSERT(supplier->sizes[i] <= supplier->chunkSize); // can't grow!
     }
 }
-   
-    
+
+
     size_t
 GzipCompressWorker::compressChunk(
     z_stream& zstream,
@@ -197,7 +198,7 @@ GzipCompressWorker::compressChunk(
     size_t fromUsed)
 {
     if (bamFormat && fromUsed > BAM_BLOCK) {
-        fprintf(stderr, "exceeded BAM chunk size\n");
+        WriteErrorMessage("exceeded BAM chunk size\n");
         soft_exit(1);
     }
     if (zstream.opaque != NULL) {
@@ -229,7 +230,7 @@ GzipCompressWorker::compressChunk(
     }
 
     if (fromUsed > 0xffffffff || toSize > 0xffffffff) {
-        fprintf(stderr,"GZipDataWriter: fromUsed or toSize too big\n");
+        WriteErrorMessage("GZipDataWriter: fromUsed or toSize too big\n");
         soft_exit(1);
     }
 
@@ -245,35 +246,35 @@ GzipCompressWorker::compressChunk(
 
     status = deflateInit2(&zstream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, windowBits | GZIP_ENCODING, 8, Z_DEFAULT_STRATEGY);
     if (status < 0) {
-        fprintf(stderr, "GzipWriterFilter: deflateInit2 failed with %d\n", status);
+        WriteErrorMessage("GzipWriterFilter: deflateInit2 failed with %d\n", status);
         soft_exit(1);
     }
     if (bamFormat) {
         status = deflateSetHeader(&zstream, &header);
         if (status != Z_OK) {
-            fprintf(stderr, "GzipWriterFilter: defaultSetHeader failed with %d\n", status);
+            WriteErrorMessage("GzipWriterFilter: defaultSetHeader failed with %d\n", status);
             soft_exit(1);
         }
     }
     oldAvail = zstream.avail_out;
     status = deflate(&zstream, Z_FINISH);
     if (status < 0 && status != Z_BUF_ERROR) {
-        fprintf(stderr, "GzipWriterFilter: deflate failed with %d\n", status);
+        WriteErrorMessage("GzipWriterFilter: deflate failed with %d\n", status);
         soft_exit(1);
     }
-    
+
     // make sure it all got written out in a single compressed block
     if (zstream.avail_in != 0) {
-        fprintf(stderr, "GzipWriterFilter: default failed to read all input\n");
+        WriteErrorMessage("GzipWriterFilter: default failed to read all input\n");
         soft_exit(1);
     }
     if (zstream.avail_out == oldAvail) {
-        fprintf(stderr, "GzipWriterFilter: default failed to write output\n");
+        WriteErrorMessage("GzipWriterFilter: default failed to write output\n");
         soft_exit(1);
     }
     status = deflateEnd(&zstream);
     if (status < 0) {
-        fprintf(stderr, "GzipWriterFilter: deflateEnd failed with %d\n", status);
+        WriteErrorMessage("GzipWriterFilter: deflateEnd failed with %d\n", status);
         soft_exit(1);
     }
 
@@ -281,14 +282,14 @@ GzipCompressWorker::compressChunk(
     if (bamFormat) {
         // backpatch compressed block size into gzip header
         if (toUsed >= BAM_BLOCK) {
-            fprintf(stderr, "exceeded BAM chunk size\n");
+            WriteErrorMessage("exceeded BAM chunk size\n");
             soft_exit(1);
         }
         * (_uint16*) (toBuffer + 16) = (_uint16) (toUsed - 1);
     }
     return toUsed;
 }
-    
+
 GzipWriterFilter::GzipWriterFilter(GzipWriterFilterSupplier* i_supplier)
     : DataWriter::Filter(DataWriter::ResizeFilter), supplier(i_supplier), manager(NULL), worker(NULL)
 {}
@@ -344,7 +345,7 @@ DataWriterSupplier::gzip(
 {
     return new GzipWriterFilterSupplier(bamFormat, chunkSize, numThreads, bindToProcessors, multiThreaded);
 }
-    
+
     DataWriter::Filter*
 GzipWriterFilterSupplier::getFilter()
 {
@@ -366,7 +367,7 @@ GzipWriterFilterSupplier::onClosing(
         char* buffer;
         size_t bytes;
         if (! (writer->getBuffer(&buffer, &bytes) && bytes >= sizeof(eof))) {
-            fprintf(stderr, "no space to write eof marker\n");
+            WriteErrorMessage("no space to write eof marker\n");
             soft_exit(1);
         }
         memcpy(buffer, eof, sizeof(eof));
@@ -377,14 +378,14 @@ GzipWriterFilterSupplier::onClosing(
         char* ignore;
         pair<_uint64,_uint64> last;
         size_t used;
-        writer->getBatch(-1, &ignore, NULL, &used, &last.second, NULL, &last.first);
+        writer->getBatch(-1, &ignore, NULL, &used, (size_t*) &last.second, NULL, (size_t*) &last.first);
         last.second += used;
         translation.push_back(last);
 
         writer->close();
         delete writer;
     }
-    
+
     // sort translations
     std::sort(translation.begin(), translation.end(), translationComparator);
 }
@@ -425,7 +426,7 @@ GzipWriterFilterSupplier::translationComparator(
 {
     return a.first < b.first;
 }
-    
+
     FileEncoder*
 FileEncoder::gzip(
     GzipWriterFilterSupplier* filterSupplier,
