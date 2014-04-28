@@ -211,8 +211,7 @@ GenomeIndex::runTranscriptomeIndexer(
     BigAllocUseHugePages = false;
 
     _int64 start = timeInMillis();
-    const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator, chromosomePad
-ding);
+    const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator, chromosomePadding);
     if (NULL == genome) {
         WriteErrorMessage("Unable to read FASTA file\n");        soft_exit(1);
     }

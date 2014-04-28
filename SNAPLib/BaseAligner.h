@@ -77,7 +77,7 @@ public:
         int                      maxEditDistanceForSecondaryResults,
         int                      secondaryResultBufferSize,
         int                     *nSecondaryResults,
-        SingleAlignmentResult   *secondaryResults             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
+        SingleAlignmentResult   *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
         seed_map  &map,
         seed_map  &mapRC);
         

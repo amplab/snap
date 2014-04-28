@@ -256,7 +256,7 @@ AlignerContext::initialize()
               delete c_filter;
             }
             //Create the contamination filter
-            c_filter = new ContaminationFilter(contamination->getGenome(), options->outputFileTemplate);
+            c_filter = new ContaminationFilter(contamination->getGenome(), options->outputFile.fileName);
 
           } else {
             printf("no alignment, input/output only\n");
@@ -267,13 +267,9 @@ AlignerContext::initialize()
     }
 
     //Create GTFReader and load the annotation
-    gtf = new GTFReader(options->outputFileTemplate);
+    gtf = new GTFReader(options->outputFile.fileName);
     gtf->Load(options->annotation);
     
-    if (options->outputFileTemplate != NULL && (options->maxHits.size() > 1 || options->maxDist.size() > 1)) {
-        fprintf(stderr, "WARNING: You gave ranges for some parameters, so SAM files will be overwritten!\n");
-    }
-
     maxHits_ = options->maxHits;
     maxDist_ = options->maxDist;
     extraSearchDepth = options->extraSearchDepth;
@@ -476,6 +472,8 @@ AlignerContext::parseOptions(
     }
 
     options->indexDir = argv[0];
+    options->transcriptomeDir = argv[1];
+    options->annotation = argv[2];
     struct InputList {
         SNAPFile    input;
         InputList*  next;
@@ -489,7 +487,7 @@ AlignerContext::parseOptions(
 
     int i;
     int nInputs = 0;
-    for (i = 1; i < argc; i++) {
+    for (i = 3; i < argc; i++) {
 
         if (',' == argv[i][0]  && '\0' == argv[i][1]) {
             i++;    // Consume the comma

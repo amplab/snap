@@ -322,7 +322,7 @@ SingleAlignerContext::runIterationThread()
         // Skip the read if it has too many Ns or trailing 2 quality scores.
         if (read->getDataLength() < 50 || read->countOfNs() > maxDist || !quality) {
             if (readWriter != NULL && options->passFilter(read, NotFound)) {
-                readWriter->writeRead(read, NotFound, 0, InvalidGenomeLocation, FORWARD, false);
+                readWriter->writeRead(read, NotFound, 0, InvalidGenomeLocation, FORWARD, false, false, 0);
             }
             continue;
         } else {
@@ -338,24 +338,24 @@ SingleAlignerContext::runIterationThread()
         result.tlocation = 0;
         int nSecondaryResults = 0;
 
-        AlignmentFilter filter(NULL, read, index->getGenome(), transcriptome->getGenome(), gtf, 0, 0, options->confDiff, options->maxDist.start, index->getSeedLength(), g_aligner);
+        AlignmentFilter filter(NULL, read, index->getGenome(), transcriptome->getGenome(), gtf, 0, 0, options->confDiff, options->maxDist, index->getSeedLength(), g_aligner);
 
-        t_aligner->AlignRead(read, &result, maxSecondaryAligmmentAdditionalEditDistance, secondaryAlignmentBufferCount, &nSecondaryResults, t_secondaryAlignments);
+        t_aligner->AlignRead(read, &result, maxSecondaryAligmmentAdditionalEditDistance, t_secondaryAlignmentBufferCount, &nSecondaryResults, t_secondaryAlignments);
 
         t_allocator->checkCanaries();
 
         filter.AddAlignment(result.location, result.direction, result.score, result.mapq, true, true);
         for (int i = 0; i < nSecondaryResults; i++) {
-          filter.AddAlignment(t_secondaryResults[i].location, t_secondaryResults[i].direction, t_secondaryResults[i].score, t_secondaryResults[i].mapq, true, true);
+          filter.AddAlignment(t_secondaryAlignments[i].location, t_secondaryAlignments[i].direction, t_secondaryAlignments[i].score, t_secondaryAlignments[i].mapq, true, true);
         }
 
-        g_aligner->AlignRead(read, &result, maxSecondaryAligmmentAdditionalEditDistance, secondaryAlignmentBufferCount, &nSecondaryResults, g_secondaryAlignments);
+        g_aligner->AlignRead(read, &result, maxSecondaryAligmmentAdditionalEditDistance, g_secondaryAlignmentBufferCount, &nSecondaryResults, g_secondaryAlignments);
 
         g_allocator->checkCanaries();
 
         filter.AddAlignment(result.location, result.direction, result.score, result.mapq, false, true);
         for (int i = 0; i < nSecondaryResults; i++) {
-          filter.AddAlignment(g_secondaryResults[i].location, g_secondaryResults[i].direction, g_secondaryResults[i].score, g_secondaryResults[i].mapq, true, true);
+          filter.AddAlignment(g_secondaryAlignments[i].location, g_secondaryAlignments[i].direction, g_secondaryAlignments[i].score, g_secondaryAlignments[i].mapq, true, true);
         }
 
         //Filter the results

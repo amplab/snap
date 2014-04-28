@@ -72,7 +72,7 @@ AlignerOptions::AlignerOptions(
     minPercentAbovePhred(90.0),
     minPhred(20),
     phredOffset(33),
-    expansionFactor(1.0)
+    expansionFactor(1.0),
     noUkkonen(false),
     noOrderedEvaluation(false)
 {
