@@ -307,116 +307,6 @@ PairedAlignerContext::PairedAlignerContext(AlignerExtension* i_extension)
 {
 }
 
-/*
-AlignerOptions* PairedAlignerContext::parseOptions(int i_argc, const char **i_argv, const char *i_version, unsigned *argsConsumed)
-{
-    argc = i_argc;
-    argv = i_argv;
-    version = i_version;
-
-    PairedAlignerOptions* options = new PairedAlignerOptions(
-        "snapr paired <genome-dir> <transcriptome-dir> <annotation> <input file(s)> <read2.fq> [<options>]\n"
-        "   where <input file(s)> is a list of files to process.  FASTQ\n"
-        "   files must come in pairs, since each read end is in a separate file.");
-    options->extra = extension->extraOptions();
-    if (argc < 4) {
-        fprintf(stderr, "Too few parameters\n");
-        options->usage();
-    }
-
-    options->indexDir = argv[0];
-    options->transcriptomeDir = argv[1];
-    options->annotation = argv[2];
-    //
-    // Figure out how many inputs there are.  All options begin with a '-', so count the
-    // args until we hit an option.  FASTQ files come in pairs, and each pair only counts
-    // as one input.
-    //
-    int nInputs = 0;
-    bool foundFirstHalfOfFASTQ = false;
-    for (int i = 3; i < argc; i++) {
-        if (argv[i][0] == '-' || argv[i][0] == ',' && argv[i][1] == '\0') {
-                break;
-        }
-        
-        if (stringEndsWith(argv[i],".sam") || stringEndsWith(argv[i],".bam")) {
-            if (foundFirstHalfOfFASTQ) {
-                fprintf(stderr,"For the paired aligner, FASTQ files must come in pairs.  I found SAM/BAM file '%s' after first half FASTQ file '%s'.\n",
-                    argv[i],argv[i-1]);
-                soft_exit(1);
-            }
-            nInputs++;
-        } else {
-            if (foundFirstHalfOfFASTQ) {
-                nInputs++;
-            }
-            foundFirstHalfOfFASTQ = !foundFirstHalfOfFASTQ;
-        }
-    }
-    if (foundFirstHalfOfFASTQ) {
-        fprintf(stderr,"For the paired aligner, FASTQ files must come in pairs.  The last one is unmatched.\n");
-        soft_exit(1);
-    }
-    if (0 == nInputs) {
-        fprintf(stderr,"Didn't see any input files\n");
-        options->usage();
-    }
-    //
-    // Now build the input array.
-    //
-    options->nInputs = nInputs;
-    options->inputs = new SNAPInput[nInputs];
-    int i;
-    int whichInput = 0;
-    for (i = 3; i < argc; i++) {
-        if (argv[i][0] == '-') {
-                break;
-        }
-
-        if (stringEndsWith(argv[i],".sam") || stringEndsWith(argv[i],".bam")) {
-            _ASSERT(!foundFirstHalfOfFASTQ);
-            options->inputs[whichInput].fileType = stringEndsWith(argv[i],".sam") ? SAMFile : BAMFile;
-            options->inputs[whichInput].fileName = argv[i];
-            whichInput++;
-        } else {
-            if (foundFirstHalfOfFASTQ) {
-                options->inputs[whichInput].fileType =
-                    stringEndsWith(argv[i],".gzip") || stringEndsWith(argv[i], ".gz") // todo: more suffixes?
-                        ? GZipFASTQFile : FASTQFile;
-                options->inputs[whichInput].secondFileName = argv[i];
-                whichInput++;
-            } else {
-                options->inputs[whichInput].fileName = argv[i];
-            }
-            foundFirstHalfOfFASTQ = !foundFirstHalfOfFASTQ;
-        }
-    }
-
-    for (; i < argc; i++) {
-        bool done;
-        int oldI = i;
-        if (!options->parse(argv, argc, i, &done)) {
-            fprintf(stderr, "Didn't understand options starting at %s\n", argv[oldI]);
-            options->usage();
-        }
-
-        if (done) {
-            i++;    // For the ',' arg
-            break;
-        }
-    }
-
-    if (options->maxDist.end + options->extraSearchDepth >= MAX_K) {
-        fprintf(stderr,"You specified too large of a maximum edit distance combined with extra search depth.  The must add up to less than %d.\n", MAX_K);
-        fprintf(stderr,"Either reduce their sum, or change MAX_K in LandauVishkin.h and recompile.\n");
-        soft_exit(1);
-    }
-        
-    *argsConsumed = i;
-    return options;
-}
-*/
-
 void PairedAlignerContext::initialize()
 {
     AlignerContext::initialize();
@@ -783,8 +673,15 @@ void PairedAlignerContext::runIterationThread()
             lastReportTime = timeInMillis();
         }
 
+        
         AlignmentFilter filter(read0, read1, index->getGenome(), transcriptome->getGenome(), gtf, minSpacing
 , maxSpacing, options->confDiff, options->maxDist, index->getSeedLength(), p_aligner);
+
+        int nSingleSecondaryResults[2];
+        int nSecondaryResults = 0;
+
+        SingleAlignmentResult singleResult;
+        singleResult.isTranscriptome = false;
 
         PairedAlignmentResult pairedResult, contaminantResult;
         pairedResult.isTranscriptome[0] = false;
@@ -795,15 +692,13 @@ void PairedAlignerContext::runIterationThread()
         contaminantResult.isTranscriptome[1] = false;
         contaminantResult.tlocation[0] = 0;
         contaminantResult.tlocation[1] = 0;
+        /*
 
 #if     TIME_HISTOGRAM
         _int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
 
         //Add transcriptome alignments
-        SingleAlignmentResult singleResult;
-        singleResult.isTranscriptome = false;
-        int nSecondaryResults = 0;
 
         t_aligner->AlignRead(read0, &singleResult, maxSecondaryAligmmentAdditionalEditDistance, t_secondaryAlignmentBufferCount, &nSecondaryResults, t_secondaryAlignments);
 
@@ -824,10 +719,11 @@ void PairedAlignerContext::runIterationThread()
         }
 
         //Add genomic reads
-        int nSingleSecondaryResults[2];
+        */        
 
         g_aligner->align(read0, read1, &pairedResult, maxSecondaryAligmmentAdditionalEditDistance, g_maxPairedSecondaryHits, &nSecondaryResults, g_secondaryResults, g_maxSingleSecondaryHits, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1],g_singleSecondaryResults);
 
+        /*
         //Add primary result
         filter.AddAlignment(pairedResult.location[0], pairedResult.direction[0], pairedResult.score[0], pairedResult.mapq[0], false, false);
         filter.AddAlignment(pairedResult.location[1], pairedResult.direction[1], pairedResult.score[1], pairedResult.mapq[1], false, true);
@@ -836,8 +732,8 @@ void PairedAlignerContext::runIterationThread()
         for (int i = 0; i < nSecondaryResults; i++) {
           filter.AddAlignment(g_secondaryResults[i].location[0], g_secondaryResults[i].direction[0], g_secondaryResults[i].score[0], g_secondaryResults[i].mapq[0], false, false);         
           filter.AddAlignment(g_secondaryResults[i].location[1], g_secondaryResults[i].direction[1], g_secondaryResults[i].score[1], g_secondaryResults[i].mapq[1], false, true);
-        }
-      
+        }      
+
         for (int i = 0; i < nSingleSecondaryResults[0] + nSingleSecondaryResults[1]; i++) {
             bool isMate0 = i < nSingleSecondaryResults[0] ? true : false;
             Read *read = i < nSingleSecondaryResults[0] ? read0 : read1;
@@ -848,6 +744,7 @@ void PairedAlignerContext::runIterationThread()
 
         //Perform the filtering
         unsigned status = filter.Filter(&pairedResult);
+        */
 
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;
