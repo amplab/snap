@@ -70,14 +70,9 @@ public:
         SingleAlignmentResult   *secondaryResults             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
     );      // Retun value is true if there was enough room in the secondary alignment buffer for everything that was found.
 
-        AlignmentResult
+        void
     CharacterizeSeeds(
         Read                    *read,
-        SingleAlignmentResult   *primaryResult,
-        int                      maxEditDistanceForSecondaryResults,
-        int                      secondaryResultBufferSize,
-        int                     *nSecondaryResults,
-        SingleAlignmentResult   *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
         seed_map  &map,
         seed_map  &mapRC);
         

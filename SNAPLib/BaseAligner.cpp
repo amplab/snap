@@ -215,6 +215,311 @@ bool _DumpAlignments = false;
 #endif  // _DEBUG
 
     void
+BaseAligner::CharacterizeSeeds(
+        Read *inputRead,
+        seed_map  &map,
+        seed_map  &mapRC
+    )      // Retun value is true if there was enough room in the secondary alignment buffer for everything that was found.
+
+{  
+    // These used to be parameters that were used by the old version of the paired-end aligner when it wanted to search for
+    // a limited set of single-end alignments.  That turned out to produce not-so-good results, so it went away but stayed
+    // in the AlignRead interface for a while. Now, it's still in the code just in case someone wants it some day, but
+    // to get it back will require changing the interface again.
+    unsigned   searchRadius = 0;
+    unsigned   searchLocation = 0;
+    Direction  searchDirection = RC;
+
+    memset(hitCountByExtraSearchDepth, 0, sizeof(*hitCountByExtraSearchDepth) * extraSearchDepth);
+
+    firstPassSeedsNotSkipped[FORWARD] = firstPassSeedsNotSkipped[RC] = 0;
+    smallestSkippedSeed[FORWARD] = smallestSkippedSeed[RC] = InvalidGenomeLocation;
+    highestWeightListChecked = 0;
+
+    unsigned maxSeedsToUse;
+    if (0 != maxSeedsToUseFromCommandLine) {
+        maxSeedsToUse = maxSeedsToUseFromCommandLine;
+    } else {
+        maxSeedsToUse = (int)(2 * maxSeedCoverage * inputRead->getDataLength() / genomeIndex->getSeedLength()); // 2x is for FORWARD/RC
+    }
+
+    unsigned lookupsThisRun = 0;
+
+    popularSeedsSkipped = 0;
+
+    // Range of genome locations to search in.
+    unsigned minLocation = 0;
+    unsigned maxLocation = 0xFFFFFFFF;
+    if (searchRadius != 0) {
+        minLocation = (searchLocation > searchRadius) ? searchLocation - searchRadius : 0;
+        maxLocation = (searchLocation < 0xFFFFFFFF - searchRadius) ? searchLocation + searchRadius : 0xFFFFFFFF;
+    }
+
+    //
+    // A bitvector for used seeds, indexed on the starting location of the seed within the read.
+    //
+    if (inputRead->getDataLength() > maxReadSize) {
+        WriteErrorMessage("BaseAligner:: got too big read (%d > %d)\n" 
+                          "Increase MAX_READ_LENGTH at the beginning of Read.h and recompile\n", inputRead->getDataLength(), maxReadSize);
+        soft_exit(1);
+    }
+
+    if ((int)inputRead->getDataLength() < seedLen) {
+        //
+        // Too short to have any seeds, it's hopeless.
+        // No need to finalize secondary results, since we don't have any.
+        //
+        return;
+    }
+
+    //
+    // Clear out the seed used array.
+    //
+    memset(seedUsed, 0, (inputRead->getDataLength() + 7) / 8);
+
+    unsigned readLen = inputRead->getDataLength();
+    const char *readData = inputRead->getData();
+    const char *readQuality = inputRead->getQuality();
+    unsigned countOfNs = 0;
+    for (unsigned i = 0; i < readLen; i++) {
+        char baseByte = readData[i];
+        char complement = rcTranslationTable[baseByte];
+        rcReadData[readLen - i - 1] = complement;
+        rcReadQuality[readLen - i - 1] = readQuality[i];
+        reversedRead[FORWARD][readLen - i - 1] = baseByte;
+        reversedRead[RC][i] = complement;
+        countOfNs += nTable[baseByte];
+    }
+
+    if (countOfNs > maxK) {
+        nReadsIgnoredBecauseOfTooManyNs++;
+        // No need to finalize secondary results, since we don't have any.
+        return;
+    }
+
+    //
+    // Block off any seeds that would contain an N.
+    //
+    if (countOfNs > 0) {
+        int minSeedToConsiderNing = 0; // In English, any word can be verbed. Including, apparently, "N."
+        for (int i = 0; i < (int) readLen; i++) {
+            if (BASE_VALUE[readData[i]] > 3) {
+                int limit = __min(i + seedLen - 1, readLen-1);
+                for (int j = __max(minSeedToConsiderNing, i - (int) seedLen + 1); j <= limit; j++) {
+                    SetSeedUsed(j);
+                }
+                minSeedToConsiderNing = limit+1;
+                if (minSeedToConsiderNing >= (int) readLen)
+                    break;
+            }
+        }
+    }
+
+    Read reverseComplimentRead;
+    Read *read[NUM_DIRECTIONS];
+    read[FORWARD] = inputRead;
+    read[RC] = &reverseComplimentRead;
+    read[RC]->init(NULL, 0, rcReadData, rcReadQuality, readLen);
+
+    clearCandidates();
+
+    //
+    // Initialize the bases table, which represents which bases we've checked.
+    // We have readSize - seeds size + 1 possible seeds.
+    //
+    unsigned nPossibleSeeds = readLen - seedLen + 1;
+    TRACE("nPossibleSeeds: %d\n", nPossibleSeeds);
+
+    unsigned nextSeedToTest = 0;
+    unsigned wrapCount = 0;
+    lowestPossibleScoreOfAnyUnseenLocation[FORWARD] = lowestPossibleScoreOfAnyUnseenLocation[RC] = 0;
+    mostSeedsContainingAnyParticularBase[FORWARD] = mostSeedsContainingAnyParticularBase[RC] = 1;  // Instead of tracking this for real, we're just conservative and use wrapCount+1.  It's faster.
+    bestScore = UnusedScoreValue;
+    secondBestScore = UnusedScoreValue;
+    nSeedsApplied[FORWARD] = nSeedsApplied[RC] = 0;
+    lvScores = 0;
+    lvScoresAfterBestFound = 0;
+    probabilityOfAllCandidates = 0.0;
+    probabilityOfBestCandidate = 0.0;
+
+    scoreLimit = maxK + extraSearchDepth; // For MAPQ computation
+
+    while (nSeedsApplied[FORWARD] + nSeedsApplied[RC] < maxSeedsToUse) {
+        //
+        // Choose the next seed to use.  Choose the first one that isn't used
+        //
+        if (nextSeedToTest >= nPossibleSeeds) {
+            //
+            // We're wrapping.  We want to space the seeds out as much as possible, so if we had
+            // a seed length of 20 we'd want to take 0, 10, 5, 15, 2, 7, 12, 17.  To make the computation
+            // fast, we use use a table lookup.
+            //
+            wrapCount++;
+            if (wrapCount >= seedLen) {
+                return;
+            }
+            nextSeedToTest = GetWrappedNextSeedToTest(seedLen, wrapCount);
+
+            mostSeedsContainingAnyParticularBase[FORWARD] = mostSeedsContainingAnyParticularBase[RC] = wrapCount + 1;
+        }
+
+        while (nextSeedToTest < nPossibleSeeds && IsSeedUsed(nextSeedToTest)) {
+            //
+            // This seed is already used.  Try the next one.
+            //
+            TRACE("Skipping due to IsSeedUsed\n");
+            nextSeedToTest++;
+        }
+        if (nextSeedToTest >= nPossibleSeeds) {
+            //
+            // Unusable seeds have pushed us past the end of the read.  Go back around the outer loop so we wrap properly.
+            //
+            TRACE("Eek, we're past the end of the read\n");
+            continue;
+        }
+
+        SetSeedUsed(nextSeedToTest);
+
+        if (!Seed::DoesTextRepresentASeed(read[FORWARD]->getData() + nextSeedToTest, seedLen)) {
+            continue;
+        }
+
+        Seed seed(read[FORWARD]->getData() + nextSeedToTest, seedLen);
+
+        unsigned        nHits[NUM_DIRECTIONS];      // Number of times this seed hits in the genome
+        const unsigned  *hits[NUM_DIRECTIONS];      // The actual hits (of size nHits)
+
+        unsigned minSeedLoc = (minLocation < readLen ? 0 : minLocation - readLen);
+        unsigned maxSeedLoc = (maxLocation > 0xFFFFFFFF - readLen ? 0xFFFFFFFF : maxLocation + readLen);
+        genomeIndex->lookupSeed(seed, minSeedLoc, maxSeedLoc, &nHits[0], &hits[0], &nHits[1], &hits[1]);
+
+        nHashTableLookups++;
+        lookupsThisRun++;
+
+        bool appliedEitherSeed = false;
+
+        for (Direction direction = 0; direction < NUM_DIRECTIONS; direction++) {
+            if (searchRadius != 0 && searchDirection != direction) {
+                //
+                // We're looking only for hits in the other direction.
+                //
+                continue;
+            }
+
+            if (nHits[direction] > maxHitsToConsider && !explorePopularSeeds) {
+                //
+                // This seed is matching too many places.  Just pretend we never looked and keep going.
+                //
+                nHitsIgnoredBecauseOfTooHighPopularity++;
+                popularSeedsSkipped++;
+                smallestSkippedSeed[direction] = __min(nHits[direction], smallestSkippedSeed[direction]);
+            } else {
+                if (0 == wrapCount) {
+                    firstPassSeedsNotSkipped[direction]++;
+                }
+
+                unsigned offset;
+                if (direction == FORWARD) {
+                    offset = nextSeedToTest;
+                } else {
+                    offset = readLen - seedLen - nextSeedToTest;
+                }
+
+                const unsigned prefetchDepth = 30;
+                unsigned limit = min(nHits[direction], maxHitsToConsider) + prefetchDepth;
+                for (unsigned iBase = 0 ; iBase < limit; iBase += prefetchDepth) {
+                    //
+                    // This works in two phases: we launch prefetches for a group of hash table lines,
+                    // then we do all of the inserts, and then repeat.
+                    //
+
+                    unsigned innerLimit = min(iBase + prefetchDepth, min(nHits[direction], maxHitsToConsider));
+                    if (doAlignerPrefetch) {
+                        for (unsigned i = iBase; i < innerLimit; i++) {
+                            prefetchHashTableBucket(hits[direction][i] - offset, direction);
+                        }
+                    }
+
+                    for (unsigned i = iBase; i < innerLimit; i++) {
+                        //
+                        // Find the genome location where the beginning of the read would hit, given a match on this seed.
+                        //
+                        unsigned genomeLocationOfThisHit = hits[direction][i] - offset;
+                        if (genomeLocationOfThisHit < minLocation ||
+                                genomeLocationOfThisHit > maxLocation ||
+                                hits[direction][i] < offset) {
+                            continue;
+                        }
+
+                        if (direction == FORWARD) {
+
+                            //Insert this position into the seed map
+                            seed_map::iterator pos = map.find(genomeLocationOfThisHit);
+
+                            //If this sequence is not found, create a new vector to store this sequence (and others like it)
+                            if ((pos == map.end())) {
+                                std::set<unsigned> temp;
+                                temp.insert(nextSeedToTest);
+                                map.insert(seed_map::value_type(genomeLocationOfThisHit, temp));
+                            } else {
+                                pos->second.insert(nextSeedToTest);
+                            }
+
+                        } else {
+
+                            //Insert this position into the seed map
+                            seed_map::iterator pos = mapRC.find(genomeLocationOfThisHit);
+
+                            //If this sequence is not found, create a new vector to store this sequence (and others like it)
+                            if ((pos == mapRC.end())) {
+                                std::set<unsigned> temp;
+                                temp.insert(nextSeedToTest);
+                                mapRC.insert(seed_map::value_type(genomeLocationOfThisHit, temp));
+                            } else {
+                                pos->second.insert(nextSeedToTest);
+                            }
+                        }
+                    }
+                }
+                nSeedsApplied[direction]++;
+                appliedEitherSeed = true;
+            } // not too popular
+        }   // directions
+
+#if 1
+        nextSeedToTest += seedLen;
+#else   // 0
+
+        //
+        // If we don't have enough seeds left to reach the end of the read, space out the seeds more-or-less evenly.
+        //
+        if ((maxSeedsToUse - (nSeedsApplied[FORWARD] + nSeedsApplied[RC]) + 1) * seedLen + nextSeedToTest < nPossibleSeeds) {
+            _ASSERT((nPossibleSeeds + nextSeedToTest) / (maxSeedsToUse - (nSeedsApplied[FORWARD] + nSeedsApplied[RC]) + 1) > seedLen);
+            nextSeedToTest += (nPossibleSeeds + nextSeedToTest) / (maxSeedsToUse - (nSeedsApplied[FORWARD] + nSeedsApplied[RC]) + 1);
+        } else {
+            nextSeedToTest += seedLen;
+        }
+
+#endif // 0
+
+    }
+
+    //
+    // Do the best with what we've got.
+    //
+#ifdef TRACE_ALIGNER
+    printf("Calling score with force=true because we ran out of seeds\n");
+#endif
+
+#ifdef  _DEBUG
+    if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates) at %u\n", primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, primaryResult->location);
+#endif  // _DEBUG
+
+    return;
+}
+
+
+    void
 BaseAligner::AlignRead(
         Read                    *inputRead,
         SingleAlignmentResult   *primaryResult,

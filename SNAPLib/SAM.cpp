@@ -1098,11 +1098,10 @@ SAMFormat::writeRead(
             const Genome::Contig *transcriptomePiece = transcriptome->getContigAtLocation(tlocation);
             const char* transcriptomePieceName = transcriptomePiece->name;
             unsigned transcriptomePositionInPiece = tlocation - transcriptomePiece->beginningOffset + 1; // SAM is 1-based
-                                       
+ 
             //Insert splice junctions
             lv->insertSpliceJunctions(gtf, tokens, transcriptomePieceName, transcriptomePositionInPiece, (char*) cigarBuf, cigarBufSize);
             cigar = cigarBuf;  
-                  
         }
     }
 

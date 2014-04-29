@@ -354,6 +354,10 @@ void PairedAlignerContext::runIterationThread()
         Read *read0;
         Read *read1;
         PairedAlignmentResult result;
+        result.isTranscriptome[0] = false;
+        result.isTranscriptome[1] = false;
+        result.tlocation[0] = 0;
+        result.tlocation[1] = 0;
         memset(&result, 0, sizeof(result));
         result.location[0] = result.location[1] = InvalidGenomeLocation;
         
@@ -421,6 +425,50 @@ void PairedAlignerContext::runIterationThread()
     PairedAlignmentResult *g_secondaryResults = (PairedAlignmentResult *)g_allocator->allocate(g_maxPairedSecondaryHits * sizeof(*g_secondaryResults));
     SingleAlignmentResult *g_singleSecondaryResults = (SingleAlignmentResult *)g_allocator->allocate(g_maxSingleSecondaryHits * sizeof(*g_singleSecondaryResults));
 
+    size_t t_memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(transcriptome, intersectingAlignerMaxHits, maxReadSize, transcriptome->getSeedLength(),
+                                                                numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize);
+
+    t_memoryPoolSize += ChimericPairedEndAligner::getBigAllocatorReservation(transcriptome, maxReadSize, maxHits, transcriptome->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxDist,
+                                                    extraSearchDepth, maxCandidatePoolSize);
+
+    unsigned t_maxPairedSecondaryHits;
+    unsigned t_maxSingleSecondaryHits;
+
+    if (maxSecondaryAligmmentAdditionalEditDistance < 0) {
+        t_maxPairedSecondaryHits = 0;
+        t_maxSingleSecondaryHits = 0;
+    } else {
+        t_maxPairedSecondaryHits = IntersectingPairedEndAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, transcriptome->getSeedLength());
+        t_maxSingleSecondaryHits = ChimericPairedEndAligner::getMaxSingleEndSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, transcriptome->getSeedLength());
+    }
+
+    t_memoryPoolSize += t_maxPairedSecondaryHits * sizeof(PairedAlignmentResult) + t_maxSingleSecondaryHits * sizeof(SingleAlignmentResult);
+
+    BigAllocator *t_allocator = new BigAllocator(t_memoryPoolSize);
+
+    IntersectingPairedEndAligner *t_intersectingAligner = new (t_allocator) IntersectingPairedEndAligner(transcriptome, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
+                                                                seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth,
+                                                                maxCandidatePoolSize, t_allocator, noUkkonen, noOrderedEvaluation);
+
+    ChimericPairedEndAligner *t_aligner = new (t_allocator) ChimericPairedEndAligner(
+        transcriptome,
+        maxReadSize,
+        maxHits,
+        maxDist,
+        numSeedsFromCommandLine,
+        seedCoverage,
+        forceSpacing,
+        extraSearchDepth,
+        noUkkonen,
+        noOrderedEvaluation,
+        t_intersectingAligner,
+        t_allocator);
+
+    t_allocator->checkCanaries();
+
+    PairedAlignmentResult *t_secondaryResults = (PairedAlignmentResult *)t_allocator->allocate(t_maxPairedSecondaryHits * sizeof(*t_secondaryResults));
+    SingleAlignmentResult *t_singleSecondaryResults = (SingleAlignmentResult *)t_allocator->allocate(t_maxSingleSecondaryHits * sizeof(*t_singleSecondaryResults));
+
     BigAllocator *c_allocator = NULL;
     IntersectingPairedEndAligner *c_intersectingAligner = NULL;
     ChimericPairedEndAligner *c_aligner = NULL;
@@ -471,54 +519,14 @@ void PairedAlignerContext::runIterationThread()
       c_singleSecondaryResults = (SingleAlignmentResult *)c_allocator->allocate(c_maxSingleSecondaryHits * sizeof(*c_singleSecondaryResults));
     
     }
-
-    unsigned singleAlignerMaxHits = 300;
-    SingleAlignmentResult *t_secondaryAlignments = NULL;
-    unsigned t_secondaryAlignmentBufferCount;
-    if (maxSecondaryAligmmentAdditionalEditDistance < 0) {
-        t_secondaryAlignmentBufferCount = 0;
-    } else {
-        t_secondaryAlignmentBufferCount = BaseAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, transcriptome->getSeedLength());
-    }
-    size_t t_secondaryAlignmentBufferSize = sizeof(*t_secondaryAlignments) * t_secondaryAlignmentBufferCount;
-
-    BigAllocator *t_allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, singleAlignerMaxHits, maxReadSize, transcriptome->getSeedLength(), numSeedsFromCommandLine, seedCoverage) + t_secondaryAlignmentBufferSize);
-
-    BaseAligner *t_aligner = new (t_allocator) BaseAligner(
-            transcriptome,
-            singleAlignerMaxHits,
-            maxDist,
-            maxReadSize,
-            numSeedsFromCommandLine,
-            seedCoverage,
-            extraSearchDepth,
-            noUkkonen,
-            noOrderedEvaluation,
-            NULL,               // LV (no need to cache in the single aligner)
-            NULL,               // reverse LV
-            stats,
-            t_allocator);
-
-    if (maxSecondaryAligmmentAdditionalEditDistance >= 0) {
-        t_secondaryAlignments = (SingleAlignmentResult *)t_allocator->allocate(t_secondaryAlignmentBufferSize);
-    }
-
-    t_allocator->checkCanaries();
-
-    t_aligner->setExplorePopularSeeds(options->explorePopularSeeds);
-    t_aligner->setStopOnFirstHit(options->stopOnFirstHit);
-
+ 
+    /*
     //p_aligner for partial alignments
-
+    unsigned singleAlignerMaxHits = 100;
     unsigned p_numSeedsFromCommandLine = 0;
     float p_seedCoverage = (float) maxReadSize / (index->getSeedLength()*2);
     SingleAlignmentResult *p_secondaryAlignments = NULL;    
-    unsigned p_secondaryAlignmentBufferCount;
-    if (maxSecondaryAligmmentAdditionalEditDistance < 0) {
-        p_secondaryAlignmentBufferCount = 0;
-    } else {
-        p_secondaryAlignmentBufferCount = BaseAligner::getMaxSecondaryResults(p_numSeedsFromCommandLine, p_seedCoverage, maxReadSize, maxHits, index->getSeedLength());
-    }
+    unsigned p_secondaryAlignmentBufferCount = 0;
     size_t p_secondaryAlignmentBufferSize = sizeof(*p_secondaryAlignments) * p_secondaryAlignmentBufferCount;
 
     BigAllocator *p_allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, singleAlignerMaxHits, maxReadSize, index->getSeedLength(), p_numSeedsFromCommandLine, p_seedCoverage) + p_secondaryAlignmentBufferSize);
@@ -546,8 +554,8 @@ void PairedAlignerContext::runIterationThread()
             
     p_aligner->setExplorePopularSeeds(options->explorePopularSeeds);
     p_aligner->setStopOnFirstHit(options->stopOnFirstHit);
-
     //END P_ALIGNER
+    */    
 
     ReadWriter *readWriter = this->readWriter;
 
@@ -673,70 +681,81 @@ void PairedAlignerContext::runIterationThread()
             lastReportTime = timeInMillis();
         }
 
-        
-        AlignmentFilter filter(read0, read1, index->getGenome(), transcriptome->getGenome(), gtf, minSpacing
-, maxSpacing, options->confDiff, options->maxDist, index->getSeedLength(), p_aligner);
+        //Create the filter
+        //AlignmentFilter filter(read0, read1, index->getGenome(), transcriptome->getGenome(), gtf, minSpacing, maxSpacing, options->confDiff, options->maxDist, index->getSeedLength(), p_aligner);
+        AlignmentFilter filter(read0, read1, index->getGenome(), transcriptome->getGenome(), gtf, minSpacing, maxSpacing, options->confDiff, options->maxDist, index->getSeedLength(), g_aligner->singleAligner);
 
-        int nSingleSecondaryResults[2];
-        int nSecondaryResults = 0;
+        int g_nSingleSecondaryResults[2];
+        int g_nSecondaryResults = 0;
+        int t_nSingleSecondaryResults[2];
+        int t_nSecondaryResults = 0;
 
         SingleAlignmentResult singleResult;
         singleResult.isTranscriptome = false;
 
-        PairedAlignmentResult pairedResult, contaminantResult;
-        pairedResult.isTranscriptome[0] = false;
-        pairedResult.isTranscriptome[1] = false;
+        PairedAlignmentResult g_pairedResult, t_pairedResult, pairedResult, contaminantResult;
+        g_pairedResult.isTranscriptome[0] = false;
+        g_pairedResult.isTranscriptome[1] = false;
+        g_pairedResult.tlocation[0] = 0;
+        g_pairedResult.tlocation[1] = 0;
+
+        t_pairedResult.isTranscriptome[0] = true;
+        t_pairedResult.isTranscriptome[1] = true;
+        t_pairedResult.tlocation[0] = 0;
+        t_pairedResult.tlocation[1] = 0;
+
+        pairedResult.isTranscriptome[0] = true;
+        pairedResult.isTranscriptome[1] = true;
         pairedResult.tlocation[0] = 0;
         pairedResult.tlocation[1] = 0;
+
         contaminantResult.isTranscriptome[0] = false;
         contaminantResult.isTranscriptome[1] = false;
         contaminantResult.tlocation[0] = 0;
         contaminantResult.tlocation[1] = 0;
-        /*
 
 #if     TIME_HISTOGRAM
         _int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
 
-        //Add transcriptome alignments
-
-        t_aligner->AlignRead(read0, &singleResult, maxSecondaryAligmmentAdditionalEditDistance, t_secondaryAlignmentBufferCount, &nSecondaryResults, t_secondaryAlignments);
+        t_aligner->align(read0, read1, &t_pairedResult, maxSecondaryAligmmentAdditionalEditDistance, t_maxPairedSecondaryHits, &t_nSecondaryResults, t_secondaryResults, t_maxSingleSecondaryHits, &t_nSingleSecondaryResults[0], &t_nSingleSecondaryResults[1],t_singleSecondaryResults);
 
         t_allocator->checkCanaries();
 
-        filter.AddAlignment(singleResult.location, singleResult.direction, singleResult.score, singleResult.mapq, true, false);
-        for (int i = 0; i < nSecondaryResults; i++) {
-          filter.AddAlignment(t_secondaryAlignments[i].location, t_secondaryAlignments[i].direction, t_secondaryAlignments[i].score, t_secondaryAlignments[i].mapq, true, false);
-        }
-
-        t_aligner->AlignRead(read1, &singleResult, maxSecondaryAligmmentAdditionalEditDistance, t_secondaryAlignmentBufferCount, &nSecondaryResults, t_secondaryAlignments);
-
-        t_allocator->checkCanaries();
-
-        filter.AddAlignment(singleResult.location, singleResult.direction, singleResult.score, singleResult.mapq, true, true);
-        for (int i = 0; i < nSecondaryResults; i++) {
-          filter.AddAlignment(t_secondaryAlignments[i].location, t_secondaryAlignments[i].direction, t_secondaryAlignments[i].score, t_secondaryAlignments[i].mapq, true, true);
-        }
-
-        //Add genomic reads
-        */        
-
-        g_aligner->align(read0, read1, &pairedResult, maxSecondaryAligmmentAdditionalEditDistance, g_maxPairedSecondaryHits, &nSecondaryResults, g_secondaryResults, g_maxSingleSecondaryHits, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1],g_singleSecondaryResults);
-
-        /*
         //Add primary result
-        filter.AddAlignment(pairedResult.location[0], pairedResult.direction[0], pairedResult.score[0], pairedResult.mapq[0], false, false);
-        filter.AddAlignment(pairedResult.location[1], pairedResult.direction[1], pairedResult.score[1], pairedResult.mapq[1], false, true);
+        filter.AddAlignment(t_pairedResult.location[0], t_pairedResult.direction[0], t_pairedResult.score[0], t_pairedResult.mapq[0], true, false);
+        filter.AddAlignment(t_pairedResult.location[1], t_pairedResult.direction[1], t_pairedResult.score[1], t_pairedResult.mapq[1], true, true);
 
-        //Add all secondary results
-        for (int i = 0; i < nSecondaryResults; i++) {
+        //Add secondary results
+        for (int i = 0; i < t_nSecondaryResults; i++) {
+          filter.AddAlignment(t_secondaryResults[i].location[0], t_secondaryResults[i].direction[0], t_secondaryResults[i].score[0], t_secondaryResults[i].mapq[0], true, false);         
+          filter.AddAlignment(t_secondaryResults[i].location[1], t_secondaryResults[i].direction[1], t_secondaryResults[i].score[1], t_secondaryResults[i].mapq[1], true, true);
+        }      
+
+        for (int i = 0; i < t_nSingleSecondaryResults[0] + t_nSingleSecondaryResults[1]; i++) {
+            bool isMate0 = i < t_nSingleSecondaryResults[0] ? true : false;
+            Read *read = i < t_nSingleSecondaryResults[0] ? read0 : read1;
+            if (readWriter != NULL && (options->passFilter(read, t_singleSecondaryResults[i].status))) {
+                filter.AddAlignment(t_singleSecondaryResults[i].location, t_singleSecondaryResults[i].direction, t_singleSecondaryResults[i].score, t_singleSecondaryResults[i].mapq, true, isMate0); 
+            }
+        }
+
+        g_aligner->align(read0, read1, &g_pairedResult, maxSecondaryAligmmentAdditionalEditDistance, g_maxPairedSecondaryHits, &g_nSecondaryResults, g_secondaryResults, g_maxSingleSecondaryHits, &g_nSingleSecondaryResults[0], &g_nSingleSecondaryResults[1],g_singleSecondaryResults);
+
+        g_allocator->checkCanaries();
+
+        filter.AddAlignment(g_pairedResult.location[0], g_pairedResult.direction[0], g_pairedResult.score[0], g_pairedResult.mapq[0], false, false);
+        filter.AddAlignment(g_pairedResult.location[1], g_pairedResult.direction[1], g_pairedResult.score[1], g_pairedResult.mapq[1], false, true);
+     
+        //Add secondary results
+        for (int i = 0; i < g_nSecondaryResults; i++) {
           filter.AddAlignment(g_secondaryResults[i].location[0], g_secondaryResults[i].direction[0], g_secondaryResults[i].score[0], g_secondaryResults[i].mapq[0], false, false);         
           filter.AddAlignment(g_secondaryResults[i].location[1], g_secondaryResults[i].direction[1], g_secondaryResults[i].score[1], g_secondaryResults[i].mapq[1], false, true);
         }      
 
-        for (int i = 0; i < nSingleSecondaryResults[0] + nSingleSecondaryResults[1]; i++) {
-            bool isMate0 = i < nSingleSecondaryResults[0] ? true : false;
-            Read *read = i < nSingleSecondaryResults[0] ? read0 : read1;
+        for (int i = 0; i < g_nSingleSecondaryResults[0] + g_nSingleSecondaryResults[1]; i++) {
+            bool isMate0 = i < g_nSingleSecondaryResults[0] ? true : false;
+            Read *read = i < g_nSingleSecondaryResults[0] ? read0 : read1;
             if (readWriter != NULL && (options->passFilter(read, g_singleSecondaryResults[i].status))) {
                 filter.AddAlignment(g_singleSecondaryResults[i].location, g_singleSecondaryResults[i].direction, g_singleSecondaryResults[i].score, g_singleSecondaryResults[i].mapq, false, isMate0); 
             }
@@ -744,7 +763,6 @@ void PairedAlignerContext::runIterationThread()
 
         //Perform the filtering
         unsigned status = filter.Filter(&pairedResult);
-        */
 
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;
@@ -782,13 +800,18 @@ void PairedAlignerContext::runIterationThread()
     stats->lvCalls = g_aligner->getLocationsScored();
 
     g_allocator->checkCanaries();
+    t_allocator->checkCanaries();
 
     g_aligner->~ChimericPairedEndAligner();
+    t_aligner->~ChimericPairedEndAligner();
     delete supplier;
 
     g_intersectingAligner->~IntersectingPairedEndAligner();
     delete g_allocator;
+    t_intersectingAligner->~IntersectingPairedEndAligner();
+    delete t_allocator;
 
+    /*
     t_aligner->~BaseAligner();
     delete t_allocator;
 
@@ -801,7 +824,7 @@ void PairedAlignerContext::runIterationThread()
         c_intersectingAligner->~IntersectingPairedEndAligner();
         delete c_allocator;
     }
-
+    */
 }
 
 void PairedAlignerContext::writePair(Read* read0, Read* read1, PairedAlignmentResult* result, bool secondary)

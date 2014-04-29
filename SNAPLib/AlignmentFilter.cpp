@@ -761,14 +761,8 @@ void AlignmentFilter::UnalignedRead(alignment_map &mate, Read *read, unsigned mi
     std::vector<AlignmentPair> intrachromosomal_splices;
     std::vector<AlignmentPair> interchromosomal_splices;
     
-    //Temp variables, but may be able to use them later
-    unsigned location = InvalidGenomeLocation;
-    Direction direction;
-    int score;
-    int mapq;
-    
     specialAligner->setReadId(0);
-    //specialAligner->CharacterizeSeeds(read, &location, &direction, &score, &mapq, 0, 0, FORWARD, map, mapRC);   
+    specialAligner->CharacterizeSeeds(read, map, mapRC);   
     char flag = 0;
     
     //PrintMaps(map, mapRC);
@@ -1026,10 +1020,10 @@ void AlignmentFilter::FindPartialMatches(PairedAlignmentResult *result, Alignmen
     int mapq;
     
     specialAligner->setReadId(0);
-    //specialAligner->CharacterizeSeeds(read0, &location, &direction, &score, &mapq, 0, 0, FORWARD, map0, mapRC0);
+    specialAligner->CharacterizeSeeds(read0, map0, mapRC0);
 
     specialAligner->setReadId(1); 
-    //specialAligner->CharacterizeSeeds(read1, &location, &direction, &score, &mapq, 0, 0, FORWARD, map1, mapRC1);
+    specialAligner->CharacterizeSeeds(read1, map1, mapRC1);
     
     //Print these maps
     //PrintMaps(map0, mapRC0);

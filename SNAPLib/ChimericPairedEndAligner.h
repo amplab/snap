@@ -29,6 +29,9 @@ Revision History:
 #include "BigAlloc.h"
 
 class ChimericPairedEndAligner : public PairedEndAligner {
+
+  friend class PairedAlignerContext;
+
 public:
     ChimericPairedEndAligner(
         GenomeIndex         *index,
@@ -78,7 +81,7 @@ public:
         return underlyingPairedEndAligner->getLocationsScored() + singleAligner->getLocationsScored();
     }
 
-private:
+protected:
    
     bool        forceSpacing;
     BaseAligner *singleAligner;
