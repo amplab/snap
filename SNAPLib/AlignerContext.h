@@ -106,7 +106,6 @@ public:
     unsigned                             numSeedsFromCommandLine;
     double                               seedCoverage;
     int                                  maxHits;
-    bool                                 computeError;
     bool                                 detailedStats;
     ReadClippingType                     clipping;
     unsigned                             extraSearchDepth;

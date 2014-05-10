@@ -31,7 +31,6 @@ Revision History:
 #include "Range.h"
 #include "SAM.h"
 #include "Tables.h"
-#include "WGsim.h"
 #include "AlignerContext.h"
 #include "AlignerOptions.h"
 #include "FASTQ.h"
@@ -181,18 +180,13 @@ SingleAlignerContext::runIterationThread()
 
         allocator->checkCanaries();
 
-        bool wasError = false;
-        if (result.status != NotFound && computeError) {
-            wasError = wgsimReadMisaligned(read, result.location, index, options->misalignThreshold);
-        }
-
         writeRead(read, result, false);
 
         for (int i = 0; i < nSecondaryResults; i++) {
             writeRead(read, secondaryAlignments[i], true);
         }
         
-        updateStats(stats, read, result.status, result.location, result.score, result.mapq, wasError);
+        updateStats(stats, read, result.status, result.score, result.mapq);
     }
 
     aligner->~BaseAligner(); // This calls the destructor without calling operator delete, allocator owns the memory.
@@ -221,16 +215,11 @@ SingleAlignerContext::updateStats(
     AlignerStats* stats,
     Read* read,
     AlignmentResult result,
-    unsigned location, 
     int score,
-    int mapq,
-    bool wasError)
+    int mapq)
 {
     if (isOneLocation(result)) {
         stats->singleHits++;
-        if (computeError) {
-            stats->errors += wasError ? 1 : 0;
-        }
     } else if (result == MultipleHits) {
         stats->multiHits++;
     } else {
@@ -241,7 +230,6 @@ SingleAlignerContext::updateStats(
     if (result != NotFound) {
         _ASSERT(mapq >= 0 && mapq <= AlignerStats::maxMapq);
         stats->mapqHistogram[mapq]++;
-        stats->mapqErrors[mapq] += wasError ? 1 : 0;
     }
 }
 

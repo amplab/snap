@@ -163,12 +163,12 @@ struct BAMAlignment
 
     // absoluate genome locations
 
-    _uint32 getLocation(const Genome* genome) const
+    GenomeLocation getLocation(const Genome* genome) const
     { return genome == NULL || pos < 0 || refID < 0 || refID >= genome->getNumContigs() || (FLAG & SAM_UNMAPPED)
-        ? UINT32_MAX : (genome->getContigs()[refID].beginningOffset + pos); }
+        ? UINT32_MAX : (genome->getContigs()[refID].beginningLocation + pos); }
 
-    _uint32 getNextLocation(const Genome* genome) const
-    { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? UINT32_MAX : (genome->getContigs()[next_refID].beginningOffset + next_pos); }
+    GenomeLocation getNextLocation(const Genome* genome) const
+    { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? UINT32_MAX : (genome->getContigs()[next_refID].beginningLocation + next_pos); }
 
 #ifdef VALIDATE_BAM
     void validate();
@@ -369,7 +369,7 @@ public:
             return getNextRead(readToUpdate, NULL, NULL, NULL, NULL, NULL, false, NULL);
         }
     
-        virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, unsigned *genomeLocation, bool *isRC, unsigned *mapQ,
+        virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, GenomeLocation *genomeLocation, bool *isRC, unsigned *mapQ,
                         unsigned *flag, const char **cigar)
         {
             return getNextRead(read,alignmentResult,genomeLocation,isRC,mapQ,flag,false,cigar);
@@ -415,10 +415,10 @@ public:
 protected:
 
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
-                        unsigned *genomeLocation, bool *isRC, unsigned *mapQ, unsigned *flag, bool ignoreEndOfRange, const char **cigar);
+                        GenomeLocation *genomeLocation, bool *isRC, unsigned *mapQ, unsigned *flag, bool ignoreEndOfRange, const char **cigar);
 
         void getReadFromLine(const Genome *genome, char *line, char *endOfBuffer, Read *read, AlignmentResult *alignmentResult,
-                        unsigned *genomeLocation, bool *isRC, unsigned *mapQ, 
+                        GenomeLocation *genomeLocation, bool *isRC, unsigned *mapQ, 
                         size_t *lineLength, unsigned *flag, const char **cigar, ReadClippingType clipping);
 
 private:

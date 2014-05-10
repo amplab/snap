@@ -29,6 +29,7 @@ Revision History:
 #include "Genome.h"
 #include "LandauVishkin.h"
 #include "AlignerOptions.h"
+#include "Genome.h"
 
 //
 // abstract class defining format-specific operations
@@ -44,7 +45,7 @@ public:
     // reading
     //
 
-    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* o_location, unsigned* o_readBytes, int* o_refID = NULL, int* o_pos = NULL) const = 0;
+    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, GenomeLocation* o_location, GenomeDistance* o_readBytes, int* o_refID = NULL, int* o_pos = NULL) const = 0;
 
     /*
 
@@ -81,9 +82,9 @@ public:
     virtual bool writeRead(
         const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
-        int mapQuality, unsigned genomeLocation, Direction direction, bool secondaryAlignment,
+        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
-        AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD) const = 0; 
+        AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD) const = 0; 
 
     //
     // formats

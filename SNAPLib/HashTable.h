@@ -62,7 +62,7 @@ class SNAPHashTable {
         unsigned GetValueSizeInBytes() const {return valueSizeInBytes;}
         unsigned GetValueCount() const {return valueCount;}
 
-		void *getEntryValues(unsigned whichEntry) 
+		void *getEntryValues(_uint64 whichEntry) 
 		{
 			_ASSERT(whichEntry < GetTableSize());
 			return getEntry(whichEntry);

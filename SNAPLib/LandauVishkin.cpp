@@ -440,8 +440,8 @@ done1:
 }
 
 int LandauVishkinWithCigar::computeEditDistanceNormalized(
-    const char* text, int textLen,
-    const char* pattern, int patternLen,
+    const char* text, GenomeDistance textLen,
+    const char* pattern, GenomeDistance patternLen,
     int k,
     char *cigarBuf, int cigarBufLen, bool useM, 
     CigarFormat format, int* cigarBufUsed)
@@ -453,7 +453,7 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
     int bamBufLen = (format == BAM_CIGAR_OPS ? 1 : 2) * cigarBufLen; // should be enough
     char* bamBuf = (char*) alloca(bamBufLen);
     int bamBufUsed, textUsed;
-    int score = computeEditDistance(text, textLen, pattern, patternLen, k, bamBuf, bamBufLen,
+    int score = computeEditDistance(text, (int)textLen, pattern, (int)patternLen, k, bamBuf, bamBufLen,
         useM, BAM_CIGAR_OPS, &bamBufUsed, &textUsed);
     if (score < 0) {
         return score;

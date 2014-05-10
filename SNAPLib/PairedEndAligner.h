@@ -22,9 +22,10 @@ Revision History:
 
 #pragma once
 
-#include "Aligner.h"
+#include "AlignmentResult.h"
 #include "directions.h"
 #include "LandauVishkin.h"
+#include "Read.h"
 
 const int NUM_READS_PER_PAIR = 2;    // This is just to make it clear what the array subscripts are, it doesn't ever make sense to change
 
@@ -32,7 +33,7 @@ struct PairedAlignmentResult {
     AlignmentResult status[NUM_READS_PER_PAIR]; // SingleHit or CertainHit if aligned, MultipleHit if matches DB
                                                 // but not confidently aligned, or NotFound.
 
-    unsigned location[NUM_READS_PER_PAIR];      // Genome location of each read.
+    GenomeLocation location[NUM_READS_PER_PAIR];// Genome location of each read.
     
     Direction direction[NUM_READS_PER_PAIR];    // Did we match the reverse complement? In general the two reads should have
                                                 // opposite orientations because they're part of the same original fragment,

@@ -61,7 +61,7 @@ public:
         other.count = 0;
     }
 
-    void reserve(int newCapacity)
+    void reserve(_int64 newCapacity)
     {
         _ASSERT(newCapacity >= 0);
         if (newCapacity <= capacity && entries != NULL) {
@@ -90,7 +90,7 @@ public:
         }
     }
 
-    inline int size() const
+    inline _int64 size() const
     {
         return count;
     }
@@ -165,7 +165,7 @@ public:
         return true;
     }
 
-    inline void erase(int index)
+    inline void erase(_int64 index)
     {
         _ASSERT(index >= 0 && index < count);
         if (index < 0 || index >= count) {
@@ -186,7 +186,7 @@ public:
         }
     }
 
-    inline V& operator[](int index) const
+    inline V& operator[](_int64 index) const
     {
         _ASSERT(index >= 0 && index < count);
         return entries[index];
@@ -231,8 +231,8 @@ public:
 
 private:
     V *entries;
-    int capacity;
-    int count;
+    _int64 capacity;
+    _int64 count;
 };
 
 typedef VariableSizeVector<unsigned> IdVector;

@@ -100,6 +100,7 @@ Arguments:
 
     genome = genomeIndex->getGenome();
     seedLen = genomeIndex->getSeedLength();
+    doesGenomeIndexHave64BitLocations = genomeIndex->doesGenomeIndexHave64BitLocations();
 
     probDistance = new ProbabilityDistance(SNP_PROB, GAP_OPEN_PROB, GAP_EXTEND_PROB);  // Match Mason
 
@@ -245,23 +246,14 @@ Return Value:
     true if there was enough space in secondaryResults, false otherwise
 
 --*/
-{  
-    // These used to be parameters that were used by the old version of the paired-end aligner when it wanted to search for
-    // a limited set of single-end alignments.  That turned out to produce not-so-good results, so it went away but stayed
-    // in the AlignRead interface for a while. Now, it's still in the code just in case someone wants it some day, but
-    // to get it back will require changing the interface again.
-    unsigned   searchRadius = 0;
-    unsigned   searchLocation = 0;
-    Direction  searchDirection = RC;
-
-    memset(hitCountByExtraSearchDepth, 0, sizeof(*hitCountByExtraSearchDepth) * extraSearchDepth);
+{   memset(hitCountByExtraSearchDepth, 0, sizeof(*hitCountByExtraSearchDepth) * extraSearchDepth);
 
     if (NULL != nSecondaryResults) {
         *nSecondaryResults = 0;
     }
 
     firstPassSeedsNotSkipped[FORWARD] = firstPassSeedsNotSkipped[RC] = 0;
-    smallestSkippedSeed[FORWARD] = smallestSkippedSeed[RC] = InvalidGenomeLocation;
+    smallestSkippedSeed[FORWARD] = smallestSkippedSeed[RC] = 0x8fffffffffffffff;
     highestWeightListChecked = 0;
 
     unsigned maxSeedsToUse;
@@ -279,14 +271,6 @@ Return Value:
     unsigned lookupsThisRun = 0;
 
     popularSeedsSkipped = 0;
-
-    // Range of genome locations to search in.
-    unsigned minLocation = 0;
-    unsigned maxLocation = 0xFFFFFFFF;
-    if (searchRadius != 0) {
-        minLocation = (searchLocation > searchRadius) ? searchLocation - searchRadius : 0;
-        maxLocation = (searchLocation < 0xFFFFFFFF - searchRadius) ? searchLocation + searchRadius : 0xFFFFFFFF;
-    }
 
     //
     // A bitvector for used seeds, indexed on the starting location of the seed within the read.
@@ -451,12 +435,17 @@ Return Value:
 
         Seed seed(read[FORWARD]->getData() + nextSeedToTest, seedLen);
 
-        unsigned        nHits[NUM_DIRECTIONS];      // Number of times this seed hits in the genome
-        const unsigned  *hits[NUM_DIRECTIONS];      // The actual hits (of size nHits)
+        _int64        nHits[NUM_DIRECTIONS];                // Number of times this seed hits in the genome
+        const GenomeLocation  *hits[NUM_DIRECTIONS];        // The actual hits (of size nHits)
+        GenomeLocation singletonHits[NUM_DIRECTIONS];       // Storage for single hits (this is required for 64 bit genome indices, since they might use fewer than 8 bytes internally)
 
-        unsigned minSeedLoc = (minLocation < readLen ? 0 : minLocation - readLen);
-        unsigned maxSeedLoc = (maxLocation > 0xFFFFFFFF - readLen ? 0xFFFFFFFF : maxLocation + readLen);
-        genomeIndex->lookupSeed(seed, minSeedLoc, maxSeedLoc, &nHits[0], &hits[0], &nHits[1], &hits[1]);
+        const unsigned *hits32[NUM_DIRECTIONS];
+
+        if (doesGenomeIndexHave64BitLocations) {
+            genomeIndex->lookupSeed(seed, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC], &singletonHits[FORWARD], &singletonHits[RC]);
+        } else {
+            genomeIndex->lookupSeed32(seed, &nHits[FORWARD], &hits32[FORWARD], &nHits[RC], &hits32[RC]);
+        }
 
         nHashTableLookups++;
         lookupsThisRun++;
@@ -490,13 +479,6 @@ Return Value:
         bool appliedEitherSeed = false;
 
         for (Direction direction = 0; direction < NUM_DIRECTIONS; direction++) {
-            if (searchRadius != 0 && searchDirection != direction) {
-                //
-                // We're looking only for hits in the other direction.
-                //
-                continue;
-            }
-
             if (nHits[direction] > maxHitsToConsider && !explorePopularSeeds) {
                 //
                 // This seed is matching too many places.  Just pretend we never looked and keep going.
@@ -533,17 +515,21 @@ Return Value:
                 }
 
                 const unsigned prefetchDepth = 30;
-                unsigned limit = min(nHits[direction], maxHitsToConsider) + prefetchDepth;
+                _int64 limit = min(nHits[direction], maxHitsToConsider) + prefetchDepth;
                 for (unsigned iBase = 0 ; iBase < limit; iBase += prefetchDepth) {
                     //
                     // This works in two phases: we launch prefetches for a group of hash table lines,
                     // then we do all of the inserts, and then repeat.
                     //
 
-                    unsigned innerLimit = min(iBase + prefetchDepth, min(nHits[direction], maxHitsToConsider));
+                    _int64 innerLimit = min(iBase + prefetchDepth, min(nHits[direction], maxHitsToConsider));
                     if (doAlignerPrefetch) {
                         for (unsigned i = iBase; i < innerLimit; i++) {
-                            prefetchHashTableBucket(hits[direction][i] - offset, direction);
+                            if (doesGenomeIndexHave64BitLocations) {
+                                prefetchHashTableBucket(hits32[direction][i] - offset, direction);
+                            } else {
+                                prefetchHashTableBucket(GenomeLocationAsInt64(hits[direction][i]) - offset, direction);
+                            }
                         }
                     }
 
@@ -551,17 +537,18 @@ Return Value:
                         //
                         // Find the genome location where the beginning of the read would hit, given a match on this seed.
                         //
-                        unsigned genomeLocationOfThisHit = hits[direction][i] - offset;
-                        if (genomeLocationOfThisHit < minLocation ||
-                                genomeLocationOfThisHit > maxLocation ||
-                                hits[direction][i] < offset) {
-                            continue;
+                        GenomeLocation genomeLocationOfThisHit;
+                        if (doesGenomeIndexHave64BitLocations) {
+                            genomeLocationOfThisHit = hits[direction][i] - offset;
+                        } else {
+                            genomeLocationOfThisHit = hits32[direction][i] - offset;
                         }
 
                         Candidate *candidate = NULL;
                         HashTableElement *hashTableElement;
 
                         findCandidate(genomeLocationOfThisHit, direction, &candidate, &hashTableElement);
+
                         if (NULL != hashTableElement) {
                             if (!noOrderedEvaluation) {     // If noOrderedEvaluation, just leave them all on the one-hit weight list so they get evaluated in whatever order
                                 incrementWeight(hashTableElement);
@@ -813,8 +800,8 @@ Return Value:
                 _ASSERT(candidateIndexToScore < hashTableElementSize);
                 Candidate *candidateToScore = &elementToScore->candidates[candidateIndexToScore];
 
-                unsigned genomeLocation = elementToScore->baseGenomeLocation + candidateIndexToScore;
-                unsigned elementGenomeLocation = genomeLocation;    // This is the genome location prior to any adjustments for indels
+                GenomeLocation genomeLocation = elementToScore->baseGenomeLocation + candidateIndexToScore;
+                GenomeLocation elementGenomeLocation = genomeLocation;    // This is the genome location prior to any adjustments for indels
 
                 //
                 // We're about to run edit distance computation on the genome.  Launch a prefetch for it
@@ -827,7 +814,7 @@ Return Value:
                 unsigned score = -1;
                 double matchProbability = 0;
                 unsigned readDataLength = read[elementToScore->direction]->getDataLength();
-                unsigned genomeDataLength = readDataLength + MAX_K; // Leave extra space in case the read has deletions
+                GenomeDistance genomeDataLength = readDataLength + MAX_K; // Leave extra space in case the read has deletions
                 const char *data = genome->getSubstring(genomeLocation, genomeDataLength);
                 if (NULL == data) {
                     //
@@ -838,16 +825,16 @@ Return Value:
                     const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
 
                     if (contig != NULL) {
-                        unsigned endOffset;
-                        if (genomeLocation + readDataLength + MAX_K >= genome->getCountOfBases()) {
-                            endOffset = genome->getCountOfBases();
+                        GenomeLocation endLocation;
+                        if (genomeLocation + readDataLength + MAX_K >= GenomeLocation(0) + genome->getCountOfBases()) {
+                            endLocation = GenomeLocation(0) + genome->getCountOfBases();
                         } else {
                             const Genome::Contig *nextContig = genome->getNextContigAfterLocation(genomeLocation);
-                            _ASSERT(NULL != contig && contig->beginningOffset <= genomeLocation && contig != nextContig);
+                            _ASSERT(contig->beginningLocation <= genomeLocation && contig != nextContig);
 
-                            endOffset = nextContig->beginningOffset;
+                            endLocation = nextContig->beginningLocation;
                         }
-                        genomeDataLength = endOffset - genomeLocation - 1;
+                        genomeDataLength = endLocation - genomeLocation - 1;
                         if (genomeDataLength >= readDataLength - MAX_K) {
                             data = genome->getSubstring(genomeLocation, genomeDataLength);
                             _ASSERT(NULL != data);
@@ -874,11 +861,9 @@ Return Value:
 
                     _ASSERT(!memcmp(data+seedOffset, readToScore->getData() + seedOffset, seedLen));
 
-                    // NB: This cacheKey computation MUST match the one in IntersectingPairedEndAligner or all hell will break loose.
-                    _uint64 cacheKey = (genomeLocation + tailStart) | (((_uint64) elementToScore->direction) << 32) | (((_uint64) readId) << 33) | (((_uint64)tailStart) << 34);
-
-                    score1 = landauVishkin->computeEditDistance(data + tailStart, genomeDataLength - tailStart, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
-                        scoreLimit, &matchProb1, cacheKey);
+                    int textLen = (int)__min(genomeDataLength - tailStart, 0x7ffffff0);
+                    score1 = landauVishkin->computeEditDistance(data + tailStart, textLen, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
+                        scoreLimit, &matchProb1);
 
                     if (score1 == -1) {
                         score = -1;
@@ -887,7 +872,7 @@ Return Value:
                         int limitLeft = scoreLimit - score1;
                         int genomeLocationOffset;
                         score2 = reverseLandauVishkin->computeEditDistance(data + seedOffset, seedOffset + MAX_K, reversedRead[elementToScore->direction] + readLen - seedOffset,
-                                                                                    read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2, cacheKey,
+                                                                                    read[OppositeDirection(elementToScore->direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2,
                                                                                     &genomeLocationOffset);
 
                         if (score2 == -1) {
@@ -957,10 +942,10 @@ Return Value:
                 // one, and you're at the right place with no branches.
                 //
                 HashTableElement *nearbyElement;
-                unsigned nearbyGenomeLocation;
+                GenomeLocation nearbyGenomeLocation;
                 if (-1 != score) {
-                    nearbyGenomeLocation = elementGenomeLocation + (2*(elementGenomeLocation % hashTableElementSize / (hashTableElementSize/2)) - 1) * (hashTableElementSize/2);
-                    _ASSERT((elementGenomeLocation % hashTableElementSize >= (hashTableElementSize/2) ? elementGenomeLocation + (hashTableElementSize/2) : elementGenomeLocation - (hashTableElementSize/2)) == nearbyGenomeLocation);   // Assert that the logic in the above comment is right.
+                    nearbyGenomeLocation = elementGenomeLocation + (2*(GenomeLocationAsInt64(elementGenomeLocation) % hashTableElementSize / (hashTableElementSize/2)) - 1) * (hashTableElementSize/2);
+                    _ASSERT((GenomeLocationAsInt64(elementGenomeLocation) % hashTableElementSize >= (hashTableElementSize/2) ? elementGenomeLocation + (hashTableElementSize/2) : elementGenomeLocation - (hashTableElementSize/2)) == nearbyGenomeLocation);   // Assert that the logic in the above comment is right.
 
                     findElement(nearbyGenomeLocation, elementToScore->direction, &nearbyElement);
                 } else {
@@ -1007,8 +992,8 @@ Return Value:
 
                     if ((secondBestScore == UnusedScoreValue || !(secondBestScoreGenomeLocation + maxMergeDist > genomeLocation && secondBestScoreGenomeLocation < genomeLocation + maxMergeDist)) &&
                         (bestScore == UnusedScoreValue || !(bestScoreGenomeLocation + maxMergeDist > genomeLocation && bestScoreGenomeLocation < genomeLocation + maxMergeDist)) &&
-                        (!anyNearbyCandidatesAlreadyScored || (bestScoreGenomeLocation / maxMergeDist != genomeLocation / maxMergeDist &&
-                                                               secondBestScoreGenomeLocation / maxMergeDist != genomeLocation / maxMergeDist))) {
+                        (!anyNearbyCandidatesAlreadyScored || (GenomeLocationAsInt64(bestScoreGenomeLocation) / maxMergeDist != GenomeLocationAsInt64(genomeLocation) / maxMergeDist &&
+                                                               GenomeLocationAsInt64(secondBestScoreGenomeLocation) / maxMergeDist != GenomeLocationAsInt64(genomeLocation) / maxMergeDist))) {
                             secondBestScore = bestScore;
                             secondBestScoreGenomeLocation = bestScoreGenomeLocation;
                             secondBestScoreDirection = primaryResult->direction;
@@ -1110,30 +1095,34 @@ Return Value:
 
 
     void
-BaseAligner::prefetchHashTableBucket(unsigned genomeLocation, Direction direction)
+BaseAligner::prefetchHashTableBucket(GenomeLocation genomeLocation, Direction direction)
 {
     HashTableAnchor *hashTable = candidateHashTable[direction];
 
-    unsigned lowOrderGenomeLocation = genomeLocation % hashTableElementSize;
-    unsigned highOrderGenomeLocation = genomeLocation - lowOrderGenomeLocation;
+    _uint64 lowOrderGenomeLocation;
+    _uint64 highOrderGenomeLocation;
 
-    unsigned hashTableIndex = hash(highOrderGenomeLocation) % candidateHashTablesSize;
+    decomposeGenomeLocation(genomeLocation, &lowOrderGenomeLocation, &highOrderGenomeLocation);
+
+    _uint64 hashTableIndex = hash(highOrderGenomeLocation) % candidateHashTablesSize;
 
     _mm_prefetch((const char *)&hashTable[hashTableIndex], _MM_HINT_T2);
 }
 
     bool
 BaseAligner::findElement(
-    unsigned         genomeLocation,
+    GenomeLocation   genomeLocation,
     Direction        direction,
     HashTableElement **hashTableElement)
 {
     HashTableAnchor *hashTable = candidateHashTable[direction];
 
-    unsigned lowOrderGenomeLocation = genomeLocation % hashTableElementSize;
-    unsigned highOrderGenomeLocation = genomeLocation - lowOrderGenomeLocation;
+    _uint64 lowOrderGenomeLocation;
+    _uint64 highOrderGenomeLocation;
 
-    unsigned hashTableIndex = hash(highOrderGenomeLocation) % candidateHashTablesSize;
+    decomposeGenomeLocation(genomeLocation, &lowOrderGenomeLocation, &highOrderGenomeLocation);
+
+    _uint64 hashTableIndex = hash(highOrderGenomeLocation) % candidateHashTablesSize;
     HashTableAnchor *anchor = &hashTable[hashTableIndex];
     if (anchor->epoch != hashTableEpoch) {
         //
@@ -1154,7 +1143,7 @@ BaseAligner::findElement(
 
     void
 BaseAligner::findCandidate(
-    unsigned         genomeLocation,
+    GenomeLocation   genomeLocation,
     Direction        direction,
     Candidate        **candidate,
     HashTableElement **hashTableElement)
@@ -1173,8 +1162,9 @@ Arguments:
 
 --*/
 {
-    unsigned lowOrderGenomeLocation = genomeLocation % hashTableElementSize;
-
+    _uint64 lowOrderGenomeLocation;
+ 
+    decomposeGenomeLocation(genomeLocation, &lowOrderGenomeLocation, NULL);
     if (!findElement(genomeLocation, direction, hashTableElement)) {
         *hashTableElement = NULL;
         *candidate = NULL;
@@ -1194,12 +1184,12 @@ bool doAlignerPrefetch = true;
 
     void
 BaseAligner::allocateNewCandidate(
-    unsigned    genomeLocation,
-    Direction   direction,
-    unsigned    lowestPossibleScore,
-    int         seedOffset,
-    Candidate **candidate,
-    HashTableElement **hashTableElement)
+    GenomeLocation      genomeLocation,
+    Direction           direction,
+    unsigned            lowestPossibleScore,
+    int                 seedOffset,
+    Candidate **        candidate,
+    HashTableElement ** hashTableElement)
 /*++
 
 Routine Description:
@@ -1212,8 +1202,10 @@ Return Value:
 {
     HashTableAnchor *hashTable = candidateHashTable[direction];
 
-    unsigned lowOrderGenomeLocation = genomeLocation % hashTableElementSize;
-    unsigned highOrderGenomeLocation = genomeLocation - lowOrderGenomeLocation;
+    _uint64 lowOrderGenomeLocation;
+    _uint64 highOrderGenomeLocation;
+
+    decomposeGenomeLocation(genomeLocation, &lowOrderGenomeLocation, &highOrderGenomeLocation);
 
     unsigned hashTableIndex = hash(highOrderGenomeLocation) % candidateHashTablesSize;
 
@@ -1276,25 +1268,6 @@ Return Value:
     anchor->element = element;
 
 }
-
-#if     DBG
-    bool
-BaseAligner::AssertCandidatesAreSorted()
-/*++
-
-Routine Description:
-
-Arguments:
-
-Return Value:
-
---*/
-{
-    for (int i = 1; i < nCandidates; i++) {
-        _ASSERT(candidates[i].genomeLocation <= candidates[i-1].genomeLocation);
-    }
-}
-#endif  // DBG
 
 BaseAligner::~BaseAligner()
 /*++

@@ -29,6 +29,7 @@ Environment:
 #include "FileFormat.h"
 #include "exit.h"
 #include "Error.h"
+#include "Genome.h"
 
 class SimpleReadWriter : public ReadWriter
 {
@@ -44,7 +45,7 @@ public:
 
     virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine);
 
-    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, unsigned genomeLocation, Direction direction, bool secondaryAlignment);
+    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment);
 
     virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result, bool secondaryAlignment);
 
@@ -91,7 +92,7 @@ SimpleReadWriter::writeRead(
     Read *read,
     AlignmentResult result,
     int mapQuality,
-    unsigned genomeLocation,
+    GenomeLocation genomeLocation,
     Direction direction,
     bool secondaryAlignment)
 {
@@ -159,7 +160,8 @@ SimpleReadWriter::writePair(
                 idLengths[1] -= 2;
         }
     }
-    unsigned locations[2];
+
+    GenomeLocation locations[2];
     locations[0] = result->status[0] != NotFound ? result->location[0] : UINT32_MAX;
     locations[1] = result->status[1] != NotFound ? result->location[1] : UINT32_MAX;
     int first = locations[0] > locations[1];

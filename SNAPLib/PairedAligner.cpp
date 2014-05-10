@@ -38,7 +38,6 @@ Revision History:
 #include "SAM.h"
 #include "ChimericPairedEndAligner.h"
 #include "Tables.h"
-#include "WGsim.h"
 #include "AlignerOptions.h"
 #include "AlignerContext.h"
 #include "AlignerStats.h"
@@ -541,13 +540,8 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
 {
     // Update stats
     for (int r = 0; r < 2; r++) {
-        bool wasError = false;
-        if (computeError && result->status[r] != NotFound) {
-            wasError = wgsimReadMisaligned((r == 0 ? read0 : read1), result->location[r], index, options->misalignThreshold);
-        }
         if (isOneLocation(result->status[r])) {
             stats->singleHits++;
-            stats->errors += wasError ? 1 : 0;
         } else if (result->status[r] == MultipleHits) {
             stats->multiHits++;
         } else {
@@ -559,7 +553,6 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
             int mapq = result->mapq[r];
             _ASSERT(mapq >= 0 && mapq <= AlignerStats::maxMapq);
             stats->mapqHistogram[mapq]++;
-            stats->mapqErrors[mapq] += wasError ? 1 : 0;
         }
     }
 

@@ -350,7 +350,7 @@ BAMAlignment::validate()
 BAMReader::getNextRead(
     Read *read,
     AlignmentResult *alignmentResult,
-    unsigned *genomeLocation,
+    GenomeLocation *genomeLocation,
     bool *isRC,
     unsigned *mapQ,
     unsigned *flag,
@@ -405,7 +405,7 @@ BAMReader::getReadFromLine(
     char *endOfBuffer,
     Read *read,
     AlignmentResult *alignmentResult,
-    unsigned *out_genomeLocation,
+    GenomeLocation *out_genomeLocation,
     bool *isRC,
     unsigned *mapQ,
     size_t *lineLength,
@@ -418,7 +418,7 @@ BAMReader::getReadFromLine(
     _ASSERT((size_t)(endOfBuffer - line) >= bam->size());
     bam->validate();
 
-    unsigned genomeLocation = bam->getLocation(genome);
+    GenomeLocation genomeLocation = bam->getLocation(genome);
 
     if (NULL != out_genomeLocation) {
         _ASSERT(-1 <= bam->refID && bam->refID < (int)genome->getNumContigs());
@@ -512,7 +512,7 @@ class BAMFormat : public FileFormat
 public:
     BAMFormat(bool i_useM) : useM(i_useM) {}
 
-    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* o_location, unsigned* o_readBytes, int* o_refID, int* o_pos) const;
+    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, GenomeLocation* o_location, GenomeDistance* o_readBytes, int* o_refID, int* o_pos) const;
 
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
 
@@ -523,9 +523,9 @@ public:
     virtual bool writeRead(
         const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
-        int mapQuality, unsigned genomeLocation, Direction direction, bool secondaryAlignment,
+        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
-        AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD) const;
+        AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD) const;
 
 private:
 
@@ -533,7 +533,7 @@ private:
         char * cigarBuf, int cigarBufLen,
         const char * data, unsigned dataLength, unsigned basesClippedBefore, unsigned extraBasesClippedBefore, unsigned basesClippedAfter,
         unsigned extraBasesClippedAfter,     unsigned frontHardClipping, unsigned backHardClipping,
-        unsigned genomeLocation, bool isRC, bool useM, int * editDistance);
+        GenomeLocation genomeLocation, bool isRC, bool useM, int * editDistance);
 
     const bool useM;
 };
@@ -545,8 +545,8 @@ BAMFormat::getSortInfo(
     const Genome* genome,
     char* buffer,
     _int64 bytes,
-    unsigned* o_location,
-	unsigned* o_readBytes,
+    GenomeLocation* o_location,
+	GenomeDistance* o_readBytes,
 	int* o_refID,
 	int* o_pos) const
 {
@@ -557,10 +557,10 @@ BAMFormat::getSortInfo(
 			if (bam->next_refID < 0 || bam->next_refID > genome->getNumContigs() || bam->next_pos < 0) {
 				*o_location = UINT32_MAX;
 			} else {
-				*o_location = genome->getContigs()[bam->next_refID].beginningOffset + bam->next_pos;
+				*o_location = genome->getContigs()[bam->next_refID].beginningLocation + bam->next_pos;
 			}
 		} else {
-			*o_location = genome->getContigs()[bam->refID].beginningOffset + bam->pos;
+			*o_location = genome->getContigs()[bam->refID].beginningLocation + bam->pos;
 		}
 	}
 	if (o_readBytes != NULL) {
@@ -645,7 +645,7 @@ BAMFormat::writeHeader(
 		int numContigs = context.genome->getNumContigs();
 		bamHeader->n_ref() = numContigs;
 		BAMHeaderRefSeq* refseq = bamHeader->firstRefSeq();
-		unsigned genomeLen = context.genome->getCountOfBases();
+		GenomeDistance genomeLen = context.genome->getCountOfBases();
 		for (int i = 0; i < numContigs; i++) {
 			int len = (int)strlen(contigs[i].name) + 1;
 			cursor += BAMHeaderRefSeq::size(len);
@@ -654,9 +654,9 @@ BAMFormat::writeHeader(
 			}
 			refseq->l_name = len;
 			memcpy(refseq->name(), contigs[i].name, len);
-			unsigned start = contigs[i].beginningOffset;
-            unsigned end = ((i + 1 < numContigs) ? contigs[i+1].beginningOffset : genomeLen) - context.genome->getChromosomePadding();
-            refseq->l_ref() = end - start;
+			GenomeLocation start = contigs[i].beginningLocation;
+            GenomeLocation end = ((i + 1 < numContigs) ? contigs[i+1].beginningLocation : genomeLen) - context.genome->getChromosomePadding();
+            refseq->l_ref() = (int)(end - start);
 			refseq = refseq->next();
 			_ASSERT((char*) refseq - header == cursor);
 		}
@@ -676,14 +676,14 @@ BAMFormat::writeRead(
     Read * read,
     AlignmentResult result,
     int mapQuality,
-    unsigned genomeLocation,
+    GenomeLocation genomeLocation,
     Direction direction,
     bool secondaryAlignment,
     bool hasMate,
     bool firstInPair,
     Read * mate,
     AlignmentResult mateResult,
-    unsigned mateLocation,
+    GenomeLocation mateLocation,
     Direction mateDirection) const
 {
     const int MAX_READ = MAX_READ_LENGTH;
@@ -693,11 +693,11 @@ BAMFormat::writeRead(
     int flags = 0;
     const char *contigName = "*";
     int contigIndex = -1;
-    unsigned positionInContig = 0;
+    GenomeDistance positionInContig = 0;
     int cigarOps = 0;
     const char *mateContigName = "*";
     int mateContigIndex = -1;
-    unsigned matePositionInContig = 0;
+    GenomeDistance matePositionInContig = 0;
     _int64 templateLength = 0;
 
     char data[MAX_READ];
@@ -707,9 +707,9 @@ BAMFormat::writeRead(
     unsigned fullLength;
     unsigned clippedLength;
     unsigned basesClippedBefore;
-    unsigned extraBasesClippedBefore;
+    GenomeDistance extraBasesClippedBefore;
     unsigned basesClippedAfter;
-    unsigned extraBasesClippedAfter;
+    GenomeDistance extraBasesClippedAfter;
     int editDistance;
 
     if (! SAMFormat::createSAMLine(genome, lv, data, quality, MAX_READ, contigName, contigIndex,
@@ -934,7 +934,7 @@ public:
 	virtual void inHeader(bool flag)
 	{ header = flag; }
 
-    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location);
+    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
 
     virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
 
@@ -1078,8 +1078,8 @@ struct DuplicateReadKey
             locations[1] = bam->getNextLocation(genome);
             isRC[0] = (bam->FLAG & SAM_REVERSE_COMPLEMENT) != 0;
             isRC[1] = (bam->FLAG & SAM_NEXT_REVERSED) != 0;
-            if (((((_uint64) locations[0]) << 1) | (isRC[0] ? 1 : 0)) > ((((_uint64) locations[1]) << 1) | (isRC[1] ? 1 : 0))) {
-                const unsigned t = locations[1];
+            if (((((_uint64) locations[0].AsInt64()) << 1) | (isRC[0] ? 1 : 0)) > ((((_uint64) locations[1].AsInt64()) << 1) | (isRC[1] ? 1 : 0))) {
+                const GenomeLocation t = locations[1];
                 locations[1] = locations[0];
                 locations[0] = t;
                 const bool f = isRC[1];
@@ -1118,9 +1118,9 @@ struct DuplicateReadKey
     bool operator!=(int x) const
     { return locations[0] != (_uint32) x || locations[1] != (_uint32) x; }
     operator _uint64()
-    { return ((_uint64) (locations[1] ^ (isRC[1] ? 1 : 0))) << 32 | (_uint64) (locations[0] ^ (isRC[0] ? 1 : 0)); }
+    { return ((_uint64) (locations[1].AsInt64() ^ (isRC[1] ? 1 : 0))) << 32 | (_uint64) (locations[0].AsInt64() ^ (isRC[0] ? 1 : 0)); }
 
-    unsigned locations[2];
+    GenomeLocation locations[2];
     bool isRC[2];
 };
 
@@ -1170,7 +1170,7 @@ private:
 
     const Genome* genome;
     size_t runOffset; // offset in file of first read in run
-    _uint32 runLocation; // location in genome
+    GenomeLocation runLocation; // location in genome
     int runCount; // number of aligned reads
     typedef VariableSizeMap<DuplicateReadKey,DuplicateMateInfo,150,MapNumericHash<DuplicateReadKey>,70,0,-2> MateMap;
     static const _uint64 RunKey = 0xffffffffc0000000UL;
@@ -1188,9 +1188,9 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
     if ((lastBam->FLAG & SAM_SECONDARY) != 0) {
         return; // ignore secondary aliignments; todo: mark them as dups too?
     }
-    unsigned location = lastBam->getLocation(genome);
-    unsigned nextLocation = lastBam->getNextLocation(genome);
-    unsigned logicalLocation = location != UINT32_MAX ? location : nextLocation;
+    GenomeLocation location = lastBam->getLocation(genome);
+    GenomeLocation nextLocation = lastBam->getNextLocation(genome);
+    GenomeLocation logicalLocation = location != InvalidGenomeLocation ? location : nextLocation;
     if (logicalLocation == UINT32_MAX) {
         return;
     }
@@ -1209,7 +1209,7 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                     ? (((_uint64) UINT32_MAX) << 32) |
                         ((record->FLAG & SAM_REVERSE_COMPLEMENT) ? RunNextRC : 0) |
                         ((record->FLAG & SAM_NEXT_REVERSED) ? RunRC : 0)
-                    : (((_uint64) record->getNextLocation(genome)) << 32) |
+                    : (((_uint64) record->getNextLocation(genome).AsInt64()) << 32) |
                         ((record->FLAG & SAM_REVERSE_COMPLEMENT) ? RunRC : 0) |
                         ((record->FLAG & SAM_NEXT_REVERSED) ? RunNextRC : 0);
                 entry |= (_uint64) ((offset - runOffset) & RunOffset);
@@ -1541,7 +1541,7 @@ BAMIndexSupplier::onClosed(
 
     for (int i = 0; i < n_ref; i++) {
         RefInfo* info = getRefInfo(i);
-        _int32 n_bin, n_intv;
+        _int64 n_bin, n_intv;
         if (info == NULL) {
             n_bin = 0;
             fwrite(&n_bin, sizeof(n_bin), 1, index);
@@ -1554,7 +1554,7 @@ BAMIndexSupplier::onClosed(
         for (BinMap::iterator j = info->bins.begin(); j != info->bins.end(); j = info->bins.next(j)) {
             _uint32 bin = j->key;
             fwrite(&bin, sizeof(bin), 1, index);
-            _int32 n_chunk = j->value.size();
+            _int64 n_chunk = j->value.size();
             fwrite(&n_chunk, sizeof(n_chunk), 1, index);
             if (bin != BAMAlignment::BAM_EXTRA_BIN) {
                 for (ChunkVec::iterator k = j->value.begin(); k != j->value.end(); k++) {

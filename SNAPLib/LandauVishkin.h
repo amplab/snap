@@ -3,6 +3,7 @@
 #include "FixedSizeMap.h"
 #include "BigAlloc.h"
 #include "exit.h"
+#include "Genome.h"
 
 const int MAX_K = 63;
 
@@ -32,113 +33,7 @@ struct LVResult {
     inline bool isValid() { return k != -1; }
 };
 
-//
-// A cache that operates in two phases: loading and looking up.  During loading,
-// it remembers the cache entries but doesn't actually put them in the cache.
-// During look-up phase, it checks the cache for entries, but doesn't add more.
-// The idea is to load during the single-end phase of paired-end alignments,
-// and to look-up during alignTogether, when we're likely to be computing many
-// of the same LV scores that we did in single-end.  
-//
-// The idea behind using two phases (rather than the more obvious design where the
-// cache is loaded and looked-up simultaneously) is to optimize cache performance.
-// Becuase some alignments will do lots of LV calls, the size of the hash table
-// in the FixedSizeMap is big, which in turn means that roughly every reference to 
-// it (both inserting and looking up) is a cache miss, which if left unchecked would
-// result in essentially no benefit from the cache.  Doing it in two phases, however
-// means that in the ordinary case where alignTogether isn't called, we do very little
-// work.  In the case where it is called, we can size the hash table appropriately
-// in order to avoid making it too big, and so reduce cache missing.  We can also
-// prefetch the hash table buckets so as to reduce the time wasted on cache missing
-// during the load-in to the cache.
-//
 
-class LandauVishkinCache {
-public:
-    LandauVishkinCache(unsigned cacheSize_) : cacheSize(cacheSize_)
-    {
-        map = new FixedSizeMap<_uint64, LVResult>();
-        map->reserve(cacheSize);
-
-        inLoadPhase = true;
-        toBeInserted = new LVResultKeyPair[cacheSize];
-    }
-
-    ~LandauVishkinCache()
-    {
-        delete map;
-        delete [] toBeInserted;
-    }
-
-    inline void put(_uint64 cacheKey, LVResult result)
-    {
-        if (!inLoadPhase) {
-            return;
-        }
-
-        _ASSERT(countToBeInserted < cacheSize);
-
-        toBeInserted[countToBeInserted].cacheKey = cacheKey;
-        toBeInserted[countToBeInserted].result = result;
-        countToBeInserted++;
-
-        // Should we prefetch the next location in toBeInserted here??
-    }
-    
-    inline void clear()
-    {
-        inLoadPhase = true;
-        countToBeInserted = 0;
-        //
-        // Don't bother clearing the map.  That happens when (if) we switch phases.
-        //
-    }
-
-    inline void enterLookupPhase()
-    {
-        _ASSERT(inLoadPhase);
-
-        map->clear();
-
-        map->resize(countToBeInserted);
-
-        //
-        // maybe we should work this loop in such a way that we're prefetching several
-        // ahead of where we're inserting in the map.
-        //
-        for (unsigned i = 0; i < countToBeInserted; i++) {
-            map->put(toBeInserted[i].cacheKey, toBeInserted[i].result);
-        }
-
-        inLoadPhase = false;
-    }
-
-    inline LVResult get(_uint64 cacheKey)
-    {
-        if (inLoadPhase) {
-            return LVResult();
-        }
-
-        LVResult result =  map->get(cacheKey);
-
-        return result;
-    }
-
-private:
-    unsigned cacheSize;
-    bool inLoadPhase;
-
-    unsigned countToBeInserted;
-
-    struct LVResultKeyPair {
-        _uint64     cacheKey;
-        LVResult    result;
-    };
-    LVResultKeyPair *toBeInserted;
-
-    FixedSizeMap<_uint64, LVResult> *map;
-
-};
 
 static inline void memsetint(int* p, int value, int count)
 {
@@ -146,7 +41,7 @@ static inline void memsetint(int* p, int value, int count)
 #ifndef _MSC_VER
   volatile
 #endif
-    int * q = p;
+  int * q = p;
   for (int i = 0; i < count; i++) {
     q[i] = value;
   }
@@ -156,7 +51,7 @@ static inline void memsetint(int* p, int value, int count)
 // Set TEXT_DIRECTION to -1 to run backwards through the text.
 template<int TEXT_DIRECTION = 1> class LandauVishkin {
 public:
-    LandauVishkin(int cacheSize = 0)
+    LandauVishkin()
 {
     if (TEXT_DIRECTION != 1 && TEXT_DIRECTION != -1) {
         fprintf(stderr, "You can't possibly be serious.\n");
@@ -164,12 +59,6 @@ public:
     }
 
     memsetint(L[0], -2, (MAX_K+1)*(2*MAX_K+1));
-
-    if (cacheSize > 0) {
-        cache = new LandauVishkinCache(cacheSize);
-     } else {
-        cache = NULL;
-    }
 
     //
     // Initialize dTable, which is used to avoid a branch misprediction in our inner loop.
@@ -191,9 +80,6 @@ public:
 
     ~LandauVishkin()
 {
-    if (cache != NULL) {
-        delete cache;
-    }
 }
 
     void enterCacheLookupPhase()
@@ -207,15 +93,14 @@ public:
     // For LandauVishkin instances with a cache, the cacheKey should be a unique identifier for
     // the text and pattern combination (e.g. (readID << 33) | direction << 32 | genomeLocation).
     int computeEditDistance(
-            const char* text,
-            int textLen, 
-            const char* pattern,
-            const char *qualityString,
-            int patternLen,
-            int k,
-            double *matchProbability,
-            _uint64 cacheKey = 0,
-            int *netIndel = NULL)   // the net of insertions and deletions in the alignment.  Negative for insertions, positive for deleteions (and 0 if there are non in net).  Filled in only if matchProbability is non-NULL
+                const char* text,
+                int textLen, 
+                const char* pattern,
+                const char *qualityString,
+                int patternLen,
+                int k,
+                double *matchProbability,
+                int *netIndel = NULL)   // the net of insertions and deletions in the alignment.  Negative for insertions, positive for deleteions (and 0 if there are non in net).  Filled in only if matchProbability is non-NULL
 {
     int localNetIndel;
     if (NULL == netIndel) {
@@ -237,19 +122,7 @@ public:
         }
         return -1;
     }
-    if (cache != NULL && cacheKey != 0) {
-        LVResult old = cache->get(cacheKey);
-        if (old.isValid() && (old.result != -1 || old.k >= k)) {
-            if (NULL != matchProbability) {
-                *matchProbability = old.matchProbability;
-            }
-            *netIndel = old.netIndel;
-            if (old.result > k) {
-                return -1;  // When we checked this before we fuond the answer, but it's bigger than k, so just pretend we don't know.
-            }
-            return old.result;
-        }
-    }
+ 
     if (NULL != matchProbability) {
         //
         // Start with perfect match probability and work our way down.
@@ -277,7 +150,7 @@ public:
             unsigned long zeroes;
             CountTrailingZeroes(x, zeroes);
             zeroes >>= 3;
-            L[0][MAX_K] = __min((int)(p - pattern) + (int)zeroes, end);
+            L[0][MAX_K] = __min((int)(p - pattern + zeroes), end);
             goto done1;
         }
         p += 8;
@@ -289,9 +162,6 @@ public:
         int result = (patternLen > end ? patternLen - end : 0); // Could need some deletions at the end
         if (NULL != matchProbability) {
             *matchProbability = lv_perfectMatchProbability[patternLen];    // Becuase the chance of a perfect match is < 1
-            if (cache != NULL && cacheKey != 0) {
-                cache->put(cacheKey, LVResult(k, result, *netIndel, *matchProbability));
-            }
         }
         if (result > k) {
             //
@@ -427,16 +297,10 @@ public:
                         }
                     } // if straightMismatches != e (i.e., the indel case)
                     *matchProbability *= lv_perfectMatchProbability[patternLen-e]; // Accounting for the < 1.0 chance of no changes for matching bases
-                    if (cache != NULL && cacheKey != 0) {
-                        cache->put(cacheKey, LVResult(k, e, *netIndel, *matchProbability));
-                    } 
                 } else {
                     //
                     // Not tracking match probability.
                     //
-                    if (cache != NULL && cacheKey != 0) {
-                        cache->put(cacheKey, LVResult(k, e, *netIndel, -1.0));
-                    }
                 }
                 _ASSERT(e <= k);
                 return e;
@@ -446,9 +310,6 @@ public:
         }
     }
 
-    if (cache != NULL && cacheKey != 0) {
-        cache->put(cacheKey, LVResult(k, -1, *netIndel, 0.0));
-    }
     return -1;
 }
 
@@ -462,14 +323,6 @@ public:
             int k)
     {
         return computeEditDistance(text, textLen, pattern, NULL, patternLen, k, NULL);
-    }
-
-    // Clear the cache of distances computed.
-    void clearCache()
-    {
-        if (cache != NULL) {
-            cache->clear();
-        }
     }
 
     void *operator new(size_t size) {return BigAlloc(size);}
@@ -495,8 +348,6 @@ private:
     char backtraceAction[MAX_K+1];
     int  backtraceMatched[MAX_K+1];
     int  backtraceD[MAX_K+1];
-
-    LandauVishkinCache *cache;
 };
 
 void setLVProbabilities(double *i_indelProbabilities, double *i_phredToProbability, double mutationProbability);
@@ -541,7 +392,7 @@ public:
                             CigarFormat format = COMPACT_CIGAR_STRING, int* o_cigarBufUsed = NULL, int* o_textUsed = NULL);
 
     // same, but places indels as early as possible, following BWA & VCF conventions
-    int computeEditDistanceNormalized(const char* text, int textLen, const char* pattern, int patternLen, int k,
+    int computeEditDistanceNormalized(const char* text, GenomeDistance textLen, const char* pattern, GenomeDistance patternLen, int k,
                             char* cigarBuf, int cigarBufLen, bool useM,
                             CigarFormat format = COMPACT_CIGAR_STRING, int* cigarBufUsed = NULL);
 

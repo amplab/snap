@@ -540,4 +540,4 @@ const Genome::Contig *Genome::getContigForRead(GenomeLocation location, unsigned
     return contig;
 }
 
-const GenomeLocation InvalidGenomeLocation((_int64)1 << 62);    // Should be plenty big enough that it won't occur in practice.
+GenomeLocation InvalidGenomeLocation;   // Gets set on genome build/load

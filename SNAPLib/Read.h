@@ -31,6 +31,7 @@ Revision History:
 #include "DataWriter.h"
 #include "directions.h"
 #include "Error.h"
+#include "Genome.h"
 
 class FileFormat;
 
@@ -38,9 +39,7 @@ class Genome;
 
 struct PairedAlignmentResult;
 
-enum AlignmentResult {NotFound, SingleHit, MultipleHits, UnknownAlignment}; // BB: Changed Unknown to UnknownAlignment because of a conflict w/Windows headers
 
-bool isAValidAlignmentResult(AlignmentResult result);
 
 //#define LONG_READS
 #ifdef LONG_READS
@@ -186,7 +185,7 @@ public:
     virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine) = 0;
 
     // write a single read, return true if successful
-    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, unsigned genomeLocation, Direction direction, bool secondaryAlignment) = 0;
+    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment) = 0;
 
     // write a pair of reads, return true if successful
     virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result, bool secondaryAlignment) = 0;
@@ -358,26 +357,26 @@ public:
                 const char *i_quality, 
                 unsigned i_dataLength)
         {
-            init(i_id, i_idLength, i_data, i_quality, i_dataLength, -1, -1, 0, 0, 0, 0, 0, NULL, 0, 0);
+            init(i_id, i_idLength, i_data, i_quality, i_dataLength, InvalidGenomeLocation, -1, 0, 0, 0, 0, 0, NULL, 0, 0);
         }
 
         void init(
-                const char *i_id, 
-                unsigned i_idLength,
-                const char *i_data, 
-                const char *i_quality, 
-                unsigned i_dataLength,
-                unsigned i_originalAlignedLocation,
-                unsigned i_originalMAPQ,
-                unsigned i_originalSAMFlags,
-                unsigned i_originalFrontClipping,
-                unsigned i_originalBackClipping,
-                unsigned i_originalFrontHardClipping,
-                unsigned i_originalBackHardClipping,
-                const char *i_originalRNEXT,
-                unsigned i_originalRNEXTLength,
-                unsigned i_originalPNEXT,
-                bool allUpper = false)
+                const char *        i_id, 
+                unsigned            i_idLength,
+                const char *        i_data, 
+                const char *        i_quality, 
+                unsigned            i_dataLength,
+                GenomeLocation      i_originalAlignedLocation,
+                unsigned            i_originalMAPQ,
+                unsigned            i_originalSAMFlags,
+                unsigned            i_originalFrontClipping,
+                unsigned            i_originalBackClipping,
+                unsigned            i_originalFrontHardClipping,
+                unsigned            i_originalBackHardClipping,
+                const char *        i_originalRNEXT,
+                unsigned            i_originalRNEXTLength,
+                unsigned            i_originalPNEXT,
+                bool                allUpper = false)
         {
             id = i_id;
             idLength = i_idLength;
@@ -442,7 +441,7 @@ public:
         inline void setBatch(DataBatch b) { batch = b; }
         inline const char* getReadGroup() const { return readGroup; }
         inline void setReadGroup(const char* rg) { readGroup = rg; }
-        inline unsigned getOriginalAlignedLocation() {return originalAlignedLocation;}
+        inline GenomeLocation getOriginalAlignedLocation() {return originalAlignedLocation;}
         inline unsigned getOriginalMAPQ() {return originalMAPQ;}
         inline unsigned getOriginalSAMFlags() {return originalSAMFlags;}
         inline unsigned getOriginalFrontClipping() {return originalFrontClipping;}
@@ -647,7 +646,7 @@ private:
         // Alignment data that was in the read when it was read from a file.  While this should probably also be the place to put
         // information that'll be used by the read writer, for now it's not.  Hence, they're all called "original."
         //
-        unsigned originalAlignedLocation;
+        GenomeLocation originalAlignedLocation;
         unsigned originalMAPQ;
         unsigned originalSAMFlags;
         unsigned originalFrontClipping;

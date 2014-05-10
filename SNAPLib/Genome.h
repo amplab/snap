@@ -29,18 +29,53 @@ Revision History:
 //
 // We have two different classes to represent a place in a genome and a distance between places in a genome.
 // In reality, they're both just 64 bit ints, but the classes are set up to encourage the user to keep
-// in mind the difference (while enouraging the compiler not to :-)).  So, a genome location might be something
+// in mind the difference.  So, a genome location might be something
 // like "chromosome 12, base 12345" which would be represented in (0-based) genome coordinates as some 
+// 64 bit int that's the base of cheomosome 12 + 12344 (one less because we're 0-based and the nomenclature
+// uses 1-based).
+// In the non-debug build, GenomeLocation is just defined as an _int64, so that no matter how dumb the compiler
+// can't possibly screw it up.  However, in the debug build you get the happy type checking.
+//
 
 typedef _int64 GenomeDistance;
+
+#ifdef _DEBUG
 
 class GenomeLocation {
 public:
     GenomeLocation(_int64 i_location) : location(i_location) {}
     GenomeLocation(const GenomeLocation &peer) : location(peer.location) {}
+    GenomeLocation() {location = -1;}
 
     inline GenomeLocation operator=(const GenomeLocation &peer) {
         location = peer.location;
+        return *this;
+    }
+
+    inline GenomeLocation operator=(const _int64 value) {
+       location = value;
+       return *this;
+    }
+
+    inline GenomeLocation operator++() {
+        location++;
+        return *this;
+    }
+
+    inline GenomeLocation operator--() {
+        location--;
+        return *this;
+    }
+
+    // The postfix versions
+    inline GenomeLocation operator++(int foo) {
+        location++;
+        return *this - 1;
+    }
+
+    inline GenomeLocation operator--(int foo) {
+        location--;
+        return *this + 1;
     }
 
     inline bool operator==(const GenomeLocation &peer) const {
@@ -90,16 +125,35 @@ public:
         return *this;
     }
 
-    inline _int64 AsInt64() const {
-        return location;
-    }
-
     _int64         location;
 };
 
+inline _int64 GenomeLocationAsInt64(GenomeLocation genomeLocation) {
+    return genomeLocation.location;
+}
+
+inline unsigned GenomeLocationAsInt32(GenomeLocation genomeLocation) {
+    _ASSERT(genomeLocation.location <= 0xffffffff && genomeLocation.location >= 0);
+    return (unsigned)genomeLocation.location;
+}
+#else   // _DEBUG
+typedef _int64 GenomeLocation;
+
+inline _int64 GenomeLocationAsInt64(GenomeLocation genomeLocation)
+{
+    return genomeLocation;
+}
+
+inline unsigned GenomeLocationAsInt32(GenomeLocation genomeLocation) {
+    _ASSERT(genomeLocation <= 0xffffffff && genomeLocation>= 0);
+    return (unsigned)genomeLocation;
+}
+
+#endif // _DEBUG
+
 typedef _int64 GenomeDistance;
 
-extern const GenomeLocation InvalidGenomeLocation;
+extern GenomeLocation InvalidGenomeLocation;
 
 class Genome {
 public:
@@ -226,8 +280,8 @@ public:
         bool getLocationOfContig(const char *contigName, GenomeLocation *location, int* index = NULL) const;
 
         inline void prefetchData(GenomeLocation genomeLocation) const {
-            _mm_prefetch(bases + genomeLocation.AsInt64(), _MM_HINT_T2);
-            _mm_prefetch(bases + genomeLocation.AsInt64() + 64, _MM_HINT_T2);
+            _mm_prefetch(bases + GenomeLocationAsInt64(genomeLocation), _MM_HINT_T2);
+            _mm_prefetch(bases + GenomeLocationAsInt64(genomeLocation) + 64, _MM_HINT_T2);
         }
 
         struct Contig {

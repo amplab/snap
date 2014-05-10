@@ -164,9 +164,9 @@ bool AppendFASTAGenome(const Genome *genome, FILE *fasta, const char *prefix="")
     const Genome::Contig *contigs = genome->getContigs();
     for (int i = 0; i < nContigs; ++i) {
         const Genome::Contig &contig = contigs[i];
-        unsigned start = contig.beginningOffset;
-        unsigned end = i + 1 < nContigs ? contigs[i + 1].beginningOffset : genome->getCountOfBases();
-        unsigned size = end - start;
+        GenomeLocation start = contig.beginningLocation;
+        GenomeLocation end = i + 1 < nContigs ? contigs[i + 1].beginningLocation : genome->getCountOfBases();
+        GenomeDistance size = end - start;
         const char *bases = genome->getSubstring(start, size);
 
         fprintf(fasta, ">%s%s\n", prefix, contig.name);

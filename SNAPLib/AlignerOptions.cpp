@@ -40,7 +40,6 @@ AlignerOptions::AlignerOptions(
     indexDir(NULL),
     similarityMapFile(NULL),
     numThreads(GetNumberOfProcessors()),
-    computeError(false),
     bindToProcessors(false),
     ignoreMismatchedIDs(false),
     clipping(ClipBack),
@@ -54,7 +53,6 @@ AlignerOptions::AlignerOptions(
     stopOnFirstHit(false),
 	useM(false),
     gapPenalty(0),
-    misalignThreshold(15),
 	extra(NULL),
     rgLineContents(NULL),
     perfFileName(NULL),
@@ -107,7 +105,6 @@ AlignerOptions::usageMessage()
         "  -a   Deprecated parameter; this is ignored.  Consumes one extra arg.\n"
         "  -t   number of threads (default is one per core)\n"
         "  -b   bind each thread to its processor (off by default)\n"
-        "  -e   compute error rate assuming wgsim-generated reads\n"
         "  -P   disables cache prefetching in the genome; may be helpful for machines\n"
         "       with small caches or lots of cores/cache\n"
         "  -so  sort output file by alignment location\n"
@@ -119,7 +116,6 @@ AlignerOptions::usageMessage()
         "       i=index, d=duplicate marking\n"
 #if     USE_DEVTEAM_OPTIONS
         "  -I   ignore IDs that don't match in the paired-end aligner\n"
-        "  -E   misalign threshold (min distance from correct location to count as error)\n"
 #ifdef  _MSC_VER    // Only need this on Windows, since memory allocation is fast on Linux
         "  -B   Insert barrier after per-thread memory allocation to improve timing accuracy\n"
 #endif  // _MSC_VER
@@ -264,9 +260,6 @@ AlignerOptions::parse(
         }
         n += argsConsumed;
         return true;
-    } else if (strcmp(argv[n], "-e") == 0) {
-        computeError = true;
-        return true;
     } else if (strcmp(argv[n], "-P") == 0) {
         doAlignerPrefetch = false;
         return true;
@@ -326,12 +319,6 @@ AlignerOptions::parse(
     } else if (strcmp(argv[n], "-I") == 0) {
         ignoreMismatchedIDs = true;
         return true;
-    } else if (strcmp(argv[n], "-E") == 0) {
-        if (n + 1 < argc) {
-            misalignThreshold = atoi(argv[n+1]);
-            n++;
-            return true;
-        }
 #ifdef  _MSC_VER
     } else if (strcmp(argv[n], "-B") == 0) {
         useTimingBarrier = true;
