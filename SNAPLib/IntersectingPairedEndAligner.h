@@ -141,8 +141,8 @@ private:
         //
         // We keep the hash table lookups that haven't been exhaused in a circular list.
         //
-        HashTableLookup *nextLookupWithRemainingMembers;
-        HashTableLookup *prevLookupWithRemainingMembers;
+        HashTableLookup<GL> *nextLookupWithRemainingMembers;
+        HashTableLookup<GL> *prevLookupWithRemainingMembers;
 
         //
         // State for handling the binary search of a location in this lookup.
@@ -161,8 +161,8 @@ private:
         // It's done that way to avoid a comparison for list head that would result in a hard-to-predict
         // branch.
         //
-        HashTableLookup *nextLookupForCurrentBinarySearch;
-        HashTableLookup *prevLookupForCurrentBinarySearch;
+        HashTableLookup<GL> *nextLookupForCurrentBinarySearch;
+        HashTableLookup<GL> *prevLookupForCurrentBinarySearch;
 
         _int64           currentHitForIntersection;
 
@@ -176,13 +176,13 @@ private:
     };
     
     //
-    // A set of seed hits, represented by the lookups that came out of the big hash table.  It's a template, because we 
-    // have different sizes of genome locations depending on the hash table format.  So, GL must be unsigned or GenomeLocation
+    // A set of seed hits, represented by the lookups that came out of the big hash table.  It can be over 32 or
+    // 64 bit indices, but its external interface is always 64 bits (it extends on the way out if necessary).
     //
-    template<class GL> class HashTableHitSet {
+    class HashTableHitSet {
     public:
         HashTableHitSet() {}
-        void firstInit(unsigned maxSeeds_, unsigned maxMergeDistance_, BigAllocator *allocator);
+        void firstInit(unsigned maxSeeds_, unsigned maxMergeDistance_, BigAllocator *allocator, bool doesGenomeIndexHave64BitLocations_);
 
         //
         // Reset to empty state.
@@ -198,31 +198,36 @@ private:
 		// seed for it not to hit, and since the reads are disjoint there can't be a case
 		// where the same difference caused two seeds to miss).
         //
-        void recordLookup(_int64 seedOffset, _int64 nHits, const GL *hits, bool beginsDisjointHitSet);
+        void recordLookup(unsigned seedOffset, _int64 nHits, const unsigned *hits, bool beginsDisjointHitSet);
+        void recordLookup(unsigned seedOffset, _int64 nHits, const GenomeLocation *hits, bool beginsDisjointHitSet);
 
         //
         // This efficiently works through the set looking for the next hit at or below this address.
         // A HashTableHitSet only allows a single iteration through its address space per call to
         // init().
         //
-        bool    getNextHitLessThanOrEqualTo(GL maxGenomeLocationToFind, GL *actualGenomeLocationFound, unsigned *seedOffsetFound);
+        bool    getNextHitLessThanOrEqualTo(GenomeLocation maxGenomeLocationToFind, GenomeLocation *actualGenomeLocationFound, unsigned *seedOffsetFound);
 
         //
         // Walk down just one step, don't binary search.
         //
-        bool getNextLowerHit(GL *genomeLocation, unsigned *seedOffsetFound);
+        bool getNextLowerHit(GenomeLocation *genomeLocation, unsigned *seedOffsetFound);
 
 
         //
         // Find the highest genome address.
         //
-        bool    getFirstHit(GL *genomeLocation, unsigned *seedOffsetFound);
+        bool    getFirstHit(GenomeLocation *genomeLocation, unsigned *seedOffsetFound);
 
 		unsigned computeBestPossibleScoreForCurrentHit();
 
-        GL *getNextSingletonLocation()
+        //
+        // This is bit of storage that the 64 bit lookup needs in order to extend singleton hits into 64 bits, since they may be
+        // stored in the index in fewer.
+        //
+        GenomeLocation *getNextSingletonLocation()
         {
-            return &lookups[nLookupsUsed].singletonGenomeLocation[1];
+            return &lookups64[nLookupsUsed].singletonGenomeLocation[1];
         }
 
 
@@ -232,31 +237,26 @@ private:
             unsigned missCount;
         };
 
-        int                     currentDisjointHitSet;
-        DisjointHitSet  *       disjointHitSets;
-        HashTableLookup<GL> *   lookups;
-        HashTableLookup<GL>     lookupListHead[1];
-        unsigned                maxSeeds;
-        unsigned                nLookupsUsed;
-        unsigned                mostRecentLocationReturned;
-		unsigned		        maxMergeDistance;
-
-        // This is effectively a local in getNextHitLessThanOrEqualTo, but since it's dynamically sized we put it here.
-        unsigned        *liveLookups;
+        int                                 currentDisjointHitSet;
+        DisjointHitSet  *                   disjointHitSets;
+        HashTableLookup<unsigned> *         lookups32;
+        HashTableLookup<GenomeLocation> *   lookups64;
+        HashTableLookup<unsigned>           lookupListHead32[1];
+        HashTableLookup<GenomeLocation>     lookupListHead64[1];
+        unsigned                            maxSeeds;
+        unsigned                            nLookupsUsed;
+        GenomeLocation                      mostRecentLocationReturned;
+		unsigned		                    maxMergeDistance;
+        bool                                doesGenomeIndexHave64BitLocations;
     };
 
-    //
-    // Two hash table hit sets, one 32 bits and the other 64.  Only one ever gets used, but which one
-    // depends on the hash table format.
-    //
-    HashTableHitSet<unsigned> *         hashTableHitSets32[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
-    HashTableHitSet<GenomeLocation> *   hashTableHitSets64[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
+    HashTableHitSet *                       hashTableHitSets[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
 
-    _int64          countOfHashTableLookups[NUM_READS_PER_PAIR];
-    _int64          totalHashTableHits[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
-    _int64          largestHashTableHit[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
-    unsigned        readWithMoreHits;
-    unsigned        readWithFewerHits;
+    int                                     countOfHashTableLookups[NUM_READS_PER_PAIR];
+    _int64                                  totalHashTableHits[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
+    _int64                                  largestHashTableHit[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
+    unsigned                                readWithMoreHits;
+    unsigned                                readWithFewerHits;
 
     //
     // A location that's been scored (or waiting to be scored).  This is needed in order to do merging
@@ -387,7 +387,7 @@ private:
         unsigned                seedOffset;
         int                     genomeOffset;
 
-        void init(unsigned readWithMoreHitsGenomeLocation_, unsigned bestPossibleScore_, unsigned seedOffset_) {
+        void init(GenomeLocation readWithMoreHitsGenomeLocation_, unsigned bestPossibleScore_, unsigned seedOffset_) {
             readWithMoreHitsGenomeLocation = readWithMoreHitsGenomeLocation_;
             bestPossibleScore = bestPossibleScore_;
             seedOffset = seedOffset_;

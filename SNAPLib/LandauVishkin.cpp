@@ -440,8 +440,8 @@ done1:
 }
 
 int LandauVishkinWithCigar::computeEditDistanceNormalized(
-    const char* text, GenomeDistance textLen,
-    const char* pattern, GenomeDistance patternLen,
+    const char* text, int textLen,
+    const char* pattern, int patternLen,
     int k,
     char *cigarBuf, int cigarBufLen, bool useM, 
     CigarFormat format, int* cigarBufUsed)

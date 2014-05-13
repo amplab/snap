@@ -392,7 +392,7 @@ public:
                             CigarFormat format = COMPACT_CIGAR_STRING, int* o_cigarBufUsed = NULL, int* o_textUsed = NULL);
 
     // same, but places indels as early as possible, following BWA & VCF conventions
-    int computeEditDistanceNormalized(const char* text, GenomeDistance textLen, const char* pattern, GenomeDistance patternLen, int k,
+    int computeEditDistanceNormalized(const char* text, int textLen, const char* pattern, int patternLen, int k,
                             char* cigarBuf, int cigarBufLen, bool useM,
                             CigarFormat format = COMPACT_CIGAR_STRING, int* cigarBufUsed = NULL);
 

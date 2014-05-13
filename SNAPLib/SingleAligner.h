@@ -27,7 +27,7 @@ Revision History:
 #include "AlignerContext.h"
 #include "AlignerStats.h"
 #include "ReadSupplierQueue.h"
-#include "Aligner.h"
+#include "AlignmentResult.h"
 
 class SingleAlignerContext : public AlignerContext
 {

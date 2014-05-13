@@ -1190,13 +1190,17 @@ SAMFormat::computeCigarString(
     data += extraBasesClippedBefore;
     dataLength -= extraBasesClippedBefore;
 
+    if (dataLength > MAXINT - MAX_K) {
+        dataLength = MAXINT - MAX_K;
+    }
+
     const char *reference = genome->getSubstring(genomeLocation, dataLength);
     if (NULL != reference) {
         *editDistance = lv->computeEditDistanceNormalized(
                             reference,
-                            dataLength - extraBasesClippedAfter + MAX_K, // Add space incase of indels.  We know there's enough, because the reference is padded.
+                            (int)(dataLength - extraBasesClippedAfter + MAX_K), // Add space incase of indels.  We know there's enough, because the reference is padded.
                             data,
-                            dataLength - extraBasesClippedAfter,
+                            (int)(dataLength - extraBasesClippedAfter),
                             MAX_K - 1,
                             cigarBuf,
                             cigarBufLen,

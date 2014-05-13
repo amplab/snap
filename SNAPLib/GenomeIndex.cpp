@@ -310,7 +310,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     // AGCT), in which case only the first integer is used.
     //
 
-	OverflowBackpointerAnchor *overflowAnchor = new OverflowBackpointerAnchor(((locationSize == 8) ? 0x8fffffffffffffff : InvalidGenomeLocation.AsInt64()) - countOfBases);   // i.e., as much as the address space will allow.
+	OverflowBackpointerAnchor *overflowAnchor = new OverflowBackpointerAnchor(((locationSize == 8) ? 0x8fffffffffffffff : GenomeLocationAsInt64(InvalidGenomeLocation)) - countOfBases);   // i.e., as much as the address space will allow.
    
     WriteStatusMessage("%llds\nBuilding hash tables.\n", (timeInMillis() + 500 - start) / 1000);
   
@@ -424,7 +424,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         index->overflowTable32 = (unsigned *)BigAlloc(index->overflowTableSize * sizeof(*index->overflowTable32));
     }
 
- 	if ((_int64)index->overflowTableSize + countOfBases >= InvalidGenomeLocation.AsInt64() - 15) {
+ 	if ((_int64)index->overflowTableSize + countOfBases >= GenomeLocationAsInt64(InvalidGenomeLocation) - 15) {
 		WriteErrorMessage("Not enough address space to index this genome with this seed size.  Try a larger seed or location size.\n");
 		soft_exit(1);
 	}
@@ -470,7 +470,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
                 } else {
                     value = values32[i];
                 }
-				if (value >= countOfBases && value != InvalidGenomeLocation.AsInt64() && value != InvalidGenomeLocation.AsInt64() - 1) {
+				if (value >= countOfBases && value != GenomeLocationAsInt64(InvalidGenomeLocation) && value != GenomeLocationAsInt64(InvalidGenomeLocation) - 1) {
 					//
 					// This is an overflow pointer.  Fix it up.  Count the number of occurrences of this
 					// seed by walking the overflow chain.
@@ -479,14 +479,14 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 
 					_uint64 nOccurrences = 0;
 					_int64 backpointerIndex = value - countOfBases;
-					while (backpointerIndex != InvalidGenomeLocation.AsInt64()) {
+					while (backpointerIndex != GenomeLocationAsInt64(InvalidGenomeLocation)) {
 						nOccurrences++;
 						OverflowBackpointer *backpointer = overflowAnchor->getBackpointer(backpointerIndex);
 						_ASSERT(overflowTableIndex + nOccurrences < index->overflowTableSize);
                         if (locationSize > 4) {
-						    index->overflowTable64[overflowTableIndex + nOccurrences] = backpointer->genomeLocation.AsInt64();
+						    index->overflowTable64[overflowTableIndex + nOccurrences] = GenomeLocationAsInt64(backpointer->genomeLocation);
                         } else {
-						    index->overflowTable32[overflowTableIndex + nOccurrences] = backpointer->genomeLocation.AsInt32();
+						    index->overflowTable32[overflowTableIndex + nOccurrences] = GenomeLocationAsInt32(backpointer->genomeLocation);
                         }
 						backpointerIndex = backpointer->nextIndex;
 					}
@@ -718,7 +718,7 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
             biasedSize = 100;
         }
         
-        hashTables[i] = new SNAPHashTable(biasedSize, hashTableKeySize, locationSize, large ? 2 : 1, InvalidGenomeLocation.AsInt64());
+        hashTables[i] = new SNAPHashTable(biasedSize, hashTableKeySize, locationSize, large ? 2 : 1, GenomeLocationAsInt64(InvalidGenomeLocation));
  
         if (NULL == hashTables[i]) {
             WriteErrorMessage("IndexBuilder: unable to allocate HashTable %d of %d\n", i+1, nHashTablesToBuild);
@@ -1144,17 +1144,17 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
 			// entry.
 			//
 			if (!usingComplement) {
-				newEntry[0] = genomeLocation.AsInt64();
-				newEntry[1] = InvalidGenomeLocation.AsInt64() - 1; // Use 0xfffffffe for unused, because we gave 0xffffffff to the hash table package.
+				newEntry[0] = GenomeLocationAsInt64(genomeLocation);
+				newEntry[1] = GenomeLocationAsInt64(InvalidGenomeLocation) - 1; // Use 0xfffffffe for unused, because we gave 0xffffffff to the hash table package.
 			} else{
-				newEntry[0] = InvalidGenomeLocation.AsInt64() - 1; // Use 0xfffffffe for unused, because we gave 0xffffffff to the hash table package.
-				newEntry[1] = genomeLocation.AsInt64();
+				newEntry[0] = GenomeLocationAsInt64(InvalidGenomeLocation) - 1; // Use 0xfffffffe for unused, because we gave 0xffffffff to the hash table package.
+				newEntry[1] = GenomeLocationAsInt64(genomeLocation);
 			}
 		} else {
-			newEntry[0] = genomeLocation.AsInt64();
+			newEntry[0] = GenomeLocationAsInt64(genomeLocation);
 		}
 
-        _ASSERT(0 != genomeLocation.AsInt64());
+        _ASSERT(0 != GenomeLocationAsInt64(genomeLocation));
 
         if (!hashTable->Insert(lowBases, newEntry)) {
             for (unsigned j = 0; j < index->nHashTables; j++) {
@@ -1174,8 +1174,8 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
         int entryIndex = usingComplement ? 1 : 0;
         if (context->locationSize > 4) {
             entry32 = NULL; // Using this would be bad
-            if (large && InvalidGenomeLocation.AsInt64() - 1 == entry64[entryIndex]) {
-                entry64[entryIndex] = genomeLocation.AsInt64();
+            if (large && GenomeLocationAsInt64(InvalidGenomeLocation) - 1 == entry64[entryIndex]) {
+                entry64[entryIndex] = GenomeLocationAsInt64(genomeLocation);
                 (*bothComplementsUsed)++;
             } else if (entry64[entryIndex] < countOfBases) { 
 
@@ -1183,7 +1183,7 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
                 (*genomeLocationsInOverflowTable) += 2;    
 
                 _int64 overflowIndex = AddOverflowBackpointer(-1, context->overflowAnchor, context->nextOverflowBackpointer, entry64[entryIndex]);
-                overflowIndex = AddOverflowBackpointer(overflowIndex, context->overflowAnchor, context->nextOverflowBackpointer, genomeLocation.AsInt64());
+                overflowIndex = AddOverflowBackpointer(overflowIndex, context->overflowAnchor, context->nextOverflowBackpointer, GenomeLocationAsInt64(genomeLocation));
 
                 entry64[entryIndex] = (unsigned)overflowIndex + countOfBases;
             } else {
@@ -1198,8 +1198,8 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
             } // If the existing entry had the complement empty, needed a new overflow entry or extended an old one
         } else {
             entry64 = NULL; // Using this would be bad
-            if (large && InvalidGenomeLocation.AsInt32() - 1 == entry32[entryIndex]) {
-                entry32[entryIndex] = genomeLocation.AsInt32();
+            if (large && GenomeLocationAsInt32(InvalidGenomeLocation) - 1 == entry32[entryIndex]) {
+                entry32[entryIndex] = GenomeLocationAsInt32(genomeLocation);
                 (*bothComplementsUsed)++;
             } else if (entry32[entryIndex] < (unsigned)countOfBases) { // cast OK, because locationSize <= 4
 
@@ -1207,7 +1207,7 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
                 (*genomeLocationsInOverflowTable) += 2;    
 
                 _int64 overflowIndex = AddOverflowBackpointer(-1, context->overflowAnchor, context->nextOverflowBackpointer, entry32[entryIndex]);
-                overflowIndex = AddOverflowBackpointer(overflowIndex, context->overflowAnchor, context->nextOverflowBackpointer, genomeLocation.AsInt64());
+                overflowIndex = AddOverflowBackpointer(overflowIndex, context->overflowAnchor, context->nextOverflowBackpointer, GenomeLocationAsInt64(genomeLocation));
 
                 entry32[entryIndex] = (unsigned)(overflowIndex + countOfBases);
             } else {
@@ -1440,16 +1440,18 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     unsigned locationSize;
     if (10 != (nRead = sscanf(indexFileBuf,"%d %d %d %lld %d %d %d %lld %d %d", &majorVersion, &minorVersion, &nHashTables, &overflowTableSize, &seedLen, &chromosomePadding, 
 											&hashTableKeySize, &hashTablesFileSize, &smallHashTable, &locationSize))) {
-        if (3 == nRead || 6 == nRead || 7 == nRead) {
-            WriteErrorMessage("Indices built by versions before 1.0dev.21 are no longer supported.  Please rebuild your index.\n");
-        } else if (9 == nRead && 4 == majorVersion && 0 == minorVersion) {
+        if (9 == nRead && 4 == majorVersion && 0 == minorVersion) {
             locationSize = 4;   // format 4.0 is the same as 4.1, but with location size fixed to 4.
         } else {
-            WriteErrorMessage("GenomeIndex::LoadFromDirectory: didn't read initial values\n");
+            if (3 == nRead || 6 == nRead || 7 == nRead) {
+                WriteErrorMessage("Indices built by versions before 1.0dev.21 are no longer supported.  Please rebuild your index.\n");
+            } else {
+                WriteErrorMessage("GenomeIndex::LoadFromDirectory: didn't read initial values\n");
+            }
+            indexFile->close();		
+            delete indexFile;
+            return NULL;
         }
-        indexFile->close();		
-        delete indexFile;
-        return NULL;
     }
     indexFile->close();
     delete indexFile;
@@ -1594,7 +1596,7 @@ GenomeIndex::lookupSeed32(
     _int64           *nRCHits,
     const unsigned  **rcHits)
 {
-    _ASSERT(!locationSize == 4);   // This is the caller's responsibility to check.
+    _ASSERT(locationSize == 4);   // This is the caller's responsibility to check.
 
     if (largeHashTable) {
         bool lookedUpComplement;
@@ -1806,14 +1808,14 @@ GenomeIndex::fillInLookedUpResults(GenomeLocation lookedUpLocation, _int64 *nHit
         // Multiple hits.  Recall that the overflow table format is first a count of
         // the number of hits for that seed, followed by the list of hits.
         //
-        unsigned overflowTableOffset = lookedUpLocation.AsInt64() - (unsigned)genome->getCountOfBases();
+        _int64 overflowTableOffset = GenomeLocationAsInt64(lookedUpLocation) - genome->getCountOfBases();
 
-        _ASSERT(overflowTableOffset < overflowTableSize);
+        _ASSERT(overflowTableOffset < (_int64)overflowTableSize);
 
         _int64 hitCount = overflowTable64[overflowTableOffset];
 
         _ASSERT(hitCount >= 2);
-        _ASSERT(hitCount + overflowTableOffset < overflowTableSize);
+        _ASSERT(hitCount + overflowTableOffset < (_int64)overflowTableSize);
 
         *nHits = hitCount;
         *hits = (const GenomeLocation *)&overflowTable64[overflowTableOffset + 1];

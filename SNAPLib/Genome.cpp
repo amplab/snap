@@ -35,7 +35,7 @@ Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned 
 {
     bases = ((char *) BigAlloc(nBasesStored + 2 * N_PADDING)) + N_PADDING;
     if (NULL == bases) {
-        WriteErrorMessage("Genome: unable to allocate memory for %llu bases\n", maxBases.AsInt64());
+        WriteErrorMessage("Genome: unable to allocate memory for %llu bases\n", GenomeLocationAsInt64(maxBases));
         soft_exit(1);
     }
 
@@ -56,9 +56,9 @@ Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned 
     void
 Genome::addData(const char *data, GenomeDistance len)
 {
-    if (nBases + len > maxBases.AsInt64()) {
+    if (nBases + len > GenomeLocationAsInt64(maxBases)) {
         WriteErrorMessage("Tried to write beyond allocated genome size (or tried to write into a genome that was loaded from a file).\n"
-                          "Size = %lld\n", maxBases.AsInt64());
+                          "Size = %lld\n", GenomeLocationAsInt64(maxBases));
         soft_exit(1);
     }
 
@@ -189,8 +189,8 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
     genome->nContigs = genome->maxContigs = nContigs;
     genome->contigs = new Contig[nContigs];
     genome->minLocation = minLocation;
-    if (minLocation.AsInt64() >= nBases) {
-        WriteErrorMessage("Genome::loadFromFile: specified minOffset %u >= nBases %u\n", minLocation.AsInt64(), nBases);
+    if (GenomeLocationAsInt64(minLocation) >= nBases) {
+        WriteErrorMessage("Genome::loadFromFile: specified minOffset %u >= nBases %u\n", GenomeLocationAsInt64(minLocation), nBases);
         soft_exit(-1);
     }
 
@@ -251,7 +251,7 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
     }
     */
 
-    if (0 != loadFile->advance(minLocation.AsInt64())) {
+    if (0 != loadFile->advance(GenomeLocationAsInt64(minLocation))) {
         WriteErrorMessage("Genome::loadFromFile: _fseek64bit failed\n");
         soft_exit(1);
     }
@@ -511,7 +511,7 @@ void Genome::fillInContigLengths()
         contigs[i].length =  contigs[i+1].beginningLocation - contigs[i].beginningLocation;
     }
 
-    contigs[nContigs-1].length = nBases - contigs[nContigs-1].beginningLocation.AsInt64();
+    contigs[nContigs-1].length = nBases - GenomeLocationAsInt64(contigs[nContigs-1].beginningLocation);
 }
 
 const Genome::Contig *Genome::getContigForRead(GenomeLocation location, unsigned readLength, GenomeDistance *extraBasesClippedBefore) const 

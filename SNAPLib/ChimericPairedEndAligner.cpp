@@ -51,7 +51,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         bool                noOrderedEvaluation,
        PairedEndAligner    *underlyingPairedEndAligner_,
         BigAllocator        *allocator)
- :  underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), lv(0), reverseLV(0)
+ :  underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_)
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,

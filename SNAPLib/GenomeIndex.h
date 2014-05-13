@@ -49,7 +49,7 @@ public:
     void lookupSeed(Seed seed, _int64 *nHits, const GenomeLocation **hits, _int64 *nRCHits, const GenomeLocation **rcHits, GenomeLocation *singleHit, GenomeLocation *singleRCHit);
     void lookupSeed32(Seed seed, _int64 *nHits, const unsigned **hits, _int64 *nRCHits, const unsigned **rcHits);
 
-    bool doesGenomeIndexHave64BitLocations() const;
+    bool doesGenomeIndexHave64BitLocations() const {return locationSize > 4;}
 
     //
     // Looks up a seed and its reverse complement, restricting the search to a given range of locations,

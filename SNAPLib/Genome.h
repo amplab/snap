@@ -340,3 +340,7 @@ private:
 };
 
 GenomeDistance DistanceBetweenGenomeLocations(GenomeLocation locationA, GenomeLocation locationB);
+inline bool isWithin(GenomeLocation locationA, GenomeLocation locationB, GenomeDistance distance)
+{
+    return DistanceBetweenGenomeLocations(locationA, locationB) <= distance;
+}

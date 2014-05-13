@@ -32,6 +32,7 @@ Revision History:
 #include "directions.h"
 #include "Error.h"
 #include "Genome.h"
+#include "AlignmentResult.h"
 
 class FileFormat;
 

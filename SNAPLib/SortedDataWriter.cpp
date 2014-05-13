@@ -38,10 +38,10 @@ using std::max;
 struct SortEntry
 {
     SortEntry() : offset(0), length(0), location(0) {}
-    SortEntry(size_t i_offset, unsigned i_length, GenomeLocation i_location)
+    SortEntry(size_t i_offset, GenomeDistance i_length, GenomeLocation i_location)
         : offset(i_offset), length(i_length), location(i_location) {}
     size_t                      offset; // offset in file
-    unsigned                    length; // number of bytes
+    GenomeDistance              length; // number of bytes
     GenomeLocation              location; // location in genome
     static bool comparator(const SortEntry& e1, const SortEntry& e2)
     {
@@ -102,7 +102,7 @@ public:
 
     virtual ~SortedDataFilter() {}
 
-    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, GenomeLocation location);
+    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
 
     virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
 
@@ -175,7 +175,7 @@ SortedDataFilter::onAdvance(
     DataWriter* writer,
     size_t batchOffset,
     char* data,
-    unsigned bytes,
+    GenomeDistance bytes,
     GenomeLocation location)
 {
     SortEntry entry(batchOffset, bytes, location);

@@ -30,7 +30,7 @@ Revision History:
 #include "Bam.h"
 #include "exit.h"
 #include "Error.h"
-
+#include "BaseAligner.h"
 
 AlignerOptions::AlignerOptions(
     const char* i_commandLine,
