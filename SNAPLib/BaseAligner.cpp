@@ -456,7 +456,7 @@ Return Value:
             printf("\tSeed offset %2d, %4d hits, %4d rcHits.", nextSeedToTest, nHits[0], nHits[1]);
             for (int rc = 0; rc < 2; rc++) {
                 for (unsigned i = 0; i < __min(nHits[rc], 5); i++) {
-                    printf(" %sHit at %9u.", rc == 1 ? "RC " : "", hits[rc][i]);
+                    printf(" %sHit at %ll9u.", rc == 1 ? "RC " : "", doesGenomeIndexHave64BitLocations ? hits[rc][i] : (_int64)hits32[rc][i]);
                 }
             }
             printf("\n");
