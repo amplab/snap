@@ -430,7 +430,7 @@ IntersectingPairedEndAligner::align(
 
             if ((lastGenomeLocationForReadWithMoreHits + maxSpacing < lastGenomeLocationForReadWithFewerHits || outOfMoreHitsLocations) &&
                 (0 == lowestFreeScoringMateCandidate[whichSetPair] ||
-                !isWithin(scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair]-1].readWithMoreHitsGenomeLocation, lastGenomeLocationForReadWithFewerHits, maxSpacing))) {
+                !genomeLocationIsWithin(scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair]-1].readWithMoreHitsGenomeLocation, lastGenomeLocationForReadWithFewerHits, maxSpacing))) {
                 //
                 // No mates for the hit on the read with fewer hits.  Skip to the next candidate.
                 //
@@ -592,8 +592,8 @@ IntersectingPairedEndAligner::align(
             for (;;) {
 
                 ScoringMateCandidate *mate = &scoringMateCandidates[candidate->whichSetPair][mateIndex];
-                _ASSERT(isWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, maxSpacing));
-                if (!isWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, minSpacing) && mate->bestPossibleScore <= scoreLimit - fewerEndScore) {
+                _ASSERT(genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, maxSpacing));
+                if (!genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, minSpacing) && mate->bestPossibleScore <= scoreLimit - fewerEndScore) {
                     //
                     // It's within the range and not necessarily too poor of a match.  Consider it.
                     //
@@ -634,7 +634,7 @@ IntersectingPairedEndAligner::align(
                             //
                             for (ScoringCandidate *mergeCandidate = candidate - 1;
                                         mergeCandidate >= scoringCandidatePool &&
-                                        isWithin(mergeCandidate->readWithFewerHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset, 50) &&
+                                        genomeLocationIsWithin(mergeCandidate->readWithFewerHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset, 50) &&
                                         mergeCandidate->whichSetPair == candidate->whichSetPair;
                                         mergeCandidate--) {
 
@@ -647,7 +647,7 @@ IntersectingPairedEndAligner::align(
                             if (NULL == mergeAnchor) {
                                 for (ScoringCandidate *mergeCandidate = candidate + 1;
                                             mergeCandidate < scoringCandidatePool + lowestFreeScoringCandidatePoolEntry &&
-                                            isWithin(mergeCandidate->readWithFewerHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset, 50) &&
+                                            genomeLocationIsWithin(mergeCandidate->readWithFewerHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset, 50) &&
                                             mergeCandidate->whichSetPair == candidate->whichSetPair;
                                             mergeCandidate--) {
 
@@ -786,7 +786,7 @@ IntersectingPairedEndAligner::align(
                     }// if the mate has a non -1 score
                 }
 
-                if (mateIndex == 0 || !isWithin(scoringMateCandidates[candidate->whichSetPair][mateIndex-1].readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, maxSpacing)) {
+                if (mateIndex == 0 || !genomeLocationIsWithin(scoringMateCandidates[candidate->whichSetPair][mateIndex-1].readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, maxSpacing)) {
                     //
                     // Out of mate candidates.
                     //
@@ -1040,19 +1040,19 @@ IntersectingPairedEndAligner::HashTableHitSet::computeBestPossibleScoreForCurren
     //
     // Another macro.  Sorry again.
     //
-#define loop(glType, lookupListHead)                                                                                                                        \
-	for (HashTableLookup<glType> *lookup = lookupListHead->nextLookupWithRemainingMembers; lookup != lookupListHead;                                        \
-         lookup = lookup->nextLookupWithRemainingMembers) {                                                                                                 \
-                                                                                                                                                            \
-		if (!(lookup->currentHitForIntersection != lookup->nHits &&                                                                                         \
-				isWithin(lookup->hits[lookup->currentHitForIntersection], mostRecentLocationReturned + lookup->seedOffset,  maxMergeDistance) ||            \
-			lookup->currentHitForIntersection != 0 &&                                                                                                       \
-				isWithin(lookup->hits[lookup->currentHitForIntersection-1], mostRecentLocationReturned + lookup->seedOffset,  maxMergeDistance))) {         \
-                                                                                                                                                            \
-			/* This one was not close enough. */                                                                                                            \
-                                                                                                                                                            \
-			disjointHitSets[lookup->whichDisjointHitSet].missCount++;                                                                                       \
-		}                                                                                                                                                   \
+#define loop(glType, lookupListHead)                                                                                                                                \
+	for (HashTableLookup<glType> *lookup = lookupListHead->nextLookupWithRemainingMembers; lookup != lookupListHead;                                                \
+         lookup = lookup->nextLookupWithRemainingMembers) {                                                                                                         \
+                                                                                                                                                                    \
+		if (!(lookup->currentHitForIntersection != lookup->nHits &&                                                                                                 \
+				genomeLocationIsWithin(lookup->hits[lookup->currentHitForIntersection], mostRecentLocationReturned + lookup->seedOffset,  maxMergeDistance) ||      \
+			lookup->currentHitForIntersection != 0 &&                                                                                                               \
+				genomeLocationIsWithin(lookup->hits[lookup->currentHitForIntersection-1], mostRecentLocationReturned + lookup->seedOffset,  maxMergeDistance))) {   \
+                                                                                                                                                                    \
+			/* This one was not close enough. */                                                                                                                    \
+                                                                                                                                                                    \
+			disjointHitSets[lookup->whichDisjointHitSet].missCount++;                                                                                               \
+		}                                                                                                                                                           \
 	}
 
     if (doesGenomeIndexHave64BitLocations) {

@@ -526,9 +526,9 @@ Return Value:
                     if (doAlignerPrefetch) {
                         for (unsigned i = iBase; i < innerLimit; i++) {
                             if (doesGenomeIndexHave64BitLocations) {
-                                prefetchHashTableBucket(hits32[direction][i] - offset, direction);
-                            } else {
                                 prefetchHashTableBucket(GenomeLocationAsInt64(hits[direction][i]) - offset, direction);
+                            } else {
+                                prefetchHashTableBucket(hits32[direction][i] - offset, direction);
                             }
                         }
                     }
@@ -1102,7 +1102,7 @@ BaseAligner::prefetchHashTableBucket(GenomeLocation genomeLocation, Direction di
     _uint64 lowOrderGenomeLocation;
     _uint64 highOrderGenomeLocation;
 
-    decomposeGenomeLocation(genomeLocation, &lowOrderGenomeLocation, &highOrderGenomeLocation);
+    decomposeGenomeLocation(genomeLocation, &highOrderGenomeLocation, &lowOrderGenomeLocation);
 
     _uint64 hashTableIndex = hash(highOrderGenomeLocation) % candidateHashTablesSize;
 
@@ -1120,7 +1120,7 @@ BaseAligner::findElement(
     _uint64 lowOrderGenomeLocation;
     _uint64 highOrderGenomeLocation;
 
-    decomposeGenomeLocation(genomeLocation, &lowOrderGenomeLocation, &highOrderGenomeLocation);
+    decomposeGenomeLocation(genomeLocation, &highOrderGenomeLocation, &lowOrderGenomeLocation);
 
     _uint64 hashTableIndex = hash(highOrderGenomeLocation) % candidateHashTablesSize;
     HashTableAnchor *anchor = &hashTable[hashTableIndex];
@@ -1164,7 +1164,7 @@ Arguments:
 {
     _uint64 lowOrderGenomeLocation;
  
-    decomposeGenomeLocation(genomeLocation, &lowOrderGenomeLocation, NULL);
+    decomposeGenomeLocation(genomeLocation, NULL, &lowOrderGenomeLocation);
     if (!findElement(genomeLocation, direction, hashTableElement)) {
         *hashTableElement = NULL;
         *candidate = NULL;
@@ -1205,7 +1205,7 @@ Return Value:
     _uint64 lowOrderGenomeLocation;
     _uint64 highOrderGenomeLocation;
 
-    decomposeGenomeLocation(genomeLocation, &lowOrderGenomeLocation, &highOrderGenomeLocation);
+    decomposeGenomeLocation(genomeLocation, &highOrderGenomeLocation, &lowOrderGenomeLocation);
 
     unsigned hashTableIndex = hash(highOrderGenomeLocation) % candidateHashTablesSize;
 

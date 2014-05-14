@@ -206,14 +206,18 @@ GenomeIndex::runIndexer(
     }
     WriteStatusMessage("%llds\n", (timeInMillis() + 500 - start) / 1000);
 
+    GenomeDistance nBases = genome->getCountOfBases();
+
     if (!GenomeIndex::BuildIndexToDirectory(genome, seedLen, slack, computeBias, outputDir, maxThreads, chromosomePadding, forceExact, keySizeInBytes, 
 		large, histogramFileName, locationSize)) {
         WriteErrorMessage("Genome index build failed\n");
         soft_exit(1);
     }
+    genome = NULL;  // It's deleted by BuildIndexToDirectory.
+
     _int64 end = timeInMillis();
     WriteStatusMessage("Index build and save took %llds (%lld bases/s)\n",
-           (end - start) / 1000, genome->getCountOfBases() / max((end - start) / 1000, (_int64) 1)); 
+           (end - start) / 1000, nBases / max((end - start) / 1000, (_int64) 1)); 
 }
 
 //
@@ -462,11 +466,12 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 	for (unsigned whichHashTable = 0; whichHashTable < nHashTables; whichHashTable++) {
 		for (_uint64 whichEntry = 0; whichEntry < hashTables[whichHashTable]->GetTableSize(); whichEntry++) {
 			unsigned *values32 = (unsigned *)hashTables[whichHashTable]->getEntryValues(whichEntry);
-            _int64 *values64 = (_int64 *)values32;  // Yes, really.
+            char *values64 = (char *)values32;  // char * because it's variable sized
 			for (int i = 0; i < (large ? NUM_DIRECTIONS : 1); i++) {
                 _int64 value;
                 if (locationSize > 4) {
-                    value = values64[i];
+                    value = 0;
+                    memcpy((char *)&value, values64 + locationSize * i, locationSize);   // assumes little endian
                 } else {
                     value = values32[i];
                 }
@@ -479,7 +484,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 
 					_uint64 nOccurrences = 0;
 					_int64 backpointerIndex = value - countOfBases;
-					while (backpointerIndex != GenomeLocationAsInt64(InvalidGenomeLocation)) {
+					while (backpointerIndex != -1) {
 						nOccurrences++;
 						OverflowBackpointer *backpointer = overflowAnchor->getBackpointer(backpointerIndex);
 						_ASSERT(overflowTableIndex + nOccurrences < index->overflowTableSize);
@@ -500,7 +505,8 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
                     _ASSERT(overflowTableIndex < index->overflowTableSize);
                     if (locationSize > 4) {
 					    index->overflowTable64[overflowTableIndex] = nOccurrences;
-                        values64[i] = overflowTableIndex + countOfBases;
+                        _int64 newValue = overflowTableIndex + countOfBases;
+                        memcpy(values64 + locationSize * i, &newValue, locationSize);   // Assumes little endian
                     } else {
 					    index->overflowTable32[overflowTableIndex] = (unsigned)nOccurrences;
                         values32[i] = (unsigned)(overflowTableIndex + countOfBases);
@@ -596,7 +602,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 
     const unsigned writeSize = 32 * 1024 * 1024;
     unsigned overflowElementSize = (locationSize > 4) ? sizeof(*index->overflowTable64) : sizeof(*index->overflowTable32);
-    char *tableToWriteAsChar = (locationSize > 4) ? (char *)index->overflowTable32 : (char *)index->overflowTable64;
+    char *tableToWriteAsChar = (locationSize > 4) ? (char *)index->overflowTable64 : (char *)index->overflowTable32;
     for (size_t writeOffset = 0; writeOffset < index->overflowTableSize * overflowElementSize; ) {
         unsigned amountToWrite = (unsigned)__min((size_t)writeSize,(size_t)index->overflowTableSize * overflowElementSize - writeOffset);
  
@@ -1133,7 +1139,6 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
     GenomeIndex *index = context->index;
     GenomeDistance countOfBases = context->genome->getCountOfBases();
     SNAPHashTable *hashTable = index->hashTables[whichHashTable];
-    _ASSERT(hashTable->GetValueSizeInBytes() == 4);
     unsigned *entry32 = (unsigned *)hashTable->SlowLookup(lowBases);  // use SlowLookup because we might have overflowed the table.  Cast is OK because valueSize == 4 when we use entry32
     _int64 *entry64 = (_int64 *)entry32;  // Yes, really
     if (NULL == entry64) {
@@ -1440,18 +1445,14 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     unsigned locationSize;
     if (10 != (nRead = sscanf(indexFileBuf,"%d %d %d %lld %d %d %d %lld %d %d", &majorVersion, &minorVersion, &nHashTables, &overflowTableSize, &seedLen, &chromosomePadding, 
 											&hashTableKeySize, &hashTablesFileSize, &smallHashTable, &locationSize))) {
-        if (9 == nRead && 4 == majorVersion && 0 == minorVersion) {
-            locationSize = 4;   // format 4.0 is the same as 4.1, but with location size fixed to 4.
+        if (3 == nRead || 6 == nRead || 7 == nRead || 9 == nRead) {
+            WriteErrorMessage("Indices built by versions before 1.0dev.21 are no longer supported.  Please rebuild your index.\n");
         } else {
-            if (3 == nRead || 6 == nRead || 7 == nRead) {
-                WriteErrorMessage("Indices built by versions before 1.0dev.21 are no longer supported.  Please rebuild your index.\n");
-            } else {
-                WriteErrorMessage("GenomeIndex::LoadFromDirectory: didn't read initial values\n");
-            }
-            indexFile->close();		
-            delete indexFile;
-            return NULL;
+            WriteErrorMessage("GenomeIndex::LoadFromDirectory: didn't read initial values\n");
         }
+        indexFile->close();		
+        delete indexFile;
+        return NULL;
     }
     indexFile->close();
     delete indexFile;
@@ -1477,8 +1478,9 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     index->hashTableKeySize = hashTableKeySize;
     index->seedLen = seedLen;
     index->locationSize = locationSize;
+    index->largeHashTable = !smallHashTable;
 
-    unsigned overflowEntrySize = (locationSize > 4) ? sizeof(*index->overflowTable64) : sizeof(index->overflowTable32);
+    unsigned overflowEntrySize = (locationSize > 4) ? sizeof(*index->overflowTable64) : sizeof(*index->overflowTable32);
 
     size_t overflowTableSizeInBytes = (size_t)index->overflowTableSize * overflowEntrySize;
     char *tableAsCharStar;

@@ -154,8 +154,8 @@ protected:
     static SNAPHashTable** allocateHashTables(unsigned* o_nTables, GenomeDistance countOfBases, double slack,
         int seedLen, unsigned hashTableKeySize, bool large, unsigned locationSize, double* biasTable = NULL);
     
-    static const unsigned GenomeIndexFormatMajorVersion = 4;
-    static const unsigned GenomeIndexFormatMinorVersion = 1;    // 4.0 is like 4.1, but leaves out the locationSize in the GenomeIndex, which is then known to be 4.
+    static const unsigned GenomeIndexFormatMajorVersion = 5;
+    static const unsigned GenomeIndexFormatMinorVersion = 0;
     
     static const unsigned largestBiasTable = 32;    // Can't be bigger than the biggest seed size, which is set in Seed.h.  Bigger than 32 means a new Seed structure.
     static const unsigned largestKeySize = 8;
