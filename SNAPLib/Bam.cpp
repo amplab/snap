@@ -1257,9 +1257,11 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                 size_t mateOffset = 0;
                 BAMAlignment* mate = NULL;
                 // optimize case for half-mapped pairs with adjacent reads
-                mate = tryFindRead(info->firstRunOffset, info->firstRunEndOffset, record->read_name(), &mateOffset);
-                if (mate == record) {
-                    mate = NULL;
+                if ((record->FLAG & SAM_MULTI_SEGMENT) != 0) {
+                    mate = tryFindRead(info->firstRunOffset, info->firstRunEndOffset, record->read_name(), &mateOffset);
+                    if (mate == record) {
+                        mate = NULL;
+                    }
                 }
                 bool isSecond = mate != NULL;
                 if (isSecond) {
