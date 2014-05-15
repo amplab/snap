@@ -1139,8 +1139,9 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
     GenomeIndex *index = context->index;
     GenomeDistance countOfBases = context->genome->getCountOfBases();
     SNAPHashTable *hashTable = index->hashTables[whichHashTable];
+    unsigned locationSize = context->locationSize;
     unsigned *entry32 = (unsigned *)hashTable->SlowLookup(lowBases);  // use SlowLookup because we might have overflowed the table.  Cast is OK because valueSize == 4 when we use entry32
-    _int64 *entry64 = (_int64 *)entry32;  // Yes, really
+    char *entry64 = (char *)entry32;  // Char * because it's variable sized
     if (NULL == entry64) {
         SNAPHashTable::ValueType newEntry[2];	// We only use [0] if !large, but it doesn't hurt to declare two
 		if (large) {
@@ -1177,27 +1178,33 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
         // it in the overflow table.
         //
         int entryIndex = usingComplement ? 1 : 0;
-        if (context->locationSize > 4) {
+        void *entryPointer = entry64 + locationSize * entryIndex;
+        if (locationSize > 4) {
             entry32 = NULL; // Using this would be bad
-            if (large && GenomeLocationAsInt64(InvalidGenomeLocation) - 1 == entry64[entryIndex]) {
-                entry64[entryIndex] = GenomeLocationAsInt64(genomeLocation);
+            _int64 entryValue = 0;
+            memcpy(&entryValue, entryPointer, locationSize);     // Assumes little endian
+            if (large && GenomeLocationAsInt64(InvalidGenomeLocation) - 1 == entryValue) {
+                _int64 locationAsInt64 = GenomeLocationAsInt64(genomeLocation);
+                memcpy(entryPointer, &locationAsInt64, locationSize);  // Assumes little endian
                 (*bothComplementsUsed)++;
-            } else if (entry64[entryIndex] < countOfBases) { 
+            } else if (entryValue < countOfBases) { 
 
                 (*seedsWithMultipleOccurrences)++;
                 (*genomeLocationsInOverflowTable) += 2;    
 
-                _int64 overflowIndex = AddOverflowBackpointer(-1, context->overflowAnchor, context->nextOverflowBackpointer, entry64[entryIndex]);
+                _int64 overflowIndex = AddOverflowBackpointer(-1, context->overflowAnchor, context->nextOverflowBackpointer, entryValue);
                 overflowIndex = AddOverflowBackpointer(overflowIndex, context->overflowAnchor, context->nextOverflowBackpointer, GenomeLocationAsInt64(genomeLocation));
 
-                entry64[entryIndex] = (unsigned)overflowIndex + countOfBases;
+                _int64 entryValue = overflowIndex + countOfBases;
+                memcpy(entryPointer, &entryValue, locationSize);
             } else {
                 //
                 // Stick another entry in the existing overflow bucket.
                 //
 
-                _int64 overflowIndex = AddOverflowBackpointer(entry64[entryIndex] - countOfBases, context->overflowAnchor, context->nextOverflowBackpointer, genomeLocation);
-                entry64[entryIndex] = overflowIndex + countOfBases;
+                _int64 overflowIndex = AddOverflowBackpointer(entryValue - countOfBases, context->overflowAnchor, context->nextOverflowBackpointer, genomeLocation);
+                _int64 entryValue = overflowIndex + countOfBases;
+                memcpy(entryPointer, &entryValue, locationSize);    // Assumes little endian
 
                 (*genomeLocationsInOverflowTable)++;
             } // If the existing entry had the complement empty, needed a new overflow entry or extended an old one
@@ -1759,20 +1766,21 @@ GenomeIndex::lookupSeed(
 		    _ASSERT(hashTables[seed.getHighBases(hashTableKeySize)]->GetValueSizeInBytes() > 4);
 		    const char *entry = (char *)hashTables[seed.getHighBases(hashTableKeySize)]->GetFirstValueForKey(lowBases);   
 
-            GenomeLocation entryByValue = 0;
-
-            memcpy(&entryByValue, entry, locationSize);  // Works because we're litte-endian
-
             if (NULL == entry) {
 			    if (FORWARD == dir) {
 				    *nHits = 0;
 			    } else {
 				    *nRCHits = 0;
 			    }
-		    } else if (FORWARD == dir) {
-			    fillInLookedUpResults(entryByValue,  nHits, hits, singleHit);
 		    } else {
-			    fillInLookedUpResults(entryByValue,  nRCHits, rcHits, singleRCHit);
+                GenomeLocation entryByValue = 0;
+                memcpy(&entryByValue, entry, locationSize);  // WAssumes little endian
+
+                if (FORWARD == dir) {
+			        fillInLookedUpResults(entryByValue,  nHits, hits, singleHit);
+		        } else {
+			        fillInLookedUpResults(entryByValue,  nRCHits, rcHits, singleRCHit);
+                }
 		    }
 		    seed = ~seed;
         }	// For each direction    
