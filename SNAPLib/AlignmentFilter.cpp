@@ -320,7 +320,7 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
     for (alignment_map::iterator m1 = mate1.begin(); m1 != mate1.end(); ++m1) {
         m1->second.Print();
     } 
-    */ 
+    */
    
     char flag = 0;
     unsigned best_score = 10000;
@@ -510,7 +510,7 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
         }
     }
     
-    /*  
+    /* 
     printf("No RC Pairs: %u\n", no_rc.size());
     for (vector<AlignmentPair>::iterator it = no_rc.begin(); it != no_rc.end(); ++it) {
         it->Print();

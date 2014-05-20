@@ -726,6 +726,7 @@ void PairedAlignerContext::runIterationThread()
         filter.AddAlignment(t_pairedResult.location[0], t_pairedResult.direction[0], t_pairedResult.score[0], t_pairedResult.mapq[0], true, false);
         filter.AddAlignment(t_pairedResult.location[1], t_pairedResult.direction[1], t_pairedResult.score[1], t_pairedResult.mapq[1], true, true);
 
+        
         //Add secondary results
         for (int i = 0; i < t_nSecondaryResults; i++) {
           filter.AddAlignment(t_secondaryResults[i].location[0], t_secondaryResults[i].direction[0], t_secondaryResults[i].score[0], t_secondaryResults[i].mapq[0], true, false);         
@@ -733,12 +734,13 @@ void PairedAlignerContext::runIterationThread()
         }      
 
         for (int i = 0; i < t_nSingleSecondaryResults[0] + t_nSingleSecondaryResults[1]; i++) {
-            bool isMate0 = i < t_nSingleSecondaryResults[0] ? true : false;
+            bool isMate0 = i < t_nSingleSecondaryResults[0] ? false : true;
             Read *read = i < t_nSingleSecondaryResults[0] ? read0 : read1;
             if (readWriter != NULL && (options->passFilter(read, t_singleSecondaryResults[i].status))) {
                 filter.AddAlignment(t_singleSecondaryResults[i].location, t_singleSecondaryResults[i].direction, t_singleSecondaryResults[i].score, t_singleSecondaryResults[i].mapq, true, isMate0); 
             }
         }
+
 
         g_aligner->align(read0, read1, &g_pairedResult, maxSecondaryAligmmentAdditionalEditDistance, g_maxPairedSecondaryHits, &g_nSecondaryResults, g_secondaryResults, g_maxSingleSecondaryHits, &g_nSingleSecondaryResults[0], &g_nSingleSecondaryResults[1],g_singleSecondaryResults);
 
@@ -754,7 +756,7 @@ void PairedAlignerContext::runIterationThread()
         }      
 
         for (int i = 0; i < g_nSingleSecondaryResults[0] + g_nSingleSecondaryResults[1]; i++) {
-            bool isMate0 = i < g_nSingleSecondaryResults[0] ? true : false;
+            bool isMate0 = i < g_nSingleSecondaryResults[0] ? false : true;
             Read *read = i < g_nSingleSecondaryResults[0] ? read0 : read1;
             if (readWriter != NULL && (options->passFilter(read, g_singleSecondaryResults[i].status))) {
                 filter.AddAlignment(g_singleSecondaryResults[i].location, g_singleSecondaryResults[i].direction, g_singleSecondaryResults[i].score, g_singleSecondaryResults[i].mapq, false, isMate0); 
