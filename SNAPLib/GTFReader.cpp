@@ -1354,7 +1354,7 @@ void GTFReader::Load(string _filename) {
     
     _int64 loadTime = timeInMillis() - loadStart;
     printf("%llds. %u features, %u transcripts, %u genes\n", loadTime / 1000, features.size(), transcripts.size(), genes.size());
-    
+ 
 }
 
 int GTFReader::Parse(string line) {
@@ -1388,6 +1388,7 @@ int GTFReader::Parse(string line) {
         
     //If this sequence is not found, create a new vector to store this sequence (and others like it)
     if ((pos == transcripts.end())) {
+
         GTFTranscript transcript(feature.chr, feature.gene_id, feature.transcript_id, feature.GeneName(), feature.TranscriptName(), feature.start, feature.end);
         transcript.features.push_back(&fpos->second);
         transcripts.insert(transcript_map::value_type(feature.transcript_id, transcript));
@@ -1414,7 +1415,7 @@ int GTFReader::Parse(string line) {
         gpos->second.transcript_ids.insert(feature.transcript_id);
         gpos->second.UpdateBoundaries(feature.start, feature.end);
     }    
-       
+     
     return 0;
     
 }
@@ -1470,7 +1471,7 @@ void GTFReader::IncrementReadCount(string transcript_id0, unsigned transcript_st
     //If it is not aligned to transcriptome, it cannot be spliced
     std::set<string> transcript_ids0, transcript_ids1;
     std::set<string>::iterator pos;
-    
+
     //If the first read is aligned to transcriptome
     if (transcript_id0.size() != 0) {
     
@@ -1487,7 +1488,7 @@ void GTFReader::IncrementReadCount(string transcript_id0, unsigned transcript_st
             it->second->IncrementReadCount();
        
             unsigned length = it->first - transcript_start0;
-            
+       
             //printf("Querying with [%u %u]\n", start0, start0+length-1);
             
             //For each junction, query the feature tree
@@ -1497,7 +1498,10 @@ void GTFReader::IncrementReadCount(string transcript_id0, unsigned transcript_st
             if (transcript_ids0.size() == 0) {
             
                 for (std::vector<GTFFeature*>::iterator it2 = results.begin(); it2 != results.end(); ++it2) {
-                    transcript_ids0.insert((*it2)->transcript_id);
+                     
+                     if ((*it2)->gene_id.compare(transcript0.gene_id)==0) {
+                         transcript_ids0.insert((*it2)->transcript_id);
+                     }
                 }               
                  
             } else {
@@ -1526,7 +1530,10 @@ void GTFReader::IncrementReadCount(string transcript_id0, unsigned transcript_st
 
         if (transcript_ids0.size() == 0) {
             for (std::vector<GTFFeature*>::iterator it2 = results.begin(); it2 != results.end(); ++it2) {
-                transcript_ids0.insert((*it2)->transcript_id);
+
+                if ((*it2)->gene_id.compare(transcript0.gene_id)==0) {
+                  transcript_ids0.insert((*it2)->transcript_id);
+                }
             }               
              
         } else {
@@ -1565,14 +1572,17 @@ void GTFReader::IncrementReadCount(string transcript_id0, unsigned transcript_st
             unsigned length = it->first - transcript_start1;
             
             //printf("Querying with [%u %u]\n", start1, start1+length-1);
-            
+
             //For each junction, query the feature tree
             std::vector<GTFFeature*> results;
             IntervalFeatures(transcript1.chr, start1, start1+length-1, results);
-            
+
             if (transcript_ids1.size() == 0) {
                 for (std::vector<GTFFeature*>::iterator it2 = results.begin(); it2 != results.end(); ++it2) {
-                    transcript_ids1.insert((*it2)->transcript_id);
+
+                    if ((*it2)->gene_id.compare(transcript1.gene_id)==0) {
+                        transcript_ids1.insert((*it2)->transcript_id);
+                    }
                 }               
                  
             } else {
@@ -1602,7 +1612,10 @@ void GTFReader::IncrementReadCount(string transcript_id0, unsigned transcript_st
         if (transcript_ids1.size() == 0) {
         
             for (std::vector<GTFFeature*>::iterator it2 = results.begin(); it2 != results.end(); ++it2) {
-                transcript_ids1.insert((*it2)->transcript_id);
+
+                if ((*it2)->gene_id.compare(transcript1.gene_id)==0) {
+                  transcript_ids1.insert((*it2)->transcript_id);
+                }
             }               
              
         } else {
@@ -1640,7 +1653,9 @@ void GTFReader::IncrementReadCount(string transcript_id0, unsigned transcript_st
     string gene_id;
     //Finally, increment the transcript count for these transcript(s)
     for (std::set<string>::iterator it = final_ids.begin(); it != final_ids.end(); ++it) {
-        transcript_map::iterator pos = transcripts.find(*it);
+ 
+       transcript_map::iterator pos = transcripts.find(*it);
+ 
         if (pos == transcripts.end()) {
             //raise exception
             printf("No transcript %s\n", it->c_str());
@@ -1650,7 +1665,7 @@ void GTFReader::IncrementReadCount(string transcript_id0, unsigned transcript_st
         //We only increment once for a paired-end fragment
         pos->second.IncrementReadCount((unsigned) final_ids.size());
     }
-    
+ 
     //Increment the gene count for one of the transcripts
     gene_map::iterator gpos = genes.find(gene_id);
     if (gpos == genes.end()) {
