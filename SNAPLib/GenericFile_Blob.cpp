@@ -96,6 +96,11 @@ GenericFile_Blob::getchar()
     return (int)c;
 }
 
+char *GenericFile_Blob::gets(char *buf, size_t count)
+{
+	return _gets_impl(buf, count);
+}
+
     //
     // This gives a pointer into the blob rather than copying it.
     // It's the caller's responsibility to assure that the blob doesn't
