@@ -969,7 +969,20 @@ public:
 
     bool waitWithTimeout(_int64 timeoutInMillis) {
         struct timespec wakeTime;
-        clock_gettime(CLOCK_REALTIME, &wakeTime);
+        #if defined(__linux__)
+          clock_gettime(CLOCK_REALTIME, &wakeTime); // Works on Linux
+        #elif defined(__MACH__)
+          clock_serv_t cclock;
+          mach_timespec_t mts;
+          host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
+          clock_get_time(cclock, &mts);
+          mach_port_deallocate(mach_task_self(), cclock);
+          wakeTime.tv_sec = mts.tv_sec;
+          wakeTime.tv_nsec = mts.tv_nsec;
+        #else
+          #error "Don't know how to get time in nanos on your platform"
+        #endif
+
         wakeTime.tv_nsec += timeoutInMillis * 1000000;
         wakeTime.tv_sec += wakeTime.tv_nsec / 1000000000;
         wakeTime.tv_nsec = wakeTime.tv_nsec % 1000000000;
