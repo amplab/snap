@@ -36,7 +36,7 @@ Revision History:
 
 using namespace std;
 
-const char *SNAP_VERSION = "1.0dev.23"; 
+const char *SNAP_VERSION = "1.0dev.23 - Bill's special FLT3-ITD finder"; 
 
 static void usage()
 {
@@ -49,6 +49,7 @@ static void usage()
             "Type a command without arguments to see its help.\n");
     soft_exit(1);
 }
+
 
 int main(int argc, const char **argv)
 {

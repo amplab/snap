@@ -128,6 +128,8 @@ AlignerContext::finishThread(AlignerContext* common)
     extension = NULL;
 }
 
+unsigned flt3itdLowerBound, flt3itdUpperBound;
+
     void
 AlignerContext::initialize()
 {
@@ -153,6 +155,24 @@ AlignerContext::initialize()
             _int64 loadTime = timeInMillis() - loadStart;
              WriteStatusMessage("%llds.  %u bases, seed size %d\n",
                     loadTime / 1000, index->getGenome()->getCountOfBases(), index->getSeedLength());
+
+             //
+             // Fill in the globals that tell us where to look for FLT3 ITDs.
+             //
+             unsigned chr13;
+             if (!g_index->getGenome()->getOffsetOfContig("chr13", &chr13)) {
+                 WriteErrorMessage("Unable to find chr13.  Is this hg19?\n");
+                 soft_exit(1);
+             }
+             flt3itdLowerBound = chr13 + 28608200;
+             flt3itdUpperBound = chr13 + 28608500;
+
+             printf("Reference genome for affected range (chr13:%u - %u): ", flt3itdLowerBound - chr13 + 1, flt3itdUpperBound - chr13 + 1); // +1 because genome coordinates are 1-based
+             for (unsigned i = flt3itdLowerBound; i <= flt3itdUpperBound; i++) {
+                 printf("%c", *g_index->getGenome()->getSubstring(i, 1));
+             }
+             printf("\n");
+
          } else {
             WriteStatusMessage("no alignment, input/output only\n");
         }

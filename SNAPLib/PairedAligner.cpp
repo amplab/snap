@@ -57,6 +57,9 @@ using util::stringEndsWith;
 static const int DEFAULT_MIN_SPACING = 50;
 static const int DEFAULT_MAX_SPACING = 1000;
 
+bool
+isFLT3ITD(Read *read, GenomeIndex *index, LandauVishkin<1> *lv, SingleAlignmentResult *result);
+
 struct PairedAlignerStats : public AlignerStats
 {
     // TODO: make these constants configurable
@@ -417,6 +420,8 @@ void PairedAlignerContext::runIterationThread()
         intersectingAligner,
         allocator);
 
+    LandauVishkin<1> lv;
+
     allocator->checkCanaries();
 
     PairedAlignmentResult *secondaryResults = (PairedAlignmentResult *)allocator->allocate(maxPairedSecondaryHits * sizeof(*secondaryResults));
@@ -459,7 +464,7 @@ void PairedAlignerContext::runIterationThread()
             result.status[1] = NotFound;
             result.location[0] = InvalidGenomeLocation;
             result.location[1] = InvalidGenomeLocation;
-            writePair(read0, read1, &result, false);
+            //writePair(read0, read1, &result, false);
             continue;
         } else {
             // Here one the reads might still be hopeless, but maybe we can align the other.
@@ -492,6 +497,30 @@ void PairedAlignerContext::runIterationThread()
         stats->nanosByTimeBucket[timeBucket] += runTime;
 #endif // TIME_HISTOGRAM
 
+        Read *reads[2] = {read0, read1};
+        unsigned numUnaligned = 0;
+        unsigned whichUnaligned;
+        for (int i = 0; i < NUM_READS_PER_PAIR; i++) {
+            if (result.status[i] == NotFound) {
+                numUnaligned++;
+                whichUnaligned = i;
+            }
+        }
+
+        extern unsigned flt3itdLowerBound, flt3itdUpperBound;
+
+        SingleAlignmentResult singleResult;
+        if (1 == numUnaligned && result.location[1 - whichUnaligned] > flt3itdLowerBound - 1000 && result.location[1 - whichUnaligned] < flt3itdUpperBound + 1000 && isFLT3ITD(reads[whichUnaligned], index, &lv, &singleResult)) {
+            result.status[whichUnaligned] = singleResult.status;
+            result.location[whichUnaligned] = singleResult.location;
+            result.direction[whichUnaligned] = singleResult.direction;
+            result.status[1 - whichUnaligned] = NotFound;
+        } else {
+            for (int i = 0; i < NUM_READS_PER_PAIR; i++) {
+                result.status[i] = NotFound;
+            }
+        }
+#if 0
         if (forceSpacing && isOneLocation(result.status[0]) != isOneLocation(result.status[1])) {
             // either both align or neither do
             result.status[0] = result.status[1] = NotFound;
@@ -511,6 +540,7 @@ void PairedAlignerContext::runIterationThread()
             }
         }
 
+#endif // 0
         updateStats((PairedAlignerStats*) stats, read0, read1, &result);
 
     }

@@ -60,6 +60,109 @@ SingleAlignerContext::runTask()
     ParallelTask<SingleAlignerContext> task(this);
     task.run();
 }
+
+extern unsigned flt3itdLowerBound, flt3itdUpperBound;
+
+    bool
+isFLT3ITDOneDirection(Read *read, GenomeIndex *genomeIndex, LandauVishkin<1> *lv, unsigned *alignedLocation)
+{
+    *alignedLocation = -1;
+    const unsigned minMatchLength = 50;
+    const int maxDifferences = 3;
+
+    int bestDifference = maxDifferences + 1;
+
+    unsigned readLen = read->getDataLength();
+
+    if (readLen < minMatchLength) {
+        return false;
+    }
+
+    unsigned seedLen = genomeIndex->getSeedLength();
+    for (unsigned nextSeedToTest = 0; nextSeedToTest < readLen - seedLen; nextSeedToTest++) {
+        if (!Seed::DoesTextRepresentASeed(read->getData() + nextSeedToTest, seedLen)) {
+            continue;
+        }
+
+        Seed seed(read->getData() + nextSeedToTest, seedLen);
+
+        unsigned        nHits[NUM_DIRECTIONS];      // Number of times this seed hits in the genome
+        const unsigned  *hits[NUM_DIRECTIONS];      // The actual hits (of size nHits)
+
+        genomeIndex->lookupSeed(seed, flt3itdLowerBound, flt3itdUpperBound, &nHits[0], &hits[0], &nHits[1], &hits[1]);
+
+        //
+        // Since we're only going one direction, ignore the RC versions.
+        //
+        for (unsigned whichHit = 0; whichHit < nHits[FORWARD]; whichHit++) {
+            //
+            // See if it matches at the beginning of the read.
+            //
+            int editDistance = lv->computeEditDistance(genomeIndex->getGenome()->getSubstring(hits[FORWARD][whichHit] - nextSeedToTest, minMatchLength + maxDifferences), minMatchLength + maxDifferences, read->getData(), __min(readLen, minMatchLength), maxDifferences);
+
+            if (editDistance < bestDifference && editDistance >= 0) {
+                *alignedLocation = hits[FORWARD][whichHit] - nextSeedToTest;
+                bestDifference = editDistance;
+            }
+
+            //
+            // Or at the end.
+            //
+            editDistance = lv->computeEditDistance(genomeIndex->getGenome()->getSubstring(hits[FORWARD][whichHit] + readLen - nextSeedToTest - minMatchLength, minMatchLength + maxDifferences), minMatchLength + maxDifferences, read->getData() + readLen - minMatchLength, 
+                __min(readLen, minMatchLength), maxDifferences);
+
+            if (editDistance < bestDifference && editDistance >= 0) {
+                bestDifference = editDistance;
+                *alignedLocation = hits[FORWARD][whichHit] - nextSeedToTest;
+            }
+        }
+    }
+
+    if (bestDifference <= maxDifferences) return true;
+
+    //
+    // Check for the pattern you'd expect from the end of 2812's ITD
+    //
+    const char *itdEnd = "AGTACTCATTATCTGAGGAG";
+    const char *itdEnd2 = "ATTCTCTGAAATCAACGTAG";
+    size_t itdEndLen = strlen(itdEnd);
+    size_t itdEnd2Len = strlen(itdEnd2);
+    for (int i = 0; i < readLen - itdEndLen; i++) {
+        if (!memcmp(read->getData() + i, itdEnd, itdEndLen) || !memcmp(read->getData() + i, itdEnd2, itdEnd2Len)) {
+            *alignedLocation = 1;
+            return true;
+        }
+    }
+
+    return bestDifference <= maxDifferences;
+}
+
+    bool
+isFLT3ITD(Read *read, GenomeIndex *index, LandauVishkin<1> *lv, SingleAlignmentResult *result)
+{
+    bool forward = isFLT3ITDOneDirection(read, index, lv, &result->location);
+    if (forward) {
+        result->status = SingleHit;
+        result->direction = FORWARD;
+        if (result->location != 1) {
+            return true;
+        }
+    }
+
+    unsigned rcLocation;
+    read->becomeRC();
+    bool is = isFLT3ITDOneDirection(read, index, lv, &rcLocation);
+    if (is) {
+        result->status = SingleHit;
+        result->location = rcLocation;
+        result->direction = RC;
+    } else if (!forward) {
+        result->status = NotFound;
+    }
+    read->becomeRC();
+
+    return is || forward;
+}
     
     void
 SingleAlignerContext::runIterationThread()
@@ -124,6 +227,8 @@ SingleAlignerContext::runIterationThread()
         secondaryAlignments = (SingleAlignmentResult *)allocator->allocate(secondaryAlignmentBufferSize);
     }
 
+    LandauVishkin<1> lv;
+
     allocator->checkCanaries();
 
     aligner->setExplorePopularSeeds(options->explorePopularSeeds);
@@ -156,7 +261,7 @@ SingleAlignerContext::runIterationThread()
         // Skip the read if it has too many Ns or trailing 2 quality scores.
         if (read->getDataLength() < 50 || read->countOfNs() > maxDist) {
             if (readWriter != NULL && options->passFilter(read, NotFound)) {
-                readWriter->writeRead(read, NotFound, 0, InvalidGenomeLocation, FORWARD, false);
+                //readWriter->writeRead(read, NotFound, 0, InvalidGenomeLocation, FORWARD, false);
             }
             continue;
         } else {
@@ -186,12 +291,14 @@ SingleAlignerContext::runIterationThread()
             wasError = wgsimReadMisaligned(read, result.location, index, options->misalignThreshold);
         }
 
-        writeRead(read, result, false);
-
-        for (int i = 0; i < nSecondaryResults; i++) {
-            writeRead(read, secondaryAlignments[i], true);
+        if (NotFound == result.status && isFLT3ITD(read, index, &lv, &result)) {
+            writeRead(read, result, false);
+            result.status = SingleHit;
+        } else {
+            result.status = NotFound;
+            result.location = -1;
         }
-        
+
         updateStats(stats, read, result.status, result.location, result.score, result.mapq, wasError);
     }
 
