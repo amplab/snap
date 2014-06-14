@@ -95,16 +95,7 @@ isFLT3ITDOneDirection(Read *read, GenomeIndex *genomeIndex, LandauVishkin<1> *lv
         // Since we're only going one direction, ignore the RC versions.
         //
         for (unsigned whichHit = 0; whichHit < nHits[FORWARD]; whichHit++) {
-            //
-            // See if it matches at the beginning of the read.
-            //
-            int editDistance = lv->computeEditDistance(genomeIndex->getGenome()->getSubstring(hits[FORWARD][whichHit] - nextSeedToTest, minMatchLength + maxDifferences), minMatchLength + maxDifferences, read->getData(), __min(readLen, minMatchLength), maxDifferences);
-
-            if (editDistance < bestDifference && editDistance >= 0) {
-                *alignedLocation = hits[FORWARD][whichHit] - nextSeedToTest;
-                bestDifference = editDistance;
-            }
-
+            int editDistance;
             //
             // Or at the end.
             //
@@ -115,6 +106,17 @@ isFLT3ITDOneDirection(Read *read, GenomeIndex *genomeIndex, LandauVishkin<1> *lv
                 bestDifference = editDistance;
                 *alignedLocation = hits[FORWARD][whichHit] - nextSeedToTest;
             }
+
+            //
+            // See if it matches at the beginning of the read.
+            //
+            editDistance = lv->computeEditDistance(genomeIndex->getGenome()->getSubstring(hits[FORWARD][whichHit] - nextSeedToTest, minMatchLength + maxDifferences), minMatchLength + maxDifferences, read->getData(), __min(readLen, minMatchLength), maxDifferences);
+
+            if (editDistance < bestDifference && editDistance >= 0) {
+                *alignedLocation = hits[FORWARD][whichHit] - nextSeedToTest;
+                bestDifference = editDistance;
+            }
+
         }
     }
 
@@ -291,7 +293,7 @@ SingleAlignerContext::runIterationThread()
             wasError = wgsimReadMisaligned(read, result.location, index, options->misalignThreshold);
         }
 
-        if (NotFound == result.status && isFLT3ITD(read, index, &lv, &result)) {
+        if (NotFound == result.status && isFLT3ITD(read, index, &lv, &result) || result.location >= flt3itdLowerBound && result.location <= flt3itdUpperBound) {
             writeRead(read, result, false);
             result.status = SingleHit;
         } else {
