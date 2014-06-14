@@ -73,7 +73,7 @@ static void usage()
 			"                   about 30%%, depending on the other index parameters and the contents of the reference genome\n"
             " -locationSize     The size of the genome locations stored in the index.  This can be from 4 to 8 bytes.  The locations need to be big enough\n"
             "                   not only to index the genome, but also to allow some space for representing seeds that occur multiple times.  For the\n"
-            "                   human genome, it will fint with four byte locations if the seed size is 19 or larger, but needs 5 (or more) for smaller\n"
+            "                   human genome, it will fit with four byte locations if the seed size is 19 or larger, but needs 5 (or more) for smaller\n"
             "                   seeds.  Making the location size bigger than necessary will just waste (lots of) space, so unless you're doing something\n"
             "                   quite unusual, the right answer is 4 or 5.  Default is %d\n"
 			,
@@ -1584,7 +1584,7 @@ GenomeIndex::loadFromDirectory(char *directoryName)
         return NULL;
     }
 
-    if ((_int64)index->genome->getCountOfBases() + (_int64)index->overflowTableSize > 0xfffffff0) {
+    if ((_int64)index->genome->getCountOfBases() + (_int64)index->overflowTableSize > 0xfffffff0 && locationSize == 4) {
         WriteErrorMessage("\nThis index has too many overflow entries to be valid.  Some early versions of SNAP\n"
                         "allowed building indices with too small of a seed size, and this appears to be such\n"
                         "an index.  You can no longer build indices like this, and you also can't use them\n"

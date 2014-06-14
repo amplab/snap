@@ -115,6 +115,7 @@ IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, uns
         for (Direction dir = 0; dir < NUM_DIRECTIONS; dir++) {
             reversedRead[whichRead][dir] = (char *)allocator->allocate(maxReadSize);
             hashTableHitSets[whichRead][dir] =(HashTableHitSet *)allocator->allocate(sizeof(HashTableHitSet)); /*new HashTableHitSet();*/
+            hashTableHitSets[whichRead][dir]->firstInit(maxSeedsToUse, maxMergeDistance, allocator, doesGenomeIndexHave64BitLocations);
         }
     }
 
@@ -1189,7 +1190,7 @@ IntersectingPairedEndAligner::HashTableHitSet::getFirstHit(GenomeLocation *genom
 
 #undef LOOP
 
-	return anyFound;
+	return !anyFound;
 }
 
     bool
@@ -1234,6 +1235,14 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextLowerHit(GenomeLocation *g
 
         if (*currentHitForIntersection != nHits && hitLocation - seedOffset == mostRecentLocationReturned) {
             (*currentHitForIntersection)++;
+            if (*currentHitForIntersection == nHits) {
+                continue;
+            }
+            if (doesGenomeIndexHave64BitLocations) {
+                hitLocation = lookups64[i].hits[*currentHitForIntersection];
+            } else {
+                hitLocation = lookups32[i].hits[*currentHitForIntersection];
+            }
         }
 
         if (*currentHitForIntersection != nHits) {

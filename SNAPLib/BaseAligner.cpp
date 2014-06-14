@@ -246,7 +246,8 @@ Return Value:
     true if there was enough space in secondaryResults, false otherwise
 
 --*/
-{   memset(hitCountByExtraSearchDepth, 0, sizeof(*hitCountByExtraSearchDepth) * extraSearchDepth);
+{   
+    memset(hitCountByExtraSearchDepth, 0, sizeof(*hitCountByExtraSearchDepth) * extraSearchDepth);
 
     if (NULL != nSecondaryResults) {
         *nSecondaryResults = 0;
