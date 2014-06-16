@@ -170,7 +170,8 @@ SingleAlignerContext::runIterationThread()
     BaseAligner *c_aligner = NULL;
     SingleAlignmentResult *c_secondaryAlignments = NULL;
     unsigned c_secondaryAlignmentBufferCount;
-
+    size_t c_secondaryAlignmentBufferSize;
+    
     if (contamination != NULL) {
 
       if (maxSecondaryAligmmentAdditionalEditDistance < 0) {
@@ -178,11 +179,11 @@ SingleAlignerContext::runIterationThread()
       } else {
           c_secondaryAlignmentBufferCount = BaseAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, contamination->getSeedLength());
       }  
-      size_t c_secondaryAlignmentBufferSize = sizeof(*c_secondaryAlignments) * c_secondaryAlignmentBufferCount;
+      c_secondaryAlignmentBufferSize = sizeof(*c_secondaryAlignments) * c_secondaryAlignmentBufferCount;
 
-      BigAllocator *c_allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, maxHits, maxReadSize, contamination->getSeedLength(), numSeedsFromCommandLine, seedCoverage) + c_secondaryAlignmentBufferSize);
+      c_allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, maxHits, maxReadSize, contamination->getSeedLength(), numSeedsFromCommandLine, seedCoverage) + c_secondaryAlignmentBufferSize);
 
-      BaseAligner *c_aligner = new (c_allocator) BaseAligner(
+      c_aligner = new (c_allocator) BaseAligner(
               contamination,
               maxHits,
               maxDist,
@@ -250,9 +251,12 @@ SingleAlignerContext::runIterationThread()
         _int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
 
-        SingleAlignmentResult result;
+        SingleAlignmentResult result, contaminantResult;
         result.isTranscriptome = false;
         result.tlocation = 0;
+        contaminantResult.isTranscriptome = false;
+        contaminantResult.tlocation = 0;
+        
         int nSecondaryResults = 0;
 
         AlignmentFilter filter(NULL, read, index->getGenome(), transcriptome->getGenome(), gtf, 0, 0, options->confDiff, options->maxDist, index->getSeedLength(), g_aligner);
@@ -278,23 +282,21 @@ SingleAlignerContext::runIterationThread()
         //Filter the results
         AlignmentResult status = filter.FilterSingle(&result.location, &result.direction, &result.score, &result.mapq, &result.isTranscriptome, &result.tlocation);
 
-        /*
         //If the read is still unaligned
-        if (result == NotFound) {
+        if (status == NotFound) {
 
             //If the contamination database is present
             if (c_aligner != NULL) {
 
-                AlignmentResult c_result = c_aligner->AlignRead(read, &location, &direction, &score, &mapq);
+                c_aligner->AlignRead(read, &contaminantResult, maxSecondaryAligmmentAdditionalEditDistance, c_secondaryAlignmentBufferCount, &nSecondaryResults, c_secondaryAlignments);
                 c_allocator->checkCanaries();
 
-                if (c_result != NotFound) {
-                    c_filter->AddAlignment(location, string(read->getId(), read->getIdLength()), string(read->getData(), read->getDataLength()));
+                if (contaminantResult.status != NotFound) {
+                    c_filter->AddAlignment(contaminantResult.location, string(read->getId(), read->getIdLength()), string(read->getData(), read->getDataLength()));
 
                 }
             }
         }
-        */
 
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;
@@ -328,6 +330,11 @@ SingleAlignerContext::runIterationThread()
 
     delete g_allocator;   // This is what actually frees the memory.
     delete t_allocator;
+
+    if (c_allocator != NULL) {
+        c_aligner->~BaseAligner();
+        delete c_allocator;
+    }
 }
     
     void
