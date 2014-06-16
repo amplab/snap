@@ -55,6 +55,7 @@ using namespace std;
 
 using util::stringEndsWith;
 
+static const int MAX_SECONDARY_ALIGNMENTS = 100;
 static const int DEFAULT_MIN_SPACING = 50;
 static const int DEFAULT_MAX_SPACING = 1000;
 
@@ -644,8 +645,8 @@ void PairedAlignerContext::runIterationThread()
         filter.AddAlignment(g_pairedResult.location[0], g_pairedResult.direction[0], g_pairedResult.score[0], g_pairedResult.mapq[0], false, false);
         filter.AddAlignment(g_pairedResult.location[1], g_pairedResult.direction[1], g_pairedResult.score[1], g_pairedResult.mapq[1], false, true);
      
-        if (g_nSecondaryResults > 10)
-          g_nSecondaryResults = 10;
+        if (g_nSecondaryResults > MAX_SECONDARY_ALIGNMENTS)
+          g_nSecondaryResults = MAX_SECONDARY_ALIGNMENTS;
         
         //Add secondary results
         for (int i = 0; i < g_nSecondaryResults; i++) {
@@ -653,10 +654,10 @@ void PairedAlignerContext::runIterationThread()
           filter.AddAlignment(g_secondaryResults[i].location[1], g_secondaryResults[i].direction[1], g_secondaryResults[i].score[1], g_secondaryResults[i].mapq[1], false, true);
         }      
         
-        if (g_nSingleSecondaryResults[0] > 10)
-          g_nSingleSecondaryResults[0] = 10;
-        if (g_nSingleSecondaryResults[1] > 10)
-          g_nSingleSecondaryResults[1] = 10;
+        if (g_nSingleSecondaryResults[0] > MAX_SECONDARY_ALIGNMENTS)
+          g_nSingleSecondaryResults[0] = MAX_SECONDARY_ALIGNMENTS;
+        if (g_nSingleSecondaryResults[1] > MAX_SECONDARY_ALIGNMENTS)
+          g_nSingleSecondaryResults[1] = MAX_SECONDARY_ALIGNMENTS;
                 
         for (int i = 0; i < g_nSingleSecondaryResults[0] + g_nSingleSecondaryResults[1]; i++) {
             bool isMate0 = i < g_nSingleSecondaryResults[0] ? false : true;
