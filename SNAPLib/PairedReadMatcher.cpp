@@ -78,6 +78,10 @@ private:
     typedef VariableSizeMap<PairedReadMatcher::StringHash,ReadWithOwnMemory*,150,MapNumericHash<PairedReadMatcher::StringHash>,80,0,true> OverflowMap;
     OverflowMap overflow; // read id -> Read
     typedef VariableSizeVector<ReadWithOwnMemory*> OverflowReadVector;
+    OverflowReadVector blocks; // BigAlloc blocks
+    static const int BlockSize = 10000; // # ReadWithOwnMemory per block
+    ExclusiveLock blockLock; // protects adding to blocks list
+    ReadWithOwnMemory* freeList; // head of free list, NULL if empty, use interlocked ops to update
     typedef VariableSizeMap<_uint64,OverflowReadVector*> OverflowReadReleaseMap;
     OverflowReadReleaseMap overflowRelease;
 #ifdef VALIDATE_MATCH
@@ -115,12 +119,12 @@ PairedReadMatcher::PairedReadMatcher(
     : single(i_single),
     overflowTotal(0), overflowPeak(0),
     quicklyDropUnpairedReads(i_quicklyDropUnpairedReads),
-    nReadsQuicklyDropped(0),
+    nReadsQuicklyDropped(0), freeList(NULL),
     currentBatch(0, 0), allDroppedInCurrentBatch(false)
 {
     new (&unmatched[0]) VariableSizeMap<StringHash,Read>(10000);
     new (&unmatched[1]) VariableSizeMap<StringHash,Read>(10000);
-
+    InitializeExclusiveLock(&blockLock);
 #ifdef STATISTICS
     currentStats.clear();
     totalStats.clear();
@@ -129,20 +133,53 @@ PairedReadMatcher::PairedReadMatcher(
     
 PairedReadMatcher::~PairedReadMatcher()
 {
+    for (OverflowReadVector::iterator i = blocks.begin(); i != blocks.end(); i++) {
+        BigDealloc(*i);
+    }
     delete single;
 }
 
     ReadWithOwnMemory*
 PairedReadMatcher::allocOverflowRead()
 {
-    return new ReadWithOwnMemory();
+    while (true) {
+        ReadWithOwnMemory* next = freeList;
+        if (next == NULL) {
+            // alloc & init a new block of reads
+            ReadWithOwnMemory* block = (ReadWithOwnMemory*) BigAlloc(BlockSize * sizeof(ReadWithOwnMemory));
+            AcquireExclusiveLock(&blockLock);
+            blocks.push_back(block);
+            ReleaseExclusiveLock(&blockLock);
+            for (int i = 0; i < BlockSize - 1; i++) {
+                *(ReadWithOwnMemory**)&block[i] = &block[i+1];
+            }
+            while (true) {
+                ReadWithOwnMemory* head = freeList;
+                *(ReadWithOwnMemory**)&block[BlockSize-1] = head;
+                if (InterlockedCompareExchangePointerAndReturnOldValue((void*volatile*)&freeList, block, head) == head) {
+                    break;
+                }
+            }
+        } else {
+            ReadWithOwnMemory* nextHead = *(ReadWithOwnMemory**)next;
+            if (InterlockedCompareExchangePointerAndReturnOldValue((void*volatile*)&freeList, nextHead, next) == next) {
+                return next;
+            }
+        }
+    }
 }
 
     void
 PairedReadMatcher::freeOverflowRead(
     ReadWithOwnMemory* read)
 {
-    delete read;
+    while (true) {
+        ReadWithOwnMemory* head = freeList;
+        *(ReadWithOwnMemory**)read = head;
+        if (InterlockedCompareExchangePointerAndReturnOldValue((void*volatile*)&freeList, read, head) == head) {
+            return;
+        }
+    }
 }
 
     bool
@@ -373,7 +410,7 @@ PairedReadMatcher::releaseBatch(
             // free memory for overflow reads
             //fprintf(stderr, "PairedReadMatcher release %d overflow reads for batch %d:%d\n", v->size(), batch.fileID, batch.batchID);
             for (OverflowReadVector::iterator i = v->begin(); i != v->end(); i++) {
-                delete *i;
+                freeOverflowRead(*i);
             }
             delete v;
             overflowRelease.erase(batch.asKey());
