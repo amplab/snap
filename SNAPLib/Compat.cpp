@@ -243,6 +243,11 @@ _uint64 InterlockedCompareExchange64AndReturnOldValue(volatile _uint64 *valueToU
     return (_uint64) InterlockedCompareExchange(valueToUpdate, replacementValue, desiredPreviousValue);
 }
 
+void* InterlockedCompareExchangePointerAndReturnOldValue(void * volatile *valueToUpdate, void* replacementValue, void* desiredPreviousValue)
+{
+    return InterlockedCompareExchangePointer(valueToUpdate, replacementValue, desiredPreviousValue);
+}
+
 struct WrapperThreadContext {
     ThreadMainFunction      mainFunction;
     void                    *mainFunctionParameter;
