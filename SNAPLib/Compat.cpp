@@ -974,8 +974,18 @@ public:
 
     bool waitWithTimeout(_int64 timeoutInMillis) {
         struct timespec wakeTime;
+#ifdef __LINUX__
         clock_gettime(CLOCK_REALTIME, &wakeTime);
         wakeTime.tv_nsec += timeoutInMillis * 1000000;
+#elif defined(__MACH__)
+        clock_serv_t cclock;
+        mach_timespec_t mts;
+        host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
+        clock_get_time(cclock, &mts);
+        mach_port_deallocate(mach_task_self(), cclock);
+        wakeTime.tv_nsec = mts.tv_nsec + timeoutInMillis * 1000000;
+        wakeTime.tv_sec = mts.tv_sec;
+#endif
         wakeTime.tv_sec += wakeTime.tv_nsec / 1000000000;
         wakeTime.tv_nsec = wakeTime.tv_nsec % 1000000000;
 
