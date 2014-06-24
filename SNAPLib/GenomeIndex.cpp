@@ -283,7 +283,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     unusedDataValue[0] = InvalidGenomeLocation;
     unusedDataValue[1] = InvalidGenomeLocation;
 
-	OverflowBackpointerAnchor *overflowAnchor = new OverflowBackpointerAnchor(0xfffffff0 - countOfBases);   // i.e., as much as the address space will allow.
+	OverflowBackpointerAnchor *overflowAnchor = new OverflowBackpointerAnchor(__min(0xfffffff0 - countOfBases, countOfBases));   // i.e., as much as the address space will allow.
    
     WriteStatusMessage("%llds\nBuilding hash tables.\n", (timeInMillis() + 500 - start) / 1000);
   
@@ -861,10 +861,10 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
         table[i] = (count / distinctSeeds) * ((double)validSeeds / countOfBases) * nHashTables;
     }
 
-    // printf("Bias table:\n");
-    // for (unsigned i = 0; i < nHashTables; i++) {
-    //     printf("%u -> %lf\n", i, table[i]);
-    // }
+    //printf("Bias table:\n");
+    //for (unsigned i = 0; i < nHashTables; i++) {
+    //    printf("%u -> %lf\n", i, table[i]);
+    //}
 
     WriteStatusMessage("Computed bias table in %llds\n", (timeInMillis() + 500 - start) / 1000);
 }
@@ -1184,7 +1184,7 @@ GenomeIndex::completeIndexing(PerHashTableBatch *batches, BuildHashTablesThreadC
 
 GenomeIndex::OverflowBackpointerAnchor::OverflowBackpointerAnchor(unsigned maxOverflowEntries_) : maxOverflowEntries(maxOverflowEntries_)
 {
-	unsigned roundedUpMaxOverflowEntries = (maxOverflowEntries + batchSize - 1) / batchSize * batchSize;	// Round up to the next batch size
+	_int64 roundedUpMaxOverflowEntries = ((_int64)maxOverflowEntries + batchSize - 1) / batchSize * batchSize;	// Round up to the next batch size
 
 	table = new OverflowBackpointer *[roundedUpMaxOverflowEntries / batchSize];
 
