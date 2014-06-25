@@ -623,7 +623,7 @@ void PairedAlignerContext::runIterationThread()
         //Add primary result
         filter.AddAlignment(t_pairedResult.location[0], t_pairedResult.direction[0], t_pairedResult.score[0], t_pairedResult.mapq[0], true, false);
         filter.AddAlignment(t_pairedResult.location[1], t_pairedResult.direction[1], t_pairedResult.score[1], t_pairedResult.mapq[1], true, true);
-
+         
         //Add secondary results
         for (int i = 0; i < t_nSecondaryResults; i++) {
           filter.AddAlignment(t_secondaryResults[i].location[0], t_secondaryResults[i].direction[0], t_secondaryResults[i].score[0], t_secondaryResults[i].mapq[0], true, false);         
@@ -666,10 +666,11 @@ void PairedAlignerContext::runIterationThread()
                 filter.AddAlignment(g_singleSecondaryResults[i].location, g_singleSecondaryResults[i].direction, g_singleSecondaryResults[i].score, g_singleSecondaryResults[i].mapq, false, isMate0); 
             }
         }
-
+        
         //Perform the filtering
         unsigned status = filter.Filter(&pairedResult);
-
+        
+        
         //If the read is still unaligned
         if ((pairedResult.status[0] == NotFound) && (pairedResult.status[1] == NotFound)) {
         
@@ -685,6 +686,7 @@ void PairedAlignerContext::runIterationThread()
             }
           }
         }
+        
 
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;
@@ -700,7 +702,8 @@ void PairedAlignerContext::runIterationThread()
         }
 
         writePair(read0, read1, &pairedResult, false);
-        
+       
+
          //No secondary alignments
         /*
         for (int i = 0; i < nSecondaryResults; i++) {

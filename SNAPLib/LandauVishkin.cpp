@@ -192,7 +192,7 @@ int LandauVishkinWithCigar::insertSpliceJunctions(
             //Get the junctions
             //printf("Querying with pos: %d length: %d\n", prev, length);
             std::vector<junction> junctions;
-            gtf->GetTranscript(transcript_id).Junctions(prev, length-1, junctions);
+            gtf->GetTranscript(transcript_id).Junctions(prev, length, junctions);
 
             //If this operator crosses a splice junction, we must add it into the CIGAR operator
             if (junctions.size() > 0) {
