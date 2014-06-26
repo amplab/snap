@@ -320,9 +320,22 @@ GenomeIndex::runIndexer(
     }
 
     if (seedLen < 19 && !computeBias) {
-        WriteErrorMessage("For hg19, you must use seed sizes between 19 and 25 (and not specifying -hg19 won't help, it'll just take longer to fail).\n");
+        WriteErrorMessage("For hg19, you must use seed sizes between 19 and 32, or not specify -hg19 and let SNAP compute the hash table bias.\n");
         soft_exit(1);
     }
+
+	if (seedLen * 2 < keySizeInBytes * 8) {
+		WriteErrorMessage("You must specify a smaller keysize or a larger seed size.  The seed must be big enough to fill the key\n"
+			"and takes two bits per base of seed.\n");
+		soft_exit(1);
+	}
+
+	if (seedLen * 2 - keySizeInBytes * 8 > 16) {
+		WriteErrorMessage("You must specify a biger keysize or smaller seed len.  SNAP restricts the number of hash tables to 4^8,\n"
+			"and needs 4^{excess seed len} hash tables, where excess seed len is the seed size minus the four times the key size.\n");
+		soft_exit(1);
+	}
+
 
     WriteStatusMessage("Hash table slack %lf\nLoading FASTA file '%s' into memory...", slack, fastaFile);
 
@@ -434,7 +447,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     unusedDataValue[0] = InvalidGenomeLocation;
     unusedDataValue[1] = InvalidGenomeLocation;
 
-	OverflowBackpointerAnchor *overflowAnchor = new OverflowBackpointerAnchor(0xfffffff0 - countOfBases);   // i.e., as much as the address space will allow.
+	OverflowBackpointerAnchor *overflowAnchor = new OverflowBackpointerAnchor(__min(0xfffffff0 - countOfBases, countOfBases));   // i.e., as much as the address space will allow.
    
     WriteStatusMessage("%llds\nBuilding hash tables.\n", (timeInMillis() + 500 - start) / 1000);
   
@@ -1012,10 +1025,10 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
         table[i] = (count / distinctSeeds) * ((double)validSeeds / countOfBases) * nHashTables;
     }
 
-    // printf("Bias table:\n");
-    // for (unsigned i = 0; i < nHashTables; i++) {
-    //     printf("%u -> %lf\n", i, table[i]);
-    // }
+    //printf("Bias table:\n");
+    //for (unsigned i = 0; i < nHashTables; i++) {
+    //    printf("%u -> %lf\n", i, table[i]);
+    //}
 
     WriteStatusMessage("Computed bias table in %llds\n", (timeInMillis() + 500 - start) / 1000);
 }
@@ -1335,7 +1348,7 @@ GenomeIndex::completeIndexing(PerHashTableBatch *batches, BuildHashTablesThreadC
 
 GenomeIndex::OverflowBackpointerAnchor::OverflowBackpointerAnchor(unsigned maxOverflowEntries_) : maxOverflowEntries(maxOverflowEntries_)
 {
-	unsigned roundedUpMaxOverflowEntries = (maxOverflowEntries + batchSize - 1) / batchSize * batchSize;	// Round up to the next batch size
+	_int64 roundedUpMaxOverflowEntries = ((_int64)maxOverflowEntries + batchSize - 1) / batchSize * batchSize;	// Round up to the next batch size
 
 	table = new OverflowBackpointer *[roundedUpMaxOverflowEntries / batchSize];
 

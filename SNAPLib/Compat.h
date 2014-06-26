@@ -329,7 +329,7 @@ int InterlockedDecrementAndReturnNewValue(volatile int *valueToDecrement);
 _int64 InterlockedAdd64AndReturnNewValue(volatile _int64 *valueToWhichToAdd, _int64 amountToAdd);
 _uint32 InterlockedCompareExchange32AndReturnOldValue(volatile _uint32 *valueToUpdate, _uint32 replacementValue, _uint32 desiredPreviousValue);
 _uint64 InterlockedCompareExchange64AndReturnOldValue(volatile _uint64 *valueToUpdate, _uint64 replacementValue, _uint64 desiredPreviousValue);
-void* InterlockedCompareExchangePointerAndReturnOldValue(volatile void **valueToUpdate, void* replacementValue, void* desiredPreviousValue);
+void* InterlockedCompareExchangePointerAndReturnOldValue(void * volatile *valueToUpdate, void* replacementValue, void* desiredPreviousValue);
 
 //
 // Functions for creating and binding threads.
