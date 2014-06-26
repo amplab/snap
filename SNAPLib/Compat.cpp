@@ -1126,11 +1126,6 @@ _uint64 InterlockedCompareExchange64AndReturnOldValue(volatile _uint64 *valueToU
 {
   return (_uint64) __sync_val_compare_and_swap((volatile _int64 *) valueToUpdate, desiredPreviousValue, replacementValue);
 }
-void* InterlockedCompareExchangePointerAndReturnOldValue(void * volatile *valueToUpdate, void* replacementValue, void* desiredPreviousValue)
-{
-    return __sync_val_compare_and_swap(valueToUpdate, desiredPreviousValue, replacementValue);
-}
-
 
 void* InterlockedCompareExchangePointerAndReturnOldValue(void * volatile *valueToUpdate, void* replacementValue, void* desiredPreviousValue)
 {
