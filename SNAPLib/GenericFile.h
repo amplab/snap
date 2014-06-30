@@ -43,10 +43,15 @@ public:
     // Returns the actual number of bytes read, or -1 on error.
 	virtual size_t read(void *ptr, size_t count) = 0;
 
+    // Gets a single character from the stream, like stdio getc.
+    // On success, returns the char promoted to an int.	
+    // On failure, returns EOF.
+    virtual int getchar() = 0;
+
 	// Gets a string from the file and store it as a c string in 'str' until (num-1)
 	// characters have ben read or either a newline or eod-of-file is reached,
 	// whichever happens first.
-	virtual char *gets(char *buf, size_t count);
+	virtual char *gets(char *buf, size_t count) = 0;
 
 	// Advance forward or back by byteOffset bytes in the file.
 	virtual int advance(long long byteOffset) = 0;
@@ -60,6 +65,7 @@ public:
 	virtual ~GenericFile();
 
 protected:
+	char *_gets_impl(char *buf, size_t count);
 	GenericFile();
 	Mode _mode;
 	char *_filename;
