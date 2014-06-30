@@ -732,7 +732,7 @@ IntersectingPairedEndAligner::align(
                                     // A secondary result to save.
                                     //
                                     if (*nSecondaryResults >= secondaryResultBufferSize) {
-                                        WriteErrorMessage("IntersectingPairedEndAligner::align(): out of secondary result buffer\n");
+                                        WriteErrorMessage("IntersectingPairedEndAligner::align(): out of secondary result buffer.  Read ID %.*s\n", read0->getIdLength(), read0->getId());
                                         soft_exit(1);
                                     }
 
