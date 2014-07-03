@@ -1,6 +1,8 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2012
+# Visual Studio 2013
+VisualStudioVersion = 12.0.21005.1
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "snap", "apps\snap\snap.vcxproj", "{76E127A5-2247-4A10-9DC8-59518C7C6636}"
 	ProjectSection(ProjectDependencies) = postProject
 		{E620DC13-195C-41EF-B33B-8FE7DE9F8ADC} = {E620DC13-195C-41EF-B33B-8FE7DE9F8ADC}
@@ -85,13 +87,11 @@ Global
 		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Debug|Win32.ActiveCfg = Debug|x64
 		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Debug|Win32.Build.0 = Debug|x64
 		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Debug|x64.ActiveCfg = Debug|x64
-		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Debug|x64.Build.0 = Debug|x64
 		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Release|Mixed Platforms.ActiveCfg = Release|Win32
 		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Release|Mixed Platforms.Build.0 = Release|Win32
 		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Release|Win32.ActiveCfg = Release|x64
 		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Release|Win32.Build.0 = Release|x64
 		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Release|x64.ActiveCfg = Release|x64
-		{EB694CE8-E805-41A0-9D08-C8BEED857166}.Release|x64.Build.0 = Release|x64
 		{70D9DA2A-E423-4705-BC71-0198C365A730}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
 		{70D9DA2A-E423-4705-BC71-0198C365A730}.Debug|Mixed Platforms.Build.0 = Debug|Win32
 		{70D9DA2A-E423-4705-BC71-0198C365A730}.Debug|Win32.ActiveCfg = Debug|x64
