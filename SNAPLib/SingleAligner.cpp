@@ -63,6 +63,8 @@ SingleAlignerContext::runTask()
     void
 SingleAlignerContext::runIterationThread()
 {
+	PreventMachineHibernationWhileThisThreadIsAlive();
+
     ReadSupplier *supplier = readSupplierGenerator->generateNewReadSupplier();
     if (NULL == supplier) {
         //

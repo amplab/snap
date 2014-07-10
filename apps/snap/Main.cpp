@@ -36,7 +36,7 @@ Revision History:
 
 using namespace std;
 
-const char *SNAP_VERSION = "1.0dev.23"; 
+const char *SNAP_VERSION = "1.0dev.25"; 
 
 static void usage()
 {
@@ -65,10 +65,10 @@ int main(int argc, const char **argv)
             unsigned nArgsConsumed;
             if (strcmp(argv[i], "single") == 0) {
                 SingleAlignerContext single;
-                single.runAlignment(argc - (i + 1), argv + i + 1, SNAP_VERSION, &nArgsConsumed);
+                single.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed);
             } else if (strcmp(argv[i], "paired") == 0) {
                 PairedAlignerContext paired;
-                paired.runAlignment(argc - (i + 1), argv + i + 1, SNAP_VERSION, &nArgsConsumed);
+                paired.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed);
             } else {
                 fprintf(stderr, "Invalid command: %s\n\n", argv[i]);
                 usage();

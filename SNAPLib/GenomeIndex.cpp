@@ -239,6 +239,8 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
                                     unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, unsigned hashTableKeySize, 
 									bool large, const char *histogramFileName, unsigned locationSize)
 {
+	PreventMachineHibernationWhileThisThreadIsAlive();
+
     SetInvalidGenomeLocation(locationSize);
 
     bool buildHistogram = (histogramFileName != NULL);
@@ -314,7 +316,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     // AGCT), in which case only the first integer is used.
     //
 
-	OverflowBackpointerAnchor *overflowAnchor = new OverflowBackpointerAnchor(((locationSize == 8) ? 0x8fffffffffffffff : GenomeLocationAsInt64(InvalidGenomeLocation)) - countOfBases);   // i.e., as much as the address space will allow.
+	OverflowBackpointerAnchor *overflowAnchor = new OverflowBackpointerAnchor(__min(((locationSize == 8) ? (_int64)0x8effffffffffffff : GenomeLocationAsInt64(InvalidGenomeLocation)) - countOfBases, countOfBases));   // i.e., as much as the address space will allow.
    
     WriteStatusMessage("%llds\nBuilding hash tables.\n", (timeInMillis() + 500 - start) / 1000);
   
@@ -530,7 +532,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
                     }
 
 					if (timeInMillis() - lastPrintTime > 60 * 1000) {
-						WriteStatusMessage("%lld/%lld duplicate seeds, %d/%d backpointers, %d/%d hash tables processed\n", 
+						WriteStatusMessage("%lld/%lld duplicate seeds, %lld/%lld backpointers, %d/%d hash tables processed\n", 
 							duplicateSeedsProcessed, seedsWithMultipleOccurrences, nBackpointersProcessed, genomeLocationsInOverflowTable,
 							whichHashTable, nHashTables);
 						lastPrintTime = timeInMillis();
@@ -904,10 +906,10 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
         table[i] = (count / distinctSeeds) * ((double)validSeeds / countOfBases) * nHashTables;
     }
 
-    // printf("Bias table:\n");
-    // for (unsigned i = 0; i < nHashTables; i++) {
-    //     printf("%u -> %lf\n", i, table[i]);
-    // }
+    //printf("Bias table:\n");
+    //for (unsigned i = 0; i < nHashTables; i++) {
+    //    printf("%u -> %lf\n", i, table[i]);
+    //}
 
     WriteStatusMessage("Computed bias table in %llds\n", (timeInMillis() + 500 - start) / 1000);
 }
@@ -1728,7 +1730,7 @@ GenomeIndex::lookupSeed(
 
         _ASSERT(seed.getHighBases(hashTableKeySize) < nHashTables);
         _uint64 lowBases = seed.getLowBases(hashTableKeySize);
-        _ASSERT(hashTables[seed.getHighBases(hashTableKeySize)]->GetValueSizeInBytes() == 4);
+        _ASSERT(hashTables[seed.getHighBases(hashTableKeySize)]->GetValueSizeInBytes() > 4);
 
         const char *entry = (char *)hashTables[seed.getHighBases(hashTableKeySize)]->GetFirstValueForKey(lowBases);
         if (NULL == entry) {
@@ -1774,7 +1776,7 @@ GenomeIndex::lookupSeed(
 			    }
 		    } else {
                 GenomeLocation entryByValue = 0;
-                memcpy(&entryByValue, entry, locationSize);  // WAssumes little endian
+                memcpy(&entryByValue, entry, locationSize);  // Assumes little endian
 
                 if (FORWARD == dir) {
 			        fillInLookedUpResults(entryByValue,  nHits, hits, singleHit);

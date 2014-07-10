@@ -338,12 +338,12 @@ AlignerContext::parseOptions(
     }
 
     options->extra = extension->extraOptions();
-    if (argc < 2) {
+    if (argc < 3) {
         WriteErrorMessage("Too few parameters\n");
         options->usage();
     }
 
-    options->indexDir = argv[0];
+    options->indexDir = argv[1];
     struct InputList {
         SNAPFile    input;
         InputList*  next;
@@ -357,7 +357,7 @@ AlignerContext::parseOptions(
 
     int i;
     int nInputs = 0;
-    for (i = 1; i < argc; i++) {
+    for (i = 2; i < argc; i++) {	// Starting at 2 skips single/paired and the index
 
         if (',' == argv[i][0]  && '\0' == argv[i][1]) {
             i++;    // Consume the comma

@@ -162,8 +162,8 @@ SimpleReadWriter::writePair(
     }
 
     GenomeLocation locations[2];
-    locations[0] = result->status[0] != NotFound ? result->location[0] : UINT32_MAX;
-    locations[1] = result->status[1] != NotFound ? result->location[1] : UINT32_MAX;
+    locations[0] = result->status[0] != NotFound ? result->location[0] : InvalidGenomeLocation;
+	locations[1] = result->status[1] != NotFound ? result->location[1] : InvalidGenomeLocation;
     int first = locations[0] > locations[1];
     int second = 1 - first;
     for (int pass = 0; pass < 2; pass++) {

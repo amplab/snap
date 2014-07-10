@@ -243,6 +243,11 @@ _uint64 InterlockedCompareExchange64AndReturnOldValue(volatile _uint64 *valueToU
     return (_uint64) InterlockedCompareExchange(valueToUpdate, replacementValue, desiredPreviousValue);
 }
 
+void* InterlockedCompareExchangePointerAndReturnOldValue(void * volatile *valueToUpdate, void* replacementValue, void* desiredPreviousValue)
+{
+    return InterlockedCompareExchangePointer(valueToUpdate, replacementValue, desiredPreviousValue);
+}
+
 struct WrapperThreadContext {
     ThreadMainFunction      mainFunction;
     void                    *mainFunctionParameter;
@@ -876,6 +881,10 @@ FileMapper::prefetch(size_t currentRead)
 }
 #endif
 
+void PreventMachineHibernationWhileThisThreadIsAlive()
+{
+	SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED);
+}
 #else   // _MSC_VER
 
 #if defined(__MACH__)
@@ -1808,6 +1817,10 @@ FileMapper::prefetch(size_t currentRead)
 }
 #endif
 
+void PreventMachineHibernationWhileThisThreadIsAlive()
+{
+	// Only implemented for Windows
+}
 #endif  // _MSC_VER
 
 AsyncFile* AsyncFile::open(const char* filename, bool write)

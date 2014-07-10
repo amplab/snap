@@ -334,6 +334,8 @@ void PairedAlignerContext::runTask()
 
 void PairedAlignerContext::runIterationThread()
 {
+	PreventMachineHibernationWhileThisThreadIsAlive();
+
     PairedReadSupplier *supplier = pairedReadSupplierGenerator->generateNewPairedReadSupplier();
 
     if (NULL == supplier) {
