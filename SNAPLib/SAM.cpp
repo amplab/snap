@@ -1190,8 +1190,8 @@ SAMFormat::computeCigarString(
     data += extraBasesClippedBefore;
     dataLength -= extraBasesClippedBefore;
 
-    if (dataLength > MAXINT - MAX_K) {
-        dataLength = MAXINT - MAX_K;
+    if (dataLength > INT32_MAX - MAX_K) {
+        dataLength = INT32_MAX - MAX_K;
     }
 
     const char *reference = genome->getSubstring(genomeLocation, dataLength);

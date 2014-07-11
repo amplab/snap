@@ -913,8 +913,8 @@ IntersectingPairedEndAligner::scoreLocation(
     _ASSERT(!memcmp(data+seedOffset, readToScore->getData() + seedOffset, seedLen));    // that the seed actually matches
 
     int textLen;
-    if (genomeDataLength - tailStart > MAXINT) {
-        textLen = MAXINT;
+    if (genomeDataLength - tailStart > INT32_MAX) {
+        textLen = INT32_MAX;
     } else {
         textLen = (int)(genomeDataLength - tailStart);
     }

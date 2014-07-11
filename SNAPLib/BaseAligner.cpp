@@ -516,14 +516,14 @@ Return Value:
                 }
 
                 const unsigned prefetchDepth = 30;
-                _int64 limit = min(nHits[direction], maxHitsToConsider) + prefetchDepth;
+                _int64 limit = min(nHits[direction], (_int64)maxHitsToConsider) + prefetchDepth;
                 for (unsigned iBase = 0 ; iBase < limit; iBase += prefetchDepth) {
                     //
                     // This works in two phases: we launch prefetches for a group of hash table lines,
                     // then we do all of the inserts, and then repeat.
                     //
 
-                    _int64 innerLimit = min(iBase + prefetchDepth, min(nHits[direction], maxHitsToConsider));
+		  _int64 innerLimit = min((_int64)iBase + prefetchDepth, min(nHits[direction], (_int64)maxHitsToConsider));
                     if (doAlignerPrefetch) {
                         for (unsigned i = iBase; i < innerLimit; i++) {
                             if (doesGenomeIndexHave64BitLocations) {
