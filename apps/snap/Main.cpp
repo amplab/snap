@@ -74,7 +74,7 @@ int main(int argc, const char **argv)
                 usage();
             }
             _ASSERT(nArgsConsumed > 0);
-            i += nArgsConsumed + 1;  // +1 for single or paired
+            i += nArgsConsumed;
         }
     } else {
         fprintf(stderr, "Invalid command: %s\n\n", argv[1]);

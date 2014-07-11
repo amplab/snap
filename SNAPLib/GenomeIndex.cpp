@@ -771,7 +771,7 @@ GenomeIndex::~GenomeIndex()
     delete genome;
     genome = NULL;
 
-    if (NULL == tablesBlob) {
+    if (NULL != tablesBlob) {
         BigDealloc(tablesBlob);
         tablesBlob = NULL;
     }
