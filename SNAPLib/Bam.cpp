@@ -745,7 +745,7 @@ BAMFormat::writeRead(
                     size_t fieldLen;
                     SAMReader::skipToBeyondNextFieldSeparator(p, aux + auxLen, &fieldLen);
                     aux = p;
-                    auxLen = (unsigned) fieldLen - 1;
+                    auxLen = (unsigned) fieldLen;
                     translateReadGroupFromSAM = true;
                     break;
                 }
@@ -808,8 +808,9 @@ BAMFormat::writeRead(
             auxData->tag[0] = 'R';
             auxData->tag[1] = 'G';
             auxData->val_type = 'Z';
-            memcpy(auxData->value(), aux + 5, auxLen - 4);
-            ((char*)auxData->value())[auxLen-1] = 0;
+            memcpy(auxData->value(), aux + 5, auxLen - 5);
+            ((char*)auxData->value())[auxLen-5] = 0;
+            auxLen -= 1; // RG:Z:xxx -> RGZxxx\0
         }
     }
     // RG
@@ -833,6 +834,7 @@ BAMFormat::writeRead(
     if (NULL != spaceUsed) {
         *spaceUsed = bamSize;
     }
+    // debugging: _ASSERT(0 == memcmp(bam->firstAux()->tag, "RG", 2) && 0 == memcmp(bam->firstAux()->next()->tag, "PG", 2) && 0 == memcmp(bam->firstAux()->next()->next()->tag, "NM", 2));
     bam->validate();
     return true;
 }
