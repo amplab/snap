@@ -194,6 +194,19 @@ GenomeIndex::runIndexer(
         locationSize = 5;
     }
 
+	if (seedLen * 2 < keySizeInBytes * 8) {
+		WriteErrorMessage("You must specify a smaller keysize or a larger seed size.  The seed must be big enough to fill the key\n"
+			"and takes two bits per base of seed.\n");
+		soft_exit(1);
+	}
+
+	if (seedLen * 2 - keySizeInBytes * 8 > 16) {
+		WriteErrorMessage("You must specify a biger keysize or smaller seed len.  SNAP restricts the number of hash tables to 4^8,\n"
+			"and needs 4^{excess seed len} hash tables, where excess seed len is the seed size minus the four times the key size.\n");
+		soft_exit(1);
+	}
+
+
     WriteStatusMessage("Hash table slack %lf\nLoading FASTA file '%s' into memory...", slack, fastaFile);
 
     BigAllocUseHugePages = false;

@@ -51,7 +51,7 @@ public:
         bool          noUkkonen_,
         bool          noOrderedEvaluation_);
 
-     static unsigned getMaxSecondaryResults(unsigned numSeedsFromCommandLine, double seedCoverage, unsigned maxReadSize, unsigned maxHits, unsigned seedLength)
+     static unsigned getMaxSecondaryResults(unsigned numSeedsFromCommandLine, double seedCoverage, unsigned maxReadSize, unsigned maxHits, unsigned seedLength, unsigned minSpacing, unsigned maxSpacing)
      {
         unsigned maxSeedsToUse;
         if (0 != numSeedsFromCommandLine) {
@@ -59,7 +59,12 @@ public:
         } else {
             maxSeedsToUse = (unsigned)(maxReadSize * seedCoverage / seedLength);
         }
-        return 2 * maxHits * maxSeedsToUse;
+
+		//
+		// The number of hits we can conceivably get is for each seed a result for every hit, times every possible pair for that hit.  The possible pairs
+		// run from min to max distance on either side, but if they're within max merge distance then they'll be merged.
+		//
+        return NUM_DIRECTIONS * maxHits * maxSeedsToUse * (maxSpacing - minSpacing + 1 + maxMergeDistance - 1) / maxMergeDistance * 2;
      }
 
      void setLandauVishkin(
@@ -124,12 +129,14 @@ private:
     unsigned        maxSpacing;
     unsigned        seedLen;
     bool            doesGenomeIndexHave64BitLocations;
-    unsigned        maxMergeDistance;
     _int64          nLocationsScored;
     bool            noUkkonen;
     bool            noOrderedEvaluation;
 
-    // It's a template, because we 
+	static const unsigned        maxMergeDistance;
+	
+	//
+	// It's a template, because we 
     // have different sizes of genome locations depending on the hash table format.  So, GL must be unsigned or GenomeLocation
     //    
     template<class GL> struct HashTableLookup {
