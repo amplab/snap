@@ -768,7 +768,7 @@ BAMFormat::writeRead(
     BAMAlignment* bam = (BAMAlignment*) buffer;
     bam->block_size = (int)bamSize - 4;
     bam->refID = contigIndex;
-    if (positionInContig > MAXINT || matePositionInContig > MAXINT) {
+    if (positionInContig > INT32_MAX || matePositionInContig > INT32_MAX) {
         WriteErrorMessage("Can't write read to BAM file because aligned position (or mate position) within contig > 2^31, which is the limit for the BAM format.\n");
         soft_exit(1);
     }
