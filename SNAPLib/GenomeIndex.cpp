@@ -194,7 +194,7 @@ GenomeIndex::runIndexer(
         locationSize = 5;
     }
 
-	if (seedLen * 2 < keySizeInBytes * 8) {
+	if ((unsigned)seedLen * 2 < keySizeInBytes * 8) {
 		WriteErrorMessage("You must specify a smaller keysize or a larger seed size.  The seed must be big enough to fill the key\n"
 			"and takes two bits per base of seed.\n");
 		soft_exit(1);
