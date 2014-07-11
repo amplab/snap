@@ -97,7 +97,7 @@ public:
 
     void truncate(int newCount)
     {
-        count = min(count, newCount);
+        count = _min(count, newCount);
     }
     
     inline void push_back(V& value)
