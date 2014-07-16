@@ -1309,11 +1309,7 @@ GenomeIndex::completeIndexing(PerHashTableBatch *batches, BuildHashTablesThreadC
         stats->unrecordedSkippedSeeds = 0; // All except the first time through the loop this will be 0.        
         AcquireExclusiveLock(&context->hashTableLocks[whichHashTable]);
 		for (unsigned i = 0; i < batches[whichHashTable].nUsed; i++) {
-			/*BJB*/ if (whichHashTable == 57 && i == 1)
-			{
-				printf("Here!\n");
-			}
-            ApplyHashTableUpdate(context, whichHashTable, batches[whichHashTable].entries[i].genomeLocation, 
+			ApplyHashTableUpdate(context, whichHashTable, batches[whichHashTable].entries[i].genomeLocation, 
                 batches[whichHashTable].entries[i].lowBases, batches[whichHashTable].entries[i].usingComplement,
                 &stats->bothComplementsUsed, &stats->genomeLocationsInOverflowTable, 
                 &stats->seedsWithMultipleOccurrences, large);
