@@ -680,6 +680,10 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
             snapFile->isCompressed = !strcmp(args[0], "-compressedFastq");
 
             if (paired) {
+				if (nArgs < 3) {
+					WriteErrorMessage("paired FASTQ requires two consecutive input files, and the last item on your command line is the first half of a FASTQ pair.\n");
+					soft_exit(1);
+				}
                 snapFile->fileType = FASTQFile;
                 snapFile->secondFileName = args[2];
                 if (!strcmp("-", args[2])) {
@@ -759,7 +763,11 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
         snapFile->isStdio = !strcmp(args[0], "-");
 
         if (paired) {
-            snapFile->secondFileName = args[1];
+			if (nArgs < 2) {
+				WriteErrorMessage("paired FASTQ requires two input files, and the last item on your command line is the first half of a FASTQ pair.\n");
+				soft_exit(1);
+			}
+			snapFile->secondFileName = args[1];
             if (!strcmp(args[1], "-")) {
                 if (snapFile->isStdio) {
                     WriteErrorMessage("Can't have both halves of paired FASTQ files be stdin ('-').  Did you mean to use the interleaved FASTQ type?\n");

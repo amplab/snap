@@ -36,7 +36,7 @@ Revision History:
 
 using namespace std;
 
-const char *SNAP_VERSION = "1.0dev.29"; 
+const char *SNAP_VERSION = "1.0dev.30"; 
 
 static void usage()
 {
