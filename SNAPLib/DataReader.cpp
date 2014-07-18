@@ -325,7 +325,8 @@ ReadBasedDataReader::nextBatch()
     info->state = InUse;
     _uint32 overflow = max((unsigned) info->offset, info->nBytesThatMayBeginARead) - info->nBytesThatMayBeginARead;
     _int64 nextStart = info->fileOffset + info->nBytesThatMayBeginARead; // for validation
-
+    //fprintf(stderr, "ReadBasedDataReader:nextBatch() finished buffer %d, starting buffer %d\n", nextBufferForConsumer, info->next);
+    //fprintf(stderr, "ReadBasedDataReader:nextBatch() skipping %u overflow bytes used in previous batch\n", overflow);
     nextBufferForConsumer = info->next;
 
     bool first = true;
@@ -426,6 +427,7 @@ ReadBasedDataReader::releaseBatch(
                     info->state = Empty;
                     // remove from ready list
                     if (i == nextBufferForConsumer) {
+                        //fprintf(stderr, "ReadBasedDataReader::releaseBatch change nextBufferForConsumer %d->%d\n", nextBufferForConsumer, info->next);
                         nextBufferForConsumer = info->next;
                     }
                     if (i == lastBufferForConsumer) {
@@ -680,6 +682,7 @@ StdioDataReader::startIo()
         info->previous = lastBufferForConsumer;
         lastBufferForConsumer = index;
 		if (nextBufferForConsumer == -1) {
+            //fprintf(stderr, "StdioDataReader::startIo set nextBufferForConsumder -1 -> %d\n", index);
 			nextBufferForConsumer = index;
 		}
        
@@ -706,6 +709,7 @@ StdioDataReader::startIo()
                 headerOverrunSize = 0;
             } else {
                 bytesToCopy = overflowBytes;
+                //fprintf(stderr, "StdioDataReader:startIO(): copy %lld bytes from overflow\n", bytesToCopy);
             }
 
             memcpy(info->buffer, overflowBuffer, bytesToCopy);

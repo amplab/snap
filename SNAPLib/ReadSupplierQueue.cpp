@@ -624,13 +624,17 @@ ReadSupplierFromQueue::getNextRead()
         return NULL;
     }
 
+    ReadQueueElement* doneElement = NULL;
     if (NULL != currentElement && nextReadIndex >= currentElement->totalReads) {
-        queue->doneWithElement(currentElement);
+        doneElement = currentElement;
         currentElement = NULL;
     }
 
     if (NULL == currentElement) {
         currentElement = queue->getElement();
+        if (doneElement != NULL) {
+            queue->doneWithElement(doneElement);
+        }
         if (NULL == currentElement) {
             done = true;
             queue->supplierFinished();

@@ -1449,7 +1449,7 @@ BaseAligner::finalizeSecondaryResults(
     // close enough.  Get rid of those now.
     //
 
-    int worstScoreToKeep = bestScore + maxEditDistanceForSecondaryResults;
+    int worstScoreToKeep = min((int)maxK, bestScore + maxEditDistanceForSecondaryResults);
 
     int i = 0;
     while (i < *nSecondaryResults) {
