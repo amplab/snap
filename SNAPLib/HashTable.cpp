@@ -23,6 +23,7 @@ Environment:
 #include "Genome.h"
 #include "Error.h"
 #include "GenericFile_Blob.h"
+#include "Compat.h"
 
 SNAPHashTable::SNAPHashTable(
     unsigned    i_tableSize,
@@ -307,6 +308,8 @@ SNAPHashTable::Insert(KeyType key, ValueType *data)
         return false;
     }
 
+	usedElementCount++;
+
     setKey(entry, key);
     for (unsigned i = 0; i < valueCount; i++) {
         memcpy((char *)entry + i * valueSizeInBytes, &data[i], valueSizeInBytes);   // Assumes little endian
@@ -315,6 +318,9 @@ SNAPHashTable::Insert(KeyType key, ValueType *data)
     return true;
 }
 
-
+void SNAPHashTable::prefetch(KeyType key)
+{
+	_mm_prefetch((const char *)getEntry(hash(key) % tableSize), _MM_HINT_T1);
+}
 
 const unsigned SNAPHashTable::magic = 0xb111b010;

@@ -65,6 +65,11 @@ public:
         genome->prefetchData(genomeLocation);
     }
 
+	//
+	// And this issues a prefetch for the hits
+	//
+	void prefetchLookup(Seed seed);
+
     inline int getSeedLength() const { return seedLen; }
 
     virtual ~GenomeIndex();

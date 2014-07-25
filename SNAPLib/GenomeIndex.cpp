@@ -1612,6 +1612,11 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     return index;
 }
 
+void GenomeIndex::prefetchLookup(Seed seed)
+{
+	hashTables[seed.getHighBases(hashTableKeySize)]->prefetch(seed.getLowBases(hashTableKeySize));
+}
+
     void
 GenomeIndex::lookupSeed32(
     Seed              seed,

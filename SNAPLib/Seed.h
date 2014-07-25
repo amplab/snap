@@ -52,7 +52,9 @@ struct Seed {
         }
     }
 
-    inline Seed() {}
+    inline Seed() {
+		bases = reverseComplement = 0;
+	}
 
     inline Seed(_int64 i_bases, _int64 i_reverseComplement)
         : bases(i_bases), reverseComplement(i_reverseComplement)

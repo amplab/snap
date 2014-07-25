@@ -32,11 +32,12 @@ Revision History:
 #include "exit.h"
 #include "SeedSequencer.h"
 #include "AlignerOptions.h"
+#include "KMerAligner.h"
 
 
 using namespace std;
 
-const char *SNAP_VERSION = "1.0dev.31"; 
+const char *SNAP_VERSION = "1.0dev.31 + kmer counting"; 
 
 static void usage()
 {
@@ -46,6 +47,7 @@ static void usage()
             "   index    build a genome index\n"
             "   single   align single-end reads\n"
             "   paired   align paired-end reads\n"
+			"   kmer     count kMers that aren't in the reference but occur more than once\n"
             "Type a command without arguments to see its help.\n");
     soft_exit(1);
 }
@@ -60,12 +62,15 @@ int main(int argc, const char **argv)
         usage();
     } else if (strcmp(argv[1], "index") == 0) {
         GenomeIndex::runIndexer(argc - 2, argv + 2);
-    } else if (strcmp(argv[1], "single") == 0 || strcmp(argv[1], "paired") == 0) {
+    } else if (strcmp(argv[1], "single") == 0 || strcmp(argv[1], "paired") == 0 || strcmp(argv[1], "kmer") == 0) {
         for (int i = 1; i < argc; /* i is increased below */) {
             unsigned nArgsConsumed;
-            if (strcmp(argv[i], "single") == 0) {
-                SingleAlignerContext single;
-                single.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed);
+			if (strcmp(argv[i], "single") == 0) {
+				SingleAlignerContext single;
+				single.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed);
+			} else if (strcmp(argv[i], "kmer") == 0) {
+					KMerAlignerContext kmer;
+					kmer.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed);
             } else if (strcmp(argv[i], "paired") == 0) {
                 PairedAlignerContext paired;
                 paired.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed);

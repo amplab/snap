@@ -187,6 +187,7 @@
     <ClInclude Include="HashTable.h" />
     <ClInclude Include="Histogram.h" />
     <ClInclude Include="IntersectingPairedEndAligner.h" />
+    <ClInclude Include="KMerAligner.h" />
     <ClInclude Include="LandauVishkin.h" />
     <ClInclude Include="mapq.h" />
     <ClInclude Include="MultiInputReadSupplier.h" />
@@ -240,6 +241,7 @@
     <ClCompile Include="HashTable.cpp" />
     <ClCompile Include="Histogram.cpp" />
     <ClCompile Include="IntersectingPairedEndAligner.cpp" />
+    <ClCompile Include="KMerAligner.cpp" />
     <ClCompile Include="LandauVishkin.cpp" />
     <ClCompile Include="mapq.cpp" />
     <ClCompile Include="MultiInputReadSupplier.cpp" />

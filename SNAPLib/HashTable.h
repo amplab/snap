@@ -137,6 +137,8 @@ class SNAPHashTable {
         //
         ValueType *SlowLookup(KeyType key);
 
+		void prefetch(KeyType key);
+
 //bjb private:
 
         SNAPHashTable() {}
@@ -189,6 +191,12 @@ class SNAPHashTable {
         {
             memcpy((char *)entry + valueSizeInBytes * valueCount, &key, keySizeInBytes);
         }
+
+		inline KeyType getKey(void *entry) {
+			KeyType key = 0;
+			memcpy(&key, (const char *)entry + valueSizeInBytes * valueCount, keySizeInBytes);	// Requires little endian
+			return key;
+		}
  
         void *Table;
         size_t tableSize;
