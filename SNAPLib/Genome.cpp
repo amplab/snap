@@ -147,11 +147,26 @@ Genome::saveToFile(const char *fileName) const
         fprintf(saveFile,"%lld %s\n",contigs[i].beginningLocation, contigs[i].name);
     }
 
-    if (nBases != fwrite(bases, 1, nBases, saveFile)) {
-        WriteErrorMessage("Genome::saveToFile: fwrite failed\n");
-        fclose(saveFile);
-        return false;
-    }
+	//
+	// Write it out in (big) chunks.  For whatever reason, fwrite with really big sizes seems not to
+	// work as well as one would like.
+	//
+	const size_t max_chunk_size = 1 * 1024 * 1024 * 1024;	// 1 GB (or GiB for the obsessively precise)
+
+	size_t bases_to_write = nBases;
+	size_t bases_written = 0;
+	while (bases_to_write > 0) {
+		size_t bases_this_write = __min(bases_to_write, max_chunk_size);
+		if (bases_this_write != fwrite(bases + bases_written, 1, bases_this_write, saveFile)) {
+			WriteErrorMessage("Genome::saveToFile: fwrite failed\n");
+			fclose(saveFile);
+			return false;
+		}
+		bases_to_write -= bases_this_write;
+		bases_written += bases_this_write;
+	}
+
+	_ASSERT(bases_written == nBases);
 
     fclose(saveFile);
     return true;

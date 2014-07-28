@@ -36,7 +36,7 @@ Revision History:
 
 using namespace std;
 
-const char *SNAP_VERSION = "1.0dev.31"; 
+const char *SNAP_VERSION = "1.0dev.32"; 
 
 static void usage()
 {
@@ -47,7 +47,7 @@ static void usage()
             "   single   align single-end reads\n"
             "   paired   align paired-end reads\n"
             "Type a command without arguments to see its help.\n");
-    soft_exit(1);
+    exit(1);    // Don't use soft_exit, it's confusing people to get an "error" message after the usage
 }
 
 int main(int argc, const char **argv)

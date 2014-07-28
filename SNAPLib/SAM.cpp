@@ -757,7 +757,7 @@ SAMFormat::writeHeader(
 	delete [] commandLine;
 	commandLine = NULL;
     if (bytesConsumed >= headerBufferSize) {
-        WriteErrorMessage("SAMWriter: header buffer too small\n");
+        //WriteErrorMessage("SAMWriter: header buffer too small\n");
         return false;
     }
 
@@ -775,7 +775,7 @@ SAMFormat::writeHeader(
                     (context.headerMatchesIndex || strncmp(p, "@SQ", 3) != 0) &&
                     strncmp(p, "@PG\tID:SNAP\t", 12) != 0) {
                 if (bytesConsumed + (newline - p) + 1 >= headerBufferSize) {
-                    WriteErrorMessage("SAMWriter: header buffer too small\n");
+                    //WriteErrorMessage("SAMWriter: header buffer too small\n");
                     return false;
                 }
                 memcpy(header + bytesConsumed, p, (newline - p));
@@ -788,7 +788,7 @@ SAMFormat::writeHeader(
 			int n = snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "%s\n",
 				rgLine == NULL ? "@RG\tID:FASTQ\tSM:sample" : rgLine);
 			if (n > headerBufferSize - bytesConsumed) {
-				WriteErrorMessage( "SAMWriter: header buffer too small\n");
+				//WriteErrorMessage( "SAMWriter: header buffer too small\n");
                 return false;
             }
 			bytesConsumed += n;
@@ -809,8 +809,8 @@ SAMFormat::writeHeader(
             if (bytesConsumed >= headerBufferSize) {
                 // todo: increase buffer size (or change to write in batch
                 bytesConsumed = originalBytesConsumed;
-                WriteErrorMessage("SAMWriter: header buffer too small, skipping @SQ lines\n");
-                break;
+                //WriteErrorMessage("SAMWriter: header buffer too small, skipping @SQ lines\n");
+                return false;
             }
         }
     }

@@ -86,7 +86,7 @@ AlignerOptions::AlignerOptions(
 AlignerOptions::usage()
 {
     usageMessage();
-    soft_exit(1);
+    soft_exit_no_print(1);    // Don't use soft_exit, it's confusing people to get an error message after the usage
 }
 
     void
