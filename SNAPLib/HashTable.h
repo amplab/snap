@@ -137,7 +137,7 @@ class SNAPHashTable {
         //
         ValueType *SlowLookup(KeyType key);
 
-//bjb private:
+private:
 
         SNAPHashTable() {}
 
@@ -146,6 +146,11 @@ class SNAPHashTable {
         //
         // A hash table entry consists of a set of valueCount values, each of valueSizeInBytes bytes, followed by
         // a key of keySizeInBytes bytes.  The key size must be between 4 and 8 bytes, inclusive.
+        //
+        // Because the size of the fields and the count of values is variable, we can't use a struct and are stuck
+        // with ugly memory manipulation to access the hash table entries.
+        //
+        // The format is 1 or 2 (valueCount) values of size valueSize, followed by keySize bytes of key.
         //
 #if 0
         struct Entry {

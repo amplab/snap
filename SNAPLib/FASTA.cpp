@@ -43,11 +43,6 @@ ReadFASTAGenome(
     //
     _int64 fileSize = QueryFileSize(fileName);
 
-    if (fileSize >> 32 != 0) {
-        WriteErrorMessage("This tool only works with genomes with 2^32 bases or fewer.\n");
-        return NULL;
-    }
-
     FILE *fastaFile = fopen(fileName, "r");
     if (fastaFile == NULL) {
         WriteErrorMessage("Unable to open FASTA file '%s' (even though we already got its size)\n",fileName);
@@ -69,7 +64,7 @@ ReadFASTAGenome(
     }
     rewind(fastaFile);
 
-    Genome *genome = new Genome((unsigned) fileSize + (nChromosomes+1) * chromosomePaddingSize, (unsigned)fileSize + (nChromosomes+1) * chromosomePaddingSize, chromosomePaddingSize);
+    Genome *genome = new Genome(fileSize + (nChromosomes+1) * chromosomePaddingSize, fileSize + (nChromosomes+1) * chromosomePaddingSize, chromosomePaddingSize);
 
     char *paddingBuffer = new char[chromosomePaddingSize+1];
     for (unsigned i = 0; i < chromosomePaddingSize; i++) {

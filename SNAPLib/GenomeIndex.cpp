@@ -82,7 +82,7 @@ static void usage()
             DEFAULT_PADDING,
             DEFAULT_KEY_BYTES,
             DEFAULT_LOCATION_SIZE);
-    soft_exit(1);
+    soft_exit_no_print(1);    // Don't use soft-exit, it's confusing people to get an error message after the usage
 }
 
 
@@ -1085,7 +1085,7 @@ GenomeIndex::BuildHashTablesWorkerThread(BuildHashTablesThreadContext *context)
             continue;
         }
 
-        Seed seed(bases, seedLen);
+		Seed seed(bases, seedLen);
 
         indexSeed(genomeLocation, seed, batches, context, &stats, large);
     } // For each genome base in our area
@@ -1356,12 +1356,18 @@ GenomeIndex::OverflowBackpointerAnchor::getBackpointer(_int64 index)
 	if (table[tableSlot] == NULL) {
         AcquireExclusiveLock(&lock);
         if (table[tableSlot] == NULL) {
-		    table[tableSlot] = (OverflowBackpointer *)BigAlloc(batchSize * sizeof(OverflowBackpointer));
+			OverflowBackpointer *newTableEntry = (OverflowBackpointer *)BigAlloc(batchSize * sizeof(OverflowBackpointer));
 		    for (unsigned i = 0; i < batchSize; i++) {
-			    table[tableSlot][i].genomeLocation = 0xffffffffffffffff;
-			    table[tableSlot][i].nextIndex = 0xffffffffffffffff;
+				newTableEntry[i].genomeLocation = 0xffffffffffffffff;
+				newTableEntry[i].nextIndex = 0xffffffffffffffff;
 		    }
-        }
+
+			//
+			// Don't fill in the table[] pointer until initialization is complete in order to avoid racing with someone writing while we're
+			// initializing.
+			//
+			table[tableSlot] = newTableEntry;
+		}
         ReleaseExclusiveLock(&lock);
 	}
 	return &table[tableSlot][index % batchSize];
