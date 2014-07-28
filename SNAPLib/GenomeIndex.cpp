@@ -188,9 +188,7 @@ GenomeIndex::runIndexer(
     }
 
     if (seedLen < 19 && !computeBias && locationSize < 5) {
-        WriteErrorMessage("For hg19, there are no bias tables for seed lengths < 19, and furthermore you'll need to use 64 bit genome offsets, which will increase memory use.\n");
-        WriteErrorMessage("Setting those options for you.\n");
-        computeBias = false;
+		WriteErrorMessage("For hg19 with seedLen < 19, you'll need to use 5 byte location size (which will use more memory).  Setting that option for you.\n");
         locationSize = 5;
     }
 

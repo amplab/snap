@@ -307,7 +307,11 @@ SNAPHashTable::Insert(KeyType key, ValueType *data)
         return false;
     }
 
-    setKey(entry, key);
+	if (!isKeyEqual(entry, key)) {
+		setKey(entry, key);
+		usedElementCount++;
+	}
+
     for (unsigned i = 0; i < valueCount; i++) {
         memcpy((char *)entry + i * valueSizeInBytes, &data[i], valueSizeInBytes);   // Assumes little endian
     }
