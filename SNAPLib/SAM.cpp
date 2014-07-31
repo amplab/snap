@@ -1186,7 +1186,7 @@ SAMFormat::computeCigarString(
     //
     // Apply the extra clipping.
     //
-    genomeLocation += extraBasesClippedBefore;
+	genomeLocation += extraBasesClippedBefore + basesClippedBefore;
     data += extraBasesClippedBefore;
     dataLength -= extraBasesClippedBefore;
 

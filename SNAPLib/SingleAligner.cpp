@@ -172,6 +172,11 @@ SingleAlignerContext::runIterationThread()
         int nSecondaryResults = 0;
 
         aligner->AlignRead(read, &result, maxSecondaryAligmmentAdditionalEditDistance, secondaryAlignmentBufferCount, &nSecondaryResults, secondaryAlignments);
+		result.correctAlignmentForSoftClipping(read, index->getGenome());
+
+		for (int i = 0; i < nSecondaryResults; i++) {
+			secondaryAlignments[i].correctAlignmentForSoftClipping(read, index->getGenome());
+		}
 
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;

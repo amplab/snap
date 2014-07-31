@@ -216,6 +216,7 @@
     <ClCompile Include="AlignerContext.cpp" />
     <ClCompile Include="AlignerOptions.cpp" />
     <ClCompile Include="AlignerStats.cpp" />
+    <ClCompile Include="AlignmentResult.cpp" />
     <ClCompile Include="ApproximateCounter.cpp" />
     <ClCompile Include="Bam.cpp" />
     <ClCompile Include="BaseAligner.cpp" />

@@ -137,6 +137,7 @@ PairedReadMatcher::~PairedReadMatcher()
         BigDealloc(*i);
     }
     delete single;
+	DestroyExclusiveLock(&blockLock);
 }
 
     ReadWithOwnMemory*

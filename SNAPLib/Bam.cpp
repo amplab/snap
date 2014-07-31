@@ -868,7 +868,7 @@ BAMFormat::computeCigarOps(
     //
     // Apply the extra clipping.
     //
-    genomeLocation += extraBasesClippedBefore;
+	genomeLocation += extraBasesClippedBefore + basesClippedBefore;
     data += extraBasesClippedBefore;
     dataLength -= extraBasesClippedBefore;
 
