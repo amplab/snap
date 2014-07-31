@@ -50,12 +50,15 @@ static void usage()
     soft_exit(1);
 }
 
+ExclusiveLock BJBLock;
 
 int main(int argc, const char **argv)
 {
     fprintf(stderr, "Welcome to SNAP version %s.\n\n", SNAP_VERSION);       // Can't use WriteStatusMessage, because we haven't parsed args yet to determine if -hdp is specified.  Just stick with stderr.
 
     InitializeSeedSequencers();
+
+	InitializeExclusiveLock(&BJBLock);
 
     if (argc < 2) {
         usage();
@@ -81,4 +84,6 @@ int main(int argc, const char **argv)
         fprintf(stderr, "Invalid command: %s\n\n", argv[1]);
         usage();
     }
+
+	DestroyExclusiveLock(&BJBLock);
 }

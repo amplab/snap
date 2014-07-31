@@ -62,13 +62,13 @@ SingleAlignerContext::runTask()
 }
 
 extern unsigned flt3itdLowerBound, flt3itdUpperBound;
+const unsigned minMatchLength = 45;
+const int maxDifferences = 3;
 
     bool
 isFLT3ITDOneDirection(Read *read, GenomeIndex *genomeIndex, LandauVishkin<1> *lv, unsigned *alignedLocation)
 {
     *alignedLocation = -1;
-    const unsigned minMatchLength = 50;
-    const int maxDifferences = 3;
 
     int bestDifference = maxDifferences + 1;
 
@@ -117,22 +117,6 @@ isFLT3ITDOneDirection(Read *read, GenomeIndex *genomeIndex, LandauVishkin<1> *lv
                 bestDifference = editDistance;
             }
 
-        }
-    }
-
-    if (bestDifference <= maxDifferences) return true;
-
-    //
-    // Check for the pattern you'd expect from the end of 2812's ITD
-    //
-    const char *itdEnd = "AGTACTCATTATCTGAGGAG";
-    const char *itdEnd2 = "ATTCTCTGAAATCAACGTAG";
-    size_t itdEndLen = strlen(itdEnd);
-    size_t itdEnd2Len = strlen(itdEnd2);
-    for (int i = 0; i < readLen - itdEndLen; i++) {
-        if (!memcmp(read->getData() + i, itdEnd, itdEndLen) || !memcmp(read->getData() + i, itdEnd2, itdEnd2Len)) {
-            *alignedLocation = 1;
-            return true;
         }
     }
 
@@ -293,9 +277,74 @@ SingleAlignerContext::runIterationThread()
             wasError = wgsimReadMisaligned(read, result.location, index, options->misalignThreshold);
         }
 
-        if (NotFound == result.status && isFLT3ITD(read, index, &lv, &result) || result.location >= flt3itdLowerBound && result.location <= flt3itdUpperBound) {
+		if (NotFound == result.status && isFLT3ITD(read, index, &lv, &result) /*|| result.location >= flt3itdLowerBound && result.location <= flt3itdUpperBound*/) {
+
+
+
+			extern ExclusiveLock BJBLock;
+			AcquireExclusiveLock(&BJBLock);
+#if 1
+			if (result.direction == RC) {
+				read->becomeRC();
+			}
+
+			unsigned editDistances[MAX_READ_LENGTH];
+			for (int prefixSize = minMatchLength - maxDifferences; prefixSize < read->getDataLength(); prefixSize++) {
+				editDistances[prefixSize] = lv.computeEditDistance(index->getGenome()->getSubstring(result.location, prefixSize + maxDifferences), prefixSize + maxDifferences, read->getData(), prefixSize, 62);
+			}
+
+			unsigned editDistanceDeltas[MAX_READ_LENGTH];
+			for (int prefixSize = minMatchLength - maxDifferences + 1; prefixSize < read->getDataLength(); prefixSize++) {
+				if (editDistances[prefixSize] == -1) {
+					editDistanceDeltas[prefixSize] = 1;
+				}
+				else {
+					editDistanceDeltas[prefixSize] = editDistances[prefixSize] - editDistances[prefixSize - 1];
+				}
+			}
+
+			double biggestDifference = 0;
+			unsigned breakpoint = 0;
+			for (int prefixSize = minMatchLength - maxDifferences + 2; prefixSize < read->getDataLength() - 1; prefixSize++) {
+				double prefixTotal = 0;
+				double prefixCount = 0;
+				double postfixTotal = 0;
+				double postfixCount = 0;
+
+				for (int i = minMatchLength - maxDifferences + 1; i < read->getDataLength(); i++) {
+					if (i < prefixSize) {
+						prefixCount++;
+						prefixTotal += editDistanceDeltas[i];
+					}
+					else {
+						postfixCount++;
+						postfixTotal += editDistanceDeltas[i];
+					}
+				}
+
+				double prefixAverage = prefixTotal / prefixCount;
+				double postfixAverage = postfixTotal / postfixCount;
+
+				if (postfixAverage - prefixAverage > biggestDifference) {
+					biggestDifference = postfixAverage - prefixAverage;
+					breakpoint = prefixSize + result.location;
+				}
+			}
+
+			if (0 == breakpoint) {
+				printf("Read aligned ITD with no breakpoint, possibly mapped to ITD rather than normal.  aligned to %lld, data %.*s\n", result.location, read->getDataLength(), read->getData());
+			} else {
+				printf("Possible breakpoint at %lld, first 5 bases %.*s, whole read %.*s\n", breakpoint, 5, read->getData() + breakpoint - result.location, read->getDataLength(), read->getData());
+			}
+
+			if (result.direction == RC) {
+				read->becomeRC();
+			}
+#endif	// 0
             writeRead(read, result, false);
             result.status = SingleHit;
+
+			ReleaseExclusiveLock(&BJBLock);
         } else {
             result.status = NotFound;
             result.location = -1;

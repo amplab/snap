@@ -552,6 +552,8 @@ Return Value:
                         // Find the genome location where the beginning of the read would hit, given a match on this seed.
                         //
                         unsigned genomeLocationOfThisHit = hits[direction][i] - offset;
+						_ASSERT(genomeLocationOfThisHit < genome->getCountOfBases());
+
                         if (genomeLocationOfThisHit < minLocation ||
                                 genomeLocationOfThisHit > maxLocation ||
                                 hits[direction][i] < offset) {

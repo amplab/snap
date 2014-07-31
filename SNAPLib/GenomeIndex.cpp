@@ -1221,13 +1221,14 @@ GenomeIndex::OverflowBackpointerAnchor::getBackpointer(unsigned index)
 	if (table[tableSlot] == NULL) {
         AcquireExclusiveLock(&lock);
         if (table[tableSlot] == NULL) {
-		    table[tableSlot] = (OverflowBackpointer *)BigAlloc(batchSize * sizeof(OverflowBackpointer));
+			OverflowBackpointer *newSlot = (OverflowBackpointer *)BigAlloc(batchSize * sizeof(OverflowBackpointer));
 		    for (unsigned i = 0; i < batchSize; i++) {
-			    table[tableSlot][i].genomeOffset = 0xffffffff;
-			    table[tableSlot][i].nextIndex = 0xffffffff;
+				newSlot[i].genomeOffset = 0xffffffff;
+				newSlot[i].nextIndex = 0xffffffff;
 		    }
-        }
-        ReleaseExclusiveLock(&lock);
+			table[tableSlot] = newSlot;
+		}
+		ReleaseExclusiveLock(&lock);
 	}
 	return &table[tableSlot][index % batchSize];
 }
@@ -1237,7 +1238,7 @@ const unsigned GenomeIndex::OverflowBackpointerAnchor::batchSize = 1024 * 1024;
     void
 GenomeIndex::printBiasTables()
 {
-    for (int keySize = 0; keySize <= largestKeySize; keySize++) {
+    for (int keySize = 0; keySize <= largestKeySize; keySize++) {                                                                                                                                                                                                                                                                                                                                                                                                                          
         for (int seedSize = 0; seedSize <= largestBiasTable; seedSize++) {
             if (NULL != hg19_biasTables_large[keySize][seedSize]) {
                 printf("static double hg19_biasTable%d_%d_large[] = {\n", seedSize, keySize);
