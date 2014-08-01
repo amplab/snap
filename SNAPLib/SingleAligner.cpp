@@ -31,7 +31,6 @@ Revision History:
 #include "Range.h"
 #include "SAM.h"
 #include "Tables.h"
-#include "WGsim.h"
 #include "AlignerContext.h"
 #include "AlignerOptions.h"
 #include "FASTQ.h"
@@ -61,12 +60,12 @@ SingleAlignerContext::runTask()
     task.run();
 }
 
-extern unsigned flt3itdLowerBound, flt3itdUpperBound;
+extern GenomeLocation flt3itdLowerBound, flt3itdUpperBound;
 const unsigned minMatchLength = 45;
 const int maxDifferences = 3;
 
     bool
-isFLT3ITDOneDirection(Read *read, GenomeIndex *genomeIndex, LandauVishkin<1> *lv, unsigned *alignedLocation)
+isFLT3ITDOneDirection(Read *read, GenomeIndex *genomeIndex, LandauVishkin<1> *lv, GenomeLocation *alignedLocation)
 {
     *alignedLocation = -1;
 
@@ -86,10 +85,16 @@ isFLT3ITDOneDirection(Read *read, GenomeIndex *genomeIndex, LandauVishkin<1> *lv
 
         Seed seed(read->getData() + nextSeedToTest, seedLen);
 
-        unsigned        nHits[NUM_DIRECTIONS];      // Number of times this seed hits in the genome
-        const unsigned  *hits[NUM_DIRECTIONS];      // The actual hits (of size nHits)
+        _int64					nHits[NUM_DIRECTIONS];      // Number of times this seed hits in the genome
+        const GenomeLocation	*hits[NUM_DIRECTIONS];      // The actual hits (of size nHits)
+		GenomeLocation			singletonHits[NUM_DIRECTIONS];
+		const unsigned			*hits32[NUM_DIRECTIONS];
 
-        genomeIndex->lookupSeed(seed, flt3itdLowerBound, flt3itdUpperBound, &nHits[0], &hits[0], &nHits[1], &hits[1]);
+		if (genomeIndex->doesGenomeIndexHave64BitLocations()) {
+			genomeIndex->lookupSeed(seed, flt3itdLowerBound, flt3itdUpperBound, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC], &singletonHits[FORWARD], &singletonHits[RC]);
+		} else {
+			genomeIndex->lookupSeed32(seed, flt3itdLowerBound, flt3itdUpperBound, &nHits[FORWARD], &hits32[FORWARD], &nHits[RC], &hits32[RC]);
+		}
 
         //
         // Since we're only going one direction, ignore the RC versions.
@@ -99,24 +104,37 @@ isFLT3ITDOneDirection(Read *read, GenomeIndex *genomeIndex, LandauVishkin<1> *lv
             //
             // Or at the end.
             //
-            editDistance = lv->computeEditDistance(genomeIndex->getGenome()->getSubstring(hits[FORWARD][whichHit] + readLen - nextSeedToTest - minMatchLength, minMatchLength + maxDifferences), minMatchLength + maxDifferences, read->getData() + readLen - minMatchLength, 
+			GenomeLocation hitLocation;
+			if (genomeIndex->doesGenomeIndexHave64BitLocations()) {
+				hitLocation = hits[FORWARD][whichHit];
+			} else {
+				hitLocation = hits32[FORWARD][whichHit];
+			}
+			editDistance = lv->computeEditDistance(genomeIndex->getGenome()->getSubstring(hitLocation + readLen - nextSeedToTest - minMatchLength, minMatchLength + maxDifferences), minMatchLength + maxDifferences, read->getData() + readLen - minMatchLength,
                 __min(readLen, minMatchLength), maxDifferences);
 
             if (editDistance < bestDifference && editDistance >= 0) {
                 bestDifference = editDistance;
-                *alignedLocation = hits[FORWARD][whichHit] - nextSeedToTest;
+				if (genomeIndex->doesGenomeIndexHave64BitLocations()) {
+					*alignedLocation = hits[FORWARD][whichHit] - nextSeedToTest;
+				} else {
+					*alignedLocation = hits32[FORWARD][whichHit] - nextSeedToTest;
+				}
             }
 
             //
             // See if it matches at the beginning of the read.
             //
-            editDistance = lv->computeEditDistance(genomeIndex->getGenome()->getSubstring(hits[FORWARD][whichHit] - nextSeedToTest, minMatchLength + maxDifferences), minMatchLength + maxDifferences, read->getData(), __min(readLen, minMatchLength), maxDifferences);
+			editDistance = lv->computeEditDistance(genomeIndex->getGenome()->getSubstring(hitLocation - nextSeedToTest, minMatchLength + maxDifferences), minMatchLength + maxDifferences, read->getData(), __min(readLen, minMatchLength), maxDifferences);
 
             if (editDistance < bestDifference && editDistance >= 0) {
-                *alignedLocation = hits[FORWARD][whichHit] - nextSeedToTest;
-                bestDifference = editDistance;
+				if (genomeIndex->doesGenomeIndexHave64BitLocations()) {
+					*alignedLocation = hits[FORWARD][whichHit] - nextSeedToTest;
+				} else {
+					*alignedLocation = hits32[FORWARD][whichHit] - nextSeedToTest;
+				}
+				bestDifference = editDistance;
             }
-
         }
     }
 
@@ -135,7 +153,7 @@ isFLT3ITD(Read *read, GenomeIndex *index, LandauVishkin<1> *lv, SingleAlignmentR
         }
     }
 
-    unsigned rcLocation;
+    GenomeLocation rcLocation;
     read->becomeRC();
     bool is = isFLT3ITDOneDirection(read, index, lv, &rcLocation);
     if (is) {
@@ -153,6 +171,8 @@ isFLT3ITD(Read *read, GenomeIndex *index, LandauVishkin<1> *lv, SingleAlignmentR
     void
 SingleAlignerContext::runIterationThread()
 {
+	PreventMachineHibernationWhileThisThreadIsAlive();
+
     ReadSupplier *supplier = readSupplierGenerator->generateNewReadSupplier();
     if (NULL == supplier) {
         //
@@ -262,6 +282,11 @@ SingleAlignerContext::runIterationThread()
         int nSecondaryResults = 0;
 
         aligner->AlignRead(read, &result, maxSecondaryAligmmentAdditionalEditDistance, secondaryAlignmentBufferCount, &nSecondaryResults, secondaryAlignments);
+		result.correctAlignmentForSoftClipping(read, index->getGenome());
+
+		for (int i = 0; i < nSecondaryResults; i++) {
+			secondaryAlignments[i].correctAlignmentForSoftClipping(read, index->getGenome());
+		}
 
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;
@@ -272,15 +297,7 @@ SingleAlignerContext::runIterationThread()
 
         allocator->checkCanaries();
 
-        bool wasError = false;
-        if (result.status != NotFound && computeError) {
-            wasError = wgsimReadMisaligned(read, result.location, index, options->misalignThreshold);
-        }
-
 		if (NotFound == result.status && isFLT3ITD(read, index, &lv, &result) /*|| result.location >= flt3itdLowerBound && result.location <= flt3itdUpperBound*/) {
-
-
-
 			extern ExclusiveLock BJBLock;
 			AcquireExclusiveLock(&BJBLock);
 #if 1
@@ -297,15 +314,14 @@ SingleAlignerContext::runIterationThread()
 			for (int prefixSize = minMatchLength - maxDifferences + 1; prefixSize < read->getDataLength(); prefixSize++) {
 				if (editDistances[prefixSize] == -1) {
 					editDistanceDeltas[prefixSize] = 1;
-				}
-				else {
+				} else {
 					editDistanceDeltas[prefixSize] = editDistances[prefixSize] - editDistances[prefixSize - 1];
 				}
 			}
 
 			double biggestDifference = 0;
-			unsigned breakpoint = 0;
-			for (int prefixSize = minMatchLength - maxDifferences + 2; prefixSize < read->getDataLength() - 1; prefixSize++) {
+			GenomeLocation breakpoint = 0;
+			for (_int64 prefixSize = minMatchLength - maxDifferences + 2; prefixSize < read->getDataLength() - 1; prefixSize++) {
 				double prefixTotal = 0;
 				double prefixCount = 0;
 				double postfixTotal = 0;
@@ -315,8 +331,7 @@ SingleAlignerContext::runIterationThread()
 					if (i < prefixSize) {
 						prefixCount++;
 						prefixTotal += editDistanceDeltas[i];
-					}
-					else {
+					} else {
 						postfixCount++;
 						postfixTotal += editDistanceDeltas[i];
 					}
@@ -327,30 +342,30 @@ SingleAlignerContext::runIterationThread()
 
 				if (postfixAverage - prefixAverage > biggestDifference) {
 					biggestDifference = postfixAverage - prefixAverage;
-					breakpoint = prefixSize + result.location;
+					breakpoint = prefixSize + GenomeLocationAsInt64(result.location);
 				}
 			}
 
-			if (0 == breakpoint) {
+			if (0 == GenomeLocationAsInt64(breakpoint)) {
 				printf("Read aligned ITD with no breakpoint, possibly mapped to ITD rather than normal.  aligned to %lld, data %.*s\n", result.location, read->getDataLength(), read->getData());
 			} else {
-				printf("Possible breakpoint at %lld, first 5 bases %.*s, whole read %.*s\n", breakpoint, 5, read->getData() + breakpoint - result.location, read->getDataLength(), read->getData());
+				printf("Possible breakpoint at %lld, first 5 bases %.*s, whole read %.*s\n", GenomeLocationAsInt64(breakpoint), 5, read->getData() + GenomeLocationAsInt64(breakpoint) - GenomeLocationAsInt64(result.location), read->getDataLength(), read->getData());
 			}
 
 			if (result.direction == RC) {
 				read->becomeRC();
 			}
 #endif	// 0
+
             writeRead(read, result, false);
             result.status = SingleHit;
-
 			ReleaseExclusiveLock(&BJBLock);
         } else {
             result.status = NotFound;
             result.location = -1;
         }
 
-        updateStats(stats, read, result.status, result.location, result.score, result.mapq, wasError);
+        updateStats(stats, read, result.status, result.score, result.mapq);
     }
 
     aligner->~BaseAligner(); // This calls the destructor without calling operator delete, allocator owns the memory.
@@ -379,16 +394,11 @@ SingleAlignerContext::updateStats(
     AlignerStats* stats,
     Read* read,
     AlignmentResult result,
-    unsigned location, 
     int score,
-    int mapq,
-    bool wasError)
+    int mapq)
 {
     if (isOneLocation(result)) {
         stats->singleHits++;
-        if (computeError) {
-            stats->errors += wasError ? 1 : 0;
-        }
     } else if (result == MultipleHits) {
         stats->multiHits++;
     } else {
@@ -399,7 +409,6 @@ SingleAlignerContext::updateStats(
     if (result != NotFound) {
         _ASSERT(mapq >= 0 && mapq <= AlignerStats::maxMapq);
         stats->mapqHistogram[mapq]++;
-        stats->mapqErrors[mapq] += wasError ? 1 : 0;
     }
 }
 

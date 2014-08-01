@@ -243,6 +243,11 @@ _uint64 InterlockedCompareExchange64AndReturnOldValue(volatile _uint64 *valueToU
     return (_uint64) InterlockedCompareExchange(valueToUpdate, replacementValue, desiredPreviousValue);
 }
 
+void* InterlockedCompareExchangePointerAndReturnOldValue(void * volatile *valueToUpdate, void* replacementValue, void* desiredPreviousValue)
+{
+    return InterlockedCompareExchangePointer(valueToUpdate, replacementValue, desiredPreviousValue);
+}
+
 struct WrapperThreadContext {
     ThreadMainFunction      mainFunction;
     void                    *mainFunctionParameter;
@@ -876,6 +881,10 @@ FileMapper::prefetch(size_t currentRead)
 }
 #endif
 
+void PreventMachineHibernationWhileThisThreadIsAlive()
+{
+	SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED);
+}
 #else   // _MSC_VER
 
 #if defined(__MACH__)
@@ -969,8 +978,18 @@ public:
 
     bool waitWithTimeout(_int64 timeoutInMillis) {
         struct timespec wakeTime;
+#ifdef __LINUX__
         clock_gettime(CLOCK_REALTIME, &wakeTime);
         wakeTime.tv_nsec += timeoutInMillis * 1000000;
+#elif defined(__MACH__)
+        clock_serv_t cclock;
+        mach_timespec_t mts;
+        host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
+        clock_get_time(cclock, &mts);
+        mach_port_deallocate(mach_task_self(), cclock);
+        wakeTime.tv_nsec = mts.tv_nsec + timeoutInMillis * 1000000;
+        wakeTime.tv_sec = mts.tv_sec;
+#endif
         wakeTime.tv_sec += wakeTime.tv_nsec / 1000000000;
         wakeTime.tv_nsec = wakeTime.tv_nsec % 1000000000;
 
@@ -1110,6 +1129,11 @@ _uint32 InterlockedCompareExchange32AndReturnOldValue(volatile _uint32 *valueToU
 _uint64 InterlockedCompareExchange64AndReturnOldValue(volatile _uint64 *valueToUpdate, _uint64 replacementValue, _uint64 desiredPreviousValue)
 {
   return (_uint64) __sync_val_compare_and_swap((volatile _int64 *) valueToUpdate, desiredPreviousValue, replacementValue);
+}
+
+void* InterlockedCompareExchangePointerAndReturnOldValue(void * volatile *valueToUpdate, void* replacementValue, void* desiredPreviousValue)
+{
+  return __sync_val_compare_and_swap(valueToUpdate, desiredPreviousValue, replacementValue);
 }
 
 namespace {
@@ -1808,6 +1832,10 @@ FileMapper::prefetch(size_t currentRead)
 }
 #endif
 
+void PreventMachineHibernationWhileThisThreadIsAlive()
+{
+	// Only implemented for Windows
+}
 #endif  // _MSC_VER
 
 AsyncFile* AsyncFile::open(const char* filename, bool write)

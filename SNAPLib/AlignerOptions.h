@@ -67,7 +67,6 @@ struct AlignerOptions : public AbstractOptions
     double              seedCoverage;       // Exclusive with numSeeds; this is readSize/seedSize
     bool                seedCountSpecified; // Has either -n or -sc been specified?  This bool is used to make sure they're not both specified on the command line
     unsigned            maxHits;
-    bool                computeError;
     bool                bindToProcessors;
     bool                ignoreMismatchedIDs;
     SNAPFile            outputFile;
@@ -84,7 +83,6 @@ struct AlignerOptions : public AbstractOptions
     bool                stopOnFirstHit;
 	bool				useM;	// Should we generate CIGAR strings using = and X, or using the old-style M?
     unsigned            gapPenalty; // if non-zero use gap penalty aligner
-    unsigned            misalignThreshold; // For error reporting: min distance from real location to mark a read as misaligned
     AbstractOptions    *extra; // extra options
     const char         *rgLineContents;
     const char         *perfFileName;

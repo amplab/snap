@@ -29,6 +29,7 @@
 ipch
 obj
 *.vsp
+*.vspx
 *.psess
 *.tlog
 *.lastbuildstate

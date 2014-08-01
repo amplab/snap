@@ -71,10 +71,8 @@ GenericFile *GenericFile::open(const char *filename, Mode mode)
 	return retval;
 }
 
-// gets -- read until a newline. Based on the K&R implementation, but
-// a zillion times slower because we're going all the way out to the JVM
-// for each character. We can buffer locally if perf hurts too much.
-char *GenericFile::gets(char *buf, size_t count)
+// gets -- read until a newline. Based on the K&R implementation.
+char *GenericFile::_gets_impl(char *buf, size_t count)
 {
 	int c;
 	char *next;

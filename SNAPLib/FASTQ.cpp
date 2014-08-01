@@ -219,6 +219,8 @@ FASTQReader::getNextRead(Read *readToUpdate)
     return true;
 }
 
+// static char LAST[100000]; static int LASTLEN = 0;
+
     _int64
 FASTQReader::getReadFromBuffer(char *buffer, _int64 validBytes, Read *readToUpdate, const char *fileName, DataReader *data, const ReaderContext &context)
 {
@@ -255,8 +257,9 @@ FASTQReader::getReadFromBuffer(char *buffer, _int64 validBytes, Read *readToUpda
             soft_exit(1);
         }
         if (! isValidStartingCharacterForNextLine[(i + 3) % 4][*scan]) {
-            WriteErrorMessage("FASTQ file has invalid starting character at offset %lld, line type %d, char %c\n", data->getFileOffset(), (i + 3) % 4, *scan);
+            WriteErrorMessage("FASTQ file has invalid starting character at offset %lld, line type %d, char %c\n", data->getFileOffset(), i, *scan);
             WriteErrorMessage("Line in question: '%.*s'\n", lineLen, scan);
+            //WriteErrorMessage("Preceding record: '%.*s'\n", LASTLEN, LAST);
             soft_exit(1);
         }
         lines[i] = scan;
@@ -265,10 +268,13 @@ FASTQReader::getReadFromBuffer(char *buffer, _int64 validBytes, Read *readToUpda
     }
 
     const char *id = lines[0] + 1; // The '@' on the first line is not part of the ID
-    readToUpdate->init(id, (unsigned) lineLengths[0] - 1, lines[1], lines[3], lineLengths[1]);
+    const char* space = strnchr(id, ' ', lineLengths[0] - 1);
+    readToUpdate->init(id, space != NULL ? (unsigned) (space - id) : (unsigned) lineLengths[0] - 1, lines[1], lines[3], lineLengths[1]);
     readToUpdate->clip(context.clipping);
     readToUpdate->setBatch(data->getBatch());
     readToUpdate->setReadGroup(context.defaultReadGroup);
+
+    // memcpy(LAST, buffer, scan - buffer); LASTLEN = scan - buffer;
 
     return scan - buffer;
 

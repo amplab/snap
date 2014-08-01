@@ -25,6 +25,7 @@ Revision History:
 #include "Compat.h"
 #include "Read.h"
 #include "ParallelTask.h"
+#include "Genome.h"
 
 class DataWriterSupplier;
 
@@ -56,7 +57,7 @@ public:
 		virtual void inHeader(bool flag) {} // default do nothing
 
         // called when a chunk of data (i.e. a single read) has been written into the file
-        virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location) = 0;
+        virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location) = 0;
 
         // called when a batch has been completed, after advancing to the next
         // e.g. so use getBatch(-1, ...) to get the one that was just completed
@@ -96,7 +97,7 @@ public:
 
     // advance within current buffer, reducing available space
     // should be called on each read, with the location
-    virtual void advance(unsigned bytes, unsigned location = 0) = 0;
+    virtual void advance(GenomeDistance bytes, GenomeLocation location = 0) = 0;
 
     // get complete data buffer in batch, relative==0 is current, relative==-1 is previous, etc.
     // if negative gets old data written, else waits for write to complete so you can write into it

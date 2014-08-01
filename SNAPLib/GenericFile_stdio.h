@@ -30,6 +30,7 @@ class GenericFile_stdio : public GenericFile
 public:
 	static GenericFile_stdio *open(const char *filename, Mode mode);
 	virtual size_t read(void *ptr, size_t count);
+	virtual int getchar();
 	virtual char *gets(char *buf, size_t count);
 	virtual int advance(long long offset);
 	virtual ~GenericFile_stdio();

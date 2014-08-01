@@ -54,7 +54,7 @@ Arguments:
         return;
     }
 
-    Table = BigAlloc(tableSize * elementSize);
+	Table = BigAlloc(tableSize * elementSize);
     ownsMemoryForTable = true;
 
     //
@@ -64,6 +64,7 @@ Arguments:
 
     for (unsigned i = 0; i < tableSize; i++) {
         void *entry = getEntry(i);
+		_ASSERT(entry >= Table && entry <= (char *)Table + tableSize * elementSize);
         clearKey(entry);
         memcpy(getEntry(i), &invalidValueValue, valueSizeInBytes);
     }

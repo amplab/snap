@@ -38,7 +38,6 @@ Revision History:
 #include "SAM.h"
 #include "ChimericPairedEndAligner.h"
 #include "Tables.h"
-#include "WGsim.h"
 #include "AlignerOptions.h"
 #include "AlignerContext.h"
 #include "AlignerStats.h"
@@ -338,6 +337,8 @@ void PairedAlignerContext::runTask()
 
 void PairedAlignerContext::runIterationThread()
 {
+	PreventMachineHibernationWhileThisThreadIsAlive();
+
     PairedReadSupplier *supplier = pairedReadSupplierGenerator->generateNewPairedReadSupplier();
 
     if (NULL == supplier) {
@@ -393,7 +394,7 @@ void PairedAlignerContext::runIterationThread()
         maxPairedSecondaryHits = 0;
         maxSingleSecondaryHits = 0;
     } else {
-        maxPairedSecondaryHits = IntersectingPairedEndAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, index->getSeedLength());
+        maxPairedSecondaryHits = IntersectingPairedEndAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, index->getSeedLength(), minSpacing, maxSpacing);
         maxSingleSecondaryHits = ChimericPairedEndAligner::getMaxSingleEndSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, index->getSeedLength());
     }
 
@@ -490,6 +491,21 @@ void PairedAlignerContext::runIterationThread()
         aligner->align(read0, read1, &result, maxSecondaryAligmmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, secondaryResults, 
             maxSingleSecondaryHits, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1],singleSecondaryResults);
 
+		Read *reads[NUM_READS_PER_PAIR] = {read0, read1};
+		result.correctAlignmentForSoftClipping(reads, index->getGenome());
+
+		for (int i = 0; i < nSecondaryResults; i++) {
+			secondaryResults[i].correctAlignmentForSoftClipping(reads, index->getGenome());
+		}
+
+		for (int i = 0; i < nSingleSecondaryResults[0]; i++) {
+			singleSecondaryResults[i].correctAlignmentForSoftClipping(read0, index->getGenome());
+		}
+
+		for (int i = nSingleSecondaryResults[0]; i < nSingleSecondaryResults[0] + nSingleSecondaryResults[1]; i++) {
+			singleSecondaryResults[i].correctAlignmentForSoftClipping(read1, index->getGenome());
+		}
+
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;
         int timeBucket = min(30, cheezyLogBase2(runTime));
@@ -497,7 +513,6 @@ void PairedAlignerContext::runIterationThread()
         stats->nanosByTimeBucket[timeBucket] += runTime;
 #endif // TIME_HISTOGRAM
 
-        Read *reads[2] = {read0, read1};
         unsigned numUnaligned = 0;
         unsigned whichUnaligned;
         for (int i = 0; i < NUM_READS_PER_PAIR; i++) {
@@ -507,7 +522,7 @@ void PairedAlignerContext::runIterationThread()
             }
         }
 
-        extern unsigned flt3itdLowerBound, flt3itdUpperBound;
+        extern GenomeLocation flt3itdLowerBound, flt3itdUpperBound;
 
         SingleAlignmentResult singleResult;
         if (1 == numUnaligned && result.location[1 - whichUnaligned] > flt3itdLowerBound - 1000 && result.location[1 - whichUnaligned] < flt3itdUpperBound + 1000 && isFLT3ITD(reads[whichUnaligned], index, &lv, &singleResult)) {
@@ -571,13 +586,8 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
 {
     // Update stats
     for (int r = 0; r < 2; r++) {
-        bool wasError = false;
-        if (computeError && result->status[r] != NotFound) {
-            wasError = wgsimReadMisaligned((r == 0 ? read0 : read1), result->location[r], index, options->misalignThreshold);
-        }
         if (isOneLocation(result->status[r])) {
             stats->singleHits++;
-            stats->errors += wasError ? 1 : 0;
         } else if (result->status[r] == MultipleHits) {
             stats->multiHits++;
         } else {
@@ -589,7 +599,6 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
             int mapq = result->mapq[r];
             _ASSERT(mapq >= 0 && mapq <= AlignerStats::maxMapq);
             stats->mapqHistogram[mapq]++;
-            stats->mapqErrors[mapq] += wasError ? 1 : 0;
         }
     }
 

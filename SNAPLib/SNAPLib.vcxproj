@@ -155,10 +155,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="Aligner.h" />
     <ClInclude Include="AlignerContext.h" />
     <ClInclude Include="AlignerOptions.h" />
     <ClInclude Include="AlignerStats.h" />
+    <ClInclude Include="AlignmentResult.h" />
     <ClInclude Include="ApproximateCounter.h" />
     <ClInclude Include="Bam.h" />
     <ClInclude Include="BaseAligner.h" />
@@ -210,13 +210,13 @@
     <ClInclude Include="Util.h" />
     <ClInclude Include="VariableSizeMap.h" />
     <ClInclude Include="VariableSizeVector.h" />
-    <ClInclude Include="WGsim.h" />
     <ClInclude Include="WindowsFileMapper.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AlignerContext.cpp" />
     <ClCompile Include="AlignerOptions.cpp" />
     <ClCompile Include="AlignerStats.cpp" />
+    <ClCompile Include="AlignmentResult.cpp" />
     <ClCompile Include="ApproximateCounter.cpp" />
     <ClCompile Include="Bam.cpp" />
     <ClCompile Include="BaseAligner.cpp" />
@@ -267,7 +267,6 @@
     </ClCompile>
     <ClCompile Include="Tables.cpp" />
     <ClCompile Include="Util.cpp" />
-    <ClCompile Include="WGsim.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

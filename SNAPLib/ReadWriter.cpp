@@ -29,6 +29,7 @@ Environment:
 #include "FileFormat.h"
 #include "exit.h"
 #include "Error.h"
+#include "Genome.h"
 
 class SimpleReadWriter : public ReadWriter
 {
@@ -44,7 +45,7 @@ public:
 
     virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine);
 
-    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, unsigned genomeLocation, Direction direction, bool secondaryAlignment);
+    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment);
 
     virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result, bool secondaryAlignment);
 
@@ -70,18 +71,45 @@ SimpleReadWriter::writeHeader(
     size_t size;
     size_t used;
 
+    char *localBuffer = NULL;
+
 	writer->inHeader(true);
     if (! writer->getBuffer(&buffer, &size)) {
         return false;
     }
 
-    if (! format->writeHeader(context, buffer, size, &used, sorted, argc, argv, version, rgLine)) {
-        WriteErrorMessage( "Failed to write header into fresh buffer\n");
-        return false;
+    char *writerBuffer = buffer;
+    size_t writerBufferSize = size;
+
+    while (!format->writeHeader(context, buffer, size, &used, sorted, argc, argv, version, rgLine)) {
+        delete[] localBuffer;
+        size = 2 * size;
+        localBuffer = new char[size];
+        buffer = localBuffer;
     }
 
-    writer->advance((unsigned)used, 0);
-	writer->nextBatch();
+    if (NULL == localBuffer) {
+        _ASSERT(writerBuffer == buffer);
+        writer->advance((unsigned)used, 0);
+        writer->nextBatch();
+    } else {
+        size_t bytesRemainingToWrite = used;
+        size_t bytesWritten = 0;
+        while (bytesRemainingToWrite > 0) {
+            size_t bytesToWrite = __min(bytesRemainingToWrite, writerBufferSize);
+            memcpy(writerBuffer, localBuffer + bytesWritten, bytesToWrite);
+            writer->advance(bytesToWrite);
+            writer->nextBatch();
+            if (!writer->getBuffer(&writerBuffer, &writerBufferSize)) {
+                return false;
+            }
+            bytesWritten += bytesToWrite;
+            bytesRemainingToWrite -= bytesToWrite;
+        }
+
+        delete[] localBuffer;
+    }
+
 	writer->inHeader(false);
     return true;
 }
@@ -91,7 +119,7 @@ SimpleReadWriter::writeRead(
     Read *read,
     AlignmentResult result,
     int mapQuality,
-    unsigned genomeLocation,
+    GenomeLocation genomeLocation,
     Direction direction,
     bool secondaryAlignment)
 {
@@ -159,9 +187,10 @@ SimpleReadWriter::writePair(
                 idLengths[1] -= 2;
         }
     }
-    unsigned locations[2];
-    locations[0] = result->status[0] != NotFound ? result->location[0] : UINT32_MAX;
-    locations[1] = result->status[1] != NotFound ? result->location[1] : UINT32_MAX;
+
+    GenomeLocation locations[2];
+    locations[0] = result->status[0] != NotFound ? result->location[0] : InvalidGenomeLocation;
+	locations[1] = result->status[1] != NotFound ? result->location[1] : InvalidGenomeLocation;
     int first = locations[0] > locations[1];
     int second = 1 - first;
     for (int pass = 0; pass < 2; pass++) {

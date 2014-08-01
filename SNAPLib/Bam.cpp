@@ -350,7 +350,7 @@ BAMAlignment::validate()
 BAMReader::getNextRead(
     Read *read,
     AlignmentResult *alignmentResult,
-    unsigned *genomeLocation,
+    GenomeLocation *genomeLocation,
     bool *isRC,
     unsigned *mapQ,
     unsigned *flag,
@@ -405,7 +405,7 @@ BAMReader::getReadFromLine(
     char *endOfBuffer,
     Read *read,
     AlignmentResult *alignmentResult,
-    unsigned *out_genomeLocation,
+    GenomeLocation *out_genomeLocation,
     bool *isRC,
     unsigned *mapQ,
     size_t *lineLength,
@@ -418,7 +418,7 @@ BAMReader::getReadFromLine(
     _ASSERT((size_t)(endOfBuffer - line) >= bam->size());
     bam->validate();
 
-    unsigned genomeLocation = bam->getLocation(genome);
+    GenomeLocation genomeLocation = bam->getLocation(genome);
 
     if (NULL != out_genomeLocation) {
         _ASSERT(-1 <= bam->refID && bam->refID < (int)genome->getNumContigs());
@@ -512,7 +512,7 @@ class BAMFormat : public FileFormat
 public:
     BAMFormat(bool i_useM) : useM(i_useM) {}
 
-    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* o_location, unsigned* o_readBytes, int* o_refID, int* o_pos) const;
+    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, GenomeLocation* o_location, GenomeDistance* o_readBytes, int* o_refID, int* o_pos) const;
 
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
 
@@ -523,9 +523,9 @@ public:
     virtual bool writeRead(
         const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
-        int mapQuality, unsigned genomeLocation, Direction direction, bool secondaryAlignment,
+        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
-        AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD) const;
+        AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD) const;
 
 private:
 
@@ -533,7 +533,7 @@ private:
         char * cigarBuf, int cigarBufLen,
         const char * data, unsigned dataLength, unsigned basesClippedBefore, unsigned extraBasesClippedBefore, unsigned basesClippedAfter,
         unsigned extraBasesClippedAfter,     unsigned frontHardClipping, unsigned backHardClipping,
-        unsigned genomeLocation, bool isRC, bool useM, int * editDistance);
+        GenomeLocation genomeLocation, bool isRC, bool useM, int * editDistance);
 
     const bool useM;
 };
@@ -545,8 +545,8 @@ BAMFormat::getSortInfo(
     const Genome* genome,
     char* buffer,
     _int64 bytes,
-    unsigned* o_location,
-	unsigned* o_readBytes,
+    GenomeLocation* o_location,
+	GenomeDistance* o_readBytes,
 	int* o_refID,
 	int* o_pos) const
 {
@@ -557,10 +557,10 @@ BAMFormat::getSortInfo(
 			if (bam->next_refID < 0 || bam->next_refID > genome->getNumContigs() || bam->next_pos < 0) {
 				*o_location = UINT32_MAX;
 			} else {
-				*o_location = genome->getContigs()[bam->next_refID].beginningOffset + bam->next_pos;
+				*o_location = genome->getContigs()[bam->next_refID].beginningLocation + bam->next_pos;
 			}
 		} else {
-			*o_location = genome->getContigs()[bam->refID].beginningOffset + bam->pos;
+			*o_location = genome->getContigs()[bam->refID].beginningLocation + bam->pos;
 		}
 	}
 	if (o_readBytes != NULL) {
@@ -645,7 +645,7 @@ BAMFormat::writeHeader(
 		int numContigs = context.genome->getNumContigs();
 		bamHeader->n_ref() = numContigs;
 		BAMHeaderRefSeq* refseq = bamHeader->firstRefSeq();
-		unsigned genomeLen = context.genome->getCountOfBases();
+		GenomeDistance genomeLen = context.genome->getCountOfBases();
 		for (int i = 0; i < numContigs; i++) {
 			int len = (int)strlen(contigs[i].name) + 1;
 			cursor += BAMHeaderRefSeq::size(len);
@@ -654,9 +654,9 @@ BAMFormat::writeHeader(
 			}
 			refseq->l_name = len;
 			memcpy(refseq->name(), contigs[i].name, len);
-			unsigned start = contigs[i].beginningOffset;
-            unsigned end = ((i + 1 < numContigs) ? contigs[i+1].beginningOffset : genomeLen) - context.genome->getChromosomePadding();
-            refseq->l_ref() = end - start;
+			GenomeLocation start = contigs[i].beginningLocation;
+            GenomeLocation end = ((i + 1 < numContigs) ? contigs[i+1].beginningLocation : genomeLen) - context.genome->getChromosomePadding();
+            refseq->l_ref() = (int)(end - start);
 			refseq = refseq->next();
 			_ASSERT((char*) refseq - header == cursor);
 		}
@@ -676,14 +676,14 @@ BAMFormat::writeRead(
     Read * read,
     AlignmentResult result,
     int mapQuality,
-    unsigned genomeLocation,
+    GenomeLocation genomeLocation,
     Direction direction,
     bool secondaryAlignment,
     bool hasMate,
     bool firstInPair,
     Read * mate,
     AlignmentResult mateResult,
-    unsigned mateLocation,
+    GenomeLocation mateLocation,
     Direction mateDirection) const
 {
     const int MAX_READ = MAX_READ_LENGTH;
@@ -693,11 +693,11 @@ BAMFormat::writeRead(
     int flags = 0;
     const char *contigName = "*";
     int contigIndex = -1;
-    unsigned positionInContig = 0;
+    GenomeDistance positionInContig = 0;
     int cigarOps = 0;
     const char *mateContigName = "*";
     int mateContigIndex = -1;
-    unsigned matePositionInContig = 0;
+    GenomeDistance matePositionInContig = 0;
     _int64 templateLength = 0;
 
     char data[MAX_READ];
@@ -707,9 +707,9 @@ BAMFormat::writeRead(
     unsigned fullLength;
     unsigned clippedLength;
     unsigned basesClippedBefore;
-    unsigned extraBasesClippedBefore;
+    GenomeDistance extraBasesClippedBefore;
     unsigned basesClippedAfter;
-    unsigned extraBasesClippedAfter;
+    GenomeDistance extraBasesClippedAfter;
     int editDistance;
 
     if (! SAMFormat::createSAMLine(genome, lv, data, quality, MAX_READ, contigName, contigIndex,
@@ -723,7 +723,7 @@ BAMFormat::writeRead(
     }
     if (genomeLocation != InvalidGenomeLocation) {
         cigarOps = computeCigarOps(genome, lv, (char*) cigarBuf, cigarBufSize * sizeof(_uint32),
-                                   clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter, extraBasesClippedAfter,
+                                   clippedData, clippedLength, basesClippedBefore, (unsigned)extraBasesClippedBefore, basesClippedAfter, (unsigned)extraBasesClippedAfter,
                                    read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
                                    genomeLocation, direction == RC, useM, &editDistance);
     }
@@ -745,7 +745,7 @@ BAMFormat::writeRead(
                     size_t fieldLen;
                     SAMReader::skipToBeyondNextFieldSeparator(p, aux + auxLen, &fieldLen);
                     aux = p;
-                    auxLen = (unsigned) fieldLen - 1;
+                    auxLen = (unsigned) fieldLen;
                     translateReadGroupFromSAM = true;
                     break;
                 }
@@ -768,7 +768,11 @@ BAMFormat::writeRead(
     BAMAlignment* bam = (BAMAlignment*) buffer;
     bam->block_size = (int)bamSize - 4;
     bam->refID = contigIndex;
-    bam->pos = positionInContig - 1;
+    if (positionInContig > INT32_MAX || matePositionInContig > INT32_MAX) {
+        WriteErrorMessage("Can't write read to BAM file because aligned position (or mate position) within contig > 2^31, which is the limit for the BAM format.\n");
+        soft_exit(1);
+    }
+    bam->pos = (int)(positionInContig - 1);
 
     if (qnameLen > 254) {
         WriteErrorMessage("BAM format: QNAME field must be less than 254 characters long, instead it's %lld\n", qnameLen);
@@ -780,16 +784,16 @@ BAMFormat::writeRead(
     for (int i = 0; i < cigarOps; i++) {
         refLength += BAMAlignment::CigarCodeToRefBase[cigarBuf[i] & 0xf] * (cigarBuf[i] >> 4);
     }
-    bam->bin = genomeLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(positionInContig-1, positionInContig-1 + refLength) :
+    bam->bin = genomeLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin((int)positionInContig-1, (int)positionInContig-1 + refLength) :
 		// unmapped is at mate's position, length 1
-		mateLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin(matePositionInContig-1, matePositionInContig) :
+		mateLocation != InvalidGenomeLocation ? BAMAlignment::reg2bin((int)matePositionInContig-1, (int)matePositionInContig) :
 		// otherwise at -1, length 1
 		BAMAlignment::reg2bin(-1, 0);
     bam->n_cigar_op = cigarOps;
     bam->FLAG = flags;
     bam->l_seq = fullLength;
     bam->next_refID = mateContigIndex;
-    bam->next_pos = matePositionInContig - 1;
+    bam->next_pos = (int)matePositionInContig - 1;
     bam->tlen = (int)templateLength;
     memcpy(bam->read_name(), read->getId(), qnameLen);
     bam->read_name()[qnameLen] = 0;
@@ -808,8 +812,9 @@ BAMFormat::writeRead(
             auxData->tag[0] = 'R';
             auxData->tag[1] = 'G';
             auxData->val_type = 'Z';
-            memcpy(auxData->value(), aux + 5, auxLen - 4);
-            ((char*)auxData->value())[auxLen-1] = 0;
+            memcpy(auxData->value(), aux + 5, auxLen - 5);
+            ((char*)auxData->value())[auxLen-5] = 0;
+            auxLen -= 1; // RG:Z:xxx -> RGZxxx\0
         }
     }
     // RG
@@ -833,6 +838,7 @@ BAMFormat::writeRead(
     if (NULL != spaceUsed) {
         *spaceUsed = bamSize;
     }
+    // debugging: _ASSERT(0 == memcmp(bam->firstAux()->tag, "RG", 2) && 0 == memcmp(bam->firstAux()->next()->tag, "PG", 2) && 0 == memcmp(bam->firstAux()->next()->next()->tag, "NM", 2));
     bam->validate();
     return true;
 }
@@ -853,7 +859,7 @@ BAMFormat::computeCigarOps(
     unsigned                    extraBasesClippedAfter,
     unsigned                    frontHardClipping,
     unsigned                    backHardClipping,
-    unsigned                    genomeLocation,
+    GenomeLocation              genomeLocation,
     bool                        isRC,
 	bool						useM,
     int *                       editDistance
@@ -862,7 +868,7 @@ BAMFormat::computeCigarOps(
     //
     // Apply the extra clipping.
     //
-    genomeLocation += extraBasesClippedBefore;
+	genomeLocation += extraBasesClippedBefore + basesClippedBefore;
     data += extraBasesClippedBefore;
     dataLength -= extraBasesClippedBefore;
 
@@ -934,7 +940,7 @@ public:
 	virtual void inHeader(bool flag)
 	{ header = flag; }
 
-    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location);
+    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
 
     virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
 
@@ -982,8 +988,8 @@ BAMFilter::onAdvance(
     DataWriter* writer,
     size_t batchOffset,
     char* data,
-    unsigned bytes,
-    unsigned location)
+    GenomeDistance bytes,
+    GenomeLocation location)
 {
     if (! header) {
         offsets.push_back(batchOffset);
@@ -1078,8 +1084,8 @@ struct DuplicateReadKey
             locations[1] = bam->getNextLocation(genome);
             isRC[0] = (bam->FLAG & SAM_REVERSE_COMPLEMENT) != 0;
             isRC[1] = (bam->FLAG & SAM_NEXT_REVERSED) != 0;
-            if (((((_uint64) locations[0]) << 1) | (isRC[0] ? 1 : 0)) > ((((_uint64) locations[1]) << 1) | (isRC[1] ? 1 : 0))) {
-                const unsigned t = locations[1];
+            if (((((_uint64) GenomeLocationAsInt64(locations[0])) << 1) | (isRC[0] ? 1 : 0)) > ((((_uint64) GenomeLocationAsInt64(locations[1])) << 1) | (isRC[1] ? 1 : 0))) {
+                const GenomeLocation t = locations[1];
                 locations[1] = locations[0];
                 locations[0] = t;
                 const bool f = isRC[1];
@@ -1118,9 +1124,9 @@ struct DuplicateReadKey
     bool operator!=(int x) const
     { return locations[0] != (_uint32) x || locations[1] != (_uint32) x; }
     operator _uint64()
-    { return ((_uint64) (locations[1] ^ (isRC[1] ? 1 : 0))) << 32 | (_uint64) (locations[0] ^ (isRC[0] ? 1 : 0)); }
+    { return ((_uint64) (GenomeLocationAsInt64(locations[1]) ^ (isRC[1] ? 1 : 0))) << 32 | (_uint64) (GenomeLocationAsInt64(locations[0]) ^ (isRC[0] ? 1 : 0)); }
 
-    unsigned locations[2];
+    GenomeLocation locations[2];
     bool isRC[2];
 };
 
@@ -1170,7 +1176,7 @@ private:
 
     const Genome* genome;
     size_t runOffset; // offset in file of first read in run
-    _uint32 runLocation; // location in genome
+    GenomeLocation runLocation; // location in genome
     int runCount; // number of aligned reads
     typedef VariableSizeMap<DuplicateReadKey,DuplicateMateInfo,150,MapNumericHash<DuplicateReadKey>,70,0,-2> MateMap;
     static const _uint64 RunKey = 0xffffffffc0000000UL;
@@ -1188,9 +1194,9 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
     if ((lastBam->FLAG & SAM_SECONDARY) != 0) {
         return; // ignore secondary aliignments; todo: mark them as dups too?
     }
-    unsigned location = lastBam->getLocation(genome);
-    unsigned nextLocation = lastBam->getNextLocation(genome);
-    unsigned logicalLocation = location != UINT32_MAX ? location : nextLocation;
+    GenomeLocation location = lastBam->getLocation(genome);
+    GenomeLocation nextLocation = lastBam->getNextLocation(genome);
+    GenomeLocation logicalLocation = location != InvalidGenomeLocation ? location : nextLocation;
     if (logicalLocation == UINT32_MAX) {
         return;
     }
@@ -1209,7 +1215,7 @@ BAMDupMarkFilter::onRead(BAMAlignment* lastBam, size_t lastOffset, int)
                     ? (((_uint64) UINT32_MAX) << 32) |
                         ((record->FLAG & SAM_REVERSE_COMPLEMENT) ? RunNextRC : 0) |
                         ((record->FLAG & SAM_NEXT_REVERSED) ? RunRC : 0)
-                    : (((_uint64) record->getNextLocation(genome)) << 32) |
+                    : (((_uint64) GenomeLocationAsInt64(record->getNextLocation(genome))) << 32) |
                         ((record->FLAG & SAM_REVERSE_COMPLEMENT) ? RunRC : 0) |
                         ((record->FLAG & SAM_NEXT_REVERSED) ? RunNextRC : 0);
                 entry |= (_uint64) ((offset - runOffset) & RunOffset);
@@ -1543,7 +1549,7 @@ BAMIndexSupplier::onClosed(
 
     for (int i = 0; i < n_ref; i++) {
         RefInfo* info = getRefInfo(i);
-        _int32 n_bin, n_intv;
+        _int64 n_bin, n_intv;
         if (info == NULL) {
             n_bin = 0;
             fwrite(&n_bin, sizeof(n_bin), 1, index);
@@ -1556,7 +1562,7 @@ BAMIndexSupplier::onClosed(
         for (BinMap::iterator j = info->bins.begin(); j != info->bins.end(); j = info->bins.next(j)) {
             _uint32 bin = j->key;
             fwrite(&bin, sizeof(bin), 1, index);
-            _int32 n_chunk = j->value.size();
+            _int64 n_chunk = j->value.size();
             fwrite(&n_chunk, sizeof(n_chunk), 1, index);
             if (bin != BAMAlignment::BAM_EXTRA_BIN) {
                 for (ChunkVec::iterator k = j->value.begin(); k != j->value.end(); k++) {
@@ -1623,7 +1629,7 @@ BAMIndexSupplier::addInterval(
     }
     int slot = end <= 0 ? 0 : ((end - 1) / 16384);
     if (slot >= info->intervals.size()) {
-        for (int i = info->intervals.size(); i < slot; i++) {
+        for (_int64 i = info->intervals.size(); i < slot; i++) {
             info->intervals.push_back(UINT64_MAX);
         }
         info->intervals.push_back(fileOffset);
@@ -1657,3 +1663,6 @@ BgzfHeader::validate(
         ISIZE() == uncompressed&&
         BSIZE() + 1 == compressed;
 }
+
+const int BAMReader::MAX_SEQ_LENGTH = MAX_READ_LENGTH;
+const int BAMReader::MAX_RECORD_LENGTH = MAX_READ_LENGTH * 8;

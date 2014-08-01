@@ -49,12 +49,10 @@ struct AlignerStats : public AbstractStats
     _int64 singleHits;
     _int64 multiHits;
     _int64 notFound;
-    _int64 errors;
     _int64 alignedAsPairs;
     _int64 lvCalls;
     static const unsigned maxMapq = 70;
     unsigned mapqHistogram[maxMapq+1];
-    unsigned mapqErrors[maxMapq+1];
 
 #if TIME_HISTOGRAM
     //

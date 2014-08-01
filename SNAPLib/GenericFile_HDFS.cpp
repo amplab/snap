@@ -346,28 +346,11 @@ int GenericFile_HDFS::getchar()
 	}
 }
 
-// gets -- read until a newline. Based on the K&R implementation, but
-// a zillion times slower because we're going all the way out to the JVM
+// very slow because we're going all the way out to the JVM
 // for each character. We can buffer locally if perf hurts too much.
 char *GenericFile_HDFS::gets(char *buf, size_t count)
 {
-	int c;
-	char *next;
-
-	if (count == 0) {
-		return NULL;
-	}
-
-	next = buf;
-	while (--count > 0 && (c = getchar()) != EOF) {
-		// put the input char into the current pointer position, then increment it.
-		// if a newline is encountered, break
-		if ((*next++ = c) == '\n')
-			break;
-	}
-
-	*next = '\0';
-	return (c == EOF && next == buf) ? NULL : buf;
+	return _gets_impl(buf, count);
 }
 
 int GenericFile_HDFS::advance(long long offset)

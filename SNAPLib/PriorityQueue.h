@@ -36,9 +36,9 @@ public:
     void add(V value, P pri)
     {
         queue.push_back(Entry(value, pri));
-        int ci = queue.size() - 1;
+        _int64 ci = queue.size() - 1;
         while (ci > 0) {
-            int pi = (ci - 1) / 2; // parent index
+            _int64 pi = (ci - 1) / 2; // parent index
             if (queue[ci].priority >= queue[pi].priority) {
                 break; // child >= parent so stop
             }
@@ -50,7 +50,7 @@ public:
 
     V pop(P* o_priority = NULL)
     {
-        int li = queue.size() - 1; // last index (before removal)
+        _int64 li = queue.size() - 1; // last index (before removal)
         Entry frontItem = queue[0];   // fetch the front
         queue[0] = queue[li];
         queue.erase(li);
@@ -91,7 +91,7 @@ public:
     void clear()
     { queue.clear(); }
 
-    int size() const
+    _int64 size() const
     { return queue.size(); }
 
     bool validate()

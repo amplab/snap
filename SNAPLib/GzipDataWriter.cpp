@@ -90,7 +90,7 @@ class GzipWriterFilter : public DataWriter::Filter
 public:
     GzipWriterFilter(GzipWriterFilterSupplier* i_supplier);
 
-    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location);
+    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
 
     virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
 
@@ -300,8 +300,8 @@ GzipWriterFilter::onAdvance(
     DataWriter* writer,
     size_t batchOffset,
     char* data,
-    unsigned bytes,
-    unsigned location)
+    GenomeDistance bytes,
+    GenomeLocation location)
 {
     // nothing
 }

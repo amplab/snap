@@ -51,7 +51,7 @@ public:
         bool          noUkkonen_,
         bool          noOrderedEvaluation_);
 
-     static unsigned getMaxSecondaryResults(unsigned numSeedsFromCommandLine, double seedCoverage, unsigned maxReadSize, unsigned maxHits, unsigned seedLength)
+     static unsigned getMaxSecondaryResults(unsigned numSeedsFromCommandLine, double seedCoverage, unsigned maxReadSize, unsigned maxHits, unsigned seedLength, unsigned minSpacing, unsigned maxSpacing)
      {
         unsigned maxSeedsToUse;
         if (0 != numSeedsFromCommandLine) {
@@ -59,7 +59,12 @@ public:
         } else {
             maxSeedsToUse = (unsigned)(maxReadSize * seedCoverage / seedLength);
         }
-        return 2 * maxHits * maxSeedsToUse;
+
+		//
+		// The number of hits we can conceivably get is for each seed a result for every hit, times every possible pair for that hit.  The possible pairs
+		// run from min to max distance on either side, but if they're within max merge distance then they'll be merged.
+		//
+        return NUM_DIRECTIONS * maxHits * maxSeedsToUse * (maxSpacing - minSpacing + 1 + maxMergeDistance - 1) / maxMergeDistance * 2;
      }
 
      void setLandauVishkin(
@@ -111,7 +116,7 @@ private:
 
     GenomeIndex *   index;
     const Genome *  genome;
-    unsigned        genomeSize;
+    GenomeDistance  genomeSize;
     unsigned        maxReadSize;
     unsigned        maxHits;
     unsigned        maxBigHits;
@@ -123,22 +128,28 @@ private:
     unsigned        minSpacing;
     unsigned        maxSpacing;
     unsigned        seedLen;
-    unsigned        maxMergeDistance;
+    bool            doesGenomeIndexHave64BitLocations;
     _int64          nLocationsScored;
     bool            noUkkonen;
     bool            noOrderedEvaluation;
 
-    struct HashTableLookup {
+	static const unsigned        maxMergeDistance;
+	
+	//
+	// It's a template, because we 
+    // have different sizes of genome locations depending on the hash table format.  So, GL must be unsigned or GenomeLocation
+    //    
+    template<class GL> struct HashTableLookup {
         unsigned        seedOffset;
-        unsigned        nHits;
-        const unsigned  *hits;
+        _int64          nHits;
+        const GL  *     hits;
         unsigned        whichDisjointHitSet;
 
         //
         // We keep the hash table lookups that haven't been exhaused in a circular list.
         //
-        HashTableLookup *nextLookupWithRemainingMembers;
-        HashTableLookup *prevLookupWithRemainingMembers;
+        HashTableLookup<GL> *nextLookupWithRemainingMembers;
+        HashTableLookup<GL> *prevLookupWithRemainingMembers;
 
         //
         // State for handling the binary search of a location in this lookup.
@@ -149,7 +160,7 @@ private:
         // it gets stuck here.
         //
         int limit[2];   // The upper and lower limits of the current binary search in hits
-        unsigned maxGenomeOffsetToFindThisSeed;
+        GL maxGenomeLocationToFindThisSeed;
         
         //
         // A linked list of lookups that haven't yet completed this binary search.  This is a linked
@@ -157,19 +168,28 @@ private:
         // It's done that way to avoid a comparison for list head that would result in a hard-to-predict
         // branch.
         //
-        HashTableLookup *nextLookupForCurrentBinarySearch;
-        HashTableLookup *prevLookupForCurrentBinarySearch;
+        HashTableLookup<GL> *nextLookupForCurrentBinarySearch;
+        HashTableLookup<GL> *prevLookupForCurrentBinarySearch;
 
-        unsigned        currentHitForIntersection;
-     };
+        _int64           currentHitForIntersection;
+
+        //
+        // A place for the hash table to write in singletons.  We need this because when the hash table is
+        // built with > 4 byte genome locations, it usually doesn't store 8 bytes, so we need to
+        // provide the lookup function a place to write the result.  Since we need one per
+        // lookup, it goes here.
+        //
+        GL singletonGenomeLocation[2];  // The [2] is because we need to look one before sometimes, and that allows space
+    };
     
     //
-    // A set of seed hits, represented by the lookups that came out of the big hash table.
+    // A set of seed hits, represented by the lookups that came out of the big hash table.  It can be over 32 or
+    // 64 bit indices, but its external interface is always 64 bits (it extends on the way out if necessary).
     //
     class HashTableHitSet {
     public:
         HashTableHitSet() {}
-        void firstInit(unsigned maxSeeds_, unsigned maxMergeDistance_, BigAllocator *allocator);
+        void firstInit(unsigned maxSeeds_, unsigned maxMergeDistance_, BigAllocator *allocator, bool doesGenomeIndexHave64BitLocations_);
 
         //
         // Reset to empty state.
@@ -185,27 +205,38 @@ private:
 		// seed for it not to hit, and since the reads are disjoint there can't be a case
 		// where the same difference caused two seeds to miss).
         //
-        void recordLookup(unsigned seedOffset, unsigned nHits, const unsigned *hits, bool beginsDisjointHitSet);
+        void recordLookup(unsigned seedOffset, _int64 nHits, const unsigned *hits, bool beginsDisjointHitSet);
+        void recordLookup(unsigned seedOffset, _int64 nHits, const GenomeLocation *hits, bool beginsDisjointHitSet);
 
         //
         // This efficiently works through the set looking for the next hit at or below this address.
         // A HashTableHitSet only allows a single iteration through its address space per call to
         // init().
         //
-        bool    getNextHitLessThanOrEqualTo(unsigned maxGenomeOffsetToFind, unsigned *actualGenomeOffsetFound, unsigned *seedOffsetFound);
+        bool    getNextHitLessThanOrEqualTo(GenomeLocation maxGenomeLocationToFind, GenomeLocation *actualGenomeLocationFound, unsigned *seedOffsetFound);
 
         //
         // Walk down just one step, don't binary search.
         //
-        bool getNextLowerHit(unsigned *genomeLocation, unsigned *seedOffsetFound);
+        bool getNextLowerHit(GenomeLocation *genomeLocation, unsigned *seedOffsetFound);
 
 
         //
         // Find the highest genome address.
         //
-        bool    getFirstHit(unsigned *genomeLocation, unsigned *seedOffsetFound);
+        bool    getFirstHit(GenomeLocation *genomeLocation, unsigned *seedOffsetFound);
 
 		unsigned computeBestPossibleScoreForCurrentHit();
+
+        //
+        // This is bit of storage that the 64 bit lookup needs in order to extend singleton hits into 64 bits, since they may be
+        // stored in the index in fewer.
+        //
+        GenomeLocation *getNextSingletonLocation()
+        {
+            return &lookups64[nLookupsUsed].singletonGenomeLocation[1];
+        }
+
 
     private:
         struct DisjointHitSet {
@@ -213,32 +244,33 @@ private:
             unsigned missCount;
         };
 
-        int             currentDisjointHitSet;
-        DisjointHitSet  *disjointHitSets;
-        HashTableLookup *lookups;
-        HashTableLookup lookupListHead[1];
-        unsigned        maxSeeds;
-        unsigned        nLookupsUsed;
-        unsigned        mostRecentLocationReturned;
-		unsigned		maxMergeDistance;
-
-        // This is effectively a local in getNextHitLessThanOrEqualTo, but since it's dynamically sized we put it here.
-        unsigned        *liveLookups;
+        int                                 currentDisjointHitSet;
+        DisjointHitSet  *                   disjointHitSets;
+        HashTableLookup<unsigned> *         lookups32;
+        HashTableLookup<GenomeLocation> *   lookups64;
+        HashTableLookup<unsigned>           lookupListHead32[1];
+        HashTableLookup<GenomeLocation>     lookupListHead64[1];
+        unsigned                            maxSeeds;
+        unsigned                            nLookupsUsed;
+        GenomeLocation                      mostRecentLocationReturned;
+		unsigned		                    maxMergeDistance;
+        bool                                doesGenomeIndexHave64BitLocations;
     };
 
-    HashTableHitSet *hashTableHitSets[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
-    unsigned        countOfHashTableLookups[NUM_READS_PER_PAIR];
-    unsigned        totalHashTableHits[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
-    unsigned        largestHashTableHit[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
-    unsigned        readWithMoreHits;
-    unsigned        readWithFewerHits;
+    HashTableHitSet *                       hashTableHitSets[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
+
+    int                                     countOfHashTableLookups[NUM_READS_PER_PAIR];
+    _int64                                  totalHashTableHits[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
+    _int64                                  largestHashTableHit[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
+    unsigned                                readWithMoreHits;
+    unsigned                                readWithFewerHits;
 
     //
     // A location that's been scored (or waiting to be scored).  This is needed in order to do merging
     // of close-together hits and to track potential mate pairs.
     //
     struct HitLocation {
-        unsigned        genomeLocation;
+        GenomeLocation  genomeLocation;
         int             genomeLocationOffset;   // This is needed because we might get an offset back from scoring (because it's really scoring a range).
         unsigned        seedOffset;
         bool            isScored;           // Mate pairs are sometimes not scored when they're inserted, because they
@@ -259,7 +291,7 @@ private:
         // right next to one another not to be matches.  There's really no way around this while avoiding
         // matching things that are possibly much more than maxMatchDistance apart.
         //
-        unsigned        genomeLocationOfNearestMatchedCandidate;
+        GenomeLocation  genomeLocationOfNearestMatchedCandidate;
     };
 
 
@@ -280,11 +312,11 @@ private:
 
     BYTE *seedUsed;
 
-    inline bool IsSeedUsed(unsigned indexInRead) const {
+    inline bool IsSeedUsed(_int64 indexInRead) const {
         return (seedUsed[indexInRead / 8] & (1 << (indexInRead % 8))) != 0;
     }
 
-    inline void SetSeedUsed(unsigned indexInRead) {
+    inline void SetSeedUsed(_int64 indexInRead) {
         seedUsed[indexInRead / 8] |= (1 << (indexInRead % 8));
     }
 
@@ -300,7 +332,7 @@ private:
     void scoreLocation(
             unsigned             whichRead,
             Direction            direction,
-            unsigned             genomeLocation,
+            GenomeLocation       genomeLocation,
             unsigned             seedOffset,
             unsigned             scoreLimit,
             unsigned            *score,
@@ -313,12 +345,12 @@ private:
     // close in the genome.
     //
     struct MergeAnchor {
-        double      matchProbability;
-        unsigned    locationForReadWithMoreHits;
-        unsigned    locationForReadWithFewerHits;
-        int         pairScore;
+        double          matchProbability;
+        GenomeLocation  locationForReadWithMoreHits;
+        GenomeLocation  locationForReadWithFewerHits;
+        int             pairScore;
 
-        void init(unsigned locationForReadWithMoreHits_, unsigned locationForReadWithFewerHits_, double matchProbability_, int pairScore_) {
+        void init(GenomeLocation locationForReadWithMoreHits_, GenomeLocation locationForReadWithFewerHits_, double matchProbability_, int pairScore_) {
             locationForReadWithMoreHits = locationForReadWithMoreHits_;
             locationForReadWithFewerHits = locationForReadWithFewerHits_;
             matchProbability = matchProbability_;
@@ -328,9 +360,9 @@ private:
         //
         // Returns whether this candidate is a match for this merge anchor.
         //
-        bool doesRangeMatch(unsigned newMoreHitLocation, unsigned newFewerHitLocation) {
-            unsigned deltaMore = DistanceBetweenGenomeLocations(locationForReadWithMoreHits, newMoreHitLocation);
-            unsigned deltaFewer = DistanceBetweenGenomeLocations(locationForReadWithFewerHits, newFewerHitLocation);
+        bool doesRangeMatch(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation) {
+            GenomeDistance deltaMore = DistanceBetweenGenomeLocations(locationForReadWithMoreHits, newMoreHitLocation);
+            GenomeDistance deltaFewer = DistanceBetweenGenomeLocations(locationForReadWithFewerHits, newFewerHitLocation);
 
             return deltaMore < 50 && deltaFewer < 50;
         }
@@ -339,7 +371,7 @@ private:
         //
         // Returns true and sets oldMatchProbability if this should be eliminated due to a match.
         //
-        bool checkMerge(unsigned newMoreHitLocation, unsigned newFewerHitLocation, double newMatchProbability, int newPairScore, 
+        bool checkMerge(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation, double newMatchProbability, int newPairScore, 
                         double *oldMatchProbability); 
     };
 
@@ -355,14 +387,14 @@ private:
         // index lower, and vice versa.
         //
         double                  matchProbability;
-        unsigned                readWithMoreHitsGenomeLocation;
+        GenomeLocation          readWithMoreHitsGenomeLocation;
         unsigned                bestPossibleScore;
         unsigned                score;
         unsigned                scoreLimit;             // The scoreLimit with which score was computed
         unsigned                seedOffset;
         int                     genomeOffset;
 
-        void init(unsigned readWithMoreHitsGenomeLocation_, unsigned bestPossibleScore_, unsigned seedOffset_) {
+        void init(GenomeLocation readWithMoreHitsGenomeLocation_, unsigned bestPossibleScore_, unsigned seedOffset_) {
             readWithMoreHitsGenomeLocation = readWithMoreHitsGenomeLocation_;
             bestPossibleScore = bestPossibleScore_;
             seedOffset = seedOffset_;
@@ -377,13 +409,13 @@ private:
         ScoringCandidate *      scoreListNext;              // This is a singly-linked list
         MergeAnchor *           mergeAnchor;
         unsigned                scoringMateCandidateIndex;  // Index into the array of scoring mate candidates where we should look 
-        unsigned                readWithFewerHitsGenomeLocation;
+        GenomeLocation          readWithFewerHitsGenomeLocation;
         unsigned                whichSetPair;
         unsigned                seedOffset;
 
         unsigned                bestPossibleScore;
 
-        void init(unsigned readWithFewerHitsGenomeLocation_, unsigned whichSetPair_, unsigned scoringMateCandidateIndex_, unsigned seedOffset_,
+        void init(GenomeLocation readWithFewerHitsGenomeLocation_, unsigned whichSetPair_, unsigned scoringMateCandidateIndex_, unsigned seedOffset_,
                   unsigned bestPossibleScore_, ScoringCandidate *scoreListNext_)
         {
             readWithFewerHitsGenomeLocation = readWithFewerHitsGenomeLocation_;
