@@ -61,7 +61,7 @@ SingleAlignerContext::runTask()
 }
 
 extern GenomeLocation flt3itdLowerBound, flt3itdUpperBound;
-const unsigned minMatchLength = 45;
+const unsigned minMatchLength = 40;
 const int maxDifferences = 3;
 
     bool
@@ -297,7 +297,7 @@ SingleAlignerContext::runIterationThread()
 
         allocator->checkCanaries();
 
-		if (NotFound == result.status && isFLT3ITD(read, index, &lv, &result) /*|| result.location >= flt3itdLowerBound && result.location <= flt3itdUpperBound*/) {
+		if (NotFound == result.status && isFLT3ITD(read, index, &lv, &result) || result.location >= flt3itdLowerBound && result.location <= flt3itdUpperBound) {
 			extern ExclusiveLock BJBLock;
 			AcquireExclusiveLock(&BJBLock);
 #if 1
@@ -346,16 +346,18 @@ SingleAlignerContext::runIterationThread()
 				}
 			}
 
+#if 0
 			if (0 == GenomeLocationAsInt64(breakpoint)) {
 				printf("Read aligned ITD with no breakpoint, possibly mapped to ITD rather than normal.  aligned to %lld, data %.*s\n", result.location, read->getDataLength(), read->getData());
 			} else {
 				printf("Possible breakpoint at %lld, first 5 bases %.*s, whole read %.*s\n", GenomeLocationAsInt64(breakpoint), 5, read->getData() + GenomeLocationAsInt64(breakpoint) - GenomeLocationAsInt64(result.location), read->getDataLength(), read->getData());
 			}
+#endif // 0
 
 			if (result.direction == RC) {
 				read->becomeRC();
 			}
-#endif	// 0
+#endif	// 1
 
             writeRead(read, result, false);
             result.status = SingleHit;

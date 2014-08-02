@@ -164,8 +164,8 @@ AlignerContext::initialize()
                  WriteErrorMessage("Unable to find chr13.  Is this hg19?\n");
                  soft_exit(1);
              }
-             flt3itdLowerBound = chr13 + 28608200;
-             flt3itdUpperBound = chr13 + 28608500;
+             flt3itdLowerBound = chr13 + 28608000;
+             flt3itdUpperBound = chr13 + 28609000;
 
              printf("Reference genome for affected range (chr13:%u - %u): ", flt3itdLowerBound - chr13 + 1, flt3itdUpperBound - chr13 + 1); // +1 because genome coordinates are 1-based
              for (GenomeLocation i = flt3itdLowerBound; i <= flt3itdUpperBound; i++) {
