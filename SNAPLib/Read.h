@@ -436,6 +436,7 @@ public:
         inline unsigned getDataLength() const {return dataLength;}
         inline unsigned getUnclippedLength() const {return unclippedLength;}
         inline unsigned getFrontClippedLength() const {return (unsigned)(data - unclippedData);}    // number of bases clipped from the front of the read
+		inline unsigned getBackClippedLength() const {return unclippedLength - dataLength - getFrontClippedLength();}
         inline void setUnclippedLength(unsigned length) {unclippedLength = length;}
 		inline ReadClippingType getClippingState() const {return clippingState;}
         inline DataBatch getBatch() { return batch; }

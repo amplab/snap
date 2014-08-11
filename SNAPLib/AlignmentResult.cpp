@@ -34,10 +34,10 @@ GenomeLocation correctLocationForSoftClipping(AlignmentResult status, GenomeLoca
 	}
 
 	GenomeLocation newLocation;
-	if (FORWARD == direction && read->getOriginalFrontClipping() != 0) {
-		newLocation = location - read->getOriginalFrontClipping();
-	} else if (RC == direction && read->getOriginalBackClipping() != 0) {
-		newLocation = location - read->getOriginalBackClipping();
+	if (FORWARD == direction && read->getFrontClippedLength() != 0) {
+		newLocation = location - read->getFrontClippedLength();
+	} else if (RC == direction && read->getBackClippedLength() != 0) {
+		newLocation = location - read->getBackClippedLength();
 	} else {
 		return location;
 	}
@@ -66,7 +66,7 @@ SingleAlignmentResult::correctAlignmentForSoftClipping(Read *read, const Genome 
 	void
 PairedAlignmentResult::correctAlignmentForSoftClipping(Read *read[], const Genome *genome)
 {
-	for (Direction direction = FORWARD; direction < NUM_DIRECTIONS; direction++) {
-		location[direction] = correctLocationForSoftClipping(status[direction], location[direction], direction, read[direction], genome);
+	for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+		location[whichRead] = correctLocationForSoftClipping(status[whichRead], location[whichRead], direction[whichRead], read[whichRead], genome);
 	}
 }
