@@ -458,13 +458,15 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
     if (score < 0) {
         return score;
     }
+
     _uint32* bamOps = (_uint32*) bamBuf;
     int bamOpCount = bamBufUsed / sizeof(_uint32);
     bool hasIndels = false;
-    for (int i = 0; i < bamOpCount && ! hasIndels; i++) {
+    for (int i = 0; i < bamOpCount; i++) {
         char c = BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[i])];
-        hasIndels = c == 'I' || c == 'D';
+        hasIndels |= c == 'I' || c == 'D';
     }
+
     if (hasIndels) {
         // run it again in reverse so it pushes indels towards the beginning
         char* text2 = (char*) alloca(textLen + 1);
@@ -497,8 +499,39 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
             WriteErrorMessage( "forward score %d, textUsed %d, bamUsed %d, text/pattern:\n%s\n%s\n",
                 score, textUsed, bamBufUsed, text2, pattern2);
         }
-    }
-    // copy out cigar info
+
+		//
+		// Trim out any trailing insertions, which can just be changed or merge in to X (or M as the case may be).
+		//
+		_ASSERT(bamOpCount > 0);
+		char lastCode = BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[bamOpCount - 1])];
+		if ('I' == lastCode) {
+			//
+			// See if it merges into the previous cigar code (which it will if it's M or X, but not D or =).
+			//
+			if (bamOpCount != 1) {
+				char previousCode = BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[bamOpCount - 2])];
+				if ('X' == previousCode || 'M' == previousCode) {
+					int newCount = BAMAlignment::GetCigarOpCount(bamOps[bamOpCount - 1]) + BAMAlignment::GetCigarOpCount(bamOps[bamOpCount - 2]);
+					bamOps[bamOpCount - 2] = (newCount << 4) | BAMAlignment::CodeToCigar[previousCode];
+					bamOpCount--;
+					bamBufUsed -= sizeof(_uint32);
+				} else if ('=' == previousCode) {
+					//
+					// The previous code was =, which this obviously doesn't.  Convert the final code to X or M.
+					//
+					bamOps[bamOpCount - 1] = (BAMAlignment::GetCigarOpCount(bamOps[bamOpCount - 1]) << 4) | BAMAlignment::CigarToCode[useM ? 'M' : 'X'];
+				}
+			}
+		}
+	}
+
+	_ASSERT(bamOpCount <= 1 || BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[bamOpCount - 1])] != 'I');	// We should have cleared all of these out
+	_ASSERT(bamOpCount <= 1 || BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[bamOpCount - 1])] != 'D');	// And none of these should happen, either.
+// Seems to happen; TODO: fix this	_ASSERT(bamOpCount <= 1 || BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[0])] != 'D');
+// Seems to happen; TODO: fix this	_ASSERT(bamOpCount <= 1 || BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[0])] != 'I');
+	
+	// copy out cigar info
     if (format == BAM_CIGAR_OPS) {
         memcpy(cigarBuf, bamOps, bamBufUsed);
         if (cigarBufUsed != NULL) {
@@ -512,7 +545,9 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
         if (cigarBufUsed != NULL) {
             *cigarBufUsed = (int) strlen(cigarBuf) + 1;
         }
-    }
+
+
+	}
     return score;
 }
 
