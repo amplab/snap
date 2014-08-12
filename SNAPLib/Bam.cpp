@@ -1549,7 +1549,7 @@ BAMIndexSupplier::onClosed(
 
     for (int i = 0; i < n_ref; i++) {
         RefInfo* info = getRefInfo(i);
-        _int64 n_bin, n_intv;
+        _int32 n_bin, n_intv;
         if (info == NULL) {
             n_bin = 0;
             fwrite(&n_bin, sizeof(n_bin), 1, index);
@@ -1562,7 +1562,7 @@ BAMIndexSupplier::onClosed(
         for (BinMap::iterator j = info->bins.begin(); j != info->bins.end(); j = info->bins.next(j)) {
             _uint32 bin = j->key;
             fwrite(&bin, sizeof(bin), 1, index);
-            _int64 n_chunk = j->value.size();
+            _int32 n_chunk = j->value.size();
             fwrite(&n_chunk, sizeof(n_chunk), 1, index);
             if (bin != BAMAlignment::BAM_EXTRA_BIN) {
                 for (ChunkVec::iterator k = j->value.begin(); k != j->value.end(); k++) {
