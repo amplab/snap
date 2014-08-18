@@ -409,7 +409,7 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
                 //If they are on the same chromosome, not within the same gene, and not within the gene boundary, 
                 } else {
                     flag |= 1 << ALIGNED_SAME_CHR;
-                    intrachromosomal_pairs.push_back(AlignmentPair(&m1->second, &m0->second, flag, false, is_backspliced));
+                    intragene_pairs.push_back(AlignmentPair(&m1->second, &m0->second, flag, false, is_backspliced));
                     continue;
                 }    
             
@@ -434,7 +434,7 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
                 } else {
                 
                     flag |= 1 << ALIGNED_SAME_CHR; 
-                    intrachromosomal_pairs.push_back(AlignmentPair(&m1->second, &m0->second, flag, true, is_backspliced));
+                    intragene_pairs.push_back(AlignmentPair(&m1->second, &m0->second, flag, true, is_backspliced));
                     continue;                
                 
                 }
@@ -460,7 +460,7 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
                 } else {
   
                     flag |= 1 << ALIGNED_SAME_CHR; 
-                    intrachromosomal_pairs.push_back(AlignmentPair(&m1->second, &m0->second, flag, true, is_backspliced));
+                    intragene_pairs.push_back(AlignmentPair(&m1->second, &m0->second, flag, true, is_backspliced));
                     continue;                   
                 
                 }
@@ -502,7 +502,7 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
                     } else {
   
                         flag |= 1 << ALIGNED_SAME_CHR;
-                        intrachromosomal_pairs.push_back(AlignmentPair(&m1->second, &m0->second, flag, true, is_backspliced));
+                        intragene_pairs.push_back(AlignmentPair(&m1->second, &m0->second, flag, true, is_backspliced));
                         continue;    
                     }        
                 } 
@@ -510,7 +510,7 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
         }
     }
     
-    /* 
+    /*
     printf("No RC Pairs: %u\n", no_rc.size());
     for (vector<AlignmentPair>::iterator it = no_rc.begin(); it != no_rc.end(); ++it) {
         it->Print();
@@ -538,6 +538,13 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
         //Determine if these alignments are unique or not.
         ProcessPairs(result, intragene_pairs);
         
+        /*
+        //If this is still a good hit, check to make sure there is no partial hit that is better
+        if (result->status[0] == SingleHit) {
+            FindPartialMatches(result, no_rc[0]);
+        }
+        */
+
         //Here we check for negative reads which indicate circular RNAs
         if (result->status[0] == SingleHit) {
         
