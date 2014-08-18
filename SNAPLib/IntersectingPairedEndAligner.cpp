@@ -47,7 +47,7 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         bool          noUkkonen_,
         bool          noOrderedEvaluation_) :
     index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), numSeedsFromCommandLine(__min(MAX_MAX_SEEDS,numSeedsFromCommandLine_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
-    landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), maxMergeDistance(31), seedCoverage(seedCoverage_) /*also should be a parameter*/, 
+	landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), seedCoverage(seedCoverage_),
     extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_)
 {
     unsigned maxSeedsToUse;
@@ -732,7 +732,7 @@ IntersectingPairedEndAligner::align(
                                     // A secondary result to save.
                                     //
                                     if (*nSecondaryResults >= secondaryResultBufferSize) {
-                                        WriteErrorMessage("IntersectingPairedEndAligner::align(): out of secondary result buffer\n");
+                                        WriteErrorMessage("IntersectingPairedEndAligner::align(): out of secondary result buffer.  Read ID %.*s\n", read0->getIdLength(), read0->getId());
                                         soft_exit(1);
                                     }
 
@@ -1558,3 +1558,5 @@ IntersectingPairedEndAligner::MergeAnchor::checkMerge(unsigned newMoreHitLocatio
 
     _ASSERT(!"NOTREACHED");
 }
+
+const unsigned IntersectingPairedEndAligner::maxMergeDistance = 31;

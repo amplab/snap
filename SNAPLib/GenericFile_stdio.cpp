@@ -68,6 +68,11 @@ size_t GenericFile_stdio::read(void *ptr, size_t count)
 
 }
 
+int GenericFile_stdio::getchar()
+{
+	return fgetc(_file);
+}
+
 char *GenericFile_stdio::gets(char *buf, size_t count)
 {
 	return fgets(buf, (int) count, _file);

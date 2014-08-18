@@ -36,13 +36,12 @@ public:
 	static GenericFile_HDFS *open(const char *filename, Mode mode);
 
 	virtual size_t read(void *ptr, size_t count);
-	virtual int advance(long long offset);
+	virtual int getchar();
 	virtual char *gets(char *buf, size_t count);
+	virtual int advance(long long offset);
     int seek(long long offset);
 	virtual void close();
 	virtual ~GenericFile_HDFS();
-
-	int getchar();
 
 private:
 	// private constructor -- must use factory

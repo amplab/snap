@@ -395,9 +395,9 @@ void PairedAlignerContext::runIterationThread()
         g_maxPairedSecondaryHits = 0;
         g_maxSingleSecondaryHits = 0;
     } else {
-        g_maxPairedSecondaryHits = IntersectingPairedEndAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, index->getSeedLength());
+        g_maxPairedSecondaryHits = IntersectingPairedEndAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, index->getSeedLength(), minSpacing, maxSpacing);
         g_maxSingleSecondaryHits = ChimericPairedEndAligner::getMaxSingleEndSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, index->getSeedLength());
-    }  
+    }
 
     g_memoryPoolSize += g_maxPairedSecondaryHits * sizeof(PairedAlignmentResult) + g_maxSingleSecondaryHits * sizeof(SingleAlignmentResult);
 
@@ -439,7 +439,7 @@ void PairedAlignerContext::runIterationThread()
         t_maxPairedSecondaryHits = 0;
         t_maxSingleSecondaryHits = 0;
     } else {
-        t_maxPairedSecondaryHits = IntersectingPairedEndAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, transcriptome->getSeedLength());
+        t_maxPairedSecondaryHits = IntersectingPairedEndAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, transcriptome->getSeedLength(), minSpacing, maxSpacing);
         t_maxSingleSecondaryHits = ChimericPairedEndAligner::getMaxSingleEndSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, transcriptome->getSeedLength());
     }
 
@@ -490,7 +490,7 @@ void PairedAlignerContext::runIterationThread()
           c_maxPairedSecondaryHits = 0;
           c_maxSingleSecondaryHits = 0;
       } else {
-          c_maxPairedSecondaryHits = IntersectingPairedEndAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, contamination->getSeedLength());
+          c_maxPairedSecondaryHits = IntersectingPairedEndAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, contamination->getSeedLength(), minSpacing, maxSpacing);
           c_maxSingleSecondaryHits = ChimericPairedEndAligner::getMaxSingleEndSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, contamination->getSeedLength());
       }
 

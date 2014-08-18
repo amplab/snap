@@ -1699,3 +1699,6 @@ BgzfHeader::validate(
         ISIZE() == uncompressed&&
         BSIZE() + 1 == compressed;
 }
+
+const int BAMReader::MAX_SEQ_LENGTH = MAX_READ_LENGTH;
+const int BAMReader::MAX_RECORD_LENGTH = MAX_READ_LENGTH * 8;

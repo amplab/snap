@@ -1804,8 +1804,8 @@ BaseAligner::getMaxSecondaryResults(unsigned maxSeedsToUse, double maxSeedCovera
 {
 
     if (0 != maxSeedsToUse) {
-        return maxHits * maxSeedsToUse * 2; // Can't have more alignments than total possible hits (*2 is for forward/RC)
+        return maxHits * maxSeedsToUse * NUM_DIRECTIONS; // Can't have more alignments than total possible hits 
     } else {
-        return (unsigned)((maxSeedCoverage * maxReadSize + seedLength) / seedLength) * maxHits * 2;
+        return (unsigned)((maxSeedCoverage * maxReadSize + seedLength) / seedLength) * maxHits * NUM_DIRECTIONS;
     }
 }

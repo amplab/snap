@@ -24,8 +24,8 @@ Environment:
 #include "PairedEndAligner.h"
 #include "VariableSizeVector.h"
 #include "BufferedAsync.h"
-#include "Read.h"
 #include "SAM.h"
+#include "Read.h"
 #include "DataReader.h"
 
 // for debugging file I/O, validate BAM records on input & output
@@ -408,9 +408,8 @@ public:
         static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(const char *fileName, int numThreads, bool quicklyDropUnmatchedReads, 
             const ReaderContext& context, int matchBufferSize = 5000);
 
-        static const int MAX_SEQ_LENGTH = MAX_READ_LENGTH;
-
-        static const int MAX_RECORD_LENGTH = MAX_READ_LENGTH * 8;
+        static const int MAX_SEQ_LENGTH;
+        static const int MAX_RECORD_LENGTH;
 
 protected:
 
