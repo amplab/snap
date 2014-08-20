@@ -169,7 +169,8 @@ public:
         Genome(
             GenomeDistance          i_maxBases,
             GenomeDistance          nBasesStored,
-            unsigned                i_chromosomePadding);
+            unsigned                i_chromosomePadding,
+            unsigned                maxContigs = 32);
 
         void startContig(
             const char          *contigName);

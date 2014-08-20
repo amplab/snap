@@ -30,8 +30,8 @@ Revision History:
 #include "exit.h"
 #include "Error.h"
 
-Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned i_chromosomePadding)
-    : maxBases(i_maxBases), minLocation(0), maxLocation(i_maxBases), chromosomePadding(i_chromosomePadding)
+Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned i_chromosomePadding, unsigned i_maxContigs)
+: maxBases(i_maxBases), minLocation(0), maxLocation(i_maxBases), chromosomePadding(i_chromosomePadding), maxContigs(i_maxContigs)
 {
     bases = ((char *) BigAlloc(nBasesStored + 2 * N_PADDING)) + N_PADDING;
     if (NULL == bases) {
@@ -44,9 +44,6 @@ Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned 
     memset(bases + nBasesStored, 'n', N_PADDING);
 
     nBases = 0;
-
-    maxContigs = 32; // A power of two that's bigger than the usual number of chromosomes, so we don't have to
-                    // reallocate in practice.
 
     nContigs = 0;
     contigs = new Contig[maxContigs];
