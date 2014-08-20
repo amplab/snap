@@ -1562,7 +1562,7 @@ BAMIndexSupplier::onClosed(
         for (BinMap::iterator j = info->bins.begin(); j != info->bins.end(); j = info->bins.next(j)) {
             _uint32 bin = j->key;
             fwrite(&bin, sizeof(bin), 1, index);
-            _int32 n_chunk = j->value.size();
+            _int32 n_chunk = (_int32) j->value.size();
             fwrite(&n_chunk, sizeof(n_chunk), 1, index);
             if (bin != BAMAlignment::BAM_EXTRA_BIN) {
                 for (ChunkVec::iterator k = j->value.begin(); k != j->value.end(); k++) {
@@ -1577,7 +1577,7 @@ BAMIndexSupplier::onClosed(
                 fwrite(&chunk, sizeof(chunk), 1, index);
             }
         }
-        n_intv = info->intervals.size();
+        n_intv = (_int32) info->intervals.size();
         fwrite(&n_intv, sizeof(n_intv), 1, index);
         for (LinearMap::iterator m = info->intervals.begin(); m != info->intervals.end(); m++) {
             _uint64 ioffset = gzipSupplier->toVirtualOffset(*m);
