@@ -116,6 +116,7 @@ public:
     bool                                 noUkkonen;
     bool                                 noOrderedEvaluation;
     int                                  maxSecondaryAligmmentAdditionalEditDistance;
+	unsigned							 minReadLength;
 
 
     // iteration variables

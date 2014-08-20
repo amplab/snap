@@ -155,7 +155,7 @@ SingleAlignerContext::runIterationThread()
         }
 
         // Skip the read if it has too many Ns or trailing 2 quality scores.
-        if (read->getDataLength() < 50 || read->countOfNs() > maxDist) {
+        if (read->getDataLength() < minReadLength || read->countOfNs() > maxDist) {
             if (readWriter != NULL && options->passFilter(read, NotFound)) {
                 readWriter->writeRead(read, NotFound, 0, InvalidGenomeLocation, FORWARD, false);
             }

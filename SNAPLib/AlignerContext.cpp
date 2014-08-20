@@ -166,6 +166,12 @@ AlignerContext::initialize()
     noUkkonen = options->noUkkonen;
     noOrderedEvaluation = options->noOrderedEvaluation;
     maxSecondaryAligmmentAdditionalEditDistance = options->maxSecondaryAligmmentAdditionalEditDistance;
+	minReadLength = options->minReadLength;
+
+	if ((int)minReadLength < index->getSeedLength()) {
+		WriteErrorMessage("The min read length (%d) must be at least the seed length (%d), or there's no hope of aligning reads that short.\n", minReadLength, index->getSeedLength());
+		soft_exit(1);
+	}
 
     if (options->perfFileName != NULL) {
         perfFile = fopen(options->perfFileName,"a");

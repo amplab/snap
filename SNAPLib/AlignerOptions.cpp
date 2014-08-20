@@ -66,7 +66,8 @@ AlignerOptions::AlignerOptions(
     preserveClipping(false),
     expansionFactor(1.0),
     noUkkonen(false),
-    noOrderedEvaluation(false)
+    noOrderedEvaluation(false),
+	minReadLength(DEFAULT_MIN_READ_LENGTH)
 {
     if (forPairedEnd) {
         maxDist                 = 15;
@@ -92,65 +93,68 @@ AlignerOptions::usage()
     void
 AlignerOptions::usageMessage()
 {
-    WriteErrorMessage(
-        "Usage: \n%s\n"
-        "Options:\n"
-        "  -o   filename  output alignments to filename in SAM or BAM format, depending on the file extension or\n"
-        "       explicit type specifier (see below)\n"
-        "  -d   maximum edit distance allowed per read or pair (default: %d)\n"
-        "  -n   number of seeds to use per read\n"
-        "  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default: %lf)\n"
-        "  -h   maximum hits to consider per seed (default: %d)\n"
-        "  -c   Deprecated parameter; this is ignored.  Consumes one extra arg.\n"
-        "  -a   Deprecated parameter; this is ignored.  Consumes one extra arg.\n"
-        "  -t   number of threads (default is one per core)\n"
-        "  -b   bind each thread to its processor (off by default)\n"
-        "  -P   disables cache prefetching in the genome; may be helpful for machines\n"
-        "       with small caches or lots of cores/cache\n"
-        "  -so  sort output file by alignment location\n"
-        "  -sm  memory to use for sorting in Gb\n"
-        "  -x   explore some hits of overly popular seeds (useful for filtering)\n"
-        "  -f   stop on first match within edit distance limit (filtering mode)\n"
-        "  -F   filter output (a=aligned only, s=single hit only, u=unaligned only)\n"
-        "  -S   suppress additional processing (sorted BAM output only)\n"
-        "       i=index, d=duplicate marking\n"
+	WriteErrorMessage(
+		"Usage: \n%s\n"
+		"Options:\n"
+		"  -o   filename  output alignments to filename in SAM or BAM format, depending on the file extension or\n"
+		"       explicit type specifier (see below)\n"
+		"  -d   maximum edit distance allowed per read or pair (default: %d)\n"
+		"  -n   number of seeds to use per read\n"
+		"  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default: %lf)\n"
+		"  -h   maximum hits to consider per seed (default: %d)\n"
+		"  -c   Deprecated parameter; this is ignored.  Consumes one extra arg.\n"
+		"  -a   Deprecated parameter; this is ignored.  Consumes one extra arg.\n"
+		"  -t   number of threads (default is one per core)\n"
+		"  -b   bind each thread to its processor (off by default)\n"
+		"  -P   disables cache prefetching in the genome; may be helpful for machines\n"
+		"       with small caches or lots of cores/cache\n"
+		"  -so  sort output file by alignment location\n"
+		"  -sm  memory to use for sorting in Gb\n"
+		"  -x   explore some hits of overly popular seeds (useful for filtering)\n"
+		"  -f   stop on first match within edit distance limit (filtering mode)\n"
+		"  -F   filter output (a=aligned only, s=single hit only, u=unaligned only)\n"
+		"  -S   suppress additional processing (sorted BAM output only)\n"
+		"       i=index, d=duplicate marking\n"
 #if     USE_DEVTEAM_OPTIONS
-        "  -I   ignore IDs that don't match in the paired-end aligner\n"
+		"  -I   ignore IDs that don't match in the paired-end aligner\n"
 #ifdef  _MSC_VER    // Only need this on Windows, since memory allocation is fast on Linux
-        "  -B   Insert barrier after per-thread memory allocation to improve timing accuracy\n"
+		"  -B   Insert barrier after per-thread memory allocation to improve timing accuracy\n"
 #endif  // _MSC_VER
 #endif  // USE_DEVTEAM_OPTIONS
-        "  -Cxx must be followed by two + or - symbols saying whether to clip low-quality\n"
-        "       bases from front and back of read respectively; default: back only (-C-+)\n"
+		"  -Cxx must be followed by two + or - symbols saying whether to clip low-quality\n"
+		"       bases from front and back of read respectively; default: back only (-C-+)\n"
 		"  -M   indicates that CIGAR strings in the generated SAM file should use M (alignment\n"
 		"       match) rather than = and X (sequence (mis-)match)\n"
-        "  -G   specify a gap penalty to use when generating CIGAR strings\n"
-        "  -pf  specify the name of a file to contain the run speed\n"
-        "  --hp Indicates not to use huge pages (this may speed up index load and slow down alignment)\n"
-        "  -D   Specifies the extra search depth (the edit distance beyond the best hit that SNAP uses to compute MAPQ).  Default 2\n"
-        "  -rg  Specify the default read group if it is not specified in the input file\n"
-        "  -R   Specify the entire read group line for the SAM/BAM output.  This must include an ID tag.  If it doesn't start with\n"
-        "       '@RG' SNAP will add that.  Specify tabs by \\t.  Two backslashes will generate a single backslash.\n"
-        "        backslash followed by anything else is illegal.  So, '-R @RG\\tID:foo\\tDS:my data' would generate reads\n"
-        "        with defualt tag foo, and an @RG line that also included the DS:my data field.\n"
-        "  -sa  Include reads from SAM or BAM files with the secondary (0x100) or supplementary (0x800) flag set; default is to drop them.\n"
-        "  -om  Output multiple alignments.  Takes as a parameter the maximum extra edit distance relative to the best alignment\n"
-        "       to allow for secondary alignments\n"
-        "  -pc  Preserve the soft clipping for reads coming from SAM or BAM files\n"
-        "  -xf  Increase expansion factor for BAM and GZ files (default %.1f)\n"
-        "  -hdp Use Hadoop-style prefixes (reporter:status:...) on error messages, and emit hadoop-style progress messages\n"
-        "  -nu  No Ukkonen: don't reduce edit distance search based on prior candidates. This option is purely for\n"
-        "       evalutating the performance effect of using Ukkonen's algorithm rather than Smith-Waterman, and specifying\n"
-        "       it will slow down execution without improving the alignments.\n"
-        "  -no  No Ordering: don't order the evalutation of reads so as to select more likely candidates first.  This option\n"
-        "       is purely for evaluating the performance effect of the read evaluation order, and specifying it will slow\n"
-        "       down execution without improving alignments.\n"
+		"  -G   specify a gap penalty to use when generating CIGAR strings\n"
+		"  -pf  specify the name of a file to contain the run speed\n"
+		"  --hp Indicates not to use huge pages (this may speed up index load and slow down alignment)\n"
+		"  -D   Specifies the extra search depth (the edit distance beyond the best hit that SNAP uses to compute MAPQ).  Default 2\n"
+		"  -rg  Specify the default read group if it is not specified in the input file\n"
+		"  -R   Specify the entire read group line for the SAM/BAM output.  This must include an ID tag.  If it doesn't start with\n"
+		"       '@RG' SNAP will add that.  Specify tabs by \\t.  Two backslashes will generate a single backslash.\n"
+		"        backslash followed by anything else is illegal.  So, '-R @RG\\tID:foo\\tDS:my data' would generate reads\n"
+		"        with defualt tag foo, and an @RG line that also included the DS:my data field.\n"
+		"  -sa  Include reads from SAM or BAM files with the secondary (0x100) or supplementary (0x800) flag set; default is to drop them.\n"
+		"  -om  Output multiple alignments.  Takes as a parameter the maximum extra edit distance relative to the best alignment\n"
+		"       to allow for secondary alignments\n"
+		"  -pc  Preserve the soft clipping for reads coming from SAM or BAM files\n"
+		"  -xf  Increase expansion factor for BAM and GZ files (default %.1f)\n"
+		"  -hdp Use Hadoop-style prefixes (reporter:status:...) on error messages, and emit hadoop-style progress messages\n"
+		"  -nu  No Ukkonen: don't reduce edit distance search based on prior candidates. This option is purely for\n"
+		"       evalutating the performance effect of using Ukkonen's algorithm rather than Smith-Waterman, and specifying\n"
+		"       it will slow down execution without improving the alignments.\n"
+		"  -no  No Ordering: don't order the evalutation of reads so as to select more likely candidates first.  This option\n"
+		"       is purely for evaluating the performance effect of the read evaluation order, and specifying it will slow\n"
+		"       down execution without improving alignments.\n"
+		"  -mrl Specify the minimum read length to align, reads shorter than this (after clipping) stay unaligned.  This should be\n"
+		"       a good bit bigger than the seed length or you might get some questionable alignments.  Default %d\n"
             ,
             commandLine,
             maxDist,
             seedCoverage,
             maxHits,
-            expansionFactor);
+            expansionFactor,
+			DEFAULT_MIN_READ_LENGTH);
 
     if (extra != NULL) {
         extra->usageMessage();
@@ -370,7 +374,13 @@ AlignerOptions::parse(
         } else {
             WriteErrorMessage("Must have the gap penalty value after -G\n");
         }
-    } else if (strcmp(argv[n], "-R") == 0) {
+	} else if (strcmp(argv[n], "-mrl") == 0) {
+		if (n + 1 < argc) {
+			n++;
+			minReadLength = atoi(argv[n]);
+			return minReadLength > 0;
+		}
+	} else if (strcmp(argv[n], "-R") == 0) {
         if (n + 1 < argc) {
             //
             // Check the line for sanity.  It must consist either of @RG\t<fields> or just <fields> (in which

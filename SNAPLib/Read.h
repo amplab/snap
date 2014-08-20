@@ -835,3 +835,5 @@ private:
     char *qualityBuffer;
     char *auxBuffer;
 };
+
+extern const unsigned DEFAULT_MIN_READ_LENGTH;

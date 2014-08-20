@@ -416,6 +416,7 @@ void PairedAlignerContext::runIterationThread()
         noUkkonen,
         noOrderedEvaluation,
         intersectingAligner,
+		minReadLength,
         allocator);
 
     allocator->checkCanaries();
@@ -452,8 +453,8 @@ void PairedAlignerContext::runIterationThread()
 
         // Skip the pair if there are too many Ns or 2s.
         int maxDist = this->maxDist;
-        bool useful0 = read0->getDataLength() >= 50 && (int)read0->countOfNs() <= maxDist;
-        bool useful1 = read1->getDataLength() >= 50 && (int)read1->countOfNs() <= maxDist;
+        bool useful0 = read0->getDataLength() >= minReadLength && (int)read0->countOfNs() <= maxDist;
+        bool useful1 = read1->getDataLength() >= minReadLength && (int)read1->countOfNs() <= maxDist;
         if (!useful0 && !useful1) {
             PairedAlignmentResult result;
             result.status[0] = NotFound;

@@ -188,9 +188,10 @@ IntersectingPairedEndAligner::align(
     reads[1][FORWARD] = read1;
 
     //
-    // Don't bother if one or both reads are too short.
+    // Don't bother if one or both reads are too short.  The minimum read length here is the seed length, but usually there's a longer
+	// minimum enforced by our called
     //
-    if (read0->getDataLength() < 50 || read1->getDataLength() < 50) {
+    if (read0->getDataLength() < seedLen || read1->getDataLength() < seedLen) {
          return;
     }
 

@@ -31,7 +31,7 @@ Revision History:
 class ChimericPairedEndAligner : public PairedEndAligner {
 public:
     ChimericPairedEndAligner(
-        GenomeIndex         *index,
+        GenomeIndex         *index_,
         unsigned            maxReadSize,
         unsigned            maxHits,
         unsigned            maxK,
@@ -42,6 +42,7 @@ public:
         bool                noUkkonen,
         bool                noOrderedEvaluation,
         PairedEndAligner    *underlyingPairedEndAligner_,
+		unsigned			minReadLength_,
         BigAllocator        *allocator);
     
     virtual ~ChimericPairedEndAligner();
@@ -89,4 +90,7 @@ private:
 
     LandauVishkin<1> lv;
     LandauVishkin<-1> reverseLV;
+
+	GenomeIndex *index;
+	unsigned	minReadLength;
 };
