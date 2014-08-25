@@ -389,7 +389,7 @@ AlignerOptions::parse(
             // new ones might be added.
             //
             bool needsRG = !(argv[n+1][0] == '@' && argv[n+1][1] == 'R' && argv[n+1][2] == 'G' && argv[n+1][3] == '\\' && argv[n+1][4] == 't');
-            const unsigned buflen = strlen(argv[n + 1]) + 1 + (needsRG ? 4 : 0);
+            const unsigned buflen = (unsigned) (strlen(argv[n + 1]) + 1 + (needsRG ? 4 : 0));
             char *buffer = new char[buflen];
             char *copyToPtr = buffer;
             const char *copyFromPtr = argv[n+1];
