@@ -389,7 +389,8 @@ AlignerOptions::parse(
             // new ones might be added.
             //
             bool needsRG = !(argv[n+1][0] == '@' && argv[n+1][1] == 'R' && argv[n+1][2] == 'G' && argv[n+1][3] == '\\' && argv[n+1][4] == 't');
-            char *buffer = new char[strlen(argv[n+1]) + 1 + needsRG ? 4 : 0];
+            const unsigned buflen = strlen(argv[n + 1]) + 1 + (needsRG ? 4 : 0);
+            char *buffer = new char[buflen];
             char *copyToPtr = buffer;
             const char *copyFromPtr = argv[n+1];
             if (needsRG) {
@@ -406,6 +407,7 @@ AlignerOptions::parse(
             while (*copyFromPtr != '\0') {
                 if (pendingBackslash) {
                     if (*copyFromPtr == 't' || *copyFromPtr == '\\') {
+                        _ASSERT((unsigned)(copyToPtr - buffer) < buflen);
                         *copyToPtr = (*copyFromPtr == 't') ? '\t' : '\\';
                         copyToPtr++;
                         copyFromPtr++;
@@ -421,13 +423,15 @@ AlignerOptions::parse(
                     pendingBackslash = *copyFromPtr == '\\';
 
                     if (!pendingBackslash) {
-                       *copyToPtr = *copyFromPtr;
+                        _ASSERT((unsigned)(copyToPtr - buffer) < buflen);
+                        *copyToPtr = *copyFromPtr;
                         copyToPtr++;
                     }
 
                     copyFromPtr++;
                 }
             } // while
+            _ASSERT((unsigned)(copyToPtr - buffer) < buflen);
             *copyToPtr = '\0';  // Null terminate the string
 
             //
