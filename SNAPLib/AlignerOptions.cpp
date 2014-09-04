@@ -67,7 +67,8 @@ AlignerOptions::AlignerOptions(
     expansionFactor(1.0),
     noUkkonen(false),
     noOrderedEvaluation(false),
-	minReadLength(DEFAULT_MIN_READ_LENGTH)
+	minReadLength(DEFAULT_MIN_READ_LENGTH),
+    maxDistFraction(0.0)
 {
     if (forPairedEnd) {
         maxDist                 = 15;
@@ -148,6 +149,9 @@ AlignerOptions::usageMessage()
 		"       down execution without improving alignments.\n"
 		"  -mrl Specify the minimum read length to align, reads shorter than this (after clipping) stay unaligned.  This should be\n"
 		"       a good bit bigger than the seed length or you might get some questionable alignments.  Default %d\n"
+#ifdef LONG_READS
+        "  -dp  Edit distance as a percentage of read length (single only, overrides -d)\n"
+#endif
             ,
             commandLine,
             maxDist,
@@ -374,12 +378,18 @@ AlignerOptions::parse(
         } else {
             WriteErrorMessage("Must have the gap penalty value after -G\n");
         }
-	} else if (strcmp(argv[n], "-mrl") == 0) {
-		if (n + 1 < argc) {
-			n++;
-			minReadLength = atoi(argv[n]);
-			return minReadLength > 0;
-		}
+    } else if (strcmp(argv[n], "-mrl") == 0) {
+        if (n + 1 < argc) {
+            n++;
+            minReadLength = atoi(argv[n]);
+            return minReadLength > 0;
+        }
+    } else if (strcmp(argv[n], "-dp") == 0) {
+        if (n + 1 < argc) {
+            n++;
+            maxDistFraction = (float) (0.01 * atof(argv[n]));
+            return (! isPaired()) && maxDistFraction > 0.0 && maxDistFraction < 1.0;
+        }
 	} else if (strcmp(argv[n], "-R") == 0) {
         if (n + 1 < argc) {
             //
