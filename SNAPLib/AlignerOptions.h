@@ -63,6 +63,7 @@ struct AlignerOptions : public AbstractOptions
     const char         *similarityMapFile;
     int                 numThreads;
     unsigned            maxDist;
+    float               maxDistFraction;
     unsigned            numSeedsFromCommandLine;
     double              seedCoverage;       // Exclusive with numSeeds; this is readSize/seedSize
     bool                seedCountSpecified; // Has either -n or -sc been specified?  This bool is used to make sure they're not both specified on the command line

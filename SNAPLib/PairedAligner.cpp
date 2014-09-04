@@ -483,7 +483,7 @@ void PairedAlignerContext::runIterationThread()
 
         int nSecondaryResults;
         int nSingleSecondaryResults[2];
-
+        
         aligner->align(read0, read1, &result, maxSecondaryAligmmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, secondaryResults, 
             maxSingleSecondaryHits, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1],singleSecondaryResults);
 

@@ -171,7 +171,16 @@ SingleAlignerContext::runIterationThread()
         SingleAlignmentResult result;
         int nSecondaryResults = 0;
 
+#ifdef LONG_READS
+        int oldMaxK = aligner->getMaxK();
+        if (options->maxDistFraction > 0.0) {
+            aligner->setMaxK(min(MAX_K, (int)(read->getDataLength() * options->maxDistFraction)));
+        }
+#endif
         aligner->AlignRead(read, &result, maxSecondaryAligmmentAdditionalEditDistance, secondaryAlignmentBufferCount, &nSecondaryResults, secondaryAlignments);
+#ifdef LONG_READS
+        aligner->setMaxK(oldMaxK);
+#endif
 		result.correctAlignmentForSoftClipping(read, index->getGenome());
 
 		for (int i = 0; i < nSecondaryResults; i++) {
