@@ -1460,7 +1460,8 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     }
 
     char indexFileBuf[1000];
-    indexFile->read(indexFileBuf, sizeof(indexFileBuf));
+    size_t indexFileSize = indexFile->read(indexFileBuf, sizeof(indexFileBuf) - 1);
+    indexFileBuf[indexFileSize] = 0;
 
     unsigned seedLen;
     unsigned majorVersion, minorVersion, chromosomePadding;

@@ -257,7 +257,7 @@ FASTQReader::getReadFromBuffer(char *buffer, _int64 validBytes, Read *readToUpda
             soft_exit(1);
         }
         if (! isValidStartingCharacterForNextLine[(i + 3) % 4][*scan]) {
-            WriteErrorMessage("FASTQ file has invalid starting character at offset %lld, line type %d, char %c\n", data->getFileOffset(), i, *scan);
+            WriteErrorMessage("FASTQ file %s has invalid starting character at offset %lld, line type %d, char %c\n", data->getFilename(), data->getFileOffset(), i, *scan);
             WriteErrorMessage("Line in question: '%.*s'\n", lineLen, scan);
             //WriteErrorMessage("Preceding record: '%.*s'\n", LASTLEN, LAST);
             soft_exit(1);

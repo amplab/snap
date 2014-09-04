@@ -73,6 +73,8 @@ public:
 
     virtual void getExtra(char** o_extra, _int64* o_length);
 
+    virtual const char* getFilename() = 0;
+
 protected:
     
     // must hold the lock to call
@@ -532,6 +534,9 @@ public:
 
     virtual char* readHeader(_int64* io_headerSize);
 
+    virtual const char* getFilename()
+    { return "-"; }
+
  protected:
     
     // must hold the lock to call
@@ -854,6 +859,9 @@ public:
     virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
 
     virtual char* readHeader(_int64* io_headerSize);
+
+    virtual const char* getFilename()
+    { return fileName; }
 
  protected:
     
@@ -1194,6 +1202,9 @@ public:
     virtual _int64 getFileOffset();
 
     virtual void getExtra(char** o_extra, _int64* o_length);
+
+    virtual const char* getFilename()
+    { return inner->getFilename(); }
 
     enum DecompressMode { SingleBlock, ContinueMultiBlock, StartMultiBlock };
 
@@ -1952,6 +1963,9 @@ public:
     virtual _int64 getFileOffset();
 
     virtual void getExtra(char** o_extra, _int64* o_length);
+
+    virtual const char* getFilename()
+    { return fileName; }
 
 private:
     
