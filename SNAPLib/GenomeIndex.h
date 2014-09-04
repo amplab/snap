@@ -29,7 +29,11 @@ Revision History:
 #include "Genome.h"
 #include "ApproximateCounter.h"
 
+extern const int DEFAULT_SEED_SIZE;
+extern const double DEFAULT_SLACK;
+
 class GenomeIndex {
+
 public:
     const Genome *getGenome() {return genome;}
 
@@ -82,6 +86,12 @@ public:
     static GenomeIndex *loadFromDirectory(char *directoryName);
 
     static void printBiasTables();
+	
+	//made these public so that KMerAligner can access them. 
+	static const unsigned largestBiasTable = 32;    // Can't be bigger than the biggest seed size, which is set in Seed.h.  Bigger than 32 means a new Seed structure.
+	static const unsigned largestKeySize = 8;
+	static double *hg19_biasTables[largestKeySize + 1][largestBiasTable + 1];
+	static double *hg19_biasTables_large[largestKeySize + 1][largestBiasTable + 1];
 
 protected:
 
@@ -162,11 +172,6 @@ protected:
     static const unsigned GenomeIndexFormatMajorVersion = 5;
     static const unsigned GenomeIndexFormatMinorVersion = 0;
     
-    static const unsigned largestBiasTable = 32;    // Can't be bigger than the biggest seed size, which is set in Seed.h.  Bigger than 32 means a new Seed structure.
-    static const unsigned largestKeySize = 8;
-    static double *hg19_biasTables[largestKeySize+1][largestBiasTable+1];
-    static double *hg19_biasTables_large[largestKeySize+1][largestBiasTable+1];
-
     static void ComputeBiasTable(const Genome* genome, int seedSize, double* table, unsigned maxThreads, bool forceExact, unsigned hashTableKeySize, bool large);
 
     struct ComputeBiasTableThreadContext {

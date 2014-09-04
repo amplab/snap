@@ -49,6 +49,8 @@ class SNAPHashTable {
 
         bool saveToFile(FILE *saveFile, size_t *bytesWritten);
 
+		bool saveToFileSorted(FILE *saveFile, size_t *bytesWritten);
+
         //
         // Fails if either the table is full or key already exists.  Inserts ALL
         // values for a key.
@@ -200,14 +202,17 @@ class SNAPHashTable {
  
         void *Table;
         size_t tableSize;
-        unsigned keySizeInBytes;
+        static unsigned keySizeInBytes;
         unsigned elementSize;
         size_t usedElementCount;
         bool ownsMemoryForTable;
-        unsigned valueSizeInBytes;
-        unsigned valueCount;
+        static unsigned valueSizeInBytes;
+        static unsigned valueCount;
         ValueType invalidValueValue;
  
+		//comparison function for sorting the hash
+		static int keyCompare(const void *, const void *);		
+		void sortHash(int(*compare)(const void *, const void*));
         //
         // Returns either the entry for this key, or else the entry where the key would be
         // inserted if it's not in the table.

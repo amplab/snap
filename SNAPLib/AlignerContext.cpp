@@ -33,6 +33,7 @@ Revision History:
 #include "FileFormat.h"
 #include "exit.h"
 #include "PairedAligner.h"
+#include "KMerAligner.h"
 #include "Error.h"
 
 using std::max;
@@ -61,15 +62,19 @@ AlignerContext::AlignerContext(int i_argc, const char **i_argv, const char *i_ve
 
 AlignerContext::~AlignerContext()
 {
-    delete extension;
+	if (NULL == extension){
+		fprintf(stderr,  "extension is NULL\n");
+	}
+	delete extension;
+	extension = NULL; 
     if (NULL != perfFile) {
         fclose(perfFile);
     }
 }
 
-void AlignerContext::runAlignment(int argc, const char **argv, const char *version, unsigned *argsConsumed)
+void AlignerContext::runAlignment(int argc, const char **argv, const char *version, unsigned *argsConsumed, const char * task)
 {
-    options = parseOptions(argc, argv, version, argsConsumed, isPaired());
+    options = parseOptions(argc, argv, version, argsConsumed, task);
 #ifdef _MSC_VER
     useTimingBarrier = options->useTimingBarrier;
 #endif
@@ -323,19 +328,22 @@ AlignerContext::parseOptions(
     const char **i_argv,
     const char *i_version,
     unsigned *argsConsumed,
-    bool      paired)
+    const char *  i_task)
 {
     argc = i_argc;
     argv = i_argv;
     version = i_version;
 
     AlignerOptions *options;
-
-    if (paired) {
+	bool paired = isPaired(); 
+	if (strcmp(i_task, "paired") == 0) {
         options = new PairedAlignerOptions("snap paired <index-dir> <inputFile(s)> [<options>] where <input file(s)> is a list of files to process.\n");
-    } else {
+    } else if (strcmp(i_task, "single") ==0) {
         options = new AlignerOptions("snap single <index-dir> <inputFile(s)> [<options>] where <input file(s)> is a list of files to process.\n");
-    }
+	}
+	else if (strcmp(i_task, "kmer") == 0){
+		options = new KmerOptions("snap kmer <inputFile(s)> [<options>] where <input file(s) is a list of files to process.\n"); 
+	}
 
     options->extra = extension->extraOptions();
     if (argc < 3) {

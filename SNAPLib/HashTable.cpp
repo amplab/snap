@@ -82,7 +82,7 @@ SNAPHashTable *SNAPHashTable::loadFromBlob(GenericFile_Blob *loadFile)
     }
 
     if (fileMagic != magic) {
-        WriteErrorMessage("SNAPHashTable: magic number mismatch.  Perhaps you have a corruped index.  %d != %d\n", fileMagic, magic);
+        WriteErrorMessage("SNAPHashTable: magic number mismatch.  Perhaps you have a corrupted index.  %d != %d\n", fileMagic, magic);
         soft_exit(1);
     }
  
@@ -227,7 +227,7 @@ SNAPHashTable::saveToFile(FILE *saveFile, size_t *bytesWritten)
     size_t maxWriteSize = 100 * 1024 * 1024;
     size_t writeOffset = 0;
     while (writeOffset < tableSize * elementSize) {
-        size_t amountToWrite = __min(maxWriteSize,tableSize * elementSize - writeOffset);
+        size_t amountToWrite = __min(maxWriteSize, tableSize * elementSize - writeOffset);
         size_t thisWrite = fwrite((char*)Table + writeOffset, 1, amountToWrite, saveFile);
         if (thisWrite < amountToWrite) {
             WriteErrorMessage("SNAPHashTable::saveToFile: fwrite failed, %d\n"
@@ -241,8 +241,12 @@ SNAPHashTable::saveToFile(FILE *saveFile, size_t *bytesWritten)
     return true;
 }
     
+
 _int64 nCallsToGetEntryForKey = 0;
 _int64 nProbesInGetEntryForKey = 0;
+unsigned SNAPHashTable::keySizeInBytes; 
+unsigned SNAPHashTable::valueCount; 
+unsigned SNAPHashTable::valueSizeInBytes; 
 
 void *
 SNAPHashTable::getEntryForKey(KeyType key) const
@@ -324,3 +328,18 @@ void SNAPHashTable::prefetch(KeyType key)
 }
 
 const unsigned SNAPHashTable::magic = 0xb111b010;
+
+int SNAPHashTable::keyCompare(const void *first, const void *second){
+	KeyType key1 = 0;
+	KeyType key2 = 0;
+	memcpy(&key1, (const char *) first + valueSizeInBytes * valueCount, keySizeInBytes);
+	memcpy(&key2, (const char *) second + valueSizeInBytes * valueCount, keySizeInBytes);
+	return key1 - key2;
+}
+
+void SNAPHashTable::sortHash(int(*compare)(const void *, const void*)) 
+{
+	SNAPHashTable *hashTable = this; 
+	size_t nel = hashTable->tableSize;
+	qsort(hashTable->Table, hashTable->tableSize, hashTable->elementSize, compare);
+}

@@ -48,7 +48,7 @@ public:
 
     // running alignment
 
-    void runAlignment(int argc, const char **argv, const char *version, unsigned *nArgsConsumed);
+    void runAlignment(int argc, const char **argv, const char *version, unsigned *nArgsConsumed, const char *task);
     
     // ParallelTask template
 
@@ -72,7 +72,7 @@ public:
     // overrideable by concrete single/paired alignment subclasses
     
     // parse options from the command line
-    AlignerOptions* parseOptions(int argc, const char **argv, const char *version, unsigned *argsConsumed, bool paired);
+    AlignerOptions* parseOptions(int argc, const char **argv, const char *version, unsigned *argsConsumed, const char *task);
     
     // initialize from options
     virtual void initialize();

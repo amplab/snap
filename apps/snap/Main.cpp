@@ -67,13 +67,13 @@ int main(int argc, const char **argv)
             unsigned nArgsConsumed;
 			if (strcmp(argv[i], "single") == 0) {
 				SingleAlignerContext single;
-				single.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed);
+				single.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed, argv[i]);
 			} else if (strcmp(argv[i], "kmer") == 0) {
 					KMerAlignerContext kmer;
-					kmer.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed);
+					kmer.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed, argv[i]);
             } else if (strcmp(argv[i], "paired") == 0) {
                 PairedAlignerContext paired;
-                paired.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed);
+                paired.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed, argv[i]);
             } else {
                 fprintf(stderr, "Invalid command: %s\n\n", argv[i]);
                 usage();
