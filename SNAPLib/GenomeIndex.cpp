@@ -754,7 +754,7 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
 
 
 
-GenomeIndex::GenomeIndex() : nHashTables(0), hashTables(NULL), overflowTable32(NULL), overflowTable64(NULL), genome(NULL), tablesBlob(NULL)
+GenomeIndex::GenomeIndex() : nHashTables(0), hashTables(NULL), overflowTable32(NULL), overflowTable64(NULL), genome(NULL), tablesBlob(NULL), mappedOverflowTable(NULL), mappedTables(NULL)
 {
 }
 
@@ -771,23 +771,29 @@ GenomeIndex::~GenomeIndex()
     delete [] hashTables;
     hashTables = NULL;
 
-    if (NULL != overflowTable32) {
-        BigDealloc(overflowTable32);
-        overflowTable32 = NULL;
-    }
+	if (NULL != mappedTables) {
+		mappedTables->close();
+		mappedOverflowTable->close();
+	} else {
+		if (NULL != overflowTable32) {
+			BigDealloc(overflowTable32);
+			overflowTable32 = NULL;
+		}
 
-    if (NULL != overflowTable64) {
-        BigDealloc(overflowTable64);
-        overflowTable64 = NULL;
-    }
+		if (NULL != overflowTable64) {
+			BigDealloc(overflowTable64);
+			overflowTable64 = NULL;
+		}
 
-    delete genome;
-    genome = NULL;
+		if (NULL != tablesBlob) {
+			BigDealloc(tablesBlob);
+			tablesBlob = NULL;
+		}
+	}
 
-    if (NULL != tablesBlob) {
-        BigDealloc(tablesBlob);
-        tablesBlob = NULL;
-    }
+	delete genome;
+	genome = NULL;
+
 }
 
     void
@@ -1444,9 +1450,8 @@ GenomeIndex::printBiasTables()
 }
 
         GenomeIndex *
-GenomeIndex::loadFromDirectory(char *directoryName)
+GenomeIndex::loadFromDirectory(char *directoryName, bool map)
 {
-
     const unsigned filenameBufferSize = MAX_PATH+1;
     char filenameBuffer[filenameBufferSize];
     
@@ -1512,35 +1517,54 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     unsigned overflowEntrySize = (locationSize > 4) ? sizeof(*index->overflowTable64) : sizeof(*index->overflowTable32);
 
     size_t overflowTableSizeInBytes = (size_t)index->overflowTableSize * overflowEntrySize;
-    char *tableAsCharStar;
-    if (locationSize > 4) {
-        index->overflowTable64 = (_int64 *)BigAlloc(overflowTableSizeInBytes);
-        tableAsCharStar = (char *) index->overflowTable64;
-        _ASSERT(NULL == index->overflowTable32);
-    } else {
-        index->overflowTable32 = (unsigned *)BigAlloc(overflowTableSizeInBytes);
-        tableAsCharStar = (char *) index->overflowTable32;
-        _ASSERT(NULL == index->overflowTable64);
-    }
 
     snprintf(filenameBuffer,filenameBufferSize, "%s%cOverflowTable", directoryName, PATH_SEP);
-    GenericFile *fOverflowTable = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
 
-    if (NULL == fOverflowTable) {
-        WriteErrorMessage("Unable to open overflow table file, '%s', %d\n", filenameBuffer, errno);
-        delete index;
-        return NULL;
-    }
+	if (map) {
+		index->mappedOverflowTable = GenericFile_map::open(filenameBuffer);
+		size_t bytesMapped;
+		if (locationSize > 4) {
+			index->overflowTable64 = (_int64 *)index->mappedOverflowTable->mapAndAdvance(overflowTableSizeInBytes, &bytesMapped);
+		} else {
+			index->overflowTable32 = (unsigned *)index->mappedOverflowTable->mapAndAdvance(overflowTableSizeInBytes, &bytesMapped);
+		}
 
-    size_t amountRead = fOverflowTable->read(tableAsCharStar, overflowTableSizeInBytes);
-    if (amountRead != overflowTableSizeInBytes) {
-        WriteErrorMessage("Error reading overflow table, %lld != %lld bytes read.\n", amountRead, overflowTableSizeInBytes);
-        soft_exit(1);
-    }
+		if (bytesMapped != overflowTableSizeInBytes) {
+			WriteErrorMessage("read (via mapping) only %lld bytes of '%s', expected %lld\n", bytesMapped, filenameBuffer, overflowTableSizeInBytes);
+			soft_exit(1);
+		}
 
-    fOverflowTable->close();
-    delete fOverflowTable;
-    fOverflowTable = NULL;
+		index->mappedOverflowTable->prefetch();
+	} else {
+		char *tableAsCharStar;
+		if (locationSize > 4) {
+			index->overflowTable64 = (_int64 *)BigAlloc(overflowTableSizeInBytes);
+			tableAsCharStar = (char *)index->overflowTable64;
+			_ASSERT(NULL == index->overflowTable32);
+		} else {
+			index->overflowTable32 = (unsigned *)BigAlloc(overflowTableSizeInBytes);
+			tableAsCharStar = (char *)index->overflowTable32;
+			_ASSERT(NULL == index->overflowTable64);
+		}
+
+		GenericFile *fOverflowTable = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
+
+		if (NULL == fOverflowTable) {
+			WriteErrorMessage("Unable to open overflow table file, '%s', %d\n", filenameBuffer, errno);
+			delete index;
+			return NULL;
+		}
+
+		size_t amountRead = fOverflowTable->read(tableAsCharStar, overflowTableSizeInBytes);
+		if (amountRead != overflowTableSizeInBytes) {
+			WriteErrorMessage("Error reading overflow table, %lld != %lld bytes read.\n", amountRead, overflowTableSizeInBytes);
+			soft_exit(1);
+		}
+
+		fOverflowTable->close();
+		delete fOverflowTable;
+		fOverflowTable = NULL;
+	}
 
     index->hashTables = new SNAPHashTable*[index->nHashTables];
 
@@ -1549,20 +1573,38 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     }
 
     snprintf(filenameBuffer, filenameBufferSize, "%s%cGenomeIndexHash", directoryName, PATH_SEP);
-	GenericFile *tablesFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
-    if (NULL == tablesFile) {
-        WriteErrorMessage("Unable to open genome hash table file '%s'\n", filenameBuffer);
-        soft_exit(1);
-    }
 
-    index->tablesBlob = BigAlloc(hashTablesFileSize);
-    amountRead = tablesFile->read(index->tablesBlob, hashTablesFileSize);
-    if (amountRead != hashTablesFileSize) {
-        WriteErrorMessage("Read incorrect amount for GenomeIndexHash file, %lld != %lld\n", hashTablesFileSize, amountRead);
-        soft_exit(1);
-    }
+	GenericFile_Blob *blobFile = NULL;
+	GenericFile *tablesFile = NULL;
 
-    GenericFile_Blob *blobFile = GenericFile_Blob::open(index->tablesBlob, hashTablesFileSize);
+	if (map) {
+		if (QueryFileSize(filenameBuffer) != hashTablesFileSize) {
+			WriteErrorMessage("File '%s' had unexpected size, %lld != %lld\n", filenameBuffer, QueryFileSize(filenameBuffer), hashTablesFileSize);
+			delete index;
+			return NULL;
+		}
+
+		index->mappedTables = GenericFile_map::open(filenameBuffer);
+		index->mappedTables->prefetch();
+		blobFile = index->mappedTables;
+		index->tablesBlob = NULL;
+	} else {
+		tablesFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
+		if (NULL == tablesFile) {
+			WriteErrorMessage("Unable to open genome hash table file '%s'\n", filenameBuffer);
+			soft_exit(1);
+		}
+
+		index->tablesBlob = BigAlloc(hashTablesFileSize);
+		size_t amountRead = tablesFile->read(index->tablesBlob, hashTablesFileSize);
+		if (amountRead != hashTablesFileSize) {
+			WriteErrorMessage("Read incorrect amount for GenomeIndexHash file, %lld != %lld\n", hashTablesFileSize, amountRead);
+			delete index;
+			return NULL;
+		}
+
+		blobFile = GenericFile_Blob::open(index->tablesBlob, hashTablesFileSize);
+	}
 
     for (unsigned i = 0; i < index->nHashTables; i++) {
         if (NULL == (index->hashTables[i] = SNAPHashTable::loadFromBlob(blobFile))) {
@@ -1591,16 +1633,18 @@ GenomeIndex::loadFromDirectory(char *directoryName)
         }
     }
 
-	tablesFile->close();
-	delete tablesFile;
-    tablesFile = NULL;
+	if (!map) {
+		tablesFile->close();
+		delete tablesFile;
+		tablesFile = NULL;
 
-    blobFile->close();
-    delete blobFile;
-    blobFile = NULL;
+		blobFile->close();
+		delete blobFile;
+		blobFile = NULL;
+	}
 
     snprintf(filenameBuffer,filenameBufferSize,"%s%cGenome",directoryName,PATH_SEP);
-    if (NULL == (index->genome = Genome::loadFromFile(filenameBuffer, chromosomePadding))) {
+    if (NULL == (index->genome = Genome::loadFromFile(filenameBuffer, chromosomePadding, 0, 0, map))) {
         WriteErrorMessage("GenomeIndex::loadFromDirectory: Failed to load the genome itself\n");
         delete index;
         return NULL;

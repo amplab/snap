@@ -68,7 +68,8 @@ AlignerOptions::AlignerOptions(
     noUkkonen(false),
     noOrderedEvaluation(false),
 	minReadLength(DEFAULT_MIN_READ_LENGTH),
-    maxDistFraction(0.0)
+    maxDistFraction(0.0),
+	mapIndex(false)
 {
     if (forPairedEnd) {
         maxDist                 = 15;
@@ -149,6 +150,9 @@ AlignerOptions::usageMessage()
 		"       down execution without improving alignments.\n"
 		"  -mrl Specify the minimum read length to align, reads shorter than this (after clipping) stay unaligned.  This should be\n"
 		"       a good bit bigger than the seed length or you might get some questionable alignments.  Default %d\n"
+		"  -map Use file mapping to load the index rather than reading it.  This might speed up index loading in cases\n"
+		"       where SNAP is run repatedly on the same index, and the index is larger than half of the memory size\n"
+		"       of the machine.\n"
 #ifdef LONG_READS
         "  -dp  Edit distance as a percentage of read length (single only, overrides -d)\n"
 #endif
@@ -274,9 +278,12 @@ AlignerOptions::parse(
     } else if (strcmp(argv[n], "-b") == 0) {
         bindToProcessors = true;
         return true;
-    } else if (strcmp(argv[n], "-so") == 0) {
-        sortOutput = true;
-        return true;
+	} else if (strcmp(argv[n], "-so") == 0) {
+		sortOutput = true;
+		return true;
+	} else if (strcmp(argv[n], "-map") == 0) {
+		mapIndex = true;
+		return true;
     } else if (strcmp(argv[n], "-S") == 0) {
         if (n + 1 < argc) {
             n++;

@@ -28,6 +28,7 @@ Revision History:
 #include "Seed.h"
 #include "Genome.h"
 #include "ApproximateCounter.h"
+#include "GenericFile_map.h"
 
 class GenomeIndex {
 public:
@@ -74,7 +75,7 @@ public:
     //
     static void runIndexer(int argc, const char **argv);
 
-    static GenomeIndex *loadFromDirectory(char *directoryName);
+    static GenomeIndex *loadFromDirectory(char *directoryName, bool map);
 
     static void printBiasTables();
 
@@ -97,8 +98,10 @@ protected:
     _uint64 overflowTableSize;
     unsigned *overflowTable32;
     _int64 *overflowTable64;
+	GenericFile_map *mappedOverflowTable;
 
     void *tablesBlob;   // All of the hash tables in one giant blob
+	GenericFile_map *mappedTables;
 
     //
     // We have to build the overflow table in two stages.  While we're walking the genome, we first

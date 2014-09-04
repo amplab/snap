@@ -180,6 +180,7 @@
     <ClInclude Include="GenericFile.h" />
     <ClInclude Include="GenericFile_Blob.h" />
     <ClInclude Include="GenericFile_HDFS.h" />
+    <ClInclude Include="GenericFile_map.h" />
     <ClInclude Include="GenericFile_stdio.h" />
     <ClInclude Include="Genome.h" />
     <ClInclude Include="GenomeIndex.h" />
@@ -234,6 +235,7 @@
     <ClCompile Include="GenericFile.cpp" />
     <ClCompile Include="GenericFile_Blob.cpp" />
     <ClCompile Include="GenericFile_HDFS.cpp" />
+    <ClCompile Include="GenericFile_map.cpp" />
     <ClCompile Include="GenericFile_stdio.cpp" />
     <ClCompile Include="Genome.cpp" />
     <ClCompile Include="GenomeIndex.cpp" />

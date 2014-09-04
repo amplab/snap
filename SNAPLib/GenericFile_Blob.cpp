@@ -24,19 +24,15 @@ Revision History:
 #include "stdafx.h"
 #include "GenericFile_Blob.h"
 
-GenericFile_Blob::GenericFile_Blob(): blob(NULL), readPointer(NULL), blobSize(0), blobEnd(NULL)
+GenericFile_Blob::GenericFile_Blob(void *i_blob, size_t i_blobSize) : blob((char *)i_blob), readPointer((char *)i_blob), blobSize(i_blobSize), blobEnd((char *)i_blob + i_blobSize)
 {
 }
 
 GenericFile_Blob *
 GenericFile_Blob::open(void *i_blob, size_t i_blobSize)
 {
-    GenericFile_Blob *file = new GenericFile_Blob();
-    file->blob = (char *)i_blob;
-    file->readPointer = (char *)i_blob;
-    file->blobSize = i_blobSize;
-    file->blobEnd = file->blob + i_blobSize;
-
+	GenericFile_Blob *file = new GenericFile_Blob(i_blob, i_blobSize);
+ 
     return file;
 }
 
