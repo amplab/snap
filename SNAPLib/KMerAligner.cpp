@@ -6,7 +6,7 @@ KMerAligner.cpp
 
 Abstract:
 
-Functions for running the single end aligner sub-program.
+Function for running the kmer counter functionality.
 
 Authors:
 
