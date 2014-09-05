@@ -31,7 +31,7 @@ class GenericFile_map : public GenericFile_Blob
 public:
 	static GenericFile_map *open(const char *filename);
 	virtual ~GenericFile_map();
-	_int64 prefetch();	// Ignore the return value, it's just to trick the compiler into not optimizing it away.
+	virtual _int64 prefetch();	// Ignore the return value, it's just to trick the compiler into not optimizing it away.
 
 private:
 	GenericFile_map(MemoryMappedFile *i_mappedFile, void *i_contents, size_t i_fileSize);

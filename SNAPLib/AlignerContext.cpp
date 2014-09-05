@@ -143,7 +143,7 @@ AlignerContext::initialize()
  
             fflush(stdout);
             _int64 loadStart = timeInMillis();
-            index = GenomeIndex::loadFromDirectory((char*) options->indexDir, options->mapIndex);
+            index = GenomeIndex::loadFromDirectory((char*) options->indexDir, options->mapIndex, options->prefetchIndex);
             if (index == NULL) {
                 WriteErrorMessage("Index load failed, aborting.\n");
                 soft_exit(1);

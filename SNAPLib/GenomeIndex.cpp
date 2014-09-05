@@ -398,8 +398,8 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     size_t totalUsedHashTableElements = 0;
     for (unsigned j = 0; j < index->nHashTables; j++) {
         totalUsedHashTableElements += hashTables[j]->GetUsedElementCount();
-//        printf("HashTable[%d] has %lld used elements, loading %lld%%\n",j,(_int64)hashTables[j]->GetUsedElementCount(),
-//                (_int64)hashTables[j]->GetUsedElementCount() * 100 / (_int64)hashTables[j]->GetTableSize());
+        printf("HashTable[%d] has %lld used elements, loading %lld%%\n",j,(_int64)hashTables[j]->GetUsedElementCount(),
+                (_int64)hashTables[j]->GetUsedElementCount() * 100 / (_int64)hashTables[j]->GetTableSize());
     }
 
     WriteStatusMessage("%lld(%lld%%) seeds occur more than once, total of %lld(%lld%%) genome locations are not unique, %lld(%lld%%) bad seeds, %lld both complements used %lld no string\n",
@@ -1450,7 +1450,7 @@ GenomeIndex::printBiasTables()
 }
 
         GenomeIndex *
-GenomeIndex::loadFromDirectory(char *directoryName, bool map)
+GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
 {
     const unsigned filenameBufferSize = MAX_PATH+1;
     char filenameBuffer[filenameBufferSize];
@@ -1521,7 +1521,24 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map)
     snprintf(filenameBuffer,filenameBufferSize, "%s%cOverflowTable", directoryName, PATH_SEP);
 
 	if (map) {
+		if (prefetch) {
+			GenericFile *overflowTableFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
+			if (NULL == overflowTableFile) {
+				WriteErrorMessage("Unable to open file '%s'\n", filenameBuffer);
+				soft_exit(1);
+			}
+
+			overflowTableFile->prefetch();
+			overflowTableFile->close();
+			delete overflowTableFile;
+		}
+
 		index->mappedOverflowTable = GenericFile_map::open(filenameBuffer);
+		if (NULL == index->mappedOverflowTable) {
+			WriteErrorMessage("Unable to open file '%s'\n", filenameBuffer);
+			soft_exit(1);
+		}
+
 		size_t bytesMapped;
 		if (locationSize > 4) {
 			index->overflowTable64 = (_int64 *)index->mappedOverflowTable->mapAndAdvance(overflowTableSizeInBytes, &bytesMapped);
@@ -1534,7 +1551,7 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map)
 			soft_exit(1);
 		}
 
-		index->mappedOverflowTable->prefetch();
+		index->mappedOverflowTable->prefetch();	// NB: This is different than the -pre prefetch.  This one maps the whole thing (and reads it sequentially in case you didn't use -pre)
 	} else {
 		char *tableAsCharStar;
 		if (locationSize > 4) {
@@ -1578,6 +1595,18 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map)
 	GenericFile *tablesFile = NULL;
 
 	if (map) {
+		if (prefetch) {
+			GenericFile *hashTableFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
+			if (NULL == hashTableFile) {
+				WriteErrorMessage("Unable to open genome hash table file '%s'\n", filenameBuffer);
+				soft_exit(1);
+			}
+
+			hashTableFile->prefetch();
+			hashTableFile->close();
+			delete hashTableFile;
+		}
+
 		if (QueryFileSize(filenameBuffer) != hashTablesFileSize) {
 			WriteErrorMessage("File '%s' had unexpected size, %lld != %lld\n", filenameBuffer, QueryFileSize(filenameBuffer), hashTablesFileSize);
 			delete index;

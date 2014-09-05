@@ -75,7 +75,7 @@ public:
     //
     static void runIndexer(int argc, const char **argv);
 
-    static GenomeIndex *loadFromDirectory(char *directoryName, bool map);
+    static GenomeIndex *loadFromDirectory(char *directoryName, bool map, bool prefetch);
 
     static void printBiasTables();
 
