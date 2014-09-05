@@ -22,6 +22,7 @@ Revision History:
 --*/
 
 #pragma once
+#include "Compat.h"
 
 class GenericFile
 {
