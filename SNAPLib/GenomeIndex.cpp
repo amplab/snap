@@ -398,8 +398,8 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     size_t totalUsedHashTableElements = 0;
     for (unsigned j = 0; j < index->nHashTables; j++) {
         totalUsedHashTableElements += hashTables[j]->GetUsedElementCount();
-        printf("HashTable[%d] has %lld used elements, loading %lld%%\n",j,(_int64)hashTables[j]->GetUsedElementCount(),
-                (_int64)hashTables[j]->GetUsedElementCount() * 100 / (_int64)hashTables[j]->GetTableSize());
+//        printf("HashTable[%d] has %lld used elements, loading %lld%%\n",j,(_int64)hashTables[j]->GetUsedElementCount(),
+//                (_int64)hashTables[j]->GetUsedElementCount() * 100 / (_int64)hashTables[j]->GetTableSize());
     }
 
     WriteStatusMessage("%lld(%lld%%) seeds occur more than once, total of %lld(%lld%%) genome locations are not unique, %lld(%lld%%) bad seeds, %lld both complements used %lld no string\n",
