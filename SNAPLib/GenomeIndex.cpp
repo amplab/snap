@@ -54,7 +54,7 @@ static void usage()
             "Options:\n"
             "  -s               Seed size (default: %d)\n"
             "  -h               Hash table slack (default: %.1f)\n"
-            "  -hg19            Use pre-computed table bias for hg19, which results in better speed, balance, and memory footprint but may not work for other references.\n"
+            "  -hg19            Use pre-computed table bias for hg19, which results in better speed, balance, and a smaller index, but only works for the complete human reference.\n"
             "  -Ofactor         This parameter is deprecated and will be ignored.\n"
             " -tMaxThreads      Specify the maximum number of threads to use. Default is the number of cores.\n"
             " -B<chars>         Specify characters to use as chromosome name terminators in the FASTA header line; these characters and anything after are\n"
@@ -67,7 +67,7 @@ static void usage()
             "                   edit distance you'll ever use, and there's a performance advantage to have it be bigger than any\n"
             "                   read you'll process.  Default is %d\n"
             " -HHistogramFile   Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n"
-            " -exact            Compute hash table sizes exactly.  This will slow down index build, but may be necessary in some cases\n"
+            " -exact            Compute hash table sizes exactly.  This will slow down index build, but usually will result in smaller indices.\n"
             " -keysize          The number of bytes to use for the hash table key.  Larger values increase SNAP's memory footprint, but allow larger seeds.  Default: %d\n"
 			" -large            Build a larger index that's a little faster, particualrly for runs with quick/inaccurate parameters.  Increases index size by\n"
 			"                   about 30%%, depending on the other index parameters and the contents of the reference genome\n"
@@ -188,9 +188,8 @@ GenomeIndex::runIndexer(
     }
 
     if (seedLen < 19 && !computeBias && locationSize < 5) {
-        WriteErrorMessage("For hg19, there are no bias tables for seed lengths < 19, and furthermore you'll need to use 64 bit genome offsets, which will increase memory use.\n");
-        WriteErrorMessage("Setting those options for you.\n");
-        computeBias = false;
+        WriteErrorMessage("For hg19, you'll need to use 64 bit genome offsets, which will increase memory use.\n");
+        WriteErrorMessage("Setting that options for you.\n");
         locationSize = 5;
     }
 
@@ -816,20 +815,31 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
     static const unsigned GENOME_SIZE_FOR_EXACT_COUNT = 1 << 20;  // Needs to be a power of 2 for hash sets
 
     bool computeExactly = (countOfBases < GENOME_SIZE_FOR_EXACT_COUNT) || forceExact;
-    if (countOfBases >= (1 << 30) && forceExact) {
-        WriteErrorMessage("You can't use -exact for genomes with >= 2^30 bases.\n");
+    if (countOfBases >= (((_int64)1) << 62) && forceExact) {
+        WriteErrorMessage("You can't use -exact for genomes with >= 2^62 bases (not that you have that much memory or disk anyway).\n");
         soft_exit(1);
     }
-    FixedSizeVector<int> numExactSeeds(nHashTables, 0);
+    
+	_uint64 *numExactSeeds = NULL;
     vector<ApproximateCounter> approxCounters(nHashTables);
 
     _int64 validSeeds = 0;
 
     if (computeExactly) {
-        // The cast in the next line is OK because we checked for < 2^30 above.
-        FixedSizeSet<_int64> exactSeedsSeen((int)(2 * (forceExact ? FirstPowerOf2GreaterThanOrEqualTo((int)countOfBases) : GENOME_SIZE_FOR_EXACT_COUNT)));
-        for (unsigned i = 0; i < (unsigned)(countOfBases - seedLen); i++) {
-            if (i % 10000000 == 0) {
+		numExactSeeds = new _uint64[nHashTables];
+		for (unsigned i = 0; i < nHashTables; i++) {
+			numExactSeeds[i] = 0;
+		}
+
+		//
+		// Create a hash table to record all of the seeds we've already seen.  The key is the seed, and the value is just one byte
+		// that the hash table package needs to be able to differentiate empty from non-empty entries.  The *11/10 is to leave some slack
+		// in the hash table.  In any case, this table should be smaller than the final index (because it doesn't need
+		// any genome locations, not to mention an overflow table), so it should fit in memory.
+		//
+		SNAPHashTable *seedsSeen = new SNAPHashTable((countOfBases * 11) / 10, ((seedLen + 3) * 2) / 8, 1, 1, 0xff);
+        for (_int64 i = 0; i < countOfBases - seedLen; i++) {
+            if (i % 100000000 == 0) {
                 WriteStatusMessage("Bias computation: %lld / %lld\n",(_int64)i, (_int64)countOfBases);
             }
             const char *bases = genome->getSubstring(i,seedLen);
@@ -858,11 +868,18 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
 			}
 
 			_ASSERT(seed.getHighBases(hashTableKeySize) < nHashTables);
-			if (!exactSeedsSeen.contains(seed.getBases())) {
-				exactSeedsSeen.add(seed.getBases());
+
+
+			if (NULL == seedsSeen->GetFirstValueForKey(seed.getBases())) {
+				_uint64 value = 42;
+				seedsSeen->Insert(seed.getBases(), &value);
 				numExactSeeds[seed.getHighBases(hashTableKeySize)]++;
 			}
         }
+
+//      for (unsigned i = 0; i < nHashTables; i++) printf("Hash table %d is predicted to have %lld entries\n", i, numExactSeeds[i]);
+		delete seedsSeen;
+		seedsSeen = NULL;
     } else {
         //
         // Run through the table in parallel.
@@ -922,13 +939,11 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
 
     for (unsigned i = 0; i < nHashTables; i++) {
         _uint64 count = computeExactly ? numExactSeeds[i] : approxCounters[i].getCount();
-        table[i] = (count / distinctSeeds) * ((double)validSeeds / countOfBases) * nHashTables;
+		table[i] = ((double)count * nHashTables) / (double)countOfBases;
     }
 
-    //printf("Bias table:\n");
-    //for (unsigned i = 0; i < nHashTables; i++) {
-    //    printf("%u -> %lf\n", i, table[i]);
-    //}
+	delete numExactSeeds;
+	numExactSeeds = NULL;
 
     WriteStatusMessage("Computed bias table in %llds\n", (timeInMillis() + 500 - start) / 1000);
 }
