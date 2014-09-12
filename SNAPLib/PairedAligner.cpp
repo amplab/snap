@@ -401,7 +401,7 @@ void PairedAlignerContext::runIterationThread()
     
     IntersectingPairedEndAligner *intersectingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
-                                                                maxCandidatePoolSize, allocator, noUkkonen, noOrderedEvaluation);
+                                                                maxCandidatePoolSize, allocator, noUkkonen, noOrderedEvaluation, noTruncation);
 
 
     ChimericPairedEndAligner *aligner = new (allocator) ChimericPairedEndAligner(
@@ -415,6 +415,7 @@ void PairedAlignerContext::runIterationThread()
         extraSearchDepth,
         noUkkonen,
         noOrderedEvaluation,
+		noTruncation,
         intersectingAligner,
 		minReadLength,
         allocator);

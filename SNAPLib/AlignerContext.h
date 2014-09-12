@@ -115,6 +115,7 @@ public:
     FILE                                *perfFile;
     bool                                 noUkkonen;
     bool                                 noOrderedEvaluation;
+	bool								 noTruncation;
     int                                  maxSecondaryAligmmentAdditionalEditDistance;
 	unsigned							 minReadLength;
 

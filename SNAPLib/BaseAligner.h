@@ -50,6 +50,7 @@ public:
         unsigned        i_extraSearchDepth,
         bool            i_noUkkonen,
         bool            i_noOrderedEvaluation,
+		bool			i_noTruncation,
         LandauVishkin<1>*i_landauVishkin = NULL,
         LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
         AlignerStats   *i_stats = NULL,
@@ -286,6 +287,7 @@ private:
     unsigned numWeightLists;
     bool     noUkkonen;
     bool     noOrderedEvaluation;
+	bool     noTruncation;
     bool     doesGenomeIndexHave64BitLocations;
 
     char *rcReadData;

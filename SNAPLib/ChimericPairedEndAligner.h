@@ -41,6 +41,7 @@ public:
         unsigned            extraSearchDepth,
         bool                noUkkonen,
         bool                noOrderedEvaluation,
+		bool				noTruncation,
         PairedEndAligner    *underlyingPairedEndAligner_,
 		unsigned			minReadLength_,
         BigAllocator        *allocator);

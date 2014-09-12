@@ -116,6 +116,7 @@ SingleAlignerContext::runIterationThread()
             extraSearchDepth,
             noUkkonen,
             noOrderedEvaluation,
+			noTruncation,
             NULL,               // LV (no need to cache in the single aligner)
             NULL,               // reverse LV
             stats,

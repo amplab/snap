@@ -49,7 +49,8 @@ public:
         unsigned      maxCandidatePoolSize,
         BigAllocator  *allocator,
         bool          noUkkonen_,
-        bool          noOrderedEvaluation_);
+        bool          noOrderedEvaluation_,
+		bool		  noTruncation_);
 
      static unsigned getMaxSecondaryResults(unsigned numSeedsFromCommandLine, double seedCoverage, unsigned maxReadSize, unsigned maxHits, unsigned seedLength, unsigned minSpacing, unsigned maxSpacing)
      {
@@ -132,6 +133,7 @@ private:
     _int64          nLocationsScored;
     bool            noUkkonen;
     bool            noOrderedEvaluation;
+	bool			noTruncation;
 
 	static const unsigned        maxMergeDistance;
 	
