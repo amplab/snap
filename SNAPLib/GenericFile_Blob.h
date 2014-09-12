@@ -55,9 +55,10 @@ public:
     //
     void *mapAndAdvance(size_t count, size_t *bytesReturned);
 
-private:
-	GenericFile_Blob();
+protected:
+	GenericFile_Blob(void *i_blob, size_t i_blobSize);
 
+private:
 	char    *blob;
     char    *blobEnd;
     char    *readPointer;

@@ -91,6 +91,8 @@ struct ReaderContext
 {
     const Genome*       genome;
     const char*         defaultReadGroup;
+    const char*         defaultReadGroupAux; // SAM or BAM depending on output format
+    int                 defaultReadGroupAuxLen;
     ReadClippingType    clipping;
     bool                paired;
     bool                ignoreSecondaryAlignments;   // Should we just ignore reads with the Secondary Alignment bit set?
@@ -186,10 +188,10 @@ public:
     virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine) = 0;
 
     // write a single read, return true if successful
-    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment) = 0;
+    virtual bool writeRead(const ReaderContext& context, Read *read, AlignmentResult result, int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment) = 0;
 
     // write a pair of reads, return true if successful
-    virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result, bool secondaryAlignment) = 0;
+    virtual bool writePair(const ReaderContext& context, Read *read0, Read *read1, PairedAlignmentResult *result, bool secondaryAlignment) = 0;
 
     // close out this thread
     virtual void close() = 0;

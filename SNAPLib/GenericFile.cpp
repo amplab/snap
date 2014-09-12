@@ -93,6 +93,17 @@ char *GenericFile::_gets_impl(char *buf, size_t count)
 	return (c == EOF && next == buf) ? NULL : buf;
 }
 
+	_int64
+GenericFile::prefetch()
+{
+	const size_t ioSize = 128 * 1024 * 1024;
 
+	char *buffer = new char[ioSize];
 
-
+	for (;;) {
+		if (0 == read(buffer, ioSize)) {
+			delete[] buffer;
+			return 0;
+		}
+	}
+}

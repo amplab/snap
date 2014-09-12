@@ -514,6 +514,9 @@ public:
 
     virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, GenomeLocation* o_location, GenomeDistance* o_readBytes, int* o_refID, int* o_pos) const;
 
+    virtual void setupReaderContext(AlignerOptions* options, ReaderContext* readerContext) const
+    { FileFormat::setupReaderContext(options, readerContext, true); }
+
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
 
     virtual bool writeHeader(
@@ -521,7 +524,7 @@ public:
         bool sorted, int argc, const char **argv, const char *version, const char *rgLine) const;
 
     virtual bool writeRead(
-        const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
+        const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
@@ -667,7 +670,7 @@ BAMFormat::writeHeader(
 
     bool
 BAMFormat::writeRead(
-    const Genome * genome,
+    const ReaderContext& context,
     LandauVishkinWithCigar * lv,
     char * buffer,
     size_t bufferSpace,
@@ -712,7 +715,7 @@ BAMFormat::writeRead(
     GenomeDistance extraBasesClippedAfter;
     int editDistance;
 
-    if (! SAMFormat::createSAMLine(genome, lv, data, quality, MAX_READ, contigName, contigIndex,
+    if (! SAMFormat::createSAMLine(context.genome, lv, data, quality, MAX_READ, contigName, contigIndex,
         flags, positionInContig, mapQuality, mateContigName, mateContigIndex, matePositionInContig, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, secondaryAlignment, useM,
@@ -722,7 +725,7 @@ BAMFormat::writeRead(
         return false;
     }
     if (genomeLocation != InvalidGenomeLocation) {
-        cigarOps = computeCigarOps(genome, lv, (char*) cigarBuf, cigarBufSize * sizeof(_uint32),
+        cigarOps = computeCigarOps(context.genome, lv, (char*) cigarBuf, cigarBufSize * sizeof(_uint32),
                                    clippedData, clippedLength, basesClippedBefore, (unsigned)extraBasesClippedBefore, basesClippedAfter, (unsigned)extraBasesClippedAfter,
                                    read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
                                    genomeLocation, direction == RC, useM, &editDistance);
@@ -758,10 +761,13 @@ BAMFormat::writeRead(
     }
     size_t bamSize = BAMAlignment::size((unsigned)qnameLen + 1, cigarOps, fullLength, auxLen);
     if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
-        bamSize += 4 + strlen(read->getReadGroup());
+        if (strcmp(read->getReadGroup(), context.defaultReadGroup) != 0) {
+            bamSize += 4 + strlen(read->getReadGroup());
+        } else {
+            bamSize += context.defaultReadGroupAuxLen;
+        }
     }
-    bamSize += 4; // NM:C field
-    bamSize += strlen("PGZSNAP") + 1; // PG field
+    bamSize += 12; // NM:C PG:Z:SNAP fields
     if (bamSize > bufferSpace) {
         return false;
     }
@@ -804,6 +810,9 @@ BAMFormat::writeRead(
     }
     memcpy(bam->qual(), quality, fullLength);
     if (aux != NULL && auxLen > 0) {
+        if (((char*)bam->firstAux()) + auxLen > buffer + bufferSpace) {
+            return false;
+        }
         if (! translateReadGroupFromSAM) {
             memcpy(bam->firstAux(), aux, auxLen);
         } else {
@@ -819,10 +828,21 @@ BAMFormat::writeRead(
     }
     // RG
     if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
-        BAMAlignAux* rg = (BAMAlignAux*) (auxLen + (char*) bam->firstAux());
-        rg->tag[0] = 'R'; rg->tag[1] = 'G'; rg->val_type = 'Z';
-        strcpy((char*) rg->value(), read->getReadGroup());
-        auxLen += (unsigned) rg->size();
+        if (strcmp(read->getReadGroup(), context.defaultReadGroup) != 0) {
+            if ((char*)bam->firstAux() + auxLen + 4 + strlen(read->getReadGroup()) > buffer + bufferSpace) {
+                return false;
+            }
+            BAMAlignAux* rg = (BAMAlignAux*)(auxLen + (char*)bam->firstAux());
+            rg->tag[0] = 'R'; rg->tag[1] = 'G'; rg->val_type = 'Z';
+            strcpy((char*)rg->value(), read->getReadGroup());
+            auxLen += (unsigned)rg->size();
+        } else {
+            if ((char*)bam->firstAux() + auxLen + context.defaultReadGroupAuxLen > buffer + bufferSpace) {
+                return false;
+            }
+            memcpy((char*)bam->firstAux() + auxLen, context.defaultReadGroupAux, context.defaultReadGroupAuxLen);
+            auxLen += context.defaultReadGroupAuxLen;
+        }
     }
     // PG
     BAMAlignAux* pg = (BAMAlignAux*) (auxLen + (char*) bam->firstAux());

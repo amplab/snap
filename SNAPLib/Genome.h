@@ -25,6 +25,7 @@ Revision History:
 #pragma once
 #include "Compat.h"
 #include "GenericFile.h"
+#include "GenericFile_map.h"
 
 //
 // We have two different classes to represent a place in a genome and a distance between places in a genome.
@@ -192,7 +193,7 @@ public:
         //
         // minOffset and length are used to read in only a part of a whole genome.
         //
-        static const Genome *loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLocation i_minLocation = 0, GenomeDistance length = 0);
+        static const Genome *loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLocation i_minLocation = 0, GenomeDistance length = 0, bool map = false);
                                                                   // This loads from a genome save
                                                                   // file, not a FASTA file.  Use
                                                                   // FASTA.h for FASTA loads.
@@ -335,9 +336,11 @@ private:
         Contig      *contigsByName;
         Genome *copy(bool copyX, bool copyY, bool copyM) const;
 
-        static bool openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs);
+        static bool openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs, bool map);
 
         const unsigned chromosomePadding;
+
+		GenericFile_map *mappedFile;
 };
 
 GenomeDistance DistanceBetweenGenomeLocations(GenomeLocation locationA, GenomeLocation locationB);

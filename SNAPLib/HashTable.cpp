@@ -25,7 +25,7 @@ Environment:
 #include "GenericFile_Blob.h"
 
 SNAPHashTable::SNAPHashTable(
-    unsigned    i_tableSize,
+    _int64      i_tableSize,
     unsigned    i_keySizeInBytes,
     unsigned    i_valueSizeInBytes,
     unsigned    i_valueCount,
@@ -62,7 +62,7 @@ Arguments:
     // unused.
     //
 
-    for (unsigned i = 0; i < tableSize; i++) {
+    for (size_t i = 0; i < tableSize; i++) {
         void *entry = getEntry(i);
 		_ASSERT(entry >= Table && entry <= (char *)Table + tableSize * elementSize);
         clearKey(entry);
@@ -251,7 +251,7 @@ SNAPHashTable::getEntryForKey(KeyType key) const
     _uint64 tableIndex = hash(key) % tableSize;
 
     bool wrapped = false;
-    unsigned nProbes = 1;
+    _uint64 nProbes = 1;
 
     //
     // Chain through the table until we hit either a match on the key or an unused element
@@ -307,7 +307,11 @@ SNAPHashTable::Insert(KeyType key, ValueType *data)
         return false;
     }
 
-    setKey(entry, key);
+	if (!isKeyEqual(entry, key)) {
+		usedElementCount++;
+		setKey(entry, key);
+	}
+
     for (unsigned i = 0; i < valueCount; i++) {
         memcpy((char *)entry + i * valueSizeInBytes, &data[i], valueSizeInBytes);   // Assumes little endian
     }

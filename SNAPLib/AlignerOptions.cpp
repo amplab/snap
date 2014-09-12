@@ -54,7 +54,7 @@ AlignerOptions::AlignerOptions(
 	useM(false),
     gapPenalty(0),
 	extra(NULL),
-    rgLineContents(NULL),
+    rgLineContents("@RG\tID:FASTQ\tPL:Illumina\tPU:pu\tLB:lb\tSM:sm"),
     perfFileName(NULL),
     useTimingBarrier(false),
     extraSearchDepth(2),
@@ -68,7 +68,9 @@ AlignerOptions::AlignerOptions(
     noUkkonen(false),
     noOrderedEvaluation(false),
 	minReadLength(DEFAULT_MIN_READ_LENGTH),
-    maxDistFraction(0.0)
+    maxDistFraction(0.0),
+	mapIndex(false),
+	prefetchIndex(false)
 {
     if (forPairedEnd) {
         maxDist                 = 15;
@@ -149,6 +151,14 @@ AlignerOptions::usageMessage()
 		"       down execution without improving alignments.\n"
 		"  -mrl Specify the minimum read length to align, reads shorter than this (after clipping) stay unaligned.  This should be\n"
 		"       a good bit bigger than the seed length or you might get some questionable alignments.  Default %d\n"
+		"  -map Use file mapping to load the index rather than reading it.  This might speed up index loading in cases\n"
+		"       where SNAP is run repatedly on the same index, and the index is larger than half of the memory size\n"
+		"       of the machine.  On some operating systems, loading an index with -map is much slower than without if the\n"
+		"       index is not in memory.  You might consider adding -pre to prefetch the index into system cache when loading\n"
+		"       with -map when you don't expect the index to be in cache.\n"
+		"  -pre Prefetch the index into system cache.  This is only meaningful with -map, and only helps if the index is not\n"
+		"       already in memory and your operating system is slow at reading mapped files (i.e., some versions of Linux,\n"
+		"       but not Windows).\n"
 #ifdef LONG_READS
         "  -dp  Edit distance as a percentage of read length (single only, overrides -d)\n"
 #endif
@@ -274,10 +284,17 @@ AlignerOptions::parse(
     } else if (strcmp(argv[n], "-b") == 0) {
         bindToProcessors = true;
         return true;
-    } else if (strcmp(argv[n], "-so") == 0) {
-        sortOutput = true;
-        return true;
-    } else if (strcmp(argv[n], "-S") == 0) {
+	} else if (strcmp(argv[n], "-so") == 0) {
+		sortOutput = true;
+		return true;
+	} else if (strcmp(argv[n], "-map") == 0) {
+		mapIndex = true;
+		return true;
+	} else if (strcmp(argv[n], "-pre") == 0) {
+		prefetchIndex = true;
+		return true;
+	}
+	else if (strcmp(argv[n], "-S") == 0) {
         if (n + 1 < argc) {
             n++;
             for (const char* p = argv[n]; *p; p++) {
@@ -534,8 +551,9 @@ AlignerOptions::parse(
             strcpy(newReadGroup, argv[n+1]);
             defaultReadGroup = newReadGroup;
             n++;
-            char* s = new char[1 + strlen(defaultReadGroup) + strlen("@RG\tID:\tSM:sample")];
-            sprintf(s, "@RG\tID:%s\tSM:sample", defaultReadGroup);
+            static const char* format = "@RG\tID:%s\tPL:Illumina\tPU:pu\tLB:lb\tSM:sm";
+            char* s = new char[1 + strlen(defaultReadGroup) + strlen(format)];
+            sprintf(s, format, defaultReadGroup);
             rgLineContents = s;
             return true;
         } else {

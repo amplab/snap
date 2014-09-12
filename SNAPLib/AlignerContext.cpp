@@ -143,7 +143,7 @@ AlignerContext::initialize()
  
             fflush(stdout);
             _int64 loadStart = timeInMillis();
-            index = GenomeIndex::loadFromDirectory((char*) options->indexDir);
+            index = GenomeIndex::loadFromDirectory((char*) options->indexDir, options->mapIndex, options->prefetchIndex);
             if (index == NULL) {
                 WriteErrorMessage("Index load failed, aborting.\n");
                 soft_exit(1);
@@ -233,6 +233,7 @@ AlignerContext::beginIteration()
             WriteErrorMessage("AlignerContext::beginIteration(): unknown file type %d for '%s'\n", options->outputFile.fileType, options->outputFile.fileName);
             soft_exit(1);
         }
+        format->setupReaderContext(options, &readerContext);
 
         writerSupplier = format->getWriterSupplier(options, readerContext.genome);
         ReadWriter* headerWriter = writerSupplier->getWriter();
