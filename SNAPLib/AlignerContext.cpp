@@ -168,7 +168,7 @@ AlignerContext::initialize()
     maxSecondaryAligmmentAdditionalEditDistance = options->maxSecondaryAligmmentAdditionalEditDistance;
 	minReadLength = options->minReadLength;
 
-	if ((int)minReadLength < index->getSeedLength()) {
+	if (index != NULL && (int)minReadLength < index->getSeedLength()) {
 		WriteErrorMessage("The min read length (%d) must be at least the seed length (%d), or there's no hope of aligning reads that short.\n", minReadLength, index->getSeedLength());
 		soft_exit(1);
 	}
