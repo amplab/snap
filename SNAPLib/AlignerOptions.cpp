@@ -54,7 +54,7 @@ AlignerOptions::AlignerOptions(
 	useM(false),
     gapPenalty(0),
 	extra(NULL),
-    rgLineContents(NULL),
+    rgLineContents("@RG\tID:FASTQ\tPL:Illumina\tPU:pu\tLB:lb\tSM:sm"),
     perfFileName(NULL),
     useTimingBarrier(false),
     extraSearchDepth(2),
@@ -551,8 +551,9 @@ AlignerOptions::parse(
             strcpy(newReadGroup, argv[n+1]);
             defaultReadGroup = newReadGroup;
             n++;
-            char* s = new char[1 + strlen(defaultReadGroup) + strlen("@RG\tID:\tSM:sample")];
-            sprintf(s, "@RG\tID:%s\tSM:sample", defaultReadGroup);
+            static const char* format = "@RG\tID:%s\tPL:Illumina\tPU:pu\tLB:lb\tSM:sm";
+            char* s = new char[1 + strlen(defaultReadGroup) + strlen(format)];
+            sprintf(s, format, defaultReadGroup);
             rgLineContents = s;
             return true;
         } else {

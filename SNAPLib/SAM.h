@@ -150,6 +150,9 @@ public:
 
     virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, GenomeLocation* o_location, GenomeDistance* o_readBytes, int* o_refID, int* o_pos) const;
 
+    virtual void setupReaderContext(AlignerOptions* options, ReaderContext* readerContext) const
+    { FileFormat::setupReaderContext(options, readerContext, false); }
+
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
 
     virtual bool writeHeader(
@@ -157,7 +160,7 @@ public:
         bool sorted, int argc, const char **argv, const char *version, const char *rgLine) const;
 
     virtual bool writeRead(
-        const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
+        const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 

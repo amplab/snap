@@ -524,7 +524,7 @@ void PairedAlignerContext::runIterationThread()
         for (int i = 0; i < nSingleSecondaryResults[0] + nSingleSecondaryResults[1]; i++) {
             Read *read = i < nSingleSecondaryResults[0] ? read0 : read1;
             if (readWriter != NULL && (options->passFilter(read, singleSecondaryResults[i].status))) {
-                readWriter->writeRead(read, singleSecondaryResults[i].status, singleSecondaryResults[i].mapq, singleSecondaryResults[i].location, singleSecondaryResults[i].direction, true);
+                readWriter->writeRead(readerContext, read, singleSecondaryResults[i].status, singleSecondaryResults[i].mapq, singleSecondaryResults[i].location, singleSecondaryResults[i].direction, true);
             }
         }
 
@@ -550,7 +550,7 @@ void PairedAlignerContext::writePair(Read* read0, Read* read1, PairedAlignmentRe
     bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
         ? (pass0 && pass1) : (pass0 || pass1);
     if (readWriter != NULL && pass) {
-        readWriter->writePair(read0, read1, result, secondary);
+        readWriter->writePair(readerContext, read0, read1, result, secondary);
     }
 }
 

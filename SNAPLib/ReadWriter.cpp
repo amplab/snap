@@ -45,9 +45,9 @@ public:
 
     virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine);
 
-    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment);
+    virtual bool writeRead(const ReaderContext& context, Read *read, AlignmentResult result, int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment);
 
-    virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result, bool secondaryAlignment);
+    virtual bool writePair(const ReaderContext& context, Read *read0, Read *read1, PairedAlignmentResult *result, bool secondaryAlignment);
 
     virtual void close();
 
@@ -116,6 +116,7 @@ SimpleReadWriter::writeHeader(
 
     bool
 SimpleReadWriter::writeRead(
+    const ReaderContext& context,
     Read *read,
     AlignmentResult result,
     int mapQuality,
@@ -133,7 +134,7 @@ SimpleReadWriter::writeRead(
         if (! writer->getBuffer(&buffer, &size)) {
             return false;
         }
-        if (format->writeRead(genome, &lvc, buffer, size, &used, read->getIdLength(), read, result, mapQuality, genomeLocation, direction, secondaryAlignment)) {
+        if (format->writeRead(context, &lvc, buffer, size, &used, read->getIdLength(), read, result, mapQuality, genomeLocation, direction, secondaryAlignment)) {
             _ASSERT(used <= size);
 
         if (used > 0xffffffff) {
@@ -157,6 +158,7 @@ SimpleReadWriter::writeRead(
 
     bool
 SimpleReadWriter::writePair(
+    const ReaderContext& context,
     Read *read0,
     Read *read1,
     PairedAlignmentResult *result,
@@ -202,12 +204,12 @@ SimpleReadWriter::writePair(
             return false;
         }
 
-        bool writesFit = format->writeRead(genome, &lvc, buffer, size, &sizeUsed[first],
+        bool writesFit = format->writeRead(context, &lvc, buffer, size, &sizeUsed[first],
                             idLengths[first], reads[first], result->status[first], result->mapq[first], locations[first], result->direction[first], secondaryAlignment, true, first == 0,
                             reads[second], result->status[second], locations[second], result->direction[second]);
 
         if (writesFit) {
-            writesFit = format->writeRead(genome, &lvc, buffer + sizeUsed[first], size - sizeUsed[first], &sizeUsed[second],
+            writesFit = format->writeRead(context, &lvc, buffer + sizeUsed[first], size - sizeUsed[first], &sizeUsed[second],
                 idLengths[second], reads[second], result->status[second], result->mapq[second], locations[second], result->direction[second], secondaryAlignment, true, first != 0,
                 reads[first], result->status[first], locations[first], result->direction[first]);
             if (writesFit) {
