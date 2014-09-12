@@ -234,6 +234,7 @@ AlignerContext::beginIteration()
             WriteErrorMessage("AlignerContext::beginIteration(): unknown file type %d for '%s'\n", options->outputFile.fileType, options->outputFile.fileName);
             soft_exit(1);
         }
+        format->setupReaderContext(options, &readerContext);
 
         writerSupplier = format->getWriterSupplier(options, readerContext.genome);
         ReadWriter* headerWriter = writerSupplier->getWriter();

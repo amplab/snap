@@ -69,6 +69,16 @@ public:
     
     */
 
+protected:
+
+    static const char* RGLineToAux;
+
+    static void setupReaderContext(AlignerOptions* options, ReaderContext* readerContext, bool bam);
+
+public:
+
+    virtual void setupReaderContext(AlignerOptions* options, ReaderContext* readerContext) const = 0;
+
     //
     // writing
     //
@@ -80,7 +90,7 @@ public:
         bool sorted, int argc, const char **argv, const char *version, const char *rgLine) const = 0;
 
     virtual bool writeRead(
-        const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
+        const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
