@@ -1098,6 +1098,7 @@ SAMFormat::writeRead(
     GenomeLocation genomeLocation,
     Direction direction,
     bool secondaryAlignment,
+    int * o_addFrontClipping,
     bool hasMate,
     bool firstInPair,
     Read * mate, 
@@ -1135,7 +1136,8 @@ SAMFormat::writeRead(
     GenomeDistance extraBasesClippedAfter;    // Clipping added if we align off the end of a chromosome
     int editDistance = -1;
 
-    if (! createSAMLine(context.genome, lv, data, quality, MAX_READ, contigName, contigIndex, 
+    *o_addFrontClipping = 0;
+    if (!createSAMLine(context.genome, lv, data, quality, MAX_READ, contigName, contigIndex,
         flags, positionInContig, mapQuality, matecontigName, mateContigIndex, matePositionInContig, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, secondaryAlignment, useM,
@@ -1147,7 +1149,11 @@ SAMFormat::writeRead(
     if (genomeLocation != InvalidGenomeLocation) {
         cigar = computeCigarString(context.genome, lv, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize, 
                                    clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter, extraBasesClippedAfter, 
-                                   read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(), genomeLocation, direction, useM, &editDistance);
+                                   read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(), genomeLocation, direction, useM,
+                                   &editDistance, o_addFrontClipping);
+        if (*o_addFrontClipping != 0) {
+            return false;
+        }
     }
 
     // Write the SAM entry, which requires the following fields:
@@ -1267,7 +1273,8 @@ SAMFormat::computeCigarString(
     GenomeLocation              genomeLocation,
     Direction                   direction,
 	bool						useM,
-    int *                       editDistance
+    int *                       o_editDistance,
+    int *                       o_addFrontClipping
 )
 {
     //
@@ -1282,8 +1289,9 @@ SAMFormat::computeCigarString(
     }
 
     const char *reference = genome->getSubstring(genomeLocation, dataLength);
+    int cigarBufUsed;
     if (NULL != reference) {
-        *editDistance = lv->computeEditDistanceNormalized(
+        *o_editDistance = lv->computeEditDistanceNormalized(
                             reference,
                             (int)(dataLength - extraBasesClippedAfter + MAX_K), // Add space incase of indels.  We know there's enough, because the reference is padded.
                             data,
@@ -1291,18 +1299,26 @@ SAMFormat::computeCigarString(
                             MAX_K - 1,
                             cigarBuf,
                             cigarBufLen,
-						    useM);
+						    useM,
+                            COMPACT_CIGAR_STRING,
+                            &cigarBufUsed,
+                            o_addFrontClipping);
+        if (*o_addFrontClipping != 0) {
+            return NULL;
+        }
     } else {
         //
         // Fell off the end of the chromosome.
         //
+        *o_editDistance = 0;
+        *o_addFrontClipping = 0;
         return "*";
     }
 
-    if (*editDistance == -2) {
+    if (*o_editDistance == -2) {
         WriteErrorMessage( "WARNING: computeEditDistance returned -2; cigarBuf may be too small\n");
         return "*";
-    } else if (*editDistance == -1) {
+    } else if (*o_editDistance == -1) {
         static bool warningPrinted = false;
         if (!warningPrinted) {
             WriteErrorMessage( "WARNING: computeEditDistance returned -1; this shouldn't happen\n");

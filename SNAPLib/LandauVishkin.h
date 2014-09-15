@@ -387,7 +387,9 @@ public:
     // same, but places indels as early as possible, following BWA & VCF conventions
     int computeEditDistanceNormalized(const char* text, int textLen, const char* pattern, int patternLen, int k,
                             char* cigarBuf, int cigarBufLen, bool useM,
-                            CigarFormat format = COMPACT_CIGAR_STRING, int* cigarBufUsed = NULL);
+                            CigarFormat format = COMPACT_CIGAR_STRING,
+                            int* cigarBufUsed = NULL,
+                            int* o_addFrontClipping = NULL);
 
     // take a compact cigar binary format and turn it into one byte per reference base
     // describing the difference from the reference at that location
