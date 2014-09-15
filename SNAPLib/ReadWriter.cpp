@@ -134,16 +134,24 @@ SimpleReadWriter::writeRead(
         if (! writer->getBuffer(&buffer, &size)) {
             return false;
         }
-        if (format->writeRead(context, &lvc, buffer, size, &used, read->getIdLength(), read, result, mapQuality, genomeLocation, direction, secondaryAlignment)) {
+        int addFrontClipping;
+        if (format->writeRead(context, &lvc, buffer, size, &used, read->getIdLength(), read, result, mapQuality, genomeLocation, direction, secondaryAlignment, &addFrontClipping)) {
             _ASSERT(used <= size);
 
-        if (used > 0xffffffff) {
-            WriteErrorMessage("SimpleReadWriter:writeRead: used too big\n");
-            soft_exit(1);
-        }
+            if (used > 0xffffffff) {
+                WriteErrorMessage("SimpleReadWriter:writeRead: used too big\n");
+                soft_exit(1);
+            }
 
-        writer->advance((unsigned)used, genomeLocation);
+
+            writer->advance((unsigned)used, genomeLocation);
             return true;
+        } else if (addFrontClipping != 0) {
+            // redo if read modified (e.g. to add soft clipping)
+            read->addFrontClipping(addFrontClipping);
+            genomeLocation += addFrontClipping;
+            pass--;
+            continue;
         }
         if (pass == 1) {
             WriteErrorMessage( "Failed to write into fresh buffer\n");
@@ -204,14 +212,28 @@ SimpleReadWriter::writePair(
             return false;
         }
 
+        int addFrontClipping;
         bool writesFit = format->writeRead(context, &lvc, buffer, size, &sizeUsed[first],
-                            idLengths[first], reads[first], result->status[first], result->mapq[first], locations[first], result->direction[first], secondaryAlignment, true, first == 0,
-                            reads[second], result->status[second], locations[second], result->direction[second]);
-
+            idLengths[first], reads[first], result->status[first], result->mapq[first], locations[first], result->direction[first], secondaryAlignment,
+            &addFrontClipping, true, first == 0,
+            reads[second], result->status[second], locations[second], result->direction[second]);
+        if (addFrontClipping != 0) {
+            reads[first]->addFrontClipping(addFrontClipping);
+            locations[first] += addFrontClipping;
+            pass--;
+            continue;
+        }
         if (writesFit) {
             writesFit = format->writeRead(context, &lvc, buffer + sizeUsed[first], size - sizeUsed[first], &sizeUsed[second],
-                idLengths[second], reads[second], result->status[second], result->mapq[second], locations[second], result->direction[second], secondaryAlignment, true, first != 0,
+                idLengths[second], reads[second], result->status[second], result->mapq[second], locations[second], result->direction[second], secondaryAlignment,
+                &addFrontClipping, true, first != 0,
                 reads[first], result->status[first], locations[first], result->direction[first]);
+            if (addFrontClipping != 0) {
+                reads[second]->addFrontClipping(addFrontClipping);
+                locations[second] += addFrontClipping;
+                pass--;
+                continue;
+            }
             if (writesFit) {
                 break;
             }

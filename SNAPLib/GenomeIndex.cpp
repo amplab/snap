@@ -1669,12 +1669,6 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
             delete index;
             return NULL;
         }
-
-        if (index->hashTables[i]->GetKeySizeInBytes() != 4) {
-            WriteErrorMessage("Expected loaded hash table to have key size in bytes of 4, but it had %d.  This version of SNAP is too old to work with this index.\n", index->hashTables[i]->GetKeySizeInBytes());
-            delete index;
-            return NULL;
-        }
     }
 
 	if (!map) {

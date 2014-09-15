@@ -96,6 +96,7 @@ struct AlignerOptions : public AbstractOptions
     float               expansionFactor;
     bool                noUkkonen;
     bool                noOrderedEvaluation;
+	bool				noTruncation;
 	unsigned			minReadLength;
 	bool				mapIndex;
 	bool				prefetchIndex;

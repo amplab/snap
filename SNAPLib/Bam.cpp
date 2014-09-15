@@ -526,7 +526,7 @@ public:
     virtual bool writeRead(
         const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
-        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment,
+        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int * o_addFrontClipping,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD) const;
 
@@ -536,7 +536,7 @@ private:
         char * cigarBuf, int cigarBufLen,
         const char * data, unsigned dataLength, unsigned basesClippedBefore, unsigned extraBasesClippedBefore, unsigned basesClippedAfter,
         unsigned extraBasesClippedAfter,     unsigned frontHardClipping, unsigned backHardClipping,
-        GenomeLocation genomeLocation, bool isRC, bool useM, int * editDistance);
+        GenomeLocation genomeLocation, bool isRC, bool useM, int * o_editDistance, int * o_addFrontClipping);
 
     const bool useM;
 };
@@ -682,6 +682,7 @@ BAMFormat::writeRead(
     GenomeLocation genomeLocation,
     Direction direction,
     bool secondaryAlignment,
+    int * o_addFrontClipping,
     bool hasMate,
     bool firstInPair,
     Read * mate,
@@ -715,7 +716,8 @@ BAMFormat::writeRead(
     GenomeDistance extraBasesClippedAfter;
     int editDistance;
 
-    if (! SAMFormat::createSAMLine(context.genome, lv, data, quality, MAX_READ, contigName, contigIndex,
+    *o_addFrontClipping = 0;
+    if (!SAMFormat::createSAMLine(context.genome, lv, data, quality, MAX_READ, contigName, contigIndex,
         flags, positionInContig, mapQuality, mateContigName, mateContigIndex, matePositionInContig, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, secondaryAlignment, useM,
@@ -725,10 +727,13 @@ BAMFormat::writeRead(
         return false;
     }
     if (genomeLocation != InvalidGenomeLocation) {
-        cigarOps = computeCigarOps(context.genome, lv, (char*) cigarBuf, cigarBufSize * sizeof(_uint32),
+        cigarOps = computeCigarOps(context.genome, lv, (char*)cigarBuf, cigarBufSize * sizeof(_uint32),
                                    clippedData, clippedLength, basesClippedBefore, (unsigned)extraBasesClippedBefore, basesClippedAfter, (unsigned)extraBasesClippedAfter,
                                    read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
-                                   genomeLocation, direction == RC, useM, &editDistance);
+                                   genomeLocation, direction == RC, useM, &editDistance, o_addFrontClipping);
+        if (*o_addFrontClipping != 0) {
+            return false;
+        }
     }
 
     // Write the BAM entry
@@ -865,6 +870,7 @@ BAMFormat::writeRead(
 
 // Compute the CIGAR edit sequence operations in BAM format for a read against a given genome location
 // Returns number of operations (or 0 if there was a problem)
+// if returns with *o_addFrontClipping set non-zero, need to adjust front clipping & rerun
     int
 BAMFormat::computeCigarOps(
     const Genome *              genome,
@@ -882,7 +888,8 @@ BAMFormat::computeCigarOps(
     GenomeLocation              genomeLocation,
     bool                        isRC,
 	bool						useM,
-    int *                       editDistance
+    int *                       o_editDistance,
+    int *                       o_addFrontClipping
 )
 {
     //
@@ -898,7 +905,7 @@ BAMFormat::computeCigarOps(
     const char *reference = genome->getSubstring(genomeLocation, dataLength);
     int used;
     if (NULL != reference) {
-        *editDistance = lv->computeEditDistanceNormalized(
+        *o_editDistance = lv->computeEditDistanceNormalized(
                             reference,
                             dataLength - extraBasesClippedAfter,
                             data,
@@ -906,18 +913,22 @@ BAMFormat::computeCigarOps(
                             MAX_K - 1,
                             cigarBuf + 4 * clippingWordsBefore,
                             cigarBufLen - 4 * (clippingWordsBefore + clippingWordsAfter),
-						    useM, BAM_CIGAR_OPS, &used);
+                            useM, BAM_CIGAR_OPS, &used, o_addFrontClipping);
+        if (*o_addFrontClipping != 0) {
+            return 0;
+        }
     } else {
         //
         // Fell off the end of the chromosome.
         //
+        *o_editDistance = 0;
         return 0;
     }
 
-    if (*editDistance == -2) {
+    if (*o_editDistance == -2) {
         WriteErrorMessage("WARNING: computeEditDistance returned -2; cigarBuf may be too small\n");
         return 0;
-    } else if (*editDistance == -1) {
+    } else if (*o_editDistance == -1) {
         static bool warningPrinted = false;
         if (!warningPrinted) {
             WriteErrorMessage("WARNING: computeEditDistance returned -1; this shouldn't happen\n");

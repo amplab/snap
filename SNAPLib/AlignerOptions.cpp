@@ -67,6 +67,7 @@ AlignerOptions::AlignerOptions(
     expansionFactor(1.0),
     noUkkonen(false),
     noOrderedEvaluation(false),
+	noTruncation(false),
 	minReadLength(DEFAULT_MIN_READ_LENGTH),
     maxDistFraction(0.0),
 	mapIndex(false),
@@ -143,12 +144,6 @@ AlignerOptions::usageMessage()
 		"  -pc  Preserve the soft clipping for reads coming from SAM or BAM files\n"
 		"  -xf  Increase expansion factor for BAM and GZ files (default %.1f)\n"
 		"  -hdp Use Hadoop-style prefixes (reporter:status:...) on error messages, and emit hadoop-style progress messages\n"
-		"  -nu  No Ukkonen: don't reduce edit distance search based on prior candidates. This option is purely for\n"
-		"       evalutating the performance effect of using Ukkonen's algorithm rather than Smith-Waterman, and specifying\n"
-		"       it will slow down execution without improving the alignments.\n"
-		"  -no  No Ordering: don't order the evalutation of reads so as to select more likely candidates first.  This option\n"
-		"       is purely for evaluating the performance effect of the read evaluation order, and specifying it will slow\n"
-		"       down execution without improving alignments.\n"
 		"  -mrl Specify the minimum read length to align, reads shorter than this (after clipping) stay unaligned.  This should be\n"
 		"       a good bit bigger than the seed length or you might get some questionable alignments.  Default %d\n"
 		"  -map Use file mapping to load the index rather than reading it.  This might speed up index loading in cases\n"
@@ -162,7 +157,15 @@ AlignerOptions::usageMessage()
 #ifdef LONG_READS
         "  -dp  Edit distance as a percentage of read length (single only, overrides -d)\n"
 #endif
-            ,
+		"  -nu  No Ukkonen: don't reduce edit distance search based on prior candidates. This option is purely for\n"
+		"       evalutating the performance effect of using Ukkonen's algorithm rather than Smith-Waterman, and specifying\n"
+		"       it will slow down execution without improving the alignments.\n"
+		"  -no  No Ordering: don't order the evalutation of reads so as to select more likely candidates first.  This option\n"
+		"       is purely for evaluating the performance effect of the read evaluation order, and specifying it will slow\n"
+		"       down execution without improving alignments.\n"
+		"  -nt  Don't truncate searches based on missed seed hits.  This option is purely for evaluating the performance effect\n"
+		"       of candidate truncation, and specifying it will slow down execution without improving alignments.\n"
+		,
             commandLine,
             maxDist,
             seedCoverage,
@@ -568,9 +571,12 @@ AlignerOptions::parse(
     } else if (strcmp(argv[n], "-nu") == 0) {
         noUkkonen = true;
         return true;
-    } else if (strcmp(argv[n], "-no") == 0) {
-        noOrderedEvaluation = true;
-        return true;
+	} else if (strcmp(argv[n], "-no") == 0) {
+		noOrderedEvaluation = true;
+		return true;
+	} else if (strcmp(argv[n], "-nt") == 0) {
+		noTruncation = true;
+		return true;
 	} else if (strcmp(argv[n], "-D") == 0) {
         if (n + 1 < argc) {
             extraSearchDepth = atoi(argv[n+1]);

@@ -165,6 +165,7 @@ AlignerContext::initialize()
     extraSearchDepth = options->extraSearchDepth;
     noUkkonen = options->noUkkonen;
     noOrderedEvaluation = options->noOrderedEvaluation;
+	noTruncation = options->noTruncation;
     maxSecondaryAligmmentAdditionalEditDistance = options->maxSecondaryAligmmentAdditionalEditDistance;
 	minReadLength = options->minReadLength;
 

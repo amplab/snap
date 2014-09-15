@@ -49,6 +49,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         unsigned            extraSearchDepth,
         bool                noUkkonen,
         bool                noOrderedEvaluation,
+		bool				noTruncation,
        PairedEndAligner    *underlyingPairedEndAligner_,
 	   unsigned				minReadLength_,
         BigAllocator        *allocator)
@@ -56,7 +57,7 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
-                                    maxSeedsFromCommandLine,  seedCoverage, extraSearchDepth, noUkkonen, noOrderedEvaluation, &lv, &reverseLV, NULL, allocator);
+                                    maxSeedsFromCommandLine,  seedCoverage, extraSearchDepth, noUkkonen, noOrderedEvaluation, noTruncation, &lv, &reverseLV, NULL, allocator);
     
     underlyingPairedEndAligner->setLandauVishkin(&lv, &reverseLV);
 
