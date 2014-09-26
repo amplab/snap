@@ -130,12 +130,27 @@ SAMReader::create(
 SAMReader::readHeader(const char *fileName)
 {
     // todo: allow for larger headers
-    _int64 headerSize = 1024 * 1024; // 1M header max
-    char* buffer = data->readHeader(&headerSize);
-    if (!parseHeader(fileName, buffer, buffer + headerSize, context.genome, &headerSize, &context.headerMatchesIndex)) {
-        WriteErrorMessage("SAMReader: failed to parse header on '%s'\n",fileName);
-        soft_exit(1);
-    }
+    _int64 headerSize = 512 * 1024; // 1M header initially (it's doubled before we use it)
+	_int64 oldHeaderSize = 0;
+ 
+	char* buffer;
+	bool sawWholeHeader;
+	do {
+		headerSize *= 2;
+		buffer = data->readHeader(&headerSize);
+		if (oldHeaderSize >= headerSize) {
+			//
+			// No new data, we hit EOF
+			//
+			return;
+		}
+		oldHeaderSize = headerSize;
+
+		if (!parseHeader(fileName, buffer, buffer + headerSize, context.genome, &headerSize, &context.headerMatchesIndex, &sawWholeHeader)) {
+			WriteErrorMessage("SAMReader: failed to parse header on '%s'\n", fileName);
+			soft_exit(1);
+		}
+	} while (!sawWholeHeader);
     _ASSERT(context.header == NULL);
     char* p = new char[headerSize + 1];
     memcpy(p, buffer, headerSize);
@@ -169,7 +184,8 @@ SAMReader::parseHeader(
     char *endOfBuffer, 
     const Genome *genome, 
     _int64 *o_headerSize,
-    bool *o_headerMatchesIndex)
+    bool *o_headerMatchesIndex,
+	bool *o_sawWholeHeader)
 {
     char *nextLineToProcess = firstLine;
     *o_headerMatchesIndex = true;
@@ -236,6 +252,9 @@ SAMReader::parseHeader(
 
     *o_headerMatchesIndex &= genome != NULL && numSQLines == genome->getNumContigs();
 	*o_headerSize = nextLineToProcess - firstLine;
+	if (NULL != o_sawWholeHeader) {
+		*o_sawWholeHeader = nextLineToProcess < endOfBuffer;
+	}
     return true;
 }
 

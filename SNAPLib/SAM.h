@@ -86,7 +86,7 @@ public:
             const char *fileName, int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context);
         
         // result and fieldLengths must be of size nSAMFields
-        static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, _int64 *o_headerSize, bool* o_headerMatchesIndex);
+        static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, _int64 *o_headerSize, bool* o_headerMatchesIndex, bool *o_sawWholeHeader = NULL);
         
         static char* skipToBeyondNextFieldSeparator(char *str, const char *endOfBuffer, size_t *o_charsUntilFirstSeparator = NULL);
 
@@ -131,6 +131,8 @@ protected:
 
 private:
         void readHeader(const char* fileName);
+
+		bool skipPartialHeader(_int64 *o_headerBytes);
 
         void init(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess);
 

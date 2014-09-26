@@ -109,7 +109,28 @@ RangeSplittingReadSupplierGenerator::RangeSplittingReadSupplierGenerator(
 {
     fileName = new char[strlen(i_fileName) + 1];
     strcpy(fileName, i_fileName);
-	splitter = new RangeSplitter(QueryFileSize(fileName),numThreads, 5, 0, 200, 10*MAX_READ_LENGTH);
+
+	//
+	// Figure out the header size based on file type.  We set up the range splitter to skip the header.  This both makes the work allocation more even,
+	// and also assures that in the case where the header is bigger than what would otherwise be the first work unit that the second guy in doesn't see
+	// header.
+	//
+	_int64 headerSize;
+	if (isSAM) {
+		SAMReader *reader = SAMReader::create(DataSupplier::Default, fileName, ReadSupplierQueue::BufferCount(numThreads), context, 0, 0);
+		if (!reader) {
+			WriteErrorMessage("Unable to create reader for SAM file '%s'\n", fileName);
+			soft_exit(1);
+		}
+		headerSize = reader->getContext()->headerBytes;
+		delete reader;
+		reader = NULL;
+	} else {
+		// FASTQ has no header.
+		headerSize = 0;
+	}
+
+	splitter = new RangeSplitter(QueryFileSize(fileName), numThreads, 5, headerSize, 200, 10 * MAX_READ_LENGTH);
 }
 
 ReadSupplier *

@@ -315,14 +315,14 @@ struct BgzfExtra
 
 struct BgzfHeader
 {
-    _uint8 ID1;
-    _uint8 ID2;
-    _uint8 CM;
-    _uint8 FLG;
-    _uint32 MTIME;
-    _uint8 XFL;
-    _uint8 OS;
-    _uint16 XLEN;
+    _uint8 ID1;		// 0x1f
+    _uint8 ID2;		// 0x8b (magic numbers)
+    _uint8 CM;		// Compression method (8 == deflate)
+    _uint8 FLG;		// flags
+    _uint32 MTIME;	// Mod time
+    _uint8 XFL;		// extra flags
+    _uint8 OS;		// operating system 
+    _uint16 XLEN;	// extra length
 
     BgzfExtra* firstExtra()
     { return (BgzfExtra*) (sizeof(_uint16) + (char*) &this->XLEN); }

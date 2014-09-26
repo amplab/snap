@@ -85,20 +85,26 @@ BAMReader::init(
     _ASSERT(context.headerBytes > 0);
     reinit(startingOffset, amountOfFileToProcess);
     if ((size_t) startingOffset < context.headerBytes) {
-        char* p;
-        _int64 valid, start;
-        bool ok = data->getData(&p, &valid, &start);
-        if (! ok) {
-            WriteErrorMessage("failure reading file %s\n", fileName);
-            soft_exit(1);
-        }
-        _int64 skip = context.headerBytes - startingOffset;
-        _ASSERT(skip < valid);
-        data->advance(skip);
-        if (skip > start) {
-            data->nextBatch();
-            data->getData(&p, &valid, &start);
-        }
+		_int64 bytesToSkip = context.headerBytes - startingOffset;
+
+		while (bytesToSkip > 0) {
+			char* p;
+			_int64 valid, start;
+			bool ok = data->getData(&p, &valid, &start);
+			if (!ok) {
+				WriteErrorMessage("failure reading file %s\n", fileName);
+				soft_exit(1);
+			}
+
+			_int64 bytesToSkipThisTime = __min(valid, bytesToSkip);
+			data->advance(bytesToSkipThisTime);
+			if (bytesToSkipThisTime > start) {
+				data->nextBatch();
+			}
+			data->getData(&p, &valid, &start);
+
+			bytesToSkip -= bytesToSkipThisTime;
+		}
     }
 }
 
@@ -107,25 +113,61 @@ BAMReader::readHeader(
     const char* fileName)
 {
     _ASSERT(context.header == NULL);
-    _int64 headerSize = 1024 * 1024; // 1M header max
-    char* buffer = data->readHeader(&headerSize);
-    BAMHeader* header = (BAMHeader*) buffer;
-    if (header->magic != BAMHeader::BAM_MAGIC) {
-        WriteErrorMessage("BAMReader: Not a valid BAM file\n");
-        soft_exit(1);
-    }
-    _int64 textHeaderSize = header->l_text;
-    if (!SAMReader::parseHeader(fileName, header->text(), header->text() + textHeaderSize, context.genome, &textHeaderSize, &context.headerMatchesIndex)) {
-        WriteErrorMessage("BAMReader: failed to parse header on '%s'\n",fileName);
-        soft_exit(1);
-    }
-    int n_ref = header->n_ref();
-    BAMHeaderRefSeq* refSeq = header->firstRefSeq();
-    for (int i = 0; i < n_ref; i++, refSeq = refSeq->next()) {
-        // just advance
-    }
+    _int64 headerSize = 1024 * 1024; // 1M header initially 
 
-    char* p = new char[textHeaderSize + 1];
+	bool sawWholeHeader;
+	BAMHeader* header;
+	_int64 textHeaderSize;
+	char* buffer;
+
+	buffer = data->readHeader(&headerSize);
+
+	if (headerSize < sizeof(BAMHeader)) {
+		WriteErrorMessage("Malformed BAM file '%s', too small to conatain even a header.\n", fileName);
+		soft_exit(1);
+	}
+
+	header = (BAMHeader*)buffer;
+	if (header->magic != BAMHeader::BAM_MAGIC) {
+		WriteErrorMessage("BAMReader: Not a valid BAM file\n");
+		soft_exit(1);
+	}
+	textHeaderSize = header->l_text;
+
+	if (textHeaderSize + (_int64)sizeof(BAMHeader) > headerSize) {
+		headerSize = textHeaderSize + (_int64)sizeof(BAMHeader);
+		buffer = data->readHeader(&headerSize);
+		if (textHeaderSize + (_int64)sizeof(BAMHeader) >  headerSize) {
+			WriteErrorMessage("Unable to read entire header of BAM file '%s', it may be malformed.\n", fileName);
+			soft_exit(1);
+		}
+
+		header = (BAMHeader*)buffer;
+		if (header->magic != BAMHeader::BAM_MAGIC) {
+			WriteErrorMessage("BAMReader: Not a valid BAM file\n");
+			soft_exit(1);
+		}
+
+		_ASSERT(textHeaderSize == header->l_text);	// We got the same thing this time
+	}
+
+	if (!SAMReader::parseHeader(fileName, header->text(), header->text() + headerSize - sizeof(BAMHeader), context.genome, &textHeaderSize, &context.headerMatchesIndex, &sawWholeHeader)) {
+		WriteErrorMessage("BAMReader: failed to parse header on '%s'\n", fileName);
+		soft_exit(1);
+	}
+
+	if (!sawWholeHeader) {
+		WriteErrorMessage("We had the entire header loaded for file '%s', but it didn't parse correctly\n", fileName);
+		soft_exit(1);
+	}
+
+	int n_ref = header->n_ref();
+	BAMHeaderRefSeq* refSeq = header->firstRefSeq();
+	for (int i = 0; i < n_ref; i++, refSeq = refSeq->next()) {
+		// just advance
+	}
+	
+	char* p = new char[textHeaderSize + 1];
     memcpy(p, header->text(), textHeaderSize);
     p[textHeaderSize] = 0;
     context.header = p;
