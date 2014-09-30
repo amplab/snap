@@ -26,17 +26,17 @@ Revision History:
 #include "Util.h"
 
 
-int FirstPowerOf2GreaterThanOrEqualTo(int value)
+_int64 FirstPowerOf2GreaterThanOrEqualTo(_int64 value)
 {
     int highestBitSet;
-    for (highestBitSet = 0; highestBitSet <= 30; highestBitSet++) { // Only go to 31, since this is signed
-        if (!(value & ~((1 << highestBitSet) - 1))) {
+    for (highestBitSet = 0; highestBitSet <= 62; highestBitSet++) { // Only go to 63, since this is signed
+        if (!(value & ~((((_int64)1) << highestBitSet) - 1))) {
             highestBitSet -= 1;
             break;
         }
     }
-    if (1 << highestBitSet == value) return value;
-    return 1 << (highestBitSet + 1);
+    if (((_int64)1) << highestBitSet == value) return value;
+    return ((_int64)1) << (highestBitSet + 1);
 }
 
 int cheezyLogBase2(_int64 value)

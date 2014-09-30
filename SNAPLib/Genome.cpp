@@ -25,13 +25,15 @@ Revision History:
 #include "stdafx.h"
 #include "Genome.h"
 #include "GenericFile.h"
+#include "GenericFile_map.h"
 #include "Compat.h"
 #include "BigAlloc.h"
 #include "exit.h"
 #include "Error.h"
 
-Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned i_chromosomePadding)
-    : maxBases(i_maxBases), minLocation(0), maxLocation(i_maxBases), chromosomePadding(i_chromosomePadding)
+Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned i_chromosomePadding, unsigned i_maxContigs)
+: maxBases(i_maxBases), minLocation(0), maxLocation(i_maxBases), chromosomePadding(i_chromosomePadding), maxContigs(i_maxContigs),
+  mappedFile(NULL)
 {
     bases = ((char *) BigAlloc(nBasesStored + 2 * N_PADDING)) + N_PADDING;
     if (NULL == bases) {
@@ -44,9 +46,6 @@ Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned 
     memset(bases + nBasesStored, 'n', N_PADDING);
 
     nBases = 0;
-
-    maxContigs = 32; // A power of two that's bigger than the usual number of chromosomes, so we don't have to
-                    // reallocate in practice.
 
     nContigs = 0;
     contigs = new Contig[maxContigs];
@@ -119,6 +118,11 @@ Genome::~Genome()
         delete [] contigsByName;
     }
     contigs = NULL;
+
+	if (NULL != mappedFile) {
+		mappedFile->close();
+		delete mappedFile;
+	}
 }
 
 
@@ -173,13 +177,13 @@ Genome::saveToFile(const char *fileName) const
 }
 
     const Genome *
-Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLocation minLocation, GenomeDistance length)
+Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLocation minLocation, GenomeDistance length, bool map)
 {    
     GenericFile *loadFile;
     GenomeDistance nBases;
     unsigned nContigs;
 
-    if (!openFileAndGetSizes(fileName, &loadFile, &nBases, &nContigs)) {
+    if (!openFileAndGetSizes(fileName, &loadFile, &nBases, &nContigs, map)) {
         //
         // It already printed an error.  Just fail.
         //
@@ -249,40 +253,33 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
         curName[contigSize] = '\0';
     }
 
-    //
-    // Skip over the miserable \n that gets left in the file.
-    //
-    /*  char newline;
-    if (1 != fread(&newline,1,1,loadFile)) {
-        WriteErrorMessage("Genome::loadFromFile: Unable to read expected newline\n");
-        delete genome;
-        return NULL;
-    }
-
-    if (newline != 10) {
-        WriteErrorMessage("Genome::loadFromFile: Expected newline to be 0x0a, got 0x%02x\n",newline);
-        delete genome;
-        return NULL;
-    }
-    */
-
     if (0 != loadFile->advance(GenomeLocationAsInt64(minLocation))) {
         WriteErrorMessage("Genome::loadFromFile: _fseek64bit failed\n");
         soft_exit(1);
     }
 
-    size_t retval;
-    if (length != (retval = loadFile->read(genome->bases, length))) {
-        WriteErrorMessage("Genome::loadFromFile: fread of bases failed; wanted %u, got %d\n", length, retval);
-        loadFile->close();
-        delete loadFile;
-        delete genome;
-        return NULL;
-    }
+    size_t readSize;
+	if (map) {
+		GenericFile_map *mappedFile = (GenericFile_map *)loadFile;
+		genome->bases = (char *)mappedFile->mapAndAdvance(length, &readSize);
+		genome->mappedFile = mappedFile;
+		mappedFile->prefetch();
+	} else {
+		readSize = loadFile->read(genome->bases, length);
 
-    loadFile->close();
-    delete loadFile;
-    genome->fillInContigLengths();
+		loadFile->close();
+		delete loadFile;
+		loadFile = NULL;
+	}
+
+	if (length != readSize) {
+		WriteErrorMessage("Genome::loadFromFile: fread of bases failed; wanted %u, got %d\n", length, readSize);
+		delete loadFile;
+		delete genome;
+		return NULL;
+	}
+	
+	genome->fillInContigLengths();
     genome->sortContigsByName();
     return genome;
 }
@@ -307,9 +304,14 @@ Genome::sortContigsByName()
 }
 
     bool
-Genome::openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs)
+Genome::openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs, bool map)
 {
-    *file = GenericFile::open(filename, GenericFile::ReadOnly);
+	if (map) {
+		*file = GenericFile_map::open(filename);
+	} else {
+		*file = GenericFile::open(filename, GenericFile::ReadOnly);
+	}
+
     if (*file == NULL) {
         WriteErrorMessage("Genome::openFileAndGetSizes: unable to open file '%s'\n",filename);
         return false;
@@ -336,7 +338,7 @@ Genome::getSizeFromFile(const char *fileName, GenomeDistance *nBases, unsigned *
     GenomeDistance localNBases;
     unsigned localnContigs;
     
-    if (!openFileAndGetSizes(fileName,&file, nBases ? nBases : &localNBases, nContigs ? nContigs : &localnContigs)) {
+    if (!openFileAndGetSizes(fileName,&file, nBases ? nBases : &localNBases, nContigs ? nContigs : &localnContigs, false)) {
         return false;
     }
 

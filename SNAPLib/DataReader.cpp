@@ -73,6 +73,8 @@ public:
 
     virtual void getExtra(char** o_extra, _int64* o_length);
 
+    virtual const char* getFilename() = 0;
+
 protected:
     
     // must hold the lock to call
@@ -151,6 +153,8 @@ private:
 	char				*headerExtra;		// Allocated in one go with the headerBuffer
 	__int64				 headerExtraSize;
 	__int64				 amountAdvancedThroughUnderlyingStoreByUs;
+	unsigned			 nHeaderBuffersAllocated;
+	bool			     hitEOFReadingHeader;
 };
 
 ReadBasedDataReader::ReadBasedDataReader(
@@ -159,7 +163,8 @@ ReadBasedDataReader::ReadBasedDataReader(
     double extraFactor)
     : DataReader(), nBuffers(i_nBuffers), overflowBytes(i_overflowBytes), maxBuffers(i_nBuffers * (i_nBuffers == 1 ? 2 : 4)),
 	headerBuffer(NULL), headerBufferSize(0), amountAdvancedThroughUnderlyingStoreByUs(0), 
-	headerExtra(NULL), headerExtraSize(0), startedReadingHeader(false), headerBuffersOutstanding(0)
+	headerExtra(NULL), headerExtraSize(0), startedReadingHeader(false), headerBuffersOutstanding(0), nHeaderBuffersAllocated(0),
+	hitEOFReadingHeader(false)
 {
     //
     // Initialize the buffer info struct.
@@ -261,6 +266,12 @@ ReadBasedDataReader::readHeader(_int64* io_headerSize)
 	while (bytesLeftToGet != 0) {
 		if (amountAdvancedThroughUnderlyingStoreByUs < validBytesInHeader) {
 			_int64 amountToAdvance = validBytesInHeader - amountAdvancedThroughUnderlyingStoreByUs - overflowBytes;	// Leave overflowBytes left over, since we 
+			if (amountToAdvance <= 0) {
+				//
+				// We're probably almost at EOF.  Consume the overflow bytes, too.
+				//
+				amountToAdvance = validBytesInHeader - amountAdvancedThroughUnderlyingStoreByUs;
+			}
 			advance(amountToAdvance);
 			amountAdvancedThroughUnderlyingStoreByUs += amountToAdvance;
 		}
@@ -274,6 +285,7 @@ ReadBasedDataReader::readHeader(_int64* io_headerSize)
 				//
 				// Hit EOF while reading header.
 				//
+				hitEOFReadingHeader = true;
 				headerBufferSize = *io_headerSize = validBytesInHeader;
 				return headerBuffer;
 			}
@@ -305,13 +317,18 @@ ReadBasedDataReader::readHeader(_int64* io_headerSize)
 //
      void
 ReadBasedDataReader::reinit(
-    _int64 i_startingOffset,
+    _int64 startingOffset,
     _int64 amountOfFileToProcess)
 {
     AcquireExclusiveLock(&lock);
 
-	if (0 != i_startingOffset || 0 != amountOfFileToProcess) {
-		WriteErrorMessage("ReadBasedDataReader:reinit called with other than (0,0) (%lld, %lld)\n", i_startingOffset, amountOfFileToProcess);
+	if (0 != amountOfFileToProcess) {
+		WriteErrorMessage("ReadBasedDataReader:reinit called with non-zero amountOfFileToProcess (%lld, %lld)\n", startingOffset, amountOfFileToProcess);
+		soft_exit(1);
+	}
+
+	if (startedReadingHeader || 0 != headerBuffersOutstanding) {
+		WriteErrorMessage("ReadBasedDataReader:reinit called after reading some data (%lld, %lld)\n", startingOffset, amountOfFileToProcess);
 		soft_exit(1);
 	}
 
@@ -334,8 +351,12 @@ ReadBasedDataReader::reinit(
 	}
 
 	_ASSERT(amountAdvancedThroughUnderlyingStoreByUs <= headerBufferSize);
-	int nHeaderBuffersNeeded = (int)(amountAdvancedThroughUnderlyingStoreByUs / (bufferSize - overflowBytes));
-	int totalBuffersNeeded = (int)(maxBuffers + nHeaderBuffersNeeded);
+	if (amountAdvancedThroughUnderlyingStoreByUs == 0) {
+		nHeaderBuffersAllocated = 0;
+	} else {
+		nHeaderBuffersAllocated = (int)((amountAdvancedThroughUnderlyingStoreByUs + bufferSize - 1) / (bufferSize - overflowBytes));	// Round up, in case we read the last buffer.
+	}
+	int totalBuffersNeeded = (int)(maxBuffers + nHeaderBuffersAllocated);
 
 	//
 	// Reallocate the buffers array.
@@ -354,12 +375,13 @@ ReadBasedDataReader::reinit(
 	//
 	// Now construct the header buffers.
 	//
-	headerExtraSize = extraBytes * nHeaderBuffersNeeded;
+	headerExtraSize = extraBytes * nHeaderBuffersAllocated;
 	headerExtra = new char[headerExtraSize];
 
 	char *headerPointer = headerBuffer;
 	char *headerExtraPointer = headerExtra;
 	_int64 fileOffset = 0;
+	_int64 bytesRemaining = amountAdvancedThroughUnderlyingStoreByUs;
 
 	for (int i = maxBuffers; i < totalBuffersNeeded; i++) {
 
@@ -371,8 +393,8 @@ ReadBasedDataReader::reinit(
 		bufferInfo[i].previous = (i == maxBuffers) ? -1 : i - 1;
 		bufferInfo[i].holds = 0;
 		bufferInfo[i].headerBuffer = true;
-		bufferInfo[i].validBytes = bufferSize;
-		bufferInfo[i].nBytesThatMayBeginARead = (int)__max(bufferInfo[i].validBytes - overflowBytes, 0);
+		bufferInfo[i].validBytes = (int)__min(bytesRemaining, bufferSize);
+		bufferInfo[i].nBytesThatMayBeginARead = (int)((bytesRemaining <= bufferSize) ? bytesRemaining : __max(bufferInfo[i].validBytes - overflowBytes, 0));
 		bufferInfo[i].offset = 0;
 		bufferInfo[i].fileOffset = fileOffset;
 		bufferInfo[i].batchID = nextBatchID++;
@@ -384,12 +406,16 @@ ReadBasedDataReader::reinit(
 		headerExtraPointer += extraBytes;
 
 		headerBuffersOutstanding++;
+		bytesRemaining -= bufferInfo[i].nBytesThatMayBeginARead;
 	}
 
-	if (nHeaderBuffersNeeded > 0) {
+	if (nHeaderBuffersAllocated > 0) {
 		_ASSERT(bufferInfo[nextBufferForConsumer].previous == -1);
 		bufferInfo[nextBufferForConsumer].previous = totalBuffersNeeded - 1;
 		nextBufferForConsumer = maxBuffers;
+		if (hitEOFReadingHeader) {
+			bufferInfo[totalBuffersNeeded - 1].isEOF = true;
+		}
 	}
 
     //
@@ -399,6 +425,30 @@ ReadBasedDataReader::reinit(
     waitForBuffer(nextBufferForConsumer);
 
     ReleaseExclusiveLock(&lock);
+
+	//
+	// Now, consume data until we've gotten to startingOffset.
+	//
+	_int64 bytesToSkip = startingOffset;
+
+	while (bytesToSkip > 0) {
+		char* p;
+		_int64 valid, start;
+		bool ok = getData(&p, &valid, &start);
+		if (!ok) {
+			WriteErrorMessage("ReadBasedDataReader::init() failure getting data\n");
+			soft_exit(1);
+		}
+
+		_int64 bytesToSkipThisTime = __min(valid, bytesToSkip);
+		advance(bytesToSkipThisTime);
+		if (bytesToSkipThisTime > start) {
+			nextBatch();
+		}
+		getData(&p, &valid, &start);
+
+		bytesToSkip -= bytesToSkipThisTime;
+	}
 }
 
 	 bool
@@ -514,7 +564,7 @@ ReadBasedDataReader::nextBatch()
     bufferInfo[nextBufferForConsumer].holds = 0;
     //fprintf(stderr,"emitting buffer starting at 0x%llx\n", info->fileOffset);
     //if (nextStart != 0) fprintf(stderr, "checking NextStart 0x%llx\n", nextStart);  
-    _ASSERT(nextStart == 0 || nextStart == bufferInfo[nextBufferForConsumer].fileOffset);
+    _ASSERT(nextStart == 0 || nextStart == bufferInfo[nextBufferForConsumer].fileOffset || bufferInfo[nextBufferForConsumer].isEOF);
 
     ReleaseExclusiveLock(&lock);
 
@@ -537,19 +587,19 @@ ReadBasedDataReader::getBatch()
 
     void
 ReadBasedDataReader::holdBatch(
-    DataBatch batch)
+	DataBatch batch)
 {
-    AcquireExclusiveLock(&lock);
-    for (unsigned i = 0; i < nBuffers; i++) {
-        BufferInfo* info = &bufferInfo[i];
-        if (info->batchID == batch.batchID) {
-            info->holds++;
-            //fprintf(stderr,"%x holdBatch batch %d, holds on buffer %d now %d\n", (unsigned) this, batch.batchID, i, info->holds);
-            break;
-        }
-    }
-    ReleaseExclusiveLock(&lock);
+	AcquireExclusiveLock(&lock);
+	for (unsigned i = 0; i < maxBuffers + nHeaderBuffersAllocated; i = (i == nBuffers - 1) ? maxBuffers : i+1) {	// Goofy loop is because headerBuffers get tacked on beyond maxBuffers
+		BufferInfo *info = &bufferInfo[i];
+		if (info->batchID == batch.batchID) {
+			//fprintf(stderr, "%x holdBatch batch 0x%x, holds on buffer %d now %d\n", (unsigned) this, batch.batchID, i, info->holds);
+			info->holds++;
+		}
+	}
+	ReleaseExclusiveLock(&lock);
 }
+
 
     bool
 ReadBasedDataReader::releaseBatch(
@@ -559,7 +609,7 @@ ReadBasedDataReader::releaseBatch(
 
     bool released = false;
     bool result = true;
-    for (unsigned i = 0; i < nBuffers; i++) {
+	for (unsigned i = 0; i < maxBuffers + nHeaderBuffersAllocated; i = (i == nBuffers - 1) ? maxBuffers : i + 1) {	// Goofy loop is because headerBuffers get tacked on beyond maxBuffers
         BufferInfo* info = &bufferInfo[i];
         if (info->batchID == batch.batchID) {
             switch (info->state) {
@@ -608,6 +658,7 @@ ReadBasedDataReader::releaseBatch(
 							delete[] headerBuffer;
 							delete[] headerExtra;
 							headerBuffer = headerExtra = NULL;
+							nHeaderBuffersAllocated = 0;
 						}
 					} else {
 						// add to head of free list
@@ -700,9 +751,8 @@ public:
 
     virtual bool init(const char* i_fileName);
 
-//    virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
-
-//    virtual char* readHeader(_int64* io_headerSize);
+    virtual const char* getFilename()
+    { return "-"; }
 
  protected:
     
@@ -824,7 +874,6 @@ StdioDataReader::startIo()
         //
         // We have to run this holding the lock, because otherwise there's no way to make the overflow buffer work properly.  
         //
-/*BJB*/ fprintf(stderr, "stdio data reader: reading file offset 0x%llx into buffer %d\n", info->fileOffset, index);
         size_t bytesRead = fread(info->buffer + bufferOffset, 1, amountToRead, stdin);
         //fprintf(stderr,"StdioDataReader:startIO(): Read offset 0x%llx into buffer at 0x%llx, size %d, copied 0x%x overflow bytes, start at 0x%llx, tid %d\n", readOffset, info->buffer, bytesRead, bufferOffset, readOffset - bufferOffset, GetCurrentThreadId());
 
@@ -953,6 +1002,9 @@ public:
     virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
 
 //    virtual char* readHeader(_int64* io_headerSize);
+
+    virtual const char* getFilename()
+    { return fileName; }
 
  protected:
     
@@ -1261,6 +1313,9 @@ public:
 
     virtual void getExtra(char** o_extra, _int64* o_length);
 
+    virtual const char* getFilename()
+    { return inner->getFilename(); }
+
     enum DecompressMode { SingleBlock, ContinueMultiBlock, StartMultiBlock };
 
     static bool decompress(z_stream* zstream, ThreadHeap* heap, char* input, _int64 inputSize, _int64* o_inputUsed,
@@ -1515,7 +1570,7 @@ DecompressDataReader::releaseBatch(DataBatch batch)
     for (int i = 0; i < count; i++) {
         Entry* entry = &entries[i];
         if (entry->batch == batch) {
-/*BJB*/fprintf(stderr,"DecompressDataReader releaseBatch %d:%d #%d\n", batch.fileID, batch.batchID, i);
+			//fprintf(stderr,"DecompressDataReader releaseBatch %d:0x%x #%d\n", batch.fileID, batch.batchID, i);
             if (entry->state == EntryHeld) {
                 enqueueAvailable(entry);
             } else {
@@ -1721,7 +1776,6 @@ DecompressDataReader::decompressThread(
             // mark as eof - no data
             entry->decompressedValid = entry->decompressedStart = reader->overflowBytes;
             DataBatch b = reader->inner->getBatch();
-/*BJB*/ fprintf(stderr, "Setting batch to 0x%x, final\n", b.batchID + 1);
             entry->batch = DataBatch(b.batchID + 1, b.fileID);
             // decompressed buffer is same as next-to-last batch, need to allocate own buffer
             entry->decompressed = (char*) BigAlloc(reader->totalExtra);
@@ -1753,7 +1807,6 @@ DecompressDataReader::decompressThread(
             entry->decompressedValid = output;
             entry->decompressedStart = output - reader->overflowBytes;
             entry->batch = reader->inner->getBatch();
-/*BJB*/ fprintf(stderr, "Setting batch to 0x%x\n", entry->batch.batchID);
 			reader->holdBatch(entry->batch); // hold batch while decompressing
             reader->inner->nextBatch(); // start reading next batch
             // decompress all chunks synchronously on multiple threads
@@ -2020,6 +2073,9 @@ public:
     virtual _int64 getFileOffset();
 
     virtual void getExtra(char** o_extra, _int64* o_length);
+
+    virtual const char* getFilename()
+    { return fileName; }
 
 private:
     

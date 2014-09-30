@@ -54,7 +54,7 @@ static void usage()
             "Options:\n"
             "  -s               Seed size (default: %d)\n"
             "  -h               Hash table slack (default: %.1f)\n"
-            "  -hg19            Use pre-computed table bias for hg19, which results in better speed, balance, and memory footprint but may not work for other references.\n"
+            "  -hg19            Use pre-computed table bias for hg19, which results in better speed, balance, and a smaller index, but only works for the complete human reference.\n"
             "  -Ofactor         This parameter is deprecated and will be ignored.\n"
             " -tMaxThreads      Specify the maximum number of threads to use. Default is the number of cores.\n"
             " -B<chars>         Specify characters to use as chromosome name terminators in the FASTA header line; these characters and anything after are\n"
@@ -67,7 +67,7 @@ static void usage()
             "                   edit distance you'll ever use, and there's a performance advantage to have it be bigger than any\n"
             "                   read you'll process.  Default is %d\n"
             " -HHistogramFile   Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n"
-            " -exact            Compute hash table sizes exactly.  This will slow down index build, but may be necessary in some cases\n"
+            " -exact            Compute hash table sizes exactly.  This will slow down index build, but usually will result in smaller indices.\n"
             " -keysize          The number of bytes to use for the hash table key.  Larger values increase SNAP's memory footprint, but allow larger seeds.  Default: %d\n"
 			" -large            Build a larger index that's a little faster, particualrly for runs with quick/inaccurate parameters.  Increases index size by\n"
 			"                   about 30%%, depending on the other index parameters and the contents of the reference genome\n"
@@ -752,7 +752,7 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
 
 
 
-GenomeIndex::GenomeIndex() : nHashTables(0), hashTables(NULL), overflowTable32(NULL), overflowTable64(NULL), genome(NULL), tablesBlob(NULL)
+GenomeIndex::GenomeIndex() : nHashTables(0), hashTables(NULL), overflowTable32(NULL), overflowTable64(NULL), genome(NULL), tablesBlob(NULL), mappedOverflowTable(NULL), mappedTables(NULL)
 {
 }
 
@@ -769,23 +769,29 @@ GenomeIndex::~GenomeIndex()
     delete [] hashTables;
     hashTables = NULL;
 
-    if (NULL != overflowTable32) {
-        BigDealloc(overflowTable32);
-        overflowTable32 = NULL;
-    }
+	if (NULL != mappedTables) {
+		mappedTables->close();
+		mappedOverflowTable->close();
+	} else {
+		if (NULL != overflowTable32) {
+			BigDealloc(overflowTable32);
+			overflowTable32 = NULL;
+		}
 
-    if (NULL != overflowTable64) {
-        BigDealloc(overflowTable64);
-        overflowTable64 = NULL;
-    }
+		if (NULL != overflowTable64) {
+			BigDealloc(overflowTable64);
+			overflowTable64 = NULL;
+		}
 
-    delete genome;
-    genome = NULL;
+		if (NULL != tablesBlob) {
+			BigDealloc(tablesBlob);
+			tablesBlob = NULL;
+		}
+	}
 
-    if (NULL != tablesBlob) {
-        BigDealloc(tablesBlob);
-        tablesBlob = NULL;
-    }
+	delete genome;
+	genome = NULL;
+
 }
 
     void
@@ -808,20 +814,31 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
     static const unsigned GENOME_SIZE_FOR_EXACT_COUNT = 1 << 20;  // Needs to be a power of 2 for hash sets
 
     bool computeExactly = (countOfBases < GENOME_SIZE_FOR_EXACT_COUNT) || forceExact;
-    if (countOfBases >= (1 << 30) && forceExact) {
-        WriteErrorMessage("You can't use -exact for genomes with >= 2^30 bases.\n");
+    if (countOfBases >= (((_int64)1) << 62) && forceExact) {
+        WriteErrorMessage("You can't use -exact for genomes with >= 2^62 bases (not that you have that much memory or disk anyway).\n");
         soft_exit(1);
     }
-    FixedSizeVector<int> numExactSeeds(nHashTables, 0);
+    
+	_uint64 *numExactSeeds = NULL;
     vector<ApproximateCounter> approxCounters(nHashTables);
 
     _int64 validSeeds = 0;
 
     if (computeExactly) {
-        // The cast in the next line is OK because we checked for < 2^30 above.
-        FixedSizeSet<_int64> exactSeedsSeen((int)(2 * (forceExact ? FirstPowerOf2GreaterThanOrEqualTo((int)countOfBases) : GENOME_SIZE_FOR_EXACT_COUNT)));
-        for (unsigned i = 0; i < (unsigned)(countOfBases - seedLen); i++) {
-            if (i % 10000000 == 0) {
+		numExactSeeds = new _uint64[nHashTables];
+		for (unsigned i = 0; i < nHashTables; i++) {
+			numExactSeeds[i] = 0;
+		}
+
+		//
+		// Create a hash table to record all of the seeds we've already seen.  The key is the seed, and the value is just one byte
+		// that the hash table package needs to be able to differentiate empty from non-empty entries.  The *11/10 is to leave some slack
+		// in the hash table.  In any case, this table should be smaller than the final index (because it doesn't need
+		// any genome locations, not to mention an overflow table), so it should fit in memory.
+		//
+		SNAPHashTable *seedsSeen = new SNAPHashTable((countOfBases * 11) / 10, ((seedLen + 3) * 2) / 8, 1, 1, 0xff);
+        for (_int64 i = 0; i < countOfBases - seedLen; i++) {
+            if (i % 100000000 == 0) {
                 WriteStatusMessage("Bias computation: %lld / %lld\n",(_int64)i, (_int64)countOfBases);
             }
             const char *bases = genome->getSubstring(i,seedLen);
@@ -850,11 +867,18 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
 			}
 
 			_ASSERT(seed.getHighBases(hashTableKeySize) < nHashTables);
-			if (!exactSeedsSeen.contains(seed.getBases())) {
-				exactSeedsSeen.add(seed.getBases());
+
+
+			if (NULL == seedsSeen->GetFirstValueForKey(seed.getBases())) {
+				_uint64 value = 42;
+				seedsSeen->Insert(seed.getBases(), &value);
 				numExactSeeds[seed.getHighBases(hashTableKeySize)]++;
 			}
         }
+
+//      for (unsigned i = 0; i < nHashTables; i++) printf("Hash table %d is predicted to have %lld entries\n", i, numExactSeeds[i]);
+		delete seedsSeen;
+		seedsSeen = NULL;
     } else {
         //
         // Run through the table in parallel.
@@ -914,13 +938,11 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
 
     for (unsigned i = 0; i < nHashTables; i++) {
         _uint64 count = computeExactly ? numExactSeeds[i] : approxCounters[i].getCount();
-        table[i] = (count / distinctSeeds) * ((double)validSeeds / countOfBases) * nHashTables;
+		table[i] = ((double)count * nHashTables) / (double)countOfBases;
     }
 
-    //printf("Bias table:\n");
-    //for (unsigned i = 0; i < nHashTables; i++) {
-    //    printf("%u -> %lf\n", i, table[i]);
-    //}
+	delete numExactSeeds;
+	numExactSeeds = NULL;
 
     WriteStatusMessage("Computed bias table in %llds\n", (timeInMillis() + 500 - start) / 1000);
 }
@@ -1442,9 +1464,8 @@ GenomeIndex::printBiasTables()
 }
 
         GenomeIndex *
-GenomeIndex::loadFromDirectory(char *directoryName)
+GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
 {
-
     const unsigned filenameBufferSize = MAX_PATH+1;
     char filenameBuffer[filenameBufferSize];
     
@@ -1458,7 +1479,8 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     }
 
     char indexFileBuf[1000];
-    indexFile->read(indexFileBuf, sizeof(indexFileBuf));
+    size_t indexFileSize = indexFile->read(indexFileBuf, sizeof(indexFileBuf) - 1);
+    indexFileBuf[indexFileSize] = 0;
 
     unsigned seedLen;
     unsigned majorVersion, minorVersion, chromosomePadding;
@@ -1509,35 +1531,71 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     unsigned overflowEntrySize = (locationSize > 4) ? sizeof(*index->overflowTable64) : sizeof(*index->overflowTable32);
 
     size_t overflowTableSizeInBytes = (size_t)index->overflowTableSize * overflowEntrySize;
-    char *tableAsCharStar;
-    if (locationSize > 4) {
-        index->overflowTable64 = (_int64 *)BigAlloc(overflowTableSizeInBytes);
-        tableAsCharStar = (char *) index->overflowTable64;
-        _ASSERT(NULL == index->overflowTable32);
-    } else {
-        index->overflowTable32 = (unsigned *)BigAlloc(overflowTableSizeInBytes);
-        tableAsCharStar = (char *) index->overflowTable32;
-        _ASSERT(NULL == index->overflowTable64);
-    }
 
     snprintf(filenameBuffer,filenameBufferSize, "%s%cOverflowTable", directoryName, PATH_SEP);
-    GenericFile *fOverflowTable = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
 
-    if (NULL == fOverflowTable) {
-        WriteErrorMessage("Unable to open overflow table file, '%s', %d\n", filenameBuffer, errno);
-        delete index;
-        return NULL;
-    }
+	if (map) {
+		if (prefetch) {
+			GenericFile *overflowTableFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
+			if (NULL == overflowTableFile) {
+				WriteErrorMessage("Unable to open file '%s'\n", filenameBuffer);
+				soft_exit(1);
+			}
 
-    size_t amountRead = fOverflowTable->read(tableAsCharStar, overflowTableSizeInBytes);
-    if (amountRead != overflowTableSizeInBytes) {
-        WriteErrorMessage("Error reading overflow table, %lld != %lld bytes read.\n", amountRead, overflowTableSizeInBytes);
-        soft_exit(1);
-    }
+			overflowTableFile->prefetch();
+			overflowTableFile->close();
+			delete overflowTableFile;
+		}
 
-    fOverflowTable->close();
-    delete fOverflowTable;
-    fOverflowTable = NULL;
+		index->mappedOverflowTable = GenericFile_map::open(filenameBuffer);
+		if (NULL == index->mappedOverflowTable) {
+			WriteErrorMessage("Unable to open file '%s'\n", filenameBuffer);
+			soft_exit(1);
+		}
+
+		size_t bytesMapped;
+		if (locationSize > 4) {
+			index->overflowTable64 = (_int64 *)index->mappedOverflowTable->mapAndAdvance(overflowTableSizeInBytes, &bytesMapped);
+		} else {
+			index->overflowTable32 = (unsigned *)index->mappedOverflowTable->mapAndAdvance(overflowTableSizeInBytes, &bytesMapped);
+		}
+
+		if (bytesMapped != overflowTableSizeInBytes) {
+			WriteErrorMessage("read (via mapping) only %lld bytes of '%s', expected %lld\n", bytesMapped, filenameBuffer, overflowTableSizeInBytes);
+			soft_exit(1);
+		}
+
+		index->mappedOverflowTable->prefetch();	// NB: This is different than the -pre prefetch.  This one maps the whole thing (and reads it sequentially in case you didn't use -pre)
+	} else {
+		char *tableAsCharStar;
+		if (locationSize > 4) {
+			index->overflowTable64 = (_int64 *)BigAlloc(overflowTableSizeInBytes);
+			tableAsCharStar = (char *)index->overflowTable64;
+			_ASSERT(NULL == index->overflowTable32);
+		} else {
+			index->overflowTable32 = (unsigned *)BigAlloc(overflowTableSizeInBytes);
+			tableAsCharStar = (char *)index->overflowTable32;
+			_ASSERT(NULL == index->overflowTable64);
+		}
+
+		GenericFile *fOverflowTable = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
+
+		if (NULL == fOverflowTable) {
+			WriteErrorMessage("Unable to open overflow table file, '%s', %d\n", filenameBuffer, errno);
+			delete index;
+			return NULL;
+		}
+
+		size_t amountRead = fOverflowTable->read(tableAsCharStar, overflowTableSizeInBytes);
+		if (amountRead != overflowTableSizeInBytes) {
+			WriteErrorMessage("Error reading overflow table, %lld != %lld bytes read.\n", amountRead, overflowTableSizeInBytes);
+			soft_exit(1);
+		}
+
+		fOverflowTable->close();
+		delete fOverflowTable;
+		fOverflowTable = NULL;
+	}
 
     index->hashTables = new SNAPHashTable*[index->nHashTables];
 
@@ -1546,20 +1604,50 @@ GenomeIndex::loadFromDirectory(char *directoryName)
     }
 
     snprintf(filenameBuffer, filenameBufferSize, "%s%cGenomeIndexHash", directoryName, PATH_SEP);
-	GenericFile *tablesFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
-    if (NULL == tablesFile) {
-        WriteErrorMessage("Unable to open genome hash table file '%s'\n", filenameBuffer);
-        soft_exit(1);
-    }
 
-    index->tablesBlob = BigAlloc(hashTablesFileSize);
-    amountRead = tablesFile->read(index->tablesBlob, hashTablesFileSize);
-    if (amountRead != hashTablesFileSize) {
-        WriteErrorMessage("Read incorrect amount for GenomeIndexHash file, %lld != %lld\n", hashTablesFileSize, amountRead);
-        soft_exit(1);
-    }
+	GenericFile_Blob *blobFile = NULL;
+	GenericFile *tablesFile = NULL;
 
-    GenericFile_Blob *blobFile = GenericFile_Blob::open(index->tablesBlob, hashTablesFileSize);
+	if (map) {
+		if (prefetch) {
+			GenericFile *hashTableFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
+			if (NULL == hashTableFile) {
+				WriteErrorMessage("Unable to open genome hash table file '%s'\n", filenameBuffer);
+				soft_exit(1);
+			}
+
+			hashTableFile->prefetch();
+			hashTableFile->close();
+			delete hashTableFile;
+		}
+
+		if (QueryFileSize(filenameBuffer) != hashTablesFileSize) {
+			WriteErrorMessage("File '%s' had unexpected size, %lld != %lld\n", filenameBuffer, QueryFileSize(filenameBuffer), hashTablesFileSize);
+			delete index;
+			return NULL;
+		}
+
+		index->mappedTables = GenericFile_map::open(filenameBuffer);
+		index->mappedTables->prefetch();
+		blobFile = index->mappedTables;
+		index->tablesBlob = NULL;
+	} else {
+		tablesFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
+		if (NULL == tablesFile) {
+			WriteErrorMessage("Unable to open genome hash table file '%s'\n", filenameBuffer);
+			soft_exit(1);
+		}
+
+		index->tablesBlob = BigAlloc(hashTablesFileSize);
+		size_t amountRead = tablesFile->read(index->tablesBlob, hashTablesFileSize);
+		if (amountRead != hashTablesFileSize) {
+			WriteErrorMessage("Read incorrect amount for GenomeIndexHash file, %lld != %lld\n", hashTablesFileSize, amountRead);
+			delete index;
+			return NULL;
+		}
+
+		blobFile = GenericFile_Blob::open(index->tablesBlob, hashTablesFileSize);
+	}
 
     for (unsigned i = 0; i < index->nHashTables; i++) {
         if (NULL == (index->hashTables[i] = SNAPHashTable::loadFromBlob(blobFile))) {
@@ -1580,24 +1668,20 @@ GenomeIndex::loadFromDirectory(char *directoryName)
             delete index;
             return NULL;
         }
-
-        if (index->hashTables[i]->GetKeySizeInBytes() != 4) {
-            WriteErrorMessage("Expected loaded hash table to have key size in bytes of 4, but it had %d.  This version of SNAP is too old to work with this index.\n", index->hashTables[i]->GetKeySizeInBytes());
-            delete index;
-            return NULL;
-        }
     }
 
-	tablesFile->close();
-	delete tablesFile;
-    tablesFile = NULL;
+	if (!map) {
+		tablesFile->close();
+		delete tablesFile;
+		tablesFile = NULL;
 
-    blobFile->close();
-    delete blobFile;
-    blobFile = NULL;
+		blobFile->close();
+		delete blobFile;
+		blobFile = NULL;
+	}
 
     snprintf(filenameBuffer,filenameBufferSize,"%s%cGenome",directoryName,PATH_SEP);
-    if (NULL == (index->genome = Genome::loadFromFile(filenameBuffer, chromosomePadding))) {
+    if (NULL == (index->genome = Genome::loadFromFile(filenameBuffer, chromosomePadding, 0, 0, map))) {
         WriteErrorMessage("GenomeIndex::loadFromDirectory: Failed to load the genome itself\n");
         delete index;
         return NULL;

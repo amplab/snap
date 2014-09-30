@@ -42,12 +42,13 @@ struct AbstractOptions
 enum FileType {UnknownFileType, SAMFile, FASTQFile, BAMFile, InterleavedFASTQFile, CRAMFile};  // Add more as needed
 
 struct SNAPFile {
-    SNAPFile() : fileName(NULL), secondFileName(NULL), fileType(UnknownFileType), isStdio(false) {}
+	SNAPFile() : fileName(NULL), secondFileName(NULL), fileType(UnknownFileType), isStdio(false), omitSQLines(false) {}
     const char          *fileName;
     const char          *secondFileName;
     FileType             fileType;
     bool                 isCompressed;
     bool                 isStdio;           // Only applies to the first file for two-file inputs
+	bool				 omitSQLines;		// Special undocumented option for Charles Chiu's group.  Mostly a bad idea.
 
     PairedReadSupplierGenerator *createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context);
     ReadSupplierGenerator *createReadSupplierGenerator(int numThreads, const ReaderContext& context);
@@ -63,6 +64,7 @@ struct AlignerOptions : public AbstractOptions
     const char         *similarityMapFile;
     int                 numThreads;
     unsigned            maxDist;
+    float               maxDistFraction;
     unsigned            numSeedsFromCommandLine;
     double              seedCoverage;       // Exclusive with numSeeds; this is readSize/seedSize
     bool                seedCountSpecified; // Has either -n or -sc been specified?  This bool is used to make sure they're not both specified on the command line
@@ -95,6 +97,10 @@ struct AlignerOptions : public AbstractOptions
     float               expansionFactor;
     bool                noUkkonen;
     bool                noOrderedEvaluation;
+	bool				noTruncation;
+	unsigned			minReadLength;
+	bool				mapIndex;
+	bool				prefetchIndex;
     
     static bool         useHadoopErrorMessages; // This is static because it's global (and I didn't want to push the options object to every place in the code)
     static bool         outputToStdout;         // Likewise

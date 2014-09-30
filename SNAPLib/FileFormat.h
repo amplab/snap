@@ -69,6 +69,16 @@ public:
     
     */
 
+protected:
+
+    static const char* RGLineToAux;
+
+    static void setupReaderContext(AlignerOptions* options, ReaderContext* readerContext, bool bam);
+
+public:
+
+    virtual void setupReaderContext(AlignerOptions* options, ReaderContext* readerContext) const = 0;
+
     //
     // writing
     //
@@ -77,12 +87,12 @@ public:
 
     virtual bool writeHeader(
         const ReaderContext& context, char *header, size_t headerBufferSize, size_t *headerActualSize,
-        bool sorted, int argc, const char **argv, const char *version, const char *rgLine) const = 0;
+        bool sorted, int argc, const char **argv, const char *version, const char *rgLine, bool omitSQLines) const = 0;
 
     virtual bool writeRead(
-        const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
-        size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
-        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment,
+        const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
+        size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
+        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int* o_addFrontClipping,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD) const = 0; 
 

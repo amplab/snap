@@ -45,10 +45,11 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         unsigned      maxCandidatePoolSize,
         BigAllocator  *allocator,
         bool          noUkkonen_,
-        bool          noOrderedEvaluation_) :
+        bool          noOrderedEvaluation_,
+		bool          noTruncation_) :
     index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), numSeedsFromCommandLine(__min(MAX_MAX_SEEDS,numSeedsFromCommandLine_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
 	landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), seedCoverage(seedCoverage_),
-    extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_)
+    extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_)
 {
     doesGenomeIndexHave64BitLocations = index->doesGenomeIndexHave64BitLocations();
 
@@ -188,9 +189,10 @@ IntersectingPairedEndAligner::align(
     reads[1][FORWARD] = read1;
 
     //
-    // Don't bother if one or both reads are too short.
+    // Don't bother if one or both reads are too short.  The minimum read length here is the seed length, but usually there's a longer
+	// minimum enforced by our called
     //
-    if (read0->getDataLength() < 50 || read1->getDataLength() < 50) {
+    if (read0->getDataLength() < seedLen || read1->getDataLength() < seedLen) {
          return;
     }
 
@@ -458,7 +460,12 @@ IntersectingPairedEndAligner::align(
 
             GenomeLocation previousMoreHitsLocation = lastGenomeLocationForReadWithMoreHits;
             while (lastGenomeLocationForReadWithMoreHits + maxSpacing >= lastGenomeLocationForReadWithFewerHits && !outOfMoreHitsLocations) {
-                unsigned bestPossibleScoreForReadWithMoreHits = setPair[readWithMoreHits]->computeBestPossibleScoreForCurrentHit();
+				unsigned bestPossibleScoreForReadWithMoreHits;
+				if (noTruncation) {
+					bestPossibleScoreForReadWithMoreHits = 0;
+				} else {
+					bestPossibleScoreForReadWithMoreHits = setPair[readWithMoreHits]->computeBestPossibleScoreForCurrentHit();
+				} 
 
                 if (lowestFreeScoringMateCandidate[whichSetPair] >= scoringCandidatePoolSize / NUM_READS_PER_PAIR) {
                     WriteErrorMessage("Ran out of scoring candidate pool entries.  Perhaps trying with a larger value of -mcp will help.\n");
@@ -491,7 +498,13 @@ IntersectingPairedEndAligner::align(
             // And finally add the hit from the fewer hit side.  To compute its best possible score, we need to look at all of the mates; we couldn't do it in the
             // loop immediately above because some of them might have already been in the mate list from a different, nearby fewer hit location.
             //
-            unsigned bestPossibleScoreForReadWithFewerHits = setPair[readWithFewerHits]->computeBestPossibleScoreForCurrentHit();
+			unsigned bestPossibleScoreForReadWithFewerHits;
+			
+			if (noTruncation) {
+				bestPossibleScoreForReadWithFewerHits = 0;
+			} else {
+				bestPossibleScoreForReadWithFewerHits = setPair[readWithFewerHits]->computeBestPossibleScoreForCurrentHit();
+			}
 
             unsigned lowestBestPossibleScoreOfAnyPossibleMate = maxK + extraSearchDepth;
             for (int i = lowestFreeScoringMateCandidate[whichSetPair] - 1; i >= 0; i--) {

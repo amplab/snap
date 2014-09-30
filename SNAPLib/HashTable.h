@@ -32,11 +32,11 @@ class SNAPHashTable {
         typedef _uint64 KeyType;    // Likewise for keys.
 
         SNAPHashTable(
-            unsigned    i_tableSize,
+            _int64		i_tableSize,
             unsigned    i_keySizeInBytes,
             unsigned    i_valueSizeInBytes,
             unsigned    i_valueCount,
-            ValueType   i_invalidValueValue);
+            _uint64		i_invalidValueValue);
 
         //
         // Load from file.

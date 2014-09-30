@@ -152,16 +152,19 @@ public:
 
     virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, GenomeLocation* o_location, GenomeDistance* o_readBytes, int* o_refID, int* o_pos) const;
 
+    virtual void setupReaderContext(AlignerOptions* options, ReaderContext* readerContext) const
+    { FileFormat::setupReaderContext(options, readerContext, false); }
+
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
 
     virtual bool writeHeader(
         const ReaderContext& context, char *header, size_t headerBufferSize, size_t *headerActualSize,
-        bool sorted, int argc, const char **argv, const char *version, const char *rgLine) const;
+        bool sorted, int argc, const char **argv, const char *version, const char *rgLine, bool omitSQLines) const;
 
     virtual bool writeRead(
-        const Genome * genome, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
+        const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
-        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment,
+        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int* o_addFrontClipping,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD) const; 
 
@@ -213,7 +216,7 @@ private:
         char * cigarBuf, int cigarBufLen, char * cigarBufWithClipping, int cigarBufWithClippingLen,
         const char * data, GenomeDistance dataLength, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter, 
         GenomeDistance extraBasesClippedAfter, unsigned frontHardCliped, unsigned backHardClipped,
-        GenomeLocation genomeLocation, Direction direction, bool useM, int * editDistance);
+        GenomeLocation genomeLocation, Direction direction, bool useM, int * o_editDistance, int * o_adjustLocation);
 
     const bool useM;
 };

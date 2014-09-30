@@ -54,6 +54,7 @@ BaseAligner::BaseAligner(
     unsigned        i_extraSearchDepth,
     bool            i_noUkkonen,
     bool            i_noOrderedEvaluation,
+	bool			i_noTruncation,
     LandauVishkin<1>*i_landauVishkin,
     LandauVishkin<-1>*i_reverseLandauVishkin,
     AlignerStats   *i_stats,
@@ -62,7 +63,7 @@ BaseAligner::BaseAligner(
         maxReadSize(i_maxReadSize), maxSeedsToUseFromCommandLine(i_maxSeedsToUseFromCommandLine),
         maxSeedCoverage(i_maxSeedCoverage), readId(-1), extraSearchDepth(i_extraSearchDepth),
         explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats), 
-        noUkkonen(i_noUkkonen), noOrderedEvaluation(i_noOrderedEvaluation)
+        noUkkonen(i_noUkkonen), noOrderedEvaluation(i_noOrderedEvaluation), noTruncation(i_noTruncation)
 /*++
 
 Routine Description:
@@ -82,6 +83,7 @@ Arguments:
     i_extraSearchDepth  - How deeply beyond bestScore do we search?
     i_noUkkonen         - Don't use Ukkonen's algorithm (i.e., don't reduce the max edit distance depth as we score candidates)
     i_noOrderedEvaluation-Don't order evaluating the reads by the hit count in order to drive down the max edit distance more quickly
+	i_noTruncation       - Don't truncate searches based on count of disjoint seed misses
     i_landauVishkin     - an externally supplied LandauVishkin string edit distance object.  This is useful if we're expecting repeated computations and use the LV cache.
     i_reverseLandauVishkin - the same for the reverse direction.
     i_stats             - an object into which we report out statistics
@@ -556,7 +558,7 @@ Return Value:
                             }
                             candidate->seedOffset = offset;
                             _ASSERT((unsigned)candidate->seedOffset <= readLen - seedLen);
-                        } else if (lowestPossibleScoreOfAnyUnseenLocation[direction] <= scoreLimit) {
+                        } else if (lowestPossibleScoreOfAnyUnseenLocation[direction] <= scoreLimit || noTruncation) {
                             _ASSERT(offset <= readLen - seedLen);
                             allocateNewCandidate(genomeLocationOfThisHit, direction, lowestPossibleScoreOfAnyUnseenLocation[direction],
                                     offset, &candidate, &hashTableElement);
@@ -735,7 +737,7 @@ Return Value:
             highestUsedWeightList = weightListToCheck;
         }
 
-        if (__min(lowestPossibleScoreOfAnyUnseenLocation[FORWARD],lowestPossibleScoreOfAnyUnseenLocation[RC]) > scoreLimit || forceResult) {
+        if ((__min(lowestPossibleScoreOfAnyUnseenLocation[FORWARD],lowestPossibleScoreOfAnyUnseenLocation[RC]) > scoreLimit && !noTruncation) || forceResult) {
             if (weightListToCheck == 0) {
                 //
                 // We've scored all live candidates and excluded all non-candidates, or we've checked enough that we've hit the cutoff.  We have our

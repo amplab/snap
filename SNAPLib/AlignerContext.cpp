@@ -143,7 +143,7 @@ AlignerContext::initialize()
  
             fflush(stdout);
             _int64 loadStart = timeInMillis();
-            index = GenomeIndex::loadFromDirectory((char*) options->indexDir);
+            index = GenomeIndex::loadFromDirectory((char*) options->indexDir, options->mapIndex, options->prefetchIndex);
             if (index == NULL) {
                 WriteErrorMessage("Index load failed, aborting.\n");
                 soft_exit(1);
@@ -165,7 +165,14 @@ AlignerContext::initialize()
     extraSearchDepth = options->extraSearchDepth;
     noUkkonen = options->noUkkonen;
     noOrderedEvaluation = options->noOrderedEvaluation;
+	noTruncation = options->noTruncation;
     maxSecondaryAligmmentAdditionalEditDistance = options->maxSecondaryAligmmentAdditionalEditDistance;
+	minReadLength = options->minReadLength;
+
+	if ((int)minReadLength < index->getSeedLength()) {
+		WriteErrorMessage("The min read length (%d) must be at least the seed length (%d), or there's no hope of aligning reads that short.\n", minReadLength, index->getSeedLength());
+		soft_exit(1);
+	}
 
     if (options->perfFileName != NULL) {
         perfFile = fopen(options->perfFileName,"a");
@@ -227,10 +234,11 @@ AlignerContext::beginIteration()
             WriteErrorMessage("AlignerContext::beginIteration(): unknown file type %d for '%s'\n", options->outputFile.fileType, options->outputFile.fileName);
             soft_exit(1);
         }
+        format->setupReaderContext(options, &readerContext);
 
         writerSupplier = format->getWriterSupplier(options, readerContext.genome);
         ReadWriter* headerWriter = writerSupplier->getWriter();
-        headerWriter->writeHeader(readerContext, options->sortOutput, argc, argv, version, options->rgLineContents);
+        headerWriter->writeHeader(readerContext, options->sortOutput, argc, argv, version, options->rgLineContents, options->outputFile.omitSQLines);
         headerWriter->close();
         delete headerWriter;
     }

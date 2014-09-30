@@ -443,36 +443,42 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
     const char* text, int textLen,
     const char* pattern, int patternLen,
     int k,
-    char *cigarBuf, int cigarBufLen, bool useM, 
-    CigarFormat format, int* cigarBufUsed)
+    char *cigarBuf, int cigarBufLen, bool useM,
+    CigarFormat format, int* o_cigarBufUsed,
+    int* o_addFrontClipping)
 {
     if (format != BAM_CIGAR_OPS && format != COMPACT_CIGAR_STRING) {
-        WriteErrorMessage( "LandauVishkinWithCigar::computeEditDistanceNormalized invalid parameter\n");
+        WriteErrorMessage("LandauVishkinWithCigar::computeEditDistanceNormalized invalid parameter\n");
         soft_exit(1);
     }
     int bamBufLen = (format == BAM_CIGAR_OPS ? 1 : 2) * cigarBufLen; // should be enough
-    char* bamBuf = (char*) alloca(bamBufLen);
+    char* bamBuf = (char*)alloca(bamBufLen);
     int bamBufUsed, textUsed;
     int score = computeEditDistance(text, (int)textLen, pattern, (int)patternLen, k, bamBuf, bamBufLen,
         useM, BAM_CIGAR_OPS, &bamBufUsed, &textUsed);
     if (score < 0) {
         return score;
     }
-    _uint32* bamOps = (_uint32*) bamBuf;
+
+    _uint32* bamOps = (_uint32*)bamBuf;
     int bamOpCount = bamBufUsed / sizeof(_uint32);
     bool hasIndels = false;
-    for (int i = 0; i < bamOpCount && ! hasIndels; i++) {
+    for (int i = 0; i < bamOpCount; i++) {
         char c = BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[i])];
-        hasIndels = c == 'I' || c == 'D';
+        if (c == 'I' || c == 'D') {
+            hasIndels = true;
+            break;
+        }
     }
+
     if (hasIndels) {
         // run it again in reverse so it pushes indels towards the beginning
-        char* text2 = (char*) alloca(textLen + 1);
+        char* text2 = (char*)alloca(textLen + 1);
         _ASSERT(textUsed <= textLen);
         util::memrevcpy(text2, text, textUsed);
-        char* pattern2 = (char*) alloca(patternLen + 1);
+        char* pattern2 = (char*)alloca(patternLen + 1);
         util::memrevcpy(pattern2, pattern, patternLen);
-        char* bamBuf2 = (char*) alloca(bamBufLen);
+        char* bamBuf2 = (char*)alloca(bamBufLen);
         int bamBufUsed2, textUsed2;
         int score2 = computeEditDistance(text2, textUsed, pattern2, patternLen, k, bamBuf2, bamBufLen,
             useM, BAM_CIGAR_OPS, &bamBufUsed2, &textUsed2);
@@ -483,36 +489,82 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
             textUsed = textUsed2;
             // reverse the operations
             for (int i = 0; i < bamOpCount; i++) {
-                bamOps[i] = ((_uint32*) bamBuf2)[bamOpCount - 1 - i];
+                bamOps[i] = ((_uint32*)bamBuf2)[bamOpCount - 1 - i];
             }
         } else if (false) { // debugging
             text2[textUsed2] = 0;
             pattern2[patternLen] = 0;
-            WriteErrorMessage( "inconsistent forward/reverse comparison\nreverse score %d, textUsed %d, bamUsed %d, text/pattern:\n%s\n%s\n",
+            WriteErrorMessage("inconsistent forward/reverse comparison\nreverse score %d, textUsed %d, bamUsed %d, text/pattern:\n%s\n%s\n",
                 score2, textUsed2, bamBufUsed2, text2, pattern2);
             memcpy(text2, text, textLen);
             text2[textLen] = 0;
             memcpy(pattern2, pattern, patternLen);
             pattern2[patternLen] = 0;
-            WriteErrorMessage( "forward score %d, textUsed %d, bamUsed %d, text/pattern:\n%s\n%s\n",
+            WriteErrorMessage("forward score %d, textUsed %d, bamUsed %d, text/pattern:\n%s\n%s\n",
                 score, textUsed, bamBufUsed, text2, pattern2);
         }
     }
-    // copy out cigar info
+
+    //
+    // Trim out any trailing insertions, which can just be changed or merge in to X (or M as the case may be).
+    //
+    _ASSERT(bamOpCount > 0);
+    char lastCode = BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[bamOpCount - 1])];
+    if ('I' == lastCode) {
+        //
+        // See if it merges into the previous cigar code (which it will if it's M or X, but not D or =).
+        //
+        if (bamOpCount != 1) {
+            char previousCode = BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[bamOpCount - 2])];
+            if ('X' == previousCode || 'M' == previousCode) {
+                int newCount = BAMAlignment::GetCigarOpCount(bamOps[bamOpCount - 1]) + BAMAlignment::GetCigarOpCount(bamOps[bamOpCount - 2]);
+                bamOps[bamOpCount - 2] = (newCount << 4) | BAMAlignment::CodeToCigar[previousCode];
+                bamOpCount--;
+                bamBufUsed -= sizeof(_uint32);
+            } else if ('=' == previousCode) {
+                //
+                // The previous code was =, which this obviously doesn't.  Convert the final code to X or M.
+                //
+                bamOps[bamOpCount - 1] = (BAMAlignment::GetCigarOpCount(bamOps[bamOpCount - 1]) << 4) | BAMAlignment::CigarToCode[useM ? 'M' : 'X'];
+            }
+        }
+    }
+    //
+    // Turn leading 'D' into soft clipping
+    //
+    if (o_addFrontClipping != NULL) {
+        char firstCode = BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[0])];
+        if (firstCode == 'D') {
+            *o_addFrontClipping = BAMAlignment::GetCigarOpCount(bamOps[0]);
+            if (*o_addFrontClipping != 0) {
+                return 0; // can fail, will be rerun with new clipping
+            }
+        } else {
+            *o_addFrontClipping = 0;
+        }
+    }
+	_ASSERT(bamOpCount <= 1 || BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[bamOpCount - 1])] != 'I');	// We should have cleared all of these out
+	_ASSERT(bamOpCount <= 1 || BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[bamOpCount - 1])] != 'D');	// And none of these should happen, either.
+// Seems to happen; TODO: fix this	_ASSERT(bamOpCount <= 1 || BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[0])] != 'D');
+// Seems to happen; TODO: fix this	_ASSERT(bamOpCount <= 1 || BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[0])] != 'I');
+	
+	// copy out cigar info
     if (format == BAM_CIGAR_OPS) {
         memcpy(cigarBuf, bamOps, bamBufUsed);
-        if (cigarBufUsed != NULL) {
-            *cigarBufUsed = bamBufUsed;
+        if (o_cigarBufUsed != NULL) {
+            *o_cigarBufUsed = bamBufUsed;
         }
     } else {
         bool ok = BAMAlignment::decodeCigar(cigarBuf, cigarBufLen, bamOps, bamOpCount);
         if (! ok) {
             return -1;
         }
-        if (cigarBufUsed != NULL) {
-            *cigarBufUsed = (int) strlen(cigarBuf) + 1;
+        if (o_cigarBufUsed != NULL) {
+            *o_cigarBufUsed = (int)strlen(cigarBuf) + 1;
         }
-    }
+
+
+	}
     return score;
 }
 

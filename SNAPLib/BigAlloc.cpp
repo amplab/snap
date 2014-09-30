@@ -26,7 +26,7 @@ Revision History:
 #include "exit.h"
 #include "Error.h"
 
-bool BigAllocUseHugePages = true;
+bool BigAllocUseHugePages = false;
 
 
 #ifdef PROFILE_BIGALLOC

@@ -46,7 +46,7 @@ struct PairedAlignmentResult;
 #ifdef LONG_READS
 #define MAX_READ_LENGTH 100000
 #else
-#define MAX_READ_LENGTH 4096
+#define MAX_READ_LENGTH 400
 #endif
 
 //
@@ -91,6 +91,8 @@ struct ReaderContext
 {
     const Genome*       genome;
     const char*         defaultReadGroup;
+    const char*         defaultReadGroupAux; // SAM or BAM depending on output format
+    int                 defaultReadGroupAuxLen;
     ReadClippingType    clipping;
     bool                paired;
     bool                ignoreSecondaryAlignments;   // Should we just ignore reads with the Secondary Alignment bit set?
@@ -183,13 +185,13 @@ public:
     virtual ~ReadWriter() {}
 
     // write out header
-    virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine) = 0;
+	virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine, bool omitSQLines) = 0;
 
     // write a single read, return true if successful
-    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment) = 0;
+    virtual bool writeRead(const ReaderContext& context, Read *read, AlignmentResult result, int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment) = 0;
 
     // write a pair of reads, return true if successful
-    virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result, bool secondaryAlignment) = 0;
+    virtual bool writePair(const ReaderContext& context, Read *read0, Read *read1, PairedAlignmentResult *result, bool secondaryAlignment) = 0;
 
     // close out this thread
     virtual void close() = 0;
@@ -436,6 +438,7 @@ public:
         inline unsigned getDataLength() const {return dataLength;}
         inline unsigned getUnclippedLength() const {return unclippedLength;}
         inline unsigned getFrontClippedLength() const {return (unsigned)(data - unclippedData);}    // number of bases clipped from the front of the read
+		inline unsigned getBackClippedLength() const {return unclippedLength - dataLength - getFrontClippedLength();}
         inline void setUnclippedLength(unsigned length) {unclippedLength = length;}
 		inline ReadClippingType getClippingState() const {return clippingState;}
         inline DataBatch getBatch() { return batch; }
@@ -452,6 +455,8 @@ public:
         inline const char *getOriginalRNEXT() {return originalRNEXT;}
         inline unsigned getOriginalRNEXTLength() {return originalRNEXTLength;}
         inline unsigned getOriginalPNEXT() {return originalPNEXT;}
+        inline void addFrontClipping(int clipping)
+        { data += clipping; dataLength -= clipping; }
 
         inline char* getAuxiliaryData(unsigned* o_length, bool * o_isSAM) const
         {
@@ -834,3 +839,5 @@ private:
     char *qualityBuffer;
     char *auxBuffer;
 };
+
+extern const unsigned DEFAULT_MIN_READ_LENGTH;

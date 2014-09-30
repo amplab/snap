@@ -116,6 +116,7 @@ SingleAlignerContext::runIterationThread()
             extraSearchDepth,
             noUkkonen,
             noOrderedEvaluation,
+			noTruncation,
             NULL,               // LV (no need to cache in the single aligner)
             NULL,               // reverse LV
             stats,
@@ -155,9 +156,9 @@ SingleAlignerContext::runIterationThread()
         }
 
         // Skip the read if it has too many Ns or trailing 2 quality scores.
-        if (read->getDataLength() < 50 || read->countOfNs() > maxDist) {
+        if (read->getDataLength() < minReadLength || read->countOfNs() > maxDist) {
             if (readWriter != NULL && options->passFilter(read, NotFound)) {
-                readWriter->writeRead(read, NotFound, 0, InvalidGenomeLocation, FORWARD, false);
+                readWriter->writeRead(readerContext, read, NotFound, 0, InvalidGenomeLocation, FORWARD, false);
             }
             continue;
         } else {
@@ -171,7 +172,21 @@ SingleAlignerContext::runIterationThread()
         SingleAlignmentResult result;
         int nSecondaryResults = 0;
 
+#ifdef LONG_READS
+        int oldMaxK = aligner->getMaxK();
+        if (options->maxDistFraction > 0.0) {
+            aligner->setMaxK(min(MAX_K, (int)(read->getDataLength() * options->maxDistFraction)));
+        }
+#endif
         aligner->AlignRead(read, &result, maxSecondaryAligmmentAdditionalEditDistance, secondaryAlignmentBufferCount, &nSecondaryResults, secondaryAlignments);
+#ifdef LONG_READS
+        aligner->setMaxK(oldMaxK);
+#endif
+		result.correctAlignmentForSoftClipping(read, index->getGenome());
+
+		for (int i = 0; i < nSecondaryResults; i++) {
+			secondaryAlignments[i].correctAlignmentForSoftClipping(read, index->getGenome());
+		}
 
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;
@@ -208,7 +223,7 @@ SingleAlignerContext::writeRead(
     )
 {
     if (readWriter != NULL && options->passFilter(read, result.status)) {
-        readWriter->writeRead(read, result.status, result.mapq, result.location, result.direction, secondaryAlignment);
+        readWriter->writeRead(readerContext, read, result.status, result.mapq, result.location, result.direction, secondaryAlignment);
     }
 }
 

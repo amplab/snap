@@ -50,3 +50,4 @@ Read::checkIdMatch(
 
     
 const unsigned Read::localBufferLength = 3 * MAX_READ_LENGTH;
+const unsigned DEFAULT_MIN_READ_LENGTH = 50;

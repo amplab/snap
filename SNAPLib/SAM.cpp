@@ -597,7 +597,7 @@ SAMReader::createReadSupplierGenerator(
     const ReaderContext& context)
 {
     //
-    // single-ended SAM files always can be read with the range splitter.
+    // single-ended SAM files always can be read with the range splitter, unless reading from stdin, which needs a queue
     //
     if (!strcmp(fileName, "-")) {
         //
@@ -720,6 +720,84 @@ SAMFormat::getSortInfo(
     }
 }
 
+// which @RG line fields to put in aux data of every read
+const char* FileFormat::RGLineToAux = "IDLBPLPUSM";
+
+    void
+FileFormat::setupReaderContext(
+    AlignerOptions* options,
+    ReaderContext* readerContext,
+    bool bam)
+{
+    if (options->rgLineContents == NULL || *options->rgLineContents == '\0') {
+        readerContext->defaultReadGroupAux = "";
+        readerContext->defaultReadGroupAuxLen = 0;
+        return;
+    }
+    char* buffer = new char[strlen(options->rgLineContents) * 3]; // can't expend > 2x
+    const char* from = options->rgLineContents;
+    char* to = buffer;
+    // skip @RG
+    _ASSERT(strncmp(from, "@RG", 3) == 0);
+    while (*from && *from != '\t') {
+        from++;
+    }
+    while (*from) {
+        if (!(from[0] == '\t' && from[1] && from[1] != '\t' && from[2] && from[2] != '\t' && from[3] == ':')) {
+            WriteErrorMessage("Invalid @RG line: %s\n", options->rgLineContents);
+            soft_exit(1);
+        }
+        bool keep = false;
+        bool isID = false;
+        for (const char* a = RGLineToAux; *a; a += 2) {
+            if (from[1] == a[0] && from[2] == a[1]) {
+                keep = true;
+                isID = from[1] == 'I' && from[2] == 'D';
+                break;
+            }
+        }
+        if (keep) {
+            if (bam) {
+                BAMAlignAux* aux = (BAMAlignAux*)to;
+                aux->tag[0] = isID ? 'R' : from[1];
+                aux->tag[1] = isID ? 'G' : from[2];
+                aux->val_type = 'Z';
+                from += 4; // skip \tXX:
+                to = (char*)aux->value();
+                while (*from && *from != '\t') {
+                    *to++ = *from++;
+                }
+                *to++ = 0;
+            } else {
+                // turn \tXX: into \tXX:Z:, change ID to RG
+                *to++ = *from++;
+                if (isID) {
+                    *to++ = 'R';
+                    *to++ = 'G';
+                    from += 2;
+                } else {
+                    *to++ = *from++;
+                    *to++ = *from++;
+                }
+                *to++ = *from++;
+                *to++ = 'Z';
+                *to++ = ':';
+                // copy string attribute
+                while (*from && *from != '\t') {
+                    *to++ = *from++;
+                }
+            }
+        } else {
+            from += 4;
+            while (*from && *from != '\t') {
+                from++;
+            }
+        }
+    }
+    readerContext->defaultReadGroupAux = buffer;
+    readerContext->defaultReadGroupAuxLen = (int) (to - buffer);
+}
+
     ReadWriterSupplier*
 SAMFormat::getWriterSupplier(
     AlignerOptions* options,
@@ -750,7 +828,8 @@ SAMFormat::writeHeader(
     int argc,
     const char **argv,
     const char *version,
-    const char *rgLine)
+    const char *rgLine,
+	bool omitSQLines)	// Hacky option for Charles
     const
 {
     char *commandLine;
@@ -814,7 +893,7 @@ SAMFormat::writeHeader(
 		}
     }
 #ifndef SKIP_SQ_LINES
-    if ((context.header == NULL || ! context.headerMatchesIndex) && context.genome != NULL) {
+    if ((context.header == NULL || ! context.headerMatchesIndex) && context.genome != NULL && !omitSQLines) {
         // Write an @SQ line for each chromosome / contig in the genome
         const Genome::Contig *contigs = context.genome->getContigs();
         int numContigs = context.genome->getNumContigs();
@@ -1027,7 +1106,7 @@ SAMFormat::createSAMLine(
 
     bool
 SAMFormat::writeRead(
-    const Genome * genome,
+    const ReaderContext& context,
     LandauVishkinWithCigar * lv,
     char * buffer,
     size_t bufferSpace, 
@@ -1039,6 +1118,7 @@ SAMFormat::writeRead(
     GenomeLocation genomeLocation,
     Direction direction,
     bool secondaryAlignment,
+    int * o_addFrontClipping,
     bool hasMate,
     bool firstInPair,
     Read * mate, 
@@ -1076,7 +1156,8 @@ SAMFormat::writeRead(
     GenomeDistance extraBasesClippedAfter;    // Clipping added if we align off the end of a chromosome
     int editDistance = -1;
 
-    if (! createSAMLine(genome, lv, data, quality, MAX_READ, contigName, contigIndex, 
+    *o_addFrontClipping = 0;
+    if (!createSAMLine(context.genome, lv, data, quality, MAX_READ, contigName, contigIndex,
         flags, positionInContig, mapQuality, matecontigName, mateContigIndex, matePositionInContig, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, secondaryAlignment, useM,
@@ -1086,9 +1167,13 @@ SAMFormat::writeRead(
         return false;
     }
     if (genomeLocation != InvalidGenomeLocation) {
-        cigar = computeCigarString(genome, lv, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize, 
+        cigar = computeCigarString(context.genome, lv, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize, 
                                    clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter, extraBasesClippedAfter, 
-                                   read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(), genomeLocation, direction, useM, &editDistance);
+                                   read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(), genomeLocation, direction, useM,
+                                   &editDistance, o_addFrontClipping);
+        if (*o_addFrontClipping != 0) {
+            return false;
+        }
     }
 
     // Write the SAM entry, which requires the following fields:
@@ -1140,11 +1225,20 @@ SAMFormat::writeRead(
         aux = NULL;
         auxLen = 0;
     }
+    const char* rglineAux = "";
+    int rglineAuxLen = 0;
     if (read->getReadGroup() != NULL && read->getReadGroup() != READ_GROUP_FROM_AUX) {
-        readGroupSeparator = "\tRG:Z:";
-        readGroupString = read->getReadGroup();
+        if (*readGroupString == 0 || strcmp(readGroupString, context.defaultReadGroup) == 0) {
+            readGroupSeparator = "";
+            readGroupString = "";
+            rglineAux = context.defaultReadGroupAux;
+            rglineAuxLen = context.defaultReadGroupAuxLen;
+        } else {
+            readGroupSeparator = "\tRG:Z:";
+            readGroupString = read->getReadGroup();
+        }
     }
-    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s\n",
+    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s\n",
         qnameLen, read->getId(),
         flags,
         contigName,
@@ -1158,7 +1252,7 @@ SAMFormat::writeRead(
         fullLength, quality,
         aux != NULL ? "\t" : "", auxLen, aux != NULL ? aux : "",
         readGroupSeparator, readGroupString,
-        nmString);
+        nmString, rglineAuxLen, rglineAux);
 
     if (charsInString > bufferSpace) {
         //
@@ -1199,13 +1293,14 @@ SAMFormat::computeCigarString(
     GenomeLocation              genomeLocation,
     Direction                   direction,
 	bool						useM,
-    int *                       editDistance
+    int *                       o_editDistance,
+    int *                       o_addFrontClipping
 )
 {
     //
     // Apply the extra clipping.
     //
-    genomeLocation += extraBasesClippedBefore;
+	genomeLocation += extraBasesClippedBefore + basesClippedBefore;
     data += extraBasesClippedBefore;
     dataLength -= extraBasesClippedBefore;
 
@@ -1214,8 +1309,9 @@ SAMFormat::computeCigarString(
     }
 
     const char *reference = genome->getSubstring(genomeLocation, dataLength);
+    int cigarBufUsed;
     if (NULL != reference) {
-        *editDistance = lv->computeEditDistanceNormalized(
+        *o_editDistance = lv->computeEditDistanceNormalized(
                             reference,
                             (int)(dataLength - extraBasesClippedAfter + MAX_K), // Add space incase of indels.  We know there's enough, because the reference is padded.
                             data,
@@ -1223,18 +1319,26 @@ SAMFormat::computeCigarString(
                             MAX_K - 1,
                             cigarBuf,
                             cigarBufLen,
-						    useM);
+						    useM,
+                            COMPACT_CIGAR_STRING,
+                            &cigarBufUsed,
+                            o_addFrontClipping);
+        if (*o_addFrontClipping != 0) {
+            return NULL;
+        }
     } else {
         //
         // Fell off the end of the chromosome.
         //
+        *o_editDistance = 0;
+        *o_addFrontClipping = 0;
         return "*";
     }
 
-    if (*editDistance == -2) {
+    if (*o_editDistance == -2) {
         WriteErrorMessage( "WARNING: computeEditDistance returned -2; cigarBuf may be too small\n");
         return "*";
-    } else if (*editDistance == -1) {
+    } else if (*o_editDistance == -1) {
         static bool warningPrinted = false;
         if (!warningPrinted) {
             WriteErrorMessage( "WARNING: computeEditDistance returned -1; this shouldn't happen\n");

@@ -401,7 +401,7 @@ void PairedAlignerContext::runIterationThread()
     
     IntersectingPairedEndAligner *intersectingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
-                                                                maxCandidatePoolSize, allocator, noUkkonen, noOrderedEvaluation);
+                                                                maxCandidatePoolSize, allocator, noUkkonen, noOrderedEvaluation, noTruncation);
 
 
     ChimericPairedEndAligner *aligner = new (allocator) ChimericPairedEndAligner(
@@ -415,7 +415,9 @@ void PairedAlignerContext::runIterationThread()
         extraSearchDepth,
         noUkkonen,
         noOrderedEvaluation,
+		noTruncation,
         intersectingAligner,
+		minReadLength,
         allocator);
 
     allocator->checkCanaries();
@@ -452,8 +454,8 @@ void PairedAlignerContext::runIterationThread()
 
         // Skip the pair if there are too many Ns or 2s.
         int maxDist = this->maxDist;
-        bool useful0 = read0->getDataLength() >= 50 && (int)read0->countOfNs() <= maxDist;
-        bool useful1 = read1->getDataLength() >= 50 && (int)read1->countOfNs() <= maxDist;
+        bool useful0 = read0->getDataLength() >= minReadLength && (int)read0->countOfNs() <= maxDist;
+        bool useful1 = read1->getDataLength() >= minReadLength && (int)read1->countOfNs() <= maxDist;
         if (!useful0 && !useful1) {
             PairedAlignmentResult result;
             result.status[0] = NotFound;
@@ -482,9 +484,24 @@ void PairedAlignerContext::runIterationThread()
 
         int nSecondaryResults;
         int nSingleSecondaryResults[2];
-
+        
         aligner->align(read0, read1, &result, maxSecondaryAligmmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, secondaryResults, 
             maxSingleSecondaryHits, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1],singleSecondaryResults);
+
+		Read *reads[NUM_READS_PER_PAIR] = {read0, read1};
+		result.correctAlignmentForSoftClipping(reads, index->getGenome());
+
+		for (int i = 0; i < nSecondaryResults; i++) {
+			secondaryResults[i].correctAlignmentForSoftClipping(reads, index->getGenome());
+		}
+
+		for (int i = 0; i < nSingleSecondaryResults[0]; i++) {
+			singleSecondaryResults[i].correctAlignmentForSoftClipping(read0, index->getGenome());
+		}
+
+		for (int i = nSingleSecondaryResults[0]; i < nSingleSecondaryResults[0] + nSingleSecondaryResults[1]; i++) {
+			singleSecondaryResults[i].correctAlignmentForSoftClipping(read1, index->getGenome());
+		}
 
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;
@@ -508,7 +525,7 @@ void PairedAlignerContext::runIterationThread()
         for (int i = 0; i < nSingleSecondaryResults[0] + nSingleSecondaryResults[1]; i++) {
             Read *read = i < nSingleSecondaryResults[0] ? read0 : read1;
             if (readWriter != NULL && (options->passFilter(read, singleSecondaryResults[i].status))) {
-                readWriter->writeRead(read, singleSecondaryResults[i].status, singleSecondaryResults[i].mapq, singleSecondaryResults[i].location, singleSecondaryResults[i].direction, true);
+                readWriter->writeRead(readerContext, read, singleSecondaryResults[i].status, singleSecondaryResults[i].mapq, singleSecondaryResults[i].location, singleSecondaryResults[i].direction, true);
             }
         }
 
@@ -534,7 +551,7 @@ void PairedAlignerContext::writePair(Read* read0, Read* read1, PairedAlignmentRe
     bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
         ? (pass0 && pass1) : (pass0 || pass1);
     if (readWriter != NULL && pass) {
-        readWriter->writePair(read0, read1, result, secondary);
+        readWriter->writePair(readerContext, read0, read1, result, secondary);
     }
 }
 
