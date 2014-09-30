@@ -47,7 +47,7 @@ GenomeLocation correctLocationForSoftClipping(AlignmentResult status, GenomeLoca
 	}
 
 	const Genome::Contig *contig = genome->getContigAtLocation(location);
-	if (contig->beginningLocation > newLocation) {
+	if (contig == NULL || contig->beginningLocation > newLocation) {
 		//
 		// This would push the alignment into a different contig.  Skip the fixup.
 		//

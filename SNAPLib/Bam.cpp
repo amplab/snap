@@ -495,7 +495,7 @@ BAMReader::getReadFromLine(
 
         const char *rnext;
         unsigned rnextLen;
-        if (bam->next_refID < 0 || bam->next_refID >= genome->getNumContigs()) {
+        if (bam->next_refID < 0 || (genome != NULL && bam->next_refID >= genome->getNumContigs())) {
             rnext = "*";
             rnextLen = 1;
         } else {

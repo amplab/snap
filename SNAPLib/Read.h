@@ -44,7 +44,7 @@ struct PairedAlignmentResult;
 
 //#define LONG_READS
 #ifdef LONG_READS
-#define MAX_READ_LENGTH 100000
+#define MAX_READ_LENGTH 400000
 #else
 #define MAX_READ_LENGTH 400
 #endif
