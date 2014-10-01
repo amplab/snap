@@ -149,10 +149,10 @@ private:
 	// until it's used up.
 	//
 	char				*headerBuffer;
-	__int64				 headerBufferSize;
+	_int64				 headerBufferSize;
 	char				*headerExtra;		// Allocated in one go with the headerBuffer
-	__int64				 headerExtraSize;
-	__int64				 amountAdvancedThroughUnderlyingStoreByUs;
+	_int64				 headerExtraSize;
+	_int64				 amountAdvancedThroughUnderlyingStoreByUs;
 	unsigned			 nHeaderBuffersAllocated;
 	bool			     hitEOFReadingHeader;
 };
@@ -432,7 +432,7 @@ ReadBasedDataReader::reinit(
 	_int64 bytesToSkip = startingOffset;
 
 	while (bytesToSkip > 0) {
-		char* p;
+		char *p;
 		_int64 valid, start;
 		bool ok = getData(&p, &valid, &start);
 		if (!ok) {
