@@ -191,6 +191,23 @@ SAMReader::parseHeader(
     *o_headerMatchesIndex = true;
     int numSQLines = 0;
     while (NULL != nextLineToProcess && nextLineToProcess < endOfBuffer && '@' == *nextLineToProcess) {
+		//
+		// Make sure we have the complete line.
+		//
+		bool foundCompleteLine = false;
+
+		for (char *c = nextLineToProcess; c < endOfBuffer; c++) {
+			if (*c == '\n') {
+				foundCompleteLine = true;
+				break;
+			}
+		}
+		if (!foundCompleteLine) {
+			*o_sawWholeHeader = false;
+			return true;	// Parsed OK, but incomplete
+		}
+
+
         if (!strncmp("@SQ",nextLineToProcess,3)) {
             //
             // These lines represent sequences in the reference genome, what are
