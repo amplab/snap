@@ -240,13 +240,14 @@ void PairedAlignerOptions::usageMessage()
 {
     AlignerOptions::usageMessage();
     WriteErrorMessage(
+        "\n"
         "  -s   min and max spacing to allow between paired ends (default: %d %d).\n"
         "  -fs  force spacing to lie between min and max.\n"
         "  -H   max hits for intersecting aligner (default: %d).\n"
         "  -mcp specifies the maximum candidate pool size (An internal data structure. \n"
         "       Only increase this if you get an error message saying to do so. If you're running\n"
         "       out of memory, you may want to reduce it.  Default: %d)\n"
-        "  -F b additional option to -F to require both mates to satisfy filter (default is just one)\n",
+        "  -F b additional option to -F to require both mates to satisfy filter (default is just one)\n"
         "       out of memory, you may want to reduce it.  Default: %d).\n"
         "  -ku  Keep unpaired-looking reads in SAM/BAM input.  Ordinarily, if a read doesn't specify\n"
         "       mate information (RNEXT field is * and/or PNEXT is 0) then the code that matches reads will immdeiately\n"
