@@ -29,7 +29,7 @@ Revision History:
 #include "LandauVishkin.h"
 #include "FixedSizeMap.h"
 
-const unsigned DEFAULT_INTERSECTING_ALIGNER_MAX_HITS = 16000;
+const unsigned DEFAULT_INTERSECTING_ALIGNER_MAX_HITS = 4000;
 const unsigned DEFAULT_MAX_CANDIDATE_POOL_SIZE = 1000000;
 
 class IntersectingPairedEndAligner : public PairedEndAligner

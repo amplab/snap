@@ -77,7 +77,7 @@ AlignerOptions::AlignerOptions(
         maxDist                 = 15;
         seedCoverage            = 0;
         numSeedsFromCommandLine = 8;
-        maxHits                 = 1600;
+        maxHits                 = 300;
      } else {
         maxDist                 = 14;
         numSeedsFromCommandLine = 25;
