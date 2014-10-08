@@ -166,7 +166,8 @@ AlignerContext::initialize()
     noUkkonen = options->noUkkonen;
     noOrderedEvaluation = options->noOrderedEvaluation;
 	noTruncation = options->noTruncation;
-    maxSecondaryAligmmentAdditionalEditDistance = options->maxSecondaryAligmmentAdditionalEditDistance;
+    maxSecondaryAlignmentAdditionalEditDistance = options->maxSecondaryAlignmentAdditionalEditDistance;
+	maxSecondaryAlignments = options->maxSecondaryAlignments;
 	minReadLength = options->minReadLength;
 
 	if (index != NULL && (int)minReadLength < index->getSeedLength()) {
@@ -418,7 +419,7 @@ AlignerContext::parseOptions(
         soft_exit(1);
     }
 
-    if (options->maxSecondaryAligmmentAdditionalEditDistance > (int)options->extraSearchDepth) {
+    if (options->maxSecondaryAlignmentAdditionalEditDistance > (int)options->extraSearchDepth) {
         WriteErrorMessage("You can't have the max edit distance for secondary alignments (-om) be bigger than the max search depth (-D)\n");
         soft_exit(1);
     }

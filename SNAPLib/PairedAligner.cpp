@@ -388,7 +388,7 @@ void PairedAlignerContext::runIterationThread()
     unsigned maxPairedSecondaryHits;
     unsigned maxSingleSecondaryHits;
 
-    if (maxSecondaryAligmmentAdditionalEditDistance < 0) {
+    if (maxSecondaryAlignmentAdditionalEditDistance < 0) {
         maxPairedSecondaryHits = 0;
         maxSingleSecondaryHits = 0;
     } else {
@@ -486,7 +486,7 @@ void PairedAlignerContext::runIterationThread()
         int nSecondaryResults;
         int nSingleSecondaryResults[2];
         
-        aligner->align(read0, read1, &result, maxSecondaryAligmmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, secondaryResults, 
+        aligner->align(read0, read1, &result, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, secondaryResults, 
             maxSingleSecondaryHits, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1],singleSecondaryResults);
 
 		Read *reads[NUM_READS_PER_PAIR] = {read0, read1};
@@ -519,11 +519,11 @@ void PairedAlignerContext::runIterationThread()
 
         writePair(read0, read1, &result, false);
         
-        for (int i = 0; i < nSecondaryResults; i++) {
+        for (int i = 0; i < __min(nSecondaryResults, maxSecondaryAlignments); i++) {
             writePair(read0, read1, secondaryResults + i, true);
         }
 
-        for (int i = 0; i < nSingleSecondaryResults[0] + nSingleSecondaryResults[1]; i++) {
+        for (int i = 0; i < __min(nSingleSecondaryResults[0] + nSingleSecondaryResults[1], maxSecondaryAlignments - nSecondaryResults); i++) {
             Read *read = i < nSingleSecondaryResults[0] ? read0 : read1;
             if (readWriter != NULL && (options->passFilter(read, singleSecondaryResults[i].status))) {
                 readWriter->writeRead(readerContext, read, singleSecondaryResults[i].status, singleSecondaryResults[i].mapq, singleSecondaryResults[i].location, singleSecondaryResults[i].direction, true);
