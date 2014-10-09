@@ -487,11 +487,23 @@ public:
             //
             // First clip from the back.
             //
+            // todo: parameterize these
+            const int minqual = 33 + 20;
+            const int minrun = 3;
             if (ClipBack == clipping || ClipFrontAndBack == clipping) {
                 unsigned backClipping = 0;
-                while (dataLength > 0 && quality[dataLength - 1] == '#') {
-                    dataLength--;
-                    backClipping++;
+                int ok = 0;
+                for (dataLength = unclippedLength; dataLength > 0; dataLength--, backClipping++) {
+                    if (quality[dataLength - 1] < minqual) {
+                        ok = 0;
+                    } else {
+                        ok++;
+                        if (ok >= minrun) {
+                            dataLength += ok - 1;
+                            backClipping -= ok - 1;
+                            break;
+                        }
+                    }
                 }
 
                 if (maintainOriginalClipping && backClipping < originalBackClipping) {
@@ -503,9 +515,17 @@ public:
             // Then clip from the beginning.
             //
             if (ClipFront == clipping || ClipFrontAndBack == clipping) {
-                frontClippedLength = 0;
-                while (frontClippedLength < dataLength && quality[frontClippedLength] == '#') {
-                    frontClippedLength++;
+                int ok = 0;
+                for (frontClippedLength = 0; frontClippedLength < dataLength; frontClippedLength++) {
+                    if (quality[frontClippedLength] < minqual) {
+                        ok = 0;
+                    } else {
+                        ok++;
+                        if (ok >= minrun) {
+                            frontClippedLength -= ok - 1;
+                            break;
+                        }
+                    }
                 }
 
                 if (maintainOriginalClipping) {

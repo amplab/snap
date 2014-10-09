@@ -29,7 +29,8 @@ Revision History:
 
 GenomeLocation correctLocationForSoftClipping(AlignmentResult status, GenomeLocation location, Direction direction, Read *read, const Genome *genome)
 {
-	if (NotFound == status || UnknownAlignment == status) {
+    // hack!!!
+	if (NotFound == status || UnknownAlignment == status || location > genome->getCountOfBases()) {
 		return location;
 	}
 

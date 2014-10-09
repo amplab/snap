@@ -1039,6 +1039,7 @@ SAMFormat::createSAMLine(
             flags |= SAM_REVERSE_COMPLEMENT;
         }
         const Genome::Contig *contig = genome->getContigForRead(genomeLocation, read->getDataLength(), extraBasesClippedBefore);
+        if (contig == NULL) { contig = &genome->getContigs()[0]; } // hack!!!
         _ASSERT(NULL != contig && contig->length > genome->getChromosomePadding());
         if (genomeLocation + read->getDataLength() > contig->beginningLocation + contig->length - genome->getChromosomePadding()) {
             //
