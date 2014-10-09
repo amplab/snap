@@ -97,7 +97,7 @@ SingleAlignerContext::runIterationThread()
 
     SingleAlignmentResult *secondaryAlignments = NULL;
     unsigned secondaryAlignmentBufferCount;
-    if (maxSecondaryAligmmentAdditionalEditDistance < 0) {
+    if (maxSecondaryAlignmentAdditionalEditDistance < 0) {
         secondaryAlignmentBufferCount = 0;
     } else {
         secondaryAlignmentBufferCount = BaseAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, index->getSeedLength());
@@ -122,7 +122,7 @@ SingleAlignerContext::runIterationThread()
             stats,
             allocator);
 
-    if (maxSecondaryAligmmentAdditionalEditDistance >= 0) {
+    if (maxSecondaryAlignmentAdditionalEditDistance >= 0) {
         secondaryAlignments = (SingleAlignmentResult *)allocator->allocate(secondaryAlignmentBufferSize);
     }
 
@@ -178,13 +178,13 @@ SingleAlignerContext::runIterationThread()
             aligner->setMaxK(min(MAX_K, (int)(read->getDataLength() * options->maxDistFraction)));
         }
 #endif
-        aligner->AlignRead(read, &result, maxSecondaryAligmmentAdditionalEditDistance, secondaryAlignmentBufferCount, &nSecondaryResults, secondaryAlignments);
+        aligner->AlignRead(read, &result, maxSecondaryAlignmentAdditionalEditDistance, secondaryAlignmentBufferCount, &nSecondaryResults, secondaryAlignments);
 #ifdef LONG_READS
         aligner->setMaxK(oldMaxK);
 #endif
 		result.correctAlignmentForSoftClipping(read, index->getGenome());
 
-		for (int i = 0; i < nSecondaryResults; i++) {
+		for (int i = 0; i < __min(nSecondaryResults, maxSecondaryAlignments); i++) {
 			secondaryAlignments[i].correctAlignmentForSoftClipping(read, index->getGenome());
 		}
 
@@ -199,7 +199,7 @@ SingleAlignerContext::runIterationThread()
 
         writeRead(read, result, false);
 
-        for (int i = 0; i < nSecondaryResults; i++) {
+		for (int i = 0; i < __min(nSecondaryResults, maxSecondaryAlignments); i++) {
             writeRead(read, secondaryAlignments[i], true);
         }
         

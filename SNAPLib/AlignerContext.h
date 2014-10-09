@@ -116,7 +116,8 @@ public:
     bool                                 noUkkonen;
     bool                                 noOrderedEvaluation;
 	bool								 noTruncation;
-    int                                  maxSecondaryAligmmentAdditionalEditDistance;
+    int                                  maxSecondaryAlignmentAdditionalEditDistance;
+	int									 maxSecondaryAlignments;
 	unsigned							 minReadLength;
 
 

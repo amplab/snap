@@ -92,7 +92,8 @@ struct AlignerOptions : public AbstractOptions
     unsigned            extraSearchDepth;
     const char         *defaultReadGroup; // if not specified in input
     bool                ignoreSecondaryAlignments; // on input, default true
-    int                 maxSecondaryAligmmentAdditionalEditDistance;
+    int                 maxSecondaryAlignmentAdditionalEditDistance;
+	int					maxSecondaryAlignments;
     bool                preserveClipping;
     float               expansionFactor;
     bool                noUkkonen;
