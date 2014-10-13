@@ -26,7 +26,6 @@ Revision History:
 
 #include "stdafx.h"
 #include "options.h"
-#include "Range.h"
 #include "Genome.h"
 #include "Read.h"
 

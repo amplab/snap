@@ -197,7 +197,6 @@
     <ClInclude Include="ParallelTask.h" />
     <ClInclude Include="PriorityQueue.h" />
     <ClInclude Include="ProbabilityDistance.h" />
-    <ClInclude Include="Range.h" />
     <ClInclude Include="RangeSplitter.h" />
     <ClInclude Include="Read.h" />
     <ClInclude Include="ReadSupplierQueue.h" />
@@ -250,7 +249,6 @@
     <ClCompile Include="PairedReadMatcher.cpp" />
     <ClCompile Include="ParallelTask.cpp" />
     <ClCompile Include="ProbabilityDistance.cpp" />
-    <ClCompile Include="Range.cpp" />
     <ClCompile Include="RangeSplitter.cpp" />
     <ClCompile Include="Read.cpp" />
     <ClCompile Include="ReadReader.cpp" />

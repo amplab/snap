@@ -25,7 +25,6 @@ Revision History:
 #pragma once
 #include "stdafx.h"
 #include "Genome.h"
-#include "Range.h"
 #include "RangeSplitter.h"
 #include "AlignerOptions.h"
 #include "AlignerStats.h"

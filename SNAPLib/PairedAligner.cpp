@@ -34,7 +34,6 @@ Revision History:
 #include "Compat.h"
 #include "RangeSplitter.h"
 #include "GenomeIndex.h"
-#include "Range.h"
 #include "SAM.h"
 #include "ChimericPairedEndAligner.h"
 #include "Tables.h"
