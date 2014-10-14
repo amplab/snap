@@ -1796,8 +1796,15 @@ DecompressDataReader::decompressThread(
                 BgzfHeader* zip = (BgzfHeader*) (entry->compressed + input);
                 input += zip->BSIZE() + 1;
                 output += zip->ISIZE();
-				_ASSERT(output <= extraSize - reader->overflowBytes && input <= entry->compressedValid);
-                _ASSERT(zip->BSIZE() < BAM_BLOCK && zip->ISIZE() <= BAM_BLOCK);
+
+                if (output > reader->extraBytes) {
+                    fprintf(stderr, "insufficient decompression space, increase -xf parameter\n");
+                    soft_exit(1);
+                }
+                if (input > entry->compressedValid || zip->BSIZE() >= BAM_BLOCK || zip->ISIZE() > BAM_BLOCK) {
+                    fprintf(stderr, "error reading BAM file at offset %lld\n", reader->getFileOffset());
+                    soft_exit(1);
+                }
             } while (input < entry->compressedStart);
             // append final offsets
             inputs.push_back(input);

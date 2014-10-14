@@ -411,6 +411,7 @@ void PairedAlignerContext::runIterationThread()
         maxDist,
         numSeedsFromCommandLine,
         seedCoverage,
+	minWeightToCheck,
         forceSpacing,
         extraSearchDepth,
         noUkkonen,

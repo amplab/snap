@@ -121,7 +121,7 @@ public:
     bool releaseBatch(DataBatch batch);
 
     static int BufferCount(int numThreads)
-    { return (numThreads + 1) * BatchesPerElement; }
+    { return (__max(numThreads,2) + 1) * BatchesPerElement; }
 
 private:
 

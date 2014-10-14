@@ -104,6 +104,7 @@ public:
     unsigned                             maxDist;
     unsigned                             numSeedsFromCommandLine;
     double                               seedCoverage;
+    unsigned                             minWeightToCheck;
     int                                  maxHits;
     bool                                 detailedStats;
     ReadClippingType                     clipping;

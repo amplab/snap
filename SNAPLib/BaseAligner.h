@@ -47,6 +47,7 @@ public:
         unsigned        i_maxReadSize,
         unsigned        i_maxSeedsToUse,
         double          i_maxSeedCoverage,
+		unsigned        i_minWeightToCheck,
         unsigned        i_extraSearchDepth,
         bool            i_noUkkonen,
         bool            i_noOrderedEvaluation,
@@ -119,8 +120,11 @@ private:
     ProbabilityDistance *probDistance;
 
     // Maximum distance to merge candidates that differ in indels over.
+#ifdef LONG_READS
+    static const unsigned maxMergeDist = 64; // Must be even and <= 64
+#else
     static const unsigned maxMergeDist = 48; // Must be even and <= 64
-
+#endif
     char rcTranslationTable[256];
 
     _int64 nHashTableLookups;
@@ -283,6 +287,7 @@ private:
     unsigned maxReadSize;
     unsigned maxSeedsToUseFromCommandLine; // Max number of seeds to look up in the hash table
     double   maxSeedCoverage;  // Max seeds to used expressed as readSize/seedSize this is mutually exclusive with maxSeedsToUseFromCommandLine
+    unsigned minWeightToCheck;
     unsigned extraSearchDepth;
     unsigned numWeightLists;
     bool     noUkkonen;

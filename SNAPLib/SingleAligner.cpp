@@ -112,6 +112,7 @@ SingleAlignerContext::runIterationThread()
             maxReadSize,
             numSeedsFromCommandLine,
             seedCoverage,
+	    minWeightToCheck,
             extraSearchDepth,
             noUkkonen,
             noOrderedEvaluation,
