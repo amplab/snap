@@ -51,7 +51,7 @@ struct ReadQueueElement {
 #ifdef LONG_READS
     static const int    MaxReadsPerElement = 400; 
 #else
-    static const int    MaxReadsPerElement = 1000; 
+    static const int    MaxReadsPerElement = 5000; 
 #endif
     ReadQueueElement    *next;
     ReadQueueElement    *prev;
