@@ -416,7 +416,7 @@ BAMReader::getNextRead(
         }
         BAMAlignment* bam = (BAMAlignment*) buffer;
         if ((_uint64)bytes < sizeof(bam->block_size) || (_uint64)bytes < bam->size()) {
-            WriteErrorMessage("Unexpected end of BAM file at %lld\n", data->getFileOffset());
+			WriteErrorMessage("Insufficient buffer space for BAM file, increase -xf parameter\n");
             soft_exit(1);
         }
         data->advance(bam->size());

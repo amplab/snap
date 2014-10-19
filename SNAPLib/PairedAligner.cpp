@@ -34,7 +34,6 @@ Revision History:
 #include "Compat.h"
 #include "RangeSplitter.h"
 #include "GenomeIndex.h"
-#include "Range.h"
 #include "SAM.h"
 #include "ChimericPairedEndAligner.h"
 #include "Tables.h"
@@ -412,6 +411,7 @@ void PairedAlignerContext::runIterationThread()
         maxDist,
         numSeedsFromCommandLine,
         seedCoverage,
+	minWeightToCheck,
         forceSpacing,
         extraSearchDepth,
         noUkkonen,

@@ -25,7 +25,6 @@ Revision History:
 #pragma once
 #include "stdafx.h"
 #include "Genome.h"
-#include "Range.h"
 #include "RangeSplitter.h"
 #include "AlignerOptions.h"
 #include "AlignerStats.h"
@@ -105,6 +104,7 @@ public:
     unsigned                             maxDist;
     unsigned                             numSeedsFromCommandLine;
     double                               seedCoverage;
+    unsigned                             minWeightToCheck;
     int                                  maxHits;
     bool                                 detailedStats;
     ReadClippingType                     clipping;

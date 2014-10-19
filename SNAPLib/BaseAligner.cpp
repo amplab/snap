@@ -51,6 +51,7 @@ BaseAligner::BaseAligner(
     unsigned        i_maxReadSize,
     unsigned        i_maxSeedsToUseFromCommandLine,
     double          i_maxSeedCoverage,
+    unsigned        i_minWeightToCheck,
     unsigned        i_extraSearchDepth,
     bool            i_noUkkonen,
     bool            i_noOrderedEvaluation,
@@ -63,7 +64,8 @@ BaseAligner::BaseAligner(
         maxReadSize(i_maxReadSize), maxSeedsToUseFromCommandLine(i_maxSeedsToUseFromCommandLine),
         maxSeedCoverage(i_maxSeedCoverage), readId(-1), extraSearchDepth(i_extraSearchDepth),
         explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats), 
-        noUkkonen(i_noUkkonen), noOrderedEvaluation(i_noOrderedEvaluation), noTruncation(i_noTruncation)
+        noUkkonen(i_noUkkonen), noOrderedEvaluation(i_noOrderedEvaluation), noTruncation(i_noTruncation),
+		minWeightToCheck(max(1u, i_minWeightToCheck))
 /*++
 
 Routine Description:
@@ -738,7 +740,7 @@ Return Value:
         }
 
         if ((__min(lowestPossibleScoreOfAnyUnseenLocation[FORWARD],lowestPossibleScoreOfAnyUnseenLocation[RC]) > scoreLimit && !noTruncation) || forceResult) {
-            if (weightListToCheck == 0) {
+            if (weightListToCheck< minWeightToCheck) {
                 //
                 // We've scored all live candidates and excluded all non-candidates, or we've checked enough that we've hit the cutoff.  We have our
                 // answer.

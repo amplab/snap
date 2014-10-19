@@ -117,7 +117,7 @@ for input_format in ["fq", "fq.gz", "bam", "sam"]:
                             temps = [] # temporary files, deleted on success
                             # build & run snap command line
                             args = [snap, ["single", "paired"][paired], _f("temp/^.idx")]
-                            args = args + ["-t", threads, "-b"]
+                            args = args + ["-t", threads, "-b", "-="]
                             if pipe == 0:
                                 args = args + _ff(inputs[input_format][paired])
                                 if input_format_2 != "":

@@ -120,9 +120,6 @@
     <ClInclude Include="ProbabilityDistance.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Range.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="RangeSplitter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -270,9 +267,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ProbabilityDistance.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Range.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="RangeSplitter.cpp">

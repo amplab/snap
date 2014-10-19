@@ -28,7 +28,6 @@ Revision History:
 #include "Compat.h"
 #include "RangeSplitter.h"
 #include "GenomeIndex.h"
-#include "Range.h"
 #include "SAM.h"
 #include "Tables.h"
 #include "AlignerContext.h"
@@ -113,6 +112,7 @@ SingleAlignerContext::runIterationThread()
             maxReadSize,
             numSeedsFromCommandLine,
             seedCoverage,
+	    minWeightToCheck,
             extraSearchDepth,
             noUkkonen,
             noOrderedEvaluation,

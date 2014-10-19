@@ -39,7 +39,7 @@
 
 namespace test {
 
-class TestCase;
+struct TestCase;
 
 typedef void (*FunctionPtr)();
 

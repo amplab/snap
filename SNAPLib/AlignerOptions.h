@@ -26,7 +26,6 @@ Revision History:
 
 #include "stdafx.h"
 #include "options.h"
-#include "Range.h"
 #include "Genome.h"
 #include "Read.h"
 
@@ -69,6 +68,7 @@ struct AlignerOptions : public AbstractOptions
     double              seedCoverage;       // Exclusive with numSeeds; this is readSize/seedSize
     bool                seedCountSpecified; // Has either -n or -sc been specified?  This bool is used to make sure they're not both specified on the command line
     unsigned            maxHits;
+    int                 minWeightToCheck;
     bool                bindToProcessors;
     bool                ignoreMismatchedIDs;
     SNAPFile            outputFile;

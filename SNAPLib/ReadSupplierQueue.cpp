@@ -73,9 +73,9 @@ ReadSupplierQueue::commonInit()
     CreateEventObject(&allReadsConsumed);
 
     //
-    // Create 2 buffers for the reader.  We'll add more buffers as we add suppliers.
+    // Create 4 buffers for the reader.  We'll add more buffers as we add suppliers.
     //
-    for (int i = 0 ; i < 2; i++) {
+    for (int i = 0 ; i < 4; i++) {
         ReadQueueElement *element = new ReadQueueElement;
         element->addToTail(emptyQueue);
     }
@@ -144,9 +144,9 @@ ReadSupplierQueue::generateNewReadSupplier()
     AcquireExclusiveLock(&lock);
     nSuppliersRunning++;
     //
-    // Add two more queue elements for this supplier.
+    // Add more queue elements for this supplier.
     //
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 4; i++) {
         ReadQueueElement *element = new ReadQueueElement;
         element->addToTail(emptyQueue);
     }
@@ -160,8 +160,8 @@ ReadSupplierQueue::generateNewReadSupplier()
         PairedReadSupplier *
 ReadSupplierQueue::generateNewPairedReadSupplier()
 {
-    ReadQueueElement * newElements[4];
-    for (int i = 0 ; i < ((singleReader[1] == NULL) ? 2 : 4); i++) {
+    ReadQueueElement * newElements[8];
+    for (int i = 0 ; i < ((singleReader[1] == NULL) ? 4 : 8); i++) {
         newElements[i] = new ReadQueueElement;
     }
 
@@ -170,7 +170,7 @@ ReadSupplierQueue::generateNewPairedReadSupplier()
     //
     // Add two more queue elements (four for paired-end, double file).
     //
-    for (int i = 0; i < ((singleReader[1] == NULL) ? 2 : 4); i++) {
+    for (int i = 0; i < ((singleReader[1] == NULL) ? 4 : 8); i++) {
         ReadQueueElement *element = newElements[i];
         element->addToTail(emptyQueue);
     }
@@ -398,13 +398,13 @@ ReadSupplierQueue::getEmptyElement()
 {
     while (emptyQueue->next == emptyQueue) {
         // Wait for a buffer.
-        //WriteErrorMessage("Thread %u: getEmptyElement releasing lock %llx\n", GetThreadId());
+        //WriteErrorMessage("Thread %u: getEmptyElement releasing lock\n", GetThreadId());
         ReleaseExclusiveLock(&lock);
-        //WriteErrorMessage("Thread %u: getEmptyElement released lock %llx\n", GetThreadId());
+        //WriteErrorMessage("Thread %u: getEmptyElement released lock\n", GetThreadId());
         WaitForEvent(&emptyBuffersAvailable);
-        //WriteErrorMessage("Thread %u: getEmptyElement acquiring lock %llx\n", GetThreadId());
+        //WriteErrorMessage("Thread %u: getEmptyElement acquiring lock\n", GetThreadId());
         AcquireExclusiveLock(&lock);
-        //WriteErrorMessage("Thread %u: getEmptyElement acquired lock %llx\n", GetThreadId());
+        //WriteErrorMessage("Thread %u: getEmptyElement acquired lock\n", GetThreadId());
     }
 
     ReadQueueElement *element = emptyQueue->next;
