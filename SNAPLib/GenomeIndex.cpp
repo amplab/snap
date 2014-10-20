@@ -30,6 +30,7 @@ Revision History:
 #include "FixedSizeSet.h"
 #include "FixedSizeVector.h"
 #include "GenericFile.h"
+#include "GenericFile_stdio.h"
 #include "Genome.h"
 #include "GenomeIndex.h"
 #include "HashTable.h"
@@ -49,33 +50,37 @@ static const unsigned DEFAULT_LOCATION_SIZE = 4;
 
 static void usage()
 {
-    WriteErrorMessage(
-            "Usage: snap index <input.fa> <output-dir> [<options>]\n"
-            "Options:\n"
-            "  -s               Seed size (default: %d)\n"
-            "  -h               Hash table slack (default: %.1f)\n"
-            "  -hg19            Use pre-computed table bias for hg19, which results in better speed, balance, and a smaller index, but only works for the complete human reference.\n"
-            "  -Ofactor         This parameter is deprecated and will be ignored.\n"
-            " -tMaxThreads      Specify the maximum number of threads to use. Default is the number of cores.\n"
-            " -B<chars>         Specify characters to use as chromosome name terminators in the FASTA header line; these characters and anything after are\n"
-            "                   not part of the chromosome name.  You must specify all characters on a single -B switch.  So, for example, with -B_|,\n"
-            "                   the FASTA header line '>chr1|Chromosome 1' would generate a chromosome named 'chr1'.  There's a separate flag for\n"
-            "                   indicating that a space is a terminator.\n"
-            " -bSpace           Indicates that the space character is a terminator for chromosome names (see -B above).  This may be used in addition\n"
-            "                   to other terminators specified by -B.  -B and -bSpace are case sensitive.\n"
-            " -pPadding         Specify the number of Ns to put as padding between chromosomes.  This must be as large as the largest\n"
-            "                   edit distance you'll ever use, and there's a performance advantage to have it be bigger than any\n"
-            "                   read you'll process.  Default is %d\n"
-            " -HHistogramFile   Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n"
-            " -exact            Compute hash table sizes exactly.  This will slow down index build, but usually will result in smaller indices.\n"
-            " -keysize          The number of bytes to use for the hash table key.  Larger values increase SNAP's memory footprint, but allow larger seeds.  Default: %d\n"
-			" -large            Build a larger index that's a little faster, particualrly for runs with quick/inaccurate parameters.  Increases index size by\n"
-			"                   about 30%%, depending on the other index parameters and the contents of the reference genome\n"
-            " -locationSize     The size of the genome locations stored in the index.  This can be from 4 to 8 bytes.  The locations need to be big enough\n"
-            "                   not only to index the genome, but also to allow some space for representing seeds that occur multiple times.  For the\n"
-            "                   human genome, it will fit with four byte locations if the seed size is 19 or larger, but needs 5 (or more) for smaller\n"
-            "                   seeds.  Making the location size bigger than necessary will just waste (lots of) space, so unless you're doing something\n"
-            "                   quite unusual, the right answer is 4 or 5.  Default is %d\n"
+	WriteErrorMessage(
+		"Usage: snap index <input.fa> <output-dir> [<options>]\n"
+		"Options:\n"
+		"  -s               Seed size (default: %d)\n"
+		"  -h               Hash table slack (default: %.1f)\n"
+		"  -hg19            Use pre-computed table bias for hg19, which results in better speed, balance, and a smaller index, but only works for the complete human reference.\n"
+		"  -Ofactor         This parameter is deprecated and will be ignored.\n"
+		" -tMaxThreads      Specify the maximum number of threads to use. Default is the number of cores.\n"
+		" -B<chars>         Specify characters to use as chromosome name terminators in the FASTA header line; these characters and anything after are\n"
+		"                   not part of the chromosome name.  You must specify all characters on a single -B switch.  So, for example, with -B_|,\n"
+		"                   the FASTA header line '>chr1|Chromosome 1' would generate a chromosome named 'chr1'.  There's a separate flag for\n"
+		"                   indicating that a space is a terminator.\n"
+		" -bSpace           Indicates that the space character is a terminator for chromosome names (see -B above).  This may be used in addition\n"
+		"                   to other terminators specified by -B.  -B and -bSpace are case sensitive.\n"
+		" -pPadding         Specify the number of Ns to put as padding between chromosomes.  This must be as large as the largest\n"
+		"                   edit distance you'll ever use, and there's a performance advantage to have it be bigger than any\n"
+		"                   read you'll process.  Default is %d\n"
+		" -HHistogramFile   Build a histogram of seed popularity.  This is just for information, it's not used by SNAP.\n"
+		" -exact            Compute hash table sizes exactly.  This will slow down index build, but usually will result in smaller indices.\n"
+		" -keysize          The number of bytes to use for the hash table key.  Larger values increase SNAP's memory footprint, but allow larger seeds.  Default: %d\n"
+		" -large            Build a larger index that's a little faster, particualrly for runs with quick/inaccurate parameters.  Increases index size by\n"
+		"                   about 30%%, depending on the other index parameters and the contents of the reference genome\n"
+		" -locationSize     The size of the genome locations stored in the index.  This can be from 4 to 8 bytes.  The locations need to be big enough\n"
+		"                   not only to index the genome, but also to allow some space for representing seeds that occur multiple times.  For the\n"
+		"                   human genome, it will fit with four byte locations if the seed size is 19 or larger, but needs 5 (or more) for smaller\n"
+		"                   seeds.  Making the location size bigger than necessary will just waste (lots of) space, so unless you're doing something\n"
+		"                   quite unusual, the right answer is 4 or 5.  Default is %d\n"
+		" -sm               Use a temp file to work better in smaller memory.  This only helps a little, but can be the difference if you're close.\n"
+		"                   In particular, this will generally use less memory than the index will use once it's built, so if this doesn't work you\n"
+		"                   won't be able to use the index anyway. However, if you've got sufficient memory to begin with, this option will just\n"
+		"                   slow down the index build by doing extra, useless IO.\n"
 			,
             DEFAULT_SEED_SIZE,
             DEFAULT_SLACK,
@@ -111,6 +116,7 @@ GenomeIndex::runIndexer(
     unsigned keySizeInBytes = DEFAULT_KEY_BYTES;
 	bool large = false;
     unsigned locationSize = DEFAULT_LOCATION_SIZE;
+	bool smallMemory = false;
 
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
@@ -154,13 +160,16 @@ GenomeIndex::runIndexer(
                 WriteErrorMessage("maxThreads must be between 1 and 100 inclusive (and you need not to leave a space after '-t')\n");
                 soft_exit(1);
             }
-        } else if (argv[n][0] == '-' && argv[n][1] == 'p') {
-            chromosomePadding = atoi(argv[n]+2);
-            if (0 == chromosomePadding) {
-                WriteErrorMessage("Invalid chromosome padding specified, must be at least one (and in practice as large as any max edit distance you might use).\n");
-                soft_exit(1);
-            }
-        } else if (strcmp(argv[n], "-keysize") == 0) {
+		} else if (argv[n][0] == '-' && argv[n][1] == 'p') {
+			chromosomePadding = atoi(argv[n] + 2);
+			if (0 == chromosomePadding) {
+				WriteErrorMessage("Invalid chromosome padding specified, must be at least one (and in practice as large as any max edit distance you might use).\n");
+				soft_exit(1);
+			}
+		} else if (argv[n][0] == '-' && argv[n][1] == 's' && argv[n][2] == 'm') {
+			smallMemory = true;
+		}
+		else if (strcmp(argv[n], "-keysize") == 0) {
             if (n + 1 < argc) {
                 keySizeInBytes = atoi(argv[n+1]);
                 if (keySizeInBytes < 4 || keySizeInBytes > 8) {
@@ -220,7 +229,7 @@ GenomeIndex::runIndexer(
     GenomeDistance nBases = genome->getCountOfBases();
 
     if (!GenomeIndex::BuildIndexToDirectory(genome, seedLen, slack, computeBias, outputDir, maxThreads, chromosomePadding, forceExact, keySizeInBytes, 
-		large, histogramFileName, locationSize)) {
+		large, histogramFileName, locationSize, smallMemory)) {
         WriteErrorMessage("Genome index build failed\n");
         soft_exit(1);
     }
@@ -248,7 +257,7 @@ SetInvalidGenomeLocation(unsigned locationSize)
     bool
 GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double slack, bool computeBias, const char *directoryName,
                                     unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, unsigned hashTableKeySize, 
-									bool large, const char *histogramFileName, unsigned locationSize)
+									bool large, const char *histogramFileName, unsigned locationSize, bool smallMemory)
 {
 	PreventMachineHibernationWhileThisThreadIsAlive();
 
@@ -356,7 +365,30 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     runningThreadCount = nThreads;
 
     GenomeDistance nextChunkToProcess = 0;
+	_int64 * lastBackpointerIndexUsedByThread = NULL;
+	ExclusiveLock backpointerSpillLock;
+	FILE *backpointerSpillFile = NULL;
+	char *backpointerSpillFileName = NULL;
+	InitializeExclusiveLock(&backpointerSpillLock);
+
+	if (smallMemory) {
+		lastBackpointerIndexUsedByThread = new _int64[nThreads];
+		for (unsigned i = 0; i < nThreads; i++) {
+			lastBackpointerIndexUsedByThread[i] = 0;
+		}
+#define	BACKPOINTER_TABLE_SPILL_FILE_NAME	"BackpointerTableSpillFile"
+		backpointerSpillFileName = new char[strlen(directoryName) + 1 + strlen(BACKPOINTER_TABLE_SPILL_FILE_NAME) + 1];
+		sprintf(backpointerSpillFileName, "%s%c%s", directoryName, PATH_SEP, BACKPOINTER_TABLE_SPILL_FILE_NAME);
+		backpointerSpillFile = fopen(backpointerSpillFileName, "w+b");
+		if (NULL == backpointerSpillFile) {
+			WriteErrorMessage("Unable to create spill file '%s' for -sm\n", backpointerSpillFileName);
+			soft_exit(1);
+		}
+	}
+
     for (unsigned i = 0; i < nThreads; i++) {
+		threadContexts[i].whichThread = i;
+		threadContexts[i].nThreads = nThreads;
         threadContexts[i].doneObject = &doneObject;
         threadContexts[i].genome = genome;
         threadContexts[i].genomeChunkStart = nextChunkToProcess;
@@ -381,12 +413,17 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         threadContexts[i].hashTableKeySize = hashTableKeySize;
 		threadContexts[i].large = large;
         threadContexts[i].locationSize = locationSize;
+		threadContexts[i].backpointerSpillLock = &backpointerSpillLock;
+		threadContexts[i].lastBackpointerIndexUsedByThread = lastBackpointerIndexUsedByThread;
+		threadContexts[i].backpointerSpillFile = backpointerSpillFile;
 
         StartNewThread(BuildHashTablesWorkerThreadMain, &threadContexts[i]);
     }
 
     WaitForSingleWaiterObject(&doneObject);
     DestroySingleWaiterObject(&doneObject);
+	DestroyExclusiveLock(&backpointerSpillLock);
+	delete[] lastBackpointerIndexUsedByThread;
 
     if (locationSize != 8 && seedsWithMultipleOccurrences + genomeLocationsInOverflowTable + (_int64)genome->getCountOfBases() > ((_int64)1 << (8 * locationSize)) - 15) { // Only really need -1 for InvalidGenomeLocation, the rest is just spare
         WriteErrorMessage("Ran out of overflow table namespace. This genome cannot be indexed with this seed and location size.  Increase at least one.\n");
@@ -418,6 +455,38 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
   
     delete genome;
     genome = NULL;
+
+	char *halfBuiltHashTableSpillFileName = NULL;
+
+	if (smallMemory) {
+		//
+		// In the hash table build, we use the backpointer table sequentially, and the hash tables randomly.  In the
+		// overflow table build, it's the opposite.  So, we spill out the half-built hash tables (except for #0, which
+		// we need immediately anyway), and then load back in the backpointer table.
+		//
+		_int64 startSpill = timeInMillis();
+		WriteStatusMessage("Spilling half-built hash tables to disk..");
+#define	HALF_BUILT_HASH_TABLE_SPILL_FILE_NAME "HalfBuiltHashTables"
+		halfBuiltHashTableSpillFileName = new char[strlen(directoryName) + 1 + strlen(HALF_BUILT_HASH_TABLE_SPILL_FILE_NAME) + 20];	// +20 is for the number and trailing null
+
+		for (unsigned i = 1; i < nHashTables; i++) {
+			sprintf(halfBuiltHashTableSpillFileName, "%s%c%s.%d", directoryName, PATH_SEP, HALF_BUILT_HASH_TABLE_SPILL_FILE_NAME, i);
+			size_t bytesWritten;
+			hashTables[i]->saveToFile(halfBuiltHashTableSpillFileName, &bytesWritten);
+			delete hashTables[i];
+			hashTables[i] = NULL;
+		}
+
+		_int64 spillDone = timeInMillis();
+		WriteStatusMessage("%llds\nReloading backpointer table from disk...", (spillDone - startSpill + 500) / 1000);
+
+		overflowAnchor->loadFromFile(backpointerSpillFile);
+		fclose(backpointerSpillFile);
+		DeleteSingleFile(backpointerSpillFileName);
+		delete[] backpointerSpillFileName;
+
+		WriteStatusMessage("%llds\n", (timeInMillis() - spillDone + 500) / 1000);
+	}
 
     WriteStatusMessage("Building overflow table.\n");
     start = timeInMillis();
@@ -477,6 +546,19 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 	_uint64 duplicateSeedsProcessed = 0;
 
 	for (unsigned whichHashTable = 0; whichHashTable < nHashTables; whichHashTable++) {
+		if (NULL == hashTables[whichHashTable]) {
+			_ASSERT(smallMemory);
+			sprintf(halfBuiltHashTableSpillFileName, "%s%c%s.%d", directoryName, PATH_SEP, HALF_BUILT_HASH_TABLE_SPILL_FILE_NAME, whichHashTable);
+			GenericFile_stdio *file = GenericFile_stdio::open(halfBuiltHashTableSpillFileName, GenericFile::Mode::ReadOnly);
+			if (NULL == file) {
+				WriteErrorMessage("Unable to open file '%s' to reload spilled hash table.\n", halfBuiltHashTableSpillFileName);
+				soft_exit(1);
+			}
+			hashTables[whichHashTable] = SNAPHashTable::loadFromGenericFile(file);
+			file->close();
+			DeleteSingleFile(halfBuiltHashTableSpillFileName);
+		}
+
 		for (_uint64 whichEntry = 0; whichEntry < hashTables[whichHashTable]->GetTableSize(); whichEntry++) {
 			unsigned *values32 = (unsigned *)hashTables[whichHashTable]->getEntryValues(whichEntry);
             char *values64 = (char *)values32;  // char * because it's variable sized
@@ -1227,8 +1309,8 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
                 (*seedsWithMultipleOccurrences)++;
                 (*genomeLocationsInOverflowTable) += 2;    
 
-                _int64 overflowIndex = AddOverflowBackpointer(-1, context->overflowAnchor, context->nextOverflowBackpointer, entryValue);
-                overflowIndex = AddOverflowBackpointer(overflowIndex, context->overflowAnchor, context->nextOverflowBackpointer, GenomeLocationAsInt64(genomeLocation));
+                _int64 overflowIndex = AddOverflowBackpointer(-1, context, entryValue);
+                overflowIndex = AddOverflowBackpointer(overflowIndex, context, GenomeLocationAsInt64(genomeLocation));
 
                 _int64 entryValue = overflowIndex + countOfBases;
                 memcpy(entryPointer, &entryValue, locationSize);
@@ -1237,7 +1319,7 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
                 // Stick another entry in the existing overflow bucket.
                 //
 
-                _int64 overflowIndex = AddOverflowBackpointer(entryValue - countOfBases, context->overflowAnchor, context->nextOverflowBackpointer, genomeLocation);
+                _int64 overflowIndex = AddOverflowBackpointer(entryValue - countOfBases, context, genomeLocation);
                 _int64 entryValue = overflowIndex + countOfBases;
                 memcpy(entryPointer, &entryValue, locationSize);    // Assumes little endian
 
@@ -1253,8 +1335,8 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
                 (*seedsWithMultipleOccurrences)++;
                 (*genomeLocationsInOverflowTable) += 2;    
 
-                _int64 overflowIndex = AddOverflowBackpointer(-1, context->overflowAnchor, context->nextOverflowBackpointer, entry32[entryIndex]);
-                overflowIndex = AddOverflowBackpointer(overflowIndex, context->overflowAnchor, context->nextOverflowBackpointer, GenomeLocationAsInt64(genomeLocation));
+                _int64 overflowIndex = AddOverflowBackpointer(-1, context, entry32[entryIndex]);
+                overflowIndex = AddOverflowBackpointer(overflowIndex, context, GenomeLocationAsInt64(genomeLocation));
 
                 entry32[entryIndex] = (unsigned)(overflowIndex + countOfBases);
             } else {
@@ -1262,7 +1344,7 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
                 // Stick another entry in the existing overflow bucket.
                 //
 
-                _int64 overflowIndex = AddOverflowBackpointer(entry32[entryIndex] - countOfBases, context->overflowAnchor, context->nextOverflowBackpointer, genomeLocation);
+                _int64 overflowIndex = AddOverflowBackpointer(entry32[entryIndex] - countOfBases, context, genomeLocation);
                 entry32[entryIndex] = (unsigned)(overflowIndex + countOfBases);
 
                 (*genomeLocationsInOverflowTable)++;
@@ -1274,20 +1356,30 @@ GenomeIndex::ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64
             _int64
 GenomeIndex::AddOverflowBackpointer(
     _int64                       previousOverflowBackpointer,
-    OverflowBackpointerAnchor   *overflowAnchor,
-    volatile _int64             *nextOverflowBackpointer,
-    GenomeLocation               genomeLocation)
+	BuildHashTablesThreadContext*context,
+	GenomeLocation               genomeLocation)
 {
-    _int64 overflowBackpointerIndex = InterlockedAdd64AndReturnNewValue(nextOverflowBackpointer, 1) - 1;
-    OverflowBackpointer *newBackpointer = overflowAnchor->getBackpointer(overflowBackpointerIndex);
+    _int64 overflowBackpointerIndex = InterlockedAdd64AndReturnNewValue(context->nextOverflowBackpointer, 1) - 1;
+    OverflowBackpointer *newBackpointer = context->overflowAnchor->getBackpointer(overflowBackpointerIndex);
  
     newBackpointer->nextIndex = previousOverflowBackpointer;
     newBackpointer->genomeLocation = genomeLocation;
 
+	if (overflowBackpointerIndex % 100000 == 1 && NULL != context->lastBackpointerIndexUsedByThread) {
+		AcquireExclusiveLock(context->backpointerSpillLock);
+		context->lastBackpointerIndexUsedByThread[context->whichThread] = overflowBackpointerIndex - 1;
+		_int64 trimToIndex = context->lastBackpointerIndexUsedByThread[0];
+		for (unsigned i = 1; i < context->nThreads; i++) {
+			trimToIndex = __min(trimToIndex, context->lastBackpointerIndexUsedByThread[i]);
+		}
+		context->overflowAnchor->trimTo(trimToIndex, context->backpointerSpillFile);
+		ReleaseExclusiveLock(context->backpointerSpillLock);
+	}
+
     return overflowBackpointerIndex;
 }
 
-            //
+//
 // A comparison method for qsort that sorts unsigned ints backwards (SNAP expects them to be backwards due to 
 // a historical artifact).
 //
@@ -1391,11 +1483,50 @@ GenomeIndex::OverflowBackpointerAnchor::getBackpointer(_int64 index)
 			table[tableSlot] = newTableEntry;
 		}
         ReleaseExclusiveLock(&lock);
+	} else {
+		if (&spilledTableSlot == table[tableSlot]) {
+			WriteErrorMessage("Looking up spilled table slot.  Something is very wrong.  Try not using -sm and contact the developers.\n");
+			soft_exit(1);
+		}
 	}
 	return &table[tableSlot][index % batchSize];
 }
 
+	void
+GenomeIndex::OverflowBackpointerAnchor::trimTo(_int64 trimToIndex, FILE *trimFile)
+{
+	//
+	// Run through the anchor table, and spill out any table slots whose indices are all less than trimToIndex and that aren't
+	// yet spilled out.
+	//
+	for (_int64 tableSlot = 0; (tableSlot + 1) * batchSize < trimToIndex; tableSlot++) {
+		if (&spilledTableSlot != table[tableSlot] && NULL != table[tableSlot]) {
+			if (batchSize != fwrite(table[tableSlot], sizeof(*table[tableSlot]), batchSize, trimFile)) {
+				WriteErrorMessage("Failure writing to trim file.  Maybe you're out of disk space or encountered some other error.  Perhaps try without -sm.\n");
+				soft_exit(1);
+			}
+			BigDealloc((void *)table[tableSlot]);
+			table[tableSlot] = &spilledTableSlot;
+		}
+	}
+}
+	void
+GenomeIndex::OverflowBackpointerAnchor::loadFromFile(FILE *file)
+{
+	rewind(file);
+	for (int i = 0; i < maxOverflowEntries / batchSize; i++) {
+		if (table[i] == &spilledTableSlot) {
+			table[i] = (OverflowBackpointer *)BigAlloc(batchSize * sizeof(OverflowBackpointer));
+			if (batchSize != fread(table[i], sizeof(OverflowBackpointer), batchSize, file)) {
+				WriteErrorMessage("Failed to read overflow table batch i from spill file\n", i);
+				soft_exit(1);
+			}
+		}
+	}
+}
+
 const unsigned GenomeIndex::OverflowBackpointerAnchor::batchSize = 1024 * 1024;
+GenomeIndex::OverflowBackpointer GenomeIndex::OverflowBackpointerAnchor::spilledTableSlot;
 
     void
 GenomeIndex::printBiasTables()

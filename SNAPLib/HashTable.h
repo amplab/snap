@@ -42,6 +42,7 @@ class SNAPHashTable {
         // Load from file.
         //
         static SNAPHashTable *loadFromBlob(GenericFile_Blob *loadFile);
+		static SNAPHashTable *loadFromGenericFile(GenericFile *loadFile);
 
         ~SNAPHashTable();
 
@@ -142,6 +143,7 @@ private:
         SNAPHashTable() {}
 
         static const unsigned QUADRATIC_CHAINING_DEPTH = 5; // Chain quadratically for this long, then linerarly  Set to 0 for linear chaining
+		static SNAPHashTable *loadCommon(GenericFile *loadFile);
 
         //
         // A hash table entry consists of a set of valueCount values, each of valueSizeInBytes bytes, followed by

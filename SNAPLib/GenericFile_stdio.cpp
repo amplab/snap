@@ -38,6 +38,7 @@ GenericFile_stdio::~GenericFile_stdio()
 GenericFile_stdio *GenericFile_stdio::open(const char *filename, Mode mode)
 {
 	GenericFile_stdio *retval = new GenericFile_stdio();
+	retval->_mode = mode;
 
 	const char *fMode = NULL;
 

@@ -72,6 +72,31 @@ Arguments:
 
 SNAPHashTable *SNAPHashTable::loadFromBlob(GenericFile_Blob *loadFile)
 {
+	SNAPHashTable *table = loadCommon(loadFile);
+
+	size_t bytesMapped;
+	table->Table = loadFile->mapAndAdvance(table->tableSize * table->elementSize, &bytesMapped);
+	if (bytesMapped != table->tableSize * table->elementSize) {
+		WriteErrorMessage("SNAPHashTable: unable to map table\n");
+		soft_exit(1);
+	}
+	table->ownsMemoryForTable = false;
+
+	return table;
+}
+
+SNAPHashTable *SNAPHashTable::loadFromGenericFile(GenericFile *loadFile)
+{
+	SNAPHashTable *table = loadCommon(loadFile);
+	table->Table = BigAlloc(table->tableSize * table->elementSize);
+	loadFile->read(table->Table, table->tableSize * table->elementSize);
+	table->ownsMemoryForTable = true;
+
+	return table;
+}
+
+SNAPHashTable *SNAPHashTable::loadCommon(GenericFile *loadFile)
+{
     SNAPHashTable *table = new SNAPHashTable();
 
     unsigned fileMagic;
@@ -144,13 +169,7 @@ SNAPHashTable *SNAPHashTable::loadFromBlob(GenericFile_Blob *loadFile)
 
     table->elementSize = table->keySizeInBytes + table->valueSizeInBytes * table->valueCount;
 
-    size_t bytesMapped;
-    table->Table = loadFile->mapAndAdvance(table->tableSize * table->elementSize, &bytesMapped);
-    if (bytesMapped != table->tableSize * table->elementSize) {
-        WriteErrorMessage("SNAPHashTable: unable to map table\n");
-        soft_exit(1);
-    }
-    table->ownsMemoryForTable = false;
+
 
     return table;
 }

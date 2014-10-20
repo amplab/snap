@@ -127,6 +127,8 @@ protected:
 		~OverflowBackpointerAnchor();
 
 		OverflowBackpointer *getBackpointer(_int64 index);
+		void trimTo(_int64 trimToIndex, FILE *trimFile);
+		void loadFromFile(FILE *tripFile);
 
 	private:
 
@@ -136,6 +138,8 @@ protected:
 		_int64 maxOverflowEntries;
 
 		OverflowBackpointer **table;
+
+		static OverflowBackpointer spilledTableSlot;	// This value is used to indicate that the table slot in question has been spilled
 	};
 
 
@@ -148,7 +152,7 @@ protected:
                                       bool computeBias, const char *directory,
                                       unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, 
                                       unsigned hashTableKeySize, bool large, const char *histogramFileName,
-                                      unsigned locationSize);
+                                      unsigned locationSize, bool smallMemory);
 
  
     //
@@ -189,6 +193,8 @@ protected:
     struct OverflowBackpointer;
 
     struct BuildHashTablesThreadContext {
+		unsigned						 nThreads;
+		unsigned						 whichThread;
         SingleWaiterObject              *doneObject;
         volatile int                    *runningThreadCount;
         GenomeLocation                   genomeChunkStart;
@@ -207,6 +213,18 @@ protected:
         unsigned                         hashTableKeySize;
 		bool							 large;
         unsigned                         locationSize;
+
+		//
+		// The "small memory" option causes SNAP to write out the backpointer table as it's
+		// built in order to save the memory it uses, because it's accessed sequentially as
+		// the table is built.  In order to be able to tell when it's safe to free some of the
+		// table, each thread occasionally records the largest backpointer index that it's done
+		// with.  It's safe to free table chunks that are less than the least of these.  The lock
+		// is used to keep more than one thread from trying to spill table at a time.
+		//
+		__int64							*lastBackpointerIndexUsedByThread;
+		ExclusiveLock					*backpointerSpillLock;
+		FILE							*backpointerSpillFile;
 
         ExclusiveLock                   *hashTableLocks;
         ExclusiveLock                   *overflowTableLock;
@@ -273,8 +291,7 @@ protected:
 
     static _int64  AddOverflowBackpointer(
                         _int64                       previousOverflowBackpointer,
-                        OverflowBackpointerAnchor   *overflowAnchor,
-                        volatile _int64             *nextOverflowBackpointer,
+						BuildHashTablesThreadContext*context,
                         GenomeLocation               genomeLocation);
 
     void fillInLookedUpResults32(const unsigned *subEntry, _int64 *nHits, const unsigned **hits);
