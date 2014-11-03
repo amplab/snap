@@ -222,7 +222,7 @@ protected:
 		// with.  It's safe to free table chunks that are less than the least of these.  The lock
 		// is used to keep more than one thread from trying to spill table at a time.
 		//
-		__int64							*lastBackpointerIndexUsedByThread;
+		_int64							*lastBackpointerIndexUsedByThread;
 		ExclusiveLock					*backpointerSpillLock;
 		FILE							*backpointerSpillFile;
 
