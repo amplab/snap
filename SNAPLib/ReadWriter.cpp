@@ -129,7 +129,7 @@ SimpleReadWriter::writeRead(
     size_t size;
     size_t used;
     if (result == NotFound) {
-        genomeLocation = UINT32_MAX;
+        genomeLocation = InvalidGenomeLocation;
     }
     for (int pass = 0; pass < 2; pass++) {
         if (! writer->getBuffer(&buffer, &size)) {
@@ -148,9 +148,21 @@ SimpleReadWriter::writeRead(
             writer->advance((unsigned)used, genomeLocation);
             return true;
         } else if (addFrontClipping != 0) {
-            // redo if read modified (e.g. to add soft clipping)
-            read->addFrontClipping(addFrontClipping);
-            genomeLocation += addFrontClipping;
+            // redo if read modified (e.g. to add soft clipping, or move alignment for a leading I.
+			const Genome::Contig *originalContig = genome->getContigAtLocation(genomeLocation);
+			const Genome::Contig *newContig = genome->getContigAtLocation(genomeLocation + addFrontClipping);
+			if (newContig != originalContig || genomeLocation + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
+				//
+				// Altering this would push us over a contig boundary.  Just give up on the read.
+				//
+				result = NotFound;
+				genomeLocation = InvalidGenomeLocation;
+			} else {
+				if (addFrontClipping > 0) {
+					read->addFrontClipping(addFrontClipping);
+				}
+				genomeLocation += addFrontClipping;
+			}
             pass--;
             continue;
         }
@@ -162,6 +174,8 @@ SimpleReadWriter::writeRead(
             return false;
         }
     }
+
+	_ASSERT(!"NOTREACHED");
     return false; // will never get here
 }
 
@@ -213,25 +227,56 @@ SimpleReadWriter::writePair(
             return false;
         }
 
+		//
+		// Write the first read into the buffer.
+		//
         int addFrontClipping;
         bool writesFit = format->writeRead(context, &lvc, buffer, size, &sizeUsed[first],
             idLengths[first], reads[first], result->status[first], result->mapq[first], locations[first], result->direction[first], secondaryAlignment,
             &addFrontClipping, true, first == 0,
             reads[second], result->status[second], locations[second], result->direction[second]);
         if (addFrontClipping != 0) {
-            reads[first]->addFrontClipping(addFrontClipping);
-            locations[first] += addFrontClipping;
+			const Genome::Contig *originalContig = genome->getContigAtLocation(locations[first]);
+			const Genome::Contig *newContig = genome->getContigAtLocation(locations[first] + addFrontClipping);
+			if (newContig != originalContig || locations[first] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
+				//
+				// Altering this would push us over a contig boundary.  Just give up on the read.
+				//
+				result->status[first] = NotFound;
+				locations[first] = InvalidGenomeLocation;
+			} else {
+				if (addFrontClipping > 0) {
+					reads[first]->addFrontClipping(addFrontClipping);
+				}
+				locations[first] += addFrontClipping;
+			}
             pass--;
             continue;
         }
+
+		//
+		// And now the second.
+		//
         if (writesFit) {
             writesFit = format->writeRead(context, &lvc, buffer + sizeUsed[first], size - sizeUsed[first], &sizeUsed[second],
                 idLengths[second], reads[second], result->status[second], result->mapq[second], locations[second], result->direction[second], secondaryAlignment,
                 &addFrontClipping, true, first != 0,
                 reads[first], result->status[first], locations[first], result->direction[first]);
             if (addFrontClipping != 0) {
-                reads[second]->addFrontClipping(addFrontClipping);
-                locations[second] += addFrontClipping;
+				const Genome::Contig *originalContig = genome->getContigAtLocation(locations[second]);
+				const Genome::Contig *newContig = genome->getContigAtLocation(locations[second] + addFrontClipping);
+				if (newContig != originalContig || locations[second] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
+					//
+					// Altering this would push us over a contig boundary.  Just give up on the read.
+					//
+					result->status[second] = NotFound;
+					locations[second] = InvalidGenomeLocation;
+				} else {
+					if (addFrontClipping > 0) {
+						reads[second]->addFrontClipping(addFrontClipping);
+					}
+					locations[second] += addFrontClipping;
+				}
                 pass--;
                 continue;
             }

@@ -178,15 +178,11 @@ SingleAlignerContext::runIterationThread()
             aligner->setMaxK(min(MAX_K, (int)(read->getDataLength() * options->maxDistFraction)));
         }
 #endif
-        aligner->AlignRead(read, &result, maxSecondaryAlignmentAdditionalEditDistance, secondaryAlignmentBufferCount, &nSecondaryResults, secondaryAlignments);
+
+		aligner->AlignRead(read, &result, maxSecondaryAlignmentAdditionalEditDistance, secondaryAlignmentBufferCount, &nSecondaryResults, secondaryAlignments);
 #ifdef LONG_READS
         aligner->setMaxK(oldMaxK);
 #endif
-		result.correctAlignmentForSoftClipping(read, index->getGenome());
-
-		for (int i = 0; i < __min(nSecondaryResults, maxSecondaryAlignments); i++) {
-			secondaryAlignments[i].correctAlignmentForSoftClipping(read, index->getGenome());
-		}
 
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;
@@ -197,7 +193,8 @@ SingleAlignerContext::runIterationThread()
 
         allocator->checkCanaries();
 
-        writeRead(read, result, false);
+
+		writeRead(read, result, false);
 
 		for (int i = 0; i < __min(nSecondaryResults, maxSecondaryAlignments); i++) {
             writeRead(read, secondaryAlignments[i], true);

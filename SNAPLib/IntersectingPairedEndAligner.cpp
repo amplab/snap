@@ -882,6 +882,8 @@ IntersectingPairedEndAligner::scoreLocation(
     unsigned readDataLength = readToScore->getDataLength();
     GenomeDistance genomeDataLength = readDataLength + MAX_K; // Leave extra space in case the read has deletions
     const char *data = genome->getSubstring(genomeLocation, genomeDataLength);
+
+#if		0 // This only happens when genomeLocation is in the padding, which can lead to no good.  Just say no.
     if (NULL == data) {
         //
         // We're up against the end of a contig.  Reduce the extra space enough that it isn't too
@@ -905,6 +907,8 @@ IntersectingPairedEndAligner::scoreLocation(
             _ASSERT(NULL != data);
         }
     }
+
+#endif // 0 This only happens when genomeLocation is in the padding, which can lead to no good.  Just say no.
 
     if (NULL == data) {
         *score = -1;

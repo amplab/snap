@@ -411,7 +411,7 @@ void PairedAlignerContext::runIterationThread()
         maxDist,
         numSeedsFromCommandLine,
         seedCoverage,
-	minWeightToCheck,
+		minWeightToCheck,
         forceSpacing,
         extraSearchDepth,
         noUkkonen,
@@ -488,21 +488,6 @@ void PairedAlignerContext::runIterationThread()
         
         aligner->align(read0, read1, &result, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, secondaryResults, 
             maxSingleSecondaryHits, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1],singleSecondaryResults);
-
-		Read *reads[NUM_READS_PER_PAIR] = {read0, read1};
-		result.correctAlignmentForSoftClipping(reads, index->getGenome());
-
-		for (int i = 0; i < nSecondaryResults; i++) {
-			secondaryResults[i].correctAlignmentForSoftClipping(reads, index->getGenome());
-		}
-
-		for (int i = 0; i < nSingleSecondaryResults[0]; i++) {
-			singleSecondaryResults[i].correctAlignmentForSoftClipping(read0, index->getGenome());
-		}
-
-		for (int i = nSingleSecondaryResults[0]; i < nSingleSecondaryResults[0] + nSingleSecondaryResults[1]; i++) {
-			singleSecondaryResults[i].correctAlignmentForSoftClipping(read1, index->getGenome());
-		}
 
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;

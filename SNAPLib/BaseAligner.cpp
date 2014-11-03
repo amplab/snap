@@ -821,6 +821,8 @@ Return Value:
                 unsigned readDataLength = read[elementToScore->direction]->getDataLength();
                 GenomeDistance genomeDataLength = readDataLength + MAX_K; // Leave extra space in case the read has deletions
                 const char *data = genome->getSubstring(genomeLocation, genomeDataLength);
+
+#if 0 // This only happens when we're in the padding region, and genomeLocations there just lead to problems.  Just say no.
                 if (NULL == data) {
                     //
                     // We're up against the end of a chromosome.  Reduce the extra space enough that it isn't too
@@ -847,6 +849,7 @@ Return Value:
                     }
                 }
 
+#endif // 0
                 if (data != NULL) {
                     Read *readToScore = read[elementToScore->direction];
 

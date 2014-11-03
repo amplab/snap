@@ -218,5 +218,12 @@ private:
         GenomeDistance extraBasesClippedAfter, unsigned frontHardCliped, unsigned backHardClipped,
         GenomeLocation genomeLocation, Direction direction, bool useM, int * o_editDistance, int * o_adjustLocation);
 
+#ifdef _DEBUG
+	static void validateCigarString(const Genome *genome, const char * cigarBuf, int cigarBufLen, const char *data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM);
+#else	// DEBUG
+	inline static void validateCigarString(const Genome *genome, const char * cigarBuf, int cigarBufLen, const char *data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM) {}
+#endif // DEBUG
+
+
     const bool useM;
 };

@@ -549,7 +549,7 @@ PairedFASTQReader::createPairedReadSupplierGenerator(
     // Decide whether to use the range splitter or a queue based on whether the files are the same size.
     //
     if (!strcmp("-", fileNames[0]) || !strcmp("-", fileNames[1]) || QueryFileSize(fileNames[0]) != QueryFileSize(fileNames[1]) || gzip) {
-        WriteErrorMessage("FASTQ using supplier queue\n");
+        //WriteStatusMessage("FASTQ using supplier queue\n");
         DataSupplier* dataSupplier[2];
         size_t fileSize[2];
 
@@ -584,7 +584,7 @@ PairedFASTQReader::createPairedReadSupplierGenerator(
         queue->startReaders();
         return queue;
     } else {
-        WriteErrorMessage("FASTQ using range splitter\n");
+        //WriteStatusMessage("FASTQ using range splitter\n");
         return new RangeSplittingPairedReadSupplierGenerator(fileName0, fileName1, FASTQFile, numThreads, false, context);
     }
 }
@@ -636,7 +636,7 @@ PairedInterleavedFASTQReader::createPairedReadSupplierGenerator(
      bool isStdin = !strcmp(fileName,"-");
  
      if (gzip || isStdin) {
-        WriteErrorMessage("PairedInterleavedFASTQ using supplier queue\n");
+        //WriteStatusMessage("PairedInterleavedFASTQ using supplier queue\n");
         DataSupplier *dataSupplier;
         if (isStdin) {
             if (gzip) {
@@ -659,7 +659,7 @@ PairedInterleavedFASTQReader::createPairedReadSupplierGenerator(
         queue->startReaders();
         return queue;
     } else {
-        WriteErrorMessage("PairedInterleavedFASTQ using range splitter\n");
+        //WriteStatusMessage("PairedInterleavedFASTQ using range splitter\n");
         return new RangeSplittingPairedReadSupplierGenerator(fileName, NULL, InterleavedFASTQFile, numThreads, false, context);
     }
 }

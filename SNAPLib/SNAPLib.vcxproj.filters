@@ -326,9 +326,6 @@
     <ClCompile Include="GenericFile_Blob.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="AlignmentResult.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="GenericFile_map.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

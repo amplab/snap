@@ -47,8 +47,6 @@ inline const char *AlignmentResultToString(AlignmentResult result) {
 }
 
 struct SingleAlignmentResult {
-	void			correctAlignmentForSoftClipping(Read *read, const Genome *genome);
-	
 	AlignmentResult status;
 
     GenomeLocation  location;	// Aligned genome location.
@@ -67,8 +65,6 @@ inline bool isOneLocation(AlignmentResult result) {
 const int NUM_READS_PER_PAIR = 2;    // This is just to make it clear what the array subscripts are, it doesn't ever make sense to change
 
 struct PairedAlignmentResult {
-	void			correctAlignmentForSoftClipping(Read *read[], const Genome *genome);
-
 	AlignmentResult status[NUM_READS_PER_PAIR]; // SingleHit or CertainHit if aligned, MultipleHit if matches DB
 	// but not confidently aligned, or NotFound.
 

@@ -205,77 +205,35 @@ public:
         //
         // Methods to read the genome.
         //
-        inline const char *getSubstring(GenomeLocation location, GenomeDistance lengthNeeded) const {
-            if (location > nBases || location + lengthNeeded > nBases + N_PADDING) {
-                // The first part of the test is for the unsigned version of a negative offset.
-                return NULL;
-            }
+		inline const char *getSubstring(GenomeLocation location, GenomeDistance lengthNeeded) const {
+			if (location > nBases || location + lengthNeeded > nBases + N_PADDING) {
+				// The first part of the test is for the unsigned version of a negative offset.
+				return NULL;
+			}
 
-            if (lengthNeeded <= chromosomePadding) {
-                return bases + (location - minLocation);
-            }
+			// If we're in the padding, then the base will be an n, and we can't short circuit.  Recall that we use lower case n in the reference so it won't match with N in the read.
+			if (lengthNeeded <= chromosomePadding && bases[GenomeLocationAsInt64(location)] != 'n') {
+				return bases + (location - minLocation);
+			}
 
-            _ASSERT(location >= minLocation && location + lengthNeeded <= maxLocation + N_PADDING); // If the caller asks for a genome slice, it's only legal to look within it.
+			_ASSERT(location >= minLocation && location + lengthNeeded <= maxLocation + N_PADDING); // If the caller asks for a genome slice, it's only legal to look within it.
 
-            if (lengthNeeded == 0) {
-                return bases + (location - minLocation);
-            }
+			if (lengthNeeded == 0) {
+				return bases + (location - minLocation);
+			}
 
-            //
-            // See if the substring crosses a contig (chromosome) boundary.  If so, disallow it.
-            //
+			const Contig *contig = getContigAtLocation(location);
+			if (NULL == contig) {
+				return NULL;
+			}
 
-            if (nContigs > 100) {
-                //
-                // Start by special casing the last contig (it makes the rest of the code easier).
-                //
-                if (contigs[nContigs - 1].beginningLocation <= location) {
-                    //
-                    // Because it starts in the last contig, it's OK because we already checked overflow
-                // of the whole genome.
-                //
-                return bases + (location - minLocation);
-            }
+			_ASSERT(contig->beginningLocation <= location && contig->beginningLocation + contig->length >= location);
+			if (contig->beginningLocation + contig->length <= location + lengthNeeded) {
+				return NULL;
+			}
 
-                int min = 0;
-                int max = nContigs - 2;
-                while (min <= max) {
-                    int i = (min + max) / 2;
-                    if (contigs[i].beginningLocation <= location) {
-                        if (contigs[i+1].beginningLocation > location) {
-                            if (contigs[i+1].beginningLocation <= location + lengthNeeded - 1) {
-                                return NULL;    // This crosses a contig boundary.
-                            } else {
-                                return bases + (location - minLocation);
-                            }
-                        } else {
-                            min = i+1;
-                    }
-                } else {
-                        max = i-1;
-                    }
-                }
-
-                _ASSERT(false && "NOTREACHED");
-                return NULL;
-            } else {
-                //
-                // Use linear rather than binary search for small numbers of contigs, because binary search
-                // confuses the branch predictor, and so is slower even though it uses many fewer instructions.
-                //
-                for (int i = 0 ; i < nContigs; i++) {
-                    if (location + lengthNeeded - 1 >= contigs[i].beginningLocation) {
-                        if (location < contigs[i].beginningLocation) {
-                            return NULL;        // crosses a contig boundary.
-                        } else {
-                            return bases + (location - minLocation);
-                        }
-                    }
-                }
-                _ASSERT(false && "NOTREACHED");
-                return NULL;
-            }
-        }
+			return bases + (location - minLocation);
+		}
 
         inline GenomeDistance getCountOfBases() const {return nBases;}
 

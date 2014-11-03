@@ -83,8 +83,22 @@ public:
 }
 
     // Compute the edit distance between two strings, if it is <= k, or return -1 otherwise.
-    // For LandauVishkin instances with a cache, the cacheKey should be a unique identifier for
-    // the text and pattern combination (e.g. (readID << 33) | direction << 32 | genomeLocation).
+
+	//
+	// The essential method is to build up the L array row by row.  L[e][d] is the farthest that you can get
+	// through the pattern (read data) with e changes (single base substition, insert or delete) and a net indel of d.
+	// Once you get to the end of the read, you've computed the best edit distance (e).  L[e][d] can be computed
+	// by looking at L[e-1][d-1 .. d+1], depending on whether the next change is a deletion, insertion or 
+	// substitution.
+	//
+	// Because d can be negative, the L array doesn't really use L[e][d].  Instead, it uses L[e][MAX_K+d], because MAX_K is
+	// the largest possible edit distance, and hence d can never be less than -MAX_K, so MAX_K + d >= 0.
+	//
+	// Also, because of the way the alignment algorithms work, sometimes SNAP wants to run the edit distance
+	// backward.  This is built as a template with TEXT_DIRECTION either 1 for forward or -1 for backward, just to make
+	// it extra confusing.
+	//
+
     int computeEditDistance(
                 const char* text,
                 int textLen, 
@@ -96,6 +110,7 @@ public:
                 int *netIndel = NULL)   // the net of insertions and deletions in the alignment.  Negative for insertions, positive for deleteions (and 0 if there are non in net).  Filled in only if matchProbability is non-NULL
 {
     int localNetIndel;
+	int d;
     if (NULL == netIndel) {
         //
         // If the user doesn't want netIndel, just use a stack local to avoid
@@ -122,9 +137,11 @@ public:
         //
         *matchProbability = 1.0;    
     }
+
     if (TEXT_DIRECTION == -1) {
         text--; // so now it points at the "first" character of t, not after it.
     }
+
     const char* p = pattern;
     const char* t = text;
     int end = __min(patternLen, textLen);
@@ -150,7 +167,9 @@ public:
         t += 8 * TEXT_DIRECTION;
     }
     L[0][MAX_K] = end;
-    done1:
+
+done1:
+
     if (L[0][MAX_K] == end) {
         int result = (patternLen > end ? patternLen - end : 0); // Could need some deletions at the end
         if (NULL != matchProbability) {
@@ -165,11 +184,14 @@ public:
         return result;
     }
 
-    for (int e = 1; e <= k; e++) {
+	int lastBestD = MAX_K + 1;
+	int e;
+
+    for (e = 1; e <= k; e++) {
         // Search d's in the order 0, 1, -1, 2, -2, etc to find an alignment with as few indels as possible.
         // dTable is just precomputed d = (d > 0 ? -d : -d+1) to save the branch misprediction from (d > 0)
         int i =0;
-        for (int d = 0; d != e+1 ; i++, d = dTable[i]) {
+        for (d = 0; d != e+1 ; i++, d = dTable[i]) {
             int best = L[e-1][MAX_K+d] + 1; // up
             A[e][MAX_K+d] = 'X';
             int left = L[e-1][MAX_K+d-1];
@@ -214,96 +236,116 @@ public:
                 }
             }
 
-            if (best == patternLen) {
-                if (NULL != matchProbability) {
+			if (best == patternLen) {
+				//
+				// We're through on this iteration.
+				//
 
-                    _ASSERT(*matchProbability == 1.0);
-                    //
-                    // We're done.  Compute the match probability.
-                    //
-                    int straightMismatches = 0;
-#if     0   // It's faster to just use the backtracker, because it doesn't look at every base, only the changed ones.
-                    for (int i = L[0][MAX_K]; i < end && straightMismatches <= e; i++) { // do this 8 at a time, like in the other loops!
-                        if (pattern[i] != text[i * TEXT_DIRECTION]) {
-                            straightMismatches++;
-                            *matchProbability *= lv_phredToProbability[qualityString[i]];
-                        }
-                    }
-#endif  // 0
- 
-                    if (straightMismatches != e) {
-                        //
-                        // There are indels.  
-                        // Trace backward to build up the CIGAR string.  We do this by filling in the backtraceAction,
-                        // backtraceMatched and backtraceD arrays, then going through them in the forward direction to
-                        // figure out our string.
-                        *matchProbability = 1.0;
-                        int curD = d;
-                        for (int curE = e; curE >= 1; curE--) {
-                            backtraceAction[curE] = A[curE][MAX_K+curD];
-                            if (backtraceAction[curE] == 'I') {
-                                backtraceD[curE] = curD + 1;
-                                backtraceMatched[curE] = L[curE][MAX_K+curD] - L[curE-1][MAX_K+curD+1] - 1;
-                            } else if (backtraceAction[curE] == 'D') {
-                                backtraceD[curE] = curD - 1;
-                                backtraceMatched[curE] = L[curE][MAX_K+curD] - L[curE-1][MAX_K+curD-1];
-                            } else { // backtraceAction[curE] == 'X'
-                                backtraceD[curE] = curD;
-                                backtraceMatched[curE] = L[curE][MAX_K+curD] - L[curE-1][MAX_K+curD] - 1;
-                            }
-                            curD = backtraceD[curE];
-        #ifdef TRACE_LV
-                            printf("%d %d: %d %c %d %d\n", curE, curD, L[curE][MAX_K+curD], 
-                                backtraceAction[curE], backtraceD[curE], backtraceMatched[curE]);
-        #endif
-                        }
-
-                        int curE = 1;
-                        int offset = L[0][MAX_K+0];
-                        _ASSERT(*netIndel == 0);
-                        while (curE <= e) {
-                            // First write the action, possibly with a repeat if it occurred multiple times with no exact matches
-                            char action = backtraceAction[curE];
-                            int actionCount = 1;
-                            while (curE+1 <= e && backtraceMatched[curE] == 0 && backtraceAction[curE+1] == action) {
-                                actionCount++;
-                                curE++;
-                            }
-                            if (action == 'I') {
-                                *matchProbability *= lv_indelProbabilities[actionCount];
-                                offset += actionCount;
-                                *netIndel += actionCount;
-                            } else if (action =='D') {
-                                *matchProbability *= lv_indelProbabilities[actionCount];
-                                offset -= actionCount;
-                                *netIndel -= actionCount;
-                            }  else {
-                                _ASSERT(action == 'X');
-                                for (int i = 0; i < actionCount; i++) {
-                                    *matchProbability *= lv_phredToProbability[qualityString[/*BUGBUG - think about what to do here*/__min(patternLen-1,__max(offset,0))]];
-                                    offset++;
-                                }
-                            }
-
-                            offset += backtraceMatched[curE];   // Skip over the matching bases.
-                            curE++;
-                        }
-                    } // if straightMismatches != e (i.e., the indel case)
-                    *matchProbability *= lv_perfectMatchProbability[patternLen-e]; // Accounting for the < 1.0 chance of no changes for matching bases
-                } else {
-                    //
-                    // Not tracking match probability.
-                    //
-                }
-                _ASSERT(e <= k);
-                return e;
-            } // if best == patternLen (i.e., we're done)
+				if ('X' == A[e][MAX_K + d]) {
+					//
+					// The last step wasn't an indel, so we're sure it's the right one.
+					//
+					lastBestD = d;
+					goto got_answer;
+				} else {
+					//
+					// We're done on this round, but maybe there's a better answer, so keep looking.
+					//
+					if (abs(d) < abs(lastBestD)) {
+						lastBestD = d;
+					}
+				}
+			} // if best==patternLen
 
             L[e][MAX_K+d] = best;
-        }
-    }
+        } // for d
 
-    return -1;
+		if (MAX_K + 1 != lastBestD) {
+			break;
+		}
+    } // for e
+
+	if (MAX_K + 1 == lastBestD) {
+		return -1;
+	}
+
+got_answer:
+
+	_ASSERT(abs(lastBestD) < MAX_K + 1);
+
+	if (NULL != matchProbability) {
+
+		_ASSERT(*matchProbability == 1.0);
+		//
+		// We're done.  Compute the match probability.
+		//
+
+		//
+		// Trace backward to build up the CIGAR string.  We do this by filling in the backtraceAction,
+		// backtraceMatched and backtraceD arrays, then going through them in the forward direction to
+		// figure out our string.
+		int curD = lastBestD;
+		for (int curE = e; curE >= 1; curE--) {
+			backtraceAction[curE] = A[curE][MAX_K + curD];
+			if (backtraceAction[curE] == 'I') {
+				backtraceD[curE] = curD + 1;
+				backtraceMatched[curE] = L[curE][MAX_K + curD] - L[curE - 1][MAX_K + curD + 1] - 1;
+			} else if (backtraceAction[curE] == 'D') {
+				backtraceD[curE] = curD - 1;
+				backtraceMatched[curE] = L[curE][MAX_K + curD] - L[curE - 1][MAX_K + curD - 1];
+			} else { // backtraceAction[curE] == 'X'
+				backtraceD[curE] = curD;
+				backtraceMatched[curE] = L[curE][MAX_K + curD] - L[curE - 1][MAX_K + curD] - 1;
+			}
+			curD = backtraceD[curE];
+#ifdef TRACE_LV
+			printf("%d %d: %d %c %d %d\n", curE, curD, L[curE][MAX_K + curD],
+				backtraceAction[curE], backtraceD[curE], backtraceMatched[curE]);
+#endif
+		}
+
+		int curE = 1;
+		int offset = L[0][MAX_K + 0];
+		_ASSERT(*netIndel == 0);
+		while (curE <= e) {
+			// First write the action, possibly with a repeat if it occurred multiple times with no exact matches
+			char action = backtraceAction[curE];
+			int actionCount = 1;
+			while (curE + 1 <= e && backtraceMatched[curE] == 0 && backtraceAction[curE + 1] == action) {
+				actionCount++;
+				curE++;
+			}
+			if (action == 'I') {
+				*matchProbability *= lv_indelProbabilities[actionCount];
+				offset += actionCount;
+				*netIndel += actionCount;
+			}
+			else if (action == 'D') {
+				*matchProbability *= lv_indelProbabilities[actionCount];
+				offset -= actionCount;
+				*netIndel -= actionCount;
+			}
+			else {
+				_ASSERT(action == 'X');
+				for (int i = 0; i < actionCount; i++) {
+					*matchProbability *= lv_phredToProbability[qualityString[/*BUGBUG - think about what to do here*/__min(patternLen - 1, __max(offset, 0))]];
+					offset++;
+				}
+			}
+
+			offset += backtraceMatched[curE];   // Skip over the matching bases.
+			curE++;
+		}
+
+		*matchProbability *= lv_perfectMatchProbability[patternLen - e]; // Accounting for the < 1.0 chance of no changes for matching bases
+	} else {
+		//
+		// Not tracking match probability.
+		//
+	}
+
+	_ASSERT(e <= k);
+	return e;
 }
 
 

@@ -111,6 +111,9 @@ inline double exp10(double x) { return exp(x * LOG10); }
 
 #ifdef DEBUG
 #define _ASSERT assert
+#ifndef _DEBUG
+#define _DEBUG 1	// Compat with Windows version
+#endif // !_DEBUG
 #else
 #define _ASSERT(x) {}
 #endif
