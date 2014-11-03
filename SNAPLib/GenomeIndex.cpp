@@ -549,7 +549,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 		if (NULL == hashTables[whichHashTable]) {
 			_ASSERT(smallMemory);
 			sprintf(halfBuiltHashTableSpillFileName, "%s%c%s.%d", directoryName, PATH_SEP, HALF_BUILT_HASH_TABLE_SPILL_FILE_NAME, whichHashTable);
-			GenericFile_stdio *file = GenericFile_stdio::open(halfBuiltHashTableSpillFileName, GenericFile::Mode::ReadOnly);
+			GenericFile_stdio *file = GenericFile_stdio::open(halfBuiltHashTableSpillFileName);
 			if (NULL == file) {
 				WriteErrorMessage("Unable to open file '%s' to reload spilled hash table.\n", halfBuiltHashTableSpillFileName);
 				soft_exit(1);
