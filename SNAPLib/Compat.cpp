@@ -1285,7 +1285,7 @@ OpenMemoryMappedFile(
     bool write,
     bool sequential)
 {
-    int fd = open(filename, write ? O_CREAT | O_RDWR : O_RDONLY);
+  int fd = open(filename, write ? O_CREAT | O_RDWR : O_RDONLY, S_IRUSR | S_IWUSR);
     if (fd < 0) {
         warn("OpenMemoryMappedFile %s failed", filename);
         return NULL;
