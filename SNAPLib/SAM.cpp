@@ -1040,11 +1040,11 @@ SAMFormat::createSAMLine(
         }
         const Genome::Contig *contig = genome->getContigForRead(genomeLocation, read->getDataLength(), extraBasesClippedBefore);
         _ASSERT(NULL != contig && contig->length > genome->getChromosomePadding());
-        if (genomeLocation + read->getDataLength() > contig->beginningLocation + contig->length - genome->getChromosomePadding()) {
+        if (genomeLocation + read->getDataLength() >= contig->beginningLocation + contig->length - genome->getChromosomePadding()) {
             //
             // The read hangs off the end of the contig.  Soft clip it at the end.
             //
-            *extraBasesClippedAfter =genomeLocation + read->getDataLength() - (contig->beginningLocation + contig->length - genome->getChromosomePadding());
+            *extraBasesClippedAfter = (genomeLocation + read->getDataLength() + 1) - (contig->beginningLocation + contig->length - genome->getChromosomePadding());
         }
         genomeLocation += *extraBasesClippedBefore;
 
