@@ -47,6 +47,7 @@ GenericFile_map::~GenericFile_map()
 	_int64
 GenericFile_map::prefetch()
 {
+    AdviseMemoryMappedFilePrefetch(mappedFile);
 	int pageSize = getpagesize();
 
 	_int64 total = 0;

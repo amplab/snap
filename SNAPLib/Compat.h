@@ -375,6 +375,9 @@ MemoryMappedFile* OpenMemoryMappedFile(const char* filename, size_t offset, size
 // closes and deallocates the file structure
 void CloseMemoryMappedFile(MemoryMappedFile* mappedFile);
 
+//
+void AdviseMemoryMappedFilePrefetch(const MemoryMappedFile *mappedFile);
+
 class AsyncFile
 {
 public:

@@ -470,6 +470,12 @@ CloseMemoryMappedFile(
     }
 }
 
+void AdviseMemoryMappedFilePrefetch(const MemoryMappedFile *mappedFile)
+{
+  // No-op on WIndows.
+}
+
+
 class WindowsAsyncFile : public AsyncFile
 {
 public:
@@ -1314,6 +1320,17 @@ CloseMemoryMappedFile(
     if (e != 0 || e2 != 0) {
         WriteErrorMessage("CloseMemoryMapped file failed\n");
     }
+}
+
+void AdviseMemoryMappedFilePrefetch(const MemoryMappedFile *mappedFile)
+{
+  if (madvise(mappedFile->map, mappedFile->length, MADV_SEQUENTIAL)) {
+    WriteErrorMessage("madvise MADV_SEQUENTIAL failed (since it's only an optimization, this is OK).  Errno %d\n", errno);
+  }
+
+  if (madvise(mappedFile->map, mappedFile->length, MADV_WILLNEED)) {
+    WriteErrorMessage("madvise MADV_WILLNEED failed (since it's only an optimization, this is OK).  Errno %d\n", errno);
+  }
 }
 
 #ifdef __linux__
