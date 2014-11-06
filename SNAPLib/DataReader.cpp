@@ -653,13 +653,15 @@ ReadBasedDataReader::releaseBatch(
 						info->buffer = NULL;
 						info->extra = NULL;
 						_ASSERT(headerBuffersOutstanding > 0);
-						headerBuffersOutstanding--;
-						if (0 == headerBuffersOutstanding) {
-							delete[] headerBuffer;
-							delete[] headerExtra;
-							headerBuffer = headerExtra = NULL;
-							nHeaderBuffersAllocated = 0;
-						}
+                        if (headerBuffersOutstanding > 0) {
+                            headerBuffersOutstanding--;
+                            if (0 == headerBuffersOutstanding) {
+                                delete[] headerBuffer;
+                                delete[] headerExtra;
+                                headerBuffer = headerExtra = NULL;
+                                nHeaderBuffersAllocated = 0;
+                            }
+                        }
 					} else {
 						// add to head of free list
 						info->next = nextBufferForReader;
@@ -735,6 +737,7 @@ ReadBasedDataReader::addBuffer()
     bufferInfo[nBuffers].offset = 0;
     bufferInfo[nBuffers].next = nextBufferForReader;
     bufferInfo[nBuffers].previous = -1;
+    bufferInfo[nBuffers].headerBuffer = false;
     nextBufferForReader = nBuffers;
     nBuffers++;
     _ASSERT(nBuffers <= maxBuffers);
