@@ -515,15 +515,15 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
         // See if it merges into the previous cigar code (which it will if it's M or X, but not D or =).
         //
         if (bamOpCount != 1) {
-            char previousCode = BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[bamOpCount - 2])];
-            if ('X' == previousCode || 'M' == previousCode) {
+            char previousOp = BAMAlignment::CodeToCigar[BAMAlignment::GetCigarOpCode(bamOps[bamOpCount - 2])];
+            if ('X' == previousOp || 'M' == previousOp) {
                 int newCount = BAMAlignment::GetCigarOpCount(bamOps[bamOpCount - 1]) + BAMAlignment::GetCigarOpCount(bamOps[bamOpCount - 2]);
-                bamOps[bamOpCount - 2] = (newCount << 4) | BAMAlignment::CodeToCigar[previousCode];
+                bamOps[bamOpCount - 2] = (newCount << 4) | BAMAlignment::CigarToCode[previousOp];
                 bamOpCount--;
                 bamBufUsed -= sizeof(_uint32);
-            } else if ('=' == previousCode) {
+            } else if ('=' == previousOp) {
                 //
-                // The previous code was =, which this obviously doesn't.  Convert the final code to X or M.
+                // The previous op was =, which this obviously doesn't.  Convert the final code to X or M.
                 //
                 bamOps[bamOpCount - 1] = (BAMAlignment::GetCigarOpCount(bamOps[bamOpCount - 1]) << 4) | BAMAlignment::CigarToCode[useM ? 'M' : 'X'];
             }
