@@ -74,7 +74,8 @@ AlignerOptions::AlignerOptions(
     phredOffset(33),
     expansionFactor(1.0),
     noUkkonen(false),
-    noOrderedEvaluation(false)
+    noOrderedEvaluation(false),
+    enableFusions(false)
 {
     if (forPairedEnd) {
         maxDist                 = 15;
@@ -154,6 +155,7 @@ AlignerOptions::usageMessage()
         "  -fo  Quality filtering: specify the Phred offset (default: %u)\n"
         "\n"
         "  -ct  Secondary index directory (optional)\n"
+        "  -fu  Enable fusion discovery\n"
 
 // not written yet        "  -r   Specify the content of the @RG line in the SAM header.\n"
         "  -hdp Use Hadoop-style prefixes (reporter:status:...) on error messages, and emit hadoop-style progress messages\n"
@@ -294,6 +296,9 @@ AlignerOptions::parse(
         return true;
     } else if (strcmp(argv[n], "-so") == 0) {
         sortOutput = true;
+        return true;
+    } else if (strcmp(argv[n], "-fu") == 0) {
+        enableFusions = true;
         return true;
     } else if (strcmp(argv[n], "-S") == 0) {
         if (n + 1 < argc) {

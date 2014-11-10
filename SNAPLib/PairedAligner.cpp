@@ -579,7 +579,7 @@ void PairedAlignerContext::runIterationThread()
         }
 
         //Create the filter
-        AlignmentFilter filter(read0, read1, index->getGenome(), transcriptome->getGenome(), gtf, minSpacing, maxSpacing, options->confDiff, options->maxDist, index->getSeedLength(), g_aligner->singleAligner);
+        AlignmentFilter filter(read0, read1, index->getGenome(), transcriptome->getGenome(), gtf, minSpacing, maxSpacing, options->confDiff, options->maxDist, index->getSeedLength(), g_aligner->singleAligner, options->enableFusions);
 
         int g_nSingleSecondaryResults[2];
         int g_nSecondaryResults = 0;
@@ -616,6 +616,7 @@ void PairedAlignerContext::runIterationThread()
         _int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
 
+        
         t_aligner->align(read0, read1, &t_pairedResult, maxSecondaryAligmmentAdditionalEditDistance, t_maxPairedSecondaryHits, &t_nSecondaryResults, t_secondaryResults, t_maxSingleSecondaryHits, &t_nSingleSecondaryResults[0], &t_nSingleSecondaryResults[1],t_singleSecondaryResults);
 
         t_allocator->checkCanaries();
@@ -623,12 +624,21 @@ void PairedAlignerContext::runIterationThread()
         //Add primary result
         filter.AddAlignment(t_pairedResult.location[0], t_pairedResult.direction[0], t_pairedResult.score[0], t_pairedResult.mapq[0], true, false);
         filter.AddAlignment(t_pairedResult.location[1], t_pairedResult.direction[1], t_pairedResult.score[1], t_pairedResult.mapq[1], true, true);
-         
+
+        if (t_nSecondaryResults > MAX_SECONDARY_ALIGNMENTS)
+          t_nSecondaryResults = MAX_SECONDARY_ALIGNMENTS;
+
+
         //Add secondary results
         for (int i = 0; i < t_nSecondaryResults; i++) {
           filter.AddAlignment(t_secondaryResults[i].location[0], t_secondaryResults[i].direction[0], t_secondaryResults[i].score[0], t_secondaryResults[i].mapq[0], true, false);         
           filter.AddAlignment(t_secondaryResults[i].location[1], t_secondaryResults[i].direction[1], t_secondaryResults[i].score[1], t_secondaryResults[i].mapq[1], true, true);
         }      
+
+        if (t_nSingleSecondaryResults[0] > MAX_SECONDARY_ALIGNMENTS)
+          t_nSingleSecondaryResults[0] = MAX_SECONDARY_ALIGNMENTS;
+        if (t_nSingleSecondaryResults[1] > MAX_SECONDARY_ALIGNMENTS)
+          t_nSingleSecondaryResults[1] = MAX_SECONDARY_ALIGNMENTS;
 
         for (int i = 0; i < t_nSingleSecondaryResults[0] + t_nSingleSecondaryResults[1]; i++) {
             bool isMate0 = i < t_nSingleSecondaryResults[0] ? false : true;
@@ -642,9 +652,11 @@ void PairedAlignerContext::runIterationThread()
 
         g_allocator->checkCanaries();
 
+        
         filter.AddAlignment(g_pairedResult.location[0], g_pairedResult.direction[0], g_pairedResult.score[0], g_pairedResult.mapq[0], false, false);
         filter.AddAlignment(g_pairedResult.location[1], g_pairedResult.direction[1], g_pairedResult.score[1], g_pairedResult.mapq[1], false, true);
      
+        
         if (g_nSecondaryResults > MAX_SECONDARY_ALIGNMENTS)
           g_nSecondaryResults = MAX_SECONDARY_ALIGNMENTS;
         
@@ -667,9 +679,9 @@ void PairedAlignerContext::runIterationThread()
             }
         }
         
+
         //Perform the filtering
         unsigned status = filter.Filter(&pairedResult);
-        
         
         //If the read is still unaligned
         if ((pairedResult.status[0] == NotFound) && (pairedResult.status[1] == NotFound)) {
@@ -686,7 +698,6 @@ void PairedAlignerContext::runIterationThread()
             }
           }
         }
-        
 
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;

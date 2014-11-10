@@ -112,6 +112,9 @@ struct AlignerOptions : public AbstractOptions
     unsigned            minPhred;
     unsigned            phredOffset;
 
+    //Enable fusion finding code
+    bool                enableFusions;
+
     void usage();
 
     virtual void usageMessage();

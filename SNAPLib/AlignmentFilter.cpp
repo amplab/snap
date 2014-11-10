@@ -108,8 +108,8 @@ void AlignmentPair::Print() {
     printf("\n");
 }
 
-AlignmentFilter::AlignmentFilter(Read *read0_, Read *read1_, const Genome* genome_, const Genome* transcriptome_, GTFReader* gtf_, unsigned minSpacing_, unsigned maxSpacing_, unsigned confDiff_, unsigned maxDist_, unsigned seedLen_, BaseAligner *specialAligner_) 
-    : read0(read0_), read1(read1_), genome(genome_), transcriptome(transcriptome_), gtf(gtf_), minSpacing(minSpacing_), maxSpacing(maxSpacing_), confDiff(confDiff_), maxDist(maxDist_), seedLen(seedLen_), specialAligner(specialAligner_), genome_mapq(maxMAPQ)
+AlignmentFilter::AlignmentFilter(Read *read0_, Read *read1_, const Genome* genome_, const Genome* transcriptome_, GTFReader* gtf_, unsigned minSpacing_, unsigned maxSpacing_, unsigned confDiff_, unsigned maxDist_, unsigned seedLen_, BaseAligner *specialAligner_, bool _enableFusions) 
+    : read0(read0_), read1(read1_), genome(genome_), transcriptome(transcriptome_), gtf(gtf_), minSpacing(minSpacing_), maxSpacing(maxSpacing_), confDiff(confDiff_), maxDist(maxDist_), seedLen(seedLen_), specialAligner(specialAligner_), genome_mapq(maxMAPQ), enableFusions(_enableFusions)
 {}
 
 AlignmentFilter::~AlignmentFilter() {}
@@ -330,20 +330,30 @@ int AlignmentFilter::Filter(PairedAlignmentResult* result) {
         flag |= 1 << SECOND_NOT_ALIGNED;
         
         //You ought to eliminate this and instead only allow single matches to dictate splicing
-        //UnalignedRead(read1, seedLen);
-        //UnalignedRead(read0, seedLen);
+
+        if (enableFusions) {
+            //UnalignedRead(read1, seedLen);
+            //UnalignedRead(read0, seedLen);
+        }
 
     //If there are no alignments for mate0
     } else if (mate0.size() == 0) {
         
         flag |= 1 << FIRST_NOT_ALIGNED;
-        UnalignedRead(mate1, read1, seedLen);
-    
+
+        if (enableFusions) {
+            UnalignedRead(mate1, read1, seedLen);
+        }    
+
     //If there are no alignments for mate1
     } else if (mate1.size() == 0) {
     
         flag |= 1 << SECOND_NOT_ALIGNED;
-        UnalignedRead(mate0, read0, seedLen);    
+     
+        if (enableFusions) {
+            UnalignedRead(mate0, read0, seedLen);    
+        }
+  
     }
     
     //Iterate through all mate0;

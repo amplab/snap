@@ -102,7 +102,7 @@ class AlignmentFilter {
     public:
     
         //Constructors/destructor
-        AlignmentFilter(Read *read0_, Read *read1_, const Genome* genome_, const Genome* transcriptome_, GTFReader* gtf_, unsigned minSpacing_, unsigned maxSpacing_, unsigned confDiff_, unsigned maxDist_, unsigned seedLen_, BaseAligner *specialAligner);
+        AlignmentFilter(Read *read0_, Read *read1_, const Genome* genome_, const Genome* transcriptome_, GTFReader* gtf_, unsigned minSpacing_, unsigned maxSpacing_, unsigned confDiff_, unsigned maxDist_, unsigned seedLen_, BaseAligner *specialAligner, bool _enableFusions=false);
         virtual ~AlignmentFilter();  
         
         //Functions
@@ -140,6 +140,7 @@ class AlignmentFilter {
         unsigned seedLen;
         unsigned genome_mapq;
         BaseAligner *specialAligner;
+        bool enableFusions;
 
 };
 
