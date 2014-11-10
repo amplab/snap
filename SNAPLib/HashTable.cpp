@@ -25,7 +25,7 @@ Environment:
 #include "GenericFile_Blob.h"
 
 SNAPHashTable::SNAPHashTable(
-    unsigned    i_tableSize,
+    _int64      i_tableSize,
     unsigned    i_keySizeInBytes,
     unsigned    i_valueSizeInBytes,
     unsigned    i_valueCount,
@@ -62,7 +62,7 @@ Arguments:
     // unused.
     //
 
-    for (unsigned i = 0; i < tableSize; i++) {
+    for (size_t i = 0; i < tableSize; i++) {
         void *entry = getEntry(i);
 		_ASSERT(entry >= Table && entry <= (char *)Table + tableSize * elementSize);
         clearKey(entry);
@@ -71,6 +71,31 @@ Arguments:
 }
 
 SNAPHashTable *SNAPHashTable::loadFromBlob(GenericFile_Blob *loadFile)
+{
+	SNAPHashTable *table = loadCommon(loadFile);
+
+	size_t bytesMapped;
+	table->Table = loadFile->mapAndAdvance(table->tableSize * table->elementSize, &bytesMapped);
+	if (bytesMapped != table->tableSize * table->elementSize) {
+		WriteErrorMessage("SNAPHashTable: unable to map table\n");
+		soft_exit(1);
+	}
+	table->ownsMemoryForTable = false;
+
+	return table;
+}
+
+SNAPHashTable *SNAPHashTable::loadFromGenericFile(GenericFile *loadFile)
+{
+	SNAPHashTable *table = loadCommon(loadFile);
+	table->Table = BigAlloc(table->tableSize * table->elementSize);
+	loadFile->read(table->Table, table->tableSize * table->elementSize);
+	table->ownsMemoryForTable = true;
+
+	return table;
+}
+
+SNAPHashTable *SNAPHashTable::loadCommon(GenericFile *loadFile)
 {
     SNAPHashTable *table = new SNAPHashTable();
 
@@ -144,13 +169,7 @@ SNAPHashTable *SNAPHashTable::loadFromBlob(GenericFile_Blob *loadFile)
 
     table->elementSize = table->keySizeInBytes + table->valueSizeInBytes * table->valueCount;
 
-    size_t bytesMapped;
-    table->Table = loadFile->mapAndAdvance(table->tableSize * table->elementSize, &bytesMapped);
-    if (bytesMapped != table->tableSize * table->elementSize) {
-        WriteErrorMessage("SNAPHashTable: unable to map table\n");
-        soft_exit(1);
-    }
-    table->ownsMemoryForTable = false;
+
 
     return table;
 }
@@ -251,7 +270,7 @@ SNAPHashTable::getEntryForKey(KeyType key) const
     _uint64 tableIndex = hash(key) % tableSize;
 
     bool wrapped = false;
-    unsigned nProbes = 1;
+    _uint64 nProbes = 1;
 
     //
     // Chain through the table until we hit either a match on the key or an unused element
@@ -307,7 +326,11 @@ SNAPHashTable::Insert(KeyType key, ValueType *data)
         return false;
     }
 
-    setKey(entry, key);
+	if (!isKeyEqual(entry, key)) {
+		setKey(entry, key);
+		usedElementCount++;
+	}
+
     for (unsigned i = 0; i < valueCount; i++) {
         memcpy((char *)entry + i * valueSizeInBytes, &data[i], valueSizeInBytes);   // Assumes little endian
     }

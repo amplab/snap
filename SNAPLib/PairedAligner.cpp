@@ -34,11 +34,9 @@ Revision History:
 #include "Compat.h"
 #include "RangeSplitter.h"
 #include "GenomeIndex.h"
-#include "Range.h"
 #include "SAM.h"
 #include "ChimericPairedEndAligner.h"
 #include "Tables.h"
-#include "WGsim.h"
 #include "AlignerOptions.h"
 #include "AlignerContext.h"
 #include "AlignerStats.h"
@@ -243,13 +241,14 @@ void PairedAlignerOptions::usageMessage()
 {
     AlignerOptions::usageMessage();
     WriteErrorMessage(
+        "\n"
         "  -s   min and max spacing to allow between paired ends (default: %d %d).\n"
         "  -fs  force spacing to lie between min and max.\n"
         "  -H   max hits for intersecting aligner (default: %d).\n"
         "  -mcp specifies the maximum candidate pool size (An internal data structure. \n"
         "       Only increase this if you get an error message saying to do so. If you're running\n"
         "       out of memory, you may want to reduce it.  Default: %d)\n"
-        "  -F b additional option to -F to require both mates to satisfy filter (default is just one)\n",
+        "  -F b additional option to -F to require both mates to satisfy filter (default is just one)\n"
         "       out of memory, you may want to reduce it.  Default: %d).\n"
         "  -ku  Keep unpaired-looking reads in SAM/BAM input.  Ordinarily, if a read doesn't specify\n"
         "       mate information (RNEXT field is * and/or PNEXT is 0) then the code that matches reads will immdeiately\n"
@@ -336,6 +335,8 @@ void PairedAlignerContext::runTask()
 
 void PairedAlignerContext::runIterationThread()
 {
+	PreventMachineHibernationWhileThisThreadIsAlive();
+
     PairedReadSupplier *supplier = pairedReadSupplierGenerator->generateNewPairedReadSupplier();
 
     if (NULL == supplier) {
@@ -405,7 +406,7 @@ void PairedAlignerContext::runIterationThread()
     
     IntersectingPairedEndAligner *g_intersectingAligner = new (g_allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
-                                                                maxCandidatePoolSize, g_allocator, noUkkonen, noOrderedEvaluation);
+                                                                maxCandidatePoolSize, g_allocator, noUkkonen, noOrderedEvaluation, noTruncation);
 
     ChimericPairedEndAligner *g_aligner = new (g_allocator) ChimericPairedEndAligner(
         index,
@@ -414,11 +415,14 @@ void PairedAlignerContext::runIterationThread()
         maxDist,
         numSeedsFromCommandLine,
         seedCoverage,
+	minWeightToCheck,
         forceSpacing,
         extraSearchDepth,
         noUkkonen,
         noOrderedEvaluation,
+        noTruncation,
         g_intersectingAligner,
+        minReadLength,
         g_allocator);        
 
     g_allocator->checkCanaries();
@@ -550,8 +554,8 @@ void PairedAlignerContext::runIterationThread()
 
         // Skip the pair if there are too many Ns or 2s.
         int maxDist = this->maxDist;
-        bool useful0 = read0->getDataLength() >= 50 && (int)read0->countOfNs() <= maxDist;
-        bool useful1 = read1->getDataLength() >= 50 && (int)read1->countOfNs() <= maxDist;
+        bool useful0 = read0->getDataLength() >= minReadLength && (int)read0->countOfNs() <= maxDist;
+        bool useful1 = read1->getDataLength() >= minReadLength && (int)read1->countOfNs() <= maxDist;
 
         //Quality filtering
         bool quality0 = read0->qualityFilter(options->minPercentAbovePhred, options->minPhred, options->phredOffset);
@@ -616,7 +620,6 @@ void PairedAlignerContext::runIterationThread()
         _int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
 
-        
         t_aligner->align(read0, read1, &t_pairedResult, maxSecondaryAligmmentAdditionalEditDistance, t_maxPairedSecondaryHits, &t_nSecondaryResults, t_secondaryResults, t_maxSingleSecondaryHits, &t_nSingleSecondaryResults[0], &t_nSingleSecondaryResults[1],t_singleSecondaryResults);
 
         t_allocator->checkCanaries();
@@ -627,7 +630,6 @@ void PairedAlignerContext::runIterationThread()
 
         if (t_nSecondaryResults > MAX_SECONDARY_ALIGNMENTS)
           t_nSecondaryResults = MAX_SECONDARY_ALIGNMENTS;
-
 
         //Add secondary results
         for (int i = 0; i < t_nSecondaryResults; i++) {
@@ -651,11 +653,9 @@ void PairedAlignerContext::runIterationThread()
         g_aligner->align(read0, read1, &g_pairedResult, maxSecondaryAligmmentAdditionalEditDistance, g_maxPairedSecondaryHits, &g_nSecondaryResults, g_secondaryResults, g_maxSingleSecondaryHits, &g_nSingleSecondaryResults[0], &g_nSingleSecondaryResults[1],g_singleSecondaryResults);
 
         g_allocator->checkCanaries();
-
         
         filter.AddAlignment(g_pairedResult.location[0], g_pairedResult.direction[0], g_pairedResult.score[0], g_pairedResult.mapq[0], false, false);
         filter.AddAlignment(g_pairedResult.location[1], g_pairedResult.direction[1], g_pairedResult.score[1], g_pairedResult.mapq[1], false, true);
-     
         
         if (g_nSecondaryResults > MAX_SECONDARY_ALIGNMENTS)
           g_nSecondaryResults = MAX_SECONDARY_ALIGNMENTS;
@@ -678,7 +678,6 @@ void PairedAlignerContext::runIterationThread()
                 filter.AddAlignment(g_singleSecondaryResults[i].location, g_singleSecondaryResults[i].direction, g_singleSecondaryResults[i].score, g_singleSecondaryResults[i].mapq, false, isMate0); 
             }
         }
-        
 
         //Perform the filtering
         unsigned status = filter.Filter(&pairedResult);
@@ -713,18 +712,16 @@ void PairedAlignerContext::runIterationThread()
         }
 
         writePair(read0, read1, &pairedResult, false);
-       
-
-         //No secondary alignments
-        /*
-        for (int i = 0; i < nSecondaryResults; i++) {
+ 
+        /*      
+        for (int i = 0; i < __min(nSecondaryResults, maxSecondaryAlignments); i++) {
             writePair(read0, read1, secondaryResults + i, true);
         }
 
-        for (int i = 0; i < nSingleSecondaryResults[0] + nSingleSecondaryResults[1]; i++) {
+        for (int i = 0; i < __min(nSingleSecondaryResults[0] + nSingleSecondaryResults[1], maxSecondaryAlignments - nSecondaryResults); i++) {
             Read *read = i < nSingleSecondaryResults[0] ? read0 : read1;
             if (readWriter != NULL && (options->passFilter(read, singleSecondaryResults[i].status))) {
-                readWriter->writeRead(read, singleSecondaryResults[i].status, singleSecondaryResults[i].mapq, singleSecondaryResults[i].location, singleSecondaryResults[i].direction, true);
+                readWriter->writeRead(readerContext, read, singleSecondaryResults[i].status, singleSecondaryResults[i].mapq, singleSecondaryResults[i].location, singleSecondaryResults[i].direction, true);
             }
         }
         */
@@ -762,7 +759,7 @@ void PairedAlignerContext::writePair(Read* read0, Read* read1, PairedAlignmentRe
     bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
         ? (pass0 && pass1) : (pass0 || pass1);
     if (readWriter != NULL && pass) {
-        readWriter->writePair(read0, read1, result, secondary);
+        readWriter->writePair(readerContext, read0, read1, result, secondary);
     }
 }
 
@@ -770,13 +767,8 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
 {
     // Update stats
     for (int r = 0; r < 2; r++) {
-        bool wasError = false;
-        if (computeError && result->status[r] != NotFound) {
-            wasError = wgsimReadMisaligned((r == 0 ? read0 : read1), result->location[r], index, options->misalignThreshold);
-        }
         if (isOneLocation(result->status[r])) {
             stats->singleHits++;
-            stats->errors += wasError ? 1 : 0;
         } else if (result->status[r] == MultipleHits) {
             stats->multiHits++;
         } else {
@@ -788,7 +780,6 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
             int mapq = result->mapq[r];
             _ASSERT(mapq >= 0 && mapq <= AlignerStats::maxMapq);
             stats->mapqHistogram[mapq]++;
-            stats->mapqErrors[mapq] += wasError ? 1 : 0;
         }
     }
 

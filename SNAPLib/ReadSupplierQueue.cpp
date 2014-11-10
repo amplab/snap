@@ -144,7 +144,7 @@ ReadSupplierQueue::generateNewReadSupplier()
     AcquireExclusiveLock(&lock);
     nSuppliersRunning++;
     //
-    // Add two more queue elements for this supplier.
+    // Add more queue elements for this supplier.
     //
     for (int i = 0; i < 2; i++) {
         ReadQueueElement *element = new ReadQueueElement;
@@ -160,17 +160,18 @@ ReadSupplierQueue::generateNewReadSupplier()
         PairedReadSupplier *
 ReadSupplierQueue::generateNewPairedReadSupplier()
 {
-    ReadQueueElement * newElements[4];
-    for (int i = 0 ; i < ((singleReader[1] == NULL) ? 2 : 4); i++) {
+    const int addElements = (singleReader[1] == NULL) ? 2 : 4 + MaxImbalance;
+    ReadQueueElement * newElements[MaxImbalance + 4];
+    for (int i = 0 ; i < addElements; i++) {
         newElements[i] = new ReadQueueElement;
     }
 
     AcquireExclusiveLock(&lock);
     nSuppliersRunning++;
     //
-    // Add two more queue elements (four for paired-end, double file).
+    // Add two more queue elements (4+MaxImbalance for paired-end, double file).
     //
-    for (int i = 0; i < ((singleReader[1] == NULL) ? 2 : 4); i++) {
+    for (int i = 0; i < addElements; i++) {
         ReadQueueElement *element = newElements[i];
         element->addToTail(emptyQueue);
     }
@@ -231,9 +232,9 @@ ReadSupplierQueue::getElements(ReadQueueElement **element1, ReadQueueElement **e
 {
    _ASSERT(singleReader[1] != NULL);   // i.e., we're doing paired file reads
 
-   //WriteErrorMessage("Thread %u: getElements wait acquire lock %llx %d @%llu\n", GetThreadId(), (_uint64) &lock.lock, lock.holderThreadId, timeInNanos());
+   //WriteErrorMessage("Thread %u: getElements wait acquire lock\n", GetThreadId());
     AcquireExclusiveLock(&lock);
-    //WriteErrorMessage("Thread %u: getElements acquired lock %llx %d @%llu\n", GetThreadId(), (_uint64) &lock.lock, lock.holderThreadId, timeInNanos());
+    //WriteErrorMessage("Thread %u: getElements acquired lock\n", GetThreadId());
     while (!areAnyReadsReady()) {
         //WriteErrorMessage("Thread %u: getElements loop releasing lock\n", GetThreadId());
         ReleaseExclusiveLock(&lock);
@@ -245,11 +246,11 @@ ReadSupplierQueue::getElements(ReadQueueElement **element1, ReadQueueElement **e
             //WriteErrorMessage("Thread %u: getElement loop exit allReadsQueued\n", GetThreadId());
             return NULL;
         }
-        //WriteErrorMessage("Thread %u: getElements loop wait readsReady %x\n", GetThreadId(), (unsigned) &lock.lock);
+        //WriteErrorMessage("Thread %u: getElements loop wait readsReady\n", GetThreadId());
         WaitForEvent(&readsReady);
-        //WriteErrorMessage("Thread %u: getElements loop wait acquire lock %x\n", GetThreadId(), (unsigned) &lock.lock);
+        //WriteErrorMessage("Thread %u: getElements loop wait acquire lock\n", GetThreadId());
         AcquireExclusiveLock(&lock);
-        //WriteErrorMessage("Thread %u: getElements loop acquired lock %x\n", GetThreadId(), (unsigned) &lock.lock);
+        //WriteErrorMessage("Thread %u: getElements loop acquired lock\n", GetThreadId());
     }
 
     ReadQueueElement* copyOut = NULL; // for adjusting sizes
@@ -303,9 +304,9 @@ ReadSupplierQueue::getElements(ReadQueueElement **element1, ReadQueueElement **e
         PreventEventWaitersFromProceeding(&readsReady);
     }
  
-    //WriteErrorMessage("Thread %u: getElements releasing lock %llx %u @%llu\n", GetThreadId(), (_uint64) &lock.lock, lock.holderThreadId, timeInNanos());
+    //WriteErrorMessage("Thread %u: getElements releasing lock\n", GetThreadId());
     ReleaseExclusiveLock(&lock);
-    //WriteErrorMessage("Thread %u: getElements released lock %llx %u @%llu\n", GetThreadId(), (_uint64) &lock.lock, lock.holderThreadId, timeInNanos());
+    //WriteErrorMessage("Thread %u: getElements released lock", GetThreadId());
     return true;
 }
 
@@ -326,17 +327,17 @@ ReadSupplierQueue::areAnyReadsReady() // must hold the lock to call this.
     void 
 ReadSupplierQueue::doneWithElement(ReadQueueElement *element)
 {
-    //WriteErrorMessage("Thread %u: doneWithElement wait acquire lock %llx\n", GetThreadId(), &lock.lock);
+    //WriteErrorMessage("Thread %u: doneWithElement wait acquire lock\n", GetThreadId());
     AcquireExclusiveLock(&lock);
-    //WriteErrorMessage("Thread %u: doneWithElement acquired lock %llx\n", GetThreadId(), &lock.lock);
+    //WriteErrorMessage("Thread %u: doneWithElement acquired lock\n", GetThreadId());
     _ASSERT(element->totalReads > 0);
     VariableSizeVector<DataBatch> batches = element->batches;
     element->batches.clear();
     element->addToTail(emptyQueue);
     AllowEventWaitersToProceed(&emptyBuffersAvailable);
-    //WriteErrorMessage("Thread %u: doneWithElement releasing lock %llx\n", GetThreadId(), &lock.lock);
+    //WriteErrorMessage("Thread %u: doneWithElement releasing lock\n", GetThreadId());
     ReleaseExclusiveLock(&lock);
-    //WriteErrorMessage("Thread %u: doneWithElement released lock %llx\n", GetThreadId(), &lock.lock);
+    //WriteErrorMessage("Thread %u: doneWithElement released lock\n", GetThreadId());
     for (VariableSizeVector<DataBatch>::iterator b = batches.begin(); b != batches.end(); b++) {
         releaseBatch(*b);
     }
@@ -345,18 +346,18 @@ ReadSupplierQueue::doneWithElement(ReadQueueElement *element)
     void 
 ReadSupplierQueue::supplierFinished()
 {
-    //WriteErrorMessage("Thread %u: supplierFinished wait acquire lock %llx\n", GetThreadId(), &lock.lock);
+    //WriteErrorMessage("Thread %u: supplierFinished wait acquire lock\n", GetThreadId());
     AcquireExclusiveLock(&lock);
-    //WriteErrorMessage("Thread %u: supplierFinished acquired lock %llx\n", GetThreadId(), &lock.lock);
+    //WriteErrorMessage("Thread %u: supplierFinished acquired lock\n", GetThreadId());
     _ASSERT(allReadsQueued);
     _ASSERT(nSuppliersRunning > 0);
     nSuppliersRunning--;
     if (0 == nSuppliersRunning) {
         AllowEventWaitersToProceed(&allReadsConsumed);
     }
-    //WriteErrorMessage("Thread %u: supplierFinished releasing lock %llx\n", GetThreadId()), &lock.lock;
+    //WriteErrorMessage("Thread %u: supplierFinished releasing lock\n", GetThreadId());
     ReleaseExclusiveLock(&lock);
-    //WriteErrorMessage("Thread %u: supplierFinished released lock %llx\n", GetThreadId(), &lock.lock);
+    //WriteErrorMessage("Thread %u: supplierFinished released lock\n", GetThreadId());
 }
     
     void
@@ -398,13 +399,13 @@ ReadSupplierQueue::getEmptyElement()
 {
     while (emptyQueue->next == emptyQueue) {
         // Wait for a buffer.
-        //WriteErrorMessage("Thread %u: getEmptyElement releasing lock %llx\n", GetThreadId());
+        //WriteErrorMessage("Thread %u: getEmptyElement releasing lock\n", GetThreadId());
         ReleaseExclusiveLock(&lock);
-        //WriteErrorMessage("Thread %u: getEmptyElement released lock %llx\n", GetThreadId());
+        //WriteErrorMessage("Thread %u: getEmptyElement released lock\n", GetThreadId());
         WaitForEvent(&emptyBuffersAvailable);
-        //WriteErrorMessage("Thread %u: getEmptyElement acquiring lock %llx\n", GetThreadId());
+        //WriteErrorMessage("Thread %u: getEmptyElement acquiring lock\n", GetThreadId());
         AcquireExclusiveLock(&lock);
-        //WriteErrorMessage("Thread %u: getEmptyElement acquired lock %llx\n", GetThreadId());
+        //WriteErrorMessage("Thread %u: getEmptyElement acquired lock\n", GetThreadId());
     }
 
     ReadQueueElement *element = emptyQueue->next;
@@ -577,6 +578,7 @@ ReadSupplierQueue::ReaderThread(ReaderThreadParams *params)
             }
 
             if (!isSingleReader) {
+                //WriteErrorMessage("Thread %u: balance %d %+d = %d...\n", GetThreadId(), balance, balanceIncrement, balance + balanceIncrement);
                 balance += balanceIncrement;
                 if (balance * balanceIncrement > MaxImbalance) {
                     _ASSERT(balance * balanceIncrement == MaxImbalance + 1);  // We can get at most one past the limit
@@ -624,13 +626,17 @@ ReadSupplierFromQueue::getNextRead()
         return NULL;
     }
 
+    ReadQueueElement* doneElement = NULL;
     if (NULL != currentElement && nextReadIndex >= currentElement->totalReads) {
-        queue->doneWithElement(currentElement);
+        doneElement = currentElement;
         currentElement = NULL;
     }
 
     if (NULL == currentElement) {
         currentElement = queue->getElement();
+        if (doneElement != NULL) {
+            queue->doneWithElement(doneElement);
+        }
         if (NULL == currentElement) {
             done = true;
             queue->supplierFinished();

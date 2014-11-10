@@ -29,6 +29,7 @@ Environment:
 #include "FileFormat.h"
 #include "exit.h"
 #include "Error.h"
+#include "Genome.h"
 
 class SimpleReadWriter : public ReadWriter
 {
@@ -42,11 +43,11 @@ public:
         delete writer;
     }
 
-    virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine);
+	virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine, bool omitSQLines);
 
-    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, unsigned genomeLocation, Direction direction, bool secondaryAlignment, bool isTranscriptome, unsigned tlocation);
+    virtual bool writeRead(const ReaderContext& context, Read *read, AlignmentResult result, int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, bool isTranscriptome, unsigned tlocation);
 
-    virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result, bool secondaryAlignment);
+    virtual bool writePair(const ReaderContext& context, Read *read0, Read *read1, PairedAlignmentResult *result, bool secondaryAlignment);
 
     virtual void close();
 
@@ -66,34 +67,63 @@ SimpleReadWriter::writeHeader(
     int argc,
     const char **argv,
     const char *version,
-    const char *rgLine)
+    const char *rgLine,
+	bool omitSQLines)
 {
     char* buffer;
     size_t size;
     size_t used;
+
+    char *localBuffer = NULL;
 
 	writer->inHeader(true);
     if (! writer->getBuffer(&buffer, &size)) {
         return false;
     }
 
-    if (! format->writeHeader(context, buffer, size, &used, sorted, argc, argv, version, rgLine)) {
-        WriteErrorMessage( "Failed to write header into fresh buffer\n");
-        return false;
+    char *writerBuffer = buffer;
+    size_t writerBufferSize = size;
+
+	while (!format->writeHeader(context, buffer, size, &used, sorted, argc, argv, version, rgLine, omitSQLines)) {
+        delete[] localBuffer;
+        size = 2 * size;
+        localBuffer = new char[size];
+        buffer = localBuffer;
     }
 
-    writer->advance((unsigned)used, 0);
-	writer->nextBatch();
+    if (NULL == localBuffer) {
+        _ASSERT(writerBuffer == buffer);
+        writer->advance((unsigned)used, 0);
+        writer->nextBatch();
+    } else {
+        size_t bytesRemainingToWrite = used;
+        size_t bytesWritten = 0;
+        while (bytesRemainingToWrite > 0) {
+            size_t bytesToWrite = __min(bytesRemainingToWrite, writerBufferSize);
+            memcpy(writerBuffer, localBuffer + bytesWritten, bytesToWrite);
+            writer->advance(bytesToWrite);
+            writer->nextBatch();
+            if (!writer->getBuffer(&writerBuffer, &writerBufferSize)) {
+                return false;
+            }
+            bytesWritten += bytesToWrite;
+            bytesRemainingToWrite -= bytesToWrite;
+        }
+
+        delete[] localBuffer;
+    }
+
 	writer->inHeader(false);
     return true;
 }
 
     bool
 SimpleReadWriter::writeRead(
+    const ReaderContext& context,
     Read *read,
     AlignmentResult result,
     int mapQuality,
-    unsigned genomeLocation,
+    GenomeLocation genomeLocation,
     Direction direction,
     bool secondaryAlignment,
     bool isTranscriptome, 
@@ -103,22 +133,42 @@ SimpleReadWriter::writeRead(
     size_t size;
     size_t used;
     if (result == NotFound) {
-        genomeLocation = UINT32_MAX;
+        genomeLocation = InvalidGenomeLocation;
     }
     for (int pass = 0; pass < 2; pass++) {
         if (! writer->getBuffer(&buffer, &size)) {
             return false;
         }
-        if (format->writeRead(genome, transcriptome, gtf, &lvc, buffer, size, &used, read->getIdLength(), read, result, mapQuality, genomeLocation, direction, secondaryAlignment, isTranscriptome, tlocation)) {
+        int addFrontClipping;
+        if (format->writeRead(context, &lvc, buffer, size, &used, read->getIdLength(), read, result, mapQuality, genomeLocation, direction, secondaryAlignment, isTranscriptome, tlocation, &addFrontClipping)) {
             _ASSERT(used <= size);
 
-        if (used > 0xffffffff) {
-            WriteErrorMessage("SimpleReadWriter:writeRead: used too big\n");
-            soft_exit(1);
-        }
+            if (used > 0xffffffff) {
+                WriteErrorMessage("SimpleReadWriter:writeRead: used too big\n");
+                soft_exit(1);
+            }
 
-        writer->advance((unsigned)used, genomeLocation);
+
+            writer->advance((unsigned)used, genomeLocation);
             return true;
+        } else if (addFrontClipping != 0) {
+            // redo if read modified (e.g. to add soft clipping, or move alignment for a leading I.
+			const Genome::Contig *originalContig = genome->getContigAtLocation(genomeLocation);
+			const Genome::Contig *newContig = genome->getContigAtLocation(genomeLocation + addFrontClipping);
+			if (newContig != originalContig || genomeLocation + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
+				//
+				// Altering this would push us over a contig boundary.  Just give up on the read.
+				//
+				result = NotFound;
+				genomeLocation = InvalidGenomeLocation;
+			} else {
+				if (addFrontClipping > 0) {
+					read->addFrontClipping(addFrontClipping);
+				}
+				genomeLocation += addFrontClipping;
+			}
+            pass--;
+            continue;
         }
         if (pass == 1) {
             WriteErrorMessage( "Failed to write into fresh buffer\n");
@@ -128,11 +178,14 @@ SimpleReadWriter::writeRead(
             return false;
         }
     }
+
+	_ASSERT(!"NOTREACHED");
     return false; // will never get here
 }
 
     bool
 SimpleReadWriter::writePair(
+    const ReaderContext& context,
     Read *read0,
     Read *read1,
     PairedAlignmentResult *result,
@@ -163,9 +216,10 @@ SimpleReadWriter::writePair(
                 idLengths[1] -= 2;
         }
     }
-    unsigned locations[2];
-    locations[0] = result->status[0] != NotFound ? result->location[0] : UINT32_MAX;
-    locations[1] = result->status[1] != NotFound ? result->location[1] : UINT32_MAX;
+
+    GenomeLocation locations[2];
+    locations[0] = result->status[0] != NotFound ? result->location[0] : InvalidGenomeLocation;
+	locations[1] = result->status[1] != NotFound ? result->location[1] : InvalidGenomeLocation;
     int first = locations[0] > locations[1];
     int second = 1 - first;
     for (int pass = 0; pass < 2; pass++) {
@@ -177,16 +231,59 @@ SimpleReadWriter::writePair(
             return false;
         }
 
-        bool writesFit = format->writeRead(genome, transcriptome, gtf, &lvc, buffer, size, &sizeUsed[first],
-                            idLengths[first], reads[first], result->status[first], result->mapq[first], locations[first], result->direction[first], secondaryAlignment,
-                            result->isTranscriptome[first], result->tlocation[first], true, first == 0,
-                            reads[second], result->status[second], locations[second], result->direction[second], result->isTranscriptome[second], result->tlocation[second]);
-
+		//
+		// Write the first read into the buffer.
+		//
+        int addFrontClipping;
+        bool writesFit = format->writeRead(context, &lvc, buffer, size, &sizeUsed[first],
+            idLengths[first], reads[first], result->status[first], result->mapq[first], locations[first], result->direction[first], secondaryAlignment,
+            result->isTranscriptome[first], result->tlocation[first], &addFrontClipping, true, first == 0,
+            reads[second], result->status[second], locations[second], result->direction[second], result->isTranscriptome[second], result->tlocation[second]);
+        if (addFrontClipping != 0) {
+			const Genome::Contig *originalContig = genome->getContigAtLocation(locations[first]);
+			const Genome::Contig *newContig = genome->getContigAtLocation(locations[first] + addFrontClipping);
+			if (newContig != originalContig || locations[first] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
+				//
+				// Altering this would push us over a contig boundary.  Just give up on the read.
+				//
+				result->status[first] = NotFound;
+				locations[first] = InvalidGenomeLocation;
+			} else {
+				if (addFrontClipping > 0) {
+					reads[first]->addFrontClipping(addFrontClipping);
+				}
+				locations[first] += addFrontClipping;
+			}
+            pass--;
+            continue;
+        }
+		//
+		// And now the second.
+		//
         if (writesFit) {
-            writesFit = format->writeRead(genome, transcriptome, gtf, &lvc, buffer + sizeUsed[first], size - sizeUsed[first], &sizeUsed[second],
+            writesFit = format->writeRead(context, &lvc, buffer + sizeUsed[first], size - sizeUsed[first], &sizeUsed[second],
                 idLengths[second], reads[second], result->status[second], result->mapq[second], locations[second], result->direction[second], secondaryAlignment,
-                result->isTranscriptome[second], result->tlocation[second], true, first != 0,
+                result->isTranscriptome[second], result->tlocation[second], &addFrontClipping, true, first != 0,
                 reads[first], result->status[first], locations[first], result->direction[first], result->isTranscriptome[first], result->tlocation[first]);
+            if (addFrontClipping != 0) {
+				const Genome::Contig *originalContig = genome->getContigAtLocation(locations[second]);
+				const Genome::Contig *newContig = genome->getContigAtLocation(locations[second] + addFrontClipping);
+				if (newContig != originalContig || locations[second] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
+					//
+					// Altering this would push us over a contig boundary.  Just give up on the read.
+					//
+					result->status[second] = NotFound;
+					locations[second] = InvalidGenomeLocation;
+				} else {
+					if (addFrontClipping > 0) {
+						reads[second]->addFrontClipping(addFrontClipping);
+					}
+					locations[second] += addFrontClipping;
+				}
+                pass--;
+                continue;
+            }
+>>>>>>> dev
             if (writesFit) {
                 break;
             }

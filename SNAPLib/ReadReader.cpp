@@ -18,7 +18,7 @@ Environment:
 #include "BigAlloc.h"
 #include "Compat.h"
 #include "Read.h"
-#include "Aligner.h"
+#include "AlignmentResult.h"
 #include "FileFormat.h"
 
 class SimpleReadReader : public ReadReader

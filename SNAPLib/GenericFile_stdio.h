@@ -29,6 +29,7 @@ class GenericFile_stdio : public GenericFile
 {
 public:
 	static GenericFile_stdio *open(const char *filename, Mode mode);
+	static GenericFile_stdio *open(const char *filename); // no Mode means ReadOnly
 	virtual size_t read(void *ptr, size_t count);
 	virtual int getchar();
 	virtual char *gets(char *buf, size_t count);

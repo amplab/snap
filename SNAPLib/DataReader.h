@@ -139,6 +139,9 @@ public:
     // todo: allow this to grow dynamically while keeping stable pointers to previous data
     virtual void getExtra(char** o_extra, _int64* o_length) = 0;
 
+    // get filename for debugging / error printing
+    virtual const char* getFilename() = 0;
+
     // timing for performance tuning (in nanos)
     static volatile _int64 ReadWaitTime;
     static volatile _int64 ReleaseWaitTime;

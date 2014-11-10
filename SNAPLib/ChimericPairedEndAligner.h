@@ -34,17 +34,20 @@ class ChimericPairedEndAligner : public PairedEndAligner {
 
 public:
     ChimericPairedEndAligner(
-        GenomeIndex         *index,
+        GenomeIndex         *index_,
         unsigned            maxReadSize,
         unsigned            maxHits,
         unsigned            maxK,
         unsigned            maxSeedsFromCommandLine,
         double              seedCoverage,
+	unsigned            minWeightToCheck,
         bool                forceSpacing_,
         unsigned            extraSearchDepth,
         bool                noUkkonen,
         bool                noOrderedEvaluation,
+		bool				noTruncation,
         PairedEndAligner    *underlyingPairedEndAligner_,
+		unsigned			minReadLength_,
         BigAllocator        *allocator);
     
     virtual ~ChimericPairedEndAligner();
@@ -92,4 +95,7 @@ protected:
 
     LandauVishkin<1> lv;
     LandauVishkin<-1> reverseLV;
+
+	GenomeIndex *index;
+	unsigned	minReadLength;
 };

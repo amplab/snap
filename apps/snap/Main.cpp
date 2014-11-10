@@ -36,7 +36,7 @@ Revision History:
 
 using namespace std;
 
-const char *SNAP_VERSION = "1.0dev.26"; 
+const char *SNAP_VERSION = "1.0dev.57"; 
 
 static void usage()
 {
@@ -48,7 +48,7 @@ static void usage()
             "   single        align single-end reads\n"
             "   paired        align paired-end reads\n"
             "Type a command without arguments to see its help.\n");
-    soft_exit(1);
+    exit(1);    // Don't use soft_exit, it's confusing people to get an "error" message after the usage
 }
 
 int main(int argc, const char **argv)
@@ -68,16 +68,16 @@ int main(int argc, const char **argv)
             unsigned nArgsConsumed;
             if (strcmp(argv[i], "single") == 0) {
                 SingleAlignerContext single;
-                single.runAlignment(argc - (i + 1), argv + i + 1, SNAP_VERSION, &nArgsConsumed);
+                single.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed);
             } else if (strcmp(argv[i], "paired") == 0) {
                 PairedAlignerContext paired;
-                paired.runAlignment(argc - (i + 1), argv + i + 1, SNAP_VERSION, &nArgsConsumed);
+                paired.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed);
             } else {
                 fprintf(stderr, "Invalid command: %s\n\n", argv[i]);
                 usage();
             }
             _ASSERT(nArgsConsumed > 0);
-            i += nArgsConsumed + 1;  // +1 for single or paired
+            i += nArgsConsumed;
         }
     } else {
         fprintf(stderr, "Invalid command: %s\n\n", argv[1]);

@@ -30,7 +30,7 @@ Revision History:
 #include "Bam.h"
 #include "exit.h"
 #include "Error.h"
-
+#include "BaseAligner.h"
 
 AlignerOptions::AlignerOptions(
     const char* i_commandLine,
@@ -42,8 +42,7 @@ AlignerOptions::AlignerOptions(
     contaminationDir(NULL),
     similarityMapFile(NULL),
     numThreads(GetNumberOfProcessors()),
-    computeError(false),
-    bindToProcessors(false),
+    bindToProcessors(true),
     ignoreMismatchedIDs(false),
     clipping(ClipBack),
     sortOutput(false),
@@ -54,34 +53,40 @@ AlignerOptions::AlignerOptions(
     filterFlags(0),
     explorePopularSeeds(false),
     stopOnFirstHit(false),
-	useM(false),
+	useM(true),
     gapPenalty(0),
-    misalignThreshold(15),
 	extra(NULL),
-    rgLineContents(NULL),
+    rgLineContents("@RG\tID:FASTQ\tPL:Illumina\tPU:pu\tLB:lb\tSM:sm"),
     perfFileName(NULL),
     useTimingBarrier(false),
     extraSearchDepth(2),
     defaultReadGroup("FASTQ"),
     seedCountSpecified(false),
+    minWeightToCheck(1),
     numSeedsFromCommandLine(0),
     ignoreSecondaryAlignments(true),
-    maxSecondaryAligmmentAdditionalEditDistance(2),
+    maxSecondaryAlignmentAdditionalEditDistance(2),
+    maxSecondaryAlignments(0x7fffffff),
     preserveClipping(false),
     confDiff(2),
-    minPercentAbovePhred(90.0),
+    minPercentAbovePhred(80.0),
     minPhred(20),
     phredOffset(33),
     expansionFactor(1.0),
     noUkkonen(false),
     noOrderedEvaluation(false),
     enableFusions(false)
+    noTruncation(false),
+    minReadLength(DEFAULT_MIN_READ_LENGTH),
+    maxDistFraction(0.0),
+    mapIndex(false),
+    prefetchIndex(false)
 {
     if (forPairedEnd) {
         maxDist                 = 15;
         seedCoverage            = 0;
         numSeedsFromCommandLine = 8;
-        maxHits                 = 16000;
+        maxHits                 = 300;
      } else {
         maxDist                 = 14;
         numSeedsFromCommandLine = 25;
@@ -95,83 +100,101 @@ AlignerOptions::AlignerOptions(
 AlignerOptions::usage()
 {
     usageMessage();
-    soft_exit(1);
+    soft_exit_no_print(1);    // Don't use soft_exit, it's confusing people to get an error message after the usage
 }
 
     void
 AlignerOptions::usageMessage()
 {
-    WriteErrorMessage(
-        "Usage: \n%s\n"
-        "Options:\n"
-        "  -o   filename  output alignments to filename in SAM or BAM format, depending on the file extension or\n"
-        "       explicit type specifier (see below)\n"
-        "  -d   maximum edit distance allowed per read or pair (default: %d)\n"
-        "  -n   number of seeds to use per read\n"
-        "  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default: %lf)\n"
-        "  -h   maximum hits to consider per seed (default: %d)\n"
-        "  -c   confidence threshold (default: %u)\n"
-        "  -a   Deprecated parameter; this is ignored.  Consumes one extra arg.\n"
-        "  -t   number of threads (default is one per core)\n"
-        "  -b   bind each thread to its processor (off by default)\n"
-        "  -e   compute error rate assuming wgsim-generated reads\n"
-        "  -P   disables cache prefetching in the genome; may be helpful for machines\n"
-        "       with small caches or lots of cores/cache\n"
-        "  -so  sort output file by alignment location\n"
-        "  -sm  memory to use for sorting in Gb\n"
-        "  -x   explore some hits of overly popular seeds (useful for filtering)\n"
-        "  -f   stop on first match within edit distance limit (filtering mode)\n"
-        "  -F   filter output (a=aligned only, s=single hit only, u=unaligned only)\n"
-        "  -S   suppress additional processing (sorted BAM output only)\n"
-        "       i=index, d=duplicate marking\n"
+	WriteErrorMessage(
+		"Usage: \n%s\n"
+		"Options:\n"
+		"  -o   filename  output alignments to filename in SAM or BAM format, depending on the file extension or\n"
+		"       explicit type specifier (see below)\n"
+		"  -d   maximum edit distance allowed per read or pair (default: %d)\n"
+		"  -n   number of seeds to use per read\n"
+		"  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default: %lf)\n"
+		"  -h   maximum hits to consider per seed (default: %d)\n"
+		"  -ms  minimum seed matches per location (default: %d)\n"
+		"  -c   confidence threshold (default: %u)\n"
+		"  -a   Deprecated parameter; this is ignored.  Consumes one extra arg.\n"
+		"  -t   number of threads (default is one per core)\n"
+		"  -b   bind each thread to its processor (this is the default)\n"
+		" --b   Don't bind each thread to its processor (note the double dash)\n"
+		"  -P   disables cache prefetching in the genome; may be helpful for machines\n"
+		"       with small caches or lots of cores/cache\n"
+		"  -so  sort output file by alignment location\n"
+		"  -sm  memory to use for sorting in Gb\n"
+		"  -x   explore some hits of overly popular seeds (useful for filtering)\n"
+		"  -f   stop on first match within edit distance limit (filtering mode)\n"
+		"  -F   filter output (a=aligned only, s=single hit only, u=unaligned only)\n"
+		"  -S   suppress additional processing (sorted BAM output only)\n"
+		"       i=index, d=duplicate marking\n"
 #if     USE_DEVTEAM_OPTIONS
-        "  -I   ignore IDs that don't match in the paired-end aligner\n"
-        "  -E   misalign threshold (min distance from correct location to count as error)\n"
+		"  -I   ignore IDs that don't match in the paired-end aligner\n"
 #ifdef  _MSC_VER    // Only need this on Windows, since memory allocation is fast on Linux
-        "  -B   Insert barrier after per-thread memory allocation to improve timing accuracy\n"
+		"  -B   Insert barrier after per-thread memory allocation to improve timing accuracy\n"
 #endif  // _MSC_VER
 #endif  // USE_DEVTEAM_OPTIONS
-        "  -Cxx must be followed by two + or - symbols saying whether to clip low-quality\n"
-        "       bases from front and back of read respectively; default: back only (-C-+)\n"
+		"  -Cxx must be followed by two + or - symbols saying whether to clip low-quality\n"
+		"       bases from front and back of read respectively; default: back only (-C-+)\n"
 		"  -M   indicates that CIGAR strings in the generated SAM file should use M (alignment\n"
-		"       match) rather than = and X (sequence (mis-)match)\n"
-        "  -G   specify a gap penalty to use when generating CIGAR strings\n"
-        "  -pf  specify the name of a file to contain the run speed\n"
-        "  --hp Indicates not to use huge pages (this may speed up index load and slow down alignment)\n"
-        "  -D   Specifies the extra search depth (the edit distance beyond the best hit that SNAP uses to compute MAPQ).  Default 2\n"
-        "  -rg  Specify the default read group if it is not specified in the input file\n"
-        "  -R   Specify the entire read group line for the SAM/BAM output.  This must include an ID tag.  If it doesn't start with\n"
-        "       '@RG' SNAP will add that.  Specify tabs by \\t.  Two backslashes will generate a single backslash.\n"
-        "        backslash followed by anything else is illegal.  So, '-R @RG\\tID:foo\\tDS:my data' would generate reads\n"
-        "        with defualt tag foo, and an @RG line that also included the DS:my data field.\n"
-        "  -sa  Include reads from SAM or BAM files with the secondary (0x100) or supplementary (0x800) flag set; default is to drop them.\n"
-        "  -om  Output multiple alignments.  Takes as a parameter the maximum extra edit distance relative to the best alignment\n"
-        "       to allow for secondary alignments\n"
-        "  -pc  Preserve the soft clipping for reads coming from SAM or BAM files\n"
-        "  -xf  Increase expansion factor for BAM and GZ files (default %.1f)\n"
-        "\n"
-        "  -fm  Quality filtering: specify the minimum Phred score (default: %u)\n"
-        "  -fp  Quality filtering: specify the minimum percent of bases >= the minimum Phred score (default: %lf)\n"
-        "  -fo  Quality filtering: specify the Phred offset (default: %u)\n"
-        "\n"
-        "  -ct  Secondary index directory (optional)\n"
-        "  -fu  Enable fusion discovery\n"
-
-// not written yet        "  -r   Specify the content of the @RG line in the SAM header.\n"
-        "  -hdp Use Hadoop-style prefixes (reporter:status:...) on error messages, and emit hadoop-style progress messages\n"
-        "  -nu  No Ukkonen: don't reduce edit distance search based on prior candidates. This option is purely for\n"
-        "       evalutating the performance effect of using Ukkonen's algorithm rather than Smith-Waterman, and specifying\n"
-        "       it will slow down execution without improving the alignments.\n"
-        "  -no  No Ordering: don't order the evalutation of reads so as to select more likely candidates first.  This option\n"
-        "       is purely for evaluating the performance effect of the read evaluation order, and specifying it will slow\n"
-        "       down execution without improving alignments.\n"
-            ,
+		"       match) rather than = and X (sequence (mis-)match).  This is the default\n"
+		"  -=   use the new style CIGAR strings with = and X rather than M.  The opposite of -M\n"
+		"  -G   specify a gap penalty to use when generating CIGAR strings\n"
+		"  -pf  specify the name of a file to contain the run speed\n"
+		"  --hp Indicates not to use huge pages (this may speed up index load and slow down alignment)  This is the default\n"
+		"  -hp  Indicates to use huge pages (this may speed up alignment and slow down index load).\n"
+		"  -D   Specifies the extra search depth (the edit distance beyond the best hit that SNAP uses to compute MAPQ).  Default 2\n"
+		"  -rg  Specify the default read group if it is not specified in the input file\n"
+		"  -R   Specify the entire read group line for the SAM/BAM output.  This must include an ID tag.  If it doesn't start with\n"
+		"       '@RG' SNAP will add that.  Specify tabs by \\t.  Two backslashes will generate a single backslash.\n"
+		"        backslash followed by anything else is illegal.  So, '-R @RG\\tID:foo\\tDS:my data' would generate reads\n"
+		"        with defualt tag foo, and an @RG line that also included the DS:my data field.\n"
+		"  -sa  Include reads from SAM or BAM files with the secondary (0x100) or supplementary (0x800) flag set; default is to drop them.\n"
+		"  -om  Output multiple alignments.  Takes as a parameter the maximum extra edit distance relative to the best alignment\n"
+		"       to allow for secondary alignments\n"
+		" -omax Limit the number of alignments per read generated by -om.\n"
+		"  -pc  Preserve the soft clipping for reads coming from SAM or BAM files\n"
+		"  -xf  Increase expansion factor for BAM and GZ files (default %.1f)\n"
+		"  -hdp Use Hadoop-style prefixes (reporter:status:...) on error messages, and emit hadoop-style progress messages\n"
+		"  -mrl Specify the minimum read length to align, reads shorter than this (after clipping) stay unaligned.  This should be\n"
+		"       a good bit bigger than the seed length or you might get some questionable alignments.  Default %d\n"
+		"  -map Use file mapping to load the index rather than reading it.  This might speed up index loading in cases\n"
+		"       where SNAP is run repatedly on the same index, and the index is larger than half of the memory size\n"
+		"       of the machine.  On some operating systems, loading an index with -map is much slower than without if the\n"
+		"       index is not in memory.  You might consider adding -pre to prefetch the index into system cache when loading\n"
+		"       with -map when you don't expect the index to be in cache.\n"
+		"  -pre Prefetch the index into system cache.  This is only meaningful with -map, and only helps if the index is not\n"
+		"       already in memory and your operating system is slow at reading mapped files (i.e., some versions of Linux,\n"
+		"       but not Windows).\n"
+#ifdef LONG_READS
+        "  -dp  Edit distance as a percentage of read length (single only, overrides -d)\n"
+#endif
+		"  -nu  No Ukkonen: don't reduce edit distance search based on prior candidates. This option is purely for\n"
+		"       evalutating the performance effect of using Ukkonen's algorithm rather than Smith-Waterman, and specifying\n"
+		"       it will slow down execution without improving the alignments.\n"
+		"  -no  No Ordering: don't order the evalutation of reads so as to select more likely candidates first.  This option\n"
+		"       is purely for evaluating the performance effect of the read evaluation order, and specifying it will slow\n"
+		"       down execution without improving alignments.\n"
+		"  -nt  Don't truncate searches based on missed seed hits.  This option is purely for evaluating the performance effect\n"
+		"       of candidate truncation, and specifying it will slow down execution without improving alignments.\n"
+                "\n"
+                "  -fm  Quality filtering: specify the minimum Phred score (default: %u)\n"
+                "  -fp  Quality filtering: specify the minimum percent of bases >= the minimum Phred score (default: %lf)\n"
+                "  -fo  Quality filtering: specify the Phred offset (default: %u)\n"
+                "\n"
+                "  -ct  Secondary index directory (optional)\n"
+                "  -fu  Enable fusion discovery\n"		
+                ,
             commandLine,
             maxDist,
             seedCoverage,
             maxHits,
-            expansionFactor,
             confDiff,
+	    minWeightToCheck,
+            expansionFactor,
+	    DEFAULT_MIN_READ_LENGTH,
             minPercentAbovePhred,
             minPhred,
             phredOffset);
@@ -251,6 +274,16 @@ AlignerOptions::parse(
             n++;
             return true;
         }
+    } else if (strcmp(argv[n], "-ms") == 0) {
+        if (n + 1 < argc) {
+	    minWeightToCheck = (unsigned) atoi(argv[n+1]);
+	    if (minWeightToCheck > 1000) {
+	      fprintf(stderr, "-ms must be between 1 and 1000\n");
+	      soft_exit(1);
+	    }
+            n++;
+            return true;
+        }
     } else if (strcmp(argv[n], "-h") == 0) {
         if (n + 1 < argc) {
             maxHits = atoi(argv[n+1]);
@@ -285,22 +318,32 @@ AlignerOptions::parse(
         }
         n += argsConsumed;
         return true;
-    } else if (strcmp(argv[n], "-e") == 0) {
-        computeError = true;
-        return true;
     } else if (strcmp(argv[n], "-P") == 0) {
         doAlignerPrefetch = false;
         return true;
     } else if (strcmp(argv[n], "-b") == 0) {
         bindToProcessors = true;
         return true;
+    } else if (strcmp(argv[n], "--b") == 0) {
+	bindToProcessors = false;
+	return true;
     } else if (strcmp(argv[n], "-so") == 0) {
         sortOutput = true;
         return true;
     } else if (strcmp(argv[n], "-fu") == 0) {
         enableFusions = true;
         return true;
-    } else if (strcmp(argv[n], "-S") == 0) {
+	} else if (strcmp(argv[n], "-so") == 0) {
+		sortOutput = true;
+		return true;
+	} else if (strcmp(argv[n], "-map") == 0) {
+		mapIndex = true;
+		return true;
+	} else if (strcmp(argv[n], "-pre") == 0) {
+		prefetchIndex = true;
+		return true;
+	}
+	else if (strcmp(argv[n], "-S") == 0) {
         if (n + 1 < argc) {
             n++;
             for (const char* p = argv[n]; *p; p++) {
@@ -366,12 +409,6 @@ AlignerOptions::parse(
     } else if (strcmp(argv[n], "-I") == 0) {
         ignoreMismatchedIDs = true;
         return true;
-    } else if (strcmp(argv[n], "-E") == 0) {
-        if (n + 1 < argc) {
-            misalignThreshold = atoi(argv[n+1]);
-            n++;
-            return true;
-        }
 #ifdef  _MSC_VER
     } else if (strcmp(argv[n], "-B") == 0) {
         useTimingBarrier = true;
@@ -381,25 +418,46 @@ AlignerOptions::parse(
 	} else if (strcmp(argv[n], "-M") == 0) {
 		useM = true;
 		return true;
+	} else if (strcmp(argv[n], "-=") == 0) {
+		useM = false;
+		return true;
 	} else if (strcmp(argv[n], "-sa") == 0) {
 		ignoreSecondaryAlignments = false;
 		return true;
 	} else if (strcmp(argv[n], "-om") == 0) {
 		if (n + 1 >= argc) {
-            WriteErrorMessage("-om requires an additional value\n");
-            soft_exit(1);
-        }
-        //
-        // Check that the parameters is actually numeric.  This is to avoid having someone do "-om -anotherSwitch" and
-        // having the additional switche silently consumed here.
-        //
-        if (argv[n+1][0] < '0' || argv[n+1][0] > '9') {
-            WriteErrorMessage("-om requires a numerical parameter.\n");
-            soft_exit(1);
-        }
-        maxSecondaryAligmmentAdditionalEditDistance = atoi(argv[n+1]);
+			WriteErrorMessage("-om requires an additional value\n");
+			soft_exit(1);
+		}
+		//
+		// Check that the parameter is actually numeric.  This is to avoid having someone do "-om -anotherSwitch" and
+		// having the additional switche silently consumed here.
+		//
+		if (argv[n + 1][0] < '0' || argv[n + 1][0] > '9') {
+			WriteErrorMessage("-om requires a numerical parameter.\n");
+			soft_exit(1);
+		}
+		maxSecondaryAlignmentAdditionalEditDistance = atoi(argv[n + 1]);
 
-        n++;
+		n++;
+
+		return true;
+	} else if (strcmp(argv[n], "-omax") == 0) {
+		if (n + 1 >= argc) {
+			WriteErrorMessage("-omax requires an additional value\n");
+			soft_exit(1);
+		}
+		//
+		// Check that the parameter is actually numeric.  This is to avoid having someone do "-omax -anotherSwitch" and
+		// having the additional switche silently consumed here.
+		//
+		if (argv[n + 1][0] < '0' || argv[n + 1][0] > '9') {
+			WriteErrorMessage("-omax requires a numerical parameter.\n");
+			soft_exit(1);
+		}
+		maxSecondaryAlignments = atoi(argv[n + 1]);
+
+		n++;
 
 		return true;
 	} else if (strcmp(argv[n], "-xf") == 0) {
@@ -423,7 +481,19 @@ AlignerOptions::parse(
         } else {
             WriteErrorMessage("Must have the gap penalty value after -G\n");
         }
-    } else if (strcmp(argv[n], "-R") == 0) {
+    } else if (strcmp(argv[n], "-mrl") == 0) {
+        if (n + 1 < argc) {
+            n++;
+            minReadLength = atoi(argv[n]);
+            return minReadLength > 0;
+        }
+    } else if (strcmp(argv[n], "-dp") == 0) {
+        if (n + 1 < argc) {
+            n++;
+            maxDistFraction = (float) (0.01 * atof(argv[n]));
+            return (! isPaired()) && maxDistFraction > 0.0 && maxDistFraction < 1.0;
+        }
+	} else if (strcmp(argv[n], "-R") == 0) {
         if (n + 1 < argc) {
             //
             // Check the line for sanity.  It must consist either of @RG\t<fields> or just <fields> (in which
@@ -432,7 +502,8 @@ AlignerOptions::parse(
             // new ones might be added.
             //
             bool needsRG = !(argv[n+1][0] == '@' && argv[n+1][1] == 'R' && argv[n+1][2] == 'G' && argv[n+1][3] == '\\' && argv[n+1][4] == 't');
-            char *buffer = new char[strlen(argv[n+1]) + 1 + needsRG ? 4 : 0];
+            const unsigned buflen = (unsigned) (strlen(argv[n + 1]) + 1 + (needsRG ? 4 : 0));
+            char *buffer = new char[buflen];
             char *copyToPtr = buffer;
             const char *copyFromPtr = argv[n+1];
             if (needsRG) {
@@ -449,6 +520,7 @@ AlignerOptions::parse(
             while (*copyFromPtr != '\0') {
                 if (pendingBackslash) {
                     if (*copyFromPtr == 't' || *copyFromPtr == '\\') {
+                        _ASSERT((unsigned)(copyToPtr - buffer) < buflen);
                         *copyToPtr = (*copyFromPtr == 't') ? '\t' : '\\';
                         copyToPtr++;
                         copyFromPtr++;
@@ -464,13 +536,15 @@ AlignerOptions::parse(
                     pendingBackslash = *copyFromPtr == '\\';
 
                     if (!pendingBackslash) {
-                       *copyToPtr = *copyFromPtr;
+                        _ASSERT((unsigned)(copyToPtr - buffer) < buflen);
+                        *copyToPtr = *copyFromPtr;
                         copyToPtr++;
                     }
 
                     copyFromPtr++;
                 }
             } // while
+            _ASSERT((unsigned)(copyToPtr - buffer) < buflen);
             *copyToPtr = '\0';  // Null terminate the string
 
             //
@@ -563,8 +637,9 @@ AlignerOptions::parse(
             strcpy(newReadGroup, argv[n+1]);
             defaultReadGroup = newReadGroup;
             n++;
-            char* s = new char[1 + strlen(defaultReadGroup) + strlen("@RG\tID:\tSM:sample")];
-            sprintf(s, "@RG\tID:%s\tSM:sample", defaultReadGroup);
+            static const char* format = "@RG\tID:%s\tPL:Illumina\tPU:pu\tLB:lb\tSM:sm";
+            char* s = new char[1 + strlen(defaultReadGroup) + strlen(format)];
+            sprintf(s, format, defaultReadGroup);
             rgLineContents = s;
             return true;
         } else {
@@ -573,15 +648,21 @@ AlignerOptions::parse(
     } else if (strcmp(argv[n], "--hp") == 0) {
         BigAllocUseHugePages = false;
         return true;    
-    } else if (strcmp(argv[n], "-hdp") == 0) {
+	} else if (strcmp(argv[n], "-hp") == 0) {
+		BigAllocUseHugePages = true;
+		return true;
+	} else if (strcmp(argv[n], "-hdp") == 0) {
         AlignerOptions::useHadoopErrorMessages = true;
         return true;    
     } else if (strcmp(argv[n], "-nu") == 0) {
         noUkkonen = true;
         return true;
-    } else if (strcmp(argv[n], "-no") == 0) {
-        noOrderedEvaluation = true;
-        return true;
+	} else if (strcmp(argv[n], "-no") == 0) {
+		noOrderedEvaluation = true;
+		return true;
+	} else if (strcmp(argv[n], "-nt") == 0) {
+		noTruncation = true;
+		return true;
 	} else if (strcmp(argv[n], "-D") == 0) {
         if (n + 1 < argc) {
             extraSearchDepth = atoi(argv[n+1]);
@@ -733,6 +814,10 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
             snapFile->isCompressed = !strcmp(args[0], "-compressedFastq");
 
             if (paired) {
+				if (nArgs < 3) {
+					WriteErrorMessage("paired FASTQ requires two consecutive input files, and the last item on your command line is the first half of a FASTQ pair.\n");
+					soft_exit(1);
+				}
                 snapFile->fileType = FASTQFile;
                 snapFile->secondFileName = args[2];
                 if (!strcmp("-", args[2])) {
@@ -750,7 +835,11 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
         } else if (!strcmp(args[0], "-sam")) {
             snapFile->fileType = SAMFile;
             *argsConsumed = 2;
-        } else if (!strcmp(args[0], "-bam")) {
+		} else if (!strcmp(args[0], "-samNoSQ") && !isInput) {	// No header is only valid for output file types
+			snapFile->fileType = SAMFile;
+			snapFile->omitSQLines = true;
+			*argsConsumed = 2;
+		} else if (!strcmp(args[0], "-bam")) {
             snapFile->fileType = BAMFile;
             snapFile->isCompressed = true;
             *argsConsumed = 2;
@@ -812,7 +901,11 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
         snapFile->isStdio = !strcmp(args[0], "-");
 
         if (paired) {
-            snapFile->secondFileName = args[1];
+			if (nArgs < 2) {
+				WriteErrorMessage("paired FASTQ requires two input files, and the last item on your command line is the first half of a FASTQ pair.\n");
+				soft_exit(1);
+			}
+			snapFile->secondFileName = args[1];
             if (!strcmp(args[1], "-")) {
                 if (snapFile->isStdio) {
                     WriteErrorMessage("Can't have both halves of paired FASTQ files be stdin ('-').  Did you mean to use the interleaved FASTQ type?\n");

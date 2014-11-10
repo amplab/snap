@@ -3,6 +3,7 @@
 #include "FixedSizeMap.h"
 #include "BigAlloc.h"
 #include "exit.h"
+#include "Genome.h"
 #include "GTFReader.h"
 #include <vector>
 
@@ -34,113 +35,7 @@ struct LVResult {
     inline bool isValid() { return k != -1; }
 };
 
-//
-// A cache that operates in two phases: loading and looking up.  During loading,
-// it remembers the cache entries but doesn't actually put them in the cache.
-// During look-up phase, it checks the cache for entries, but doesn't add more.
-// The idea is to load during the single-end phase of paired-end alignments,
-// and to look-up during alignTogether, when we're likely to be computing many
-// of the same LV scores that we did in single-end.  
-//
-// The idea behind using two phases (rather than the more obvious design where the
-// cache is loaded and looked-up simultaneously) is to optimize cache performance.
-// Becuase some alignments will do lots of LV calls, the size of the hash table
-// in the FixedSizeMap is big, which in turn means that roughly every reference to 
-// it (both inserting and looking up) is a cache miss, which if left unchecked would
-// result in essentially no benefit from the cache.  Doing it in two phases, however
-// means that in the ordinary case where alignTogether isn't called, we do very little
-// work.  In the case where it is called, we can size the hash table appropriately
-// in order to avoid making it too big, and so reduce cache missing.  We can also
-// prefetch the hash table buckets so as to reduce the time wasted on cache missing
-// during the load-in to the cache.
-//
 
-class LandauVishkinCache {
-public:
-    LandauVishkinCache(unsigned cacheSize_) : cacheSize(cacheSize_)
-    {
-        map = new FixedSizeMap<_uint64, LVResult>();
-        map->reserve(cacheSize);
-
-        inLoadPhase = true;
-        toBeInserted = new LVResultKeyPair[cacheSize];
-    }
-
-    ~LandauVishkinCache()
-    {
-        delete map;
-        delete [] toBeInserted;
-    }
-
-    inline void put(_uint64 cacheKey, LVResult result)
-    {
-        if (!inLoadPhase) {
-            return;
-        }
-
-        _ASSERT(countToBeInserted < cacheSize);
-
-        toBeInserted[countToBeInserted].cacheKey = cacheKey;
-        toBeInserted[countToBeInserted].result = result;
-        countToBeInserted++;
-
-        // Should we prefetch the next location in toBeInserted here??
-    }
-    
-    inline void clear()
-    {
-        inLoadPhase = true;
-        countToBeInserted = 0;
-        //
-        // Don't bother clearing the map.  That happens when (if) we switch phases.
-        //
-    }
-
-    inline void enterLookupPhase()
-    {
-        _ASSERT(inLoadPhase);
-
-        map->clear();
-
-        map->resize(countToBeInserted);
-
-        //
-        // maybe we should work this loop in such a way that we're prefetching several
-        // ahead of where we're inserting in the map.
-        //
-        for (unsigned i = 0; i < countToBeInserted; i++) {
-            map->put(toBeInserted[i].cacheKey, toBeInserted[i].result);
-        }
-
-        inLoadPhase = false;
-    }
-
-    inline LVResult get(_uint64 cacheKey)
-    {
-        if (inLoadPhase) {
-            return LVResult();
-        }
-
-        LVResult result =  map->get(cacheKey);
-
-        return result;
-    }
-
-private:
-    unsigned cacheSize;
-    bool inLoadPhase;
-
-    unsigned countToBeInserted;
-
-    struct LVResultKeyPair {
-        _uint64     cacheKey;
-        LVResult    result;
-    };
-    LVResultKeyPair *toBeInserted;
-
-    FixedSizeMap<_uint64, LVResult> *map;
-
-};
 
 static inline void memsetint(int* p, int value, int count)
 {
@@ -148,7 +43,7 @@ static inline void memsetint(int* p, int value, int count)
 #ifndef _MSC_VER
   volatile
 #endif
-    int * q = p;
+  int * q = p;
   for (int i = 0; i < count; i++) {
     q[i] = value;
   }
@@ -158,7 +53,7 @@ static inline void memsetint(int* p, int value, int count)
 // Set TEXT_DIRECTION to -1 to run backwards through the text.
 template<int TEXT_DIRECTION = 1> class LandauVishkin {
 public:
-    LandauVishkin(int cacheSize = 0)
+    LandauVishkin()
 {
     if (TEXT_DIRECTION != 1 && TEXT_DIRECTION != -1) {
         fprintf(stderr, "You can't possibly be serious.\n");
@@ -166,12 +61,6 @@ public:
     }
 
     memsetint(L[0], -2, (MAX_K+1)*(2*MAX_K+1));
-
-    if (cacheSize > 0) {
-        cache = new LandauVishkinCache(cacheSize);
-     } else {
-        cache = NULL;
-    }
 
     //
     // Initialize dTable, which is used to avoid a branch misprediction in our inner loop.
@@ -193,33 +82,37 @@ public:
 
     ~LandauVishkin()
 {
-    if (cache != NULL) {
-        delete cache;
-    }
 }
 
-    void enterCacheLookupPhase()
-    {
-        if (NULL != cache) {
-            cache->enterLookupPhase();
-        }
-    }
-
     // Compute the edit distance between two strings, if it is <= k, or return -1 otherwise.
-    // For LandauVishkin instances with a cache, the cacheKey should be a unique identifier for
-    // the text and pattern combination (e.g. (readID << 33) | direction << 32 | genomeLocation).
+
+	//
+	// The essential method is to build up the L array row by row.  L[e][d] is the farthest that you can get
+	// through the pattern (read data) with e changes (single base substition, insert or delete) and a net indel of d.
+	// Once you get to the end of the read, you've computed the best edit distance (e).  L[e][d] can be computed
+	// by looking at L[e-1][d-1 .. d+1], depending on whether the next change is a deletion, insertion or 
+	// substitution.
+	//
+	// Because d can be negative, the L array doesn't really use L[e][d].  Instead, it uses L[e][MAX_K+d], because MAX_K is
+	// the largest possible edit distance, and hence d can never be less than -MAX_K, so MAX_K + d >= 0.
+	//
+	// Also, because of the way the alignment algorithms work, sometimes SNAP wants to run the edit distance
+	// backward.  This is built as a template with TEXT_DIRECTION either 1 for forward or -1 for backward, just to make
+	// it extra confusing.
+	//
+
     int computeEditDistance(
-            const char* text,
-            int textLen, 
-            const char* pattern,
-            const char *qualityString,
-            int patternLen,
-            int k,
-            double *matchProbability,
-            _uint64 cacheKey = 0,
-            int *netIndel = NULL)   // the net of insertions and deletions in the alignment.  Negative for insertions, positive for deleteions (and 0 if there are non in net).  Filled in only if matchProbability is non-NULL
+                const char* text,
+                int textLen, 
+                const char* pattern,
+                const char *qualityString,
+                int patternLen,
+                int k,
+                double *matchProbability,
+                int *netIndel = NULL)   // the net of insertions and deletions in the alignment.  Negative for insertions, positive for deleteions (and 0 if there are non in net).  Filled in only if matchProbability is non-NULL
 {
     int localNetIndel;
+	int d;
     if (NULL == netIndel) {
         //
         // If the user doesn't want netIndel, just use a stack local to avoid
@@ -239,28 +132,18 @@ public:
         }
         return -1;
     }
-    if (cache != NULL && cacheKey != 0) {
-        LVResult old = cache->get(cacheKey);
-        if (old.isValid() && (old.result != -1 || old.k >= k)) {
-            if (NULL != matchProbability) {
-                *matchProbability = old.matchProbability;
-            }
-            *netIndel = old.netIndel;
-            if (old.result > k) {
-                return -1;  // When we checked this before we fuond the answer, but it's bigger than k, so just pretend we don't know.
-            }
-            return old.result;
-        }
-    }
+ 
     if (NULL != matchProbability) {
         //
         // Start with perfect match probability and work our way down.
         //
         *matchProbability = 1.0;    
     }
+
     if (TEXT_DIRECTION == -1) {
         text--; // so now it points at the "first" character of t, not after it.
     }
+
     const char* p = pattern;
     const char* t = text;
     int end = __min(patternLen, textLen);
@@ -279,21 +162,20 @@ public:
             unsigned long zeroes;
             CountTrailingZeroes(x, zeroes);
             zeroes >>= 3;
-            L[0][MAX_K] = __min((int)(p - pattern) + (int)zeroes, end);
+            L[0][MAX_K] = __min((int)(p - pattern + zeroes), end);
             goto done1;
         }
         p += 8;
         t += 8 * TEXT_DIRECTION;
     }
     L[0][MAX_K] = end;
-    done1:
+
+done1:
+
     if (L[0][MAX_K] == end) {
         int result = (patternLen > end ? patternLen - end : 0); // Could need some deletions at the end
         if (NULL != matchProbability) {
             *matchProbability = lv_perfectMatchProbability[patternLen];    // Becuase the chance of a perfect match is < 1
-            if (cache != NULL && cacheKey != 0) {
-                cache->put(cacheKey, LVResult(k, result, *netIndel, *matchProbability));
-            }
         }
         if (result > k) {
             //
@@ -304,11 +186,14 @@ public:
         return result;
     }
 
-    for (int e = 1; e <= k; e++) {
+	int lastBestD = MAX_K + 1;
+	int e;
+
+    for (e = 1; e <= k; e++) {
         // Search d's in the order 0, 1, -1, 2, -2, etc to find an alignment with as few indels as possible.
         // dTable is just precomputed d = (d > 0 ? -d : -d+1) to save the branch misprediction from (d > 0)
         int i =0;
-        for (int d = 0; d != e+1 ; i++, d = dTable[i]) {
+        for (d = 0; d != e+1 ; i++, d = dTable[i]) {
             int best = L[e-1][MAX_K+d] + 1; // up
             A[e][MAX_K+d] = 'X';
             int left = L[e-1][MAX_K+d-1];
@@ -353,105 +238,116 @@ public:
                 }
             }
 
-            if (best == patternLen) {
-                if (NULL != matchProbability) {
+			if (best == patternLen) {
+				//
+				// We're through on this iteration.
+				//
 
-                    _ASSERT(*matchProbability == 1.0);
-                    //
-                    // We're done.  Compute the match probability.
-                    //
-                    int straightMismatches = 0;
-#if     0   // It's faster to just use the backtracker, because it doesn't look at every base, only the changed ones.
-                    for (int i = L[0][MAX_K]; i < end && straightMismatches <= e; i++) { // do this 8 at a time, like in the other loops!
-                        if (pattern[i] != text[i * TEXT_DIRECTION]) {
-                            straightMismatches++;
-                            *matchProbability *= lv_phredToProbability[qualityString[i]];
-                        }
-                    }
-#endif  // 0
- 
-                    if (straightMismatches != e) {
-                        //
-                        // There are indels.  
-                        // Trace backward to build up the CIGAR string.  We do this by filling in the backtraceAction,
-                        // backtraceMatched and backtraceD arrays, then going through them in the forward direction to
-                        // figure out our string.
-                        *matchProbability = 1.0;
-                        int curD = d;
-                        for (int curE = e; curE >= 1; curE--) {
-                            backtraceAction[curE] = A[curE][MAX_K+curD];
-                            if (backtraceAction[curE] == 'I') {
-                                backtraceD[curE] = curD + 1;
-                                backtraceMatched[curE] = L[curE][MAX_K+curD] - L[curE-1][MAX_K+curD+1] - 1;
-                            } else if (backtraceAction[curE] == 'D') {
-                                backtraceD[curE] = curD - 1;
-                                backtraceMatched[curE] = L[curE][MAX_K+curD] - L[curE-1][MAX_K+curD-1];
-                            } else { // backtraceAction[curE] == 'X'
-                                backtraceD[curE] = curD;
-                                backtraceMatched[curE] = L[curE][MAX_K+curD] - L[curE-1][MAX_K+curD] - 1;
-                            }
-                            curD = backtraceD[curE];
-        #ifdef TRACE_LV
-                            printf("%d %d: %d %c %d %d\n", curE, curD, L[curE][MAX_K+curD], 
-                                backtraceAction[curE], backtraceD[curE], backtraceMatched[curE]);
-        #endif
-                        }
-
-                        int curE = 1;
-                        int offset = L[0][MAX_K+0];
-                        _ASSERT(*netIndel == 0);
-                        while (curE <= e) {
-                            // First write the action, possibly with a repeat if it occurred multiple times with no exact matches
-                            char action = backtraceAction[curE];
-                            int actionCount = 1;
-                            while (curE+1 <= e && backtraceMatched[curE] == 0 && backtraceAction[curE+1] == action) {
-                                actionCount++;
-                                curE++;
-                            }
-                            if (action == 'I') {
-                                *matchProbability *= lv_indelProbabilities[actionCount];
-                                offset += actionCount;
-                                *netIndel += actionCount;
-                            } else if (action =='D') {
-                                *matchProbability *= lv_indelProbabilities[actionCount];
-                                offset -= actionCount;
-                                *netIndel -= actionCount;
-                            }  else {
-                                _ASSERT(action == 'X');
-                                for (int i = 0; i < actionCount; i++) {
-                                    *matchProbability *= lv_phredToProbability[qualityString[/*BUGBUG - think about what to do here*/__min(patternLen-1,__max(offset,0))]];
-                                    offset++;
-                                }
-                            }
-
-                            offset += backtraceMatched[curE];   // Skip over the matching bases.
-                            curE++;
-                        }
-                    } // if straightMismatches != e (i.e., the indel case)
-                    *matchProbability *= lv_perfectMatchProbability[patternLen-e]; // Accounting for the < 1.0 chance of no changes for matching bases
-                    if (cache != NULL && cacheKey != 0) {
-                        cache->put(cacheKey, LVResult(k, e, *netIndel, *matchProbability));
-                    } 
-                } else {
-                    //
-                    // Not tracking match probability.
-                    //
-                    if (cache != NULL && cacheKey != 0) {
-                        cache->put(cacheKey, LVResult(k, e, *netIndel, -1.0));
-                    }
-                }
-                _ASSERT(e <= k);
-                return e;
-            } // if best == patternLen (i.e., we're done)
+				if ('X' == A[e][MAX_K + d]) {
+					//
+					// The last step wasn't an indel, so we're sure it's the right one.
+					//
+					lastBestD = d;
+					goto got_answer;
+				} else {
+					//
+					// We're done on this round, but maybe there's a better answer, so keep looking.
+					//
+					if (abs(d) < abs(lastBestD)) {
+						lastBestD = d;
+					}
+				}
+			} // if best==patternLen
 
             L[e][MAX_K+d] = best;
-        }
-    }
+        } // for d
 
-    if (cache != NULL && cacheKey != 0) {
-        cache->put(cacheKey, LVResult(k, -1, *netIndel, 0.0));
-    }
-    return -1;
+		if (MAX_K + 1 != lastBestD) {
+			break;
+		}
+    } // for e
+
+	if (MAX_K + 1 == lastBestD) {
+		return -1;
+	}
+
+got_answer:
+
+	_ASSERT(abs(lastBestD) < MAX_K + 1);
+
+	if (NULL != matchProbability) {
+
+		_ASSERT(*matchProbability == 1.0);
+		//
+		// We're done.  Compute the match probability.
+		//
+
+		//
+		// Trace backward to build up the CIGAR string.  We do this by filling in the backtraceAction,
+		// backtraceMatched and backtraceD arrays, then going through them in the forward direction to
+		// figure out our string.
+		int curD = lastBestD;
+		for (int curE = e; curE >= 1; curE--) {
+			backtraceAction[curE] = A[curE][MAX_K + curD];
+			if (backtraceAction[curE] == 'I') {
+				backtraceD[curE] = curD + 1;
+				backtraceMatched[curE] = L[curE][MAX_K + curD] - L[curE - 1][MAX_K + curD + 1] - 1;
+			} else if (backtraceAction[curE] == 'D') {
+				backtraceD[curE] = curD - 1;
+				backtraceMatched[curE] = L[curE][MAX_K + curD] - L[curE - 1][MAX_K + curD - 1];
+			} else { // backtraceAction[curE] == 'X'
+				backtraceD[curE] = curD;
+				backtraceMatched[curE] = L[curE][MAX_K + curD] - L[curE - 1][MAX_K + curD] - 1;
+			}
+			curD = backtraceD[curE];
+#ifdef TRACE_LV
+			printf("%d %d: %d %c %d %d\n", curE, curD, L[curE][MAX_K + curD],
+				backtraceAction[curE], backtraceD[curE], backtraceMatched[curE]);
+#endif
+		}
+
+		int curE = 1;
+		int offset = L[0][MAX_K + 0];
+		_ASSERT(*netIndel == 0);
+		while (curE <= e) {
+			// First write the action, possibly with a repeat if it occurred multiple times with no exact matches
+			char action = backtraceAction[curE];
+			int actionCount = 1;
+			while (curE + 1 <= e && backtraceMatched[curE] == 0 && backtraceAction[curE + 1] == action) {
+				actionCount++;
+				curE++;
+			}
+			if (action == 'I') {
+				*matchProbability *= lv_indelProbabilities[actionCount];
+				offset += actionCount;
+				*netIndel += actionCount;
+			}
+			else if (action == 'D') {
+				*matchProbability *= lv_indelProbabilities[actionCount];
+				offset -= actionCount;
+				*netIndel -= actionCount;
+			}
+			else {
+				_ASSERT(action == 'X');
+				for (int i = 0; i < actionCount; i++) {
+					*matchProbability *= lv_phredToProbability[qualityString[/*BUGBUG - think about what to do here*/__min(patternLen - 1, __max(offset, 0))]];
+					offset++;
+				}
+			}
+
+			offset += backtraceMatched[curE];   // Skip over the matching bases.
+			curE++;
+		}
+
+		*matchProbability *= lv_perfectMatchProbability[patternLen - e]; // Accounting for the < 1.0 chance of no changes for matching bases
+	} else {
+		//
+		// Not tracking match probability.
+		//
+	}
+
+	_ASSERT(e <= k);
+	return e;
 }
 
 
@@ -464,14 +360,6 @@ public:
             int k)
     {
         return computeEditDistance(text, textLen, pattern, NULL, patternLen, k, NULL);
-    }
-
-    // Clear the cache of distances computed.
-    void clearCache()
-    {
-        if (cache != NULL) {
-            cache->clear();
-        }
     }
 
     void *operator new(size_t size) {return BigAlloc(size);}
@@ -497,8 +385,6 @@ private:
     char backtraceAction[MAX_K+1];
     int  backtraceMatched[MAX_K+1];
     int  backtraceD[MAX_K+1];
-
-    LandauVishkinCache *cache;
 };
 
 void setLVProbabilities(double *i_indelProbabilities, double *i_phredToProbability, double mutationProbability);
@@ -544,11 +430,14 @@ public:
      
     // same, but places indels as early as possible, following BWA & VCF conventions
     int computeEditDistanceNormalized(const char* text, int textLen, const char* pattern, int patternLen, int k,
-                            char* cigarBuf, int cigarBufLen, bool useM, std::vector<unsigned> &tokens,
-                            CigarFormat format = COMPACT_CIGAR_STRING, int* cigarBufUsed = NULL);
+                            char* cigarBuf, int cigarBufLen, bool useM, 
+                            std::vector<unsigned> &tokens,
+                            CigarFormat format = COMPACT_CIGAR_STRING, 
+                            int* cigarBufUsed = NULL, 
+                            int* o_addFrontClipping = NULL);
                        
     int insertSpliceJunctions(const GTFReader *gtf, std::vector<unsigned> tokens, std::string transcript_id, unsigned pos, char *cigarNew, int cigarNewLen, CigarFormat format = COMPACT_CIGAR_STRING);
-                            
+
     // take a compact cigar binary format and turn it into one byte per reference base
     // describing the difference from the reference at that location
     // might lose information for large inserts

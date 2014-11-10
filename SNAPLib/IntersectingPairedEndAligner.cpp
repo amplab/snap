@@ -45,11 +45,14 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         unsigned      maxCandidatePoolSize,
         BigAllocator  *allocator,
         bool          noUkkonen_,
-        bool          noOrderedEvaluation_) :
+        bool          noOrderedEvaluation_,
+		bool          noTruncation_) :
     index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), numSeedsFromCommandLine(__min(MAX_MAX_SEEDS,numSeedsFromCommandLine_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
 	landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), seedCoverage(seedCoverage_),
-    extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_)
+    extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_)
 {
+    doesGenomeIndexHave64BitLocations = index->doesGenomeIndexHave64BitLocations();
+
     unsigned maxSeedsToUse;
     if (0 != numSeedsFromCommandLine) {
         maxSeedsToUse = numSeedsFromCommandLine;
@@ -113,7 +116,7 @@ IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, uns
         for (Direction dir = 0; dir < NUM_DIRECTIONS; dir++) {
             reversedRead[whichRead][dir] = (char *)allocator->allocate(maxReadSize);
             hashTableHitSets[whichRead][dir] =(HashTableHitSet *)allocator->allocate(sizeof(HashTableHitSet)); /*new HashTableHitSet();*/
-            hashTableHitSets[whichRead][dir]->firstInit(maxSeedsToUse, maxEditDistanceToConsider, allocator);
+            hashTableHitSets[whichRead][dir]->firstInit(maxSeedsToUse, maxMergeDistance, allocator, doesGenomeIndexHave64BitLocations);
         }
     }
 
@@ -152,11 +155,11 @@ IntersectingPairedEndAligner::align(
     *nSingleEndSecondaryResultsForFirstRead = 0;
     *nSingleEndSecondaryResultsForSecondRead = 0;
 
-    unsigned maxSeeds;
+    int maxSeeds;
     if (numSeedsFromCommandLine != 0) {
-        maxSeeds = numSeedsFromCommandLine;
+        maxSeeds = (int)numSeedsFromCommandLine;
     } else {
-        maxSeeds = (unsigned)(max(read0->getDataLength(), read1->getDataLength()) * seedCoverage / index->getSeedLength());
+        maxSeeds = (int)(max(read0->getDataLength(), read1->getDataLength()) * seedCoverage / index->getSeedLength());
     }
 
 #ifdef  _DEBUG
@@ -177,7 +180,7 @@ IntersectingPairedEndAligner::align(
 
     Read rcReads[NUM_READS_PER_PAIR];
 
-    unsigned bestResultGenomeLocation[NUM_READS_PER_PAIR];
+    GenomeLocation bestResultGenomeLocation[NUM_READS_PER_PAIR];
     Direction bestResultDirection[NUM_READS_PER_PAIR];
     unsigned bestResultScore[NUM_READS_PER_PAIR];
     unsigned popularSeedsSkipped[NUM_READS_PER_PAIR];
@@ -186,9 +189,10 @@ IntersectingPairedEndAligner::align(
     reads[1][FORWARD] = read1;
 
     //
-    // Don't bother if one or both reads are too short.
+    // Don't bother if one or both reads are too short.  The minimum read length here is the seed length, but usually there's a longer
+	// minimum enforced by our called
     //
-    if (read0->getDataLength() < 50 || read1->getDataLength() < 50) {
+    if (read0->getDataLength() < seedLen || read1->getDataLength() < seedLen) {
          return;
     }
 
@@ -262,9 +266,9 @@ IntersectingPairedEndAligner::align(
     // Phase 1: do the hash table lookups for each of the seeds for each of the reads and add them to the hit sets.
     //
     for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
-        unsigned nextSeedToTest = 0;
+        int nextSeedToTest = 0;
         unsigned wrapCount = 0;
-        unsigned nPossibleSeeds = readLen[whichRead] - seedLen + 1;
+        int nPossibleSeeds = (int)readLen[whichRead] - seedLen + 1;
         memset(seedUsed, 0, (__max(readLen[0], readLen[1]) + 7) / 8);
         bool beginsDisjointHitSet[NUM_DIRECTIONS] = {true, true};
 
@@ -310,14 +314,20 @@ IntersectingPairedEndAligner::align(
             //
             // Find all instances of this seed in the genome.
             //
-            unsigned nHits[NUM_DIRECTIONS];
-            const unsigned *hits[NUM_DIRECTIONS];
+            _int64 nHits[NUM_DIRECTIONS];
+            const GenomeLocation *hits[NUM_DIRECTIONS];
+            const unsigned *hits32[NUM_DIRECTIONS];
 
-            index->lookupSeed(seed, 0, InvalidGenomeLocation, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC]);
+            if (doesGenomeIndexHave64BitLocations) {
+                index->lookupSeed(seed, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC], 
+                            hashTableHitSets[whichRead][FORWARD]->getNextSingletonLocation(), hashTableHitSets[whichRead][RC]->getNextSingletonLocation());
+            } else {
+                index->lookupSeed32(seed, &nHits[FORWARD], &hits32[FORWARD], &nHits[RC], &hits32[RC]);
+            }
 
             countOfHashTableLookups[whichRead]++;
             for (Direction dir = FORWARD; dir < NUM_DIRECTIONS; dir++) {
-                unsigned offset;
+                int offset;
                 if (dir == FORWARD) {
                     offset = nextSeedToTest;
                 } else {
@@ -325,7 +335,11 @@ IntersectingPairedEndAligner::align(
                 }
                 if (nHits[dir] < maxBigHits) {
                     totalHashTableHits[whichRead][dir] += nHits[dir];
-                    hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits[dir], beginsDisjointHitSet[dir]);
+                    if (doesGenomeIndexHave64BitLocations) {
+                        hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits[dir], beginsDisjointHitSet[dir]);
+                    } else {
+                        hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits32[dir], beginsDisjointHitSet[dir]);
+                    }
                     beginsDisjointHitSet[dir]= false;
                 } else {
                     popularSeedsSkipped[whichRead]++;
@@ -335,8 +349,8 @@ IntersectingPairedEndAligner::align(
             //
             // If we don't have enough seeds left to reach the end of the read, space out the seeds more-or-less evenly.
             //
-            if ((maxSeeds - countOfHashTableLookups[whichRead] + 1) * seedLen + nextSeedToTest < nPossibleSeeds) {
-                _ASSERT((nPossibleSeeds - nextSeedToTest - 1) / (maxSeeds - countOfHashTableLookups[whichRead] + 1) >= seedLen);
+            if ((maxSeeds - countOfHashTableLookups[whichRead] + 1) * (int)seedLen + nextSeedToTest < nPossibleSeeds) {
+                _ASSERT((nPossibleSeeds - nextSeedToTest - 1) / (maxSeeds - countOfHashTableLookups[whichRead] + 1) >= (int)seedLen);
                 nextSeedToTest += (nPossibleSeeds - nextSeedToTest - 1) / (maxSeeds - countOfHashTableLookups[whichRead] + 1);
                 _ASSERT(nextSeedToTest < nPossibleSeeds);   // We haven't run off the end of the read.
             } else {
@@ -364,6 +378,7 @@ IntersectingPairedEndAligner::align(
 
     for (unsigned whichSetPair = 0; whichSetPair < NUM_SET_PAIRS; whichSetPair++) {
         HashTableHitSet *setPair[NUM_READS_PER_PAIR];
+
         if (whichSetPair == 0) {
             setPair[0] = hashTableHitSets[0][FORWARD];
             setPair[1] = hashTableHitSets[1][RC];
@@ -372,9 +387,10 @@ IntersectingPairedEndAligner::align(
             setPair[1] = hashTableHitSets[1][FORWARD];
         }
 
+
         unsigned            lastSeedOffsetForReadWithFewerHits;
-        unsigned            lastGenomeLocationForReadWithFewerHits;
-        unsigned            lastGenomeLocationForReadWithMoreHits;
+        GenomeLocation      lastGenomeLocationForReadWithFewerHits;
+        GenomeLocation      lastGenomeLocationForReadWithMoreHits;
         unsigned            lastSeedOffsetForReadWithMoreHits;
 
         bool                outOfMoreHitsLocations = false;
@@ -382,7 +398,7 @@ IntersectingPairedEndAligner::align(
         //
         // Seed the intersection state by doing a first lookup.
         //
-        if (!setPair[readWithFewerHits]->getFirstHit(&lastGenomeLocationForReadWithFewerHits, &lastSeedOffsetForReadWithFewerHits)) {
+        if (setPair[readWithFewerHits]->getFirstHit(&lastGenomeLocationForReadWithFewerHits, &lastSeedOffsetForReadWithFewerHits)) {
             //
             // No hits in this direction.
             //
@@ -417,7 +433,7 @@ IntersectingPairedEndAligner::align(
 
             if ((lastGenomeLocationForReadWithMoreHits + maxSpacing < lastGenomeLocationForReadWithFewerHits || outOfMoreHitsLocations) &&
                 (0 == lowestFreeScoringMateCandidate[whichSetPair] ||
-                !isWithin(scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair]-1].readWithMoreHitsGenomeLocation, lastGenomeLocationForReadWithFewerHits, maxSpacing))) {
+                !genomeLocationIsWithin(scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair]-1].readWithMoreHitsGenomeLocation, lastGenomeLocationForReadWithFewerHits, maxSpacing))) {
                 //
                 // No mates for the hit on the read with fewer hits.  Skip to the next candidate.
                 //
@@ -442,9 +458,14 @@ IntersectingPairedEndAligner::align(
             // Add all of the mate candidates for this fewer side hit.
             //
 
-            unsigned previousMoreHitsLocation = lastGenomeLocationForReadWithMoreHits;
+            GenomeLocation previousMoreHitsLocation = lastGenomeLocationForReadWithMoreHits;
             while (lastGenomeLocationForReadWithMoreHits + maxSpacing >= lastGenomeLocationForReadWithFewerHits && !outOfMoreHitsLocations) {
-                unsigned bestPossibleScoreForReadWithMoreHits = setPair[readWithMoreHits]->computeBestPossibleScoreForCurrentHit();
+				unsigned bestPossibleScoreForReadWithMoreHits;
+				if (noTruncation) {
+					bestPossibleScoreForReadWithMoreHits = 0;
+				} else {
+					bestPossibleScoreForReadWithMoreHits = setPair[readWithMoreHits]->computeBestPossibleScoreForCurrentHit();
+				} 
 
                 if (lowestFreeScoringMateCandidate[whichSetPair] >= scoringCandidatePoolSize / NUM_READS_PER_PAIR) {
                     WriteErrorMessage("Ran out of scoring candidate pool entries.  Perhaps trying with a larger value of -mcp will help.\n");
@@ -477,7 +498,13 @@ IntersectingPairedEndAligner::align(
             // And finally add the hit from the fewer hit side.  To compute its best possible score, we need to look at all of the mates; we couldn't do it in the
             // loop immediately above because some of them might have already been in the mate list from a different, nearby fewer hit location.
             //
-            unsigned bestPossibleScoreForReadWithFewerHits = setPair[readWithFewerHits]->computeBestPossibleScoreForCurrentHit();
+			unsigned bestPossibleScoreForReadWithFewerHits;
+			
+			if (noTruncation) {
+				bestPossibleScoreForReadWithFewerHits = 0;
+			} else {
+				bestPossibleScoreForReadWithFewerHits = setPair[readWithFewerHits]->computeBestPossibleScoreForCurrentHit();
+			}
 
             unsigned lowestBestPossibleScoreOfAnyPossibleMate = maxK + extraSearchDepth;
             for (int i = lowestFreeScoringMateCandidate[whichSetPair] - 1; i >= 0; i--) {
@@ -579,8 +606,8 @@ IntersectingPairedEndAligner::align(
             for (;;) {
 
                 ScoringMateCandidate *mate = &scoringMateCandidates[candidate->whichSetPair][mateIndex];
-                _ASSERT(isWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, maxSpacing));
-                if (!isWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, minSpacing) && mate->bestPossibleScore <= scoreLimit - fewerEndScore) {
+                _ASSERT(genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, maxSpacing));
+                if (!genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, minSpacing) && mate->bestPossibleScore <= scoreLimit - fewerEndScore) {
                     //
                     // It's within the range and not necessarily too poor of a match.  Consider it.
                     //
@@ -621,7 +648,7 @@ IntersectingPairedEndAligner::align(
                             //
                             for (ScoringCandidate *mergeCandidate = candidate - 1;
                                         mergeCandidate >= scoringCandidatePool &&
-                                        isWithin(mergeCandidate->readWithFewerHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset, 50) &&
+                                        genomeLocationIsWithin(mergeCandidate->readWithFewerHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset, 50) &&
                                         mergeCandidate->whichSetPair == candidate->whichSetPair;
                                         mergeCandidate--) {
 
@@ -634,7 +661,7 @@ IntersectingPairedEndAligner::align(
                             if (NULL == mergeAnchor) {
                                 for (ScoringCandidate *mergeCandidate = candidate + 1;
                                             mergeCandidate < scoringCandidatePool + lowestFreeScoringCandidatePoolEntry &&
-                                            isWithin(mergeCandidate->readWithFewerHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset, 50) &&
+                                            genomeLocationIsWithin(mergeCandidate->readWithFewerHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset, 50) &&
                                             mergeCandidate->whichSetPair == candidate->whichSetPair;
                                             mergeCandidate--) {
 
@@ -773,7 +800,7 @@ IntersectingPairedEndAligner::align(
                     }// if the mate has a non -1 score
                 }
 
-                if (mateIndex == 0 || !isWithin(scoringMateCandidates[candidate->whichSetPair][mateIndex-1].readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, maxSpacing)) {
+                if (mateIndex == 0 || !genomeLocationIsWithin(scoringMateCandidates[candidate->whichSetPair][mateIndex-1].readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, maxSpacing)) {
                     //
                     // Out of mate candidates.
                     //
@@ -842,7 +869,7 @@ doneScoring:
 IntersectingPairedEndAligner::scoreLocation(
     unsigned             whichRead,
     Direction            direction,
-    unsigned             genomeLocation,
+    GenomeLocation       genomeLocation,
     unsigned             seedOffset,
     unsigned             scoreLimit,
     unsigned            *score,
@@ -853,8 +880,10 @@ IntersectingPairedEndAligner::scoreLocation(
 
     Read *readToScore = reads[whichRead][direction];
     unsigned readDataLength = readToScore->getDataLength();
-    unsigned genomeDataLength = readDataLength + MAX_K; // Leave extra space in case the read has deletions
+    GenomeDistance genomeDataLength = readDataLength + MAX_K; // Leave extra space in case the read has deletions
     const char *data = genome->getSubstring(genomeLocation, genomeDataLength);
+
+#if		0 // This only happens when genomeLocation is in the padding, which can lead to no good.  Just say no.
     if (NULL == data) {
         //
         // We're up against the end of a contig.  Reduce the extra space enough that it isn't too
@@ -863,21 +892,23 @@ IntersectingPairedEndAligner::scoreLocation(
         //
         const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
 
-        unsigned endOffset;
+        GenomeLocation endLocation;
         if (genomeLocation + readDataLength + MAX_K >= genome->getCountOfBases()) {
-            endOffset = genome->getCountOfBases();
+            endLocation = genome->getCountOfBases();
         } else {
             const Genome::Contig *nextContig = genome->getContigAtLocation(genomeLocation + readDataLength + MAX_K);
-            _ASSERT(NULL != contig && contig->beginningOffset <= genomeLocation && contig != nextContig);
+            _ASSERT(NULL != contig && contig->beginningLocation <= genomeLocation && contig != nextContig);
 
-            endOffset = nextContig->beginningOffset;
+            endLocation = nextContig->beginningLocation;
         }
-        genomeDataLength = endOffset - genomeLocation - 1;
+        genomeDataLength = endLocation - genomeLocation - 1;
         if (genomeDataLength >= readDataLength - MAX_K) {
             data = genome->getSubstring(genomeLocation, genomeDataLength);
             _ASSERT(NULL != data);
         }
     }
+
+#endif // 0 This only happens when genomeLocation is in the padding, which can lead to no good.  Just say no.
 
     if (NULL == data) {
         *score = -1;
@@ -898,18 +929,21 @@ IntersectingPairedEndAligner::scoreLocation(
 
     _ASSERT(!memcmp(data+seedOffset, readToScore->getData() + seedOffset, seedLen));    // that the seed actually matches
 
-    // NB: This cacheKey computation MUST match the one in BaseAligner or all hell will break loose.
-    _uint64 cacheKey = (genomeLocation + tailStart) | (((_uint64) direction) << 32) | (((_uint64) whichRead) << 33) | (((_uint64)tailStart) << 34);
-
-    score1 = landauVishkin->computeEditDistance(data + tailStart, genomeDataLength - tailStart, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
-        scoreLimit, &matchProb1, cacheKey);
+    int textLen;
+    if (genomeDataLength - tailStart > INT32_MAX) {
+        textLen = INT32_MAX;
+    } else {
+        textLen = (int)(genomeDataLength - tailStart);
+    }
+    score1 = landauVishkin->computeEditDistance(data + tailStart, textLen, readToScore->getData() + tailStart, readToScore->getQuality() + tailStart, readLen - tailStart,
+        scoreLimit, &matchProb1);
     if (score1 == -1) {
         *score = -1;
     } else {
         // The tail of the read matched; now let's reverse the reference genome data and match the head
         int limitLeft = scoreLimit - score1;
         score2 = reverseLandauVishkin->computeEditDistance(data + seedOffset, seedOffset + MAX_K, reversedRead[whichRead][direction] + readLen - seedOffset,
-                                                                    reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2, cacheKey, genomeLocationOffset);
+                                                                    reads[whichRead][OppositeDirection(direction)]->getQuality() + readLen - seedOffset, seedOffset, limitLeft, &matchProb2, genomeLocationOffset);
 
         if (score2 == -1) {
             *score = -1;
@@ -927,13 +961,19 @@ IntersectingPairedEndAligner::scoreLocation(
 }
 
     void
- IntersectingPairedEndAligner::HashTableHitSet::firstInit(unsigned maxSeeds_, unsigned maxMergeDistance_, BigAllocator *allocator)
+ IntersectingPairedEndAligner::HashTableHitSet::firstInit(unsigned maxSeeds_, unsigned maxMergeDistance_, BigAllocator *allocator, bool doesGenomeIndexHave64BitLocations_)
  {
     maxSeeds = maxSeeds_;
     maxMergeDistance = maxMergeDistance_;
+    doesGenomeIndexHave64BitLocations = doesGenomeIndexHave64BitLocations_;
     nLookupsUsed = 0;
-    lookups = (HashTableLookup *)allocator->allocate(sizeof(HashTableLookup) * maxSeeds);
-    liveLookups = (unsigned *)allocator->allocate(sizeof(*liveLookups) * maxSeeds);
+    if (doesGenomeIndexHave64BitLocations) {
+        lookups64 = (HashTableLookup<GenomeLocation> *)allocator->allocate(sizeof(HashTableLookup<GenomeLocation>) * maxSeeds);
+        lookups32 = NULL;
+    } else {
+        lookups32 = (HashTableLookup<unsigned> *)allocator->allocate(sizeof(HashTableLookup<unsigned>) * maxSeeds);
+        lookups64 = NULL;
+    }
     disjointHitSets = (DisjointHitSet *)allocator->allocate(sizeof(DisjointHitSet) * maxSeeds);
  }
     void
@@ -941,49 +981,69 @@ IntersectingPairedEndAligner::HashTableHitSet::init()
 {
     nLookupsUsed = 0;
     currentDisjointHitSet = -1;
-    lookupListHead->nextLookupWithRemainingMembers = lookupListHead->prevLookupWithRemainingMembers = lookupListHead;
-}
-    void
-IntersectingPairedEndAligner::HashTableHitSet::recordLookup(unsigned seedOffset, unsigned nHits, const unsigned *hits, bool beginsDisjointHitSet)
-{
-    _ASSERT(nLookupsUsed < maxSeeds);
-    if (beginsDisjointHitSet) {
-        currentDisjointHitSet++;
-        _ASSERT(currentDisjointHitSet < (int)maxSeeds);
-        disjointHitSets[currentDisjointHitSet].countOfExhaustedHits = 0;
-    }
-
-    if (0 == nHits) {
-        disjointHitSets[currentDisjointHitSet].countOfExhaustedHits++;
+    if (doesGenomeIndexHave64BitLocations) {
+        lookupListHead64->nextLookupWithRemainingMembers = lookupListHead64->prevLookupWithRemainingMembers = lookupListHead64;
+        lookupListHead32->nextLookupWithRemainingMembers = lookupListHead32->prevLookupWithRemainingMembers = NULL;
     } else {
-        _ASSERT(currentDisjointHitSet != -1);    // Essentially that beginsDisjointHitSet is set for the first recordLookup call
-        lookups[nLookupsUsed].currentHitForIntersection = 0;
-        lookups[nLookupsUsed].hits = hits;
-        lookups[nLookupsUsed].nHits = nHits;
-        lookups[nLookupsUsed].seedOffset = seedOffset;
-        lookups[nLookupsUsed].whichDisjointHitSet = currentDisjointHitSet;
-
-        //
-        // Trim off any hits that are smaller than seedOffset, since they are clearly meaningless.
-        //
-        while (lookups[nLookupsUsed].nHits > 0 && lookups[nLookupsUsed].hits[lookups[nLookupsUsed].nHits - 1] < lookups[nLookupsUsed].seedOffset) {
-            lookups[nLookupsUsed].nHits--;
-        }
-
-        //
-        // Add this lookup into the non-empty lookup list.
-        //
-        lookups[nLookupsUsed].prevLookupWithRemainingMembers = lookupListHead;
-        lookups[nLookupsUsed].nextLookupWithRemainingMembers = lookupListHead->nextLookupWithRemainingMembers;
-        lookups[nLookupsUsed].prevLookupWithRemainingMembers->nextLookupWithRemainingMembers = lookups[nLookupsUsed].nextLookupWithRemainingMembers->prevLookupWithRemainingMembers = &lookups[nLookupsUsed];
-
-        if (doAlignerPrefetch) {
-            _mm_prefetch((const char *)&lookups[nLookupsUsed].hits[lookups[nLookupsUsed].nHits / 2], _MM_HINT_T2);
-        }
-
-        nLookupsUsed++;
+        lookupListHead32->nextLookupWithRemainingMembers = lookupListHead32->prevLookupWithRemainingMembers = lookupListHead32;
+        lookupListHead64->nextLookupWithRemainingMembers = lookupListHead64->prevLookupWithRemainingMembers = NULL;
     }
 }
+
+
+//
+// I apologize for this, but I had to do two versions of recordLookup, one for the 32 bit and one for the 64 bit version.  The options were
+// copying the code or doing a macro with the types as parameters.  I chose macro, so you get ugly but unlikely to accidentally diverge.
+// At least it's just isolated to the HashTableHitSet class.
+//
+
+#define RL(lookups, glType, lookupListHead)                                                                                                                 \
+    void                                                                                                                                                    \
+IntersectingPairedEndAligner::HashTableHitSet::recordLookup(unsigned seedOffset, _int64 nHits, const glType *hits, bool beginsDisjointHitSet)               \
+{                                                                                                                                                           \
+    _ASSERT(nLookupsUsed < maxSeeds);                                                                                                                       \
+    if (beginsDisjointHitSet) {                                                                                                                             \
+        currentDisjointHitSet++;                                                                                                                            \
+        _ASSERT(currentDisjointHitSet < (int)maxSeeds);                                                                                                     \
+        disjointHitSets[currentDisjointHitSet].countOfExhaustedHits = 0;                                                                                    \
+    }                                                                                                                                                       \
+                                                                                                                                                            \
+    if (0 == nHits) {                                                                                                                                       \
+        disjointHitSets[currentDisjointHitSet].countOfExhaustedHits++;                                                                                      \
+    } else {                                                                                                                                                \
+        _ASSERT(currentDisjointHitSet != -1);    /* Essentially that beginsDisjointHitSet is set for the first recordLookup call */                         \
+        lookups[nLookupsUsed].currentHitForIntersection = 0;                                                                                                \
+        lookups[nLookupsUsed].hits = hits;                                                                                                                  \
+        lookups[nLookupsUsed].nHits = nHits;                                                                                                                \
+        lookups[nLookupsUsed].seedOffset = seedOffset;                                                                                                      \
+        lookups[nLookupsUsed].whichDisjointHitSet = currentDisjointHitSet;                                                                                  \
+                                                                                                                                                            \
+        /* Trim off any hits that are smaller than seedOffset, since they are clearly meaningless. */                                                       \
+                                                                                                                                                            \
+        while (lookups[nLookupsUsed].nHits > 0 && lookups[nLookupsUsed].hits[lookups[nLookupsUsed].nHits - 1] < lookups[nLookupsUsed].seedOffset) {         \
+            lookups[nLookupsUsed].nHits--;                                                                                                                  \
+        }                                                                                                                                                   \
+                                                                                                                                                            \
+        /* Add this lookup into the non-empty lookup list. */                                                                                               \
+                                                                                                                                                            \
+        lookups[nLookupsUsed].prevLookupWithRemainingMembers = lookupListHead;                                                                              \
+        lookups[nLookupsUsed].nextLookupWithRemainingMembers = lookupListHead->nextLookupWithRemainingMembers;                                              \
+        lookups[nLookupsUsed].prevLookupWithRemainingMembers->nextLookupWithRemainingMembers =                                                              \
+            lookups[nLookupsUsed].nextLookupWithRemainingMembers->prevLookupWithRemainingMembers = &lookups[nLookupsUsed];                                  \
+                                                                                                                                                            \
+        if (doAlignerPrefetch) {                                                                                                                            \
+            _mm_prefetch((const char *)&lookups[nLookupsUsed].hits[lookups[nLookupsUsed].nHits / 2], _MM_HINT_T2);                                          \
+        }                                                                                                                                                   \
+                                                                                                                                                            \
+        nLookupsUsed++;                                                                                                                                     \
+    }                                                                                                                                                       \
+}
+
+RL(lookups32, unsigned, lookupListHead32)
+RL(lookups64, GenomeLocation, lookupListHead64)
+
+#undef RL
+
 
 	unsigned
 IntersectingPairedEndAligner::HashTableHitSet::computeBestPossibleScoreForCurrentHit()
@@ -995,17 +1055,30 @@ IntersectingPairedEndAligner::HashTableHitSet::computeBestPossibleScoreForCurren
         disjointHitSets[i].missCount = disjointHitSets[i].countOfExhaustedHits;
     }
 
-	for (HashTableLookup *lookup = lookupListHead->nextLookupWithRemainingMembers; lookup != lookupListHead; lookup = lookup->nextLookupWithRemainingMembers) {
-		if (!(lookup->currentHitForIntersection != lookup->nHits &&
-				isWithin(lookup->hits[lookup->currentHitForIntersection], mostRecentLocationReturned + lookup->seedOffset,  maxMergeDistance) ||
-			lookup->currentHitForIntersection != 0 &&
-				isWithin(lookup->hits[lookup->currentHitForIntersection-1], mostRecentLocationReturned + lookup->seedOffset,  maxMergeDistance))) {
-			//
-			// This one was not close enough.
-			//
-			disjointHitSets[lookup->whichDisjointHitSet].missCount++;
-		}
+    //
+    // Another macro.  Sorry again.
+    //
+#define loop(glType, lookupListHead)                                                                                                                                \
+	for (HashTableLookup<glType> *lookup = lookupListHead->nextLookupWithRemainingMembers; lookup != lookupListHead;                                                \
+         lookup = lookup->nextLookupWithRemainingMembers) {                                                                                                         \
+                                                                                                                                                                    \
+		if (!(lookup->currentHitForIntersection != lookup->nHits &&                                                                                                 \
+				genomeLocationIsWithin(lookup->hits[lookup->currentHitForIntersection], mostRecentLocationReturned + lookup->seedOffset,  maxMergeDistance) ||      \
+			lookup->currentHitForIntersection != 0 &&                                                                                                               \
+				genomeLocationIsWithin(lookup->hits[lookup->currentHitForIntersection-1], mostRecentLocationReturned + lookup->seedOffset,  maxMergeDistance))) {   \
+                                                                                                                                                                    \
+			/* This one was not close enough. */                                                                                                                    \
+                                                                                                                                                                    \
+			disjointHitSets[lookup->whichDisjointHitSet].missCount++;                                                                                               \
+		}                                                                                                                                                           \
 	}
+
+    if (doesGenomeIndexHave64BitLocations) {
+        loop(GenomeLocation, lookupListHead64);
+    } else {
+        loop(unsigned, lookupListHead32);
+    }
+#undef loop
 
     unsigned bestPossibleScoreSoFar = 0;
     for (int i = 0; i <= currentDisjointHitSet; i++) {
@@ -1016,429 +1089,75 @@ IntersectingPairedEndAligner::HashTableHitSet::computeBestPossibleScoreForCurren
 }
 
 	bool
-IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(unsigned maxGenomeOffsetToFind, unsigned *actualGenomeOffsetFound, unsigned *seedOffsetFound)
+IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(GenomeLocation maxGenomeLocationToFind, GenomeLocation *actualGenomeLocationFound, unsigned *seedOffsetFound)
 {
-#if 0
-    //
-    // The verison of the code that searches each lookup serially.
-    //
-    bool anyFound = false;
-    unsigned bestOffsetFound = 0;
-	for (HashTableLookup *lookup = lookupListHead->nextLookupWithRemainingMembers; lookup != lookupListHead; lookup = lookup->nextLookupWithRemainingMembers) {
-        //
-        // Binary search from the current starting offset to either the right place or the end.
-        //
-        int limit[2] = {(int)lookup->currentHitForIntersection, (int)lookup->nHits - 1};
-        unsigned maxGenomeOffsetToFindThisSeed = maxGenomeOffsetToFind + lookup->seedOffset;
-        if (lookup->nHits != 0 && lookup->hits[lookup->nHits - 1] <= maxGenomeOffsetToFindThisSeed) {
-            for (;;) { // We don't need to check the loop exit condition (which is that limit[0] > limit[1]) becuase we'll always find an answer
-               _ASSERT(limit[0] <= limit[1]);
-               int probe = (limit[0] + limit[1]) / 2;
-                //
-                // Recall that the hit sets are sorted from largest to smallest, so the strange looking logic is actually right.
-                // We're evaluating the expression "lookups[i].hits[probe] <= maxGenomeOffsetToFindThisSeed && (probe == 0 || lookups[i].hits[probe-1] > maxGenomeOffsetToFindThisSeed)"
-                // We write it using no-branch logic to avoid branch predictor misses.
-                //
-
-                unsigned clause1 = (((_int64)lookup->hits[probe] - (_int64)maxGenomeOffsetToFindThisSeed - 1) >> 63) & 1; // equivalent to: lookups[i].hits[probe] <= maxGenomeOffsetToFindThisSeed;
-                _ASSERT((clause1 == 1) == (lookup->hits[probe] <= maxGenomeOffsetToFindThisSeed));
-
-                //
-                // Now compute probe == 0 || lookup->hits[probe-1] > maxGenomeOffsetToFindThisSeed.  We rely on the guarantee from
-                // lookupSeed that hits[-1] is valid memory (though with undefined contents).
-                //
-                unsigned clause2 = 1 - ((1 - (((probe - 1) >> 31) & 1)) * (((_int64)lookup->hits[probe-1] - 1 - (_int64)maxGenomeOffsetToFindThisSeed) >> 63) & 1);
-                _ASSERT((clause2 == 1) == (probe == 0 || lookup->hits[probe-1] > maxGenomeOffsetToFindThisSeed));
-
-                if (clause1 * clause2) {
-                    //
-                    // We're implementing the following code:
-                    // if (lookups[i].hits[probe] - lookups[i].seedOffset >  bestOffsetFound) {
-                    //    mostRecentLocationReturned = *actualGenomeOffsetFound = bestOffsetFound = lookups[i].hits[probe] - lookups[i].seedOffset;
-                    //    *seedOffsetFound = lookups[i].seedOffset;
-                    // }
-                    // using no-branch logic in order to avoid mispredicted branches.
-
-                    anyFound = true;
-
-                    unsigned seedOffset[2] = {lookup->seedOffset, *seedOffsetFound};
-                    unsigned mostRecentLocation[2] = {lookup->hits[probe] - lookup->seedOffset, mostRecentLocationReturned};
-                    //
-                    // Compute the difference between the two halves of the inequality in the normal version of the if statement, using
-                    // 64-bit numbers to store the 32 bit values.  The difference will be strictly positive if the left half of the
-                    // inequality is larger than the right half, zero if they're equal and strictly negative if the right half is
-                    // smaller than the left.  Subtracting one means that the value will be positive or zero if the left half
-                    // is greater, and strictly negative if the right half is greater or equal (which is the condition we're
-                    // trying to evaluate).
-                    //
-                    _int64 condition = (_int64)(lookup->hits[probe] - lookup->seedOffset) -  (_int64)bestOffsetFound - 1;
-
-                    //
-                    // Now grab the sign bit of "condition" and use it as an index into the arrays that we built with the two possible
-                    // sets of values.  Note that it's inverted relative to what you'd expect; 0 means true and 1 means false.
-                    //
-                    unsigned conditionBit = (condition >> 63) & 1;
-                    _ASSERT((conditionBit == 0) == (lookup->hits[probe] - lookup->seedOffset >  bestOffsetFound));   // i.e., that we did what we were supposed to do
-
-                    mostRecentLocationReturned = *actualGenomeOffsetFound = bestOffsetFound = mostRecentLocation[conditionBit];
-                    *seedOffsetFound = seedOffset[conditionBit];
-
-                    lookup->currentHitForIntersection = probe;
-                    break;
-                }
-
-                //
-                // The following branch-free logic encodes this:
-                //
-                //if (lookups[i].hits[probe] > maxGenomeOffsetToFindThisSeed) {
-                //    limit[0] = probe + 1;
-                //} else {
-                //    limit[1] = probe - 1;
-                // }
-                //
-
-                unsigned whichProbe = (((_int64)lookup->hits[probe] - 1 - (_int64)maxGenomeOffsetToFindThisSeed) >> 63) & 1;
-                _ASSERT(whichProbe == !(lookup->hits[probe] > maxGenomeOffsetToFindThisSeed));
-                limit[whichProbe] = probe + (-2 * whichProbe) + 1;
-            } // for ever
-
-            _ASSERT(limit[0] <= limit[1]);
-        } else {
-            //
-            // The smallest thing in lookups[i] was too big.  Remove it from the useful list.
-            //
-            lookup->currentHitForIntersection = lookup->nHits;
-            lookup->prevLookupWithRemainingMembers->nextLookupWithRemainingMembers = lookup->nextLookupWithRemainingMembers;
-            lookup->nextLookupWithRemainingMembers->prevLookupWithRemainingMembers = lookup->prevLookupWithRemainingMembers;
-            //
-            // Don't kill the pointers in lookup itself, the for loop iterator needs the next pointer.
-            //
-        }
-    } // For each lookup
-#elif 0
-    //
-    // This code does a binary search over the lookups in this hit set to find the greatest location that's not larger than
-    // maxGenomeOffsetToFind in any of the sets.  It is written in a very convoluted way because it's the performance
-    // critical contig of the inner loop of SNAP's paired-end aligner.  The code is designed to do two things: first, to avoid
-    // branch predictor misses (which flush the instruction pipeline and take a very long time), and second to avoid
-    // L2 cache misses looking into the hit sets.
-    //
-    // Avoiding branch predictor misses is done mostly by coding things that would normally be written as if statements
-    // as array references instead.  So for example, if we had if (a > b) x = y else x = z, we'd make an array of size
-    // 2 that had y and z as its values.  To turn a > b into an array index, we observe that a - 1 - b is positive if
-    // and only if a > b (we'd skip the -1 for a >= b), so we can subtact a from b and use bit manipulation to take the sign bit.  One has to be a little
-    // careful about overflow here, because if b >> a, then the difference will wrap and a - b will not have the sign bit
-    // set; to deal with this, we just cast to 64 bits.  I tried to stick in ASSERT statements to show what I was trying
-    // to compute in more human readable code.
-    //
-    // Avoiding cache misses is done by taking one step in each binary search, launching a prefetch for the probe of the next
-    // step, and then switching to the next binary search.  So, instead of doing the natural thing and doing all of the searche
-    // on lookup 0, then on lookup 1, etc., instead we interleave them to give the memory system time to do the prefectches.
-    //
-    if (lookupListHead->nextLookupWithRemainingMembers == lookupListHead) {
-        return false;
-    };
-
-    //
-    // Build the linked list of lookup candidates.  This list does NOT have a header element, so we need to
-    // be careful about how we build it (essentially special casing the first element).
-    // XXX Handle case where we need to eliminate a candidate (indluding the header) because it's not got any small enough elements (i.e., the if (lookup->nHits != 0 && lookup->hits[lookup->nHits - 1] <= maxGenomeOffsetToFindThisSeed) condition below)
-    HashTableLookup *lookupHeader = lookupListHead->nextLookupWithRemainingMembers;
-    lookupHeader->nextLookupForCurrentBinarySearch = lookupHeader->prevLookupForCurrentBinarySearch = lookupHeader;
-    lookupHeader->limit[0] = lookupHeader->currentHitForIntersection;
-    lookupHeader->limit[1] = (int)lookupHeader->nHits - 1;
-
-    //
-    // Launch a prefetch for the first probe in the first lookup.
-    //
-    _mm_prefetch((const char *)&lookupHeader->hits[(lookupHeader->limit[0] + lookupHeader->limit[1])/2-1], _MM_HINT_T2);
-
-    HashTableLookup *lookup;    // This could be in the loop, but the debugger gets the scoping wrong and makes it hard to follow if it is
-    for (HashTableLookup *lookup = lookupHeader->nextLookupWithRemainingMembers; lookupListHead != lookup; lookup = lookup->nextLookupWithRemainingMembers) {
-        //
-        // Decide whether this lookup is permanently done.
-        //
-        if (lookup->nHits == 0 || lookup->hits[lookup->nHits - 1] > maxGenomeOffsetToFind + lookup->seedOffset) {
-            //
-            // The smallest thing in lookup was too big.  Remove it from the useful list.  Leave its own pointers, because
-            // the loop iterator relies on them.
-            //
-            lookup->currentHitForIntersection = lookup->nHits;
-            lookup->prevLookupWithRemainingMembers->nextLookupWithRemainingMembers = lookup->nextLookupWithRemainingMembers;
-            lookup->nextLookupWithRemainingMembers->prevLookupWithRemainingMembers = lookup->prevLookupWithRemainingMembers;
-            disjointHitSets[lookup->whichDisjointHitSet].countOfExhaustedHits++;
-        } else {
-            lookup->nextLookupForCurrentBinarySearch = lookupHeader;
-            lookup->prevLookupForCurrentBinarySearch = lookupHeader->prevLookupForCurrentBinarySearch;
-            lookup->nextLookupForCurrentBinarySearch = lookupHeader;
-            lookup->nextLookupForCurrentBinarySearch->prevLookupForCurrentBinarySearch = lookup;
-            lookup->prevLookupForCurrentBinarySearch->nextLookupForCurrentBinarySearch = lookup;
-            lookup->limit[0] = lookup->currentHitForIntersection;
-            lookup->limit[1] = (int)lookup->nHits - 1;
-
-            if (doAlignerPrefetch) {
-                //
-                // Launch a prefetch for the first probe in this lookup.
-                //
-                _mm_prefetch((const char *)&lookup->hits[(lookup->limit[0] + lookup->limit[1]) / 2-1], _MM_HINT_T2);
-            }
-        }
-    };
-
-    //
-    // Check to see if we should remove the lookup header because it has no useful entries.  This unfortunate contig of
-    // code is necesary because I chose to have a linked list with no header element in order to avoid having to test
-    // for the header in the main loop below.
-    //
-    if (lookupHeader->nHits == 0 || lookupHeader->hits[lookupHeader->nHits - 1] > maxGenomeOffsetToFind + lookupHeader->seedOffset) {
-         lookupHeader->currentHitForIntersection = lookupHeader->nHits;
-         lookupHeader->nextLookupWithRemainingMembers->prevLookupWithRemainingMembers = lookupHeader->prevLookupWithRemainingMembers;
-         lookupHeader->prevLookupWithRemainingMembers->nextLookupWithRemainingMembers = lookupHeader->nextLookupWithRemainingMembers;
-         disjointHitSets[lookupHeader->whichDisjointHitSet].countOfExhaustedHits++;
-
-         if (lookupHeader->nextLookupForCurrentBinarySearch == lookupHeader) {
-             return false;
-         }
-
-         lookupHeader->nextLookupForCurrentBinarySearch->prevLookupForCurrentBinarySearch = lookupHeader->prevLookupForCurrentBinarySearch;
-         lookupHeader->prevLookupForCurrentBinarySearch->nextLookupForCurrentBinarySearch = lookupHeader->nextLookupForCurrentBinarySearch;
-
-         _ASSERT(lookupHeader->nextLookupForCurrentBinarySearch != lookupHeader);   // Else we would have exited above
-         lookupHeader = lookupHeader->nextLookupForCurrentBinarySearch;
-    }
-
 
     bool anyFound = false;
-    unsigned bestOffsetFound = 0;
-    lookup = lookupHeader;
-    for (;;) {
-        //
-        // Each iteration of this loop is one probe in one of the searches for the
-        //
-        unsigned maxGenomeOffsetToFindThisSeed = maxGenomeOffsetToFind + lookup->seedOffset;
-        _ASSERT(!(lookup->nHits == 0 || lookup->hits[lookup->nHits - 1] > maxGenomeOffsetToFindThisSeed));
-        _ASSERT(lookup->limit[0] <= lookup->limit[1]);
-        int probe = (lookup->limit[0] + lookup->limit[1]) / 2;
-        //
-        // Recall that the hit sets are sorted from largest to smallest, so the strange looking logic is actually right.
-        // We're evaluating the expression "lookups[i].hits[probe] <= maxGenomeOffsetToFindThisSeed && (probe == 0 || lookups[i].hits[probe-1] > maxGenomeOffsetToFindThisSeed)"
-        // We write it using no-branch logic to avoid branch predictor misses.
-        //
-
-        unsigned clause1 = getSignBit64((_int64)lookup->hits[probe] - (_int64)maxGenomeOffsetToFindThisSeed - 1);
-        _ASSERT((clause1 == 1) == (lookup->hits[probe] <= maxGenomeOffsetToFindThisSeed));
-
-        //
-        // Now compute probe == 0 || lookup->hits[probe-1] > maxGenomeOffsetToFindThisSeed.  We rely on the guarantee from
-        // lookupSeed that hits[-1] is valid memory (though with undefined contents).
-        //
-        unsigned clause2 = 1 - ((1 - getSignBit32(probe - 1)) * getSignBit64((_int64)lookup->hits[probe-1] - 1 - (_int64)maxGenomeOffsetToFindThisSeed));
-        _ASSERT((clause2 == 1) == (probe == 0 || lookup->hits[probe-1] > maxGenomeOffsetToFindThisSeed));
-
-        if (clause1 * clause2) {
-            //
-            // The human-readable version of this code is:
-            // if (lookups[i].hits[probe] - lookups[i].seedOffset >  bestOffsetFound) {
-            //    mostRecentLocationReturned = *actualGenomeOffsetFound = bestOffsetFound = lookups[i].hits[probe] - lookups[i].seedOffset;
-            //    *seedOffsetFound = lookups[i].seedOffset;
-            // }
-            // remove lookup from the list for this search
-            //
-
-            anyFound = true;
-
-            unsigned seedOffset[2] = {lookup->seedOffset, *seedOffsetFound};
-            unsigned mostRecentLocation[2] = {lookup->hits[probe] - lookup->seedOffset, mostRecentLocationReturned};
-
-            _int64 condition = getSignBit64((_int64)(lookup->hits[probe] - lookup->seedOffset) -  (_int64)bestOffsetFound - 1);
-
-            _ASSERT((condition == 0) == (lookup->hits[probe] - lookup->seedOffset >  bestOffsetFound));
-
-            mostRecentLocationReturned = *actualGenomeOffsetFound = bestOffsetFound = mostRecentLocation[condition];
-            *seedOffsetFound = seedOffset[condition];
-
-            lookup->currentHitForIntersection = probe;
-
-            //
-            // Remove this lookup from the list for the current search.
-            //
-            if (lookup->nextLookupForCurrentBinarySearch == lookup) {
-                //
-                // We're now done with all of the lookups, and hence this search.
-                //
-                break;
-            } else {
-                lookup->prevLookupForCurrentBinarySearch->nextLookupForCurrentBinarySearch = lookup->nextLookupForCurrentBinarySearch;
-                lookup->nextLookupForCurrentBinarySearch->prevLookupForCurrentBinarySearch = lookup->prevLookupForCurrentBinarySearch;
-                lookup = lookup->nextLookupForCurrentBinarySearch;
-            }
-        } else {
-
-            //
-            // The following branch-free logic encodes this:
-            //
-            //if (lookups[i].hits[probe] > maxGenomeOffsetToFindThisSeed) {
-            //    limit[0] = probe + 1;
-            //} else {
-            //    limit[1] = probe - 1;
-            // }
-            //
-
-            unsigned whichProbe = getSignBit64((_int64)lookup->hits[probe] - 1 - (_int64)maxGenomeOffsetToFindThisSeed);
-            _ASSERT(whichProbe == !(lookup->hits[probe] > maxGenomeOffsetToFindThisSeed));
-            lookup->limit[whichProbe] = probe + (-2 * whichProbe) + 1;
-
-            _ASSERT(lookup->limit[0] <= lookup->limit[1]);
-
-            //
-            // And finally the entire point of this tortured control flow.
-            //
-            if (doAlignerPrefetch) {
-                _mm_prefetch((const char *)&lookup->hits[(lookup->limit[0] + lookup->limit[1])/2-1], _MM_HINT_T2);
-            }
-
-            //
-            // Move on to take one step from the next binary search.
-            //
-            lookup = lookup->nextLookupForCurrentBinarySearch;
-        }
-    } // For ever
-#elif   0
-    //
-    // Version that interleaves the steps in each search so that it can launch prefetches farther ahead.  Essentially just the
-    // the simple version with the outer loops reversed.
-    //
-    bool anyFound = false;
-    unsigned bestOffsetFound = 0;
-    unsigned nLiveLookups = 0;
-
-    //
-    // The state of the binary search is stored in each lookup object.  Initialize them, and kick off prefetches
-    // for each of their first locations to be tested.
-    //
-    for (unsigned i = 0; i < nLookupsUsed; i++) {
-        lookups[i].limit[0] = (int)lookups[i].currentHitForIntersection;
-        lookups[i].limit[1] = (int)lookups[i].nHits - 1;
-
-        if (lookups[i].limit[0] <= lookups[i].limit[1]) {
-            liveLookups[nLiveLookups] = i;
-            nLiveLookups++;
-
-            if (doAlignerPrefetch) {
-                _mm_prefetch((const char *)&lookups[i].hits[(lookups[i].limit[0] + lookups[i].limit[1])/2-1], _MM_HINT_T1);
-            }
-        }
-    }
-
-    if (nLookupsUsed == 0) {
-        return false;
-    }
-
-
-    unsigned i = 0;
-    for (;;) {
-        HashTableLookup *lookup = &lookups[liveLookups[i]];
-        _ASSERT(lookup->limit[0] <= lookup->limit[1]);  // else it shoulnd't be live
-
-        //
-        // We could store these in the lookup object rather than recomputing them every time.
-        //
-        int probe = (lookup->limit[0] + lookup->limit[1]) / 2;
-        unsigned maxGenomeOffsetToFindThisSeed = maxGenomeOffsetToFind + lookup->seedOffset;
-        //
-        // Recall that the hit sets are sorted from largest to smallest, so the strange looking logic is actually right.
-        // We're evaluating the expression "lookup->hits[probe] <= maxGenomeOffsetToFindThisSeed && (probe == 0 || lookup->hits[probe-1] > maxGenomeOffsetToFindThisSeed)"
-        // It's written in this strange way just so the profile tool will show us where the time's going.
-        //
-        unsigned clause1 = lookup->hits[probe] <= maxGenomeOffsetToFindThisSeed;
-        unsigned clause2 = probe == 0;
-
-        if (clause1 && (clause2 || lookup->hits[probe-1] > maxGenomeOffsetToFindThisSeed)) {
-            //
-            // Done with this lookup.
-            //
-            if (lookup->hits[probe] - lookup->seedOffset >  bestOffsetFound) {
-				anyFound = true;
-                mostRecentLocationReturned = *actualGenomeOffsetFound = bestOffsetFound = lookup->hits[probe] - lookup->seedOffset;
-                *seedOffsetFound = lookup->seedOffset;
-            }
-            lookup->currentHitForIntersection = probe;
-
-            //
-            // Remove us from liveLookups by copying the last one into our spot and reducing the count.
-            //
-            liveLookups[i] = liveLookups[nLiveLookups-1];
-
-            nLiveLookups--;
-            if (nLiveLookups == 0) {
-                break;
-            }
-            i = i % nLiveLookups;
-         } else {
-            if (lookup->hits[probe] > maxGenomeOffsetToFindThisSeed) {   // Recode this without the if to avoid the hard-to-predict branch.
-                lookup->limit[0] = probe + 1;
-            } else {
-                lookup->limit[1] = probe - 1;
-            }
-
-            if (lookup->limit[0] > lookup->limit[1]) {
-                //
-                // No hit here, done with this lookup.
-                //
-                // Remove us from liveLookups by copying the last one into our spot and reducing the count.
-                //
-                lookup->currentHitForIntersection = lookup->nHits;
-
-                liveLookups[i] = liveLookups[nLiveLookups-1];
-                nLiveLookups--;
-                if (nLiveLookups == 0) {
-                    break;
-                }
-                i = i % nLiveLookups;
-
-            } else {
-                if (doAlignerPrefetch) {
-                    _mm_prefetch((const char *)&lookup->hits[(lookup->limit[0] + lookup->limit[1]) / 2 - 1], _MM_HINT_T2);   // -1 is because we look one before probe in the test-for-done case.
-                }
-                i = (i + 1) % nLiveLookups;
-            }
-        } // If this was the right candidate for this lookup.
-     }
-
-#else   // The traditional version
-    bool anyFound = false;
-    unsigned bestOffsetFound = 0;
+    GenomeLocation bestLocationFound = 0;
     for (unsigned i = 0; i < nLookupsUsed; i++) {
         //
         // Binary search from the current starting offset to either the right place or the end.
         //
-        int limit[2] = {(int)lookups[i].currentHitForIntersection, (int)lookups[i].nHits - 1};
-        unsigned maxGenomeOffsetToFindThisSeed = maxGenomeOffsetToFind + lookups[i].seedOffset;
+        _int64 limit[2];
+        GenomeLocation maxGenomeLocationToFindThisSeed;
+
+        if (doesGenomeIndexHave64BitLocations) {
+            limit[0] = (_int64)lookups64[i].currentHitForIntersection;
+            limit[1] = (_int64)lookups64[i].nHits - 1;
+            maxGenomeLocationToFindThisSeed = maxGenomeLocationToFind + lookups64[i].seedOffset;
+        } else {
+            limit[0] = (_int64)lookups32[i].currentHitForIntersection;
+            limit[1] = (_int64)lookups32[i].nHits - 1;
+            maxGenomeLocationToFindThisSeed = maxGenomeLocationToFind + lookups32[i].seedOffset;
+        }
+ 
         while (limit[0] <= limit[1]) {
-            unsigned probe = (limit[0] + limit[1]) / 2;
+            _int64 probe = (limit[0] + limit[1]) / 2;
             if (doAlignerPrefetch) { // not clear this helps.  We're probably not far enough ahead.
-                _mm_prefetch((const char *)&lookups[i].hits[(limit[0] + probe) / 2 - 1], _MM_HINT_T2);
-                _mm_prefetch((const char *)&lookups[i].hits[(limit[1] + probe) / 2 + 1], _MM_HINT_T2);
+                if (doesGenomeIndexHave64BitLocations) {
+                    _mm_prefetch((const char *)&lookups64[i].hits[(limit[0] + probe) / 2 - 1], _MM_HINT_T2);
+                    _mm_prefetch((const char *)&lookups64[i].hits[(limit[1] + probe) / 2 + 1], _MM_HINT_T2);
+                } else {
+                    _mm_prefetch((const char *)&lookups32[i].hits[(limit[0] + probe) / 2 - 1], _MM_HINT_T2);
+                    _mm_prefetch((const char *)&lookups32[i].hits[(limit[1] + probe) / 2 + 1], _MM_HINT_T2);
+                }
             }
             //
             // Recall that the hit sets are sorted from largest to smallest, so the strange looking logic is actually right.
             // We're evaluating the expression "lookups[i].hits[probe] <= maxGenomeOffsetToFindThisSeed && (probe == 0 || lookups[i].hits[probe-1] > maxGenomeOffsetToFindThisSeed)"
             // It's written in this strange way just so the profile tool will show us where the time's going.
             //
-            unsigned clause1 = lookups[i].hits[probe] <= maxGenomeOffsetToFindThisSeed;
+            GenomeLocation probeHit;
+            GenomeLocation probeMinusOneHit;
+            unsigned seedOffset;
+            if (doesGenomeIndexHave64BitLocations) {
+                probeHit = lookups64[i].hits[probe];
+                probeMinusOneHit = lookups64[i].hits[probe-1];
+                seedOffset = lookups64[i].seedOffset;
+            } else {
+                probeHit = lookups32[i].hits[probe];
+                probeMinusOneHit = lookups32[i].hits[probe-1];
+                seedOffset = lookups32[i].seedOffset;
+            }
+            unsigned clause1 =  probeHit <= maxGenomeLocationToFindThisSeed;
             unsigned clause2 = probe == 0;
 
-            if (clause1 && (clause2 || lookups[i].hits[probe-1] > maxGenomeOffsetToFindThisSeed)) {
-                if (lookups[i].hits[probe] - lookups[i].seedOffset >  bestOffsetFound) {
+            if (clause1 && (clause2 || probeMinusOneHit > maxGenomeLocationToFindThisSeed)) {
+                if (probeHit - seedOffset > bestLocationFound) {
 					anyFound = true;
-                    mostRecentLocationReturned = *actualGenomeOffsetFound = bestOffsetFound = lookups[i].hits[probe] - lookups[i].seedOffset;
-                    *seedOffsetFound = lookups[i].seedOffset;
+                    mostRecentLocationReturned = *actualGenomeLocationFound = bestLocationFound = probeHit - seedOffset;
+                    *seedOffsetFound = seedOffset;
                 }
-                lookups[i].currentHitForIntersection = probe;
+
+                if (doesGenomeIndexHave64BitLocations) {
+                    lookups64[i].currentHitForIntersection = probe;
+                } else {
+                    lookups32[i].currentHitForIntersection = probe;
+                }
                 break;
             }
 
-            if (lookups[i].hits[probe] > maxGenomeOffsetToFindThisSeed) {   // Recode this without the if to avoid the hard-to-predict branch.
+            if (probeHit > maxGenomeLocationToFindThisSeed) {   // Recode this without the if to avoid the hard-to-predict branch.
                 limit[0] = probe + 1;
             } else {
                 limit[1] = probe - 1;
@@ -1446,58 +1165,109 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(unsig
         } // While we're looking
 
         if (limit[0] > limit[1]) {
-            lookups[i].currentHitForIntersection = lookups[i].nHits;    // We're done with this lookup.
+            // We're done with this lookup.
+            if (doesGenomeIndexHave64BitLocations) {
+                lookups64[i].currentHitForIntersection = lookups64[i].nHits;    
+            } else {
+                lookups32[i].currentHitForIntersection = lookups32[i].nHits;
+            }
         }
     } // For each lookup
-#endif  // 0
-    _ASSERT(!anyFound || *actualGenomeOffsetFound <= maxGenomeOffsetToFind);
+
+    _ASSERT(!anyFound || *actualGenomeLocationFound <= maxGenomeLocationToFind);
 
     return anyFound;
 }
 
 
     bool
-IntersectingPairedEndAligner::HashTableHitSet::getFirstHit(unsigned *genomeLocation, unsigned *seedOffsetFound)
+IntersectingPairedEndAligner::HashTableHitSet::getFirstHit(GenomeLocation *genomeLocation, unsigned *seedOffsetFound)
 {
     bool anyFound = false;
     *genomeLocation = 0;
-    for (unsigned i = 0; i < nLookupsUsed; i++) {
-        if (lookups[i].nHits > 0 && lookups[i].hits[0] - lookups[i].seedOffset > *genomeLocation) {
-            mostRecentLocationReturned = *genomeLocation = lookups[i].hits[0] - lookups[i].seedOffset;
-            *seedOffsetFound = lookups[i].seedOffset;
-            anyFound = true;
-        }
+
+    //
+    // Yet another macro.  This makes me want to write in a better language sometimes.  But then it would be too slow.  :-(
+    //
+
+#define LOOP(lookups)                                                                                                                       \
+    for (unsigned i = 0; i < nLookupsUsed; i++) {                                                                                           \
+        if (lookups[i].nHits > 0 && lookups[i].hits[0] - lookups[i].seedOffset > GenomeLocationAsInt64(*genomeLocation)) {                  \
+            mostRecentLocationReturned = *genomeLocation = lookups[i].hits[0] - lookups[i].seedOffset;                                      \
+            *seedOffsetFound = lookups[i].seedOffset;                                                                                       \
+            anyFound = true;                                                                                                                \
+        }                                                                                                                                   \
     }
 
-	return anyFound;
+    if (doesGenomeIndexHave64BitLocations) {
+        LOOP(lookups64);
+    } else {
+        LOOP(lookups32);
+    }
+
+#undef LOOP
+
+	return !anyFound;
 }
 
     bool
-IntersectingPairedEndAligner::HashTableHitSet::getNextLowerHit(unsigned *genomeLocation, unsigned *seedOffsetFound)
+IntersectingPairedEndAligner::HashTableHitSet::getNextLowerHit(GenomeLocation *genomeLocation, unsigned *seedOffsetFound)
 {
     //
     // Look through all of the lookups and find the one with the highest location smaller than the current one.
     //
-    unsigned foundLocation = 0;
+    GenomeLocation foundLocation = 0;
     bool anyFound = false;
 
     //
     // Run through the lookups pushing up any that are at the most recently returned
     //
-    for (unsigned i = 0; i < nLookupsUsed; i++) {
-        _ASSERT(lookups[i].currentHitForIntersection == lookups[i].nHits || lookups[i].hits[lookups[i].currentHitForIntersection] - lookups[i].seedOffset <= mostRecentLocationReturned ||
-            lookups[i].hits[lookups[i].currentHitForIntersection] < lookups[i].seedOffset);
 
-        if (lookups[i].currentHitForIntersection != lookups[i].nHits && lookups[i].hits[lookups[i].currentHitForIntersection] - lookups[i].seedOffset == mostRecentLocationReturned) {
-            lookups[i].currentHitForIntersection++;
+    for (unsigned i = 0; i < nLookupsUsed; i++) {
+        _int64 *currentHitForIntersection;
+        _int64 nHits;
+        GenomeLocation hitLocation;
+        unsigned seedOffset;
+
+        //
+        // A macro to initialize stuff that we need to avoid a bigger macro later.
+        //
+#define initVars(lookups)                                                                                               \
+        currentHitForIntersection = &lookups[i].currentHitForIntersection;                                              \
+        nHits = lookups[i].nHits;                                                                                       \
+        seedOffset = lookups[i].seedOffset;                                                                             \
+        if (nHits != *currentHitForIntersection) {                                                                      \
+            hitLocation = lookups[i].hits[*currentHitForIntersection];                                                  \
         }
 
-        if (lookups[i].currentHitForIntersection != lookups[i].nHits) {
-            if (foundLocation < lookups[i].hits[lookups[i].currentHitForIntersection] - lookups[i].seedOffset && // found location is OK
-                lookups[i].hits[lookups[i].currentHitForIntersection] >= lookups[i].seedOffset) // found location isn't too small to push us before the beginning of the genome
+
+        if (doesGenomeIndexHave64BitLocations) {
+            initVars(lookups64);
+        } else {
+            initVars(lookups32);
+        }
+#undef  initVars
+
+        _ASSERT(*currentHitForIntersection == nHits || hitLocation - seedOffset <= mostRecentLocationReturned || hitLocation < seedOffset);
+
+        if (*currentHitForIntersection != nHits && hitLocation - seedOffset == mostRecentLocationReturned) {
+            (*currentHitForIntersection)++;
+            if (*currentHitForIntersection == nHits) {
+                continue;
+            }
+            if (doesGenomeIndexHave64BitLocations) {
+                hitLocation = lookups64[i].hits[*currentHitForIntersection];
+            } else {
+                hitLocation = lookups32[i].hits[*currentHitForIntersection];
+            }
+        }
+
+        if (*currentHitForIntersection != nHits) {
+            if (foundLocation < hitLocation - seedOffset && // found location is OK
+                hitLocation >= seedOffset) // found location isn't too small to push us before the beginning of the genome
             {
-                *genomeLocation = foundLocation = lookups[i].hits[lookups[i].currentHitForIntersection] - lookups[i].seedOffset;
-                *seedOffsetFound = lookups[i].seedOffset;
+                *genomeLocation = foundLocation = hitLocation - seedOffset;
+                *seedOffsetFound = seedOffset;
                 anyFound = true;
             }
         }
@@ -1511,7 +1281,7 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextLowerHit(unsigned *genomeL
 }
 
             bool
-IntersectingPairedEndAligner::MergeAnchor::checkMerge(unsigned newMoreHitLocation, unsigned newFewerHitLocation, double newMatchProbability, int newPairScore,
+IntersectingPairedEndAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation, double newMatchProbability, int newPairScore,
                         double *oldMatchProbability)
 {
     if (locationForReadWithMoreHits == InvalidGenomeLocation || !doesRangeMatch(newMoreHitLocation, newFewerHitLocation)) {

@@ -25,7 +25,6 @@ Revision History:
 #pragma once
 #include "stdafx.h"
 #include "Genome.h"
-#include "Range.h"
 #include "RangeSplitter.h"
 #include "AlignerOptions.h"
 #include "AlignerStats.h"
@@ -111,8 +110,8 @@ public:
     unsigned                             maxDist;
     unsigned                             numSeedsFromCommandLine;
     double                               seedCoverage;
+    unsigned                             minWeightToCheck;
     int                                  maxHits;
-    bool                                 computeError;
     bool                                 detailedStats;
     ReadClippingType                     clipping;
     unsigned                             extraSearchDepth;
@@ -122,7 +121,10 @@ public:
     FILE                                *perfFile;
     bool                                 noUkkonen;
     bool                                 noOrderedEvaluation;
-    int                                  maxSecondaryAligmmentAdditionalEditDistance;
+	bool								 noTruncation;
+    int                                  maxSecondaryAlignmentAdditionalEditDistance;
+	int									 maxSecondaryAlignments;
+	unsigned							 minReadLength;
 
 
     // iteration variables

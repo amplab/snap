@@ -39,23 +39,26 @@ using namespace std;
 #endif
 
 ChimericPairedEndAligner::ChimericPairedEndAligner(
-        GenomeIndex         *index,
+        GenomeIndex         *index_,
         unsigned            maxReadSize,
         unsigned            maxHits,
         unsigned            maxK,
         unsigned            maxSeedsFromCommandLine,
         double              seedCoverage,
+		unsigned            minWeightToCheck,
         bool                forceSpacing_,
         unsigned            extraSearchDepth,
         bool                noUkkonen,
         bool                noOrderedEvaluation,
+		bool				noTruncation,
        PairedEndAligner    *underlyingPairedEndAligner_,
+	   unsigned				minReadLength_,
         BigAllocator        *allocator)
- :  underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), lv(0), reverseLV(0)
+		: underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_)
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
-                                    maxSeedsFromCommandLine,  seedCoverage, extraSearchDepth, noUkkonen, noOrderedEvaluation, &lv, &reverseLV, NULL, allocator);
+                                    maxSeedsFromCommandLine,  seedCoverage, minWeightToCheck,extraSearchDepth, noUkkonen, noOrderedEvaluation, noTruncation, &lv, &reverseLV, NULL, allocator);
     
     underlyingPairedEndAligner->setLandauVishkin(&lv, &reverseLV);
 
@@ -107,38 +110,52 @@ void ChimericPairedEndAligner::align(
     *nSingleEndSecondaryResultsForFirstRead = 0;
     *nSingleEndSecondaryResultsForSecondRead = 0;
 
-     if (read0->getDataLength() < 50 && read1->getDataLength() < 50) {
+	if (read0->getDataLength() < minReadLength && read1->getDataLength() < minReadLength) {
         TRACE("Reads are both too short -- returning");
-        return;
+		for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+			result->location[whichRead] = 0;
+			result->mapq[whichRead] = 0;
+			result->score[whichRead] = 0;
+			result->status[whichRead] = NotFound;
+		}
+		result->alignedAsPair = false;
+		result->fromAlignTogether = false;
+		result->nanosInAlignTogether = 0;
+		result->nLVCalls = 0;
+		result->nSmallHits = 0;
+		return;
     }
 
     _int64 start = timeInNanos();
-    //
-    // Let the LVs use the cache that we built up.
-    //
-    underlyingPairedEndAligner->align(read0, read1, result, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults, 
-        singleSecondaryBufferSize, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead, singleEndSecondaryResults);
-    _int64 end = timeInNanos();
+	if (read0->getDataLength() >= minReadLength && read1->getDataLength() >= minReadLength) {
+		//
+		// Let the LVs use the cache that we built up.
+		//
+		underlyingPairedEndAligner->align(read0, read1, result, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults,
+			singleSecondaryBufferSize, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead, singleEndSecondaryResults);
+		_int64 end = timeInNanos();
 
-    result->nanosInAlignTogether = end - start;
-    result->fromAlignTogether = true;
-    result->alignedAsPair = true;
+		result->nanosInAlignTogether = end - start;
+		result->fromAlignTogether = true;
+		result->alignedAsPair = true;
 
-    if (forceSpacing) {
-        if (result->status[0] == NotFound) {
-            result->fromAlignTogether = false;
-        } else {
-            _ASSERT(result->status[1] != NotFound); // If one's not found, so is the other
-        }
-        return;
-    }
+		if (forceSpacing) {
+			if (result->status[0] == NotFound) {
+				result->fromAlignTogether = false;
+			}
+			else {
+				_ASSERT(result->status[1] != NotFound); // If one's not found, so is the other
+			}
+			return;
+		}
 
-    if (result->status[0] != NotFound && result->status[1] != NotFound) {
-        //
-        // Not a chimeric read.
-        //
-        return;
-    }
+		if (result->status[0] != NotFound && result->status[1] != NotFound) {
+			//
+			// Not a chimeric read.
+			//
+			return;
+		}
+	}
 
     //
     // If the intersecting aligner didn't find an alignment for these reads, then they may be
@@ -151,18 +168,26 @@ void ChimericPairedEndAligner::align(
         SingleAlignmentResult singleResult;
         int singleEndSecondaryResultsThisTime = 0;
 
-        // We're using *nSingleEndSecondaryResultsForFirstRead because it's either 0 or what all we've seen (i.e., we know NUM_READS_PER_PAIR is 2)
-        singleAligner->AlignRead(read[r], &singleResult, maxEditDistanceForSecondaryResults, 
-            singleSecondaryBufferSize - *nSingleEndSecondaryResultsForFirstRead, &singleEndSecondaryResultsThisTime, 
-            singleEndSecondaryResults + *nSingleEndSecondaryResultsForFirstRead);   
+		if (read[r]->getDataLength() < minReadLength) {
+			result->status[r] = NotFound;
+			result->mapq[r] = 0;
+			result->direction[r] = FORWARD;
+			result->location[r] = 0;
+			result->score[r] = 0;
+		} else {
+			// We're using *nSingleEndSecondaryResultsForFirstRead because it's either 0 or what all we've seen (i.e., we know NUM_READS_PER_PAIR is 2)
+			singleAligner->AlignRead(read[r], &singleResult, maxEditDistanceForSecondaryResults,
+				singleSecondaryBufferSize - *nSingleEndSecondaryResultsForFirstRead, &singleEndSecondaryResultsThisTime,
+				singleEndSecondaryResults + *nSingleEndSecondaryResultsForFirstRead);
 
-        *(resultCount[r]) = singleEndSecondaryResultsThisTime;
+			*(resultCount[r]) = singleEndSecondaryResultsThisTime;
 
-        result->status[r] = singleResult.status;
-        result->mapq[r] = singleResult.mapq/3;   // Heavy quality penalty for chimeric reads
-        result->direction[r] = singleResult.direction;
-        result->location[r] = singleResult.location;
-        result->score[r] = singleResult.score;
+			result->status[r] = singleResult.status;
+			result->mapq[r] = singleResult.mapq / 3;   // Heavy quality penalty for chimeric reads
+			result->direction[r] = singleResult.direction;
+			result->location[r] = singleResult.location;
+			result->score[r] = singleResult.score;
+		}
     }
 
     result->fromAlignTogether = false;

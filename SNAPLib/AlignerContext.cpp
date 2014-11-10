@@ -181,7 +181,7 @@ AlignerContext::initialize()
  
             fflush(stdout);
             _int64 loadStart = timeInMillis();
-            index = GenomeIndex::loadFromDirectory((char*) options->indexDir);
+            index = GenomeIndex::loadFromDirectory((char*) options->indexDir, options->mapIndex, options->prefetchIndex);
             if (index == NULL) {
                 WriteErrorMessage("Index load failed, aborting.\n");
                 soft_exit(1);
@@ -275,7 +275,15 @@ AlignerContext::initialize()
     extraSearchDepth = options->extraSearchDepth;
     noUkkonen = options->noUkkonen;
     noOrderedEvaluation = options->noOrderedEvaluation;
-    maxSecondaryAligmmentAdditionalEditDistance = options->maxSecondaryAligmmentAdditionalEditDistance;
+	noTruncation = options->noTruncation;
+    maxSecondaryAlignmentAdditionalEditDistance = options->maxSecondaryAlignmentAdditionalEditDistance;
+	maxSecondaryAlignments = options->maxSecondaryAlignments;
+	minReadLength = options->minReadLength;
+
+	if (index != NULL && (int)minReadLength < index->getSeedLength()) {
+		WriteErrorMessage("The min read length (%d) must be at least the seed length (%d), or there's no hope of aligning reads that short.\n", minReadLength, index->getSeedLength());
+		soft_exit(1);
+	}
 
     if (options->perfFileName != NULL) {
         perfFile = fopen(options->perfFileName,"a");
@@ -291,7 +299,7 @@ AlignerContext::initialize()
     void
 AlignerContext::printStatsHeader()
 {
-    WriteStatusMessage("MaxHits\tMaxDist\t%%Used\t%%Unique\t%%Multi\t%%!Found\t%%Error\t%%Pairs\tlvCalls\tNumReads\tReads/s\n");
+    WriteStatusMessage("MaxHits\tMaxDist\t%%Used\t%%Unique\t%%Multi\t%%!Found\t%%Pairs\tlvCalls\tNumReads\tReads/s\n");
 }
 
     void
@@ -301,12 +309,12 @@ AlignerContext::beginIteration()
     alignStart = timeInMillis();
     clipping = options->clipping;
     totalThreads = options->numThreads;
-    computeError = options->computeError;
     bindToProcessors = options->bindToProcessors;
     maxDist = maxDist_;
     maxHits = maxHits_;
     numSeedsFromCommandLine = options->numSeedsFromCommandLine;
     seedCoverage = options->seedCoverage;
+    minWeightToCheck = options->minWeightToCheck;
     if (stats != NULL) {
         delete stats;
     }
@@ -340,10 +348,11 @@ AlignerContext::beginIteration()
             WriteErrorMessage("AlignerContext::beginIteration(): unknown file type %d for '%s'\n", options->outputFile.fileType, options->outputFile.fileName);
             soft_exit(1);
         }
+        format->setupReaderContext(options, &readerContext);
 
         writerSupplier = format->getWriterSupplier(options, readerContext.genome, readerContext.transcriptome, readerContext.gtf);
         ReadWriter* headerWriter = writerSupplier->getWriter();
-        headerWriter->writeHeader(readerContext, options->sortOutput, argc, argv, version, options->rgLineContents);
+        headerWriter->writeHeader(readerContext, options->sortOutput, argc, argv, version, options->rgLineContents, options->outputFile.omitSQLines);
         headerWriter->close();
         delete headerWriter;
     }
@@ -377,52 +386,35 @@ AlignerContext::nextIteration()
 AlignerContext::printStats()
 {
     double usefulReads = max((double) stats->usefulReads, 1.0);
-    char errorRate[16];
-    if (options->computeError) {
-        _int64 numSingle = max(stats->singleHits, (_int64) 1);
-        snprintf(errorRate, sizeof(errorRate), "%0.3f%%", (100.0 * stats->errors) / numSingle);
-    } else {
-        snprintf(errorRate, sizeof(errorRate), "-");
-    }
-    WriteStatusMessage("%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%lld\t%lld\t%.0f (at: %lld)\n",
-            maxHits_, maxDist_, 
+
+    WriteStatusMessage("%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%lld\t%lld\t%.0f (at: %lld)\n",
+            maxHits_, 
+            maxDist_, 
             100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
             100.0 * stats->singleHits / usefulReads,
             100.0 * stats->multiHits / usefulReads,
             100.0 * stats->notFound / usefulReads,
-            errorRate,
             100.0 * stats->alignedAsPairs / usefulReads,
             stats->lvCalls,
             stats->totalReads,
             (1000.0 * usefulReads) / max(alignTime, (_int64) 1), 
             alignTime);
+
     if (NULL != perfFile) {
-        fprintf(perfFile, "%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%s\t%0.2f%%\t%lld\t%lld\tt%.0f\n",
+        fprintf(perfFile, "%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%lld\t%lld\tt%.0f\n",
                 maxHits_, maxDist_, 
                 100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
                 100.0 * stats->singleHits / usefulReads,
                 100.0 * stats->multiHits / usefulReads,
                 100.0 * stats->notFound / usefulReads,
                 stats->lvCalls,
-                errorRate,
                 100.0 * stats->alignedAsPairs / usefulReads,
                 stats->totalReads,
                 (1000.0 * usefulReads) / max(alignTime, (_int64) 1));
 
         fprintf(perfFile,"\n");
     }
-    // Running counts to compute a ROC curve (with error rate and %aligned above a given MAPQ)
-    double totalAligned = 0;
-    double totalErrors = 0;
-    for (int i = AlignerStats::maxMapq; i >= 0; i--) {
-        totalAligned += stats->mapqHistogram[i];
-        totalErrors += stats->mapqErrors[i];
-        double truePositives = (totalAligned - totalErrors) / max(stats->totalReads, (_int64) 1);
-        double falsePositives = totalErrors / totalAligned;
-        if (i <= 10 || i % 2 == 0 || i == 69) {
-//            WriteStatusMessage("%d\t%d\t%d\t%.3f\t%.2E\n", i, stats->mapqHistogram[i], stats->mapqErrors[i], truePositives, falsePositives);
-        }
-    }
+
 
 #if TIME_HISTOGRAM
     WriteStatusMessage("Per-read alignment time histogram:\nlog2(ns)\tcount\ttotal time (ns)\n");
@@ -466,14 +458,14 @@ AlignerContext::parseOptions(
     }
 
     options->extra = extension->extraOptions();
-    if (argc < 2) {
+    if (argc < 3) {
         WriteErrorMessage("Too few parameters\n");
         options->usage();
     }
 
-    options->indexDir = argv[0];
-    options->transcriptomeDir = argv[1];
-    options->annotation = argv[2];
+    options->indexDir = argv[1];
+    options->transcriptomeDir = argv[2];
+    options->annotation = argv[3];
     struct InputList {
         SNAPFile    input;
         InputList*  next;
@@ -487,7 +479,7 @@ AlignerContext::parseOptions(
 
     int i;
     int nInputs = 0;
-    for (i = 3; i < argc; i++) {
+    for (i = 2; i < argc; i++) {	// Starting at 2 skips single/paired and the index
 
         if (',' == argv[i][0]  && '\0' == argv[i][1]) {
             i++;    // Consume the comma
@@ -540,7 +532,7 @@ AlignerContext::parseOptions(
         soft_exit(1);
     }
 
-    if (options->maxSecondaryAligmmentAdditionalEditDistance > (int)options->extraSearchDepth) {
+    if (options->maxSecondaryAlignmentAdditionalEditDistance > (int)options->extraSearchDepth) {
         WriteErrorMessage("You can't have the max edit distance for secondary alignments (-om) be bigger than the max search depth (-D)\n");
         soft_exit(1);
     }

@@ -116,6 +116,9 @@ inline double exp10(double x) { return exp(x * LOG10); }
 
 #ifdef DEBUG
 #define _ASSERT assert
+#ifndef _DEBUG
+#define _DEBUG 1	// Compat with Windows version
+#endif // !_DEBUG
 #else
 #define _ASSERT(x) {}
 #endif
@@ -377,6 +380,9 @@ MemoryMappedFile* OpenMemoryMappedFile(const char* filename, size_t offset, size
 // closes and deallocates the file structure
 void CloseMemoryMappedFile(MemoryMappedFile* mappedFile);
 
+//
+void AdviseMemoryMappedFilePrefetch(const MemoryMappedFile *mappedFile);
+
 class AsyncFile
 {
 public:
@@ -510,3 +516,7 @@ private:
 #endif  // _MSC_VER
 };
 
+//
+// Call to keep the OS from putting the machine asleep
+//
+void PreventMachineHibernationWhileThisThreadIsAlive();

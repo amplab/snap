@@ -29,6 +29,7 @@ Revision History:
 #include "Genome.h"
 #include "LandauVishkin.h"
 #include "AlignerOptions.h"
+#include "Genome.h"
 #include "GTFReader.h"
 
 //
@@ -45,7 +46,7 @@ public:
     // reading
     //
 
-    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* o_location, unsigned* o_readBytes, int* o_refID = NULL, int* o_pos = NULL) const = 0;
+    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, GenomeLocation* o_location, GenomeDistance* o_readBytes, int* o_refID = NULL, int* o_pos = NULL) const = 0;
 
     /*
 
@@ -69,6 +70,16 @@ public:
     
     */
 
+protected:
+
+    static const char* RGLineToAux;
+
+    static void setupReaderContext(AlignerOptions* options, ReaderContext* readerContext, bool bam);
+
+public:
+
+    virtual void setupReaderContext(AlignerOptions* options, ReaderContext* readerContext) const = 0;
+
     //
     // writing
     //
@@ -77,15 +88,14 @@ public:
 
     virtual bool writeHeader(
         const ReaderContext& context, char *header, size_t headerBufferSize, size_t *headerActualSize,
-        bool sorted, int argc, const char **argv, const char *version, const char *rgLine) const = 0;
+        bool sorted, int argc, const char **argv, const char *version, const char *rgLine, bool omitSQLines) const = 0;
 
     virtual bool writeRead(
-        const Genome * genome, const Genome * transcriptome, const GTFReader * gtf, 
-        LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
+        const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
-        int mapQuality, unsigned genomeLocation, Direction direction, bool secondaryAlignment, bool isTranscriptome = false, unsigned tlocation = 0,
+        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, bool isTranscriptome = false, unsigned tlocation = 0, int* o_addFrontClipping,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
-        AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD,
+        AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
         bool mateIsTranscriptome = false, unsigned mateTlocation= 0) const = 0; 
 
     //

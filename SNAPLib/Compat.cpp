@@ -470,6 +470,12 @@ CloseMemoryMappedFile(
     }
 }
 
+void AdviseMemoryMappedFilePrefetch(const MemoryMappedFile *mappedFile)
+{
+  // No-op on WIndows.
+}
+
+
 class WindowsAsyncFile : public AsyncFile
 {
 public:
@@ -881,6 +887,10 @@ FileMapper::prefetch(size_t currentRead)
 }
 #endif
 
+void PreventMachineHibernationWhileThisThreadIsAlive()
+{
+	SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED);
+}
 #else   // _MSC_VER
 
 #if defined(__MACH__)
@@ -1275,7 +1285,7 @@ OpenMemoryMappedFile(
     bool write,
     bool sequential)
 {
-    int fd = open(filename, write ? O_CREAT | O_RDWR : O_RDONLY);
+  int fd = open(filename, write ? O_CREAT | O_RDWR : O_RDONLY, S_IRUSR | S_IWUSR);
     if (fd < 0) {
         warn("OpenMemoryMappedFile %s failed", filename);
         return NULL;
@@ -1310,6 +1320,17 @@ CloseMemoryMappedFile(
     if (e != 0 || e2 != 0) {
         WriteErrorMessage("CloseMemoryMapped file failed\n");
     }
+}
+
+void AdviseMemoryMappedFilePrefetch(const MemoryMappedFile *mappedFile)
+{
+  if (madvise(mappedFile->map, mappedFile->length, MADV_SEQUENTIAL)) {
+    WriteErrorMessage("madvise MADV_SEQUENTIAL failed (since it's only an optimization, this is OK).  Errno %d\n", errno);
+  }
+
+  if (madvise(mappedFile->map, mappedFile->length, MADV_WILLNEED)) {
+    WriteErrorMessage("madvise MADV_WILLNEED failed (since it's only an optimization, this is OK).  Errno %d\n", errno);
+  }
 }
 
 #ifdef __linux__
@@ -1828,6 +1849,10 @@ FileMapper::prefetch(size_t currentRead)
 }
 #endif
 
+void PreventMachineHibernationWhileThisThreadIsAlive()
+{
+	// Only implemented for Windows
+}
 #endif  // _MSC_VER
 
 AsyncFile* AsyncFile::open(const char* filename, bool write)

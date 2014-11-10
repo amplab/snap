@@ -60,7 +60,7 @@ public:
 
         virtual bool getNextRead(Read *readToUpdate);
     
-        virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, unsigned *genomeLocation, Direction *direction, unsigned *mapQ,
+        virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, GenomeLocation *genomeLocation, Direction *direction, unsigned *mapQ,
                         unsigned *flag, const char **cigar)
         {
             return getNextRead(read, alignmentResult, genomeLocation, direction, mapQ, flag, false, cigar);
@@ -87,7 +87,7 @@ public:
             const char *fileName, int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context);
         
         // result and fieldLengths must be of size nSAMFields
-        static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, _int64 *o_headerSize, bool* o_headerMatchesIndex);
+        static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, _int64 *o_headerSize, bool* o_headerMatchesIndex, bool *o_sawWholeHeader = NULL);
         
         static char* skipToBeyondNextFieldSeparator(char *str, const char *endOfBuffer, size_t *o_charsUntilFirstSeparator = NULL);
 
@@ -117,21 +117,23 @@ protected:
             size_t *lineLength, size_t fieldLengths[]);
 
         static void parseContigName(const Genome* genome, char* contigName,
-            size_t contigNameBufferSize, unsigned* o_offsetOfContig, int* o_indexOfContig,
+            size_t contigNameBufferSize, GenomeLocation * o_locationOfContig, int* o_indexOfContig,
             char* field[], size_t fieldLength[], unsigned rfield = RNAME);
 
-        static unsigned parseLocation(unsigned offsetOfContig, char* field[], size_t fieldLength[], unsigned rfield = RNAME, unsigned posfield = POS);
+        static GenomeLocation parseLocation(GenomeLocation locationOfContig, char* field[], size_t fieldLength[], unsigned rfield = RNAME, unsigned posfield = POS);
 
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
-                        unsigned *genomeLocation, Direction *direction, unsigned *mapQ, unsigned *flag, bool ignoreEndOfRange, const char **cigar);
+                        GenomeLocation *genomeLocation, Direction *direction, unsigned *mapQ, unsigned *flag, bool ignoreEndOfRange, const char **cigar);
 
         static void getReadFromLine(const Genome *genome, char *line, char *endOfBuffer, Read *read, AlignmentResult *alignmentResult,
-                        unsigned *genomeLocation, Direction *direction, unsigned *mapQ, 
+                        GenomeLocation *genomeLocation, Direction *direction, unsigned *mapQ, 
                         size_t *lineLength, unsigned *flag, const char **cigar, ReadClippingType clipping);
 
 
 private:
         void readHeader(const char* fileName);
+
+		bool skipPartialHeader(_int64 *o_headerBytes);
 
         void init(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess);
 
@@ -149,19 +151,22 @@ class SAMFormat : public FileFormat
 public:
     SAMFormat(bool i_useM) : useM(i_useM) {}
 
-    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, unsigned* o_location, unsigned* o_readBytes, int* o_refID, int* o_pos) const;
+    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, GenomeLocation* o_location, GenomeDistance* o_readBytes, int* o_refID, int* o_pos) const;
+
+    virtual void setupReaderContext(AlignerOptions* options, ReaderContext* readerContext) const
+    { FileFormat::setupReaderContext(options, readerContext, false); }
 
     virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome, const Genome* transcriptome, const GTFReader* gtf) const;
 
     virtual bool writeHeader(
         const ReaderContext& context, char *header, size_t headerBufferSize, size_t *headerActualSize,
-        bool sorted, int argc, const char **argv, const char *version, const char *rgLine) const;
+        bool sorted, int argc, const char **argv, const char *version, const char *rgLine, bool omitSQLines) const;
 
     virtual bool writeRead(
-        const Genome * genome, const Genome * transcriptome, const GTFReader * gtf, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
+        const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
-        int mapQuality, unsigned genomeLocation, Direction direction, bool secondaryAlignment, bool isTranscriptome, unsigned tlocation,
-        bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
+        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, bool isTranscriptome, unsigned tlocation,
+        int* o_addFrontClipping, bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
         AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD, bool mateIsTranscriptome = false, unsigned mateTlocation = 0) const; 
 
     // calculate data needed to write SAM/BAM record
@@ -177,15 +182,15 @@ public:
         // output data
         char* data,
         char* quality,
-        unsigned dataSize,
+        GenomeDistance dataSize,
         const char*& contigName,
         int& contigIndex,
         int& flags,
-        unsigned& positionInContig,
+        GenomeDistance& positionInContig,
         int& mapQuality,
         const char*& mateContigName,
         int& mateContigIndex,
-        unsigned& matePositionInContig,
+        GenomeDistance& matePositionInContig,
         _int64& templateLength,
         unsigned& fullLength,
         const char*& clippedData,
@@ -196,7 +201,7 @@ public:
         size_t& qnameLen,
         Read * read,
         AlignmentResult result, 
-        unsigned genomeLocation,
+        GenomeLocation genomeLocation,
         Direction direction,
         bool secondaryAlignment,
         bool isTranscriptome,
@@ -205,18 +210,24 @@ public:
         bool firstInPair,
         Read * mate, 
         AlignmentResult mateResult,
-        unsigned mateLocation,
+        GenomeLocation mateLocation,
         Direction mateDirection,
         bool mateIsTranscriptome,
-        unsigned *extraBasesClippedBefore,
-        unsigned *extraBasesClippedAfter);
+        GenomeDistance *extraBasesClippedBefore,
+        GenomeDistance *extraBasesClippedAfter);
 
 private:
     static const char * computeCigarString(const Genome * genome, LandauVishkinWithCigar * lv,
         char * cigarBuf, int cigarBufLen, char * cigarBufWithClipping, int cigarBufWithClippingLen,
-        const char * data, unsigned dataLength, unsigned basesClippedBefore, unsigned extraBasesClippedBefore, unsigned basesClippedAfter,
-        unsigned extraBasesClippedAfter, unsigned frontHardCliped, unsigned backHardClipped,        
-        unsigned genomeLocation, Direction direction, bool useM, int * editDistance, std::vector<unsigned> &tokens);
+        const char * data, GenomeDistance dataLength, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter,
+        GenomeDistance extraBasesClippedAfter, unsigned frontHardCliped, unsigned backHardClipped,        
+        GenomeLocation genomeLocation, Direction direction, bool useM, int * editDistance, int * o_adjustLocation, std::vector<unsigned> &tokens);
+
+#ifdef _DEBUG
+	static void validateCigarString(const Genome *genome, const char * cigarBuf, int cigarBufLen, const char *data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM);
+#else	// DEBUG
+	inline static void validateCigarString(const Genome *genome, const char * cigarBuf, int cigarBufLen, const char *data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM) {}
+#endif // DEBUG
 
     const bool useM;
 };

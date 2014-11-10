@@ -43,7 +43,7 @@ void testManyWaitersMain(void* c)
 {
   TestContext* context = (TestContext*) c;
   if (context->parent->bind) {
-    BindThreadToProcessor(context->index);
+    BindThreadToProcessor(context->index%GetNumberOfProcessors());
   }
   //printf("start thread %d%s\n", context->index, context->parent->bind ? " bind" : "");
   InterlockedIncrementAndReturnNewValue(&context->parent->started);

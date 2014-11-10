@@ -26,7 +26,6 @@ Revision History:
 
 #include "stdafx.h"
 #include "options.h"
-#include "Range.h"
 #include "Genome.h"
 #include "Read.h"
 
@@ -42,12 +41,13 @@ struct AbstractOptions
 enum FileType {UnknownFileType, SAMFile, FASTQFile, BAMFile, InterleavedFASTQFile, CRAMFile};  // Add more as needed
 
 struct SNAPFile {
-    SNAPFile() : fileName(NULL), secondFileName(NULL), fileType(UnknownFileType), isStdio(false) {}
+	SNAPFile() : fileName(NULL), secondFileName(NULL), fileType(UnknownFileType), isStdio(false), omitSQLines(false) {}
     const char          *fileName;
     const char          *secondFileName;
     FileType             fileType;
     bool                 isCompressed;
     bool                 isStdio;           // Only applies to the first file for two-file inputs
+	bool				 omitSQLines;		// Special undocumented option for Charles Chiu's group.  Mostly a bad idea.
 
     PairedReadSupplierGenerator *createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context);
     ReadSupplierGenerator *createReadSupplierGenerator(int numThreads, const ReaderContext& context);
@@ -66,11 +66,12 @@ struct AlignerOptions : public AbstractOptions
     const char         *similarityMapFile;
     int                 numThreads;
     unsigned            maxDist;
+    float               maxDistFraction;
     unsigned            numSeedsFromCommandLine;
     double              seedCoverage;       // Exclusive with numSeeds; this is readSize/seedSize
     bool                seedCountSpecified; // Has either -n or -sc been specified?  This bool is used to make sure they're not both specified on the command line
     unsigned            maxHits;
-    bool                computeError;
+    int                 minWeightToCheck;
     bool                bindToProcessors;
     bool                ignoreMismatchedIDs;
     SNAPFile            outputFile;
@@ -87,7 +88,6 @@ struct AlignerOptions : public AbstractOptions
     bool                stopOnFirstHit;
 	bool				useM;	// Should we generate CIGAR strings using = and X, or using the old-style M?
     unsigned            gapPenalty; // if non-zero use gap penalty aligner
-    unsigned            misalignThreshold; // For error reporting: min distance from real location to mark a read as misaligned
     AbstractOptions    *extra; // extra options
     const char         *rgLineContents;
     const char         *perfFileName;
@@ -95,11 +95,16 @@ struct AlignerOptions : public AbstractOptions
     unsigned            extraSearchDepth;
     const char         *defaultReadGroup; // if not specified in input
     bool                ignoreSecondaryAlignments; // on input, default true
-    int                 maxSecondaryAligmmentAdditionalEditDistance;
+    int                 maxSecondaryAlignmentAdditionalEditDistance;
+	int					maxSecondaryAlignments;
     bool                preserveClipping;
     float               expansionFactor;
     bool                noUkkonen;
     bool                noOrderedEvaluation;
+	bool				noTruncation;
+	unsigned			minReadLength;
+	bool				mapIndex;
+	bool				prefetchIndex;
     
     static bool         useHadoopErrorMessages; // This is static because it's global (and I didn't want to push the options object to every place in the code)
     static bool         outputToStdout;         // Likewise

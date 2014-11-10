@@ -21,9 +21,6 @@
     <ClInclude Include="targetver.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Aligner.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="AlignerContext.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -123,9 +120,6 @@
     <ClInclude Include="ProbabilityDistance.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Range.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="RangeSplitter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -159,9 +153,6 @@
     <ClInclude Include="VariableSizeVector.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="WGsim.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="WindowsFileMapper.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -184,6 +175,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="GenericFile_Blob.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AlignmentResult.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GenericFile_map.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -272,9 +269,6 @@
     <ClCompile Include="ProbabilityDistance.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Range.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="RangeSplitter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -305,9 +299,6 @@
     <ClCompile Include="Util.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="WGsim.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Read.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -333,6 +324,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="GenericFile_Blob.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GenericFile_map.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

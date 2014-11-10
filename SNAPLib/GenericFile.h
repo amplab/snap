@@ -22,6 +22,7 @@ Revision History:
 --*/
 
 #pragma once
+#include "Compat.h"
 
 class GenericFile
 {
@@ -63,6 +64,8 @@ public:
 	char *getFilename() { return _filename; }
 
 	virtual ~GenericFile();
+
+	virtual _int64 prefetch();	// Ignore the return value, it's just to trick the compiler into not optimizing it away.
 
 protected:
 	char *_gets_impl(char *buf, size_t count);

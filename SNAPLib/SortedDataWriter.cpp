@@ -38,11 +38,11 @@ using std::max;
 struct SortEntry
 {
     SortEntry() : offset(0), length(0), location(0) {}
-    SortEntry(size_t i_offset, unsigned i_length, unsigned i_location)
+    SortEntry(size_t i_offset, GenomeDistance i_length, GenomeLocation i_location)
         : offset(i_offset), length(i_length), location(i_location) {}
     size_t                      offset; // offset in file
-    unsigned                    length; // number of bytes
-    unsigned                    location; // location in genome
+    GenomeDistance              length; // number of bytes
+    GenomeLocation              location; // location in genome
     static bool comparator(const SortEntry& e1, const SortEntry& e2)
     {
         return e1.location < e2.location;
@@ -69,9 +69,9 @@ struct SortBlock
 #endif
     // for mergesort phase
     DataReader* reader;
-    unsigned    location; // genome location of current read
+    GenomeLocation    location; // genome location of current read
     char*       data; // read data in read buffer
-    unsigned    length; // length in bytes
+    GenomeDistance    length; // length in bytes
 };
 
     void
@@ -102,7 +102,7 @@ public:
 
     virtual ~SortedDataFilter() {}
 
-    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, unsigned bytes, unsigned location);
+    virtual void onAdvance(DataWriter* writer, size_t batchOffset, char* data, GenomeDistance bytes, GenomeLocation location);
 
     virtual size_t onNextBatch(DataWriter* writer, size_t offset, size_t bytes);
 
@@ -175,8 +175,8 @@ SortedDataFilter::onAdvance(
     DataWriter* writer,
     size_t batchOffset,
     char* data,
-    unsigned bytes,
-    unsigned location)
+    GenomeDistance bytes,
+    GenomeLocation location)
 {
     SortEntry entry(batchOffset, bytes, location);
 #ifdef VALIDATE_SORT
@@ -370,7 +370,7 @@ SortedDataFilterSupplier::mergeSort()
     // merge temp blocks into output
     _int64 total = 0;
     // get initial merge sort data
-    typedef PriorityQueue<unsigned,int> BlockQueue;
+    typedef PriorityQueue<GenomeLocation, _int64> BlockQueue;
     BlockQueue queue;
     for (SortBlockVector::iterator b = blocks.begin(); b != blocks.end(); b++) {
         _int64 bytes;
@@ -378,7 +378,7 @@ SortedDataFilterSupplier::mergeSort()
         format->getSortInfo(genome, b->data, bytes, &b->location, &b->length);
         queue.add((_uint32) (b - blocks.begin()), b->location); 
     }
-    unsigned current = 0; // current location for validation
+    GenomeLocation current = 0; // current location for validation
 	int lastRefID = -1, lastPos = 0;
     while (queue.size() > 0) {
 #if VALIDATE_SORT
@@ -386,10 +386,10 @@ SortedDataFilterSupplier::mergeSort()
 		queue.peek(&check);
 		_ASSERT(check >= current);
 #endif
-        unsigned secondLocation;
-        int smallestIndex = queue.pop();
-        int secondIndex = queue.size() > 0 ? queue.peek(&secondLocation) : -1;
-        unsigned limit = secondIndex != -1 ? secondLocation : UINT32_MAX;
+        GenomeLocation secondLocation;
+        _int64 smallestIndex = queue.pop();
+        _int64 secondIndex = queue.size() > 0 ? queue.peek(&secondLocation) : -1;
+        GenomeLocation limit = secondIndex != -1 ? secondLocation : InvalidGenomeLocation;
         SortBlock* b = &blocks[smallestIndex];
         char* writeBuffer;
         size_t writeBytes;
@@ -398,10 +398,10 @@ SortedDataFilterSupplier::mergeSort()
 #if VALIDATE_SORT
 			_ASSERT(b->location >= b->minLocation && b->location <= b->maxLocation);
 #endif
-            if (writeBytes < b->length) {
+            if (writeBytes < (size_t)b->length) {
                 writer->nextBatch();
                 writer->getBuffer(&writeBuffer, &writeBytes);
-                if (writeBytes < b->length) {
+                if (writeBytes < (size_t)b->length) {
                     WriteErrorMessage( "mergeSort: buffer size too small\n");
                     return false;
                 }
@@ -438,7 +438,7 @@ SortedDataFilterSupplier::mergeSort()
                     break;
                 }
             }
-            unsigned previous = b->location;
+            GenomeLocation previous = b->location;
             format->getSortInfo(genome, b->data, readBytes, &b->location, &b->length);
             _ASSERT(b->length <= readBytes && b->location >= previous);
         }

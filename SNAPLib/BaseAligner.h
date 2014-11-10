@@ -27,18 +27,21 @@ Revision History:
 
 #pragma once
 
-#include "Aligner.h"
+#include "AlignmentResult.h"
 #include "LandauVishkin.h"
 #include "BigAlloc.h"
 #include "ProbabilityDistance.h"
 #include "AlignerStats.h"
 #include "directions.h"
+#include "GenomeIndex.h"
 #include <map>
 #include <set>
 
 typedef std::map<unsigned, std::set<unsigned> > seed_map;
 
-class BaseAligner: public Aligner {
+extern bool doAlignerPrefetch;
+
+class BaseAligner {
 public:
 
     BaseAligner(
@@ -48,9 +51,11 @@ public:
         unsigned        i_maxReadSize,
         unsigned        i_maxSeedsToUse,
         double          i_maxSeedCoverage,
+		unsigned        i_minWeightToCheck,
         unsigned        i_extraSearchDepth,
         bool            i_noUkkonen,
         bool            i_noOrderedEvaluation,
+		bool			i_noTruncation,
         LandauVishkin<1>*i_landauVishkin = NULL,
         LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
         AlignerStats   *i_stats = NULL,
@@ -130,8 +135,11 @@ private:
     ProbabilityDistance *probDistance;
 
     // Maximum distance to merge candidates that differ in indels over.
+#ifdef LONG_READS
+    static const unsigned maxMergeDist = 64; // Must be even and <= 64
+#else
     static const unsigned maxMergeDist = 48; // Must be even and <= 64
-
+#endif
     char rcTranslationTable[256];
 
     _int64 nHashTableLookups;
@@ -165,7 +173,15 @@ private:
 
     static const unsigned hashTableElementSize = maxMergeDist;   // The code depends on this, don't change it
 
-     struct HashTableElement {
+    void decomposeGenomeLocation(GenomeLocation genomeLocation, _uint64 *highOrder, _uint64 *lowOrder)
+    {
+        *lowOrder = (_uint64)GenomeLocationAsInt64(genomeLocation) % hashTableElementSize;
+        if (NULL != highOrder) {
+            *highOrder = (_uint64)GenomeLocationAsInt64(genomeLocation) - *lowOrder;
+        }
+    }
+
+    struct HashTableElement {
         HashTableElement();
         void init();
 
@@ -180,18 +196,18 @@ private:
         //
         HashTableElement    *next;
 
-        _uint64             candidatesUsed;    // Really candidates we still need to score
-        _uint64             candidatesScored;
+        _uint64              candidatesUsed;    // Really candidates we still need to score
+        _uint64              candidatesScored;
 
-        unsigned             baseGenomeLocation;
+        GenomeLocation       baseGenomeLocation;
         unsigned             weight;
         unsigned             lowestPossibleScore;
         unsigned             bestScore;
-        unsigned             bestScoreGenomeLocation;
+        GenomeLocation       bestScoreGenomeLocation;
         Direction            direction;
         bool                 allExtantCandidatesScored;
         double               matchProbabilityForBestScore;
-
+ 
         Candidate            candidates[hashTableElementSize];
     };
 
@@ -223,7 +239,7 @@ private:
     HashTableElement *weightLists;
     unsigned highestUsedWeightList;
 
-    static inline unsigned hash(unsigned key) {
+    static inline _uint64 hash(_uint64 key) {
         key = key * 131;    // Believe it or not, we spend a long time computing the hash, so we're better off with more table entries and a dopey function.
         return key;
     }
@@ -244,9 +260,9 @@ private:
     unsigned mostSeedsContainingAnyParticularBase[NUM_DIRECTIONS];
     unsigned nSeedsApplied[NUM_DIRECTIONS];
     unsigned bestScore;
-    unsigned bestScoreGenomeLocation;
+    GenomeLocation bestScoreGenomeLocation;
     unsigned secondBestScore;
-    unsigned secondBestScoreGenomeLocation;
+    GenomeLocation secondBestScoreGenomeLocation;
     int      secondBestScoreDirection;
     unsigned scoreLimit;
     unsigned lvScores;
@@ -254,9 +270,8 @@ private:
     double probabilityOfAllCandidates;
     double probabilityOfBestCandidate;
     int firstPassSeedsNotSkipped[NUM_DIRECTIONS];
-    unsigned smallestSkippedSeed[NUM_DIRECTIONS];
+    _int64 smallestSkippedSeed[NUM_DIRECTIONS];
     unsigned highestWeightListChecked;
-    bool usedHammingThisAlignment;
 
     double totalProbabilityByDepth[AlignerStats::maxMaxHits];
     void updateProbabilityMass();
@@ -273,11 +288,11 @@ private:
 
     void clearCandidates();
 
-    bool findElement(unsigned genomeLocation, Direction direction, HashTableElement **hashTableElement);
-    void findCandidate(unsigned genomeLocation, Direction direction, Candidate **candidate, HashTableElement **hashTableElement);
-    void allocateNewCandidate(unsigned genomeLoation, Direction direction, unsigned lowestPossibleScore, int seedOffset, Candidate **candidate, HashTableElement **hashTableElement);
+    bool findElement(GenomeLocation genomeLocation, Direction direction, HashTableElement **hashTableElement);
+    void findCandidate(GenomeLocation genomeLocation, Direction direction, Candidate **candidate, HashTableElement **hashTableElement);
+    void allocateNewCandidate(GenomeLocation genomeLoation, Direction direction, unsigned lowestPossibleScore, int seedOffset, Candidate **candidate, HashTableElement **hashTableElement);
     void incrementWeight(HashTableElement *element);
-    void prefetchHashTableBucket(unsigned genomeLocation, Direction direction);
+    void prefetchHashTableBucket(GenomeLocation genomeLocation, Direction direction);
 
     const Genome *genome;
     GenomeIndex *genomeIndex;
@@ -287,10 +302,13 @@ private:
     unsigned maxReadSize;
     unsigned maxSeedsToUseFromCommandLine; // Max number of seeds to look up in the hash table
     double   maxSeedCoverage;  // Max seeds to used expressed as readSize/seedSize this is mutually exclusive with maxSeedsToUseFromCommandLine
+    unsigned minWeightToCheck;
     unsigned extraSearchDepth;
     unsigned numWeightLists;
     bool     noUkkonen;
     bool     noOrderedEvaluation;
+	bool     noTruncation;
+    bool     doesGenomeIndexHave64BitLocations;
 
     char *rcReadData;
     char *rcReadQuality;

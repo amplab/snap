@@ -539,11 +539,12 @@ void memrevcpy(void* dst, const void* src, size_t bytes);
 
 } // namespace util
 
-int FirstPowerOf2GreaterThanOrEqualTo(int value);
+_int64 FirstPowerOf2GreaterThanOrEqualTo(_int64 value);
 int cheezyLogBase2(_int64 value);
 
 //
 // Check if a is within distance of b, coping properly with the varagies of unsigneds.
+// There's a similar function for GenomeLocations defined in Genome.h.
 //
 inline bool isWithin(unsigned a, unsigned b, unsigned distance)
     {

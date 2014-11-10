@@ -31,6 +31,8 @@ Revision History:
 #include "DataWriter.h"
 #include "directions.h"
 #include "Error.h"
+#include "Genome.h"
+#include "AlignmentResult.h"
 
 class FileFormat;
 
@@ -39,15 +41,13 @@ class GTFReader;
 
 struct PairedAlignmentResult;
 
-enum AlignmentResult {NotFound, SingleHit, MultipleHits, UnknownAlignment}; // BB: Changed Unknown to UnknownAlignment because of a conflict w/Windows headers
 
-bool isAValidAlignmentResult(AlignmentResult result);
 
 //#define LONG_READS
 #ifdef LONG_READS
-#define MAX_READ_LENGTH 100000
+#define MAX_READ_LENGTH 400000
 #else
-#define MAX_READ_LENGTH 4096
+#define MAX_READ_LENGTH 400
 #endif
 
 //
@@ -94,6 +94,8 @@ struct ReaderContext
     const Genome*       transcriptome;
     GTFReader*          gtf;
     const char*         defaultReadGroup;
+    const char*         defaultReadGroupAux; // SAM or BAM depending on output format
+    int                 defaultReadGroupAuxLen;
     ReadClippingType    clipping;
     bool                paired;
     bool                ignoreSecondaryAlignments;   // Should we just ignore reads with the Secondary Alignment bit set?
@@ -186,13 +188,13 @@ public:
     virtual ~ReadWriter() {}
 
     // write out header
-    virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine) = 0;
+	virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine, bool omitSQLines) = 0;
 
     // write a single read, return true if successful
-    virtual bool writeRead(Read *read, AlignmentResult result, int mapQuality, unsigned genomeLocation, Direction direction, bool secondaryAlignment, bool isTranscriptome, unsigned tlocation) = 0;
+    virtual bool writeRead(const ReaderContext& context, Read *read, AlignmentResult result, int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, bool isTranscriptome, unsigned tlocation) = 0;
 
     // write a pair of reads, return true if successful
-    virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result, bool secondaryAlignment) = 0;
+    virtual bool writePair(const ReaderContext& context, Read *read0, Read *read1, PairedAlignmentResult *result, bool secondaryAlignment) = 0;
 
     // close out this thread
     virtual void close() = 0;
@@ -361,26 +363,26 @@ public:
                 const char *i_quality, 
                 unsigned i_dataLength)
         {
-            init(i_id, i_idLength, i_data, i_quality, i_dataLength, -1, -1, 0, 0, 0, 0, 0, NULL, 0, 0);
+            init(i_id, i_idLength, i_data, i_quality, i_dataLength, InvalidGenomeLocation, -1, 0, 0, 0, 0, 0, NULL, 0, 0);
         }
 
         void init(
-                const char *i_id, 
-                unsigned i_idLength,
-                const char *i_data, 
-                const char *i_quality, 
-                unsigned i_dataLength,
-                unsigned i_originalAlignedLocation,
-                unsigned i_originalMAPQ,
-                unsigned i_originalSAMFlags,
-                unsigned i_originalFrontClipping,
-                unsigned i_originalBackClipping,
-                unsigned i_originalFrontHardClipping,
-                unsigned i_originalBackHardClipping,
-                const char *i_originalRNEXT,
-                unsigned i_originalRNEXTLength,
-                unsigned i_originalPNEXT,
-                bool allUpper = false)
+                const char *        i_id, 
+                unsigned            i_idLength,
+                const char *        i_data, 
+                const char *        i_quality, 
+                unsigned            i_dataLength,
+                GenomeLocation      i_originalAlignedLocation,
+                unsigned            i_originalMAPQ,
+                unsigned            i_originalSAMFlags,
+                unsigned            i_originalFrontClipping,
+                unsigned            i_originalBackClipping,
+                unsigned            i_originalFrontHardClipping,
+                unsigned            i_originalBackHardClipping,
+                const char *        i_originalRNEXT,
+                unsigned            i_originalRNEXTLength,
+                unsigned            i_originalPNEXT,
+                bool                allUpper = false)
         {
             id = i_id;
             idLength = i_idLength;
@@ -439,13 +441,14 @@ public:
         inline unsigned getDataLength() const {return dataLength;}
         inline unsigned getUnclippedLength() const {return unclippedLength;}
         inline unsigned getFrontClippedLength() const {return (unsigned)(data - unclippedData);}    // number of bases clipped from the front of the read
+		inline unsigned getBackClippedLength() const {return unclippedLength - dataLength - getFrontClippedLength();}
         inline void setUnclippedLength(unsigned length) {unclippedLength = length;}
 		inline ReadClippingType getClippingState() const {return clippingState;}
         inline DataBatch getBatch() { return batch; }
         inline void setBatch(DataBatch b) { batch = b; }
         inline const char* getReadGroup() const { return readGroup; }
         inline void setReadGroup(const char* rg) { readGroup = rg; }
-        inline unsigned getOriginalAlignedLocation() {return originalAlignedLocation;}
+        inline GenomeLocation getOriginalAlignedLocation() {return originalAlignedLocation;}
         inline unsigned getOriginalMAPQ() {return originalMAPQ;}
         inline unsigned getOriginalSAMFlags() {return originalSAMFlags;}
         inline unsigned getOriginalFrontClipping() {return originalFrontClipping;}
@@ -455,6 +458,8 @@ public:
         inline const char *getOriginalRNEXT() {return originalRNEXT;}
         inline unsigned getOriginalRNEXTLength() {return originalRNEXTLength;}
         inline unsigned getOriginalPNEXT() {return originalPNEXT;}
+        inline void addFrontClipping(int clipping)
+        { data += clipping; dataLength -= clipping; }
 
         inline char* getAuxiliaryData(unsigned* o_length, bool * o_isSAM) const
         {
@@ -663,7 +668,7 @@ private:
         // Alignment data that was in the read when it was read from a file.  While this should probably also be the place to put
         // information that'll be used by the read writer, for now it's not.  Hence, they're all called "original."
         //
-        unsigned originalAlignedLocation;
+        GenomeLocation originalAlignedLocation;
         unsigned originalMAPQ;
         unsigned originalSAMFlags;
         unsigned originalFrontClipping;
@@ -850,3 +855,5 @@ private:
     char *qualityBuffer;
     char *auxBuffer;
 };
+
+extern const unsigned DEFAULT_MIN_READ_LENGTH;

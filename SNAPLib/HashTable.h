@@ -32,16 +32,17 @@ class SNAPHashTable {
         typedef _uint64 KeyType;    // Likewise for keys.
 
         SNAPHashTable(
-            unsigned    i_tableSize,
+            _int64		i_tableSize,
             unsigned    i_keySizeInBytes,
             unsigned    i_valueSizeInBytes,
             unsigned    i_valueCount,
-            ValueType   i_invalidValueValue);
+            _uint64		i_invalidValueValue);
 
         //
         // Load from file.
         //
         static SNAPHashTable *loadFromBlob(GenericFile_Blob *loadFile);
+		static SNAPHashTable *loadFromGenericFile(GenericFile *loadFile);
 
         ~SNAPHashTable();
 
@@ -62,7 +63,7 @@ class SNAPHashTable {
         unsigned GetValueSizeInBytes() const {return valueSizeInBytes;}
         unsigned GetValueCount() const {return valueCount;}
 
-		void *getEntryValues(unsigned whichEntry) 
+		void *getEntryValues(_uint64 whichEntry) 
 		{
 			_ASSERT(whichEntry < GetTableSize());
 			return getEntry(whichEntry);
@@ -137,15 +138,21 @@ class SNAPHashTable {
         //
         ValueType *SlowLookup(KeyType key);
 
-//bjb private:
+private:
 
         SNAPHashTable() {}
 
         static const unsigned QUADRATIC_CHAINING_DEPTH = 5; // Chain quadratically for this long, then linerarly  Set to 0 for linear chaining
+		static SNAPHashTable *loadCommon(GenericFile *loadFile);
 
         //
         // A hash table entry consists of a set of valueCount values, each of valueSizeInBytes bytes, followed by
         // a key of keySizeInBytes bytes.  The key size must be between 4 and 8 bytes, inclusive.
+        //
+        // Because the size of the fields and the count of values is variable, we can't use a struct and are stuck
+        // with ugly memory manipulation to access the hash table entries.
+        //
+        // The format is 1 or 2 (valueCount) values of size valueSize, followed by keySize bytes of key.
         //
 #if 0
         struct Entry {

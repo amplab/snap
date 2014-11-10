@@ -38,6 +38,7 @@ GenericFile_stdio::~GenericFile_stdio()
 GenericFile_stdio *GenericFile_stdio::open(const char *filename, Mode mode)
 {
 	GenericFile_stdio *retval = new GenericFile_stdio();
+	retval->_mode = mode;
 
 	const char *fMode = NULL;
 
@@ -60,6 +61,10 @@ GenericFile_stdio *GenericFile_stdio::open(const char *filename, Mode mode)
 	return retval;
 }
 
+GenericFile_stdio *GenericFile_stdio::open(const char *filename)
+{
+        return open(filename, ReadOnly);
+}
 
 size_t GenericFile_stdio::read(void *ptr, size_t count)
 {

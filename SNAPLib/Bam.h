@@ -163,12 +163,12 @@ struct BAMAlignment
 
     // absoluate genome locations
 
-    _uint32 getLocation(const Genome* genome) const
+    GenomeLocation getLocation(const Genome* genome) const
     { return genome == NULL || pos < 0 || refID < 0 || refID >= genome->getNumContigs() || (FLAG & SAM_UNMAPPED)
-        ? UINT32_MAX : (genome->getContigs()[refID].beginningOffset + pos); }
+        ? UINT32_MAX : (genome->getContigs()[refID].beginningLocation + pos); }
 
-    _uint32 getNextLocation(const Genome* genome) const
-    { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? UINT32_MAX : (genome->getContigs()[next_refID].beginningOffset + next_pos); }
+    GenomeLocation getNextLocation(const Genome* genome) const
+    { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? UINT32_MAX : (genome->getContigs()[next_refID].beginningLocation + next_pos); }
 
 #ifdef VALIDATE_BAM
     void validate();
@@ -315,14 +315,14 @@ struct BgzfExtra
 
 struct BgzfHeader
 {
-    _uint8 ID1;
-    _uint8 ID2;
-    _uint8 CM;
-    _uint8 FLG;
-    _uint32 MTIME;
-    _uint8 XFL;
-    _uint8 OS;
-    _uint16 XLEN;
+    _uint8 ID1;		// 0x1f
+    _uint8 ID2;		// 0x8b (magic numbers)
+    _uint8 CM;		// Compression method (8 == deflate)
+    _uint8 FLG;		// flags
+    _uint32 MTIME;	// Mod time
+    _uint8 XFL;		// extra flags
+    _uint8 OS;		// operating system 
+    _uint16 XLEN;	// extra length
 
     BgzfExtra* firstExtra()
     { return (BgzfExtra*) (sizeof(_uint16) + (char*) &this->XLEN); }
@@ -369,7 +369,7 @@ public:
             return getNextRead(readToUpdate, NULL, NULL, NULL, NULL, NULL, false, NULL);
         }
     
-        virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, unsigned *genomeLocation, bool *isRC, unsigned *mapQ,
+        virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, GenomeLocation *genomeLocation, bool *isRC, unsigned *mapQ,
                         unsigned *flag, const char **cigar)
         {
             return getNextRead(read,alignmentResult,genomeLocation,isRC,mapQ,flag,false,cigar);
@@ -414,10 +414,10 @@ public:
 protected:
 
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
-                        unsigned *genomeLocation, bool *isRC, unsigned *mapQ, unsigned *flag, bool ignoreEndOfRange, const char **cigar);
+                        GenomeLocation *genomeLocation, bool *isRC, unsigned *mapQ, unsigned *flag, bool ignoreEndOfRange, const char **cigar);
 
         void getReadFromLine(const Genome *genome, char *line, char *endOfBuffer, Read *read, AlignmentResult *alignmentResult,
-                        unsigned *genomeLocation, bool *isRC, unsigned *mapQ, 
+                        GenomeLocation *genomeLocation, bool *isRC, unsigned *mapQ, 
                         size_t *lineLength, unsigned *flag, const char **cigar, ReadClippingType clipping);
 
 private:

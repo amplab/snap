@@ -43,11 +43,6 @@ ReadFASTAGenome(
     //
     _int64 fileSize = QueryFileSize(fileName);
 
-    if (fileSize >> 32 != 0) {
-        WriteErrorMessage("This tool only works with genomes with 2^32 bases or fewer.\n");
-        return NULL;
-    }
-
     FILE *fastaFile = fopen(fileName, "r");
     if (fastaFile == NULL) {
         WriteErrorMessage("Unable to open FASTA file '%s' (even though we already got its size)\n",fileName);
@@ -69,7 +64,7 @@ ReadFASTAGenome(
     }
     rewind(fastaFile);
 
-    Genome *genome = new Genome((unsigned) fileSize + (nChromosomes+1) * chromosomePaddingSize, (unsigned)fileSize + (nChromosomes+1) * chromosomePaddingSize, chromosomePaddingSize);
+    Genome *genome = new Genome(fileSize + (nChromosomes+1) * (size_t)chromosomePaddingSize, fileSize + (nChromosomes+1) * (size_t)chromosomePaddingSize, chromosomePaddingSize, nChromosomes + 1);
 
     char *paddingBuffer = new char[chromosomePaddingSize+1];
     for (unsigned i = 0; i < chromosomePaddingSize; i++) {
@@ -164,9 +159,9 @@ bool AppendFASTAGenome(const Genome *genome, FILE *fasta, const char *prefix="")
     const Genome::Contig *contigs = genome->getContigs();
     for (int i = 0; i < nContigs; ++i) {
         const Genome::Contig &contig = contigs[i];
-        unsigned start = contig.beginningOffset;
-        unsigned end = i + 1 < nContigs ? contigs[i + 1].beginningOffset : genome->getCountOfBases();
-        unsigned size = end - start;
+        GenomeLocation start = contig.beginningLocation;
+        GenomeLocation end = i + 1 < nContigs ? contigs[i + 1].beginningLocation : genome->getCountOfBases();
+        GenomeDistance size = end - start;
         const char *bases = genome->getSubstring(start, size);
 
         fprintf(fasta, ">%s%s\n", prefix, contig.name);
