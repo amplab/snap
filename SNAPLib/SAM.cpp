@@ -1031,10 +1031,6 @@ SAMFormat::createSAMLine(
     int editDistance = -1;
     *extraBasesClippedAfter = 0;
     if (genomeLocation != InvalidGenomeLocation) {
-        // This could be either a single hit read or a multiple hit read where we just
-        // returned one location, but either way, let's print that location. We will then
-        // set the quality to 60 if it was single or 0 if it was multiple. These are the
-        // values the SAM FAQ suggests for aligners that don't compute confidence scores.
         if (direction == RC) {
             flags |= SAM_REVERSE_COMPLEMENT;
         }
