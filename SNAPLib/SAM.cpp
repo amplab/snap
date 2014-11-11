@@ -1142,9 +1142,9 @@ SAMFormat::writeRead(
     GenomeLocation genomeLocation,
     Direction direction,
     bool secondaryAlignment,
+    int * o_addFrontClipping,
     bool isTranscriptome,
     unsigned tlocation,
-    int * o_addFrontClipping,
     bool hasMate,
     bool firstInPair,
     Read * mate, 
@@ -1210,12 +1210,12 @@ SAMFormat::writeRead(
                                        read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(), tlocation, direction, useM, &editDistance, o_addFrontClipping, tokens);        
         
             //We need the pieceName for conversion             
-            const Genome::Contig *transcriptomePiece = transcriptome->getContigAtLocation(tlocation);
+            const Genome::Contig *transcriptomePiece = context.transcriptome->getContigAtLocation(tlocation);
             const char* transcriptomePieceName = transcriptomePiece->name;
-            unsigned transcriptomePositionInPiece = tlocation - transcriptomePiece->beginningOffset + 1; // SAM is 1-based
+            unsigned transcriptomePositionInPiece = tlocation - transcriptomePiece->beginningLocation + 1; // SAM is 1-based
  
             //Insert splice junctions
-            lv->insertSpliceJunctions(gtf, tokens, transcriptomePieceName, transcriptomePositionInPiece, (char*) cigarBuf, cigarBufSize);
+            lv->insertSpliceJunctions(context.gtf, tokens, transcriptomePieceName, transcriptomePositionInPiece, (char*) cigarBuf, cigarBufSize);
             cigar = cigarBuf;
         }
 
@@ -1363,10 +1363,10 @@ SAMFormat::computeCigarString(
                             cigarBuf,
                             cigarBufLen,
 			    useM,
+                            tokens,
                             COMPACT_CIGAR_STRING,
                             &cigarBufUsed,
-                            o_addFrontClipping,
-                            tokens);
+                            o_addFrontClipping);
         if (*o_addFrontClipping != 0) {
             return NULL;
         }

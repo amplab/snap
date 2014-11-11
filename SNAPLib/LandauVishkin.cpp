@@ -617,7 +617,7 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
     int k,
     char *cigarBuf, int cigarBufLen, bool useM, 
     std::vector<unsigned> &tokens,
-    CigarFormat format, int* cigarBufUsed, 
+    CigarFormat format, int* o_cigarBufUsed, 
     int* o_addFrontClipping)
 {
     if (format != BAM_CIGAR_OPS && format != COMPACT_CIGAR_STRING) {

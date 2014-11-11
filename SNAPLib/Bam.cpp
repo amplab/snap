@@ -569,7 +569,7 @@ public:
     virtual bool writeRead(
         const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
-        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, bool isTranscriptome = false, unsigned tlocation = 0, int * o_addFrontClipping,
+        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int * o_addFrontClipping, bool isTranscriptome = false, unsigned tlocation = 0,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
         bool mateIsTranscriptome = false, unsigned mateTlocation = 0) const; 
@@ -731,9 +731,9 @@ BAMFormat::writeRead(
     GenomeLocation genomeLocation,
     Direction direction,
     bool secondaryAlignment,
+    int * o_addFrontClipping,
     bool isTranscriptome,
     unsigned tlocation,
-    int * o_addFrontClipping,
     bool hasMate,
     bool firstInPair,
     Read * mate,
@@ -787,7 +787,7 @@ BAMFormat::writeRead(
             cigarOps = computeCigarOps(context.genome, lv, (char*) cigarBuf, cigarBufSize * sizeof(_uint32),
                                        clippedData, clippedLength, basesClippedBefore, (unsigned)extraBasesClippedBefore, basesClippedAfter, (unsigned)extraBasesClippedAfter,
                                        read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
-                                       genomeLocation, direction == RC, useM, &editDistance, o_AddFrontClipping, tokens);
+                                       genomeLocation, direction == RC, useM, &editDistance, o_addFrontClipping, tokens);
                                    
         } else {
         
@@ -798,12 +798,12 @@ BAMFormat::writeRead(
                                        tlocation, direction == RC, useM, &editDistance, o_addFrontClipping, tokens);
                                              
             //We need the pieceName for conversion             
-            const Genome::Contig *transcriptomePiece = transcriptome->getContigAtLocation(tlocation);
+            const Genome::Contig *transcriptomePiece = context.transcriptome->getContigAtLocation(tlocation);
             const char* transcriptomePieceName = transcriptomePiece->name;
-            unsigned transcriptomePositionInPiece = tlocation - transcriptomePiece->beginningOffset + 1; // SAM is 1-based
+            unsigned transcriptomePositionInPiece = tlocation - transcriptomePiece->beginningLocation + 1; // SAM is 1-based
             
             //Need to assign to cigarOPS                                                                          
-            cigarOps = lv->insertSpliceJunctions(gtf, tokens, transcriptomePieceName, transcriptomePositionInPiece, (char*) cigarBuf, cigarBufSize * sizeof(_uint32), BAM_CIGAR_OPS);
+            cigarOps = lv->insertSpliceJunctions(context.gtf, tokens, transcriptomePieceName, transcriptomePositionInPiece, (char*) cigarBuf, cigarBufSize * sizeof(_uint32), BAM_CIGAR_OPS);
          
         } 
               

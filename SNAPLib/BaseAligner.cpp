@@ -221,24 +221,15 @@ bool _DumpAlignments = false;
 
     void
 BaseAligner::CharacterizeSeeds(
-        Read *inputRead,
-        seed_map  &map,
-        seed_map  &mapRC
+        Read                    *inputRead,
+        seed_map                &map,
+        seed_map                &mapRC
     )      // Retun value is true if there was enough room in the secondary alignment buffer for everything that was found.
-
-{  
-    // These used to be parameters that were used by the old version of the paired-end aligner when it wanted to search for
-    // a limited set of single-end alignments.  That turned out to produce not-so-good results, so it went away but stayed
-    // in the AlignRead interface for a while. Now, it's still in the code just in case someone wants it some day, but
-    // to get it back will require changing the interface again.
-    unsigned   searchRadius = 0;
-    unsigned   searchLocation = 0;
-    Direction  searchDirection = RC;
-
+{   
     memset(hitCountByExtraSearchDepth, 0, sizeof(*hitCountByExtraSearchDepth) * extraSearchDepth);
 
     firstPassSeedsNotSkipped[FORWARD] = firstPassSeedsNotSkipped[RC] = 0;
-    smallestSkippedSeed[FORWARD] = smallestSkippedSeed[RC] = InvalidGenomeLocation;
+    smallestSkippedSeed[FORWARD] = smallestSkippedSeed[RC] = 0x8fffffffffffffff;
     highestWeightListChecked = 0;
 
     unsigned maxSeedsToUse;
@@ -251,14 +242,6 @@ BaseAligner::CharacterizeSeeds(
     unsigned lookupsThisRun = 0;
 
     popularSeedsSkipped = 0;
-
-    // Range of genome locations to search in.
-    unsigned minLocation = 0;
-    unsigned maxLocation = 0xFFFFFFFF;
-    if (searchRadius != 0) {
-        minLocation = (searchLocation > searchRadius) ? searchLocation - searchRadius : 0;
-        maxLocation = (searchLocation < 0xFFFFFFFF - searchRadius) ? searchLocation + searchRadius : 0xFFFFFFFF;
-    }
 
     //
     // A bitvector for used seeds, indexed on the starting location of the seed within the read.
@@ -391,12 +374,17 @@ BaseAligner::CharacterizeSeeds(
 
         Seed seed(read[FORWARD]->getData() + nextSeedToTest, seedLen);
 
-        unsigned        nHits[NUM_DIRECTIONS];      // Number of times this seed hits in the genome
-        const unsigned  *hits[NUM_DIRECTIONS];      // The actual hits (of size nHits)
+        _int64        nHits[NUM_DIRECTIONS];                // Number of times this seed hits in the genome
+        const GenomeLocation  *hits[NUM_DIRECTIONS];        // The actual hits (of size nHits)
+        GenomeLocation singletonHits[NUM_DIRECTIONS];       // Storage for single hits (this is required for 64 bit genome indices, since they might use fewer than 8 bytes internally)
 
-        unsigned minSeedLoc = (minLocation < readLen ? 0 : minLocation - readLen);
-        unsigned maxSeedLoc = (maxLocation > 0xFFFFFFFF - readLen ? 0xFFFFFFFF : maxLocation + readLen);
-        genomeIndex->lookupSeed(seed, minSeedLoc, maxSeedLoc, &nHits[0], &hits[0], &nHits[1], &hits[1]);
+        const unsigned *hits32[NUM_DIRECTIONS];
+
+        if (doesGenomeIndexHave64BitLocations) {
+            genomeIndex->lookupSeed(seed, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC], &singletonHits[FORWARD], &singletonHits[RC]);
+        } else {
+            genomeIndex->lookupSeed32(seed, &nHits[FORWARD], &hits32[FORWARD], &nHits[RC], &hits32[RC]);
+        }
 
         nHashTableLookups++;
         lookupsThisRun++;
@@ -404,13 +392,6 @@ BaseAligner::CharacterizeSeeds(
         bool appliedEitherSeed = false;
 
         for (Direction direction = 0; direction < NUM_DIRECTIONS; direction++) {
-            if (searchRadius != 0 && searchDirection != direction) {
-                //
-                // We're looking only for hits in the other direction.
-                //
-                continue;
-            }
-
             if (nHits[direction] > maxHitsToConsider && !explorePopularSeeds) {
                 //
                 // This seed is matching too many places.  Just pretend we never looked and keep going.
@@ -423,25 +404,45 @@ BaseAligner::CharacterizeSeeds(
                     firstPassSeedsNotSkipped[direction]++;
                 }
 
+                //
+                // Update the candidates list with any hits from this seed.  If lowest possible score of any unseen location is
+                // more than best_score + confDiff then we know that if this location is newly seen then its location won't ever be a
+                // winner, and we can ignore it.
+                //
+
                 unsigned offset;
                 if (direction == FORWARD) {
                     offset = nextSeedToTest;
                 } else {
+                    //
+                    // The RC seed is at offset ReadSize - SeedSize - seed offset in the RC seed.
+                    //
+                    // To see why, imagine that you had a read that looked like 0123456 (where the digits
+                    // represented some particular bases, and digit' is the base's complement). Then the
+                    // RC of that read is 6'5'4'3'2'1'.  So, when we look up the hits for the seed at
+                    // offset 0 in the forward read (i.e. 012 assuming a seed size of 3) then the index
+                    // will also return the results for the seed's reverse complement, i.e., 3'2'1'.
+                    // This happens as the last seed in the RC read.
+                    //
                     offset = readLen - seedLen - nextSeedToTest;
                 }
 
                 const unsigned prefetchDepth = 30;
-                unsigned limit = min(nHits[direction], maxHitsToConsider) + prefetchDepth;
+                _int64 limit = min(nHits[direction], (_int64)maxHitsToConsider) + prefetchDepth;
                 for (unsigned iBase = 0 ; iBase < limit; iBase += prefetchDepth) {
                     //
                     // This works in two phases: we launch prefetches for a group of hash table lines,
                     // then we do all of the inserts, and then repeat.
                     //
 
-                    unsigned innerLimit = min(iBase + prefetchDepth, min(nHits[direction], maxHitsToConsider));
+		  _int64 innerLimit = min((_int64)iBase + prefetchDepth, min(nHits[direction], (_int64)maxHitsToConsider));
                     if (doAlignerPrefetch) {
                         for (unsigned i = iBase; i < innerLimit; i++) {
-                            prefetchHashTableBucket(hits[direction][i] - offset, direction);
+                            if (doesGenomeIndexHave64BitLocations) {
+                                prefetchHashTableBucket(GenomeLocationAsInt64(hits[direction][i]) - offset, direction);
+                            } else {
+                                prefetchHashTableBucket(hits32[direction][i] - offset, direction);
+                            }
                         }
                     }
 
@@ -449,11 +450,11 @@ BaseAligner::CharacterizeSeeds(
                         //
                         // Find the genome location where the beginning of the read would hit, given a match on this seed.
                         //
-                        unsigned genomeLocationOfThisHit = hits[direction][i] - offset;
-                        if (genomeLocationOfThisHit < minLocation ||
-                                genomeLocationOfThisHit > maxLocation ||
-                                hits[direction][i] < offset) {
-                            continue;
+                        GenomeLocation genomeLocationOfThisHit;
+                        if (doesGenomeIndexHave64BitLocations) {
+                            genomeLocationOfThisHit = hits[direction][i] - offset;
+                        } else {
+                            genomeLocationOfThisHit = hits32[direction][i] - offset;
                         }
 
                         if (direction == FORWARD) {
@@ -506,19 +507,11 @@ BaseAligner::CharacterizeSeeds(
         }
 
 #endif // 0
-
     }
 
     //
     // Do the best with what we've got.
     //
-#ifdef TRACE_ALIGNER
-    printf("Calling score with force=true because we ran out of seeds\n");
-#endif
-
-#ifdef  _DEBUG
-    if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates) at %u\n", primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, primaryResult->location);
-#endif  // _DEBUG
 
     return;
 }

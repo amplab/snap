@@ -1237,8 +1237,8 @@ void GTFTranscript::Junctions(unsigned transcript_pos, unsigned span, std::vecto
 void GTFTranscript::WriteFASTA(const Genome *genome, std::ofstream &outfile) const {
 
     //Get the offset for this chromosome
-    unsigned offset;
-    bool isValid = genome->getOffsetOfContig(chr.c_str(), &offset);
+    GenomeLocation offset;
+    bool isValid = genome->getLocationOfContig(chr.c_str(), &offset);
 
     if (!isValid) {
         printf("Warning: chromosome %s from the annotation is not found in the genome file\n", chr.c_str());

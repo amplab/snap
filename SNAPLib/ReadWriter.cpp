@@ -140,7 +140,7 @@ SimpleReadWriter::writeRead(
             return false;
         }
         int addFrontClipping;
-        if (format->writeRead(context, &lvc, buffer, size, &used, read->getIdLength(), read, result, mapQuality, genomeLocation, direction, secondaryAlignment, isTranscriptome, tlocation, &addFrontClipping)) {
+        if (format->writeRead(context, &lvc, buffer, size, &used, read->getIdLength(), read, result, mapQuality, genomeLocation, direction, secondaryAlignment, &addFrontClipping, isTranscriptome, tlocation)) {
             _ASSERT(used <= size);
 
             if (used > 0xffffffff) {
@@ -237,7 +237,7 @@ SimpleReadWriter::writePair(
         int addFrontClipping;
         bool writesFit = format->writeRead(context, &lvc, buffer, size, &sizeUsed[first],
             idLengths[first], reads[first], result->status[first], result->mapq[first], locations[first], result->direction[first], secondaryAlignment,
-            result->isTranscriptome[first], result->tlocation[first], &addFrontClipping, true, first == 0,
+            &addFrontClipping, result->isTranscriptome[first], result->tlocation[first], true, first == 0,
             reads[second], result->status[second], locations[second], result->direction[second], result->isTranscriptome[second], result->tlocation[second]);
         if (addFrontClipping != 0) {
 			const Genome::Contig *originalContig = genome->getContigAtLocation(locations[first]);
@@ -263,7 +263,7 @@ SimpleReadWriter::writePair(
         if (writesFit) {
             writesFit = format->writeRead(context, &lvc, buffer + sizeUsed[first], size - sizeUsed[first], &sizeUsed[second],
                 idLengths[second], reads[second], result->status[second], result->mapq[second], locations[second], result->direction[second], secondaryAlignment,
-                result->isTranscriptome[second], result->tlocation[second], &addFrontClipping, true, first != 0,
+                &addFrontClipping, result->isTranscriptome[second], result->tlocation[second], true, first != 0,
                 reads[first], result->status[first], locations[first], result->direction[first], result->isTranscriptome[first], result->tlocation[first]);
             if (addFrontClipping != 0) {
 				const Genome::Contig *originalContig = genome->getContigAtLocation(locations[second]);
@@ -283,7 +283,6 @@ SimpleReadWriter::writePair(
                 pass--;
                 continue;
             }
->>>>>>> dev
             if (writesFit) {
                 break;
             }

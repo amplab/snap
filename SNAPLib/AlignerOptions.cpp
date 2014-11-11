@@ -75,7 +75,7 @@ AlignerOptions::AlignerOptions(
     expansionFactor(1.0),
     noUkkonen(false),
     noOrderedEvaluation(false),
-    enableFusions(false)
+    enableFusions(false),
     noTruncation(false),
     minReadLength(DEFAULT_MIN_READ_LENGTH),
     maxDistFraction(0.0),

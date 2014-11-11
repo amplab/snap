@@ -392,7 +392,7 @@ void PairedAlignerContext::runIterationThread()
     unsigned g_maxPairedSecondaryHits;
     unsigned g_maxSingleSecondaryHits;
 
-    if (maxSecondaryAligmmentAdditionalEditDistance < 0) {
+    if (maxSecondaryAlignmentAdditionalEditDistance < 0) {
         g_maxPairedSecondaryHits = 0;
         g_maxSingleSecondaryHits = 0;
     } else {
@@ -439,7 +439,7 @@ void PairedAlignerContext::runIterationThread()
     unsigned t_maxPairedSecondaryHits;
     unsigned t_maxSingleSecondaryHits;
 
-    if (maxSecondaryAligmmentAdditionalEditDistance < 0) {
+    if (maxSecondaryAlignmentAdditionalEditDistance < 0) {
         t_maxPairedSecondaryHits = 0;
         t_maxSingleSecondaryHits = 0;
     } else {
@@ -453,7 +453,7 @@ void PairedAlignerContext::runIterationThread()
 
     IntersectingPairedEndAligner *t_intersectingAligner = new (t_allocator) IntersectingPairedEndAligner(transcriptome, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth,
-                                                                maxCandidatePoolSize, t_allocator, noUkkonen, noOrderedEvaluation);
+                                                                maxCandidatePoolSize, t_allocator, noUkkonen, noOrderedEvaluation, noTruncation);
 
     ChimericPairedEndAligner *t_aligner = new (t_allocator) ChimericPairedEndAligner(
         transcriptome,
@@ -462,11 +462,14 @@ void PairedAlignerContext::runIterationThread()
         maxDist,
         numSeedsFromCommandLine,
         seedCoverage,
+        minWeightToCheck,
         forceSpacing,
         extraSearchDepth,
         noUkkonen,
         noOrderedEvaluation,
+        noTruncation,
         t_intersectingAligner,
+        minReadLength,
         t_allocator);
 
     t_allocator->checkCanaries();
@@ -490,7 +493,7 @@ void PairedAlignerContext::runIterationThread()
 
       c_memoryPoolSize += ChimericPairedEndAligner::getBigAllocatorReservation(contamination, maxReadSize, maxHits, contamination->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize);
 
-      if (maxSecondaryAligmmentAdditionalEditDistance < 0) {
+      if (maxSecondaryAlignmentAdditionalEditDistance < 0) {
           c_maxPairedSecondaryHits = 0;
           c_maxSingleSecondaryHits = 0;
       } else {
@@ -504,7 +507,7 @@ void PairedAlignerContext::runIterationThread()
       
       c_intersectingAligner = new (c_allocator) IntersectingPairedEndAligner(contamination, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
                                                                   seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth,
-                                                                  maxCandidatePoolSize, c_allocator, noUkkonen, noOrderedEvaluation);
+                                                                  maxCandidatePoolSize, c_allocator, noUkkonen, noOrderedEvaluation, noTruncation);
       c_aligner = new (c_allocator) ChimericPairedEndAligner(
           contamination,
           maxReadSize,
@@ -512,11 +515,14 @@ void PairedAlignerContext::runIterationThread()
           maxDist,
           numSeedsFromCommandLine,
           seedCoverage,
+          minWeightToCheck,
           forceSpacing,
           extraSearchDepth,
           noUkkonen,
           noOrderedEvaluation,
+          noTruncation,
           c_intersectingAligner,
+          minReadLength,
           c_allocator);
 
       c_allocator->checkCanaries();
@@ -620,7 +626,7 @@ void PairedAlignerContext::runIterationThread()
         _int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
 
-        t_aligner->align(read0, read1, &t_pairedResult, maxSecondaryAligmmentAdditionalEditDistance, t_maxPairedSecondaryHits, &t_nSecondaryResults, t_secondaryResults, t_maxSingleSecondaryHits, &t_nSingleSecondaryResults[0], &t_nSingleSecondaryResults[1],t_singleSecondaryResults);
+        t_aligner->align(read0, read1, &t_pairedResult, maxSecondaryAlignmentAdditionalEditDistance, t_maxPairedSecondaryHits, &t_nSecondaryResults, t_secondaryResults, t_maxSingleSecondaryHits, &t_nSingleSecondaryResults[0], &t_nSingleSecondaryResults[1],t_singleSecondaryResults);
 
         t_allocator->checkCanaries();
 
@@ -650,7 +656,7 @@ void PairedAlignerContext::runIterationThread()
             }
         }
 
-        g_aligner->align(read0, read1, &g_pairedResult, maxSecondaryAligmmentAdditionalEditDistance, g_maxPairedSecondaryHits, &g_nSecondaryResults, g_secondaryResults, g_maxSingleSecondaryHits, &g_nSingleSecondaryResults[0], &g_nSingleSecondaryResults[1],g_singleSecondaryResults);
+        g_aligner->align(read0, read1, &g_pairedResult, maxSecondaryAlignmentAdditionalEditDistance, g_maxPairedSecondaryHits, &g_nSecondaryResults, g_secondaryResults, g_maxSingleSecondaryHits, &g_nSingleSecondaryResults[0], &g_nSingleSecondaryResults[1],g_singleSecondaryResults);
 
         g_allocator->checkCanaries();
         
@@ -688,7 +694,7 @@ void PairedAlignerContext::runIterationThread()
           //If the contamination database is present
           if (c_aligner != NULL) {
 
-            c_aligner->align(read0, read1, &contaminantResult, maxSecondaryAligmmentAdditionalEditDistance, c_maxPairedSecondaryHits, &c_nSecondaryResults, c_secondaryResults, c_maxSingleSecondaryHits, &c_nSingleSecondaryResults[0], &c_nSingleSecondaryResults[1],c_singleSecondaryResults);
+            c_aligner->align(read0, read1, &contaminantResult, maxSecondaryAlignmentAdditionalEditDistance, c_maxPairedSecondaryHits, &c_nSecondaryResults, c_secondaryResults, c_maxSingleSecondaryHits, &c_nSingleSecondaryResults[0], &c_nSingleSecondaryResults[1],c_singleSecondaryResults);
             if ((contaminantResult.status[0] != NotFound) && (contaminantResult.status[1] != NotFound)) {
 
               c_filter->AddAlignment(contaminantResult.location[0], string(read0->getId(), read0->getIdLength()), string(read0->getData(), read0->getDataLength()));

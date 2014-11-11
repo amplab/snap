@@ -46,7 +46,7 @@ class Alignment {
 
     public:
     
-        Alignment(unsigned location_, Direction direction_, int score_, int mapq, string rname_, unsigned pos_, unsigned pos_end_, unsigned pos_original_, string transcript_id_, string gene_id_, bool isTranscriptome_);
+        Alignment(GenomeLocation location_, Direction direction_, int score_, int mapq, string rname_, unsigned pos_, unsigned pos_end_, unsigned pos_original_, string transcript_id_, string gene_id_, bool isTranscriptome_);
         virtual ~Alignment() {}
         Alignment(const Alignment &rhs);
         Alignment& operator=(const Alignment&rhs);
@@ -55,7 +55,7 @@ class Alignment {
         
     protected:
     
-        unsigned location;
+        GenomeLocation location;
         Direction direction;
         int score;
         int mapq;
@@ -106,9 +106,9 @@ class AlignmentFilter {
         virtual ~AlignmentFilter();  
         
         //Functions
-        int AddAlignment(unsigned location, Direction direction, int score, int mapq, bool isTranscriptome, bool isMate0); 
+        int AddAlignment(GenomeLocation location, Direction direction, int score, int mapq, bool isTranscriptome, bool isMate0); 
         int Filter(PairedAlignmentResult* result);
-        AlignmentResult FilterSingle(unsigned* location, Direction* direction, int* score, int* mapq, bool* isTranscriptome, unsigned* tlocation);   
+        AlignmentResult FilterSingle(GenomeLocation* location, Direction* direction, int* score, int* mapq, bool* isTranscriptome, unsigned* tlocation);   
         
     protected:
     

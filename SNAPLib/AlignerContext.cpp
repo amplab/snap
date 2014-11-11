@@ -210,7 +210,7 @@ AlignerContext::initialize()
             printf("Loading transcriptome index from directory... ");
             fflush(stdout);
             _int64 loadStart = timeInMillis();
-            transcriptome = GenomeIndex::loadFromDirectory((char*) options->transcriptomeDir);
+            transcriptome = GenomeIndex::loadFromDirectory((char*) options->transcriptomeDir, options->mapIndex, options->prefetchIndex);
             if (transcriptome == NULL) {
                 fprintf(stderr, "Transcriptome index load failed, aborting.\n");
                 soft_exit(1);
@@ -241,7 +241,7 @@ AlignerContext::initialize()
             printf("Loading secondary index from directory... ");
             fflush(stdout);
             _int64 loadStart = timeInMillis();
-            contamination = GenomeIndex::loadFromDirectory((char*) options->contaminationDir);
+            contamination = GenomeIndex::loadFromDirectory((char*) options->contaminationDir, options->mapIndex, options->prefetchIndex);
             if (contamination == NULL) {
                 fprintf(stderr, "Secondary index load failed, aborting.\n");
                 soft_exit(1);

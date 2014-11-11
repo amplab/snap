@@ -165,9 +165,9 @@ public:
     virtual bool writeRead(
         const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace, 
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
-        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, bool isTranscriptome, unsigned tlocation,
-        int* o_addFrontClipping, bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
-        AlignmentResult mateResult = NotFound, unsigned mateLocation = 0, Direction mateDirection = FORWARD, bool mateIsTranscriptome = false, unsigned mateTlocation = 0) const; 
+        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int* o_addFrontClipping, 
+        bool isTranscriptome, unsigned tlocation, bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
+        AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD, bool mateIsTranscriptome = false, unsigned mateTlocation = 0) const; 
 
     // calculate data needed to write SAM/BAM record
     // very long argument list since this was extracted from

@@ -53,7 +53,7 @@ void ContaminationFilter::AddAlignment(unsigned location, string header, string 
     
       const Genome::Contig *piece = contamination->getContigAtLocation(location);
       rname = piece->name;
-      pos = location - piece->beginningOffset + 1;
+      pos = location - piece->beginningLocation + 1;
     
     } 
     
