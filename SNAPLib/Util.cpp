@@ -114,13 +114,13 @@ void NWaiter::signal()
 	AllowEventWaitersToProceed(&_waiter);
 }
 
-char *FormatUIntWithCommas(unsigned _int64 val, char *outputBuffer, size_t outputBufferSize)
+char *FormatUIntWithCommas(_uint64 val, char *outputBuffer, size_t outputBufferSize)
 {
 	//
 	// First, figure out the number of digits.
 	//
 	unsigned nDigits = 0;
-	unsigned _int64 x = val;
+	_uint64 x = val;
 	while (x > 0) {
 		nDigits++;
 		x = x / 10;
