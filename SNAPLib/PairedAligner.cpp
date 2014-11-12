@@ -516,7 +516,7 @@ void PairedAlignerContext::runIterationThread()
             }
         }
 
-        updateStats((PairedAlignerStats*) stats, read0, read1, &result);
+        updateStats((PairedAlignerStats*) stats, read0, read1, &result, useful0, useful1);
 
     }
 
@@ -542,18 +542,22 @@ void PairedAlignerContext::writePair(Read* read0, Read* read1, PairedAlignmentRe
     }
 }
 
-void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, Read* read1, PairedAlignmentResult* result)
+void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, Read* read1, PairedAlignmentResult* result, bool useful0, bool useful1)
 {
+	bool useful[2] = { useful0, useful1 };
+
     // Update stats
     for (int r = 0; r < 2; r++) {
-        if (isOneLocation(result->status[r])) {
-            stats->singleHits++;
-        } else if (result->status[r] == MultipleHits) {
-            stats->multiHits++;
-        } else {
-            _ASSERT(result->status[r] == NotFound);
-            stats->notFound++;
-        }
+		if (useful[r]) {
+			if (isOneLocation(result->status[r])) {
+				stats->singleHits++;
+			} else if (result->status[r] == MultipleHits) {
+				stats->multiHits++;
+			} else {
+				_ASSERT(result->status[r] == NotFound);
+				stats->notFound++;
+			}
+		}
         // Add in MAPQ stats
         if (result->status[r] != NotFound) {
             int mapq = result->mapq[r];
