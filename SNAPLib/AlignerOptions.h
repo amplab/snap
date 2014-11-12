@@ -118,9 +118,10 @@ struct AlignerOptions : public AbstractOptions
         FilterSingleHit =           0x0002,
         FilterMultipleHits =        0x0004,
         FilterBothMatesMatch =      0x0008,
+		FilterTooShort =            0x0010
     };
 
-    bool passFilter(Read* read, AlignmentResult result);
+    bool passFilter(Read* read, AlignmentResult result, bool tooShort);
     
     virtual bool isPaired() { return false; }
 };

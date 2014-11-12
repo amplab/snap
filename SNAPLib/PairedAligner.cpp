@@ -247,7 +247,7 @@ void PairedAlignerOptions::usageMessage()
         "       Only increase this if you get an error message saying to do so. If you're running\n"
         "       out of memory, you may want to reduce it.  Default: %d)\n"
         "  -F b additional option to -F to require both mates to satisfy filter (default is just one)\n"
-        "       out of memory, you may want to reduce it.  Default: %d).\n"
+		"       If you specify -F b together with one of the other -F options, -F b MUST be second\n"
         "  -ku  Keep unpaired-looking reads in SAM/BAM input.  Ordinarily, if a read doesn't specify\n"
         "       mate information (RNEXT field is * and/or PNEXT is 0) then the code that matches reads will immdeiately\n"
         "       discard it.  Specifying this flag may cause large memory usage for some input files,\n"
@@ -371,7 +371,7 @@ void PairedAlignerContext::runIterationThread()
             stats->totalReads += 2;
 
 
-            writePair(read0, read1, &result, false);
+            writePair(read0, read1, &result, false, true, true);
         }
         delete supplier;
         return;
@@ -457,13 +457,13 @@ void PairedAlignerContext::runIterationThread()
         int maxDist = this->maxDist;
         bool useful0 = read0->getDataLength() >= minReadLength && (int)read0->countOfNs() <= maxDist;
         bool useful1 = read1->getDataLength() >= minReadLength && (int)read1->countOfNs() <= maxDist;
-        if (!useful0 && !useful1) {
-            PairedAlignmentResult result;
-            result.status[0] = NotFound;
-            result.status[1] = NotFound;
-            result.location[0] = InvalidGenomeLocation;
-            result.location[1] = InvalidGenomeLocation;
-            writePair(read0, read1, &result, false);
+		if (!useful0 && !useful1) {
+			PairedAlignmentResult result;
+			result.status[0] = NotFound;
+			result.status[1] = NotFound;
+			result.location[0] = InvalidGenomeLocation;
+			result.location[1] = InvalidGenomeLocation;
+			writePair(read0, read1, &result, false, useful0, useful1);
             continue;
         } else {
             // Here one the reads might still be hopeless, but maybe we can align the other.
@@ -502,15 +502,16 @@ void PairedAlignerContext::runIterationThread()
             result.location[0] = result.location[1] = InvalidGenomeLocation;
         }
 
-        writePair(read0, read1, &result, false);
+		writePair(read0, read1, &result, false, useful0, useful1);
         
         for (int i = 0; i < __min(nSecondaryResults, maxSecondaryAlignments); i++) {
-            writePair(read0, read1, secondaryResults + i, true);
+            writePair(read0, read1, secondaryResults + i, true, useful0, useful1);
         }
 
         for (int i = 0; i < __min(nSingleSecondaryResults[0] + nSingleSecondaryResults[1], maxSecondaryAlignments - nSecondaryResults); i++) {
             Read *read = i < nSingleSecondaryResults[0] ? read0 : read1;
-            if (readWriter != NULL && (options->passFilter(read, singleSecondaryResults[i].status))) {
+			bool useful = i < nSingleSecondaryResults[0] ? useful0 : useful1;
+            if (readWriter != NULL && (options->passFilter(read, singleSecondaryResults[i].status, !useful))) {
                 readWriter->writeRead(readerContext, read, singleSecondaryResults[i].status, singleSecondaryResults[i].mapq, singleSecondaryResults[i].location, singleSecondaryResults[i].direction, true);
             }
         }
@@ -530,10 +531,10 @@ void PairedAlignerContext::runIterationThread()
     delete allocator;
 }
 
-void PairedAlignerContext::writePair(Read* read0, Read* read1, PairedAlignmentResult* result, bool secondary)
+void PairedAlignerContext::writePair(Read* read0, Read* read1, PairedAlignmentResult* result, bool secondary, bool useful0, bool useful1)
 {
-    bool pass0 = options->passFilter(read0, result->status[0]);
-    bool pass1 = options->passFilter(read1, result->status[1]);
+    bool pass0 = options->passFilter(read0, result->status[0], !useful0);
+    bool pass1 = options->passFilter(read1, result->status[1], !useful1);
     bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
         ? (pass0 && pass1) : (pass0 || pass1);
     if (readWriter != NULL && pass) {

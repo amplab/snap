@@ -221,7 +221,7 @@ Return Value:
             if (!VirtualProtect((char *)allocatedMemory + virtualAllocSize, systemInfo->dwPageSize, PAGE_NOACCESS, &oldProtect)) {
                 static bool printedVirtualProtectedWarning = false;
                 if (! printedVirtualProtectedWarning) {
-                    WriteErrorMessage("VirtualProtect for guard page failed, %d\n", GetLastError());
+                    //WriteErrorMessage("VirtualProtect for guard page failed, %d\n", GetLastError());
                     printedVirtualProtectedWarning = true;
                 }
             }

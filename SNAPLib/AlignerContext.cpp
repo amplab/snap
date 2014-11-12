@@ -34,6 +34,7 @@ Revision History:
 #include "exit.h"
 #include "PairedAligner.h"
 #include "Error.h"
+#include "Util.h"
 
 using std::max;
 using std::min;
@@ -189,7 +190,7 @@ AlignerContext::initialize()
     void
 AlignerContext::printStatsHeader()
 {
-    WriteStatusMessage("MaxHits\tMaxDist\t%%Used\t%%Unique\t%%Multi\t%%!Found\t%%Pairs\tlvCalls\tNumReads\tReads/s\n");
+	WriteStatusMessage("Total Reads    Aligned, MAPQ >= %2d    Aligned, MAPQ < %2d     Unaligned              Too Short/Too Many Ns  %%Pairs\tReads/s   Time in Aligner (s)\n", MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT);
 }
 
     void
@@ -270,33 +271,68 @@ AlignerContext::nextIteration()
     return false;
 }
 
+extern char *FormatUIntWithCommas(unsigned _int64 val, char *outputBuffer, size_t outputBufferSize);	// Relying on the one in Util.h results in an "internal compiler error" for Visual Studio.
+
+//
+// Take an integer and a percentage, and turn it into a string of the form "number (percentage%)<padding>" where
+// number has commas and the whole thing is padded out with spaces to a specific length.
+//
+char *numPctAndPad(char *buffer, unsigned _int64 num, double pct, size_t desiredWidth, size_t bufferLen)
+{
+	_ASSERT(desiredWidth < bufferLen);	// < to leave room for trailing null.
+
+	FormatUIntWithCommas(num, buffer, bufferLen);
+	const size_t percentageBufferSize = 100;	// Plenty big enough for any value
+	char percentageBuffer[percentageBufferSize];
+
+	sprintf(percentageBuffer, " (%.02f%%)", pct);
+	if (strlen(percentageBuffer) + strlen(buffer) >= bufferLen) {
+		WriteErrorMessage("numPctAndPad: overflowed output buffer\n");
+		soft_exit(1);
+	}
+
+	strcat(buffer, percentageBuffer);
+	for (size_t x = strlen(buffer); x < desiredWidth; x++) {
+		strcat(buffer, " ");
+	}
+
+	return buffer;
+}
+
     void
 AlignerContext::printStats()
 {
     double usefulReads = max((double) stats->usefulReads, 1.0);
 
-    WriteStatusMessage("%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%lld\t%lld\t%.0f (at: %lld)\n",
-            maxHits_, 
-            maxDist_, 
-            100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
-            100.0 * stats->singleHits / usefulReads,
-            100.0 * stats->multiHits / usefulReads,
-            100.0 * stats->notFound / usefulReads,
-            100.0 * stats->alignedAsPairs / usefulReads,
-            stats->lvCalls,
-            stats->totalReads,
-            (1000.0 * usefulReads) / max(alignTime, (_int64) 1), 
-            alignTime);
+	const size_t strBufLen = 50;	// Way more than enough for 64 bit numbers with commas
+	char tooShort[strBufLen];
+	char single[strBufLen];
+	char multi[strBufLen];
+	char unaligned[strBufLen];
+	char numReads[strBufLen];
+	char readsPerSecond[strBufLen];
+	char alignTimeString[strBufLen];
+
+	WriteStatusMessage("%-14s %s %s %s %s %.02f%%%\t%-9s %s\n",
+		FormatUIntWithCommas(stats->totalReads, numReads, strBufLen),
+		numPctAndPad(single, stats->singleHits, 100.0 * stats->singleHits / stats->totalReads, 22, strBufLen),
+		numPctAndPad(multi, stats->multiHits, 100.0 * stats->multiHits / stats->totalReads, 22, strBufLen),
+		numPctAndPad(unaligned, stats->notFound, 100.0 * stats->notFound / stats->totalReads, 22, strBufLen),
+		numPctAndPad(tooShort, stats->totalReads - stats->usefulReads, 100.0 * (stats->totalReads - stats->usefulReads) / max(stats->totalReads, (_int64)1), 22, strBufLen),
+		100.0 * stats->alignedAsPairs / stats->totalReads,
+		FormatUIntWithCommas((unsigned _int64)(1000 * stats->totalReads / max(alignTime, (_int64)1)), readsPerSecond, strBufLen),	// Aligntime is in ms
+		FormatUIntWithCommas((alignTime + 500) / 1000, alignTimeString, strBufLen)
+		);
 
     if (NULL != perfFile) {
         fprintf(perfFile, "%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%lld\t%lld\tt%.0f\n",
                 maxHits_, maxDist_, 
                 100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
-                100.0 * stats->singleHits / usefulReads,
-                100.0 * stats->multiHits / usefulReads,
-                100.0 * stats->notFound / usefulReads,
+				100.0 * stats->singleHits / stats->totalReads,
+				100.0 * stats->multiHits / stats->totalReads,
+				100.0 * stats->notFound / stats->totalReads,
                 stats->lvCalls,
-                100.0 * stats->alignedAsPairs / usefulReads,
+				100.0 * stats->alignedAsPairs / stats->totalReads,
                 stats->totalReads,
                 (1000.0 * usefulReads) / max(alignTime, (_int64) 1));
 

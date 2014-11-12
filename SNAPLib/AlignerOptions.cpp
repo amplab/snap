@@ -109,8 +109,6 @@ AlignerOptions::usageMessage()
 		"  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default: %lf)\n"
 		"  -h   maximum hits to consider per seed (default: %d)\n"
 		"  -ms  minimum seed matches per location (default: %d)\n"
-		"  -c   Deprecated parameter; this is ignored.  Consumes one extra arg.\n"
-		"  -a   Deprecated parameter; this is ignored.  Consumes one extra arg.\n"
 		"  -t   number of threads (default is one per core)\n"
 		"  -b   bind each thread to its processor (this is the default)\n"
 		" --b   Don't bind each thread to its processor (note the double dash)\n"
@@ -120,7 +118,7 @@ AlignerOptions::usageMessage()
 		"  -sm  memory to use for sorting in Gb\n"
 		"  -x   explore some hits of overly popular seeds (useful for filtering)\n"
 		"  -f   stop on first match within edit distance limit (filtering mode)\n"
-		"  -F   filter output (a=aligned only, s=single hit only, u=unaligned only)\n"
+		"  -F   filter output (a=aligned only, s=single hit only (MAPQ >= %d), u=unaligned only, l=long enough to align (see -mrl))\n"
 		"  -S   suppress additional processing (sorted BAM output only)\n"
 		"       i=index, d=duplicate marking\n"
 #if     USE_DEVTEAM_OPTIONS
@@ -178,6 +176,7 @@ AlignerOptions::usageMessage()
             seedCoverage,
             maxHits,
 			minWeightToCheck,
+			MAPQ_LIMIT_FOR_SINGLE_HIT,
             expansionFactor,
 			DEFAULT_MIN_READ_LENGTH);
 
@@ -348,14 +347,35 @@ AlignerOptions::parse(
         if (n + 1 < argc) {
             n++;
             if (strcmp(argv[n], "a") == 0) {
-                filterFlags = FilterSingleHit | FilterMultipleHits;
+				if (0 != filterFlags) {
+					WriteErrorMessage("Specified -F %s after a previous -F option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
+					soft_exit(1);
+				}
+                filterFlags = FilterSingleHit | FilterMultipleHits | FilterTooShort;
             } else if (strcmp(argv[n], "s") == 0) {
-                filterFlags = FilterSingleHit;
-            } else if (strcmp(argv[n], "u") == 0) {
-                filterFlags = FilterUnaligned;
-            } else {
-                // ignore since might be other options for paired
-            }
+				if (0 != filterFlags) {
+					WriteErrorMessage("Specified -F %s after a previous -F option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
+					soft_exit(1);
+				}
+				filterFlags = FilterSingleHit | FilterTooShort;
+			} else if (strcmp(argv[n], "u") == 0) {
+				if (0 != filterFlags) {
+					WriteErrorMessage("Specified -F %s after a previous -F option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
+					soft_exit(1);
+				}
+				filterFlags = FilterUnaligned | FilterTooShort;
+			} else if (strcmp(argv[n], "l") == 0) {
+				if (0 != filterFlags) {
+					WriteErrorMessage("Specified -F %s after a previous -F option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
+					soft_exit(1);
+				}
+				filterFlags = FilterSingleHit | FilterMultipleHits | FilterUnaligned;
+            } else if (strcmp(argv[n], "b") == 0) {
+                // ignore paired-end option(s)
+			} else {
+				WriteErrorMessage("Unknown option type after -F: %s\n", argv[n]);
+				soft_exit(1);
+			}
             return true;
         }
     } else if (strcmp(argv[n], "-x") == 0) {
@@ -667,11 +687,15 @@ AlignerOptions::parse(
     bool
 AlignerOptions::passFilter(
     Read* read,
-    AlignmentResult result)
+    AlignmentResult result,
+	bool tooShort)
 {
     if (filterFlags == 0) {
         return true;
     }
+	if (tooShort && (filterFlags & FilterTooShort) == 0) {
+		return false;
+	}
     switch (result) {
     case NotFound:
     case UnknownAlignment:

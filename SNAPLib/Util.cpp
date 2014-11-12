@@ -24,6 +24,7 @@ Revision History:
 
 #include "stdafx.h"
 #include "Util.h"
+#include "Error.h"
 
 
 _int64 FirstPowerOf2GreaterThanOrEqualTo(_int64 value)
@@ -111,4 +112,66 @@ void NWaiter::signal()
 	ReleaseExclusiveLock(&_lock);
 
 	AllowEventWaitersToProceed(&_waiter);
+}
+
+char *FormatUIntWithCommas(unsigned _int64 val, char *outputBuffer, size_t outputBufferSize)
+{
+	//
+	// First, figure out the number of digits.
+	//
+	unsigned nDigits = 0;
+	unsigned _int64 x = val;
+	while (x > 0) {
+		nDigits++;
+		x = x / 10;
+	}
+
+	if (0 == nDigits) {
+		//
+		// Special case for the value 0 (which, I suppose if the world was rational, would be represented by the empty string.  :-))
+		//
+		_ASSERT(0 == val);
+		nDigits = 1;
+	}
+
+	int nCommas = (nDigits - 1) / 3;
+
+	if (outputBufferSize < nDigits + nCommas + 1) {
+		WriteErrorMessage("Internal error: too small buffer for FormatUIntWithCommas, value %lld, outputBufferSize %lld\n", val, outputBufferSize);
+		if (outputBufferSize > 0) {
+			*outputBuffer = 0;
+		} else {
+			soft_exit(1);
+		}
+		return outputBuffer;
+	}
+
+	//
+	// Now build up the string backwards.
+	//
+	size_t offset = nDigits + nCommas;
+	outputBuffer[offset] = '\0';
+
+	if (0 == val) {
+		outputBuffer[0] = '0';
+		return outputBuffer;
+	}
+
+	x = val;
+	while (x > 0) {
+		char tempBuf[5];
+		if (x > 999) {
+			sprintf(tempBuf, ",%03lld", x % 1000);
+			_ASSERT(strlen(tempBuf) == 4);
+		} else {
+			sprintf(tempBuf, "%d", x);
+		}
+
+		_ASSERT(offset >= strlen(tempBuf));
+		offset -= strlen(tempBuf);
+		memcpy(outputBuffer + offset, tempBuf, strlen(tempBuf));
+		x /= 1000;
+	}
+
+	return outputBuffer;
 }

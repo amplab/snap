@@ -21,23 +21,13 @@ inline double ratio(double a, double b=1)
     return a / (a + b);
 }
 
-inline void die(const std::string &epitaph, int code=1)
-{
-    fputs((epitaph + '\n').c_str(), stderr);
-    soft_exit(code);
-}
+//
+// Turn the value into a string with comma formatting (so 1,234,567 instead of 1234567).
+// Produces a null-terminated string.
+//
+extern char *FormatUIntWithCommas(unsigned _int64 val, char *outputBuffer, size_t outputBufferSize);
 
 const int MAXLINE = 1024;
-
-inline bool readLine(char *line, FILE *file)
-{
-    return fgets(line, MAXLINE, file) && strchr(line, '\n');
-}
-
-inline void dieAtLine(const std::string &epitaph, const std::string &line)
-{
-    die(epitaph + "\n  line: " + line);
-}
 
 //
 // You'd think this would be in the C library.
@@ -89,21 +79,6 @@ stringEndsWith(const char* str, const char* pattern)
     }
 }
 
-//
-// Read a line, returning whether the read was successful or EOF occurred.
-//
-// Die if an error occurred.
-// 
-inline bool readLineOrDie(char *line, FILE *file)
-{
-    if (!readLine(line, file)) {
-        if (feof(file))
-            return false;
-        dieAtLine("Error reading line.", line);
-    }
-    return true;
-}
-
 template <class Key, class T>
 const T &getOrElse(const std::map<Key, T> &m, typename std::map<Key, T>::const_iterator p,
                    const T &d=T())
@@ -146,26 +121,6 @@ void addIfAbsent(std::vector<T> *v, const T &e)
 {
     if (!std::count(v->begin(), v->end(), e))
         v->push_back(e);
-}
-
-inline FILE *fopenOrDie(const char *fileName, const char *mode)
-{
-#ifdef _MSC_VER
-    FILE *file = NULL;
-    fopen_s(&file, fileName, mode);
-#else
-    FILE *file = fopen(fileName, mode);
-#endif
-    if (!file)
-        die("Unable to open file '%s'.");
-    return file;
-}
-
-inline void fcloseOrDie(FILE *file)
-{
-    if (ferror(file))
-        die("Error in file about to be closed.");
-    fclose(file);
 }
 
 inline bool startsWith(const char *s, const char *prefix)

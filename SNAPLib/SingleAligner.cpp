@@ -112,7 +112,7 @@ SingleAlignerContext::runIterationThread()
             maxReadSize,
             numSeedsFromCommandLine,
             seedCoverage,
-	    minWeightToCheck,
+			minWeightToCheck,
             extraSearchDepth,
             noUkkonen,
             noOrderedEvaluation,
@@ -157,7 +157,7 @@ SingleAlignerContext::runIterationThread()
 
         // Skip the read if it has too many Ns or trailing 2 quality scores.
         if (read->getDataLength() < minReadLength || read->countOfNs() > maxDist) {
-            if (readWriter != NULL && options->passFilter(read, NotFound)) {
+            if (readWriter != NULL && options->passFilter(read, NotFound, true)) {
                 readWriter->writeRead(readerContext, read, NotFound, 0, InvalidGenomeLocation, FORWARD, false);
             }
             continue;
@@ -219,7 +219,7 @@ SingleAlignerContext::writeRead(
     bool secondaryAlignment
     )
 {
-    if (readWriter != NULL && options->passFilter(read, result.status)) {
+    if (readWriter != NULL && options->passFilter(read, result.status, false)) {
         readWriter->writeRead(readerContext, read, result.status, result.mapq, result.location, result.direction, secondaryAlignment);
     }
 }
