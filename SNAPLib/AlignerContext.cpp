@@ -271,13 +271,13 @@ AlignerContext::nextIteration()
     return false;
 }
 
-extern char *FormatUIntWithCommas(unsigned _int64 val, char *outputBuffer, size_t outputBufferSize);	// Relying on the one in Util.h results in an "internal compiler error" for Visual Studio.
+extern char *FormatUIntWithCommas(_uint64 val, char *outputBuffer, size_t outputBufferSize);	// Relying on the one in Util.h results in an "internal compiler error" for Visual Studio.
 
 //
 // Take an integer and a percentage, and turn it into a string of the form "number (percentage%)<padding>" where
 // number has commas and the whole thing is padded out with spaces to a specific length.
 //
-char *numPctAndPad(char *buffer, unsigned _int64 num, double pct, size_t desiredWidth, size_t bufferLen)
+char *numPctAndPad(char *buffer, _uint64 num, double pct, size_t desiredWidth, size_t bufferLen)
 {
 	_ASSERT(desiredWidth < bufferLen);	// < to leave room for trailing null.
 
