@@ -33,6 +33,7 @@ Pulled from the main program and expanded to handle daemon mode
 #include "AlignerOptions.h"
 #include "CommandProcessor.h"
 #include "Error.h"
+#include "Compat.h"
 
 const char *SNAP_VERSION = "1.0dev.59";
 
@@ -44,7 +45,7 @@ static void usage()
 		"   index    build a genome index\n"
 		"   single   align single-end reads\n"
 		"   paired   align paired-end reads\n"
-		"   daemon   run in daemon mode--accept commands remotely\n"
+//		"   daemon   run in daemon mode--accept commands remotely\n"
 		"Type a command without arguments to see its help.\n");
 }
 
@@ -170,7 +171,7 @@ void ProcessTopLevelCommands(int argc, const char **argv)
 		soft_exit_no_print(1);
 	}
 
-	if (strcmp(argv[1], "daemon") == 0) {
+	if (strcmp(argv[1], "daemon") == 0 && 0) {
 		RunDaemonMode(argc, argv);
 	} else {
 		ProcessNonDaemonCommands(argc, argv);

@@ -70,15 +70,6 @@ typedef HANDLE EventObject;
 
 int getpagesize();
 
-struct NamedPipe;	// It's bi-directional, which in Unix means it's actually two pipes
-
-extern NamedPipe *OpenNamedPipe(const char *pipeName, bool serverSide);
-extern bool ReadFromNamedPipe(NamedPipe *pipe, char *outputBuffer, size_t outputBufferSize);
-extern bool WriteToNamedPipe(NamedPipe *pipe, const char *stringToWrite);	// Null-terminated string
-extern void CloseNamedPipe(NamedPipe *pipe);
-
-extern const char *DEFAULT_NAMED_PIPE_NAME;
-
 #else   // _MSC_VER
 
 #include <pthread.h>
@@ -179,6 +170,15 @@ inline _uint64 bit_rotate_left64(_uint64 value, unsigned shift)
 }
 
 #endif  // _MSC_VER
+
+struct NamedPipe;	// It's bi-directional, which in Unix means it's actually two pipes
+
+extern NamedPipe *OpenNamedPipe(const char *pipeName, bool serverSide);
+extern bool ReadFromNamedPipe(NamedPipe *pipe, char *outputBuffer, size_t outputBufferSize);
+extern bool WriteToNamedPipe(NamedPipe *pipe, const char *stringToWrite);	// Null-terminated string
+extern void CloseNamedPipe(NamedPipe *pipe);
+
+extern const char *DEFAULT_NAMED_PIPE_NAME;
 
 //
 // Get the time since some predefined time.  The predefined time must not change during any particular program run.

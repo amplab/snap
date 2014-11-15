@@ -36,7 +36,7 @@ usage()
 }
 
 
-void main(int argc, const char **argv) 
+int main(int argc, const char **argv) 
 {
 	if (argc < 2) {
 		usage();
@@ -100,4 +100,6 @@ void main(int argc, const char **argv)
 
 	fprintf(stderr, "Error reading from server pipe\n");
 	soft_exit(1);
+
+	return 1;
 }

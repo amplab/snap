@@ -1953,7 +1953,6 @@ void PreventMachineHibernationWhileThisThreadIsAlive()
 // Linux named pipes are unidirectional, so we need two of them.
 //
 struct NamedPipe {
-	bool	serverSide;	// Are we the server side?
 	FILE	*input;
 	FILE	*output;
 };
@@ -1967,7 +1966,7 @@ FILE *connectPipe(char *fullyQualifiedPipeName, bool serverSide, bool forInput)
 					WriteErrorMessage("OpenNamedPipe: unable to create named pipe at path '%s' because a directory in the path doesn't exist.  Please create it or use a different pipe name\n", fullyQualifiedPipeName);
 					return NULL;
 				}
-				if (errno == EACES) {
+				if (errno == EACCES) {
 					WriteErrorMessage("OpenNamedPipe: unable to create named pipe at path '%s' because you do not have sufficient permissions.\n", fullyQualifiedPipeName);
 					return NULL;
 				}
@@ -1991,8 +1990,8 @@ FILE *connectPipe(char *fullyQualifiedPipeName, bool serverSide, bool forInput)
 NamedPipe *OpenNamedPipe(const char *pipeName, bool serverSide)
 {
 	char *fullyQualifiedPipeName;
-	char *defaultPipeDirectory = "/tmp/";
-	char *pipeDirectory;
+	const char *defaultPipeDirectory = "/tmp/";
+	const char *pipeDirectory;
 
 	if (pipeName[0] != '/') {
 		pipeDirectory = defaultPipeDirectory;
@@ -2006,7 +2005,6 @@ NamedPipe *OpenNamedPipe(const char *pipeName, bool serverSide)
 	fullyQualifiedPipeName = new char[strlen(pipeDirectory) + strlen(pipeName) + __max(strlen(toServer), strlen(toClient)) + 1];	// +1 for trailing null
 
 	NamedPipe *pipe = new NamedPipe;
-	pipe->serverEnd = serverSide;
 	pipe->input = pipe->output = NULL;
 
 	sprintf(fullyQualifiedPipeName, "%s%s%s", pipeDirectory, pipeName, toServer);
@@ -2055,6 +2053,7 @@ void CloseNamedPipe(NamedPipe *pipe)
 	delete pipe;
 }
 
+const char *DEFAULT_NAMED_PIPE_NAME = "SNAP";
 
 #endif  // _MSC_VER
 

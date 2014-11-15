@@ -33,16 +33,18 @@ LIB_OBJ = $(patsubst %.cpp, %.o, $(LIB_SRC))
 SNAP_SRC = $(wildcard apps/snap/*.cpp)
 TEST_SRC = $(wildcard tests/*.cpp)
 ROC_SRC = $(wildcard apps/ComputeROC/*.cpp)
+SNAPCOMMAND_SRC = $(wildcard apps/SNAPCommand/*.cpp)
 
 SNAP_OBJ = $(patsubst %.cpp, %.o, $(SNAP_SRC))
 TEST_OBJ = $(patsubst %.cpp, %.o, $(TEST_SRC))
 ROC_OBJ = $(patsubst %.cpp, %.o, $(ROC_SRC))
+SNAPCOMMAND_OBJ = $(patsubst %.cpp, %.o, $(SNAPCOMMAND_SRC))
 
-ALL_OBJ = $(LIB_OBJ) $(SNAP_OBJ) $(TEST_OBJ)
+ALL_OBJ = $(LIB_OBJ) $(SNAP_OBJ) $(TEST_OBJ) $(SNAPCOMMAND_OBJ)
 
 DEPS = $(pathsubst %.o, %.d, $(ALL_OBJ))
 
-EXES = snap unit_tests
+EXES = snap unit_tests SNAPCommand
 
 default: $(EXES)
 
@@ -53,6 +55,11 @@ $(OBJS): %.o : %.cpp
 
 snap: $(LIB_OBJ) $(SNAP_OBJ)
 	$(CXX) -o $@ $(CXXFLAGS) -Itests $(LDFLAGS) $^ $(LIBS)
+
+SNAPCommand: $(LIB_OBJ) $(SNAPCOMMAND_OBJ)
+	echo SNAPCOMMAND_OBJ is $(SNAPCOMMAND_OBJ)
+	echo SNAP_OBJ is $(SNAP_OBJ)
+	$(CXX) -o $@ $(CXXFLAGS) $(LDFLAGS) $^ $(LIBS)
 
 snapxl:
 	make clean
