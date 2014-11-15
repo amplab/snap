@@ -39,7 +39,7 @@ protected:
 
     // AlignerContext
     
-    virtual void initialize();
+    virtual bool initialize();
 
     virtual AlignerStats* newStats();
     

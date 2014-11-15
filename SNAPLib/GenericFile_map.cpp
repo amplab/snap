@@ -39,9 +39,20 @@ GenericFile_map::GenericFile_map(MemoryMappedFile *i_mappedFile, void *i_content
 {
 }
 
+	void
+GenericFile_map::close()
+{
+	if (NULL != mappedFile) {
+		CloseMemoryMappedFile(mappedFile);
+		mappedFile = NULL;
+
+		GenericFile_Blob::close();
+	}
+}
+
 GenericFile_map::~GenericFile_map()
 {
-	CloseMemoryMappedFile(mappedFile);
+	close();
 }
 
 	_int64

@@ -74,7 +74,7 @@ public:
     AlignerOptions* parseOptions(int argc, const char **argv, const char *version, unsigned *argsConsumed, bool paired);
     
     // initialize from options
-    virtual void initialize();
+    virtual bool initialize();
 
     // new stats object
     virtual AlignerStats* newStats() = 0;

@@ -70,6 +70,15 @@ typedef HANDLE EventObject;
 
 int getpagesize();
 
+struct NamedPipe;	// It's bi-directional, which in Unix means it's actually two pipes
+
+extern NamedPipe *OpenNamedPipe(const char *pipeName, bool serverSide);
+extern bool ReadFromNamedPipe(NamedPipe *pipe, char *outputBuffer, size_t outputBufferSize);
+extern bool WriteToNamedPipe(NamedPipe *pipe, const char *stringToWrite);	// Null-terminated string
+extern void CloseNamedPipe(NamedPipe *pipe);
+
+extern const char *DEFAULT_NAMED_PIPE_NAME;
+
 #else   // _MSC_VER
 
 #include <pthread.h>

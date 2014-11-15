@@ -32,6 +32,7 @@ public:
 	static GenericFile_map *open(const char *filename);
 	virtual ~GenericFile_map();
 	virtual _int64 prefetch();	// Ignore the return value, it's just to trick the compiler into not optimizing it away.
+	virtual void close();
 
 private:
 	GenericFile_map(MemoryMappedFile *i_mappedFile, void *i_contents, size_t i_fileSize);

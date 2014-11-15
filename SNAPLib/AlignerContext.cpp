@@ -35,6 +35,7 @@ Revision History:
 #include "PairedAligner.h"
 #include "Error.h"
 #include "Util.h"
+#include "CommandProcessor.h"
 
 using std::max;
 using std::min;
@@ -71,11 +72,19 @@ AlignerContext::~AlignerContext()
 void AlignerContext::runAlignment(int argc, const char **argv, const char *version, unsigned *argsConsumed)
 {
     options = parseOptions(argc, argv, version, argsConsumed, isPaired());
-#ifdef _MSC_VER
-    useTimingBarrier = options->useTimingBarrier;
-#endif
 
-    initialize();
+	if (NULL == options) {	// Didn't parse correctly
+		*argsConsumed = argc;
+		return;
+	}
+
+#ifdef _MSC_VER
+	useTimingBarrier = options->useTimingBarrier;
+#endif
+	
+	if (!initialize()) {
+		return;
+	}
     extension->initialize();
     
     if (! extension->skipAlignment()) {
@@ -129,7 +138,7 @@ AlignerContext::finishThread(AlignerContext* common)
     extension = NULL;
 }
 
-    void
+    bool
 AlignerContext::initialize()
 {
     if (g_indexDirectory == NULL || strcmp(g_indexDirectory, options->indexDir) != 0) {
@@ -147,7 +156,7 @@ AlignerContext::initialize()
             index = GenomeIndex::loadFromDirectory((char*) options->indexDir, options->mapIndex, options->prefetchIndex);
             if (index == NULL) {
                 WriteErrorMessage("Index load failed, aborting.\n");
-                soft_exit(1);
+				return false;
             }
             g_index = index;
 
@@ -173,14 +182,14 @@ AlignerContext::initialize()
 
 	if (index != NULL && (int)minReadLength < index->getSeedLength()) {
 		WriteErrorMessage("The min read length (%d) must be at least the seed length (%d), or there's no hope of aligning reads that short.\n", minReadLength, index->getSeedLength());
-		soft_exit(1);
+		return false;
 	}
 
     if (options->perfFileName != NULL) {
         perfFile = fopen(options->perfFileName,"a");
         if (NULL == perfFile) {
             WriteErrorMessage("Unable to open perf file '%s'\n", options->perfFileName);
-            soft_exit(1);
+			return false;
         }
     }
 
@@ -387,6 +396,8 @@ AlignerContext::parseOptions(
     if (argc < 3) {
         WriteErrorMessage("Too few parameters\n");
         options->usage();
+		delete options;
+		return NULL;
     }
 
     options->indexDir = argv[1];
@@ -414,9 +425,16 @@ AlignerContext::parseOptions(
         SNAPFile input;
         if (SNAPFile::generateFromCommandLine(argv+i, argc-i, &argsConsumed, &input, paired, true)) {
             if (input.isStdio) {
+				if (CommandPipe != NULL) {
+					WriteErrorMessage("You may not use stdin/stdout in daemon mode\n");
+					delete options;
+					return NULL;
+				}
+
                 if (inputFromStdio) {
                     WriteErrorMessage("You specified stdin ('-') specified for more than one input, which isn't permitted.\n");
-                    soft_exit(1);
+					delete options;
+					return NULL;
                 } else {
                     inputFromStdio = true;
                 }
@@ -437,6 +455,8 @@ AlignerContext::parseOptions(
         if (!options->parse(argv, argc, i, &done)) {
             WriteErrorMessage("Didn't understand options starting at %s\n", argv[oldI]);
             options->usage();
+			delete options;
+			return NULL;
         }
 
         if (done) {
@@ -447,18 +467,21 @@ AlignerContext::parseOptions(
 
     if (0 == nInputs) {
         WriteErrorMessage("No input files specified.\n");
-        soft_exit(1);
+		delete options;
+		return NULL;
     }
 
     if (options->maxDist + options->extraSearchDepth >= MAX_K) {
         WriteErrorMessage("You specified too large of a maximum edit distance combined with extra search depth.  The must add up to less than %d.\n", MAX_K);
         WriteErrorMessage("Either reduce their sum, or change MAX_K in LandauVishkin.h and recompile.\n");
-        soft_exit(1);
+		delete options;
+		return NULL;
     }
 
     if (options->maxSecondaryAlignmentAdditionalEditDistance > (int)options->extraSearchDepth) {
         WriteErrorMessage("You can't have the max edit distance for secondary alignments (-om) be bigger than the max search depth (-D)\n");
-        soft_exit(1);
+		delete options;
+		return NULL;
     }
 
     options->nInputs = nInputs;

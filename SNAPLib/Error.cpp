@@ -25,8 +25,9 @@ Revision History:
 #include "Compat.h"
 #include "Error.h"
 #include "AlignerOptions.h"
+#include "CommandProcessor.h"
 
-void
+	void
 WriteMessageToFile(FILE *file, const char *message, va_list args)
 {
     if (AlignerOptions::useHadoopErrorMessages) {
@@ -47,12 +48,24 @@ WriteMessageToFile(FILE *file, const char *message, va_list args)
     }
 }
 
+	void
+WriteMessageToNamedPipe(NamedPipe *pipe, const char *message, va_list args)
+{
+	const size_t bufferSize = 102400;
+	char buffer[bufferSize];
+	vsnprintf(buffer, bufferSize - 1, message, args);
+	WriteToNamedPipe(pipe, buffer);
+}
+
     void
 WriteErrorMessage(const char *message, ...)
 {
     va_list args;
     va_start(args, message);
     WriteMessageToFile(stderr, message, args);
+	if (NULL != CommandPipe) {
+		WriteMessageToNamedPipe(CommandPipe, message, args);
+	}
 }
 
     void
@@ -61,6 +74,9 @@ WriteStatusMessage(const char *message, ...)
     va_list args;
     va_start(args, message);
     WriteMessageToFile(stdout, message, args);
+	if (NULL != CommandPipe) {
+		WriteMessageToNamedPipe(CommandPipe, message, args);
+	}
 }
 
     void

@@ -305,7 +305,7 @@ PairedAlignerContext::PairedAlignerContext(AlignerExtension* i_extension)
 {
 }
 
-void PairedAlignerContext::initialize()
+bool PairedAlignerContext::initialize()
 {
     AlignerContext::initialize();
     PairedAlignerOptions* options2 = (PairedAlignerOptions*) options;
@@ -318,6 +318,8 @@ void PairedAlignerContext::initialize()
     quicklyDropUnpairedReads = options2->quicklyDropUnpairedReads;
     noUkkonen = options->noUkkonen;
     noOrderedEvaluation = options->noOrderedEvaluation;
+
+	return true;
 }
 
 AlignerStats* PairedAlignerContext::newStats()

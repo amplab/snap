@@ -31,6 +31,7 @@ Revision History:
 #include "exit.h"
 #include "Error.h"
 #include "BaseAligner.h"
+#include "CommandProcessor.h"
 
 AlignerOptions::AlignerOptions(
     const char* i_commandLine,
@@ -84,6 +85,7 @@ AlignerOptions::AlignerOptions(
         maxDist                 = 14;
         numSeedsFromCommandLine = 25;
         maxHits                 = 300;
+		seedCoverage			= 0;
     }
 
     initializeLVProbabilitiesToPhredPlus33();
@@ -93,7 +95,6 @@ AlignerOptions::AlignerOptions(
 AlignerOptions::usage()
 {
     usageMessage();
-    soft_exit_no_print(1);    // Don't use soft_exit, it's confusing people to get an error message after the usage
 }
 
     void
@@ -106,7 +107,7 @@ AlignerOptions::usageMessage()
 		"       explicit type specifier (see below)\n"
 		"  -d   maximum edit distance allowed per read or pair (default: %d)\n"
 		"  -n   number of seeds to use per read\n"
-		"  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default: %lf)\n"
+		"  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default uses -n)\n"
 		"  -h   maximum hits to consider per seed (default: %d)\n"
 		"  -ms  minimum seed matches per location (default: %d)\n"
 		"  -t   number of threads (default is one per core)\n"
@@ -173,7 +174,6 @@ AlignerOptions::usageMessage()
 		,
             commandLine,
             maxDist,
-            seedCoverage,
             maxHits,
 			minWeightToCheck,
 			MAPQ_LIMIT_FOR_SINGLE_HIT,
@@ -205,7 +205,6 @@ AlignerOptions::usageMessage()
                       "    -sam\n"
                       "    -bam\n"
                       "    -pairedFastq\n"
-                      "    -pairedCompressedFastq\n"
                       "    -pairedInterleavedFastq\n"
                       "    -pairedCompressedInterleavedFastq\n"
                       "\n"
@@ -236,7 +235,7 @@ AlignerOptions::parse(
         if (n + 1 < argc) {
             if (seedCountSpecified) {
                 WriteErrorMessage("-sc and -n are mutually exclusive.  Please use only one.\n");
-                soft_exit(1);
+				return false;
             }
             seedCountSpecified = true;
             numSeedsFromCommandLine = atoi(argv[n+1]);
@@ -247,7 +246,7 @@ AlignerOptions::parse(
         if (n + 1 < argc) {
             if (seedCountSpecified) {
                 WriteErrorMessage("-sc and -n are mutually exclusive.  Please use only one.\n");
-                soft_exit(1);
+				return false;
             }
             seedCountSpecified = true;
             seedCoverage = atof(argv[n+1]);
@@ -260,7 +259,7 @@ AlignerOptions::parse(
 	    minWeightToCheck = (unsigned) atoi(argv[n+1]);
 	    if (minWeightToCheck > 1000) {
 	      fprintf(stderr, "-ms must be between 1 and 1000\n");
-	      soft_exit(1);
+		  return false;
 	    }
             n++;
             return true;
@@ -291,7 +290,7 @@ AlignerOptions::parse(
         int argsConsumed;
         if (!SNAPFile::generateFromCommandLine(argv + n + 1, argc - n - 1, &argsConsumed, &outputFile, false, false)) {
             WriteErrorMessage("Must have a file specifier after -o\n");
-            soft_exit(1);
+			return false;
         }
         if (outputFile.isStdio) {
             AlignerOptions::outputToStdout = true;
@@ -349,32 +348,32 @@ AlignerOptions::parse(
             if (strcmp(argv[n], "a") == 0) {
 				if (0 != filterFlags) {
 					WriteErrorMessage("Specified -F %s after a previous -F option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
-					soft_exit(1);
+					return false;
 				}
                 filterFlags = FilterSingleHit | FilterMultipleHits | FilterTooShort;
             } else if (strcmp(argv[n], "s") == 0) {
 				if (0 != filterFlags) {
 					WriteErrorMessage("Specified -F %s after a previous -F option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
-					soft_exit(1);
+					return false;
 				}
 				filterFlags = FilterSingleHit | FilterTooShort;
 			} else if (strcmp(argv[n], "u") == 0) {
 				if (0 != filterFlags) {
 					WriteErrorMessage("Specified -F %s after a previous -F option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
-					soft_exit(1);
+					return false;
 				}
 				filterFlags = FilterUnaligned | FilterTooShort;
 			} else if (strcmp(argv[n], "l") == 0) {
 				if (0 != filterFlags) {
 					WriteErrorMessage("Specified -F %s after a previous -F option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
-					soft_exit(1);
+					return false;
 				}
 				filterFlags = FilterSingleHit | FilterMultipleHits | FilterUnaligned;
             } else if (strcmp(argv[n], "b") == 0) {
                 // ignore paired-end option(s)
 			} else {
 				WriteErrorMessage("Unknown option type after -F: %s\n", argv[n]);
-				soft_exit(1);
+				return false;
 			}
             return true;
         }
@@ -406,7 +405,7 @@ AlignerOptions::parse(
 	} else if (strcmp(argv[n], "-om") == 0) {
 		if (n + 1 >= argc) {
 			WriteErrorMessage("-om requires an additional value\n");
-			soft_exit(1);
+			return false;
 		}
 		//
 		// Check that the parameter is actually numeric.  This is to avoid having someone do "-om -anotherSwitch" and
@@ -414,7 +413,7 @@ AlignerOptions::parse(
 		//
 		if (argv[n + 1][0] < '0' || argv[n + 1][0] > '9') {
 			WriteErrorMessage("-om requires a numerical parameter.\n");
-			soft_exit(1);
+			return false;
 		}
 		maxSecondaryAlignmentAdditionalEditDistance = atoi(argv[n + 1]);
 
@@ -424,7 +423,7 @@ AlignerOptions::parse(
 	} else if (strcmp(argv[n], "-omax") == 0) {
 		if (n + 1 >= argc) {
 			WriteErrorMessage("-omax requires an additional value\n");
-			soft_exit(1);
+			return false;
 		}
 		//
 		// Check that the parameter is actually numeric.  This is to avoid having someone do "-omax -anotherSwitch" and
@@ -432,7 +431,7 @@ AlignerOptions::parse(
 		//
 		if (argv[n + 1][0] < '0' || argv[n + 1][0] > '9') {
 			WriteErrorMessage("-omax requires a numerical parameter.\n");
-			soft_exit(1);
+			return false;
 		}
 		maxSecondaryAlignments = atoi(argv[n + 1]);
 
@@ -506,7 +505,7 @@ AlignerOptions::parse(
                         pendingBackslash = false;
                     } else {
                         WriteErrorMessage("Unrecognized escape character in -R parameter.  A backslash must be followed by a t or another backslash.\n");
-                        soft_exit(1);
+						return false;
                     }
                 } else {
                     //
@@ -559,7 +558,7 @@ AlignerOptions::parse(
                     if (buffer[i] == ':') {
                         if (NULL != defaultReadGroup) {
                             WriteErrorMessage("read group string specified with -R contained more than one ID field.\n");
-                            soft_exit(1);
+							return false;
                         }
                         //
                         // The ID tag starts at i+1.
@@ -571,7 +570,7 @@ AlignerOptions::parse(
  
                         if (0 == idTagSize) {
                             WriteErrorMessage("The ID tag on the read group line specified by -R must not be empty\n");
-                            soft_exit(1);
+							return false;
                         }
                         char *newReadGroup = new char[idTagSize + 1]; // +1 for null.
                         memcpy(newReadGroup, buffer + i + 1, idTagSize);
@@ -591,7 +590,7 @@ AlignerOptions::parse(
 
             if (NULL == defaultReadGroup) {
                 WriteErrorMessage("The string specified after -R must include an ID field.\n");
-                soft_exit(1);
+				return false;
             }
 
             rgLineContents = buffer;    // This leaks, but so what?
@@ -600,7 +599,7 @@ AlignerOptions::parse(
                 
         } else {
             WriteErrorMessage("-R requires a value");
-            soft_exit(1);
+			return false;
         }
 	} else if (strcmp(argv[n], "-pf") == 0) {
         if (n + 1 < argc) {
@@ -785,12 +784,12 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
         if (!strcmp(args[0], "-fastq") || !strcmp(args[0], "-compressedFastq")) {
             if (!isInput) {
                 WriteErrorMessage("%s is not a valid output file type.\n", args[0]);
-                soft_exit(1);
+				return false;
             }
 
             if (paired && nArgs < 3) {
                 WriteErrorMessage("Expected a pair of fastQ files, but instead just got one\n");
-                soft_exit(1);
+				return false;
             }
 
  
@@ -799,14 +798,14 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
             if (paired) {
 				if (nArgs < 3) {
 					WriteErrorMessage("paired FASTQ requires two consecutive input files, and the last item on your command line is the first half of a FASTQ pair.\n");
-					soft_exit(1);
+					return false;
 				}
                 snapFile->fileType = FASTQFile;
                 snapFile->secondFileName = args[2];
                 if (!strcmp("-", args[2])) {
                     if (snapFile->isStdio) {
                         WriteErrorMessage("Can't have both halves of paired FASTQ files be stdin ('-').  Did you mean to use the interleaved FASTQ type?\n");
-                        soft_exit(1);
+						return false;
                     }
                     snapFile->isStdio = true;
                 }
@@ -829,7 +828,7 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
         } else if (!strcmp(args[0], "-pairedInterleavedFastq") || !strcmp(args[0], "-pairedCompressedInterleavedFastq")) {
             if (!paired) {
                 WriteErrorMessage("Specified %s for a single-end alignment.  To treat it as single-end, just use ordinary fastq (or compressed fastq, as appropriate)\n", args[0]);
-                soft_exit(1);
+				return false;
             }
 
             snapFile->fileType = InterleavedFASTQFile;
@@ -865,7 +864,7 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
         //
         WriteErrorMessage("You specified an output file with name '%s', which doesn't end in .sam or .bam, and doesn't have an explicit type\n"
                           "specifier.  There is no default output file type.  Consider doing something like '-o -bam %s'\n", args[0], args[0]);
-        soft_exit(1);
+		return false;
     } else if (util::stringEndsWith(args[0], ".fq") || util::stringEndsWith(args[0], ".fastq") ||
         util::stringEndsWith(args[0], ".fq.gz") || util::stringEndsWith(args[0], ".fastq.gz") ||
         util::stringEndsWith(args[0], ".fq.gzip") || util::stringEndsWith(args[0], ".fastq.gzip")) {
@@ -886,29 +885,30 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
         if (paired) {
 			if (nArgs < 2) {
 				WriteErrorMessage("paired FASTQ requires two input files, and the last item on your command line is the first half of a FASTQ pair.\n");
-				soft_exit(1);
+				return false;
 			}
 			snapFile->secondFileName = args[1];
             if (!strcmp(args[1], "-")) {
                 if (snapFile->isStdio) {
                     WriteErrorMessage("Can't have both halves of paired FASTQ files be stdin ('-').  Did you mean to use the interleaved FASTQ type?\n");
-                    soft_exit(1);
+					return false;
                 }
+				if (CommandPipe != NULL) {
+					WriteErrorMessage("You may not write to stdout in daemon mode\n");
+					return false;
+				}
                 snapFile->isStdio = true;
             }
 
             *argsConsumed = 2;
         }
-
-
     } else {
         if (snapFile->isStdio) {
             WriteErrorMessage("Stdio IO always requires an explicit file type.  So, for example, do 'snap single index-directory -fastq -' to read FASTQ from stdin\n");
         } else {
             WriteErrorMessage("Unknown file type for file name '%s', please specify file type with -fastq, -sam, -bam, etc.\n", snapFile->fileName);
         }
-
-        soft_exit(1);
+		return false;
     }
 
     return true;
