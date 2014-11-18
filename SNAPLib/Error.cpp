@@ -28,43 +28,35 @@ Revision History:
 #include "CommandProcessor.h"
 
 	void
-WriteMessageToFile(FILE *file, const char *message, va_list args)
+WriteMessageToFile(FILE *file, const char *message)
 {
     if (AlignerOptions::useHadoopErrorMessages) {
-        const size_t bufferSize = 10240;
-        char buffer[bufferSize];
-        vsnprintf(buffer, bufferSize - 1, message, args);
-        fprintf(stderr,"reporter:status:%s", buffer);           // Always use stderr in Hadoop mode, regardless of whether this is an error
-        fprintf(stderr, "%s", buffer);                          // And also print without the prefix, so it shows up in both logs
+        fprintf(stderr,"reporter:status:%s", message);           // Always use stderr in Hadoop mode, regardless of whether this is an error
+        fprintf(stderr, "%s", message);                          // And also print without the prefix, so it shows up in both logs
 		fflush(stderr);
     } else {
         if (AlignerOptions::outputToStdout && stdout == file) {
-            vfprintf(stderr, message, args);
+	  fprintf(stderr, "%s", message);
 			fflush(stderr);
         } else {
-            vfprintf(file, message, args);
+	  fprintf(file, "%s", message);
 			fflush(file);
         }
     }
 }
 
-	void
-WriteMessageToNamedPipe(NamedPipe *pipe, const char *message, va_list args)
-{
-	const size_t bufferSize = 102400;
-	char buffer[bufferSize];
-	vsnprintf(buffer, bufferSize - 1, message, args);
-	WriteToNamedPipe(pipe, buffer);
-}
 
     void
 WriteErrorMessage(const char *message, ...)
 {
     va_list args;
     va_start(args, message);
-    WriteMessageToFile(stderr, message, args);
+    const size_t bufferSize = 10240;
+    char buffer[bufferSize];
+    vsnprintf(buffer, bufferSize - 1, message, args);
+    WriteMessageToFile(stderr, buffer);
 	if (NULL != CommandPipe) {
-		WriteMessageToNamedPipe(CommandPipe, message, args);
+	  WriteToNamedPipe(CommandPipe, buffer);
 	}
 }
 
@@ -73,9 +65,12 @@ WriteStatusMessage(const char *message, ...)
 {
     va_list args;
     va_start(args, message);
-    WriteMessageToFile(stdout, message, args);
+    const size_t bufferSize = 10240;
+    char buffer[bufferSize];
+    vsnprintf(buffer, bufferSize - 1, message, args);
+    WriteMessageToFile(stdout, buffer);
 	if (NULL != CommandPipe) {
-		WriteMessageToNamedPipe(CommandPipe, message, args);
+	  WriteToNamedPipe(CommandPipe, buffer);
 	}
 }
 

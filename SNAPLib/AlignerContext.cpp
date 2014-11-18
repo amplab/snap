@@ -194,6 +194,8 @@ AlignerContext::initialize()
     }
 
     DataSupplier::ThreadCount = options->numThreads;
+
+    return true;
 }
 
     void
