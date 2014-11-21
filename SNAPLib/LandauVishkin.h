@@ -107,20 +107,20 @@ public:
                 int patternLen,
                 int k,
                 double *matchProbability,
-                int *netIndel = NULL)   // the net of insertions and deletions in the alignment.  Negative for insertions, positive for deleteions (and 0 if there are non in net).  Filled in only if matchProbability is non-NULL
+                int *o_netIndel = NULL)   // the net of insertions and deletions in the alignment.  Negative for insertions, positive for deleteions (and 0 if there are non in net).  Filled in only if matchProbability is non-NULL
 {
     int localNetIndel;
 	int d;
-    if (NULL == netIndel) {
+    if (NULL == o_netIndel) {
         //
         // If the user doesn't want netIndel, just use a stack local to avoid
         // having to check it all the time.
         //
-        netIndel = &localNetIndel;
+        o_netIndel = &localNetIndel;
     }
     _ASSERT(k < MAX_K);
 
-    *netIndel = 0;
+    *o_netIndel = 0;
 
     k = __min(MAX_K - 1, k); // enforce limit even in non-debug builds
     if (NULL == text) {
@@ -306,7 +306,7 @@ got_answer:
 
 		int curE = 1;
 		int offset = L[0][MAX_K + 0];
-		_ASSERT(*netIndel == 0);
+		_ASSERT(*o_netIndel == 0);
 		while (curE <= e) {
 			// First write the action, possibly with a repeat if it occurred multiple times with no exact matches
 			char action = backtraceAction[curE];
@@ -318,12 +318,12 @@ got_answer:
 			if (action == 'I') {
 				*matchProbability *= lv_indelProbabilities[actionCount];
 				offset += actionCount;
-				*netIndel += actionCount;
+				*o_netIndel += actionCount;
 			}
 			else if (action == 'D') {
 				*matchProbability *= lv_indelProbabilities[actionCount];
 				offset -= actionCount;
-				*netIndel -= actionCount;
+				*o_netIndel -= actionCount;
 			}
 			else {
 				_ASSERT(action == 'X');
@@ -424,14 +424,16 @@ public:
     // Returns -1 if the edit distance exceeds k or -2 if we run out of space in cigarBuf.
     int computeEditDistance(const char* text, int textLen, const char* pattern, int patternLen, int k,
                             char* cigarBuf, int cigarBufLen, bool useM,
-                            CigarFormat format = COMPACT_CIGAR_STRING, int* o_cigarBufUsed = NULL, int* o_textUsed = NULL);
+                            CigarFormat format = COMPACT_CIGAR_STRING, int* o_cigarBufUsed = NULL, int* o_textUsed = NULL,
+                            int *o_netIndel = NULL);
 
     // same, but places indels as early as possible, following BWA & VCF conventions
     int computeEditDistanceNormalized(const char* text, int textLen, const char* pattern, int patternLen, int k,
                             char* cigarBuf, int cigarBufLen, bool useM,
-                            CigarFormat format = COMPACT_CIGAR_STRING,
-                            int* cigarBufUsed = NULL,
-                            int* o_addFrontClipping = NULL);
+                            CigarFormat format,
+                            int* cigarBufUsed,
+                            int* o_addFrontClipping,
+                            int* o_netIndel);
 
     // take a compact cigar binary format and turn it into one byte per reference base
     // describing the difference from the reference at that location

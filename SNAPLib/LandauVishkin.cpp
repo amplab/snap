@@ -134,8 +134,21 @@ int LandauVishkinWithCigar::computeEditDistance(
     const char* pattern, int patternLen,
     int k,
     char *cigarBuf, int cigarBufLen, bool useM, 
-    CigarFormat format, int* o_cigarBufUsed, int* o_textUsed)
+    CigarFormat format, int* o_cigarBufUsed, int* o_textUsed,
+    int *o_netIndel)
 {
+    int localNetIndel;
+    if (NULL == o_netIndel) {
+        //
+        // If the user doesn't want netIndel, just use a stack local to avoid
+        // having to check it all the time.
+        //
+        o_netIndel = &localNetIndel;
+    }
+    _ASSERT(k < MAX_K);
+
+    *o_netIndel = 0;
+    
     _ASSERT(patternLen >= 0 && textLen >= 0);
     _ASSERT(k < MAX_K);
     const char* p = pattern;
@@ -409,6 +422,13 @@ got_answer:
 			actionCount++;
 			curE++;
 		}
+
+        if (action == 'I') {
+            *o_netIndel -= actionCount;
+        } else if (action == 'D') {
+            *o_netIndel += actionCount;
+        }
+
 		if (useM) {
 			if (action == '=' || action == 'X') {
 				accumulatedMs += actionCount;
@@ -474,7 +494,8 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
     int k,
     char *cigarBuf, int cigarBufLen, bool useM,
     CigarFormat format, int* o_cigarBufUsed,
-    int* o_addFrontClipping)
+    int* o_addFrontClipping,
+    int *o_netIndel)
 {
     if (format != BAM_CIGAR_OPS && format != COMPACT_CIGAR_STRING) {
         WriteErrorMessage("LandauVishkinWithCigar::computeEditDistanceNormalized invalid parameter\n");
@@ -484,7 +505,7 @@ int LandauVishkinWithCigar::computeEditDistanceNormalized(
     char* bamBuf = (char*)alloca(bamBufLen);
     int bamBufUsed, textUsed;
     int score = computeEditDistance(text, (int)textLen, pattern, (int)patternLen, k, bamBuf, bamBufLen,
-        useM, BAM_CIGAR_OPS, &bamBufUsed, &textUsed);
+        useM, BAM_CIGAR_OPS, &bamBufUsed, &textUsed, o_netIndel);
     if (score < 0) {
         return score;
     }

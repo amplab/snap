@@ -577,7 +577,7 @@ private:
     static int computeCigarOps(const Genome * genome, LandauVishkinWithCigar * lv,
         char * cigarBuf, int cigarBufLen,
         const char * data, unsigned dataLength, unsigned basesClippedBefore, unsigned extraBasesClippedBefore, unsigned basesClippedAfter,
-        unsigned extraBasesClippedAfter,     unsigned frontHardClipping, unsigned backHardClipping,
+        unsigned frontHardClipping, unsigned backHardClipping,
         GenomeLocation genomeLocation, bool isRC, bool useM, int * o_editDistance, int * o_addFrontClipping);
 
     const bool useM;
@@ -758,7 +758,6 @@ BAMFormat::writeRead(
     unsigned basesClippedBefore;
     GenomeDistance extraBasesClippedBefore;
     unsigned basesClippedAfter;
-    GenomeDistance extraBasesClippedAfter;
     int editDistance;
 
     *o_addFrontClipping = 0;
@@ -767,13 +766,13 @@ BAMFormat::writeRead(
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, secondaryAlignment, useM,
         hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection,
-        &extraBasesClippedBefore, &extraBasesClippedAfter))
+        &extraBasesClippedBefore))
     {
         return false;
     }
     if (genomeLocation != InvalidGenomeLocation) {
         cigarOps = computeCigarOps(context.genome, lv, (char*)cigarBuf, cigarBufSize * sizeof(_uint32),
-                                   clippedData, clippedLength, basesClippedBefore, (unsigned)extraBasesClippedBefore, basesClippedAfter, (unsigned)extraBasesClippedAfter,
+                                   clippedData, clippedLength, basesClippedBefore, (unsigned)extraBasesClippedBefore, basesClippedAfter,
                                    read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
                                    genomeLocation, direction == RC, useM, &editDistance, o_addFrontClipping);
         if (*o_addFrontClipping != 0) {
@@ -927,7 +926,6 @@ BAMFormat::computeCigarOps(
     unsigned                    basesClippedBefore,
     unsigned                    extraBasesClippedBefore,
     unsigned                    basesClippedAfter,
-    unsigned                    extraBasesClippedAfter,
     unsigned                    frontHardClipping,
     unsigned                    backHardClipping,
     GenomeLocation              genomeLocation,
@@ -937,6 +935,17 @@ BAMFormat::computeCigarOps(
     int *                       o_addFrontClipping
 )
 {
+    unsigned extraBasesClippedAfter = 0;
+
+    const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
+
+    if (genomeLocation + dataLength > contig->beginningLocation + contig->length - genome->getChromosomePadding()) {
+        //
+        // The read hangs off the end of the contig.  Soft clip it at the end.
+        //
+        extraBasesClippedAfter = (unsigned)(genomeLocation + dataLength - (contig->beginningLocation + contig->length - genome->getChromosomePadding()));
+    }
+    
     //
     // Apply the extra clipping.
     //
@@ -950,6 +959,7 @@ BAMFormat::computeCigarOps(
     const char *reference = genome->getSubstring(genomeLocation, dataLength);
     int used;
     if (NULL != reference) {
+        int netIndel;
         *o_editDistance = lv->computeEditDistanceNormalized(
                             reference,
                             dataLength - extraBasesClippedAfter,
@@ -958,9 +968,37 @@ BAMFormat::computeCigarOps(
                             MAX_K - 1,
                             cigarBuf + 4 * clippingWordsBefore,
                             cigarBufLen - 4 * (clippingWordsBefore + clippingWordsAfter),
-                            useM, BAM_CIGAR_OPS, &used, o_addFrontClipping);
+                            useM, BAM_CIGAR_OPS, &used, o_addFrontClipping, &netIndel);
         if (*o_addFrontClipping != 0) {
             return 0;
+        }
+        if (netIndel != 0) {
+            //
+            // There was an indel, which means that the read extends longer than we thought above.  See if we need to recompute
+            // extraBasesClippedAfter.
+            //
+            if (genomeLocation + dataLength + netIndel > contig->beginningLocation + contig->length - genome->getChromosomePadding()) {
+                //
+                // The read hangs off the end of the contig.  Soft clip it at the end, then recompute the edit distance/CIGAR string.
+                //
+                unsigned newExtraBasesClippedAfter = (unsigned)(genomeLocation + dataLength + netIndel - (contig->beginningLocation + contig->length - genome->getChromosomePadding()));
+
+                if (newExtraBasesClippedAfter != extraBasesClippedAfter) {
+                    int newNetIndel;
+                    extraBasesClippedAfter = newExtraBasesClippedAfter;
+                    *o_editDistance = lv->computeEditDistanceNormalized(
+                        reference,
+                        dataLength - extraBasesClippedAfter,
+                        data,
+                        dataLength - extraBasesClippedAfter,
+                        MAX_K - 1,
+                        cigarBuf + 4 * clippingWordsBefore,
+                        cigarBufLen - 4 * (clippingWordsBefore + clippingWordsAfter),
+                        useM, BAM_CIGAR_OPS, &used, o_addFrontClipping, &newNetIndel);
+
+                    _ASSERT(newNetIndel == netIndel);
+                }
+            }
         }
     } else {
         //
