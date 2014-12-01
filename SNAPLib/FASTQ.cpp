@@ -108,6 +108,10 @@ FASTQReader::reinit(
     // there can be '@' signs in the quality string (and maybe even in read names?).
     if (startingOffset != 0) {
         if (!skipPartialRecord(data)) {
+            //
+            // There wasn't a whole record in our range.  Skip over what we had.
+            //
+            data->advance(bytes);
             return;
         }
     }
