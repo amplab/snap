@@ -167,7 +167,6 @@ RangeSplittingReadSupplier::getNextRead()
     if (!splitter->getNextRange(&rangeStart, &rangeLength)) {
         return NULL;
     }
- 
     underlyingReader->reinit(rangeStart,rangeLength);
     if (!underlyingReader->getNextRead(&read)) {
         return NULL;

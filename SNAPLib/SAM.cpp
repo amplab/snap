@@ -1391,8 +1391,7 @@ SAMFormat::computeCigar(
         newExtraBasesClippedAfter = __max(0, genomeLocation + dataLength + netIndel - (contig->beginningLocation + contig->length - genome->getChromosomePadding()));
      }
 
-    /*BJB*/fprintf(stderr, "Assert would have gone off\n");
-    _ASSERT(!"cigar computation didn't converge");
+     _ASSERT(!"cigar computation didn't converge");
     *o_extraBasesClippedAfter = newExtraBasesClippedAfter;
 }
 

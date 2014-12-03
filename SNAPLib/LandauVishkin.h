@@ -424,16 +424,18 @@ public:
     // Returns -1 if the edit distance exceeds k or -2 if we run out of space in cigarBuf.
     int computeEditDistance(const char* text, int textLen, const char* pattern, int patternLen, int k,
                             char* cigarBuf, int cigarBufLen, bool useM,
-                            CigarFormat format = COMPACT_CIGAR_STRING, int* o_cigarBufUsed = NULL, int* o_textUsed = NULL,
+                            CigarFormat format = COMPACT_CIGAR_STRING,
+                            int* o_cigarBufUsed = NULL,
+                            int* o_textUsed = NULL,
                             int *o_netIndel = NULL);
 
     // same, but places indels as early as possible, following BWA & VCF conventions
     int computeEditDistanceNormalized(const char* text, int textLen, const char* pattern, int patternLen, int k,
                             char* cigarBuf, int cigarBufLen, bool useM,
-                            CigarFormat format,
-                            int* cigarBufUsed,
-                            int* o_addFrontClipping,
-                            int* o_netIndel);
+                            CigarFormat format = COMPACT_CIGAR_STRING,
+                            int* o_cigarBufUsed = NULL,
+                            int* o_textUsed = NULL,
+                            int *o_netIndel = NULL);
 
     // take a compact cigar binary format and turn it into one byte per reference base
     // describing the difference from the reference at that location
