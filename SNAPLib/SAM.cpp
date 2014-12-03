@@ -1034,15 +1034,6 @@ SAMFormat::createSAMLine(
         }
         const Genome::Contig *contig = genome->getContigForRead(genomeLocation, read->getDataLength(), extraBasesClippedBefore);
         _ASSERT(NULL != contig && contig->length > genome->getChromosomePadding());
-#if 0   // BJB
-        if (genomeLocation + read->getDataLength() > contig->beginningLocation + contig->length - genome->getChromosomePadding()) {
-            //
-            // The read hangs off the end of the contig.  Soft clip it at the end.
-            //
-            *extraBasesClippedAfter = genomeLocation + read->getDataLength() - (contig->beginningLocation + contig->length - genome->getChromosomePadding());
-        }
-
-#endif // 0
         genomeLocation += *extraBasesClippedBefore;
 
         contigName = contig->name;
@@ -1286,6 +1277,125 @@ SAMFormat::writeRead(
     return true;
 }
 
+//
+// Common cigar string computation between SAM and BAM formats.
+//
+    void
+SAMFormat::computeCigar(
+    CigarFormat cigarFormat, 
+    const Genome * genome, 
+    LandauVishkinWithCigar * lv,
+    char * cigarBuf, 
+    int cigarBufLen, 
+    const char * data, 
+    GenomeDistance dataLength, 
+    unsigned basesClippedBefore, 
+    GenomeDistance extraBasesClippedBefore, 
+    unsigned basesClippedAfter,
+    GenomeDistance *o_extraBasesClippedAfter, 
+    GenomeLocation genomeLocation, 
+    bool useM, 
+    int * o_editDistance, 
+    int *o_cigarBufUsed, 
+    int * o_addFrontClipping)
+{
+    if (dataLength > INT32_MAX - MAX_K) {
+        dataLength = INT32_MAX - MAX_K;
+    }
+
+    int netIndel;
+    *o_extraBasesClippedAfter = 0;
+
+
+    //
+    // Apply the extra clipping.
+    //
+    genomeLocation += extraBasesClippedBefore;
+    data += extraBasesClippedBefore;
+    dataLength -= extraBasesClippedBefore;
+
+    const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
+
+    if (genomeLocation + dataLength > contig->beginningLocation + contig->length - genome->getChromosomePadding()) {
+        //
+        // The read hangs off the end of the contig.  Soft clip it at the end.  This is a tentative amount that assumes no net indels in the
+        // mapping, we'll refine it later if needed.
+        //
+        *o_extraBasesClippedAfter = genomeLocation + dataLength - (contig->beginningLocation + contig->length - genome->getChromosomePadding());
+    } else {
+        *o_extraBasesClippedAfter = 0;
+    }
+
+    const char *reference = genome->getSubstring(genomeLocation, dataLength);
+    if (NULL == reference) {
+        //
+        // Fell off the end of the contig.
+        //
+        *o_editDistance = 0;
+        *o_addFrontClipping = 0;
+        *o_cigarBufUsed = 0;
+        *cigarBuf = '*';
+        return;
+    }
+
+    *o_editDistance = lv->computeEditDistanceNormalized(
+        reference,
+        (int)(dataLength - *o_extraBasesClippedAfter + MAX_K), // Add space incase of indels.  We know there's enough, because the reference is padded.
+        data,
+        (int)(dataLength - *o_extraBasesClippedAfter),
+        MAX_K - 1,
+        cigarBuf,
+        cigarBufLen,
+        useM,
+        cigarFormat,
+        o_cigarBufUsed,
+        o_addFrontClipping,
+        &netIndel);
+
+    if (*o_addFrontClipping != 0) {
+        //
+        // On this path, there really isn't a returned cigar string, it's sort of like an exception.  We're going up a level and
+        // trying a different alignment.
+        //
+        return;
+    }
+
+    //
+    // Normally, we'd be done.  However, if the amount that we would clip at the end of the read because of hanging off of the end
+    // of the contig changed, then we need to recompute.  In some cases this is an iterative processess as we add or remove bits
+    // of read.  
+    //
+    GenomeDistance newExtraBasesClippedAfter = __max(0, genomeLocation + dataLength + netIndel - (contig->beginningLocation + contig->length - genome->getChromosomePadding()));
+    for (GenomeDistance pass = 0; pass < dataLength; pass++) {
+        if (newExtraBasesClippedAfter == *o_extraBasesClippedAfter) {
+            *o_extraBasesClippedAfter = newExtraBasesClippedAfter;
+            return;
+        }
+
+        *o_extraBasesClippedAfter = newExtraBasesClippedAfter;
+
+        *o_editDistance = lv->computeEditDistanceNormalized(
+            reference,
+            (int)(dataLength - *o_extraBasesClippedAfter + MAX_K), // Add space incase of indels.  We know there's enough, because the reference is padded.
+            data,
+            (int)(dataLength - *o_extraBasesClippedAfter),
+            MAX_K - 1,
+            cigarBuf,
+            cigarBufLen,
+            useM,
+            cigarFormat,
+            o_cigarBufUsed,
+            o_addFrontClipping,
+            &netIndel);
+
+        newExtraBasesClippedAfter = __max(0, genomeLocation + dataLength + netIndel - (contig->beginningLocation + contig->length - genome->getChromosomePadding()));
+     }
+
+    /*BJB*/fprintf(stderr, "Assert would have gone off\n");
+    _ASSERT(!"cigar computation didn't converge");
+    *o_extraBasesClippedAfter = newExtraBasesClippedAfter;
+}
+
 // Compute the CIGAR edit sequence string for a read against a given genome location.
 // Returns this string if possible or "*" if we fail to compute it (which would likely
 // be a bug due to lack of buffer space). The pointer returned may be to cigarBuf so it
@@ -1312,81 +1422,15 @@ SAMFormat::computeCigarString(
     int *                       o_addFrontClipping
 )
 {
-    if (dataLength > INT32_MAX - MAX_K) {
-        dataLength = INT32_MAX - MAX_K;
-    }
-
-    const char *reference = genome->getSubstring(genomeLocation, dataLength);
+    GenomeDistance extraBasesClippedAfter;
     int cigarBufUsed;
-    int netIndel;
-    GenomeDistance extraBasesClippedAfter = 0;
 
-    const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
+    computeCigar(COMPACT_CIGAR_STRING, genome, lv, cigarBuf, cigarBufLen, data, dataLength, basesClippedBefore,
+        extraBasesClippedBefore, basesClippedAfter, &extraBasesClippedAfter, genomeLocation, useM,
+        o_editDistance, &cigarBufUsed, o_addFrontClipping);
 
-    if (genomeLocation + dataLength > contig->beginningLocation + contig->length - genome->getChromosomePadding()) {
-        //
-        // The read hangs off the end of the contig.  Soft clip it at the end.
-        //
-        extraBasesClippedAfter = genomeLocation + dataLength - (contig->beginningLocation + contig->length - genome->getChromosomePadding());
-    }
-
-    if (NULL != reference) {
-        *o_editDistance = lv->computeEditDistanceNormalized(
-                            reference,
-                            (int)(dataLength - extraBasesClippedAfter + MAX_K), // Add space incase of indels.  We know there's enough, because the reference is padded.
-                            data,
-                            (int)(dataLength - extraBasesClippedAfter),
-                            MAX_K - 1,
-                            cigarBuf,
-                            cigarBufLen,
-						    useM,
-                            COMPACT_CIGAR_STRING,
-                            &cigarBufUsed,
-                            o_addFrontClipping,
-                            &netIndel);
-        if (*o_addFrontClipping != 0) {
-            return NULL;
-        }
-
-        if (netIndel != 0) {
-            //
-            // There was an indel, which means that the read extends longer than we thought above.  See if we need to recompute
-            // extraBasesClippedAfter.
-            //
-            if (genomeLocation + dataLength + netIndel > contig->beginningLocation + contig->length - genome->getChromosomePadding()) {
-                //
-                // The read hangs off the end of the contig.  Soft clip it at the end, then recompute the edit distance/CIGAR string.
-                //
-                GenomeDistance newExtraBasesClippedAfter = genomeLocation + dataLength + netIndel - (contig->beginningLocation + contig->length - genome->getChromosomePadding());
-
-                if (newExtraBasesClippedAfter != extraBasesClippedAfter) {
-                    int newNetIndel;
-                    extraBasesClippedAfter = newExtraBasesClippedAfter;
-                    *o_editDistance = lv->computeEditDistanceNormalized(
-                        reference,
-                        (int)(dataLength - extraBasesClippedAfter + MAX_K), // Add space incase of indels.  We know there's enough, because the reference is padded.
-                        data,
-                        (int)(dataLength - extraBasesClippedAfter),
-                        MAX_K - 1,
-                        cigarBuf,
-                        cigarBufLen,
-                        useM,
-                        COMPACT_CIGAR_STRING,
-                        &cigarBufUsed,
-                        o_addFrontClipping,
-                        &newNetIndel);
-
-                    _ASSERT(newNetIndel == netIndel);
-                }
-            }
-        }
-    } else {
-        //
-        // Fell off the end of the chromosome.
-        //
-        *o_editDistance = 0;
-        *o_addFrontClipping = 0;
-        return "*";
+    if (*o_addFrontClipping != 0) {
+        return NULL;
     }
 
     if (*o_editDistance == -2) {
@@ -1420,7 +1464,7 @@ SAMFormat::computeCigarString(
         snprintf(cigarBufWithClipping, cigarBufWithClippingLen, "%s%s%s%s%s", hardClipBefore, clipBefore, cigarBuf, clipAfter, hardClipAfter);
 
 		validateCigarString(genome, cigarBufWithClipping, cigarBufWithClippingLen, 
-			data - (basesClippedBefore + extraBasesClippedBefore), dataLength + (basesClippedBefore + extraBasesClippedBefore + basesClippedAfter), genomeLocation, direction, useM);
+			data - basesClippedBefore, dataLength + (basesClippedBefore + basesClippedAfter), genomeLocation + extraBasesClippedBefore, direction, useM);
 
         return cigarBufWithClipping;
     }
@@ -1563,6 +1607,11 @@ SAMFormat::validateCigarString(
 					soft_exit(1);
 				}
 
+                if (previousOp == 'D') {
+                    WriteErrorMessage("validateCigarString: cigar string had D immediately followed by I here '%'s in overall cigar '%s'\n", nextChunkOfCigar, cigarBuf);
+                    soft_exit(1);
+                }
+
 				offsetInData += len;
 				sawNonH = true;
 				lastItemWasIndel = true;
@@ -1576,7 +1625,12 @@ SAMFormat::validateCigarString(
 					soft_exit(1);
 				}
 						
-				//
+                if (previousOp == 'I') {
+                    WriteErrorMessage("validateCigarString: cigar string had I immediately followed by D here '%'s in overall cigar '%s'\n", nextChunkOfCigar, cigarBuf);
+                    soft_exit(1);
+                }
+
+                //
 				// D uses up bases in the reference but not the read.
 				//
 				offsetInReference += len;
@@ -1612,7 +1666,8 @@ SAMFormat::validateCigarString(
 				if (sawNonH) {
 					sawTailS = true;
 				}
-				offsetInData += len;
+                sawNonH = true;
+ 				offsetInData += len;
 				break;
 			}
 

@@ -935,76 +935,16 @@ BAMFormat::computeCigarOps(
     int *                       o_addFrontClipping
 )
 {
-    unsigned extraBasesClippedAfter = 0;
-
-    const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
-
-    if (genomeLocation + dataLength > contig->beginningLocation + contig->length - genome->getChromosomePadding()) {
-        //
-        // The read hangs off the end of the contig.  Soft clip it at the end.
-        //
-        extraBasesClippedAfter = (unsigned)(genomeLocation + dataLength - (contig->beginningLocation + contig->length - genome->getChromosomePadding()));
-    }
-    
-    //
-    // Apply the extra clipping.
-    //
-	genomeLocation += extraBasesClippedBefore + basesClippedBefore;
-    data += extraBasesClippedBefore;
-    dataLength -= extraBasesClippedBefore;
+    GenomeDistance extraBasesClippedAfter = 0;
+    int used = 0;
 
     unsigned clippingWordsBefore = ((basesClippedBefore + extraBasesClippedBefore > 0) ? 1 : 0) + ((frontHardClipping > 0) ? 1 : 0);
     unsigned clippingWordsAfter = ((basesClippedAfter + extraBasesClippedAfter > 0) ? 1 : 0) + ((backHardClipping > 0) ? 1 : 0);
 
-    const char *reference = genome->getSubstring(genomeLocation, dataLength);
-    int used;
-    if (NULL != reference) {
-        int netIndel;
-        *o_editDistance = lv->computeEditDistanceNormalized(
-                            reference,
-                            dataLength - extraBasesClippedAfter,
-                            data,
-                            dataLength - extraBasesClippedAfter,
-                            MAX_K - 1,
-                            cigarBuf + 4 * clippingWordsBefore,
-                            cigarBufLen - 4 * (clippingWordsBefore + clippingWordsAfter),
-                            useM, BAM_CIGAR_OPS, &used, o_addFrontClipping, &netIndel);
-        if (*o_addFrontClipping != 0) {
-            return 0;
-        }
-        if (netIndel != 0) {
-            //
-            // There was an indel, which means that the read extends longer than we thought above.  See if we need to recompute
-            // extraBasesClippedAfter.
-            //
-            if (genomeLocation + dataLength + netIndel > contig->beginningLocation + contig->length - genome->getChromosomePadding()) {
-                //
-                // The read hangs off the end of the contig.  Soft clip it at the end, then recompute the edit distance/CIGAR string.
-                //
-                unsigned newExtraBasesClippedAfter = (unsigned)(genomeLocation + dataLength + netIndel - (contig->beginningLocation + contig->length - genome->getChromosomePadding()));
+    SAMFormat::computeCigar(BAM_CIGAR_OPS, genome, lv, cigarBuf + 4 * clippingWordsBefore, cigarBufLen - 4 * (clippingWordsBefore + clippingWordsAfter), data, dataLength, basesClippedBefore, extraBasesClippedBefore,
+        basesClippedAfter, &extraBasesClippedAfter, genomeLocation, useM, o_editDistance, &used,  o_addFrontClipping);
 
-                if (newExtraBasesClippedAfter != extraBasesClippedAfter) {
-                    int newNetIndel;
-                    extraBasesClippedAfter = newExtraBasesClippedAfter;
-                    *o_editDistance = lv->computeEditDistanceNormalized(
-                        reference,
-                        dataLength - extraBasesClippedAfter,
-                        data,
-                        dataLength - extraBasesClippedAfter,
-                        MAX_K - 1,
-                        cigarBuf + 4 * clippingWordsBefore,
-                        cigarBufLen - 4 * (clippingWordsBefore + clippingWordsAfter),
-                        useM, BAM_CIGAR_OPS, &used, o_addFrontClipping, &newNetIndel);
-
-                    _ASSERT(newNetIndel == netIndel);
-                }
-            }
-        }
-    } else {
-        //
-        // Fell off the end of the chromosome.
-        //
-        *o_editDistance = 0;
+    if (*o_addFrontClipping != 0) {
         return 0;
     }
 
@@ -1032,7 +972,7 @@ BAMFormat::computeCigarOps(
             used += 4;
         }
         if (basesClippedAfter + extraBasesClippedAfter > 0) {
-            *(_uint32*)(cigarBuf + used) = ((basesClippedAfter + extraBasesClippedAfter) << 4) | BAMAlignment::CigarToCode['S'];
+            *(_uint32*)(cigarBuf + used) = ((int)(basesClippedAfter + extraBasesClippedAfter) << 4) | BAMAlignment::CigarToCode['S'];
             used += 4;
         }
 

@@ -449,6 +449,12 @@ private:
     // Action we did to get to each position: 'D' = deletion, 'I' = insertion, 'X' = substitution.
     char A[MAX_K+1][2 * MAX_K + 1];
 
+    //
+    // Total (not net) indels at this point.  Parallel to L and A arrays.  Used to select the least-indel path
+    // consistent with the lowest edit distance.
+    //
+    int totalIndels[MAX_K + 1][2 * MAX_K + 1];
+
     // Arrays for backtracing the actions required to match two strings
     char backtraceAction[MAX_K+1];
     int backtraceMatched[MAX_K+1];

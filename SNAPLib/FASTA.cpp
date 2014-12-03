@@ -26,6 +26,7 @@ Revision History:
 #include "Compat.h"
 #include "FASTA.h"
 #include "Error.h"
+#include "exit.h"
 
 using namespace std;
 
@@ -42,6 +43,14 @@ ReadFASTAGenome(
     // byte.  Get the file size to use for this bound.
     //
     _int64 fileSize = QueryFileSize(fileName);
+    bool isValidGenomeCharacter[256];
+
+    for (int i = 0; i < 256; i++) {
+        isValidGenomeCharacter[i] = false;
+    }
+
+    isValidGenomeCharacter['A'] = isValidGenomeCharacter['T'] = isValidGenomeCharacter['C'] = isValidGenomeCharacter['G'] = isValidGenomeCharacter['N'] = true;
+    isValidGenomeCharacter['a'] = isValidGenomeCharacter['t'] = isValidGenomeCharacter['c'] = isValidGenomeCharacter['g'] = isValidGenomeCharacter['n'] = true;
 
     FILE *fastaFile = fopen(fileName, "r");
     if (fastaFile == NULL) {
@@ -132,6 +141,11 @@ ReadFASTAGenome(
 			for (unsigned i = 0; i < lineLen; i++) {
                 if ('N' == lineBuffer[i]) {
                     lineBuffer[i] = 'n';
+                }
+
+                if (!isValidGenomeCharacter[(unsigned char)lineBuffer[i]]) {
+                    WriteErrorMessage("\nFASTA file contained a character that's not a valid base (or N): '%c', full line '%s'\n", lineBuffer[i], lineBuffer);
+                    soft_exit(1);
                 }
             }
             genome->addData(lineBuffer);

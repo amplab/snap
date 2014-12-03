@@ -19,6 +19,7 @@ LandauVishkinWithCigar::LandauVishkinWithCigar()
             L[i][j] = -2;
         }
     }
+    totalIndels[0][MAX_K] = 0;
 }
 
 /*++
@@ -124,10 +125,17 @@ LandauVishkinWithCigar::printLinear(
     *buffer++ = 0;
 }
 
-static const int PrevDelta[3][3] = 
+#if 0
+static const int PrevDelta[3][3] =  // Version that minimizes NET indels (ie., |#ins - #del|
     {{+1, 0, -1},    // d < 0
     {0, -1, +1},    // d == 0
     {-1, 0, +1}};   // d > 0
+#else    // 0
+    static const int PrevDelta[3][3] = // Version that minimizes absolute indels (ie., #ins + #del)
+    { { 0, +1, -1},      // d < 0
+      { 0, +1, -1 },     // d == 0
+      { 0, -1, +1 } };   // d > 0
+#endif // 0
 
 int LandauVishkinWithCigar::computeEditDistance(
     const char* text, int textLen,
@@ -205,7 +213,8 @@ done1:
     char lastAction = '*';
 
 	int e;
-	int lastBestD = MAX_K + 1;
+	int lastBestIndels = MAX_K + 1;
+    int lastBestD = MAX_K + 1;
 	int lastBestBest;
 
     for (e = 1; e <= k; e++) {
@@ -214,11 +223,13 @@ done1:
         for (int d = 0; d != -(e+1); d = (d >= 0 ? -(d+1) : -d)) {
             int bestdelta = 0;
             int bestbest = -1;
+            int bestBestIndels = MAX_K + 1;
             //  extend previous solutions as far as possible, pick best, minimizing indels
             int dy = (d >= 0) + (d > 0);
             for (int dx = 0; dx < 3; dx++) {
                 int delta = PrevDelta[dy][dx];
                 int best = L[e-1][MAX_K+d + delta] + (delta >= 0);
+                int bestIndels = totalIndels[e - 1][MAX_K + d + delta] + (delta != 0);  // Our parent, plus one if this is an indel
                 if (best < 0) {
                     continue;
                 }
@@ -245,26 +256,30 @@ done1:
                         t += 8;
                     }
                 }
-                if (best > bestbest) {
+                if (best > bestbest || best == bestbest && bestIndels < bestBestIndels) {
                     bestbest = best;
                     bestdelta = delta;
+                    bestBestIndels = bestIndels;
                 }
             }
             int best = bestbest;
             A[e][MAX_K+d] = "DXI"[bestdelta + 1];
 
             L[e][MAX_K+d] = best;
+            totalIndels[e][MAX_K + d] = bestBestIndels;
 
 			if (best == patternLen) {
 
-				if (bestdelta == 0) {
-					lastBestD = d;
+				if (bestBestIndels == 0) {
+					lastBestIndels = bestBestIndels;
+                    lastBestD = d;
 					lastBestBest = best;
 					goto got_answer;
 				}
 
-				if (abs(lastBestD) > abs(d)) {
-					lastBestD = d;
+				if (abs(lastBestIndels) > bestBestIndels) {
+                    lastBestIndels = bestBestIndels;
+                    lastBestD = d;
 					lastBestBest = best;
 				}
             } // if best == patternlen

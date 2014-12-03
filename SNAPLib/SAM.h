@@ -210,12 +210,18 @@ public:
         Direction mateDirection,
         GenomeDistance *extraBasesClippedBefore);
 
+    static void computeCigar(CigarFormat cigarFormat, const Genome * genome, LandauVishkinWithCigar * lv,
+        char * cigarBuf, int cigarBufLen,
+        const char * data, GenomeDistance dataLength, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter,
+        GenomeDistance *o_extraBasesClippedAfter, 
+        GenomeLocation genomeLocation, bool useM, int * o_editDistance, int *o_cigarBufUsed, int * o_addFrontClipping);
+
 private:
     static const char * computeCigarString(const Genome * genome, LandauVishkinWithCigar * lv,
         char * cigarBuf, int cigarBufLen, char * cigarBufWithClipping, int cigarBufWithClippingLen,
         const char * data, GenomeDistance dataLength, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter, 
-        unsigned frontHardCliped, unsigned backHardClipped,
-        GenomeLocation genomeLocation, Direction direction, bool useM, int * o_editDistance, int * o_adjustLocation);
+        unsigned frontHardClipped, unsigned backHardClipped,
+        GenomeLocation genomeLocation, Direction direction, bool useM, int * o_editDistance, int * o_addFrontClipping);
 
 #ifdef _DEBUG
 	static void validateCigarString(const Genome *genome, const char * cigarBuf, int cigarBufLen, const char *data, GenomeDistance dataLength, GenomeLocation genomeLocation, Direction direction, bool useM);
