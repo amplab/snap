@@ -19,8 +19,8 @@ class Tables
     char valueBase[5];
     unsigned char value4RC[256]; // reverse complement of 4 bases/byte
 
-    unsigned isLowerCase[256];
-    char toUpperCase[256];
+    unsigned isLowerCaseOrDot[256];
+    char toUpperCaseDotToN[256];
 
     char packedBaseValue[256];
     char packedQualityMask[256];
@@ -43,8 +43,8 @@ public:
     const char* getPackedQualityMask() const { return packedQualityMask; }
     const char* getPackedValueBase() const { return packedValueBase; }
     const char* getPackedValueBaseRC() const { return packedValueBaseRC; }
-    const unsigned *getIsLowerCase() const {return isLowerCase; }
-    const char *getToUpperCase() const { return toUpperCase; }
+    const unsigned *getIsLowerCaseOrDot() const {return isLowerCaseOrDot; }
+    const char *getToUpperCaseDotToN() const { return toUpperCaseDotToN; }
     const char *getCigarQualToSam() const { return cigarQualToSam; }
 };
 
@@ -58,7 +58,7 @@ extern const char *PACKED_QUALITY_MASK;
 extern const char *PACKED_VALUE_BASE;
 extern const char *PACKED_VALUE_BASE_RC;
 extern const int  *BASE_VALUE_NO_N;
-extern const unsigned *IS_LOWER_CASE;
-extern const char *TO_UPPER_CASE;
+extern const unsigned *IS_LOWER_CASE_OR_DOT;
+extern const char *TO_UPPER_CASE_DOT_TO_N;
 extern const char *CIGAR_QUAL_TO_SAM;
 

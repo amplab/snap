@@ -893,6 +893,13 @@ void PreventMachineHibernationWhileThisThreadIsAlive()
 	SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED);
 }
 
+void SetToLowSchedulingPriority()
+{
+    if (!SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS)) {
+        WriteErrorMessage("Unable to set process to background priority class, %d.  Ignoring and proceeding at normal priority\n", GetLastError());
+    }
+}
+
 struct NamedPipe {
 	HANDLE hPipe;
 };
@@ -1948,6 +1955,12 @@ FileMapper::prefetch(size_t currentRead)
 void PreventMachineHibernationWhileThisThreadIsAlive()
 {
 	// Only implemented for Windows
+}
+
+void SetToLowSchedulingPriority()
+{
+    // Only implemented for Windows (the Linux version is per-thread, and I'm too lazy to do it now).
+    WriteErrorMessage("The Linux code for running at low priority is not implemented, so SNAP will run at normal priority\n");
 }
 
 //

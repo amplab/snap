@@ -13,8 +13,8 @@ const unsigned char *VALUE4_RC = tables.getValue4RC();
 const char *PACKED_BASE_VALUE = tables.getPackedBaseValue();
 const char *PACKED_QUALITY_MASK = tables.getPackedQualityMask();
 const char *PACKED_VALUE_BASE = tables.getPackedValueBase();
-const unsigned *IS_LOWER_CASE = tables.getIsLowerCase();
-const char *TO_UPPER_CASE = tables.getToUpperCase();
+const unsigned *IS_LOWER_CASE_OR_DOT = tables.getIsLowerCaseOrDot();
+const char *TO_UPPER_CASE_DOT_TO_N = tables.getToUpperCaseDotToN();
 const char *PACKED_VALUE_BASE_RC = tables.getPackedValueBaseRC();
 const char *CIGAR_QUAL_TO_SAM = tables.getCigarQualToSam();
 
@@ -78,13 +78,16 @@ Tables::Tables()
     memset(packedQualityMask + 4, 0x3f, sizeof(packedQualityMask) - 4);
 
     for (unsigned i = 0; i < 256; i++) {
-        isLowerCase[i] = 0;
-        toUpperCase[i] = i;
+        isLowerCaseOrDot[i] = 0;
+        toUpperCaseDotToN[i] = i;
     }
     for (unsigned i = 0x61; i <= 0x7a; i++) {
-        isLowerCase[i] = 1;
-        toUpperCase[i] = i - 0x20;
+        isLowerCaseOrDot[i] = 1;
+        toUpperCaseDotToN[i] = i - 0x20;
     }
+
+    isLowerCaseOrDot['.'] = 1;
+    toUpperCaseDotToN['.'] = 'N';
 
     for (unsigned i = 0; i < 256; i++) {
         cigarQualToSam[i] = i > ('~' - '!') ? '!' : '!' + i;

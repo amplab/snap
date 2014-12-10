@@ -307,9 +307,9 @@ FASTQReader::_init::_init()
 
     //
     // The second line is the read itself and must start with a base or an
-    // 'N' in either case.
+    // 'N' in either case.  A . is just a different way to encode an N.
     //
-    for (const char*p = "ACTGNURYKMSWBDHVNX"; *p; p++) {
+    for (const char*p = "ACTGNURYKMSWBDHVNX."; *p; p++) {
         isValidStartingCharacterForNextLine[0][*p] = true;
         isValidStartingCharacterForNextLine[0][tolower(*p)] = true;
     }

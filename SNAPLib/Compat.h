@@ -481,13 +481,6 @@ public:
     // MUST call unmap on each token out of createMapping, the destructor WILL NOT cleanup
     void unmap(void* token);
 
-#if 0
-    // prefetch was not being used, and implementation depended on single mapping per object
-    // ifdef'ed out when API was changed to allow multiple mappings (to reduce FD usage)
-    // can resurrect prefetch if we need it...
-    void prefetch(size_t currentRead);
-#endif
-
 private:
     bool        initialized;
     const char* fileName;
@@ -499,14 +492,6 @@ private:
     HANDLE      hFile;
     HANDLE      hMapping;
 
-#if 0
-    HANDLE      hFilePrefetch;
-    OVERLAPPED  lap[1];     // for the prefetch read
-    void        *prefetchBuffer;
-    static const int prefetchBufferSize = 16 * 1024 * 1024;
-    bool        isPrefetchOutstanding;
-    size_t      lastPrefetch;
-#endif
     _int64 millisSpentInReadFile;
     _int64 countOfImmediateCompletions;
     _int64 countOfDelayedCompletions;
@@ -524,3 +509,9 @@ private:
 // Call to keep the OS from putting the machine asleep
 //
 void PreventMachineHibernationWhileThisThreadIsAlive();
+
+//
+// Reduce our scheduling priority to be nicer to other jobs.
+//
+void SetToLowSchedulingPriority();
+

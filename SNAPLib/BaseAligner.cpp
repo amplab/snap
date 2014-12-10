@@ -701,11 +701,10 @@ Return Value:
     if (0 == mostSeedsContainingAnyParticularBase[FORWARD] && 0 == mostSeedsContainingAnyParticularBase[RC]) {
         //
         // The only way we can get here is if we've tried all of the seeds that we're willing
-        // to try and every one of them generated too many hits to process.  Declare
-        // a multi hit and give up.
+        // to try and every one of them generated too many hits to process.  Give up.
         //
         _ASSERT(forceResult);
-        primaryResult->status = MultipleHits;
+        primaryResult->status = NotFound;
         primaryResult->mapq = 0;
         return true;
     }
@@ -756,9 +755,7 @@ Return Value:
                     }
                     return true;
                 } else {
-                    // If none of our seeds was below the popularity threshold, report this as MultipleHits; otherwise,
-                    // report it as NotFound
-                    primaryResult->status = (nSeedsApplied[FORWARD] == 0 && nSeedsApplied[RC] == 0) ? MultipleHits : NotFound;
+                    primaryResult->status = NotFound;
                     primaryResult->mapq = 0;
                     return true;
                 }

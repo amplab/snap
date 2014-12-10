@@ -160,6 +160,7 @@ AlignerOptions::usageMessage()
 		"  -pre Prefetch the index into system cache.  This is only meaningful with -map, and only helps if the index is not\n"
 		"       already in memory and your operating system is slow at reading mapped files (i.e., some versions of Linux,\n"
 		"       but not Windows).\n"
+        "   -lp Run SNAP at low scheduling priority (Only implemented on Windows)\n"
 #ifdef LONG_READS
         "  -dp  Edit distance as a percentage of read length (single only, overrides -d)\n"
 #endif
@@ -632,6 +633,9 @@ AlignerOptions::parse(
 	} else if (strcmp(argv[n], "-hdp") == 0) {
         AlignerOptions::useHadoopErrorMessages = true;
         return true;    
+    } else if (strcmp(argv[n], "-lp") == 0) {
+        SetToLowSchedulingPriority();
+        return true;
     } else if (strcmp(argv[n], "-nu") == 0) {
         noUkkonen = true;
         return true;

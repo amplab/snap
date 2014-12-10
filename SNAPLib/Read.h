@@ -405,12 +405,13 @@ public:
             upcaseForwardRead = rcData = rcQuality = NULL;
 
             //
-            // Check for lower case letters in the data, and convert to upper case if there are any.
+            // Check for lower case letters in the data, and convert to upper case if there are any.  Also convert
+            // '.' to N.
             //
             if (! allUpper) {
                 unsigned anyLowerCase = 0;
                 for (unsigned i = 0; i < dataLength; i++) {
-                    anyLowerCase |= IS_LOWER_CASE[data[i]];
+                    anyLowerCase |= IS_LOWER_CASE_OR_DOT[data[i]];
                 }
 
                 if (anyLowerCase) {
@@ -418,7 +419,7 @@ public:
                     upcaseForwardRead = localBuffer;
                     localBufferAllocationOffset += unclippedLength;
                     for (unsigned i = 0; i < dataLength; i++) {
-                        upcaseForwardRead[i] = TO_UPPER_CASE[data[i]];
+                        upcaseForwardRead[i] = TO_UPPER_CASE_DOT_TO_N[data[i]];
                     }
 
                     unclippedData = data = upcaseForwardRead;
