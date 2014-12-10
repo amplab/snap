@@ -238,7 +238,7 @@ SimpleReadWriter::writePair(
         if (addFrontClipping != 0) {
 			const Genome::Contig *originalContig = genome->getContigAtLocation(locations[first]);
 			const Genome::Contig *newContig = genome->getContigAtLocation(locations[first] + addFrontClipping);
-			if (newContig != originalContig || locations[first] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
+			if (newContig != originalContig || NULL == newContig || locations[first] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
 				//
 				// Altering this would push us over a contig boundary.  Just give up on the read.
 				//
