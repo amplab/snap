@@ -81,6 +81,8 @@ ReadFASTAGenome(
     }
     paddingBuffer[chromosomePaddingSize] = '\0';
 
+    bool warningIssued = false;
+
     while (NULL != fgets(lineBuffer,lineBufferSize,fastaFile)) {
         if (lineBuffer[0] == '>') {
             //
@@ -144,8 +146,11 @@ ReadFASTAGenome(
                 }
 
                 if (!isValidGenomeCharacter[(unsigned char)lineBuffer[i]]) {
-                    WriteErrorMessage("\nFASTA file contained a character that's not a valid base (or N): '%c', full line '%s'\n", lineBuffer[i], lineBuffer);
-                    soft_exit(1);
+                    if (!warningIssued) {
+                        WriteErrorMessage("\nFASTA file contained a character that's not a valid base (or N): '%c', full line '%s'; \nconverting to 'N'.  This may happen again, but there will be no more warnings.\n", lineBuffer[i], lineBuffer);
+                        warningIssued = true;
+                    }
+                    lineBuffer[i] = 'N';
                 }
             }
             genome->addData(lineBuffer);
