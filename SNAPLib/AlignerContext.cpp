@@ -88,18 +88,19 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
     extension->initialize();
     
     if (! extension->skipAlignment()) {
+        WriteStatusMessage("Aligning.\n");
+
+        beginIteration();
+
+        runTask();
+            
+        finishIteration();
+
         printStatsHeader();
-        do {
 
-            beginIteration();
+        printStats();
 
-            runTask();
-            
-            finishIteration();
-            
-            printStats();
-
-        } while (nextIteration());
+        nextIteration();    // This probably should get rolled into something else; it's really cleanup code, not "next iteration"
     }
 
     extension->finishAlignment();

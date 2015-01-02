@@ -151,7 +151,7 @@ SimpleReadWriter::writeRead(
             // redo if read modified (e.g. to add soft clipping, or move alignment for a leading I.
 			const Genome::Contig *originalContig = genome->getContigAtLocation(genomeLocation);
 			const Genome::Contig *newContig = genome->getContigAtLocation(genomeLocation + addFrontClipping);
-			if (newContig != originalContig || genomeLocation + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
+			if (newContig == NULL || newContig != originalContig || genomeLocation + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
 				//
 				// Altering this would push us over a contig boundary.  Just give up on the read.
 				//
