@@ -42,3 +42,4 @@ obj
 # Compiled binaries
 /snap
 /unit_tests
+/SNAPCommand
