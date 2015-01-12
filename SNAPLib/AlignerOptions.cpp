@@ -103,7 +103,8 @@ AlignerOptions::usageMessage()
 		"Usage: \n%s\n"
 		"Options:\n"
 		"  -o   filename  output alignments to filename in SAM or BAM format, depending on the file extension or\n"
-		"       explicit type specifier (see below)\n"
+		"       explicit type specifier (see below).  Use a dash with an explicit type specifier to write to\n"
+        "       stdout, so for example -o -sam - would write SAM output to stdout\n"
 		"  -d   maximum edit distance allowed per read or pair (default: %d)\n"
 		"  -n   number of seeds to use per read\n"
 		"  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default: %lf)\n"
@@ -142,8 +143,8 @@ AlignerOptions::usageMessage()
 		"  -rg  Specify the default read group if it is not specified in the input file\n"
 		"  -R   Specify the entire read group line for the SAM/BAM output.  This must include an ID tag.  If it doesn't start with\n"
 		"       '@RG' SNAP will add that.  Specify tabs by \\t.  Two backslashes will generate a single backslash.\n"
-		"        backslash followed by anything else is illegal.  So, '-R @RG\\tID:foo\\tDS:my data' would generate reads\n"
-		"        with defualt tag foo, and an @RG line that also included the DS:my data field.\n"
+		"       backslash followed by anything else is illegal.  So, '-R @RG\\tID:foo\\tDS:my data' would generate reads\n"
+		"       with defualt tag foo, and an @RG line that also included the DS:my data field.\n"
 		"  -sa  Include reads from SAM or BAM files with the secondary (0x100) or supplementary (0x800) flag set; default is to drop them.\n"
 		"  -om  Output multiple alignments.  Takes as a parameter the maximum extra edit distance relative to the best alignment\n"
 		"       to allow for secondary alignments\n"
@@ -215,6 +216,10 @@ AlignerOptions::usageMessage()
                       "doesn't recoginize the file extension.\n"
                       "In order to use a file name that begins with a '-' and not have SNAP treat it as a switch, you must\n"
                       "explicitly specify the type.  But really, that's just confusing and you shouldn't do it.\n"
+                      "Input and output may also be from/to stdin/stdout. To do that, use a - for the input or output file\n"
+                      "name and give an explicit type specifier.  So, for example, \n"
+                      "snap single myIndex -fastq - -o -sam -\n"
+                      "would read FASTQ from stdin and write SAM to stdout.\n"
     );
 }
 
