@@ -1,0 +1,88 @@
+#############################################
+# DO NOT HAND-EDIT THIS GENERATED FILE!!!!! #
+#############################################
+CNFP_PRODUCTNAME         := twb
+CNFP_PRODUCT_OUTSUBDIR   := 
+CNFP_TOPDIR              := ../../
+CNFP_PRODUCTDIR          := 
+CNFP_CURDIR              := pdclibhdfs/src/
+PRODUCT_CONFIG_XML_FILES := config/twb.tdprod.xml
+include $(CNFP_TOPDIR)../tdv/etc/build_common.mk
+LOCAL_LEAFMKFILE         := $(CNFP_TOPDIR)pdclibhdfs/src/makefile.twb
+LOCAL_GLBLPRJSNIPPETS    :=
+
+ifeq ($(IDEBUILD_PROJID),TstOpsHdfs)
+sinclude $(CNFP_TOPDIR)config/build.twb/$(HATAVARDIR)/ProjectIde/TstOpsHdfs.tdsubmk
+else
+ifeq ($(IDEBUILD_PROJID),)
+sinclude $(CNFP_TOPDIR)config/build.twb/$(HATAVARDIR)/ProjectLocal/TstOpsHdfs.tdsubmk
+ifeq ($(LAST_INCLUDED_PROJID),TstOpsHdfs)
+LOCAL_GLBLPRJSNIPPETS += $(PROJECTGLOBAL_DIR)TstOpsHdfs.tdsubmk
+$(CNFP_TstOpsHdfs_GLOBALEMITDONES) $(CNFP_TstOpsHdfs_EXES) $(CNFP_TstOpsHdfs_LIBS) $(CNFP_TstOpsHdfs_OBJS): $(CNFP_TstOpsHdfs_DRVSRC) $(CNFP_PUBLICDRVSRC)
+endif
+endif
+endif
+
+ifeq ($(IDEBUILD_PROJID),TstReadHdfs)
+sinclude $(CNFP_TOPDIR)config/build.twb/$(HATAVARDIR)/ProjectIde/TstReadHdfs.tdsubmk
+else
+ifeq ($(IDEBUILD_PROJID),)
+sinclude $(CNFP_TOPDIR)config/build.twb/$(HATAVARDIR)/ProjectLocal/TstReadHdfs.tdsubmk
+ifeq ($(LAST_INCLUDED_PROJID),TstReadHdfs)
+LOCAL_GLBLPRJSNIPPETS += $(PROJECTGLOBAL_DIR)TstReadHdfs.tdsubmk
+$(CNFP_TstReadHdfs_GLOBALEMITDONES) $(CNFP_TstReadHdfs_EXES) $(CNFP_TstReadHdfs_LIBS) $(CNFP_TstReadHdfs_OBJS): $(CNFP_TstReadHdfs_DRVSRC) $(CNFP_PUBLICDRVSRC)
+endif
+endif
+endif
+
+ifeq ($(IDEBUILD_PROJID),TstWriteHdfs)
+sinclude $(CNFP_TOPDIR)config/build.twb/$(HATAVARDIR)/ProjectIde/TstWriteHdfs.tdsubmk
+else
+ifeq ($(IDEBUILD_PROJID),)
+sinclude $(CNFP_TOPDIR)config/build.twb/$(HATAVARDIR)/ProjectLocal/TstWriteHdfs.tdsubmk
+ifeq ($(LAST_INCLUDED_PROJID),TstWriteHdfs)
+LOCAL_GLBLPRJSNIPPETS += $(PROJECTGLOBAL_DIR)TstWriteHdfs.tdsubmk
+$(CNFP_TstWriteHdfs_GLOBALEMITDONES) $(CNFP_TstWriteHdfs_EXES) $(CNFP_TstWriteHdfs_LIBS) $(CNFP_TstWriteHdfs_OBJS): $(CNFP_TstWriteHdfs_DRVSRC) $(CNFP_PUBLICDRVSRC)
+endif
+endif
+endif
+
+ifeq ($(IDEBUILD_PROJID),pdclibhdfs)
+sinclude $(CNFP_TOPDIR)config/build.twb/$(HATAVARDIR)/ProjectIde/pdclibhdfs.tdsubmk
+else
+ifeq ($(IDEBUILD_PROJID),)
+sinclude $(CNFP_TOPDIR)config/build.twb/$(HATAVARDIR)/ProjectLocal/pdclibhdfs.tdsubmk
+ifeq ($(LAST_INCLUDED_PROJID),pdclibhdfs)
+LOCAL_GLBLPRJSNIPPETS += $(PROJECTGLOBAL_DIR)pdclibhdfs.tdsubmk
+$(CNFP_pdclibhdfs_GLOBALEMITDONES) $(CNFP_pdclibhdfs_EXES) $(CNFP_pdclibhdfs_LIBS) $(CNFP_pdclibhdfs_OBJS): $(CNFP_pdclibhdfs_DRVSRC) $(CNFP_PUBLICDRVSRC)
+endif
+endif
+endif
+
+.PHONY: preppkg all globalemitdones exes libs objs $(LOCAL_PHONY_FILETARGS) drvsrc publicdrvsrc drvdir clean clobber
+preppkg:      $(CNFP_LOCAL_PREPPKG)
+all: globalemitdones exes libs objs drvsrc
+globalemitdones: $(CNFP_LOCAL_GLOBALEMITDONES)
+exes:            $(CNFP_LOCAL_EXES)
+libs:            $(CNFP_LOCAL_LIBS)
+objs:            $(CNFP_LOCAL_OBJS)
+drvsrc:          $(CNFP_LOCAL_DRVSRC)
+publicdrvsrc:    $(CNFP_LOCAL_PUBLICDRVSRC)
+eclipseinfo:     $(CNFP_LOCAL_ECLIPSEINFO)
+drvdir:          $(CNFP_OUTDIRLIST)
+clean:           $(CNFP_LOCAL_CLEAN)
+clobber:         $(CNFP_LOCAL_CLOBBER)
+
+.NO_CMP_SCRIPT: $(CNFP_OUTDIRLIST)
+$(CNFP_OUTDIRLIST):
+	$(MKDIR) -p $@
+
+ifneq ($(CNFP_SNAPSHOT_CONTEXT),ThisShouldBeNull)
+preppkg all globalemitdones exes libs objs $(LOCAL_PHONY_FILETARGS) drvsrc publicdrvsrc clean clobber : $(CNFP_OUTDIRLIST)
+endif
+
+$(CNFP_RMT_GLOBALEMITDONES) $(CNFP_RMT_EXES) $(CNFP_RMT_LIBS) $(CNFP_RMT_OBJS): $(CNFP_PUBLICDRVSRC)
+
+preppkg all globalemitdones exes libs objs drvsrc publicdrvsrc drvdir clean clobber : $(GLOBAL_BLDENV_FILES) $(LOCAL_LEAFMKFILE) $(LOCAL_GLBLPRJSNIPPETS)
+
+sinclude $(PRODUCT_HATAVAR_70_SNIPPET)

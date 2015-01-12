@@ -27,81 +27,54 @@ Revision History:
 
 #pragma once
 
-#include "Aligner.h"
+#include "AlignmentResult.h"
 #include "LandauVishkin.h"
-#include "BoundedStringDistance.h"
 #include "BigAlloc.h"
+#include "ProbabilityDistance.h"
+#include "AlignerStats.h"
+#include "directions.h"
+#include "GenomeIndex.h"
 
-class BaseAligner: public Aligner {
+extern bool doAlignerPrefetch;
+
+class BaseAligner {
 public:
 
     BaseAligner(
         GenomeIndex    *i_genomeIndex, 
-        unsigned        i_confDiff, 
         unsigned        i_maxHitsToConsider, 
         unsigned        i_maxK,
         unsigned        i_maxReadSize,
         unsigned        i_maxSeedsToUse,
-        unsigned        i_lvCutoff,
-        unsigned        i_adaptiveConfDiffThreshold,
-        LandauVishkin  *i_landauVishkin = NULL);
+        double          i_maxSeedCoverage,
+		unsigned        i_minWeightToCheck,
+        unsigned        i_extraSearchDepth,
+        bool            i_noUkkonen,
+        bool            i_noOrderedEvaluation,
+		bool			i_noTruncation,
+        LandauVishkin<1>*i_landauVishkin = NULL,
+        LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
+        AlignerStats   *i_stats = NULL,
+        BigAllocator    *allocator = NULL);
+
+    static unsigned getMaxSecondaryResults(unsigned maxSeedsToUse, double maxSeedCoverage, unsigned maxReadSize, unsigned maxHits, unsigned seedLength);
 
     virtual ~BaseAligner();
 
-        virtual AlignmentResult
+        void
     AlignRead(
-        Read        *read,
-        unsigned    *genomeLocation,
-        bool        *hitIsRC,
-        int         *finalScore = NULL);
-        
-    //
-    // A richer version of AlignRead that allows for searching near a given location.
-    // If searchRadius is not 0, constrain the search to distance maxSpacing around
-    // searchLocation in the orientation given by searchRC.
-    //
-        AlignmentResult
-    AlignRead(
-        Read        *read,
-        unsigned    *genomeLocation,
-        bool        *hitIsRC,
-        int         *finalScore,
-        unsigned     searchRadius,       // If non-zero, constrain search around searchLocation in direction searchRC.
-        unsigned     searchLocation,
-        bool         searchRC);
-        
-    //
-    // A richer version of AlignRead that allows for searching near a given location, as well as returning
-    // multiple hits if the best hits are within distance confDiff of each other.
-    //
-        AlignmentResult
-    AlignRead(
-        Read        *read,
-        unsigned    *genomeLocation,
-        bool        *hitIsRC,
-        int         *finalScore,
-        unsigned     searchRadius,       // If non-zero, constrain search around searchLocation in direction searchRC.
-        unsigned     searchLocation,
-        bool         searchRC,
-        int          maxHitsToGet,       // If maxHitsToGet > 1, output up to this many hits within confDiff of the best
-        int         *multiHitsFound,     // inside multiHitLocations / RCs instead of returning MultipleHits right away.
-        unsigned    *multiHitLocations,
-        bool        *multiHitRCs,
-        int         *multiHitScores);
+        Read                    *read,
+        SingleAlignmentResult   *primaryResult,
+        int                      maxEditDistanceForSecondaryResults,
+        int                      secondaryResultBufferSize,
+        int                     *nSecondaryResults,
+        SingleAlignmentResult   *secondaryResults             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
+    );      // Retun value is true if there was enough room in the secondary alignment buffer for everything that was found.
 
+        
     //
     // Statistics gathering.
     //
-        void
-    ComputeHitDistribution(
-        Read        *read,
-        unsigned     correctGenomeLocation,
-        bool         correctHitIsRC,
-        unsigned    *hitCountBySeed,
-        unsigned    *rcHitCountBySeed,
-        unsigned    &nSeedsApplied,
-        unsigned    &nRCSeedsApplied,
-        unsigned    *hitsCountsContainingCorrectLocation);
 
     _int64 getNHashTableLookups() const {return nHashTableLookups;}
     _int64 getLocationsScored() const {return nLocationsScored;}
@@ -110,18 +83,9 @@ public:
     _int64 getNIndelsMerged() const {return nIndelsMerged;}
     void addIgnoredReads(_int64 newlyIgnoredReads) {nReadsIgnoredBecauseOfTooManyNs += newlyIgnoredReads;}
 
-#if     MAINTAIN_HISTOGRAMS
-    const Histogram *getLVHistogram() const {return lvHistogram;}
-    const Histogram *getLookupHistogram() const {return lookupHistogram;}
-    const Histogram *getLVHistogramForMulti() const {return lvHistogramForMulti;}
-    const Histogram *getLVHistogramWhenBestFound() const {return lvCountWhenBestFound;}
-#endif  // MAINTAIN_HISTOGRAMS
-
-
     const char *getRCTranslationTable() const {return rcTranslationTable;}
 
     inline int getMaxK() const {return maxK;}
-    inline int getConfDiff() const {return confDiff;}
 
     inline void setMaxK(int maxK_) {maxK = maxK_;}
 
@@ -134,30 +98,34 @@ public:
     void *operator new(size_t size) {return BigAlloc(size);}
     void operator delete(void *ptr) {BigDealloc(ptr);}
 
+    void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(BaseAligner)); return allocator->allocate(size);}
+    void operator delete(void *ptr, BigAllocator *allocator) {/* do nothing.  Memory gets cleaned up when the allocator is deleted.*/}
+ 
     inline bool getExplorePopularSeeds() {return explorePopularSeeds;}
     inline void setExplorePopularSeeds(bool newValue) {explorePopularSeeds = newValue;}
 
     inline bool getStopOnFirstHit() {return stopOnFirstHit;}
     inline void setStopOnFirstHit(bool newValue) {stopOnFirstHit = newValue;}
 
+    static size_t getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned numSeedsFromCommandLine, double seedCoverage);
+
 private:
-    LandauVishkin *landauVishkin;
-    BoundedStringDistance<> *bsd;
+
+    bool hadBigAllocator;
+
+    LandauVishkin<> *landauVishkin;
+    LandauVishkin<-1> *reverseLandauVishkin;
     bool ownLandauVishkin;
 
-    // Maximum distance to merge candidates that differe in indels over.
-    // This can't be bigger than 32, else some bitvectors overflow.
-    // TODO(matei): this seems to work better when we make it lower; why?
-    static const unsigned maxMergeDist = 15; 
+    ProbabilityDistance *probDistance;
 
+    // Maximum distance to merge candidates that differ in indels over.
+#ifdef LONG_READS
+    static const unsigned maxMergeDist = 64; // Must be even and <= 64
+#else
+    static const unsigned maxMergeDist = 48; // Must be even and <= 64
+#endif
     char rcTranslationTable[256];
-
-#if     MAINTAIN_HISTOGRAMS
-    Histogram   *lvHistogram;
-    Histogram   *lookupHistogram;
-    Histogram   *lvHistogramForMulti;
-    Histogram   *lvCountWhenBestFound;
-#endif  // MAINTAIN_HISTOGRAMS
 
     _int64 nHashTableLookups;
     _int64 nLocationsScored;
@@ -184,9 +152,19 @@ private:
         Candidate() {init();}
         void init();
 
-        _int64          scoredInEpoch;
         unsigned        score;
+        int             seedOffset;
     };
+
+    static const unsigned hashTableElementSize = maxMergeDist;   // The code depends on this, don't change it
+
+    void decomposeGenomeLocation(GenomeLocation genomeLocation, _uint64 *highOrder, _uint64 *lowOrder)
+    {
+        *lowOrder = (_uint64)GenomeLocationAsInt64(genomeLocation) % hashTableElementSize;
+        if (NULL != highOrder) {
+            *highOrder = (_uint64)GenomeLocationAsInt64(genomeLocation) - *lowOrder;
+        }
+    }
 
     struct HashTableElement {
         HashTableElement();
@@ -203,16 +181,19 @@ private:
         //
         HashTableElement    *next;
 
-        _uint64      candidatesUsed;
+        _uint64              candidatesUsed;    // Really candidates we still need to score
+        _uint64              candidatesScored;
 
-        unsigned             baseGenomeLocation;
+        GenomeLocation       baseGenomeLocation;
         unsigned             weight;
         unsigned             lowestPossibleScore;
         unsigned             bestScore;
-        bool                 isRC;
+        GenomeLocation       bestScoreGenomeLocation;
+        Direction            direction;
         bool                 allExtantCandidatesScored;
-
-        Candidate            candidates[maxMergeDist * 2];
+        double               matchProbabilityForBestScore;
+ 
+        Candidate            candidates[hashTableElementSize];
     };
 
     //
@@ -238,93 +219,90 @@ private:
     const HashTableElement emptyHashTableElement;
 
     unsigned candidateHashTablesSize;
-    HashTableAnchor *candidateHashTable[2]; // 0 is normal, 1 reverse complement
+    HashTableAnchor *candidateHashTable[NUM_DIRECTIONS];
     
     HashTableElement *weightLists;
     unsigned highestUsedWeightList;
 
-    static inline unsigned hash(unsigned key) {
-#if     1
+    static inline _uint64 hash(_uint64 key) {
         key = key * 131;    // Believe it or not, we spend a long time computing the hash, so we're better off with more table entries and a dopey function.
-#else   // 1
-        //
-        // Hash the key.  Use the hash finalizer from the 64 bit MurmurHash3, http://code.google.com/p/smhasher/wiki/MurmurHash3,
-        // which is public domain code.
-        //
-    
-        key ^= key >> 16; 
-        key *= 0x85ebca6b; 
-        key ^= key >> 13; 
-        key *= 0xc2b2ae35; 
-        key ^= key >> 16;
-#endif  // 1
         return key;
     }
 
-
     static const unsigned UnusedScoreValue = 0xffff;
+
+    // MAPQ parameters, currently not set to match Mason.  Using #define because VC won't allow "static const double".
+#define SNP_PROB  0.001
+#define GAP_OPEN_PROB  0.001
+#define GAP_EXTEND_PROB  0.5
+
+    //
+    // Storage that's used during a call to AlignRead, but that's also needed by the
+    // score function.  Since BaseAligner is single threaded, it's easier just to make
+    // them member variables than to pass them around.
+    //
+    unsigned lowestPossibleScoreOfAnyUnseenLocation[NUM_DIRECTIONS];
+    unsigned mostSeedsContainingAnyParticularBase[NUM_DIRECTIONS];
+    unsigned nSeedsApplied[NUM_DIRECTIONS];
+    unsigned bestScore;
+    GenomeLocation bestScoreGenomeLocation;
+    unsigned secondBestScore;
+    GenomeLocation secondBestScoreGenomeLocation;
+    int      secondBestScoreDirection;
+    unsigned scoreLimit;
+    unsigned lvScores;
+    unsigned lvScoresAfterBestFound;
+    double probabilityOfAllCandidates;
+    double probabilityOfBestCandidate;
+    int firstPassSeedsNotSkipped[NUM_DIRECTIONS];
+    _int64 smallestSkippedSeed[NUM_DIRECTIONS];
+    unsigned highestWeightListChecked;
+
+    double totalProbabilityByDepth[AlignerStats::maxMaxHits];
+    void updateProbabilityMass();
 
         bool
     score(
-        bool             forceResult,
-        Read            *read,
-        Read            *rcRead,
-        AlignmentResult *result,
-        int             *finalScore,
-        unsigned        *singleHitGenomeLocation,
-        bool            *hitIsRC,
-        unsigned         nSeedsApplied,
-        unsigned         nRCSeedsApplied,
-        unsigned         mostSeedsContainingAnyParticularBase,
-        unsigned         mostRCSeedsContainingAnyParticularBase,
-        unsigned        &lowestPossibleScoreOfAnyUnseenLocation,
-        unsigned        &lowestPossibleRCScoreOfAnyUnseenLocation,
-        Candidate       *candidates,
-        unsigned        &bestScore,
-        unsigned        &bestScoreGenomeLocation,
-        unsigned        &secondBestScore,
-        unsigned        &secondBestScoreGenomeLocation,
-        bool            &secondBestScoreIsRC,
-        unsigned        &scoreLimit,
-        unsigned        &lvScores,
-        unsigned        &lvScoresAfterBestFound,
-        unsigned         maxHitsToGet);
-    
+        bool                     forceResult,
+        Read                    *read[NUM_DIRECTIONS],
+        SingleAlignmentResult   *primaryResult,
+        int                      maxEditDistanceForSecondaryResults,
+        int                      secondaryResultBufferSize,
+        int                     *nSecondaryResults,
+        SingleAlignmentResult   *secondaryResults);
+
     void clearCandidates();
 
-    void findCandidate(unsigned genomeLocation, bool isRC, Candidate **candidate, HashTableElement **hashTableElement);
-    void allocateNewCandidate(unsigned genomeLoation, bool isRC, unsigned lowestPossibleScore, Candidate **candidate, HashTableElement **hashTableElement);
+    bool findElement(GenomeLocation genomeLocation, Direction direction, HashTableElement **hashTableElement);
+    void findCandidate(GenomeLocation genomeLocation, Direction direction, Candidate **candidate, HashTableElement **hashTableElement);
+    void allocateNewCandidate(GenomeLocation genomeLoation, Direction direction, unsigned lowestPossibleScore, int seedOffset, Candidate **candidate, HashTableElement **hashTableElement);
     void incrementWeight(HashTableElement *element);
-
-    void fillHitsFound(unsigned maxHitsToGet, int *multiHitsFound, 
-                       unsigned *multiHitLocations, bool *multiHitRCs, int *multiHitScores);
+    void prefetchHashTableBucket(GenomeLocation genomeLocation, Direction direction);
 
     const Genome *genome;
     GenomeIndex *genomeIndex;
     unsigned seedLen;
-    unsigned confDiff;
     unsigned maxHitsToConsider;
     unsigned maxK;
     unsigned maxReadSize;
-    unsigned maxSeedsToUse; // Max number of seeds to look up in the hash table
-    unsigned lvCutoff;
-    unsigned adaptiveConfDiffThreshold; // Increase confDiff by 1 if this many seeds are repetitive.
-
-    int nCandidates;
-    Candidate *candidates;
+    unsigned maxSeedsToUseFromCommandLine; // Max number of seeds to look up in the hash table
+    double   maxSeedCoverage;  // Max seeds to used expressed as readSize/seedSize this is mutually exclusive with maxSeedsToUseFromCommandLine
+    unsigned minWeightToCheck;
+    unsigned extraSearchDepth;
+    unsigned numWeightLists;
+    bool     noUkkonen;
+    bool     noOrderedEvaluation;
+	bool     noTruncation;
+    bool     doesGenomeIndexHave64BitLocations;
 
     char *rcReadData;
+    char *rcReadQuality;
+    char *reversedRead[NUM_DIRECTIONS];
 
     unsigned nTable[256];
 
     int readId;
     
-    // Store the best hits at a given edit distance, as well as their number
-    static const int MAX_MULTI_HITS_TO_GET = 512;
-    unsigned hitCount[MAX_K];
-    unsigned hitLocations[MAX_K][MAX_MULTI_HITS_TO_GET];
-    bool hitRCs[MAX_K][MAX_MULTI_HITS_TO_GET];
-
     // How many overly popular (> maxHits) seeds we skipped this run
     unsigned popularSeedsSkipped;
 
@@ -335,204 +313,16 @@ private:
     bool stopOnFirstHit;      // Whether to stop the first time a location matches with less than
                               // maxK edit distance (useful when using SNAP for filtering only).
 
-    inline unsigned getWrappedNextSeedToTest(unsigned wrapCount) {
-            if (0 == wrapCount) {
-                return 0;
-            }
-            switch (seedLen) {
-                case 23: {
-                    switch (wrapCount) {
-                        case 1: return 12;
-                        case 2: return 6;
-                        case 3: return 17;
-                        case 4: return 3;
-                        case 5: return 9;
-                        case 6: return 20;
-                        case 7: return 14;
-                        case 8: return 1;
-                        case 9: return 4;
-                        case 10: return 7;
-                        case 11: return 10;
-                        case 12: return 15;
-                        case 13: return 18;
-                        case 14: return 21;
-                        case 15: return 4;
-                        case 16: return 2;
-                        case 17: return 5;
-                        case 18: return 11;
-                        case 19: return 16;
-                        case 20: return 19;
-                        case 21: return 22;
-                        case 22: return 8;
-                    }
-                }
-                case 22: {
-                    switch (wrapCount) {
-                        case 1: return 11;
-                        case 2: return 6;
-                        case 3: return 16;
-                        case 4: return 3;
-                        case 5: return 9;
-                        case 6: return 14;
-                        case 7: return 19;
-                        case 8: return 2;
-                        case 9: return 7;
-                        case 10: return 12;
-                        case 11: return 17;
-                        case 12: return 20;
-                        case 13: return 4;
-                        case 14: return 1;
-                        case 15: return 10;
-                        case 16: return 13;
-                        case 17: return 15;
-                        case 18: return 18;
-                        case 19: return 21;
-                        case 20: return 5;
-                        case 21: return 8;
-                        default: _ASSERT(!"NOTREACHED");
-                    }
-                }
+    AlignerStats *stats;
 
-                case 21: {
-                    switch (wrapCount) {
-                        case 1: return 11;
-                        case 2: return 6;
-                        case 3: return 16;
-                        case 4: return 3;
-                        case 5: return 9;
-                        case 6: return 13;
-                        case 7: return 17;
-                        case 8: return 18;
-                        case 9: return 2;
-                        case 10: return 5;
-                        case 11: return 8;
-                        case 12: return 15;
-                        case 13: return 20;
-                        case 14: return 1;
-                        case 15: return 4;
-                        case 16: return 7;
-                        case 17: return 10;
-                        case 18: return 12;
-                        case 19: return 14;
-                        case 20: return 19;
-                        default: _ASSERT(!"NOTREACHED");
-                    }
-                }
-                case 20: {
-                    switch (wrapCount) {
-                        case 1: return 10;
-                        case 2: return 5;
-                        case 3: return 15;
-                        case 4: return 2;
-                        case 5: return 7;
-                        case 6: return 12;
-                        case 7: return 17;
-                        case 8: return 3;
-                        case 9: return 9;
-                        case 10: return 11;
-                        case 11: return 13;
-                        case 12: return 19;
-                        case 13: return 1;
-                        case 14: return 4;
-                        case 15: return 6;
-                        case 16: return 8;
-                        case 17: return 14;
-                        case 18: return 18;
-                        case 19: return 16;
-                        default: _ASSERT(!"NOTREACHED");
-                    }
-                }
+    unsigned *hitCountByExtraSearchDepth;   // How many hits at each depth bigger than the current best edit distance.
+                                            // So if the current best hit has edit distance 2, then hitCountByExtraSearchDepth[0] would
+                                            // be the count of hits at edit distance 2, while hitCountByExtraSearchDepth[2] would be the count
+                                            // of hits at edit distance 4.
 
-                case 19: {
-                    switch (wrapCount) {
-                        case 1: return 10;
-                        case 2: return 4;
-                        case 3: return 14;
-                        case 4: return 2;
-                        case 5: return 6;
-                        case 6: return 8;
-                        case 7: return 12;
-                        case 8: return 16;
-                        case 9: return 18;
-                        case 10: return 1;
-                        case 11: return 3;
-                        case 12: return 5;
-                        case 13: return 7;
-                        case 14: return 9;
-                        case 15: return 11;
-                        case 16: return 13;
-                        case 17: return 15;
-                        case 18: return 17;
-                        default: _ASSERT(!"NOTREACHED");
-                    }
-                }
-
-                case 18: {
-                    switch (wrapCount) {
-                        case 1: return 9;
-                        case 2: return 4;
-                        case 3: return 13;
-                        case 4: return 2;
-                        case 5: return 6;
-                        case 6: return 11;
-                        case 7: return 15;
-                        case 8: return 1;
-                        case 9: return 3;
-                        case 10: return 5;
-                        case 11: return 7;
-                        case 12: return 8;
-                        case 13: return 10;
-                        case 14: return 12;
-                        case 15: return 14;
-                        case 16: return 16;
-                        case 17: return 17;
-                        default: _ASSERT(!"NOTREACHED");
-                    }
-                }
-
-                case 17: {
-                    switch (wrapCount) {
-                        case 1: return 8;
-                        case 2: return 4;
-                        case 3: return 12;
-                        case 4: return 2;
-                        case 5: return 6;
-                        case 6: return 10;
-                        case 7: return 14;
-                        case 8: return 1;
-                        case 9: return 3;
-                        case 10: return 5;
-                        case 11: return 7;
-                        case 12: return 9;
-                        case 13: return 11;
-                        case 14: return 13;
-                        case 15: return 15;
-                        case 16: return 16;
-                        default: _ASSERT(!"NOTREACHED");
-                    }
-                }
-
-                case 16: {
-                    switch (wrapCount) {
-                        case 1: return 8;
-                        case 2: return 4;
-                        case 3: return 12;
-                        case 4: return 2;
-                        case 5: return 6;
-                        case 6: return 10;
-                        case 7: return 14;
-                        case 8: return 1;
-                        case 9: return 3;
-                        case 10: return 5;
-                        case 11: return 7;
-                        case 12: return 9;
-                        case 13: return 11;
-                        case 14: return 13;
-                        case 15: return 15;
-                        default: _ASSERT(!"NOTREACHED");
-                    }
-                } // inner switch
-                default: fprintf(stderr,"BaseAligner: Not set up to run with this seed size\n"); exit(1);
-            } // outer switch
-        } 
+    void finalizeSecondaryResults(
+        int                     *nSecondaryResults,                     // in/out
+        SingleAlignmentResult   *secondaryResults,
+        int                      maxEditDistanceForSecondaryResults,
+        int                      bestScore);
 };

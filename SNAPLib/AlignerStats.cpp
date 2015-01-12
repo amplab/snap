@@ -36,9 +36,26 @@ AlignerStats::AlignerStats(AbstractStats* i_extra)
     singleHits(0), 
     multiHits(0),
     notFound(0),
-    errors(0),
-    extra(i_extra)
+    alignedAsPairs(0),
+    extra(i_extra),
+    lvCalls(0)
 {
+    for (int i = 0; i <= AlignerStats::maxMapq; i++) {
+        mapqHistogram[i] = 0;
+     }
+
+    for (int i = 0; i < maxMaxHits; i++) {
+        countOfBestHitsByWeightDepth[i] = 0;
+        countOfAllHitsByWeightDepth[i] = 0;
+        probabilityMassByWeightDepth[i] = 0;
+    }
+
+#if     TIME_HISTOGRAM
+    for (unsigned i = 0; i < 31; i++) {
+        countByTimeBucket[i] = nanosByTimeBucket[i] = 0;
+    }
+#endif  // TIME_HISTOGRAM
+
 }
 
 AlignerStats::~AlignerStats()
@@ -68,8 +85,27 @@ AlignerStats::add(
     singleHits += other->singleHits;
     multiHits += other->multiHits;
     notFound += other->notFound;
-    errors += other->errors;
+    alignedAsPairs += other->alignedAsPairs;
+    lvCalls += other->lvCalls;
+
     if (extra != NULL && other->extra != NULL) {
         extra->add(other->extra);
     }
+
+    for (int i = 0; i <= AlignerStats::maxMapq; i++) {
+        mapqHistogram[i] += other->mapqHistogram[i];
+    }
+
+    for (int i = 0; i < maxMaxHits; i++) {
+        countOfBestHitsByWeightDepth[i] += other->countOfBestHitsByWeightDepth[i];
+        countOfAllHitsByWeightDepth[i] += other->countOfAllHitsByWeightDepth[i];
+        probabilityMassByWeightDepth[i] = other->probabilityMassByWeightDepth[i];
+    }
+
+#if TIME_HISTOGRAM
+    for (unsigned i = 0; i < 31; i++) {
+        countByTimeBucket[i] += other->countByTimeBucket[i];
+        nanosByTimeBucket[i] += other->nanosByTimeBucket[i];
+    }
+#endif // TIME_HISTOGRAM
 }

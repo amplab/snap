@@ -25,6 +25,7 @@ Revision History:
 #pragma once
 #include "stdafx.h"
 #include "AlignerContext.h"
+#include "ReadSupplierQueue.h"
 
 struct PairedAlignerStats;
 
@@ -38,8 +39,6 @@ protected:
 
     // AlignerContext
     
-    virtual AlignerOptions* parseOptions(int argc, const char **argv, const char *version);
-
     virtual void initialize();
 
     virtual AlignerStats* newStats();
@@ -50,16 +49,29 @@ protected:
 
     // for subclasses
 
-    virtual void writePair(Read* read0, Read* read1, PairedAlignmentResult* result);
+    virtual void writePair(Read* read0, Read* read1, PairedAlignmentResult* result, bool secondary);
 
     virtual void updateStats(PairedAlignerStats* stats, Read* read0, Read* read1, PairedAlignmentResult* result);
 
+    bool isPaired() {return true;}
+
 protected:
 
+    virtual void typeSpecificBeginIteration();
+    virtual void typeSpecificNextIteration();
+
+    PairedReadSupplierGenerator *pairedReadSupplierGenerator;
+ 
     int                 minSpacing;
     int                 maxSpacing;
+    bool                forceSpacing;
+    unsigned            intersectingAlignerMaxHits;
+    unsigned            maxCandidatePoolSize;
     const char         *fastqFile1;
     bool                ignoreMismatchedIDs;
+    bool                quicklyDropUnpairedReads;
+
+	friend class AlignerContext2;
 };
 
 struct PairedAlignerOptions : public AlignerOptions
@@ -68,9 +80,14 @@ struct PairedAlignerOptions : public AlignerOptions
 
     virtual void usageMessage();
 
-    virtual bool parse(const char** argv, int argc, int& n);
+    virtual bool parse(const char** argv, int argc, int& n, bool *done);
 
-    int minSpacing;
-    int maxSpacing;
-    const char* fastqFile1;
+    virtual bool isPaired() { return true; }
+
+    int         minSpacing;
+    int         maxSpacing;
+    bool        forceSpacing;
+    unsigned    intersectingAlignerMaxHits;
+    unsigned    maxCandidatePoolSize;
+    bool        quicklyDropUnpairedReads;
 };

@@ -1,5 +1,8 @@
 #pragma once
 
+#include "exit.h"
+#include "Error.h"
+
 //
 // A fixed-size vector that does not perform any memory allocation.
 //
@@ -26,8 +29,8 @@ public:
     void reserve(int capacity) {
         if (entries != NULL) {
             if (curSize > 0) {
-                fprintf(stderr, "reserve() called on a non-empty FixedSizeVector\n");
-                exit(1);
+                WriteErrorMessage("reserve() called on a non-empty FixedSizeVector\n");
+                soft_exit(1);
             }
             delete[] entries;
         }

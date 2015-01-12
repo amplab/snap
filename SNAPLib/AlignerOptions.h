@@ -26,16 +26,32 @@ Revision History:
 
 #include "stdafx.h"
 #include "options.h"
-#include "Range.h"
 #include "Genome.h"
-#include "SAM.h"
-#include "RangeSplitter.h"
+#include "Read.h"
+
+#define MAPQ_LIMIT_FOR_SINGLE_HIT 10
 
 struct AbstractOptions
 {
     virtual void usageMessage() = 0;
 
-    virtual bool parse(const char** argv, int argc, int& n) = 0;
+    virtual bool parse(const char** argv, int argc, int& n, bool *done) = 0;
+};
+
+enum FileType {UnknownFileType, SAMFile, FASTQFile, BAMFile, InterleavedFASTQFile, CRAMFile};  // Add more as needed
+
+struct SNAPFile {
+	SNAPFile() : fileName(NULL), secondFileName(NULL), fileType(UnknownFileType), isStdio(false), omitSQLines(false) {}
+    const char          *fileName;
+    const char          *secondFileName;
+    FileType             fileType;
+    bool                 isCompressed;
+    bool                 isStdio;           // Only applies to the first file for two-file inputs
+	bool				 omitSQLines;		// Special undocumented option for Charles Chiu's group.  Mostly a bad idea.
+
+    PairedReadSupplierGenerator *createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context);
+    ReadSupplierGenerator *createReadSupplierGenerator(int numThreads, const ReaderContext& context);
+    static bool generateFromCommandLine(const char **args, int nArgs, int *argsConsumed, SNAPFile *snapFile, bool paired, bool isInput);
 };
 
 struct AlignerOptions : public AbstractOptions
@@ -44,22 +60,25 @@ struct AlignerOptions : public AbstractOptions
 
     const char         *commandLine;
     const char         *indexDir;
+    const char         *similarityMapFile;
     int                 numThreads;
-    Range               maxDist;
-    Range               numSeeds;
-    Range               maxHits;
-    Range               confDiff;
-    Range               adaptiveConfDiff;
-    bool                computeError;
+    unsigned            maxDist;
+    float               maxDistFraction;
+    unsigned            numSeedsFromCommandLine;
+    double              seedCoverage;       // Exclusive with numSeeds; this is readSize/seedSize
+    bool                seedCountSpecified; // Has either -n or -sc been specified?  This bool is used to make sure they're not both specified on the command line
+    unsigned            maxHits;
+    int                 minWeightToCheck;
     bool                bindToProcessors;
     bool                ignoreMismatchedIDs;
-    unsigned            selectivity;
-    const char         *samFileTemplate;
-    bool                doAlignerPrefetch;
-    const char         *inputFilename;
-    bool                inputFileIsFASTQ;   // Else SAM
+    SNAPFile            outputFile;
+    int                 nInputs;
+    SNAPFile           *inputs;
     ReadClippingType    clipping;
     bool                sortOutput;
+    bool                noIndex;
+    bool                noDuplicateMarking;
+    bool                noQualityCalibration;
     unsigned            sortMemory; // total output sorting buffer size in Gb
     unsigned            filterFlags;
     bool                explorePopularSeeds;
@@ -68,19 +87,40 @@ struct AlignerOptions : public AbstractOptions
     unsigned            gapPenalty; // if non-zero use gap penalty aligner
     AbstractOptions    *extra; // extra options
     const char         *rgLineContents;
+    const char         *perfFileName;
+    bool                useTimingBarrier;
+    unsigned            extraSearchDepth;
+    const char         *defaultReadGroup; // if not specified in input
+    bool                ignoreSecondaryAlignments; // on input, default true
+    int                 maxSecondaryAlignmentAdditionalEditDistance;
+	int					maxSecondaryAlignments;
+    bool                preserveClipping;
+    float               expansionFactor;
+    bool                noUkkonen;
+    bool                noOrderedEvaluation;
+	bool				noTruncation;
+	unsigned			minReadLength;
+	bool				mapIndex;
+	bool				prefetchIndex;
+    
+    static bool         useHadoopErrorMessages; // This is static because it's global (and I didn't want to push the options object to every place in the code)
+    static bool         outputToStdout;         // Likewise
 
     void usage();
 
     virtual void usageMessage();
 
-    virtual bool parse(const char** argv, int argc, int& n);
+    virtual bool parse(const char** argv, int argc, int& n, bool *done);
 
     enum FilterFlags
     {
         FilterUnaligned =           0x0001,
         FilterSingleHit =           0x0002,
         FilterMultipleHits =        0x0004,
+        FilterBothMatesMatch =      0x0008,
     };
 
     bool passFilter(Read* read, AlignmentResult result);
+    
+    virtual bool isPaired() { return false; }
 };

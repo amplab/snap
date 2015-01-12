@@ -23,7 +23,61 @@ Revision History:
 #include "stdafx.h"
 #include "BigAlloc.h"
 #include "Compat.h"
+#include "exit.h"
+#include "Error.h"
 
+bool BigAllocUseHugePages = false;
+
+
+#ifdef PROFILE_BIGALLOC
+
+struct ProfileEntry
+{
+    const char*   caller;
+    size_t  total;
+    size_t  count;
+};
+
+static const int MaxCallers = 1000;
+static int NCallers = 0;
+static int LastCaller = 0;
+static ProfileEntry AllocProfile[1000];
+
+void *BigAllocInternal(
+        size_t      sizeToAllocate,
+        size_t      *sizeAllocated,
+        bool        reserveOnly = FALSE,
+        size_t      *pageSize = NULL);
+
+void *BigAllocProfile(
+        size_t      sizeToAllocate,
+        size_t      *sizeAllocated,
+        const char  *caller)
+{
+    if (caller) {
+        if (LastCaller >= NCallers || strcmp(AllocProfile[LastCaller].caller, caller)) {
+            LastCaller = NCallers;
+            for (int i = 0; i < NCallers; i++) {
+                if (0 == strcmp(AllocProfile[i].caller, caller)) {
+                    LastCaller = i;
+                    break;
+                }
+            }
+            if (LastCaller == NCallers && NCallers < MaxCallers) {
+                NCallers++;
+                AllocProfile[LastCaller].caller = caller;
+                AllocProfile[LastCaller].total = AllocProfile[LastCaller].count = 0;
+            }
+        }
+        if (LastCaller < MaxCallers) {
+            AllocProfile[LastCaller].count++;
+            AllocProfile[LastCaller].total += sizeToAllocate;
+        }
+    }
+    return BigAllocInternal(sizeToAllocate, sizeAllocated);
+}
+
+#endif
 
 #ifdef _MSC_VER
 
@@ -96,8 +150,8 @@ AssertPrivilege(
 void *BigAllocInternal(
         size_t      sizeToAllocate,
         size_t      *sizeAllocated,
-        bool        reserveOnly = FALSE,
-        size_t      *pageSize = NULL)
+        bool        reserveOnly,
+        size_t      *pageSize)
 /*++
 
 Routine Description:
@@ -123,9 +177,9 @@ Return Value:
 {
     if (sizeToAllocate == 0) {
        sizeToAllocate = 1;
-   }
+    }
 
-   static bool warningPrinted = false;
+    static bool warningPrinted = false;
 
     void *allocatedMemory;
 
@@ -154,9 +208,25 @@ Return Value:
         DWORD assertPrivilegeError = GetLastError();
 
         size_t largePageSizeToAllocate = ((virtualAllocSize + largePageSize - 1) / largePageSize) * largePageSize;
-        allocatedMemory = (BYTE *)VirtualAlloc(0,largePageSizeToAllocate,commitFlag|MEM_RESERVE|MEM_LARGE_PAGES,PAGE_READWRITE);
+
+#if     _DEBUG
+        largePageSizeToAllocate += largePageSize;   // For the guard page.
+#endif  // DEBUG
+
+        allocatedMemory = (BYTE *)VirtualAlloc(0,largePageSizeToAllocate,commitFlag|MEM_RESERVE|((BigAllocUseHugePages && !reserveOnly) ? MEM_LARGE_PAGES : 0),PAGE_READWRITE);
 
         if (NULL != allocatedMemory) {
+#if     _DEBUG
+            DWORD oldProtect;
+            if (!VirtualProtect((char *)allocatedMemory + virtualAllocSize, systemInfo->dwPageSize, PAGE_NOACCESS, &oldProtect)) {
+                static bool printedVirtualProtectedWarning = false;
+                if (! printedVirtualProtectedWarning) {
+                    WriteErrorMessage("VirtualProtect for guard page failed, %d\n", GetLastError());
+                    printedVirtualProtectedWarning = true;
+                }
+            }
+            largePageSizeToAllocate -= largePageSize;   // Back out the guard page
+#endif  // DEBUG
             if (NULL != sizeAllocated) {
                 *sizeAllocated = largePageSizeToAllocate;
             }
@@ -168,13 +238,13 @@ Return Value:
             // to run.  The check for printing only once isn't thread safe, so you might get more than one printed
             // if multiple threads fail at the same time.
             //
-            warningPrinted= true;
-            fprintf(stderr,"BigAlloc: WARNING: Unable to allocate large page memory, %d.  Falling back to VirtualAlloc.  Performance may be adversely affected.\n",GetLastError());
+            warningPrinted = true;
+            WriteErrorMessage("BigAlloc: WARNING: Unable to allocate large page memory, %d.  Falling back to VirtualAlloc.  Performance may be adversely affected.  Size = %lld\n", GetLastError(), largePageSizeToAllocate);
             if (!assertPrivilegeWorked || GetLastError() == 1314) { // TODO: Look up the error code name for 1314.
-                fprintf(stderr,"BigAlloc: Unable to assert the SeLockMemoryPrivilege (%d), which is probably why it failed.\n",assertPrivilegeError);
-                fprintf(stderr,"Try secpol.msc, then SecuritySettings, Local Policies, User Rights Assignment.\n");
-                fprintf(stderr,"Then double click 'Lock Pages in Memory,' add the current user directly or by being\n");
-                fprintf(stderr,"In a group and then reboot (you MUST reboot) for it to work.\n");
+                WriteErrorMessage("BigAlloc: Unable to assert the SeLockMemoryPrivilege (%d), which is probably why it failed.\n"
+                                  "Try secpol.msc, then SecuritySettings, Local Policies, User Rights Assignment.\n"
+                                  "Then double click 'Lock Pages in Memory,' add the current user directly or by being\n"
+                                  "In a group and then reboot (you MUST reboot) for it to work.\n", GetLastError());
             }
         }
     }
@@ -186,71 +256,23 @@ Return Value:
     }
 
     if (NULL == allocatedMemory) {
-        fprintf(stderr,"BigAlloc of size %lld failed.\n",sizeToAllocate);
-        exit(1);
+        WriteErrorMessage("BigAlloc of size %lld failed.\n", sizeToAllocate);
+#ifdef PROFILE_BIGALLOC
+        PrintBigAllocProfile();
+#endif
+        soft_exit(1);
     }
 
     return allocatedMemory;
 
 }
 
-#ifdef PROFILE_BIGALLOC
-
-struct ProfileEntry
-{
-    char*   caller;
-    size_t  total;
-    size_t  count;
-};
-
-static const int MaxCallers = 1000;
-static int NCallers = 0;
-static int LastCaller = 0;
-static ProfileEntry AllocProfile[1000];
-
-void *BigAllocProfile(
-        size_t      sizeToAllocate,
-        size_t      *sizeAllocated,
-        char        *caller)
-{
-    if (caller) {
-        if (LastCaller >= NCallers || strcmp(AllocProfile[LastCaller].caller, caller)) {
-            LastCaller = NCallers;
-            for (int i = 0; i < NCallers; i++) {
-                if (0 == strcmp(AllocProfile[i].caller, caller)) {
-                    LastCaller = i;
-                    break;
-                }
-            }
-            if (LastCaller == NCallers && NCallers < MaxCallers) {
-                NCallers++;
-                AllocProfile[LastCaller].caller = caller;
-                AllocProfile[LastCaller].total = AllocProfile[LastCaller].count = 0;
-            }
-        }
-        if (LastCaller < MaxCallers) {
-            AllocProfile[LastCaller].count++;
-            AllocProfile[LastCaller].total += sizeToAllocate;
-        }
-    }
-    return BigAllocInternal(sizeToAllocate, sizeAllocated);
-}
-
-void PrintAllocProfile()
-{
-    printf("BigAlloc usage\n");
-    for (int i = 0; i < NCallers; i++) {
-        printf("%7.1f Mb %7lld %s\n", 
-            AllocProfile[i].total * 1e-6, AllocProfile[i].count, AllocProfile[i].caller);
-    }
-}
-
-#else
+#ifndef PROFILE_BIGALLOC
 void *BigAlloc(
         size_t      sizeToAllocate,
         size_t      *sizeAllocated)
 {
-    return BigAllocInternal(sizeToAllocate, sizeAllocated);
+    return BigAllocInternal(sizeToAllocate, sizeAllocated, FALSE, NULL);
 }
 #endif
 
@@ -268,6 +290,7 @@ Arguments:
 
 --*/
 {
+    if (NULL == memory) return;
     VirtualFree(memory,0,MEM_RELEASE);
 }
 
@@ -285,14 +308,18 @@ bool BigCommit(
 {
     void* allocatedMemory = VirtualAlloc(memoryToCommit, sizeToCommit, MEM_COMMIT, PAGE_READWRITE);
     if (allocatedMemory == NULL) {
-        printf("BigCommit VirtualAlloc failed with error 0x%x\n", GetLastError());
+        WriteErrorMessage("BigCommit VirtualAlloc failed with error 0x%x\n", GetLastError());
     }
     return allocatedMemory != NULL;
 }
 
 #else /* no _MSC_VER */
 
+#ifdef PROFILE_BIGALLOC
+void *BigAllocInternal(
+#else
 void *BigAlloc(
+#endif
         size_t      sizeToAllocate,
         size_t      *sizeAllocated)
 {
@@ -315,13 +342,15 @@ void *BigAlloc(
     char *mem = (char *) mmap(NULL, sizeToAllocate, PROT_READ|PROT_WRITE, flags, -1, 0);
     if (mem == MAP_FAILED) {
         perror("mmap");
-        exit(1);
+        soft_exit(1);
     }
 
 #if (defined(MADV_HUGEPAGE) && !defined(USE_HUGETLB))
     // Tell Linux to use huge pages for this range
-    if (madvise(mem, sizeToAllocate, MADV_HUGEPAGE) == -1) {
-        fprintf(stderr, "WARNING: failed to enable huge pages -- your kernel may not support it\n"); 
+    if (BigAllocUseHugePages) {
+        if (madvise(mem, sizeToAllocate, MADV_HUGEPAGE) == -1) {
+            WriteErrorMessage("WARNING: failed to enable huge pages -- your kernel may not support it\n"); 
+        }
     }
 #endif
 
@@ -333,12 +362,13 @@ void *BigAlloc(
 
 void BigDealloc(void *memory)
 {
+    if (NULL == memory) return;
     // Figure out the size we had allocated
     char *startAddress = ((char *) memory) - sizeof(size_t);
     size_t sizeAllocated = *((size_t *) startAddress);
     if (munmap(startAddress, sizeAllocated) != 0) {
         perror("munmap");
-        exit(1);
+        soft_exit(1);
     }
 }
 
@@ -351,7 +381,11 @@ void *BigReserve(
     if (pageSize != NULL) {
         *pageSize = 4096;
     }
+#ifdef PROFILE_BIGALLOC
+    return BigAllocInternal(sizeToReserve, sizeReserved);
+#else
     return BigAlloc(sizeToReserve, sizeReserved);
+#endif
 }
 
 bool BigCommit(
@@ -365,3 +399,125 @@ bool BigCommit(
 
 
 #endif /* _MSC_VER */
+
+BigAllocator::BigAllocator(size_t i_maxMemory, size_t i_allocationGranularity) : maxMemory(i_maxMemory), allocationGranularity(i_allocationGranularity)
+{
+#if     _DEBUG
+    maxMemory += maxCanaries * sizeof(unsigned);
+#endif  // DEBUG
+    basePointer = (char *)BigAlloc(__max(maxMemory, 2 * 1024 * 1024)); // The 2MB minimum is to assure this lands in a big page
+    allocPointer = basePointer;
+
+#if     _DEBUG
+    //
+    // Stick a canary at the beginning of the array so that we can detect underflows for whatever's allocated first.
+    //
+    canaries[0] = (unsigned *) allocPointer;
+    *canaries[0] = canaryValue;
+    nCanaries = 1;
+    allocPointer += sizeof(unsigned);
+#endif  // _DEBUG
+}
+
+BigAllocator::~BigAllocator()
+{
+    BigDealloc(basePointer);
+}
+
+void *
+BigAllocator::allocate(size_t amountToAllocate)
+{
+    //
+    // Round up to the allocation granularity.
+    //
+    if ((size_t)allocPointer % allocationGranularity != 0) {
+        allocPointer = (char *)((size_t)allocPointer + allocationGranularity - (size_t)allocPointer % allocationGranularity);
+        _ASSERT((size_t)allocPointer % allocationGranularity == 0);
+    }
+
+    if (allocPointer + amountToAllocate > basePointer + maxMemory) {
+        WriteErrorMessage("BigAllocator: allocating too much memory, %lld > %lld\n", allocPointer + amountToAllocate  - basePointer , maxMemory);
+        soft_exit(1);
+    }
+ 
+    void *retVal = allocPointer;
+    allocPointer += amountToAllocate;
+
+#if     _DEBUG
+    if (nCanaries < maxCanaries) {
+        _ASSERT(allocPointer + sizeof(unsigned) <= basePointer + maxMemory);
+        canaries[nCanaries] = (unsigned *)allocPointer;
+        *canaries[nCanaries] = canaryValue;
+        nCanaries++;
+        allocPointer += sizeof(unsigned);
+    }
+#endif  // DEBUG
+    return retVal;
+}
+ 
+#if     _DEBUG
+    void
+BigAllocator::checkCanaries()
+{
+    bool allOK = true;
+    for (unsigned i = 0; i < nCanaries; i++) {
+        if (*canaries[i] != canaryValue) {
+            WriteErrorMessage("Memory corruption detected: canary at 0x%llx has value 0x%llx\n",canaries[i], *canaries[i]);
+            allOK = false;
+        }
+    }
+    _ASSERT(allOK);
+}
+#endif  // DEBUG
+
+
+    void *
+CountingBigAllocator::allocate(size_t sizeToAllocate)
+{            
+    size += sizeToAllocate + allocationGranularity - 1; // Add in the max roundoff
+
+    Allocation *allocation = new Allocation;
+    allocation->next = allocations;
+    allocation->ptr = malloc(sizeToAllocate);
+    allocations = allocation;
+    return allocation->ptr;
+}
+
+CountingBigAllocator::~CountingBigAllocator()
+{
+    while (NULL != allocations) {
+        Allocation *allocation = allocations;
+        allocations = allocation->next;
+        free(allocation->ptr);
+        delete allocation;
+    }
+}
+
+void PrintBigAllocProfile()
+{
+#ifdef PROFILE_BIGALLOC
+    WriteStatusMessage("BigAlloc usage\n");
+    for (int i = 0; i < NCallers; i++) {
+        WriteStatusMessage("%7.1f Mb %7lld %s\n", 
+            AllocProfile[i].total * 1e-6, AllocProfile[i].count, AllocProfile[i].caller);
+    }
+#endif
+}
+
+void* zalloc(void* opaque, unsigned items, unsigned size)
+{
+    size_t bytes = items * (size_t) size;
+    void* result = ((ThreadHeap*) opaque)->alloc(bytes);
+    static int printed = 0;
+    if ((! result) && printed++ < 10) {
+        WriteErrorMessage("warning: zalloc using malloc for %lld bytes\n", bytes);
+    }
+    return result ? result : malloc(bytes);
+}
+
+void zfree(void* opaque, void* p)
+{
+    if (! ((ThreadHeap*) opaque)->free(p)) {
+        free(p);
+    }
+}

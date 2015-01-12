@@ -27,7 +27,7 @@ Revision History:
 #include "Genome.h"
 
     const Genome *
-ReadFASTAGenome(const char *fileName, const char *pieceNameTerminatorCharacters, bool spaceIsAPieceNameTerminator);
+ReadFASTAGenome(const char *fileName, const char *pieceNameTerminatorCharacters, bool spaceIsAPieceNameTerminator, unsigned chromosomePaddingSize);
 
 //
 // The FASTA appending functions return whether the write was successful.
@@ -47,12 +47,3 @@ inline const char *diploidFASTASexPrefix(bool male)
 {
     return male ? "PATERNAL|" : "MATERNAL|";
 }
-
-//
-// Append a diploid genome to a single FASTA file.
-// 
-    bool
-AppendFASTADiploidGenome(const DiploidGenome *, FILE *fasta);
-
-    bool
-WriteFASTADiploidGenome(const DiploidGenome *, const char *fileName);

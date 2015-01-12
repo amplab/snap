@@ -29,4 +29,16 @@
 ipch
 obj
 *.vsp
+*.vspx
+*.psess
+*.tlog
+*.lastbuildstate
+*.pch
+*.idb
+*.pdb
+*.log
+*.unsuccessfulbuild
 
+# Compiled binaries
+/snap
+/unit_tests

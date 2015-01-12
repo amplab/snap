@@ -24,291 +24,14 @@ Environment:
 #include "PairedEndAligner.h"
 #include "VariableSizeVector.h"
 #include "BufferedAsync.h"
-#include "BoundedStringDistance.h"
+#include "directions.h"
+#include "Read.h"
+#include "DataReader.h"
+#include "FileFormat.h"
 
-/*
- * Output aligned reads in SAM format. See http://samtools.sourceforge.net/SAM1.pdf for details.
- */
-class SAMWriter {
-public:
-    virtual ~SAMWriter();
+bool readIdsMatch(const char* id0, const char* id1);
 
-    virtual bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC) = 0;
-
-    virtual bool writePair(Read *read1, Read *read2, PairedAlignmentResult *result) = 0;
-
-    virtual bool close() = 0;
-
-    static SAMWriter* create(const char *fileName, const Genome *genome, bool useM, unsigned gapPenalty, int argc, const char **argv, const char *version, const char *rgLine);
-
-    static bool generateHeader(const Genome *genome, char *header, size_t headerBufferSize, size_t *headerActualSize, bool sorted, int argc, const char **argv, const char *version, const char *rgLine);
-   
-    static const int HEADER_BUFFER_SIZE = 256 * 1024 * 1024;
-    
-protected:
-
-    //
-    // Generate a SAM line into a buffer.  The line IS null terminated, but the space for the terminator
-    // is not included in the returned spaceUsed value.
-    //
-
-    static bool generateSAMText(
-                        Read *                      read,
-                        AlignmentResult             result, 
-                        unsigned                    genomeLocation, 
-                        bool                        isRC, 
-						bool						useM,
-                        bool                        hasMate, 
-                        bool                        firstInPair, 
-                        Read *                      mate, 
-                        AlignmentResult             mateResult, 
-                        unsigned                    mateLocation,
-                        bool                        isMateRC, 
-                        const Genome *              genome, 
-                        LandauVishkinWithCigar *    lv, 
-                        BoundedStringDistance<true>* bsd,
-                        char *                      buffer, 
-                        size_t                      bufferSpace, 
-                        size_t *                    spaceUsed = NULL,
-                        size_t                      qnameLen = 0
-                );
-
-private:
-                    
-    static const char *computeCigarString(
-                        const Genome *              genome,
-                        LandauVishkinWithCigar *    lv,
-                        BoundedStringDistance<true>* bsd,
-                        char *                      cigarBuf,
-                        int                         cigarBufLen,
-                        char *                      cigarBufWithClipping,
-                        int                         cigarBufWithClippingLen,
-                        const char *                data,
-                        unsigned                    dataLength,
-                        unsigned                    basesClippedBefore,
-                        unsigned                    basesClippedAfter,
-                        unsigned                    genomeLocation,
-                        bool                        isRC,
-						bool						useM,
-                        int                         *editDistance
-                );
-
-};
-
-/*
- * A SAMWriter that uses the C standard library (fwrite & co).
- */
-class SimpleSAMWriter: public SAMWriter {
-public:
-    SimpleSAMWriter(bool i_useM, unsigned i_gapPenalty, int i_argc, const char **i_argv, const char *i_version, const char *i_rgLine);
-
-    virtual ~SimpleSAMWriter();
-
-    bool open(const char* fileName, const Genome *genome);
-
-    virtual bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC);
-
-    virtual bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result);
-
-    virtual bool close();
-
-private:
-    // Write one read's result, whether it's from a pair or not.
-    void write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC, bool hasMate, bool firstInPair,
-               Read *mate, AlignmentResult mateResult, unsigned mateLocation, bool mateIsRC);
-
-    static const int BUFFER_SIZE = 8 * 1024 * 1024;
-
-    FILE *file;
-    char *buffer; // For setvbuf
-
-    const Genome *genome;
-
-	bool        useM;
-	int         argc;
-	const char **argv;
-    const char  *version;
-    const char  *rgLine;
-
-    LandauVishkinWithCigar* lv;
-    BoundedStringDistance<true>* bsd;
-};
-
-//
-// Like with SimpleSAMWriter there is one of these per thread.  Unlike SimpleSAMWriter they all
-// share a single file.  Each thread maintains its own write buffer.  When the buffer is full,
-// it allocates a write offset by doing an interlocked add of the writeOffset, which is shared
-// among all writers of this file.
-// Abstract base class with a subclass per platform.
-//
-
-class ThreadSAMWriter : public SAMWriter {
-public:
-
-    ThreadSAMWriter(size_t i_bufferSize, bool i_useM, unsigned gapPenalty);
-    virtual ~ThreadSAMWriter();
-
-    bool initialize(AsyncFile* file, const Genome *i_genome, volatile _int64 *i_nextWriteOffset);
-    
-    bool write(Read *read, AlignmentResult result, unsigned genomeLocation, bool isRC);
-
-    bool writePair(Read *read0, Read *read1, PairedAlignmentResult *result);
-
-    virtual bool close();
-
-protected:
-
-    // hooks to allow for sorting the output buffer
-    virtual void                    afterWrite(unsigned location, size_t bufferOffset, unsigned length) {}
-    virtual bool                    beforeFlush(_int64 fileOffset, _int64 length) { return true; }
-
-    bool                            startIo();
-
-    bool                            waitForIoCompletion();
-
-    volatile _int64                *nextWriteOffset;
-
-    const size_t                    bufferSize;
-    size_t                          remainingBufferSpace;
-    
-    unsigned                        bufferBeingCreated; // Which buffer are we generating new SAM into?
-    AsyncFile::Writer              *writer[2];
-    char                           *buffer[2];
-    const Genome                   *genome;
-
-    LandauVishkinWithCigar*         lv;
-    BoundedStringDistance<true>*    bsd;
-
-	bool							useM;
-};
-
-class ParallelSAMWriter {
-public:
-    virtual ~ParallelSAMWriter();
-
-    ParallelSAMWriter() : writer(NULL), file(NULL), argv(NULL), version(NULL), rgLine(NULL) {}
-
-    static ParallelSAMWriter*       create(const char *fileName, const Genome *genome,
-                                        unsigned nThreads, bool sort, size_t sortBufferMemory, bool i_useM, unsigned i_gapPenalty,
-                                        int argc, const char **argv, const char *version, const char *rgLine);
-
-    static const size_t             UnsortedBufferSize = 16 * 1024 * 1024;
-
-    virtual bool                    initialize(const char *fileName, const Genome *genome, unsigned nThreads, bool sorted);
-
-    SAMWriter *                     getWriterForThread(int whichThread);
-
-    virtual bool                    close();
-
-protected:
-									ParallelSAMWriter(bool i_useM, unsigned i_gapPenalty, int i_argc, const char **i_argv, const char *i_version,
-                                        const char *i_rgLine) : 
-                                        useM(i_useM), gapPenalty(i_gapPenalty), argc(i_argc), argv(i_argv), version(i_version), rgLine(i_rgLine), writer(NULL) {}
-
-    virtual bool                    createThreadWriters(const Genome* genome);
-
-    AsyncFile                      *file;
-    volatile _int64                 nextWriteOffset;
-
-    ThreadSAMWriter               **writer;
-    int                             nThreads;
-
-	bool							useM;
-    unsigned                        gapPenalty;
-    int                             argc;
-    const char                    **argv;
-    const char                     *version;
-    const char                     *rgLine;
-};
-
-#pragma pack(push, 4)
-struct SortEntry
-{
-    SortEntry() : offset(0), length(0), location(0) {}
-    SortEntry(size_t i_offset, unsigned i_length, unsigned i_location)
-        : offset(i_offset), length(i_length), location(i_location) {}
-    size_t                      offset; // offset in file
-    unsigned                    length; // number of bytes
-    unsigned                    location; // location in genome
-    static bool comparator(const SortEntry& e1, const SortEntry& e2)
-    {
-        return e1.location < e2.location;
-    }
-};
-#pragma pack(pop)
-
-struct SortBlock
-{
-    SortBlock();
-    SortBlock(size_t capacity);
-    SortBlock(SortBlock& other);
-    void operator=(SortBlock& other);
-
-    VariableSizeVector<SortEntry>   entries;
-    size_t                          fileOffset;
-    size_t                          fileBytes;
-    unsigned                        index;
-    BufferedAsyncReader             reader; // for reading phase
-};
-
-class SortedParallelSAMWriter;
-
-class SortedThreadSAMWriter : public ThreadSAMWriter
-{
-public:
-
-    SortedThreadSAMWriter(size_t i_bufferSize, bool useM, unsigned gapPenalty);
-    virtual ~SortedThreadSAMWriter();
-
-
-    bool                            initialize(SortedParallelSAMWriter* i_parent, const Genome* i_genome);
-
-protected:
-    
-    virtual void                    afterWrite(unsigned location, size_t bufferOffset, unsigned length);
-
-    virtual bool                    beforeFlush(_int64 fileOffset, _int64 length);
-
-private:
-    SortedParallelSAMWriter*        parent;
-    int                             largest; // largest location count so far
-    SortBlock                       locations;
-};
-
-class SortedParallelSAMWriter : public ParallelSAMWriter
-{
-public:
-
-    SortedParallelSAMWriter(size_t i_totalMemory, bool useM, unsigned i_gapPenalty, int argc, const char**argv, const char *version, const char *rgLine) : 
-      ParallelSAMWriter(useM, i_gapPenalty, argc, argv, version, rgLine), totalMemory(i_totalMemory), tempFile(NULL), sortedFile(NULL) {}
-
-    virtual ~SortedParallelSAMWriter() {}
-    
-    virtual bool                    initialize(const char *fileName, const Genome *genome, unsigned nThreads, bool sorted);
-
-    bool                            close();
-
-protected:
-    
-    virtual bool                    createThreadWriters(const Genome* genome);
-
-private:
-    
-    friend class SortedThreadSAMWriter;
-
-    void                            addLocations(SortBlock& added);
-
-    bool                            mergeSort();
-
-    bool                            memoryMappedSort();
-
-    const size_t                    totalMemory;
-    size_t                          headerSize;
-    char*                           tempFile;
-    const char*                     sortedFile;
-    ExclusiveLock                   lock;
-    VariableSizeVector<SortBlock>   locations;
-};
+bool readIdsMatch(Read *read0, Read *read1);
 
 /*
  * Flags for the SAM file format; see http://samtools.sourceforge.net/SAM1.pdf for details.
@@ -322,44 +45,52 @@ const int SAM_NEXT_REVERSED      = 0x020; // Next segment of the read is reverse
 const int SAM_FIRST_SEGMENT      = 0x040; // This is the first segment in the read.
 const int SAM_LAST_SEGMENT       = 0x080; // This is the last segment in the read.
 const int SAM_SECONDARY          = 0x100; // Secondary alignment for a read with multiple hits.
+const int SAM_FAILED_QC          = 0x200; // Not passing quality controls.
+const int SAM_DUPLICATE          = 0x400; // PCR or optical duplicate.
+const int SAM_SUPPLEMENTARY      = 0x800; // Supplementary alignment
 
-class SAMReader : public PairedReadReader, public ReadReader {
+class SAMReader : public ReadReader {
 public:
-        virtual ~SAMReader();
+        virtual ~SAMReader() {}
+
+        SAMReader(DataReader* i_data, const ReaderContext& i_context);
+
+        virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
 
         virtual bool getNextRead(Read *readToUpdate);
     
-        virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, unsigned *genomeLocation, bool *isRC, unsigned *mapQ,
+        virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, GenomeLocation *genomeLocation, Direction *direction, unsigned *mapQ,
                         unsigned *flag, const char **cigar)
         {
-            return getNextRead(read,alignmentResult,genomeLocation,isRC,mapQ,flag,false,cigar);
+            return getNextRead(read, alignmentResult, genomeLocation, direction, mapQ, flag, false, cigar);
         }
+        
+        virtual void holdBatch(DataBatch batch)
+        { data->holdBatch(batch); }
 
-        //
-        // In getNextReadPair mapQ points to an array of two unsigneds.
-        //
-        virtual bool getNextReadPair(Read *read1, Read *read2, PairedAlignmentResult *alignmentResult, unsigned *mapQ, const char **cigar);
+        virtual bool releaseBatch(DataBatch batch)
+        { return data->releaseBatch(batch); }
+        
+        static SAMReader* create(DataSupplier* supplier, const char *fileName,
+                int bufferCount, const ReaderContext& i_context,
+                _int64 startingOffset, _int64 amountOfFileToProcess);
+        
+        static PairedReadReader* createPairedReader(const DataSupplier* supplier,
+                const char *fileName, int bufferCount, _int64 startingOffset, _int64 amountOfFileToProcess, 
+                bool quicklyDropUnpairedReads, const ReaderContext& context);
 
-        //
-        // The PairedReadReader version of getNextReadPair, which throws away the alignment, mapQ and cigar values.
-        //
-            bool
-        getNextReadPair(Read *read1, Read *read2) {
-            PairedAlignmentResult pairedAlignmentResult;
-            unsigned mapQ[2];
+        static ReadSupplierGenerator *createReadSupplierGenerator(
+            const char *fileName, int numThreads, const ReaderContext& context);
 
-            return getNextReadPair(read1,read2,&pairedAlignmentResult,mapQ,NULL);
-        }
+        static PairedReadSupplierGenerator *createPairedReadSupplierGenerator(
+            const char *fileName, int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context);
+        
+        // result and fieldLengths must be of size nSAMFields
+        static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, _int64 *o_headerSize, bool* o_headerMatchesIndex, bool *o_sawWholeHeader = NULL);
+        
+        static char* skipToBeyondNextFieldSeparator(char *str, const char *endOfBuffer, size_t *o_charsUntilFirstSeparator = NULL);
 
-        virtual void readDoneWithBuffer(unsigned *referenceCount) = 0;
 
-        static SAMReader* create(const char *fileName, const Genome *genome, _int64 startingOffset, _int64 amountOfFileToProcess, 
-                                 ReadClippingType clipping = ClipBack);
-
-        virtual ReadReader *getReaderToInitializeRead(int whichHalfOfPair) {
-            _ASSERT(0 == whichHalfOfPair || 1 == whichHalfOfPair);
-            return this;
-        }
 protected:
 
         //
@@ -376,126 +107,116 @@ protected:
         static const unsigned  TLEN         = 8;
         static const unsigned  SEQ          = 9;
         static const unsigned  QUAL         = 10;
-        static const unsigned  nSAMFields   = 11;
+        static const unsigned  OPT          = 11;
+        static const unsigned  nSAMFields   = 12;
 
-        // result and fieldLengths must be of size nSAMFields
-        static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, size_t *headerSize);
-        
-        static bool parseLine(char *line, char *endOfBuffer, char *result[], size_t *lineLength, size_t fieldLengths[]);
+        static const int maxLineLen = MAX_READ_LENGTH * 5;
+
+        static bool parseLine(char *line, char *endOfBuffer, char *result[],
+            size_t *lineLength, size_t fieldLengths[]);
+
+        static void parseContigName(const Genome* genome, char* contigName,
+            size_t contigNameBufferSize, GenomeLocation * o_locationOfContig, int* o_indexOfContig,
+            char* field[], size_t fieldLength[], unsigned rfield = RNAME);
+
+        static GenomeLocation parseLocation(GenomeLocation locationOfContig, char* field[], size_t fieldLength[], unsigned rfield = RNAME, unsigned posfield = POS);
 
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
-                        unsigned *genomeLocation, bool *isRC, unsigned *mapQ, unsigned *flag, bool ignoreEndOfRange, const char **cigar) = 0;
+                        GenomeLocation *genomeLocation, Direction *direction, unsigned *mapQ, unsigned *flag, bool ignoreEndOfRange, const char **cigar);
 
         static void getReadFromLine(const Genome *genome, char *line, char *endOfBuffer, Read *read, AlignmentResult *alignmentResult,
-                        unsigned *genomeLocation, bool *isRC, unsigned *mapQ, 
-                        size_t *lineLength, unsigned *flag, unsigned **newReferenceCounts, const char **cigar, ReadClippingType clipping);
-};
+                        GenomeLocation *genomeLocation, Direction *direction, unsigned *mapQ, 
+                        size_t *lineLength, unsigned *flag, const char **cigar, ReadClippingType clipping);
 
-#ifdef  _MSC_VER
-
-class WindowsOverlappedSAMReader : public SAMReader {
-public:
-        WindowsOverlappedSAMReader(ReadClippingType i_clipping);
-        virtual ~WindowsOverlappedSAMReader();
-
-        virtual void readDoneWithBuffer(unsigned *referenceCount);
-
-        virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
-
-protected:
-
-        virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
-                        unsigned *genomeLocation, bool *isRC, unsigned *mapQ, unsigned *flags, bool ignoreEndOfRange, const char **cigar);
 
 private:
-        bool init(const char *fileName, const Genome *i_genome, _int64 startingOffset, _int64 amountOfFileToProcess);
-        friend class SAMReader;
+        void readHeader(const char* fileName);
 
-        static const unsigned nBuffers = 3;
-        static const unsigned bufferSize = 32 * 1024 * 1024 - 4096;
+		bool skipPartialHeader(_int64 *o_headerBytes);
 
-        static const int maxReadSizeInBytes = 25000;    // Read as in sequencer read, not read-from-the-filesystem.
-        static const unsigned maxLineLen = maxReadSizeInBytes;
+        void init(const char *fileName, _int64 startingOffset, _int64 amountOfFileToProcess);
 
-        enum BufferState {Empty, Reading, Full, UsedButReferenced};
-
-        struct BufferInfo {
-            char            *buffer;
-            BufferState     state;
-            DWORD           validBytes;
-            DWORD           nBytesThatMayBeginARead;
-            unsigned        referenceCount; // How many reads refer to this buffer?
-            //
-            // Some memory to hold a line that's broken over the end of this buffer and the
-            // beginning of the next.
-            //
-            char            overflowBuffer[maxLineLen+1];
-            bool            isEOF;
-            unsigned        offset;     // How far has the consumer gotten?
-
-            _int64          fileOffset;
-
-            OVERLAPPED      lap;
-        };
-
-        BufferInfo bufferInfo[nBuffers];
-
-        unsigned            nextBufferForReader;
-        unsigned            nextBufferForConsumer;
-
-        LARGE_INTEGER       readOffset;
-        _int64              endingOffset;
-        LARGE_INTEGER       fileSize;
-        size_t              headerSize;
+        DataReader*         data;
+        _int64              headerSize;
         ReadClippingType    clipping;
 
         bool                didInitialSkip;   // Have we skipped to the beginning of the first SAM line?  We may start in the middle of one.
 
-        HANDLE              hFile;
-  
-        const Genome *      genome;
-
-        void startIo();
-        void waitForBuffer(unsigned bufferNumber);
+        friend class SAMFormat;
 };
 
-#else   // _MSC_VER
-
-class MemMapSAMReader : public SAMReader {
+class SAMFormat : public FileFormat
+{
 public:
-        MemMapSAMReader(ReadClippingType i_clipping);
-        virtual ~MemMapSAMReader();
+    SAMFormat(bool i_useM) : useM(i_useM) {}
 
-        virtual void readDoneWithBuffer(unsigned *referenceCount);
+    virtual void getSortInfo(const Genome* genome, char* buffer, _int64 bytes, GenomeLocation* o_location, GenomeDistance* o_readBytes, int* o_refID, int* o_pos) const;
 
-        virtual void reinit(_int64 startingOffset, _int64 amountOfFileToProcess);
+    virtual void setupReaderContext(AlignerOptions* options, ReaderContext* readerContext) const
+    { FileFormat::setupReaderContext(options, readerContext, false); }
 
-protected:
-        virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
-                        unsigned *genomeLocation, bool *isRC, unsigned *mapQ, unsigned *flags, bool ignoreEndOfRange, const char **cigar);
+    virtual ReadWriterSupplier* getWriterSupplier(AlignerOptions* options, const Genome* genome) const;
+
+    virtual bool writeHeader(
+        const ReaderContext& context, char *header, size_t headerBufferSize, size_t *headerActualSize,
+        bool sorted, int argc, const char **argv, const char *version, const char *rgLine, bool omitSQLines) const;
+
+    virtual bool writeRead(
+        const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
+        size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
+        int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int* o_addFrontClipping,
+        bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
+        AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD) const; 
+
+    // calculate data needed to write SAM/BAM record
+    // very long argument list since this was extracted from
+    // original SAM record writing routine so it could be shared with BAM
+
+    static bool
+    createSAMLine(
+        const Genome * genome,
+        LandauVishkinWithCigar * lv,
+        // output data
+        char* data,
+        char* quality,
+        GenomeDistance dataSize,
+        const char*& contigName,
+        int& contigIndex,
+        int& flags,
+        GenomeDistance& positionInContig,
+        int& mapQuality,
+        const char*& mateContigName,
+        int& mateContigIndex,
+        GenomeDistance& matePositionInContig,
+        _int64& templateLength,
+        unsigned& fullLength,
+        const char*& clippedData,
+        unsigned& clippedLength,
+        unsigned& basesClippedBefore,
+        unsigned& basesClippedAfter,
+        // input data
+        size_t& qnameLen,
+        Read * read,
+        AlignmentResult result, 
+        GenomeLocation genomeLocation,
+        Direction direction,
+        bool secondaryAlignment,
+        bool useM,
+        bool hasMate,
+        bool firstInPair,
+        Read * mate, 
+        AlignmentResult mateResult,
+        GenomeLocation mateLocation,
+        Direction mateDirection,
+        GenomeDistance *extraBasesClippedBefore,
+        GenomeDistance *extraBasesClippedAfter);
 
 private:
-        bool init(const char *fileName, const Genome *i_genome, _int64 startingOffset, _int64 amountOfFileToProcess);
-        friend class SAMReader;
+    static const char * computeCigarString(const Genome * genome, LandauVishkinWithCigar * lv,
+        char * cigarBuf, int cigarBufLen, char * cigarBufWithClipping, int cigarBufWithClippingLen,
+        const char * data, GenomeDistance dataLength, unsigned basesClippedBefore, GenomeDistance extraBasesClippedBefore, unsigned basesClippedAfter, 
+        GenomeDistance extraBasesClippedAfter, unsigned frontHardCliped, unsigned backHardClipped,
+        GenomeLocation genomeLocation, Direction direction, bool useM, int * o_editDistance, int * o_adjustLocation);
 
-        void unmapCurrentRange();
-        
-        static const int maxReadSizeInBytes = 25000;
-        static const int madviseSize = 4 * 1024 * 1024;
-
-        ReadClippingType clipping;
-        const Genome *genome;
-        int fd;
-        size_t fileSize;
-        size_t headerSize;
-
-        char *fileData;
-        size_t offsetMapped;
-        _uint64 pos;             // Current position within the range of the file we mapped
-        _uint64 endPos;          // Where the range we were requested to parse ends; we might look one read past this
-        _uint64 amountMapped;    // Where our current mmap() ends
-        _uint64 lastPosMadvised; // Last position we called madvise() on to initiate a read
+    const bool useM;
 };
-
-
-#endif  // _MSC_VER

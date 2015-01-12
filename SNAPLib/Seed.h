@@ -26,6 +26,9 @@ Revision History:
 
 #include "Compat.h"
 #include "Tables.h"
+#include "Util.h"
+
+const unsigned LargestSeedSize = 32;
 
 
 struct Seed {
@@ -56,16 +59,28 @@ struct Seed {
     {
     }
 
-    inline unsigned getLowBases() const {   // Returns the lowest 16 bases as an unsigned
-        return (unsigned) (bases & 0xffffffff);
+    inline _uint64 getLowBases(unsigned keySizeInBytes) const {   // Returns the lowest bases as an unsigned
+        if (keySizeInBytes == 8) {
+            return bases;
+        } else {
+            return  bases & (((_uint64)1 << (keySizeInBytes * 8)) - 1);
+        }
     }
 
-    inline unsigned getHighBases() const {   // Returns any bases > 16 as an unsigned.  If seedLen <= 16, returns 0.
-        return (unsigned) ((bases >> 32) & 0xffffffff);
+    inline unsigned getHighBases(unsigned keySizeInBytes) const {   // Returns any high as an unsigned.  If seedLen <= 16, returns 0.
+        if (keySizeInBytes == 8) {
+            return 0;
+        } else {
+            return (unsigned)(bases >> (keySizeInBytes * 8));
+        }
     }
 
-    inline _int64 getBases() const {
+    inline _uint64 getBases() const {
         return bases;
+    }
+
+    inline _uint64 getRCBases() const {
+        return reverseComplement;
     }
 
     inline Seed operator~() const
@@ -129,7 +144,7 @@ struct Seed {
     inline void shiftIn(int b, int seedLen) {
         int shift = (seedLen - 1) * 2;
         bases = ((bases << 2) & ~((_uint64) 3 << (shift + 2))) | (b & 3);
-        reverseComplement = (reverseComplement >> 2) | (((_uint64) (b ^ 3) & 3) << shift);
+        reverseComplement = ((_uint64) reverseComplement >> 2) | (((_uint64) (b ^ 3) & 3) << shift);
     }
 
     inline void toString(char* o_bases, int seedLength) {
@@ -138,23 +153,48 @@ struct Seed {
         }
     }
 
-    inline static Seed fromBases(_int64 bases, int seedLength) {
-        _int64 rc = 0;
-        _int64 b = bases;
-        for (int i = 0; i < seedLength; i++) {
-            rc = (rc << 2) | ((b & 3) ^ 3);
-            b = b >> 2;
-        }
-        return Seed(bases, rc);
+    static Seed fromBases(_int64 bases, int seedLength);
+
+    inline _uint64 hash64()
+    {
+        return 1+util::hash64(min(bases, reverseComplement));
+    }
+    
+    inline unsigned hash()
+    {
+        return (unsigned) hash64();
     }
 
+    static _uint64 hash64(const char* sequence, int length)
+    {
+        if (length <= MaxBases) {
+            Seed s(sequence, length);
+            return s.hash64();
+        } else {
+            // string compare seq & reverse, hash smallest one
+            for (int i = 0; i < length / 2; i++) {
+                char c = sequence[i];
+                char r = COMPLEMENT[sequence[length - 1 - i]];
+                if (c < r) {
+                    return util::hash(sequence, length);
+                } else if (r < c) {
+                    char* rc = (char*) alloca(length);
+                    util::toComplement(rc, sequence, length);
+                    return util::hash64(rc, length);
+                }
+            }
+            return util::hash(sequence, length); // rc palindrome
+        }
+    }
+
+    static const int MaxBases = 32;
 private:
 
-    _int64   bases;
+    _uint64   bases;
 
     //
     // Since we pretty much always compute the reverse complement of a seed, we just keep it
     // here.  That way we only execute the loop once: when the constructor runs.
     //
-    _int64   reverseComplement;
+    _uint64   reverseComplement;
 };
