@@ -1212,7 +1212,7 @@ SAMFormat::writeRead(
             //We need the pieceName for conversion             
             const Genome::Contig *transcriptomePiece = context.transcriptome->getContigAtLocation(tlocation);
             const char* transcriptomePieceName = transcriptomePiece->name;
-            unsigned transcriptomePositionInPiece = tlocation - transcriptomePiece->beginningLocation + 1; // SAM is 1-based
+            unsigned transcriptomePositionInPiece = tlocation - transcriptomePiece->beginningLocation + 1 + basesClippedBefore + extraBasesClippedBefore; // SAM is 1-based
  
             //Insert splice junctions
             lv->insertSpliceJunctions(context.gtf, tokens, transcriptomePieceName, transcriptomePositionInPiece, (char*) cigarBuf, cigarBufSize);

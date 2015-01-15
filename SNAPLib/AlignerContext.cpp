@@ -479,7 +479,7 @@ AlignerContext::parseOptions(
 
     int i;
     int nInputs = 0;
-    for (i = 2; i < argc; i++) {	// Starting at 2 skips single/paired and the index
+    for (i = 4; i < argc; i++) {	// Starting at 2 skips single/paired and the index
 
         if (',' == argv[i][0]  && '\0' == argv[i][1]) {
             i++;    // Consume the comma

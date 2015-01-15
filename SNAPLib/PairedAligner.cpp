@@ -655,7 +655,7 @@ void PairedAlignerContext::runIterationThread()
                 filter.AddAlignment(t_singleSecondaryResults[i].location, t_singleSecondaryResults[i].direction, t_singleSecondaryResults[i].score, t_singleSecondaryResults[i].mapq, true, isMate0); 
             }
         }
-
+        
         g_aligner->align(read0, read1, &g_pairedResult, maxSecondaryAlignmentAdditionalEditDistance, g_maxPairedSecondaryHits, &g_nSecondaryResults, g_secondaryResults, g_maxSingleSecondaryHits, &g_nSingleSecondaryResults[0], &g_nSingleSecondaryResults[1],g_singleSecondaryResults);
 
         g_allocator->checkCanaries();

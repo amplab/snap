@@ -792,7 +792,7 @@ BAMFormat::writeRead(
         } else {
         
             //Vector of tokens from CIGAR string for Transcriptome conversion
-            cigarOps = computeCigarOps(context.transcriptome, lv, (char*) cigarNew, cigarBufSize * sizeof(_uint32),
+            cigarOps = computeCigarOps(context.transcriptome, lv, (char*) cigarBuf, cigarBufSize * sizeof(_uint32),
                                        clippedData, clippedLength, basesClippedBefore, (unsigned)extraBasesClippedBefore, basesClippedAfter, (unsigned)extraBasesClippedAfter,
                                        read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(),
                                        tlocation, direction == RC, useM, &editDistance, o_addFrontClipping, tokens);
@@ -808,7 +808,8 @@ BAMFormat::writeRead(
         } 
               
         if (*o_addFrontClipping != 0) {
-            return false;
+            *o_addFrontClipping = 0;
+            //return false;
         }
     }
 
