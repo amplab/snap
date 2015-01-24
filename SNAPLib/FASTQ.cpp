@@ -159,7 +159,7 @@ FASTQReader::skipPartialRecord(DataReader *data)
         char *thirdLineCandidate = secondLineCandidate;
         while (*thirdLineCandidate == 'A' || *thirdLineCandidate == 'C' || *thirdLineCandidate == 'T' || *thirdLineCandidate == 'G' ||
                 *thirdLineCandidate == 'N' || *thirdLineCandidate == 'a' || *thirdLineCandidate == 'c' || *thirdLineCandidate == 't' || 
-                *thirdLineCandidate == 'g') {
+                *thirdLineCandidate == 'g' || *thirdLineCandidate == 'n') {
             thirdLineCandidate++;
         }
 
