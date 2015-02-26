@@ -44,7 +44,7 @@ ALL_OBJ = $(LIB_OBJ) $(SNAP_OBJ) $(TEST_OBJ) $(SNAPCOMMAND_OBJ)
 
 DEPS = $(pathsubst %.o, %.d, $(ALL_OBJ))
 
-EXES = snap unit_tests SNAPCommand
+EXES = SNAP unit_tests SNAPCommand
 
 default: $(EXES)
 
@@ -53,7 +53,7 @@ default: $(EXES)
 $(OBJS): %.o : %.cpp
 	$(CXX) -o $@ $(CXXFLAGS) -c $< 
 
-snap: $(LIB_OBJ) $(SNAP_OBJ)
+SNAP: $(LIB_OBJ) $(SNAP_OBJ)
 	$(CXX) -o $@ $(CXXFLAGS) -Itests $(LDFLAGS) $^ $(LIBS)
 
 SNAPCommand: $(LIB_OBJ) $(SNAPCOMMAND_OBJ)
@@ -74,6 +74,6 @@ unit_tests: $(LIB_OBJ) $(TEST_OBJ)
 	$(CXX) -o $@ $(CXXFLAGS) -Itests $(LDFLAGS) $^ $(LIBS)
 
 clean:
-	rm -f $(ALL_OBJ) $(DEPS) $(EXES)
+	rm -f $(ALL_OBJ) $(DEPS) $(EXES) snap
 
 .phony: clean default
