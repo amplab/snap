@@ -346,34 +346,42 @@ void PairedAlignerContext::runIterationThread()
         //
         return;
     }
+
 	if (extension->runIterationThread(supplier, this)) {
         delete supplier;
 		return;
 	}
 
+    Read *reads[NUM_READS_PER_PAIR];
+    int nSingleResults[2] = { 0, 0 };
 
  	if (index == NULL) {
         // no alignment, just input/output
-        Read *read0;
-        Read *read1;
         PairedAlignmentResult result;
         memset(&result, 0, sizeof(result));
         result.location[0] = result.location[1] = InvalidGenomeLocation;
-        
-        while (supplier->getNextReadPair(&read0,&read1)) {
+
+         
+        while (supplier->getNextReadPair(&reads[0],&reads[1])) {
             // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
-            if (!ignoreMismatchedIDs && !readIdsMatch(read0, read1)) {
-                unsigned n[2] = {min(read0->getIdLength(), 200u), min(read1->getIdLength(), 200u)};
+            if (!ignoreMismatchedIDs && !readIdsMatch(reads[0], reads[1])) {
+                unsigned n[2] = {min(reads[0]->getIdLength(), 200u), min(reads[1]->getIdLength(), 200u)};
                 char* p[2] = {(char*) alloca(n[0] + 1), (char*) alloca(n[1] + 1)};
-                memcpy(p[0], read0->getId(), n[0]); p[0][n[0]] = 0;
-                memcpy(p[1], read1->getId(), n[1]); p[1][n[1]] = 0;
+                memcpy(p[0], reads[0]->getId(), n[0]); p[0][n[0]] = 0;
+                memcpy(p[1], reads[1]->getId(), n[1]); p[1][n[1]] = 0;
                 WriteErrorMessage( "Unmatched read IDs '%s' and '%s'.  Use the -I option to ignore this.\n", p[0], p[1]);
                 soft_exit(1);
             }
             stats->totalReads += 2;
 
+            bool pass0 = options->passFilter(reads[0], result.status[0], false);
+            bool pass1 = options->passFilter(reads[1], result.status[1], false);
+            bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
+                ? (pass0 && pass1) : (pass0 || pass1);
 
-            writePair(read0, read1, &result, false, true, true);
+            if (pass && NULL != readWriter) {
+                readWriter->writePairs(readerContext, reads, &result, 1, NULL, nSingleResults, true);
+            }
         }
         delete supplier;
         return;
@@ -425,7 +433,7 @@ void PairedAlignerContext::runIterationThread()
 
     allocator->checkCanaries();
 
-    PairedAlignmentResult *secondaryResults = (PairedAlignmentResult *)allocator->allocate(maxPairedSecondaryHits * sizeof(*secondaryResults));
+    PairedAlignmentResult *results = (PairedAlignmentResult *)allocator->allocate((1 + maxPairedSecondaryHits) * sizeof(*results)); // 1 + is for the primary result
     SingleAlignmentResult *singleSecondaryResults = (SingleAlignmentResult *)allocator->allocate(maxSingleSecondaryHits * sizeof(*singleSecondaryResults));
 
     ReadWriter *readWriter = this->readWriter;
@@ -441,31 +449,39 @@ void PairedAlignerContext::runIterationThread()
 #endif  // _MSC_VER
 
     // Align the reads.
-    Read *read0;
-    Read *read1;
-
     _uint64 lastReportTime = timeInMillis();
     _uint64 readsWhenLastReported = 0;
 
-    while (supplier->getNextReadPair(&read0,&read1)) {
+    while (supplier->getNextReadPair(&reads[0],&reads[1])) {
         // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
         if (!ignoreMismatchedIDs) {
-			Read::checkIdMatch(read0, read1);
+            Read::checkIdMatch(reads[0], reads[1]);
 		}
 
         stats->totalReads += 2;
 
         // Skip the pair if there are too many Ns or 2s.
         int maxDist = this->maxDist;
-        bool useful0 = read0->getDataLength() >= minReadLength && (int)read0->countOfNs() <= maxDist;
-        bool useful1 = read1->getDataLength() >= minReadLength && (int)read1->countOfNs() <= maxDist;
+        bool useful0 = reads[0]->getDataLength() >= minReadLength && (int)reads[0]->countOfNs() <= maxDist;
+        bool useful1 = reads[1]->getDataLength() >= minReadLength && (int)reads[1]->countOfNs() <= maxDist;
 		if (!useful0 && !useful1) {
 			PairedAlignmentResult result;
 			result.status[0] = NotFound;
 			result.status[1] = NotFound;
 			result.location[0] = InvalidGenomeLocation;
 			result.location[1] = InvalidGenomeLocation;
-			writePair(read0, read1, &result, false, useful0, useful1);
+            nSingleResults[0] = nSingleResults[1] = 0;
+
+            bool pass0 = options->passFilter(reads[0], result.status[0], false);
+            bool pass1 = options->passFilter(reads[1], result.status[1], false);
+            bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
+                ? (pass0 && pass1) : (pass0 || pass1);
+
+
+            if (pass && NULL != readWriter) {
+                readWriter->writePairs(readerContext, reads, &result, 1, NULL, nSingleResults, true);
+            }
+            
             continue;
         } else {
             // Here one the reads might still be hopeless, but maybe we can align the other.
@@ -479,16 +495,14 @@ void PairedAlignerContext::runIterationThread()
         }
 
 
-        PairedAlignmentResult result;
-
-#if     TIME_HISTOGRAM
+ #if     TIME_HISTOGRAM
         _int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
 
         int nSecondaryResults;
         int nSingleSecondaryResults[2];
         
-        aligner->align(read0, read1, &result, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, secondaryResults, 
+        aligner->align(reads[0], reads[1], results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, results+1,
             maxSingleSecondaryHits, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1],singleSecondaryResults);
 
 #if     TIME_HISTOGRAM
@@ -498,27 +512,52 @@ void PairedAlignerContext::runIterationThread()
         stats->nanosByTimeBucket[timeBucket] += runTime;
 #endif // TIME_HISTOGRAM
 
-        if (forceSpacing && isOneLocation(result.status[0]) != isOneLocation(result.status[1])) {
+        if (forceSpacing && isOneLocation(results[0].status[0]) != isOneLocation(results[0].status[1])) {
             // either both align or neither do
-            result.status[0] = result.status[1] = NotFound;
-            result.location[0] = result.location[1] = InvalidGenomeLocation;
+            results[0].status[0] = results[0].status[1] = NotFound;
+            results[0].location[0] = results[0].location[1] = InvalidGenomeLocation;
         }
 
-		writePair(read0, read1, &result, false, useful0, useful1);
-        
-        for (int i = 0; i < __min(nSecondaryResults, maxSecondaryAlignments); i++) {
-            writePair(read0, read1, secondaryResults + i, true, useful0, useful1);
-        }
+        if (NULL != readWriter) {
+            bool firstIsPrimary = true;
+            for (int i = 0; i <= nSecondaryResults + 1; i++) {  // Loop runs to <= nSecondaryResults because there's a primary result, too.
+                bool pass0 = options->passFilter(reads[0], results[i].status[0], false);
+                bool pass1 = options->passFilter(reads[1], results[i].status[1], false);
+                bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
+                    ? (pass0 && pass1) : (pass0 || pass1);
 
-        for (int i = 0; i < __min(nSingleSecondaryResults[0] + nSingleSecondaryResults[1], maxSecondaryAlignments - nSecondaryResults); i++) {
-            Read *read = i < nSingleSecondaryResults[0] ? read0 : read1;
-			bool useful = i < nSingleSecondaryResults[0] ? useful0 : useful1;
-            if (readWriter != NULL && (options->passFilter(read, singleSecondaryResults[i].status, !useful))) {
-                readWriter->writeRead(readerContext, read, singleSecondaryResults[i].status, singleSecondaryResults[i].mapq, singleSecondaryResults[i].location, singleSecondaryResults[i].direction, true);
+                if (!pass) {
+                    //
+                    // Remove this one from the list by copying the last one here.
+                    //
+                    results[i] = results[nSecondaryResults];
+                    nSecondaryResults--;
+                    if (0 == i) {
+                        firstIsPrimary = false;
+                    }
+                    i--;
+                }
+
             }
+
+            //
+            // Now check the single secondary alignments
+            //
+            SingleAlignmentResult *singleResults[2] = { singleSecondaryResults, singleSecondaryResults + nSingleSecondaryResults[0] };
+            for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+                for (int whichAlignment = 0; whichAlignment < nSingleSecondaryResults[whichRead]; whichAlignment++) {
+                    if (!options->passFilter(reads[whichRead], singleResults[whichRead][whichAlignment].status, false)) {
+                        singleResults[whichRead][whichAlignment] = singleResults[whichRead][nSingleSecondaryResults[whichRead] - 1];
+                        nSingleSecondaryResults[whichRead]--;
+                        whichAlignment--;
+                    }
+                }
+            }
+
+            readWriter->writePairs(readerContext, reads, results, nSecondaryResults + 1, singleResults, nSingleSecondaryResults, firstIsPrimary);
         }
 
-        updateStats((PairedAlignerStats*) stats, read0, read1, &result, useful0, useful1);
+        updateStats((PairedAlignerStats*) stats, reads[0], reads[1], &results[0], useful0, useful1);
 
     }
 
@@ -533,16 +572,6 @@ void PairedAlignerContext::runIterationThread()
     delete allocator;
 }
 
-void PairedAlignerContext::writePair(Read* read0, Read* read1, PairedAlignmentResult* result, bool secondary, bool useful0, bool useful1)
-{
-    bool pass0 = options->passFilter(read0, result->status[0], !useful0);
-    bool pass1 = options->passFilter(read1, result->status[1], !useful1);
-    bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
-        ? (pass0 && pass1) : (pass0 || pass1);
-    if (readWriter != NULL && pass) {
-        readWriter->writePair(readerContext, read0, read1, result, secondary);
-    }
-}
 
 void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, Read* read1, PairedAlignmentResult* result, bool useful0, bool useful1)
 {

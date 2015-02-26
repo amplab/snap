@@ -570,7 +570,8 @@ public:
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int * o_addFrontClipping,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
-        AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD) const;
+        AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
+        bool alignedAsPair = false) const;
 
 private:
 
@@ -647,10 +648,10 @@ BAMFormat::getWriterSupplier(
         }
         dataSupplier = DataWriterSupplier::sorted(this, genome, tempFileName,
             options->sortMemory * (1ULL << 30),
-            options->numThreads, options->outputFile.fileName, filters,
+            options->numThreads, options->outputFile.fileName, filters, options->writeBufferSize,
             FileEncoder::gzip(gzipSupplier, options->numThreads, options->bindToProcessors));
     } else {
-        dataSupplier = DataWriterSupplier::create(options->outputFile.fileName, gzipSupplier);
+        dataSupplier = DataWriterSupplier::create(options->outputFile.fileName, options->writeBufferSize, gzipSupplier);
     }
     return ReadWriterSupplier::create(this, dataSupplier, genome);
 }
@@ -727,13 +728,14 @@ BAMFormat::writeRead(
     GenomeLocation genomeLocation,
     Direction direction,
     bool secondaryAlignment,
-    int * o_addFrontClipping,
+    int *o_addFrontClipping,
     bool hasMate,
     bool firstInPair,
     Read * mate,
     AlignmentResult mateResult,
     GenomeLocation mateLocation,
-    Direction mateDirection) const
+    Direction mateDirection,
+    bool alignedAsPair) const
 {
     const int MAX_READ = MAX_READ_LENGTH;
     const int cigarBufSize = MAX_READ;
@@ -759,13 +761,16 @@ BAMFormat::writeRead(
     GenomeDistance extraBasesClippedBefore;
     unsigned basesClippedAfter;
     int editDistance;
+    int newAddFrontClipping = 0;
 
-    *o_addFrontClipping = 0;
-    if (!SAMFormat::createSAMLine(context.genome, lv, data, quality, MAX_READ, contigName, contigIndex,
+    if (!SAMFormat::createSAMLine(context.genome, lv, 
+        // outputs:
+        data, quality, MAX_READ, contigName, contigIndex,
         flags, positionInContig, mapQuality, mateContigName, mateContigIndex, matePositionInContig, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
+        // inputs:
         qnameLen, read, result, genomeLocation, direction, secondaryAlignment, useM,
-        hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection,
+        hasMate, firstInPair, alignedAsPair, mate, mateResult, mateLocation, mateDirection,
         &extraBasesClippedBefore))
     {
         return false;

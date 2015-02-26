@@ -2,7 +2,7 @@
 
 Module Name:
 
-    ChimericPairedEndAligner.h
+    ChimericPairedEndAligner.cpp
 
 Abstract:
 

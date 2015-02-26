@@ -121,6 +121,7 @@ public:
         const char* i_tempFileName,
         const char* i_sortedFileName,
         DataWriter::FilterSupplier* i_sortedFilterSupplier,
+        size_t i_bufferSize,
         FileEncoder* i_encoder = NULL)
         :
         format(i_fileFormat),
@@ -130,6 +131,7 @@ public:
         tempFileName(i_tempFileName),
         sortedFileName(i_sortedFileName),
         sortedFilterSupplier(i_sortedFilterSupplier),
+        bufferSize(i_bufferSize),
         blocks()
     {
         InitializeExclusiveLock(&lock);
@@ -166,6 +168,7 @@ private:
     size_t                          headerSize;
     ExclusiveLock                   lock; // for adding blocks
     SortBlockVector                 blocks;
+    size_t                          bufferSize;
 
 	friend class SortedDataFilter;
 };
@@ -313,7 +316,7 @@ SortedDataFilterSupplier::mergeSort()
 #endif
 
     // set up buffered output
-    DataWriterSupplier* writerSupplier = DataWriterSupplier::create(sortedFileName, sortedFilterSupplier,
+    DataWriterSupplier* writerSupplier = DataWriterSupplier::create(sortedFileName, bufferSize, sortedFilterSupplier,
         encoder, encoder != NULL ? 6 : 4); // use more buffers to let encoder run async
     DataWriter* writer = writerSupplier->getWriter();
     if (writer == NULL) {
@@ -478,13 +481,14 @@ DataWriterSupplier::sorted(
     int numThreads,
     const char* sortedFileName,
     DataWriter::FilterSupplier* sortedFilterSuppler,
+    size_t maxBufferSize,
     FileEncoder* encoder)
 {
     const int bufferCount = 3;
     const size_t bufferSize = tempBufferMemory > 0
         ? tempBufferMemory / (bufferCount * numThreads)
-        : max((size_t) 16 * 1024 * 1024, ((size_t) (genome ? genome->getCountOfBases() : 0) / 3) / bufferCount);
+        : max(maxBufferSize, ((size_t) (genome ? genome->getCountOfBases() : 0) / 3) / bufferCount);
     DataWriter::FilterSupplier* filterSupplier =
-        new SortedDataFilterSupplier(format, genome, tempFileName, sortedFileName, sortedFilterSuppler, encoder);
-    return DataWriterSupplier::create(tempFileName, filterSupplier, NULL, bufferCount, bufferSize);
+        new SortedDataFilterSupplier(format, genome, tempFileName, sortedFileName, sortedFilterSuppler, bufferSize, encoder);
+    return DataWriterSupplier::create(tempFileName, bufferSize, filterSupplier, NULL, bufferCount);
 }

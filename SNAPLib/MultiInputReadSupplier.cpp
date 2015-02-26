@@ -2,7 +2,7 @@
 
 Module Name:
 
-    MultiInputReadSupplier.cp
+    MultiInputReadSupplier.cpp
 
 Abstract:
 

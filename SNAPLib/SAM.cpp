@@ -828,9 +828,9 @@ SAMFormat::getWriterSupplier(
         strcpy(tempFileName, options->outputFile.fileName);
         strcpy(tempFileName + len, ".tmp");
         dataSupplier = DataWriterSupplier::sorted(this, genome, tempFileName, options->sortMemory * (1ULL << 30),
-            options->numThreads, options->outputFile.fileName, NULL);
+            options->numThreads, options->outputFile.fileName, NULL, options->writeBufferSize);
     } else {
-        dataSupplier = DataWriterSupplier::create(options->outputFile.fileName);
+        dataSupplier = DataWriterSupplier::create(options->outputFile.fileName, options->writeBufferSize);
     }
     return ReadWriterSupplier::create(this, dataSupplier, genome);
 }
@@ -967,6 +967,7 @@ SAMFormat::createSAMLine(
     bool useM,
     bool hasMate,
     bool firstInPair,
+    bool alignedAsPair,
     Read * mate, 
     AlignmentResult mateResult,
     GenomeLocation mateLocation,
@@ -1083,7 +1084,9 @@ SAMFormat::createSAMLine(
         }
 
         if (genomeLocation != InvalidGenomeLocation && mateLocation != InvalidGenomeLocation) {
-            flags |= SAM_ALL_ALIGNED;
+            if (alignedAsPair) {
+                flags |= SAM_ALL_ALIGNED;
+            }
             // Also compute the length of the whole paired-end string whose ends we saw. This is slightly
             // tricky because (a) we may have clipped some bases before/after each end and (b) we need to
             // give a signed result based on whether our read is first or second in the pair.
@@ -1129,7 +1132,8 @@ SAMFormat::writeRead(
     Read * mate, 
     AlignmentResult mateResult,
     GenomeLocation mateLocation,
-    Direction mateDirection
+    Direction mateDirection,
+    bool alignedAsPair
     ) const
 {
     const int MAX_READ = MAX_READ_LENGTH;
@@ -1166,7 +1170,7 @@ SAMFormat::writeRead(
         flags, positionInContig, mapQuality, matecontigName, mateContigIndex, matePositionInContig, templateLength,
         fullLength, clippedData, clippedLength, basesClippedBefore, basesClippedAfter,
         qnameLen, read, result, genomeLocation, direction, secondaryAlignment, useM,
-        hasMate, firstInPair, mate, mateResult, mateLocation, mateDirection, 
+        hasMate, firstInPair, alignedAsPair, mate, mateResult, mateLocation, mateDirection, 
         &extraBasesClippedBefore))
     {
         return false;

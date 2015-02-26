@@ -2,7 +2,7 @@
 
 Module Name:
 
-    ZipDataWriter.cpp
+    GzipDataWriter.cpp
 
 Abstract:
 

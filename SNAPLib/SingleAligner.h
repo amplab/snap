@@ -51,8 +51,6 @@ protected:
 
     // for subclasses
 
-    virtual void writeRead(Read* read, const SingleAlignmentResult &result, bool secondaryAlignment);
-
     virtual void updateStats(AlignerStats* stats, Read* read, AlignmentResult result, int score, int mapq);
 
     //RangeSplittingReadSupplierGenerator   *readSupplierGenerator;

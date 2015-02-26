@@ -82,11 +82,13 @@ ReadFASTAGenome(
     paddingBuffer[chromosomePaddingSize] = '\0';
 
     bool warningIssued = false;
+    bool inAContig = false;
 
     while (NULL != fgets(lineBuffer,lineBufferSize,fastaFile)) {
         if (lineBuffer[0] == '>') {
+            inAContig = true;
             //
-            // A new chromosome.  Add in the padding first.
+            // A new contig.  Add in the padding first.
             //
             genome->addData(paddingBuffer);
 
@@ -121,6 +123,11 @@ ReadFASTAGenome(
             }
             genome->startContig(lineBuffer+1);
         } else {
+            if (!inAContig) {
+                WriteErrorMessage("\nFASTA file doesn't beging with a contig name (i.e., the first line doesn't start with '>').\n");
+                soft_exit(1);
+            }
+
             //
             // Convert it to upper case and truncate the newline before adding it to the genome.
             //

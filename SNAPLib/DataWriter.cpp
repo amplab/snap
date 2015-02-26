@@ -511,10 +511,10 @@ AsyncDataWriterSupplier::advance(
     DataWriterSupplier*
 DataWriterSupplier::create(
     const char* filename,
+    size_t bufferSize,
     DataWriter::FilterSupplier* filterSupplier,
     FileEncoder* encoder,
-    int count,
-    size_t bufferSize)
+    int count)
 {
     return new AsyncDataWriterSupplier(filename, filterSupplier, encoder, count, bufferSize);
 }

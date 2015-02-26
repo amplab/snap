@@ -74,7 +74,8 @@ AlignerOptions::AlignerOptions(
 	minReadLength(DEFAULT_MIN_READ_LENGTH),
     maxDistFraction(0.0),
 	mapIndex(false),
-	prefetchIndex(false)
+	prefetchIndex(false),
+    writeBufferSize(16 * 1024 * 1024)
 {
     if (forPairedEnd) {
         maxDist                 = 15;
@@ -173,6 +174,7 @@ AlignerOptions::usageMessage()
 		"       down execution without improving alignments.\n"
 		"  -nt  Don't truncate searches based on missed seed hits.  This option is purely for evaluating the performance effect\n"
 		"       of candidate truncation, and specifying it will slow down execution without improving alignments.\n"
+        " -wbs  Write buffer size in megabytes.  Don't specify this unless you've gotten an error message saying to make it bigger.  Default 16.\n"
 		,
             commandLine,
             maxDist,
@@ -444,7 +446,30 @@ AlignerOptions::parse(
 		n++;
 
 		return true;
-	} else if (strcmp(argv[n], "-xf") == 0) {
+    } else if (strcmp(argv[n], "-wbs") == 0) {
+        if (n + 1 >= argc) {
+            WriteErrorMessage("-wbs requires an additional value\n");
+            return false;
+        }
+        //
+        // Check that the parameter is actually numeric.  This is to avoid having someone do "-wbs -anotherSwitch" and
+        // having the additional switche silently consumed here.
+        //
+        if (argv[n + 1][0] < '0' || argv[n + 1][0] > '9') {
+            WriteErrorMessage("-wbs requires a numerical parameter.\n");
+            return false;
+        }
+        writeBufferSize = atoi(argv[n + 1]) * 1024 * 1024;
+
+        if (writeBufferSize <= 0) {
+            WriteErrorMessage("-wbs must be bigger than zero");
+            return false;
+        }
+
+        n++;
+
+        return true;
+    } else if (strcmp(argv[n], "-xf") == 0) {
         if (n + 1 < argc) {
             n++;
             expansionFactor = (float)atof(argv[n]);

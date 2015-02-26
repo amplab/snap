@@ -424,6 +424,7 @@ Return Value:
             TRACE("Skipping due to IsSeedUsed\n");
             nextSeedToTest++;
         }
+
         if (nextSeedToTest >= nPossibleSeeds) {
             //
             // Unusable seeds have pushed us past the end of the read.  Go back around the outer loop so we wrap properly.
