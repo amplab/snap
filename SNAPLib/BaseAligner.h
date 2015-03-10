@@ -300,7 +300,7 @@ private:
     int      maxSecondaryAlignmentsPerContig;
 
     struct HitsPerContigCounts {
-        __int64 epoch;          // Used hashTableEpoch, for the same reason
+        _int64  epoch;          // Used hashTableEpoch, for the same reason
         int     hits;
     };
 

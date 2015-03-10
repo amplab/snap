@@ -466,7 +466,7 @@ private:
 
 
     struct HitsPerContigCounts {
-        __int64 epoch;              // Rather than zeroing this whole array every time, we just bump the epoch number; results with an old epoch are considered zero
+        _int64  epoch;              // Rather than zeroing this whole array every time, we just bump the epoch number; results with an old epoch are considered zero
         int     hits;
     };
 
