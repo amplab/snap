@@ -105,7 +105,8 @@ SingleAlignerContext::runIterationThread()
     }
     size_t alignmentResultBufferSize = sizeof(*alignmentResults) * (alignmentResultBufferCount + 1); // +1 is for primary result
  
-    BigAllocator *allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, maxHits, maxReadSize, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage) + alignmentResultBufferSize);
+    BigAllocator *allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(index, true, maxHits, maxReadSize, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxSecondaryAlignmentsPerContig) 
+        + alignmentResultBufferSize);
    
     BaseAligner *aligner = new (allocator) BaseAligner(
             index,
@@ -119,6 +120,7 @@ SingleAlignerContext::runIterationThread()
             noUkkonen,
             noOrderedEvaluation,
 			noTruncation,
+            maxSecondaryAlignmentsPerContig,
             NULL,               // LV (no need to cache in the single aligner)
             NULL,               // reverse LV
             stats,
@@ -183,7 +185,7 @@ SingleAlignerContext::runIterationThread()
         }
 #endif
 
-        aligner->AlignRead(read, alignmentResults, maxSecondaryAlignmentAdditionalEditDistance, alignmentResultBufferCount - 1, &nSecondaryResults, alignmentResults + 1);
+        aligner->AlignRead(read, alignmentResults, maxSecondaryAlignmentAdditionalEditDistance, alignmentResultBufferCount - 1, &nSecondaryResults, maxSecondaryAlignments, alignmentResults + 1);
 #ifdef LONG_READS
         aligner->setMaxK(oldMaxK);
 #endif

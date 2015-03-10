@@ -55,6 +55,8 @@ struct SingleAlignmentResult {
 
     int             mapq;		// mapping quality, encoded like a Phred score (but as an integer, not ASCII Phred + 33).
 
+    static int compareByContigAndScore(const void *first, const void *second);      // qsort()-style compare routine
+    static int compareByScore(const void *first, const void *second);               // qsort()-style compare routine
 };
 
 // Does an AlignmentResult represent a single location?
@@ -85,4 +87,7 @@ struct PairedAlignmentResult {
 	_int64 nanosInAlignTogether;
 	unsigned nLVCalls;
 	unsigned nSmallHits;
+
+    static int compareByContigAndScore(const void *first, const void *second);      // qsort()-style compare routine
+    static int compareByScore(const void *first, const void *second);               // qsort()-style compare routine
 };

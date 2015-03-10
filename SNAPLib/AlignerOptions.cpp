@@ -66,6 +66,7 @@ AlignerOptions::AlignerOptions(
     ignoreSecondaryAlignments(true),
     maxSecondaryAlignmentAdditionalEditDistance(-1),
 	maxSecondaryAlignments(0x7fffffff),
+    maxSecondaryAlignmentsPerContig(-1),    // -1 means don't limit
     preserveClipping(false),
     expansionFactor(1.0),
     noUkkonen(false),
@@ -101,54 +102,58 @@ AlignerOptions::usage()
     void
 AlignerOptions::usageMessage()
 {
-	WriteErrorMessage(
-		"Usage: \n%s\n"
-		"Options:\n"
-		"  -o   filename  output alignments to filename in SAM or BAM format, depending on the file extension or\n"
-		"       explicit type specifier (see below).  Use a dash with an explicit type specifier to write to\n"
+    WriteErrorMessage(
+        "Usage: \n%s\n"
+        "Options:\n"
+        "  -o   filename  output alignments to filename in SAM or BAM format, depending on the file extension or\n"
+        "       explicit type specifier (see below).  Use a dash with an explicit type specifier to write to\n"
         "       stdout, so for example -o -sam - would write SAM output to stdout\n"
-		"  -d   maximum edit distance allowed per read or pair (default: %d)\n"
-		"  -n   number of seeds to use per read\n"
-		"  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default uses -n)\n"
-		"  -h   maximum hits to consider per seed (default: %d)\n"
-		"  -ms  minimum seed matches per location (default: %d)\n"
-		"  -t   number of threads (default is one per core)\n"
-		"  -b   bind each thread to its processor (this is the default)\n"
-		" --b   Don't bind each thread to its processor (note the double dash)\n"
-		"  -P   disables cache prefetching in the genome; may be helpful for machines\n"
-		"       with small caches or lots of cores/cache\n"
-		"  -so  sort output file by alignment location\n"
-		"  -sm  memory to use for sorting in Gb\n"
-		"  -x   explore some hits of overly popular seeds (useful for filtering)\n"
-		"  -f   stop on first match within edit distance limit (filtering mode)\n"
-		"  -F   filter output (a=aligned only, s=single hit only (MAPQ >= %d), u=unaligned only, l=long enough to align (see -mrl))\n"
-		"  -S   suppress additional processing (sorted BAM output only)\n"
-		"       i=index, d=duplicate marking\n"
+        "  -d   maximum edit distance allowed per read or pair (default: %d)\n"
+        "  -n   number of seeds to use per read\n"
+        "  -sc  Seed coverage (i.e., readSize/seedSize).  Floating point.  Exclusive with -n.  (default uses -n)\n"
+        "  -h   maximum hits to consider per seed (default: %d)\n"
+        "  -ms  minimum seed matches per location (default: %d)\n"
+        "  -t   number of threads (default is one per core)\n"
+        "  -b   bind each thread to its processor (this is the default)\n"
+        " --b   Don't bind each thread to its processor (note the double dash)\n"
+        "  -P   disables cache prefetching in the genome; may be helpful for machines\n"
+        "       with small caches or lots of cores/cache\n"
+        "  -so  sort output file by alignment location\n"
+        "  -sm  memory to use for sorting in Gb\n"
+        "  -x   explore some hits of overly popular seeds (useful for filtering)\n"
+        "  -f   stop on first match within edit distance limit (filtering mode)\n"
+        "  -F   filter output (a=aligned only, s=single hit only (MAPQ >= %d), u=unaligned only, l=long enough to align (see -mrl))\n"
+        "  -S   suppress additional processing (sorted BAM output only)\n"
+        "       i=index, d=duplicate marking\n"
 #if     USE_DEVTEAM_OPTIONS
-		"  -I   ignore IDs that don't match in the paired-end aligner\n"
+        "  -I   ignore IDs that don't match in the paired-end aligner\n"
 #ifdef  _MSC_VER    // Only need this on Windows, since memory allocation is fast on Linux
-		"  -B   Insert barrier after per-thread memory allocation to improve timing accuracy\n"
+        "  -B   Insert barrier after per-thread memory allocation to improve timing accuracy\n"
 #endif  // _MSC_VER
 #endif  // USE_DEVTEAM_OPTIONS
-		"  -Cxx must be followed by two + or - symbols saying whether to clip low-quality\n"
-		"       bases from front and back of read respectively; default: back only (-C-+)\n"
-		"  -M   indicates that CIGAR strings in the generated SAM file should use M (alignment\n"
-		"       match) rather than = and X (sequence (mis-)match).  This is the default\n"
-		"  -=   use the new style CIGAR strings with = and X rather than M.  The opposite of -M\n"
-		"  -G   specify a gap penalty to use when generating CIGAR strings\n"
-		"  -pf  specify the name of a file to contain the run speed\n"
-		"  --hp Indicates not to use huge pages (this may speed up index load and slow down alignment)  This is the default\n"
-		"  -hp  Indicates to use huge pages (this may speed up alignment and slow down index load).\n"
-		"  -D   Specifies the extra search depth (the edit distance beyond the best hit that SNAP uses to compute MAPQ).  Default 2\n"
-		"  -rg  Specify the default read group if it is not specified in the input file\n"
-		"  -R   Specify the entire read group line for the SAM/BAM output.  This must include an ID tag.  If it doesn't start with\n"
-		"       '@RG' SNAP will add that.  Specify tabs by \\t.  Two backslashes will generate a single backslash.\n"
-		"       backslash followed by anything else is illegal.  So, '-R @RG\\tID:foo\\tDS:my data' would generate reads\n"
-		"       with defualt tag foo, and an @RG line that also included the DS:my data field.\n"
-		"  -sa  Include reads from SAM or BAM files with the secondary (0x100) or supplementary (0x800) flag set; default is to drop them.\n"
-		"  -om  Output multiple alignments.  Takes as a parameter the maximum extra edit distance relative to the best alignment\n"
-		"       to allow for secondary alignments\n"
-		" -omax Limit the number of alignments per read generated by -om.\n"
+        "  -Cxx must be followed by two + or - symbols saying whether to clip low-quality\n"
+        "       bases from front and back of read respectively; default: back only (-C-+)\n"
+        "  -M   indicates that CIGAR strings in the generated SAM file should use M (alignment\n"
+        "       match) rather than = and X (sequence (mis-)match).  This is the default\n"
+        "  -=   use the new style CIGAR strings with = and X rather than M.  The opposite of -M\n"
+        "  -G   specify a gap penalty to use when generating CIGAR strings\n"
+        "  -pf  specify the name of a file to contain the run speed\n"
+        "  --hp Indicates not to use huge pages (this may speed up index load and slow down alignment)  This is the default\n"
+        "  -hp  Indicates to use huge pages (this may speed up alignment and slow down index load).\n"
+        "  -D   Specifies the extra search depth (the edit distance beyond the best hit that SNAP uses to compute MAPQ).  Default 2\n"
+        "  -rg  Specify the default read group if it is not specified in the input file\n"
+        "  -R   Specify the entire read group line for the SAM/BAM output.  This must include an ID tag.  If it doesn't start with\n"
+        "       '@RG' SNAP will add that.  Specify tabs by \\t.  Two backslashes will generate a single backslash.\n"
+        "       backslash followed by anything else is illegal.  So, '-R @RG\\tID:foo\\tDS:my data' would generate reads\n"
+        "       with defualt tag foo, and an @RG line that also included the DS:my data field.\n"
+        "  -sa  Include reads from SAM or BAM files with the secondary (0x100) or supplementary (0x800) flag set; default is to drop them.\n"
+        "  -om  Output multiple alignments.  Takes as a parameter the maximum extra edit distance relative to the best alignment\n"
+        "       to allow for secondary alignments\n"
+        " -omax Limit the number of alignments per read generated by -om.  This means that if -om would generate more\n"
+        "       than -omax secondary alignments, SNAP will write out only the best -omax of them, where 'best' means\n"
+        "       'with the lowest edit distance'.  Ties are broken arbitrarily.\n"
+        "  -mpc Limit the number of alignments generated by -om to this many per contig (chromosome/FASTA entry);\n"
+        "       'mpc' means 'max per contig; default unlimited.  This filter is applied prior to -omax.\n"
 		"  -pc  Preserve the soft clipping for reads coming from SAM or BAM files\n"
 		"  -xf  Increase expansion factor for BAM and GZ files (default %.1f)\n"
 		"  -hdp Use Hadoop-style prefixes (reporter:status:...) on error messages, and emit hadoop-style progress messages\n"
@@ -428,24 +433,37 @@ AlignerOptions::parse(
 		n++;
 
 		return true;
-	} else if (strcmp(argv[n], "-omax") == 0) {
-		if (n + 1 >= argc) {
-			WriteErrorMessage("-omax requires an additional value\n");
-			return false;
-		}
-		//
-		// Check that the parameter is actually numeric.  This is to avoid having someone do "-omax -anotherSwitch" and
-		// having the additional switche silently consumed here.
-		//
-		if (argv[n + 1][0] < '0' || argv[n + 1][0] > '9') {
-			WriteErrorMessage("-omax requires a numerical parameter.\n");
-			return false;
-		}
-		maxSecondaryAlignments = atoi(argv[n + 1]);
+    } else if (strcmp(argv[n], "-omax") == 0) {
+        if (n + 1 >= argc) {
+            WriteErrorMessage("-omax requires an additional value\n");
+            return false;
+        }
+ 
+        maxSecondaryAlignments = atoi(argv[n + 1]);
 
-		n++;
+        if (maxSecondaryAlignments <= 0) {
+            WriteErrorMessage("-omax must be strictly positive\n");
+        }
 
-		return true;
+        n++;
+
+        return true;
+    } else if (strcmp(argv[n], "-mpc") == 0) {
+        if (n + 1 >= argc) {
+            WriteErrorMessage("-mpc requires an additional value\n");
+            return false;
+        }
+
+        maxSecondaryAlignmentsPerContig = atoi(argv[n + 1]);
+
+        if (maxSecondaryAlignmentsPerContig <= 0) {
+            WriteErrorMessage("-mpc must be strictly positive\n");
+            return false;
+        }
+
+        n++;
+
+        return true;
     } else if (strcmp(argv[n], "-wbs") == 0) {
         if (n + 1 >= argc) {
             WriteErrorMessage("-wbs requires an additional value\n");

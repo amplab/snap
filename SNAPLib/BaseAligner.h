@@ -52,6 +52,7 @@ public:
         bool            i_noUkkonen,
         bool            i_noOrderedEvaluation,
 		bool			i_noTruncation,
+        int             i_maxSecondaryAlignmentsPerContig,
         LandauVishkin<1>*i_landauVishkin = NULL,
         LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
         AlignerStats   *i_stats = NULL,
@@ -68,6 +69,7 @@ public:
         int                      maxEditDistanceForSecondaryResults,
         int                      secondaryResultBufferSize,
         int                     *nSecondaryResults,
+        int                      maxSecondaryResults,         // The most secondary results to return; always return the best ones
         SingleAlignmentResult   *secondaryResults             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
     );      // Retun value is true if there was enough room in the secondary alignment buffer for everything that was found.
 
@@ -107,7 +109,8 @@ public:
     inline bool getStopOnFirstHit() {return stopOnFirstHit;}
     inline void setStopOnFirstHit(bool newValue) {stopOnFirstHit = newValue;}
 
-    static size_t getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned numSeedsFromCommandLine, double seedCoverage);
+    static size_t getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, 
+        unsigned numSeedsFromCommandLine, double seedCoverage, int maxSecondaryAlignmentsPerContig);
 
 private:
 
@@ -294,6 +297,14 @@ private:
     bool     noOrderedEvaluation;
 	bool     noTruncation;
     bool     doesGenomeIndexHave64BitLocations;
+    int      maxSecondaryAlignmentsPerContig;
+
+    struct HitsPerContigCounts {
+        __int64 epoch;          // Used hashTableEpoch, for the same reason
+        int     hits;
+    };
+
+    HitsPerContigCounts *hitsPerContigCounts;   // How many alignments are we reporting for each contig.  Used to implement -mpc, otheriwse unallocated.
 
     char *rcReadData;
     char *rcReadQuality;
@@ -323,6 +334,7 @@ private:
     void finalizeSecondaryResults(
         int                     *nSecondaryResults,                     // in/out
         SingleAlignmentResult   *secondaryResults,
+        int                      maxSecondaryResults,
         int                      maxEditDistanceForSecondaryResults,
         int                      bestScore);
 };

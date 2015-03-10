@@ -26,6 +26,7 @@ Revision History:
 #include "mapq.h"
 #include "exit.h"
 #include "Error.h"
+#include "BigAlloc.h"
 
 #ifdef  _DEBUG
 extern bool _DumpAlignments;    // From BaseAligner.cpp
@@ -43,13 +44,15 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         unsigned      maxBigHits_,
         unsigned      extraSearchDepth_,
         unsigned      maxCandidatePoolSize,
+        int           maxSecondaryAlignmentsPerContig_,
         BigAllocator  *allocator,
         bool          noUkkonen_,
         bool          noOrderedEvaluation_,
 		bool          noTruncation_) :
     index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), numSeedsFromCommandLine(__min(MAX_MAX_SEEDS,numSeedsFromCommandLine_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
 	landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), seedCoverage(seedCoverage_),
-    extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_)
+    extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_), 
+    maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_)
 {
     doesGenomeIndexHave64BitLocations = index->doesGenomeIndexHave64BitLocations();
 
@@ -59,7 +62,7 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
     } else {
         maxSeedsToUse = (unsigned)(maxReadSize * seedCoverage / index->getSeedLength());
     }
-    allocateDynamicMemory(allocator, maxReadSize, maxBigHits, maxSeedsToUse, maxK, extraSearchDepth, maxCandidatePoolSize);
+    allocateDynamicMemory(allocator, maxReadSize, maxBigHits, maxSeedsToUse, maxK, extraSearchDepth, maxCandidatePoolSize, maxSecondaryAlignmentsPerContig);
 
     rcTranslationTable['A'] = 'T';
     rcTranslationTable['G'] = 'C';
@@ -85,7 +88,8 @@ IntersectingPairedEndAligner::~IntersectingPairedEndAligner()
 
     size_t
 IntersectingPairedEndAligner::getBigAllocatorReservation(GenomeIndex * index, unsigned maxBigHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned numSeedsFromCommandLine,
-                                                         double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize)
+                                                         double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize,
+                                                         int maxSecondaryAlignmentsPerContig)
 {
     unsigned maxSeedsToUse;
     if (0 != numSeedsFromCommandLine) {
@@ -98,14 +102,16 @@ IntersectingPairedEndAligner::getBigAllocatorReservation(GenomeIndex * index, un
         IntersectingPairedEndAligner aligner; // This has to be in a nested scope so its destructor is called before that of the countingAllocator
         aligner.index = index;
 
-        aligner.allocateDynamicMemory(&countingAllocator, maxReadSize, maxBigHitsToConsider, maxSeedsToUse, maxEditDistanceToConsider, maxExtraSearchDepth, maxCandidatePoolSize);
+        aligner.allocateDynamicMemory(&countingAllocator, maxReadSize, maxBigHitsToConsider, maxSeedsToUse, maxEditDistanceToConsider, maxExtraSearchDepth, maxCandidatePoolSize,
+            maxSecondaryAlignmentsPerContig);
         return sizeof(aligner) + countingAllocator.getMemoryUsed();
     }
 }
 
     void
 IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, unsigned maxReadSize, unsigned maxBigHitsToConsider, unsigned maxSeedsToUse,
-                                                    unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize)
+                                                    unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize,
+                                                    int maxSecondaryAlignmentsPerContig)
 {
     seedUsed = (BYTE *) allocator->allocate(100 + (maxReadSize + 7) / 8);
 
@@ -131,6 +137,15 @@ IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, uns
 
     mergeAnchorPoolSize = scoringCandidatePoolSize;
     mergeAnchorPool = (MergeAnchor *)allocator->allocate(sizeof(MergeAnchor) * mergeAnchorPoolSize);
+
+    if (maxSecondaryAlignmentsPerContig > 0) {
+        size_t size = sizeof(*hitsPerContigCounts) * index->getGenome()->getNumContigs();
+        hitsPerContigCounts = (HitsPerContigCounts *)allocator->allocate(size);
+        memset(hitsPerContigCounts, 0, size);
+        contigCountEpoch = 0;
+    } else {
+        hitsPerContigCounts = NULL;
+    }
 }
 
     void
@@ -143,6 +158,7 @@ IntersectingPairedEndAligner::align(
         int                   *nSecondaryResults,
         PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
         int                    singleSecondaryBufferSize,
+        int                    maxSecondaryResultsToReturn,
         int                   *nSingleEndSecondaryResultsForFirstRead,
         int                   *nSingleEndSecondaryResultsForSecondRead,
         SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
@@ -852,7 +868,7 @@ doneScoring:
     }
 
     //
-    // Get rid of any secondary results that are too far away from the best score.
+    // Get rid of any secondary results that are too far away from the best score.  (NB: the rest of the code in align() is very similar to BaseAligner::finalizeSecondaryResults.  Sorry)
     //
     int i = 0;
     while (i < *nSecondaryResults) {
@@ -862,6 +878,74 @@ doneScoring:
         } else {
             i++;
         }
+    }
+
+    //
+    // Now check to see if there are too many for any particular contig.
+    //
+    if (maxSecondaryAlignmentsPerContig > 0) {
+        //
+        // Run through the results and count the number of results per contig, to see if any of them are too big.
+        //
+
+        bool anyContigHasTooManyResults = false;
+        contigCountEpoch++;
+
+        for (i = 0; i < *nSecondaryResults; i++) {
+            int contigNum = genome->getContigNumAtLocation(secondaryResults[i].location[0]);    // We know they're on the same contig, so either will do
+            if (hitsPerContigCounts[contigNum].epoch != contigCountEpoch) {
+                hitsPerContigCounts[contigNum].epoch = contigCountEpoch;
+                hitsPerContigCounts[contigNum].hits = 0;
+            }
+
+            hitsPerContigCounts[contigNum].hits++;
+            if (hitsPerContigCounts[contigNum].hits > maxSecondaryAlignmentsPerContig) {
+                anyContigHasTooManyResults = true;
+                break;
+            }
+        }
+
+        if (anyContigHasTooManyResults) {
+            //
+            // Just sort them all, in order of contig then hit depth.
+            //
+            qsort(secondaryResults, *nSecondaryResults, sizeof(*secondaryResults), PairedAlignmentResult::compareByContigAndScore);
+
+            //
+            // Now run through and eliminate any contigs with too many hits.  We can't use the same trick at the first loop above, because the
+            // counting here relies on the results being sorted.  So, instead, we just copy them as we go.
+            //
+            int currentContigNum = -1;
+            int currentContigCount = 0;
+            int destResult = 0;
+
+            for (int sourceResult = 0; sourceResult < *nSecondaryResults; sourceResult++) {
+                int contigNum = genome->getContigNumAtLocation(secondaryResults[sourceResult].location[0]);
+                if (contigNum != currentContigNum) {
+                    currentContigNum = contigNum;
+                    currentContigCount = 0;
+                }
+
+                currentContigCount++;
+
+                if (currentContigCount <= maxSecondaryAlignmentsPerContig) {
+                    //
+                    // Keep it.  If we don't get here, then we don't copy the result and
+                    // don't increment destResult.  And yes, this will sometimes copy a
+                    // result over itself.  That's harmless.
+                    //
+                    secondaryResults[destResult] = secondaryResults[sourceResult];
+                    destResult++;
+                }
+            } // for each source result
+            *nSecondaryResults = destResult;
+        }
+    } // if we're limiting by contig
+
+
+    if (*nSecondaryResults > maxSecondaryResultsToReturn) {
+        qsort(secondaryResults, *nSecondaryResults, sizeof(*secondaryResults), PairedAlignmentResult::compareByScore);
+        *nSecondaryResults = maxSecondaryResultsToReturn;   // Just truncate it
     }
 }
 

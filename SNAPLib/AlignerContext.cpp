@@ -179,6 +179,12 @@ AlignerContext::initialize()
 	noTruncation = options->noTruncation;
     maxSecondaryAlignmentAdditionalEditDistance = options->maxSecondaryAlignmentAdditionalEditDistance;
 	maxSecondaryAlignments = options->maxSecondaryAlignments;
+    maxSecondaryAlignmentsPerContig = options->maxSecondaryAlignmentsPerContig;
+
+    if (maxSecondaryAlignmentAdditionalEditDistance < 0 && (maxSecondaryAlignments < 1000000 || maxSecondaryAlignmentsPerContig > 0)) {
+        WriteErrorMessage("You set -omax and/or -mpc without setting -om.  They're meaningful only in the context of -om, so you probably didn't really mean to do that.\n");
+        soft_exit(1);
+    }
 	minReadLength = options->minReadLength;
 
 	if (index != NULL && (int)minReadLength < index->getSeedLength()) {

@@ -37,7 +37,7 @@ public:
         unsigned            maxK,
         unsigned            maxSeedsFromCommandLine,
         double              seedCoverage,
-	unsigned            minWeightToCheck,
+	    unsigned            minWeightToCheck,
         bool                forceSpacing_,
         unsigned            extraSearchDepth,
         bool                noUkkonen,
@@ -45,6 +45,7 @@ public:
 		bool				noTruncation,
         PairedEndAligner    *underlyingPairedEndAligner_,
 		unsigned			minReadLength_,
+        int                 maxSecondaryAlignmentsPerContig,
         BigAllocator        *allocator);
     
     virtual ~ChimericPairedEndAligner();
@@ -55,7 +56,8 @@ public:
     }
 
     static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxReadSize, unsigned maxHits, unsigned seedLen, unsigned maxSeedsFromCommandLine, 
-                                             double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize);
+                                             double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize,
+                                             int maxSecondaryAlignmentsPerContig);
 
     void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(ChimericPairedEndAligner)); return allocator->allocate(size);}
     void operator delete(void *ptr, BigAllocator *allocator) {/* do nothing.  Memory gets cleaned up when the allocator is deleted.*/}
@@ -69,6 +71,7 @@ public:
         int                   *nSecondaryResults,
         PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
         int                    singleSecondaryBufferSize,
+        int                    maxSecondaryAlignmentsToReturn,
         int                   *nSingleEndSecondaryResultsForFirstRead,
         int                   *nSingleEndSecondaryResultsForSecondRead,
         SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly

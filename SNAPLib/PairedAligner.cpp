@@ -389,10 +389,11 @@ void PairedAlignerContext::runIterationThread()
 
     int maxReadSize = MAX_READ_LENGTH;
     size_t memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), 
-                                                                numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize);
+                                                                numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize,
+                                                                maxSecondaryAlignmentsPerContig);
 
     memoryPoolSize += ChimericPairedEndAligner::getBigAllocatorReservation(index, maxReadSize, maxHits, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxDist,
-                                                    extraSearchDepth, maxCandidatePoolSize);
+        extraSearchDepth, maxCandidatePoolSize, maxSecondaryAlignmentsPerContig);
 
     unsigned maxPairedSecondaryHits;
     unsigned maxSingleSecondaryHits;
@@ -411,7 +412,7 @@ void PairedAlignerContext::runIterationThread()
     
     IntersectingPairedEndAligner *intersectingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
-                                                                maxCandidatePoolSize, allocator, noUkkonen, noOrderedEvaluation, noTruncation);
+                                                                maxCandidatePoolSize, maxSecondaryAlignmentsPerContig ,allocator, noUkkonen, noOrderedEvaluation, noTruncation);
 
 
     ChimericPairedEndAligner *aligner = new (allocator) ChimericPairedEndAligner(
@@ -429,6 +430,7 @@ void PairedAlignerContext::runIterationThread()
 		noTruncation,
         intersectingAligner,
 		minReadLength,
+        maxSecondaryAlignmentsPerContig,
         allocator);
 
     allocator->checkCanaries();
@@ -502,8 +504,8 @@ void PairedAlignerContext::runIterationThread()
         int nSecondaryResults;
         int nSingleSecondaryResults[2];
         
-        aligner->align(reads[0], reads[1], results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, results+1,
-            maxSingleSecondaryHits, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1],singleSecondaryResults);
+        aligner->align(reads[0], reads[1], results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, results + 1,
+            maxSingleSecondaryHits, maxSecondaryAlignments, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1], singleSecondaryResults);
 
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;

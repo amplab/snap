@@ -94,6 +94,7 @@ struct AlignerOptions : public AbstractOptions
     bool                ignoreSecondaryAlignments; // on input, default true
     int                 maxSecondaryAlignmentAdditionalEditDistance;
 	int					maxSecondaryAlignments;
+    int                 maxSecondaryAlignmentsPerContig;
     bool                preserveClipping;
     float               expansionFactor;
     bool                noUkkonen;

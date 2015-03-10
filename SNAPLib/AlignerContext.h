@@ -118,6 +118,7 @@ public:
 	bool								 noTruncation;
     int                                  maxSecondaryAlignmentAdditionalEditDistance;
 	int									 maxSecondaryAlignments;
+    int                                  maxSecondaryAlignmentsPerContig;
 	unsigned							 minReadLength;
 
 

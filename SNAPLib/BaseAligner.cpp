@@ -56,6 +56,7 @@ BaseAligner::BaseAligner(
     bool            i_noUkkonen,
     bool            i_noOrderedEvaluation,
 	bool			i_noTruncation,
+    int             i_maxSecondaryAlignmentsPerContig,
     LandauVishkin<1>*i_landauVishkin,
     LandauVishkin<-1>*i_reverseLandauVishkin,
     AlignerStats   *i_stats,
@@ -65,7 +66,7 @@ BaseAligner::BaseAligner(
         maxSeedCoverage(i_maxSeedCoverage), readId(-1), extraSearchDepth(i_extraSearchDepth),
         explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats), 
         noUkkonen(i_noUkkonen), noOrderedEvaluation(i_noOrderedEvaluation), noTruncation(i_noTruncation),
-		minWeightToCheck(max(1u, i_minWeightToCheck))
+		minWeightToCheck(max(1u, i_minWeightToCheck)), maxSecondaryAlignmentsPerContig(i_maxSecondaryAlignmentsPerContig)
 /*++
 
 Routine Description:
@@ -86,6 +87,7 @@ Arguments:
     i_noUkkonen         - Don't use Ukkonen's algorithm (i.e., don't reduce the max edit distance depth as we score candidates)
     i_noOrderedEvaluation-Don't order evaluating the reads by the hit count in order to drive down the max edit distance more quickly
 	i_noTruncation       - Don't truncate searches based on count of disjoint seed misses
+    i_maxSecondaryAlignmentsPerContig - Maximum secondary alignments per contig; -1 means don't limit this
     i_landauVishkin     - an externally supplied LandauVishkin string edit distance object.  This is useful if we're expecting repeated computations and use the LV cache.
     i_reverseLandauVishkin - the same for the reverse direction.
     i_stats             - an object into which we report out statistics
@@ -190,12 +192,25 @@ Arguments:
         weightLists = (HashTableElement *)allocator->allocate(sizeof(HashTableElement) * numWeightLists);
         hashTableElementPool = (HashTableElement *)allocator->allocate(sizeof(HashTableElement) * hashTableElementPoolSize); // Allocte last, because it's biggest and usually unused.  This puts all of the commonly used stuff into one large page.
         hitCountByExtraSearchDepth = (unsigned *)allocator->allocate(sizeof(*hitCountByExtraSearchDepth) * extraSearchDepth);
+        if (maxSecondaryAlignmentsPerContig > 0) {
+            hitsPerContigCounts = (HitsPerContigCounts *)allocator->allocate(sizeof(*hitsPerContigCounts) * genome->getNumContigs());
+            memset(hitsPerContigCounts, 0, sizeof(*hitsPerContigCounts) * genome->getNumContigs());
+        } else {
+            hitsPerContigCounts = NULL;
+        }
     } else {
         candidateHashTable[FORWARD] = (HashTableAnchor *)BigAlloc(sizeof(HashTableAnchor) * candidateHashTablesSize);
         candidateHashTable[RC] = (HashTableAnchor *)BigAlloc(sizeof(HashTableAnchor) * candidateHashTablesSize);
         weightLists = (HashTableElement *)BigAlloc(sizeof(HashTableElement) * numWeightLists);
         hashTableElementPool = (HashTableElement *)BigAlloc(sizeof(HashTableElement) * hashTableElementPoolSize);
         hitCountByExtraSearchDepth = (unsigned *)BigAlloc(sizeof(*hitCountByExtraSearchDepth) * extraSearchDepth);
+        if (maxSecondaryAlignmentsPerContig > 0) {
+            hitsPerContigCounts = (HitsPerContigCounts *)BigAlloc(sizeof(*hitsPerContigCounts) * genome->getNumContigs());
+            memset(hitsPerContigCounts, 0, sizeof(*hitsPerContigCounts) * genome->getNumContigs());
+        }
+        else {
+            hitsPerContigCounts = NULL;
+        }
     }
 
     for (unsigned i = 0; i < hashTableElementPoolSize; i++) {
@@ -226,6 +241,7 @@ BaseAligner::AlignRead(
         int                      maxEditDistanceForSecondaryResults,
         int                      secondaryResultBufferSize,
         int                     *nSecondaryResults,
+        int                      maxSecondaryResults,
         SingleAlignmentResult   *secondaryResults             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
     )      // Retun value is true if there was enough room in the secondary alignment buffer for everything that was found.
 
@@ -242,6 +258,7 @@ Arguments:
     maxEditDistanceForSecondaryResults  - How much worse than the primary result should we look?
     secondaryResultBufferSize           - the size of the secondaryResults buffer.  If provided, it must be at least maxK * maxSeeds * 2.
     nRescondaryResults                  - returns the number of secondary results found
+    maxSecondaryResults                 - limit the number of secondary results to this
     secondaryResults                    - returns the secondary results
 
 
@@ -409,7 +426,7 @@ Return Value:
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates)  at %u\n", 
                                             primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, primaryResult->location);
 #endif  // _DEBUG
-                finalizeSecondaryResults(nSecondaryResults, secondaryResults, maxEditDistanceForSecondaryResults, bestScore);
+                finalizeSecondaryResults(nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
                 return;
             }
             nextSeedToTest = GetWrappedNextSeedToTest(seedLen, wrapCount);
@@ -528,7 +545,7 @@ Return Value:
                     // then we do all of the inserts, and then repeat.
                     //
 
-		  _int64 innerLimit = min((_int64)iBase + prefetchDepth, min(nHits[direction], (_int64)maxHitsToConsider));
+		            _int64 innerLimit = min((_int64)iBase + prefetchDepth, min(nHits[direction], (_int64)maxHitsToConsider));
                     if (doAlignerPrefetch) {
                         for (unsigned i = iBase; i < innerLimit; i++) {
                             if (doesGenomeIndexHave64BitLocations) {
@@ -607,7 +624,7 @@ Return Value:
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", primaryResult->score, primaryResult->mapq, primaryResult->location);
 #endif  // _DEBUG
 
-                finalizeSecondaryResults(nSecondaryResults, secondaryResults, maxEditDistanceForSecondaryResults, bestScore);
+                finalizeSecondaryResults(nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
                 return;
             }
         }
@@ -632,7 +649,7 @@ Return Value:
     if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates) at %u\n", primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, primaryResult->location);
 #endif  // _DEBUG
 
-    finalizeSecondaryResults(nSecondaryResults, secondaryResults, maxEditDistanceForSecondaryResults, bestScore);
+    finalizeSecondaryResults(nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
     return;
 }
 
@@ -1334,6 +1351,11 @@ Return Value:
 
         BigDealloc(hashTableElementPool);
         hashTableElementPool = NULL;
+
+        if (NULL != hitsPerContigCounts) {
+            BigDealloc(hitsPerContigCounts);
+            hitsPerContigCounts = NULL;
+        }
     }
 }
 
@@ -1415,8 +1437,8 @@ BaseAligner::incrementWeight(HashTableElement *element)
 }
 
     size_t
-BaseAligner::getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize,
-                unsigned seedLen, unsigned numSeedsFromCommandLine, double seedCoverage)
+BaseAligner::getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize,
+                unsigned seedLen, unsigned numSeedsFromCommandLine, double seedCoverage, int maxSecondaryAlignmentsPerContig)
 {
     unsigned maxSeedsToUse;
     if (0 != numSeedsFromCommandLine) {
@@ -1426,25 +1448,33 @@ BaseAligner::getBigAllocatorReservation(bool ownLandauVishkin, unsigned maxHitsT
     }
     size_t candidateHashTablesSize = (maxHitsToConsider * maxSeedsToUse * 3)/2;    // *1.5 for hash table slack
     size_t hashTableElementPoolSize = maxHitsToConsider * maxSeedsToUse * 2 ;   // *2 for RC
+    size_t contigCounters;
+    if (maxSecondaryAlignmentsPerContig > 0) {
+        contigCounters = sizeof(HitsPerContigCounts)* index->getGenome()->getNumContigs();
+    } else {
+        contigCounters = 0;
+    }
 
     return
-        sizeof(_uint64) * 14                                        + // allow for alignment
-        sizeof(BaseAligner)                                         + // our own member variables
+        contigCounters                                                  +
+        sizeof(_uint64) * 14                                            + // allow for alignment
+        sizeof(BaseAligner)                                             + // our own member variables
         (ownLandauVishkin ?
             LandauVishkin<>::getBigAllocatorReservation() +
-            LandauVishkin<-1>::getBigAllocatorReservation() : 0)    + // our LandauVishkin objects
-        sizeof(char) * maxReadSize * 2                              + // rcReadData
-        sizeof(char) * maxReadSize * 4 + 2 * MAX_K                  + // reversed read (both)
-        sizeof(BYTE) * (maxReadSize + 7 + 128) / 8                  + // seed used
-        sizeof(HashTableElement) * hashTableElementPoolSize         + // hash table element pool
-        sizeof(HashTableAnchor) * candidateHashTablesSize * 2       + // candidate hash table (both)
-        sizeof(HashTableElement) * (maxSeedsToUse + 1);               // weight lists
+            LandauVishkin<-1>::getBigAllocatorReservation() : 0)        + // our LandauVishkin objects
+        sizeof(char) * maxReadSize * 2                                  + // rcReadData
+        sizeof(char) * maxReadSize * 4 + 2 * MAX_K                      + // reversed read (both)
+        sizeof(BYTE) * (maxReadSize + 7 + 128) / 8                      + // seed used
+        sizeof(HashTableElement) * hashTableElementPoolSize             + // hash table element pool
+        sizeof(HashTableAnchor) * candidateHashTablesSize * 2           + // candidate hash table (both)
+        sizeof(HashTableElement) * (maxSeedsToUse + 1);                   // weight lists
 }
 
     void 
 BaseAligner::finalizeSecondaryResults(
     int                     *nSecondaryResults,                     // in/out
     SingleAlignmentResult   *secondaryResults,
+    int                      maxSecondaryResults,
     int                      maxEditDistanceForSecondaryResults,
     int                      bestScore)
 {
@@ -1452,6 +1482,8 @@ BaseAligner::finalizeSecondaryResults(
     // There's no guarantee that the results are actually within the bound; the aligner records anything that's
     // within the bound when it's scored, but if we subsequently found a better fit, then it may no longer be
     // close enough.  Get rid of those now.
+    //
+    // NB: This code is very similar to code at the end of IntersectingPairedEndAligner::align().  Sorry.
     //
 
     int worstScoreToKeep = min((int)maxK, bestScore + maxEditDistanceForSecondaryResults);
@@ -1469,6 +1501,69 @@ BaseAligner::finalizeSecondaryResults(
         } else {
             i++;
         }
+    }
+
+    if (maxSecondaryAlignmentsPerContig > 0) {
+        //
+        // Run through the results and count the number of results per contig, to see if any of them are too big.
+        //
+
+        bool anyContigHasTooManyResults = false;
+
+        for (i = 0; i < *nSecondaryResults; i++) {
+            int contigNum = genome->getContigNumAtLocation(secondaryResults[i].location);
+            if (hitsPerContigCounts[contigNum].epoch != hashTableEpoch) {
+                hitsPerContigCounts[contigNum].epoch = hashTableEpoch;
+                hitsPerContigCounts[contigNum].hits = 0;
+            }
+
+            hitsPerContigCounts[contigNum].hits++;
+            if (hitsPerContigCounts[contigNum].hits > maxSecondaryAlignmentsPerContig) {
+                anyContigHasTooManyResults = true;
+                break;
+            }
+        }
+
+        if (anyContigHasTooManyResults) {
+            //
+            // Just sort them all, in order of contig then hit depth.
+            //
+            qsort(secondaryResults, *nSecondaryResults, sizeof(*secondaryResults), SingleAlignmentResult::compareByContigAndScore);
+
+            //
+            // Now run through and eliminate any contigs with too many hits.  We can't use the same trick at the first loop above, because the
+            // counting here relies on the results being sorted.  So, instead, we just copy them as we go.
+            //
+            int currentContigNum = -1;
+            int currentContigCount = 0;
+            int destResult = 0;
+
+            for (int sourceResult = 0; sourceResult < *nSecondaryResults; sourceResult++) {
+                int contigNum = genome->getContigNumAtLocation(secondaryResults[sourceResult].location);
+                if (contigNum != currentContigNum) {
+                    currentContigNum = contigNum;
+                    currentContigCount = 0;
+                }
+
+                currentContigCount++;
+
+                if (currentContigCount <= maxSecondaryAlignmentsPerContig) {
+                    //
+                    // Keep it.  If we don't get here, then we don't copy the result and
+                    // don't increment destResult.  And yes, this will sometimes copy a
+                    // result over itself.  That's harmless.
+                    //
+                    secondaryResults[destResult] = secondaryResults[sourceResult];
+                    destResult++;
+                }
+            } // for each source result
+            *nSecondaryResults = destResult;
+        }
+    } // if maxSecondaryAlignmentsPerContig > 0
+
+    if (*nSecondaryResults > maxSecondaryResults) {
+        qsort(secondaryResults, *nSecondaryResults, sizeof(*secondaryResults), SingleAlignmentResult::compareByScore);
+        *nSecondaryResults = maxSecondaryResults;   // Just truncate it
     }
 }
 
