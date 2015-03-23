@@ -243,8 +243,7 @@ BaseAligner::AlignRead(
         int                     *nSecondaryResults,
         int                      maxSecondaryResults,
         SingleAlignmentResult   *secondaryResults             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
-    )      // Retun value is true if there was enough room in the secondary alignment buffer for everything that was found.
-
+    )
 /*++
 
 Routine Description:

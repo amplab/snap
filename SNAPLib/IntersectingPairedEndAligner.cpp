@@ -27,6 +27,7 @@ Revision History:
 #include "exit.h"
 #include "Error.h"
 #include "BigAlloc.h"
+#include "AlignerOptions.h"
 
 #ifdef  _DEBUG
 extern bool _DumpAlignments;    // From BaseAligner.cpp
@@ -855,7 +856,7 @@ doneScoring:
             result->location[whichRead] = bestResultGenomeLocation[whichRead];
             result->direction[whichRead] = bestResultDirection[whichRead];
             result->mapq[whichRead] = computeMAPQ(probabilityOfAllPairs, probabilityOfBestPair, bestResultScore[whichRead], popularSeedsSkipped[0] + popularSeedsSkipped[1]);
-            result->status[whichRead] = result->mapq[whichRead] > 10 ? SingleHit : MultipleHits;
+            result->status[whichRead] = result->mapq[whichRead] > MAPQ_LIMIT_FOR_SINGLE_HIT ? SingleHit : MultipleHits;
             result->score[whichRead] = bestResultScore[whichRead];
         }
 #ifdef  _DEBUG
