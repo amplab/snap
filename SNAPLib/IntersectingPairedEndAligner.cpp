@@ -884,13 +884,19 @@ doneScoring:
     //
     // Now check to see if there are too many for any particular contig.
     //
-    if (maxSecondaryAlignmentsPerContig > 0) {
+    if (maxSecondaryAlignmentsPerContig > 0 && result->status[0] != NotFound) {
         //
         // Run through the results and count the number of results per contig, to see if any of them are too big.
+        // First, record the primary result.
         //
 
         bool anyContigHasTooManyResults = false;
         contigCountEpoch++;
+
+        int primaryContigNum = genome->getContigNumAtLocation(result->location[0]);
+        hitsPerContigCounts[primaryContigNum].hits = 1;
+        hitsPerContigCounts[primaryContigNum].epoch = contigCountEpoch;
+        
 
         for (i = 0; i < *nSecondaryResults; i++) {
             int contigNum = genome->getContigNumAtLocation(secondaryResults[i].location[0]);    // We know they're on the same contig, so either will do
@@ -924,7 +930,7 @@ doneScoring:
                 int contigNum = genome->getContigNumAtLocation(secondaryResults[sourceResult].location[0]);
                 if (contigNum != currentContigNum) {
                     currentContigNum = contigNum;
-                    currentContigCount = 0;
+                    currentContigCount = (contigNum == primaryContigNum) ? 1 : 0;
                 }
 
                 currentContigCount++;

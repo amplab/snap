@@ -332,6 +332,7 @@ private:
                                             // of hits at edit distance 4.
 
     void finalizeSecondaryResults(
+        SingleAlignmentResult    primaryResult,
         int                     *nSecondaryResults,                     // in/out
         SingleAlignmentResult   *secondaryResults,
         int                      maxSecondaryResults,

@@ -425,7 +425,7 @@ Return Value:
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates)  at %u\n", 
                                             primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, primaryResult->location);
 #endif  // _DEBUG
-                finalizeSecondaryResults(nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
+                finalizeSecondaryResults(*primaryResult, nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
                 return;
             }
             nextSeedToTest = GetWrappedNextSeedToTest(seedLen, wrapCount);
@@ -623,7 +623,7 @@ Return Value:
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", primaryResult->score, primaryResult->mapq, primaryResult->location);
 #endif  // _DEBUG
 
-                finalizeSecondaryResults(nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
+                finalizeSecondaryResults(*primaryResult, nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
                 return;
             }
         }
@@ -648,7 +648,7 @@ Return Value:
     if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates) at %u\n", primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, primaryResult->location);
 #endif  // _DEBUG
 
-    finalizeSecondaryResults(nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
+    finalizeSecondaryResults(*primaryResult, nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
     return;
 }
 
@@ -1471,6 +1471,7 @@ BaseAligner::getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishki
 
     void 
 BaseAligner::finalizeSecondaryResults(
+    SingleAlignmentResult    primaryResult,
     int                     *nSecondaryResults,                     // in/out
     SingleAlignmentResult   *secondaryResults,
     int                      maxSecondaryResults,
@@ -1502,12 +1503,16 @@ BaseAligner::finalizeSecondaryResults(
         }
     }
 
-    if (maxSecondaryAlignmentsPerContig > 0) {
+    if (maxSecondaryAlignmentsPerContig > 0 && primaryResult.status != NotFound) {
         //
         // Run through the results and count the number of results per contig, to see if any of them are too big.
         //
 
         bool anyContigHasTooManyResults = false;
+
+        int primaryResultContigNum = genome->getContigNumAtLocation(primaryResult.location);
+        hitsPerContigCounts[primaryResultContigNum].hits = 1;
+        hitsPerContigCounts[primaryResultContigNum].epoch = hashTableEpoch;
 
         for (i = 0; i < *nSecondaryResults; i++) {
             int contigNum = genome->getContigNumAtLocation(secondaryResults[i].location);
@@ -1541,7 +1546,7 @@ BaseAligner::finalizeSecondaryResults(
                 int contigNum = genome->getContigNumAtLocation(secondaryResults[sourceResult].location);
                 if (contigNum != currentContigNum) {
                     currentContigNum = contigNum;
-                    currentContigCount = 0;
+                    currentContigCount = (contigNum == primaryResultContigNum) ? 1 : 0;
                 }
 
                 currentContigCount++;
