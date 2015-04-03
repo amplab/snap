@@ -168,7 +168,7 @@ SimpleReadWriter::writeReads(
         used = 0;
 
         for (int whichResult = 0; whichResult < nResults; whichResult++) {
-            int addFrontClipping;
+            int addFrontClipping = 0;
             read->setAdditionalFrontClipping(0);
             int cumulativeAddFrontClipping = 0;
             finalLocations[whichResult] = results[whichResult].location;
@@ -182,8 +182,10 @@ SimpleReadWriter::writeReads(
                 }
 
                 // redo if read modified (e.g. to add soft clipping, or move alignment for a leading I.
-                const Genome::Contig *originalContig = genome->getContigAtLocation(results[whichResult].location);
-                const Genome::Contig *newContig = genome->getContigAtLocation(results[whichResult].location + addFrontClipping);
+                const Genome::Contig *originalContig = results[whichResult].status == NotFound ? NULL
+                    : genome->getContigAtLocation(results[whichResult].location);
+                const Genome::Contig *newContig = results[whichResult].status == NotFound ? NULL
+                    : genome->getContigAtLocation(results[whichResult].location + addFrontClipping);
                 if (newContig == NULL || newContig != originalContig || finalLocations[whichResult] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
                     //
                     // Altering this would push us over a contig boundary.  Just give up on the read.
@@ -347,7 +349,7 @@ SimpleReadWriter::writePairs(
                     //
                     // Loop until we get a write with no additional front clipping.
                     //
-                    int addFrontClipping;
+                    int addFrontClipping = 0;
 
                     while (!format->writeRead(context, &lvc, buffer + used + tentativeUsed, size - used - tentativeUsed, &usedBuffer[firstOrSecond][whichAlignmentPair],
                         idLengths[whichRead], reads[whichRead], result[whichAlignmentPair].status[whichRead], result[whichAlignmentPair].mapq[whichRead], locations[whichRead], result[whichAlignmentPair].direction[whichRead],
@@ -448,8 +450,10 @@ SimpleReadWriter::writePairs(
         //
         for (int whichReadPair = 0; whichReadPair < nResults; whichReadPair++) {
             for (int firstOrSecond = 0; firstOrSecond < NUM_READS_PER_PAIR; firstOrSecond++) {
+                // adjust for write order
+                int writeFirstOrSecond = firstOrSecond ^ (finalLocations[0][whichReadPair] > finalLocations[1][whichReadPair]);
                 writer->advance((unsigned)usedBuffer[firstOrSecond][whichReadPair],
-                    finalLocations[firstOrSecond][whichReadPair] == InvalidGenomeLocation ? finalLocations[1 - firstOrSecond][whichReadPair] : finalLocations[firstOrSecond][whichReadPair]);
+                    finalLocations[writeFirstOrSecond][whichReadPair] == InvalidGenomeLocation ? finalLocations[1 - writeFirstOrSecond][whichReadPair] : finalLocations[writeFirstOrSecond][whichReadPair]);
             }
         }
 
