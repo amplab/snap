@@ -65,7 +65,7 @@ struct SortBlock
     size_t      start;
     size_t      bytes;
 #ifdef VALIDATE_SORT
-	unsigned	minLocation, maxLocation;
+	GenomeLocation	minLocation, maxLocation;
 #endif
     // for mergesort phase
     DataReader* reader;
@@ -153,7 +153,7 @@ public:
 #ifndef VALIDATE_SORT
 	void addBlock(size_t start, size_t bytes);
 #else
-    void addBlock(size_t start, size_t bytes, unsigned minLocation, unsigned maxLocation);
+    void addBlock(size_t start, size_t bytes, GenomeLocation minLocation, GenomeLocation maxLocation);
 #endif
 
 private:
@@ -184,7 +184,8 @@ SortedDataFilter::onAdvance(
     SortEntry entry(batchOffset, bytes, location);
 #ifdef VALIDATE_SORT
 		if (memcmp(data, "BAM", 3) != 0 && memcmp(data, "@HD", 3) != 0) { // skip header block
-			unsigned loc, len;
+            GenomeLocation loc;
+			GenomeDistance len;
 			parent->format->getSortInfo(parent->genome, data, bytes, &loc, &len);
 			_ASSERT(loc == location);
 		}
@@ -213,11 +214,12 @@ SortedDataFilter::onNextBatch(
         soft_exit(1);
     }
     size_t target = 0;
-	unsigned previous = 0;
+	GenomeLocation previous = 0;
     for (VariableSizeVector<SortEntry>::iterator i = locations.begin(); i != locations.end(); i++) {
 #ifdef VALIDATE_SORT
 		if (locations.size() > 1) { // skip header block
-			unsigned loc, len;
+            GenomeLocation loc;
+            GenomeDistance len;
 			parent->format->getSortInfo(parent->genome, fromBuffer + i->offset, i->length, &loc, &len);
 			_ASSERT(loc >= previous);
 			previous = loc;
@@ -236,8 +238,8 @@ SortedDataFilter::onNextBatch(
     }
 	int first = offset == 0;
 #ifdef VALIDATE_SORT
-	unsigned minLocation = locations.size() > first ? locations[first].location : 0;
-	unsigned maxLocation = locations.size() > first ? locations[locations.size()-1].location : UINT32_MAX;
+	GenomeLocation minLocation = locations.size() > first ? locations[first].location : 0;
+    GenomeLocation maxLocation = locations.size() > first ? locations[locations.size() - 1].location : UINT32_MAX;
     parent->addBlock(offset + header, bytes - header, minLocation, maxLocation);
 #else
     parent->addBlock(offset + header, bytes - header);
@@ -278,8 +280,8 @@ SortedDataFilterSupplier::addBlock(
     size_t start,
     size_t bytes
 #ifdef VALIDATE_SORT
-	, unsigned minLocation
-	, unsigned maxLocation
+	, GenomeLocation minLocation
+	, GenomeLocation maxLocation
 #endif
 	)
 {
@@ -385,7 +387,7 @@ SortedDataFilterSupplier::mergeSort()
 	int lastRefID = -1, lastPos = 0;
     while (queue.size() > 0) {
 #if VALIDATE_SORT
-		unsigned check;
+        GenomeLocation check;
 		queue.peek(&check);
 		_ASSERT(check >= current);
 #endif
@@ -397,6 +399,9 @@ SortedDataFilterSupplier::mergeSort()
         char* writeBuffer;
         size_t writeBytes;
         writer->getBuffer(&writeBuffer, &writeBytes);
+        const int NBLOCKS = 20;
+        SortBlock oldBlocks[NBLOCKS];
+        int oldBlockIndex = 0;
         while (b->location <= limit) {
 #if VALIDATE_SORT
 			_ASSERT(b->location >= b->minLocation && b->location <= b->maxLocation);
@@ -428,6 +433,8 @@ SortedDataFilterSupplier::mergeSort()
             writer->advance(b->length);
             writeBytes -= b->length;
             writeBuffer += b->length;
+            oldBlocks[oldBlockIndex] = *b;
+            oldBlockIndex = (oldBlockIndex + 1) % NBLOCKS;
             b->reader->advance(b->length);
             _ASSERT(b->location >= current);
             current = b->location;
