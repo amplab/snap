@@ -225,28 +225,70 @@ BAMReader::createPairedReadSupplierGenerator(
     return queue;
 }
 
-const char* BAMAlignment::CodeToSeq = "=ACMGRSVTWYHKDBN";
+const char* BAMAlignment::CodeToSeq =   "=ACMGRSVTWYHKDBN";
+const char *BAMAlignment::CodeToSeqRC = "NTGKCYWBASRDMHVN"; // Bill's best guess for things other than ATCG, not that it matters for SNAP
+_uint16 BAMAlignment::CodeToSeqPair[256];
+_uint16 BAMAlignment::CodeToSeqPairRC[256];
 _uint8 BAMAlignment::SeqToCode[256];
 const char* BAMAlignment::CodeToCigar = "MIDNSHP=X";
 _uint8 BAMAlignment::CigarToCode[256];
 _uint8 BAMAlignment::CigarCodeToRefBase[9] = {1, 0, 1, 1, 0, 0, 1, 1, 1};
+
+const _uint8 BAM_CIGAR_M = 0;
+const _uint8 BAM_CIGAR_I = 1;
+const _uint8 BAM_CIGAR_D = 2;
+const _uint8 BAM_CIGAR_N = 3;
+const _uint8 BAM_CIGAR_S = 4;
+const _uint8 BAM_CIGAR_H = 5;
+const _uint8 BAM_CIGAR_P = 6;
+const _uint8 BAM_CIGAR_EQUAL = 7;
+const _uint8 BAM_CIGAR_X = 8;
 
 BAMAlignment::_init BAMAlignment::_init_;
 
     void
 BAMAlignment::decodeSeq(
     char* o_sequence,
-    _uint8* nibbles,
+    const _uint8* nibbles,
     int bases)
 {
+
+
+    _uint16 *o_sequence_pairs = (_uint16 *)o_sequence;
+    int pairs = bases / 2;
+    for (int i = 0; i < pairs; i++) {
+        o_sequence_pairs[i] = CodeToSeqPair[nibbles[i]];
+    }
+
+    if (bases % 2 == 1) {
+        o_sequence[bases - 1] = CodeToSeq[nibbles[bases / 2] >> 4];
+    }
+
+#ifdef _DEBUG   // Make sure the new one does the same thing as the old.
     for (int i = 0; i < bases; i++) {
         int bit = 1 ^ (i & 1);
         int n = (*nibbles >> (bit << 2)) & 0xf; // extract nibble without branches
-        nibbles += 1^bit;
-        *o_sequence++ = BAMAlignment::CodeToSeq[n];
+        nibbles += 1 ^ bit;
+        _ASSERT(o_sequence[i] == BAMAlignment::CodeToSeq[n]);
+    }
+#endif // _DEBUG
+}
+    void
+BAMAlignment::decodeSeqRC(
+char* o_sequence,
+const _uint8* nibbles,
+int bases)
+{
+    _uint16 *o_sequence_pairs = (_uint16 *)o_sequence;
+    int pairs = bases / 2;
+    for (int i = 0; i < pairs; i++) {
+        o_sequence_pairs[pairs-i-1] = CodeToSeqPairRC[nibbles[i]];
+    }
+
+    if (bases % 2 == 1) {
+        o_sequence[0] = CodeToSeqRC[nibbles[bases / 2] >> 4];
     }
 }
-
     void
 BAMAlignment::decodeQual(
     char* o_qual,
@@ -255,6 +297,17 @@ BAMAlignment::decodeQual(
 {
     for (int i = 0; i < bases; i++) {
         o_qual[i] = CIGAR_QUAL_TO_SAM[((_uint8*)quality)[i]];
+    }
+}
+
+    void
+BAMAlignment::decodeQualRC(
+    char* o_qual,
+    char* quality,
+    int bases)
+{
+    for (int i = 0; i < bases; i++) {
+        o_qual[bases-i-1] = CIGAR_QUAL_TO_SAM[((_uint8*)quality)[i]];
     }
 }
 
@@ -280,6 +333,54 @@ BAMAlignment::decodeCigar(
     o_cigar[i++] = 0;
     return ops == 0;
 }
+
+    void 
+BAMAlignment::getClippingFromCigar(
+    _uint32 *cigar, 
+    int ops, 
+    unsigned *o_frontClipping, 
+    unsigned *o_backClipping, 
+    unsigned *o_frontHardClipping, 
+    unsigned *o_backHardClipping)
+{
+    *o_frontHardClipping = 0;   // Gets overwritten if we have any
+    *o_frontClipping = 0;
+    *o_backHardClipping = 0;
+    *o_backClipping = 0;
+
+    if (0 == ops) return;
+
+    if ((*cigar & 0xf) == BAM_CIGAR_H) {
+        *o_frontHardClipping = *cigar >> 4;
+        cigar++;
+        ops--;
+        if (0 == ops) {
+            return;   // What a strange cigar string, all hard clip!
+        }
+    }
+
+    if ((*cigar & 0xf) == BAM_CIGAR_S) {
+        *o_frontClipping = *cigar >> 4;
+        cigar++;
+        ops--;
+        if (0 == ops) {
+            return;
+        }
+    }
+
+    if ((cigar[ops - 1] & 0xf) == BAM_CIGAR_H) {
+        *o_backHardClipping = cigar[ops - 1] >> 4;
+        ops--;
+        if (0 == ops) {
+            return;
+        }
+    }
+
+    if ((cigar[ops - 1] & 0xf) == BAM_CIGAR_S) {
+        *o_backClipping = cigar[ops - 1] >> 4;
+    }
+}
+
 
     void
 BAMAlignment::encodeSeq(
@@ -322,6 +423,12 @@ BAMAlignment::_init::_init()
     for (int i = 1; i < 16; i++) {
         SeqToCode[CodeToSeq[i]] = i;
     }
+
+    for (int i = 0; i < 256; i++) {
+        CodeToSeqPair[i] = CodeToSeq[i >> 4] | (CodeToSeq[i & 0xf] << 8); // If this looks backwards, recall that the machines are little-endian
+        CodeToSeqPairRC[i] = (CodeToSeqRC[i >> 4] << 8) | CodeToSeqRC[i & 0xf]; // Doubled backwards == forward
+    }
+
     memset(CigarToCode, 0, 256);
     for (int i = 1; i < 9; i++) {
         CigarToCode[CodeToCigar[i]] = i;
@@ -467,19 +574,17 @@ BAMReader::getReadFromLine(
         *out_genomeLocation = genomeLocation;
     }
 
-    // todo: only convert to text if needed, compute clipping directly from binary
-    const char* cigarBuffer;
-    {
-        char *writableCigarBuffer = getExtra(min(MAX_K * 5, MAX_SEQ_LENGTH));
-        if (! BAMAlignment::decodeCigar(writableCigarBuffer, MAX_SEQ_LENGTH, bam->cigar(), bam->n_cigar_op)) {
-            cigarBuffer = ""; // todo: fail?
-        } else {
-            cigarBuffer = writableCigarBuffer;
-        }
-    }
-
-
     if (NULL != cigar) {
+        const char* cigarBuffer;
+        {
+            char *writableCigarBuffer = getExtra(min(MAX_K * 5, MAX_SEQ_LENGTH));
+            if (!BAMAlignment::decodeCigar(writableCigarBuffer, MAX_SEQ_LENGTH, bam->cigar(), bam->n_cigar_op)) {
+                cigarBuffer = ""; // todo: fail?
+            }
+            else {
+                cigarBuffer = writableCigarBuffer;
+            }
+        }
         *cigar = cigarBuffer;
     }
 
@@ -487,11 +592,23 @@ BAMReader::getReadFromLine(
         _ASSERT(bam->l_seq < MAX_SEQ_LENGTH);
 		char* seqBuffer = getExtra(bam->l_seq);
         char* qualBuffer = getExtra(bam->l_seq);
-        BAMAlignment::decodeSeq(seqBuffer, bam->seq(), bam->l_seq);
-        BAMAlignment::decodeQual(qualBuffer, bam->qual(), bam->l_seq);
 
         unsigned originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping;
-        Read::computeClippingFromCigar(cigarBuffer, &originalFrontClipping, &originalBackClipping, &originalFrontHardClipping, &originalBackHardClipping);
+
+        if (bam->FLAG & SAM_REVERSE_COMPLEMENT) {
+            BAMAlignment::decodeSeqRC(seqBuffer, bam->seq(), bam->l_seq);
+            BAMAlignment::decodeQualRC(qualBuffer, bam->qual(), bam->l_seq);
+
+            //
+            // Get the clipping, but reverse the outputs front/back because this is an RC read.
+            //
+            BAMAlignment::getClippingFromCigar(bam->cigar(), bam->n_cigar_op, &originalBackClipping, &originalFrontClipping, &originalBackHardClipping, &originalFrontHardClipping);
+        } else {
+            BAMAlignment::decodeSeq(seqBuffer, bam->seq(), bam->l_seq);
+            BAMAlignment::decodeQual(qualBuffer, bam->qual(), bam->l_seq);
+
+            BAMAlignment::getClippingFromCigar(bam->cigar(), bam->n_cigar_op, &originalFrontClipping, &originalBackClipping, &originalFrontHardClipping, &originalBackHardClipping);
+        }
 
         const char *rnext;
         unsigned rnextLen;
@@ -505,9 +622,6 @@ BAMReader::getReadFromLine(
         read->init(bam->read_name(), bam->l_read_name - 1, seqBuffer, qualBuffer, bam->l_seq, genomeLocation, bam->MAPQ, bam->FLAG,
             originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping, rnext, rnextLen, bam->next_pos + 1, true);
         read->setBatch(data->getBatch());
-        if (bam->FLAG & SAM_REVERSE_COMPLEMENT) {
-            read->becomeRC();
-        }
         read->clip(clipping);
     }
 

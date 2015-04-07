@@ -355,7 +355,7 @@ SimpleReadWriter::writePairs(
                         reads[1 - whichRead], result[whichAlignmentPair].status[1 - whichRead], locations[1 - whichRead], result[whichAlignmentPair].direction[1 - whichRead],
                         result[whichAlignmentPair].alignedAsPair)) {
 
-                        if (0 == addFrontClipping) {
+                        if (0 == addFrontClipping || locations[whichRead] == InvalidGenomeLocation) {
                             //
                             // We failed because we ran out of buffer.
                             //

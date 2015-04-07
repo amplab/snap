@@ -69,7 +69,6 @@ typedef HANDLE EventObject;
 #define bit_rotate_left64(value, shift) _rotl64(value, shift)
 
 int getpagesize();
-
 #else   // _MSC_VER
 
 #include <pthread.h>

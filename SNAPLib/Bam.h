@@ -133,6 +133,9 @@ struct BAMAlignment
     // conversions
 
     static const char* CodeToSeq;
+    static const char* CodeToSeqRC;
+    static _uint16 CodeToSeqPair[256];
+    static _uint16 CodeToSeqPairRC[256];
     static _uint8 SeqToCode[256];
     static const char* CodeToCigar;
     static _uint8 CigarToCode[256];
@@ -140,9 +143,12 @@ struct BAMAlignment
     static int GetCigarOpCode(_uint32 op) { return op & 0xf; }
     static int GetCigarOpCount(_uint32 op) { return op >> 4; }
     
-    static void decodeSeq(char* o_sequence, _uint8* nibbles, int bases);
+    static void decodeSeq(char* o_sequence, const _uint8* nibbles, int bases);
     static void decodeQual(char* o_qual, char* quality, int bases);
+    static void decodeSeqRC(char* o_sequence, const _uint8* nibbles, int bases);
+    static void decodeQualRC(char* o_qual, char* quality, int bases);
     static bool decodeCigar(char* o_cigar, int cigarSize, _uint32* cigar, int ops);
+    static void getClippingFromCigar(_uint32 *cigar, int ops, unsigned *o_frontClipping, unsigned *o_backClipping, unsigned *o_frontHardClipping, unsigned *o_backHardClipping);
 
     static void encodeSeq(_uint8* nibbles, char* ascii, int length);
 
