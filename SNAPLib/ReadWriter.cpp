@@ -364,6 +364,13 @@ SimpleReadWriter::writePairs(
                             goto blownBuffer;
                         }
 
+                        if (1 == firstOrSecond) {
+                            //
+                            // If the location of the second read changed, we need to redo the first one as well, because it includes an offset to the second read
+                            //
+                            secondReadLocationChanged = true;
+                        }
+
                         const Genome::Contig *originalContig = genome->getContigAtLocation(locations[whichRead]);
                         const Genome::Contig *newContig = genome->getContigAtLocation(locations[whichRead] + addFrontClipping);
                         if (newContig != originalContig || NULL == newContig || locations[whichRead] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
@@ -379,12 +386,6 @@ SimpleReadWriter::writePairs(
                                 reads[whichRead]->setAdditionalFrontClipping(cumulativePositiveAddFrontClipping[firstOrSecond]);
                             }
                             locations[whichRead] += addFrontClipping;
-                            if (1 == firstOrSecond) {
-                                //
-                                // If the location of the second read changed, we need to redo the first one as well, because it includes an offset to the second read
-                                //
-                                secondReadLocationChanged = true;
-                            }
                         }
                     } // While formatting didn't work
                     tentativeUsed += usedBuffer[firstOrSecond][whichAlignmentPair];

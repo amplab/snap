@@ -423,7 +423,7 @@ AlignerOptions::parse(
 		}
 		//
 		// Check that the parameter is actually numeric.  This is to avoid having someone do "-om -anotherSwitch" and
-		// having the additional switche silently consumed here.
+		// having the additional switch silently consumed here.
 		//
 		if (argv[n + 1][0] < '0' || argv[n + 1][0] > '9') {
 			WriteErrorMessage("-om requires a numerical parameter.\n");
@@ -472,7 +472,7 @@ AlignerOptions::parse(
         }
         //
         // Check that the parameter is actually numeric.  This is to avoid having someone do "-wbs -anotherSwitch" and
-        // having the additional switche silently consumed here.
+        // having the additional switch silently consumed here.
         //
         if (argv[n + 1][0] < '0' || argv[n + 1][0] > '9') {
             WriteErrorMessage("-wbs requires a numerical parameter.\n");
