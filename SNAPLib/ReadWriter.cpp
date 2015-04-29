@@ -452,7 +452,7 @@ SimpleReadWriter::writePairs(
         for (int whichReadPair = 0; whichReadPair < nResults; whichReadPair++) {
             for (int firstOrSecond = 0; firstOrSecond < NUM_READS_PER_PAIR; firstOrSecond++) {
                 // adjust for write order
-                int writeFirstOrSecond = firstOrSecond ^ (finalLocations[0][whichReadPair] > finalLocations[1][whichReadPair]);
+                int writeFirstOrSecond = (!!firstOrSecond) ^ (finalLocations[0][whichReadPair] > finalLocations[1][whichReadPair]); // goofy looking !! converts int to bool
                 writer->advance((unsigned)usedBuffer[firstOrSecond][whichReadPair],
                     finalLocations[writeFirstOrSecond][whichReadPair] == InvalidGenomeLocation ? finalLocations[1 - writeFirstOrSecond][whichReadPair] : finalLocations[writeFirstOrSecond][whichReadPair]);
             }
