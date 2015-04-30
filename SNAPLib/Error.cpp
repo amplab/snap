@@ -84,6 +84,6 @@ WriteProgressCounter(const char *counterName, _int64 increment)
         return;
     }
 
-    fprintf(stderr,"reporter:counter:SNAP,%s,%ld\n", counterName, increment);
-    fflush(stderr);
+    fprintf(stderr,"reporter:counter:SNAP,%s,%lld\n", counterName, increment);
+	fflush(stderr);
 }

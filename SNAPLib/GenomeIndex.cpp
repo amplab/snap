@@ -288,7 +288,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         WriteErrorMessage("GenomeIndex::saveToDirectory: Failed to save the genome itself\n");
         return false;
     }
-    fprintf(stderr,"%lds\n", (timeInMillis() + 500 - start) / 1000);
+	fprintf(stderr,"%llds\n", (timeInMillis() + 500 - start) / 1000);
 
 	GenomeIndex *index = new GenomeIndex();
     index->genome = NULL;   // We always delete the index when we're done, but we delete the genome first to save space during the overflow table build.
@@ -676,7 +676,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
                 fprintf(histogramFile,"%d\t%d\n", i, histogram[i]);
             }
         }
-        fprintf(histogramFile, "%ld larger than %u with %ld total genome locations, largest seed %ld\n", countOfTooBigForHistogram, maxHistogramEntry, sumOfTooBigForHistogram, largestSeed);
+        fprintf(histogramFile, "%d larger than %d with %d total genome locations, largest seed %d\n", countOfTooBigForHistogram, maxHistogramEntry, sumOfTooBigForHistogram, largestSeed);
         fclose(histogramFile);
         delete [] histogram;
     }
@@ -728,7 +728,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         return false;
     }
 
-    fprintf(indexFile,"%d %d %d %lu %d %d %d %lu %d %d", GenomeIndexFormatMajorVersion, GenomeIndexFormatMinorVersion, index->nHashTables, 
+    fprintf(indexFile,"%d %d %d %lld %d %d %d %lld %d %d", GenomeIndexFormatMajorVersion, GenomeIndexFormatMinorVersion, index->nHashTables, 
         index->overflowTableSize, seedLen, chromosomePaddingSize, hashTableKeySize, totalBytesWritten, large ? 0 : 1, locationSize); 
 
     fclose(indexFile);
