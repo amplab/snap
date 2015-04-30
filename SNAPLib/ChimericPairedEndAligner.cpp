@@ -200,7 +200,7 @@ void ChimericPairedEndAligner::align(
 
 #ifdef _DEBUG
     if (_DumpAlignments) {
-        printf("ChimericPairedEndAligner: (%u, %u) score (%d, %d), MAPQ (%d, %d)\n\n\n",result->location[0], result->location[1],
+      printf("ChimericPairedEndAligner: (%lu, %lu) score (%d, %d), MAPQ (%d, %d)\n\n\n", GenomeLocationAsInt64(result->location[0]), GenomeLocationAsInt64(result->location[1]),
             result->score[0], result->score[1], result->mapq[0], result->mapq[1]);
     }
 #endif // _DEBUG

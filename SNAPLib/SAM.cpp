@@ -919,7 +919,7 @@ SAMFormat::writeHeader(
         for (int i = 0; i < numContigs; i++) {
             GenomeLocation start = contigs[i].beginningLocation;
             GenomeLocation end = ((i + 1 < numContigs) ? contigs[i+1].beginningLocation : genomeLen) - context.genome->getChromosomePadding();
-            bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%u\n", contigs[i].name, end - start);
+            bytesConsumed += snprintf(header + bytesConsumed, headerBufferSize - bytesConsumed, "@SQ\tSN:%s\tLN:%ld\n", contigs[i].name, end - start);
 
             if (bytesConsumed >= headerBufferSize) {
                 // todo: increase buffer size (or change to write in batch
@@ -1249,8 +1249,8 @@ SAMFormat::writeRead(
             readGroupString = read->getReadGroup();
         }
     }
-    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s\n",
-        qnameLen, read->getId(),
+    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%ld\t%d\t%s\t%s\t%ld\t%ld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s\n",
+	(int)qnameLen, read->getId(),
         flags,
         contigName,
         positionInContig,
@@ -1420,7 +1420,7 @@ SAMFormat::computeCigarString(
     unsigned                    backHardClipping,
     GenomeLocation              genomeLocation,
     Direction                   direction,
-	bool						useM,
+    bool			useM,
     int *                       o_editDistance,
     int *                       o_addFrontClipping
 )
@@ -1456,10 +1456,10 @@ SAMFormat::computeCigarString(
             snprintf(hardClipBefore, sizeof(hardClipBefore), "%uH", frontHardClipping);
         }
         if (basesClippedBefore + extraBasesClippedBefore > 0) {
-            snprintf(clipBefore, sizeof(clipBefore), "%lluS", basesClippedBefore + extraBasesClippedBefore);
+            snprintf(clipBefore, sizeof(clipBefore), "%ldS", basesClippedBefore + extraBasesClippedBefore);
         }
         if (basesClippedAfter + extraBasesClippedAfter > 0) {
-            snprintf(clipAfter, sizeof(clipAfter), "%lluS", basesClippedAfter + extraBasesClippedAfter);
+            snprintf(clipAfter, sizeof(clipAfter), "%ldS", basesClippedAfter + extraBasesClippedAfter);
         }
         if (backHardClipping > 0) {
             snprintf(hardClipAfter, sizeof(hardClipAfter), "%uH", backHardClipping);
@@ -1482,8 +1482,8 @@ SAMFormat::validateCigarString(
 	GenomeDistance offsetInData = 0;
 	const char *reference = genome->getSubstring(genomeLocation, dataLength);
 	if (NULL == reference) {
-		WriteErrorMessage("validateCigarString: couldn't look up genome data for location %lld\n", genomeLocation);
-		soft_exit(1);
+	    WriteErrorMessage("validateCigarString: couldn't look up genome data for location %ld\n", GenomeLocationAsInt64(genomeLocation));
+	    soft_exit(1);
 	}
 	GenomeDistance offsetInReference = 0;
 	bool sawNonH = false;	// This is to make sure that the clipping types (H & S) occur only at the beginning or end of the cigar string.

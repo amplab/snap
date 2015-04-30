@@ -1331,7 +1331,7 @@ public:
         if (mates.size() > 0) {
             WriteErrorMessage("duplicate matching ended with %d unmatched reads:\n", mates.size());
             for (MateMap::iterator i = mates.begin(); i != mates.end(); i = mates.next(i)) {
-                WriteErrorMessage("%u%s/%u%s\n", i->key.locations[0], i->key.isRC[0] ? "rc" : "", i->key.locations[1], i->key.isRC[1] ? "rc" : "");
+	      WriteErrorMessage("%u%s/%u%s\n", GenomeLocationAsInt64(i->key.locations[0]), i->key.isRC[0] ? "rc" : "", GenomeLocationAsInt64(i->key.locations[1]), i->key.isRC[1] ? "rc" : "");
             }
         }
 #endif

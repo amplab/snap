@@ -140,7 +140,7 @@ Genome::saveToFile(const char *fileName) const
         return false;
     } 
 
-    fprintf(saveFile,"%lld %d\n",nBases, nContigs);
+    fprintf(saveFile,"%ld %d\n",nBases, nContigs);
     char *curChar = NULL;
 
     for (int i = 0; i < nContigs; i++) {
@@ -148,7 +148,7 @@ Genome::saveToFile(const char *fileName) const
          curChar = contigs[i].name + n;
          if (*curChar == ' '){ *curChar = '_'; }
         }
-        fprintf(saveFile,"%lld %s\n",contigs[i].beginningLocation, contigs[i].name);
+        fprintf(saveFile,"%ld %s\n", GenomeLocationAsInt64(contigs[i].beginningLocation), contigs[i].name);
     }
 
 	//
@@ -236,7 +236,7 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
 	}
 
     _int64 contigStart;
-    if (1 != sscanf(contigNameBuffer, "%lld", &contigStart)) {
+    if (1 != sscanf(contigNameBuffer, "%ld", &contigStart)) {
         WriteErrorMessage("Unable to parse contig start in genome file '%s', '%s%'\n", fileName, contigNameBuffer);
         soft_exit(1);
     }
@@ -320,7 +320,7 @@ Genome::openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDist
     char linebuf[2000];
     char *retval = (*file)->gets(linebuf, sizeof(linebuf));
 
-    if (NULL == retval || 2 != sscanf(linebuf,"%lld %d\n", nBases, nContigs)) {
+    if (NULL == retval || 2 != sscanf(linebuf,"%ld %d\n", nBases, nContigs)) {
         (*file)->close();
         delete *file;
         *file = NULL;

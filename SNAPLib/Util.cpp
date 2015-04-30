@@ -161,10 +161,10 @@ char *FormatUIntWithCommas(_uint64 val, char *outputBuffer, size_t outputBufferS
 	while (x > 0) {
 		char tempBuf[5];
 		if (x > 999) {
-			sprintf(tempBuf, ",%03lld", x % 1000);
+			sprintf(tempBuf, ",%03lu", x % 1000);
 			_ASSERT(strlen(tempBuf) == 4);
 		} else {
-			sprintf(tempBuf, "%d", x);
+			sprintf(tempBuf, "%lu", x);
 		}
 
 		_ASSERT(offset >= strlen(tempBuf));

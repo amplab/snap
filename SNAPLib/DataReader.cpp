@@ -1677,15 +1677,15 @@ DecompressDataReader::findPointer(
     for (int i = 0; i < count; i++) {
         Entry* e = &entries[i];
         if (e->compressed <= p && p < e->compressed + e->compressedValid) {
-            sprintf(result, "compressed #%d @ %lld", i, (char*)p - e->compressed);
+            sprintf(result, "compressed #%d @ %ld", i, (char*)p - e->compressed);
             break;
         }
         if (e->decompressed <= p && p < e->decompressed + extraBytes) {
-            sprintf(result, "decompressed #%d %lld", i, (char*) p - e->decompressed);
+            sprintf(result, "decompressed #%d %ld", i, (char*) p - e->decompressed);
             break;
         }
         if (e->decompressed + extraBytes <= p && p < e->decompressed + totalExtra) {
-            sprintf(result, "extra #%d %lld", i, (char*) p - e->decompressed - extraBytes);
+            sprintf(result, "extra #%d %ld", i, (char*) p - e->decompressed - extraBytes);
             break;
         }
     }
@@ -1805,7 +1805,7 @@ DecompressDataReader::decompressThread(
                     soft_exit(1);
                 }
                 if (input > entry->compressedValid || zip->BSIZE() >= BAM_BLOCK || zip->ISIZE() > BAM_BLOCK) {
-                    fprintf(stderr, "error reading BAM file at offset %lld\n", reader->getFileOffset());
+                    fprintf(stderr, "error reading BAM file at offset %ld\n", reader->getFileOffset());
                     soft_exit(1);
                 }
             } while (input < entry->compressedStart);

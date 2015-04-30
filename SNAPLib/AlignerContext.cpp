@@ -343,16 +343,18 @@ AlignerContext::printStats()
 		);
 
     if (NULL != perfFile) {
-        fprintf(perfFile, "%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%lld\t%lld\tt%.0f\n",
+        _int64 reads = max(stats->totalReads, (_int64) 1);
+        double time = (double)(max(alignTime, (_int64) 1));
+        fprintf(perfFile, "%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%ld\t%.02f%%\t%ld\tt%.0f\n",
                 maxHits_, maxDist_, 
-                100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
-				100.0 * stats->singleHits / stats->totalReads,
-				100.0 * stats->multiHits / stats->totalReads,
-				100.0 * stats->notFound / stats->totalReads,
+                100.0 * usefulReads / reads,
+		100.0 * stats->singleHits / stats->totalReads,
+		100.0 * stats->multiHits / stats->totalReads,
+		100.0 * stats->notFound / stats->totalReads,
                 stats->lvCalls,
-				100.0 * stats->alignedAsPairs / stats->totalReads,
+		100.0 * stats->alignedAsPairs / stats->totalReads,
                 stats->totalReads,
-                (1000.0 * usefulReads) / max(alignTime, (_int64) 1));
+                (1000.0 * usefulReads) / time);
 
         fprintf(perfFile,"\n");
     }
