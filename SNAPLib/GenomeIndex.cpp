@@ -1622,7 +1622,7 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
     unsigned hashTableKeySize;
     unsigned smallHashTable;
     unsigned locationSize;
-    if (10 != (nRead = sscanf(indexFileBuf,"%d %d %d %lu %d %d %d %lu %d %d", &majorVersion, &minorVersion, &nHashTables, &overflowTableSize, &seedLen, &chromosomePadding, 
+    if (10 != (nRead = sscanf(indexFileBuf,"%d %d %d %lld %d %d %d %lld %d %d", &majorVersion, &minorVersion, &nHashTables, &overflowTableSize, &seedLen, &chromosomePadding, 
 											&hashTableKeySize, &hashTablesFileSize, &smallHashTable, &locationSize))) {
         if (3 == nRead || 6 == nRead || 7 == nRead || 9 == nRead) {
             WriteErrorMessage("Indices built by versions before 1.0dev.21 are no longer supported.  Please rebuild your index.\n");
