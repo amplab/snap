@@ -120,7 +120,7 @@ SAMReader::create(
     _int64 startingOffset, 
     _int64 amountOfFileToProcess)
 {
-    DataReader* data = supplier->getDataReader(bufferCount, maxLineLen, 0.0);
+    DataReader* data = supplier->getDataReader(bufferCount, maxLineLen, 0.0, 0);
     SAMReader *reader = new SAMReader(data, context);
     reader->init(fileName, startingOffset, amountOfFileToProcess);
     return reader;

@@ -68,9 +68,9 @@ BAMReader::init(
     // todo: integrate supplier models
     // might need up to 3x extra for expanded sequence + quality + cigar data
     if (!strcmp("-", fileName)) {
-        data = DataSupplier::GzipBamStdio->getDataReader(bufferCount, MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
+        data = DataSupplier::GzipBamStdio->getDataReader(bufferCount, MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor, 0);
     } else {
-        data = DataSupplier::GzipBamDefault->getDataReader(bufferCount, MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor);
+        data = DataSupplier::GzipBamDefault->getDataReader(bufferCount, MAX_RECORD_LENGTH, 3.0 * DataSupplier::ExpansionFactor, 0);
     }
 
     if (! data->init(fileName)) {

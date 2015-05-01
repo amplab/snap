@@ -62,7 +62,7 @@ FASTQReader::create(
     _int64 amountOfFileToProcess,
     const ReaderContext& context)
 {
-    DataReader* data = supplier->getDataReader(bufferCount, maxReadSizeInBytes, 0.0);
+    DataReader* data = supplier->getDataReader(bufferCount, maxReadSizeInBytes, 0.0, 0);
     FASTQReader* fastq = new FASTQReader(data, context);
     if (! fastq->init(fileName)) {
         WriteErrorMessage("Unable to initialize FASTQReader for file %s\n", fileName);
@@ -347,7 +347,7 @@ PairedInterleavedFASTQReader::PairedInterleavedFASTQReader(
 PairedInterleavedFASTQReader::create(DataSupplier* supplier, const char *fileName, int bufferCount, _int64 startingOffset, _int64 amountOfFileToProcess,
                                         const ReaderContext& context)
 {
-    DataReader* data = supplier->getDataReader(bufferCount, 2 * maxReadSizeInBytes, 0.0); // 2* because we read in pairs
+    DataReader* data = supplier->getDataReader(bufferCount, 2 * maxReadSizeInBytes, 0.0, 0); // 2* because we read in pairs
     PairedInterleavedFASTQReader* fastq = new PairedInterleavedFASTQReader(data, context);
     if (! fastq->init(fileName)) {
         WriteErrorMessage("Unable to initialize PairedInterleavedFASTQReader for file %s\n", fileName);

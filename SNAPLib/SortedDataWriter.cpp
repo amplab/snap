@@ -122,6 +122,7 @@ public:
         const char* i_sortedFileName,
         DataWriter::FilterSupplier* i_sortedFilterSupplier,
         size_t i_bufferSize,
+        size_t i_bufferSpace,
         FileEncoder* i_encoder = NULL)
         :
         format(i_fileFormat),
@@ -132,6 +133,7 @@ public:
         sortedFileName(i_sortedFileName),
         sortedFilterSupplier(i_sortedFilterSupplier),
         bufferSize(i_bufferSize),
+        bufferSpace(i_bufferSpace),
         blocks()
     {
         InitializeExclusiveLock(&lock);
@@ -169,6 +171,7 @@ private:
     ExclusiveLock                   lock; // for adding blocks
     SortBlockVector                 blocks;
     size_t                          bufferSize;
+    size_t                          bufferSpace;
 
 	friend class SortedDataFilter;
 };
@@ -327,8 +330,12 @@ SortedDataFilterSupplier::mergeSort()
     }
     DataSupplier* readerSupplier = DataSupplier::Default; // autorelease
     // setup - open all files, read first block, begin read for second
+    if (blocks.size() > 5000) {
+        WriteErrorMessage("warning: merging %d blocks could be slow, try increasing sort memory with -sm option\n", blocks.size());
+    }
     for (SortBlockVector::iterator i = blocks.begin(); i != blocks.end(); i++) {
-        i->reader = readerSupplier->getDataReader(1, MAX_READ_LENGTH * 8, 0.0); // todo: standardize max length
+        i->reader = readerSupplier->getDataReader(1, MAX_READ_LENGTH * 8, 0.0,
+            min(1UL << 23, max(1UL << 17, bufferSpace / blocks.size()))); // 128kB to 8MB buffer space per block
         i->reader->init(tempFileName);
         i->reader->reinit(i->start, i->bytes);
     }
@@ -492,10 +499,9 @@ DataWriterSupplier::sorted(
     FileEncoder* encoder)
 {
     const int bufferCount = 3;
-    const size_t bufferSize = tempBufferMemory > 0
-        ? tempBufferMemory / (bufferCount * numThreads)
-        : max(maxBufferSize, ((size_t) (genome ? genome->getCountOfBases() : 0) / 3) / bufferCount);
+    const size_t bufferSpace = tempBufferMemory > 0 ? tempBufferMemory : (numThreads * (size_t)1 << 30);
+    const size_t bufferSize = bufferSpace / (bufferCount * numThreads);
     DataWriter::FilterSupplier* filterSupplier =
-        new SortedDataFilterSupplier(format, genome, tempFileName, sortedFileName, sortedFilterSuppler, bufferSize, encoder);
+        new SortedDataFilterSupplier(format, genome, tempFileName, sortedFileName, sortedFilterSuppler, bufferSize, bufferSpace, encoder);
     return DataWriterSupplier::create(tempFileName, bufferSize, filterSupplier, NULL, bufferCount);
 }

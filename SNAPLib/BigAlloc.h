@@ -31,33 +31,49 @@ inline unsigned RoundUpToPageSize(unsigned size)
 //#define PROFILE_BIGALLOC
 
 #ifdef PROFILE_BIGALLOC
+
 #define BigAlloc(s) BigAllocProfile((s), NULL, __FUNCTION__)
 #define BigAlloc2(s,p) BigAllocProfile((s), (p), __FUNCTION__)
+#define BigReserve(s) BigReserveProfile((s), NULL, NULL, __FUNCTION__)
+#define BigCommit(p, s) BigCommitProfile((p), (s), __FUNCTION__)
 
 void *BigAllocProfile(
         size_t      sizeToAllocate,
         size_t      *sizeAllocated = NULL,
         const char* caller = NULL);
 
+void *BigReserveProfile(
+    size_t      sizeToReserve,
+    size_t      *sizeReserved = NULL,
+    size_t      *pageSize = NULL,
+    const char* caller = NULL);
+
+bool BigCommitProfile(
+    void        *memoryToCommit,
+    size_t      sizeToCommit,
+    const char* caller = NULL);
+
 #else
+
 void *BigAlloc(
         size_t      sizeToAllocate,
         size_t      *sizeAllocated = NULL);
 #define BigAlloc2(s,p) BigAlloc((s), (p))
+
+void *BigReserve(
+    size_t      sizeToReserve,
+    size_t      *sizeReserved = NULL,
+    size_t      *pageSize = NULL);
+
+bool BigCommit(
+    void        *memoryToCommit,
+    size_t      sizeToCommit);
+
 #endif
 
 void PrintBigAllocProfile();
 
 void BigDealloc(void *memory);
-
-void *BigReserve(
-        size_t      sizeToReserve,
-        size_t      *sizeReserved = NULL,
-        size_t      *pageSize = NULL);
-
-bool BigCommit(
-        void        *memoryToCommit,
-        size_t      sizeToCommit);
 
 //
 // This class is used to allocate a group of objects all onto a single set of big pages.  It requires knowing

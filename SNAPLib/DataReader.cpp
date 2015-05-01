@@ -45,7 +45,7 @@ class ReadBasedDataReader : public DataReader
 {
 public:
 
-    ReadBasedDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor);
+    ReadBasedDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor, size_t bufferSpace = 0);
 
     virtual ~ReadBasedDataReader();
     
@@ -86,7 +86,7 @@ protected:
     // must hold the lock to call
     virtual void addBuffer();
   
-    static const unsigned bufferSize = 4 * 1024 * 1024 - 4096;
+    static const unsigned BUFFER_SIZE = 4 * 1024 * 1024 - 4096;
 
     enum BufferState {Empty, Reading, Full, InUse};
 
@@ -155,13 +155,18 @@ private:
 	_int64				 amountAdvancedThroughUnderlyingStoreByUs;
 	unsigned			 nHeaderBuffersAllocated;
 	bool			     hitEOFReadingHeader;
+protected:
+    const size_t         bufferSize;
 };
 
 ReadBasedDataReader::ReadBasedDataReader(
     unsigned i_nBuffers,
     _int64 i_overflowBytes,
-    double extraFactor)
-    : DataReader(), nBuffers(i_nBuffers), overflowBytes(i_overflowBytes), maxBuffers(i_nBuffers * (i_nBuffers == 1 ? 2 : 4)),
+    double extraFactor,
+    size_t i_bufferSpace)
+    : DataReader(), nBuffers(i_nBuffers), overflowBytes(i_overflowBytes),
+    maxBuffers(i_nBuffers * (i_nBuffers == 1 ? 2 : 4)),
+    bufferSize(i_bufferSpace > 0 ? i_bufferSpace / (i_nBuffers * 2) : BUFFER_SIZE),
 	headerBuffer(NULL), headerBufferSize(0), amountAdvancedThroughUnderlyingStoreByUs(0), 
 	headerExtra(NULL), headerExtraSize(0), startedReadingHeader(false), headerBuffersOutstanding(0), nHeaderBuffersAllocated(0),
 	hitEOFReadingHeader(false)
@@ -393,8 +398,8 @@ ReadBasedDataReader::reinit(
 		bufferInfo[i].previous = (i == maxBuffers) ? -1 : i - 1;
 		bufferInfo[i].holds = 0;
 		bufferInfo[i].headerBuffer = true;
-		bufferInfo[i].validBytes = (int)__min(bytesRemaining, bufferSize);
-		bufferInfo[i].nBytesThatMayBeginARead = (int)((bytesRemaining <= bufferSize) ? bytesRemaining : __max(bufferInfo[i].validBytes - overflowBytes, 0));
+		bufferInfo[i].validBytes = (int)__min(bytesRemaining, (_int64) bufferSize);
+		bufferInfo[i].nBytesThatMayBeginARead = (int)((bytesRemaining <= (_int64) bufferSize) ? bytesRemaining : __max(bufferInfo[i].validBytes - overflowBytes, 0));
 		bufferInfo[i].offset = 0;
 		bufferInfo[i].fileOffset = fileOffset;
 		bufferInfo[i].batchID = nextBatchID++;
@@ -972,7 +977,7 @@ class StdioDataSupplier : public DataSupplier
 {
 public:
     StdioDataSupplier() : DataSupplier() {}
-    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor = 0.0)
+    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor = 0.0, size_t bufferSpace = 0)
     {
         if (supplied) {
             WriteErrorMessage("You can only use stdin input for one run per execution of SNAP (i.e., if you use ',' to run SNAP more than once without reloading the index, you can only use stdin once)\n");
@@ -996,7 +1001,7 @@ class WindowsOverlappedDataReader : public ReadBasedDataReader
 {
 public:
 
-    WindowsOverlappedDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor);
+    WindowsOverlappedDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor, size_t bufferSpace);
 
     virtual ~WindowsOverlappedDataReader();
     
@@ -1031,11 +1036,11 @@ public:
 
 };
 
-WindowsOverlappedDataReader::WindowsOverlappedDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor) :
-    ReadBasedDataReader(i_nBuffers, i_overflowBytes, extraFactor), fileName(NULL), hFile(INVALID_HANDLE_VALUE), endingOffset(0)
+WindowsOverlappedDataReader::WindowsOverlappedDataReader(unsigned i_nBuffers, _int64 i_overflowBytes, double extraFactor, size_t bufferSpace) :
+    ReadBasedDataReader(i_nBuffers, i_overflowBytes, extraFactor, bufferSpace), fileName(NULL), hFile(INVALID_HANDLE_VALUE), endingOffset(0)
 {
     readOffset.QuadPart = 0;
-    bufferLaps = (OVERLAPPED *)BigAlloc(sizeof(OVERLAPPED) * maxBuffers);
+    bufferLaps = (OVERLAPPED *)malloc(sizeof(OVERLAPPED) * maxBuffers);
     for (unsigned i = 0; i < i_nBuffers; i++) {
         bufferLaps[i].hEvent = CreateEvent(NULL,TRUE,FALSE,NULL);
         if (NULL == bufferLaps[i].hEvent) {
@@ -1050,7 +1055,7 @@ WindowsOverlappedDataReader::~WindowsOverlappedDataReader()
     for (unsigned i = 0; i < nBuffers; i++) {
        CloseHandle(bufferLaps[i].hEvent);
     }
-    BigDealloc(bufferLaps);
+    free(bufferLaps);
     bufferLaps = NULL;
     CloseHandle(hFile);
 }
@@ -1161,7 +1166,7 @@ WindowsOverlappedDataReader::startIo()
         _int64 finalStartOffset = min(fileSize.QuadPart, endingOffset);
         amountToRead = (unsigned)min(finalOffset - readOffset.QuadPart, (_int64) bufferSize);   // Cast OK because can't be longer than unsigned bufferSize
         info->isEOF = readOffset.QuadPart + amountToRead == finalOffset;
-        info->nBytesThatMayBeginARead = (unsigned)min(bufferSize - overflowBytes, finalStartOffset - readOffset.QuadPart);
+        info->nBytesThatMayBeginARead = (unsigned)min((_int64)bufferSize - overflowBytes, finalStartOffset - readOffset.QuadPart);
 
         _ASSERT(amountToRead >= info->nBytesThatMayBeginARead && (!info->isEOF || finalOffset == readOffset.QuadPart + amountToRead));
         ResetEvent(bufferLap->hEvent);
@@ -1263,10 +1268,10 @@ class WindowsOverlappedDataSupplier : public DataSupplier
 {
 public:
     WindowsOverlappedDataSupplier() : DataSupplier() {}
-    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor)
+    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor, size_t bufferSpace)
     {
         // add some buffers for read-ahead
-        return new WindowsOverlappedDataReader(bufferCount + (bufferCount > 1 ? 4 : 0), overflowBytes, extraFactor);
+        return new WindowsOverlappedDataReader(bufferCount + (bufferCount > 1 ? 4 : 0), overflowBytes, extraFactor, bufferSpace);
     }
 };
 
@@ -1983,7 +1988,7 @@ public:
         : DataSupplier(), inner(i_inner), blockSize(i_blockSize)
     {}
 
-    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor);
+    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor, size_t bufferSpace);
 
 private:
     DataSupplier* inner;
@@ -1994,14 +1999,15 @@ private:
 DecompressDataReaderSupplier::getDataReader(
     int bufferCount,
     _int64 overflowBytes,
-    double extraFactor)
+    double extraFactor,
+    size_t bufferSpace)
 {
     // adjust extra factor for compression ratio
     double expand = MAX_FACTOR * DataSupplier::ExpansionFactor;
     double totalFactor = expand * (1.0 + extraFactor);
     // get inner reader with no overflow since zlib can't deal with it
     // add 2 buffers for compression thread
-    DataReader* data = inner->getDataReader(bufferCount + 2, blockSize, totalFactor);
+    DataReader* data = inner->getDataReader(bufferCount + 2, blockSize, totalFactor, bufferSpace);
     // compute how many extra bytes are owned by this layer
     char* p;
     _int64 totalExtra;
@@ -2041,7 +2047,7 @@ public:
 
     virtual ~MemMapDataSupplier();
 
-    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor);
+    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor, size_t bufferSpace);
 
     FileMapper* getMapper(const char* fileName);
     void releaseMapper(const char* fileName);
@@ -2407,7 +2413,8 @@ MemMapDataSupplier::~MemMapDataSupplier()
 MemMapDataSupplier::getDataReader(
     int bufferCount,
     _int64 overflowBytes,
-    double extraFactor)
+    double extraFactor,
+    size_t bufferSpace /*not relevant*/)
 {
     _ASSERT(extraFactor >= 0 && overflowBytes >= 0);
     if (extraFactor == 0) {
