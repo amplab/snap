@@ -2055,7 +2055,7 @@ bool connectNamedPipes(NamedPipe *pipe)
 	    //
 	    // Release any exclusive lock on the toServer pipe that may have been left by a now-dead client
 	    //
-	    flock lock;
+	    struct flock lock;
 	    lock.l_type = F_UNLCK;
 	    lock.l_whence = SEEK_SET;
 	    lock.l_start = 0;
@@ -2114,7 +2114,7 @@ NamedPipe *OpenNamedPipe(const char *pipeName, bool serverSide)
 	    //
 	    // Take an exclusive lock on the toServer pipe so that only one client is sending at a time.
 	    //
-	    flock lock;
+	    struct flock lock;
 	    lock.l_type = F_WRLCK;
 	    lock.l_whence = SEEK_SET;
 	    lock.l_start = 0;
