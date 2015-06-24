@@ -738,7 +738,7 @@ SAMFormat::getSortInfo(
 }
 
 // which @RG line fields to put in aux data of every read
-const char* FileFormat::RGLineToAux = "IDLBPLPUSM";
+const char* FileFormat::RGLineToAux = "IDLBPU";
 
     void
 FileFormat::setupReaderContext(
