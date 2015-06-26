@@ -560,9 +560,9 @@ public:
     inline bool put(K key, V value)
     {
         int pos; int i;
-        init(pos, i, key);
+        this->init(pos, i, key);
         if (pos == this->capacity) {
-            add(key, value);
+            this->add(key, value);
             return true;
         }
         Entry* slot = NULL;

@@ -2,11 +2,11 @@
 
 Module Name:
 
-    MultiInputReadSupplier.cpp
+    PairedReadMatcher.cpp
 
 Abstract:
 
-    A read supplier that combines other read suppliers.  It's used when there are muliple input files to process.
+    Match paired-end reads coming in from different streams
 
 Authors:
 

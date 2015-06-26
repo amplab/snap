@@ -50,7 +50,7 @@ inline double exp10(double x) { return exp(x * LOG10); }
 const void* memmem(const void* data, const size_t dataLength, const void* pattern, const size_t patternLength);
 
 typedef CRITICAL_SECTION    UnderlyingExclusiveLock;
-typedef HANDLE SingleWaiterObject;      // This is an event in Windows.  It's just a synchronization object that you can wait for and set.
+typedef HANDLE SingleWaiterObject;      // This is an event in Windows.  It's just a synchronization object that you can wait for and set.  "Single" means only one thread can wait on it at a time.
 typedef HANDLE EventObject;
 
 #define PATH_SEP '\\'
@@ -69,7 +69,6 @@ typedef HANDLE EventObject;
 #define bit_rotate_left64(value, shift) _rotl64(value, shift)
 
 int getpagesize();
-
 #else   // _MSC_VER
 
 #include <pthread.h>
@@ -140,7 +139,7 @@ inline bool _BitScanForward64(unsigned long *result, _uint64 x) {
 class SingleWaiterObjectImpl;
 
 typedef pthread_mutex_t UnderlyingExclusiveLock;
-typedef SingleWaiterObjectImpl *SingleWaiterObject;
+typedef SingleWaiterObjectImpl *SingleWaiterObject; // "Single" means only one thread can wait on it at a time.
 
 class EventObjectImpl;
 typedef EventObjectImpl *EventObject;

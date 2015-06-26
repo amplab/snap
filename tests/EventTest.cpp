@@ -7,13 +7,13 @@ struct EventTest;
 struct TestContext {
   EventTest* parent;
   int index;
+  SingleWaiterObject singleWaiterObject;
 
   void init(EventTest* parent, int i);
 };
 
 struct EventTest {
   EventObject event;
-  SingleWaiterObject single;
   TestContext* contexts;
   bool bind;
   volatile int started;
@@ -26,6 +26,7 @@ struct EventTest {
 void TestContext::init(EventTest* i_parent, int i) {
     this->parent = i_parent;
     index = i;
+    CreateSingleWaiterObject(&singleWaiterObject);
 }
 
 void waitEqual(int value, volatile int* variable, const char* message)
@@ -87,46 +88,49 @@ void testSingleWaitersMain(void* c)
 {
   TestContext* context = (TestContext*) c;
   if (context->parent->bind) {
-    BindThreadToProcessor(context->index);
+    BindThreadToProcessor(context->index%GetNumberOfProcessors());
   }
   //printf("start thread %d%s\n", context->index, context->parent->bind ? " bind" : "");
   InterlockedIncrementAndReturnNewValue(&context->parent->started);
-  WaitForSingleWaiterObject(&context->parent->single);
+  WaitForSingleWaiterObject(&context->singleWaiterObject);
   //printf("proceed thread %d\n", context->index);
   InterlockedIncrementAndReturnNewValue(&context->parent->proceeded);
+  ResetSingleWaiterObject(&context->singleWaiterObject);
 }
 
 void EventTest::testSingleWaiters(int threads, bool i_bind)
 {
   //printf("testing single %d threads%s\n", threads, i_bind ? " (bind)" : "");
   contexts = new TestContext[threads];
-  CreateSingleWaiterObject(&single);
   started = proceeded = 0;
   bind = i_bind;
   for (int i = 0; i < threads; i++) {
     contexts[i].init(this, i);
     StartNewThread(testSingleWaitersMain, &contexts[i]);
   }
-  SleepForMillis(50);
+  //SleepForMillis(50);
   char buf[100];
   sprintf(buf, "single started %d%s\n", threads, i_bind ? " bind" : "");
   waitEqual(threads, &started, buf);
   for (int i = 0; i < threads; i++) {
-    SignalSingleWaiterObject(&single);
+    SignalSingleWaiterObject(&contexts[i].singleWaiterObject);
     sprintf(buf, "single proceeded %d of %d%s\n", i, threads, i_bind ? " bind" : "");
     waitEqual(i + 1, &proceeded, buf);
-    SleepForMillis(10); // allow more threads to release
+    //SleepForMillis(10); // allow more threads to release
     sprintf(buf, "single after proceeded %d of %d%s\n", i, threads, i_bind ? " bind" : "");
     ASSERT_EQ_M(i + 1, proceeded, buf);
   }
-  DestroySingleWaiterObject(&single);
+
+  for (int i = 0; i < threads; i++) {
+      DestroySingleWaiterObject(&contexts[i].singleWaiterObject);
+  }
 }
 
 TEST_F(EventTest, "single waiters") {
-  for (int i = 0; i < 1000; i++) {
+  for (int i = 0; i < 50; i++) {
     for (int threads = 1; threads <= 64; threads *= 2) {
       for (int bind = 0; bind < (threads <= 16 ? 2 : 1); bind++) {
-	testSingleWaiters(threads, bind);
+	    testSingleWaiters(threads, bind); 
       }
     }
   }

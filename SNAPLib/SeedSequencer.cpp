@@ -2,7 +2,7 @@
 
 Module Name:
 
-    SeedSequencer.h
+    SeedSequencer.cpp
 
 Abstract:
 

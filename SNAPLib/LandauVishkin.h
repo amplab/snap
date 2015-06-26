@@ -50,6 +50,13 @@ static inline void memsetint(int* p, int value, int count)
 // Computes the edit distance between two strings without returning the edits themselves.
 // Set TEXT_DIRECTION to -1 to run backwards through the text.
 template<int TEXT_DIRECTION = 1> class LandauVishkin {
+
+//
+// Macros to make arrays with negative indices seem "natural" in the code.
+//
+#define L(e,d)			L_zero			[(e) * (2 * MAX_K + 1) + (d)]
+#define A(e,d)			A_zero			[(e) * (2 * MAX_K + 1) + (d)]
+
 public:
     LandauVishkin()
 {
@@ -58,7 +65,10 @@ public:
         soft_exit(1);
     }
 
-    memsetint(L[0], -2, (MAX_K+1)*(2*MAX_K+1));
+    memsetint(L_space, -2, (MAX_K + 1) * (2 * MAX_K + 1));
+
+    L_zero = L_space + MAX_K;   // The address of L(0,0)
+    A_zero = A_space + MAX_K;   // The address of A(0,0)
 
     //
     // Initialize dTable, which is used to avoid a branch misprediction in our inner loop.
@@ -92,7 +102,8 @@ public:
 	// substitution.
 	//
 	// Because d can be negative, the L array doesn't really use L[e][d].  Instead, it uses L[e][MAX_K+d], because MAX_K is
-	// the largest possible edit distance, and hence d can never be less than -MAX_K, so MAX_K + d >= 0.
+	// the largest possible edit distance, and hence d can never be less than -MAX_K, so MAX_K + d >= 0.  However, the L and A macros
+    // conceal this internally.
 	//
 	// Also, because of the way the alignment algorithms work, sometimes SNAP wants to run the edit distance
 	// backward.  This is built as a template with TEXT_DIRECTION either 1 for forward or -1 for backward, just to make
@@ -146,31 +157,10 @@ public:
     const char* t = text;
     int end = __min(patternLen, textLen);
     const char* pend = pattern + end;
-    while (p < pend) {
-        _uint64 x;
-        if (TEXT_DIRECTION == 1) {
-            x = *((_uint64*) p) ^ *((_uint64*) t);
-        } else {
-            _uint64 T = *(_uint64 *)(t - 7);
-            _uint64 tSwap = ByteSwapUI64(T);
-            x = *((_uint64*) p) ^ tSwap;
-        }
 
-        if (x) {
-            unsigned long zeroes;
-            CountTrailingZeroes(x, zeroes);
-            zeroes >>= 3;
-            L[0][MAX_K] = __min((int)(p - pattern + zeroes), end);
-            goto done1;
-        }
-        p += 8;
-        t += 8 * TEXT_DIRECTION;
-    }
-    L[0][MAX_K] = end;
+    L(0, 0) = countPerfectMatch(p, t, end);
 
-done1:
-
-    if (L[0][MAX_K] == end) {
+    if (L(0, 0) == end) {
         int result = (patternLen > end ? patternLen - end : 0); // Could need some deletions at the end
         if (NULL != matchProbability) {
             *matchProbability = lv_perfectMatchProbability[patternLen];    // Becuase the chance of a perfect match is < 1
@@ -192,48 +182,47 @@ done1:
         // dTable is just precomputed d = (d > 0 ? -d : -d+1) to save the branch misprediction from (d > 0)
         int i =0;
         for (d = 0; d != e+1 ; i++, d = dTable[i]) {
-            int best = L[e-1][MAX_K+d] + 1; // up
-            A[e][MAX_K+d] = 'X';
-            int left = L[e-1][MAX_K+d-1];
-            if (left > best) {
-                best = left;
-                A[e][MAX_K+d] = 'D';
-            }
-            int right = L[e-1][MAX_K+d+1] + 1;
-            if (right > best) {
-                best = right;
-                A[e][MAX_K+d] = 'I';
-            }
+            int best = L(e-1, d) + 1; // up
+            A(e, d) = 'X';
 
             const char* p = pattern + best;
             const char* t = (text + d * TEXT_DIRECTION) + best * TEXT_DIRECTION;
-            if (*p == *t) {
+            if (*p == *t && best >= 0) {
                 int end = __min(patternLen, textLen - d);
                 const char* pend = pattern + end;
 
-                while (true) {
-                    _uint64 x;
-                    if (TEXT_DIRECTION == 1) {
-                        x = *((_uint64*) p) ^ *((_uint64*) t);
-                    } else {
-                        _uint64 T = *(_uint64 *)(t - 7);
-                        _uint64 tSwap = ByteSwapUI64(T);
-                        x = *((_uint64*) p) ^ tSwap;
-                    }
-                    if (x) {
-                        unsigned long zeroes;
-                        CountTrailingZeroes(x, zeroes);
-                        zeroes >>= 3;
-                        best = __min((int)(p - pattern) + (int)zeroes, end);
-                        break;
-                    }
-                    p += 8;
-                    if (p >= pend) {
-                        best = end;
-                        break;
-                    }
-                    t += 8 * TEXT_DIRECTION;
-                }
+                best += countPerfectMatch(p, t, (int)(end - (p - pattern)));
+            }
+
+
+            int left = L(e-1, d-1);
+            p = pattern + left;
+            t = (text + d * TEXT_DIRECTION) + left * TEXT_DIRECTION;
+            if (*p == *t && left >= 0) {
+                int end = __min(patternLen, textLen - d);
+                const char* pend = pattern + end;
+
+                left += countPerfectMatch(p, t, (int)(end - (p - pattern)));
+            }
+
+            if (left > best) {
+                best = left;
+                A(e, d) = 'D';
+            }
+
+            int right = L(e-1, d+1) + 1;
+            p = pattern + right;
+            t = (text + d * TEXT_DIRECTION) + right * TEXT_DIRECTION;
+            if (*p == *t && right >= 0) {
+                int end = __min(patternLen, textLen - d);
+                const char* pend = pattern + end;
+
+                right += countPerfectMatch(p, t, (int)(end - (p - pattern)));
+            }
+
+            if (right > best) {
+                best = right;
+                A(e, d) = 'I';
             }
 
 			if (best == patternLen) {
@@ -241,7 +230,7 @@ done1:
 				// We're through on this iteration.
 				//
 
-				if ('X' == A[e][MAX_K + d]) {
+				if ('X' == A(e, d)) {
 					//
 					// The last step wasn't an indel, so we're sure it's the right one.
 					//
@@ -257,7 +246,7 @@ done1:
 				}
 			} // if best==patternLen
 
-            L[e][MAX_K+d] = best;
+            L(e, d) = best;
         } // for d
 
 		if (MAX_K + 1 != lastBestD) {
@@ -286,26 +275,26 @@ got_answer:
 		// figure out our string.
 		int curD = lastBestD;
 		for (int curE = e; curE >= 1; curE--) {
-			backtraceAction[curE] = A[curE][MAX_K + curD];
+			backtraceAction[curE] = A(curE, curD);
 			if (backtraceAction[curE] == 'I') {
 				backtraceD[curE] = curD + 1;
-				backtraceMatched[curE] = L[curE][MAX_K + curD] - L[curE - 1][MAX_K + curD + 1] - 1;
+				backtraceMatched[curE] = L(curE, curD) - L(curE - 1, curD + 1) - 1;
 			} else if (backtraceAction[curE] == 'D') {
 				backtraceD[curE] = curD - 1;
-				backtraceMatched[curE] = L[curE][MAX_K + curD] - L[curE - 1][MAX_K + curD - 1];
+				backtraceMatched[curE] = L(curE, curD) - L(curE - 1, curD - 1);
 			} else { // backtraceAction[curE] == 'X'
 				backtraceD[curE] = curD;
-				backtraceMatched[curE] = L[curE][MAX_K + curD] - L[curE - 1][MAX_K + curD] - 1;
+				backtraceMatched[curE] = L(curE, curD) - L(curE - 1, curD) - 1;
 			}
 			curD = backtraceD[curE];
 #ifdef TRACE_LV
-			printf("%d %d: %d %c %d %d\n", curE, curD, L[curE][MAX_K + curD],
+			printf("%d %d: %d %c %d %d\n", curE, curD, L(curE, curD),
 				backtraceAction[curE], backtraceD[curE], backtraceMatched[curE]);
 #endif
 		}
 
 		int curE = 1;
-		int offset = L[0][MAX_K + 0];
+		int offset = L(0, 0);
 		_ASSERT(*o_netIndel == 0);
 		while (curE <= e) {
 			// First write the action, possibly with a repeat if it occurred multiple times with no exact matches
@@ -367,8 +356,43 @@ got_answer:
     void operator delete(void *ptr, BigAllocator *allocator) {/*Do nothing.  The memory is freed when the allocator is deleted.*/}
  
 private:
-    // TODO: For long reads, we should include a version that only has L be 2 x (2*MAX_K+1) cells
-    int L[MAX_K+1][2 * MAX_K + 1];
+    //
+    // Count characters of a perfect match until a mismatch or the end of one or the other string, the
+    // minimum length of which is represented by the end parameter.  Advances p & t to the first mismatch
+    // or first character beyond the end.
+    //
+    inline int countPerfectMatch(const char *& p, const char *& t, int availBytes)      // This is essentially duplicated in LandauVishkinWithCigar
+    {
+	    const char *pBase = p;
+	    const char *pend = p + availBytes;
+	    while (true) {
+		    _uint64 x;
+		    if (TEXT_DIRECTION == 1) {
+			    x = *((_uint64*)p) ^ *((_uint64*)t);
+		    } else {
+			    _uint64 T = *(_uint64 *)(t - 7);
+			    _uint64 tSwap = ByteSwapUI64(T);
+			    x = *((_uint64*)p) ^ tSwap;
+		    }
+
+		    if (x) {
+			    unsigned long zeroes;
+			    CountTrailingZeroes(x, zeroes);
+			    zeroes >>= 3;
+			    return __min((int)(p - pBase) + (int)zeroes, availBytes);
+		    } // if (x)
+
+		    p += 8;
+		    if (p >= pend) {
+			    return availBytes;
+		    }
+
+		    t += 8 * TEXT_DIRECTION;
+	    } // while true
+
+	    return 0;
+    }
+
 
     //
     // Table of d values for the inner loop in computeEditDistance.  This allows us to avoid the line d = (d > 0 ? -d : -d+1), which causes
@@ -376,13 +400,37 @@ private:
     //
     int dTable[2 * (MAX_K + 1) + 1];
     
+	//
+	// Note on state arrays:
+	// 
+	// We have several arrays that need to be indexed on edit distance and net indels.  Because net indels is signed, we want them
+	// to have their second coordinate (d) run from [-MAX_K .. MAX_K].  When computing the opening or closing of an indel, we add more than
+	// one edit distance, which means we compute LInsert[e][x] based on L[e-OpenPenalty][x+1].  When we're at edit distance < the gap open
+	// penalty, of course we can't fill in LInsert; however, rather than just checking it each time (and incurring a branch prediction miss), 
+	// we just let it happily index into negative space, which is initialized with -2 and so will never be used.  So, we want our arrays to
+	// run from [-MAX_GAP..MAX_K][-MAX_K .. MAX_K].  To do this, we just allocate the space and compute a pointer that would be at [0][0].
+	// We use macros to do the indexing, because it's tricky to convince C++ to do this kind of thing statically.
+	//
+	// Also, conceptually these arrays are local to each computation.  They're here to save memory allocation and initialization overhead.
+	// Note that the important parts for the initialization is never overwritten, though the rest is.
+	//
+
+
+    // TODO: For long reads, we should include a version that only has L be 2 x (2*MAX_K+1) cells
+    int L_space[(MAX_K + 1) * (2 * MAX_K + 1)];
+	int *L_zero;
+
     // Action we did to get to each position: 'D' = deletion, 'I' = insertion, 'X' = substitution.  This is needed to compute match probability.
-    char A[MAX_K+1][2 * MAX_K + 1];
+	char A_space[(MAX_K + 1) * (2 * MAX_K + 1)];
+	char *A_zero;
 
     // Arrays for backtracing the actions required to match two strings
     char backtraceAction[MAX_K+1];
     int  backtraceMatched[MAX_K+1];
     int  backtraceD[MAX_K+1];
+
+#undef  L
+#undef  A
 };
 
 void setLVProbabilities(double *i_indelProbabilities, double *i_phredToProbability, double mutationProbability);

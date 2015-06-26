@@ -94,6 +94,7 @@ struct AlignerOptions : public AbstractOptions
     bool                ignoreSecondaryAlignments; // on input, default true
     int                 maxSecondaryAlignmentAdditionalEditDistance;
 	int					maxSecondaryAlignments;
+    int                 maxSecondaryAlignmentsPerContig;
     bool                preserveClipping;
     float               expansionFactor;
     bool                noUkkonen;
@@ -102,6 +103,8 @@ struct AlignerOptions : public AbstractOptions
 	unsigned			minReadLength;
 	bool				mapIndex;
 	bool				prefetchIndex;
+    size_t              writeBufferSize;
+    bool                dropIndexBeforeSort;
     
     static bool         useHadoopErrorMessages; // This is static because it's global (and I didn't want to push the options object to every place in the code)
     static bool         outputToStdout;         // Likewise

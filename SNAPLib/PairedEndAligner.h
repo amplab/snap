@@ -46,6 +46,7 @@ public:
         int                   *nSecondaryResults,
         PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
         int                    singleSecondaryBufferSize,
+        int                    maxSecondaryAlignmentsToReturn,
         int                   *nSingleEndSecondaryResultsForFirstRead,
         int                   *nSingleEndSecondaryResultsForSecondRead,
         SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly

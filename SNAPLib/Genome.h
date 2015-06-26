@@ -146,7 +146,7 @@ inline _int64 GenomeLocationAsInt64(GenomeLocation genomeLocation)
 }
 
 inline unsigned GenomeLocationAsInt32(GenomeLocation genomeLocation) {
-    _ASSERT(genomeLocation <= 0xffffffff && genomeLocation>= 0);
+    _ASSERT(genomeLocation <= 0xffffffff && genomeLocation>= 0);    // One might wonder about the value of an _ASSERT in code that's only non-_DEBUG.  Think of it as an uppity comment.  :-)
     return (unsigned)genomeLocation;
 }
 
@@ -259,6 +259,7 @@ public:
         const Contig *getContigAtLocation(GenomeLocation location) const;
         const Contig *getContigForRead(GenomeLocation location, unsigned readLength, GenomeDistance *extraBasesClippedBefore) const;
         const Contig *getNextContigAfterLocation(GenomeLocation location) const;
+        int getContigNumAtLocation(GenomeLocation location) const;    // Returns the contig number, which runs from 0 .. getNumContigs() - 1.
 
 // unused        Genome *copy() const {return copy(true,true,true);}
 // unused        Genome *copyGenomeOneSex(bool useY, bool useM) const {return copy(!useY,useY,useM);}

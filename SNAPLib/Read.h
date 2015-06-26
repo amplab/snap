@@ -187,11 +187,19 @@ public:
     // write out header
 	virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine, bool omitSQLines) = 0;
 
-    // write a single read, return true if successful
-    virtual bool writeRead(const ReaderContext& context, Read *read, AlignmentResult result, int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment) = 0;
+    //
+    // write a batch of single reads, the first one of which is a primary alignment and the rest secondary.
+    //
+    virtual bool writeReads(const ReaderContext& context, Read *read, SingleAlignmentResult *results, int nResults, bool firstIsPrimary) = 0;
 
-    // write a pair of reads, return true if successful
-    virtual bool writePair(const ReaderContext& context, Read *read0, Read *read1, PairedAlignmentResult *result, bool secondaryAlignment) = 0;
+    //
+    // Write a batch of paired alignments, including some single secondary alignments.  reads needs to be exactly two reads, singleAlignmentResult is a pointer to two arrays of
+    // SingleAlignmentResults for single alignments of the respective reads, and the number of results is given by the two ints pointed to by nSingleResults.  The first paired
+    // result is primary, all others are secondary.
+    //
+    virtual bool writePairs(const ReaderContext& context, Read **reads /* array of size 2 */, PairedAlignmentResult *result, int nResults,
+        SingleAlignmentResult **singleResults /* array of size 2*/, int *nSingleResults /* array of size 2*/, bool firstIsPrimary) = 0;
+
 
     // close out this thread
     virtual void close() = 0;
@@ -221,7 +229,7 @@ public:
             upcaseForwardRead(NULL), auxiliaryData(NULL), auxiliaryDataLength(0),
             readGroup(NULL), originalAlignedLocation(-1), originalMAPQ(-1), originalSAMFlags(0),
             originalFrontClipping(0), originalBackClipping(0), originalFrontHardClipping(0), originalBackHardClipping(0),
-            originalRNEXT(NULL), originalRNEXTLength(0), originalPNEXT(0)
+            originalRNEXT(NULL), originalRNEXTLength(0), originalPNEXT(0), additionalFrontClipping(0)
         {}
 
         Read(const Read& other) :  localBufferAllocationOffset(0)
@@ -343,6 +351,7 @@ public:
             originalRNEXT = other.originalRNEXT;
             originalRNEXTLength = other.originalRNEXTLength;
             originalPNEXT = other.originalPNEXT;
+            additionalFrontClipping = other.additionalFrontClipping;
         }
 
         //
@@ -389,6 +398,7 @@ public:
             unclippedLength = dataLength;
             frontClippedLength = 0;
             clippingState = NoClipping;
+            additionalFrontClipping = 0;
             originalAlignedLocation = i_originalAlignedLocation;
             originalMAPQ = i_originalMAPQ;
             originalSAMFlags = i_originalSAMFlags;
@@ -456,8 +466,13 @@ public:
         inline const char *getOriginalRNEXT() {return originalRNEXT;}
         inline unsigned getOriginalRNEXTLength() {return originalRNEXTLength;}
         inline unsigned getOriginalPNEXT() {return originalPNEXT;}
-        inline void addFrontClipping(int clipping)
-        { data += clipping; dataLength -= clipping; }
+        inline void setAdditionalFrontClipping(int clipping)
+        {
+            data += clipping - additionalFrontClipping;
+            dataLength -= clipping - additionalFrontClipping;
+            quality += clipping - additionalFrontClipping;
+            additionalFrontClipping = clipping;
+        }
 
         inline char* getAuxiliaryData(unsigned* o_length, bool * o_isSAM) const
         {
@@ -648,6 +663,7 @@ private:
         unsigned unclippedLength;
         unsigned frontClippedLength;
         ReadClippingType clippingState;
+        int additionalFrontClipping;
 
         //
         // Alignment data that was in the read when it was read from a file.  While this should probably also be the place to put

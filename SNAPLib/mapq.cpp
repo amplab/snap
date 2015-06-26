@@ -2,7 +2,7 @@
 
 Module Name:
 
-    mapq.h
+    mapq.cpp
 
 Abstract:
 

@@ -86,7 +86,9 @@ SingleAlignerContext::runIterationThread()
             result.mapq = 0;
             result.score = 0;
             result.location = InvalidGenomeLocation;
-            writeRead(read, result, false);
+            if (NULL != readWriter && options->passFilter(read, NotFound, false)) {
+                readWriter->writeReads(readerContext, read, &result, 1, true);
+            }
         }
         delete supplier;
         return;
@@ -94,16 +96,17 @@ SingleAlignerContext::runIterationThread()
 
     int maxReadSize = MAX_READ_LENGTH;
 
-    SingleAlignmentResult *secondaryAlignments = NULL;
-    unsigned secondaryAlignmentBufferCount;
+    SingleAlignmentResult *alignmentResults = NULL;
+    unsigned alignmentResultBufferCount;
     if (maxSecondaryAlignmentAdditionalEditDistance < 0) {
-        secondaryAlignmentBufferCount = 0;
+        alignmentResultBufferCount = 1; // For the primary alignment
     } else {
-        secondaryAlignmentBufferCount = BaseAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, index->getSeedLength());
+        alignmentResultBufferCount = BaseAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, index->getSeedLength()) + 1; // +1 for the primary alignment
     }
-    size_t secondaryAlignmentBufferSize = sizeof(*secondaryAlignments) * secondaryAlignmentBufferCount;
+    size_t alignmentResultBufferSize = sizeof(*alignmentResults) * (alignmentResultBufferCount + 1); // +1 is for primary result
  
-    BigAllocator *allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(true, maxHits, maxReadSize, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage) + secondaryAlignmentBufferSize);
+    BigAllocator *allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(index, true, maxHits, maxReadSize, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxSecondaryAlignmentsPerContig) 
+        + alignmentResultBufferSize);
    
     BaseAligner *aligner = new (allocator) BaseAligner(
             index,
@@ -117,15 +120,14 @@ SingleAlignerContext::runIterationThread()
             noUkkonen,
             noOrderedEvaluation,
 			noTruncation,
+            maxSecondaryAlignmentsPerContig,
             NULL,               // LV (no need to cache in the single aligner)
             NULL,               // reverse LV
             stats,
             allocator);
 
-    if (maxSecondaryAlignmentAdditionalEditDistance >= 0) {
-        secondaryAlignments = (SingleAlignmentResult *)allocator->allocate(secondaryAlignmentBufferSize);
-    }
-
+    alignmentResults = (SingleAlignmentResult *)allocator->allocate(alignmentResultBufferSize);
+ 
     allocator->checkCanaries();
 
     aligner->setExplorePopularSeeds(options->explorePopularSeeds);
@@ -158,7 +160,12 @@ SingleAlignerContext::runIterationThread()
         // Skip the read if it has too many Ns or trailing 2 quality scores.
         if (read->getDataLength() < minReadLength || read->countOfNs() > maxDist) {
             if (readWriter != NULL && options->passFilter(read, NotFound, true)) {
-                readWriter->writeRead(readerContext, read, NotFound, 0, InvalidGenomeLocation, FORWARD, false);
+                SingleAlignmentResult result;
+                result.status = NotFound;
+                result.location = InvalidGenomeLocation;
+                result.mapq = 0;
+                result.direction = FORWARD;
+                readWriter->writeReads(readerContext, read, &result, 1, true);
             }
             continue;
         } else {
@@ -169,7 +176,6 @@ SingleAlignerContext::runIterationThread()
         _int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
 
-        SingleAlignmentResult result;
         int nSecondaryResults = 0;
 
 #ifdef LONG_READS
@@ -179,7 +185,7 @@ SingleAlignerContext::runIterationThread()
         }
 #endif
 
-		aligner->AlignRead(read, &result, maxSecondaryAlignmentAdditionalEditDistance, secondaryAlignmentBufferCount, &nSecondaryResults, secondaryAlignments);
+        aligner->AlignRead(read, alignmentResults, maxSecondaryAlignmentAdditionalEditDistance, alignmentResultBufferCount - 1, &nSecondaryResults, maxSecondaryAlignments, alignmentResults + 1);
 #ifdef LONG_READS
         aligner->setMaxK(oldMaxK);
 #endif
@@ -193,14 +199,35 @@ SingleAlignerContext::runIterationThread()
 
         allocator->checkCanaries();
 
+        updateStats(stats, read, alignmentResults[0].status, alignmentResults[0].score, alignmentResults[0].mapq);
 
-		writeRead(read, result, false);
+        if (NULL != readWriter) {
+            //
+            // Remove any reads that don't pass the filter, then send the remainder down to the writer.
+            //
+            bool containsPrimary = true;
+            for (int i = 0; i <= nSecondaryResults; i++) {
+                if (!options->passFilter(read, alignmentResults[i].status, false)) {
+                    if (i == 0) {
+                        containsPrimary = false;
+                    }
+                    //
+                    // Copy the last result here.
+                    //
+                    alignmentResults[i] = alignmentResults[nSecondaryResults];
+                    nSecondaryResults--;
 
-		for (int i = 0; i < __min(nSecondaryResults, maxSecondaryAlignments); i++) {
-            writeRead(read, secondaryAlignments[i], true);
+                    //
+                    // And back up so it gets checked.
+                    //
+                    i--;
+                }
+            } // For each result
+
+            readWriter->writeReads(readerContext, read, alignmentResults, nSecondaryResults + 1, containsPrimary);
+
         }
-        
-        updateStats(stats, read, result.status, result.score, result.mapq);
+
     }
 
     aligner->~BaseAligner(); // This calls the destructor without calling operator delete, allocator owns the memory.
@@ -210,18 +237,6 @@ SingleAlignerContext::runIterationThread()
     }
 
     delete allocator;   // This is what actually frees the memory.
-}
-    
-    void
-SingleAlignerContext::writeRead(
-    Read* read,
-    const SingleAlignmentResult &result,
-    bool secondaryAlignment
-    )
-{
-    if (readWriter != NULL && options->passFilter(read, result.status, false)) {
-        readWriter->writeRead(readerContext, read, result.status, result.mapq, result.location, result.direction, secondaryAlignment);
-    }
 }
 
     void

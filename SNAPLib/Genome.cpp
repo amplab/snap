@@ -408,6 +408,13 @@ Genome::getContigAtLocation(GenomeLocation location) const
     return NULL; // Should not be reached
 }
 
+    int
+Genome::getContigNumAtLocation(GenomeLocation location) const
+{
+    const Contig *contig = getContigAtLocation(location);
+    return (int)(contig - contigs);
+}
+
     const Genome::Contig *
 Genome::getNextContigAfterLocation(GenomeLocation location) const
 {

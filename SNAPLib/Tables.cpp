@@ -18,7 +18,6 @@ const char *TO_UPPER_CASE_DOT_TO_N = tables.getToUpperCaseDotToN();
 const char *PACKED_VALUE_BASE_RC = tables.getPackedValueBaseRC();
 const char *CIGAR_QUAL_TO_SAM = tables.getCigarQualToSam();
 
-
 Tables::Tables()
 {
     memset(complement, 0, sizeof(complement));

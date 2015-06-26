@@ -166,7 +166,8 @@ public:
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int* o_addFrontClipping,
         bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
-        AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD) const; 
+        AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
+        bool alignedAsPair = false) const; 
 
     // calculate data needed to write SAM/BAM record
     // very long argument list since this was extracted from
@@ -204,6 +205,7 @@ public:
         bool useM,
         bool hasMate,
         bool firstInPair,
+        bool alignedAsPair,
         Read * mate, 
         AlignmentResult mateResult,
         GenomeLocation mateLocation,

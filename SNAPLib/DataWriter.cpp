@@ -315,7 +315,7 @@ AsyncDataWriter::advance(
     _ASSERT((size_t)bytes <= bufferSize - batches[current].used);
     char* data = batches[current].buffer + batches[current].used;
     size_t batchOffset = batches[current].used;
-    batches[current].used = min(bufferSize, batchOffset + bytes);
+    batches[current].used = min<long long>(bufferSize, batchOffset + bytes);
     if (filter != NULL) {
         //_int64 start = timeInNanos();
         filter->onAdvance(this, batchOffset, data, bytes, location);
@@ -511,10 +511,10 @@ AsyncDataWriterSupplier::advance(
     DataWriterSupplier*
 DataWriterSupplier::create(
     const char* filename,
+    size_t bufferSize,
     DataWriter::FilterSupplier* filterSupplier,
     FileEncoder* encoder,
-    int count,
-    size_t bufferSize)
+    int count)
 {
     return new AsyncDataWriterSupplier(filename, filterSupplier, encoder, count, bufferSize);
 }

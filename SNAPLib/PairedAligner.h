@@ -49,8 +49,6 @@ protected:
 
     // for subclasses
 
-    virtual void writePair(Read* read0, Read* read1, PairedAlignmentResult* result, bool secondary, bool useful0, bool useful1);
-
     virtual void updateStats(PairedAlignerStats* stats, Read* read0, Read* read1, PairedAlignmentResult* result, bool useful0, bool useful1);
 
     bool isPaired() {return true;}

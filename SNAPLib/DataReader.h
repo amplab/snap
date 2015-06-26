@@ -154,7 +154,7 @@ public:
     
     virtual ~DataSupplier() {}
 
-    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor) = 0;
+    virtual DataReader* getDataReader(int bufferCount, _int64 overflowBytes, double extraFactor, size_t bufferSpace) = 0;
 
     //
     // creating specific factories

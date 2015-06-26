@@ -12,6 +12,11 @@ private:
 
     inline static void* allocate(size_t bytes)
     {
+#ifdef USE_DEVTEAM_OPTIONS
+        if (bytes > (1L << 23) && ! big) {
+            WriteErrorMessage("%s: allocate %lld - consider using BigAlloc\n", __FUNCTION__, bytes);
+        }
+#endif
         return big ? BigAlloc(bytes) : malloc(bytes);
     }
 

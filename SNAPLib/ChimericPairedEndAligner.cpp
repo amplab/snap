@@ -2,7 +2,7 @@
 
 Module Name:
 
-    ChimericPairedEndAligner.h
+    ChimericPairedEndAligner.cpp
 
 Abstract:
 
@@ -53,12 +53,13 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
 		bool				noTruncation,
        PairedEndAligner    *underlyingPairedEndAligner_,
 	   unsigned				minReadLength_,
+       int                  maxSecondaryAlignmentsPerContig,
         BigAllocator        *allocator)
 		: underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_)
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
-                                    maxSeedsFromCommandLine,  seedCoverage, minWeightToCheck,extraSearchDepth, noUkkonen, noOrderedEvaluation, noTruncation, &lv, &reverseLV, NULL, allocator);
+        maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, noUkkonen, noOrderedEvaluation, noTruncation, maxSecondaryAlignmentsPerContig, &lv, &reverseLV, NULL, allocator);
     
     underlyingPairedEndAligner->setLandauVishkin(&lv, &reverseLV);
 
@@ -75,9 +76,10 @@ ChimericPairedEndAligner::getBigAllocatorReservation(
         double          seedCoverage,
         unsigned        maxEditDistanceToConsider, 
         unsigned        maxExtraSearchDepth, 
-        unsigned        maxCandidatePoolSize)
+        unsigned        maxCandidatePoolSize,
+        int             maxSecondaryAlignmentsPerContig)
 {
-    return BaseAligner::getBigAllocatorReservation(false, maxHits, maxReadSize, seedLen, maxSeedsFromCommandLine, seedCoverage) + sizeof(ChimericPairedEndAligner) + sizeof(_uint64);
+    return BaseAligner::getBigAllocatorReservation(index, false, maxHits, maxReadSize, seedLen, maxSeedsFromCommandLine, seedCoverage, maxSecondaryAlignmentsPerContig) + sizeof(ChimericPairedEndAligner)+sizeof(_uint64);
 }
 
 
@@ -100,6 +102,7 @@ void ChimericPairedEndAligner::align(
         int                   *nSecondaryResults,
         PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
         int                    singleSecondaryBufferSize,
+        int                    maxSecondaryAlignmentsToReturn,
         int                   *nSingleEndSecondaryResultsForFirstRead,
         int                   *nSingleEndSecondaryResultsForSecondRead,
         SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly        
@@ -132,7 +135,9 @@ void ChimericPairedEndAligner::align(
 		// Let the LVs use the cache that we built up.
 		//
 		underlyingPairedEndAligner->align(read0, read1, result, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults,
-			singleSecondaryBufferSize, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead, singleEndSecondaryResults);
+            singleSecondaryBufferSize, maxSecondaryAlignmentsToReturn, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead, 
+            singleEndSecondaryResults);
+
 		_int64 end = timeInNanos();
 
 		result->nanosInAlignTogether = end - start;
@@ -178,7 +183,7 @@ void ChimericPairedEndAligner::align(
 			// We're using *nSingleEndSecondaryResultsForFirstRead because it's either 0 or what all we've seen (i.e., we know NUM_READS_PER_PAIR is 2)
 			singleAligner->AlignRead(read[r], &singleResult, maxEditDistanceForSecondaryResults,
 				singleSecondaryBufferSize - *nSingleEndSecondaryResultsForFirstRead, &singleEndSecondaryResultsThisTime,
-				singleEndSecondaryResults + *nSingleEndSecondaryResultsForFirstRead);
+                maxSecondaryAlignmentsToReturn, singleEndSecondaryResults + *nSingleEndSecondaryResultsForFirstRead);
 
 			*(resultCount[r]) = singleEndSecondaryResultsThisTime;
 

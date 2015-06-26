@@ -47,6 +47,7 @@ public:
         unsigned      maxBigHits_,
         unsigned      extraSearchDepth_,
         unsigned      maxCandidatePoolSize,
+        int           maxSecondaryAlignmentsPerContig_,
         BigAllocator  *allocator,
         bool          noUkkonen_,
         bool          noOrderedEvaluation_,
@@ -87,13 +88,15 @@ public:
         int                   *nSecondaryResults,
         PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
         int                    singleSecondaryBufferSize,
+        int                    maxSecondaryResultsToReturn,
         int                   *nSingleEndSecondaryResultsForFirstRead,
         int                   *nSingleEndSecondaryResultsForSecondRead,
         SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
         );
 
     static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxBigHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsFromCommandLine, 
-                                             double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize);
+                                             double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize,
+                                             int maxSecondaryAlignmentsPerContig);
 
     void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(IntersectingPairedEndAligner)); return allocator->allocate(size);}
     void operator delete(void *ptr, BigAllocator *allocator) {/* do nothing.  Memory gets cleaned up when the allocator is deleted.*/}
@@ -113,7 +116,8 @@ private:
     static const int NUM_SET_PAIRS = 2;         // A "set pair" is read0 FORWARD + read1 RC, or read0 RC + read1 FORWARD.  Again, it doesn't make sense to change this.
 
     void allocateDynamicMemory(BigAllocator *allocator, unsigned maxReadSize, unsigned maxBigHitsToConsider, unsigned maxSeedsToUse, 
-                               unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize);
+                               unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize,
+                               int maxSecondaryAlignmentsPerContig);
 
     GenomeIndex *   index;
     const Genome *  genome;
@@ -459,4 +463,14 @@ private:
     MergeAnchor *mergeAnchorPool;
     unsigned firstFreeMergeAnchor;
     unsigned mergeAnchorPoolSize;
+
+
+    struct HitsPerContigCounts {
+        _int64  epoch;              // Rather than zeroing this whole array every time, we just bump the epoch number; results with an old epoch are considered zero
+        int     hits;
+    };
+
+    HitsPerContigCounts *hitsPerContigCounts;   // How many alignments are we reporting for each contig.  Used to implement -mpc, otheriwse unallocated.
+    int maxSecondaryAlignmentsPerContig;
+    _int64 contigCountEpoch;
 };

@@ -88,18 +88,19 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
     extension->initialize();
     
     if (! extension->skipAlignment()) {
+        WriteStatusMessage("Aligning.\n");
+
+        beginIteration();
+
+        runTask();
+            
+        finishIteration();
+
         printStatsHeader();
-        do {
 
-            beginIteration();
+        printStats();
 
-            runTask();
-            
-            finishIteration();
-            
-            printStats();
-
-        } while (nextIteration());
+        nextIteration();    // This probably should get rolled into something else; it's really cleanup code, not "next iteration"
     }
 
     extension->finishAlignment();
@@ -178,6 +179,12 @@ AlignerContext::initialize()
 	noTruncation = options->noTruncation;
     maxSecondaryAlignmentAdditionalEditDistance = options->maxSecondaryAlignmentAdditionalEditDistance;
 	maxSecondaryAlignments = options->maxSecondaryAlignments;
+    maxSecondaryAlignmentsPerContig = options->maxSecondaryAlignmentsPerContig;
+
+    if (maxSecondaryAlignmentAdditionalEditDistance < 0 && (maxSecondaryAlignments < 1000000 || maxSecondaryAlignmentsPerContig > 0)) {
+        WriteErrorMessage("You set -omax and/or -mpc without setting -om.  They're meaningful only in the context of -om, so you probably didn't really mean to do that.\n");
+        soft_exit(1);
+    }
 	minReadLength = options->minReadLength;
 
 	if (index != NULL && (int)minReadLength < index->getSeedLength()) {
@@ -264,9 +271,24 @@ AlignerContext::finishIteration()
     extension->finishIteration();
 
     if (NULL != writerSupplier) {
+        if (options->dropIndexBeforeSort) {
+            g_index->dropIndex();
+
+        }
         writerSupplier->close();
         delete writerSupplier;
         writerSupplier = NULL;
+
+        if (options->dropIndexBeforeSort) {
+            //
+            // Since we dropped the index part of the index, now we need to delete it completely.
+            //
+            delete g_index;
+            g_index = NULL;
+            index = NULL;
+            delete g_indexDirectory;
+            g_indexDirectory = NULL;
+        }
     }
 
     alignTime = /*timeInMillis() - alignStart -- use the time from ParallelTask.h, that may exclude memory allocation time*/ time;
