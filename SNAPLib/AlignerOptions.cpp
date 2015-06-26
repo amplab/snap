@@ -76,7 +76,8 @@ AlignerOptions::AlignerOptions(
     maxDistFraction(0.0),
 	mapIndex(false),
 	prefetchIndex(false),
-    writeBufferSize(16 * 1024 * 1024)
+    writeBufferSize(16 * 1024 * 1024),
+    dropIndexBeforeSort(false)
 {
     if (forPairedEnd) {
         maxDist                 = 15;
@@ -181,6 +182,7 @@ AlignerOptions::usageMessage()
 		"  -nt  Don't truncate searches based on missed seed hits.  This option is purely for evaluating the performance effect\n"
 		"       of candidate truncation, and specifying it will slow down execution without improving alignments.\n"
         " -wbs  Write buffer size in megabytes.  Don't specify this unless you've gotten an error message saying to make it bigger.  Default 16.\n"
+        "  -di  Drop the index after aligning and before sorting.  This frees up memory for the sort at the expense of not having the index loaded for your next run.\n"
 		,
             commandLine,
             maxDist,
@@ -694,7 +696,10 @@ AlignerOptions::parse(
 	} else if (strcmp(argv[n], "-nt") == 0) {
 		noTruncation = true;
 		return true;
-	} else if (strcmp(argv[n], "-D") == 0) {
+    } else if (strcmp(argv[n], "-di") == 0) {
+        dropIndexBeforeSort = true;
+        return true;
+    } else if (strcmp(argv[n], "-D") == 0) {
         if (n + 1 < argc) {
             extraSearchDepth = atoi(argv[n+1]);
             n++;

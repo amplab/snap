@@ -838,8 +838,7 @@ GenomeIndex::GenomeIndex() : nHashTables(0), hashTables(NULL), overflowTable32(N
 {
 }
 
-
-GenomeIndex::~GenomeIndex()
+void GenomeIndex::dropIndex()
 {
     if (NULL != hashTables) {
         for (unsigned i = 0; i < nHashTables; i++) {
@@ -848,28 +847,35 @@ GenomeIndex::~GenomeIndex()
         }
     }
 
-    delete [] hashTables;
+    delete[] hashTables;
     hashTables = NULL;
 
-	if (NULL != mappedTables) {
-		mappedTables->close();
-		mappedOverflowTable->close();
-	} else {
-		if (NULL != overflowTable32) {
-			BigDealloc(overflowTable32);
-			overflowTable32 = NULL;
-		}
+    if (NULL != mappedTables) {
+        mappedTables->close();
+        mappedOverflowTable->close();
+    }
+    else {
+        if (NULL != overflowTable32) {
+            BigDealloc(overflowTable32);
+            overflowTable32 = NULL;
+        }
 
-		if (NULL != overflowTable64) {
-			BigDealloc(overflowTable64);
-			overflowTable64 = NULL;
-		}
+        if (NULL != overflowTable64) {
+            BigDealloc(overflowTable64);
+            overflowTable64 = NULL;
+        }
 
-		if (NULL != tablesBlob) {
-			BigDealloc(tablesBlob);
-			tablesBlob = NULL;
-		}
-	}
+        if (NULL != tablesBlob) {
+            BigDealloc(tablesBlob);
+            tablesBlob = NULL;
+        }
+    }
+}
+
+
+GenomeIndex::~GenomeIndex()
+{
+    dropIndex();
 
 	delete genome;
 	genome = NULL;

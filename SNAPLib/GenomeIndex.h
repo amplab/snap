@@ -68,6 +68,8 @@ public:
 
     inline int getSeedLength() const { return seedLen; }
 
+    void dropIndex();   // This frees the memory for the index, but leaves the genome itself around.
+
     virtual ~GenomeIndex();
 
     //

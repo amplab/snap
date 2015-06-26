@@ -271,9 +271,24 @@ AlignerContext::finishIteration()
     extension->finishIteration();
 
     if (NULL != writerSupplier) {
+        if (options->dropIndexBeforeSort) {
+            g_index->dropIndex();
+
+        }
         writerSupplier->close();
         delete writerSupplier;
         writerSupplier = NULL;
+
+        if (options->dropIndexBeforeSort) {
+            //
+            // Since we dropped the index part of the index, now we need to delete it completely.
+            //
+            delete g_index;
+            g_index = NULL;
+            index = NULL;
+            delete g_indexDirectory;
+            g_indexDirectory = NULL;
+        }
     }
 
     alignTime = /*timeInMillis() - alignStart -- use the time from ParallelTask.h, that may exclude memory allocation time*/ time;

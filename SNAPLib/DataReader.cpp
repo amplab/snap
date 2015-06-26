@@ -1618,14 +1618,14 @@ DecompressDataReader::decompress(
     _int64* o_outputWritten,
     DecompressMode mode)
 {
-    if (inputBytes > 0xffffffff || outputBytes > 0xffffffff) {
+    if (inputBytes > 0xffffffff) {
         WriteErrorMessage("GzipDataReader: inputBytes or outputBytes > max unsigned int\n");
         soft_exit(1);
     }
     zstream->next_in = (Bytef*) input;
     zstream->avail_in = (uInt)inputBytes;
     zstream->next_out = (Bytef*) output;
-    zstream->avail_out = (uInt)outputBytes;
+    zstream->avail_out = (uInt)__min(outputBytes, 0xffffffff);
     if (heap != NULL) {
         zstream->zalloc = zalloc;
         zstream->zfree = zfree;
