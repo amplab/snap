@@ -672,7 +672,7 @@ ReadBasedDataReader::releaseBatch(
 						info->next = nextBufferForReader;
 						info->batchID = 0;
 #ifdef _DEBUG
-						memset(info->buffer, 0xde, bufferSize + extraBytes);
+						//memset(info->buffer, 0xde, bufferSize + extraBytes);
 #endif
 						nextBufferForReader = i;
 					}
@@ -1361,6 +1361,7 @@ private:
         char* decompressed;
         _int64 decompressedStart;
         _int64 decompressedValid;
+        _int64 decompressedSize;
         bool allocated; // if decompressed has been allocated specially, not from inner extra data
     };
 
@@ -1413,6 +1414,7 @@ DecompressDataReader::DecompressDataReader(
         entry->decompressed = NULL;
         entry->allocated = false;
         entry->batch = DataBatch(0, 0);
+        entry->decompressedSize = extraBytes;
     }
     available = entries;
     first = last = NULL;
@@ -1602,7 +1604,7 @@ DecompressDataReader::getExtra(
     char** o_extra,
     _int64* o_length)
 {
-    *o_extra = peekReady()->decompressed + extraBytes;
+    *o_extra = peekReady()->decompressed + peekReady()->decompressedSize;
     *o_length = totalExtra - extraBytes;
 }
     
@@ -1798,6 +1800,38 @@ DecompressDataReader::decompressThread(
             outputs.clear();
             _int64 input = 0;
             _int64 output = reader->overflowBytes;
+
+            _int64 tempInput = input;
+            _int64 tempOutput = output;
+            do {
+                BgzfHeader* zip = (BgzfHeader*)(entry->compressed + tempInput);
+                tempInput += zip->BSIZE() + 1;
+                tempOutput += zip->ISIZE();
+
+                if (tempInput > entry->compressedValid || zip->BSIZE() >= BAM_BLOCK || zip->ISIZE() > BAM_BLOCK) {
+                    fprintf(stderr, "error reading BAM file at offset %lld\n", reader->getFileOffset());
+                    soft_exit(1);
+                }
+
+            } while (tempInput < entry->compressedStart);
+
+            if (tempOutput > entry->decompressedSize) {
+                //
+                // Allocate more space.  BUGBUG: probably should deallocate these over time to save space if it happens much.
+                //
+                WriteErrorMessage("DecompressDataReader: expanding decompress buffer from %lld to %lld\n", entry->decompressedSize, tempOutput);
+
+                char *newSpace = (char *)BigAlloc(tempOutput + reader->totalExtra - reader->extraBytes); // Extend it for the "extra" space.
+                memcpy(newSpace, entry->decompressed, reader->overflowBytes);
+
+                if (entry->allocated) {
+                    BigDealloc(entry->decompressed);
+                }
+                entry->decompressed = newSpace;
+                entry->allocated = true;
+                entry->decompressedSize = tempOutput;
+            }
+
             do {
                 inputs.push_back(input);
                 outputs.push_back(output);
@@ -1805,8 +1839,8 @@ DecompressDataReader::decompressThread(
                 input += zip->BSIZE() + 1;
                 output += zip->ISIZE();
 
-                if (output > reader->extraBytes) {
-                    fprintf(stderr, "insufficient decompression space, increase -xf parameter\n");
+                if (output > entry->decompressedSize) {
+                    fprintf(stderr, "Bug in DecompressDataReader::decompressThread(); don't have enough decompress buffer when we thought we'd assured it.  Existing size %lld, needed (at least) %lld, entry @0x%p\n", entry->decompressedSize, output, entry);
                     soft_exit(1);
                 }
                 if (input > entry->compressedValid || zip->BSIZE() >= BAM_BLOCK || zip->ISIZE() > BAM_BLOCK) {
