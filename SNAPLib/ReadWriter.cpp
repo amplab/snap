@@ -327,22 +327,22 @@ SimpleReadWriter::writePairs(
             locations[0] = result[whichAlignmentPair].status[0] != NotFound ? result[whichAlignmentPair].location[0] : InvalidGenomeLocation;
             locations[1] = result[whichAlignmentPair].status[1] != NotFound ? result[whichAlignmentPair].location[1] : InvalidGenomeLocation;
 
-            int writeOrder[2];  // The order in which we write the reads, which is just numerical by genome location.  SO writeOrder[0] gets written first, and writeOrder[1] second.
-
-            if (locations[0] <= locations[1]) {
-                writeOrder[0] = 0;
-                writeOrder[1] = 1;
-            } else {
-                writeOrder[0] = 1;
-                writeOrder[1] = 0;
-            }
-
             bool secondReadLocationChanged;
             int cumulativePositiveAddFrontClipping[NUM_READS_PER_PAIR] = { 0, 0 };
 
             do {
                 size_t tentativeUsed = 0;
                 secondReadLocationChanged = false;
+
+                int writeOrder[2];  // The order in which we write the reads, which is just numerical by genome location.  SO writeOrder[0] gets written first, and writeOrder[1] second.
+
+                if (locations[0] <= locations[1]) {
+                    writeOrder[0] = 0;
+                    writeOrder[1] = 1;
+                } else {
+                    writeOrder[0] = 1;
+                    writeOrder[1] = 0;
+                }
 
                 for (int firstOrSecond = 0; firstOrSecond < NUM_READS_PER_PAIR; firstOrSecond++) {  // looping over the order in which the reads are written, not the order in which they arrived
                     int whichRead = writeOrder[firstOrSecond];

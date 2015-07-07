@@ -224,7 +224,7 @@ SortedDataFilter::onNextBatch(
             GenomeLocation loc;
             GenomeDistance len;
 			parent->format->getSortInfo(parent->genome, fromBuffer + i->offset, i->length, &loc, &len);
-			_ASSERT(loc >= previous);
+			_ASSERT(loc == i->location && loc >= previous);
 			previous = loc;
 		}
 #endif

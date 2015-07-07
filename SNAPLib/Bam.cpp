@@ -523,7 +523,7 @@ BAMReader::getNextRead(
         }
         BAMAlignment* bam = (BAMAlignment*) buffer;
         if ((_uint64)bytes < sizeof(bam->block_size) || (_uint64)bytes < bam->size()) {
-			WriteErrorMessage("Insufficient buffer space for BAM file, increase -xf parameter\n");
+			WriteErrorMessage("Truncated or corrupt BAM file near offset %lld\n", data->getFileOffset());
             soft_exit(1);
         }
         data->advance(bam->size());

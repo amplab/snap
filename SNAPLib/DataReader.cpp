@@ -581,7 +581,8 @@ ReadBasedDataReader::nextBatch()
     bool
 ReadBasedDataReader::isEOF()
 {
-    return bufferInfo[nextBufferForConsumer].isEOF;
+    BufferInfo* info = &bufferInfo[nextBufferForConsumer];
+    return info->isEOF && info->offset >= info->validBytes;
 }
     
     DataBatch
@@ -1166,7 +1167,8 @@ WindowsOverlappedDataReader::startIo()
         _int64 finalStartOffset = min(fileSize.QuadPart, endingOffset);
         amountToRead = (unsigned)min(finalOffset - readOffset.QuadPart, (_int64) bufferSize);   // Cast OK because can't be longer than unsigned bufferSize
         info->isEOF = readOffset.QuadPart + amountToRead == finalOffset;
-        info->nBytesThatMayBeginARead = (unsigned)min((_int64)bufferSize - overflowBytes, finalStartOffset - readOffset.QuadPart);
+        info->nBytesThatMayBeginARead = info->isEOF && finalStartOffset == fileSize.QuadPart ? amountToRead
+            : (unsigned)min((_int64)bufferSize - overflowBytes, finalStartOffset - readOffset.QuadPart);
 
         _ASSERT(amountToRead >= info->nBytesThatMayBeginARead && (!info->isEOF || finalOffset == readOffset.QuadPart + amountToRead));
         ResetEvent(bufferLap->hEvent);
