@@ -46,6 +46,7 @@ namespace ExpressionMetadata
         };
 
         static List<LibraryStrategy> LibraryStrategies = new List<LibraryStrategy>();
+        static List<string> TumorAndNormal = new List<string>();
 
         public static void AddEntireTumorToMachine(Dictionary<AnalysisType, Pathname> tumorToMachineMapping, TumorType tumorType, Pathname machine) 
         {
@@ -61,21 +62,23 @@ namespace ExpressionMetadata
 
         public class Machine
         {
-            public Machine(string name_, int memoryInGB_, int diskInTB_)
+            public Machine(string name_, int memoryInGB_, int diskInTB_, bool secondaryMachine_)
             {
                 name = name_;
                 memoryInGB = memoryInGB_;
                 diskInTB = diskInTB_;
+                secondaryMachine = secondaryMachine_;
             }
 
-            public static void AddMachine(string name_, int memoryInGB_, int diskInTB_)
+            public static void AddMachine(string name_, int memoryInGB_, int diskInTB_, bool secondaryMachine_ = false)
             {
-                Machines.Add(name_, new Machine(name_, memoryInGB_, diskInTB_));
+                Machines.Add(name_, new Machine(name_, memoryInGB_, diskInTB_, secondaryMachine_));
             }
 
             public string name;
             public int memoryInGB;
             public int diskInTB;
+            public bool secondaryMachine;
         }
 
         public static void InitializeMachines()
@@ -85,8 +88,8 @@ namespace ExpressionMetadata
             Machine.AddMachine("msr-srs-2", 8, 36);
             Machine.AddMachine("msr-srs-3", 8, 36);
             Machine.AddMachine("msr-srs-4", 8, 36);
-            Machine.AddMachine("msr-srs-5", 8, 36);
-            Machine.AddMachine("msr-srs-6", 8, 36);
+            Machine.AddMachine("msr-srs-5", 16, 36);
+            Machine.AddMachine("msr-srs-6", 16, 36);
             Machine.AddMachine("msr-srs-7", 48, 48);
             Machine.AddMachine("msr-srs-8", 48, 36);
             Machine.AddMachine("fds-326-k25-1", 48, 6);
@@ -106,6 +109,7 @@ namespace ExpressionMetadata
             Machine.AddMachine("fds-326-k25-17", 48, 6);
             Machine.AddMachine("fds-326-k25-18", 48, 6);
             Machine.AddMachine("fds-326-k25-20", 48, 6);
+            Machine.AddMachine("msr-genomics-0", 256, 240, true);
         }
 
         public static Dictionary<string, Machine> Machines = new Dictionary<string, Machine>();
@@ -162,9 +166,9 @@ namespace ExpressionMetadata
             tumorToMachineMapping.Add(new AnalysisType("lgg", "wgs", false), "fds-326-k25-14");
             tumorToMachineMapping.Add(new AnalysisType("lgg", "wxs", false), "fds-326-k25-3");
 
-            tumorToMachineMapping.Add(new AnalysisType("lihc", "rna", true), "fds-326-k25-6");
-            tumorToMachineMapping.Add(new AnalysisType("lihc", "wgs", true), "fds-326-k25-6");
-            tumorToMachineMapping.Add(new AnalysisType("lihc", "wxs", true), "fds-326-k25-6");
+            tumorToMachineMapping.Add(new AnalysisType("lihc", "rna", true), "msr-srs-2");
+            tumorToMachineMapping.Add(new AnalysisType("lihc", "wgs", true), "msr-srs-2");
+            tumorToMachineMapping.Add(new AnalysisType("lihc", "wxs", true), "msr-srs-2");
             tumorToMachineMapping.Add(new AnalysisType("lihc", "rna", false), "msr-srs-2");
             tumorToMachineMapping.Add(new AnalysisType("lihc", "wgs", false), "fds-326-k25-20");
             tumorToMachineMapping.Add(new AnalysisType("lihc", "wxs", false), "msr-srs-2");
@@ -195,10 +199,41 @@ namespace ExpressionMetadata
             public long totalSize;
             public bool needed = false; // Do we need this as input for some experiment?
             public bool isRealingned = false;   // Was this realined, or is it straight from TCGA
+            public string bamHash = null;  // MD5 of the BAM file
+            public string baiHash = null;  // MD5 of the BAI file
         }
 
+        static void GenerateHashCommandForFile(Pathname file, Dictionary<Pathname, StreamWriter> hashScripts)
+        {
+            //
+            // The file is in \\ form.  Switch it to d: form.
+            //
 
-        static void LoadStoredBAMsForDirectory(Pathname directory, Dictionary<AnalysisID, StoredBAM> storedBAMs) 
+            string[] pathnameComponents = file.Split('\\');
+            if (pathnameComponents.Count() < 4 || pathnameComponents[0] != "" || pathnameComponents[1] != "" || pathnameComponents[3].Count() != 2 || pathnameComponents[3].Substring(1) != "$")
+            {
+                Console.WriteLine("GenerateHashCommandForFile: expected \\ pathname, got " + file);
+                return;
+            }
+
+            string machine = pathnameComponents[2];
+            string localDirname = pathnameComponents[3].Substring(0, 1) + @":";
+            string unqualifiedFilename = pathnameComponents[pathnameComponents.Count() - 1];
+
+            for (int i = 4; i < pathnameComponents.Count() - 1; i++)
+            {
+                localDirname += @"\" + pathnameComponents[i];
+            }
+
+            if (!hashScripts.ContainsKey(machine))
+            {
+                hashScripts.Add(machine, new StreamWriter(@"f:\temp\expression\hashData-" + machine + ".cmd"));
+            }
+
+            hashScripts[machine].WriteLine(@"cd /d " + localDirname);
+            hashScripts[machine].WriteLine(@"ComputeMD5 " + unqualifiedFilename + @"> " + unqualifiedFilename + ".md5");
+        }
+        static void LoadStoredBAMsForDirectory(Pathname directory, Dictionary<AnalysisID, StoredBAM> storedBAMs, Dictionary<Pathname, StreamWriter> hashScripts) 
         {
             if (!Directory.Exists(directory))
             {
@@ -209,6 +244,12 @@ namespace ExpressionMetadata
             foreach (var subdir in Directory.GetDirectories(directory))
             {
                 var pathnameComponents = subdir.Split('\\');
+                if (pathnameComponents.Count() < 4)
+                {
+                    Console.WriteLine("LoadStoredBAMsForDirectory: bizarre pathname " + subdir);
+                    continue;
+                }
+
                 AnalysisID analysisID = pathnameComponents[pathnameComponents.Count() - 1].ToLower();
                 if (analysisID.Count() == 36)  // The length of a GUID string
                 {
@@ -226,6 +267,29 @@ namespace ExpressionMetadata
                                 Console.WriteLine("Saw multiple BAM files in the same analysis directory " + file + " and " + storedBAM.bamInfo.FullName);
                             }
                             storedBAM.bamInfo = new FileInfo(file);
+                            string md5Pathname = file + ".md5";
+                            if (File.Exists(md5Pathname))
+                            {
+                                try
+                                {
+                                    storedBAM.bamHash = File.ReadAllText(md5Pathname);
+                                    if (storedBAM.bamHash == "")
+                                    {
+                                        storedBAM.bamHash = null;   // Probably it got interrupted while being computed, just ignore it and it'll get run again.
+                                    }
+                                }
+                                catch (IOException e)
+                                {
+                                    //
+                                    // It's probably a sharing violation because we're computing hashes.  Just warn and go on.
+                                    //
+                                    Console.WriteLine("IO Exception reading m5 file " + md5Pathname + ".  If you're not computing that hash now, maybe something's wrong; error: " + e.Message);
+                                }
+                            }
+                            else
+                            {
+                                GenerateHashCommandForFile(file, hashScripts);
+                            }
                         }
                         else if (file.Count() > 4 && file.Substring(file.Count() - 4) == ".bai")
                         {
@@ -234,8 +298,35 @@ namespace ExpressionMetadata
                                 Console.WriteLine("Saw multiple BAI files in the same analysis directory " + file + " and " + storedBAM.baiInfo.FullName);
                             }
                             storedBAM.baiInfo = new FileInfo(file);
-                        } else if (file.Count() > 4 && file.Substring(file.Count() -4) == ".tar") {
+                            string md5Pathname = file + ".md5";
+
+                            if (File.Exists(md5Pathname))
+                            {
+                                try {
+                                storedBAM.baiHash = File.ReadAllText(md5Pathname);
+                                    if (storedBAM.baiHash == "")
+                                    {
+                                        storedBAM.baiHash = null;   // Probably it got interrupted while being computed, just ignore it and it'll get run again.
+                                    }
+                                }
+                                catch (IOException e)
+                                {
+                                    //
+                                    // It's probably a sharing violation because we're computing hashes.  Just warn and go on.
+                                    //
+                                    Console.WriteLine("IO Exception reading m5 file " + md5Pathname + ".  If you're not computing that hash now, maybe something's wrong; error: " + e.Message);
+                                }
+                            }
+                            else
+                            {
+                                GenerateHashCommandForFile(file, hashScripts);
+                            }
+                        }
+                        else if (file.Count() > 4 && file.Substring(file.Count() - 4) == ".tar")
+                        {
                             hasTarFile = true;
+                        } else if (file.Count() > 3 && file.Substring(file.Count() - 4) == ".md5") {
+                            // Do nothing; checksum files are expected.
                         }
                         else
                         {
@@ -268,22 +359,65 @@ namespace ExpressionMetadata
             }
         }
 
+        public static void LoadStoredBamsForMachine(Pathname directory, Dictionary<AnalysisID, StoredBAM> storedBAMs, Dictionary<Pathname, StreamWriter> hashScripts)
+        {
+            //
+            // Load BAMs from a machine that offloads storage from the main machines.  These machines are allowed to store data
+            // in places that's other than its primary storage location.  We just work though the directory hierarchy and
+            // load each lowest level directory individually.  "directory" should point at the directory containing the
+            // disease subdirectories, i.e., \\msr-genomics-0\d$\tcga.
+            //
+
+            if (!Directory.Exists(directory))
+            {
+                Console.WriteLine("Unable to find expected secondary machine directory " + directory);
+                return;
+            }
+
+            foreach (var diseaseDir in Directory.GetDirectories(directory)) 
+            {
+                foreach (var tumorOrNormal in TumorAndNormal)
+                {
+                    if (!Directory.Exists(diseaseDir + @"\" + tumorOrNormal))
+                    {
+                        continue;
+                    }
+
+                    foreach (var libraryStrategy in LibraryStrategies)
+                    {
+                        var sampleDir = diseaseDir + @"\" + tumorOrNormal + @"\" + libraryStrategy;
+                        if (Directory.Exists(sampleDir))
+                        {
+                            LoadStoredBAMsForDirectory(sampleDir, storedBAMs, hashScripts);
+                        }
+                    }
+                }
+            }
+        }
+
         public static Dictionary<AnalysisID, StoredBAM> LoadStoredBAMs(Dictionary<AnalysisType, Pathname> tumorToMachineMapping)
         {
             var storedBAMs = new Dictionary<AnalysisID, StoredBAM>();
+            var hashScripts = new Dictionary<Pathname, StreamWriter>();
 
             //
             // Directory structure is \\msr-srs-%n\d$\tcga\{rna,wgs,wxs}\{tumor, normal}\disease_abbr\analysis_id\*.{bam,bai}.  We need to call LoadStoredBAMsForDirectory on each
-            // of the disease_abbr directories.  In addition, there are files on \\erg00\r$\tcga\laml.
+            // of the disease_abbr directories.  
             //
 
 
             foreach (var entry in tumorToMachineMapping)
             {
-                LoadStoredBAMsForDirectory(@"\\" + entry.Value + @"\d$\tcga\" + entry.Key.tumorType + @"\" + (entry.Key.isNormal ? "normal" : "tumor") + @"\" + entry.Key.libraryStrategy, storedBAMs);
+                LoadStoredBAMsForDirectory(@"\\" + entry.Value + @"\d$\tcga\" + entry.Key.tumorType + @"\" + (entry.Key.isNormal ? "normal" : "tumor") + @"\" + entry.Key.libraryStrategy, storedBAMs, hashScripts);
             }
 
-            LoadStoredBAMsForDirectory(@"\\erg00\r$\tcga\laml", storedBAMs);
+            LoadStoredBamsForMachine(@"\\msr-genomics-0\d$\tcga", storedBAMs, hashScripts);
+            LoadStoredBamsForMachine(@"\\msr-genomics-0\e$\tcga", storedBAMs, hashScripts);
+
+            foreach (var entry in hashScripts)
+            {
+                entry.Value.Close();
+            }
 
             return storedBAMs;
         }
@@ -293,7 +427,9 @@ namespace ExpressionMetadata
             public AnalysisID analysis_id;
             public ParticipantID participant_id;
             public Pathname bamFileName;
+            public string bamHash = null;
             public Pathname baiFileName;
+            public string baiHash = null;
             public DateTime lastModified;
             public DateTime uploadDate;
             public SampleID aliquot_id;
@@ -330,7 +466,7 @@ namespace ExpressionMetadata
             }
         }
 
-        public static Dictionary<AnalysisID, TCGARecord> LoadTCGARecords(Dictionary<AnalysisID, StoredBAM> storedBAMs)
+        public static Dictionary<AnalysisID, TCGARecord> LoadTCGARecords(Dictionary<AnalysisID, StoredBAM> storedBAMs, List<AnalysisID> excludedAnalyses)
         {
             var tcgaRecords = new Dictionary<AnalysisID, TCGARecord>();
 
@@ -377,6 +513,11 @@ namespace ExpressionMetadata
                 }
 
                 record.analysis_id = result.Element("analysis_id").Value.ToLower();
+
+                if (excludedAnalyses.Contains(record.analysis_id)) {
+                    continue;   // Just pretend we didn't see it.
+                }
+
                 record.aliquot_id = result.Element("aliquot_id").Value.ToLower();
                 record.center_name = result.Element("center_name").Value.ToLower();
                 record.disease_abbr = result.Element("disease_abbr").Value.ToLower();
@@ -399,10 +540,12 @@ namespace ExpressionMetadata
                     if (fileName.Length > 4 && ".bam" == fileName.Substring(fileName.Length - 4))
                     {
                         record.bamFileName = fileName;
+                        record.bamHash = file.Element("checksum").Value;
                     }
                     else if (fileName.Length > 4 && ".bai" == fileName.Substring(fileName.Length - 4))
                     {
                         record.baiFileName = fileName;
+                        record.baiHash = file.Element("checksum").Value;
                     }
                     record.totalFileSize += Convert.ToInt64(file.Element("filesize").Value);
                 }
@@ -469,7 +612,6 @@ namespace ExpressionMetadata
         {
             //
             // Make sure that all of the analyses are in the right place.  They should be in a path that looks like \\machine\d$\tcga\{disease}\{tumor, normal}\{RNA, WGS, WXS}\<analysis-id>\X.bam
-            // Or \\erg00\r$\laml\<analysis-id>\X.bam
             //
 
             const int diseaseComponent = 5;
@@ -477,6 +619,8 @@ namespace ExpressionMetadata
             const int libraryComponent = 7;
 
             int nRealigned = 0;
+            int nChecksumsPresent = 0;
+            int nChecksumsWrong = 0;
 
             foreach (var bamEntry in storedBAMs)
             {
@@ -491,17 +635,27 @@ namespace ExpressionMetadata
                 }
 
                 if (!tcgaRecords.ContainsKey(analysisID)) {
-                    //
-                    // Special case it if it's stored on erg00, which has a bunch of uncategorized mirna and stuff.
-                    //
-                    if (!(pathLength == 8 && pathComponents[2] == "erg00"))
-                    {
-                        Console.WriteLine("Stored BAM doesn't have accompanying TCGA record, pathname " + storedBAM.bamInfo.FullName);
-                    }
+                    Console.WriteLine("Stored BAM doesn't have accompanying TCGA record, pathname " + storedBAM.bamInfo.FullName);
                     continue;
                 }
 
                 TCGARecord tcgaRecord = tcgaRecords[analysisID];
+
+                if (storedBAM.bamHash != null && tcgaRecord.bamHash != null && tcgaRecord.bamHash != "")
+                {
+                    nChecksumsPresent++;
+                    if (storedBAM.bamHash != tcgaRecord.bamHash)
+                    {
+                        Console.WriteLine("Checksum mismatch on file " + storedBAM.bamInfo.FullName + " (size " + storedBAM.bamInfo.Length + "), expected " + tcgaRecord.bamHash + " but got " + storedBAM.bamHash);
+                        nChecksumsWrong++;
+                    }
+                }
+
+                if (storedBAM.baiHash != null && storedBAM.baiHash != tcgaRecord.baiHash && tcgaRecord.bamHash != null && tcgaRecord.baiHash != "")
+                {
+                    Console.WriteLine("Checksum mismatch on file " + storedBAM.baiInfo.FullName + " (size " + storedBAM.bamInfo.Length + "), expected " + tcgaRecord.baiHash + " but got " + storedBAM.baiHash);
+                    nChecksumsWrong++;
+                }
 
                 if (tcgaRecord.localRealign)
                 {
@@ -514,56 +668,39 @@ namespace ExpressionMetadata
                     continue;
                 }
 
-                if (pathComponents[2] == "erg00")
+                if (pathLength != 10 || (pathComponents[3] != "d$"  && pathComponents[3] != "e$") || pathComponents[4] != "tcga" || pathComponents[8] != analysisID ||
+                    (pathComponents[libraryComponent] != "rna" && pathComponents[libraryComponent] != "wgs" && pathComponents[libraryComponent] != "wxs") || (pathComponents[tumorNormalComponent] != "tumor" && pathComponents[tumorNormalComponent] != "normal"))
                 {
-                    if (pathLength != 8 || pathComponents[3] != "r$" || pathComponents[4] != "tcga" || pathComponents[5] != "laml" || pathComponents[6] != analysisID)
-                    {
-                        Console.WriteLine("Invalid erg00 path for analysis ID " + analysisID + " path " + fullPath);
-                        continue;
-                    }
-
-                    if (tcgaRecord.disease_abbr != "laml")
-                    {
-                        Console.WriteLine("Non-AML sample stored on erg00, analysisID " + analysisID + " tumor type " + tcgaRecord.disease_abbr);
-                        continue;
-                    }
+                    Console.WriteLine("Invalid path for analysis ID " + analysisID + " path " + fullPath);
+                    continue;
                 }
-                else
+
+                //
+                // Its shape is right.  Check to see if it's actually the right place.
+                //
+                if (tcgaRecord.library_strategy.ToLower() != pathComponents[libraryComponent])
                 {
-                    if (pathLength != 10 || pathComponents[3] != "d$" || pathComponents[4] != "tcga" || pathComponents[8] != analysisID ||
-                        (pathComponents[libraryComponent] != "rna" && pathComponents[libraryComponent] != "wgs" && pathComponents[libraryComponent] != "wxs") || (pathComponents[tumorNormalComponent] != "tumor" && pathComponents[tumorNormalComponent] != "normal"))
-                    {
-                        Console.WriteLine("Invalid non-erg00 path for analysis ID " + analysisID + " path " + fullPath);
-                        continue;
-                    }
+                    Console.WriteLine("Analysis " + analysisID + " has library strategy " + tcgaRecord.library_strategy + " but is stored at " + fullPath);
+                    continue;
+                }
 
-                    //
-                    // Its shape is right.  Check to see if it's actually the right place.
-                    //
-                    if (tcgaRecord.library_strategy.ToLower() != pathComponents[libraryComponent])
-                    {
-                        Console.WriteLine("Analysis " + analysisID + " has library strategy " + tcgaRecord.library_strategy + " but is stored at " + fullPath);
-                        continue;
-                    }
+                if (tcgaRecord.tumorSample != (pathComponents[tumorNormalComponent] == "tumor"))
+                {
+                    Console.WriteLine("Analysis " + analysisID + " in wrong tumor/normal directory " + fullPath);
+                    continue;
+                }
 
-                    if (tcgaRecord.tumorSample != (pathComponents[tumorNormalComponent] == "tumor"))
-                    {
-                        Console.WriteLine("Analysis " + analysisID + " in wrong tumor/normal directory " + fullPath);
-                        continue;
-                    }
+                if (tcgaRecord.disease_abbr != pathComponents[diseaseComponent])
+                {
+                    Console.WriteLine("Sample in wrong tumor type.  Should be " + tcgaRecord.disease_abbr + " but it's in " + fullPath);
+                    continue;
+                }
 
-                    if (tcgaRecord.disease_abbr != pathComponents[diseaseComponent])
-                    {
-                        Console.WriteLine("Sample in wrong tumor type.  Should be " + tcgaRecord.disease_abbr + " but it's in " + fullPath);
-                        continue;
-                    }
-
-                    string correctMachine = tumorTypeToMachineMapping[new AnalysisType(tcgaRecord)].ToLower();
-                    if (correctMachine != pathComponents[2])
-                    {
-                        Console.WriteLine("BAM stored on wrong machine " + fullPath + " expected to be on " + correctMachine);
-                        continue;
-                    }
+                string correctMachine = tumorTypeToMachineMapping[new AnalysisType(tcgaRecord)].ToLower();
+                if (correctMachine != pathComponents[2] && (!Machines.ContainsKey(pathComponents[2]) || !Machines[pathComponents[2]].secondaryMachine)) 
+                {
+                    Console.WriteLine("BAM stored on wrong machine " + fullPath + " expected to be on " + correctMachine);
+                    continue;
                 }
 
                 if (tcgaRecord.bamFileName.ToLower() != pathComponents[pathLength - 1].ToLower())
@@ -573,6 +710,7 @@ namespace ExpressionMetadata
                 }
             }
 
+            Console.WriteLine("Verified " + nChecksumsPresent + " checksums on BAM files, of which " + nChecksumsWrong + " were wrong.");
         }
 
         const string realignPathname = @"f:\sequence\reads\tcga\realigns.txt";
@@ -614,6 +752,11 @@ namespace ExpressionMetadata
                 if (storedBAMs.ContainsKey(record.analysis_id))
                 {
                     record.storedBAM = storedBAMs[record.analysis_id];
+                    if (record.realignSource.storedBAM != null && record.realignSource.storedBAM.bamInfo.Length > record.storedBAM.bamInfo.Length * 4 / 3)
+                    {
+                        Console.WriteLine("Suspiciously small realigned file " + record.storedBAM.bamInfo.FullName + " size " + record.storedBAM.bamInfo.Length + 
+                            " while source " + record.realignSource.storedBAM.bamInfo.FullName + " is " + record.realignSource.storedBAM.bamInfo.Length);
+                    }
                 }
 
                 tcgaRecords.Add(record.analysis_id, record);
@@ -747,8 +890,8 @@ namespace ExpressionMetadata
 
                 mafRecord.Hugo_symbol = fields[0];
                 mafRecord.center = fields[2];
-                mafRecord.NcbiBuild = fields[3];
-                mafRecord.Chrom = fields[4];
+                mafRecord.NcbiBuild = fields[3].ToLower();
+                mafRecord.Chrom = fields[4].ToLower();
                 mafRecord.Start_position = Convert.ToInt32(fields[5]);
                 mafRecord.End_position = Convert.ToInt32(fields[6]);
                 mafRecord.Variant_classification = fields[8];
@@ -1583,6 +1726,7 @@ namespace ExpressionMetadata
                 script.Write(" -so -sm 5 -di -xf 1.5");
             }
             script.WriteLine(" -lp -map -pc -mrl " + Math.Min(50, seedLength * 2));
+            script.WriteLine("del " + outputFileName + ".tmp"); // In case the alignment failed for whatever reason, don't copy the intermediate file, just get rid of it
 
             if (!local)
             {
@@ -1683,26 +1827,120 @@ namespace ExpressionMetadata
             }
         }
 
+        public class DiseaseReferencePair
+        {
+            public DiseaseReferencePair(string disease_, string reference_)
+            {
+                disease = disease_;
+                reference = reference_;
+            }
+            public string disease;
+            public string reference;
+        }
+
         static public void GenerateExtractionScripts(List<Experiment> experiments)
         {
-            StreamWriter extractScript = new StreamWriter(@"f:\temp\expression\extract_genetic_data.cmd");
             StreamWriter extractRNAInput = new StreamWriter(@"f:\temp\expression\extractRNAInput.txt");
             StreamWriter extractTumorDNAInput = new StreamWriter(@"f:\temp\expression\extractTumorDNAInput.txt");
+            StreamWriter extractTumorDNAScript = new StreamWriter(@"f:\temp\expression\extractTumorDNASamples.cmd");
+            var perMachineExtractScripts = new Dictionary<Pathname, StreamWriter>();
+
+
+
+            //Console.WriteLine("samtools view " + storedData[tumorNormalPair.tumorAnalysisId].bamFileName + chromPrefix + mutation.Chrom + ":" + Math.Max(1, mutation.Start_position - 200) + "-" + (mutation.Start_position + 10) + @" > " +
+              // tumorFileName);
+
+            //inputFileForExtractRNA.WriteLine();
+
+
+
+
+            var experimentSets = new Dictionary<DiseaseReferencePair, List<MAFRecord>>();
             foreach (var experiment in experiments)
             {
+                var diseaseAndReference = new DiseaseReferencePair(experiment.NormalDNAAnalysis.disease_abbr, experiment.TumorRNAAnalysis.refassemShortName);
+                if (!experimentSets.ContainsKey(diseaseAndReference))
+                {
+                    experimentSets.Add(diseaseAndReference, new List<MAFRecord>());
+                }
+
+                string chromPrefix;
+                string refassem = experiment.TumorDNAAnalysis.refassemShortName.ToLower();
+                if (refassem == "NCBI36_BCCAGSC_variant".ToLower() || refassem == "grch37-lite" || refassem == "grch37" || refassem == "hg19_broad_variant" || refassem == "grch37-lite_wugsc_variant_1" || refassem == "grch37-lite_wugsc_variant_2"
+                    || refassem == "grch37-lite-+-hpv_redux-build" || refassem == "HS37D5".ToLower() || refassem == "NCBI36_WUGSC_variant".ToLower())
+                {
+                    chromPrefix = " ";
+                }
+                else
+                {
+                    chromPrefix = " chr";
+                }
+
                 foreach (MAFRecord mafRecord in experiment.maf)
                 {
-                    if (mafRecord.Chrom == "MT" || mafRecord.Chrom == "M")
+                    if (experiment.TumorDNAAnalysis.storedBAM != null)
                     {
-                        //
-                        // Just totally ignore mitochondrial mutations.
-                        //
-                        continue;
+                        string tumorDNAFileName = diseaseAndReference.disease + @"\" + experiment.TumorDNAAnalysis.analysis_id + "-" +
+                            mafRecord.Hugo_symbol + "-chr" + mafRecord.Chrom + "-" + Math.Max(1, mafRecord.Start_position - 200) + "-" +
+                           (mafRecord.Start_position + 10);
+
+                        extractTumorDNAInput.WriteLine(tumorDNAFileName + "\t" + mafRecord.entire_maf_line);
+                        extractTumorDNAScript.WriteLine("samtools view " + experiment.TumorDNAAnalysis.storedBAM.bamInfo.FullName + chromPrefix + mafRecord.Chrom.ToUpper() + ":" + Math.Max(1, mafRecord.Start_position - 200) + "-" + (mafRecord.Start_position + 10) + @" > " +
+                                                             tumorDNAFileName);
                     }
                 }
             }
+
+            extractRNAInput.Close();
+            extractTumorDNAInput.Close();
+            extractTumorDNAScript.Close();
+
+            foreach (var entry in perMachineExtractScripts)
+            {
+                entry.Value.Close();
+            }
+
+
         }
-  
+
+        public static void GenerateLAMLMoves(Dictionary<AnalysisID, TCGARecord> tcgaRecords)
+        {
+            StreamWriter script = new StreamWriter(@"f:\temp\expression\moveLAML.cmd");
+
+            foreach (var entry in tcgaRecords)
+            {
+                TCGARecord record = entry.Value;
+                if (record.disease_abbr != "laml")
+                {
+                    continue;
+                }
+
+                string destination;
+                if (record.tumorSample) {
+                    destination = @"tumor\";
+                } else {
+                    destination = @"normal\";
+                }
+                destination += record.library_strategy + @"\";
+                script.WriteLine(@"mv " + record.analysis_id + " " + destination + record.analysis_id);
+            }
+
+            script.Close();
+
+        }
+
+        public static List<AnalysisID> LoadExcludedAnalyses() 
+        {
+            var excludedAnalyses = new List<AnalysisID>();
+
+            string [] analyses = File.ReadAllLines(@"f:\sequence\reads\tcga\excluded_analyses.txt");
+
+            foreach (var analysis in analyses) {
+                excludedAnalyses.Add(analysis.ToLower());
+            }
+
+            return excludedAnalyses;
+        }
         static void Main(string[] args)
         {
             hg18_likeReferences.Add("NCBI36_BCCAGSC_variant".ToLower());
@@ -1715,18 +1953,21 @@ namespace ExpressionMetadata
             LibraryStrategies.Add("wxs");
             LibraryStrategies.Add("rna");
 
+            TumorAndNormal.Add("tumor");
+            TumorAndNormal.Add("normal");
+
             InitializeMachines();
+
+            List<AnalysisID> excludedAnalyses = LoadExcludedAnalyses();
 
             var tumorToMachineMapping = GenerateTumorToMachineMapping();
             Dictionary<AnalysisID, StoredBAM> storedBAMs = LoadStoredBAMs(tumorToMachineMapping);
-            var tcgaRecords = LoadTCGARecords(storedBAMs);
+            var tcgaRecords = LoadTCGARecords(storedBAMs, excludedAnalyses);
             LoadTCGARecordsForLocalRealigns(tcgaRecords, storedBAMs);
             LoadTCGAAdditionalMetadata(tcgaRecords);
             GenereateAdditionalTCGAMetadataGeneratingScript(tcgaRecords, storedBAMs, tumorToMachineMapping);
             VerifyStoredBAMPaths(storedBAMs, tcgaRecords, tumorToMachineMapping);
 
-            // off while it's running. GenereateAdditionalTCGAMetadataGeneratingScript(tcgaRecords, storedBAMs);
-            
             var sampleToParticipantIDMap = CreateSampleToParticipantIDMap(tcgaRecords);
             var centerNameToDomainNameMap = GenerateCenterNameToDomainName();
             var domainNameToCenterNameMap = InvertStringDictionary(centerNameToDomainNameMap);
@@ -1753,7 +1994,7 @@ namespace ExpressionMetadata
             GenerateDownloadScripts(experiments, tumorToMachineMapping);
 
             GenerateExtractionScripts(experiments);
-
+            GenerateLAMLMoves(tcgaRecords);
         }
     }
 }
