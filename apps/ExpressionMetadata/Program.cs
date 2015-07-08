@@ -110,6 +110,7 @@ namespace ExpressionMetadata
             Machine.AddMachine("fds-326-k25-18", 48, 6);
             Machine.AddMachine("fds-326-k25-20", 48, 6);
             Machine.AddMachine("msr-genomics-0", 256, 240, true);
+            Machine.AddMachine("msr-genomics-1", 256, 240, true);
         }
 
         public static Dictionary<string, Machine> Machines = new Dictionary<string, Machine>();
@@ -404,15 +405,13 @@ namespace ExpressionMetadata
             // Directory structure is \\msr-srs-%n\d$\tcga\{rna,wgs,wxs}\{tumor, normal}\disease_abbr\analysis_id\*.{bam,bai}.  We need to call LoadStoredBAMsForDirectory on each
             // of the disease_abbr directories.  
             //
-
-
-            foreach (var entry in tumorToMachineMapping)
+            foreach (var machine in Machines)
             {
-                LoadStoredBAMsForDirectory(@"\\" + entry.Value + @"\d$\tcga\" + entry.Key.tumorType + @"\" + (entry.Key.isNormal ? "normal" : "tumor") + @"\" + entry.Key.libraryStrategy, storedBAMs, hashScripts);
+                LoadStoredBamsForMachine(@"\\" + machine + @"\d$\tcga", storedBAMs, hashScripts);
             }
 
-            LoadStoredBamsForMachine(@"\\msr-genomics-0\d$\tcga", storedBAMs, hashScripts);
             LoadStoredBamsForMachine(@"\\msr-genomics-0\e$\tcga", storedBAMs, hashScripts);
+            LoadStoredBamsForMachine(@"\\msr-genomics-1\e$\tcga", storedBAMs, hashScripts);
 
             foreach (var entry in hashScripts)
             {
