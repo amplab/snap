@@ -12,6 +12,16 @@ void usage()
     soft_exit(1);
 }
 
+int CompareGenomeLocations(const void *l1, const void *l2)
+{
+    GenomeLocation gl1 = *(GenomeLocation *)l1;
+    GenomeLocation gl2 = *(GenomeLocation *)l2;
+
+    if (gl1 > gl2)      return 1;
+    if (gl1 == gl2)     return 0;
+    return -1;
+}
+
 int main(int argc, char* argv[])
 {
     if (4 != argc) {
@@ -50,6 +60,7 @@ int main(int argc, char* argv[])
     GenomeLocation *locationsToCheck = new GenomeLocation[nLocationsToCheck];
 
     rewind(listOfLocationsFile);
+
     for (int i = 0; i < nLocationsToCheck; i++) {
         if (NULL == fgets(inputBuffer, inputBufferSize, listOfLocationsFile)) {
             fprintf(stderr, "Error reading listOfLocations file second time\n");
@@ -78,7 +89,7 @@ int main(int argc, char* argv[])
         locationsToCheck[i] = contigBase + offset - 1;  // -1 because we're 0 based and S/BAM is 1-based.
     }
 
-    now sort locationsToCheck.
+    qsort(locationsToCheck, nLocationsToCheck, sizeof(*locationsToCheck), CompareGenomeLocations);
 
 
 	return 0;

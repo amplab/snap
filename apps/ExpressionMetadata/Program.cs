@@ -97,16 +97,12 @@ namespace ExpressionMetadata
             Machine.AddMachine("fds-326-k25-3", 48, 6);
             Machine.AddMachine("fds-326-k25-4", 48, 6);
             Machine.AddMachine("fds-326-k25-5", 48, 6);
-            Machine.AddMachine("fds-326-k25-6", 48, 6);
             Machine.AddMachine("fds-326-k25-7", 48, 6);
             Machine.AddMachine("fds-326-k25-8", 48, 6);
             Machine.AddMachine("fds-326-k25-9", 48, 6);
             Machine.AddMachine("fds-326-k25-11", 48, 6);
-            Machine.AddMachine("fds-326-k25-12", 48, 6);
             Machine.AddMachine("fds-326-k25-14", 48, 6);
             Machine.AddMachine("fds-326-k25-15", 48, 6);
-            Machine.AddMachine("fds-326-k25-16", 48, 6);
-            Machine.AddMachine("fds-326-k25-17", 48, 6);
             Machine.AddMachine("fds-326-k25-18", 48, 6);
             Machine.AddMachine("fds-326-k25-20", 48, 6);
             Machine.AddMachine("msr-genomics-0", 256, 240, true);
@@ -184,9 +180,9 @@ namespace ExpressionMetadata
             tumorToMachineMapping.Add(new AnalysisType("lusc", "rna", true), "fds-326-k25-18");
             tumorToMachineMapping.Add(new AnalysisType("lusc", "wgs", true), "fds-326-k25-18");
             tumorToMachineMapping.Add(new AnalysisType("lusc", "wxs", true), "fds-326-k25-18");
-            tumorToMachineMapping.Add(new AnalysisType("lusc", "rna", false), "fds-326-k25-16");
-            tumorToMachineMapping.Add(new AnalysisType("lusc", "wgs", false), "fds-326-k25-19");
-            tumorToMachineMapping.Add(new AnalysisType("lusc", "wxs", false), "fds-326-k25-16");
+            tumorToMachineMapping.Add(new AnalysisType("lusc", "rna", false), "msr-srs-3");
+            tumorToMachineMapping.Add(new AnalysisType("lusc", "wgs", false), "msr-srs-3");
+            tumorToMachineMapping.Add(new AnalysisType("lusc", "wxs", false), "msr-srs-3");
 
              return tumorToMachineMapping;
         }
@@ -375,6 +371,8 @@ namespace ExpressionMetadata
                 return;
             }
 
+            Console.WriteLine("Loading bams for " + directory);
+
             foreach (var diseaseDir in Directory.GetDirectories(directory)) 
             {
                 foreach (var tumorOrNormal in TumorAndNormal)
@@ -407,11 +405,12 @@ namespace ExpressionMetadata
             //
             foreach (var machine in Machines)
             {
-                LoadStoredBamsForMachine(@"\\" + machine + @"\d$\tcga", storedBAMs, hashScripts);
+                LoadStoredBamsForMachine(@"\\" + machine.Value.name + @"\d$\tcga", storedBAMs, hashScripts);
             }
 
             LoadStoredBamsForMachine(@"\\msr-genomics-0\e$\tcga", storedBAMs, hashScripts);
             LoadStoredBamsForMachine(@"\\msr-genomics-1\e$\tcga", storedBAMs, hashScripts);
+            LoadStoredBamsForMachine(@"\\bolosky\f$\tcga", storedBAMs, hashScripts);
 
             foreach (var entry in hashScripts)
             {
@@ -548,6 +547,14 @@ namespace ExpressionMetadata
                     }
                     record.totalFileSize += Convert.ToInt64(file.Element("filesize").Value);
                 }
+
+                if (record.bamFileName == "" || record.baiFileName == "")
+                {
+                    //
+                    // This might be a broken analysis with a name like foo.bam_HOLD_QC_PENDING or something.  Ignore it.
+                    //
+                    continue;
+                }
                 record.localRealign = false;
 
                 string refassem = record.refassemShortName;
@@ -667,7 +674,7 @@ namespace ExpressionMetadata
                     continue;
                 }
 
-                if (pathLength != 10 || (pathComponents[3] != "d$"  && pathComponents[3] != "e$") || pathComponents[4] != "tcga" || pathComponents[8] != analysisID ||
+                if (pathLength != 10 || (pathComponents[3] != "d$" && pathComponents[3] != "e$" && pathComponents[3] != "f$") || pathComponents[4] != "tcga" || pathComponents[8] != analysisID ||
                     (pathComponents[libraryComponent] != "rna" && pathComponents[libraryComponent] != "wgs" && pathComponents[libraryComponent] != "wxs") || (pathComponents[tumorNormalComponent] != "tumor" && pathComponents[tumorNormalComponent] != "normal"))
                 {
                     Console.WriteLine("Invalid path for analysis ID " + analysisID + " path " + fullPath);
@@ -744,6 +751,11 @@ namespace ExpressionMetadata
                 record.tumorSample = fields[11] == "tumor";
                 record.localRealign = true;
                 record.realignedFrom = fields[12];
+                if (!tcgaRecords.ContainsKey(record.realignedFrom))
+                {
+                    Console.WriteLine("Realignment analysis " + record.analysis_id + " is realigned from an unknown source; most likely something we excluded after we generated this realignment.  Maybe you want to delete it from realigns.txt");
+                    continue;
+                }
                 record.realignSource = tcgaRecords[record.realignedFrom];
 
                 UseAnalysis(record.realignedFrom, null, storedBAMs);
@@ -838,6 +850,20 @@ namespace ExpressionMetadata
             public SampleID Tumor_sample_uuid;
             public SampleID Matched_normal_sample_uuid;
             public Pathname MAFFileName;
+
+            public bool hasDNACounts = false;
+            public int DNALineNumber;
+            public int nDNAMatchingNormal;
+            public int nDNAMatchingTumor;
+            public int nDNAMatchingNeither;
+            public int nDNAMatchingBoth;
+
+            public bool hasRNACounts = false;
+            public int RNALineNumber;
+            public int nRNAMatchingNormal;
+            public int nRNAMatchingTumor;
+            public int nRNAMatchingNeither;
+            public int nRNAMatchingBoth;
         }
 
         static void AddMAFFileToParticipants(Pathname inputFilename, Dictionary<ParticipantID, Participant> participants, Dictionary<SampleID, ParticipantID> sampleToParticipantIDMap)
@@ -976,10 +1002,12 @@ namespace ExpressionMetadata
             public List<TCGARecord> DNA = new List<TCGARecord>();
         }
 
+ 
         public class Participant
         {
             public string participantId;
             public List<List<MAFRecord>> mafs = new List<List<MAFRecord>>();
+            public Dictionary<string, List<MAFRecord>> mafsByGene = new Dictionary<TumorType, List<MAFRecord>>();
             public Dictionary<SampleID, Sample> tumorSamples = new Dictionary<SampleID, Sample>();   // Maps sampleID->sample for this participant
             public Dictionary<SampleID, Sample> normalSamples = new Dictionary<SampleID, Sample>();  // Maps sampleID->sample for this participant
             public Dictionary<string, List<TCGARecord>> tumorRNAByReference = new Dictionary<string, List<TCGARecord>>();
@@ -1565,40 +1593,66 @@ namespace ExpressionMetadata
             return experiments;
         }
 
-        public static void AddDownloadToScript(TCGARecord tcgaRecord, Dictionary<string, StreamWriter> downloadScripts,  Dictionary<AnalysisType, Pathname> tumorToMachineMapping)
+        public static void AddDownloadToScript(TCGARecord tcgaRecord, Dictionary<string, StreamWriter> downloadScripts,  Dictionary<AnalysisType, Pathname> tumorToMachineMapping, Dictionary<string, long> downloadAmounts)
         {
             string machine = tumorToMachineMapping[new AnalysisType(tcgaRecord)];
             if (!downloadScripts.ContainsKey(machine))
             {
                 downloadScripts.Add(machine, new StreamWriter(@"f:\temp\expression\loadFromTCGA-" + machine + ".cmd"));
+                downloadAmounts.Add(machine, 0);
             }
 
             downloadScripts[machine].WriteLine(@"cd /d d:\tcga\" + tcgaRecord.disease_abbr + (tcgaRecord.tumorSample ? @"\tumor\" : @"\normal\") + tcgaRecord.library_strategy);
-            downloadScripts[machine].WriteLine(@"gtdownload -c c:\bolosky\ravip-cghub.key " + tcgaRecord.analysis_id);
+            downloadScripts[machine].WriteLine(@"gtdownload -c c:\bolosky\ravip-cghub.key -k 30 " + tcgaRecord.analysis_id);
+
+            downloadAmounts[machine] += tcgaRecord.totalFileSize;
         }
 
         public static void GenerateDownloadScripts(List<Experiment> experiments,  Dictionary<AnalysisType, Pathname> tumorToMachineMapping)
         {
+            Console.WriteLine();
             var downloadScripts = new Dictionary<string, StreamWriter>();
+            var downloadAmounts = new Dictionary<string, long>();
             foreach (var experiment in experiments)
             {
                 if (experiment.TumorRNAAnalysis.storedBAM == null && !experiment.TumorRNAAnalysis.localRealign) {
-                    AddDownloadToScript(experiment.TumorRNAAnalysis, downloadScripts, tumorToMachineMapping);
+                    AddDownloadToScript(experiment.TumorRNAAnalysis, downloadScripts, tumorToMachineMapping, downloadAmounts);
                 }
 
-                if (experiment.TumorDNAAnalysis.storedBAM == null && !experiment.TumorDNAAnalysis.localRealign)
+                if (experiment.TumorDNAAnalysis.storedBAM == null)
                 {
-                    AddDownloadToScript(experiment.TumorDNAAnalysis, downloadScripts, tumorToMachineMapping);
+                    if (experiment.TumorDNAAnalysis.localRealign)
+                    {
+                        if (experiment.TumorDNAAnalysis.realignSource.storedBAM == null)
+                        {
+                            AddDownloadToScript(experiment.TumorDNAAnalysis.realignSource, downloadScripts, tumorToMachineMapping, downloadAmounts);
+                        }
+                    }
+                    else
+                    {
+                        AddDownloadToScript(experiment.TumorDNAAnalysis, downloadScripts, tumorToMachineMapping, downloadAmounts);
+                    }
                 }
 
-                if (experiment.NormalDNAAnalysis.storedBAM == null && !experiment.NormalDNAAnalysis.localRealign)
+                if (experiment.NormalDNAAnalysis.storedBAM == null)
                 {
-                    AddDownloadToScript(experiment.NormalDNAAnalysis, downloadScripts, tumorToMachineMapping);
+                    if (experiment.NormalDNAAnalysis.localRealign)
+                    {
+                        if (experiment.NormalDNAAnalysis.realignSource.storedBAM == null)
+                        {
+                            AddDownloadToScript(experiment.NormalDNAAnalysis.realignSource, downloadScripts, tumorToMachineMapping, downloadAmounts);
+                        }
+                    }
+                    else
+                    {
+                        AddDownloadToScript(experiment.NormalDNAAnalysis, downloadScripts, tumorToMachineMapping, downloadAmounts);
+                    }
                 }
             }
 
             foreach (var entry in downloadScripts)
             {
+                Console.WriteLine(entry.Key + " needs to download " + String.Format("{0:n0}", downloadAmounts[entry.Key]) + " bytes.");
                 entry.Value.Close();
             }
         }
@@ -1716,14 +1770,7 @@ namespace ExpressionMetadata
             {
                 script.Write(" -s 0 1000");
             }
-            if (bigMem)
-            {
-                script.Write(" -so -sm 100 -xf 5");
-            }
-            else
-            {
-                script.Write(" -so -sm 5 -di -xf 1.5");
-            }
+            script.Write(" -di -so -sm " + (bigMem ? "60" : "5"));
             script.WriteLine(" -lp -map -pc -mrl " + Math.Min(50, seedLength * 2));
             script.WriteLine("del " + outputFileName + ".tmp"); // In case the alignment failed for whatever reason, don't copy the intermediate file, just get rid of it
 
@@ -1839,20 +1886,11 @@ namespace ExpressionMetadata
 
         static public void GenerateExtractionScripts(List<Experiment> experiments)
         {
-            StreamWriter extractRNAInput = new StreamWriter(@"f:\temp\expression\extractRNAInput.txt");
-            StreamWriter extractTumorDNAInput = new StreamWriter(@"f:\temp\expression\extractTumorDNAInput.txt");
+            var extractRNAInputs = new Dictionary<string, StreamWriter>();  // Maps reference->input file
+            var extractDNAInputs = new Dictionary<string, StreamWriter>();  // Maps reference->input file
+            StreamWriter extractRNAScript = new StreamWriter(@"f:\temp\expression\extractRNAScript.cmd");
             StreamWriter extractTumorDNAScript = new StreamWriter(@"f:\temp\expression\extractTumorDNASamples.cmd");
             var perMachineExtractScripts = new Dictionary<Pathname, StreamWriter>();
-
-
-
-            //Console.WriteLine("samtools view " + storedData[tumorNormalPair.tumorAnalysisId].bamFileName + chromPrefix + mutation.Chrom + ":" + Math.Max(1, mutation.Start_position - 200) + "-" + (mutation.Start_position + 10) + @" > " +
-              // tumorFileName);
-
-            //inputFileForExtractRNA.WriteLine();
-
-
-
 
             var experimentSets = new Dictionary<DiseaseReferencePair, List<MAFRecord>>();
             foreach (var experiment in experiments)
@@ -1875,7 +1913,13 @@ namespace ExpressionMetadata
                     chromPrefix = " chr";
                 }
 
-                foreach (MAFRecord mafRecord in experiment.maf)
+                if (!extractDNAInputs.ContainsKey(refassem))
+                {
+                    extractDNAInputs.Add(refassem, new StreamWriter(@"f:\temp\expression\tumorDNAInput-" + refassem + ".txt"));
+                    extractRNAInputs.Add(refassem, new StreamWriter(@"f:\temp\expression\tumorRNAInput-" + refassem + ".txt"));
+                }
+
+                 foreach (MAFRecord mafRecord in experiment.maf)
                 {
                     if (experiment.TumorDNAAnalysis.storedBAM != null)
                     {
@@ -1883,16 +1927,32 @@ namespace ExpressionMetadata
                             mafRecord.Hugo_symbol + "-chr" + mafRecord.Chrom + "-" + Math.Max(1, mafRecord.Start_position - 200) + "-" +
                            (mafRecord.Start_position + 10);
 
-                        extractTumorDNAInput.WriteLine(tumorDNAFileName + "\t" + mafRecord.entire_maf_line);
+                        extractDNAInputs[refassem].WriteLine(tumorDNAFileName + "\t" + mafRecord.entire_maf_line);
                         extractTumorDNAScript.WriteLine("samtools view " + experiment.TumorDNAAnalysis.storedBAM.bamInfo.FullName + chromPrefix + mafRecord.Chrom.ToUpper() + ":" + Math.Max(1, mafRecord.Start_position - 200) + "-" + (mafRecord.Start_position + 10) + @" > " +
                                                              tumorDNAFileName);
+                    }
+
+                    if (experiment.TumorRNAAnalysis.storedBAM != null)
+                    {
+                        string tumorRNAFileName = diseaseAndReference.disease + @"\" + experiment.TumorRNAAnalysis.analysis_id + "-" +
+                            mafRecord.Hugo_symbol + "-chr" + mafRecord.Chrom + "-" + Math.Max(1, mafRecord.Start_position - 200) + "-" +
+                           (mafRecord.Start_position + 10) + "-RNA";
+
+                        extractRNAInputs[refassem].WriteLine(tumorRNAFileName + "\t" + mafRecord.entire_maf_line);
+                        extractRNAScript.WriteLine("samtools view " + experiment.TumorRNAAnalysis.storedBAM.bamInfo.FullName + chromPrefix + mafRecord.Chrom.ToUpper() + ":" + Math.Max(1, mafRecord.Start_position - 200) + "-" + (mafRecord.Start_position + 10) + @" > " +
+                                                             tumorRNAFileName);
                     }
                 }
             }
 
-            extractRNAInput.Close();
-            extractTumorDNAInput.Close();
+            extractRNAScript.Close();
             extractTumorDNAScript.Close();
+
+            foreach (var entry in extractDNAInputs)
+            {
+                extractDNAInputs[entry.Key].Close();
+                extractRNAInputs[entry.Key].Close();
+            }
 
             foreach (var entry in perMachineExtractScripts)
             {
@@ -1940,6 +2000,214 @@ namespace ExpressionMetadata
 
             return excludedAnalyses;
         }
+
+        public static void AddOneTypeOfCountsToMAFs(string[] counts, Dictionary<string, Participant> participants, Dictionary<string, Sample> allSamples, bool isDNA)
+        {
+            int nDuplicateLines = 0;
+            int nNoSample = 0;
+            for (int lineNumber = 1; lineNumber <= counts.Count(); lineNumber++ )   // Use 1-based to correspond to how people usually use file lines
+            {
+                string count = counts[lineNumber-1]; // -1 is because we're 1 based
+                string[] fields = count.Split('\t');
+                if (fields.Count() != 43)
+                {
+                    Console.WriteLine("Badly formatted dna count line " + count);
+                    continue;
+                }
+
+                //
+                // Get the analysis ID, which is contained in the filename in field 1.
+                //
+                string[] filenameFields = fields[1].Split('\\');
+                if (filenameFields.Count() != 2 || filenameFields[1].Count() < 36)
+                {
+                    Console.WriteLine("Can't parse filename field in dna record " + count);
+                    continue;
+                }
+                AnalysisID analysisID = filenameFields[1].Substring(0, 36);
+                string gene = fields[2];
+
+                if (!allSamples.ContainsKey(fields[34]) || !allSamples.ContainsKey(fields[35]))
+                {
+                    //Console.WriteLine("Unable to find tumor and/or normal sample for DNA line " + count);
+                    nNoSample++;
+                    continue;
+                }
+
+                Sample tumorSample = allSamples[fields[34]];
+                Sample normalSample = allSamples[fields[35]];
+
+                if (tumorSample.participantID != normalSample.participantID)
+                {
+                    Console.WriteLine("Samples have different participant IDs " + fields[35] + "(" + tumorSample.participantID + ") and " + fields[36] + "(" + normalSample.participantID);
+                    continue;
+                }
+
+                Participant participant = participants[tumorSample.participantID];
+
+                //
+                // Now find the actual MAFRecord.
+                //
+                if (!participant.mafsByGene.ContainsKey(gene))
+                {
+                    Console.WriteLine("Participant " + participant.participantId + " doesn't seem to have any mutations for gene " + gene + " though it has a MAF line");
+                    continue;
+                }
+
+                MAFRecord mafRecord = null;
+                foreach (var mafCandidate in participant.mafsByGene[gene])
+                {
+                    if (mafCandidate.Start_position == Convert.ToInt32(fields[7]) && mafCandidate.End_position == Convert.ToInt32(fields[8]))
+                    {
+                        mafRecord = mafCandidate;
+                        break;
+                    }
+                }
+                if (null == mafRecord)
+                {
+                    Console.WriteLine("Couldn't find matching MAF record for count line " + count);
+                    continue;
+                }
+
+                if (isDNA)
+                {
+                    if (mafRecord.hasDNACounts)
+                    {
+                        //
+                        // For reasons that I don't entirely understand, some mutations are listed more than once in the MAF files, and so wind up more than once here.
+                        //
+                        if (mafRecord.nDNAMatchingNormal != Convert.ToInt32(fields[39]) || mafRecord.nDNAMatchingTumor != Convert.ToInt32(fields[40]) ||
+                            mafRecord.nDNAMatchingNeither != Convert.ToInt32(fields[41]) || mafRecord.nDNAMatchingBoth != Convert.ToInt32(fields[42]))
+                        {
+                            Console.WriteLine("Found DNA count record for already filled in MAF with different values (line numbers " + mafRecord.DNALineNumber + " and " + lineNumber + " line: " + count);
+                        }
+                        nDuplicateLines++;
+                        continue;
+                    }
+                    mafRecord.hasDNACounts = true;
+                    mafRecord.DNALineNumber = lineNumber;
+                    mafRecord.nDNAMatchingNormal = Convert.ToInt32(fields[39]);
+                    mafRecord.nDNAMatchingTumor = Convert.ToInt32(fields[40]);
+                    mafRecord.nDNAMatchingNeither = Convert.ToInt32(fields[41]);
+                    mafRecord.nDNAMatchingBoth = Convert.ToInt32(fields[42]);
+                }
+                else
+                {
+                    if (mafRecord.hasRNACounts)
+                    {
+                        if (mafRecord.nRNAMatchingNormal != Convert.ToInt32(fields[39]) || mafRecord.nRNAMatchingTumor != Convert.ToInt32(fields[40]) ||
+                            mafRecord.nRNAMatchingNeither != Convert.ToInt32(fields[41]) || mafRecord.nRNAMatchingBoth != Convert.ToInt32(fields[42]))
+                        {
+                            Console.WriteLine("Found RNA count record for already filled in MAF with different values (line numbers " + mafRecord.RNALineNumber + " and " + lineNumber + " line: " + count);
+                        }
+                        nDuplicateLines++;
+                        continue;
+                    }
+                    mafRecord.hasRNACounts = true;
+                    mafRecord.RNALineNumber = lineNumber;
+                    mafRecord.nRNAMatchingNormal = Convert.ToInt32(fields[39]);
+                    mafRecord.nRNAMatchingTumor = Convert.ToInt32(fields[40]);
+                    mafRecord.nRNAMatchingNeither = Convert.ToInt32(fields[41]);
+                    mafRecord.nRNAMatchingBoth = Convert.ToInt32(fields[42]);
+                }
+            }
+
+            if (0 != nDuplicateLines || 0 != nNoSample)
+            {
+                Console.WriteLine("Found " + nDuplicateLines + " duplicate and  " + nNoSample + " no sample " + (isDNA ? "DNA" : "RNA") + " counts, presumably because of duplicate lines in the MAF files from TCGA.");
+            }
+
+        }
+
+
+        public static void AddCountsToMAFs(Dictionary<string, Participant> participants, Dictionary<string, Sample> allSamples)
+        {
+            string[] dnaCounts = File.ReadAllLines(@"f:\sequence\Reads\tcga\tumor_dna.txt");    // These are the counts of tumor/normal/both/neither for each MAF line for which we could get data
+            AddOneTypeOfCountsToMAFs(dnaCounts, participants, allSamples, true);
+
+            dnaCounts = null;
+            string[] rnaCounts = File.ReadAllLines(@"f:\sequence\Reads\tcga\tumor_rna.txt");
+            AddOneTypeOfCountsToMAFs(rnaCounts, participants, allSamples, false);
+        }
+
+        public static void BuildMAFsByGene(Dictionary<string, Participant> participants)
+        {
+            foreach (var entry in participants)
+            {
+                var participant = entry.Value;
+                if (participant.mafs.Count() == 0)
+                {
+                    continue;
+                }
+
+                foreach (MAFRecord mafRecord in participant.mafs[0])   // We only ever use mafs[0]; other ones are just different mutation calls for the same participant, which we ignore
+                {
+                    if (!participant.mafsByGene.ContainsKey(mafRecord.Hugo_symbol))
+                    {
+                        participant.mafsByGene.Add(mafRecord.Hugo_symbol, new List<MAFRecord>());
+                    }
+
+                    participant.mafsByGene[mafRecord.Hugo_symbol].Add(mafRecord);
+                }
+
+            }
+        }
+
+        public static void GenerateScatterGraphs(Dictionary<string, Participant> participants)
+        {
+            StreamWriter outputFile = new StreamWriter(@"f:\temp\expression\mutation_and_tumor_reference_counts.txt");
+            outputFile.WriteLine("participantID\tHugo_Symbol\tisSingle\tnDNAMatchingTumor\tnDNAMatchingNormal\tnDNAMatchingNeither\tnDNAMatchingBoth\tnRNAMatchingTumor\tnRNAMatchingNormal\tnRNAMatchingNeither\tnRNAMatchingBoth");
+
+            List<string> genesToCheck = new List<string>();
+            genesToCheck.Add("TP53");
+            genesToCheck.Add("CDKN2A");
+
+            foreach (var gene in genesToCheck ) {
+                foreach (var participantEntry in participants)
+                {
+                    Participant participant = participantEntry.Value;
+
+                    int ntp53 = 0;
+                    bool hasBigMutation = false;
+                    if (participant.mafsByGene.ContainsKey(gene))
+                    {
+                        foreach (var mafRecord in participant.mafsByGene[gene])
+                        {
+                            if (mafRecord.Variant_classification.ToLower() == "silent") 
+                            {
+                                //
+                                // Silent or no counts.  Ignore it.
+                                //
+                                continue;
+                            }
+                            if (mafRecord.Tumor_seq_allele_1.Count() > 2 || mafRecord.Reference_allele.Count() > 2 || !mafRecord.hasRNACounts || !mafRecord.hasDNACounts) {
+                                hasBigMutation = true;  // not having counts is like a big mutation, in that we just ignore this person
+                                break;
+                            }
+                            ntp53++;
+                        }
+
+                        if (ntp53 > 0 && !hasBigMutation)
+                        {
+                            foreach (var mafRecord in participant.mafsByGene[gene])
+                            {
+                                if (mafRecord.Variant_classification.ToLower() != "silent")
+                                {
+                                    continue;
+                                }
+
+                                outputFile.WriteLine(participant.participantId + "\t" + gene + "\t" + ((ntp53 > 1) ? "Multiple" : "single") + "\t" + mafRecord.nDNAMatchingTumor + "\t" + mafRecord.nDNAMatchingNormal + "\t" + mafRecord.nDNAMatchingNeither + "\t" + mafRecord.nDNAMatchingBoth + "\t"
+                                    + mafRecord.nRNAMatchingTumor + "\t" + mafRecord.nRNAMatchingNormal + "\t" + mafRecord.nRNAMatchingNeither + "\t" + mafRecord.nRNAMatchingBoth);
+                            }
+
+                        }
+                    }
+
+                 }
+            }
+
+           outputFile.Close();
+        }
         static void Main(string[] args)
         {
             hg18_likeReferences.Add("NCBI36_BCCAGSC_variant".ToLower());
@@ -1985,6 +2253,10 @@ namespace ExpressionMetadata
             {
                 AddMAFFileToParticipants(file, participants, sampleToParticipantIDMap);
             }
+
+            BuildMAFsByGene(participants);
+            AddCountsToMAFs(participants, allSamples);
+            GenerateScatterGraphs(participants);
 
             var experiments = BuildExperiments(participants);
             GenerateRealignmentScript(experiments, tcgaRecords, storedBAMs, tumorToMachineMapping);

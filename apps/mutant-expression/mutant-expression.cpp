@@ -242,13 +242,16 @@ int main(int argc, char* argv[])
 //        int lineNumber = atoi(piece[LineNumber]);   // This is the mutation line number from the spreadsheet, used to match it with its SAM file
 //        const size_t SAMFileNameSize = 1000;
         lineNumber++;
+        if (lineNumber % 10000 == 0) {
+            fprintf(stderr, ".");
+        }
         char *SAMFileName = piece[RNAFileName];
 
         samFile = fopen(SAMFileName, "r");
         if (NULL == samFile) {
             //
             //
-            fprintf(stderr, "Unable to open SAM file %s\n", SAMFileName);
+            fprintf(stderr, "Unable to open SAM file %s, line %d\n", SAMFileName, lineNumber);
             noSAMFile++;
             goto doneWithMutation;
         }
@@ -375,8 +378,7 @@ int main(int argc, char* argv[])
                 goto doneWithMutation;
             }
             if (memcmp(refAtMutation, piece[Reference_Allele], polymorphismLength)) {
-                fprintf(stderr, "Reference doesn't match expected reference allele (type %s), %c != %c, mutation number %d, chromosome %s, location %d\n", 
-                    piece[VariantType], *refAtMutation, piece[Reference_Allele][0], mutationNumber, piece[Chrom], mutationStartPos);
+                fprintf(stderr, "Reference doesn't match expected reference allele (type %s), %c != %c, mutation number %d, chromosome %s, location %d\n", piece[VariantType], *refAtMutation, piece[Reference_Allele][0], mutationNumber, piece[Chrom], mutationStartPos);
                 nValidationProblems++;
                 goto doneWithMutation;
             }
@@ -606,6 +608,9 @@ int main(int argc, char* argv[])
                 case 'N':
                     currentReadPos += cigarCount;
                     break;
+
+                case 'H':
+                    break;  // Hard clip; just telling us something's missing, it's a no-op for us.
 
                 default:
                     fprintf(stderr, "Invalid cigar operation %c in cigar string '%s' on line %d of SAM file '%s'\n", op, cigarString, samFileLineNumber, SAMFileName);
