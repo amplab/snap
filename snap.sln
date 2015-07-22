@@ -203,7 +203,7 @@ Global
 		{F1B7F2D6-7C54-4BC7-9129-319D44847E49}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
 		{F1B7F2D6-7C54-4BC7-9129-319D44847E49}.Release|Mixed Platforms.Build.0 = Release|Any CPU
 		{F1B7F2D6-7C54-4BC7-9129-319D44847E49}.Release|Win32.ActiveCfg = Release|Any CPU
-		{F1B7F2D6-7C54-4BC7-9129-319D44847E49}.Release|x64.ActiveCfg = Release|Any CPU
+		{F1B7F2D6-7C54-4BC7-9129-319D44847E49}.Release|x64.ActiveCfg = Release|x64
 		{B7B07E1C-B763-4D68-B342-0CCB6E94A484}.Debug|Any CPU.ActiveCfg = Debug|Win32
 		{B7B07E1C-B763-4D68-B342-0CCB6E94A484}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
 		{B7B07E1C-B763-4D68-B342-0CCB6E94A484}.Debug|Mixed Platforms.Build.0 = Debug|Win32
@@ -239,7 +239,7 @@ Global
 		{BF4B5440-1F73-4D30-9868-7C92489020FF}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
 		{BF4B5440-1F73-4D30-9868-7C92489020FF}.Release|Mixed Platforms.Build.0 = Release|Any CPU
 		{BF4B5440-1F73-4D30-9868-7C92489020FF}.Release|Win32.ActiveCfg = Release|Any CPU
-		{BF4B5440-1F73-4D30-9868-7C92489020FF}.Release|x64.ActiveCfg = Release|Any CPU
+		{BF4B5440-1F73-4D30-9868-7C92489020FF}.Release|x64.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

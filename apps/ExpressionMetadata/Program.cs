@@ -1539,6 +1539,11 @@ namespace ExpressionMetadata
                     continue;
                 }
 
+                if (bestExperiment.TumorRNAAnalysis.analysis_id.ToLower() == "194bbcde-239a-434a-b06c-6b0182c4635c")
+                {
+                    Console.WriteLine("Here!");
+                }
+
 
                 experiments.Add(bestExperiment);
 
@@ -1792,6 +1797,8 @@ namespace ExpressionMetadata
             var realignBigMemScript = new StreamWriter(@"f:\temp\expression\realignBigMem.cmd");
             var perMachineScripts = new Dictionary<Pathname, StreamWriter>();
 
+            var perMachineOutput = new Dictionary<Pathname, long>();
+
             const long limitForBigMem = (long)50 * 1024 * 1024 * 1024;
             const long limitFor48 = (long)25 * 1024 * 1024 * 1024;
 
@@ -1859,6 +1866,12 @@ namespace ExpressionMetadata
                         }
                     }
 
+                    Pathname destMachine = tumorToMachineMapping[new AnalysisType(analysis)];
+                    if (!perMachineOutput.ContainsKey(destMachine))
+                    {
+                        perMachineOutput.Add(destMachine, 0);
+                    }
+                    perMachineOutput[destMachine] += analysis.realignSource.totalFileSize;
                     AddSingleRealignmentToScript(analysis, script, tcgaRecords, storedBAMs, tumorToMachineMapping, local, bigMem);
                 }
              }
@@ -1870,6 +1883,11 @@ namespace ExpressionMetadata
             foreach (var entry in perMachineScripts)
             {
                 entry.Value.Close();
+            }
+
+            foreach (var entry in perMachineOutput)
+            {
+                Console.WriteLine("Realign for " + entry.Key + " will consume about " + String.Format("{0:n0}", entry.Value) + " bytes.");
             }
         }
 
@@ -2256,7 +2274,7 @@ namespace ExpressionMetadata
 
             BuildMAFsByGene(participants);
             AddCountsToMAFs(participants, allSamples);
-            GenerateScatterGraphs(participants);
+            //GenerateScatterGraphs(participants);
 
             var experiments = BuildExperiments(participants);
             GenerateRealignmentScript(experiments, tcgaRecords, storedBAMs, tumorToMachineMapping);

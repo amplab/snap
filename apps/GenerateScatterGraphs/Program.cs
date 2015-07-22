@@ -9,191 +9,212 @@ namespace GenerateScatterGraphs
 {
     class Program
     {
+
+ 
         class GeneState
         {
-            public GeneState()
-            {
-                for (int i = 0; i < 2; i++)
-                {
-                    indices[i] = new Dictionary<string, bool>();
-                }
-            }
+            public string gene;
+            public List<string> single = new List<string>();
+            public List<string> multiple = new List<string>();
 
-            Dictionary<string, bool>[] indices = new Dictionary<string, bool>[2];
+            public Dictionary<string, List<string[]>> dnaMutationsByTumorAnalysis = new Dictionary<string, List<string []>>();
 
+            public int nSingle = 0;
+            public int nMultiple = 0;
+            public int nInteresting = 0;
+
+            public bool sex;
+            public string chrom;
         }
+ 
         static void Main(string[] args)
         {
-            string[] tumorDNA = File.ReadAllLines(@"c:\temp\tumor_dna.txt");
-            string[] tumorRNA = File.ReadAllLines(@"c:\temp\tumor_rna.txt");
+            const int minReads = 10;    // Minimum reads (in each RNA and DNA) to keep a sample.
 
-            string[][] tumorDNAFields = new string[tumorDNA.Count()][];
-            string[][] tumorRNAFields = new string[tumorRNA.Count()][];
+            string[] tumorDNA = File.ReadAllLines(@"f:\temp\tumor_dna.txt");
 
-            for (int i = 0; i < tumorDNA.Count(); i++)
+            var geneStates = new Dictionary<string, GeneState>();
+
+            foreach (var line in tumorDNA)
             {
-                tumorDNAFields[i] = tumorDNA[i].Split('\t');
-            }
+                string[] fields = line.Split('\t');
 
-            for (int i = 0; i < tumorRNA.Count(); i++)
-            {
-                tumorRNAFields[i] = tumorRNA[i].Split('\t');
-            }
-
-            string[][] measurements = new string[2][];
-            measurements[0] = tumorDNA;
-            measurements[1] = tumorRNA;
-
-            var genes = new List<string>();
-
-            if (false)
-            {
-                genes.Add("tp53");
-                genes.Add("cdkn2a");
-                genes.Add("egfr");
-                genes.Add("idh1");
-                genes.Add("idh2");
-                genes.Add("brca1");
-                genes.Add("brca2");
-                genes.Add("cebpa");
-                genes.Add("npm1");
-            }
-            else
-            {
-                foreach (var line in tumorDNA)
+                string variantClassification = fields[10];
+                if (variantClassification.ToLower() == "silent")
                 {
-                    string[] fields = line.Split('\t');
-                    if (!genes.Contains(fields[2].ToLower()))
-                    {
-                        genes.Add(fields[2].ToLower());
-                    }
+                    //
+                    // Just ignore silent mutations.
+                    //
+                    continue;
                 }
+
+                string gene = fields[2].ToLower();
+
+                if (gene == "unknown")
+                {
+                    continue;
+                }
+
+                string tumorSampleID = fields[34];
+                string chrom = fields[6].ToLower();
+                bool sex = chrom == "x" || chrom == "y" || chrom == "chrx" || chrom == "chry";
+
+                if (!geneStates.ContainsKey(gene))
+                {
+                    geneStates.Add(gene, new GeneState());
+                    geneStates[gene].gene = gene;
+                    geneStates[gene].sex = sex;
+                    geneStates[gene].chrom = chrom;
+                }
+
+                if (geneStates[gene].sex != sex)
+                {
+                    Console.WriteLine("Disagreement on sex for gene " + gene + " this record is " + chrom + " and first one was " + geneStates[gene].chrom);
+                }
+
+                if (!geneStates[gene].dnaMutationsByTumorAnalysis.ContainsKey(tumorSampleID))
+                {
+                    geneStates[gene].dnaMutationsByTumorAnalysis.Add(tumorSampleID, new List<string[]>());
+                }
+
+                geneStates[gene].dnaMutationsByTumorAnalysis[tumorSampleID].Add(fields);
             }
 
-            foreach (var gene in genes)
+            tumorDNA = null;    // Let it GC this.
+
+            string[] tumorRNA = File.ReadAllLines(@"f:\temp\tumor_rna.txt");
+
+            //
+            // Now run through the RNA and look for matches.
+            //
+            foreach (var line in tumorRNA)
             {
-                //
-                // We need to find all mutations for this gene that are present in both the DNA and RNA sets.  Make indices of them.
-                //
-                var indices = new Dictionary<string, bool>[2];
-                for (int i = 0; i < 2; i++)
+                string [] fields = line.Split('\t');
+                string gene = fields[2].ToLower();
+
+                if (gene == "unknown")
                 {
-                    indices[i] = new Dictionary<string, bool>();
-                    foreach (var line in measurements[i])
+                    continue;
+                }
+
+                string tumorSampleID = fields[34];
+
+                double nRNAReference = Convert.ToInt32(fields[39]);
+                double nRNATumor = Convert.ToInt32(fields[40]);
+                double nRNANeither = Convert.ToInt32(fields[41]);
+
+                if (nRNAReference + nRNATumor + nRNANeither < minReads)
+                {
+                    continue;
+                }
+
+ 
+                if (!geneStates.ContainsKey(gene) || !geneStates[gene].dnaMutationsByTumorAnalysis.ContainsKey(tumorSampleID))
+                {
+                    continue;
+                }
+
+                var geneState = geneStates[gene];
+
+                //
+                // Look for this particular mutation (they should always be there if we get this far).  Fields[2..37] should match (2 is a filename, after 37
+                // are counts; all differ between RNA and DNA.
+                //
+                foreach (var dnaMutation in geneState.dnaMutationsByTumorAnalysis[tumorSampleID])
+                {
+                    bool foundIt = true;
+                    for (int i = 2; i <= 37; i++)
                     {
-                        string[] fields = line.Split('\t');
-                        if (fields[2].ToLower() != gene)
+                        if (fields[i] != dnaMutation[i])
                         {
-                            continue;   // Wrong gene; ignore it
+                            foundIt = false;
+                            break;
                         }
-                        if (fields[10].ToLower() == "silent")
+                    }
+
+
+                    if (foundIt)
+                    {
+                        double nDNAReference = Convert.ToInt32(dnaMutation[39]);
+                        double nDNATumor = Convert.ToInt32(dnaMutation[40]);
+                        double nDNANeither = Convert.ToInt32(dnaMutation[41]);
+
+                        if (nDNAReference + nDNATumor + nDNANeither < minReads)
                         {
-                            //
-                            // Ignore silent mutations.
-                            //
                             continue;
                         }
 
-                        if (!indices[i].ContainsKey(fields[34])) // fields[34] is normal sample ID
-                        {
-                            indices[i].Add(fields[34], true);
-                        }
-                    }
-                }
+                        string thisLine = fields[1] + "\t" + dnaMutation[1];
 
-                //
-                // Now run through each one and keep only the ones that match.
-                //
-                List<string>[] matchedMeasurements = new List<string>[2];
-                for (int i = 0; i < 2; i++)
+                        for (int i = 2; i <= 42; i++)
+                        {
+                            thisLine += "\t" + dnaMutation[i];
+                        }
+
+                        //
+                        // Write the RNA counts after the DNA counts
+                        //
+                        for (int i = 39; i <= 42; i++)
+                        {
+                            thisLine += "\t" + fields[i];
+                        }
+
+                        bool isSingle = geneState.dnaMutationsByTumorAnalysis[tumorSampleID].Count() == 1;
+                        double tumorDNAFraction = nDNATumor / (nDNATumor + nDNAReference + nDNANeither);
+                        double tumorRNAFraction = nRNATumor / (nRNATumor + nRNAReference + nRNANeither);
+                        thisLine += "\t" + tumorDNAFraction + "\t" + tumorRNAFraction + "\t" + isSingle;
+
+                        if (isSingle)
+                        {
+                            geneState.nSingle++;
+                            geneState.single.Add(thisLine);
+                        }
+                        else
+                        {
+                            geneState.nMultiple++;
+                            geneState.multiple.Add(thisLine);
+                        }
+
+                        if (tumorDNAFraction < .6 && tumorDNAFraction > .1 && tumorRNAFraction >= .67 && tumorRNAFraction < .99)
+                        {
+                            geneState.nInteresting++;
+                        }
+                        break;
+                    }
+                } // for each possible matching DNA mutation
+            } // foreach line in the RNA input file.
+
+            StreamWriter summaryFile = new StreamWriter(@"f:\temp\gene_scatter_graphs\_summary.txt");
+            summaryFile.WriteLine("Gene\tnSingle\tnMultiple\tnInteresting\t%Interesting\tsex");
+
+            foreach (var entry in geneStates)
+            {
+                var geneState = entry.Value;
+                if (geneState.single.Count() + geneState.multiple.Count()< 10)
                 {
-                    matchedMeasurements[i] = new List<string>();
-                    foreach (var line in measurements[i])
-                    {
-                        string[] fields = line.Split('\t');
-
-                        if (fields[2].ToLower() != gene)
-                        {
-                            continue;   // Wrong gene; ignore it
-                        }
-
-                        if (indices[1 - i].ContainsKey(fields[34]))
-                        {
-                            matchedMeasurements[i].Add(line);
-                        }
-                    }
+                    continue;   // Not enough patients to be interesting
                 }
-
-
-                StreamWriter outFile = new StreamWriter(@"c:\temp\gene_expression_graphs\" + gene + ".txt");
-                int nMultiple = 0;
-                int nEmitted = 0;
-                int nInteresting = 0;
-                for (int i = 0; i < matchedMeasurements[0].Count(); i++)
+                StreamWriter file = new StreamWriter(@"f:\temp\gene_scatter_graphs\" + geneState.gene + ".txt");
+                file.WriteLine("RNAFile\tDNAFile\t" +
+                    "Hugo_Symbol\tEntrez_Gene_Id\tCenter\tNCBI_Build\tChromosome\tStart_Position\tEnd_Position\tStrand\tVariant_Classification\tVariant_Type\tReference_Allele\tTumor_Seq_Allele_1\tTumor_Seq_Allele_2\tdbSNP_RS\tdbSNP_Val_Status\t" +
+                    "Tumor_Sample_Barcode\tMatched_Norm_Sample_Barcode\tMatch_Norm_Seq_Allele1\tMatch_Norm_Seq_Allele2\tTumor_Validation_Allele1\tTumor_Validation_Allele2\tMatch_Norm_Validation_Allele1\tMatch_Norm_Validation_Allele2\tVerification_Status\t" +
+                    "Validation_Status\tMutation_Status\tSequencing_Phase\tSequence_Source\tValidation_Method\tScore\tBAM_File\tSequencer\tTumor_Sample_UUID\tMatched_Norm_Sample_UUID\tFile_Name\tArchive_Name\tLine_Number\t" +
+                    "n_DNA_Matching_Reference\tn_DNA_Matching_Tumor\tn_DNA_Matching_Neither\tn_DNA_Matching_Both\t" +
+                    "n_RNA_Matching_Reference\tn_RNA_Matching_Tumor\tn_RNA_Matching_Neither\tn_RNA_Matching_Both\t" +
+                    "tumorDNAFraction\ttumorRNAFraction\tIsSingle");
+                foreach (var line in geneState.multiple)
                 {
-                    //
-                    // It it single?
-                    //
-                    string [] currentFields = matchedMeasurements[0][i].Split('\t');
-
-                    double nNormalDNA = Convert.ToDouble(currentFields[39]);
-                    double nTumorDNA = Convert.ToDouble(currentFields[40]);
-                    double nNeitherDNA = Convert.ToDouble(currentFields[41]);
-
-                    string[] currentRNA = matchedMeasurements[1][i].Split('\t');
-                    double nNormalRNA = Convert.ToDouble(currentRNA[39]);
-                    double nTumorRNA = Convert.ToDouble(currentRNA[40]);
-                    double nNeitherRNA = Convert.ToDouble(currentRNA[41]);
-
-                    //
-                    // Give up on ones that don't have at least 10 DNA and RNA reads.
-                    //
-                    if (nNormalDNA + nTumorDNA + nNeitherDNA < 10) continue;
-                    if (nNormalRNA + nTumorRNA + nNeitherRNA < 10) continue;
-
-                    nEmitted++;
-                    outFile.Write(matchedMeasurements[0][i] + "\t" + matchedMeasurements[1][i]);
-                    bool single = true;
-                    if (i != 0)
-                    {
-                        string[] priorFields = matchedMeasurements[0][i - 1].Split('\t');
-                        if (priorFields[34] == currentFields[34])
-                        {
-                            single = false;
-                            nMultiple++;
-                        }
-                    }
-
-                    if (single && i != matchedMeasurements[0].Count()-1)
-                    {
-                        string[] nextFields = matchedMeasurements[0][i + 1].Split('\t');
-                        if (nextFields[34] == currentFields[34])
-                        {
-                            single = false;
-                            nMultiple++;
-                        }
-                    }
-
-                    outFile.Write("\t" + single + "\t" + (nTumorDNA / (nTumorDNA + nNormalDNA + nNeitherDNA)) + "\t" + (nTumorRNA / (nTumorRNA + nNormalRNA + nNeitherRNA)));
-                    if ((nTumorDNA / (nTumorDNA + nNormalDNA + nNeitherDNA)) > 0)
-                    {
-                        outFile.WriteLine("\t" + (nTumorRNA / (nTumorRNA + nNormalRNA + nNeitherRNA) / nTumorDNA / (nTumorDNA + nNormalDNA + nNeitherDNA)));
-                    }
-                    else
-                    {
-                        outFile.WriteLine();
-                    }
-
-                    if ((nTumorDNA / (nTumorDNA + nNormalDNA + nNeitherDNA)) <= .55 && (nTumorRNA / (nTumorRNA + nNormalRNA + nNeitherRNA)) >= .67)
-                    {
-                        nInteresting++;
-                    }
-
+                    file.WriteLine(line);
                 }
-                outFile.Close();
-                Console.WriteLine(gene + " has " + matchedMeasurements[0].Count() + " total matched samples, of which we emitted " + nEmitted + " of which " + nMultiple + " were multiple mutations, " +
-                    nInteresting + " were interesting.");
+                foreach (var line in geneState.single)
+                {
+                    file.WriteLine(line);
+                }
+                file.Close();
+                summaryFile.WriteLine(geneState.gene + "\t" + geneState.nSingle + "\t" + geneState.nMultiple + "\t" + geneState.nInteresting + "\t" + ((geneState.nInteresting * 100) / (geneState.nSingle + geneState.nMultiple)) + "\t" + geneState.sex);
             }
-        }
+            summaryFile.Close();
+
+        } // Main
     }
 }

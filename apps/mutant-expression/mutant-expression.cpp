@@ -211,6 +211,13 @@ int main(int argc, char* argv[])
     int nSAMProblems = 0;
     lineNumber = 0;
 
+    struct MissingGUID {
+        char guid[37];
+        MissingGUID *next;
+    };
+
+    MissingGUID *missingGUIDs = NULL;
+
     while (fgets(inputBuffer, inputLineSize - 1, inputFile)) {
         int nMatchingReference = 0;
         int nMatchingMutation = 0;
@@ -252,6 +259,23 @@ int main(int argc, char* argv[])
             //
             //
             fprintf(stderr, "Unable to open SAM file %s, line %d\n", SAMFileName, lineNumber);
+
+            //
+            // Keep track of the GUID from the filename so that we can list them at the end.
+            //
+            const char *guid = strchr(SAMFileName, '\\');
+            if (NULL != guid) {
+                guid++;
+                if (strlen(guid) >= 36) {
+                    if (NULL == missingGUIDs || memcmp(missingGUIDs->guid, guid, 36)) {
+                        MissingGUID *next = new MissingGUID;
+                        memcpy(next->guid, guid, 36);
+                        next->guid[36] = '\0';
+                        next->next = missingGUIDs;
+                        missingGUIDs = next;
+                    }
+                }
+            }
             noSAMFile++;
             goto doneWithMutation;
         }
@@ -670,6 +694,13 @@ int main(int argc, char* argv[])
             samFile = NULL;
         }
         mutationNumber++;
+    }
+
+    bool first = true;
+    while (NULL != missingGUIDs) {
+        fprintf(stderr, "findstr %s f:\\temp\\expression\\extractTumorDNASamples.cmd >%c foo.cmd\n", missingGUIDs->guid, first ? ' ' : '>');
+        first = false;
+        missingGUIDs = missingGUIDs->next;  // Just leak, we're about to exit
     }
 
     fprintf(stderr, "%d mutations, %d mitochondrial, %d no SAM file, %d wrong class, %d validation problems, %d SAM file problems\n", mutationNumber, nMT, noSAMFile, nWrongClass, nValidationProblems, nSAMProblems);
