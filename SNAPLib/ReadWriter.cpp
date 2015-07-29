@@ -34,8 +34,8 @@ Environment:
 class SimpleReadWriter : public ReadWriter
 {
 public:
-    SimpleReadWriter(const FileFormat* i_format, DataWriter* i_writer, const Genome* i_genome)
-        : format(i_format), writer(i_writer), genome(i_genome)
+    SimpleReadWriter(const FileFormat* i_format, DataWriter* i_writer, const Genome* i_genome, bool i_killIfTooSlow)
+        : format(i_format), writer(i_writer), genome(i_genome), killIfTooSlow(i_killIfTooSlow), lastTooSlowCheck(0)
     {}
 
     virtual ~SimpleReadWriter()
@@ -57,6 +57,11 @@ private:
     DataWriter* writer;
     const Genome* genome;
     LandauVishkinWithCigar lvc;
+
+    void checkIfTooSlow();
+    bool killIfTooSlow;
+    _int64 lastTooSlowCheck;
+    _int64 writesSinceLastTooSlowCheck;
 };
 
     bool
@@ -116,6 +121,29 @@ SimpleReadWriter::writeHeader(
     return true;
 }
 
+    void
+SimpleReadWriter::checkIfTooSlow()
+{
+    const _int64 tooSlowCheckPeriod = 5 * 60 * 1000;    // 5 min in ms
+    const _int64 tooSlowCheckMinReadsPerCheckPeriod = 5 * 60 * 1000;    // One read/ms (or 1000 reads/s, but just on this thread).
+
+    if (killIfTooSlow) {
+        _int64 now = timeInMillis();
+        if (lastTooSlowCheck + tooSlowCheckPeriod <= now) {
+            if (lastTooSlowCheck != 0 && writesSinceLastTooSlowCheck < tooSlowCheckMinReadsPerCheckPeriod) {
+                WriteErrorMessage("Only wrote %lld writes during a %lld minute check period; we're probably out of memory and are giving up because of -kts\n", writesSinceLastTooSlowCheck, tooSlowCheckPeriod / (60 * 1000));
+                soft_exit(1);
+            }
+
+            lastTooSlowCheck = now;
+            writesSinceLastTooSlowCheck = 0;
+        }
+
+        writesSinceLastTooSlowCheck++;
+    } // if (killIfTooSlow)
+}
+
+
     bool
 SimpleReadWriter::writeReads(
     const ReaderContext& context, 
@@ -128,6 +156,8 @@ SimpleReadWriter::writeReads(
     size_t size;
     size_t used;
     bool result = false;
+
+    checkIfTooSlow();
 
     for (int i = 0; i < nResults; i++) {
         if (results[i].status == NotFound) {
@@ -270,6 +300,8 @@ SimpleReadWriter::writePairs(
     const int staticUsedBufferSize = 2000;
     size_t staticUsedBuffer[NUM_READS_PER_PAIR][staticUsedBufferSize];
     GenomeLocation staticLocationBuffer[NUM_READS_PER_PAIR][staticUsedBufferSize];
+
+    checkIfTooSlow();
 
     GenomeLocation *finalLocations[NUM_READS_PER_PAIR];
     size_t *usedBuffer[NUM_READS_PER_PAIR];
@@ -509,11 +541,12 @@ SimpleReadWriter::close()
 class SimpleReadWriterSupplier : public ReadWriterSupplier
 {
 public:
-    SimpleReadWriterSupplier(const FileFormat* i_format, DataWriterSupplier* i_dataSupplier, const Genome* i_genome)
+    SimpleReadWriterSupplier(const FileFormat* i_format, DataWriterSupplier* i_dataSupplier, const Genome* i_genome, bool i_killIfTooSlow)
         :
         format(i_format),
         dataSupplier(i_dataSupplier),
-        genome(i_genome)
+        genome(i_genome),
+        killIfTooSlow(i_killIfTooSlow)
     {}
 
     ~SimpleReadWriterSupplier()
@@ -523,7 +556,7 @@ public:
 
     virtual ReadWriter* getWriter()
     {
-        return new SimpleReadWriter(format, dataSupplier->getWriter(), genome);
+        return new SimpleReadWriter(format, dataSupplier->getWriter(), genome, killIfTooSlow);
     }
 
     virtual void close()
@@ -535,14 +568,16 @@ private:
     const FileFormat* format;
     DataWriterSupplier* dataSupplier;
     const Genome* genome;
+    bool killIfTooSlow;
 };
 
     ReadWriterSupplier*
 ReadWriterSupplier::create(
     const FileFormat* format,
     DataWriterSupplier* dataSupplier,
-    const Genome* genome)
+    const Genome* genome,
+    bool killIfTooSlow)
 {
-    return new SimpleReadWriterSupplier(format, dataSupplier, genome);
+    return new SimpleReadWriterSupplier(format, dataSupplier, genome, killIfTooSlow);
 }
 

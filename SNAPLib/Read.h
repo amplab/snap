@@ -215,7 +215,7 @@ public:
     virtual void close() = 0;
 
     static ReadWriterSupplier* create(const FileFormat* format, DataWriterSupplier* dataSupplier,
-        const Genome* genome);
+        const Genome* genome, bool killIfTooSlow);
 };
 
 #define READ_GROUP_FROM_AUX     ((const char*) -1)
