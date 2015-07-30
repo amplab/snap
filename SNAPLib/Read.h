@@ -433,6 +433,15 @@ public:
                     }
 
                     unclippedData = data = upcaseForwardRead;
+
+					//
+					// Quality must also be in localBuffer if data is.  Copy it now.
+					//
+					memcpy(localBuffer + localBufferAllocationOffset, quality, unclippedLength);
+					unclippedQuality = quality = localBuffer + localBufferAllocationOffset;
+
+					localBufferAllocationOffset += unclippedLength;
+
                 }
             }
         }
