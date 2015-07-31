@@ -454,6 +454,7 @@ BigAllocator::BigAllocator(size_t i_maxMemory, size_t i_allocationGranularity) :
 #if     _DEBUG
     maxMemory += maxCanaries * sizeof(unsigned);
 #endif  // DEBUG
+    printf("BigAllocator@0x%p(%lld, %lld)\n", this, maxMemory, allocationGranularity);
     basePointer = (char *)BigAlloc(__max(maxMemory, 2 * 1024 * 1024)); // The 2MB minimum is to assure this lands in a big page
     allocPointer = basePointer;
 
@@ -476,10 +477,12 @@ BigAllocator::~BigAllocator()
 void *
 BigAllocator::allocate(size_t amountToAllocate)
 {
+    printf("BigAllocator@0x%p::allocate(%lld)\n", this, amountToAllocate);
     //
     // Round up to the allocation granularity.
     //
     if ((size_t)allocPointer % allocationGranularity != 0) {
+        printf("BigAllocator@0x%p::rounding up for granularity from 0x%p\n", this, allocPointer);
         allocPointer = (char *)((size_t)allocPointer + allocationGranularity - (size_t)allocPointer % allocationGranularity);
         _ASSERT((size_t)allocPointer % allocationGranularity == 0);
     }
@@ -522,8 +525,10 @@ BigAllocator::checkCanaries()
 
     void *
 CountingBigAllocator::allocate(size_t sizeToAllocate)
-{            
+{
     size += sizeToAllocate + allocationGranularity - 1; // Add in the max roundoff
+
+    printf("CountingBigAllocator@0x%p::allocate(%lld), total now %lld\n", this, sizeToAllocate, size);
 
     Allocation *allocation = new Allocation;
     allocation->next = allocations;
