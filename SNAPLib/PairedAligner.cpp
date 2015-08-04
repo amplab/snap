@@ -392,8 +392,10 @@ void PairedAlignerContext::runIterationThread()
                                                                 numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize,
                                                                 maxSecondaryAlignmentsPerContig);
 
+    size_t mps_Pre_CPA = memoryPoolSize;
     memoryPoolSize += ChimericPairedEndAligner::getBigAllocatorReservation(index, maxReadSize, maxHits, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxDist,
         extraSearchDepth, maxCandidatePoolSize, maxSecondaryAlignmentsPerContig);
+    size_t mps_Pre_Secondary = memoryPoolSize;
 
     unsigned maxPairedSecondaryHits;
     unsigned maxSingleSecondaryHits;
@@ -406,9 +408,11 @@ void PairedAlignerContext::runIterationThread()
         maxSingleSecondaryHits = ChimericPairedEndAligner::getMaxSingleEndSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, index->getSeedLength());
     }
 
-    memoryPoolSize += maxPairedSecondaryHits * sizeof(PairedAlignmentResult) + maxSingleSecondaryHits * sizeof(SingleAlignmentResult);
+    memoryPoolSize += (1 + maxPairedSecondaryHits) * sizeof(PairedAlignmentResult) + maxSingleSecondaryHits * sizeof(SingleAlignmentResult);
 
     BigAllocator *allocator = new BigAllocator(memoryPoolSize);
+
+    printf("For allocator @0x%p, memory size pre-single %lld, post-single %lld, final %lld\n", allocator, mps_Pre_CPA, mps_Pre_Secondary, memoryPoolSize);
     
     IntersectingPairedEndAligner *intersectingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 

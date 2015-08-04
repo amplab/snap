@@ -488,6 +488,7 @@ BigAllocator::allocate(size_t amountToAllocate)
     }
 
     if (allocPointer + amountToAllocate > basePointer + maxMemory) {
+        printf("BigAllocator@ox%p failed, %lld > %lld\n", this, allocPointer + amountToAllocate - basePointer, maxMemory);
         WriteErrorMessage("BigAllocator: allocating too much memory, %lld > %lld\n", allocPointer + amountToAllocate  - basePointer , maxMemory);
         soft_exit(1);
     }

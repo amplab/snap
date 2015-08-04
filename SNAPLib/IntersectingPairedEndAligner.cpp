@@ -102,6 +102,7 @@ IntersectingPairedEndAligner::getBigAllocatorReservation(GenomeIndex * index, un
     {
         IntersectingPairedEndAligner aligner; // This has to be in a nested scope so its destructor is called before that of the countingAllocator
         aligner.index = index;
+        aligner.doesGenomeIndexHave64BitLocations = index->doesGenomeIndexHave64BitLocations();
 
         aligner.allocateDynamicMemory(&countingAllocator, maxReadSize, maxBigHitsToConsider, maxSeedsToUse, maxEditDistanceToConsider, maxExtraSearchDepth, maxCandidatePoolSize,
             maxSecondaryAlignmentsPerContig);
