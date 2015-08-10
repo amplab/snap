@@ -115,25 +115,30 @@ namespace ExpressionMetadata
         {
             var tumorToMachineMapping = new Dictionary<AnalysisType, Pathname>();
 
-            AddEntireTumorToMachine(tumorToMachineMapping, "acc", "fds-326-k25-2");
-            AddEntireTumorToMachine(tumorToMachineMapping, "blca", "msr-srs-3");
+            AddEntireTumorToMachine(tumorToMachineMapping, "acc",  "fds-326-k25-2");
+            AddEntireTumorToMachine(tumorToMachineMapping, "blca", "msr-srs-7");
             AddEntireTumorToMachine(tumorToMachineMapping, "chol", "msr-srs-6");
-            AddEntireTumorToMachine(tumorToMachineMapping, "gbm", "msr-srs-4");
+            AddEntireTumorToMachine(tumorToMachineMapping, "coad", "msr-srs-6");
+            AddEntireTumorToMachine(tumorToMachineMapping, "gbm",  "msr-srs-4");
             AddEntireTumorToMachine(tumorToMachineMapping, "hnsc", "msr-srs-0");
             AddEntireTumorToMachine(tumorToMachineMapping, "kich", "fds-326-k25-9");
+            AddEntireTumorToMachine(tumorToMachineMapping, "kirc", "msr-srs-3");
             AddEntireTumorToMachine(tumorToMachineMapping, "kirp", "msr-srs-6");
             AddEntireTumorToMachine(tumorToMachineMapping, "laml", "msr-srs-8");
             AddEntireTumorToMachine(tumorToMachineMapping, "luad", "msr-srs-6");
-            AddEntireTumorToMachine(tumorToMachineMapping, "ov", "msr-srs-7");
+            AddEntireTumorToMachine(tumorToMachineMapping, "ov",   "msr-srs-7");
             AddEntireTumorToMachine(tumorToMachineMapping, "paad", "fds-326-k25-5");
             AddEntireTumorToMachine(tumorToMachineMapping, "pcpg", "fds-326-k25-1");
             AddEntireTumorToMachine(tumorToMachineMapping, "prad", "msr-srs-2");
             AddEntireTumorToMachine(tumorToMachineMapping, "read", "fds-326-k25-7");
+            AddEntireTumorToMachine(tumorToMachineMapping, "sarc", "msr-srs-4");
             AddEntireTumorToMachine(tumorToMachineMapping, "stad", "msr-srs-5");
+            AddEntireTumorToMachine(tumorToMachineMapping, "tgct", "msr-srs-0");
             AddEntireTumorToMachine(tumorToMachineMapping, "thca", "msr-srs-4");
+            AddEntireTumorToMachine(tumorToMachineMapping, "thym", "msr-srs-1");
             AddEntireTumorToMachine(tumorToMachineMapping, "ucec", "msr-srs-2");
-            AddEntireTumorToMachine(tumorToMachineMapping, "ucs", "msr-srs-4");
-            AddEntireTumorToMachine(tumorToMachineMapping, "uvm", "msr-srs-4");
+            AddEntireTumorToMachine(tumorToMachineMapping, "ucs",  "msr-srs-4");
+            AddEntireTumorToMachine(tumorToMachineMapping, "uvm",  "msr-srs-4");
 
             tumorToMachineMapping.Add(new AnalysisType("brca", "rna", true), "fds-326-k25-4");
             tumorToMachineMapping.Add(new AnalysisType("brca", "wgs", true), "fds-326-k25-4");
@@ -180,9 +185,9 @@ namespace ExpressionMetadata
             tumorToMachineMapping.Add(new AnalysisType("lusc", "rna", true), "fds-326-k25-18");
             tumorToMachineMapping.Add(new AnalysisType("lusc", "wgs", true), "fds-326-k25-18");
             tumorToMachineMapping.Add(new AnalysisType("lusc", "wxs", true), "fds-326-k25-18");
-            tumorToMachineMapping.Add(new AnalysisType("lusc", "rna", false), "msr-srs-3");
-            tumorToMachineMapping.Add(new AnalysisType("lusc", "wgs", false), "msr-srs-3");
-            tumorToMachineMapping.Add(new AnalysisType("lusc", "wxs", false), "msr-srs-3");
+            tumorToMachineMapping.Add(new AnalysisType("lusc", "rna", false), "msr-srs-7");
+            tumorToMachineMapping.Add(new AnalysisType("lusc", "wgs", false), "msr-srs-7");
+            tumorToMachineMapping.Add(new AnalysisType("lusc", "wxs", false), "msr-srs-7");
 
              return tumorToMachineMapping;
         }
@@ -191,6 +196,8 @@ namespace ExpressionMetadata
         {
             public AnalysisID analysisID;
             public Pathname directoryName;
+            public string machineName;
+            public char driveLetter;
             public FileInfo bamInfo = null;
             public FileInfo baiInfo = null;
             public long totalSize;
@@ -198,6 +205,7 @@ namespace ExpressionMetadata
             public bool isRealingned = false;   // Was this realined, or is it straight from TCGA
             public string bamHash = null;  // MD5 of the BAM file
             public string baiHash = null;  // MD5 of the BAI file
+            public string isoformCount = null;  // File with the count of isoform references
         }
 
         static void GenerateHashCommandForFile(Pathname file, Dictionary<Pathname, StreamWriter> hashScripts)
@@ -252,6 +260,8 @@ namespace ExpressionMetadata
                 {
                     var storedBAM = new StoredBAM();
                     storedBAM.analysisID = analysisID;
+                    storedBAM.machineName = pathnameComponents[2].ToLower();
+                    storedBAM.driveLetter = char.ToLower(pathnameComponents[3][0]);
 
                     bool hasTarFile = false;    // Some RNA analyses include a tarred FASTQ.  If we see one, don't generate a warning for not having BAM files.
 
@@ -259,6 +269,10 @@ namespace ExpressionMetadata
                     {
                         if (file.Count() > 4 && file.Substring(file.Count() - 4) == ".bam")
                         {
+                            if (-1 != file.IndexOf("HOLD_QC"))
+                            {
+                                Console.WriteLine("File " + file + " appears to be QC pending; you may want to exclude it.");
+                            }
                             if (null != storedBAM.bamInfo)
                             {
                                 Console.WriteLine("Saw multiple BAM files in the same analysis directory " + file + " and " + storedBAM.bamInfo.FullName);
@@ -324,6 +338,16 @@ namespace ExpressionMetadata
                             hasTarFile = true;
                         } else if (file.Count() > 3 && file.Substring(file.Count() - 4) == ".md5") {
                             // Do nothing; checksum files are expected.
+                        }
+                        else if (file.Count() > 12 && file.Substring(file.Count() - 13).ToLower() == "-isoforms.txt")
+                        {
+                            string expectedFilename = analysisID + "-isoforms.txt";
+                            if (file.Count() < expectedFilename.Count() || file.Substring(file.Count() - expectedFilename.Count()) != expectedFilename)
+                            {
+                                Console.WriteLine("Incorrect isoform file " + file);
+                            } else {
+                                storedBAM.isoformCount = file;
+                            }
                         }
                         else
                         {
@@ -684,21 +708,9 @@ namespace ExpressionMetadata
                 //
                 // Its shape is right.  Check to see if it's actually the right place.
                 //
-                if (tcgaRecord.library_strategy.ToLower() != pathComponents[libraryComponent])
+                if (tcgaRecord.library_strategy.ToLower() != pathComponents[libraryComponent] || tcgaRecord.tumorSample != (pathComponents[tumorNormalComponent] == "tumor") || tcgaRecord.disease_abbr != pathComponents[diseaseComponent])
                 {
-                    Console.WriteLine("Analysis " + analysisID + " has library strategy " + tcgaRecord.library_strategy + " but is stored at " + fullPath);
-                    continue;
-                }
-
-                if (tcgaRecord.tumorSample != (pathComponents[tumorNormalComponent] == "tumor"))
-                {
-                    Console.WriteLine("Analysis " + analysisID + " in wrong tumor/normal directory " + fullPath);
-                    continue;
-                }
-
-                if (tcgaRecord.disease_abbr != pathComponents[diseaseComponent])
-                {
-                    Console.WriteLine("Sample in wrong tumor type.  Should be " + tcgaRecord.disease_abbr + " but it's in " + fullPath);
+                    Console.WriteLine("Analysis " + analysisID + " is in the wrong directory.  It's at " + fullPath + " but it should be at " + tcgaRecord.disease_abbr + @"\" + (tcgaRecord.tumorSample ? "tumor" : "normal") + @"\" + tcgaRecord.library_strategy.ToLower());
                     continue;
                 }
 
@@ -763,7 +775,7 @@ namespace ExpressionMetadata
                 if (storedBAMs.ContainsKey(record.analysis_id))
                 {
                     record.storedBAM = storedBAMs[record.analysis_id];
-                    if (record.realignSource.storedBAM != null && record.realignSource.storedBAM.bamInfo.Length > record.storedBAM.bamInfo.Length * 4 / 3)
+                    if (record.realignSource.storedBAM != null && record.realignSource.storedBAM.bamInfo.Length > record.storedBAM.bamInfo.Length * 2)
                     {
                         Console.WriteLine("Suspiciously small realigned file " + record.storedBAM.bamInfo.FullName + " size " + record.storedBAM.bamInfo.Length + 
                             " while source " + record.realignSource.storedBAM.bamInfo.FullName + " is " + record.realignSource.storedBAM.bamInfo.Length);
@@ -1130,28 +1142,6 @@ namespace ExpressionMetadata
             }
         }
 
-        public class Experiment1Run
-        {
-            public MAFRecord mafRecord;
-            public StoredBAM rnaBAM;
-            public StoredBAM normalBAM;
-            public TCGARecord rnaRecord;
-            public TCGARecord normalRecord;
-        }
-
-        public class Experiment1Participant // The inputs for all the experiment 1 runs for a particular participant
-        {
-            public Experiment1Participant ()
-            {
-                for (int silent = 0; silent < 2; silent++)
-                    for (int sex = 0; sex < 2; sex++)
-                        for (int multipleMutations = 0; multipleMutations < 2; multipleMutations++)
-                            runs[silent, sex, multipleMutations] = new List<Experiment1Run>();
-            }
-            public Participant participant;
-            public List<Experiment1Run>[, ,] runs = new List<Experiment1Run>[2, 2, 2];    // Dimensions are slient/non-silent, autosome/sex (ignore MT), single/multiple mutations in this gene
-        }
-
 
         public static string RefassemToIndex(string refassem)
         {
@@ -1273,9 +1263,11 @@ namespace ExpressionMetadata
         public class Experiment
         {
             public Participant participant;
+            public string disease_abbr;
             public TCGARecord TumorRNAAnalysis;
             public TCGARecord TumorDNAAnalysis;
             public TCGARecord NormalDNAAnalysis;
+            public TCGARecord NormalRNAAnalysis;    // This is optional, and filled in if it exists, but we'll generate the experiment even if it doesn't.
             public List<MAFRecord> maf;
             public bool normalNeedsRealignment = false;
             public bool tumorNeedsRealignment = false;
@@ -1331,8 +1323,6 @@ namespace ExpressionMetadata
 
             int nMutations = 0;
 
-            int nAMLbjb = 0;    // mostly just to set a breakpoint
-
             //
             // We try to do an experiment for each participant.
             //
@@ -1374,11 +1364,7 @@ namespace ExpressionMetadata
                         Experiment experiment = new Experiment();
                         experiment.participant = participant;
                         experiment.maf = participant.mafs[0];
-
-                        if (RNAtcgaRecord.disease_abbr == "laml")
-                        {
-                            nAMLbjb++;
-                        }
+                        experiment.disease_abbr = RNAtcgaRecord.disease_abbr;
 
                         if (hg18_likeReferences.Contains(RNAtcgaRecord.refassemShortName) != hg18Like)
                         {
@@ -1539,12 +1525,6 @@ namespace ExpressionMetadata
                     continue;
                 }
 
-                if (bestExperiment.TumorRNAAnalysis.analysis_id.ToLower() == "194bbcde-239a-434a-b06c-6b0182c4635c")
-                {
-                    Console.WriteLine("Here!");
-                }
-
-
                 experiments.Add(bestExperiment);
 
                 RecordDownloadAndRealign(bestExperiment.NormalDNAAnalysis, ref nNormalRealigns, ref nNormalRealignBytes, ref nNormalDownloads, ref normalBytesToDownload);
@@ -1611,6 +1591,11 @@ namespace ExpressionMetadata
             downloadScripts[machine].WriteLine(@"gtdownload -c c:\bolosky\ravip-cghub.key -k 30 " + tcgaRecord.analysis_id);
 
             downloadAmounts[machine] += tcgaRecord.totalFileSize;
+
+            if (-1 != tcgaRecord.bamFileName.IndexOf("HOLD_QC"))
+            {
+                Console.WriteLine("Warning: generated download command for analysis " + tcgaRecord.analysis_id + " that has bam file name " + tcgaRecord.bamFileName + ".  Perhaps you should exclude it.");
+            }
         }
 
         public static void GenerateDownloadScripts(List<Experiment> experiments,  Dictionary<AnalysisType, Pathname> tumorToMachineMapping)
@@ -1734,25 +1719,37 @@ namespace ExpressionMetadata
             string outputFileName = record.analysis_id + "-SNAP-realigned-" + realignSource.analysis_id + "-" + record.disease_abbr + "-" + tumorOrNormal + ".bam";
             string destinationDirectory;
 
-            if (local)
+            if (local || bigMem)// bigMem machines are the msr-genomics ones, and they have tons of storage.  Just hold them here.
             {
                 destinationDirectory = @"d:\tcga\" + record.disease_abbr + @"\" + tumorOrNormal + @"\" + record.library_strategy + @"\" + record.analysis_id + @"\";
                 outputFileName = destinationDirectory + outputFileName;
                 script.WriteLine(@"md " + destinationDirectory);
             } else {
-                destinationDirectory = @"\\" + tumorToMachineMapping[analysisType] + @"\d$\tcga\" + record.disease_abbr + @"\" + tumorOrNormal + @"\" + record.library_strategy + @"\" + record.analysis_id + @"\";
+                //
+                // Just write directly to msr-genomics-1.
+                //
+                long lastChunkOfGuid = long.Parse(record.analysis_id.Substring(24), System.Globalization.NumberStyles.HexNumber);
+                bool useGenomics0 = lastChunkOfGuid % 3 == 0 && false;
+                destinationDirectory = @"\\" + (useGenomics0 ? "msr-genomics-0" : "msr-genomics-1") + @"\d$\tcga\" + record.disease_abbr + @"\" + tumorOrNormal + @"\" + record.library_strategy + @"\" + record.analysis_id + @"\";
             }
 
             UseAnalysis(record.realignedFrom, null, storedBAMs);
 
+            string indexDrive = "";
+
+            if (bigMem)
+            {
+                indexDrive = @"d:";
+            }
+
             script.Write("snap ");
             if (realignSource.anyPaired)
             {
-                script.Write(@"paired \sequence\indices\");
+                script.Write(@"paired " + indexDrive + @"\sequence\indices\");
             }
             else
             {
-                script.Write(@"single \sequence\indices\");
+                script.Write(@"single " + indexDrive + @"\sequence\indices\");
             }
 
             script.Write(record.refassemShortName + "-");
@@ -1775,11 +1772,23 @@ namespace ExpressionMetadata
             {
                 script.Write(" -s 0 1000");
             }
-            script.Write(" -di -so -sm " + (bigMem ? "60" : "5"));
-            script.WriteLine(" -lp -map -pc -mrl " + Math.Min(50, seedLength * 2));
-            script.WriteLine("del " + outputFileName + ".tmp"); // In case the alignment failed for whatever reason, don't copy the intermediate file, just get rid of it
+            script.Write(" -di -so -sm " + (bigMem ? "60" : "5 -kts"));
+            if (bigMem)
+            {
+                script.Write(" -sid .");
+            }
+            script.WriteLine(" -lp -map -pc -pro -mrl " + Math.Min(50, seedLength * 2));
 
-            if (!local)
+            if (bigMem)
+            {
+                script.WriteLine(@"del .\*.tmp");
+            }
+            else
+            {
+                script.WriteLine("del " + outputFileName + ".tmp"); // In case the alignment failed for whatever reason, don't copy the intermediate file, just get rid of it
+            }
+
+            if (!local && !bigMem)
             {
                 script.WriteLine(@"md " + destinationDirectory);
                 script.WriteLine("copy " + outputFileName + "* " + destinationDirectory);
@@ -1842,7 +1851,7 @@ namespace ExpressionMetadata
 
                         bigMem = false;
 
-                        if (localMem < 48 || localMem == 48 && analysis.realignSource.storedBAM.totalSize >= limitFor48)
+                        if (localMem < 48 || localMem == 48 && analysis.realignSource.storedBAM.totalSize >= limitFor48 || true /* don't generate local anymore*/)
                         {
                             local = false;
                             if (analysis.tumorSample)
@@ -2171,61 +2180,27 @@ namespace ExpressionMetadata
             }
         }
 
-        public static void GenerateScatterGraphs(Dictionary<string, Participant> participants)
+        public static void GenerateMakeIsoformsScripts(List<Experiment> experiments)
         {
-            StreamWriter outputFile = new StreamWriter(@"f:\temp\expression\mutation_and_tumor_reference_counts.txt");
-            outputFile.WriteLine("participantID\tHugo_Symbol\tisSingle\tnDNAMatchingTumor\tnDNAMatchingNormal\tnDNAMatchingNeither\tnDNAMatchingBoth\tnRNAMatchingTumor\tnRNAMatchingNormal\tnRNAMatchingNeither\tnRNAMatchingBoth");
+            var scripts = new Dictionary<Pathname, StreamWriter>();
 
-            List<string> genesToCheck = new List<string>();
-            genesToCheck.Add("TP53");
-            genesToCheck.Add("CDKN2A");
-
-            foreach (var gene in genesToCheck ) {
-                foreach (var participantEntry in participants)
-                {
-                    Participant participant = participantEntry.Value;
-
-                    int ntp53 = 0;
-                    bool hasBigMutation = false;
-                    if (participant.mafsByGene.ContainsKey(gene))
-                    {
-                        foreach (var mafRecord in participant.mafsByGene[gene])
-                        {
-                            if (mafRecord.Variant_classification.ToLower() == "silent") 
-                            {
-                                //
-                                // Silent or no counts.  Ignore it.
-                                //
-                                continue;
-                            }
-                            if (mafRecord.Tumor_seq_allele_1.Count() > 2 || mafRecord.Reference_allele.Count() > 2 || !mafRecord.hasRNACounts || !mafRecord.hasDNACounts) {
-                                hasBigMutation = true;  // not having counts is like a big mutation, in that we just ignore this person
-                                break;
-                            }
-                            ntp53++;
-                        }
-
-                        if (ntp53 > 0 && !hasBigMutation)
-                        {
-                            foreach (var mafRecord in participant.mafsByGene[gene])
-                            {
-                                if (mafRecord.Variant_classification.ToLower() != "silent")
-                                {
-                                    continue;
-                                }
-
-                                outputFile.WriteLine(participant.participantId + "\t" + gene + "\t" + ((ntp53 > 1) ? "Multiple" : "single") + "\t" + mafRecord.nDNAMatchingTumor + "\t" + mafRecord.nDNAMatchingNormal + "\t" + mafRecord.nDNAMatchingNeither + "\t" + mafRecord.nDNAMatchingBoth + "\t"
-                                    + mafRecord.nRNAMatchingTumor + "\t" + mafRecord.nRNAMatchingNormal + "\t" + mafRecord.nRNAMatchingNeither + "\t" + mafRecord.nRNAMatchingBoth);
-                            }
-
-                        }
+            foreach (var experiment in experiments) {
+                if (experiment.TumorRNAAnalysis.storedBAM != null && experiment.TumorRNAAnalysis.storedBAM.isoformCount == null) {
+                    if (!scripts.ContainsKey(experiment.TumorRNAAnalysis.storedBAM.machineName)) {
+                        scripts.Add(experiment.TumorRNAAnalysis.storedBAM.machineName, new StreamWriter(@"f:\temp\expression\CountIsoforms-" + experiment.TumorRNAAnalysis.storedBAM.machineName + ".cmd"));
                     }
 
-                 }
+                    scripts[experiment.TumorRNAAnalysis.storedBAM.machineName].WriteLine(@"cd /d " + experiment.TumorRNAAnalysis.storedBAM.driveLetter + @":\tcga\" + experiment.disease_abbr + @"\tumor\rna\" + experiment.TumorRNAAnalysis.analysis_id);
+                    scripts[experiment.TumorRNAAnalysis.storedBAM.machineName].WriteLine(@"d:\tcga\CountReadsCovering d:\sequence\indices\" + experiment.TumorRNAAnalysis.refassemShortName + @"-24 d:\sequence\gene_data\knownGene-hg" + 
+                        (hg18_likeReferences.Contains(experiment.TumorRNAAnalysis.refassemShortName) ? "18" : "19") + ".txt " + experiment.TumorRNAAnalysis.storedBAM.bamInfo.FullName + @" " + experiment.TumorRNAAnalysis.analysis_id + "-isoforms.txt");
+                }
             }
 
-           outputFile.Close();
+            foreach (var entry in scripts) {
+                entry.Value.Close();
+            }
         }
+
         static void Main(string[] args)
         {
             hg18_likeReferences.Add("NCBI36_BCCAGSC_variant".ToLower());
@@ -2272,18 +2247,18 @@ namespace ExpressionMetadata
                 AddMAFFileToParticipants(file, participants, sampleToParticipantIDMap);
             }
 
-            BuildMAFsByGene(participants);
-            AddCountsToMAFs(participants, allSamples);
-            //GenerateScatterGraphs(participants);
+            //BuildMAFsByGene(participants);
+            //AddCountsToMAFs(participants, allSamples);
 
             var experiments = BuildExperiments(participants);
+            GenerateMakeIsoformsScripts(experiments);
             GenerateRealignmentScript(experiments, tcgaRecords, storedBAMs, tumorToMachineMapping);
             GenerateUnneededLists(storedBAMs);
             GenerateRealignmentAnalyses(experiments);
             GenerateDownloadScripts(experiments, tumorToMachineMapping);
 
             GenerateExtractionScripts(experiments);
-            GenerateLAMLMoves(tcgaRecords);
+            //GenerateLAMLMoves(tcgaRecords);
         }
     }
 }

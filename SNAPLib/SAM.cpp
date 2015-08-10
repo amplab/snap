@@ -390,7 +390,7 @@ SAMReader::getReadFromLine(
         unsigned pnext = atoi(field[PNEXT]);    // Relies on atoi() returning 0 for non-numeric fields (i.e., *)
 
         read->init(field[QNAME],(unsigned)fieldLength[QNAME],field[SEQ],field[QUAL],(unsigned)fieldLength[SEQ], genomeLocation, atoi(field[MAPQ]), _flag, 
-            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping, field[RNEXT], (unsigned)fieldLength[RNEXT], pnext);
+            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping, field[RNEXT], (unsigned)fieldLength[RNEXT], pnext, 0, NULL, false);
         //
         // If this read is RC in the SAM file, we need to reverse it here, since Reads are always the sense that they were as they came
         // out of the base caller.

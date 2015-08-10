@@ -229,7 +229,7 @@ public:
             upcaseForwardRead(NULL), auxiliaryData(NULL), auxiliaryDataLength(0),
             readGroup(NULL), originalAlignedLocation(-1), originalMAPQ(-1), originalSAMFlags(0),
             originalFrontClipping(0), originalBackClipping(0), originalFrontHardClipping(0), originalBackHardClipping(0),
-            originalRNEXT(NULL), originalRNEXTLength(0), originalPNEXT(0), additionalFrontClipping(0)
+            originalRNEXT(NULL), originalRNEXTLength(0), originalPNEXT(0), originalNBAMCigar(0), additionalFrontClipping(0)
         {}
 
         Read(const Read& other) :  localBufferAllocationOffset(0)
@@ -351,6 +351,8 @@ public:
             originalRNEXT = other.originalRNEXT;
             originalRNEXTLength = other.originalRNEXTLength;
             originalPNEXT = other.originalPNEXT;
+            originalNBAMCigar = other.originalNBAMCigar;
+            memcpy(originalBAMCigar, other.originalBAMCigar, sizeof(*originalBAMCigar) * other.originalNBAMCigar);
             additionalFrontClipping = other.additionalFrontClipping;
         }
 
@@ -369,7 +371,7 @@ public:
                 const char *i_quality, 
                 unsigned i_dataLength)
         {
-            init(i_id, i_idLength, i_data, i_quality, i_dataLength, InvalidGenomeLocation, -1, 0, 0, 0, 0, 0, NULL, 0, 0);
+            init(i_id, i_idLength, i_data, i_quality, i_dataLength, InvalidGenomeLocation, -1, 0, 0, 0, 0, 0, NULL, 0, 0, 0, NULL, false);
         }
 
         void init(
@@ -388,7 +390,9 @@ public:
                 const char *        i_originalRNEXT,
                 unsigned            i_originalRNEXTLength,
                 unsigned            i_originalPNEXT,
-                bool                allUpper = false)
+                _uint16             i_originalNBAMCigar,
+                _uint32 *           i_originalBAMCigar,
+                bool                allUpper)
         {
             id = i_id;
             idLength = i_idLength;
@@ -409,6 +413,18 @@ public:
             originalRNEXT = i_originalRNEXT;
             originalRNEXTLength = i_originalRNEXTLength;
             originalPNEXT = i_originalPNEXT;
+            if (i_originalNBAMCigar > MaxBAMCigarSlots) {
+                static bool warned = false;
+                if (!warned) {
+                    warned = true;
+                    WriteErrorMessage("Too many BAM fields to save in read (need %d, have %d), dropping.  This is your only warning.\n", i_originalNBAMCigar, MaxBAMCigarSlots);
+                }
+                originalNBAMCigar = 0;
+            } else {
+                originalNBAMCigar = i_originalNBAMCigar;
+            }
+
+            memcpy(originalBAMCigar, i_originalBAMCigar, sizeof(*originalBAMCigar) * originalNBAMCigar);
             currentReadDirection = FORWARD;
 
             localBufferAllocationOffset = 0;    // Clears out any allocations that might previously have been in the buffer
@@ -418,7 +434,7 @@ public:
             // Check for lower case letters in the data, and convert to upper case if there are any.  Also convert
             // '.' to N.
             //
-            if (! allUpper) {
+            if (!allUpper) {
                 unsigned anyLowerCase = 0;
                 for (unsigned i = 0; i < dataLength; i++) {
                     anyLowerCase |= IS_LOWER_CASE_OR_DOT[data[i]];
@@ -466,6 +482,8 @@ public:
         inline const char *getOriginalRNEXT() {return originalRNEXT;}
         inline unsigned getOriginalRNEXTLength() {return originalRNEXTLength;}
         inline unsigned getOriginalPNEXT() {return originalPNEXT;}
+        inline _uint16 getOriginalNBAMCigar() {return originalNBAMCigar;}
+        inline _uint32 *getOriginalBAMCigar() {return originalBAMCigar;}
         inline void setAdditionalFrontClipping(int clipping)
         {
             data += clipping - additionalFrontClipping;
@@ -679,6 +697,9 @@ private:
         const char *originalRNEXT;
         unsigned originalRNEXTLength;
         unsigned originalPNEXT;
+        static const int MaxBAMCigarSlots = 50;
+        _uint16 originalNBAMCigar;
+        _uint32 originalBAMCigar[MaxBAMCigarSlots];
 
 
         //

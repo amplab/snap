@@ -55,6 +55,9 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ComputeMD5", "apps\ComputeMD5\ComputeMD5.vcxproj", "{B7B07E1C-B763-4D68-B342-0CCB6E94A484}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "CountReadsCovering", "apps\CountReadsCovering\CountReadsCovering.vcxproj", "{DD50DF2E-A57E-4B99-ADF6-9A8083952AF6}"
+	ProjectSection(ProjectDependencies) = postProject
+		{E620DC13-195C-41EF-B33B-8FE7DE9F8ADC} = {E620DC13-195C-41EF-B33B-8FE7DE9F8ADC}
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateScatterGraphs", "apps\GenerateScatterGraphs\GenerateScatterGraphs.csproj", "{BF4B5440-1F73-4D30-9868-7C92489020FF}"
 EndProject
@@ -221,7 +224,7 @@ Global
 		{DD50DF2E-A57E-4B99-ADF6-9A8083952AF6}.Debug|Mixed Platforms.Build.0 = Debug|Win32
 		{DD50DF2E-A57E-4B99-ADF6-9A8083952AF6}.Debug|Win32.ActiveCfg = Debug|Win32
 		{DD50DF2E-A57E-4B99-ADF6-9A8083952AF6}.Debug|Win32.Build.0 = Debug|Win32
-		{DD50DF2E-A57E-4B99-ADF6-9A8083952AF6}.Debug|x64.ActiveCfg = Debug|Win32
+		{DD50DF2E-A57E-4B99-ADF6-9A8083952AF6}.Debug|x64.ActiveCfg = Debug|x64
 		{DD50DF2E-A57E-4B99-ADF6-9A8083952AF6}.Release|Any CPU.ActiveCfg = Release|Win32
 		{DD50DF2E-A57E-4B99-ADF6-9A8083952AF6}.Release|Mixed Platforms.ActiveCfg = Release|Win32
 		{DD50DF2E-A57E-4B99-ADF6-9A8083952AF6}.Release|Mixed Platforms.Build.0 = Release|Win32

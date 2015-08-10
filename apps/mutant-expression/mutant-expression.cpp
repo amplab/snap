@@ -697,8 +697,9 @@ int main(int argc, char* argv[])
     }
 
     bool first = true;
+    fprintf(stderr, "\n");
     while (NULL != missingGUIDs) {
-        fprintf(stderr, "findstr %s f:\\temp\\expression\\extractTumorDNASamples.cmd >%c foo.cmd\n", missingGUIDs->guid, first ? ' ' : '>');
+        fprintf(stderr, "findstr %s extractTumorDNASamples.cmd >%c foo.cmd\n", missingGUIDs->guid, first ? ' ' : '>');
         first = false;
         missingGUIDs = missingGUIDs->next;  // Just leak, we're about to exit
     }

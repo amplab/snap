@@ -160,6 +160,9 @@
     <ClInclude Include="AlignerStats.h" />
     <ClInclude Include="AlignmentResult.h" />
     <ClInclude Include="ApproximateCounter.h" />
+    <ClInclude Include="avl2.h" />
+    <ClInclude Include="avl2logic.h" />
+    <ClInclude Include="avl2mem.h" />
     <ClInclude Include="Bam.h" />
     <ClInclude Include="BaseAligner.h" />
     <ClInclude Include="BigAlloc.h" />
@@ -196,6 +199,7 @@
     <ClInclude Include="PairedAligner.h" />
     <ClInclude Include="PairedEndAligner.h" />
     <ClInclude Include="ParallelTask.h" />
+    <ClInclude Include="pool.h" />
     <ClInclude Include="PriorityQueue.h" />
     <ClInclude Include="ProbabilityDistance.h" />
     <ClInclude Include="RangeSplitter.h" />
@@ -250,6 +254,7 @@
     <ClCompile Include="PairedAligner.cpp" />
     <ClCompile Include="PairedReadMatcher.cpp" />
     <ClCompile Include="ParallelTask.cpp" />
+    <ClCompile Include="pool.cpp" />
     <ClCompile Include="ProbabilityDistance.cpp" />
     <ClCompile Include="RangeSplitter.cpp" />
     <ClCompile Include="Read.cpp" />
