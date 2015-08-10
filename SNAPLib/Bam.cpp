@@ -515,7 +515,7 @@ BAMReader::getNextRead(
         }
         BAMAlignment* bam = (BAMAlignment*) buffer;
         if ((_uint64)bytes < sizeof(bam->block_size) || (_uint64)bytes < bam->size()) {
-			WriteErrorMessage("Insufficient buffer space for BAM file, increase -xf parameter\n");
+			WriteErrorMessage("Truncated or corrupt BAM file near offset %lld\n", data->getFileOffset());
             soft_exit(1);
         }
         data->advance(bam->size());
@@ -736,17 +736,14 @@ BAMFormat::getWriterSupplier(
         DataWriterSupplier::gzip(true, BAM_BLOCK, max(1, options->numThreads - 1), false, options->sortOutput);
         // (leave a thread free for main, and let OS map threads to cores to allow system IO etc.)
     if (options->sortOutput) {
-        size_t len = strlen(options->outputFile.fileName);
-        // todo: this is going to leak, but there's no easy way to free it, and it's small...
-        char* tempFileName = (char*) malloc(5 + len);
-        strcpy(tempFileName, options->outputFile.fileName);
-        strcpy(tempFileName + len, ".tmp");
+        char *tempFileName = DataWriterSupplier::generateSortIntermediateFilePathName(options);
         // todo: make markDuplicates optional?
         DataWriter::FilterSupplier* filters = gzipSupplier;
         if (! options->noDuplicateMarking) {
             filters = DataWriterSupplier::markDuplicates(genome)->compose(filters);
         }
         if (! options->noIndex) {
+            size_t len = strlen(options->outputFile.fileName);
             char* indexFileName = (char*) malloc(5 + len);
             strcpy(indexFileName, options->outputFile.fileName);
             strcpy(indexFileName + len, ".bai");
@@ -759,7 +756,7 @@ BAMFormat::getWriterSupplier(
     } else {
         dataSupplier = DataWriterSupplier::create(options->outputFile.fileName, options->writeBufferSize, gzipSupplier);
     }
-    return ReadWriterSupplier::create(this, dataSupplier, genome);
+    return ReadWriterSupplier::create(this, dataSupplier, genome, options->killIfTooSlow);
 }
 
     bool

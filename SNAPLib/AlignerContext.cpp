@@ -157,7 +157,7 @@ AlignerContext::initialize()
             index = GenomeIndex::loadFromDirectory((char*) options->indexDir, options->mapIndex, options->prefetchIndex);
             if (index == NULL) {
                 WriteErrorMessage("Index load failed, aborting.\n");
-				return false;
+				soft_exit(1);
             }
             g_index = index;
 
@@ -189,14 +189,14 @@ AlignerContext::initialize()
 
 	if (index != NULL && (int)minReadLength < index->getSeedLength()) {
 		WriteErrorMessage("The min read length (%d) must be at least the seed length (%d), or there's no hope of aligning reads that short.\n", minReadLength, index->getSeedLength());
-		return false;
+		soft_exit(1);
 	}
 
     if (options->perfFileName != NULL) {
         perfFile = fopen(options->perfFileName,"a");
         if (NULL == perfFile) {
             WriteErrorMessage("Unable to open perf file '%s'\n", options->perfFileName);
-			return false;
+			soft_exit(1);
         }
     }
 

@@ -215,7 +215,7 @@ public:
     virtual void close() = 0;
 
     static ReadWriterSupplier* create(const FileFormat* format, DataWriterSupplier* dataSupplier,
-        const Genome* genome);
+        const Genome* genome, bool killIfTooSlow);
 };
 
 #define READ_GROUP_FROM_AUX     ((const char*) -1)
@@ -449,6 +449,15 @@ public:
                     }
 
                     unclippedData = data = upcaseForwardRead;
+
+					//
+					// Quality must also be in localBuffer if data is.  Copy it now.
+					//
+					memcpy(localBuffer + localBufferAllocationOffset, quality, unclippedLength);
+					unclippedQuality = quality = localBuffer + localBufferAllocationOffset;
+
+					localBufferAllocationOffset += unclippedLength;
+
                 }
             }
         }
