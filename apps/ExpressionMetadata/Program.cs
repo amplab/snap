@@ -238,6 +238,7 @@ namespace ExpressionMetadata
             hashScripts[machine].WriteLine(@"cd /d " + localDirname);
             hashScripts[machine].WriteLine(@"ComputeMD5 " + unqualifiedFilename + @"> " + unqualifiedFilename + ".md5");
         }
+        static StreamWriter AllIsoformsFile;
         static void LoadStoredBAMsForDirectory(Pathname directory, Dictionary<AnalysisID, StoredBAM> storedBAMs, Dictionary<Pathname, StreamWriter> hashScripts) 
         {
             if (!Directory.Exists(directory))
@@ -347,6 +348,7 @@ namespace ExpressionMetadata
                                 Console.WriteLine("Incorrect isoform file " + file);
                             } else {
                                 storedBAM.isoformCount = file;
+                                AllIsoformsFile.WriteLine(file);
                             }
                         }
                         else
@@ -1730,7 +1732,7 @@ namespace ExpressionMetadata
                 //
                 long lastChunkOfGuid = long.Parse(record.analysis_id.Substring(24), System.Globalization.NumberStyles.HexNumber);
                 bool useGenomics0 = lastChunkOfGuid % 3 == 0 && false;
-                destinationDirectory = @"\\" + (useGenomics0 ? "msr-genomics-0" : "msr-genomics-1") + @"\d$\tcga\" + record.disease_abbr + @"\" + tumorOrNormal + @"\" + record.library_strategy + @"\" + record.analysis_id + @"\";
+                destinationDirectory = @"\\" + (useGenomics0 ? "msr-genomics-0" : "msr-genomics-1") + @"\e$\tcga\" + record.disease_abbr + @"\" + tumorOrNormal + @"\" + record.library_strategy + @"\" + record.analysis_id + @"\";
             }
 
             UseAnalysis(record.realignedFrom, null, storedBAMs);
@@ -2201,6 +2203,45 @@ namespace ExpressionMetadata
             }
         }
 
+        static void DumpExperiments(List<Experiment> experiments) {
+            StreamWriter outputFile = new StreamWriter(@"f:\temp\expression\experiments.txt");
+
+            outputFile.WriteLine("disease_abbr\tTumorRNAAnalysis\tTumoprDNAAnalysis\tNormalDNAAnalysis\tparticipantID\ttumorRNAPathname\ttumorDNAPathname\tnormalDNAPathname");
+
+            foreach (Experiment experiment in experiments) {
+                outputFile.Write(experiment.disease_abbr + "\t" + experiment.TumorRNAAnalysis.analysis_id + "\t" + experiment.TumorDNAAnalysis.analysis_id + "\t" + experiment.NormalDNAAnalysis.analysis_id + "\t" + experiment.participant.participantId + "\t");
+
+                if (experiment.TumorRNAAnalysis.storedBAM != null)
+                {
+                    outputFile.Write(experiment.TumorRNAAnalysis.storedBAM.bamInfo.FullName + "\t");
+                }
+                else
+                {
+                    outputFile.Write("\t");
+                }
+
+                if (experiment.TumorDNAAnalysis.storedBAM != null)
+                {
+                    outputFile.Write(experiment.TumorDNAAnalysis.storedBAM.bamInfo.FullName + "\t");
+                }
+                else
+                {
+                    outputFile.Write("\t");
+                }
+
+                if (experiment.NormalDNAAnalysis.storedBAM != null)
+                {
+                    outputFile.WriteLine(experiment.NormalDNAAnalysis.storedBAM.bamInfo.FullName + "\t");
+                }
+                else
+                {
+                    outputFile.WriteLine("\t");
+                }
+            }
+
+            outputFile.Close();
+        }
+
         static void Main(string[] args)
         {
             hg18_likeReferences.Add("NCBI36_BCCAGSC_variant".ToLower());
@@ -2218,10 +2259,13 @@ namespace ExpressionMetadata
 
             InitializeMachines();
 
+            AllIsoformsFile = new StreamWriter(@"f:\temp\expression\all_isoform_files.txt");
+
             List<AnalysisID> excludedAnalyses = LoadExcludedAnalyses();
 
             var tumorToMachineMapping = GenerateTumorToMachineMapping();
             Dictionary<AnalysisID, StoredBAM> storedBAMs = LoadStoredBAMs(tumorToMachineMapping);
+            AllIsoformsFile.Close();
             var tcgaRecords = LoadTCGARecords(storedBAMs, excludedAnalyses);
             LoadTCGARecordsForLocalRealigns(tcgaRecords, storedBAMs);
             LoadTCGAAdditionalMetadata(tcgaRecords);
@@ -2251,6 +2295,7 @@ namespace ExpressionMetadata
             //AddCountsToMAFs(participants, allSamples);
 
             var experiments = BuildExperiments(participants);
+            DumpExperiments(experiments);
             GenerateMakeIsoformsScripts(experiments);
             GenerateRealignmentScript(experiments, tcgaRecords, storedBAMs, tumorToMachineMapping);
             GenerateUnneededLists(storedBAMs);
