@@ -39,12 +39,29 @@ using std::max;
 using std::min;
 using util::strnchr;
 
-BAMReader::BAMReader(const ReaderContext& i_context) : ReadReader(i_context)
+GenomeLocation 
+BAMAlignment::getLocation(const BAMReader * bamReader) const
+{
+    return bamReader == NULL || pos < 0 || refID < 0 || (FLAG & SAM_UNMAPPED)
+        ? InvalidGenomeLocation : (bamReader->getLocationForRefAndOffset(refID, pos));
+}
+
+GenomeLocation 
+BAMAlignment::getNextLocation(const BAMReader * bamReader) const
+{
+    return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED)
+        ? InvalidGenomeLocation : (bamReader->getLocationForRefAndOffset(next_refID, next_pos));
+}
+
+
+BAMReader::BAMReader(const ReaderContext& i_context) : ReadReader(i_context), refLocation(0), n_ref(0)
 {
 }
 
 BAMReader::~BAMReader()
 {
+    BigDealloc(refLocation);
+    refLocation = NULL;
 }
 
     bool
@@ -151,7 +168,7 @@ BAMReader::readHeader(
 		_ASSERT(textHeaderSize == header->l_text);	// We got the same thing this time
 	}
 
-	if (!SAMReader::parseHeader(fileName, header->text(), header->text() + headerSize - sizeof(BAMHeader), context.genome, &textHeaderSize, &context.headerMatchesIndex, &sawWholeHeader)) {
+	if (!SAMReader::parseHeader(fileName, header->text(), header->text() + headerSize - sizeof(BAMHeader), context.genome, &textHeaderSize, &context.headerMatchesIndex, &sawWholeHeader, &n_ref, &refLocation)) {
 		WriteErrorMessage("BAMReader: failed to parse header on '%s'\n", fileName);
 		soft_exit(1);
 	}
@@ -161,7 +178,7 @@ BAMReader::readHeader(
 		soft_exit(1);
 	}
 
-	int n_ref = header->n_ref();
+    _ASSERT(header->n_ref() == n_ref);  // We got the same value from the SAM header parser as is in the BAM header
 	BAMHeaderRefSeq* refSeq = header->firstRefSeq();
 	for (int i = 0; i < n_ref; i++, refSeq = refSeq->next()) {
 		// just advance
@@ -559,7 +576,7 @@ BAMReader::getReadFromLine(
     _ASSERT((size_t)(endOfBuffer - line) >= bam->size());
     bam->validate();
 
-    GenomeLocation genomeLocation = bam->getLocation(genome);
+    GenomeLocation genomeLocation = bam->getLocation(this);
 
     if (NULL != out_genomeLocation) {
         _ASSERT(-1 <= bam->refID && bam->refID < (int)genome->getNumContigs());
@@ -1236,7 +1253,7 @@ struct DuplicateReadKey
     DuplicateReadKey()
     { memset(this, 0, sizeof(DuplicateReadKey)); }
 
-    DuplicateReadKey(const BAMAlignment* bam, const Genome* genome)
+    DuplicateReadKey(const BAMAlignment* bam, const Genome *genome)
     {
         if (bam == NULL) {
             locations[0] = locations[1] = UINT32_MAX;

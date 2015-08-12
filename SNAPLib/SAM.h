@@ -86,7 +86,8 @@ public:
             const char *fileName, int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context);
         
         // result and fieldLengths must be of size nSAMFields
-        static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, _int64 *o_headerSize, bool* o_headerMatchesIndex, bool *o_sawWholeHeader = NULL);
+        static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, _int64 *o_headerSize, bool* o_headerMatchesIndex, bool *o_sawWholeHeader = NULL, 
+            int *o_n_ref = NULL, GenomeLocation **o_ref_locations = NULL);  // o_ref_locations is BigAlloc'ed
         
         static char* skipToBeyondNextFieldSeparator(char *str, const char *endOfBuffer, size_t *o_charsUntilFirstSeparator = NULL);
 

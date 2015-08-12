@@ -185,11 +185,21 @@ SAMReader::parseHeader(
     const Genome *genome, 
     _int64 *o_headerSize,
     bool *o_headerMatchesIndex,
-	bool *o_sawWholeHeader)
+	bool *o_sawWholeHeader,
+    int *o_n_ref,
+    GenomeLocation **o_ref_locations)
 {
+    _ASSERT((NULL == o_n_ref) == (NULL == o_ref_locations));    // both or neither are NULL, not one of each
+
     char *nextLineToProcess = firstLine;
     *o_headerMatchesIndex = true;
     int numSQLines = 0;
+    int n_ref_slots = 4096;
+    GenomeLocation *ref_locations = NULL;
+    if (NULL != o_ref_locations) {
+        ref_locations = (GenomeLocation *)BigAlloc(sizeof(GenomeLocation)* n_ref_slots);
+    }
+
     while (NULL != nextLineToProcess && nextLineToProcess < endOfBuffer && '@' == *nextLineToProcess) {
 		//
 		// Make sure we have the complete line.
@@ -218,7 +228,6 @@ SAMReader::parseHeader(
             //
             // Verify that they actually match what's in our reference genome.
             //
-            numSQLines++;
             if (nextLineToProcess + 3 >= endOfBuffer || ' ' != nextLineToProcess[3] && '\t' != nextLineToProcess[3]) {
                 WriteErrorMessage("Malformed SAM file '%s' has @SQ without a following space or tab.\n",fileName);
                 return false;
@@ -245,10 +254,24 @@ SAMReader::parseHeader(
             }
             contigName[contigNameBufferSize - 1] = '\0';
 
-            if (genome == NULL || !genome->getLocationOfContig(contigName, NULL)) {
+            GenomeLocation contigBase = InvalidGenomeLocation;
+            if (genome == NULL || !genome->getLocationOfContig(contigName, &contigBase)) {
                 *o_headerMatchesIndex = false;
             }
-        } else if (!strncmp("@HD",nextLineToProcess,3) || !strncmp("@RG",nextLineToProcess,3) || !strncmp("@PG",nextLineToProcess,3) ||
+
+            if (NULL != o_ref_locations) {
+                if (numSQLines >= n_ref_slots) {
+                    GenomeLocation *new_ref_locations = (GenomeLocation *)BigAlloc(sizeof(GenomeLocation)* n_ref_slots * 2);
+                    memcpy(new_ref_locations, ref_locations, sizeof(GenomeLocation)* n_ref_slots);
+                    BigDealloc(ref_locations);
+                    ref_locations = new_ref_locations;
+                    n_ref_slots *= 2;
+                }
+                ref_locations[numSQLines] = contigBase;
+            }
+
+            numSQLines++;
+        } else if (!strncmp("@HD", nextLineToProcess, 3) || !strncmp("@RG", nextLineToProcess, 3) || !strncmp("@PG", nextLineToProcess, 3) ||
             !strncmp("@CO",nextLineToProcess,3)) {
             //
             // Ignore these lines.
@@ -272,6 +295,12 @@ SAMReader::parseHeader(
 	if (NULL != o_sawWholeHeader) {
 		*o_sawWholeHeader = nextLineToProcess < endOfBuffer;
 	}
+
+    if (NULL != o_ref_locations) {
+        *o_n_ref = numSQLines;
+        *o_ref_locations = ref_locations;
+    }
+
     return true;
 }
 
@@ -354,7 +383,13 @@ SAMReader::getReadFromLine(
     GenomeLocation locationOfContig;
     parseContigName(genome, contigName, contigNameBufferSize, &locationOfContig, NULL, field, fieldLength);
 
-    GenomeLocation genomeLocation = parseLocation(locationOfContig, field, fieldLength);
+    GenomeLocation genomeLocation;
+    
+    if (InvalidGenomeLocation != locationOfContig) {
+        genomeLocation = parseLocation(locationOfContig, field, fieldLength);
+    } else {
+        genomeLocation = InvalidGenomeLocation;
+    }
 
     if (NULL != out_genomeLocation) {
         *out_genomeLocation = genomeLocation;
@@ -468,7 +503,7 @@ SAMReader::parseContigName(
     memcpy(contigName,field[rfield],fieldLength[rfield]);
     contigName[fieldLength[rfield]] = '\0';
 
-    *o_locationOfContig = 0;
+    *o_locationOfContig = InvalidGenomeLocation;
     if ('*' != contigName[0] && genome != NULL && !genome->getLocationOfContig(contigName, o_locationOfContig, o_indexOfContig)) {
         //WriteErrorMessage("Unable to find contig '%s' in genome.  SAM file malformed.\n",contigName);
         //soft_exit(1);

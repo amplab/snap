@@ -88,6 +88,7 @@ struct BAMHeaderRefSeq
 
 // information for each alignment record
 struct BAMAlignAux;
+class BAMReader;
 struct BAMAlignment
 {
     _int32      block_size;
@@ -170,11 +171,17 @@ struct BAMAlignment
     // absoluate genome locations
 
     GenomeLocation getLocation(const Genome* genome) const
-    { return genome == NULL || pos < 0 || refID < 0 || refID >= genome->getNumContigs() || (FLAG & SAM_UNMAPPED)
-        ? UINT32_MAX : (genome->getContigs()[refID].beginningLocation + pos); }
+    {
+        return genome == NULL || pos < 0 || refID < 0 || refID >= genome->getNumContigs() || (FLAG & SAM_UNMAPPED)
+            ? UINT32_MAX : (genome->getContigs()[refID].beginningLocation + pos);
+    }
 
     GenomeLocation getNextLocation(const Genome* genome) const
     { return next_pos < 0 || next_refID < 0 || (FLAG & SAM_NEXT_UNMAPPED) ? UINT32_MAX : (genome->getContigs()[next_refID].beginningLocation + next_pos); }
+
+    GenomeLocation getLocation(const BAMReader * bamReader) const;  // Use this version for input reads rather than for SNAP-aligned ones
+
+    GenomeLocation getNextLocation(const BAMReader * bamReader) const;  // Use this version for input reads rather than for SNAP-aligned ones
 
 #ifdef VALIDATE_BAM
     void validate();
@@ -427,6 +434,14 @@ public:
         static const int MAX_SEQ_LENGTH;
         static const int MAX_RECORD_LENGTH;
 
+        const GenomeLocation getLocationForRefAndOffset(int ref, unsigned offset) const
+        {
+            if (ref < 0 || ref >= n_ref || refLocation[ref] == InvalidGenomeLocation) {
+                return InvalidGenomeLocation;
+            }
+            return refLocation[ref] + offset;
+        }
+
 protected:
 
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
@@ -443,7 +458,7 @@ private:
         char* getExtra(_int64 bytes);
 
         DataReader*         data;
-        //unsigned            n_ref; // number of reference sequences
-        //unsigned*           refOffset; // array mapping ref sequence ID to contig location
+        int                 n_ref; // number of reference sequences
+        GenomeLocation*     refLocation; // array mapping ref sequence ID to contig genome location
         _int64              extraOffset; // offset into extra data
 };

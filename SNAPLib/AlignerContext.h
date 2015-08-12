@@ -57,8 +57,6 @@ public:
 
     void finishThread(AlignerContext* common);
 
-    void printStatsHeader();
-    
     void printStats();
     
     void beginIteration();

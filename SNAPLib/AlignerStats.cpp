@@ -38,7 +38,10 @@ AlignerStats::AlignerStats(AbstractStats* i_extra)
     notFound(0),
     alignedAsPairs(0),
     extra(i_extra),
-    lvCalls(0)
+    lvCalls(0),
+    millisReading(0),
+    millisAligning(0),
+    millisWriting(0)
 {
     for (int i = 0; i <= AlignerStats::maxMapq; i++) {
         mapqHistogram[i] = 0;
@@ -87,6 +90,9 @@ AlignerStats::add(
     notFound += other->notFound;
     alignedAsPairs += other->alignedAsPairs;
     lvCalls += other->lvCalls;
+    millisReading += other->millisReading;
+    millisAligning += other->millisAligning;
+    millisWriting += other->millisWriting;
 
     if (extra != NULL && other->extra != NULL) {
         extra->add(other->extra);
