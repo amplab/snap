@@ -79,7 +79,8 @@ AlignerOptions::AlignerOptions(
     writeBufferSize(16 * 1024 * 1024),
     dropIndexBeforeSort(false),
     killIfTooSlow(false),
-    sortIntermediateDirectory(NULL)
+    sortIntermediateDirectory(NULL),
+    profile(false)
 {
     if (forPairedEnd) {
         maxDist                 = 15;
@@ -193,6 +194,7 @@ AlignerOptions::usageMessage()
         "       the aligned reads in batches to a temporary file.  When the aligning is done, it does a merge sort from the temporary file into the\n"
         "       final output file.  By default, the intermediate file is in the same directory as the output file, but for performance or space\n"
         "       reasons, you might want to put it elsewhere.  If so, use this option.\n"
+        " -pro  Profile alignment to give you an idea of how much time is spent aligning and how much waiting for IO\n"
 		,
             commandLine,
             maxDist,
@@ -527,7 +529,10 @@ AlignerOptions::parse(
 	} else if (strcmp(argv[n], "-pc") == 0) {
 		preserveClipping = true;
 		return true;
-	} else if (strcmp(argv[n], "-G") == 0) {
+    } else if (strcmp(argv[n], "-pro") == 0) {
+        profile = true;
+        return true;
+    } else if (strcmp(argv[n], "-G") == 0) {
         if (n + 1 < argc) {
             gapPenalty = atoi(argv[n+1]);
             if (gapPenalty < 1) {

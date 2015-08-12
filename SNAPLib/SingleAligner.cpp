@@ -148,7 +148,14 @@ SingleAlignerContext::runIterationThread()
     _uint64 lastReportTime = timeInMillis();
     _uint64 readsWhenLastReported = 0;
 
+    _int64 startTime = timeInMillis();
     while (NULL != (read = supplier->getNextRead())) {
+        _int64 readFinishedTime;
+        if (options->profile) {
+            readFinishedTime = timeInMillis();
+            stats->millisReading += (readFinishedTime - startTime);
+        }
+
         stats->totalReads++;
 
         if (AlignerOptions::useHadoopErrorMessages && stats->totalReads % 10000 == 0 && timeInMillis() - lastReportTime > 10000) {
@@ -190,6 +197,12 @@ SingleAlignerContext::runIterationThread()
         aligner->setMaxK(oldMaxK);
 #endif
 
+        _int64 alignFinishedTime;
+        if (options->profile) {
+            alignFinishedTime = timeInMillis();
+            stats->millisAligning += (alignFinishedTime - readFinishedTime);            
+        }
+
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;
         int timeBucket = min(30, cheezyLogBase2(runTime));
@@ -226,6 +239,11 @@ SingleAlignerContext::runIterationThread()
 
             readWriter->writeReads(readerContext, read, alignmentResults, nSecondaryResults + 1, containsPrimary);
 
+        }
+
+        if (options->profile) {
+            startTime = timeInMillis();
+            stats->millisWriting = (startTime - alignFinishedTime);
         }
 
     }

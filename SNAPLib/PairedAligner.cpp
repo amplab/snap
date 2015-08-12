@@ -454,7 +454,13 @@ void PairedAlignerContext::runIterationThread()
     _uint64 lastReportTime = timeInMillis();
     _uint64 readsWhenLastReported = 0;
 
+    _int64 startTime = timeInMillis();
     while (supplier->getNextReadPair(&reads[0],&reads[1])) {
+        _int64 readFinishedTime;
+        if (options->profile) {
+            readFinishedTime = timeInMillis();
+            stats->millisReading += (readFinishedTime - startTime);
+        }
         // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
         if (!ignoreMismatchedIDs) {
             Read::checkIdMatch(reads[0], reads[1]);
@@ -491,21 +497,27 @@ void PairedAlignerContext::runIterationThread()
         }
 
         if (AlignerOptions::useHadoopErrorMessages && stats->totalReads % 10000 == 0 && timeInMillis() - lastReportTime > 10000) {
-            fprintf(stderr,"reporter:counter:SNAP,readsAligned,%lu\n",stats->totalReads - readsWhenLastReported);
+            fprintf(stderr, "reporter:counter:SNAP,readsAligned,%lu\n", stats->totalReads - readsWhenLastReported);
             readsWhenLastReported = stats->totalReads;
             lastReportTime = timeInMillis();
         }
 
 
- #if     TIME_HISTOGRAM
+#if     TIME_HISTOGRAM
         _int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
 
         int nSecondaryResults;
         int nSingleSecondaryResults[2];
-        
+
         aligner->align(reads[0], reads[1], results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, results + 1,
             maxSingleSecondaryHits, maxSecondaryAlignments, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1], singleSecondaryResults);
+
+        _int64 alignFinishedTime;
+        if (options->profile) {
+            alignFinishedTime = timeInMillis();
+            stats->millisAligning += (alignFinishedTime - readFinishedTime);
+        }
 
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;
@@ -559,8 +571,12 @@ void PairedAlignerContext::runIterationThread()
             readWriter->writePairs(readerContext, reads, results, nSecondaryResults + 1, singleResults, nSingleSecondaryResults, firstIsPrimary);
         }
 
-        updateStats((PairedAlignerStats*) stats, reads[0], reads[1], &results[0], useful0, useful1);
+        if (options->profile) {
+            startTime = timeInMillis();
+            stats->millisWriting += (startTime - alignFinishedTime);
+        }
 
+        updateStats((PairedAlignerStats*) stats, reads[0], reads[1], &results[0], useful0, useful1);
     }
 
     stats->lvCalls = aligner->getLocationsScored();
