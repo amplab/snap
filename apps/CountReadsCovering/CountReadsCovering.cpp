@@ -130,7 +130,6 @@ void ReaderThread(void *param)
 
     int BJBNs = 0;
 
-
     Read *read;
     while (NULL != (read = readSupplier->getNextRead())) {
         const int maxExons = 1000;
@@ -139,7 +138,7 @@ void ReaderThread(void *param)
  
         int nExons = 0;
         totalReads++;
-        if (read->getOriginalSAMFlags() & SAM_UNMAPPED) {
+        if (read->getOriginalSAMFlags() & SAM_UNMAPPED || read->getOriginalAlignedLocation() == InvalidGenomeLocation) {
             continue;
         }
         mappedReads++;
@@ -184,9 +183,6 @@ void ReaderThread(void *param)
             }
         } // for each cigar op.
 
-
-
-
         qsort(exons, nExons, sizeof(Exon *), ComparePointers);
         qsort(isoforms, nExons, sizeof(Isoform *), ComparePointers);
 
@@ -225,6 +221,29 @@ void checkRegions()
     }
 }
 
+const char *translateAlternateChromName(const char *inputName)
+{
+    if (!strcmp(inputName, "GL000191.1")) return "chr1_gl000191_random";
+    if (!strcmp(inputName, "GL000192.1")) return "chr1_gl000192_random";
+    if (!strcmp(inputName, "GL000193.1")) return "chr4_gl000193_random";
+    if (!strcmp(inputName, "GL000194.1")) return "chr4_gl000194_random";
+    if (!strcmp(inputName, "GL000195.1")) return "chr7_gl000195_random";
+    if (!strcmp(inputName, "GL000205.1")) return "chr17_gl000205_random";
+    if (!strcmp(inputName, "GL000209.1")) return "chr19_gl000209_random";
+    if (!strcmp(inputName, "GL000211.1")) return "chrUn_gl000211";
+    if (!strcmp(inputName, "GL000212.1")) return "chrUn_gl000212";
+    if (!strcmp(inputName, "GL000213.1")) return "chrUn_gl000213";
+    if (!strcmp(inputName, "GL000214.1")) return "chrUn_gl000214";
+    if (!strcmp(inputName, "GL000218.1")) return "chrUn_gl000218";
+    if (!strcmp(inputName, "GL000219.1")) return "chrUn_gl000219";
+    if (!strcmp(inputName, "GL000220.1")) return "chrUn_gl000220";
+    if (!strcmp(inputName, "GL000229.1")) return "chrUn_gl000229";
+    if (!strcmp(inputName, "GL000237.1")) return "chrUn_gl000237";
+    if (!strcmp(inputName, "GL000241.1")) return "chrUn_gl000241";
+
+    return NULL;
+}
+
 int main(int argc, char* argv[])
 {
     _int64 start = timeInMillis();
@@ -259,7 +278,7 @@ int main(int argc, char* argv[])
     // Open the input file.
     //
     int nThreads = GetNumberOfProcessors();
-nThreads = 1; /*BJB*/
+nThreads = 1; // BJB
     DataSupplier::ThreadCount = nThreads;
 
     ReaderContext readerContext;
@@ -349,8 +368,29 @@ nThreads = 1; /*BJB*/
 
         GenomeLocation contigBase;
         if (!genome->getLocationOfContig(fields[kg_chrom], &contigBase)) {
-            fprintf(stderr, "Unable to find contig '%s', line %d\n", fields[kg_chrom], lineNumber);
-            soft_exit(1);
+            //
+            // Try stripping off the leading "chr" if it has one.
+            //
+            if (strlen(fields[kg_chrom]) < 3 || fields[kg_chrom][0] != 'c' || fields[kg_chrom][1] != 'h' || fields[kg_chrom][2] != 'r' || !genome->getLocationOfContig(fields[kg_chrom] + 3, &contigBase)) {
+                //
+                // Change chrM into MT
+                //
+                if (strlen(fields[kg_chrom]) != 4 || fields[kg_chrom][0] != 'c' || fields[kg_chrom][1] != 'h' || fields[kg_chrom][2] != 'r' || fields[kg_chrom][3] != 'M' || !genome->getLocationOfContig("MT", &contigBase)) {
+                    //
+                    // Try the alternate naming.
+                    //
+                    const char *alternateName = translateAlternateChromName(fields[kg_chrom]);
+                    if (NULL == alternateName || !genome->getLocationOfContig(alternateName, &contigBase)) {
+                        //
+                        // And ignore long things that didn't otherwise work; they're probably minor haplotypes that aren't in this reference (especially if it's grch37-lite, which specifically has them stripped).
+                        //
+                        if (strlen(fields[kg_chrom]) < 5) {
+                            fprintf(stderr, "Unable to find contig '%s', line %d\n", fields[kg_chrom], lineNumber);
+                            soft_exit(1);
+                        }
+                    }
+                }
+            }
         }
 
         char *startPtr = fields[kg_exonStarts];
@@ -475,6 +515,11 @@ nThreads = 1; /*BJB*/
     }
 
     WaitForSingleWaiterObject(&allThreadsDone);
+
+    if (0 == MappedReads) {
+        WriteErrorMessage("No reads mapped.  Something is wrong, not writing output.\n");
+        soft_exit(1);
+    }
 
     FILE *outputFile = fopen(argv[4], "w");
     if (NULL == outputFile) {
