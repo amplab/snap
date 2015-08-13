@@ -255,9 +255,34 @@ SAMReader::parseHeader(
             contigName[contigNameBufferSize - 1] = '\0';
 
             GenomeLocation contigBase = InvalidGenomeLocation;
-            if (genome == NULL || !genome->getLocationOfContig(contigName, &contigBase)) {
+            if (NULL != genome) {
+                if (!genome->getLocationOfContig(contigName, &contigBase)) {
+                    //
+                    // Try stripping off the leading "chr" if it has one.
+                    //
+                    if (strlen(contigName) < 3 || contigName[0] != 'c' || contigName[1] != 'h' || contigName[2] != 'r' || !genome->getLocationOfContig(contigName + 3, &contigBase)) {
+                        //
+                        // Change chrM into MT
+                        //
+                        if (strlen(contigName) != 4 || contigName[0] != 'c' || contigName[1] != 'h' || contigName[2] != 'r' || contigName[3] != 'M' || !genome->getLocationOfContig("MT", &contigBase)) {
+                            //
+                            // Try prefixing chr to short names.
+                            //
+                            const size_t maxShortNameSize = 2;
+                            char prefixedName[maxShortNameSize + 4];
+                            if (strlen(contigName) <= maxShortNameSize) {
+                                sprintf(prefixedName, "chr%s", contigName);
+                                genome->getLocationOfContig(prefixedName, &contigBase);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (InvalidGenomeLocation == contigBase) {
                 *o_headerMatchesIndex = false;
             }
+
 
             if (NULL != o_ref_locations) {
                 if (numSQLines >= n_ref_slots) {
