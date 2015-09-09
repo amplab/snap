@@ -278,7 +278,6 @@ int main(int argc, char* argv[])
     // Open the input file.
     //
     int nThreads = GetNumberOfProcessors();
-nThreads = 1; // BJB
     DataSupplier::ThreadCount = nThreads;
 
     ReaderContext readerContext;

@@ -47,4 +47,7 @@ obj
 /snap-aligner
 /apps/ExpressionMetadata/bin
 /apps/GenerateScatterGraphs/bin
+/apps/GrovelPileups/bin
+/apps/SplitIntoPieces/bin
+
 
