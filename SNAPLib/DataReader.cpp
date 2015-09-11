@@ -1365,6 +1365,7 @@ private:
         _int64 decompressedValid;
         _int64 decompressedSize;
         bool allocated; // if decompressed has been allocated specially, not from inner extra data
+        void ensureSize(_int64 newSize, _int64 newTotal, _int64 copyOld);
     };
 
     // use only these routines to manipulate the linked  lists
@@ -1396,6 +1397,22 @@ private:
     ExclusiveLock lock; // lock on linked list pointers in this object and in Entry
 };
 
+void DecompressDataReader::Entry::ensureSize(_int64 newSize, _int64 extra, _int64 copyOld)
+{
+    if (newSize > decompressedSize) {
+        //WriteErrorMessage("DecompressDataReader: expanding decompress buffer from %lld to %lld\n", decompressedSize, newSize);
+        char * newSpace = (char*)BigAlloc(newSize + extra);
+        memcpy(newSpace, decompressed, copyOld);
+        if (allocated) {
+            BigDealloc(decompressed);
+            //fprintf(stderr, "Entry::ensureSize free 0x%llx-0x%llx\n", (_int64)decompressed, (_int64)decompressed + decompressedSize + extra);
+        }
+        decompressed = newSpace;
+        allocated = true;
+        decompressedSize = newSize;
+        //fprintf(stderr, "Entry::ensureSize allocate 0x%llx-0x%llx\n", (_int64)decompressed, (_int64)decompressed + decompressedSize + extra);
+    }
+}
 
 DecompressDataReader::DecompressDataReader(
     DataReader* i_inner,
@@ -1760,6 +1777,23 @@ DecompressWorker::step()
     }
 }
 
+    _int64
+calculateDecompressedSize(char* compressed, _int64 compressedStart, _int64 compressedValid, _int64 input, _int64 output, _int64 fileOffset)
+{
+    do {
+        BgzfHeader* zip = (BgzfHeader*)(compressed + input);
+        input += zip->BSIZE() + 1;
+        output += zip->ISIZE();
+
+        if (input > compressedValid || zip->BSIZE() >= BAM_BLOCK || zip->ISIZE() > BAM_BLOCK) {
+            WriteErrorMessage("error reading BAM file at %lld\n", fileOffset + input);
+            soft_exit(1);
+        }
+
+    } while (input < compressedStart);
+    return output;
+}
+
     void
 DecompressDataReader::decompressThread(
     void* context)
@@ -1786,53 +1820,29 @@ DecompressDataReader::decompressThread(
                 soft_exit(1);
             }
             // mark as eof - no data
-            entry->decompressedValid = entry->decompressedStart = reader->overflowBytes;
             DataBatch b = reader->inner->getBatch();
             entry->batch = DataBatch(b.batchID + 1, b.fileID);
             // decompressed buffer is same as next-to-last batch, need to allocate own buffer
             entry->decompressed = (char*) BigAlloc(reader->totalExtra);
+            entry->decompressedSize = reader->extraBytes;
+            entry->decompressedValid = entry->decompressedStart = reader->overflowBytes;
             entry->allocated = true;
             stop = true;
         } else {
-            _int64 extraSize;
-            reader->inner->getExtra(&entry->decompressed, &extraSize);
-			_ASSERT(extraSize >= reader->extraBytes && extraSize >= reader->overflowBytes);
+            if (!entry->allocated) {
+                _int64 extraSize;
+                reader->inner->getExtra(&entry->decompressed, &extraSize);
+                entry->decompressedSize = reader->extraBytes;
+                _ASSERT(extraSize >= reader->extraBytes && extraSize >= reader->overflowBytes);
+            }
             // figure out offsets and advance inner data
             inputs.clear();
             outputs.clear();
             _int64 input = 0;
             _int64 output = reader->overflowBytes;
 
-            _int64 tempInput = input;
-            _int64 tempOutput = output;
-            do {
-                BgzfHeader* zip = (BgzfHeader*)(entry->compressed + tempInput);
-                tempInput += zip->BSIZE() + 1;
-                tempOutput += zip->ISIZE();
-
-                if (tempInput > entry->compressedValid || zip->BSIZE() >= BAM_BLOCK || zip->ISIZE() > BAM_BLOCK) {
-                    fprintf(stderr, "error reading BAM file at offset %lld\n", reader->getFileOffset());
-                    soft_exit(1);
-                }
-
-            } while (tempInput < entry->compressedStart);
-
-            if (tempOutput > entry->decompressedSize) {
-                //
-                // Allocate more space.  BUGBUG: probably should deallocate these over time to save space if it happens much.
-                //
-                WriteErrorMessage("DecompressDataReader: expanding decompress buffer from %lld to %lld\n", entry->decompressedSize, tempOutput);
-
-                char *newSpace = (char *)BigAlloc(tempOutput + reader->totalExtra - reader->extraBytes); // Extend it for the "extra" space.
-                memcpy(newSpace, entry->decompressed, reader->overflowBytes);
-
-                if (entry->allocated) {
-                    BigDealloc(entry->decompressed);
-                }
-                entry->decompressed = newSpace;
-                entry->allocated = true;
-                entry->decompressedSize = tempOutput;
-            }
+            _int64 tempOutput = calculateDecompressedSize(entry->compressed, entry->compressedStart, entry->compressedValid, input, output, reader->getFileOffset() - input);
+            entry->ensureSize(tempOutput, reader->totalExtra - reader->extraBytes, reader->overflowBytes);
 
             do {
                 inputs.push_back(input);
@@ -1911,10 +1921,14 @@ DecompressDataReader::decompressThreadContinuous(
             reader->holdBatch(entry->batch); // hold batch while decompressing
             reader->inner->advance(entry->compressedValid);
             reader->inner->nextBatch(); // start reading next batch
-            decompress(&zstream, NULL,
+            bool ok = decompress(&zstream, NULL,
                 entry->compressed, entry->compressedValid, &compressedRead,
-                entry->decompressed + reader->overflowBytes, reader->extraBytes - reader->overflowBytes, &decompressedWritten,
+                entry->decompressed + reader->overflowBytes, entry->decompressedSize - reader->overflowBytes, &decompressedWritten,
                 first ? StartMultiBlock : ContinueMultiBlock);
+            if (!ok) {
+                WriteErrorMessage("Failed to decompress BAM file at offset %lld\n", reader->inner->getFileOffset());
+                soft_exit(1);
+            }
             _ASSERT(compressedRead == entry->compressedValid && decompressedWritten <= reader->extraBytes - reader->overflowBytes);
             entry->decompressedValid = reader->overflowBytes + decompressedWritten;
             entry->decompressedStart = decompressedWritten;
