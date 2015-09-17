@@ -178,7 +178,10 @@ BAMReader::readHeader(
 		soft_exit(1);
 	}
 
-    _ASSERT(header->n_ref() == n_ref);  // We got the same value from the SAM header parser as is in the BAM header
+    if (header->n_ref() != n_ref) { // We got the same value from the SAM header parser as is in the BAM header
+        WriteErrorMessage("Truncated or corrupt BAM file near offset %lld\n", data->getFileOffset());
+        soft_exit(1);
+    }
 	BAMHeaderRefSeq* refSeq = header->firstRefSeq();
 	for (int i = 0; i < n_ref; i++, refSeq = refSeq->next()) {
 		// just advance
@@ -581,7 +584,10 @@ BAMReader::getReadFromLine(
 {
     _ASSERT(endOfBuffer - line >= sizeof(BAMHeader));
     BAMAlignment* bam = (BAMAlignment*) line;
-    _ASSERT((size_t)(endOfBuffer - line) >= bam->size());
+    if ((size_t)(endOfBuffer - line) < bam->size()) {
+        WriteErrorMessage("Truncated or corrupt BAM file near offset %lld\n", data->getFileOffset());
+        soft_exit(1);
+    }
     bam->validate();
 
     GenomeLocation genomeLocation = bam->getLocation(this);
@@ -606,7 +612,10 @@ BAMReader::getReadFromLine(
     }
 
     if (NULL != read) {
-        _ASSERT(bam->l_seq < MAX_SEQ_LENGTH);
+        if (bam->l_seq > MAX_SEQ_LENGTH) {
+            WriteErrorMessage("Truncated or corrupt BAM file near offset %lld\n", data->getFileOffset());
+            soft_exit(1);
+        }
 		char* seqBuffer = getExtra(bam->l_seq);
         char* qualBuffer = getExtra(bam->l_seq);
 
@@ -1156,7 +1165,10 @@ BAMFilter::onNextBatch(
     size_t bytes)
 {
     bool ok = writer->getBatch(-1, &currentBuffer, NULL, NULL, NULL, &currentBufferBytes, &currentOffset);
-    _ASSERT(ok);
+    if (!ok) {
+        WriteErrorMessage("Error writing to output file\n");
+        soft_exit(1);
+    }
     currentWriter = writer;
     int index = 0;
     for (VariableSizeVector<size_t>::iterator i = offsets.begin(); i != offsets.end(); i++) {

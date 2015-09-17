@@ -91,7 +91,9 @@ void *BigAllocProfile(
         const char  *caller)
 {
     RecordAllocProfile(sizeToAllocate, caller);
-    return BigAllocInternal(sizeToAllocate, sizeAllocated);
+    void * result = BigAllocInternal(sizeToAllocate, sizeAllocated);
+    //WriteErrorMessage("!! BigAllocProfile %s 0x%llx-0x%llx %lld\n", caller, (_int64)result, (_int64)result + sizeToAllocate, sizeToAllocate);
+    return result;
 }
 
 #endif
@@ -308,7 +310,16 @@ Arguments:
 --*/
 {
     if (NULL == memory) return;
+#if 1
     VirtualFree(memory,0,MEM_RELEASE);
+#else
+    // for debugging dangling pointer read/writes
+    MEMORY_BASIC_INFORMATION info;
+    DWORD oldProtect;
+    VirtualQuery(memory, &info, sizeof(info));
+    VirtualProtect(memory, info.RegionSize, PAGE_NOACCESS, &oldProtect);
+    WriteErrorMessage("!! BigDealloc 0x%llx\n", (_int64)memory);
+#endif
 }
 
 #ifdef PROFILE_BIGALLOC
