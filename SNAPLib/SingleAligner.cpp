@@ -105,7 +105,7 @@ SingleAlignerContext::runIterationThread()
     }
     size_t alignmentResultBufferSize = sizeof(*alignmentResults) * (alignmentResultBufferCount + 1); // +1 is for primary result
  
-    BigAllocator *allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(index, true, maxHits, maxReadSize, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxSecondaryAlignmentsPerContig) 
+    BigAllocator *allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(index, true, maxHits, maxReadSize, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxSecondaryAlignmentsPerContig, extraSearchDepth) 
         + alignmentResultBufferSize);
    
     BaseAligner *aligner = new (allocator) BaseAligner(
