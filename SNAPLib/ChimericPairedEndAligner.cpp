@@ -79,7 +79,7 @@ ChimericPairedEndAligner::getBigAllocatorReservation(
         unsigned        maxCandidatePoolSize,
         int             maxSecondaryAlignmentsPerContig)
 {
-    return BaseAligner::getBigAllocatorReservation(index, false, maxHits, maxReadSize, seedLen, maxSeedsFromCommandLine, seedCoverage, maxSecondaryAlignmentsPerContig) + sizeof(ChimericPairedEndAligner)+sizeof(_uint64);
+    return BaseAligner::getBigAllocatorReservation(index, false, maxHits, maxReadSize, seedLen, maxSeedsFromCommandLine, seedCoverage, maxSecondaryAlignmentsPerContig, maxExtraSearchDepth) + sizeof(ChimericPairedEndAligner)+sizeof(_uint64);
 }
 
 

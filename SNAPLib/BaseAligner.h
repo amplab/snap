@@ -110,7 +110,7 @@ public:
     inline void setStopOnFirstHit(bool newValue) {stopOnFirstHit = newValue;}
 
     static size_t getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, 
-        unsigned numSeedsFromCommandLine, double seedCoverage, int maxSecondaryAlignmentsPerContig);
+        unsigned numSeedsFromCommandLine, double seedCoverage, int maxSecondaryAlignmentsPerContig, unsigned extraSearchDepth);
 
 private:
 

@@ -1436,7 +1436,7 @@ BaseAligner::incrementWeight(HashTableElement *element)
 
     size_t
 BaseAligner::getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize,
-                unsigned seedLen, unsigned numSeedsFromCommandLine, double seedCoverage, int maxSecondaryAlignmentsPerContig)
+                unsigned seedLen, unsigned numSeedsFromCommandLine, double seedCoverage, int maxSecondaryAlignmentsPerContig, unsigned extraSearchDepth)
 {
     unsigned maxSeedsToUse;
     if (0 != numSeedsFromCommandLine) {
@@ -1465,7 +1465,8 @@ BaseAligner::getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishki
         sizeof(BYTE) * (maxReadSize + 7 + 128) / 8                      + // seed used
         sizeof(HashTableElement) * hashTableElementPoolSize             + // hash table element pool
         sizeof(HashTableAnchor) * candidateHashTablesSize * 2           + // candidate hash table (both)
-        sizeof(HashTableElement) * (maxSeedsToUse + 1);                   // weight lists
+        sizeof(HashTableElement) * (maxSeedsToUse + 1)                  + // weight lists
+        sizeof(unsigned) * extraSearchDepth;                              // hitCountByExtraSearchDepth
 }
 
     void 
