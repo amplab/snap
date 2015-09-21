@@ -203,8 +203,12 @@ SimpleReadWriter::writeReads(
             int cumulativeAddFrontClipping = 0;
             finalLocations[whichResult] = results[whichResult].location;
 
+            unsigned nAdjustments = 0;
+
             while (!format->writeRead(context, &lvc, buffer + used, size - used, &usedBuffer[whichResult], read->getIdLength(), read, results[whichResult].status,
                 results[whichResult].mapq, finalLocations[whichResult], results[whichResult].direction, (whichResult > 0) || !firstIsPrimary, &addFrontClipping)) {
+
+                nAdjustments++;
 
                 if (0 == addFrontClipping) {
                     blewBuffer = true;
@@ -216,9 +220,10 @@ SimpleReadWriter::writeReads(
                     : genome->getContigAtLocation(results[whichResult].location);
                 const Genome::Contig *newContig = results[whichResult].status == NotFound ? NULL
                     : genome->getContigAtLocation(results[whichResult].location + addFrontClipping);
-                if (newContig == NULL || newContig != originalContig || finalLocations[whichResult] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding()) {
+                if (newContig == NULL || newContig != originalContig || finalLocations[whichResult] + addFrontClipping > originalContig->beginningLocation + originalContig->length - genome->getChromosomePadding() ||
+                    nAdjustments > read->getDataLength()) {
                     //
-                    // Altering this would push us over a contig boundary.  Just give up on the read.
+                    // Altering this would push us over a contig boundary, or we're stuck in a loop.  Just give up on the read.
                     //
                     results[whichResult].status = NotFound;
                     results[whichResult].location = InvalidGenomeLocation;
