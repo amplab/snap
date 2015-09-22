@@ -11,12 +11,15 @@ namespace SplitIntoPieces
     {
         static void PrintUsage()
         {
-            Console.WriteLine("usage: SplitIntoPieces inputFile nPieces lineGranularity outputNameBase outputNameExtension");
+            Console.WriteLine("usage: SplitIntoPieces inputFile nPieces lineGranularity outputNameBase outputNameExtension {-u} {-h headerLine}");
+            Console.WriteLine(" -u means to use unix-style line terminators.");
+            Console.WriteLine(" -h provides a header line to use in each output file.");
         }
         static void Main(string[] args)
         {
-            if (args.Count() != 5)
+            if (args.Count() < 5 || args.Count() > 8)
             {
+                Console.WriteLine("Incorrect arg count " + args.Count() + " must be between 5 and 8");
                 PrintUsage();
                 return;
             }
@@ -24,6 +27,30 @@ namespace SplitIntoPieces
             string inputFilename = args[0];
             string outputNameBase = args[3];
             string outputNameExtension = args[4];
+            string headerLine = null;
+            bool useUnixLineEndings = false;
+
+            int i = 5;
+            while (i < args.Count())
+            {
+                if ("-u" == args[i])
+                {
+                    useUnixLineEndings = true;
+                }
+                else if ("-h" == args[i] && i < args.Count() - 1)
+                {
+                    i++;
+                    headerLine = args[i];
+                }
+                else
+                {
+                    Console.WriteLine("Couldn't parse arg " + args[i]);
+                    PrintUsage();
+                    return;
+                }
+
+                i++;
+            }
 
             int nPieces = Convert.ToInt32(args[1]);
             if (nPieces < 1)
@@ -50,13 +77,31 @@ namespace SplitIntoPieces
                 nLinesPerPiece += lineGranularity - nLinesPerPiece % lineGranularity;
             }
 
-            for (int i = 0; i < nPieces; i++)
+            for (i = 0; i < nPieces; i++)
             {
                 StreamWriter outputFile = new StreamWriter(outputNameBase + i + outputNameExtension);
+                if (headerLine != null)
+                {
+                    if (useUnixLineEndings)
+                    {
+                        outputFile.Write(headerLine + "\n");
+                    }
+                    else
+                    {
+                        outputFile.WriteLine(headerLine);
+                    }
+                }
 
                 for (int j = i * nLinesPerPiece; j < (i + 1) * nLinesPerPiece && j < nLines; j++)
                 {
-                    outputFile.WriteLine(lines[j]);
+                    if (useUnixLineEndings)
+                    {
+                        outputFile.Write(lines[j] + "\n");
+                    }
+                    else
+                    {
+                        outputFile.WriteLine(lines[j]);
+                    }
                 }
 
                 outputFile.Close();

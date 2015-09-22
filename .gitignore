@@ -49,5 +49,6 @@ obj
 /apps/GenerateScatterGraphs/bin
 /apps/GrovelPileups/bin
 /apps/SplitIntoPieces/bin
+/apps/FilterVCF/bin
 
 
