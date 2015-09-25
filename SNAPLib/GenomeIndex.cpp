@@ -1610,6 +1610,17 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
 
     GenericFile *indexFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
 
+    for (int i = 0; i < 20 && NULL == indexFile; i++) {
+        //
+        // On Windows, stdio opens the file exclusively.  So, if we want to have multiple instances of snap
+        // read the same index and start at the same time (think cluster scheduler), then it helps to put
+        // in a little tolerance to spread it out.  Probably should use random exponential backoff here, but
+        // non-random constant is probably good enough in practice.
+        //
+        SleepForMillis(1000);
+        indexFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
+    }
+
     if (NULL == indexFile) {
         WriteErrorMessage("Unable to open file '%s' for read.\n",filenameBuffer);
         return NULL;
