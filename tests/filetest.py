@@ -32,7 +32,7 @@ import shutil
 import subprocess
 
 if (len(sys.argv) < 5 or len(sys.argv) > 6):
-    print "usage: %s data_dir file_base snap bin_dir [-quick]" % sys.argv[0]
+    print "usage: %s data_dir file_base snap-aligner bin_dir [-quick]" % sys.argv[0]
     exit(1)
 
 data = sys.argv[1]

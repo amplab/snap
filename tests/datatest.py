@@ -24,7 +24,7 @@ import shutil
 import subprocess
 
 if len(sys.argv) != 4:
-    print "usage: %s data_dir snap bin_dir" % sys.argv[0]
+    print "usage: %s data_dir snap-aligner bin_dir" % sys.argv[0]
     exit(1)
 
 data = sys.argv[1]

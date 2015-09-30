@@ -40,7 +40,7 @@ const char *SNAP_VERSION = "1.0beta.20";
 static void usage()
 {
 	WriteErrorMessage(
-		"Usage: snap <command> [<options>]\n"
+		"Usage: snap-aligner <command> [<options>]\n"
 		"Commands:\n"
 		"   index    build a genome index\n"
 		"   single   align single-end reads\n"
@@ -57,7 +57,7 @@ void ProcessNonDaemonCommands(int argc, const char **argv) {
 			//
 			// The error cases in index build don't really free memory properly, so we just don't allows it in daemon mode.
 			//
-			WriteErrorMessage("The index command is not available in daemon mode.  Please run 'snap index' directly.\n");
+			WriteErrorMessage("The index command is not available in daemon mode.  Please run 'snap-aligner index' directly.\n");
 		}
 	} else if (strcmp(argv[1], "single") == 0 || strcmp(argv[1], "paired") == 0) {
 		for (int i = 1; i < argc; /* i is increased below */) {
@@ -84,7 +84,7 @@ void ProcessNonDaemonCommands(int argc, const char **argv) {
 
 static void daemonUsage()
 {
-	fprintf(stderr, "Usage: snap daemon [Named pipe name]\n");
+	fprintf(stderr, "Usage: snap-aligner daemon [Named pipe name]\n");
 	soft_exit_no_print(1);    // Don't use soft_exit, it's confusing people to get an "error" message after the usage
 }
 

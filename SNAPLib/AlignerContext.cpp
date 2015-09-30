@@ -396,9 +396,9 @@ AlignerContext::parseOptions(
     AlignerOptions *options;
 
     if (paired) {
-        options = new PairedAlignerOptions("snap paired <index-dir> <inputFile(s)> [<options>] where <input file(s)> is a list of files to process.\n");
+        options = new PairedAlignerOptions("snap-aligner paired <index-dir> <inputFile(s)> [<options>] where <input file(s)> is a list of files to process.\n");
     } else {
-        options = new AlignerOptions("snap single <index-dir> <inputFile(s)> [<options>] where <input file(s)> is a list of files to process.\n");
+        options = new AlignerOptions("snap-aligner single <index-dir> <inputFile(s)> [<options>] where <input file(s)> is a list of files to process.\n");
     }
 
     options->extra = extension->extraOptions();
