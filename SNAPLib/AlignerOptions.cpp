@@ -225,7 +225,7 @@ AlignerOptions::usageMessage()
                       "explicitly specify the type.  But really, that's just confusing and you shouldn't do it.\n"
                       "Input and output may also be from/to stdin/stdout. To do that, use a - for the input or output file\n"
                       "name and give an explicit type specifier.  So, for example, \n"
-                      "snap-aligner aligner single myIndex -fastq - -o -sam -\n"
+                      "snap-aligner single myIndex -fastq - -o -sam -\n"
                       "would read FASTQ from stdin and write SAM to stdout.\n"
     );
 }
