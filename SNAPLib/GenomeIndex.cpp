@@ -172,8 +172,8 @@ GenomeIndex::runIndexer(
 		else if (strcmp(argv[n], "-keysize") == 0) {
             if (n + 1 < argc) {
                 keySizeInBytes = atoi(argv[n+1]);
-                if (keySizeInBytes < 4 || keySizeInBytes > 8) {
-                    WriteErrorMessage("Key size must be between 4 and 8 inclusive\n");
+                if (keySizeInBytes < 2 || keySizeInBytes > 8) {
+                    WriteErrorMessage("Key size must be between 2 and 8 inclusive\n");
                     soft_exit(1);
                 }
                 n++;
@@ -190,9 +190,9 @@ GenomeIndex::runIndexer(
         }
     }
 
-    if (seedLen < 16 || seedLen > 32) {
+    if (seedLen < 8 || seedLen > 32) {
         // Seeds are stored in 64 bits, so they can't be larger than 32 bases for now.
-        WriteErrorMessage("Seed length must be between 16 and 32, inclusive\n");
+        WriteErrorMessage("Seed length must be between 8 and 32, inclusive\n");
         soft_exit(1);
     }
 
@@ -769,8 +769,8 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
         soft_exit(1);
     }
 
-    if (hashTableKeySize < 4 || hashTableKeySize > 8) {
-        WriteErrorMessage("allocateHashTables: key size must be 4-8 inclusive\n");
+    if (hashTableKeySize < 2 || hashTableKeySize > 8) {
+        WriteErrorMessage("allocateHashTables: key size must be 2-8 inclusive\n");
         soft_exit(1);
     }
 
