@@ -200,7 +200,7 @@ AlignerOptions::usageMessage()
                 "alignment, followed by a comma (separated by a space from the other parameters) followed by the\n"
                 "parameters for the next alignment (including single or paired).  You may have as many of these\n"
                 "as you please.  If two consecutive alignments use the same index, it will not be reloaded.\n"
-                "So, for example, you could do 'snap single hg19-20 foo.fq -o foo.sam , paired hg19-20 end1.fq end2.fq -o paired.sam'\n"
+                "So, for example, you could do 'snap-aligner single hg19-20 foo.fq -o foo.sam , paired hg19-20 end1.fq end2.fq -o paired.sam'\n"
                 "and it would not reload the index between the single and paired alignments.\n",
                 "SNAP doesn't parse the options for later runs until the earlier ones have completed, so if you make\n"
                 "an error in one, it may take a while for you to notice.  So, be careful (or check back shortly after\n"
@@ -225,7 +225,7 @@ AlignerOptions::usageMessage()
                       "explicitly specify the type.  But really, that's just confusing and you shouldn't do it.\n"
                       "Input and output may also be from/to stdin/stdout. To do that, use a - for the input or output file\n"
                       "name and give an explicit type specifier.  So, for example, \n"
-                      "snap single myIndex -fastq - -o -sam -\n"
+                      "snap-aligner single myIndex -fastq - -o -sam -\n"
                       "would read FASTQ from stdin and write SAM to stdout.\n"
     );
 }
@@ -957,7 +957,7 @@ SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsume
         }
     } else {
         if (snapFile->isStdio) {
-            WriteErrorMessage("Stdio IO always requires an explicit file type.  So, for example, do 'snap single index-directory -fastq -' to read FASTQ from stdin\n");
+            WriteErrorMessage("Stdio IO always requires an explicit file type.  So, for example, do 'snap-aligner single index-directory -fastq -' to read FASTQ from stdin\n");
         } else {
             WriteErrorMessage("Unknown file type for file name '%s', please specify file type with -fastq, -sam, -bam, etc.\n", snapFile->fileName);
         }

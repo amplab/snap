@@ -51,7 +51,7 @@ static const unsigned DEFAULT_LOCATION_SIZE = 4;
 static void usage()
 {
 	WriteErrorMessage(
-		"Usage: snap index <input.fa> <output-dir> [<options>]\n"
+		"Usage: snap-aligner index <input.fa> <output-dir> [<options>]\n"
 		"Options:\n"
 		"  -s               Seed size (default: %d)\n"
 		"  -h               Hash table slack (default: %.1f)\n"
