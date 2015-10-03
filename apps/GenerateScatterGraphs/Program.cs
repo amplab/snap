@@ -25,6 +25,14 @@ namespace GenerateScatterGraphs
             public int nInteresting = 0;
             public int nWithDNA = 0;
 
+            //
+            // The ratio of the RNA mutant expression ratio to the DNA mutant expression ratio for each mutation that makes the cut.
+            //
+            public List<double> singleRatioRatios = new List<double>();
+            public List<double> multipleRatioRatios = new List<double>();
+            public List<double> ratioRatios = new List<double>();
+            public List<double> ratioRatiosMidDNA = new List<double>();
+
             public bool sex;
             public string chrom;
         }
@@ -56,13 +64,12 @@ namespace GenerateScatterGraphs
             public double z;
         }
 
-        public static Dictionary<string, Dictionary<string, NormalizedExpressionAndZScore>> BuildExpressionMultipleMapping() // maps gene->(tumor RNA Analysis ID -> multiple of mean expression of this gene in this disease for this sample)
+        public static Dictionary<string, Dictionary<string, NormalizedExpressionAndZScore>> BuildExpressionMultipleMapping(string[] experiments) // maps gene->(tumor RNA Analysis ID -> multiple of mean expression of this gene in this disease for this sample)
         {
             //
             // Makes a mapping from tumor type->gene->mean expression for that gene in that tumor type's tumor RNA.
             //
 
-            string[] experiments = File.ReadAllLines(@"f:\temp\expression\experiments.txt");
 
             var diseaseByTumorRNA = new Dictionary<string, string>();
 
@@ -193,11 +200,98 @@ namespace GenerateScatterGraphs
 
             return normalizedExpressionByGeneAndAnalysisID;
         }
+
+        public static Dictionary<string, string> MakeTumorSampleIdToGenderMap(string[] experiments)
+        {
+            var participantToGenderMap = new Dictionary<string, string>();
+
+            foreach (var line in experiments)
+            {
+                string[] fields = line.Split('\t');
+                if (fields[15] != "" && fields[0] != "disease_abbr")
+                {
+                    participantToGenderMap.Add(fields[15], fields[12]);
+                }
+            }
+
+            return participantToGenderMap;
+        }
+
+        static double Median(List<double> input, List<double> input2 = null)
+        {
+            int size = input.Count();
+            if (null != input2)
+            {
+                size += input2.Count();
+            }
+
+            if (size == 0) {
+                return 0;
+            }
+            var newList = new List<double>();
+            foreach (var element in input)
+            {
+                newList.Add(element);
+            }
+
+            if (null != input2)
+            {
+                foreach (var element in input2)
+                {
+                    newList.Add(element);
+                }
+            }
+
+            newList.Sort();
+
+            if (size % 2 == 1)
+            {
+                return newList[size / 2];
+            }
+
+            return (newList[size / 2] + newList[size / 2 - 1])/2;
+        }
+
+        static string[] BuildHistogram(List<double> values, List<double> bucketMaxima)
+        {
+            int nBuckets = bucketMaxima.Count() + 1;
+            int[] buckets = new int[nBuckets];  // +1 is for "More"
+
+            for (int i = 0; i < nBuckets; i++)
+            {
+                buckets[i] = 0;
+            }
+
+            foreach (var value in values)
+            {
+                for (int i = 0; i < nBuckets; i++)
+                {
+                    if (i == nBuckets - 1 || value < bucketMaxima[i])   // Yes, we could do a binary search, but it's not worth the effort
+                    {
+                        buckets[i]++;
+                        break;
+                    }
+                }
+            }
+
+            string[] output = new string[nBuckets + 1]; // +1 is for the header
+            output[0] = "BucketMax\tCount\tpdf\tcdf";
+            int runningTotal = 0;
+            for (int i = 0; i < nBuckets; i++)
+            {
+                runningTotal += buckets[i];
+                output[i + 1] = ((i + 1 == nBuckets) ? "More" : Convert.ToString(bucketMaxima[i])) + "\t" + buckets[i] + "\t" + ((double)buckets[i]) / values.Count() + "\t" + ((double)runningTotal) / values.Count();
+            }
+
+            return output;
+        }
         static void Main(string[] args)
         {
-            const int minReads = 10;    // Minimum reads (in each RNA and DNA) to keep a sample.
+            const int minReads = 30;    // Minimum reads (in each RNA and DNA) to keep a sample.
 
-            var normalizedExpression = BuildExpressionMultipleMapping();
+            string[] experiments = File.ReadAllLines(@"f:\temp\expression\experiments.txt");
+            var normalizedExpression = BuildExpressionMultipleMapping(experiments);
+            var tumorSampleIDToGenderMap = MakeTumorSampleIdToGenderMap(experiments);
 
             string[] tumorDNA = File.ReadAllLines(@"f:\sequence\reads\tcga\tumor_dna.txt");
 
@@ -340,11 +434,11 @@ namespace GenerateScatterGraphs
                             continue;
                         }
 
-                        string ouptutLine = fields[1] + "\t" + dnaMutation[1];
+                        string outputLine = fields[1] + "\t" + dnaMutation[1];
 
                         for (int i = 2; i <= 42; i++)
                         {
-                            ouptutLine += "\t" + dnaMutation[i];
+                            outputLine += "\t" + dnaMutation[i];
                         }
 
                         //
@@ -352,7 +446,7 @@ namespace GenerateScatterGraphs
                         //
                         for (int i = 39; i <= 42; i++)
                         {
-                            ouptutLine += "\t" + fields[i];
+                            outputLine += "\t" + fields[i];
                         }
 
                         bool isSingle = geneState.dnaMutationsByTumorAnalysis[tumorSampleID].Count() == 1;
@@ -387,21 +481,54 @@ namespace GenerateScatterGraphs
                             normalizedExpressionString = "\t";
                         }
 
-                        ouptutLine += "\t" + tumorDNAFraction + "\t" + tumorRNAFraction + "\t" + tumorDNAMultiple + "\t" + tumorRNAMultiple + "\t" + tumorDNALog + "\t" + tumorRNALog + "\t" + normalizedExpressionString + "\t" + isSingle +"\t";
-                        if (geneState.countByCancerType[cancerType] * 20 >= geneState.nWithDNA) // 5% or more
+                        string ratioOfRatiosString;
+                        if (tumorDNALog == 0)
                         {
-                            ouptutLine += cancerType;
+                            ratioOfRatiosString = "1000";
                         }
                         else
                         {
-                            ouptutLine += "other";
+                            ratioOfRatiosString = Convert.ToString(tumorRNALog / tumorDNALog);
                         }
 
-                        geneState.output.Add(ouptutLine);
+                        outputLine += "\t" + tumorDNAFraction + "\t" + tumorRNAFraction + "\t" + tumorDNAMultiple + "\t" + tumorRNAMultiple + "\t" + tumorDNALog + "\t" + tumorRNALog + "\t" + normalizedExpressionString + "\t" + ratioOfRatiosString + "\t" + isSingle + "\t";
+                        if (geneState.countByCancerType[cancerType] * 20 >= geneState.nWithDNA) // 5% or more
+                        {
+                            outputLine += cancerType + "\t";
+                        }
+                        else
+                        {
+                            outputLine += "other\t";
+                        }
+
+                        if (tumorSampleIDToGenderMap.ContainsKey(tumorSampleID))
+                        {
+                            outputLine += tumorSampleIDToGenderMap[tumorSampleID];
+                        }
+                        else
+                        {
+                            outputLine += "unknown";
+                        }
+
+                        geneState.output.Add(outputLine);
 
                         if (tumorDNAFraction < .6 && tumorDNAFraction > .1 && tumorRNAFraction >= .67 && tumorRNAFraction < .999)
                         {
                             geneState.nInteresting++;
+                        }
+
+                        if (isSingle)
+                        {
+                            geneState.singleRatioRatios.Add(tumorRNALog / tumorDNALog);
+                        }
+                        else
+                        {
+                            geneState.multipleRatioRatios.Add(tumorRNALog / tumorDNALog);
+                        }
+                        geneState.ratioRatios.Add(tumorRNALog / tumorDNALog);
+                        if (tumorDNALog >= 0.5 && tumorDNALog <= 2)
+                        {
+                            geneState.ratioRatiosMidDNA.Add(tumorRNALog / tumorDNALog);
                         }
                         break;
                     }
@@ -409,30 +536,49 @@ namespace GenerateScatterGraphs
             } // foreach line in the RNA input file.
 
             StreamWriter summaryFile = new StreamWriter(@"f:\temp\gene_scatter_graphs\_summary.txt");
-            summaryFile.WriteLine("Gene\tnSingle\tnMultiple\tnInteresting\t%Interesting\tsex");
+            summaryFile.WriteLine("Gene\tnSingle\tnMultiple\tnInteresting\t%Interesting\tsex\tmedian single\tmedian multi\tmedian combined\tmedian heterozygous");
+
+            var histogramBucketMaxima = new List<double>();
+            for (double value = .001; value <= 1000; value *= Math.Pow(10, .1))
+            {
+                histogramBucketMaxima.Add(value);
+            }
 
             foreach (var entry in geneStates)
             {
                 var geneState = entry.Value;
-                if (geneState.output.Count() < 10)
+                if (geneState.output.Count() < 30)
                 {
                     continue;   // Not enough patients to be interesting
                 }
-                StreamWriter file = new StreamWriter(@"f:\temp\gene_scatter_graphs\" + geneState.gene + ".txt");
+
+                summaryFile.WriteLine(geneState.gene + "\t" + geneState.nSingle + "\t" + geneState.nMultiple + "\t" + geneState.nInteresting + "\t" + ((geneState.nInteresting * 100) / (geneState.nSingle + geneState.nMultiple)) + "\t" + geneState.sex + "\t" +
+                    Median(geneState.singleRatioRatios) + "\t" + Median(geneState.multipleRatioRatios) + "\t" + Median(geneState.singleRatioRatios, geneState.multipleRatioRatios) + "\t" +  Median(geneState.ratioRatiosMidDNA));
+
+                string[] histogramLines = BuildHistogram(geneState.ratioRatios, histogramBucketMaxima);
+                string[] histogram2Lines = BuildHistogram(geneState.ratioRatiosMidDNA, histogramBucketMaxima);
+
+               StreamWriter file = new StreamWriter(@"f:\temp\gene_scatter_graphs\" + geneState.gene + ".txt");
                 file.WriteLine("RNAFile\tDNAFile\t" +
                     "Hugo_Symbol\tEntrez_Gene_Id\tCenter\tNCBI_Build\tChromosome\tStart_Position\tEnd_Position\tStrand\tVariant_Classification\tVariant_Type\tReference_Allele\tTumor_Seq_Allele_1\tTumor_Seq_Allele_2\tdbSNP_RS\tdbSNP_Val_Status\t" +
                     "Tumor_Sample_Barcode\tMatched_Norm_Sample_Barcode\tMatch_Norm_Seq_Allele1\tMatch_Norm_Seq_Allele2\tTumor_Validation_Allele1\tTumor_Validation_Allele2\tMatch_Norm_Validation_Allele1\tMatch_Norm_Validation_Allele2\tVerification_Status\t" +
                     "Validation_Status\tMutation_Status\tSequencing_Phase\tSequence_Source\tValidation_Method\tScore\tBAM_File\tSequencer\tTumor_Sample_UUID\tMatched_Norm_Sample_UUID\tFile_Name\tArchive_Name\tLine_Number\t" +
                     "n_DNA_Matching_Reference\tn_DNA_Matching_Tumor\tn_DNA_Matching_Neither\tn_DNA_Matching_Both\t" +
                     "n_RNA_Matching_Reference\tn_RNA_Matching_Tumor\tn_RNA_Matching_Neither\tn_RNA_Matching_Both\t" +
-                    "tumorDNAFraction\ttumorRNAFraction\ttumorDNAMultiple\ttumorRNAMultiple\ttumorDNARatio\ttumorRNARatio\tFractionOfMeanExpression\tzOfmeanExpression\tIsSingle\tCancerType");
-                foreach (var line in geneState.output)
+                    "tumorDNAFraction\ttumorRNAFraction\ttumorDNAMultiple\ttumorRNAMultiple\ttumorDNARatio\ttumorRNARatio\tFractionOfMeanExpression\tzOfmeanExpression\tratioOfRatios\tIsSingle\tCancerType\tgender\t" + histogramLines[0] + "\t" + histogram2Lines[0]);
+                for (int i = 0; i < geneState.output.Count(); i++)
                 {
-                    file.WriteLine(line);
+                    if (i < histogramLines.Count()-1)
+                    {
+                        file.WriteLine(geneState.output[i] + "\t" + histogramLines[i+1] + "\t" + histogram2Lines[i+1]);
+                    }
+                    else
+                    {
+                        file.WriteLine(geneState.output[i]);
+                    }
                 }
 
                 file.Close();
-                summaryFile.WriteLine(geneState.gene + "\t" + geneState.nSingle + "\t" + geneState.nMultiple + "\t" + geneState.nInteresting + "\t" + ((geneState.nInteresting * 100) / (geneState.nSingle + geneState.nMultiple)) + "\t" + geneState.sex);
             }
             summaryFile.Close();
 
