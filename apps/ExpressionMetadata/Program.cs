@@ -841,9 +841,8 @@ namespace ExpressionMetadata
 
         }
 
-        public static string GenerateRealignmentFileString(TCGARecord tcgaRecord, string newRefassem)
+        public static string GenerateRealignmentFileString(string analysisID, TCGARecord tcgaRecord, string newRefassem)
         {
-            string analysisID = Guid.NewGuid().ToString().ToLower();
             string tumorOrNormal = tcgaRecord.tumorSample ? "tumor" : "normal";
             return
                 analysisID +
@@ -859,6 +858,53 @@ namespace ExpressionMetadata
                 "*" + tcgaRecord.center_name +
                 "*" + tumorOrNormal +
                 "*" + tcgaRecord.analysis_id;
+        }
+
+        public static void RebuildRealignmentAnalysesFromExperimentsFile(Dictionary<AnalysisID, TCGARecord> tcgaRecords)
+        {
+            StreamWriter realignFile = new StreamWriter(realignPathname);   // This overwrites the existing file (which probably got deleted or else you wouldn't be doing this).
+            string [] experiments = File.ReadAllLines(baseDirectory + @"experiments.txt");
+
+            foreach (var experiment in experiments) {
+                string [] fields = experiment.Split('\t');
+                if (fields.Count() == 0 || fields[0] == "disease_abbr")
+                {
+                    continue;
+                }
+
+                for (int whichField = 8; whichField <= 9; whichField++)
+                {
+                    string pathname = fields[whichField];
+                    if (!pathname.Contains("-SNAP-realigned-"))
+                    {
+                        continue;
+                    }
+
+                    string[] pathComponents = pathname.Split('\\');
+                    string filename = pathComponents[pathComponents.Count() - 1];
+                    if (filename.Count() < 63)
+                    {
+                        Console.WriteLine("Bizarre filename in experiments file: " + pathname);
+                        continue;
+                    }
+
+                    AnalysisID realignedAnalysisID = filename.Substring(0, 24);
+                    AnalysisID realignedFromAnalysisID = filename.Substring(39, 24);
+
+                    if (!tcgaRecords.ContainsKey(realignedFromAnalysisID))
+                    {
+                        Console.WriteLine("Couldn't find tcga record for source of realigned file " + pathname + " (realigned analysis ID: " + realignedFromAnalysisID + ")");
+                        continue;
+                    }
+
+                    realignFile.WriteLine(GenerateRealignmentFileString(realignedAnalysisID, tcgaRecords[realignedFromAnalysisID], fields[1]));
+                }
+            }
+
+        }
+        public static string GenerateRealignmentFileString(TCGARecord tcgaRecord, string newRefassem) {
+            string analysisID = Guid.NewGuid().ToString().ToLower();
+            return GenerateRealignmentFileString(analysisID, tcgaRecord, newRefassem);
         }
         public static void GenerateRealignmentAnalyses(List<Experiment> experiments) 
         {
@@ -2582,7 +2628,7 @@ namespace ExpressionMetadata
         static void DumpExperiments(List<Experiment> experiments) {
             StreamWriter outputFile = new StreamWriter(baseDirectory + @"experiments.txt");
 
-            outputFile.WriteLine("disease_abbr\treference\tparticipantID\tTumorRNAAnalysis\tTumoprDNAAnalysis\tNormalDNAAnalysis\tNormalRNAAnalysis\ttumorRNAPathname\ttumorDNAPathname\tnormalDNAPathname\tNormalRNAPathname\tVCFPathname\tgender\tdaysToBirth\tdaysToDeath\tOrigTumorDNAAliquotID");
+            outputFile.WriteLine("disease_abbr\treference\tparticipantID\tTumorRNAAnalysis\tTumorDNAAnalysis\tNormalDNAAnalysis\tNormalRNAAnalysis\ttumorRNAPathname\ttumorDNAPathname\tnormalDNAPathname\tNormalRNAPathname\tVCFPathname\tgender\tdaysToBirth\tdaysToDeath\tOrigTumorDNAAliquotID");
 
             foreach (Experiment experiment in experiments) {
                 outputFile.Write(experiment.disease_abbr + "\t" + experiment.TumorRNAAnalysis.refassemShortName + "\t" + experiment.participant.participantId + "\t" + experiment.TumorRNAAnalysis.analysis_id + "\t" + experiment.TumorDNAAnalysis.analysis_id + "\t" + experiment.NormalDNAAnalysis.analysis_id + "\t");
@@ -3073,6 +3119,7 @@ namespace ExpressionMetadata
             AllIsoformsFile.Close();
             var tcgaRecords = LoadTCGARecords(storedBAMs, excludedAnalyses);
             LoadTCGARecordsForLocalRealigns(tcgaRecords, storedBAMs);
+RebuildRealignmentAnalysesFromExperimentsFile(tcgaRecords);
             LoadTCGAAdditionalMetadata(tcgaRecords);
             GenereateAdditionalTCGAMetadataGeneratingScript(tcgaRecords, storedBAMs, tumorToMachineMapping);
             VerifyStoredBAMPaths(storedBAMs, tcgaRecords, tumorToMachineMapping);
