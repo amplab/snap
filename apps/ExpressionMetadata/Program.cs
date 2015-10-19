@@ -225,6 +225,7 @@ namespace ExpressionMetadata
             public FileInfo bamInfo = null;
             public FileInfo baiInfo = null;
             public FileInfo vcfInfo = null;
+            public FileInfo allCountInfo = null;
             public long totalSize;
             public bool needed = false; // Do we need this as input for some experiment?
             public bool isRealingned = false;   // Was this realined, or is it straight from TCGA
@@ -401,6 +402,22 @@ namespace ExpressionMetadata
                             } else {
                                 storedBAM.isoformCount = file;
                                 AllIsoformsFile.WriteLine(file);
+                            }
+                        }
+                        else if (file.Count() > 12 && file.Substring(file.Count() - 12).ToLower() == ".allcount.gz")
+                        {
+                            string expectedFilename = analysisID + ".allcount.gz";
+                            if (file.Count() < expectedFilename.Count() || file.Substring(file.Count() - expectedFilename.Count()) != expectedFilename)
+                            {
+                                Console.WriteLine("Incorrect allcount file " + file);
+                            }
+                            else
+                            {
+                                storedBAM.allCountInfo = new FileInfo(file);
+                                if (storedBAM.allCountInfo.Length < 1 * 1024 * 1024)
+                                {
+                                    Console.WriteLine("Unusually small allCount file " + file + ", " + storedBAM.allCountInfo.Length);
+                                }
                             }
                         }
                         else
@@ -664,7 +681,11 @@ namespace ExpressionMetadata
         }
 
         public static void LoadTCGAAdditionalMetadata(Dictionary<AnalysisID, TCGARecord> tcgaRecords)
-        {    
+        {
+            if (!File.Exists(@"f:\sequence\reads\tcga\tcgaAdditionalMetadata.txt"))
+            {
+                return;
+            }
             string[] additionalMetadata = File.ReadAllLines(@"f:\sequence\reads\tcga\tcgaAdditionalMetadata.txt");
             foreach (var line in additionalMetadata)
             {
@@ -829,7 +850,7 @@ namespace ExpressionMetadata
                 if (storedBAMs.ContainsKey(record.analysis_id))
                 {
                     record.storedBAM = storedBAMs[record.analysis_id];
-                    if (record.realignSource.storedBAM != null && record.realignSource.storedBAM.bamInfo.Length * 3 > record.storedBAM.bamInfo.Length * 4)
+                    if (record.realignSource.storedBAM != null && record.realignSource.storedBAM.bamInfo.Length  > record.storedBAM.bamInfo.Length * 2)
                     {
                         Console.WriteLine("Suspiciously small realigned file " + record.storedBAM.bamInfo.FullName + " size " + record.storedBAM.bamInfo.Length + 
                             " while source " + record.realignSource.storedBAM.bamInfo.FullName + " is " + record.realignSource.storedBAM.bamInfo.Length);
@@ -882,14 +903,14 @@ namespace ExpressionMetadata
 
                     string[] pathComponents = pathname.Split('\\');
                     string filename = pathComponents[pathComponents.Count() - 1];
-                    if (filename.Count() < 63)
+                    if (filename.Count() < 87)
                     {
                         Console.WriteLine("Bizarre filename in experiments file: " + pathname);
                         continue;
                     }
 
-                    AnalysisID realignedAnalysisID = filename.Substring(0, 24);
-                    AnalysisID realignedFromAnalysisID = filename.Substring(39, 24);
+                    AnalysisID realignedAnalysisID = filename.Substring(0, 36);
+                    AnalysisID realignedFromAnalysisID = filename.Substring(52, 36);
 
                     if (!tcgaRecords.ContainsKey(realignedFromAnalysisID))
                     {
@@ -900,6 +921,7 @@ namespace ExpressionMetadata
                     realignFile.WriteLine(GenerateRealignmentFileString(realignedAnalysisID, tcgaRecords[realignedFromAnalysisID], fields[1]));
                 }
             }
+            realignFile.Close();
 
         }
         public static string GenerateRealignmentFileString(TCGARecord tcgaRecord, string newRefassem) {
@@ -2628,7 +2650,8 @@ namespace ExpressionMetadata
         static void DumpExperiments(List<Experiment> experiments) {
             StreamWriter outputFile = new StreamWriter(baseDirectory + @"experiments.txt");
 
-            outputFile.WriteLine("disease_abbr\treference\tparticipantID\tTumorRNAAnalysis\tTumorDNAAnalysis\tNormalDNAAnalysis\tNormalRNAAnalysis\ttumorRNAPathname\ttumorDNAPathname\tnormalDNAPathname\tNormalRNAPathname\tVCFPathname\tgender\tdaysToBirth\tdaysToDeath\tOrigTumorDNAAliquotID");
+            outputFile.WriteLine("disease_abbr\treference\tparticipantID\tTumorRNAAnalysis\tTumorDNAAnalysis\tNormalDNAAnalysis\tNormalRNAAnalysis\ttumorRNAPathname\ttumorDNAPathname\t" +
+                "normalDNAPathname\tNormalRNAPathname\tVCFPathname\tgender\tdaysToBirth\tdaysToDeath\tOrigTumorDNAAliquotID\tTumorAllcountFile\tNormalAllcountFile");
 
             foreach (Experiment experiment in experiments) {
                 outputFile.Write(experiment.disease_abbr + "\t" + experiment.TumorRNAAnalysis.refassemShortName + "\t" + experiment.participant.participantId + "\t" + experiment.TumorRNAAnalysis.analysis_id + "\t" + experiment.TumorDNAAnalysis.analysis_id + "\t" + experiment.NormalDNAAnalysis.analysis_id + "\t");
@@ -2716,12 +2739,31 @@ namespace ExpressionMetadata
 
                 if (experiment.TumorDNAAnalysis.realignSource != null)
                 {
-                    outputFile.WriteLine(experiment.TumorDNAAnalysis.realignSource.aliquot_id + "\t");
+                    outputFile.Write(experiment.TumorDNAAnalysis.realignSource.aliquot_id + "\t");
                 }
                 else
                 {
-                    outputFile.WriteLine(experiment.TumorDNAAnalysis.aliquot_id + "\t");
+                    outputFile.Write(experiment.TumorDNAAnalysis.aliquot_id + "\t");
                 }
+
+                if (experiment.TumorRNAAnalysis.storedBAM != null && experiment.TumorRNAAnalysis.storedBAM.allCountInfo != null)
+                {
+                    outputFile.Write(experiment.TumorRNAAnalysis.storedBAM.allCountInfo.FullName + "\t");
+                }
+                else
+                {
+                    outputFile.Write("\t");
+                }
+
+                if (experiment.NormalRNAAnalysis != null && experiment.NormalRNAAnalysis.storedBAM != null && experiment.NormalRNAAnalysis.storedBAM.allCountInfo != null)
+                {
+                    outputFile.WriteLine(experiment.NormalRNAAnalysis.storedBAM.allCountInfo.FullName + "\t");
+                }
+                else
+                {
+                    outputFile.WriteLine("\t");
+                }
+
             }
 
             outputFile.Close();
@@ -3091,6 +3133,68 @@ namespace ExpressionMetadata
             outputFile.Close();
         }
 
+        static public void GenerateAllcountScript( Dictionary<AnalysisID, TCGARecord> tcgaRecords)
+        {
+            int nWithAllcount = 0;
+            int nAllcountsToGenerate = 0;
+            int nAwaitingDownload = 0;
+            int indexMachine = 0;
+            StreamWriter allcountScript = null;
+            foreach (var entry in tcgaRecords)
+            {
+                TCGARecord tcgaRecord = entry.Value;
+                AnalysisID analysisID = entry.Key;
+
+                if (tcgaRecord.library_strategy == "RNA")
+                {
+                    if (tcgaRecord.storedBAM == null)
+                    {
+                        nAwaitingDownload++;
+                    }
+                    else if (tcgaRecord.storedBAM.allCountInfo != null)
+                    {
+                        nWithAllcount++;
+                    }
+                    else
+                    {
+                        nAllcountsToGenerate++;
+                        if (allcountScript == null)
+                        {
+                            allcountScript = new StreamWriter(baseDirectory + "allcountCluster.cmd");
+                            StreamWriter jobScript = new StreamWriter(baseDirectory + "createAllcountJob.cmd");
+                            jobScript.WriteLine("job new /emailaddress:bolosky@microsoft.com /nodegroup:B99,ExpressQ /exclusive:true /failontaskfailure:false /jobname:allcount /memorypernode:10000 /notifyoncompletion:true /numnodes:1-40 /runtime:12:00 /scheduler:gcr /jobtemplate:ExpressQ /estimatedprocessmemory:10000");
+                            jobScript.Close();
+                        }
+                        allcountScript.WriteLine(@"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr " + @"\\gcr\scratch\b99\bolosky\countAll.cmd \\msr-genomics-" + indexMachine + @"\d$\sequence\indices\" + tcgaRecord.refassemShortName + "-24 " + tcgaRecord.storedBAM.bamInfo.FullName + " " +
+                            tcgaRecord.storedBAM.bamInfo.DirectoryName + @"\" + analysisID + ".allcount.gz");
+                        indexMachine = 1 - indexMachine;
+                    }
+                }
+            } // foreach TCGA record
+            if (allcountScript != null)
+            {
+                allcountScript.Close();
+            }
+            Console.WriteLine("Found " + nWithAllcount + " RNA analyses with allcounts, generated a script to build " + nAllcountsToGenerate + " more, and " + nAwaitingDownload + " are awaiting downloads");
+        }
+
+        static void GenerateListOfAllcountFiles(Dictionary<AnalysisID, StoredBAM> storedBAMs)
+        {
+            StreamWriter output = new StreamWriter(baseDirectory + "allcount_files.txt");
+
+            foreach (var entry in storedBAMs)
+            {
+                StoredBAM storedBAM = entry.Value;
+
+                if (storedBAM.allCountInfo != null)
+                {
+                    output.WriteLine(storedBAM.allCountInfo.FullName);
+                }
+            }
+
+            output.Close();
+        }
+
         static void Main(string[] args)
         {
             hg18_likeReferences.Add("NCBI36_BCCAGSC_variant".ToLower());
@@ -3117,12 +3221,14 @@ namespace ExpressionMetadata
             var tumorToMachineMapping = GenerateTumorToMachineMapping();
             Dictionary<AnalysisID, StoredBAM> storedBAMs = LoadStoredBAMs(tumorToMachineMapping);
             AllIsoformsFile.Close();
+            GenerateListOfAllcountFiles(storedBAMs);
             var tcgaRecords = LoadTCGARecords(storedBAMs, excludedAnalyses);
             LoadTCGARecordsForLocalRealigns(tcgaRecords, storedBAMs);
-RebuildRealignmentAnalysesFromExperimentsFile(tcgaRecords);
+//RebuildRealignmentAnalysesFromExperimentsFile(tcgaRecords); return;
             LoadTCGAAdditionalMetadata(tcgaRecords);
             GenereateAdditionalTCGAMetadataGeneratingScript(tcgaRecords, storedBAMs, tumorToMachineMapping);
             VerifyStoredBAMPaths(storedBAMs, tcgaRecords, tumorToMachineMapping);
+            GenerateAllcountScript(tcgaRecords);
 
             var sampleToParticipantIDMap = CreateSampleToParticipantIDMap(tcgaRecords);
             DumpSampleToParticipantIDMap(sampleToParticipantIDMap);

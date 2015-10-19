@@ -223,34 +223,36 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
     for (unsigned i = 0; i < nContigs; i++) {
         if (NULL == loadFile->gets(contigNameBuffer, contigNameBufferSize)){
 	  
-	  WriteErrorMessage("Unable to read contig description\n");
-            delete genome;
-            return NULL;
+	      WriteErrorMessage("Unable to read contig description\n");
+                delete genome;
+                return NULL;
         }
 
-	for (n = 0; n < contigNameBufferSize; n++){
-	  if (contigNameBuffer[n] == ' ') {
-	    contigNameBuffer[n] = '\0'; 
-	    break;
-	  }
-	}
+	    for (n = 0; n < contigNameBufferSize; n++){
+	      if (contigNameBuffer[n] == ' ') {
+	        contigNameBuffer[n] = '\0'; 
+	        break;
+	      }
+	    }
 
-    _int64 contigStart;
-    if (1 != sscanf(contigNameBuffer, "%lld", &contigStart)) {
-        WriteErrorMessage("Unable to parse contig start in genome file '%s', '%s%'\n", fileName, contigNameBuffer);
-        soft_exit(1);
-    }
-    genome->contigs[i].beginningLocation = GenomeLocation(contigStart);
-	contigNameBuffer[n] = ' '; 
-	n++; // increment n so we start copying at the position after the space
-	contigSize = strlen(contigNameBuffer + n) - 1; //don't include the final \n
-    genome->contigs[i].name = new char[contigSize + 1];
-    genome->contigs[i].nameLength = (unsigned)contigSize;
-	curName = genome->contigs[i].name;
-	for (unsigned pos = 0; pos < contigSize; pos++) {
-	  curName[pos] = contigNameBuffer[pos + n];
-	}
+        _int64 contigStart;
+        if (1 != sscanf(contigNameBuffer, "%lld", &contigStart)) {
+            WriteErrorMessage("Unable to parse contig start in genome file '%s', '%s%'\n", fileName, contigNameBuffer);
+            soft_exit(1);
+        }
+        genome->contigs[i].beginningLocation = GenomeLocation(contigStart);
+	    contigNameBuffer[n] = ' '; 
+	    n++; // increment n so we start copying at the position after the space
+	    contigSize = strlen(contigNameBuffer + n) - 1; //don't include the final \n
+        genome->contigs[i].name = new char[contigSize + 1];
+        genome->contigs[i].nameLength = (unsigned)contigSize;
+	    curName = genome->contigs[i].name;
+	    for (unsigned pos = 0; pos < contigSize; pos++) {
+	      curName[pos] = contigNameBuffer[pos + n];
+	    }
         curName[contigSize] = '\0';
+
+        genome->contigs[i].mitochondrial = (!_stricmp(curName, "m")) || (!_stricmp(curName, "mt")) || (!_stricmp(curName, "chrm")) || (!_stricmp(curName, "chrmt"));
     }
 
     if (0 != loadFile->advance(GenomeLocationAsInt64(minLocation))) {

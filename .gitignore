@@ -50,5 +50,6 @@ obj
 /apps/GrovelPileups/bin
 /apps/SplitIntoPieces/bin
 /apps/FilterVCF/bin
+/apps/SplitIntoChromosomes/bin
 
 

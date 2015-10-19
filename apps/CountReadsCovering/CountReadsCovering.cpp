@@ -16,7 +16,7 @@
 
 void usage()
 {
-    fprintf(stderr, "usage: CountReadsCovering index knownGenesFile inputFile outputFile\n");
+    fprintf(stderr, "usage: CountReadsCovering index {-a | knownGenesFile} inputFile outputFile\n");
     fprintf(stderr, "Counts the reads that cover each gene and exon in the knownGenesFile.\n");
     soft_exit(1);
 }
@@ -93,8 +93,17 @@ ReadSupplierGenerator *readSupplierGenerator;
 SingleWaiterObject allThreadsDone;
 volatile _int64 TotalReads = 0;
 volatile _int64 MappedReads = 0;
+volatile _int64 LowQualityReads = 0;
+volatile _int64 MitochondrialReads = 0;
 volatile _int64 IsoformHits = 0;
 volatile _int64 ExonHits = 0;
+
+const Genome *genome;
+
+//
+// When counting all locations (i.e., -a), this counts the number of reads mapped to each location in the genome.  For each contig (chromosome), it has one unsigned for each location (1-based, the 0 entry in the array is unused).
+//
+int **mappedLocationCounts = NULL;
 
 //
 // Definitions of the knownGene fields
@@ -125,10 +134,10 @@ void ReaderThread(void *param)
 
     _int64 totalReads = 0;
     _int64 mappedReads = 0;
+    _int64 lowQualityReads = 0;
+    _int64 mitochondrialReads = 0;
     _int64 isoformHits = 0;
     _int64 exonHits = 0;
-
-    int BJBNs = 0;
 
     Read *read;
     while (NULL != (read = readSupplier->getNextRead())) {
@@ -141,33 +150,54 @@ void ReaderThread(void *param)
         if (read->getOriginalSAMFlags() & SAM_UNMAPPED || read->getOriginalAlignedLocation() == InvalidGenomeLocation) {
             continue;
         }
-        mappedReads++;
+
+        if (read->getOriginalMAPQ() < 10) {
+            lowQualityReads++;
+            continue;
+        }
+
 
         //
         // Run through the read and handle each chunk separated by an N in the cigar string.
         //
         GenomeLocation chunkStart = read->getOriginalAlignedLocation();
         GenomeLocation chunkEnd = chunkStart;
+        const Genome::Contig *contig = genome->getContigAtLocation(chunkStart); // Only need to do this once per read, since a non-split read can only map to one contig
+
+        if (contig->mitochondrial) {
+            mitochondrialReads++;
+            continue;
+        }
+
+        mappedReads++;
+        _int64 contigNumber = contig - genome->getContigs();
+
         for (int i = 0; i <= read->getOriginalNBAMCigar(); i++) {
             _uint32 cigarOp = read->getOriginalBAMCigar()[i] & 0xf;
             _uint32 cigarCount = (read->getOriginalBAMCigar()[i] >> 4);
             if (i == read->getOriginalNBAMCigar() || cigarOp == BAM_CIGAR_N) {
-                if (cigarOp == BAM_CIGAR_N) {
-                    BJBNs++;
-                }
-                for (Region *region = regions->findFirstLessThanOrEqualTo(chunkStart); NULL != region && region->start < chunkEnd; region = region->next) {
-                    for (unsigned i = 0; i < region->nExons; i++) {
-                        if (nExons < maxExons) {
-                            exons[nExons] = region->exons[i];
-                            isoforms[nExons] = region->exons[i]->isoform;
+                if (NULL != mappedLocationCounts) {
+                    for (GenomeLocation j = chunkStart; j < chunkEnd; j++) {
+                        if (j - contig->beginningLocation < contig->length) {   // Some BAMs have reads aligned off the end of the contig, which we just ignore.
+                            InterlockedIncrementAndReturnNewValue(&mappedLocationCounts[contigNumber][j - contig->beginningLocation + 1]);  // i + 1 because it's 1-based.
                         }
-                        nExons++;
                     }
                 }
+                else {
+                    for (Region *region = regions->findFirstLessThanOrEqualTo(chunkStart); NULL != region && region->start < chunkEnd; region = region->next) {
+                        for (unsigned i = 0; i < region->nExons; i++) {
+                            if (nExons < maxExons) {
+                                exons[nExons] = region->exons[i];
+                                isoforms[nExons] = region->exons[i]->isoform;
+                            }
+                            nExons++;
+                        }
+                    }
 
-                if (nExons > maxExons) {
-                    WriteErrorMessage("Not enough space for exons, %d > %d\n", nExons, maxExons);
-                    continue;
+                    if (nExons > maxExons) {
+                        WriteErrorMessage("Not enough space for exons, %d > %d\n", nExons, maxExons); 
+                        continue;
+                    }
                 }
 
                 if (i == read->getOriginalNBAMCigar()) {
@@ -183,24 +213,28 @@ void ReaderThread(void *param)
             }
         } // for each cigar op.
 
-        qsort(exons, nExons, sizeof(Exon *), ComparePointers);
-        qsort(isoforms, nExons, sizeof(Isoform *), ComparePointers);
+        if (NULL == mappedLocationCounts) {
+            qsort(exons, nExons, sizeof(Exon *), ComparePointers);
+            qsort(isoforms, nExons, sizeof(Isoform *), ComparePointers);
 
-        for (int i = 0; i < nExons; i++) {
-            if (i == 0 || exons[i] != exons[i - 1]) {
-                exonHits++;
-                InterlockedAdd64AndReturnNewValue(&exons[i]->mappedCount, 1);
-            }
+            for (int i = 0; i < nExons; i++) {
+                if (i == 0 || exons[i] != exons[i - 1]) {
+                    exonHits++;
+                    InterlockedAdd64AndReturnNewValue(&exons[i]->mappedCount, 1);
+                }
 
-            if (i == 0 || isoforms[i] != isoforms[i - 1]) {
-                isoformHits++;
-                InterlockedAdd64AndReturnNewValue(&isoforms[i]->mappedCount, 1);
+                if (i == 0 || isoforms[i] != isoforms[i - 1]) {
+                    isoformHits++;
+                    InterlockedAdd64AndReturnNewValue(&isoforms[i]->mappedCount, 1);
+                }
             }
         }
     }
 
     InterlockedAdd64AndReturnNewValue(&TotalReads, totalReads);
     InterlockedAdd64AndReturnNewValue(&MappedReads, mappedReads);
+    InterlockedAdd64AndReturnNewValue(&LowQualityReads, lowQualityReads);
+    InterlockedAdd64AndReturnNewValue(&MitochondrialReads, mitochondrialReads);
     InterlockedAdd64AndReturnNewValue(&IsoformHits, isoformHits);
     InterlockedAdd64AndReturnNewValue(&ExonHits, exonHits);
 
@@ -256,20 +290,25 @@ int main(int argc, char* argv[])
     char inputBuffer[inputBufferLength];
     char headerBuffer[inputBufferLength];
 
-    FILE *knownGenesFile = fopen(argv[2], "r");
-    if (NULL == knownGenesFile) {
-        fprintf(stderr, "Unable to open '%s'\n", argv[2]);
-        soft_exit(1);
+    FILE *knownGenesFile;
+    if (!strcmp(argv[2], "-a")) {
+        knownGenesFile = NULL;
+    } else {
+        knownGenesFile = fopen(argv[2], "r");
+        if (NULL == knownGenesFile) {
+            fprintf(stderr, "Unable to open '%s'\n", argv[2]);
+            soft_exit(1);
+        }
     }
 
     static const char *genomeSuffix = "Genome";
     size_t filenameLen = strlen(argv[1]) + 1 + strlen(genomeSuffix) + 1;
     char *fileName = new char[strlen(argv[1]) + 1 + strlen(genomeSuffix) + 1];
     snprintf(fileName, filenameLen, "%s%c%s", argv[1], PATH_SEP, genomeSuffix);
-    const Genome *genome = Genome::loadFromFile(fileName, 0);
+    genome = Genome::loadFromFile(fileName, 0);
     if (NULL == genome) {
         fprintf(stderr, "Unable to load genome from file '%s'\n", fileName);
-        return -1;
+        soft_exit(1);
     }
     delete[] fileName;
     fileName = NULL;
@@ -298,208 +337,227 @@ int main(int argc, char* argv[])
     }
 
     regions = new AVLTree<Region, GenomeLocation>();
-
-    //
-    // Run through the knownGenes file and build the regions tree.  
-    //
-    fgets(headerBuffer, inputBufferLength, knownGenesFile);  // Save the header line
-
-    int lineNumber = 2; // Because we just skipped 1
-
     Isoform *isoforms = NULL;
     Isoform *lastIsoform = NULL;    // This strange thing is a way to do a singly linked list that's in order.
 
-    while (fgets(inputBuffer, inputBufferLength, knownGenesFile)) {
+    if (NULL == knownGenesFile) {
         //
-        // Split the line into fields as separated by tabs (which, in C# would be inputLine.Split('\t').  Sigh.)
+        // We're doing the -a version where we track every single location.  Allocate the space.
         //
-        int whichField = 0;
-        const int nFields = 12;
-        char *fields[nFields];
-
-
-        Isoform *isoform = new Isoform;
-        if (NULL == isoforms) {
-            isoforms = isoform;
-        } else {
-            lastIsoform->next = isoform;
+        mappedLocationCounts = new int *[genome->getNumContigs()];
+        for (int i = 0; i < genome->getNumContigs(); i++) {
+            mappedLocationCounts[i] = new int[genome->getContigs()[i].length + 1];
+            for (int j = 0; j < genome->getContigs()[i].length + 1; j++) {
+                mappedLocationCounts[i][j] = 0;
+            }
         }
-        isoform->next = NULL;
-        lastIsoform = isoform;
+
+    } else {
+        //
+        // Run through the knownGenes file and build the regions tree.  
+        //
+        fgets(headerBuffer, inputBufferLength, knownGenesFile);  // Save the header line
+
+        int lineNumber = 2; // Because we just skipped 1
 
 
-        isoform->knownGeneLine = new char[strlen(inputBuffer) + 1];
-        strcpy(isoform->knownGeneLine, inputBuffer);
+        while (fgets(inputBuffer, inputBufferLength, knownGenesFile)) {
+            //
+            // Split the line into fields as separated by tabs (which, in C# would be inputLine.Split('\t').  Sigh.)
+            //
+            int whichField = 0;
+            const int nFields = 12;
+            char *fields[nFields];
 
-        for (char *ptr = inputBuffer; NULL != ptr; ptr = strchr(ptr, '\t')) {
-            if (0 != whichField) {
-                //
-                // Turn the tab into a null terminator for the previous field.
-                //
-                *ptr = '\0';
-                ptr++;
+
+            Isoform *isoform = new Isoform;
+            if (NULL == isoforms) {
+                isoforms = isoform;
+            }
+            else {
+                lastIsoform->next = isoform;
+            }
+            isoform->next = NULL;
+            lastIsoform = isoform;
+
+
+            isoform->knownGeneLine = new char[strlen(inputBuffer) + 1];
+            strcpy(isoform->knownGeneLine, inputBuffer);
+
+            for (char *ptr = inputBuffer; NULL != ptr; ptr = strchr(ptr, '\t')) {
+                if (0 != whichField) {
+                    //
+                    // Turn the tab into a null terminator for the previous field.
+                    //
+                    *ptr = '\0';
+                    ptr++;
+                }
+
+                if (whichField >= nFields) {
+                    fprintf(stderr, "Too few fields on line %d\n", lineNumber);
+                    soft_exit(1);
+                }
+
+                fields[whichField] = ptr;
+                whichField++;
             }
 
-            if (whichField >= nFields) {
+            if (whichField != nFields) {
                 fprintf(stderr, "Too few fields on line %d\n", lineNumber);
                 soft_exit(1);
             }
 
-            fields[whichField] = ptr;
-            whichField++;
-        }
 
-        if (whichField != nFields) {
-            fprintf(stderr, "Too few fields on line %d\n", lineNumber);
-            soft_exit(1);
-        }
+            isoform->nExons = atoi(fields[kg_exonCount]);
 
+            if (isoform->nExons <= 0) {
+                fprintf(stderr, "Isoform %s has zero (or negative) exon count.  Ignoring.  Line %d.\n", fields[kg_name], lineNumber);
+                delete isoform;
+                continue;
+            }
 
-        isoform->nExons = atoi(fields[kg_exonCount]);
+            isoform->exons = new Exon[isoform->nExons];
 
-        if (isoform->nExons <= 0) {
-            fprintf(stderr, "Isoform %s has zero (or negative) exon count.  Ignoring.  Line %d.\n", fields[kg_name], lineNumber);
-            delete isoform;
-            continue;
-        }
-
-        isoform->exons = new Exon[isoform->nExons];
-
-        GenomeLocation contigBase;
-        if (!genome->getLocationOfContig(fields[kg_chrom], &contigBase)) {
-            //
-            // Try stripping off the leading "chr" if it has one.
-            //
-            if (strlen(fields[kg_chrom]) < 3 || fields[kg_chrom][0] != 'c' || fields[kg_chrom][1] != 'h' || fields[kg_chrom][2] != 'r' || !genome->getLocationOfContig(fields[kg_chrom] + 3, &contigBase)) {
+            GenomeLocation contigBase;
+            if (!genome->getLocationOfContig(fields[kg_chrom], &contigBase)) {
                 //
-                // Change chrM into MT
+                // Try stripping off the leading "chr" if it has one.
                 //
-                if (strlen(fields[kg_chrom]) != 4 || fields[kg_chrom][0] != 'c' || fields[kg_chrom][1] != 'h' || fields[kg_chrom][2] != 'r' || fields[kg_chrom][3] != 'M' || !genome->getLocationOfContig("MT", &contigBase)) {
+                if (strlen(fields[kg_chrom]) < 3 || fields[kg_chrom][0] != 'c' || fields[kg_chrom][1] != 'h' || fields[kg_chrom][2] != 'r' || !genome->getLocationOfContig(fields[kg_chrom] + 3, &contigBase)) {
                     //
-                    // Try the alternate naming.
+                    // Change chrM into MT
                     //
-                    const char *alternateName = translateAlternateChromName(fields[kg_chrom]);
-                    if (NULL == alternateName || !genome->getLocationOfContig(alternateName, &contigBase)) {
+                    if (strlen(fields[kg_chrom]) != 4 || fields[kg_chrom][0] != 'c' || fields[kg_chrom][1] != 'h' || fields[kg_chrom][2] != 'r' || fields[kg_chrom][3] != 'M' || !genome->getLocationOfContig("MT", &contigBase)) {
                         //
-                        // And ignore long things that didn't otherwise work; they're probably minor haplotypes that aren't in this reference (especially if it's grch37-lite, which specifically has them stripped).
+                        // Try the alternate naming.
                         //
-                        if (strlen(fields[kg_chrom]) < 5) {
-                            fprintf(stderr, "Unable to find contig '%s', line %d\n", fields[kg_chrom], lineNumber);
-                            soft_exit(1);
+                        const char *alternateName = translateAlternateChromName(fields[kg_chrom]);
+                        if (NULL == alternateName || !genome->getLocationOfContig(alternateName, &contigBase)) {
+                            //
+                            // And ignore long things that didn't otherwise work; they're probably minor haplotypes that aren't in this reference (especially if it's grch37-lite, which specifically has them stripped).
+                            //
+                            if (strlen(fields[kg_chrom]) < 5) {
+                                fprintf(stderr, "Unable to find contig '%s', line %d\n", fields[kg_chrom], lineNumber);
+                                soft_exit(1);
+                            }
                         }
                     }
                 }
             }
-        }
 
-        char *startPtr = fields[kg_exonStarts];
-        char *endPtr = fields[kg_exonEnds];
+            char *startPtr = fields[kg_exonStarts];
+            char *endPtr = fields[kg_exonEnds];
 
-        for (unsigned i = 0; i < isoform->nExons; i++) {
-            if ((char *)1 == startPtr || (char *)1 == endPtr) {
-                fprintf(stderr, "Too few exons on line %d\n", lineNumber);
-                soft_exit(1);
+            for (unsigned i = 0; i < isoform->nExons; i++) {
+                if ((char *)1 == startPtr || (char *)1 == endPtr) {
+                    fprintf(stderr, "Too few exons on line %d\n", lineNumber);
+                    soft_exit(1);
+                }
+
+                isoform->exons[i].start = contigBase + atoi(startPtr) - 1;  // -1 because coordinates are 1-based
+                isoform->exons[i].end = contigBase + atoi(endPtr) - 1;
+                isoform->exons[i].isoform = isoform;
+                if (isoform->exons[i].end <= isoform->exons[i].start) {
+                    fprintf(stderr, "Zero or negative length exon on line %d\n", lineNumber);
+                    soft_exit(1);
+                }
+
+                startPtr = strchr(startPtr + 1, ',') + 1;
+                endPtr = strchr(endPtr + 1, ',') + 1;
             }
 
-            isoform->exons[i].start = contigBase + atoi(startPtr) - 1;  // -1 because coordinates are 1-based
-            isoform->exons[i].end = contigBase + atoi(endPtr) - 1;
-            isoform->exons[i].isoform = isoform;
-            if (isoform->exons[i].end <= isoform->exons[i].start) {
-                fprintf(stderr, "Zero or negative length exon on line %d\n", lineNumber);
-                soft_exit(1);
-            }
+            //
+            // Now insert the isoform's exons into the region map.
+            //
+            for (unsigned i = 0; i < isoform->nExons; i++) {
+                Exon *exon = &isoform->exons[i];
+                GenomeLocation coveredUpTo = exon->start;
 
-            startPtr = strchr(startPtr + 1, ',') + 1;
-            endPtr = strchr(endPtr + 1, ',') + 1;
-        }
+                while (coveredUpTo < exon->end) {
+                    Region *region = regions->findFirstLessThanOrEqualTo(coveredUpTo);
 
-        //
-        // Now insert the isoform's exons into the region map.
-        //
-        for (unsigned i = 0; i < isoform->nExons; i++) {
-            Exon *exon = &isoform->exons[i];
-            GenomeLocation coveredUpTo = exon->start;
-
-            while (coveredUpTo < exon->end) {
-                Region *region = regions->findFirstLessThanOrEqualTo(coveredUpTo);
-
-                if (NULL == region || region->end <= coveredUpTo) {
-                    //
-                    // There's no region covering the first part of what we need.  Create a new one.  It will extend
-                    // to the end of the exon or the start of the next region, whichever's first.
-                    //
-                    Region *nextRegion = regions->findFirstGreaterThan(coveredUpTo);
-
-                    GenomeLocation end;
-                    if (NULL != nextRegion && nextRegion->start < exon->end) {
-                        end = nextRegion->start;
-                    } else {
-                        end = exon->end;
-                    }
-                    Region *newRegion = new Region(coveredUpTo, end, 1, 2);
-                    newRegion->exons[0] = exon;
-
-                    regions->insert(newRegion);
-                    coveredUpTo = newRegion->end;
-                } else {
-                    //
-                    // The region before us covers our start.
-                    //
-                    if (region->start < coveredUpTo) {
+                    if (NULL == region || region->end <= coveredUpTo) {
                         //
-                        // It has part hanging off the beginning.  This should only happen if we're the first part of the exon.  Chop it into two, but don't add us to
-                        // the second half; instead that'll happen the next time around the loop.
+                        // There's no region covering the first part of what we need.  Create a new one.  It will extend
+                        // to the end of the exon or the start of the next region, whichever's first.
                         //
-                        _ASSERT(coveredUpTo == exon->start);
-                        Region *newRegion = new Region(region);
+                        Region *nextRegion = regions->findFirstGreaterThan(coveredUpTo);
 
-                        region->end = coveredUpTo;
-                        newRegion->start = coveredUpTo;
-                        regions->insert(newRegion);
-                    } else {
-                        //
-                        // It starts exactly where we do.
-                        //
-                        _ASSERT(region->start == coveredUpTo);
-                        if (region->end > exon->end) {
-                            //
-                            // But ends beyond where we do.  Split it at our and and add ourself to the first half.
-                            //
-                            Region *newRegion = new Region(region);
-                            newRegion->start = exon->end;
-                            region->end = exon->end;
-                            regions->insert(newRegion);
-                            region->addExon(exon);
-                        } else {
-                            //
-                            // Just add ourself to it.  It ends before us or exactly where we end.
-                            //
-                            region->addExon(exon);
+                        GenomeLocation end;
+                        if (NULL != nextRegion && nextRegion->start < exon->end) {
+                            end = nextRegion->start;
                         }
+                        else {
+                            end = exon->end;
+                        }
+                        Region *newRegion = new Region(coveredUpTo, end, 1, 2);
+                        newRegion->exons[0] = exon;
+
+                        regions->insert(newRegion);
+                        coveredUpTo = newRegion->end;
                     }
-                    coveredUpTo = region->end;
-                } // region doesn't cover our start
+                    else {
+                        //
+                        // The region before us covers our start.
+                        //
+                        if (region->start < coveredUpTo) {
+                            //
+                            // It has part hanging off the beginning.  This should only happen if we're the first part of the exon.  Chop it into two, but don't add us to
+                            // the second half; instead that'll happen the next time around the loop.
+                            //
+                            _ASSERT(coveredUpTo == exon->start);
+                            Region *newRegion = new Region(region);
+
+                            region->end = coveredUpTo;
+                            newRegion->start = coveredUpTo;
+                            regions->insert(newRegion);
+                        }
+                        else {
+                            //
+                            // It starts exactly where we do.
+                            //
+                            _ASSERT(region->start == coveredUpTo);
+                            if (region->end > exon->end) {
+                                //
+                                // But ends beyond where we do.  Split it at our and and add ourself to the first half.
+                                //
+                                Region *newRegion = new Region(region);
+                                newRegion->start = exon->end;
+                                region->end = exon->end;
+                                regions->insert(newRegion);
+                                region->addExon(exon);
+                            }
+                            else {
+                                //
+                                // Just add ourself to it.  It ends before us or exactly where we end.
+                                //
+                                region->addExon(exon);
+                            }
+                        }
+                        coveredUpTo = region->end;
+                    } // region doesn't cover our start
 
 
-            } // while we have space in this exon
-        } // for each exon
+                } // while we have space in this exon
+            } // for each exon
 
-        lineNumber++;
-    } // for each isoform (i.e., non-header line in known genes file)
+            lineNumber++;
+        } // for each isoform (i.e., non-header line in known genes file)
 
 #ifdef _DEBUG
-    checkRegions();
+        checkRegions();
 #endif // _DEBUG
 
-    //
-    // Now run through the tree and link the regions together.
-    //
-    Region *prevRegion = NULL;
-    for (Region *region = regions->findMin(); NULL != region; region = regions->findFirstGreaterThan(region)) {
-        if (NULL != prevRegion) {
-            prevRegion->next = region;
+        //
+        // Now run through the tree and link the regions together.
+        //
+        Region *prevRegion = NULL;
+        for (Region *region = regions->findMin(); NULL != region; region = regions->findFirstGreaterThan(region)) {
+            if (NULL != prevRegion) {
+                prevRegion->next = region;
+            }
+            prevRegion = region;
         }
-        prevRegion = region;
     }
 
     //
@@ -520,45 +578,108 @@ int main(int argc, char* argv[])
         soft_exit(1);
     }
 
-    FILE *outputFile = fopen(argv[4], "w");
-    if (NULL == outputFile) {
-        fprintf(stderr, "Unable to open output file '%s'\n", argv[4]);
-        soft_exit(1);
+    FILE *outputFile;
+    if (!strcmp(argv[4], "-")) {
+        outputFile = stdout;
+    } else {
+        outputFile = fopen(argv[4], "w");
+        if (NULL == outputFile) {
+            fprintf(stderr, "Unable to open output file '%s'\n", argv[4]);
+            soft_exit(1);
+        }
     }
 
     char *newLine = strchr(headerBuffer, '\n');
     if (NULL != newLine) {
         *newLine = '\0';
     }
-    fprintf(outputFile, "%s\tExonHits(%lld)\tIsoformHits(%lld)\tFracIsoformHits\tv1.0\n", headerBuffer, ExonHits, IsoformHits);
 
-    for (Isoform *isoform = isoforms; NULL != isoform; isoform = isoform->next) {
-        if (NULL != (newLine = strchr(isoform->knownGeneLine, '\n'))) {
-            *newLine = '\0';
+    if (NULL != mappedLocationCounts) {
+        fprintf(outputFile, "CountReadsCovering v1.1 %s %s %s %s\n", argv[1], argv[2], argv[3], argv[4]);
+        fprintf(outputFile, "%lld mapped high quality nuclear reads, %lld low quality reads, %lld mitochondrial reads, %lld total reads\n", MappedReads, LowQualityReads, MitochondrialReads, TotalReads);
+        fprintf(outputFile, "%s\nNumContigs: %d\nContigName\tLength\n", headerBuffer, genome->getNumContigs());
+        for (int i = 0; i < genome->getNumContigs(); i++) {
+            const Genome::Contig *contig = genome->getContigs() + i;
+            fprintf(outputFile, "%s\t%d\n", contig->name, contig->length);
         }
 
-        fprintf(outputFile, "%s\t", isoform->knownGeneLine);
-        for (unsigned i = 0; i < isoform->nExons; i++) {
-            fprintf(outputFile, "%lld,", isoform->exons[i].mappedCount);
-        }
-        fprintf(outputFile, "\t%lld\t%0.9f\n", isoform->mappedCount, (double)isoform->mappedCount / (double)IsoformHits);
+        bool sawZero = true;
+        int nConsecutive = 0;
+        int mostRecentValue = -1;
+        for (int i = 0; i < genome->getNumContigs(); i++) {
+            const Genome::Contig *contig = genome->getContigs() + i;
+            fprintf(outputFile, ">%s\n", contig->name);
+            sawZero = true;
+
+            for (int j = 1; j <= contig->length; j++) {
+                if ((mappedLocationCounts[i][j] != mostRecentValue || sawZero) && nConsecutive > 1) {
+                    fprintf(outputFile, "x%x\n", nConsecutive);
+                    nConsecutive = 0;
+                    mostRecentValue = -1;
+                }
+
+                if (0 != mappedLocationCounts[i][j]) {
+                    if (sawZero) {
+                        fprintf(outputFile, "%x\t%x\n", j, mappedLocationCounts[i][j]);
+                        nConsecutive = 1;
+                        mostRecentValue = mappedLocationCounts[i][j];
+                    } else {
+                        if (mostRecentValue == mappedLocationCounts[i][j]) {
+                            nConsecutive++;
+                        } else {
+                            fprintf(outputFile, "%x\n", mappedLocationCounts[i][j]);
+                            nConsecutive = 1;
+                            mostRecentValue = mappedLocationCounts[i][j];
+                        }
+                    }
+                    sawZero = false;
+                }
+                else {
+                    sawZero = true;
+                    nConsecutive = 0;
+                    mostRecentValue = -1;
+                }
+            } // For each offset in the contig
+            if (nConsecutive > 1) {
+                fprintf(outputFile, "x%x\n", nConsecutive);
+                nConsecutive = 0;
+                mostRecentValue = -1;
+            }
+
+        } // for each contig
+        fprintf(outputFile, "**done**\n");
     }
+    else {
+        fprintf(outputFile, "%s\tExonHits(%lld)\tIsoformHits(%lld)\tFracIsoformHits\tv1.0\n", headerBuffer, ExonHits, IsoformHits);
 
-    const int numberMaxWidth = 20;
-    char readCount[numberMaxWidth];
-    char mappedReadCount[numberMaxWidth];
-    char isoformHitCount[numberMaxWidth];
-    char exonHitCount[numberMaxWidth];
-    char time[numberMaxWidth];
+        for (Isoform *isoform = isoforms; NULL != isoform; isoform = isoform->next) {
+            if (NULL != (newLine = strchr(isoform->knownGeneLine, '\n'))) {
+                *newLine = '\0';
+            }
 
-    extern char *FormatUIntWithCommas(_uint64 val, char *outputBuffer, size_t outputBufferSize);
+            fprintf(outputFile, "%s\t", isoform->knownGeneLine);
+            for (unsigned i = 0; i < isoform->nExons; i++) {
+                fprintf(outputFile, "%lld,", isoform->exons[i].mappedCount);
+            }
+            fprintf(outputFile, "\t%lld\t%0.9f\n", isoform->mappedCount, (double)isoform->mappedCount / (double)IsoformHits);
+        }
 
-    printf("%s reads (%s mapped), %s isoform hits, %s exon hits in %ss\n",
-        FormatUIntWithCommas(TotalReads, readCount, numberMaxWidth),
-        FormatUIntWithCommas(MappedReads, mappedReadCount, numberMaxWidth),
-        FormatUIntWithCommas(IsoformHits, isoformHitCount, numberMaxWidth),
-        FormatUIntWithCommas(ExonHits, exonHitCount, numberMaxWidth),
-        FormatUIntWithCommas((timeInMillis() - start + 500) / 1000, time, numberMaxWidth));
+        const int numberMaxWidth = 20;
+        char readCount[numberMaxWidth];
+        char mappedReadCount[numberMaxWidth];
+        char isoformHitCount[numberMaxWidth];
+        char exonHitCount[numberMaxWidth];
+        char time[numberMaxWidth];
+
+        extern char *FormatUIntWithCommas(_uint64 val, char *outputBuffer, size_t outputBufferSize);
+
+        printf("%s reads (%s mapped), %s isoform hits, %s exon hits in %ss\n",
+            FormatUIntWithCommas(TotalReads, readCount, numberMaxWidth),
+            FormatUIntWithCommas(MappedReads, mappedReadCount, numberMaxWidth),
+            FormatUIntWithCommas(IsoformHits, isoformHitCount, numberMaxWidth),
+            FormatUIntWithCommas(ExonHits, exonHitCount, numberMaxWidth),
+            FormatUIntWithCommas((timeInMillis() - start + 500) / 1000, time, numberMaxWidth));
+    }
 
 	return 0;
 }
