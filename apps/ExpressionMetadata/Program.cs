@@ -3195,6 +3195,44 @@ namespace ExpressionMetadata
             output.Close();
         }
 
+         delegate TCGARecord RecordExtractor(Experiment experiment);
+         static void GenerateTP53CountScript(RecordExtractor recordExtractor, List<Experiment> experiments, StreamWriter script)
+         {
+             foreach (var experiment in experiments)
+             {
+                 if (recordExtractor(experiment) != null && recordExtractor(experiment).storedBAM != null)
+                 {
+                     script.Write("samtools view " + recordExtractor(experiment).storedBAM.bamInfo.FullName + " ");
+                     if (recordExtractor(experiment).refassemShortName.ToLower() == "hg19")
+                     {
+                         script.Write("chr");
+                     }
+
+                     if (recordExtractor(experiment).refassemShortName.ToLower() == "ncbi36_bccagsc_variant")
+                     {
+                         script.Write("17:7519125-7519126");   // hg18 coordinates (this is the only refassem with Tumor RNA aligned to any hg18 reference)
+                     }
+                     else
+                     {
+                         script.Write("17:7578400-7578401");   // hg19 coordinates
+                     }
+
+                     script.WriteLine(" > " + recordExtractor(experiment).analysis_id + ".tp53locus-reads.txt");
+                 }
+             }
+         }
+
+        static void GenerateTP53CountScripts(List<Experiment> experiments)
+        {
+            var script = new StreamWriter(baseDirectory + "generateTP53Count.cmd");
+            GenerateTP53CountScript(e => e.TumorRNAAnalysis, experiments, script);
+            script.Close();
+
+            script = new StreamWriter(baseDirectory + "generateTP53Count-normal.cmd");
+            GenerateTP53CountScript(e => e.NormalRNAAnalysis, experiments, script);
+            script.Close();
+        }
+
         static void Main(string[] args)
         {
             hg18_likeReferences.Add("NCBI36_BCCAGSC_variant".ToLower());
@@ -3255,6 +3293,7 @@ namespace ExpressionMetadata
 
             var experiments = BuildExperiments(participants);
             DumpExperiments(experiments);
+            GenerateTP53CountScripts(experiments);
             GenerateIsoformFileListsByDiseaseAndMutation(experiments);
             //GenerateMutationDistributionByGene(experiments);
             GenerateMakeIsoformsScripts(experiments);

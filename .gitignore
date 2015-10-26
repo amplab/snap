@@ -51,5 +51,8 @@ obj
 /apps/SplitIntoPieces/bin
 /apps/FilterVCF/bin
 /apps/SplitIntoChromosomes/bin
+/apps/AllExpression/bin
+/apps/ComputeP53Levels/bin
+
 
 
