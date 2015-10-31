@@ -85,6 +85,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ComputeP53Levels", "apps\Co
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AllExpression", "apps\AllExpression\AllExpression.csproj", "{F653C928-B599-42E9-9A0F-72E58A9EA7FA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MannWhitney", "apps\MannWhitney\MannWhitney.csproj", "{BFE44AD8-B0B0-4C4E-8363-A1776D47A301}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -367,6 +369,18 @@ Global
 		{F653C928-B599-42E9-9A0F-72E58A9EA7FA}.Release|Mixed Platforms.Build.0 = Release|Any CPU
 		{F653C928-B599-42E9-9A0F-72E58A9EA7FA}.Release|Win32.ActiveCfg = Release|Any CPU
 		{F653C928-B599-42E9-9A0F-72E58A9EA7FA}.Release|x64.ActiveCfg = Release|Any CPU
+		{BFE44AD8-B0B0-4C4E-8363-A1776D47A301}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BFE44AD8-B0B0-4C4E-8363-A1776D47A301}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BFE44AD8-B0B0-4C4E-8363-A1776D47A301}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{BFE44AD8-B0B0-4C4E-8363-A1776D47A301}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{BFE44AD8-B0B0-4C4E-8363-A1776D47A301}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{BFE44AD8-B0B0-4C4E-8363-A1776D47A301}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{BFE44AD8-B0B0-4C4E-8363-A1776D47A301}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BFE44AD8-B0B0-4C4E-8363-A1776D47A301}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BFE44AD8-B0B0-4C4E-8363-A1776D47A301}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{BFE44AD8-B0B0-4C4E-8363-A1776D47A301}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{BFE44AD8-B0B0-4C4E-8363-A1776D47A301}.Release|Win32.ActiveCfg = Release|Any CPU
+		{BFE44AD8-B0B0-4C4E-8363-A1776D47A301}.Release|x64.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

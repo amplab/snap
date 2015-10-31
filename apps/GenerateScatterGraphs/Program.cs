@@ -325,7 +325,18 @@ namespace GenerateScatterGraphs
         }
         static void Main(string[] args)
         {
+            bool useExpression = true;
             const int minReads = 30;    // Minimum reads (in each RNA and DNA) to keep a sample.
+
+            if (args.Count() > 0)
+            {
+                if (args.Count() > 1 || args[0] != "--e")
+                {
+                    Console.WriteLine("usage: GenerateScatterGraphs {--e}");
+                    return;
+                }
+                useExpression = false;
+            }
 
             string[] experiments = File.ReadAllLines(@"f:\temp\expression\experiments.txt");
             var normalizedExpression = /*BuildExpressionMultipleMapping(experiments);*/ new Dictionary<string, Dictionary<string, NormalizedExpressionAndZScore>>();    // Don't bother with this anymore
@@ -433,7 +444,7 @@ namespace GenerateScatterGraphs
                     continue;
                 }
 
-                if (designator != loadedCancerType)
+                if (designator != loadedCancerType && useExpression)
                 {
                     loadedCancerType = designator;
                     if (null != stopwatch)
@@ -613,7 +624,7 @@ namespace GenerateScatterGraphs
                         // tumor type, but that we've loaded the values for this tumor type.
                         //
                         int startPosition = Convert.ToInt32(fields[7]);
-                        if (expression.ContainsKey(fields[6]) && expression[fields[6]].ContainsKey(startPosition))
+                        if (expression != null && expression.ContainsKey(fields[6]) && expression[fields[6]].ContainsKey(startPosition))
                         {
                             if (!tumorSampleToHighQualityNuclearRNAReads.ContainsKey(tumorRNAAnalysisID) && tumorSampleToAllcountMap.ContainsKey(tumorRNAAnalysisID))
                             {
@@ -653,7 +664,7 @@ namespace GenerateScatterGraphs
                         }
                         else
                         {
-                            outputLine += "\t";
+                            outputLine += "\t\t\t\t\t";
                         }
 
 

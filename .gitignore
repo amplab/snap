@@ -45,14 +45,29 @@ obj
 /SNAPCommand
 /SNAP
 /snap-aligner
-/apps/ExpressionMetadata/bin
-/apps/GenerateScatterGraphs/bin
 /apps/GrovelPileups/bin
 /apps/SplitIntoPieces/bin
 /apps/FilterVCF/bin
 /apps/SplitIntoChromosomes/bin
 /apps/AllExpression/bin
 /apps/ComputeP53Levels/bin
+
+/apps/ExpressionMetadata/bin/x64/Debug
+/apps/ExpressionMetadata/bin/x64/Release/ExpressionMetadata.exe.config
+/apps/ExpressionMetadata/bin/x64/Release/ExpressionMetadata.vshost.exe.config
+/apps/ExpressionMetadata/bin/x64/Release/ExpressionMetadata.vshost.exe.manifest
+
+apps/MannWhitney/bin/Release/MannWhitney.exe.config
+apps/MannWhitney/bin/Release/MannWhitney.vshost.exe.config
+apps/MannWhitney/bin/Release/MannWhitney.vshost.exe.manifest
+apps/MannWhitney/bin/Release/MathNet.Numerics.dll
+apps/MannWhitney/bin/Release/MathNet.Numerics.xml
+
+
+apps/GenerateScatterGraphs/bin/x64/Debug/
+apps/GenerateScatterGraphs/bin/x64/Release/GenerateScatterGraphs.exe.config
+apps/GenerateScatterGraphs/bin/x64/Release/GenerateScatterGraphs.vshost.exe.config
+apps/GenerateScatterGraphs/bin/x64/Release/GenerateScatterGraphs.vshost.exe.manifest
 
 
 
