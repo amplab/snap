@@ -25,6 +25,7 @@ Revision History:
 #include "stdafx.h"
 #include "Util.h"
 #include "Error.h"
+#include "GenericFile.h"
 
 
 _int64 FirstPowerOf2GreaterThanOrEqualTo(_int64 value)
@@ -174,4 +175,97 @@ char *FormatUIntWithCommas(_uint64 val, char *outputBuffer, size_t outputBufferS
 	}
 
 	return outputBuffer;
+}
+
+//
+// Version of fgets that dynamically (re-)allocates the buffer to be big enough to fit the whole line
+//
+
+class FgetsObject
+{
+public:
+    virtual char *fgets(char *s, int size) = 0;
+};
+
+char *genericReallocatingFgets(char **buffer, int *io_bufferSize, FgetsObject *getsObject)
+{
+    if (*io_bufferSize == 0) {
+        //
+        // Just pick a decent size to start out with.
+        //
+        *io_bufferSize = 128;
+        *buffer = new char[*io_bufferSize];
+    }
+
+    int offset = 0;
+    for (;;) { // loop with middle exit
+
+        if (NULL == getsObject->fgets((*buffer) + offset, *io_bufferSize - offset)) {    // Recall that if this clips, then the next time it just keeps reading from the clip.
+            //
+            // EOF or error.
+            //
+            return NULL;
+        }
+
+        int len = (int)strlen(*buffer);
+        if (len != *io_bufferSize - 1 || (*buffer)[len - 1] == '\n') {
+            //
+            // It fit.
+            //
+            return *buffer;
+        }
+
+        //
+        // Double the buffer and retry.
+        //
+
+        if (((_int64)*io_bufferSize) * 2 > 0x7fffffff) {
+            WriteErrorMessage("Trying to fgets() a string bigger than 2^31 bytes.  Perhaps you've supplied an incorrect input file.");
+            soft_exit(1);
+        }
+        int newBufferSize = *io_bufferSize * 2;
+        char *newBuffer = new char[newBufferSize];
+        offset = len;
+        memcpy(newBuffer, *buffer, offset);
+        delete[] *buffer;
+        *buffer = newBuffer;
+        *io_bufferSize = newBufferSize;
+    }
+
+    //NOTREACHED
+    return NULL;    // Just to keep the compiler happy
+}
+
+class StdioFGetsObject : public FgetsObject
+{
+public:
+    StdioFGetsObject(FILE *_file) : file(_file) {}
+    virtual char *fgets(char *s, int size) {
+        return ::fgets(s, size, file);
+    }
+private:
+    FILE *file;
+};
+
+char *reallocatingFgets(char **buffer, int *io_bufferSize, FILE *stream)
+{
+    StdioFGetsObject fgetsObject(stream);
+    return genericReallocatingFgets(buffer, io_bufferSize, &fgetsObject);
+}
+
+class GenericFileFGetsObject : public FgetsObject
+{
+public:
+    GenericFileFGetsObject(GenericFile *_file) : file(_file) {}
+    virtual char *fgets(char *s, int size) {
+        return file->gets(s, size);
+    }
+private:
+    GenericFile *file;
+};
+
+char *reallocatingFgetsGenericFile(char **buffer, int *io_bufferSize, GenericFile *file)
+{
+    GenericFileFGetsObject fgetsObject(file);
+    return genericReallocatingFgets(buffer, io_bufferSize, &fgetsObject);
 }

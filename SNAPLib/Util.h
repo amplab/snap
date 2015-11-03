@@ -5,6 +5,7 @@
 #include "Compat.h"
 #include "Tables.h"
 #include "exit.h"
+#include "GenericFile.h"
 using std::max;
 using std::min;
 
@@ -535,4 +536,11 @@ private:
 	EventObject _waiter;
 	ExclusiveLock _lock;
 };
+
+//
+// Version of fgets that dynamically (re-)allocates the buffer to be big enough to fit the whole line
+//
+char *reallocatingFgets(char **buffer, int *io_bufferSize, FILE *stream);
+char *reallocatingFgetsGenericFile(char **buffer, int *io_bufferSize, GenericFile *file);
+
 

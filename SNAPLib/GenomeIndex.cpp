@@ -47,6 +47,10 @@ static const unsigned DEFAULT_PADDING = 500;
 static const unsigned DEFAULT_KEY_BYTES = 4;
 static const unsigned DEFAULT_LOCATION_SIZE = 4;
 
+const char *GenomeIndexFileName = "GenomeIndex";
+const char *OverflowTableFileName = "OverflowTable";
+const char *GenomeIndexHashFileName = "GenomeIndexHash";
+const char *GenomeFileName = "Genome";
 
 static void usage()
 {
@@ -278,14 +282,15 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         return false;
     }
 
-    const unsigned filenameBufferSize = MAX_PATH+1;
-    char filenameBuffer[filenameBufferSize];
+    int filenameBufferSize = (int)(strlen(directoryName) + 1 + __max(strlen(GenomeIndexFileName), __max(strlen(OverflowTableFileName), __max(strlen(GenomeIndexHashFileName), strlen(GenomeFileName)))) + 1);
+    char *filenameBuffer = new char[filenameBufferSize];
     
 	fprintf(stderr,"Saving genome...");
 	_int64 start = timeInMillis();
-    snprintf(filenameBuffer,filenameBufferSize,"%s%cGenome",directoryName,PATH_SEP);
+    snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, GenomeFileName);
     if (!genome->saveToFile(filenameBuffer)) {
         WriteErrorMessage("GenomeIndex::saveToDirectory: Failed to save the genome itself\n");
+        delete[] filenameBuffer;
         return false;
     }
 	fprintf(stderr,"%llds\n", (timeInMillis() + 500 - start) / 1000);
@@ -534,7 +539,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 	// Build the overflow table by walking each of the hash tables and looking for elements to fix up.
 	// Write the hash tables as we go so that we can free their memory on the fly.
 	//
-	snprintf(filenameBuffer,filenameBufferSize,"%s%cGenomeIndexHash", directoryName, PATH_SEP);
+	snprintf(filenameBuffer,filenameBufferSize,"%s%c%s", directoryName, PATH_SEP, GenomeIndexHashFileName);
     FILE *tablesFile = fopen(filenameBuffer, "wb");
     if (NULL == tablesFile) {
         WriteErrorMessage("Unable to open hash table file '%s'\n", filenameBuffer);
@@ -654,6 +659,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 		size_t bytesWrittenThisHashTable;
         if (!hashTables[whichHashTable]->saveToFile(tablesFile, &bytesWrittenThisHashTable)) {
             WriteErrorMessage("GenomeIndex::saveToDirectory: Failed to save hash table %d\n", whichHashTable);
+            delete[] filenameBuffer;
             return false;
         }
         totalBytesWritten += bytesWrittenThisHashTable;
@@ -688,10 +694,11 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     start = timeInMillis();
 
 
-    snprintf(filenameBuffer, filenameBufferSize, "%s%cOverflowTable", directoryName, PATH_SEP);
+    snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, OverflowTableFileName);
     FILE* fOverflowTable = fopen(filenameBuffer, "wb");
     if (fOverflowTable == NULL) {
         WriteErrorMessage("Unable to open overflow table file, '%s', %d\n", filenameBuffer, errno);
+        delete[] filenameBuffer;
         return false;
     }
 
@@ -705,6 +712,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         if (amountWritten < amountToWrite) {
             WriteErrorMessage("GenomeIndex::saveToDirectory: fwrite failed, %d\n",errno);
             fclose(fOverflowTable);
+            delete[] filenameBuffer;
             return false;
         }
         writeOffset += amountWritten;
@@ -720,11 +728,12 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     //  table number.
     //  And the genome itself is already saved in the same directory in its own format.
     //
-    snprintf(filenameBuffer, filenameBufferSize, "%s%cGenomeIndex", directoryName, PATH_SEP);
+    snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, GenomeIndexFileName);
 
     FILE *indexFile = fopen(filenameBuffer,"w");
     if (indexFile == NULL) {
         WriteErrorMessage("Unable to open file '%s' for write.\n", filenameBuffer);
+        delete[] filenameBuffer;
         return false;
     }
 
@@ -739,6 +748,8 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     }
  
     WriteStatusMessage("%llds\n", (timeInMillis() + 500 - start) / 1000);
+
+    delete[] filenameBuffer;
     
     return true;
 }
@@ -1597,15 +1608,17 @@ GenomeIndex::printBiasTables()
         GenomeIndex *
 GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
 {
-    const unsigned filenameBufferSize = MAX_PATH+1;
-    char filenameBuffer[filenameBufferSize];
+    int filenameBufferSize = (int)(strlen(directoryName) + 1 + __max(strlen(GenomeIndexFileName), __max(strlen(OverflowTableFileName), __max(strlen(GenomeIndexHashFileName), strlen(GenomeFileName)))) + 1);
+    char *filenameBuffer = new char[filenameBufferSize];
     
-    snprintf(filenameBuffer,filenameBufferSize,"%s%cGenomeIndex",directoryName,PATH_SEP);
+    snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, GenomeIndexFileName);
 
     GenericFile *indexFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
 
     if (NULL == indexFile) {
         WriteErrorMessage("Unable to open file '%s' for read.\n",filenameBuffer);
+        delete[] filenameBuffer;
+        filenameBuffer = NULL;
         return NULL;
     }
 
@@ -1663,14 +1676,14 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
 
     size_t overflowTableSizeInBytes = (size_t)index->overflowTableSize * overflowEntrySize;
 
-    snprintf(filenameBuffer,filenameBufferSize, "%s%cOverflowTable", directoryName, PATH_SEP);
+    snprintf(filenameBuffer,filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, OverflowTableFileName);
 
 	if (map) {
 		if (prefetch) {
 			GenericFile *overflowTableFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
 			if (NULL == overflowTableFile) {
 				WriteErrorMessage("Unable to open file '%s'\n", filenameBuffer);
-				soft_exit(1);
+                soft_exit(1);
 			}
 
 			overflowTableFile->prefetch();
@@ -1681,7 +1694,7 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
 		index->mappedOverflowTable = GenericFile_map::open(filenameBuffer);
 		if (NULL == index->mappedOverflowTable) {
 			WriteErrorMessage("Unable to open file '%s'\n", filenameBuffer);
-			soft_exit(1);
+            soft_exit(1);
 		}
 
 		size_t bytesMapped;
@@ -1693,7 +1706,7 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
 
 		if (bytesMapped != overflowTableSizeInBytes) {
 			WriteErrorMessage("read (via mapping) only %lld bytes of '%s', expected %lld\n", bytesMapped, filenameBuffer, overflowTableSizeInBytes);
-			soft_exit(1);
+            soft_exit(1);
 		}
 
 		index->mappedOverflowTable->prefetch();	// NB: This is different than the -pre prefetch.  This one maps the whole thing (and reads it sequentially in case you didn't use -pre)
@@ -1713,7 +1726,8 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
 
 		if (NULL == fOverflowTable) {
 			WriteErrorMessage("Unable to open overflow table file, '%s', %d\n", filenameBuffer, errno);
-			delete index;
+            delete[] filenameBuffer;
+            delete index;
 			return NULL;
 		}
 
@@ -1734,7 +1748,7 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
         index->hashTables[i] = NULL; // We need to do this so the destructor doesn't crash if loading a hash table fails.
     }
 
-    snprintf(filenameBuffer, filenameBufferSize, "%s%cGenomeIndexHash", directoryName, PATH_SEP);
+    snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, GenomeIndexHashFileName);
 
 	GenericFile_Blob *blobFile = NULL;
 	GenericFile *tablesFile = NULL;
@@ -1754,6 +1768,7 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
 
 		if (QueryFileSize(filenameBuffer) != hashTablesFileSize) {
 			WriteErrorMessage("File '%s' had unexpected size, %lld != %lld\n", filenameBuffer, QueryFileSize(filenameBuffer), hashTablesFileSize);
+            delete[]filenameBuffer;
 			delete index;
 			return NULL;
 		}
@@ -1773,6 +1788,7 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
 		size_t amountRead = tablesFile->read(index->tablesBlob, hashTablesFileSize);
 		if (amountRead != hashTablesFileSize) {
 			WriteErrorMessage("Read incorrect amount for GenomeIndexHash file, %lld != %lld\n", hashTablesFileSize, amountRead);
+            delete[] filenameBuffer;
 			delete index;
 			return NULL;
 		}
@@ -1783,6 +1799,7 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
     for (unsigned i = 0; i < index->nHashTables; i++) {
         if (NULL == (index->hashTables[i] = SNAPHashTable::loadFromBlob(blobFile))) {
             WriteErrorMessage("GenomeIndex::loadFromDirectory: Failed to load hash table %d\n",i);
+            delete[] filenameBuffer;
             delete index;
             return NULL;
         }
@@ -1796,6 +1813,7 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
 
         if (index->hashTables[i]->GetValueCount() != expectedValueCount) {
             WriteErrorMessage("Expected loaded hash table to have value count of %d, but it had %d.  Index corrupt\n", expectedValueCount, index->hashTables[i]->GetValueCount());
+            delete[] filenameBuffer;
             delete index;
             return NULL;
         }
@@ -1811,9 +1829,10 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
 		blobFile = NULL;
 	}
 
-    snprintf(filenameBuffer,filenameBufferSize,"%s%cGenome",directoryName,PATH_SEP);
+    snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, GenomeFileName);
     if (NULL == (index->genome = Genome::loadFromFile(filenameBuffer, chromosomePadding, 0, 0, map))) {
         WriteErrorMessage("GenomeIndex::loadFromDirectory: Failed to load the genome itself\n");
+        delete[] filenameBuffer;
         delete index;
         return NULL;
     }
@@ -1828,6 +1847,7 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
         soft_exit(1);
     }
 
+    delete[] filenameBuffer;
     return index;
 }
 

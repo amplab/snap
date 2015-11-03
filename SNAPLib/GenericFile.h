@@ -50,7 +50,7 @@ public:
     virtual int getchar() = 0;
 
 	// Gets a string from the file and store it as a c string in 'str' until (num-1)
-	// characters have ben read or either a newline or eod-of-file is reached,
+	// characters have been read or either a newline or eod-of-file is reached,
 	// whichever happens first.
 	virtual char *gets(char *buf, size_t count) = 0;
 
