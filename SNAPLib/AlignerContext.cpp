@@ -312,7 +312,7 @@ char *numPctAndPad(char *buffer, _uint64 num, double pct, size_t desiredWidth, s
 	char percentageBuffer[percentageBufferSize];
 
 	sprintf(percentageBuffer, " (%.02f%%)", pct);
-	if (strlen(percentageBuffer) + strlen(buffer) >= bufferLen) {
+	if (strlen(percentageBuffer) + strlen(buffer) >= bufferLen || desiredWidth >= bufferLen) { // >= accounts for terminating null
 		WriteErrorMessage("numPctAndPad: overflowed output buffer\n");
 		soft_exit(1);
 	}

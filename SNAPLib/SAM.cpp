@@ -243,9 +243,20 @@ SAMReader::parseHeader(
                 return false;
             }
 
-            const size_t contigNameBufferSize = 512;
-            char contigName[contigNameBufferSize];
-            for (unsigned i = 0; i < contigNameBufferSize && snStart+3+i < endOfBuffer; i++) {
+            size_t contigNameBufferSize = 512;
+            char *contigName = new char[contigNameBufferSize];
+            for (unsigned i = 0; snStart+3+i < endOfBuffer; i++) {
+                if (i >= contigNameBufferSize) {
+                    //
+                    // Get more buffer.
+                    //
+                    size_t newSize = contigNameBufferSize * 2;
+                    char *newBuffer = new char[newSize];
+                    memcpy(newBuffer, contigName, contigNameBufferSize);
+                    delete[] contigName;
+                    contigName = newBuffer;
+                    contigNameBufferSize = newSize;
+                }
                 if (snStart[3+i] == ' ' || snStart[3+i] == '\t' || snStart[3+i] == '\n' || snStart[3+i] == 0) {
                     contigName[i] = '\0';
                 } else {
@@ -283,7 +294,6 @@ SAMReader::parseHeader(
                 *o_headerMatchesIndex = false;
             }
 
-
             if (NULL != o_ref_locations) {
                 if (numSQLines >= n_ref_slots) {
                     GenomeLocation *new_ref_locations = (GenomeLocation *)BigAlloc(sizeof(GenomeLocation)* n_ref_slots * 2);
@@ -296,6 +306,7 @@ SAMReader::parseHeader(
             }
 
             numSQLines++;
+            delete[] contigName;
         } else if (!strncmp("@HD", nextLineToProcess, 3) || !strncmp("@RG", nextLineToProcess, 3) || !strncmp("@PG", nextLineToProcess, 3) ||
             !strncmp("@CO",nextLineToProcess,3)) {
             //
@@ -404,9 +415,17 @@ SAMReader::getReadFromLine(
     // it to be a null-terminated string, while all we've got is one that's space delimited.
     //
     const size_t contigNameBufferSize = 512;
-    char contigName[contigNameBufferSize];
+    char contigNameBuffer[contigNameBufferSize];
+    char *contigName = contigNameBuffer;
+    size_t neededSize;
     GenomeLocation locationOfContig;
-    parseContigName(genome, contigName, contigNameBufferSize, &locationOfContig, NULL, field, fieldLength);
+    if (0 != (neededSize = parseContigName(genome, contigName, contigNameBufferSize, &locationOfContig, NULL, field, fieldLength))) {
+        contigName = new char[neededSize];
+        if (0 != parseContigName(genome, contigName, neededSize, &locationOfContig, NULL, field, fieldLength)) {
+            WriteErrorMessage("SAMReader::getReadFromLine: reallocated contigName was still too small\n");
+            soft_exit(1);
+        }
+    }
 
     GenomeLocation genomeLocation;
     
@@ -507,9 +526,13 @@ SAMReader::getReadFromLine(
     if (NULL != cigar) {
         *cigar = field[CIGAR];
     }
+
+    if (contigName != contigNameBuffer) {
+        delete[] contigName;
+    }
 }
 
-    void
+    size_t
 SAMReader::parseContigName(
     const Genome* genome,
     char* contigName,
@@ -521,8 +544,7 @@ SAMReader::parseContigName(
 	unsigned rfield)
 {
     if (fieldLength[rfield] >= contigNameBufferSize) {  // >= because we need a byte for the \0
-        WriteErrorMessage("SAMReader: too long an RNAME.  Can't parse.\n");
-        soft_exit(1);
+        return fieldLength[rfield] + 1; // +1 for trailing null
     }
     
     memcpy(contigName,field[rfield],fieldLength[rfield]);
@@ -533,6 +555,7 @@ SAMReader::parseContigName(
         //WriteErrorMessage("Unable to find contig '%s' in genome.  SAM file malformed.\n",contigName);
         //soft_exit(1);
     }
+    return 0;
 }
 
     GenomeLocation
@@ -778,22 +801,48 @@ SAMFormat::getSortInfo(
 				*o_pos = 0;
 			}
 		} else {
-			const size_t contigNameBufferSize = 512;
-			char contigName[contigNameBufferSize];
+			const size_t contigNameBufferSize = 512;        // We do a static buffer with reallocation so that in the usual case there is no dynamic memory allocation.  If you have enormous contig names, you'll just run a little slower
+            char contigNameBuffer[contigNameBufferSize];
+            char *contigName = contigNameBuffer;
 			GenomeLocation locationOfContig;
-			SAMReader::parseContigName(genome, contigName, contigNameBufferSize, &locationOfContig, o_refID, fields, lengths, SAMReader::RNEXT);
+            size_t neededSize;
+            if (0 != (neededSize = SAMReader::parseContigName(genome, contigName, contigNameBufferSize, &locationOfContig, o_refID, fields, lengths, SAMReader::RNEXT))) {
+                //
+                // Need a bigger buffer.
+                //
+                contigName = new char[neededSize];
+                if (0 != SAMReader::parseContigName(genome, contigName, neededSize, &locationOfContig, o_refID, fields, lengths, SAMReader::RNEXT)) {
+                    WriteErrorMessage("SAMFormat::getSortInfo: reallocated buffer size is still too small.\n"); // This really shouldn't happen
+                    soft_exit(1);
+                }
+            }
 			if (o_location != NULL) {
 				*o_location = SAMReader::parseLocation(locationOfContig, fields, lengths, SAMReader::RNEXT, SAMReader::PNEXT);
 			}
+
+            if (contigName != contigNameBuffer) {
+                delete[] contigName;
+            }
 		}
     } else {
-        const size_t contigNameBufferSize = 512;
-        char contigName[contigNameBufferSize];
+        const size_t contigNameBufferSize = 512;    // We do a static buffer with reallocation so that in the usual case there is no dynamic memory allocation.  If you have enormous contig names, you'll just run a little slower
+        char contigNameBuffer[contigNameBufferSize];
+        char *contigName = contigNameBuffer;
+        size_t neededSize;
         GenomeLocation locationOfContig;
-        SAMReader::parseContigName(genome, contigName, contigNameBufferSize, &locationOfContig, o_refID, fields, lengths);
+        if (0 != (neededSize = SAMReader::parseContigName(genome, contigName, contigNameBufferSize, &locationOfContig, o_refID, fields, lengths))) {
+            contigName = new char[neededSize];
+            if (0 != SAMReader::parseContigName(genome, contigName, neededSize, &locationOfContig, o_refID, fields, lengths)) {
+                WriteErrorMessage("SAMFormat::getSortInfo(2): reallocated buffer size is still too small.\n");
+                soft_exit(1);
+            }
+        }
 		if (o_location != NULL) {
 	        *o_location = SAMReader::parseLocation(locationOfContig, fields, lengths);
 		}
+        if (contigName != contigNameBuffer) {
+            delete[] contigName;
+        }
     }
 }
 

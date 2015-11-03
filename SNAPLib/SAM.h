@@ -116,9 +116,9 @@ protected:
         static bool parseLine(char *line, char *endOfBuffer, char *result[],
             size_t *lineLength, size_t fieldLengths[]);
 
-        static void parseContigName(const Genome* genome, char* contigName,
+        static size_t parseContigName(const Genome* genome, char* contigName,
             size_t contigNameBufferSize, GenomeLocation * o_locationOfContig, int* o_indexOfContig,
-            char* field[], size_t fieldLength[], unsigned rfield = RNAME);
+            char* field[], size_t fieldLength[], unsigned rfield = RNAME);  // Returns 0 on success, needed contigNameBufferSize otherwise.
 
         static GenomeLocation parseLocation(GenomeLocation locationOfContig, char* field[], size_t fieldLength[], unsigned rfield = RNAME, unsigned posfield = POS);
 

@@ -27,6 +27,7 @@ Revision History:
 #include "FASTA.h"
 #include "Error.h"
 #include "exit.h"
+#include "Util.h"
 
 using namespace std;
 
@@ -58,15 +59,15 @@ ReadFASTAGenome(
         return NULL;
     }
 
-    const size_t lineBufferSize = 4096;
-    char lineBuffer[lineBufferSize];
-
+    int lineBufferSize = 0;
+    char *lineBuffer;
+ 
     //
     // Count the chromosomes
     //
     unsigned nChromosomes = 0;
 
-    while (NULL != fgets(lineBuffer,lineBufferSize,fastaFile)) {
+    while (NULL != reallocatingFgets(&lineBuffer,&lineBufferSize,fastaFile)) {
         if (lineBuffer[0] == '>') {
             nChromosomes++;
         }
@@ -84,7 +85,7 @@ ReadFASTAGenome(
     bool warningIssued = false;
     bool inAContig = false;
 
-    while (NULL != fgets(lineBuffer,lineBufferSize,fastaFile)) {
+    while (NULL != reallocatingFgets(&lineBuffer, &lineBufferSize, fastaFile)) {
         if (lineBuffer[0] == '>') {
             inAContig = true;
             //
@@ -173,6 +174,7 @@ ReadFASTAGenome(
 
     fclose(fastaFile);
     delete [] paddingBuffer;
+    delete [] lineBuffer;
     return genome;
 }
 
