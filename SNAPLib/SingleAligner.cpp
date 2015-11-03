@@ -89,6 +89,7 @@ SingleAlignerContext::runIterationThread()
             if (NULL != readWriter && options->passFilter(read, NotFound, false)) {
                 readWriter->writeReads(readerContext, read, &result, 1, true);
             }
+            extension->writeRead(read, &result);
         }
         delete supplier;
         return;

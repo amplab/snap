@@ -154,6 +154,10 @@ public:
 	
 	virtual bool runIterationThread(ReadSupplier* supplier, AlignerContext* threadContext) { return false; }
 
+    virtual void writeRead(Read* read, SingleAlignmentResult* result) {}
+
+    virtual void writePair(Read* read0, Read* read1, PairedAlignmentResult* result) {}
+
     virtual void finishThread() {}
 
     virtual void finishIteration() {}
