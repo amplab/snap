@@ -54,7 +54,7 @@ BAMAlignment::getNextLocation(const BAMReader * bamReader) const
 }
 
 
-BAMReader::BAMReader(const ReaderContext& i_context) : ReadReader(i_context), refLocation(0), n_ref(0)
+BAMReader::BAMReader(const ReaderContext& i_context) : ReadReader(i_context), refLocation(0), n_ref(0), data(NULL)
 {
 }
 
@@ -62,6 +62,9 @@ BAMReader::~BAMReader()
 {
     BigDealloc(refLocation);
     refLocation = NULL;
+    if (NULL != data) {
+        delete data;
+    }
 }
 
     bool
