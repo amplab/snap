@@ -89,14 +89,31 @@ namespace MannWhitney
 
                 mutations.Sort(Mutation.Compare);
 
-                int Rsingle = 0;
+                double Rsingle = 0;
                 double nSingle = 0;
                 double nMultiple = 0;
                 for (int i = 0; i < mutations.Count(); i++)
                 {
                     if (mutations[i].isSingle)
                     {
-                        Rsingle += i + 1;   // +1 because Mann-Whitney is one-based, while C# is 0-based.  BUGBUG: Handle ties properly (which would be more interesting to do if this turned up more than TP53)
+                        int cumulativeR = i + 1;// +1 because Mann-Whitney is one-based, while C# is 0-based.  BUGBUG: Handle ties properly (which would be more interesting to do if this turned up more than TP53)
+                        int n = 1;
+                        //
+                        // Now add in adjascent indices if there's a tie.  For ties, we use the mean of all the indices in the tied region for each of them (regardless of whether they're single or multiple).
+                        //
+                        for (int j = i - 1; j > 0 && mutations[j].RatioOfRatios == mutations[i].RatioOfRatios; j--)
+                        {
+                            cumulativeR += j + 1;
+                            n++;
+                        }
+
+                        for (int j = i + 1; j < mutations.Count() && mutations[j].RatioOfRatios == mutations[i].RatioOfRatios; j++) {
+                            cumulativeR += j+1;
+                            n++;
+                        }
+
+
+                        Rsingle += cumulativeR / n;
                         nSingle++;
                     }
                     else

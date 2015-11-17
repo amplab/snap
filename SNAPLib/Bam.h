@@ -442,6 +442,15 @@ public:
             return refLocation[ref] + offset;
         }
 
+        int GetNRef() const {
+            return n_ref;
+        }
+
+        const char *getRefName(int which) const {
+            _ASSERT(which < n_ref);
+            return refNames[which];
+        }
+
 protected:
 
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
@@ -461,4 +470,5 @@ private:
         int                 n_ref; // number of reference sequences
         GenomeLocation*     refLocation; // array mapping ref sequence ID to contig genome location
         _int64              extraOffset; // offset into extra data
+        char **             refNames;
 };

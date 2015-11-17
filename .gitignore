@@ -69,5 +69,9 @@ apps/GenerateScatterGraphs/bin/x64/Release/GenerateScatterGraphs.exe.config
 apps/GenerateScatterGraphs/bin/x64/Release/GenerateScatterGraphs.vshost.exe.config
 apps/GenerateScatterGraphs/bin/x64/Release/GenerateScatterGraphs.vshost.exe.manifest
 
+apps/ExpressionLib/bin/
+apps/ExpressionMetadata/bin/x64/Release/ExpressionLib.dll
+apps/ProcessVCFs/bin/
+
 
 

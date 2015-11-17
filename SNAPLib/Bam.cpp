@@ -54,7 +54,7 @@ BAMAlignment::getNextLocation(const BAMReader * bamReader) const
 }
 
 
-BAMReader::BAMReader(const ReaderContext& i_context) : ReadReader(i_context), refLocation(0), n_ref(0)
+BAMReader::BAMReader(const ReaderContext& i_context) : ReadReader(i_context), refLocation(0), n_ref(0), refNames(NULL), data(NULL)
 {
 }
 
@@ -62,6 +62,12 @@ BAMReader::~BAMReader()
 {
     BigDealloc(refLocation);
     refLocation = NULL;
+    if (NULL != refNames) {
+        delete[] refNames;
+    }
+    if (NULL != data) {
+        delete data;
+    }
 }
 
     bool
@@ -168,7 +174,7 @@ BAMReader::readHeader(
 		_ASSERT(textHeaderSize == header->l_text);	// We got the same thing this time
 	}
 
-	if (!SAMReader::parseHeader(fileName, header->text(), header->text() + headerSize - sizeof(BAMHeader), context.genome, &textHeaderSize, &context.headerMatchesIndex, &sawWholeHeader, &n_ref, &refLocation)) {
+	if (!SAMReader::parseHeader(fileName, header->text(), header->text() + headerSize - sizeof(BAMHeader), context.genome, &textHeaderSize, &context.headerMatchesIndex, &sawWholeHeader, &n_ref, &refLocation, &refNames)) {
 		WriteErrorMessage("BAMReader: failed to parse header on '%s'\n", fileName);
 		soft_exit(1);
 	}

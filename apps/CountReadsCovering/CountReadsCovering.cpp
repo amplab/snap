@@ -473,7 +473,7 @@ int main(int argc, char* argv[])
                 Exon *exon = &isoform->exons[i];
                 GenomeLocation coveredUpTo = exon->start;
 
-                while (coveredUpTo < exon->end) {
+                while (coveredUpTo < exon->end) {   // Essentially the same code as this (but in C#) is in ExpressionLib
                     Region *region = regions->findFirstLessThanOrEqualTo(coveredUpTo);
 
                     if (NULL == region || region->end <= coveredUpTo) {

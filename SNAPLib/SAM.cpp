@@ -177,6 +177,11 @@ SAMReader::getNextRead(Read *readToUpdate)
     return getNextRead(readToUpdate, NULL, NULL, NULL, NULL, NULL, NULL);
 }
 
+struct RefNameEntry {
+    char *refName;
+    RefNameEntry *next;
+};
+
     bool
 SAMReader::parseHeader(
     const char *fileName, 
@@ -187,7 +192,8 @@ SAMReader::parseHeader(
     bool *o_headerMatchesIndex,
 	bool *o_sawWholeHeader,
     int *o_n_ref,
-    GenomeLocation **o_ref_locations)
+    GenomeLocation **o_ref_locations,
+    char ***o_refNames)
 {
     _ASSERT((NULL == o_n_ref) == (NULL == o_ref_locations));    // both or neither are NULL, not one of each
 
@@ -199,6 +205,7 @@ SAMReader::parseHeader(
     if (NULL != o_ref_locations) {
         ref_locations = (GenomeLocation *)BigAlloc(sizeof(GenomeLocation)* n_ref_slots);
     }
+    RefNameEntry *refNameEntries = NULL;
 
     while (NULL != nextLineToProcess && nextLineToProcess < endOfBuffer && '@' == *nextLineToProcess) {
 		//
@@ -295,6 +302,14 @@ SAMReader::parseHeader(
                 ref_locations[numSQLines] = contigBase;
             }
 
+            if (NULL != o_refNames) {
+                RefNameEntry *newEntry = new RefNameEntry;
+                newEntry->refName = new char[strlen(contigName) + 1];
+                strcpy(newEntry->refName, contigName);
+                newEntry->next = refNameEntries;
+                refNameEntries = newEntry;
+            }
+
             numSQLines++;
         } else if (!strncmp("@HD", nextLineToProcess, 3) || !strncmp("@RG", nextLineToProcess, 3) || !strncmp("@PG", nextLineToProcess, 3) ||
             !strncmp("@CO",nextLineToProcess,3)) {
@@ -324,6 +339,19 @@ SAMReader::parseHeader(
     if (NULL != o_ref_locations) {
         *o_n_ref = numSQLines;
         *o_ref_locations = ref_locations;
+    }
+
+    if (NULL != o_refNames) {
+        *o_refNames = new char *[numSQLines];
+        for (int i = numSQLines - 1; i >= 0; i--) { // Build it backwards because the linked list is backwards.
+            _ASSERT(refNameEntries != NULL);
+            (*o_refNames)[i] = refNameEntries->refName;
+            RefNameEntry *entry = refNameEntries;
+            refNameEntries = entry->next;
+            delete entry;
+        }
+
+        _ASSERT(refNameEntries == NULL);    // We had exactly the right amount
     }
 
     return true;
