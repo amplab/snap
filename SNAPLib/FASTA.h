@@ -39,11 +39,3 @@ ReadFASTAGenome(const char *fileName, const char *pieceNameTerminatorCharacters,
 
     bool
 AppendFASTAGenome(const Genome *, FILE *fasta);
-
-//
-// This is arbitrary; is there some existing convention?
-//
-inline const char *diploidFASTASexPrefix(bool male)
-{
-    return male ? "PATERNAL|" : "MATERNAL|";
-}

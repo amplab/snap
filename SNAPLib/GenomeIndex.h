@@ -50,6 +50,13 @@ public:
     void lookupSeed(Seed seed, _int64 *nHits, const GenomeLocation **hits, _int64 *nRCHits, const GenomeLocation **rcHits, GenomeLocation *singleHit, GenomeLocation *singleRCHit);
     void lookupSeed32(Seed seed, _int64 *nHits, const unsigned **hits, _int64 *nRCHits, const unsigned **rcHits);
 
+    // versions for genome that has alt regions
+    // hits/rcHits locations are lifted to non-alt contigs, unliftedHits/unliftedRCHits are original locations in alt contigs
+    // nHits/nRCHits is the same for both sets
+    // *hits==*unliftedHits && *rcHits==*unliftedRCHits iff seed has no alt hits
+    void lookupSeedAlt(Seed seed, _int64 *nHits, const GenomeLocation **hits, _int64 *nRCHits, const GenomeLocation **rcHits, const GenomeLocation **unliftedHits, const GenomeLocation **unliftedRCHits, GenomeLocation *singleHit, GenomeLocation *singleRCHit);
+    void lookupSeedAlt32(Seed seed, _int64 *nHits, const unsigned **hits, _int64 *nRCHits, const unsigned **rcHits, const unsigned **unliftedHits, const unsigned **unliftedRCHits);
+
     bool doesGenomeIndexHave64BitLocations() const {return locationSize > 4;}
 
     //

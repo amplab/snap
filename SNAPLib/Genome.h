@@ -245,9 +245,15 @@ public:
         }
 
         struct Contig {
-            Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL) {}
+            Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL),
+                    isAlternate(FALSE), isReverseStrand(FALSE), liftedLocation(InvalidGenomeLocation), contextBefore(0), contextAfter(0) {}
             GenomeLocation     beginningLocation;
             GenomeDistance     length;
+            bool               isAlternate;
+            int                altGroup; // each group of overlapping alt regions is given a unique ID
+            bool               isReverseStrand; // if reversed alternate strand
+            GenomeLocation     liftedLocation; // location of beginning of alt contig mapping to primary
+            GenomeLocation     contextBefore, contextAfter;   // context sequence added from primary (alts near ends have less context)
             unsigned           nameLength;
             char              *name;
         };
@@ -260,6 +266,10 @@ public:
         const Contig *getContigForRead(GenomeLocation location, unsigned readLength, GenomeDistance *extraBasesClippedBefore) const;
         const Contig *getNextContigAfterLocation(GenomeLocation location) const;
         int getContigNumAtLocation(GenomeLocation location) const;    // Returns the contig number, which runs from 0 .. getNumContigs() - 1.
+
+        inline bool hasAltContigs() const { return FALSE;  } // todo: implement
+
+        GenomeLocation getLiftedLocation(GenomeLocation altLocation) const { return altLocation;  } // todo: implement
 
 // unused        Genome *copy() const {return copy(true,true,true);}
 // unused        Genome *copyGenomeOneSex(bool useY, bool useM) const {return copy(!useY,useY,useM);}

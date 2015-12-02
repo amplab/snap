@@ -335,12 +335,26 @@ IntersectingPairedEndAligner::align(
             _int64 nHits[NUM_DIRECTIONS];
             const GenomeLocation *hits[NUM_DIRECTIONS];
             const unsigned *hits32[NUM_DIRECTIONS];
+            const GenomeLocation *unliftedHits[NUM_DIRECTIONS];
+            const unsigned *unliftedHits32[NUM_DIRECTIONS];
 
-            if (doesGenomeIndexHave64BitLocations) {
-                index->lookupSeed(seed, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC], 
-                            hashTableHitSets[whichRead][FORWARD]->getNextSingletonLocation(), hashTableHitSets[whichRead][RC]->getNextSingletonLocation());
-            } else {
-                index->lookupSeed32(seed, &nHits[FORWARD], &hits32[FORWARD], &nHits[RC], &hits32[RC]);
+            if (!doesGenomeIndexHaveAlts) {
+                if (doesGenomeIndexHave64BitLocations) {
+                    index->lookupSeed(seed, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC],
+                        hashTableHitSets[whichRead][FORWARD]->getNextSingletonLocation(), hashTableHitSets[whichRead][RC]->getNextSingletonLocation());
+                }
+                else {
+                    index->lookupSeed32(seed, &nHits[FORWARD], &hits32[FORWARD], &nHits[RC], &hits32[RC]);
+                }
+            }
+            else {
+                if (doesGenomeIndexHave64BitLocations) {
+                    index->lookupSeedAlt(seed, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC], &unliftedHits[FORWARD], &unliftedHits[RC],
+                        hashTableHitSets[whichRead][FORWARD]->getNextSingletonLocation(), hashTableHitSets[whichRead][RC]->getNextSingletonLocation());
+                }
+                else {
+                    index->lookupSeedAlt32(seed, &nHits[FORWARD], &hits32[FORWARD], &nHits[RC], &hits32[RC], &unliftedHits32[FORWARD], &unliftedHits32[RC]);
+                }
             }
 
             countOfHashTableLookups[whichRead]++;
@@ -353,10 +367,21 @@ IntersectingPairedEndAligner::align(
                 }
                 if (nHits[dir] < maxBigHits) {
                     totalHashTableHits[whichRead][dir] += nHits[dir];
-                    if (doesGenomeIndexHave64BitLocations) {
-                        hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits[dir], beginsDisjointHitSet[dir]);
-                    } else {
-                        hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits32[dir], beginsDisjointHitSet[dir]);
+                    if (!doesGenomeIndexHaveAlts) {
+                        if (doesGenomeIndexHave64BitLocations) {
+                            hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits[dir], NULL, beginsDisjointHitSet[dir]);
+                        }
+                        else {
+                            hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits32[dir], NULL, beginsDisjointHitSet[dir]);
+                        }
+                    }
+                    else {
+                        if (doesGenomeIndexHave64BitLocations) {
+                            hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits[dir], unliftedHits[dir], beginsDisjointHitSet[dir]);
+                        }
+                        else {
+                            hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits32[dir], unliftedHits32[dir], beginsDisjointHitSet[dir]);
+                        }
                     }
                     beginsDisjointHitSet[dir]= false;
                 } else {
@@ -388,7 +413,6 @@ IntersectingPairedEndAligner::align(
 
     Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = {{FORWARD, RC}, {RC, FORWARD}};
 
-
     //
     // Phase 2: find all possible candidates and add them to candidate lists (for the reads with fewer and more hits).
     //
@@ -409,6 +433,10 @@ IntersectingPairedEndAligner::align(
         unsigned            lastSeedOffsetForReadWithFewerHits;
         GenomeLocation      lastGenomeLocationForReadWithFewerHits;
         GenomeLocation      lastGenomeLocationForReadWithMoreHits;
+        GenomeLocation      lastUnliftedGenomeLocationForReadWithFewerHits;
+        GenomeLocation      lastUnliftedGenomeLocationForReadWithMoreHits;
+        GenomeLocation     *pLastGenomeLocationForReadWithFewerHits = doesGenomeIndexHaveAlts ? &lastUnliftedGenomeLocationForReadWithFewerHits : NULL;
+        GenomeLocation     *pLastGenomeLocationForReadWithMoreHits = doesGenomeIndexHaveAlts ? &lastUnliftedGenomeLocationForReadWithMoreHits : NULL;
         unsigned            lastSeedOffsetForReadWithMoreHits;
 
         bool                outOfMoreHitsLocations = false;
@@ -416,7 +444,7 @@ IntersectingPairedEndAligner::align(
         //
         // Seed the intersection state by doing a first lookup.
         //
-        if (setPair[readWithFewerHits]->getFirstHit(&lastGenomeLocationForReadWithFewerHits, &lastSeedOffsetForReadWithFewerHits)) {
+        if (setPair[readWithFewerHits]->getFirstHit(&lastGenomeLocationForReadWithFewerHits, &lastSeedOffsetForReadWithFewerHits, pLastGenomeLocationForReadWithFewerHits)) {
             //
             // No hits in this direction.
             //
@@ -444,7 +472,7 @@ IntersectingPairedEndAligner::align(
                 // location that's not too high.
                 //
                 if (!setPair[readWithMoreHits]->getNextHitLessThanOrEqualTo(lastGenomeLocationForReadWithFewerHits + maxSpacing,
-                                                                             &lastGenomeLocationForReadWithMoreHits, &lastSeedOffsetForReadWithMoreHits)) {
+                    &lastGenomeLocationForReadWithMoreHits, &lastSeedOffsetForReadWithMoreHits, pLastGenomeLocationForReadWithMoreHits)) {
                     break;  // End of all of the mates.  We're done with this set pair.
                 }
             }
@@ -463,7 +491,7 @@ IntersectingPairedEndAligner::align(
                 }
 
                 if (!setPair[readWithFewerHits]->getNextHitLessThanOrEqualTo(lastGenomeLocationForReadWithMoreHits + maxSpacing, &lastGenomeLocationForReadWithFewerHits,
-                                                        &lastSeedOffsetForReadWithFewerHits)) {
+                    &lastSeedOffsetForReadWithFewerHits, pLastGenomeLocationForReadWithFewerHits)) {
                     //
                     // No more candidates on the read with fewer hits side.  We're done with this set pair.
                     //
@@ -490,7 +518,8 @@ IntersectingPairedEndAligner::align(
                     soft_exit(1);
                 }
                 scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair]].init(
-                                lastGenomeLocationForReadWithMoreHits, bestPossibleScoreForReadWithMoreHits, lastSeedOffsetForReadWithMoreHits);
+                                lastGenomeLocationForReadWithMoreHits, bestPossibleScoreForReadWithMoreHits, lastSeedOffsetForReadWithMoreHits,
+                                doesGenomeIndexHaveAlts ? lastUnliftedGenomeLocationForReadWithMoreHits : lastGenomeLocationForReadWithMoreHits);
 
 #ifdef _DEBUG
                 if (_DumpAlignments) {
@@ -505,7 +534,7 @@ IntersectingPairedEndAligner::align(
 
                 previousMoreHitsLocation = lastGenomeLocationForReadWithMoreHits;
 
-                if (!setPair[readWithMoreHits]->getNextLowerHit(&lastGenomeLocationForReadWithMoreHits, &lastSeedOffsetForReadWithMoreHits)) {
+                if (!setPair[readWithMoreHits]->getNextLowerHit(&lastGenomeLocationForReadWithMoreHits, &lastSeedOffsetForReadWithMoreHits, pLastGenomeLocationForReadWithMoreHits)) {
                     lastGenomeLocationForReadWithMoreHits = 0;
                     outOfMoreHitsLocations = true;
                     break; // out of the loop looking for candidates on the more hits side.
@@ -550,7 +579,8 @@ IntersectingPairedEndAligner::align(
 
                 scoringCandidatePool[lowestFreeScoringCandidatePoolEntry].init(lastGenomeLocationForReadWithFewerHits, whichSetPair, lowestFreeScoringMateCandidate[whichSetPair] - 1,
                                                                                 lastSeedOffsetForReadWithFewerHits, bestPossibleScoreForReadWithFewerHits,
-                                                                                scoringCandidates[bestPossibleScore]);
+                                                                                scoringCandidates[bestPossibleScore],
+                                                                                doesGenomeIndexHaveAlts ? lastUnliftedGenomeLocationForReadWithFewerHits : lastGenomeLocationForReadWithFewerHits);
 
 
                 scoringCandidates[bestPossibleScore] = &scoringCandidatePool[lowestFreeScoringCandidatePoolEntry];
@@ -568,7 +598,7 @@ IntersectingPairedEndAligner::align(
                 maxUsedBestPossibleScoreList = max(maxUsedBestPossibleScoreList, bestPossibleScore);
             }
 
-            if (!setPair[readWithFewerHits]->getNextLowerHit(&lastGenomeLocationForReadWithFewerHits, &lastSeedOffsetForReadWithFewerHits)) {
+            if (!setPair[readWithFewerHits]->getNextLowerHit(&lastGenomeLocationForReadWithFewerHits, &lastSeedOffsetForReadWithFewerHits, pLastGenomeLocationForReadWithFewerHits)) {
                 break;
             }
         }
@@ -602,7 +632,7 @@ IntersectingPairedEndAligner::align(
         double fewerEndMatchProbability;
         int fewerEndGenomeLocationOffset;
 
-        scoreLocation(readWithFewerHits, setPairDirection[candidate->whichSetPair][readWithFewerHits], candidate->readWithFewerHitsGenomeLocation,
+        scoreLocation(readWithFewerHits, setPairDirection[candidate->whichSetPair][readWithFewerHits], candidate->readWithFewerHitsUnliftedGenomeLocation,
             candidate->seedOffset, scoreLimit, &fewerEndScore, &fewerEndMatchProbability, &fewerEndGenomeLocationOffset);
 
         _ASSERT(-1 == fewerEndScore || fewerEndScore >= candidate->bestPossibleScore);
@@ -635,7 +665,7 @@ IntersectingPairedEndAligner::align(
                     // use now, score it.
                     //
                     if (mate->score == -2 || mate->score == -1 && mate->scoreLimit < scoreLimit - fewerEndScore) {
-                        scoreLocation(readWithMoreHits, setPairDirection[candidate->whichSetPair][readWithMoreHits], mate->readWithMoreHitsGenomeLocation,
+                        scoreLocation(readWithMoreHits, setPairDirection[candidate->whichSetPair][readWithMoreHits], mate->readWithMoreHitsUnliftedGenomeLocation,
                             mate->seedOffset, scoreLimit - fewerEndScore, &mate->score, &mate->matchProbability,
                             &mate->genomeOffset);
 #ifdef _DEBUG
@@ -654,6 +684,16 @@ IntersectingPairedEndAligner::align(
                     if (mate->score != -1) {
                         double pairProbability = mate->matchProbability * fewerEndMatchProbability;
                         unsigned pairScore = mate->score + fewerEndScore;
+
+                        // reduce probability of pairs matching across different overlapping alts
+                        // todo: assuming if they're on different alts within maxSpacing they overlap - true for GRCh38 but not necessarily for all genomes
+                        // use crossover probability with 1 centiMorgan ~= 1Mbp
+                        if (doesGenomeIndexHaveAlts && isBothAltPairMapping(candidate, mate) &&
+                            abs(mate->readWithMoreHitsUnliftedGenomeLocation - candidate->readWithFewerHitsUnliftedGenomeLocation) > 2*maxSpacing) 
+                        {
+                            pairProbability *= 1e-8 * abs(candidate->readWithFewerHitsGenomeLocation - mate->readWithMoreHitsGenomeLocation);
+                        }
+
                         //
                         // See if this should be ignored as a merge, or if we need to back out a previously scored location
                         // because it's a worse version of this location.
@@ -713,7 +753,7 @@ IntersectingPairedEndAligner::align(
                             candidate->mergeAnchor = mergeAnchor;
                         } else {
                             merged = mergeAnchor->checkMerge(mate->readWithMoreHitsGenomeLocation + mate->genomeOffset, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset,
-                                pairProbability, pairScore, &oldPairProbability);
+                                pairProbability, pairScore, doesGenomeIndexHaveAlts && isNonAltPairMapping(candidate, mate), &oldPairProbability);
                         }
 
                         if (!merged) {
@@ -727,7 +767,8 @@ IntersectingPairedEndAligner::align(
                             bool isBestHit = false;
 
                             if (pairScore <= maxK && (pairScore < bestPairScore ||
-                                (pairScore == bestPairScore && pairProbability > probabilityOfBestPair))) {
+                                (pairScore == bestPairScore && (pairProbability > probabilityOfBestPair ||
+                                (pairProbability == probabilityOfBestPair && isNonAltPairMapping(candidate, mate)))))) {
                                 //
                                 // A new best hit.
                                 //
@@ -759,8 +800,8 @@ IntersectingPairedEndAligner::align(
                                 }
                                 bestPairScore = pairScore;
                                 probabilityOfBestPair = pairProbability;
-                                bestResultGenomeLocation[readWithFewerHits] = candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset;
-                                bestResultGenomeLocation[readWithMoreHits] = mate->readWithMoreHitsGenomeLocation + mate->genomeOffset;
+                                bestResultGenomeLocation[readWithFewerHits] = candidate->readWithFewerHitsUnliftedGenomeLocation + fewerEndGenomeLocationOffset;
+                                bestResultGenomeLocation[readWithMoreHits] = mate->readWithMoreHitsUnliftedGenomeLocation + mate->genomeOffset;
                                 bestResultScore[readWithFewerHits] = fewerEndScore;
                                 bestResultScore[readWithMoreHits] = mate->score;
                                 bestResultDirection[readWithFewerHits] = setPairDirection[candidate->whichSetPair][readWithFewerHits];
@@ -786,8 +827,8 @@ IntersectingPairedEndAligner::align(
                                     result->direction[readWithMoreHits] = setPairDirection[candidate->whichSetPair][readWithMoreHits];
                                     result->direction[readWithFewerHits] = setPairDirection[candidate->whichSetPair][readWithFewerHits];
                                     result->fromAlignTogether = true;
-                                    result->location[readWithMoreHits] = mate->readWithMoreHitsGenomeLocation + mate->genomeOffset;
-                                    result->location[readWithFewerHits] = candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset;
+                                    result->location[readWithMoreHits] = mate->readWithMoreHitsUnliftedGenomeLocation + mate->genomeOffset;
+                                    result->location[readWithFewerHits] = candidate->readWithFewerHitsUnliftedGenomeLocation + fewerEndGenomeLocationOffset;
                                     result->mapq[0] = result->mapq[1] = 0;
                                     result->score[readWithMoreHits] = mate->score;
                                     result->score[readWithFewerHits] = fewerEndScore;
@@ -1091,7 +1132,7 @@ IntersectingPairedEndAligner::HashTableHitSet::init()
 
 #define RL(lookups, glType, lookupListHead)                                                                                                                 \
     void                                                                                                                                                    \
-IntersectingPairedEndAligner::HashTableHitSet::recordLookup(unsigned seedOffset, _int64 nHits, const glType *hits, bool beginsDisjointHitSet)               \
+IntersectingPairedEndAligner::HashTableHitSet::recordLookup(unsigned seedOffset, _int64 nHits, const glType *hits, const glType *unliftedHits, bool beginsDisjointHitSet)               \
 {                                                                                                                                                           \
     _ASSERT(nLookupsUsed < maxSeeds);                                                                                                                       \
     if (beginsDisjointHitSet) {                                                                                                                             \
@@ -1106,6 +1147,7 @@ IntersectingPairedEndAligner::HashTableHitSet::recordLookup(unsigned seedOffset,
         _ASSERT(currentDisjointHitSet != -1);    /* Essentially that beginsDisjointHitSet is set for the first recordLookup call */                         \
         lookups[nLookupsUsed].currentHitForIntersection = 0;                                                                                                \
         lookups[nLookupsUsed].hits = hits;                                                                                                                  \
+        lookups[nLookupsUsed].unliftedHits = unliftedHits;                                                                                                  \
         lookups[nLookupsUsed].nHits = nHits;                                                                                                                \
         lookups[nLookupsUsed].seedOffset = seedOffset;                                                                                                      \
         lookups[nLookupsUsed].whichDisjointHitSet = currentDisjointHitSet;                                                                                  \
@@ -1181,7 +1223,7 @@ IntersectingPairedEndAligner::HashTableHitSet::computeBestPossibleScoreForCurren
 }
 
 	bool
-IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(GenomeLocation maxGenomeLocationToFind, GenomeLocation *actualGenomeLocationFound, unsigned *seedOffsetFound)
+        IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(GenomeLocation maxGenomeLocationToFind, GenomeLocation *actualGenomeLocationFound, unsigned *seedOffsetFound, GenomeLocation *actualUnliftedGenomeLocationFound)
 {
 
     bool anyFound = false;
@@ -1238,6 +1280,10 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(Genom
                 if (probeHit - seedOffset > bestLocationFound) {
 					anyFound = true;
                     mostRecentLocationReturned = *actualGenomeLocationFound = bestLocationFound = probeHit - seedOffset;
+                    if (actualUnliftedGenomeLocationFound != NULL) {
+                        *actualUnliftedGenomeLocationFound = doesGenomeIndexHave64BitLocations
+                            ? lookups64[i].unliftedHits[probe] : lookups32[i].unliftedHits[probe];
+                    }
                     *seedOffsetFound = seedOffset;
                 }
 
@@ -1273,7 +1319,7 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextHitLessThanOrEqualTo(Genom
 
 
     bool
-IntersectingPairedEndAligner::HashTableHitSet::getFirstHit(GenomeLocation *genomeLocation, unsigned *seedOffsetFound)
+        IntersectingPairedEndAligner::HashTableHitSet::getFirstHit(GenomeLocation *genomeLocation, unsigned *seedOffsetFound, GenomeLocation *unliftedGenomeLocation)
 {
     bool anyFound = false;
     *genomeLocation = 0;
@@ -1286,6 +1332,9 @@ IntersectingPairedEndAligner::HashTableHitSet::getFirstHit(GenomeLocation *genom
     for (unsigned i = 0; i < nLookupsUsed; i++) {                                                                                           \
         if (lookups[i].nHits > 0 && lookups[i].hits[0] - lookups[i].seedOffset > GenomeLocationAsInt64(*genomeLocation)) {                  \
             mostRecentLocationReturned = *genomeLocation = lookups[i].hits[0] - lookups[i].seedOffset;                                      \
+            if (unliftedGenomeLocation != NULL) {                                                                                           \
+                *unliftedGenomeLocation = lookups[i].unliftedHits[0] - lookups[i].seedOffset;                                               \
+            }                                                                                                                               \
             *seedOffsetFound = lookups[i].seedOffset;                                                                                       \
             anyFound = true;                                                                                                                \
         }                                                                                                                                   \
@@ -1303,7 +1352,7 @@ IntersectingPairedEndAligner::HashTableHitSet::getFirstHit(GenomeLocation *genom
 }
 
     bool
-IntersectingPairedEndAligner::HashTableHitSet::getNextLowerHit(GenomeLocation *genomeLocation, unsigned *seedOffsetFound)
+        IntersectingPairedEndAligner::HashTableHitSet::getNextLowerHit(GenomeLocation *genomeLocation, unsigned *seedOffsetFound, GenomeLocation *unliftedGenomeLocation)
 {
     //
     // Look through all of the lookups and find the one with the highest location smaller than the current one.
@@ -1373,7 +1422,7 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextLowerHit(GenomeLocation *g
 }
 
             bool
-IntersectingPairedEndAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation, double newMatchProbability, int newPairScore,
+IntersectingPairedEndAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation, double newMatchProbability, int newPairScore, bool newPairIsNonAlt,
                         double *oldMatchProbability)
 {
     if (locationForReadWithMoreHits == InvalidGenomeLocation || !doesRangeMatch(newMoreHitLocation, newFewerHitLocation)) {
@@ -1390,7 +1439,8 @@ IntersectingPairedEndAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitL
         //
         // Within merge distance.  Keep the better score (or if they're tied the better match probability).
         //
-        if (newPairScore < pairScore || newPairScore == pairScore && newMatchProbability > matchProbability) {
+        if (newPairScore < pairScore || (newPairScore == pairScore &&
+            (newMatchProbability > matchProbability || (newMatchProbability == matchProbability && newPairIsNonAlt)))) {
 #ifdef _DEBUG
             if (_DumpAlignments) {
                 printf("Merge replacement at anchor (%u, %u), loc (%u, %u), old match prob %e, new match prob %e, old pair score %d, new pair score %d\n",

@@ -134,6 +134,7 @@ private:
     unsigned        maxSpacing;
     unsigned        seedLen;
     bool            doesGenomeIndexHave64BitLocations;
+    bool            doesGenomeIndexHaveAlts;
     _int64          nLocationsScored;
     bool            noUkkonen;
     bool            noOrderedEvaluation;
@@ -149,6 +150,7 @@ private:
         unsigned        seedOffset;
         _int64          nHits;
         const GL  *     hits;
+        const GL  *     unliftedHits;
         unsigned        whichDisjointHitSet;
 
         //
@@ -185,7 +187,8 @@ private:
         // provide the lookup function a place to write the result.  Since we need one per
         // lookup, it goes here.
         //
-        GL singletonGenomeLocation[2];  // The [2] is because we need to look one before sometimes, and that allows space
+        GL singletonGenomeLocation[4];  // The [4] is because we need to look one before sometimes, and that allows space
+                                        // also to allow space for unlifted locations
     };
     
     //
@@ -211,26 +214,26 @@ private:
 		// seed for it not to hit, and since the reads are disjoint there can't be a case
 		// where the same difference caused two seeds to miss).
         //
-        void recordLookup(unsigned seedOffset, _int64 nHits, const unsigned *hits, bool beginsDisjointHitSet);
-        void recordLookup(unsigned seedOffset, _int64 nHits, const GenomeLocation *hits, bool beginsDisjointHitSet);
+        void recordLookup(unsigned seedOffset, _int64 nHits, const unsigned *hits, const unsigned *unliftedHits, bool beginsDisjointHitSet);
+        void recordLookup(unsigned seedOffset, _int64 nHits, const GenomeLocation *hits, const GenomeLocation *unliftedHits, bool beginsDisjointHitSet);
 
         //
         // This efficiently works through the set looking for the next hit at or below this address.
         // A HashTableHitSet only allows a single iteration through its address space per call to
         // init().
         //
-        bool    getNextHitLessThanOrEqualTo(GenomeLocation maxGenomeLocationToFind, GenomeLocation *actualGenomeLocationFound, unsigned *seedOffsetFound);
+        bool    getNextHitLessThanOrEqualTo(GenomeLocation maxGenomeLocationToFind, GenomeLocation *actualGenomeLocationFound, unsigned *seedOffsetFound, GenomeLocation *actualUnliftedGenomeLocationFound);
 
         //
         // Walk down just one step, don't binary search.
         //
-        bool getNextLowerHit(GenomeLocation *genomeLocation, unsigned *seedOffsetFound);
+        bool getNextLowerHit(GenomeLocation *genomeLocation, unsigned *seedOffsetFound, GenomeLocation *unliftedGenomeLocation);
 
 
         //
         // Find the highest genome address.
         //
-        bool    getFirstHit(GenomeLocation *genomeLocation, unsigned *seedOffsetFound);
+        bool    getFirstHit(GenomeLocation *genomeLocation, unsigned *seedOffsetFound, GenomeLocation *unliftedGenomeLocation);
 
 		unsigned computeBestPossibleScoreForCurrentHit();
 
@@ -377,7 +380,7 @@ private:
         //
         // Returns true and sets oldMatchProbability if this should be eliminated due to a match.
         //
-        bool checkMerge(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation, double newMatchProbability, int newPairScore, 
+        bool checkMerge(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation, double newMatchProbability, int newPairScore, bool newPairIsNonAlt,
                         double *oldMatchProbability); 
     };
 
@@ -394,14 +397,16 @@ private:
         //
         double                  matchProbability;
         GenomeLocation          readWithMoreHitsGenomeLocation;
+        GenomeLocation          readWithMoreHitsUnliftedGenomeLocation;
         unsigned                bestPossibleScore;
         unsigned                score;
         unsigned                scoreLimit;             // The scoreLimit with which score was computed
         unsigned                seedOffset;
         int                     genomeOffset;
 
-        void init(GenomeLocation readWithMoreHitsGenomeLocation_, unsigned bestPossibleScore_, unsigned seedOffset_) {
+        void init(GenomeLocation readWithMoreHitsGenomeLocation_, unsigned bestPossibleScore_, unsigned seedOffset_, GenomeLocation readWithMoreHitsUnliftedGenomeLocation_) {
             readWithMoreHitsGenomeLocation = readWithMoreHitsGenomeLocation_;
+            readWithMoreHitsUnliftedGenomeLocation = readWithMoreHitsUnliftedGenomeLocation_;
             bestPossibleScore = bestPossibleScore_;
             seedOffset = seedOffset_;
             score = -2;
@@ -416,15 +421,17 @@ private:
         MergeAnchor *           mergeAnchor;
         unsigned                scoringMateCandidateIndex;  // Index into the array of scoring mate candidates where we should look 
         GenomeLocation          readWithFewerHitsGenomeLocation;
+        GenomeLocation          readWithFewerHitsUnliftedGenomeLocation;
         unsigned                whichSetPair;
         unsigned                seedOffset;
 
         unsigned                bestPossibleScore;
 
         void init(GenomeLocation readWithFewerHitsGenomeLocation_, unsigned whichSetPair_, unsigned scoringMateCandidateIndex_, unsigned seedOffset_,
-                  unsigned bestPossibleScore_, ScoringCandidate *scoreListNext_)
+                  unsigned bestPossibleScore_, ScoringCandidate *scoreListNext_, GenomeLocation readWithFewerHitsUnliftedGenomeLocation_)
         {
             readWithFewerHitsGenomeLocation = readWithFewerHitsGenomeLocation_;
+            readWithFewerHitsUnliftedGenomeLocation = readWithFewerHitsUnliftedGenomeLocation_;
             whichSetPair = whichSetPair_;
             _ASSERT(whichSetPair < NUM_SET_PAIRS);  // You wouldn't think this would be necessary, but...
             scoringMateCandidateIndex = scoringMateCandidateIndex_;
@@ -434,6 +441,18 @@ private:
             mergeAnchor = NULL;
          }
     };
+
+    static bool isNonAltPairMapping(ScoringCandidate* candidate, ScoringMateCandidate* mate)
+    {
+        return candidate->readWithFewerHitsGenomeLocation == candidate->readWithFewerHitsUnliftedGenomeLocation &&
+            mate->readWithMoreHitsGenomeLocation == mate->readWithMoreHitsUnliftedGenomeLocation;
+    }
+
+    static bool isBothAltPairMapping(ScoringCandidate* candidate, ScoringMateCandidate* mate)
+    {
+        return candidate->readWithFewerHitsGenomeLocation != candidate->readWithFewerHitsUnliftedGenomeLocation &&
+            mate->readWithMoreHitsGenomeLocation != mate->readWithMoreHitsUnliftedGenomeLocation;
+    }
 
     //
     // A pool of scoring candidates.  For each alignment call, we free them all by resetting lowestFreeScoringCandidatePoolEntry to 0,

@@ -1915,6 +1915,22 @@ GenomeIndex::lookupSeed32(
     }
 }
 
+
+    void
+GenomeIndex::lookupSeedAlt32(
+        Seed              seed,
+        _int64           *nHits,
+        const unsigned  **hits,
+        _int64           *nRCHits,
+        const unsigned  **rcHits,
+        const unsigned  **unliftedHits,
+        const unsigned  **unliftedRCHits)
+{
+    lookupSeed32(seed, nHits, hits, nRCHits, rcHits);
+    *unliftedHits = *hits;
+    *unliftedRCHits = *rcHits;
+}
+
     void
 GenomeIndex::fillInLookedUpResults32(
     const unsigned  *subEntry,
@@ -2041,6 +2057,23 @@ GenomeIndex::lookupSeed(
     }
 }
 
+    void
+GenomeIndex::lookupSeedAlt(
+        Seed                    seed,
+        _int64 *                nHits,
+        const GenomeLocation ** hits,
+        _int64 *                nRCHits,
+        const GenomeLocation ** rcHits,
+        const GenomeLocation ** unliftedHits,
+        const GenomeLocation ** unliftedRCHits,
+        GenomeLocation *        singleHit,
+        GenomeLocation *        singleRCHit)
+{
+    // todo: implement
+    lookupSeed(seed, nHits, hits, nRCHits, rcHits, singleHit, singleRCHit);
+    *unliftedHits = *hits;
+    *unliftedRCHits = *rcHits;
+}
 
     void 
 GenomeIndex::fillInLookedUpResults(GenomeLocation lookedUpLocation, _int64 *nHits, const GenomeLocation **hits, GenomeLocation *singleHitLocation)
