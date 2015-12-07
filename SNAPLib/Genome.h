@@ -26,6 +26,8 @@ Revision History:
 #include "Compat.h"
 #include "GenericFile.h"
 #include "GenericFile_map.h"
+#include <string>
+#include <map>
 
 //
 // We have two different classes to represent a place in a genome and a distance between places in a genome.
@@ -156,6 +158,8 @@ typedef _int64 GenomeDistance;
 
 extern GenomeLocation InvalidGenomeLocation;
 
+class AltContigMap;
+
 class Genome {
 public:
         //
@@ -174,7 +178,8 @@ public:
             unsigned                maxContigs = 32);
 
         void startContig(
-            const char          *contigName);
+            const char          *contigName,
+            AltContigMap        *altMap);
 
         void addData(
             const char          *data);
@@ -246,14 +251,14 @@ public:
 
         struct Contig {
             Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL),
-                    isAlternate(FALSE), isReverseStrand(FALSE), liftedLocation(InvalidGenomeLocation), contextBefore(0), contextAfter(0) {}
+                    isAlternate(FALSE), isReverseStrand(FALSE), liftedLocation(InvalidGenomeLocation) {}
             GenomeLocation     beginningLocation;
             GenomeDistance     length;
+
             bool               isAlternate;
-            int                altGroup; // each group of overlapping alt regions is given a unique ID
             bool               isReverseStrand; // if reversed alternate strand
             GenomeLocation     liftedLocation; // location of beginning of alt contig mapping to primary
-            GenomeLocation     contextBefore, contextAfter;   // context sequence added from primary (alts near ends have less context)
+            
             unsigned           nameLength;
             char              *name;
         };
@@ -278,7 +283,10 @@ public:
         // These are only public so creators of new genomes (i.e., FASTA) can use them.
         //
         void    fillInContigLengths();
+        void    adjustAltContigs(AltContigMap* altMap);
         void    sortContigsByName();
+
+        static char* findTerminator(char* buffer, const char* terminators, bool whitespaceTerminator);
 
 private:
 
@@ -317,3 +325,38 @@ inline bool genomeLocationIsWithin(GenomeLocation locationA, GenomeLocation loca
 {
     return DistanceBetweenGenomeLocations(locationA, locationB) <= distance;
 }
+
+class AltContigMap
+{
+public:
+    AltContigMap() {}
+
+    static AltContigMap* readFromFile(const char* filename, const char* columnList);
+
+    void addFastaContig(const char* lineBuffer, const char* terminator);
+
+    void setAltContig(Genome::Contig* contig);
+
+    const char* getParentContigName(const char* altName);
+
+private:
+
+    struct AltContig {
+        const char* name;
+        const char* accession;
+        const char* parentAccession;
+        bool isRC;
+        GenomeLocation start, stop;
+        GenomeLocation parentStart, parentStop;
+        GenomeLocation startTail, stopTail;
+        AltContig() : name(NULL), accession(NULL), parentAccession(NULL), isRC(false),
+            start(0), stop(0), parentStart(0), parentStop(0), startTail(0), stopTail(0) {}
+    };
+
+
+    const char* accessionFastaTag;
+    typedef std::map<std::string, AltContig> StringAltContigMap;
+    StringAltContigMap altsByAccession;
+    typedef std::map<std::string, std::string> StringMap;
+    StringMap nameToAccession;
+};

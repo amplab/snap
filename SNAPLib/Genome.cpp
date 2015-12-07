@@ -31,6 +31,7 @@ Revision History:
 #include "exit.h"
 #include "Error.h"
 #include "Util.h"
+#include "VariableSizeVector.h"
 
 Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned i_chromosomePadding, unsigned i_maxContigs)
 : maxBases(i_maxBases), minLocation(0), maxLocation(i_maxBases), chromosomePadding(i_chromosomePadding), maxContigs(i_maxContigs),
@@ -73,7 +74,7 @@ Genome::addData(const char *data)
 }
 
     void
-Genome::startContig(const char *contigName)
+Genome::startContig(const char *contigName, AltContigMap *altMap)
 {
     if (nContigs == maxContigs) {
         //
@@ -101,6 +102,10 @@ Genome::startContig(const char *contigName)
 
     strncpy(contigs[nContigs].name,contigName,len);
     contigs[nContigs].name[len-1] = '\0';
+
+    if (altMap != NULL) {
+        altMap->setAltContig(&contigs[nContigs]);
+    }
 
     nContigs++;
 }
@@ -465,6 +470,78 @@ void Genome::fillInContigLengths()
     contigs[nContigs-1].length = nBases - GenomeLocationAsInt64(contigs[nContigs-1].beginningLocation);
 }
 
+void Genome::adjustAltContigs(AltContigMap* altMap)
+{
+    if (altMap == NULL) {
+        return;
+    }
+    bool error = false;
+    // build parent links from alt contigs
+    for (int i = 0; i < nContigs; i++) {
+        if (contigs[i].isAlternate) {
+            const char* parentName = altMap->getParentContigName(contigs[i].name);
+            if (parentName == NULL) {
+                WriteErrorMessage("Unable to find parent contig for alt contig %s\n", contigs[i].name);
+                error = true;
+                continue;
+            }
+            GenomeLocation parentLocation;
+            int parentIndex;
+            if (!getLocationOfContig(parentName, &parentLocation, &parentIndex)) {
+                WriteErrorMessage("Unable to find parent contig %s for alt contig %s\n", parentName, contigs[i].name);
+                error = true;
+                continue;
+            }
+            if (contigs[parentIndex].isAlternate) {
+                WriteErrorMessage("Alt contig %s has alt parent contig %s, should be non-alt\n", contigs[i].name, parentName);
+                error = true; continue;
+            }
+            contigs[i].liftedLocation = parentLocation;
+        }
+    }
+    if (error) {
+        soft_exit(1);
+    }
+
+    // flip RC contigs
+    for (int i = 0; i < nContigs; i++) {
+        if (contigs[i].isAlternate && contigs[i].isReverseStrand) {
+            util::toComplement(bases + contigs[i].beginningLocation.location, NULL, (int) contigs[i].length);
+        }
+    }
+}
+
+char * Genome::findTerminator(char* lineBuffer, const char* pieceNameTerminatorCharacters, bool spaceIsAPieceNameTerminator)
+{
+    char* result = lineBuffer + strlen(lineBuffer);
+    if (NULL != pieceNameTerminatorCharacters) {
+        for (int i = 0; i < strlen(pieceNameTerminatorCharacters); i++) {
+            char *terminator = strchr(lineBuffer + 1, pieceNameTerminatorCharacters[i]);
+            if (NULL != terminator && terminator < result) {
+                result = terminator;
+            }
+        }
+    }
+    if (spaceIsAPieceNameTerminator) {
+        char *terminator = strchr(lineBuffer, ' ');
+        if (NULL != terminator && terminator < result) {
+            result = terminator;
+        }
+        terminator = strchr(lineBuffer, '\t');
+        if (NULL != terminator && terminator < result) {
+            result = terminator;
+        }
+    }
+    char *terminator = strchr(lineBuffer, '\n');
+    if (NULL != terminator) {
+        result = terminator;
+    }
+    terminator = strchr(lineBuffer, '\r');
+    if (NULL != terminator) {
+        result = terminator;
+    }
+    return result;
+}
 const Genome::Contig *Genome::getContigForRead(GenomeLocation location, unsigned readLength, GenomeDistance *extraBasesClippedBefore) const 
 {
     const Contig *contig = getContigAtLocation(location);
@@ -492,3 +569,229 @@ const Genome::Contig *Genome::getContigForRead(GenomeLocation location, unsigned
 }
 
 GenomeLocation InvalidGenomeLocation;   // Gets set on genome build/load
+
+// terminate string at next tab or newline
+// return pointer to beginning of next chunk of data
+char* tokenizeToNextTabOrNewline(char* start, bool* endOfLine, bool* endOfFile)
+{
+    char* p = start;
+    while (*p) {
+        if (*p == '\t') {
+            *p = '\0';
+            *endOfLine = false;
+            *endOfFile = false;
+            return p + 1;
+        } else if (*p == '\r' || *p == '\n') {
+            if (*(p + 1) != *p && (*(p + 1) == '\r' || *(p + 1) == '\n')) {
+                *p++ = '\0';
+            } else {
+            }
+            *p = '\0';
+            *endOfLine = true;
+            *endOfFile = false;
+            return p + 1;
+        }
+        p++;
+    }
+    *endOfLine = true;
+    *endOfFile = true;
+    return p;
+}
+
+static const int ALT_SCAF_ACC   = 0;
+static const int PARENT_ACC     = 1;
+static const int ORI            = 2;
+static const int ALT_SCAF_START = 3;
+static const int ALT_SCAF_STOP  = 4;
+static const int PARENT_START   = 5;
+static const int PARENT_STOP    = 6;
+static const int ALT_START_TAIL = 7;
+static const int ALT_STOP_TAIL  = 8;
+static const int N_COLUMNS      = 9;
+
+AltContigMap* AltContigMap::readFromFile(const char* filename, const char* columns)
+{
+    // just map & copy the whole file into a region of memory
+    FileMapper map;
+    if (!map.init(filename)) {
+err_map_failed:
+        WriteErrorMessage("Failed to map file %s\n", filename);
+        soft_exit(1);
+    }
+    _int64 size = map.getFileSize();
+    char* buffer = (char*)BigAlloc(size + 1 + strlen(columns) + 1);
+    void* token;
+    char* mapped = map.createMapping(0, size, &token);
+    if (mapped == NULL) {
+        goto err_map_failed;
+    }
+    memcpy(buffer, mapped, size);
+    buffer[size] = '\0';
+    if (strlen(buffer) != size) {
+        WriteErrorMessage("Nulls in file %s\n", filename);
+        soft_exit(1);
+    }
+    map.unmap(token);
+    strcpy(buffer + size + 1, columns);
+
+    AltContigMap* result = new AltContigMap();
+    // first find accession FASTA tag, add "|"
+    char* p = buffer + size + 1;
+    if (*p == '#') {
+        p++;
+    }
+    char* q = strchr(p, ',');
+    if (q == NULL) {
+err_invalid_column_spec:
+        WriteErrorMessage("Invalid columns spec %s\n", columns);
+        soft_exit(1);
+    }
+    *q = '\0';
+    result->accessionFastaTag = p;
+
+    // get names for each column type (last 2 are optional)
+    p = q + 1;
+    char* columnNames[N_COLUMNS];
+    memset(columnNames, 0, sizeof(char*) * N_COLUMNS);
+    for (int i = 0; i < N_COLUMNS; i++) {
+        columnNames[i] = p;
+        q = strchr(p, ',');
+        if (q != NULL) {
+            *q = '\0';
+            p = q + 1;
+        } else {
+            q = p + strlen(p);
+            if (i < PARENT_STOP) {
+                goto err_invalid_column_spec;
+            }
+            break;
+        }
+    }
+
+    // map column names to indices
+    VariableSizeVector<int> columnTypes;
+    p = buffer + (*buffer == '#'); // beginning of buffer, skipping possible comment char
+    bool endOfLine = false, endOfFile = false;
+    bool columnFound[N_COLUMNS];
+    memset(columnFound, 0, sizeof(bool)* N_COLUMNS);
+    for (int columnIndex = 0; !endOfLine; columnIndex++) {
+        q = tokenizeToNextTabOrNewline(p, &endOfLine, &endOfFile);
+        if (q == NULL) {
+err_file_format:
+            WriteErrorMessage("Invalid file format for alt data in %s\n", filename);
+            soft_exit(1);
+        }
+        *q = '\0';
+        for (int i = 0; i <= N_COLUMNS; i++) {
+            if (i < N_COLUMNS && !strcmp(columnNames[i], p)) {
+                columnTypes.add(i);
+                columnFound[i] = true;
+                break;
+            } else if (i == N_COLUMNS) {
+                columnTypes.add(N_COLUMNS); // ignore this column
+            }
+        }
+        p = q;
+    }
+    for (int i = 0; i < N_COLUMNS; i++) {
+        if (columnNames[i] != NULL && !columnFound[i]) {
+            goto err_file_format;
+        }
+    }
+    while (!endOfFile) {
+        endOfLine = false;
+        AltContig alt;
+        for (int columnIndex = 0; !endOfLine; columnIndex++) {
+            q = tokenizeToNextTabOrNewline(p, &endOfLine, &endOfFile);
+            switch (columnTypes[columnIndex]) {
+            case ALT_SCAF_ACC:
+                alt.accession = p;
+                break;
+            case PARENT_ACC:
+                alt.parentAccession = p;
+                break;
+            case ORI:
+                alt.isRC = *p == '-';
+                break;
+            case ALT_SCAF_START:
+                alt.start = atol(p);
+                break;
+            case ALT_SCAF_STOP:
+                alt.stop = atol(p);
+                break;
+            case PARENT_START:
+                alt.parentStart = atol(p);
+                break;
+            case PARENT_STOP:
+                alt.parentStop = atol(p);
+                break;
+            case ALT_START_TAIL:
+                alt.startTail = atol(p);
+                break;
+            case ALT_STOP_TAIL:
+                alt.stopTail = atol(p);
+                break;
+            case N_COLUMNS:
+                // ignore
+                break;
+            default:
+                _ASSERT(false);
+            }
+            p = q;
+        }
+        result->altsByAccession[alt.accession] = alt;
+    }
+    return result;
+}
+
+void AltContigMap::addFastaContig(const char* lineBuffer, const char* nameTerminator)
+{
+    // get the name
+    char* name = (char*) malloc(nameTerminator - lineBuffer);
+    memcpy(name, lineBuffer + 1, nameTerminator - lineBuffer - 1);
+    name[nameTerminator - lineBuffer - 1] = 0;
+
+    // find the accession number
+    const char* tag = strstr(lineBuffer, accessionFastaTag);
+    const char* p = tag + strlen(accessionFastaTag);
+    if (tag == NULL || *p == '\0') {
+        WriteErrorMessage("Unable to find accession code for contig %s in FASTA line\n%s\n", name, lineBuffer);
+        soft_exit(1);
+    }
+    const char*q = p;
+    while (*q != '\0' && *q != '|' && *q != ' ' && *q != '\t' && *q != '\r' && *q != '\n') {
+        q++;
+    }
+    char* accession = (char*)malloc(q - p);
+    memcpy(accession, p, q - p - 1);
+    *(accession + (q - p)) = '\0';
+
+    nameToAccession[name] = accession;
+}
+
+void AltContigMap::setAltContig(Genome::Contig* contig)
+{
+    StringMap::iterator accession = nameToAccession.find(contig->name);
+    if (accession != nameToAccession.end()) {
+        StringAltContigMap::iterator alt = altsByAccession.find(accession->second);
+        if (alt != altsByAccession.end()) {
+            contig->isAlternate = true;
+            contig->isReverseStrand = alt->second.isRC;
+            return;
+        }
+    }
+    contig->isAlternate = false;
+    contig->isReverseStrand = false;
+}
+
+const char* AltContigMap::getParentContigName(const char* altName)
+{
+    StringMap::iterator accession = nameToAccession.find(altName);
+    if (accession != nameToAccession.end()) {
+        StringAltContigMap::iterator alt = altsByAccession.find(accession->second);
+        if (alt != altsByAccession.end()) {
+            return alt->second.name;
+        }
+    }
+    return NULL;
+}

@@ -46,11 +46,12 @@ static const double DEFAULT_SLACK = 0.3;
 static const unsigned DEFAULT_PADDING = 500;
 static const unsigned DEFAULT_KEY_BYTES = 4;
 static const unsigned DEFAULT_LOCATION_SIZE = 4;
-
+static const char* DEFAULT_ALT_COLUMNS = "gb,alt_scaf_acc,parent_acc,ori,alt_scaf_start,alt_scaf_stop,parent_start,parent_stop,alt_start_tail,alt_stop_tail";
 const char *GenomeIndexFileName = "GenomeIndex";
 const char *OverflowTableFileName = "OverflowTable";
 const char *GenomeIndexHashFileName = "GenomeIndexHash";
 const char *GenomeFileName = "Genome";
+const char *LiftedIndexDirName = "Lifted";
 
 static void usage()
 {
@@ -85,12 +86,16 @@ static void usage()
 		"                   In particular, this will generally use less memory than the index will use once it's built, so if this doesn't work you\n"
 		"                   won't be able to use the index anyway. However, if you've got sufficient memory to begin with, this option will just\n"
 		"                   slow down the index build by doing extra, useless IO.\n"
+        "-altmap file       Tab-separated file of alt contig mapping information\n"
+        "-altcols columns   Comma-separated list of columns describing alt mapping file\n"
+        "                   Default is v38 %s\n"
 			,
             DEFAULT_SEED_SIZE,
             DEFAULT_SLACK,
             DEFAULT_PADDING,
             DEFAULT_KEY_BYTES,
-            DEFAULT_LOCATION_SIZE);
+            DEFAULT_LOCATION_SIZE,
+            DEFAULT_ALT_COLUMNS);
     soft_exit_no_print(1);    // Don't use soft-exit, it's confusing people to get an error message after the usage
 }
 
@@ -121,6 +126,8 @@ GenomeIndex::runIndexer(
 	bool large = false;
     unsigned locationSize = DEFAULT_LOCATION_SIZE;
 	bool smallMemory = false;
+    const char* altMapFilename = NULL;
+    const char* altMapColumns = DEFAULT_ALT_COLUMNS;
 
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
@@ -172,8 +179,7 @@ GenomeIndex::runIndexer(
 			}
 		} else if (argv[n][0] == '-' && argv[n][1] == 's' && argv[n][2] == 'm') {
 			smallMemory = true;
-		}
-		else if (strcmp(argv[n], "-keysize") == 0) {
+		} else if (strcmp(argv[n], "-keysize") == 0) {
             if (n + 1 < argc) {
                 keySizeInBytes = atoi(argv[n+1]);
                 if (keySizeInBytes < 4 || keySizeInBytes > 8) {
@@ -188,6 +194,20 @@ GenomeIndex::runIndexer(
             pieceNameTerminatorCharacters = argv[n] + 2;
         } else if (!strcmp(argv[n], "-bSpace")) {
             spaceIsAPieceNameTerminator = true;
+        } else if (!strcmp(argv[n], "-altmap")) {
+            if (n + 1 < argc) {
+                altMapFilename = argv[n + 1];
+                n++;
+            } else {
+                usage();
+            }
+        } else if (!strcmp(argv[n], "-altcols")) {
+            if (n + 1 < argc) {
+                altMapColumns = argv[n + 1];
+                n++;
+            } else {
+                usage();
+            }
         } else {
             WriteErrorMessage("Invalid argument: %s\n\n", argv[n]);
             usage();
@@ -223,7 +243,10 @@ GenomeIndex::runIndexer(
     BigAllocUseHugePages = false;
 
     _int64 start = timeInMillis();
-    const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator, chromosomePadding);
+
+    AltContigMap* altMap = altMapFilename != NULL ? AltContigMap::readFromFile(altMapFilename, altMapColumns) : NULL;
+
+    const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator, chromosomePadding, altMap);
     if (NULL == genome) {
         WriteErrorMessage("Unable to read FASTA file\n");
         soft_exit(1);
@@ -261,11 +284,16 @@ SetInvalidGenomeLocation(unsigned locationSize)
     bool
 GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double slack, bool computeBias, const char *directoryName,
                                     unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, unsigned hashTableKeySize, 
-									bool large, const char *histogramFileName, unsigned locationSize, bool smallMemory)
+									bool large, const char *histogramFileName, unsigned locationSize, bool smallMemory, GenomeIndex* unliftedIndex)
 {
 	PreventMachineHibernationWhileThisThreadIsAlive();
 
     SetInvalidGenomeLocation(locationSize);
+
+    if (genome->hasAltContigs() && smallMemory) {
+        WriteErrorMessage("Warning: Cannot use small memory to build index with alt contigs, ignoring flag\n");
+        smallMemory = false;
+    }
 
     bool buildHistogram = (histogramFileName != NULL);
     FILE *histogramFile;
@@ -282,7 +310,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         return false;
     }
 
-    int filenameBufferSize = (int)(strlen(directoryName) + 1 + __max(strlen(GenomeIndexFileName), __max(strlen(OverflowTableFileName), __max(strlen(GenomeIndexHashFileName), strlen(GenomeFileName)))) + 1);
+    int filenameBufferSize = (int)(strlen(directoryName) + 1 + __max(strlen(GenomeIndexFileName), __max(strlen(OverflowTableFileName), __max(strlen(GenomeIndexHashFileName), __max(strlen(GenomeFileName), strlen(LiftedIndexDirName))))) + 1);
     char *filenameBuffer = new char[filenameBufferSize];
     
 	fprintf(stderr,"Saving genome...");
@@ -421,6 +449,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 		threadContexts[i].backpointerSpillLock = &backpointerSpillLock;
 		threadContexts[i].lastBackpointerIndexUsedByThread = lastBackpointerIndexUsedByThread;
 		threadContexts[i].backpointerSpillFile = backpointerSpillFile;
+        threadContexts[i].unliftedIndex = unliftedIndex;
 
         StartNewThread(BuildHashTablesWorkerThreadMain, &threadContexts[i]);
     }
@@ -742,15 +771,27 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 
     fclose(indexFile);
  
+    if (genome->hasAltContigs() && unliftedIndex != NULL) {
+        // create a sub-index with only seeds that occur in alt contigs
+        snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, LiftedIndexDirName);
+        bool ok = BuildIndexToDirectory(genome, seedLen, slack, TRUE, filenameBuffer, maxThreads, chromosomePaddingSize, forceExact,
+            hashTableKeySize, large, histogramFileName, locationSize, smallMemory, index);
+        if (!ok) {
+            WriteErrorMessage("Failed to build lifted index %s\n", filenameBuffer);
+            soft_exit(1);
+            return false;
+        }
+    }
+
     delete index;
     if (computeBias && biasTable != NULL) {
         delete[] biasTable;
     }
- 
+
     WriteStatusMessage("%llds\n", (timeInMillis() + 500 - start) / 1000);
 
     delete[] filenameBuffer;
-    
+
     return true;
 }
 
@@ -845,7 +886,7 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
 
 
 
-GenomeIndex::GenomeIndex() : nHashTables(0), hashTables(NULL), overflowTable32(NULL), overflowTable64(NULL), genome(NULL), tablesBlob(NULL), mappedOverflowTable(NULL), mappedTables(NULL)
+GenomeIndex::GenomeIndex() : nHashTables(0), hashTables(NULL), overflowTable32(NULL), overflowTable64(NULL), genome(NULL), tablesBlob(NULL), mappedOverflowTable(NULL), mappedTables(NULL), hasAlts(FALSE), liftedIndex(NULL)
 {
 }
 
@@ -885,6 +926,9 @@ GenomeIndex::~GenomeIndex()
 	delete genome;
 	genome = NULL;
 
+    if (NULL != liftedIndex) {
+        delete liftedIndex;
+    }
 }
 
     void
@@ -1171,6 +1215,7 @@ GenomeIndex::BuildHashTablesWorkerThread(BuildHashTablesThreadContext *context)
     const Genome *genome = context->genome;
     unsigned seedLen = context->seedLen;
 	bool large = context->large;
+    bool lift = context->unliftedIndex != NULL;
  
     //
     // Batch the insertions into the hash tables, because otherwise we spend all of
@@ -1202,7 +1247,12 @@ GenomeIndex::BuildHashTablesWorkerThread(BuildHashTablesThreadContext *context)
 
 		Seed seed(bases, seedLen);
 
-        indexSeed(genomeLocation, seed, batches, context, &stats, large);
+        if (!lift) {
+            indexSeed(genomeLocation, seed, batches, context, &stats, large);
+        }
+        else {
+            indexLiftedSeed(genomeLocation, seed, batches, context, &stats, large);
+        }
     } // For each genome base in our area
 
     //
@@ -1224,9 +1274,8 @@ GenomeIndex::BuildHashTablesWorkerThread(BuildHashTablesThreadContext *context)
     }
 
 }
-    
-const _int64 GenomeIndex::printPeriod = 100000000;
 
+const _int64 GenomeIndex::printPeriod = 100000000;
 
 
     void
@@ -1257,6 +1306,48 @@ GenomeIndex::indexSeed(GenomeLocation genomeLocation, Seed seed, PerHashTableBat
 		stats->unrecordedSkippedSeeds = 0;
 		batches[whichHashTable].clear();
 	} // If we filled a batch
+}
+
+    void
+GenomeIndex::indexLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large)
+{
+    // todo: optimize
+    // if this is first occurrence of seed in unlifted index, checks if seed is in any alts
+    // and if so, adds all locations to this index, lifting alts to non-alt locations
+
+    _int64 nHits, nRCHits;
+    if (doesGenomeIndexHave64BitLocations()) {
+        const GenomeLocation *hits, *rcHits;
+        GenomeLocation singleHit[2], singleRCHit[2];
+        context->unliftedIndex->lookupSeed(seed, &nHits, &hits, &nRCHits, &rcHits, &singleHit[1], &singleRCHit[1]);
+#define CHECK_ALTS_AND_ADD_LIFTED \
+        if ((nHits > 0 && genomeLocation == *hits) || (nHits == 0 && nRCHits > 0 && genomeLocation == *rcHits)) { \
+            bool anyAlts = false; \
+            for (int i = 0; i < nHits && ! anyAlts; i++) { \
+                anyAlts = genome->getLiftedLocation(hits[i]) != hits[i]; \
+            } \
+            for (int i = 0; i < nRCHits && !anyAlts; i++) { \
+                anyAlts = genome->getLiftedLocation(rcHits[i]) != rcHits[i]; \
+            } \
+            if (anyAlts) { \
+                for (int i = 0; i < nHits && !anyAlts; i++) { \
+                    indexSeed(genome->getLiftedLocation(hits[i]), seed, batches, context, stats, large); \
+                } \
+                if (!seed.isOwnReverseComplement()) { \
+                    Seed rcSeed = ~seed; \
+                    for (int i = 0; i < nRCHits && !anyAlts; i++) { \
+                        indexSeed(genome->getLiftedLocation(rcHits[i]), rcSeed, batches, context, stats, large); \
+                    } \
+                } \
+            } \
+        }
+        CHECK_ALTS_AND_ADD_LIFTED
+    }
+    else {
+        const unsigned *hits, *rcHits;
+        context->unliftedIndex->lookupSeed32(seed, &nHits, &hits, &nRCHits, &rcHits);
+        CHECK_ALTS_AND_ADD_LIFTED
+    }
 }
 
         void 
@@ -1929,6 +2020,16 @@ GenomeIndex::lookupSeedAlt32(
     lookupSeed32(seed, nHits, hits, nRCHits, rcHits);
     *unliftedHits = *hits;
     *unliftedRCHits = *rcHits;
+    if (hasAlts) {
+        _int64 nLiftedHits, nLiftedRCHits;
+        const unsigned *liftedHits, *liftedRCHits;
+        liftedIndex->lookupSeed32(seed, &nLiftedHits, &liftedHits, &nLiftedRCHits, &liftedRCHits);
+        if (nLiftedHits != 0 || nLiftedRCHits != 0) {
+            _ASSERT(nLiftedHits == *nHits && nLiftedRCHits == *nRCHits);
+            *hits = liftedHits;
+            *rcHits = liftedRCHits;
+        }
+    }
 }
 
     void
@@ -2073,6 +2174,16 @@ GenomeIndex::lookupSeedAlt(
     lookupSeed(seed, nHits, hits, nRCHits, rcHits, singleHit, singleRCHit);
     *unliftedHits = *hits;
     *unliftedRCHits = *rcHits;
+    if (hasAlts) {
+        _int64 nLiftedHits, nLiftedRCHits;
+        const GenomeLocation *liftedHits, *liftedRCHits;
+        liftedIndex->lookupSeed(seed, &nLiftedHits, &liftedHits, &nLiftedRCHits, &liftedRCHits, singleHit + 1, singleRCHit + 1);
+        if (nLiftedHits != 0 || nLiftedRCHits != 0) {
+            _ASSERT(nLiftedHits == *nHits && nLiftedRCHits == *nRCHits);
+            *hits = liftedHits;
+            *rcHits = liftedRCHits;
+        }
+    }
 }
 
     void 

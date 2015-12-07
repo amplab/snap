@@ -342,17 +342,14 @@ IntersectingPairedEndAligner::align(
                 if (doesGenomeIndexHave64BitLocations) {
                     index->lookupSeed(seed, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC],
                         hashTableHitSets[whichRead][FORWARD]->getNextSingletonLocation(), hashTableHitSets[whichRead][RC]->getNextSingletonLocation());
-                }
-                else {
+                } else {
                     index->lookupSeed32(seed, &nHits[FORWARD], &hits32[FORWARD], &nHits[RC], &hits32[RC]);
                 }
-            }
-            else {
+            } else {
                 if (doesGenomeIndexHave64BitLocations) {
                     index->lookupSeedAlt(seed, &nHits[FORWARD], &hits[FORWARD], &nHits[RC], &hits[RC], &unliftedHits[FORWARD], &unliftedHits[RC],
                         hashTableHitSets[whichRead][FORWARD]->getNextSingletonLocation(), hashTableHitSets[whichRead][RC]->getNextSingletonLocation());
-                }
-                else {
+                } else {
                     index->lookupSeedAlt32(seed, &nHits[FORWARD], &hits32[FORWARD], &nHits[RC], &hits32[RC], &unliftedHits32[FORWARD], &unliftedHits32[RC]);
                 }
             }
@@ -370,16 +367,13 @@ IntersectingPairedEndAligner::align(
                     if (!doesGenomeIndexHaveAlts) {
                         if (doesGenomeIndexHave64BitLocations) {
                             hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits[dir], NULL, beginsDisjointHitSet[dir]);
-                        }
-                        else {
+                        } else {
                             hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits32[dir], NULL, beginsDisjointHitSet[dir]);
                         }
-                    }
-                    else {
+                    } else {
                         if (doesGenomeIndexHave64BitLocations) {
                             hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits[dir], unliftedHits[dir], beginsDisjointHitSet[dir]);
-                        }
-                        else {
+                        } else {
                             hashTableHitSets[whichRead][dir]->recordLookup(offset, nHits[dir], hits32[dir], unliftedHits32[dir], beginsDisjointHitSet[dir]);
                         }
                     }
@@ -687,11 +681,11 @@ IntersectingPairedEndAligner::align(
 
                         // reduce probability of pairs matching across different overlapping alts
                         // todo: assuming if they're on different alts within maxSpacing they overlap - true for GRCh38 but not necessarily for all genomes
-                        // use crossover probability with 1 centiMorgan ~= 1Mbp
-                        if (doesGenomeIndexHaveAlts && isBothAltPairMapping(candidate, mate) &&
-                            abs(mate->readWithMoreHitsUnliftedGenomeLocation - candidate->readWithFewerHitsUnliftedGenomeLocation) > 2*maxSpacing) 
+                        // use crossover probability with 1 centiMorgan ~= 1Mbp - too strict?
+                        if (doesGenomeIndexHaveAlts && candidate->isAlt() && mate->isAlt() &&
+                            DistanceBetweenGenomeLocations(mate->readWithMoreHitsUnliftedGenomeLocation, candidate->readWithFewerHitsUnliftedGenomeLocation) > 2*maxSpacing) 
                         {
-                            pairProbability *= 1e-8 * abs(candidate->readWithFewerHitsGenomeLocation - mate->readWithMoreHitsGenomeLocation);
+                            pairProbability *= 1e-8 * DistanceBetweenGenomeLocations(candidate->readWithFewerHitsGenomeLocation, mate->readWithMoreHitsGenomeLocation);
                         }
 
                         //
@@ -753,7 +747,7 @@ IntersectingPairedEndAligner::align(
                             candidate->mergeAnchor = mergeAnchor;
                         } else {
                             merged = mergeAnchor->checkMerge(mate->readWithMoreHitsGenomeLocation + mate->genomeOffset, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset,
-                                pairProbability, pairScore, doesGenomeIndexHaveAlts && isNonAltPairMapping(candidate, mate), &oldPairProbability);
+                                pairProbability, pairScore, doesGenomeIndexHaveAlts && (! candidate->isAlt()) && (!mate->isAlt()), &oldPairProbability);
                         }
 
                         if (!merged) {
@@ -768,7 +762,7 @@ IntersectingPairedEndAligner::align(
 
                             if (pairScore <= maxK && (pairScore < bestPairScore ||
                                 (pairScore == bestPairScore && (pairProbability > probabilityOfBestPair ||
-                                (pairProbability == probabilityOfBestPair && isNonAltPairMapping(candidate, mate)))))) {
+                                (pairProbability == probabilityOfBestPair && (! candidate->isAlt()) && (!mate->isAlt())))))) {
                                 //
                                 // A new best hit.
                                 //

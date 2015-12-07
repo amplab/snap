@@ -93,6 +93,12 @@ protected:
     unsigned nHashTables;
     const Genome *genome;
 
+    // TRUE if genome has alt contigs
+    bool hasAlts;
+
+    // secondary index for all seeds that map to alt contigs with locations lifted to non-alt contigs
+    GenomeIndex* liftedIndex;
+
     bool largeHashTable;
     unsigned locationSize;
 
@@ -154,12 +160,13 @@ protected:
     // Build a genome index and write it to a directory.  If you don't already have a saved index
     // the only way to get one is to build it into a directory and then load it from the directory.
     // NB: This deletes the Genome that's passed into it.
+    // unliftedIndex is an internal parameter used to build 2-level index for genomes with alt contigs
     //
     static bool BuildIndexToDirectory(const Genome *genome, int seedLen, double slack,
-                                      bool computeBias, const char *directory,
+                                      bool computeBias, const char *directoryName,
                                       unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, 
                                       unsigned hashTableKeySize, bool large, const char *histogramFileName,
-                                      unsigned locationSize, bool smallMemory);
+                                      unsigned locationSize, bool smallMemory, GenomeIndex *unliftedIndex = NULL);
 
  
     //
@@ -233,6 +240,9 @@ protected:
 		ExclusiveLock					*backpointerSpillLock;
 		FILE							*backpointerSpillFile;
 
+        // used for building sub-index of only seeds that occur in alt contigs
+        GenomeIndex                     *unliftedIndex;
+
         ExclusiveLock                   *hashTableLocks;
         ExclusiveLock                   *overflowTableLock;
     };
@@ -281,6 +291,7 @@ protected:
     static const _int64 printPeriod;
 
     virtual void indexSeed(GenomeLocation genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large);
+    virtual void indexLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large);
     virtual void completeIndexing(PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large);
 
     static void BuildHashTablesWorkerThreadMain(void *param);

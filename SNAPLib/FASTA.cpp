@@ -36,7 +36,8 @@ ReadFASTAGenome(
     const char *fileName,
     const char *pieceNameTerminatorCharacters,
     bool spaceIsAPieceNameTerminator,
-    unsigned chromosomePaddingSize)
+    unsigned chromosomePaddingSize,
+    AltContigMap* altMap)
 {
     //
     // We need to know a bound on the size of the genome before we create the Genome object.
@@ -96,33 +97,12 @@ ReadFASTAGenome(
             //
             // Now supply the chromosome name.
             //
-            if (NULL != pieceNameTerminatorCharacters) {
-                for (int i = 0; i < strlen(pieceNameTerminatorCharacters); i++) {
-                    char *terminator = strchr(lineBuffer+1, pieceNameTerminatorCharacters[i]);
-                    if (NULL != terminator) {
-                        *terminator = '\0';
-                    }
-                }
+            char * terminator = Genome::findTerminator(lineBuffer, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator);
+            if (altMap != NULL) {
+                altMap->addFastaContig(lineBuffer, terminator);
             }
-            if (spaceIsAPieceNameTerminator) {
-                char *terminator = strchr(lineBuffer, ' ');
-                if (NULL != terminator) {
-                    *terminator = '\0';
-                }
-                terminator = strchr(lineBuffer, '\t');
-                if (NULL != terminator) {
-                    *terminator = '\0';
-                }
-            }
-            char *terminator = strchr(lineBuffer, '\n');
-            if (NULL != terminator) {
-                *terminator = '\0';
-            }
-            terminator = strchr(lineBuffer, '\r');
-            if (NULL != terminator) {
-                *terminator = '\0';
-            }
-            genome->startContig(lineBuffer+1);
+            *terminator = 0;
+            genome->startContig(lineBuffer+1, altMap);
         } else {
             if (!inAContig) {
                 WriteErrorMessage("\nFASTA file doesn't beging with a contig name (i.e., the first line doesn't start with '>').\n");
@@ -170,6 +150,9 @@ ReadFASTAGenome(
     //
     genome->addData(paddingBuffer);
     genome->fillInContigLengths();
+    if (altMap != NULL) {
+        genome->adjustAltContigs(altMap);
+    }
     genome->sortContigsByName();
 
     fclose(fastaFile);

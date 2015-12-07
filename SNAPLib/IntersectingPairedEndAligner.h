@@ -414,6 +414,7 @@ private:
             matchProbability = 0;
             genomeOffset = 0;
         }
+        bool isAlt() const { return readWithMoreHitsGenomeLocation != readWithMoreHitsUnliftedGenomeLocation; }
     };
 
     struct ScoringCandidate {
@@ -440,19 +441,8 @@ private:
             scoreListNext = scoreListNext_;
             mergeAnchor = NULL;
          }
+        bool isAlt() const { return readWithFewerHitsGenomeLocation != readWithFewerHitsUnliftedGenomeLocation; }
     };
-
-    static bool isNonAltPairMapping(ScoringCandidate* candidate, ScoringMateCandidate* mate)
-    {
-        return candidate->readWithFewerHitsGenomeLocation == candidate->readWithFewerHitsUnliftedGenomeLocation &&
-            mate->readWithMoreHitsGenomeLocation == mate->readWithMoreHitsUnliftedGenomeLocation;
-    }
-
-    static bool isBothAltPairMapping(ScoringCandidate* candidate, ScoringMateCandidate* mate)
-    {
-        return candidate->readWithFewerHitsGenomeLocation != candidate->readWithFewerHitsUnliftedGenomeLocation &&
-            mate->readWithMoreHitsGenomeLocation != mate->readWithMoreHitsUnliftedGenomeLocation;
-    }
 
     //
     // A pool of scoring candidates.  For each alignment call, we free them all by resetting lowestFreeScoringCandidatePoolEntry to 0,
