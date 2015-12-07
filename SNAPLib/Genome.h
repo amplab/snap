@@ -251,12 +251,12 @@ public:
 
         struct Contig {
             Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL),
-                    isAlternate(FALSE), isReverseStrand(FALSE), liftedLocation(InvalidGenomeLocation) {}
+            isAlternate(false), isAlternateRC(false), liftedLocation(InvalidGenomeLocation) {}
             GenomeLocation     beginningLocation;
             GenomeDistance     length;
 
             bool               isAlternate;
-            bool               isReverseStrand; // if reversed alternate strand
+            bool               isAlternateRC; // if reversed alternate strand
             GenomeLocation     liftedLocation; // location of beginning of alt contig mapping to primary
             
             unsigned           nameLength;
@@ -272,9 +272,9 @@ public:
         const Contig *getNextContigAfterLocation(GenomeLocation location) const;
         int getContigNumAtLocation(GenomeLocation location) const;    // Returns the contig number, which runs from 0 .. getNumContigs() - 1.
 
-        inline bool hasAltContigs() const { return FALSE;  } // todo: implement
+        inline bool hasAltContigs() const { return minAltLocation < maxBases; }
 
-        GenomeLocation getLiftedLocation(GenomeLocation altLocation) const { return altLocation;  } // todo: implement
+        GenomeLocation getLiftedLocation(GenomeLocation altLocation) const;
 
 // unused        Genome *copy() const {return copy(true,true,true);}
 // unused        Genome *copyGenomeOneSex(bool useY, bool useM) const {return copy(!useY,useY,useM);}
@@ -285,8 +285,6 @@ public:
         void    fillInContigLengths();
         void    adjustAltContigs(AltContigMap* altMap);
         void    sortContigsByName();
-
-        static char* findTerminator(char* buffer, const char* terminators, bool whitespaceTerminator);
 
 private:
 
@@ -300,6 +298,8 @@ private:
 
         GenomeLocation       minLocation;
         GenomeLocation       maxLocation;
+
+        GenomeLocation       minAltLocation;
 
         //
         // A genome is made up of a bunch of contigs, typically chromosomes.  Contigs have names,

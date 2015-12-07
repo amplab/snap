@@ -82,7 +82,7 @@ public:
     //
     static void runIndexer(int argc, const char **argv);
 
-    static GenomeIndex *loadFromDirectory(char *directoryName, bool map, bool prefetch);
+    static GenomeIndex *loadFromDirectory(char *directoryName, bool map, bool prefetch, bool liftedIndex = false);
 
     static void printBiasTables();
 
@@ -175,9 +175,11 @@ protected:
     static SNAPHashTable** allocateHashTables(unsigned* o_nTables, GenomeDistance countOfBases, double slack,
         int seedLen, unsigned hashTableKeySize, bool large, unsigned locationSize, double* biasTable = NULL);
     
-    static const unsigned GenomeIndexFormatMajorVersion = 5;
+    static const unsigned GenomeIndexFormatMajorVersion = 6;
     static const unsigned GenomeIndexFormatMinorVersion = 0;
-    
+    // NOTE: this must be changed if the format no longer supports v5 (pre-alt)
+    static const unsigned GenomeIndexFormatMajorVersionWithoutAlts = 5;
+
     static const unsigned largestBiasTable = 32;    // Can't be bigger than the biggest seed size, which is set in Seed.h.  Bigger than 32 means a new Seed structure.
     static const unsigned largestKeySize = 8;
     static double *hg19_biasTables[largestKeySize+1][largestBiasTable+1];

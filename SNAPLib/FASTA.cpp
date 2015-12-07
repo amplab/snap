@@ -97,11 +97,38 @@ ReadFASTAGenome(
             //
             // Now supply the chromosome name.
             //
-            char * terminator = Genome::findTerminator(lineBuffer, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator);
+            char * terminator = lineBuffer + strlen(lineBuffer);
+            char * p;
+            if (NULL != pieceNameTerminatorCharacters) {
+                for (int i = 0; i < strlen(pieceNameTerminatorCharacters); i++) {
+                    p = strchr(lineBuffer + 1, pieceNameTerminatorCharacters[i]);
+                    if (NULL != p && p < terminator) {
+                        terminator = p;
+                    }
+                }
+            }
+            if (spaceIsAPieceNameTerminator) {
+                p = strchr(lineBuffer, ' ');
+                if (NULL != p && p < terminator) {
+                    terminator = p;
+                }
+                p = strchr(lineBuffer, '\t');
+                if (NULL != p && p < terminator) {
+                    terminator = p;
+                }
+            }
+            p = strchr(lineBuffer, '\n');
+            if (NULL != p && p < terminator) {
+                terminator = p;
+            }
+            p = strchr(lineBuffer, '\r');
+            if (NULL != p && p < terminator) {
+                terminator = p;
+            }
             if (altMap != NULL) {
                 altMap->addFastaContig(lineBuffer, terminator);
             }
-            *terminator = 0;
+            *terminator = '\0';
             genome->startContig(lineBuffer+1, altMap);
         } else {
             if (!inAContig) {

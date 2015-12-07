@@ -487,8 +487,12 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     // We're done with the raw genome.  Delete it to save some memory.
     //
   
-    delete genome;
-    genome = NULL;
+    bool genomeHasAlts = genome->hasAltContigs();
+    if (! (genomeHasAlts && unliftedIndex == NULL)) {
+        // delete if we won't need it later
+        delete genome;
+        genome = NULL;
+    }
 
 	char *halfBuiltHashTableSpillFileName = NULL;
 
@@ -766,16 +770,21 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         return false;
     }
 
-    fprintf(indexFile,"%d %d %d %lld %d %d %d %lld %d %d", GenomeIndexFormatMajorVersion, GenomeIndexFormatMinorVersion, index->nHashTables, 
+    fprintf(indexFile,"%d %d %d %lld %d %d %d %lld %d %d",
+        // NOTE: this must be changed if the format no longer supports v5 (pre-alt)
+        genomeHasAlts ? GenomeIndexFormatMajorVersion : GenomeIndexFormatMajorVersionWithoutAlts,
+        GenomeIndexFormatMinorVersion, index->nHashTables, 
         index->overflowTableSize, seedLen, chromosomePaddingSize, hashTableKeySize, totalBytesWritten, large ? 0 : 1, locationSize); 
 
     fclose(indexFile);
  
-    if (genome->hasAltContigs() && unliftedIndex != NULL) {
+    if (genomeHasAlts && unliftedIndex == NULL) {
         // create a sub-index with only seeds that occur in alt contigs
         snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, LiftedIndexDirName);
         bool ok = BuildIndexToDirectory(genome, seedLen, slack, TRUE, filenameBuffer, maxThreads, chromosomePaddingSize, forceExact,
             hashTableKeySize, large, histogramFileName, locationSize, smallMemory, index);
+        delete genome;
+        genome = NULL;
         if (!ok) {
             WriteErrorMessage("Failed to build lifted index %s\n", filenameBuffer);
             soft_exit(1);
@@ -1697,7 +1706,7 @@ GenomeIndex::printBiasTables()
 }
 
         GenomeIndex *
-GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
+GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch, bool liftedIndex)
 {
     int filenameBufferSize = (int)(strlen(directoryName) + 1 + __max(strlen(GenomeIndexFileName), __max(strlen(OverflowTableFileName), __max(strlen(GenomeIndexHashFileName), strlen(GenomeFileName)))) + 1);
     char *filenameBuffer = new char[filenameBufferSize];
@@ -1740,7 +1749,7 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
     indexFile->close();
     delete indexFile;
 
-    if (majorVersion != GenomeIndexFormatMajorVersion) {
+    if (majorVersion != GenomeIndexFormatMajorVersion && majorVersion != GenomeIndexFormatMajorVersionWithoutAlts) {
         WriteErrorMessage("This genome index appears to be from a different version of SNAP than this, and so we can't read it.  Index version %d, SNAP index format version %d\n",
             majorVersion, GenomeIndexFormatMajorVersion);
         soft_exit(1);
@@ -1920,22 +1929,38 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
 		blobFile = NULL;
 	}
 
-    snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, GenomeFileName);
-    if (NULL == (index->genome = Genome::loadFromFile(filenameBuffer, chromosomePadding, 0, 0, map))) {
-        WriteErrorMessage("GenomeIndex::loadFromDirectory: Failed to load the genome itself\n");
-        delete[] filenameBuffer;
-        delete index;
-        return NULL;
-    }
+    if (!liftedIndex) {
+        snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, GenomeFileName);
+        if (NULL == (index->genome = Genome::loadFromFile(filenameBuffer, chromosomePadding, 0, 0, map))) {
+            WriteErrorMessage("GenomeIndex::loadFromDirectory: Failed to load the genome itself\n");
+            delete[] filenameBuffer;
+            delete index;
+            return NULL;
+        }
 
-    if ((_int64)index->genome->getCountOfBases() + (_int64)index->overflowTableSize > 0xfffffff0 && locationSize == 4) {
-        WriteErrorMessage("\nThis index has too many overflow entries to be valid.  Some early versions of SNAP\n"
-                        "allowed building indices with too small of a seed size, and this appears to be such\n"
-                        "an index.  You can no longer build indices like this, and you also can't use them\n"
-                        "because they are corrupt and would produce incorrect results.  Please use an index\n"
-                        "built with a larger seed size.  For hg19, the seed size must be at least 19.\n"
-                        "For other reference genomes this quantity will vary.\n");
-        soft_exit(1);
+        if ((_int64)index->genome->getCountOfBases() + (_int64)index->overflowTableSize > 0xfffffff0 && locationSize == 4) {
+            WriteErrorMessage("\nThis index has too many overflow entries to be valid.  Some early versions of SNAP\n"
+                "allowed building indices with too small of a seed size, and this appears to be such\n"
+                "an index.  You can no longer build indices like this, and you also can't use them\n"
+                "because they are corrupt and would produce incorrect results.  Please use an index\n"
+                "built with a larger seed size.  For hg19, the seed size must be at least 19.\n"
+                "For other reference genomes this quantity will vary.\n");
+            soft_exit(1);
+        }
+
+        if (index->genome->hasAltContigs()) {
+            snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, LiftedIndexDirName);
+            index->liftedIndex = loadFromDirectory(filenameBuffer, map, prefetch, true);
+            if (index->liftedIndex == NULL) {
+                WriteErrorMessage("Missing alt index directory %s\n", filenameBuffer);
+                soft_exit(1);
+            }
+            index->liftedIndex->genome = index->genome;
+        } else {
+            index->liftedIndex = NULL;
+        }
+    } else {
+        index->genome = NULL;
     }
 
     delete[] filenameBuffer;
