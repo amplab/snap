@@ -311,7 +311,6 @@ err_contig_parse:
 	}
 	
 	genome->fillInContigLengths();
-    genome->adjustAltContigs(NULL);
     genome->sortContigsByName();
     delete[] contigNameBuffer;
     return genome;
@@ -535,7 +534,7 @@ void Genome::adjustAltContigs(AltContigMap* altMap)
     // flip RC contigs
     for (int i = 0; i < nContigs; i++) {
         if (contigs[i].isAlternate && contigs[i].isAlternateRC) {
-            util::toComplement(bases + contigs[i].beginningLocation.location, NULL, (int) contigs[i].length);
+            util::toComplement(bases + contigs[i].beginningLocation.location, NULL, (int) contigs[i].length - chromosomePadding);
         }
     }
 }

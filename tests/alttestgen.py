@@ -84,12 +84,19 @@ class Genome:
         self.add(Contig(name, accession, altseq, True, parent, start, isRC))
 
     def get_seq(self, chr, start, end):
-        return self.contigs[chr].seq[start:end]
+        contig = self.contigs[chr]
+        if not contig.isAltRC:
+            return contig.seq[start:end]
+        else:
+            return rc(contig.seq[len(contig.seq) - end : len(contig.seq) - start])
 
     def make_read(self, chr, pos, isRC=False, len=100, pmut=.02, id=None):
         if id == None:
             id = "r{:05d}_{}_{}_{}".format(random.randint(0,99999), chr, pos+1, ('r' if isRC else 'f'))
-        return Read(id, chr, pos, random_mutate(self.get_seq(chr, pos, pos + len), pmut))
+        seq = random_mutate(self.get_seq(chr, pos, pos + len))
+        if isRC:
+            seq = rc(seq)
+        return Read(id, chr, pos, seq, pmut)
 
     def make_pair(self, chr1, pos1, chr2, pos2, len=100, pmut=.02):
         id = "r{:05d}_{}_{}_{}_{}".format(random.randint(0,99999), chr1, pos1+1, chr2, pos2+1)
@@ -116,14 +123,18 @@ class Genome:
                         1, len(contig.seq), 1 + contig.parentLoc, contig.parentLoc + len(contig.seq), 0, 0))
 
 g = Genome()
-g.add(Contig("chr1", "C01", random_bases(3000)))
+g.add(Contig("chr1", "C01", random_bases(5000)))
 g.add_alt("chr1a", "C01A", "chr1", 1000, 2000)
+g.add_alt("chr1b", "C01B", "chr1", 3000, 4000, True)
 g.write_fasta("test.fa")
 g.write_alts("test_alts.txt")
 
 with open("test.sam", "w") as file:
-    for i in range(100, 201, 20):
-        [r1, r2] = g.make_pair('chr1', i, 'chr1a', i)
+    for i in [100, 150, 200, 250, 2100, 2150, 2200, 2250]:
+        if i < 2000:
+            [r1, r2] = g.make_pair('chr1', i, 'chr1a' , i)
+        else:
+            [r1, r2] = g.make_pair('chr1', i, 'chr1b' , i - 2000)
         file.write(r1.to_sam_pair(r2))
         [r1, r2] = g.make_pair('chr1', i, 'chr1', i+1000)
         file.write(r1.to_sam_pair(r2))

@@ -1027,7 +1027,6 @@ SAMFormat::createSAMLine(
 {
     contigName = "*";
     positionInContig = 0;
-    const char *cigar = "*";
     templateLength = 0;
 
     if (secondaryAlignment) {
@@ -1092,6 +1091,7 @@ SAMFormat::createSAMLine(
         contigIndex = (int)(contig - genome->getContigs());
         positionInContig = genomeLocation - contig->beginningLocation + 1; // SAM is 1-based
         mapQuality = max(0, min(70, mapQuality));       // FIXME: manifest constant.
+
     } else {
         flags |= SAM_UNMAPPED;
         mapQuality = 0;
@@ -1228,13 +1228,17 @@ SAMFormat::writeRead(
     }
 
 	if (genomeLocation != InvalidGenomeLocation) {
-		cigar = computeCigarString(context.genome, lv, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize,
-			clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter, 
-			read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(), genomeLocation, direction, useM,
-			&editDistance, o_addFrontClipping);
-		if (*o_addFrontClipping != 0) {
-			return false;
-		}
+        if (!context.genome->getContigs()[contigIndex].isAlternateRC) {
+            cigar = computeCigarString(context.genome, lv, cigarBuf, cigarBufSize, cigarBufWithClipping, cigarBufWithClippingSize,
+                clippedData, clippedLength, basesClippedBefore, extraBasesClippedBefore, basesClippedAfter,
+                read->getOriginalFrontHardClipping(), read->getOriginalBackHardClipping(), genomeLocation, direction, useM,
+                &editDistance, o_addFrontClipping);
+            if (*o_addFrontClipping != 0) {
+                return false;
+            }
+        } else {
+
+        }
 	}
 
 
@@ -1299,6 +1303,19 @@ SAMFormat::writeRead(
             readGroupSeparator = "\tRG:Z:";
             readGroupString = read->getReadGroup();
         }
+    }
+    const Genome::Contig* contig = &context.genome->getContigs()[contigIndex];
+    if (contig->isAlternateRC) {
+        // contig was reverse-complemented when building index
+        // so reverse flags, adjust position; CIGAR string was reversed in computeCigar
+        flags ^= SAM_REVERSE_COMPLEMENT;
+        positionInContig = 1 + max(0, (contig->length - context.genome->getChromosomePadding() - positionInContig + 1) - (_int64)fullLength);
+    }
+    const Genome::Contig* mateContig = &context.genome->getContigs()[mateContigIndex];
+    if (mateContig->isAlternateRC) {
+        // same for mate
+        flags ^= SAM_NEXT_REVERSED;
+        matePositionInContig = 1 + max(0, (mateContig->length - context.genome->getChromosomePadding() - matePositionInContig + 1) - (_int64)fullLength);
     }
     int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s\n",
         qnameLen, read->getId(),
@@ -1391,6 +1408,17 @@ SAMFormat::computeCigar(
         *o_cigarBufUsed = 0;
         *cigarBuf = '*';
         return;
+    }
+
+    if (contig->isAlternateRC) {
+        // the original reference was reverse-complemented on index build to simplify alignment
+        // so reverse-complement both reference and data for CIGAR string
+        char* dataBuf = (char*)alloca(dataLength);
+        util::toComplement(dataBuf, data, dataLength);
+        data = dataBuf;
+        char* referenceBuf = (char*)alloca(dataLength + MAX_K);
+        util::toComplement(referenceBuf, reference - MAX_K, dataLength + MAX_K);
+        reference = referenceBuf;
     }
 
     *o_editDistance = lv->computeEditDistanceNormalized(
@@ -1566,6 +1594,16 @@ SAMFormat::validateCigarString(
 		WriteErrorMessage("validateCigarString: read alignment location isn't in a chromosome, genomeLocation %lld\n", GenomeLocationAsInt64(genomeLocation));
 		soft_exit(1);
 	}
+    if (contig->isAlternateRC) {
+        // the original reference was reverse-complemented on index build to simplify alignment
+        // so reverse-complement both reference and data for CIGAR string
+        char* dataBuf = (char*)alloca(dataLength);
+        util::toComplement(dataBuf, data, dataLength);
+        data = dataBuf;
+        char* referenceBuf = (char*)alloca(dataLength + MAX_K);
+        util::toComplement(referenceBuf, reference - MAX_K, dataLength + MAX_K);
+        reference = referenceBuf;
+    }
 
 	if (genomeLocation >= contig->beginningLocation + contig->length - genome->getChromosomePadding()) {
 		WriteErrorMessage("validateCigarString: alignment location is in genome padding: %lld, contig name %s, base %lld, len %lld, padding size %d\n",
