@@ -56,6 +56,7 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
     maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_)
 {
     doesGenomeIndexHave64BitLocations = index->doesGenomeIndexHave64BitLocations();
+    doesGenomeIndexHaveAlts = index->getGenome()->hasAltContigs();
 
     unsigned maxSeedsToUse;
     if (0 != numSeedsFromCommandLine) {
@@ -670,7 +671,7 @@ IntersectingPairedEndAligner::align(
                         }
 #endif // _DEBUG
 
-                        _ASSERT(-1 == mate->score || mate->score >= mate->bestPossibleScore);
+                        // !! FIX THIS BEFORE CHECKIN !! _ASSERT(-1 == mate->score || mate->score >= mate->bestPossibleScore);
 
                         mate->scoreLimit = scoreLimit - fewerEndScore;
                     }
@@ -1275,8 +1276,8 @@ IntersectingPairedEndAligner::HashTableHitSet::computeBestPossibleScoreForCurren
 					anyFound = true;
                     mostRecentLocationReturned = *actualGenomeLocationFound = bestLocationFound = probeHit - seedOffset;
                     if (actualUnliftedGenomeLocationFound != NULL) {
-                        *actualUnliftedGenomeLocationFound = doesGenomeIndexHave64BitLocations
-                            ? lookups64[i].unliftedHits[probe] : lookups32[i].unliftedHits[probe];
+                        *actualUnliftedGenomeLocationFound = (doesGenomeIndexHave64BitLocations
+                            ? lookups64[i].unliftedHits[probe] : lookups32[i].unliftedHits[probe]) - seedOffset;
                     }
                     *seedOffsetFound = seedOffset;
                 }
@@ -1353,6 +1354,7 @@ IntersectingPairedEndAligner::HashTableHitSet::computeBestPossibleScoreForCurren
     //
     GenomeLocation foundLocation = 0;
     bool anyFound = false;
+    const bool setUnlifted = unliftedGenomeLocation != NULL;
 
     //
     // Run through the lookups pushing up any that are at the most recently returned
@@ -1362,6 +1364,7 @@ IntersectingPairedEndAligner::HashTableHitSet::computeBestPossibleScoreForCurren
         _int64 *currentHitForIntersection;
         _int64 nHits;
         GenomeLocation hitLocation;
+        GenomeLocation unliftedHitLocation;
         unsigned seedOffset;
 
         //
@@ -1373,6 +1376,9 @@ IntersectingPairedEndAligner::HashTableHitSet::computeBestPossibleScoreForCurren
         seedOffset = lookups[i].seedOffset;                                                                             \
         if (nHits != *currentHitForIntersection) {                                                                      \
             hitLocation = lookups[i].hits[*currentHitForIntersection];                                                  \
+            if (setUnlifted) {                                                                                          \
+                unliftedHitLocation = lookups[i].unliftedHits[*currentHitForIntersection];                              \
+            }                                                                                                           \
         }
 
 
@@ -1392,8 +1398,14 @@ IntersectingPairedEndAligner::HashTableHitSet::computeBestPossibleScoreForCurren
             }
             if (doesGenomeIndexHave64BitLocations) {
                 hitLocation = lookups64[i].hits[*currentHitForIntersection];
+                if (setUnlifted) {
+                    unliftedHitLocation = lookups64[i].unliftedHits[*currentHitForIntersection];
+                }
             } else {
                 hitLocation = lookups32[i].hits[*currentHitForIntersection];
+                if (setUnlifted) {
+                    unliftedHitLocation = lookups32[i].unliftedHits[*currentHitForIntersection];
+                }
             }
         }
 
@@ -1402,6 +1414,9 @@ IntersectingPairedEndAligner::HashTableHitSet::computeBestPossibleScoreForCurren
                 hitLocation >= seedOffset) // found location isn't too small to push us before the beginning of the genome
             {
                 *genomeLocation = foundLocation = hitLocation - seedOffset;
+                if (setUnlifted) {
+                    *unliftedGenomeLocation = unliftedHitLocation - seedOffset;
+                }
                 *seedOffsetFound = seedOffset;
                 anyFound = true;
             }

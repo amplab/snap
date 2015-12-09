@@ -359,4 +359,5 @@ private:
     StringAltContigMap altsByAccession;
     typedef std::map<std::string, std::string> StringMap;
     StringMap nameToAccession;
+    StringMap accessionToName;
 };

@@ -44,27 +44,6 @@ using std::min;
 #define TRACE(...) {}
 #endif
 
-
-typedef struct MatchInfo
-{
-    GenomeLocation  location;
-    GenomeLocation  liftedLocation;
-    double          matchProbability;
-
-    MatchInfo(GenomeLocation _loc, GenomeLocation _lifted, double _p) :
-        location(_loc), liftedLocation(_lifted), matchProbability(_p) {}
-} MatchInfo;
-
-bool
-matchInfoComparator(
-    const MatchInfo& a,
-    const MatchInfo& b)
-{
-    return a.liftedLocation < b.liftedLocation;
-}
-
-typedef VariableSizeVector<MatchInfo> MatchInfoVector;
-
 BaseAligner::BaseAligner(
     GenomeIndex    *i_genomeIndex,
     unsigned        i_maxHitsToConsider,
@@ -85,7 +64,7 @@ BaseAligner::BaseAligner(
         genomeIndex(i_genomeIndex), maxHitsToConsider(i_maxHitsToConsider), maxK(i_maxK),
         maxReadSize(i_maxReadSize), maxSeedsToUseFromCommandLine(i_maxSeedsToUseFromCommandLine),
         maxSeedCoverage(i_maxSeedCoverage), readId(-1), extraSearchDepth(i_extraSearchDepth),
-        explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats), 
+        explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats), allMatches(NULL),
         noUkkonen(i_noUkkonen), noOrderedEvaluation(i_noOrderedEvaluation), noTruncation(i_noTruncation),
 		minWeightToCheck(max(1u, i_minWeightToCheck)), maxSecondaryAlignmentsPerContig(i_maxSecondaryAlignmentsPerContig)
 /*++
@@ -247,6 +226,9 @@ Arguments:
     }
     hashTableEpoch = 0;
 
+    if (genome->hasAltContigs()) {
+        allMatches = new MatchInfoVector();
+    }
  
 }
 
@@ -677,8 +659,7 @@ Return Value:
     * Add up the highest-probability matches of all overlapping alternates
     */
     double
-computeLiftedCandidateProbability(
-    MatchInfoVector* allMatches,
+BaseAligner::computeLiftedCandidateProbability(
     GenomeDistance length)
 {
     std::sort(allMatches->begin(), allMatches->end(), matchInfoComparator);
@@ -796,10 +777,9 @@ Return Value:
 #endif
 
     unsigned weightListToCheck = highestUsedWeightList;
-    MatchInfoVector* allMatches = NULL;
-    bool anyAltMatches = FALSE;
-    if (genome->hasAltContigs()) {
-        allMatches = new MatchInfoVector();
+    bool anyAltMatches = false;
+    if (allMatches != NULL) {
+        allMatches->clear();
     }
 
     do {
@@ -822,7 +802,7 @@ Return Value:
                 if (bestScore <= maxK) {
                     primaryResult->location = bestScoreGenomeLocation;
                     if (anyAltMatches) {
-                        probabilityOfAllCandidates = computeLiftedCandidateProbability(allMatches, read[0]->getDataLength());
+                        probabilityOfAllCandidates = computeLiftedCandidateProbability(read[0]->getDataLength());
                     }
                     primaryResult->mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, popularSeedsSkipped);
                     if (primaryResult->mapq >= MAPQ_LIMIT_FOR_SINGLE_HIT) {
@@ -976,8 +956,8 @@ Return Value:
 
                             // remember in case there are alt matches
                             if (allMatches != NULL) {
-                                if ((! anyAltMatches) && genome->getContigAtLocation(genomeLocation)->isAlternate) {
-                                    anyAltMatches = TRUE;
+                                if ((! anyAltMatches) && genome->getLiftedLocation(genomeLocation) != genomeLocation) {
+                                    anyAltMatches = true;
                                 }
                                 allMatches->push_back(MatchInfo(genomeLocation, genome->getLiftedLocation(genomeLocation), matchProbability));
                             }

@@ -48,11 +48,11 @@ class Read:
 
     def to_sam_pair(self, other):
         r1 = "{}\t{}\t{}\t{}\t{}\t{}M\t{}\t{}\t{}\t{}\t{}\n".format(
-            self.id, 99, self.chr, self.pos, 60, len(self.seq), other.chr,
-            other.pos, abs(self.pos - other.pos + len(other.seq)), self.seq, 'A'*len(self.seq))
+            self.id, 99, self.chr, self.pos + 1, 60, len(self.seq), other.chr,
+            other.pos + 1, abs(self.pos - other.pos + len(other.seq)), self.seq, 'A'*len(self.seq))
         return r1 + "{}\t{}\t{}\t{}\t{}\t{}M\t{}\t{}\t{}\t{}\t{}\n".format(
-            other.id, 147, other.chr, other.pos, 60, len(other.seq), self.chr,
-            self.pos, abs(self.pos - other.pos + len(other.seq)), other.seq, 'A'*len(other.seq))
+            other.id, 147, other.chr, other.pos + 1, 60, len(other.seq), self.chr,
+            self.pos + 1, abs(self.pos - other.pos + len(other.seq)), other.seq, 'A'*len(other.seq))
 
 class Contig:
     def __init__(self, name, accession, seq, isAlt=False, parent=None, parentLoc = 0, isAltRC=False):
@@ -76,7 +76,7 @@ class Genome:
     def add(self, contig):
         self.contigs[contig.name] = contig
 
-    def add_alt(self, name, accession, parent, start, stop, isRC=False, pmut=0.1):
+    def add_alt(self, name, accession, parent, start, stop, isRC=False, pmut=0.05):
         pc = self.contigs[parent]
         altseq = random_mutate(pc.seq[start:stop], pmut)
         if (isRC):
@@ -88,21 +88,23 @@ class Genome:
 
     def make_read(self, chr, pos, isRC=False, len=100, pmut=.02, id=None):
         if id == None:
-            id = "r{:05d}_{}_{}_{}".format(random.randint(0,99999), chr, pos, ('r' if isRC else 'f'))
+            id = "r{:05d}_{}_{}_{}".format(random.randint(0,99999), chr, pos+1, ('r' if isRC else 'f'))
         return Read(id, chr, pos, random_mutate(self.get_seq(chr, pos, pos + len), pmut))
 
     def make_pair(self, chr1, pos1, chr2, pos2, len=100, pmut=.02):
-        id = "r{:05d}_{}_{}_{}_{}".format(random.randint(0,99999), chr1, pos1, chr2, pos2)
+        id = "r{:05d}_{}_{}_{}_{}".format(random.randint(0,99999), chr1, pos1+1, chr2, pos2+1)
         r1 = self.make_read(chr1, pos1, False, len, pmut, id + "/1")
         r2 = self.make_read(chr2, pos2, True, len, pmut, id + "/2")
         return [r1, r2]
 
     def write_fasta(self, filename):
         with open(filename, 'w') as file:
-            for contig in self.contigs.values():
-                file.write(">{}|gb|{}\n".format(contig.name, contig.accession))
-                for i in range(0, len(contig.seq), 80):
-                    file.write("{}\n".format(contig.seq[i:i+80]))
+            for write_alts in [False, True]:
+                for contig in self.contigs.values():
+                    if contig.isAlt == write_alts:
+                        file.write(">{}|gb|{}\n".format(contig.name, contig.accession))
+                        for i in range(0, len(contig.seq), 80):
+                            file.write("{}\n".format(contig.seq[i:i+80]))
 
     def write_alts(self, filename):
         with open(filename, 'w') as file:
@@ -114,12 +116,14 @@ class Genome:
                         1, len(contig.seq), 1 + contig.parentLoc, contig.parentLoc + len(contig.seq), 0, 0))
 
 g = Genome()
-g.add(Contig("chr1", "C01", random_bases(2000)))
-g.add_alt("chr1a", "C01A", "chr1", 500, 1500)
+g.add(Contig("chr1", "C01", random_bases(3000)))
+g.add_alt("chr1a", "C01A", "chr1", 1000, 2000)
 g.write_fasta("test.fa")
 g.write_alts("test_alts.txt")
 
 with open("test.sam", "w") as file:
-    for i in range(0, 101, 10):
-        [r1, r2] = g.make_pair('chr1', 500 + i, 'chr1a', i)
+    for i in range(100, 201, 20):
+        [r1, r2] = g.make_pair('chr1', i, 'chr1a', i)
+        file.write(r1.to_sam_pair(r2))
+        [r1, r2] = g.make_pair('chr1', i, 'chr1', i+1000)
         file.write(r1.to_sam_pair(r2))

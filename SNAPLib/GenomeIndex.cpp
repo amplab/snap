@@ -313,19 +313,22 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     int filenameBufferSize = (int)(strlen(directoryName) + 1 + __max(strlen(GenomeIndexFileName), __max(strlen(OverflowTableFileName), __max(strlen(GenomeIndexHashFileName), __max(strlen(GenomeFileName), strlen(LiftedIndexDirName))))) + 1);
     char *filenameBuffer = new char[filenameBufferSize];
     
-	fprintf(stderr,"Saving genome...");
-	_int64 start = timeInMillis();
-    snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, GenomeFileName);
-    if (!genome->saveToFile(filenameBuffer)) {
-        WriteErrorMessage("GenomeIndex::saveToDirectory: Failed to save the genome itself\n");
-        delete[] filenameBuffer;
-        return false;
+    _int64 start;
+    if (unliftedIndex == NULL) {
+        fprintf(stderr, "Saving genome...");
+        start = timeInMillis();
+        snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, GenomeFileName);
+        if (!genome->saveToFile(filenameBuffer)) {
+            WriteErrorMessage("GenomeIndex::saveToDirectory: Failed to save the genome itself\n");
+            delete[] filenameBuffer;
+            return false;
+        }
+        fprintf(stderr, "%llds\n", (timeInMillis() + 500 - start) / 1000);
     }
-	fprintf(stderr,"%llds\n", (timeInMillis() + 500 - start) / 1000);
 
 	GenomeIndex *index = new GenomeIndex();
     index->genome = NULL;   // We always delete the index when we're done, but we delete the genome first to save space during the overflow table build.
-
+    
     GenomeDistance countOfBases = genome->getCountOfBases();
     if (locationSize != 8 && countOfBases > ((_int64) 1 << (locationSize*8)) - 16) {
         WriteErrorMessage("Genome is too big for %d byte genome locations.  Specify a larger location size with -locationSize\n", locationSize);
@@ -418,6 +421,12 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 			soft_exit(1);
 		}
 	}
+
+    index->seedLen = seedLen;
+    index->hashTableKeySize = hashTableKeySize;
+    index->largeHashTable = large;
+    index->locationSize = locationSize;
+    index->genome = genome;
 
     for (unsigned i = 0; i < nThreads; i++) {
 		threadContexts[i].whichThread = i;
@@ -697,8 +706,10 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         }
         totalBytesWritten += bytesWrittenThisHashTable;
 
-		delete hashTables[whichHashTable];
-		hashTables[whichHashTable] = NULL;
+        if (!(genomeHasAlts && unliftedIndex == NULL)) {
+            delete hashTables[whichHashTable];
+            hashTables[whichHashTable] = NULL;
+        }
 	} // for each hash table
 
     fclose(tablesFile);
@@ -783,8 +794,6 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, LiftedIndexDirName);
         bool ok = BuildIndexToDirectory(genome, seedLen, slack, TRUE, filenameBuffer, maxThreads, chromosomePaddingSize, forceExact,
             hashTableKeySize, large, histogramFileName, locationSize, smallMemory, index);
-        delete genome;
-        genome = NULL;
         if (!ok) {
             WriteErrorMessage("Failed to build lifted index %s\n", filenameBuffer);
             soft_exit(1);
@@ -792,6 +801,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         }
     }
 
+    index->genome = NULL; // deleted earlier
     delete index;
     if (computeBias && biasTable != NULL) {
         delete[] biasTable;
@@ -895,7 +905,7 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
 
 
 
-GenomeIndex::GenomeIndex() : nHashTables(0), hashTables(NULL), overflowTable32(NULL), overflowTable64(NULL), genome(NULL), tablesBlob(NULL), mappedOverflowTable(NULL), mappedTables(NULL), hasAlts(FALSE), liftedIndex(NULL)
+GenomeIndex::GenomeIndex() : nHashTables(0), hashTables(NULL), overflowTable32(NULL), overflowTable64(NULL), genome(NULL), tablesBlob(NULL), mappedOverflowTable(NULL), mappedTables(NULL), hasAlts(false), liftedIndex(NULL)
 {
 }
 
@@ -1258,8 +1268,7 @@ GenomeIndex::BuildHashTablesWorkerThread(BuildHashTablesThreadContext *context)
 
         if (!lift) {
             indexSeed(genomeLocation, seed, batches, context, &stats, large);
-        }
-        else {
+        } else {
             indexLiftedSeed(genomeLocation, seed, batches, context, &stats, large);
         }
     } // For each genome base in our area
@@ -1355,7 +1364,27 @@ GenomeIndex::indexLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashTa
     else {
         const unsigned *hits, *rcHits;
         context->unliftedIndex->lookupSeed32(seed, &nHits, &hits, &nRCHits, &rcHits);
-        CHECK_ALTS_AND_ADD_LIFTED
+        // CHECK_ALTS_AND_ADD_LIFTED
+        if ((nHits > 0 && genomeLocation == *hits) || (nHits == 0 && nRCHits > 0 && genomeLocation == *rcHits)) {
+            bool anyAlts = false;
+            for (int i = 0; i < nHits && !anyAlts; i++) {
+                anyAlts = genome->getLiftedLocation(hits[i]) != hits[i];
+            }
+            for (int i = 0; i < nRCHits && !anyAlts; i++) {
+                anyAlts = genome->getLiftedLocation(rcHits[i]) != rcHits[i];
+            }
+            if (anyAlts) {
+                for (int i = 0; i < nHits; i++) {
+                    indexSeed(genome->getLiftedLocation(hits[i]), seed, batches, context, stats, large);
+                }
+                if (!seed.isOwnReverseComplement()) {
+                    Seed rcSeed = ~seed;
+                    for (int i = 0; i < nRCHits; i++) {
+                        indexSeed(genome->getLiftedLocation(rcHits[i]), rcSeed, batches, context, stats, large);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1929,7 +1958,7 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch, boo
 		blobFile = NULL;
 	}
 
-    if (!liftedIndex) {
+    if (liftedIndex == NULL) {
         snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, GenomeFileName);
         if (NULL == (index->genome = Genome::loadFromFile(filenameBuffer, chromosomePadding, 0, 0, map))) {
             WriteErrorMessage("GenomeIndex::loadFromDirectory: Failed to load the genome itself\n");
@@ -1956,10 +1985,12 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch, boo
                 soft_exit(1);
             }
             index->liftedIndex->genome = index->genome;
+            index->hasAlts = true;
         } else {
             index->liftedIndex = NULL;
         }
     } else {
+        index->hasAlts = true;
         index->genome = NULL;
     }
 
