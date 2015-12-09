@@ -717,7 +717,7 @@ err_file_format:
             if (endOfFile) {
                 break;
             }
-            switch (columnTypes[columnIndex]) {
+            switch (columnIndex < columnTypes.size() ? columnTypes[columnIndex] : N_COLUMNS) {
             case ALT_SCAF_ACC:
                 alt.accession = p;
                 break;
