@@ -246,7 +246,7 @@ public:
 
         struct Contig {
             Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL),
-                    isAlternate(FALSE), isReverseStrand(FALSE), liftedLocation(InvalidGenomeLocation), contextBefore(0), contextAfter(0) {}
+                    isAlternate(false), isReverseStrand(false), liftedLocation(InvalidGenomeLocation), contextBefore(0), contextAfter(0) {}
             GenomeLocation     beginningLocation;
             GenomeDistance     length;
             bool               isAlternate;
@@ -267,7 +267,7 @@ public:
         const Contig *getNextContigAfterLocation(GenomeLocation location) const;
         int getContigNumAtLocation(GenomeLocation location) const;    // Returns the contig number, which runs from 0 .. getNumContigs() - 1.
 
-        inline bool hasAltContigs() const { return FALSE;  } // todo: implement
+        inline bool hasAltContigs() const { return false;  } // todo: implement
 
         GenomeLocation getLiftedLocation(GenomeLocation altLocation) const { return altLocation;  } // todo: implement
 

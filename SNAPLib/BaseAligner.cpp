@@ -797,7 +797,7 @@ Return Value:
 
     unsigned weightListToCheck = highestUsedWeightList;
     MatchInfoVector* allMatches = NULL;
-    bool anyAltMatches = FALSE;
+    bool anyAltMatches = false;
     if (genome->hasAltContigs()) {
         allMatches = new MatchInfoVector();
     }
@@ -977,7 +977,7 @@ Return Value:
                             // remember in case there are alt matches
                             if (allMatches != NULL) {
                                 if ((! anyAltMatches) && genome->getContigAtLocation(genomeLocation)->isAlternate) {
-                                    anyAltMatches = TRUE;
+                                    anyAltMatches = true;
                                 }
                                 allMatches->push_back(MatchInfo(genomeLocation, genome->getLiftedLocation(genomeLocation), matchProbability));
                             }
