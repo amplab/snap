@@ -792,7 +792,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     if (genomeHasAlts && unliftedIndex == NULL) {
         // create a sub-index with only seeds that occur in alt contigs
         snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, LiftedIndexDirName);
-        bool ok = BuildIndexToDirectory(genome, seedLen, slack, TRUE, filenameBuffer, maxThreads, chromosomePaddingSize, forceExact,
+        bool ok = BuildIndexToDirectory(genome, seedLen, slack, true, filenameBuffer, maxThreads, chromosomePaddingSize, forceExact,
             hashTableKeySize, large, histogramFileName, locationSize, smallMemory, index);
         if (!ok) {
             WriteErrorMessage("Failed to build lifted index %s\n", filenameBuffer);
@@ -1958,7 +1958,7 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch, boo
 		blobFile = NULL;
 	}
 
-    if (liftedIndex == NULL) {
+    if (!liftedIndex) {
         snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, GenomeFileName);
         if (NULL == (index->genome = Genome::loadFromFile(filenameBuffer, chromosomePadding, 0, 0, map))) {
             WriteErrorMessage("GenomeIndex::loadFromDirectory: Failed to load the genome itself\n");

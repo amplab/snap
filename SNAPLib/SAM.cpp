@@ -1309,13 +1309,13 @@ SAMFormat::writeRead(
         // contig was reverse-complemented when building index
         // so reverse flags, adjust position; CIGAR string was reversed in computeCigar
         flags ^= SAM_REVERSE_COMPLEMENT;
-        positionInContig = 1 + max(0, (contig->length - context.genome->getChromosomePadding() - positionInContig + 1) - (_int64)fullLength);
+        positionInContig = 1 + max(0L, (contig->length - context.genome->getChromosomePadding() - positionInContig + 1) - (_int64)fullLength);
     }
     const Genome::Contig* mateContig = &context.genome->getContigs()[mateContigIndex];
     if (mateContig->isAlternateRC) {
         // same for mate
         flags ^= SAM_NEXT_REVERSED;
-        matePositionInContig = 1 + max(0, (mateContig->length - context.genome->getChromosomePadding() - matePositionInContig + 1) - (_int64)fullLength);
+        matePositionInContig = 1 + max(0L, (mateContig->length - context.genome->getChromosomePadding() - matePositionInContig + 1) - (_int64)fullLength);
     }
     int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s\n",
         qnameLen, read->getId(),

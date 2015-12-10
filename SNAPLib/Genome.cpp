@@ -277,7 +277,7 @@ err_contig_parse:
             }
             genome->contigs[i].liftedLocation = liftedLocation;
 
-            if (isAlternate && contigStart < genome->minAltLocation.location) {
+            if (isAlternate && contigStart < (_int64)genome->minAltLocation) {
                 genome->minAltLocation = contigStart - chromosomePadding / 2;
             }
         }
@@ -534,7 +534,7 @@ void Genome::adjustAltContigs(AltContigMap* altMap)
     // flip RC contigs
     for (int i = 0; i < nContigs; i++) {
         if (contigs[i].isAlternate && contigs[i].isAlternateRC) {
-            util::toComplement(bases + contigs[i].beginningLocation.location, NULL, (int) contigs[i].length - chromosomePadding);
+	  util::toComplement(bases + (_int64)contigs[i].beginningLocation, NULL, (int) contigs[i].length - chromosomePadding);
         }
     }
 }
@@ -651,7 +651,6 @@ err_map_failed:
     }
     char* q = strchr(p, ',');
     if (q == NULL) {
-err_invalid_column_spec:
         WriteErrorMessage("Invalid columns spec %s\n", columns);
         soft_exit(1);
     }
@@ -674,7 +673,8 @@ err_invalid_column_spec:
         } else {
             q = p + strlen(p);
             if (i < PARENT_STOP) {
-                goto err_invalid_column_spec;
+		WriteErrorMessage("Invalid columns spec %s\n", columns);
+		soft_exit(1);
             }
             break;
         }
@@ -689,7 +689,6 @@ err_invalid_column_spec:
     for (int columnIndex = 0; !endOfLine; columnIndex++) {
         q = tokenizeToNextTabOrNewline(p, &endOfLine, &endOfFile);
         if (q == NULL) {
-err_file_format:
             WriteErrorMessage("Invalid file format for alt data in %s\n", filename);
             soft_exit(1);
         }
@@ -706,7 +705,8 @@ err_file_format:
     }
     for (int i = 0; i < N_COLUMNS; i++) {
         if (columnNames[i] != NULL && !columnFound[i]) {
-            goto err_file_format;
+            WriteErrorMessage("Invalid file format for alt data in %s\n", filename);
+            soft_exit(1);
         }
     }
     while (!endOfFile) {
