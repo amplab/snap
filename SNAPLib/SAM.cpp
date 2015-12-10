@@ -1414,10 +1414,10 @@ SAMFormat::computeCigar(
         // the original reference was reverse-complemented on index build to simplify alignment
         // so reverse-complement both reference and data for CIGAR string
         char* dataBuf = (char*)alloca(dataLength);
-        util::toComplement(dataBuf, data, dataLength);
+        util::toComplement(dataBuf, data, (int)dataLength);
         data = dataBuf;
         char* referenceBuf = (char*)alloca(dataLength + MAX_K);
-        util::toComplement(referenceBuf, reference - MAX_K, dataLength + MAX_K);
+        util::toComplement(referenceBuf, reference - MAX_K, (int)dataLength + MAX_K);
         reference = referenceBuf;
     }
 
@@ -1598,10 +1598,10 @@ SAMFormat::validateCigarString(
         // the original reference was reverse-complemented on index build to simplify alignment
         // so reverse-complement both reference and data for CIGAR string
         char* dataBuf = (char*)alloca(dataLength);
-        util::toComplement(dataBuf, data, dataLength);
+        util::toComplement(dataBuf, data, (int)dataLength);
         data = dataBuf;
         char* referenceBuf = (char*)alloca(dataLength + MAX_K);
-        util::toComplement(referenceBuf, reference - MAX_K, dataLength + MAX_K);
+        util::toComplement(referenceBuf, reference - MAX_K, (int)dataLength + MAX_K);
         reference = referenceBuf;
     }
 

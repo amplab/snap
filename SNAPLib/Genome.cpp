@@ -277,7 +277,7 @@ err_contig_parse:
             }
             genome->contigs[i].liftedLocation = liftedLocation;
 
-            if (isAlternate && contigStart < (_int64)genome->minAltLocation) {
+            if (isAlternate && contigStart < GenomeLocationAsInt64(genome->minAltLocation)) {
                 genome->minAltLocation = contigStart - chromosomePadding / 2;
             }
         }
@@ -534,7 +534,7 @@ void Genome::adjustAltContigs(AltContigMap* altMap)
     // flip RC contigs
     for (int i = 0; i < nContigs; i++) {
         if (contigs[i].isAlternate && contigs[i].isAlternateRC) {
-	  util::toComplement(bases + (_int64)contigs[i].beginningLocation, NULL, (int) contigs[i].length - chromosomePadding);
+	  util::toComplement(bases + GenomeLocationAsInt64(contigs[i].beginningLocation), NULL, (int) contigs[i].length - chromosomePadding);
         }
     }
 }
