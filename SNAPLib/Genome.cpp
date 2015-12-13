@@ -593,7 +593,6 @@ char* tokenizeToNextTabOrNewline(char* start, bool* endOfLine, bool* endOfFile)
         } else if (*p == '\r' || *p == '\n') {
             if (*(p + 1) != *p && (*(p + 1) == '\r' || *(p + 1) == '\n')) {
                 *p++ = '\0';
-            } else {
             }
             *p = '\0';
             *endOfLine = true;
@@ -694,11 +693,11 @@ err_map_failed:
         }
         for (int i = 0; i <= N_COLUMNS; i++) {
             if (i < N_COLUMNS && !strcmp(columnNames[i], p)) {
-                columnTypes.add(i);
+                columnTypes.push_back(i);
                 columnFound[i] = true;
                 break;
             } else if (i == N_COLUMNS) {
-                columnTypes.add(N_COLUMNS); // ignore this column
+                columnTypes.push_back(N_COLUMNS); // ignore this column
             }
         }
         p = q;

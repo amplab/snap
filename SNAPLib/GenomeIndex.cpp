@@ -1339,7 +1339,8 @@ GenomeIndex::indexLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashTa
         GenomeLocation singleHit[2], singleRCHit[2];
         context->unliftedIndex->lookupSeed(seed, &nHits, &hits, &nRCHits, &rcHits, &singleHit[1], &singleRCHit[1]);
 #define CHECK_ALTS_AND_ADD_LIFTED \
-        if ((nHits > 0 && genomeLocation == *hits) || (nHits == 0 && nRCHits > 0 && genomeLocation == *rcHits)) { \
+        if ((nHits > 0 && genomeLocation == *hits && (nRCHits == 0 || *hits <= *rcHits)) || \
+                (nRCHits > 0 && genomeLocation == *rcHits && (nHits == 0 || *rcHits < *hits))) { \
             bool anyAlts = false; \
             for (int i = 0; i < nHits && ! anyAlts; i++) { \
                 anyAlts = genome->getLiftedLocation(hits[i]) != hits[i]; \
@@ -1348,12 +1349,12 @@ GenomeIndex::indexLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashTa
                 anyAlts = genome->getLiftedLocation(rcHits[i]) != rcHits[i]; \
             } \
             if (anyAlts) { \
-                for (int i = 0; i < nHits && !anyAlts; i++) { \
+                for (int i = 0; i < nHits; i++) { \
                     indexSeed(genome->getLiftedLocation(hits[i]), seed, batches, context, stats, large); \
                 } \
                 if (!seed.isOwnReverseComplement()) { \
                     Seed rcSeed = ~seed; \
-                    for (int i = 0; i < nRCHits && !anyAlts; i++) { \
+                    for (int i = 0; i < nRCHits; i++) { \
                         indexSeed(genome->getLiftedLocation(rcHits[i]), rcSeed, batches, context, stats, large); \
                     } \
                 } \
@@ -1364,27 +1365,7 @@ GenomeIndex::indexLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashTa
     else {
         const unsigned *hits, *rcHits;
         context->unliftedIndex->lookupSeed32(seed, &nHits, &hits, &nRCHits, &rcHits);
-        // CHECK_ALTS_AND_ADD_LIFTED
-        if ((nHits > 0 && genomeLocation == *hits) || (nHits == 0 && nRCHits > 0 && genomeLocation == *rcHits)) {
-            bool anyAlts = false;
-            for (int i = 0; i < nHits && !anyAlts; i++) {
-                anyAlts = genome->getLiftedLocation(hits[i]) != hits[i];
-            }
-            for (int i = 0; i < nRCHits && !anyAlts; i++) {
-                anyAlts = genome->getLiftedLocation(rcHits[i]) != rcHits[i];
-            }
-            if (anyAlts) {
-                for (int i = 0; i < nHits; i++) {
-                    indexSeed(genome->getLiftedLocation(hits[i]), seed, batches, context, stats, large);
-                }
-                if (!seed.isOwnReverseComplement()) {
-                    Seed rcSeed = ~seed;
-                    for (int i = 0; i < nRCHits; i++) {
-                        indexSeed(genome->getLiftedLocation(rcHits[i]), rcSeed, batches, context, stats, large);
-                    }
-                }
-            }
-        }
+        CHECK_ALTS_AND_ADD_LIFTED
     }
 }
 
