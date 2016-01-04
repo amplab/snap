@@ -326,7 +326,7 @@ namespace GenerateScatterGraphs
         static void Main(string[] args)
         {
             bool useExpression = true;
-            const int minReads = 30;    // Minimum reads (in each RNA and DNA) to keep a sample.
+            const int minReads = 30;    // Minimum reads (in each RNA and DNA) to keep a sample.  There's a similar constant in ProcessVCFs.
 
             if (args.Count() > 0)
             {

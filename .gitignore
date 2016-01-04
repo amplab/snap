@@ -38,6 +38,7 @@ obj
 *.pdb
 *.log
 *.unsuccessfulbuild
+*.csproj.user
 
 # Compiled binaries
 /snap
@@ -51,6 +52,10 @@ obj
 /apps/SplitIntoChromosomes/bin
 /apps/AllExpression/bin
 /apps/ComputeP53Levels/bin
+/apps/ColumnizeSam/bin
+/apps/ProcessVCFs/bin
+/apps/QuickNDirtyMakeExpressionScript/bin
+/apps/ResortConcatenatedGermlineVariants/bin
 
 /apps/ExpressionMetadata/bin/x64/Debug
 /apps/ExpressionMetadata/bin/x64/Release/ExpressionMetadata.exe.config
@@ -71,7 +76,7 @@ apps/GenerateScatterGraphs/bin/x64/Release/GenerateScatterGraphs.vshost.exe.mani
 
 apps/ExpressionLib/bin/
 apps/ExpressionMetadata/bin/x64/Release/ExpressionLib.dll
-apps/ProcessVCFs/bin/
+
 
 
 

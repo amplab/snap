@@ -1324,6 +1324,9 @@ namespace ExpressionMetadata
             public string reference;
         }
 
+        static List<string> refassemWithoutChr = new List<string>();
+        static Dictionary<string, string> refassemChrStateSwitched = new Dictionary<string, string>();
+        static Dictionary<string, string> refassemTranslation = new Dictionary<string, string>();        // refassems in the input that are equivalent to ones we actually have
 
 
         static public void GenerateExtractionScripts(List<ExpressionTools.Experiment> experiments)
@@ -1355,17 +1358,8 @@ namespace ExpressionMetadata
                     experimentSets.Add(diseaseAndReference, new List<ExpressionTools.MAFRecord>());
                 }
 
-                string chromPrefix;
                 string refassem = experiment.TumorDNAAnalysis.refassemShortName.ToLower();
-                if (refassem == "NCBI36_BCCAGSC_variant".ToLower() || refassem == "grch37-lite" || refassem == "grch37" || refassem == "hg19_broad_variant" || refassem == "grch37-lite_wugsc_variant_1" || refassem == "grch37-lite_wugsc_variant_2"
-                    || refassem == "grch37-lite-+-hpv_redux-build" || refassem == "HS37D5".ToLower() || refassem == "NCBI36_WUGSC_variant".ToLower())
-                {
-                    chromPrefix = " ";
-                }
-                else
-                {
-                    chromPrefix = " chr";
-                }
+                string chromPrefix = " " + ExpressionTools.ChromPrefixFromRefassem(refassem);
 
                 if (!extractDNAInputs.ContainsKey(refassem))
                 {
@@ -1805,10 +1799,18 @@ namespace ExpressionMetadata
             int nSamplesNotYetReadyToCall = 0;
             int nSkipped = 0;
 
+            var referencesNeedingAlternateChrState = new List<string>();
+
             StreamWriter variantCallScript = null;
 
             foreach (var experiment in experiments)
             {
+                string refassem = experiment.NormalDNAAnalysis.refassemShortName.ToLower();
+                if (refassemTranslation.ContainsKey(refassem))
+                {
+                    refassem = refassemTranslation[refassem].ToLower();
+                }
+
                 if (experiment.NormalDNAAnalysis.storedBAM == null)
                 {
                     nSamplesNotYetReadyToCall++;
@@ -1816,13 +1818,43 @@ namespace ExpressionMetadata
                 else if (experiment.NormalDNAAnalysis.storedBAM.vcfInfo != null) 
                 {
                     nSamplesAlreadyCalled++;
-                } 
-                else if (!experiment.NormalDNAAnalysis.localRealign)
+                }
+                else if (!experiment.NormalDNAAnalysis.localRealign && (!experiment.NormalDNAAnalysis.storedBAM.chrStateKnown ||
+                    refassemWithoutChr.Contains(refassem) == experiment.NormalDNAAnalysis.storedBAM.usesChr && !refassemChrStateSwitched.ContainsKey(refassem)))
                 {
-                    nSkipped++; // First pass, just do the ones we locally realigned, because there's some confusion matching the chromosome names with the references for the ones in TCGA
+                    if (experiment.NormalDNAAnalysis.storedBAM.chrStateKnown && !referencesNeedingAlternateChrState.Contains(refassem))
+                    {
+                        referencesNeedingAlternateChrState.Add(refassem);
+                    }
+                    nSkipped++;
                 }
                 else
                 {
+                    string referenceToUse;
+
+                    if (!experiment.NormalDNAAnalysis.localRealign)
+                    {
+                        //
+                        // We must have chrStateKnown or an alternate, because we checked for it above
+                        //
+                        if (refassemWithoutChr.Contains(refassem) == experiment.NormalDNAAnalysis.storedBAM.usesChr) // Subtle: reverse the chr state if the reference not-chr state is the same as the bam chr state.
+                        {
+                            if (refassemChrStateSwitched.ContainsKey(refassem))
+                            {
+                                referenceToUse = refassemChrStateSwitched[refassem];
+                            } else {
+                                Console.WriteLine("Got to unexpected place with ref " + refassem);
+                                nSkipped++; // For now, just skip it.
+                                referenceToUse = "This shouldn't happen";   // Because we picked it off above in the nSkipped case.  Need this to convince the compiler, though
+                            }
+                        } else {
+                            referenceToUse = refassem;
+                        }
+                    }
+                    else
+                    {
+                        referenceToUse = refassem;
+                    }
                     nSamplesToVariantCall++;
 
                     if (variantCallScript == null)
@@ -1831,8 +1863,8 @@ namespace ExpressionMetadata
                     }
 
                     variantCallScript.Write("date\n");
-                    variantCallScript.Write(@"cat ~/genomes/" + experiment.NormalDNAAnalysis.refassemShortName + "-100k-regions | parallel -k -j `cat ~/ncores` \" freebayes --region {} --fasta-reference ~/genomes/" + 
-                        experiment.NormalDNAAnalysis.refassemShortName + ".fa " +
+                    variantCallScript.Write(@"cat ~/genomes/" + referenceToUse + "-100k-regions | parallel -k -j `cat ~/ncores` \" freebayes --region {} --fasta-reference ~/genomes/" + 
+                        referenceToUse + ".fa " +
                         ExpressionTools.WindowsToLinuxPathname(experiment.NormalDNAAnalysis.storedBAM.bamInfo.FullName) + " \" | ~/freebayes/vcflib/bin/vcffirstheader | ~/freebayes/vcflib/bin/vcfstreamsort -w 1000 | ~/freebayes/vcflib/bin/vcfuniq > " +
                         experiment.NormalDNAAnalysis.analysis_id + ".vcf\n");
                     variantCallScript.Write("if [ $? = 0 ]; then\n");
@@ -1850,7 +1882,16 @@ namespace ExpressionMetadata
                 variantCallScript.Close();
             }
 
-            Console.WriteLine("" + nSamplesAlreadyCalled + " have been variant called, " + nSamplesNotYetReadyToCall + " are waiting for other things, " + nSkipped + " were skipped, and " + nSamplesToVariantCall + " are ready to call.");
+            Console.WriteLine("" + nSamplesAlreadyCalled + " have been variant called, " + nSamplesNotYetReadyToCall + " are waiting for other things, " + nSkipped + " are skipped, and " + nSamplesToVariantCall + " are ready to call.");
+            if (referencesNeedingAlternateChrState.Count() != 0)
+            {
+                Console.Write("References needing alternate chr state: ");
+                foreach (var reference in referencesNeedingAlternateChrState)
+                {
+                    Console.Write(reference + " ");
+                }
+                Console.WriteLine();
+            }
         }
 
         static public void DumpSampleToParticipantIDMap( Dictionary<SampleID, ParticipantID> sampleToParticipantIdMap)
@@ -1994,6 +2035,24 @@ namespace ExpressionMetadata
             hg18_likeReferences.Add("NCBI36_WUGSC_variant".ToLower());
             hg18_likeReferences.Add("hg18");
             hg18_likeReferences.Add("HG18_Broad_variant".ToLower());
+
+            refassemWithoutChr.Add("NCBI36_BCCAGSC_variant".ToLower());
+            refassemWithoutChr.Add("GRCH37-lite".ToLower());
+            refassemWithoutChr.Add("hg19_broad_variant");
+            refassemWithoutChr.Add("HS37D5".ToLower());
+            refassemWithoutChr.Add("ncbi36.54");
+            refassemWithoutChr.Add("NCBI36_WUGSC_variant".ToLower());
+            refassemWithoutChr.Add("grch37-lite-+-hpv_redux-build");
+
+            refassemChrStateSwitched.Add("hg19", "hg19-no-chr");
+            refassemChrStateSwitched.Add("hs37d5", "hs37d5-with-chr");
+            refassemChrStateSwitched.Add("grch37", "grch37-no-chr");
+            refassemChrStateSwitched.Add("grch37-lite", "grch37-lite-with-chr");
+            refassemChrStateSwitched.Add("hg19_broad_variant", "hg19_broad_variant-with-chr");
+            refassemChrStateSwitched.Add("NCBI36_BCM_variant".ToLower(), "NCBI36_BCM_variant-no-chr".ToLower());
+            refassemChrStateSwitched.Add("NCBI36_WUGSC_variant".ToLower(), "NCBI36_WUGSC_variant-with-chr".ToLower());
+            refassemTranslation.Add("grch37-lite_wugsc_variant_1", "grch37-lite");
+
 
             InitializeMachines();
 

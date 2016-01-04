@@ -25,6 +25,20 @@ namespace ExpressionLib
 {
     public class ExpressionTools
     {
+        public static string ChromPrefixFromRefassem(string refassem)
+        {
+            refassem = refassem.ToLower();
+            if (refassem == "NCBI36_BCCAGSC_variant".ToLower() || refassem == "grch37-lite" || refassem == "grch37" || refassem == "hg19_broad_variant" || refassem == "grch37-lite_wugsc_variant_1" || refassem == "grch37-lite_wugsc_variant_2"
+                || refassem == "grch37-lite-+-hpv_redux-build" || refassem == "HS37D5".ToLower() || refassem == "NCBI36_WUGSC_variant".ToLower())
+            {
+               return "";
+            }
+            else
+            {
+                return "chr";
+            }
+
+        }
         public static string ShareFromPathname(string pathname)
         {
             //
@@ -523,6 +537,7 @@ namespace ExpressionLib
             string line;
             while (null != (line = reader.ReadLine()))
             {
+                line = line.ToLower();
                 var fields = line.Split('\t');
                 if (fields.Count() != 2)
                 {
@@ -536,7 +551,7 @@ namespace ExpressionLib
                 {
                     usesChr = true;
                 }
-                else if (fields[1] == "noChr")
+                else if (fields[1] == "nochr")
                 {
                     usesChr = false;
                 }
@@ -778,14 +793,25 @@ namespace ExpressionLib
                 experiment.disease_abbr = fields[0];
                 experiment.participant = participants[fields[2]];
                 experiment.TumorRNAAnalysis = tcgaRecords[fields[3]];
+                experiment.TumorRNAAnalysis.bamFileName = fields[7];
                 experiment.TumorDNAAnalysis = tcgaRecords[fields[4]];
+                experiment.TumorDNAAnalysis.bamFileName = fields[8];
                 experiment.NormalDNAAnalysis = tcgaRecords[fields[5]];
+                experiment.NormalDNAAnalysis.bamFileName = fields[9];
                 if (fields[6] == "") {
                     experiment.NormalRNAAnalysis = null;
                 } else {
                     experiment.NormalRNAAnalysis = tcgaRecords[fields[6]];
+                    experiment.NormalRNAAnalysis.bamFileName = fields[10];
                 }
-                experiment.maf = experiment.participant.mafs[0];
+                if (experiment.participant.mafs.Count() > 0)
+                {
+                    experiment.maf = experiment.participant.mafs[0];
+                }
+                else
+                {
+                    experiment.maf = null;
+                }
 
                 experiments.Add(experiment);
             }
@@ -793,7 +819,7 @@ namespace ExpressionLib
             return experiments;
         }
 
-        public class MAFRecord
+        public class MAFRecord : IComparable<MAFRecord>
         {
             public string entire_maf_line;  // The raw line.
 
@@ -827,6 +853,15 @@ namespace ExpressionLib
             public int nRNAMatchingTumor;
             public int nRNAMatchingNeither;
             public int nRNAMatchingBoth;
+
+            public int CompareTo(MAFRecord peer) {
+                if (Chrom != peer.Chrom)
+                {
+                    return Chrom.CompareTo(peer.Chrom);
+                }
+
+                return Start_position.CompareTo(peer.Start_position);
+            }
         } // MAFRecord
 
         public class Sample
@@ -960,16 +995,16 @@ namespace ExpressionLib
 
         } // AddMAFFileToParticipants
 
-        public static void AddAllMAFFilesToParticipants(Dictionary<ParticipantID, Participant> participants, Dictionary<SampleID, ParticipantID> sampleToParticipantIDMap)
+        public static void AddAllMAFFilesToParticipants(Dictionary<ParticipantID, Participant> participants, Dictionary<SampleID, ParticipantID> sampleToParticipantIDMap, string path = @"f:\sequence\Reads\tcga\mafs\")
         {
-            foreach (var file in Directory.GetFiles(@"f:\sequence\Reads\tcga\mafs\"))
+            foreach (var file in Directory.GetFiles(path))
             {
                 AddMAFFileToParticipants(file, participants, sampleToParticipantIDMap);
             }
         }
 
 
-        public static Dictionary<string, Participant> BuildParticipantData(Dictionary<string, TCGARecord> tcgaEntries, out Dictionary<string, Sample> allSamples)
+        public static Dictionary<string, Participant> BuildParticipantData(Dictionary<string, TCGARecord> tcgaEntries, out Dictionary<string, Sample> allSamples, string clinicalDirectory = @"f:\sequence\reads\tcga\clinical")
         {
             var participants = new Dictionary<string, Participant>();
 
@@ -1061,7 +1096,7 @@ namespace ExpressionLib
             //
             // Now add in the per-participant clinical metadata.
             //
-            foreach (var clinical_file in Directory.EnumerateFiles(@"f:\sequence\reads\tcga\clinical"))
+            foreach (var clinical_file in Directory.EnumerateFiles(clinicalDirectory))
             {
                 ProcessClinicalFile(participants, clinical_file);
             }
@@ -1519,13 +1554,13 @@ namespace ExpressionLib
 
         }
 
-        public static void LoadTCGAAdditionalMetadata(Dictionary<AnalysisID, ExpressionTools.TCGARecord> tcgaRecords)
+        public static void LoadTCGAAdditionalMetadata(Dictionary<AnalysisID, ExpressionTools.TCGARecord> tcgaRecords, string additonalMetadataFilename = @"f:\sequence\reads\tcga\tcgaAdditionalMetadata.txt")
         {
-            if (!File.Exists(@"f:\sequence\reads\tcga\tcgaAdditionalMetadata.txt"))
+            if (!File.Exists(additonalMetadataFilename))
             {
                 return;
             }
-            string[] additionalMetadata = File.ReadAllLines(@"f:\sequence\reads\tcga\tcgaAdditionalMetadata.txt");
+            string[] additionalMetadata = File.ReadAllLines(additonalMetadataFilename);
             foreach (var line in additionalMetadata)
             {
                 string[] fields = line.Split('\t'); // Format is 0:analysisID 1:filename 2:readsSampled 3:minLength 4:maxLength 5:totalLength 6:minGood 7:maxGood 8:totalGoodBases 9:anyPaired 10:allPaired
@@ -1892,8 +1927,14 @@ namespace ExpressionLib
                         {
                             chromosomeName = "chr" + chromosomeName;
                         }
+                        else
+                        {
+                            return emptyList;
+                        }
                     }
-
+                }
+                else
+                {
                     return emptyList;
                 }
 
