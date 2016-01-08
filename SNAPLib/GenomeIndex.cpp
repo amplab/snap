@@ -387,9 +387,6 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     volatile _int64 nBasesProcessed = 0;
     volatile int runningThreadCount;
 
-    SingleWaiterObject doneObject;
-    CreateSingleWaiterObject(&doneObject);
-
     unsigned nThreads = __min(GetNumberOfProcessors(), maxThreads);
     BuildHashTablesThreadContext *threadContexts = new BuildHashTablesThreadContext[nThreads];
 
@@ -397,6 +394,14 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     for (unsigned i = 0; i < nHashTables; i++) {
         InitializeExclusiveLock(&hashTableLocks[i]);
     }
+
+    // lifted index needs to be done in two passes, first to build and then to sort
+    int liftedIndexPass = 0;
+
+lifted_index_pass_start:
+
+    SingleWaiterObject doneObject;
+    CreateSingleWaiterObject(&doneObject);
 
     runningThreadCount = nThreads;
 
@@ -459,6 +464,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 		threadContexts[i].lastBackpointerIndexUsedByThread = lastBackpointerIndexUsedByThread;
 		threadContexts[i].backpointerSpillFile = backpointerSpillFile;
         threadContexts[i].unliftedIndex = unliftedIndex;
+        threadContexts[i].liftedIndexPass = liftedIndexPass;
 
         StartNewThread(BuildHashTablesWorkerThreadMain, &threadContexts[i]);
     }
@@ -496,8 +502,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     // We're done with the raw genome.  Delete it to save some memory.
     //
   
-    bool genomeHasAlts = genome->hasAltContigs();
-    if (! (genomeHasAlts && unliftedIndex == NULL)) {
+    if (!genome->hasAltContigs()) {
         // delete if we won't need it later
         delete genome;
         genome = NULL;
@@ -534,6 +539,10 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 
 		WriteStatusMessage("%llds\n", (timeInMillis() - spillDone + 500) / 1000);
 	}
+
+    if (unliftedIndex != NULL && liftedIndexPass == 1) {
+        goto lifted_skip_overflow;
+    }
 
     WriteStatusMessage("Building overflow table.\n");
     start = timeInMillis();
@@ -706,7 +715,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
         }
         totalBytesWritten += bytesWrittenThisHashTable;
 
-        if (!(genomeHasAlts && unliftedIndex == NULL)) {
+        if (genome == NULL || !genome->hasAltContigs()) {
             delete hashTables[whichHashTable];
             hashTables[whichHashTable] = NULL;
         }
@@ -716,6 +725,13 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 
     _ASSERT(overflowTableIndex == index->overflowTableSize);    // We used exactly what we expected to use.
 
+    if (unliftedIndex != NULL && liftedIndexPass == 0) {
+        liftedIndexPass = 1;
+        goto lifted_index_pass_start;
+    }
+
+lifted_skip_overflow:
+    
     delete overflowAnchor;
     overflowAnchor = NULL;
 
@@ -783,13 +799,13 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 
     fprintf(indexFile,"%d %d %d %lld %d %d %d %lld %d %d",
         // NOTE: this must be changed if the format no longer supports v5 (pre-alt)
-        genomeHasAlts ? GenomeIndexFormatMajorVersion : GenomeIndexFormatMajorVersionWithoutAlts,
+        genome != NULL && genome->hasAltContigs() ? GenomeIndexFormatMajorVersion : GenomeIndexFormatMajorVersionWithoutAlts,
         GenomeIndexFormatMinorVersion, index->nHashTables, 
         index->overflowTableSize, seedLen, chromosomePaddingSize, hashTableKeySize, totalBytesWritten, large ? 0 : 1, locationSize); 
 
     fclose(indexFile);
  
-    if (genomeHasAlts && unliftedIndex == NULL) {
+    if (genome != NULL && genome->hasAltContigs() && unliftedIndex == NULL) {
         // create a sub-index with only seeds that occur in alt contigs
         snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, LiftedIndexDirName);
         bool ok = BuildIndexToDirectory(genome, seedLen, slack, true, filenameBuffer, maxThreads, chromosomePaddingSize, forceExact,
@@ -1264,12 +1280,18 @@ GenomeIndex::BuildHashTablesWorkerThread(BuildHashTablesThreadContext *context)
             continue;
         }
 
-		Seed seed(bases, seedLen);
+        Seed seed(bases, seedLen);
 
         if (!lift) {
             indexSeed(genomeLocation, seed, batches, context, &stats, large);
         } else {
-            indexLiftedSeed(genomeLocation, seed, batches, context, &stats, large);
+            // in the lifted case, we first do one pass to index lifted seeds
+            // and then another pass to sort the unlifted locations by the lifted locations so they correspond
+            if (context->liftedIndexPass == 0) {
+                indexLiftedSeed(genomeLocation, seed, batches, context, &stats, large);
+            } else {
+                resortLiftedSeed(genomeLocation, seed, batches, context, &stats, large);
+            }
         }
     } // For each genome base in our area
 
@@ -1295,7 +1317,6 @@ GenomeIndex::BuildHashTablesWorkerThread(BuildHashTablesThreadContext *context)
 
 const _int64 GenomeIndex::printPeriod = 100000000;
 
-
     void
 GenomeIndex::indexSeed(GenomeLocation genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large)
 {
@@ -1308,28 +1329,27 @@ GenomeIndex::indexSeed(GenomeLocation genomeLocation, Seed seed, PerHashTableBat
     _ASSERT(whichHashTable < nHashTables);
  
 	if (batches[whichHashTable].addSeed(genomeLocation, seed.getLowBases(context->hashTableKeySize), usingComplement)) {
-		AcquireExclusiveLock(&context->hashTableLocks[whichHashTable]);
-		for (unsigned i = 0; i < batches[whichHashTable].nUsed; i++) {
-			ApplyHashTableUpdate(context, whichHashTable, batches[whichHashTable].entries[i].genomeLocation, 
-				batches[whichHashTable].entries[i].lowBases, batches[whichHashTable].entries[i].usingComplement,
-				&stats->bothComplementsUsed, &stats->genomeLocationsInOverflowTable, &stats->seedsWithMultipleOccurrences, large);
-		}
-		ReleaseExclusiveLock(&context->hashTableLocks[whichHashTable]);
+        AcquireExclusiveLock(&context->hashTableLocks[whichHashTable]);
+        for (unsigned i = 0; i < batches[whichHashTable].nUsed; i++) {
+            ApplyHashTableUpdate(context, whichHashTable, batches[whichHashTable].entries[i].genomeLocation,
+                batches[whichHashTable].entries[i].lowBases, batches[whichHashTable].entries[i].usingComplement,
+                &stats->bothComplementsUsed, &stats->genomeLocationsInOverflowTable, &stats->seedsWithMultipleOccurrences, large);
+        }
+        ReleaseExclusiveLock(&context->hashTableLocks[whichHashTable]);
 
-		_int64 newNBasesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[whichHashTable].nUsed + stats->unrecordedSkippedSeeds);
+        _int64 newNBasesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, batches[whichHashTable].nUsed + stats->unrecordedSkippedSeeds);
 
-		if ((unsigned)(newNBasesProcessed / printPeriod) > (unsigned)((newNBasesProcessed - batches[whichHashTable].nUsed - stats->unrecordedSkippedSeeds) / printPeriod)) {
-			WriteStatusMessage("Indexing %lld / %lld\n", (newNBasesProcessed / printPeriod) * printPeriod, context->genome->getCountOfBases());
-		}
-		stats->unrecordedSkippedSeeds = 0;
-		batches[whichHashTable].clear();
-	} // If we filled a batch
+        if ((unsigned)(newNBasesProcessed / printPeriod) >(unsigned)((newNBasesProcessed - batches[whichHashTable].nUsed - stats->unrecordedSkippedSeeds) / printPeriod)) {
+            WriteStatusMessage("Indexing %lld / %lld\n", (newNBasesProcessed / printPeriod) * printPeriod, context->genome->getCountOfBases());
+        }
+        stats->unrecordedSkippedSeeds = 0;
+        batches[whichHashTable].clear();
+    } // If we filled a batch
 }
 
     void
 GenomeIndex::indexLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large)
 {
-    // todo: optimize
     // if this is first occurrence of seed in unlifted index, checks if seed is in any alts
     // and if so, adds all locations to this index, lifting alts to non-alt locations
 
@@ -1366,6 +1386,80 @@ GenomeIndex::indexLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashTa
         const unsigned *hits, *rcHits;
         context->unliftedIndex->lookupSeed32(seed, &nHits, &hits, &nRCHits, &rcHits);
         CHECK_ALTS_AND_ADD_LIFTED
+    }
+}
+    
+    void
+dualSort32(
+    _int64 n,
+    unsigned* keys,
+    unsigned* values)
+{
+    // todo: optimize sorting, just using a simple selection sort for now
+    unsigned t;
+#define DUAL_SORT \
+    if (n < 2) { \
+        return; \
+    } \
+    for (_int64 i = 0; i < n - 1; i++) { \
+        for (_int64 j = n - 1; j > i; j--) { \
+            if (keys[i] > keys[j]) { \
+                t = keys[i]; \
+                keys[i] = keys[j]; \
+                keys[j] = t; \
+                t = values[i]; \
+                values[i] = values[j]; \
+                values[j] = t; \
+            } \
+        } \
+    }
+    DUAL_SORT
+}
+
+    void
+dualSort(
+    _int64 n,
+    GenomeLocation* keys,
+    GenomeLocation* values)
+{
+    GenomeLocation t;
+    DUAL_SORT
+}
+
+    void
+GenomeIndex::resortLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large)
+{
+    // redo lifting and then sort both lists by lifted location
+    // NOTE: this leaves the unlifted list in a non-sorted order
+
+    _int64 nHits, nRCHits;
+    _int64 nLiftedHits, nLiftedRCHits;
+    if (doesGenomeIndexHave64BitLocations()) {
+        const GenomeLocation *hits, *rcHits;
+        GenomeLocation singleHit[2], singleRCHit[2];
+        const GenomeLocation *liftedHits, *liftedRCHits;
+        GenomeLocation liftedSingleHit[2], liftedSingleRCHit[2];
+        lookupSeed(seed, &nLiftedHits, &liftedHits, &nLiftedRCHits, &liftedRCHits, &liftedSingleHit[1], &liftedSingleRCHit[1]);
+        if (nLiftedHits > 1 || nLiftedRCHits > 1) {
+            context->unliftedIndex->lookupSeed(seed, &nHits, &hits, &nRCHits, &rcHits, &singleHit[1], &singleRCHit[1]);
+            _ASSERT(nLiftedHits == nHits && nLiftedRCHits == nRCHits);
+            if ((nHits > 0 && genomeLocation == hits[0]) || (nRCHits > 0 && genomeLocation == rcHits[0])) {
+                dualSort(nHits, (GenomeLocation*)liftedHits, (GenomeLocation*)hits);
+                dualSort(nRCHits, (GenomeLocation*)liftedRCHits, (GenomeLocation*)rcHits);
+            }
+        }
+    } else {
+        const unsigned *hits, *rcHits;
+        const unsigned *liftedHits, *liftedRCHits;
+        lookupSeed32(seed, &nLiftedHits, &liftedHits, &nLiftedRCHits, &liftedRCHits);
+        if (nLiftedHits > 1 || nLiftedRCHits > 1) {
+            context->unliftedIndex->lookupSeed32(seed, &nHits, &hits, &nRCHits, &rcHits);
+            _ASSERT(nLiftedHits == nHits && nLiftedRCHits == nRCHits);
+            if ((nHits > 0 && genomeLocation == hits[0]) || (nRCHits > 0 && genomeLocation == rcHits[0])) {
+                dualSort32(nHits, (unsigned*)liftedHits, (unsigned*)hits);
+                dualSort32(nRCHits, (unsigned*)liftedRCHits, (unsigned*)rcHits);
+            }
+        }
     }
 }
 

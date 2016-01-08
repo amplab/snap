@@ -227,6 +227,7 @@ Arguments:
     hashTableEpoch = 0;
 
     if (genome->hasAltContigs()) {
+        // todo: BigAlloc / new(allocator) -> fixed size, avoid reallocs; reserve space for max size
         allMatches = new MatchInfoVector();
     }
  

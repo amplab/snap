@@ -46,14 +46,6 @@ class Read:
     def __str__(self):
         return "Read({}, {}, {}, {})".format(self.id, self.chr, self.pos, self.seq)
 
-    def to_sam_pair(self, other):
-        r1 = "{}\t{}\t{}\t{}\t{}\t{}M\t{}\t{}\t{}\t{}\t{}\n".format(
-            self.id, 99, self.chr, self.pos + 1, 60, len(self.seq), other.chr,
-            other.pos + 1, abs(self.pos - other.pos + len(other.seq)), self.seq, 'A'*len(self.seq))
-        return r1 + "{}\t{}\t{}\t{}\t{}\t{}M\t{}\t{}\t{}\t{}\t{}\n".format(
-            other.id, 147, other.chr, other.pos + 1, 60, len(other.seq), self.chr,
-            self.pos + 1, abs(self.pos - other.pos + len(other.seq)), other.seq, 'A'*len(other.seq))
-
 class Contig:
     def __init__(self, name, accession, seq, isAlt=False, parent=None, parentLoc = 0, isAltRC=False):
         self.name = name
@@ -83,26 +75,27 @@ class Genome:
             altseq = rc(altseq)
         self.add(Contig(name, accession, altseq, True, parent, start, isRC))
 
-    def get_seq(self, chr, start, end):
-        contig = self.contigs[chr]
-        if not contig.isAltRC:
-            return contig.seq[start:end]
-        else:
-            return rc(contig.seq[len(contig.seq) - end : len(contig.seq) - start])
-
-    def make_read(self, chr, pos, isRC=False, len=100, pmut=.02, id=None):
+    def make_read(self, chr, pos, isReverse=False, len=100, pmut=.02, id=None):
         if id == None:
-            id = "r{:05d}_{}_{}_{}".format(random.randint(0,99999), chr, pos+1, ('r' if isRC else 'f'))
-        seq = random_mutate(self.get_seq(chr, pos, pos + len))
-        if isRC:
-            seq = rc(seq)
-        return Read(id, chr, pos, seq, pmut)
+            id = "r{:05d}_{}_{}_{}".format(random.randint(0,99999), chr, pos+1, ('r' if isReverse else 'f'))
+        seq = random_mutate(self.contigs[chr].seq[pos:pos + len], pmut)
+        return Read(id, chr, pos, seq)
 
     def make_pair(self, chr1, pos1, chr2, pos2, len=100, pmut=.02):
-        id = "r{:05d}_{}_{}_{}_{}".format(random.randint(0,99999), chr1, pos1+1, chr2, pos2+1)
+        id = "r{:05d}_{}_{}_{}_{}".format(random.randint(0,99999), chr1, pos1 + 1, chr2, pos2 + 1)
         r1 = self.make_read(chr1, pos1, False, len, pmut, id + "/1")
         r2 = self.make_read(chr2, pos2, True, len, pmut, id + "/2")
         return [r1, r2]
+
+    def to_sam_pair(self, read1, read2):
+        rc1 = 1 if self.contigs[read1.chr].isAltRC else 0
+        rc2 = 0 if self.contigs[read2.chr].isAltRC else 1
+        r1 = "{}\t{}\t{}\t{}\t{}\t{}M\t{}\t{}\t{}\t{}\t{}\n".format(
+            read1.id, 67+16*rc1+32*rc2, read1.chr, read1.pos + 1, 60, len(read1.seq), read2.chr,
+            read2.pos + 1, abs(read1.pos - read2.pos + len(read2.seq)), read1.seq, (['ABCD','DCBA'][rc1]*int(len(read1.seq)/4+1))[:len(read1.seq)])
+        return r1 + "{}\t{}\t{}\t{}\t{}\t{}M\t{}\t{}\t{}\t{}\t{}\n".format(
+            read2.id, 131+16*rc2+32*rc1, read2.chr, read2.pos + 1, 60, len(read2.seq), read1.chr,
+            read1.pos + 1, abs(read1.pos - read2.pos + len(read2.seq)), read2.seq, (['ABCD','DCBA'][rc2]*int(len(read2.seq)/4+1))[:len(read2.seq)])
 
     def write_fasta(self, filename):
         with open(filename, 'w') as file:
@@ -110,8 +103,9 @@ class Genome:
                 for contig in self.contigs.values():
                     if contig.isAlt == write_alts:
                         file.write(">{}|gb|{}\n".format(contig.name, contig.accession))
-                        for i in range(0, len(contig.seq), 80):
-                            file.write("{}\n".format(contig.seq[i:i+80]))
+                        LINE_LEN=100
+                        for i in range(0, len(contig.seq), LINE_LEN):
+                            file.write("{}\n".format(contig.seq[i:i+LINE_LEN]))
 
     def write_alts(self, filename):
         with open(filename, 'w') as file:
@@ -134,7 +128,7 @@ with open("test.sam", "w") as file:
         if i < 2000:
             [r1, r2] = g.make_pair('chr1', i, 'chr1a' , i)
         else:
-            [r1, r2] = g.make_pair('chr1', i, 'chr1b' , i - 2000)
-        file.write(r1.to_sam_pair(r2))
+            [r1, r2] = g.make_pair('chr1', i, 'chr1b' , 900 - (i - 2000))
+        file.write(g.to_sam_pair(r1,r2))
         [r1, r2] = g.make_pair('chr1', i, 'chr1', i+1000)
-        file.write(r1.to_sam_pair(r2))
+        file.write(g.to_sam_pair(r1,r2))

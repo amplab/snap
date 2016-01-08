@@ -276,6 +276,9 @@ public:
 
         GenomeLocation getLiftedLocation(GenomeLocation altLocation) const;
 
+        inline bool isAltLocation(GenomeLocation location) const
+        { return location != InvalidGenomeLocation && location >= minAltLocation && getLiftedLocation(location) != location; }
+
 // unused        Genome *copy() const {return copy(true,true,true);}
 // unused        Genome *copyGenomeOneSex(bool useY, bool useM) const {return copy(!useY,useY,useM);}
 
@@ -337,7 +340,7 @@ public:
 
     void setAltContig(Genome::Contig* contig);
 
-    const char* getParentContigName(const char* altName);
+    const char* getParentContigName(const char* altName, GenomeDistance* pOffset = NULL);
 
 private:
 

@@ -244,6 +244,7 @@ protected:
 
         // used for building sub-index of only seeds that occur in alt contigs
         GenomeIndex                     *unliftedIndex;
+        int                              liftedIndexPass;
 
         ExclusiveLock                   *hashTableLocks;
         ExclusiveLock                   *overflowTableLock;
@@ -294,8 +295,9 @@ protected:
 
     virtual void indexSeed(GenomeLocation genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large);
     virtual void indexLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large);
+    virtual void resortLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large);
     virtual void completeIndexing(PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large);
-
+    
     static void BuildHashTablesWorkerThreadMain(void *param);
     void BuildHashTablesWorkerThread(BuildHashTablesThreadContext *context);
     static void ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64 whichHashTable, GenomeLocation genomeLocation, _uint64 lowBases, bool usingComplement,

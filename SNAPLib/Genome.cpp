@@ -506,7 +506,8 @@ void Genome::adjustAltContigs(AltContigMap* altMap)
                 if (contigs[i].beginningLocation < minAltLocation) {
                     minAltLocation = contigs[i].beginningLocation - chromosomePadding / 2;
                 }
-                const char* parentName = altMap->getParentContigName(contigs[i].name);
+                GenomeDistance offset;
+                const char* parentName = altMap->getParentContigName(contigs[i].name, &offset);
                 if (parentName == NULL) {
                     WriteErrorMessage("Unable to find parent contig for alt contig %s\n", contigs[i].name);
                     error = true;
@@ -523,7 +524,7 @@ void Genome::adjustAltContigs(AltContigMap* altMap)
                     WriteErrorMessage("Alt contig %s has alt parent contig %s, should be non-alt\n", contigs[i].name, parentName);
                     error = true; continue;
                 }
-                contigs[i].liftedLocation = parentLocation;
+                contigs[i].liftedLocation = parentLocation + offset;
             }
         }
         if (error) {
@@ -534,7 +535,7 @@ void Genome::adjustAltContigs(AltContigMap* altMap)
     // flip RC contigs
     for (int i = 0; i < nContigs; i++) {
         if (contigs[i].isAlternate && contigs[i].isAlternateRC) {
-	  util::toComplement(bases + GenomeLocationAsInt64(contigs[i].beginningLocation), NULL, (int) contigs[i].length - chromosomePadding);
+	        util::toComplement(bases + GenomeLocationAsInt64(contigs[i].beginningLocation), NULL, (int) contigs[i].length - chromosomePadding);
         }
     }
 }
@@ -805,7 +806,7 @@ void AltContigMap::setAltContig(Genome::Contig* contig)
     contig->isAlternateRC = false;
 }
 
-const char* AltContigMap::getParentContigName(const char* altName)
+const char* AltContigMap::getParentContigName(const char* altName, GenomeDistance* pOffset)
 {
     StringMap::iterator accession = nameToAccession.find(altName);
     if (accession != nameToAccession.end()) {
@@ -813,6 +814,9 @@ const char* AltContigMap::getParentContigName(const char* altName)
         if (alt != altsByAccession.end()) {
             StringMap::iterator parent = accessionToName.find(alt->second.parentAccession);
             if (parent != accessionToName.end()) {
+                if (pOffset != NULL) {
+                    *pOffset = alt->second.parentStart - alt->second.start;
+                }
                 return parent->second.data();
             }
         }

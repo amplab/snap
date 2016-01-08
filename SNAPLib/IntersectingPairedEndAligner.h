@@ -407,6 +407,7 @@ private:
         void init(GenomeLocation readWithMoreHitsGenomeLocation_, unsigned bestPossibleScore_, unsigned seedOffset_, GenomeLocation readWithMoreHitsUnliftedGenomeLocation_) {
             readWithMoreHitsGenomeLocation = readWithMoreHitsGenomeLocation_;
             readWithMoreHitsUnliftedGenomeLocation = readWithMoreHitsUnliftedGenomeLocation_;
+            _ASSERT(readWithMoreHitsUnliftedGenomeLocation != -1);
             bestPossibleScore = bestPossibleScore_;
             seedOffset = seedOffset_;
             score = -2;
@@ -420,6 +421,7 @@ private:
     struct ScoringCandidate {
         ScoringCandidate *      scoreListNext;              // This is a singly-linked list
         MergeAnchor *           mergeAnchor;
+        MergeAnchor *           unliftedMergeAnchor;
         unsigned                scoringMateCandidateIndex;  // Index into the array of scoring mate candidates where we should look 
         GenomeLocation          readWithFewerHitsGenomeLocation;
         GenomeLocation          readWithFewerHitsUnliftedGenomeLocation;
@@ -440,6 +442,7 @@ private:
             bestPossibleScore = bestPossibleScore_;
             scoreListNext = scoreListNext_;
             mergeAnchor = NULL;
+            unliftedMergeAnchor = NULL;
          }
         bool isAlt() const { return readWithFewerHitsGenomeLocation != readWithFewerHitsUnliftedGenomeLocation; }
     };
