@@ -68,20 +68,20 @@ class Genome:
     def add(self, contig):
         self.contigs[contig.name] = contig
 
-    def add_alt(self, name, accession, parent, start, stop, isRC=False, pmut=0.05):
+    def add_alt(self, name, accession, parent, start, stop, isRC=False, pmut=0.01):
         pc = self.contigs[parent]
         altseq = random_mutate(pc.seq[start:stop], pmut)
         if (isRC):
             altseq = rc(altseq)
         self.add(Contig(name, accession, altseq, True, parent, start, isRC))
 
-    def make_read(self, chr, pos, isReverse=False, len=100, pmut=.02, id=None):
+    def make_read(self, chr, pos, isReverse=False, len=100, pmut=.01, id=None):
         if id == None:
             id = "r{:05d}_{}_{}_{}".format(random.randint(0,99999), chr, pos+1, ('r' if isReverse else 'f'))
         seq = random_mutate(self.contigs[chr].seq[pos:pos + len], pmut)
         return Read(id, chr, pos, seq)
 
-    def make_pair(self, chr1, pos1, chr2, pos2, len=100, pmut=.02):
+    def make_pair(self, chr1, pos1, chr2, pos2, len=100, pmut=.01):
         id = "r{:05d}_{}_{}_{}_{}".format(random.randint(0,99999), chr1, pos1 + 1, chr2, pos2 + 1)
         r1 = self.make_read(chr1, pos1, False, len, pmut, id + "/1")
         r2 = self.make_read(chr2, pos2, True, len, pmut, id + "/2")
@@ -100,7 +100,10 @@ class Genome:
     def write_fasta(self, filename):
         with open(filename, 'w') as file:
             for write_alts in [False, True]:
-                for contig in self.contigs.values():
+                cnames = self.contigs.keys()
+                cnames.sort()
+                for cname in cnames:
+                    contig = self.contigs[cname]
                     if contig.isAlt == write_alts:
                         file.write(">{}|gb|{}\n".format(contig.name, contig.accession))
                         LINE_LEN=100
@@ -117,18 +120,29 @@ class Genome:
                         1, len(contig.seq), 1 + contig.parentLoc, contig.parentLoc + len(contig.seq), 0, 0))
 
 g = Genome()
-g.add(Contig("chr1", "C01", random_bases(5000)))
+seq = random_bases(7000)
+seq = seq + random_mutate(seq[5000:6000]) + random_bases(1000) + random_mutate(seq[5000:6000]) + random_bases(1000)
+g.add(Contig("chr1", "C01", seq))
 g.add_alt("chr1a", "C01A", "chr1", 1000, 2000)
 g.add_alt("chr1b", "C01B", "chr1", 3000, 4000, True)
+g.add_alt("chr1c", "C01C", "chr1", 5000, 6000)
+g.add_alt("chr1d", "C01D", "chr1", 7000, 8000, True)
+g.add_alt("chr1e", "C01E", "chr1", 9000, 10000)
+g.add_alt("chr1f", "C01F", "chr1", 9000, 10000)
 g.write_fasta("test.fa")
 g.write_alts("test_alts.txt")
 
 with open("test.sam", "w") as file:
-    for i in [100, 150, 200, 250, 2100, 2150, 2200, 2250]:
-        if i < 2000:
-            [r1, r2] = g.make_pair('chr1', i, 'chr1a' , i)
-        else:
-            [r1, r2] = g.make_pair('chr1', i, 'chr1b' , 900 - (i - 2000))
-        file.write(g.to_sam_pair(r1,r2))
-        [r1, r2] = g.make_pair('chr1', i, 'chr1', i+1000)
-        file.write(g.to_sam_pair(r1,r2))
+    for i in [0, 100, 600, 800, 900]:
+        for j in range(5):
+            start = j * 2000
+            chralt = ['chr1a', 'chr1b', 'chr1c', 'chr1d', 'chr1e'][j]
+            ialt = 900 - i if g.contigs[chralt].isAltRC else i
+            [r1, r2] = g.make_pair('chr1', i + start, chralt, ialt)
+            file.write(g.to_sam_pair(r1,r2))
+            [r1, r2] = g.make_pair('chr1', i + start, 'chr1', i + start + 1000)
+            file.write(g.to_sam_pair(r1,r2))
+            [r1, r2] = g.make_pair(chralt, ialt, 'chr1', i + start + 2000)
+            file.write(g.to_sam_pair(r1,r2))
+            [r1, r2] = g.make_pair('chr1', i + start + 1000, 'chr1', i + start + 2000)
+            file.write(g.to_sam_pair(r1,r2))

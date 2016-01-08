@@ -747,6 +747,19 @@ lifted_skip_overflow:
         delete [] histogram;
     }
 
+    if (genome != NULL && genome->hasAltContigs() && unliftedIndex == NULL) {
+        // create a sub-index with only seeds that occur in alt contigs
+        // need to build lifted index here because it will reorder unlifted index overflow table
+        snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, LiftedIndexDirName);
+        bool ok = BuildIndexToDirectory(genome, seedLen, slack, true, filenameBuffer, maxThreads, chromosomePaddingSize, forceExact,
+            hashTableKeySize, large, histogramFileName, locationSize, smallMemory, index);
+        if (!ok) {
+            WriteErrorMessage("Failed to build lifted index %s\n", filenameBuffer);
+            soft_exit(1);
+            return false;
+        }
+    }
+
     //
     // Now save out the part of the index that's independent of the genome itself.
     //
@@ -805,18 +818,6 @@ lifted_skip_overflow:
 
     fclose(indexFile);
  
-    if (genome != NULL && genome->hasAltContigs() && unliftedIndex == NULL) {
-        // create a sub-index with only seeds that occur in alt contigs
-        snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, LiftedIndexDirName);
-        bool ok = BuildIndexToDirectory(genome, seedLen, slack, true, filenameBuffer, maxThreads, chromosomePaddingSize, forceExact,
-            hashTableKeySize, large, histogramFileName, locationSize, smallMemory, index);
-        if (!ok) {
-            WriteErrorMessage("Failed to build lifted index %s\n", filenameBuffer);
-            soft_exit(1);
-            return false;
-        }
-    }
-
     index->genome = NULL; // deleted earlier
     delete index;
     if (computeBias && biasTable != NULL) {
@@ -1388,22 +1389,23 @@ GenomeIndex::indexLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashTa
         CHECK_ALTS_AND_ADD_LIFTED
     }
 }
-    
+#undef CHECK_ALTS_AND_ADD_LIFTED
+
     void
-dualSort32(
+dualBackwardsSort32(
     _int64 n,
     unsigned* keys,
     unsigned* values)
 {
     // todo: optimize sorting, just using a simple selection sort for now
     unsigned t;
-#define DUAL_SORT \
+#define DUAL_BACKWARDS_SORT \
     if (n < 2) { \
         return; \
     } \
     for (_int64 i = 0; i < n - 1; i++) { \
         for (_int64 j = n - 1; j > i; j--) { \
-            if (keys[i] > keys[j]) { \
+            if (keys[i] < keys[j]) { \
                 t = keys[i]; \
                 keys[i] = keys[j]; \
                 keys[j] = t; \
@@ -1413,18 +1415,19 @@ dualSort32(
             } \
         } \
     }
-    DUAL_SORT
+    DUAL_BACKWARDS_SORT
 }
 
     void
-dualSort(
+dualBackwardsSort(
     _int64 n,
     GenomeLocation* keys,
     GenomeLocation* values)
 {
     GenomeLocation t;
-    DUAL_SORT
+    DUAL_BACKWARDS_SORT
 }
+#undef DUAL_BACKWARDS_SORT
 
     void
 GenomeIndex::resortLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large)
@@ -1443,9 +1446,26 @@ GenomeIndex::resortLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashT
         if (nLiftedHits > 1 || nLiftedRCHits > 1) {
             context->unliftedIndex->lookupSeed(seed, &nHits, &hits, &nRCHits, &rcHits, &singleHit[1], &singleRCHit[1]);
             _ASSERT(nLiftedHits == nHits && nLiftedRCHits == nRCHits);
-            if ((nHits > 0 && genomeLocation == hits[0]) || (nRCHits > 0 && genomeLocation == rcHits[0])) {
-                dualSort(nHits, (GenomeLocation*)liftedHits, (GenomeLocation*)hits);
-                dualSort(nRCHits, (GenomeLocation*)liftedRCHits, (GenomeLocation*)rcHits);
+            if ((nHits > 1 && genomeLocation == hits[0]) || (nRCHits > 1 && genomeLocation == rcHits[0])) {
+                // re-lift unlifted so that the order corresponds, then sort both by lifted location
+                for (int i = 0; i < nHits; i++) {
+                    ((GenomeLocation*)liftedHits)[i] = genome->getLiftedLocation(hits[i]);
+                }
+                for (int i = 0; i < nRCHits; i++) {
+                    ((GenomeLocation*)liftedRCHits)[i] = genome->getLiftedLocation(rcHits[i]);
+                }
+                dualBackwardsSort(nHits, (GenomeLocation*)liftedHits, (GenomeLocation*)hits);
+                dualBackwardsSort(nRCHits, (GenomeLocation*)liftedRCHits, (GenomeLocation*)rcHits);
+#ifdef _DEBUG
+                for (int i = 0; i < nHits; i++) {
+                    _ASSERT(genome->getLiftedLocation(hits[i]) == liftedHits[i]);
+                    _ASSERT(i == 0 || liftedHits[i - 1] >= liftedHits[i]);
+                }
+                for (int i = 0; i < nRCHits; i++) {
+                    _ASSERT(genome->getLiftedLocation(rcHits[i]) == liftedRCHits[i]);
+                    _ASSERT(i == 0 || liftedRCHits[i - 1] >= liftedRCHits[i]);
+                }
+#endif
             }
         }
     } else {
@@ -1456,8 +1476,25 @@ GenomeIndex::resortLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashT
             context->unliftedIndex->lookupSeed32(seed, &nHits, &hits, &nRCHits, &rcHits);
             _ASSERT(nLiftedHits == nHits && nLiftedRCHits == nRCHits);
             if ((nHits > 0 && genomeLocation == hits[0]) || (nRCHits > 0 && genomeLocation == rcHits[0])) {
-                dualSort32(nHits, (unsigned*)liftedHits, (unsigned*)hits);
-                dualSort32(nRCHits, (unsigned*)liftedRCHits, (unsigned*)rcHits);
+                // re-lift unlifted so that the order corresponds, then sort both by lifted location
+                for (int i = 0; i < nHits; i++) {
+                    ((unsigned*)liftedHits)[i] = GenomeLocationAsInt32(genome->getLiftedLocation(hits[i]));
+                }
+                for (int i = 0; i < nRCHits; i++) {
+                    ((unsigned*)liftedRCHits)[i] = GenomeLocationAsInt32(genome->getLiftedLocation(rcHits[i]));
+                }
+                dualBackwardsSort32(nHits, (unsigned*)liftedHits, (unsigned*)hits);
+                dualBackwardsSort32(nRCHits, (unsigned*)liftedRCHits, (unsigned*)rcHits);
+#ifdef _DEBUG
+                for (int i = 0; i < nHits; i++) {
+                    _ASSERT(genome->getLiftedLocation(hits[i]) == liftedHits[i]);
+                    _ASSERT(i == 0 || liftedHits[i - 1] >= liftedHits[i]);
+                }
+                for (int i = 0; i < nRCHits; i++) {
+                    _ASSERT(genome->getLiftedLocation(rcHits[i]) == liftedRCHits[i]);
+                    _ASSERT(i == 0 || liftedRCHits[i - 1] >= liftedRCHits[i]);
+                }
+#endif
             }
         }
     }
