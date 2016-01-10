@@ -70,21 +70,25 @@
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)\obj\bin\$(Configuration)\$(Platform)\</OutDir>
     <IntDir>$(SolutionDir)\obj\obj\snap\$(Configuration)\$(Platform)\</IntDir>
+    <TargetName>snap-aligner</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)\obj\bin\$(Configuration)\$(Platform)\</OutDir>
     <IntDir>$(SolutionDir)\obj\obj\snap\$(Configuration)\$(Platform)\</IntDir>
+    <TargetName>snap-aligner</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)\obj\bin\$(Configuration)\$(Platform)\</OutDir>
     <IntDir>$(SolutionDir)\obj\obj\snap\$(Configuration)\$(Platform)\</IntDir>
+    <TargetName>snap-aligner</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)\obj\bin\$(Configuration)\$(Platform)\</OutDir>
     <IntDir>$(SolutionDir)\obj\obj\snap\$(Configuration)\$(Platform)\</IntDir>
+    <TargetName>snap-aligner</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
