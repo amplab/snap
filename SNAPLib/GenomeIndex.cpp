@@ -540,6 +540,19 @@ lifted_index_pass_start:
 		WriteStatusMessage("%llds\n", (timeInMillis() - spillDone + 500) / 1000);
 	}
 
+    // declare variables before goto
+    _uint64 nBackpointersProcessed;
+    _int64 lastPrintTime;
+    const unsigned maxHistogramEntry = 500000;
+    _uint64 countOfTooBigForHistogram;
+    _uint64  sumOfTooBigForHistogram;
+    _uint64 largestSeed;
+    unsigned *histogram;
+    FILE *tablesFile;
+    size_t totalBytesWritten;
+    _uint64 overflowTableIndex;
+    _uint64 duplicateSeedsProcessed;
+
     if (unliftedIndex != NULL && liftedIndexPass == 1) {
         goto lifted_skip_overflow;
     }
@@ -571,14 +584,13 @@ lifted_index_pass_start:
 		soft_exit(1);
 	}
 
-    _uint64 nBackpointersProcessed = 0;
-    _int64 lastPrintTime = timeInMillis();
+    nBackpointersProcessed = 0;
+    lastPrintTime = timeInMillis();
 
-    const unsigned maxHistogramEntry = 500000;
-    _uint64 countOfTooBigForHistogram = 0;
-    _uint64  sumOfTooBigForHistogram = 0;
-    _uint64 largestSeed = 0;
-    unsigned *histogram = NULL;
+    countOfTooBigForHistogram = 0;
+    sumOfTooBigForHistogram = 0;
+    largestSeed = 0;
+    histogram = NULL;
     if (buildHistogram) {
         histogram = new unsigned[maxHistogramEntry+1];
         for (unsigned i = 0; i <= maxHistogramEntry; i++) {
@@ -591,15 +603,15 @@ lifted_index_pass_start:
 	// Write the hash tables as we go so that we can free their memory on the fly.
 	//
 	snprintf(filenameBuffer,filenameBufferSize,"%s%c%s", directoryName, PATH_SEP, GenomeIndexHashFileName);
-    FILE *tablesFile = fopen(filenameBuffer, "wb");
+    tablesFile = fopen(filenameBuffer, "wb");
     if (NULL == tablesFile) {
         WriteErrorMessage("Unable to open hash table file '%s'\n", filenameBuffer);
         soft_exit(1);
     }
 
-    size_t totalBytesWritten = 0;
-    _uint64 overflowTableIndex = 0;
-	_uint64 duplicateSeedsProcessed = 0;
+    totalBytesWritten = 0;
+    overflowTableIndex = 0;
+    duplicateSeedsProcessed = 0;
 
 	for (unsigned whichHashTable = 0; whichHashTable < nHashTables; whichHashTable++) {
 		if (NULL == hashTables[whichHashTable]) {

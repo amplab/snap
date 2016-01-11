@@ -11,8 +11,6 @@ import shutil
 import subprocess
 import random
 
-import pandas as pd
-
 BASES = "ACTG"
 RCBASES = {"A":"T", "T":"A", "C":"G", "G":"C"}
 
@@ -68,20 +66,20 @@ class Genome:
     def add(self, contig):
         self.contigs[contig.name] = contig
 
-    def add_alt(self, name, accession, parent, start, stop, isRC=False, pmut=0.01):
+    def add_alt(self, name, accession, parent, start, stop, isRC=False, pmut=0.02):
         pc = self.contigs[parent]
         altseq = random_mutate(pc.seq[start:stop], pmut)
         if (isRC):
             altseq = rc(altseq)
         self.add(Contig(name, accession, altseq, True, parent, start, isRC))
 
-    def make_read(self, chr, pos, isReverse=False, len=100, pmut=.01, id=None):
+    def make_read(self, chr, pos, isReverse=False, len=100, pmut=.02, id=None):
         if id == None:
             id = "r{:05d}_{}_{}_{}".format(random.randint(0,99999), chr, pos+1, ('r' if isReverse else 'f'))
         seq = random_mutate(self.contigs[chr].seq[pos:pos + len], pmut)
         return Read(id, chr, pos, seq)
 
-    def make_pair(self, chr1, pos1, chr2, pos2, len=100, pmut=.01):
+    def make_pair(self, chr1, pos1, chr2, pos2, len=100, pmut=.02):
         id = "r{:05d}_{}_{}_{}_{}".format(random.randint(0,99999), chr1, pos1 + 1, chr2, pos2 + 1)
         r1 = self.make_read(chr1, pos1, False, len, pmut, id + "/1")
         r2 = self.make_read(chr2, pos2, True, len, pmut, id + "/2")
