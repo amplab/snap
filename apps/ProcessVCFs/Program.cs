@@ -420,9 +420,11 @@ namespace ProcessVCFs
                         }
                         nSavedGermlineVariants++;
                     }
-                }
+                } // each VCF line
 
                 Console.Write(/*"(" + nVariants + "," + hqVariants + ")"*/ ".");
+
+                vcfReader.Close();
 
                 if (error)
                 {
@@ -438,7 +440,7 @@ namespace ProcessVCFs
                     }
                 }
 
-            } // while we have an input line
+            } // while we have an input line (i.e., once around this loop for each VCF file)
 
 
             int nGenes = 0;

@@ -105,6 +105,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QuickNDirtyMakeExpressionSc
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColumnizeSam", "apps\ColumnizeSam\ColumnizeSam.csproj", "{5993E92A-4AC1-418E-80C4-D2B6E890958B}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GenerateConsolodatedExtractedReads", "apps\GenerateConsolodatedExtractedReads\GenerateConsolodatedExtractedReads.vcxproj", "{784CA826-F61A-4E50-978E-E3D5641E28EF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -471,6 +473,18 @@ Global
 		{5993E92A-4AC1-418E-80C4-D2B6E890958B}.Release|Mixed Platforms.Build.0 = Release|Any CPU
 		{5993E92A-4AC1-418E-80C4-D2B6E890958B}.Release|Win32.ActiveCfg = Release|Any CPU
 		{5993E92A-4AC1-418E-80C4-D2B6E890958B}.Release|x64.ActiveCfg = Release|Any CPU
+		{784CA826-F61A-4E50-978E-E3D5641E28EF}.Debug|Any CPU.ActiveCfg = Debug|Win32
+		{784CA826-F61A-4E50-978E-E3D5641E28EF}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
+		{784CA826-F61A-4E50-978E-E3D5641E28EF}.Debug|Mixed Platforms.Build.0 = Debug|Win32
+		{784CA826-F61A-4E50-978E-E3D5641E28EF}.Debug|Win32.ActiveCfg = Debug|Win32
+		{784CA826-F61A-4E50-978E-E3D5641E28EF}.Debug|Win32.Build.0 = Debug|Win32
+		{784CA826-F61A-4E50-978E-E3D5641E28EF}.Debug|x64.ActiveCfg = Debug|x64
+		{784CA826-F61A-4E50-978E-E3D5641E28EF}.Release|Any CPU.ActiveCfg = Release|Win32
+		{784CA826-F61A-4E50-978E-E3D5641E28EF}.Release|Mixed Platforms.ActiveCfg = Release|Win32
+		{784CA826-F61A-4E50-978E-E3D5641E28EF}.Release|Mixed Platforms.Build.0 = Release|Win32
+		{784CA826-F61A-4E50-978E-E3D5641E28EF}.Release|Win32.ActiveCfg = Release|Win32
+		{784CA826-F61A-4E50-978E-E3D5641E28EF}.Release|Win32.Build.0 = Release|Win32
+		{784CA826-F61A-4E50-978E-E3D5641E28EF}.Release|x64.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
