@@ -382,14 +382,6 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     start = timeInMillis();
     volatile _int64 nextOverflowBackpointer = 0;
 
-    volatile _int64 nonSeeds = 0;
-    volatile _int64 seedsWithMultipleOccurrences = 0;
-    volatile _int64 genomeLocationsInOverflowTable = 0;     // Number of extra hits on duplicate indices.  This should come out once we implement the overflow table.
-    volatile _int64 bothComplementsUsed = 0;    // Number of hash buckets where both complements are used
-    volatile _int64 noBaseAvailable = 0;        // Number of places where getSubstring returned null.
-    volatile _int64 nBasesProcessed = 0;
-    volatile int runningThreadCount;
-
     unsigned nThreads = __min(GetNumberOfProcessors(), maxThreads);
     BuildHashTablesThreadContext *threadContexts = new BuildHashTablesThreadContext[nThreads];
 
@@ -402,6 +394,14 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     int liftedIndexPass = 0;
 
 lifted_index_pass_start:
+
+    volatile _int64 nonSeeds = 0;
+    volatile _int64 seedsWithMultipleOccurrences = 0;
+    volatile _int64 genomeLocationsInOverflowTable = 0;     // Number of extra hits on duplicate indices.  This should come out once we implement the overflow table.
+    volatile _int64 bothComplementsUsed = 0;    // Number of hash buckets where both complements are used
+    volatile _int64 noBaseAvailable = 0;        // Number of places where getSubstring returned null.
+    volatile _int64 nBasesProcessed = 0;
+    volatile int runningThreadCount;
 
     SingleWaiterObject doneObject;
     CreateSingleWaiterObject(&doneObject);
@@ -489,18 +489,19 @@ lifted_index_pass_start:
 //                (_int64)hashTables[j]->GetUsedElementCount() * 100 / (_int64)hashTables[j]->GetTableSize());
     }
 
-    WriteStatusMessage("%lld(%lld%%) seeds occur more than once, total of %lld(%lld%%) genome locations are not unique, %lld(%lld%%) bad seeds, %lld both complements used %lld no string\n",
-        seedsWithMultipleOccurrences,
-        (seedsWithMultipleOccurrences * 100) / countOfBases,
-        genomeLocationsInOverflowTable,
-        genomeLocationsInOverflowTable * 100 / countOfBases,
-        nonSeeds,
-        (nonSeeds * 100) / countOfBases,
-        bothComplementsUsed,
-        noBaseAvailable);
+    if (unliftedIndex == NULL) {
+        WriteStatusMessage("%lld(%lld%%) seeds occur more than once, total of %lld(%lld%%) genome locations are not unique, %lld(%lld%%) bad seeds, %lld both complements used %lld no string\n",
+            seedsWithMultipleOccurrences,
+            (seedsWithMultipleOccurrences * 100) / countOfBases,
+            genomeLocationsInOverflowTable,
+            genomeLocationsInOverflowTable * 100 / countOfBases,
+            nonSeeds,
+            (nonSeeds * 100) / countOfBases,
+            bothComplementsUsed,
+            noBaseAvailable);
 
-    WriteStatusMessage("Hash table build took %llds\n",(timeInMillis() + 500 - start) / 1000);
-
+        WriteStatusMessage("Hash table build took %llds\n", (timeInMillis() + 500 - start) / 1000);
+    }
     //
     // We're done with the raw genome.  Delete it to save some memory.
     //
@@ -765,6 +766,7 @@ lifted_skip_overflow:
     if (genome != NULL && genome->hasAltContigs() && unliftedIndex == NULL) {
         // create a sub-index with only seeds that occur in alt contigs
         // need to build lifted index here because it will reorder unlifted index overflow table
+        WriteStatusMessage("Creating sub-index for alt contigs...\n");
         snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, LiftedIndexDirName);
         bool ok = BuildIndexToDirectory(genome, seedLen, slack, true, filenameBuffer, maxThreads, chromosomePaddingSize, forceExact,
             hashTableKeySize, large, histogramFileName, locationSize, smallMemory, index);
@@ -773,6 +775,7 @@ lifted_skip_overflow:
             soft_exit(1);
             return false;
         }
+        WriteStatusMessage("...Finished creating sub-index for alt contigs\n");
     }
 
     //
