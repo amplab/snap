@@ -34,6 +34,7 @@ Revision History:
 #include "AlignerStats.h"
 #include "directions.h"
 #include "GenomeIndex.h"
+#include "VariableSizeVector.h"
 
 extern bool doAlignerPrefetch;
 
@@ -325,6 +326,27 @@ private:
                               // maxK edit distance (useful when using SNAP for filtering only).
 
     AlignerStats *stats;
+
+    typedef struct MatchInfo
+    {
+        GenomeLocation  location;
+        GenomeLocation  liftedLocation;
+        double          matchProbability;
+
+        MatchInfo(GenomeLocation _loc, GenomeLocation _lifted, double _p) :
+            location(_loc), liftedLocation(_lifted), matchProbability(_p) {}
+    } MatchInfo;
+
+    static bool matchInfoComparator(const BaseAligner::MatchInfo& a, const BaseAligner::MatchInfo& b)
+    {
+        return a.liftedLocation < b.liftedLocation;
+    }
+
+    typedef VariableSizeVector<MatchInfo> MatchInfoVector;
+
+    MatchInfoVector* allMatches;
+
+    double computeLiftedCandidateProbability(GenomeDistance length);
 
     unsigned *hitCountByExtraSearchDepth;   // How many hits at each depth bigger than the current best edit distance.
                                             // So if the current best hit has edit distance 2, then hitCountByExtraSearchDepth[0] would

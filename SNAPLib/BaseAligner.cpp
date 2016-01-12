@@ -64,7 +64,7 @@ BaseAligner::BaseAligner(
         genomeIndex(i_genomeIndex), maxHitsToConsider(i_maxHitsToConsider), maxK(i_maxK),
         maxReadSize(i_maxReadSize), maxSeedsToUseFromCommandLine(i_maxSeedsToUseFromCommandLine),
         maxSeedCoverage(i_maxSeedCoverage), readId(-1), extraSearchDepth(i_extraSearchDepth),
-        explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats), 
+        explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats), allMatches(NULL),
         noUkkonen(i_noUkkonen), noOrderedEvaluation(i_noOrderedEvaluation), noTruncation(i_noTruncation),
 		minWeightToCheck(max(1u, i_minWeightToCheck)), maxSecondaryAlignmentsPerContig(i_maxSecondaryAlignmentsPerContig)
 /*++
@@ -226,6 +226,10 @@ Arguments:
     }
     hashTableEpoch = 0;
 
+    if (genome->hasAltContigs()) {
+        // todo: BigAlloc / new(allocator) -> fixed size, avoid reallocs; reserve space for max size
+        allMatches = new MatchInfoVector();
+    }
  
 }
 
@@ -652,6 +656,36 @@ Return Value:
     return;
 }
 
+  /**
+    * Add up the highest-probability matches of all overlapping alternates
+    */
+    double
+BaseAligner::computeLiftedCandidateProbability(
+    GenomeDistance length)
+{
+    std::sort(allMatches->begin(), allMatches->end(), matchInfoComparator);
+    double totalProbability = 0.0;
+    MatchInfo best(0, 0, 0);
+    GenomeLocation farthest;
+    for (int i = 0; i <= allMatches->size(); i++) {
+        MatchInfo m(0, 0, 0);
+        if (i == allMatches->size() || (m = (*allMatches)[i]).liftedLocation > farthest) {
+            totalProbability += best.matchProbability;
+            best = m;
+        }
+        else {
+            if (m.matchProbability > best.matchProbability) {
+                best = m;
+            }
+            GenomeLocation e = m.liftedLocation + length - 1;
+            if (e > farthest) {
+                farthest = e;
+            }
+        }
+    }
+    return totalProbability;
+}
+
     bool
 BaseAligner::score(
         bool                     forceResult,
@@ -744,6 +778,10 @@ Return Value:
 #endif
 
     unsigned weightListToCheck = highestUsedWeightList;
+    bool anyAltMatches = false;
+    if (allMatches != NULL) {
+        allMatches->clear();
+    }
 
     do {
         //
@@ -764,6 +802,9 @@ Return Value:
                 primaryResult->score = bestScore;
                 if (bestScore <= maxK) {
                     primaryResult->location = bestScoreGenomeLocation;
+                    if (anyAltMatches) {
+                        probabilityOfAllCandidates = computeLiftedCandidateProbability(read[0]->getDataLength());
+                    }
                     primaryResult->mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, popularSeedsSkipped);
                     if (primaryResult->mapq >= MAPQ_LIMIT_FOR_SINGLE_HIT) {
                         primaryResult->status = SingleHit;
@@ -912,6 +953,14 @@ Return Value:
                             // We could mark as scored anything in between the old and new genome offsets, but it's probably not worth the effort since this is
                             // so rare and all it would do is same time.
                             //
+
+                            // remember in case there are alt matches
+                            if (allMatches != NULL) {
+                                if ((! anyAltMatches) && genome->getLiftedLocation(genomeLocation) != genomeLocation) {
+                                    anyAltMatches = true;
+                                }
+                                allMatches->push_back(MatchInfo(genomeLocation, genome->getLiftedLocation(genomeLocation), matchProbability));
+                            }
                         }
                     }
                 } else { // if we had genome data to compare against
@@ -1112,7 +1161,6 @@ Return Value:
 
     return false;
 }
-
 
     void
 BaseAligner::prefetchHashTableBucket(GenomeLocation genomeLocation, Direction direction)

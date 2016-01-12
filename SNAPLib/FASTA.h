@@ -27,7 +27,7 @@ Revision History:
 #include "Genome.h"
 
     const Genome *
-ReadFASTAGenome(const char *fileName, const char *pieceNameTerminatorCharacters, bool spaceIsAPieceNameTerminator, unsigned chromosomePaddingSize);
+ReadFASTAGenome(const char *fileName, const char *pieceNameTerminatorCharacters, bool spaceIsAPieceNameTerminator, unsigned chromosomePaddingSize, AltContigMap* altMap);
 
 //
 // The FASTA appending functions return whether the write was successful.
@@ -39,11 +39,3 @@ ReadFASTAGenome(const char *fileName, const char *pieceNameTerminatorCharacters,
 
     bool
 AppendFASTAGenome(const Genome *, FILE *fasta);
-
-//
-// This is arbitrary; is there some existing convention?
-//
-inline const char *diploidFASTASexPrefix(bool male)
-{
-    return male ? "PATERNAL|" : "MATERNAL|";
-}

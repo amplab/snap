@@ -47,8 +47,15 @@ public:
     // be pointed to as a return value.  When only a single hit is returned, *hits == singleHit, so there's
     // no need to check on the caller's side.
     //
-    void lookupSeed(Seed seed, _int64 *nHits, const GenomeLocation **hits, _int64 *nRCHits, const GenomeLocation **rcHits, GenomeLocation *singleHit, GenomeLocation *singleRCHit);
-    void lookupSeed32(Seed seed, _int64 *nHits, const unsigned **hits, _int64 *nRCHits, const unsigned **rcHits);
+    void lookupSeed(Seed seed, _int64 *nHits, const GenomeLocation **hits, _int64 *nRCHits, const GenomeLocation **rcHits, GenomeLocation *singleHit, GenomeLocation *singleRCHit) const;
+    void lookupSeed32(Seed seed, _int64 *nHits, const unsigned **hits, _int64 *nRCHits, const unsigned **rcHits) const;
+
+    // versions for genome that has alt regions
+    // hits/rcHits locations are lifted to non-alt contigs, unliftedHits/unliftedRCHits are original locations in alt contigs
+    // nHits/nRCHits is the same for both sets
+    // *hits==*unliftedHits && *rcHits==*unliftedRCHits iff seed has no alt hits
+    void lookupSeedAlt(Seed seed, _int64 *nHits, const GenomeLocation **hits, _int64 *nRCHits, const GenomeLocation **rcHits, const GenomeLocation **unliftedHits, const GenomeLocation **unliftedRCHits, GenomeLocation *singleHit, GenomeLocation *singleRCHit);
+    void lookupSeedAlt32(Seed seed, _int64 *nHits, const unsigned **hits, _int64 *nRCHits, const unsigned **rcHits, const unsigned **unliftedHits, const unsigned **unliftedRCHits);
 
     bool doesGenomeIndexHave64BitLocations() const {return locationSize > 4;}
 
@@ -77,7 +84,7 @@ public:
     //
     static void runIndexer(int argc, const char **argv);
 
-    static GenomeIndex *loadFromDirectory(char *directoryName, bool map, bool prefetch);
+    static GenomeIndex *loadFromDirectory(char *directoryName, bool map, bool prefetch, bool liftedIndex = false);
 
     static void printBiasTables();
 
@@ -87,6 +94,12 @@ protected:
     unsigned hashTableKeySize;
     unsigned nHashTables;
     const Genome *genome;
+
+    // TRUE if genome has alt contigs
+    bool hasAlts;
+
+    // secondary index for all seeds that map to alt contigs with locations lifted to non-alt contigs
+    GenomeIndex* liftedIndex;
 
     bool largeHashTable;
     unsigned locationSize;
@@ -149,12 +162,13 @@ protected:
     // Build a genome index and write it to a directory.  If you don't already have a saved index
     // the only way to get one is to build it into a directory and then load it from the directory.
     // NB: This deletes the Genome that's passed into it.
+    // unliftedIndex is an internal parameter used to build 2-level index for genomes with alt contigs
     //
     static bool BuildIndexToDirectory(const Genome *genome, int seedLen, double slack,
-                                      bool computeBias, const char *directory,
+                                      bool computeBias, const char *directoryName,
                                       unsigned maxThreads, unsigned chromosomePaddingSize, bool forceExact, 
                                       unsigned hashTableKeySize, bool large, const char *histogramFileName,
-                                      unsigned locationSize, bool smallMemory);
+                                      unsigned locationSize, bool smallMemory, GenomeIndex *unliftedIndex = NULL);
 
  
     //
@@ -163,15 +177,17 @@ protected:
     static SNAPHashTable** allocateHashTables(unsigned* o_nTables, GenomeDistance countOfBases, double slack,
         int seedLen, unsigned hashTableKeySize, bool large, unsigned locationSize, double* biasTable = NULL);
     
-    static const unsigned GenomeIndexFormatMajorVersion = 5;
+    static const unsigned GenomeIndexFormatMajorVersion = 6;
     static const unsigned GenomeIndexFormatMinorVersion = 0;
-    
+    // NOTE: this must be changed if the format no longer supports v5 (pre-alt)
+    static const unsigned GenomeIndexFormatMajorVersionWithoutAlts = 5;
+
     static const unsigned largestBiasTable = 32;    // Can't be bigger than the biggest seed size, which is set in Seed.h.  Bigger than 32 means a new Seed structure.
     static const unsigned largestKeySize = 8;
     static double *hg19_biasTables[largestKeySize+1][largestBiasTable+1];
     static double *hg19_biasTables_large[largestKeySize+1][largestBiasTable+1];
 
-    static void ComputeBiasTable(const Genome* genome, int seedSize, double* table, unsigned maxThreads, bool forceExact, unsigned hashTableKeySize, bool large);
+    static void ComputeBiasTable(const Genome* genome, int seedSize, double* table, unsigned maxThreads, bool forceExact, unsigned hashTableKeySize, bool large, const GenomeIndex* unliftedIndex = NULL);
 
     struct ComputeBiasTableThreadContext {
         SingleWaiterObject              *doneObject;
@@ -186,11 +202,14 @@ protected:
         unsigned                         seedLen;
         volatile _int64                 *validSeeds;
 		bool							 large;
+        const GenomeIndex               *unliftedIndex;
 
         ExclusiveLock                   *approximateCounterLocks;
     };
 
     static void ComputeBiasTableWorkerThreadMain(void *param);
+
+    static bool hasAnyAltHits(Seed seed, GenomeLocation genomeLocation, const GenomeIndex* unliftedIndex, _int64 *pnHits, _int64 *pnRCHits);
 
     struct OverflowBackpointer;
 
@@ -227,6 +246,10 @@ protected:
 		_int64							*lastBackpointerIndexUsedByThread;
 		ExclusiveLock					*backpointerSpillLock;
 		FILE							*backpointerSpillFile;
+
+        // used for building sub-index of only seeds that occur in alt contigs
+        GenomeIndex                     *unliftedIndex;
+        int                              liftedIndexPass;
 
         ExclusiveLock                   *hashTableLocks;
         ExclusiveLock                   *overflowTableLock;
@@ -276,8 +299,10 @@ protected:
     static const _int64 printPeriod;
 
     virtual void indexSeed(GenomeLocation genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large);
+    virtual void indexLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large);
+    virtual void resortLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large);
     virtual void completeIndexing(PerHashTableBatch *batches, BuildHashTablesThreadContext *context, IndexBuildStats *stats, bool large);
-
+    
     static void BuildHashTablesWorkerThreadMain(void *param);
     void BuildHashTablesWorkerThread(BuildHashTablesThreadContext *context);
     static void ApplyHashTableUpdate(BuildHashTablesThreadContext *context, _uint64 whichHashTable, GenomeLocation genomeLocation, _uint64 lowBases, bool usingComplement,
@@ -296,6 +321,6 @@ protected:
 						BuildHashTablesThreadContext*context,
                         GenomeLocation               genomeLocation);
 
-    void fillInLookedUpResults32(const unsigned *subEntry, _int64 *nHits, const unsigned **hits);
-    void fillInLookedUpResults(GenomeLocation lookedUpLocation, _int64 *nHits, const GenomeLocation **hits, GenomeLocation *singleHitLocation);
+    void fillInLookedUpResults32(const unsigned *subEntry, _int64 *nHits, const unsigned **hits) const;
+    void fillInLookedUpResults(GenomeLocation lookedUpLocation, _int64 *nHits, const GenomeLocation **hits, GenomeLocation *singleHitLocation) const;
 };

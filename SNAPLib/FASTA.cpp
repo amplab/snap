@@ -36,7 +36,8 @@ ReadFASTAGenome(
     const char *fileName,
     const char *pieceNameTerminatorCharacters,
     bool spaceIsAPieceNameTerminator,
-    unsigned chromosomePaddingSize)
+    unsigned chromosomePaddingSize,
+    AltContigMap* altMap)
 {
     //
     // We need to know a bound on the size of the genome before we create the Genome object.
@@ -96,33 +97,39 @@ ReadFASTAGenome(
             //
             // Now supply the chromosome name.
             //
+            char * terminator = lineBuffer + strlen(lineBuffer);
+            char * p;
             if (NULL != pieceNameTerminatorCharacters) {
                 for (int i = 0; i < strlen(pieceNameTerminatorCharacters); i++) {
-                    char *terminator = strchr(lineBuffer+1, pieceNameTerminatorCharacters[i]);
-                    if (NULL != terminator) {
-                        *terminator = '\0';
+                    p = strchr(lineBuffer + 1, pieceNameTerminatorCharacters[i]);
+                    if (NULL != p && p < terminator) {
+                        terminator = p;
                     }
                 }
             }
             if (spaceIsAPieceNameTerminator) {
-                char *terminator = strchr(lineBuffer, ' ');
-                if (NULL != terminator) {
-                    *terminator = '\0';
+                p = strchr(lineBuffer, ' ');
+                if (NULL != p && p < terminator) {
+                    terminator = p;
                 }
-                terminator = strchr(lineBuffer, '\t');
-                if (NULL != terminator) {
-                    *terminator = '\0';
+                p = strchr(lineBuffer, '\t');
+                if (NULL != p && p < terminator) {
+                    terminator = p;
                 }
             }
-            char *terminator = strchr(lineBuffer, '\n');
-            if (NULL != terminator) {
-                *terminator = '\0';
+            p = strchr(lineBuffer, '\n');
+            if (NULL != p && p < terminator) {
+                terminator = p;
             }
-            terminator = strchr(lineBuffer, '\r');
-            if (NULL != terminator) {
-                *terminator = '\0';
+            p = strchr(lineBuffer, '\r');
+            if (NULL != p && p < terminator) {
+                terminator = p;
             }
-            genome->startContig(lineBuffer+1);
+            if (altMap != NULL) {
+                altMap->addFastaContig(lineBuffer, terminator);
+            }
+            *terminator = '\0';
+            genome->startContig(lineBuffer+1, altMap);
         } else {
             if (!inAContig) {
                 WriteErrorMessage("\nFASTA file doesn't beging with a contig name (i.e., the first line doesn't start with '>').\n");
@@ -170,6 +177,9 @@ ReadFASTAGenome(
     //
     genome->addData(paddingBuffer);
     genome->fillInContigLengths();
+    if (altMap != NULL) {
+        genome->adjustAltContigs(altMap);
+    }
     genome->sortContigsByName();
 
     fclose(fastaFile);
