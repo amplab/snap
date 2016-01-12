@@ -47,8 +47,8 @@ public:
     // be pointed to as a return value.  When only a single hit is returned, *hits == singleHit, so there's
     // no need to check on the caller's side.
     //
-    void lookupSeed(Seed seed, _int64 *nHits, const GenomeLocation **hits, _int64 *nRCHits, const GenomeLocation **rcHits, GenomeLocation *singleHit, GenomeLocation *singleRCHit);
-    void lookupSeed32(Seed seed, _int64 *nHits, const unsigned **hits, _int64 *nRCHits, const unsigned **rcHits);
+    void lookupSeed(Seed seed, _int64 *nHits, const GenomeLocation **hits, _int64 *nRCHits, const GenomeLocation **rcHits, GenomeLocation *singleHit, GenomeLocation *singleRCHit) const;
+    void lookupSeed32(Seed seed, _int64 *nHits, const unsigned **hits, _int64 *nRCHits, const unsigned **rcHits) const;
 
     // versions for genome that has alt regions
     // hits/rcHits locations are lifted to non-alt contigs, unliftedHits/unliftedRCHits are original locations in alt contigs
@@ -185,7 +185,7 @@ protected:
     static double *hg19_biasTables[largestKeySize+1][largestBiasTable+1];
     static double *hg19_biasTables_large[largestKeySize+1][largestBiasTable+1];
 
-    static void ComputeBiasTable(const Genome* genome, int seedSize, double* table, unsigned maxThreads, bool forceExact, unsigned hashTableKeySize, bool large);
+    static void ComputeBiasTable(const Genome* genome, int seedSize, double* table, unsigned maxThreads, bool forceExact, unsigned hashTableKeySize, bool large, const GenomeIndex* unliftedIndex = NULL);
 
     struct ComputeBiasTableThreadContext {
         SingleWaiterObject              *doneObject;
@@ -200,11 +200,14 @@ protected:
         unsigned                         seedLen;
         volatile _int64                 *validSeeds;
 		bool							 large;
+        const GenomeIndex               *unliftedIndex;
 
         ExclusiveLock                   *approximateCounterLocks;
     };
 
     static void ComputeBiasTableWorkerThreadMain(void *param);
+
+    static bool hasAnyAltHits(Seed seed, GenomeLocation genomeLocation, const GenomeIndex* unliftedIndex, _int64 *pnHits, _int64 *pnRCHits);
 
     struct OverflowBackpointer;
 
@@ -316,6 +319,6 @@ protected:
 						BuildHashTablesThreadContext*context,
                         GenomeLocation               genomeLocation);
 
-    void fillInLookedUpResults32(const unsigned *subEntry, _int64 *nHits, const unsigned **hits);
-    void fillInLookedUpResults(GenomeLocation lookedUpLocation, _int64 *nHits, const GenomeLocation **hits, GenomeLocation *singleHitLocation);
+    void fillInLookedUpResults32(const unsigned *subEntry, _int64 *nHits, const unsigned **hits) const;
+    void fillInLookedUpResults(GenomeLocation lookedUpLocation, _int64 *nHits, const GenomeLocation **hits, GenomeLocation *singleHitLocation) const;
 };

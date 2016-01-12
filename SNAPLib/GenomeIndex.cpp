@@ -337,6 +337,9 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
 
     // Compute bias table sizes, unless we're using the precomputed ones hardcoded in BiasTables.cpp
     double *biasTable = NULL;
+    if (unliftedIndex != NULL) {
+        computeBias = true;
+    }
     if (!computeBias) {
         if (large) {
             biasTable = hg19_biasTables_large[hashTableKeySize][seedLen];
@@ -353,7 +356,7 @@ GenomeIndex::BuildIndexToDirectory(const Genome *genome, int seedLen, double sla
     if (computeBias) {
         unsigned nHashTables = 1 << ((max((unsigned)seedLen, hashTableKeySize * 4) - hashTableKeySize * 4) * 2);
         biasTable = new double[nHashTables];
-        ComputeBiasTable(genome, seedLen, biasTable, maxThreads, forceExact, hashTableKeySize, large);
+        ComputeBiasTable(genome, seedLen, biasTable, maxThreads, forceExact, hashTableKeySize, large, unliftedIndex);
     }
 
     WriteStatusMessage("Allocating memory for hash tables...");
@@ -980,7 +983,7 @@ GenomeIndex::~GenomeIndex()
 }
 
     void
-GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, unsigned maxThreads, bool forceExact, unsigned hashTableKeySize, bool large)
+GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, unsigned maxThreads, bool forceExact, unsigned hashTableKeySize, bool large, const GenomeIndex* unliftedIndex)
 /**
  * Fill in table with the table size biases for a given genome and seed size.
  * We assume that table is already of the correct size for our seed size
@@ -1053,12 +1056,14 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
 
 			_ASSERT(seed.getHighBases(hashTableKeySize) < nHashTables);
 
-
-			if (NULL == seedsSeen->GetFirstValueForKey(seed.getBases())) {
-				_uint64 value = 42;
-				seedsSeen->Insert(seed.getBases(), &value);
-				numExactSeeds[seed.getHighBases(hashTableKeySize)]++;
-			}
+            _int64 nHits, nRCHits;
+            if (unliftedIndex == NULL || hasAnyAltHits(seed, i, unliftedIndex, &nHits, &nRCHits)) {
+                if (NULL == seedsSeen->GetFirstValueForKey(seed.getBases())) {
+                    _uint64 value = 42;
+                    seedsSeen->Insert(seed.getBases(), &value);
+                    numExactSeeds[seed.getHighBases(hashTableKeySize)]++;
+                }
+            }
         }
 
 //      for (unsigned i = 0; i < nHashTables; i++) printf("Hash table %d is predicted to have %lld entries\n", i, numExactSeeds[i]);
@@ -1102,6 +1107,8 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
             contexts[i].validSeeds = &validSeeds;
             contexts[i].approximateCounterLocks = locks;
 			contexts[i].large = large;
+            contexts[i].unliftedIndex = unliftedIndex;
+
 
             StartNewThread(ComputeBiasTableWorkerThreadMain, &contexts[i]);
         }
@@ -1206,19 +1213,30 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
 
 			_ASSERT(whichHashTable < context->nHashTables);
 
-			if (batches[whichHashTable].addSeed(seed.getLowBases(context->hashTableKeySize))) {
-				PerCounterBatch *batch = &batches[whichHashTable];
-				AcquireExclusiveLock(&context->approximateCounterLocks[whichHashTable]);
-				batch->apply(&(*context->approxCounters)[whichHashTable]);    
-				ReleaseExclusiveLock(&context->approximateCounterLocks[whichHashTable]);
+            _int64 nRepeats = 1;
+            if (context->unliftedIndex != NULL) {
+                _int64 nHits, nRCHits;
+                if (hasAnyAltHits(seed, i, context->unliftedIndex, &nHits, &nRCHits)) {
+                    nRepeats = nHits + nRCHits;
+                } else {
+                    nRepeats = 0;
+                }
+            }
+            for (; nRepeats > 0; nRepeats--) {
+                if (batches[whichHashTable].addSeed(seed.getLowBases(context->hashTableKeySize))) {
+                    PerCounterBatch *batch = &batches[whichHashTable];
+                    AcquireExclusiveLock(&context->approximateCounterLocks[whichHashTable]);
+                    batch->apply(&(*context->approxCounters)[whichHashTable]);
+                    ReleaseExclusiveLock(&context->approximateCounterLocks[whichHashTable]);
 
-				_int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, PerCounterBatch::nSeedsPerBatch + unrecordedSkippedSeeds);
+                    _int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, PerCounterBatch::nSeedsPerBatch + unrecordedSkippedSeeds);
 
-				if ((_uint64)basesProcessed / printBatchSize > ((_uint64)basesProcessed - PerCounterBatch::nSeedsPerBatch - unrecordedSkippedSeeds)/printBatchSize) {
-					WriteStatusMessage("Bias computation: %lld / %lld\n",(basesProcessed/printBatchSize)*printBatchSize, (_int64)countOfBases);
-				}
-				unrecordedSkippedSeeds= 0;  // We've now recorded them.
-			}
+                    if ((_uint64)basesProcessed / printBatchSize > ((_uint64)basesProcessed - PerCounterBatch::nSeedsPerBatch - unrecordedSkippedSeeds) / printBatchSize) {
+                        WriteStatusMessage("Bias computation: %lld / %lld\n", (basesProcessed / printBatchSize)*printBatchSize, (_int64)countOfBases);
+                    }
+                    unrecordedSkippedSeeds = 0;  // We've now recorded them.
+                }
+            }
     }
 
     for (unsigned i = 0; i < context->nHashTables; i++) {
@@ -1246,7 +1264,43 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
     }
 }
 
-
+bool
+GenomeIndex::hasAnyAltHits(
+    Seed seed, GenomeLocation genomeLocation, const GenomeIndex* unliftedIndex, _int64 *pnHits, _int64 *pnRCHits)
+{
+    if (unliftedIndex == NULL) {
+        return false;
+    }
+    _int64 nHits, nRCHits;
+    if (unliftedIndex->doesGenomeIndexHave64BitLocations()) {
+        const GenomeLocation *hits, *rcHits;
+        GenomeLocation singleHit[2], singleRCHit[2];
+        unliftedIndex->lookupSeed(seed, pnHits, &hits, pnRCHits, &rcHits, &singleHit[1], &singleRCHit[1]);
+        *pnHits = nHits;
+        *pnRCHits = nRCHits;
+#define HAS_ANY_ALTS \
+        if ((nHits > 0 && genomeLocation == *hits && (nRCHits == 0 || *hits <= *rcHits)) || \
+            (nRCHits > 0 && genomeLocation == *rcHits && (nHits == 0 || *rcHits < *hits))) { \
+            for (int i = 0; i < nHits; i++) { \
+                if (unliftedIndex->genome->isAltLocation(hits[i])) { \
+                    return true; \
+                } \
+            } \
+            for (int i = 0; i < nRCHits; i++) { \
+                if (unliftedIndex->genome->isAltLocation(hits[i])) { \
+                return true; \
+                } \
+            } \
+            return false; \
+        }
+        HAS_ANY_ALTS
+    } else {
+        const unsigned *hits, *rcHits;
+        unliftedIndex->lookupSeed32(seed, &nHits, &hits, &nRCHits, &rcHits);
+        HAS_ANY_ALTS
+    }
+}
+#undef HAS_ANY_ALTS
 
     void 
 GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
@@ -1375,11 +1429,11 @@ GenomeIndex::indexLiftedSeed(GenomeLocation genomeLocation, Seed seed, PerHashTa
         if ((nHits > 0 && genomeLocation == *hits && (nRCHits == 0 || *hits <= *rcHits)) || \
                 (nRCHits > 0 && genomeLocation == *rcHits && (nHits == 0 || *rcHits < *hits))) { \
             bool anyAlts = false; \
-            for (int i = 0; i < nHits && ! anyAlts; i++) { \
-                anyAlts = genome->getLiftedLocation(hits[i]) != hits[i]; \
+            for (int i = 0; i < nHits && !anyAlts; i++) { \
+                anyAlts = genome->isAltLocation(hits[i]); \
             } \
             for (int i = 0; i < nRCHits && !anyAlts; i++) { \
-                anyAlts = genome->getLiftedLocation(rcHits[i]) != rcHits[i]; \
+                anyAlts = genome->isAltLocation(rcHits[i]); \
             } \
             if (anyAlts) { \
                 for (int i = 0; i < nHits; i++) { \
@@ -2128,7 +2182,7 @@ GenomeIndex::lookupSeed32(
     _int64           *nHits,
     const unsigned  **hits,
     _int64           *nRCHits,
-    const unsigned  **rcHits)
+    const unsigned  **rcHits) const
 {
     _ASSERT(locationSize == 4);   // This is the caller's responsibility to check.
 
@@ -2216,7 +2270,7 @@ GenomeIndex::lookupSeedAlt32(
 GenomeIndex::fillInLookedUpResults32(
     const unsigned  *subEntry,
     _int64          *nHits, 
-    const unsigned **hits)
+    const unsigned **hits) const
 {
     //
     // WARNING: the code in the IntersectingPairedEndAligner relies on being able to look at 
@@ -2265,7 +2319,7 @@ GenomeIndex::lookupSeed(
     _int64 *                nRCHits, 
     const GenomeLocation ** rcHits, 
     GenomeLocation *        singleHit, 
-    GenomeLocation *        singleRCHit)
+    GenomeLocation *        singleRCHit) const
 {
     _ASSERT(locationSize > 4 && locationSize <= 8);
 
@@ -2367,7 +2421,7 @@ GenomeIndex::lookupSeedAlt(
 }
 
     void 
-GenomeIndex::fillInLookedUpResults(GenomeLocation lookedUpLocation, _int64 *nHits, const GenomeLocation **hits, GenomeLocation *singleHitLocation)
+GenomeIndex::fillInLookedUpResults(GenomeLocation lookedUpLocation, _int64 *nHits, const GenomeLocation **hits, GenomeLocation *singleHitLocation) const
 {
      //
     // WARNING: the code in the IntersectingPairedEndAligner relies on being able to look at 
