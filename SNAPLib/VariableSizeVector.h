@@ -4,6 +4,7 @@
 
 //
 // A variable-size vector that does not perform any memory allocation except to grow.
+// if grow==0 then it must be supplied with a vector to start and it will NOT grow or deallocate
 //
 template<typename V, int grow = 150, bool big = false>
 class VariableSizeVector
@@ -17,31 +18,43 @@ private:
             WriteErrorMessage("%s: allocate %lld - consider using BigAlloc\n", __FUNCTION__, bytes);
         }
 #endif
+        _ASSERT(grow != 0);
         return big ? BigAlloc(bytes) : malloc(bytes);
     }
 
     inline static void deallocate(void* p)
     {
-        if (big) { BigDealloc(p); } else { free(p); }
+        if (grow != 0) {
+            if (big) { BigDealloc(p); } else { free(p); }
+        }
     }
 
 public:
+
     VariableSizeVector(int i_capacity = 16)
         : entries(NULL), count(0), capacity(i_capacity)
-    {}
+    { _ASSERT(grow != 0); }
     
-    VariableSizeVector(VariableSizeVector& other)
+    VariableSizeVector(V* i_entries, int i_capacity)
+        : entries(i_entries), capacity(i_capacity), count(0)
+    { _ASSERT(grow == 0); }
+
+    VariableSizeVector(VariableSizeVector<V,grow,big>& other)
         : entries(other.entries), count(other.count), capacity(other.capacity)
     {
         other.count = 0;
+        other.capacity = 0;
         other.entries = NULL;
     }
 
     ~VariableSizeVector()
     {
         if (entries != NULL) {
-            deallocate(entries);
+            if (grow != 0) {
+                deallocate(entries);
+            }
             entries = NULL;
+            capacity = 0;
             count = 0;
         }
     }
@@ -57,7 +70,7 @@ private:
     }
 
 public:
-    void operator=(VariableSizeVector<V>& other)
+    void operator=(VariableSizeVector<V,grow,big>& other)
     {
         entries = other.entries;
         capacity = other.capacity;
@@ -68,6 +81,13 @@ public:
 
     void reserve(_int64 newCapacity)
     {
+        if (grow == 0) {
+            if (newCapacity <= capacity) {
+                return;
+            }
+            WriteErrorMessage("Unable to grow fixed VariableSizeVector from %ld to %ld\n", capacity, newCapacity);
+            soft_exit(1);
+        }
         _ASSERT(newCapacity >= 0);
         if (newCapacity <= capacity && entries != NULL) {
             return;
@@ -89,8 +109,10 @@ public:
     inline void clean()
     {
         if (entries != NULL) {
-            deallocate(entries);
-            entries = NULL;
+            if (grow != 0) {
+                deallocate(entries);
+                entries = NULL;
+            }
             count = 0;
         }
     }
@@ -109,11 +131,7 @@ public:
     
     inline void push_back(V& value)
     {
-        if (entries == NULL) {
-            reserve(capacity);
-        } else if (count == capacity) {
-            reserve((int) (((_int64) count * grow) / 100));
-        }
+        increase();
         _ASSERT(count < capacity);
         entries[count++] = value;
     }

@@ -227,8 +227,8 @@ Arguments:
     hashTableEpoch = 0;
 
     if (genome->hasAltContigs()) {
-        // todo: BigAlloc / new(allocator) -> fixed size, avoid reallocs; reserve space for max size
-        allMatches = new MatchInfoVector();
+        MatchInfo* entries = (MatchInfo*)allocator->allocate(sizeof(MatchInfo)* maxHitsToConsider);
+        allMatches = new MatchInfoVector(entries, maxHitsToConsider);
     }
  
 }
@@ -1503,17 +1503,18 @@ BaseAligner::getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishki
     }
 
     return
-        contigCounters                                                  +
-        sizeof(_uint64) * 14                                            + // allow for alignment
-        sizeof(BaseAligner)                                             + // our own member variables
+        contigCounters +
+        sizeof(_uint64)* 14 + // allow for alignment
+        sizeof(BaseAligner)+ // our own member variables
         (ownLandauVishkin ?
-            LandauVishkin<>::getBigAllocatorReservation() +
-            LandauVishkin<-1>::getBigAllocatorReservation() : 0)        + // our LandauVishkin objects
-        sizeof(char) * maxReadSize * 2                                  + // rcReadData
-        sizeof(char) * maxReadSize * 4 + 2 * MAX_K                      + // reversed read (both)
-        sizeof(BYTE) * (maxReadSize + 7 + 128) / 8                      + // seed used
-        sizeof(HashTableElement) * hashTableElementPoolSize             + // hash table element pool
-        sizeof(HashTableAnchor) * candidateHashTablesSize * 2           + // candidate hash table (both)
+        LandauVishkin<>::getBigAllocatorReservation() +
+        LandauVishkin<-1>::getBigAllocatorReservation() : 0) + // our LandauVishkin objects
+        sizeof(char)* maxReadSize * 2 + // rcReadData
+        sizeof(char)* maxReadSize * 4 + 2 * MAX_K + // reversed read (both)
+        sizeof(BYTE)* (maxReadSize + 7 + 128) / 8 + // seed used
+        sizeof(HashTableElement)* hashTableElementPoolSize + // hash table element pool
+        sizeof(HashTableAnchor)* candidateHashTablesSize * 2 + // candidate hash table (both)
+        (index->getGenome()->hasAltContigs() ? sizeof(MatchInfo) * maxHitsToConsider : 0) + // matches for alt contigs
         sizeof(HashTableElement) * (maxSeedsToUse + 1);                   // weight lists
 }
 

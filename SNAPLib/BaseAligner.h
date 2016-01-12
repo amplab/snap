@@ -342,7 +342,7 @@ private:
         return a.liftedLocation < b.liftedLocation;
     }
 
-    typedef VariableSizeVector<MatchInfo> MatchInfoVector;
+    typedef VariableSizeVector<MatchInfo,0> MatchInfoVector;
 
     MatchInfoVector* allMatches;
 
