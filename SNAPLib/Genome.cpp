@@ -24,6 +24,7 @@ Revision History:
 
 #include "stdafx.h"
 #include "Genome.h"
+#include "FASTA.h"
 #include "GenericFile.h"
 #include "GenericFile_map.h"
 #include "Compat.h"
@@ -32,6 +33,9 @@ Revision History:
 #include "Error.h"
 #include "Util.h"
 #include "VariableSizeVector.h"
+
+#include <string>
+using namespace std;
 
 Genome::Genome(GenomeDistance i_maxBases, GenomeDistance nBasesStored, unsigned i_chromosomePadding, unsigned i_maxContigs)
 : maxBases(i_maxBases), minLocation(0), maxLocation(i_maxBases), chromosomePadding(i_chromosomePadding), maxContigs(i_maxContigs),
@@ -545,7 +549,7 @@ GenomeLocation Genome::getLiftedLocation(GenomeLocation altLocation) const
     if (altLocation < minAltLocation) {
         return altLocation;
     }
-    const Contig* alt = getContigAtLocation(altLocation);
+    const Contig* alt = getContigAtLocation(altLocation + chromosomePadding / 2);
     if (alt == NULL || ! alt->isAlternate) {
         return altLocation;
     }
@@ -655,9 +659,8 @@ err_map_failed:
         soft_exit(1);
     }
     *q = '\0';
-    char * tag = (char*) malloc(q - p + 2);
+    char * tag = (char*) malloc(q - p + 1);
     strcpy(tag, p);
-    strcat(tag, "|");
     result->accessionFastaTag = tag;
 
     // get names for each column type (last 2 are optional)
@@ -760,34 +763,26 @@ err_map_failed:
     return result;
 }
 
-void AltContigMap::addFastaContig(const char* lineBuffer, const char* nameTerminator)
+void AltContigMap::addFastaContig(const char* lineBuffer, const char* chrName, int chrNameLength)
 {
     // get the name
-    char* name = (char*) malloc(nameTerminator - lineBuffer);
-    memcpy(name, lineBuffer + 1, nameTerminator - lineBuffer - 1);
-    name[nameTerminator - lineBuffer - 1] = 0;
+    string name(chrName, chrName + chrNameLength);
 
     // find the accession number
-    const char* tag = strstr(lineBuffer, accessionFastaTag);
-    const char* p = tag + strlen(accessionFastaTag);
-    if (tag == NULL || *p == '\0') {
+    const char *accessionStart;
+    int accessionLength;
+    if (!FindFASTATagValue(lineBuffer, accessionFastaTag, &accessionStart, &accessionLength)) {
         WriteErrorMessage("Unable to find accession code for contig %s in FASTA line\n%s\n", name, lineBuffer);
         soft_exit(1);
     }
-    const char*q = p;
-    while (*q != '\0' && *q != '|' && *q != ' ' && *q != '\t' && *q != '\r' && *q != '\n') {
-        q++;
-    }
-    char* accession = (char*)malloc(q - p);
-    memcpy(accession, p, q - p);
-    *(accession + (q - p)) = '\0';
+    string accession(accessionStart, accessionStart + accessionLength);
 
     nameToAccession[name] = accession;
     accessionToName[accession] = name;
 
     StringAltContigMap::iterator alt = altsByAccession.find(accession);
     if (alt != altsByAccession.end()) {
-        alt->second.name = name;
+        alt->second.name = (new string(name))->data(); // alloc & never free, but tiny :-)
     }
 }
 

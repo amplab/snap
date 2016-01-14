@@ -46,7 +46,7 @@ static const double DEFAULT_SLACK = 0.3;
 static const unsigned DEFAULT_PADDING = 500;
 static const unsigned DEFAULT_KEY_BYTES = 4;
 static const unsigned DEFAULT_LOCATION_SIZE = 4;
-static const char* DEFAULT_ALT_COLUMNS = "gb,alt_scaf_acc,parent_acc,ori,alt_scaf_start,alt_scaf_stop,parent_start,parent_stop,alt_start_tail,alt_stop_tail";
+static const char* DEFAULT_ALT_COLUMNS = "ref,alt_scaf_acc,parent_acc,ori,alt_scaf_start,alt_scaf_stop,parent_start,parent_stop,alt_start_tail,alt_stop_tail";
 const char *GenomeIndexFileName = "GenomeIndex";
 const char *OverflowTableFileName = "OverflowTable";
 const char *GenomeIndexHashFileName = "GenomeIndexHash";
@@ -89,6 +89,8 @@ static void usage()
         "-altmap file       Tab-separated file of alt contig mapping information\n"
         "-altcols columns   Comma-separated list of columns describing alt mapping file\n"
         "                   Default is v38 %s\n"
+        "-chrtag tag        Tag for chrom name\n"
+        "-chrmap file       Tab-separated file of chrom name and tag values\n"
 			,
             DEFAULT_SEED_SIZE,
             DEFAULT_SLACK,
@@ -128,6 +130,8 @@ GenomeIndex::runIndexer(
 	bool smallMemory = false;
     const char* altMapFilename = NULL;
     const char* altMapColumns = DEFAULT_ALT_COLUMNS;
+    const char* chrTag = NULL;
+    const char* chrMapFilename = NULL;
 
     for (int n = 2; n < argc; n++) {
         if (strcmp(argv[n], "-s") == 0) {
@@ -208,10 +212,31 @@ GenomeIndex::runIndexer(
             } else {
                 usage();
             }
+        } else if (!strcmp(argv[n], "-chrtag")) {
+            if (n + 1 < argc) {
+                chrTag = argv[n + 1];
+                n++;
+            }
+            else {
+                usage();
+            }
+        } else if (!strcmp(argv[n], "-chrmap")) {
+            if (n + 1 < argc) {
+                chrMapFilename = argv[n + 1];
+                n++;
+            }
+            else {
+                usage();
+            }
         } else {
             WriteErrorMessage("Invalid argument: %s\n\n", argv[n]);
             usage();
         }
+    }
+
+    if (chrMapFilename != NULL && chrTag == NULL) {
+        WriteErrorMessage("The -chrmap option requires the -chrtag option to be specified\n");
+        usage();
     }
 
     if (seedLen < 16 || seedLen > 32) {
@@ -246,7 +271,7 @@ GenomeIndex::runIndexer(
 
     AltContigMap* altMap = altMapFilename != NULL ? AltContigMap::readFromFile(altMapFilename, altMapColumns) : NULL;
 
-    const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator, chromosomePadding, altMap);
+    const Genome *genome = ReadFASTAGenome(fastaFile, pieceNameTerminatorCharacters, spaceIsAPieceNameTerminator, chromosomePadding, chrTag, chrMapFilename, altMap);
     if (NULL == genome) {
         WriteErrorMessage("Unable to read FASTA file\n");
         soft_exit(1);
@@ -1059,13 +1084,12 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
 
 			_ASSERT(seed.getHighBases(hashTableKeySize) < nHashTables);
 
-            _int64 nHits, nRCHits;
-            if (unliftedIndex == NULL || hasAnyAltHits(seed, i, unliftedIndex, &nHits, &nRCHits)) {
-                if (NULL == seedsSeen->GetFirstValueForKey(seed.getBases())) {
-                    _uint64 value = 42;
-                    seedsSeen->Insert(seed.getBases(), &value);
-                    numExactSeeds[seed.getHighBases(hashTableKeySize)]++;
-                }
+            bool addSeed = unliftedIndex == NULL || hasAnyAltHits(seed, i, unliftedIndex) ||
+                ((!large) && hasAnyAltHits(~seed, i, unliftedIndex));
+            if (addSeed && NULL == seedsSeen->GetFirstValueForKey(seed.getBases())) {
+                _uint64 value = 42;
+                seedsSeen->Insert(seed.getBases(), &value);
+                numExactSeeds[seed.getHighBases(hashTableKeySize)]++;
             }
         }
 
@@ -1216,29 +1240,20 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
 
 			_ASSERT(whichHashTable < context->nHashTables);
 
-            _int64 nRepeats = 1;
-            if (context->unliftedIndex != NULL) {
-                _int64 nHits, nRCHits;
-                if (hasAnyAltHits(seed, i, context->unliftedIndex, &nHits, &nRCHits)) {
-                    nRepeats = nHits + nRCHits;
-                } else {
-                    nRepeats = 0;
-                }
-            }
-            for (; nRepeats > 0; nRepeats--) {
-                if (batches[whichHashTable].addSeed(seed.getLowBases(context->hashTableKeySize))) {
-                    PerCounterBatch *batch = &batches[whichHashTable];
-                    AcquireExclusiveLock(&context->approximateCounterLocks[whichHashTable]);
-                    batch->apply(&(*context->approxCounters)[whichHashTable]);
-                    ReleaseExclusiveLock(&context->approximateCounterLocks[whichHashTable]);
+            bool addSeed = context->unliftedIndex == NULL || hasAnyAltHits(seed, i,  context->unliftedIndex) ||
+                ((!large) && hasAnyAltHits(~seed, i, context->unliftedIndex));
+            if (addSeed && batches[whichHashTable].addSeed(seed.getLowBases(context->hashTableKeySize))) {
+                PerCounterBatch *batch = &batches[whichHashTable];
+                AcquireExclusiveLock(&context->approximateCounterLocks[whichHashTable]);
+                batch->apply(&(*context->approxCounters)[whichHashTable]);
+                ReleaseExclusiveLock(&context->approximateCounterLocks[whichHashTable]);
 
-                    _int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, PerCounterBatch::nSeedsPerBatch + unrecordedSkippedSeeds);
+                _int64 basesProcessed = InterlockedAdd64AndReturnNewValue(context->nBasesProcessed, PerCounterBatch::nSeedsPerBatch + unrecordedSkippedSeeds);
 
-                    if ((_uint64)basesProcessed / printBatchSize > ((_uint64)basesProcessed - PerCounterBatch::nSeedsPerBatch - unrecordedSkippedSeeds) / printBatchSize) {
-                        WriteStatusMessage("Bias computation: %lld / %lld\n", (basesProcessed / printBatchSize)*printBatchSize, (_int64)countOfBases);
-                    }
-                    unrecordedSkippedSeeds = 0;  // We've now recorded them.
+                if ((_uint64)basesProcessed / printBatchSize > ((_uint64)basesProcessed - PerCounterBatch::nSeedsPerBatch - unrecordedSkippedSeeds) / printBatchSize) {
+                    WriteStatusMessage("Bias computation: %lld / %lld\n", (basesProcessed / printBatchSize)*printBatchSize, (_int64)countOfBases);
                 }
+                unrecordedSkippedSeeds = 0;  // We've now recorded them.
             }
     }
 
@@ -1269,18 +1284,13 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
 
 bool
 GenomeIndex::hasAnyAltHits(
-    Seed seed, GenomeLocation genomeLocation, const GenomeIndex* unliftedIndex, _int64 *pnHits, _int64 *pnRCHits)
+    Seed seed, GenomeLocation genomeLocation, const GenomeIndex* unliftedIndex)
 {
-    if (unliftedIndex == NULL) {
-        return false;
-    }
     _int64 nHits, nRCHits;
     if (unliftedIndex->doesGenomeIndexHave64BitLocations()) {
         const GenomeLocation *hits, *rcHits;
         GenomeLocation singleHit[2], singleRCHit[2];
-        unliftedIndex->lookupSeed(seed, pnHits, &hits, pnRCHits, &rcHits, &singleHit[1], &singleRCHit[1]);
-        *pnHits = nHits;
-        *pnRCHits = nRCHits;
+        unliftedIndex->lookupSeed(seed, &nHits, &hits, &nRCHits, &rcHits, &singleHit[1], &singleRCHit[1]);
 #define HAS_ANY_ALTS \
         if ((nHits > 0 && genomeLocation == *hits && (nRCHits == 0 || *hits <= *rcHits)) || \
             (nRCHits > 0 && genomeLocation == *rcHits && (nHits == 0 || *rcHits < *hits))) { \
@@ -1290,12 +1300,12 @@ GenomeIndex::hasAnyAltHits(
                 } \
             } \
             for (int i = 0; i < nRCHits; i++) { \
-                if (unliftedIndex->genome->isAltLocation(hits[i])) { \
+                if (unliftedIndex->genome->isAltLocation(rcHits[i])) { \
                 return true; \
                 } \
             } \
-            return false; \
-        }
+        } \
+        return false;
         HAS_ANY_ALTS
     } else {
         const unsigned *hits, *rcHits;

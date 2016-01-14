@@ -207,7 +207,7 @@ protected:
 
     static void ComputeBiasTableWorkerThreadMain(void *param);
 
-    static bool hasAnyAltHits(Seed seed, GenomeLocation genomeLocation, const GenomeIndex* unliftedIndex, _int64 *pnHits, _int64 *pnRCHits);
+    static bool hasAnyAltHits(Seed seed, GenomeLocation genomeLocation, const GenomeIndex* unliftedIndex);
 
     struct OverflowBackpointer;
 

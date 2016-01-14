@@ -336,7 +336,7 @@ public:
 
     static AltContigMap* readFromFile(const char* filename, const char* columnList);
 
-    void addFastaContig(const char* lineBuffer, const char* terminator);
+    void addFastaContig(const char* lineBuffer, const char* chrName, int chrNameLength);
 
     void setAltContig(Genome::Contig* contig);
 

@@ -229,7 +229,6 @@ private:
         //
         bool getNextLowerHit(GenomeLocation *genomeLocation, unsigned *seedOffsetFound, GenomeLocation *unliftedGenomeLocation);
 
-
         //
         // Find the highest genome address.
         //

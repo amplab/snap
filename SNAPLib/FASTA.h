@@ -27,7 +27,7 @@ Revision History:
 #include "Genome.h"
 
     const Genome *
-ReadFASTAGenome(const char *fileName, const char *pieceNameTerminatorCharacters, bool spaceIsAPieceNameTerminator, unsigned chromosomePaddingSize, AltContigMap* altMap);
+ReadFASTAGenome(const char *fileName, const char *pieceNameTerminatorCharacters, bool spaceIsAPieceNameTerminator, unsigned chromosomePaddingSize, const char* chrTag, const char* chrMapFilename, AltContigMap* altMap);
 
 //
 // The FASTA appending functions return whether the write was successful.
@@ -39,3 +39,7 @@ ReadFASTAGenome(const char *fileName, const char *pieceNameTerminatorCharacters,
 
     bool
 AppendFASTAGenome(const Genome *, FILE *fasta);
+
+// utility for parsing FASTA tags
+    bool
+FindFASTATagValue(const char* lineBuffer, const char* tag, const char ** pTagValue, int * pValueLength);

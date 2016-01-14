@@ -37,6 +37,8 @@ ReadFASTAGenome(
     const char *pieceNameTerminatorCharacters,
     bool spaceIsAPieceNameTerminator,
     unsigned chromosomePaddingSize,
+    const char *chrTag,
+    const char *chrMapFilename,
     AltContigMap* altMap)
 {
     //
@@ -54,15 +56,38 @@ ReadFASTAGenome(
     isValidGenomeCharacter['A'] = isValidGenomeCharacter['T'] = isValidGenomeCharacter['C'] = isValidGenomeCharacter['G'] = isValidGenomeCharacter['N'] = true;
     isValidGenomeCharacter['a'] = isValidGenomeCharacter['t'] = isValidGenomeCharacter['c'] = isValidGenomeCharacter['g'] = isValidGenomeCharacter['n'] = true;
 
+    int lineBufferSize = 0;
+    char *lineBuffer;
+
+    map<string, string> chrMap;
+    if (chrMapFilename != NULL) {
+        FILE* mapFile = fopen(chrMapFilename, "r");
+        if (mapFile == NULL) {
+            WriteErrorMessage("Unable to open -chrmap file '%s'\n", chrMapFilename);
+            return NULL;
+        }
+        while (NULL != reallocatingFgets(&lineBuffer, &lineBufferSize, mapFile)) {
+            if (lineBuffer[0] == '#') {
+                continue;
+            }
+            string chrom;
+            for (char * token = strtok(lineBuffer, "\t\r\n"); token != NULL; token = strtok(NULL, "\t\r\n")) {
+                if (token == lineBuffer) {
+                    chrom = string(token);
+                } else {
+                    chrMap[string(token)] = chrom;
+                }
+            }
+        }
+        fclose(mapFile);
+    }
+
     FILE *fastaFile = fopen(fileName, "r");
     if (fastaFile == NULL) {
         WriteErrorMessage("Unable to open FASTA file '%s' (even though we already got its size)\n",fileName);
         return NULL;
     }
 
-    int lineBufferSize = 0;
-    char *lineBuffer;
- 
     //
     // Count the chromosomes
     //
@@ -97,39 +122,59 @@ ReadFASTAGenome(
             //
             // Now supply the chromosome name.
             //
-            char * terminator = lineBuffer + strlen(lineBuffer);
-            char * p;
-            if (NULL != pieceNameTerminatorCharacters) {
-                for (int i = 0; i < strlen(pieceNameTerminatorCharacters); i++) {
-                    p = strchr(lineBuffer + 1, pieceNameTerminatorCharacters[i]);
+            const char *chrName;
+            int chrNameLen;
+            if (chrTag == NULL) {
+                char * terminator = lineBuffer + strlen(lineBuffer);
+                char * p;
+                if (NULL != pieceNameTerminatorCharacters) {
+                    for (int i = 0; i < strlen(pieceNameTerminatorCharacters); i++) {
+                        p = strchr(lineBuffer + 1, pieceNameTerminatorCharacters[i]);
+                        if (NULL != p && p < terminator) {
+                            terminator = p;
+                        }
+                    }
+                }
+                if (spaceIsAPieceNameTerminator) {
+                    p = strchr(lineBuffer, ' ');
+                    if (NULL != p && p < terminator) {
+                        terminator = p;
+                    }
+                    p = strchr(lineBuffer, '\t');
                     if (NULL != p && p < terminator) {
                         terminator = p;
                     }
                 }
-            }
-            if (spaceIsAPieceNameTerminator) {
-                p = strchr(lineBuffer, ' ');
+                p = strchr(lineBuffer, '\n');
                 if (NULL != p && p < terminator) {
                     terminator = p;
                 }
-                p = strchr(lineBuffer, '\t');
+                p = strchr(lineBuffer, '\r');
                 if (NULL != p && p < terminator) {
                     terminator = p;
                 }
-            }
-            p = strchr(lineBuffer, '\n');
-            if (NULL != p && p < terminator) {
-                terminator = p;
-            }
-            p = strchr(lineBuffer, '\r');
-            if (NULL != p && p < terminator) {
-                terminator = p;
+                chrName = lineBuffer + 1;
+                chrNameLen = (int) (terminator - lineBuffer - 1);
+            } else {
+                if (!FindFASTATagValue(lineBuffer, chrTag, &chrName, &chrNameLen)) {
+                    WriteErrorMessage("Unable to find tag '%s' in contig '%s'\n", chrTag, lineBuffer + 1);
+                    soft_exit(1);
+                }
+                if (chrMapFilename != NULL) {
+                    map<string,string>::iterator mapped = chrMap.find(string(chrName, chrName + chrNameLen));
+                    if (mapped != chrMap.end()) {
+                        chrName = mapped->second.data();
+                        chrNameLen = (int) mapped->second.length();
+                    }
+                }
             }
             if (altMap != NULL) {
-                altMap->addFastaContig(lineBuffer, terminator);
+                altMap->addFastaContig(lineBuffer, chrName, chrNameLen);
             }
-            *terminator = '\0';
-            genome->startContig(lineBuffer+1, altMap);
+            char *contigName = (char*) malloc(chrNameLen + 1);
+            memcpy(contigName, chrName, chrNameLen);
+            contigName[chrNameLen] = '\0';
+            genome->startContig(contigName, altMap);
         } else {
             if (!inAContig) {
                 WriteErrorMessage("\nFASTA file doesn't beging with a contig name (i.e., the first line doesn't start with '>').\n");
@@ -207,4 +252,24 @@ bool AppendFASTAGenome(const Genome *genome, FILE *fasta, const char *prefix="")
         fputc('\n', fasta);
     }
     return !ferror(fasta);
+}
+
+    bool
+FindFASTATagValue(const char* lineBuffer, const char* tagName, const char ** pTagValue, int * pValueLength)
+{
+    const char *tag = lineBuffer;
+    do {
+        tag = strstr(tag + 1, tagName);
+        if (tag == NULL) {
+            return false;
+        }
+    } while (tag[-1] != '>' && tag[-1] != '|' && tag[strlen(tagName)] != '|');
+    *pTagValue = tag + strlen(tagName) + 1; // Format is "tag|value|
+    const char *tagValueEnd = strchr(*pTagValue, '|');
+    if (tagValueEnd == NULL) {
+        WriteErrorMessage("Badly formatted tag '%s' in contig '%s'\n", tag, lineBuffer + 1);
+        soft_exit(1);
+    }
+    *pValueLength = (int) (tagValueEnd - *pTagValue);
+    return true;
 }

@@ -534,7 +534,6 @@ IntersectingPairedEndAligner::align(
                 lowestFreeScoringMateCandidate[whichSetPair]++;
 
                 previousMoreHitsLocation = lastGenomeLocationForReadWithMoreHits;
-
                 if (!setPair[readWithMoreHits]->getNextLowerHit(&lastGenomeLocationForReadWithMoreHits, &lastSeedOffsetForReadWithMoreHits, pLastUnliftedGenomeLocationForReadWithMoreHits)) {
                     lastGenomeLocationForReadWithMoreHits = 0;
                     outOfMoreHitsLocations = true;
@@ -1385,14 +1384,14 @@ IntersectingPairedEndAligner::HashTableHitSet::computeBestPossibleScoreForCurren
 }
 
     bool
-        IntersectingPairedEndAligner::HashTableHitSet::getNextLowerHit(GenomeLocation *genomeLocation, unsigned *seedOffsetFound, GenomeLocation *unliftedGenomeLocation)
+IntersectingPairedEndAligner::HashTableHitSet::getNextLowerHit(
+    GenomeLocation *genomeLocation, unsigned *seedOffsetFound, GenomeLocation *unliftedGenomeLocation)
 {
     //
     // Look through all of the lookups and find the one with the highest location smaller than the current one.
     //
     GenomeLocation foundLocation = 0;
     bool anyFound = false;
-    const bool setUnlifted = unliftedGenomeLocation != NULL;
 
     //
     // Run through the lookups pushing up any that are at the most recently returned
@@ -1401,8 +1400,8 @@ IntersectingPairedEndAligner::HashTableHitSet::computeBestPossibleScoreForCurren
     for (unsigned i = 0; i < nLookupsUsed; i++) {
         _int64 *currentHitForIntersection;
         _int64 nHits;
-        GenomeLocation hitLocation;
-        GenomeLocation unliftedHitLocation;
+        GenomeLocation hitLocation = -1;
+        GenomeLocation unliftedHitLocation = -2;
         unsigned seedOffset;
 
         //
@@ -1414,7 +1413,7 @@ IntersectingPairedEndAligner::HashTableHitSet::computeBestPossibleScoreForCurren
         seedOffset = lookups[i].seedOffset;                                                                             \
         if (nHits != *currentHitForIntersection) {                                                                      \
             hitLocation = lookups[i].hits[*currentHitForIntersection];                                                  \
-            if (setUnlifted) {                                                                                          \
+            if (unliftedGenomeLocation != NULL) {                                                                       \
                 unliftedHitLocation = lookups[i].unliftedHits[*currentHitForIntersection];                              \
             }                                                                                                           \
         }
@@ -1436,12 +1435,12 @@ IntersectingPairedEndAligner::HashTableHitSet::computeBestPossibleScoreForCurren
             }
             if (doesGenomeIndexHave64BitLocations) {
                 hitLocation = lookups64[i].hits[*currentHitForIntersection];
-                if (setUnlifted) {
+                if (unliftedGenomeLocation != NULL) {
                     unliftedHitLocation = lookups64[i].unliftedHits[*currentHitForIntersection];
                 }
             } else {
                 hitLocation = lookups32[i].hits[*currentHitForIntersection];
-                if (setUnlifted) {
+                if (unliftedGenomeLocation != NULL) {
                     unliftedHitLocation = lookups32[i].unliftedHits[*currentHitForIntersection];
                 }
             }
@@ -1452,7 +1451,7 @@ IntersectingPairedEndAligner::HashTableHitSet::computeBestPossibleScoreForCurren
                 hitLocation >= seedOffset) // found location isn't too small to push us before the beginning of the genome
             {
                 *genomeLocation = foundLocation = hitLocation - seedOffset;
-                if (setUnlifted) {
+                if (unliftedGenomeLocation != NULL) {
                     *unliftedGenomeLocation = unliftedHitLocation - seedOffset;
                 }
                 *seedOffsetFound = seedOffset;
