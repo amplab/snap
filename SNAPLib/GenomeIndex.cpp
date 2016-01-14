@@ -1084,8 +1084,7 @@ GenomeIndex::ComputeBiasTable(const Genome* genome, int seedLen, double* table, 
 
 			_ASSERT(seed.getHighBases(hashTableKeySize) < nHashTables);
 
-            bool addSeed = unliftedIndex == NULL || hasAnyAltHits(seed, i, unliftedIndex) ||
-                ((!large) && hasAnyAltHits(~seed, i, unliftedIndex));
+            bool addSeed = unliftedIndex == NULL || unliftedIndex->hasAnyAltHitsAndLocationIsFirst(seed, i, large);
             if (addSeed && NULL == seedsSeen->GetFirstValueForKey(seed.getBases())) {
                 _uint64 value = 42;
                 seedsSeen->Insert(seed.getBases(), &value);
@@ -1240,8 +1239,7 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
 
 			_ASSERT(whichHashTable < context->nHashTables);
 
-            bool addSeed = context->unliftedIndex == NULL || hasAnyAltHits(seed, i,  context->unliftedIndex) ||
-                ((!large) && hasAnyAltHits(~seed, i, context->unliftedIndex));
+            bool addSeed = context->unliftedIndex == NULL || context->unliftedIndex->hasAnyAltHitsAndLocationIsFirst(seed, i, large);
             if (addSeed && batches[whichHashTable].addSeed(seed.getLowBases(context->hashTableKeySize))) {
                 PerCounterBatch *batch = &batches[whichHashTable];
                 AcquireExclusiveLock(&context->approximateCounterLocks[whichHashTable]);
@@ -1283,25 +1281,28 @@ GenomeIndex::ComputeBiasTableWorkerThreadMain(void *param)
 }
 
 bool
-GenomeIndex::hasAnyAltHits(
-    Seed seed, GenomeLocation genomeLocation, const GenomeIndex* unliftedIndex)
+GenomeIndex::hasAnyAltHitsAndLocationIsFirst(
+    Seed seed, GenomeLocation genomeLocation, bool large) const
 {
     _int64 nHits, nRCHits;
-    if (unliftedIndex->doesGenomeIndexHave64BitLocations()) {
+    if (doesGenomeIndexHave64BitLocations()) {
         const GenomeLocation *hits, *rcHits;
         GenomeLocation singleHit[2], singleRCHit[2];
-        unliftedIndex->lookupSeed(seed, &nHits, &hits, &nRCHits, &rcHits, &singleHit[1], &singleRCHit[1]);
+        lookupSeed(seed, &nHits, &hits, &nRCHits, &rcHits, &singleHit[1], &singleRCHit[1]);
 #define HAS_ANY_ALTS \
-        if ((nHits > 0 && genomeLocation == *hits && (nRCHits == 0 || *hits <= *rcHits)) || \
-            (nRCHits > 0 && genomeLocation == *rcHits && (nHits == 0 || *rcHits < *hits))) { \
+        bool isFirst = large \
+            ? (nHits > 0 && genomeLocation == *hits && (nRCHits == 0 || *hits <= *rcHits)) || \
+                (nRCHits > 0 && genomeLocation == *rcHits && (nHits == 0 || *rcHits < *hits)) \
+            : nHits > 0 && genomeLocation == *hits; \
+        if (isFirst) { \
             for (int i = 0; i < nHits; i++) { \
-                if (unliftedIndex->genome->isAltLocation(hits[i])) { \
+                if (genome->isAltLocation(hits[i])) { \
                     return true; \
                 } \
             } \
             for (int i = 0; i < nRCHits; i++) { \
-                if (unliftedIndex->genome->isAltLocation(rcHits[i])) { \
-                return true; \
+                if (genome->isAltLocation(rcHits[i])) { \
+                    return true; \
                 } \
             } \
         } \
@@ -1309,7 +1310,7 @@ GenomeIndex::hasAnyAltHits(
         HAS_ANY_ALTS
     } else {
         const unsigned *hits, *rcHits;
-        unliftedIndex->lookupSeed32(seed, &nHits, &hits, &nRCHits, &rcHits);
+        lookupSeed32(seed, &nHits, &hits, &nRCHits, &rcHits);
         HAS_ANY_ALTS
     }
 }

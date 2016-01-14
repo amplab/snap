@@ -184,6 +184,16 @@ SortedDataFilter::onAdvance(
     GenomeDistance bytes,
     GenomeLocation location)
 {
+    if (location != InvalidGenomeLocation && parent->genome->hasAltContigs()) {
+        // reads mapped to RC alt contigs need to have location flipped so they sort properly
+        const Genome::Contig* c = parent->genome->getContigAtLocation(location);
+        if (c != NULL && c->isAlternateRC) {
+            GenomeLocation rcLocation;
+            GenomeDistance ignore;
+            parent->format->getSortInfo(parent->genome, data, bytes, &rcLocation, &ignore);
+            location = rcLocation;
+        }
+    }
     SortEntry entry(batchOffset, bytes, location);
 #ifdef VALIDATE_SORT
 		if (memcmp(data, "BAM", 3) != 0 && memcmp(data, "@HD", 3) != 0) { // skip header block
