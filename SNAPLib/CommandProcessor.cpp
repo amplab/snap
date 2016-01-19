@@ -35,7 +35,7 @@ Pulled from the main program and expanded to handle daemon mode
 #include "Error.h"
 #include "Compat.h"
 
-const char *SNAP_VERSION = "1.0dev.93";
+const char *SNAP_VERSION = "1.0dev.94";
 
 static void usage()
 {

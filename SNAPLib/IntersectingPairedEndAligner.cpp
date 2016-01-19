@@ -681,7 +681,7 @@ IntersectingPairedEndAligner::align(
                                             mergeCandidate < scoringCandidatePool + lowestFreeScoringCandidatePoolEntry &&
                                             genomeLocationIsWithin(mergeCandidate->readWithFewerHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset, 50) &&
                                             mergeCandidate->whichSetPair == candidate->whichSetPair;
-                                            mergeCandidate--) {
+                                            mergeCandidate++) {
 
                                     if (mergeCandidate->mergeAnchor != NULL) {
                                         candidate->mergeAnchor = mergeAnchor = mergeCandidate->mergeAnchor;
@@ -731,7 +731,7 @@ IntersectingPairedEndAligner::align(
                                 //
                                 // A new best hit.
                                 //
-                                if (maxEditDistanceForSecondaryResults != -1 && (unsigned)maxEditDistanceForSecondaryResults >= pairScore - bestPairScore) {
+                                if (maxEditDistanceForSecondaryResults != -1 && (unsigned)maxEditDistanceForSecondaryResults >= bestPairScore - pairScore) {
                                     //
                                     // Move the old best to be a secondary alignment.  This won't happen on the first time we get a valid alignment,
                                     // because bestPairScore is initialized to be very large.
@@ -772,7 +772,7 @@ IntersectingPairedEndAligner::align(
 
                                 isBestHit = true;
                             } else {
-                                if (maxEditDistanceForSecondaryResults != -1 && (unsigned)maxEditDistanceForSecondaryResults >= pairScore - bestPairScore) {
+                                if (maxEditDistanceForSecondaryResults != -1 && pairScore <= maxK && (unsigned)maxEditDistanceForSecondaryResults >= pairScore - bestPairScore) {
                                     //
                                     // A secondary result to save.
                                     //
