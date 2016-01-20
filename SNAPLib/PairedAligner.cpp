@@ -374,13 +374,18 @@ void PairedAlignerContext::runIterationThread()
             }
             stats->totalReads += 2;
 
-            bool pass0 = options->passFilter(reads[0], result.status[0], false);
-            bool pass1 = options->passFilter(reads[1], result.status[1], false);
+            bool pass0 = options->passFilter(reads[0], result.status[0], reads[0]->getDataLength() >= minReadLength && (int)reads[0]->countOfNs() <= maxDist, false);
+            bool pass1 = options->passFilter(reads[1], result.status[1], reads[1]->getDataLength() >= minReadLength && (int)reads[1]->countOfNs() <= maxDist, false);
             bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
                 ? (pass0 && pass1) : (pass0 || pass1);
 
-            if (pass && NULL != readWriter) {
-                readWriter->writePairs(readerContext, reads, &result, 1, NULL, nSingleResults, true);
+            if (pass) {
+                stats->notFound++;
+                if (NULL != readWriter) {
+                    readWriter->writePairs(readerContext, reads, &result, 1, NULL, nSingleResults, true);
+                }
+            } else {
+                stats->uselessReads++;
             }
         }
         delete supplier;
@@ -454,56 +459,60 @@ void PairedAlignerContext::runIterationThread()
     _uint64 lastReportTime = timeInMillis();
     _uint64 readsWhenLastReported = 0;
 
-    while (supplier->getNextReadPair(&reads[0],&reads[1])) {
+    while (supplier->getNextReadPair(&reads[0], &reads[1])) {
         // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
         if (!ignoreMismatchedIDs) {
             Read::checkIdMatch(reads[0], reads[1]);
-		}
+        }
 
         stats->totalReads += 2;
 
-        // Skip the pair if there are too many Ns or 2s.
-        int maxDist = this->maxDist;
-        bool useful0 = reads[0]->getDataLength() >= minReadLength && (int)reads[0]->countOfNs() <= maxDist;
-        bool useful1 = reads[1]->getDataLength() >= minReadLength && (int)reads[1]->countOfNs() <= maxDist;
-		if (!useful0 && !useful1) {
-			PairedAlignmentResult result;
-			result.status[0] = NotFound;
-			result.status[1] = NotFound;
-			result.location[0] = InvalidGenomeLocation;
-			result.location[1] = InvalidGenomeLocation;
-            nSingleResults[0] = nSingleResults[1] = 0;
-
-            bool pass0 = options->passFilter(reads[0], result.status[0], false);
-            bool pass1 = options->passFilter(reads[1], result.status[1], false);
-            bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
-                ? (pass0 && pass1) : (pass0 || pass1);
-
-
-            if (pass && NULL != readWriter) {
-                readWriter->writePairs(readerContext, reads, &result, 1, NULL, nSingleResults, true);
-            }
-            
-            continue;
-        } else {
-            // Here one the reads might still be hopeless, but maybe we can align the other.
-            stats->usefulReads += (useful0 && useful1) ? 2 : 1;
-        }
-
         if (AlignerOptions::useHadoopErrorMessages && stats->totalReads % 10000 == 0 && timeInMillis() - lastReportTime > 10000) {
-            fprintf(stderr,"reporter:counter:SNAP,readsAligned,%lu\n",stats->totalReads - readsWhenLastReported);
+            fprintf(stderr, "reporter:counter:SNAP,readsAligned,%lu\n", stats->totalReads - readsWhenLastReported);
             readsWhenLastReported = stats->totalReads;
             lastReportTime = timeInMillis();
         }
 
+        // Skip the pair if there are too many Ns and/or they're too short
+        int maxDist = this->maxDist;
+        bool useful0 = reads[0]->getDataLength() >= minReadLength && (int)reads[0]->countOfNs() <= maxDist;
+        bool useful1 = reads[1]->getDataLength() >= minReadLength && (int)reads[1]->countOfNs() <= maxDist;
+        if (!useful0 && !useful1) {
+            PairedAlignmentResult result;
+            result.status[0] = NotFound;
+            result.status[1] = NotFound;
+            result.location[0] = InvalidGenomeLocation;
+            result.location[1] = InvalidGenomeLocation;
+            nSingleResults[0] = nSingleResults[1] = 0;
 
- #if     TIME_HISTOGRAM
+            bool pass0 = options->passFilter(reads[0], result.status[0], true, false);
+            bool pass1 = options->passFilter(reads[1], result.status[1], true, false);
+            bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
+                ? (pass0 && pass1) : (pass0 || pass1);
+
+
+            if (pass) {
+                if (NULL != readWriter) {
+                    readWriter->writePairs(readerContext, reads, &result, 1, NULL, nSingleResults, true);
+                }
+                stats->uselessReads += 2;
+            }
+            else {
+                stats->filtered += 2;
+            }
+
+            continue;
+        }
+
+
+
+#if     TIME_HISTOGRAM
         _int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
 
         int nSecondaryResults;
         int nSingleSecondaryResults[2];
-        
+
         aligner->align(reads[0], reads[1], results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, results + 1,
             maxSingleSecondaryHits, maxSecondaryAlignments, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1], singleSecondaryResults);
 
@@ -520,48 +529,51 @@ void PairedAlignerContext::runIterationThread()
             results[0].location[0] = results[0].location[1] = InvalidGenomeLocation;
         }
 
+        bool firstIsPrimary = true;
+        for (int i = 0; i <= nSecondaryResults; i++) {  // Loop runs to <= nSecondaryResults because there's a primary result, too.
+            bool pass0 = options->passFilter(reads[0], results[i].status[0], !useful0, i != 0 || !firstIsPrimary);
+            bool pass1 = options->passFilter(reads[1], results[i].status[1], !useful1, i != 0 || !firstIsPrimary);
+            bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
+                ? (pass0 && pass1) : (pass0 || pass1);
+
+            if (!pass) {
+                //
+                // Remove this one from the list by copying the last one here.
+                //
+                results[i] = results[nSecondaryResults];
+                nSecondaryResults--;
+                if (0 == i) {
+                    firstIsPrimary = false;
+                }
+                i--;
+            }
+        }
+
+        //
+        // Now check the single secondary alignments
+        //
+        SingleAlignmentResult *singleResults[2] = { singleSecondaryResults, singleSecondaryResults + nSingleSecondaryResults[0] };
+        for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+            for (int whichAlignment = 0; whichAlignment < nSingleSecondaryResults[whichRead]; whichAlignment++) {
+                if (!options->passFilter(reads[whichRead], singleResults[whichRead][whichAlignment].status, false, true)) {
+                    singleResults[whichRead][whichAlignment] = singleResults[whichRead][nSingleSecondaryResults[whichRead] - 1];
+                    nSingleSecondaryResults[whichRead]--;
+                    whichAlignment--;
+                }
+            }
+        }
+
         if (NULL != readWriter) {
-            bool firstIsPrimary = true;
-            for (int i = 0; i <= nSecondaryResults + 1; i++) {  // Loop runs to <= nSecondaryResults because there's a primary result, too.
-                bool pass0 = options->passFilter(reads[0], results[i].status[0], false);
-                bool pass1 = options->passFilter(reads[1], results[i].status[1], false);
-                bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
-                    ? (pass0 && pass1) : (pass0 || pass1);
-
-                if (!pass) {
-                    //
-                    // Remove this one from the list by copying the last one here.
-                    //
-                    results[i] = results[nSecondaryResults];
-                    nSecondaryResults--;
-                    if (0 == i) {
-                        firstIsPrimary = false;
-                    }
-                    i--;
-                }
-
-            }
-
-            //
-            // Now check the single secondary alignments
-            //
-            SingleAlignmentResult *singleResults[2] = { singleSecondaryResults, singleSecondaryResults + nSingleSecondaryResults[0] };
-            for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
-                for (int whichAlignment = 0; whichAlignment < nSingleSecondaryResults[whichRead]; whichAlignment++) {
-                    if (!options->passFilter(reads[whichRead], singleResults[whichRead][whichAlignment].status, false)) {
-                        singleResults[whichRead][whichAlignment] = singleResults[whichRead][nSingleSecondaryResults[whichRead] - 1];
-                        nSingleSecondaryResults[whichRead]--;
-                        whichAlignment--;
-                    }
-                }
-            }
-
             readWriter->writePairs(readerContext, reads, results, nSecondaryResults + 1, singleResults, nSingleSecondaryResults, firstIsPrimary);
         }
 
-        updateStats((PairedAlignerStats*) stats, reads[0], reads[1], &results[0], useful0, useful1);
-
-    }
+        stats->extraAlignments += nSecondaryResults + (firstIsPrimary ? 0 : 1); // If first isn't primary, it's secondary.
+        if (firstIsPrimary) {
+            updateStats((PairedAlignerStats*)stats, reads[0], reads[1], &results[0], useful0, useful1);
+        } else {
+            stats->filtered += 2;
+        }
+    }   // while we have a read pair
 
     stats->lvCalls = aligner->getLocationsScored();
 
@@ -590,13 +602,16 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
 				_ASSERT(result->status[r] == NotFound);
 				stats->notFound++;
 			}
-		}
-        // Add in MAPQ stats
-        if (result->status[r] != NotFound) {
-            int mapq = result->mapq[r];
-            _ASSERT(mapq >= 0 && mapq <= AlignerStats::maxMapq);
-            stats->mapqHistogram[mapq]++;
+            // Add in MAPQ stats
+            if (result->status[r] != NotFound) {
+                int mapq = result->mapq[r];
+                _ASSERT(mapq >= 0 && mapq <= AlignerStats::maxMapq);
+                stats->mapqHistogram[mapq]++;
+            }
+        } else {
+            stats->uselessReads++;
         }
+
     }
 
     if (result->direction[0] == result->direction[1]) {

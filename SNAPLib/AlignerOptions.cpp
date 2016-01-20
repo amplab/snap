@@ -123,6 +123,12 @@ AlignerOptions::usageMessage()
         "  -x   explore some hits of overly popular seeds (useful for filtering)\n"
         "  -f   stop on first match within edit distance limit (filtering mode)\n"
         "  -F   filter output (a=aligned only, s=single hit only (MAPQ >= %d), u=unaligned only, l=long enough to align (see -mrl))\n"
+        "  -E   an alternate (and fully general) way to specify filter options.  Emit only these types s = single hit (MAPQ >= %d), m = multiple hit (MAPQ < %d),\n"
+        "       x = not long enough to align, u = unaligned, b = filter must apply to both ends of a paired-end read.  Combine the letters after\n"
+        "       -E, so for example -E smu will emit all reads that aren't too short/have too many Ns (because it leaves off l).  -E smx is the same\n"
+        "       as -F a, -E ux is the same as -F u, and so forth.\n"
+        "       When filtering in paired-end mode (either with -F or -E) unless you specify the b flag a read will be emitted if it's mate pair passes the filter\n"
+        "       Even if the read itself does not.  If you specify b mode, then a read will be emitted only if it and its partner both pass the filter.\n"
         "  -S   suppress additional processing (sorted BAM output only)\n"
         "       i=index, d=duplicate marking\n"
 #if     USE_DEVTEAM_OPTIONS
@@ -186,7 +192,7 @@ AlignerOptions::usageMessage()
             maxDist,
             maxHits,
 			minWeightToCheck,
-			MAPQ_LIMIT_FOR_SINGLE_HIT,
+            MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT,
             expansionFactor,
 			DEFAULT_MIN_READ_LENGTH);
 
@@ -361,25 +367,25 @@ AlignerOptions::parse(
             n++;
             if (strcmp(argv[n], "a") == 0) {
 				if (0 != filterFlags) {
-					WriteErrorMessage("Specified -F %s after a previous -F option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
+					WriteErrorMessage("Specified -F %s after a previous -F or -E option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
 					return false;
 				}
                 filterFlags = FilterSingleHit | FilterMultipleHits | FilterTooShort;
             } else if (strcmp(argv[n], "s") == 0) {
 				if (0 != filterFlags) {
-					WriteErrorMessage("Specified -F %s after a previous -F option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
+					WriteErrorMessage("Specified -F %s after a previous -F or -E option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
 					return false;
 				}
 				filterFlags = FilterSingleHit | FilterTooShort;
 			} else if (strcmp(argv[n], "u") == 0) {
 				if (0 != filterFlags) {
-					WriteErrorMessage("Specified -F %s after a previous -F option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
+					WriteErrorMessage("Specified -F %s after a previous -F or -E  option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
 					return false;
 				}
 				filterFlags = FilterUnaligned | FilterTooShort;
 			} else if (strcmp(argv[n], "l") == 0) {
 				if (0 != filterFlags) {
-					WriteErrorMessage("Specified -F %s after a previous -F option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
+					WriteErrorMessage("Specified -F %s after a previous -F or -E  option.  Choose one (or put -F b after -F %s)\n", argv[n], argv[n]);
 					return false;
 				}
 				filterFlags = FilterSingleHit | FilterMultipleHits | FilterUnaligned;
@@ -389,6 +395,25 @@ AlignerOptions::parse(
 				WriteErrorMessage("Unknown option type after -F: %s\n", argv[n]);
 				return false;
 			}
+            return true;
+        }
+    } else if (strcmp(argv[n], "-E") == 0) {
+        if (n + 1 < argc) {
+            if (0 != filterFlags) {
+                WriteErrorMessage("You can have only one -F and/or -E switch (excepting -F b)\n");
+                return false;
+            }
+            n++;
+            for (int whichChar = 0; whichChar < strlen(argv[n]); whichChar++) {
+                switch (argv[n][whichChar]) {
+                case 's':   filterFlags |= FilterSingleHit; break;
+                case 'm':   filterFlags |= FilterMultipleHits; break;
+                case 'x':   filterFlags |= FilterTooShort; break;
+                case 'u':   filterFlags |= FilterUnaligned; break;
+                case 'b':   filterFlags |= FilterBothMatesMatch; break;
+                default:    WriteErrorMessage("Unrecognized filter type after -E '%c'; must be one of smxub\n", argv[n][whichChar]); return false;
+                }
+            }
             return true;
         }
     } else if (strcmp(argv[n], "-x") == 0) {
@@ -740,14 +765,20 @@ AlignerOptions::parse(
 AlignerOptions::passFilter(
     Read* read,
     AlignmentResult result,
-	bool tooShort)
+	bool tooShort,
+    bool secondaryAlignment)
 {
     if (filterFlags == 0) {
         return true;
     }
-	if (tooShort && (filterFlags & FilterTooShort) == 0) {
-		return false;
-	}
+    if (tooShort) {
+        return (filterFlags & FilterTooShort) != 0;
+    }
+
+    if (result == MultipleHits && secondaryAlignment && (filterFlags & FilterSingleHit)) { // Don't filter out secondary alignments for low MAPQ
+        return true;
+    }
+
     switch (result) {
     case NotFound:
     case UnknownAlignment:

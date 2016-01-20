@@ -96,8 +96,6 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
             
         finishIteration();
 
-        printStatsHeader();
-
         printStats();
 
         nextIteration();    // This probably should get rolled into something else; it's really cleanup code, not "next iteration"
@@ -205,11 +203,6 @@ AlignerContext::initialize()
     return true;
 }
 
-    void
-AlignerContext::printStatsHeader()
-{
-	WriteStatusMessage("Total Reads    Aligned, MAPQ >= %2d    Aligned, MAPQ < %2d     Unaligned              Too Short/Too Many Ns  %%Pairs\tReads/s   Time in Aligner (s)\n", MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT);
-}
 
     void
 AlignerContext::beginIteration()
@@ -297,7 +290,7 @@ extern char *FormatUIntWithCommas(_uint64 val, char *outputBuffer, size_t output
 //
 char *numPctAndPad(char *buffer, _uint64 num, double pct, size_t desiredWidth, size_t bufferLen)
 {
-	_ASSERT(desiredWidth < bufferLen);	// < to leave room for trailing null.
+	_ASSERT(desiredWidth + 1 < bufferLen);	// < to leave room for trailing null.
 
 	FormatUIntWithCommas(num, buffer, bufferLen);
 	const size_t percentageBufferSize = 100;	// Plenty big enough for any value
@@ -306,7 +299,8 @@ char *numPctAndPad(char *buffer, _uint64 num, double pct, size_t desiredWidth, s
 	sprintf(percentageBuffer, " (%.02f%%)", pct);
 	if (strlen(percentageBuffer) + strlen(buffer) >= bufferLen || desiredWidth >= bufferLen) { // >= accounts for terminating null
 		WriteErrorMessage("numPctAndPad: overflowed output buffer\n");
-		soft_exit(1);
+        buffer[0] = '\0';
+        return buffer;
 	}
 
 	strcat(buffer, percentageBuffer);
@@ -317,10 +311,37 @@ char *numPctAndPad(char *buffer, _uint64 num, double pct, size_t desiredWidth, s
 	return buffer;
 }
 
+char *pctAndPad(char * buffer, double pct, size_t desiredWidth, size_t bufferLen) {
+    _ASSERT(desiredWidth + 1 < bufferLen);
+
+    const size_t percentageBufferSize = 100;	// Plenty big enough for any value
+    char percentageBuffer[percentageBufferSize];
+
+    sprintf(percentageBuffer, "%.02f%%",pct);
+
+    if (strlen(percentageBuffer) + 1 > bufferLen) {
+        WriteErrorMessage("pctAndPad: buffer too small\n");
+        buffer[0] = '\0';
+        return buffer;
+    }
+
+    strcpy(buffer, percentageBuffer);
+    for (size_t x = strlen(buffer); x < desiredWidth; x++) {
+        strcat(buffer, " ");
+    }
+
+    return buffer;
+}
+
     void
 AlignerContext::printStats()
 {
-    double usefulReads = max((double) stats->usefulReads, 1.0);
+
+    WriteStatusMessage("Total Reads    Aligned, MAPQ >= %2d    Aligned, MAPQ < %2d     Unaligned              Too Short/Too Many Ns  %s%s%sReads/s   Time in Aligner (s)\n", MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT,
+        (stats->filtered > 0) ? "Filtered               " : "",
+        (stats->extraAlignments) ? " Extra Alignments " : "",
+        isPaired() ? "%Pairs    " : "   "
+        );
 
 	const size_t strBufLen = 50;	// Way more than enough for 64 bit numbers with commas
 	char tooShort[strBufLen];
@@ -330,14 +351,31 @@ AlignerContext::printStats()
 	char numReads[strBufLen];
 	char readsPerSecond[strBufLen];
 	char alignTimeString[strBufLen];
+    char filtered[strBufLen];
+    char extraAlignments[strBufLen];
+    char pctPairs[strBufLen];
 
-	WriteStatusMessage("%-14s %s %s %s %s %.02f%%%\t%-9s %s\n",
-		FormatUIntWithCommas(stats->totalReads, numReads, strBufLen),
-		numPctAndPad(single, stats->singleHits, 100.0 * stats->singleHits / stats->totalReads, 22, strBufLen),
-		numPctAndPad(multi, stats->multiHits, 100.0 * stats->multiHits / stats->totalReads, 22, strBufLen),
-		numPctAndPad(unaligned, stats->notFound, 100.0 * stats->notFound / stats->totalReads, 22, strBufLen),
-		numPctAndPad(tooShort, stats->totalReads - stats->usefulReads, 100.0 * (stats->totalReads - stats->usefulReads) / max(stats->totalReads, (_int64)1), 22, strBufLen),
-		100.0 * stats->alignedAsPairs / stats->totalReads,
+    /*
+                                                         total                                           total
+                                                         |    single                                     |  single
+                                                         |    |  multi                                   |  |  multi
+                                                         |    |  |  unaligned                            |  |  |  unaligned
+                                                         |    |  |  |  too short                         |  |  |  |  too short
+                                                         |    |  |  |  |  filtered                       |  |  |  |  |  filtered 
+                                                         |    |  |  |  |  |    extra      reads/s        |  |  |  |  |  | extra    reads/s     
+                                                         |    |  |  |  |  |    |   pairs  |  time        |  |  |  |  |  | | pairs  |  time
+                                                         |    |  |  |  |  |    |   |      |  |           |  |  |  |  |  | | |      |  |
+                                                         v    v  v  v  v  v    v   v      v  v           v  v  v  v  v  v v v      v  v
+    */
+    WriteStatusMessage((stats->extraAlignments > 0) ? "%-14s %s %s %s %s %s %-16s %s   %-9s %s\n" : "%-14s %s %s %s %s %s%s%s   %-9s %s\n",
+        FormatUIntWithCommas(stats->totalReads, numReads, strBufLen),
+        numPctAndPad(single, stats->singleHits, 100.0 * stats->singleHits / stats->totalReads, 22, strBufLen),
+        numPctAndPad(multi, stats->multiHits, 100.0 * stats->multiHits / stats->totalReads, 22, strBufLen),
+        numPctAndPad(unaligned, stats->notFound, 100.0 * stats->notFound / stats->totalReads, 22, strBufLen),
+        numPctAndPad(tooShort, stats->uselessReads , 100.0 * stats->uselessReads / max(stats->totalReads, (_int64)1), 22, strBufLen),
+        (stats->filtered > 0) ? numPctAndPad(filtered, stats->filtered, 100.0 * stats->filtered / stats->totalReads, 23, strBufLen) : "",
+        (stats->extraAlignments > 0) ? FormatUIntWithCommas(stats->extraAlignments, extraAlignments, strBufLen) : "",
+		isPaired() ? pctAndPad(pctPairs,  100.0 * stats->alignedAsPairs / stats->totalReads, 7, strBufLen) : "",
 		FormatUIntWithCommas((unsigned _int64)(1000 * stats->totalReads / max(alignTime, (_int64)1)), readsPerSecond, strBufLen),	// Aligntime is in ms
 		FormatUIntWithCommas((alignTime + 500) / 1000, alignTimeString, strBufLen)
 		);
@@ -345,14 +383,14 @@ AlignerContext::printStats()
     if (NULL != perfFile) {
         fprintf(perfFile, "%d\t%d\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%0.2f%%\t%lld\t%lld\tt%.0f\n",
                 maxHits_, maxDist_, 
-                100.0 * usefulReads / max(stats->totalReads, (_int64) 1),
+                100.0 * (stats->totalReads - stats->uselessReads) / max(stats->totalReads, (_int64) 1),
 				100.0 * stats->singleHits / stats->totalReads,
 				100.0 * stats->multiHits / stats->totalReads,
 				100.0 * stats->notFound / stats->totalReads,
                 stats->lvCalls,
 				100.0 * stats->alignedAsPairs / stats->totalReads,
                 stats->totalReads,
-                (1000.0 * usefulReads) / max(alignTime, (_int64) 1));
+                (1000.0 * (stats->totalReads - stats->uselessReads)) / max(alignTime, (_int64)1));
 
         fprintf(perfFile,"\n");
     }

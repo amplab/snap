@@ -123,7 +123,7 @@ struct AlignerOptions : public AbstractOptions
 		FilterTooShort =            0x0010
     };
 
-    bool passFilter(Read* read, AlignmentResult result, bool tooShort);
+    bool passFilter(Read* read, AlignmentResult result, bool tooShort, bool secondaryAlignment);
     
     virtual bool isPaired() { return false; }
 };

@@ -32,13 +32,15 @@ AbstractStats::~AbstractStats()
 AlignerStats::AlignerStats(AbstractStats* i_extra)
 :
     totalReads(0),
-    usefulReads(0),
+    uselessReads(0),
     singleHits(0), 
     multiHits(0),
     notFound(0),
     alignedAsPairs(0),
     extra(i_extra),
-    lvCalls(0)
+    lvCalls(0),
+    filtered(0),
+    extraAlignments(0)
 {
     for (int i = 0; i <= AlignerStats::maxMapq; i++) {
         mapqHistogram[i] = 0;
@@ -81,12 +83,14 @@ AlignerStats::add(
 {
     AlignerStats* other = (AlignerStats*) i_other;
     totalReads += other->totalReads;
-    usefulReads += other->usefulReads;
+    uselessReads += other->uselessReads;
     singleHits += other->singleHits;
     multiHits += other->multiHits;
     notFound += other->notFound;
     alignedAsPairs += other->alignedAsPairs;
     lvCalls += other->lvCalls;
+    filtered += other->filtered;
+    extraAlignments += other->extraAlignments;
 
     if (extra != NULL && other->extra != NULL) {
         extra->add(other->extra);
