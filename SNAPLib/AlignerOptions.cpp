@@ -179,7 +179,7 @@ AlignerOptions::usageMessage()
         "  -dp  Edit distance as a percentage of read length (single only, overrides -d)\n"
 #endif
 		"  -nu  No Ukkonen: don't reduce edit distance search based on prior candidates. This option is purely for\n"
-		"       evalutating the performance effect of using Ukkonen's algorithm rather than Smith-Waterman, and specifying\n"
+		"       evaluating the performance effect of using Ukkonen's algorithm rather than Smith-Waterman, and specifying\n"
 		"       it will slow down execution without improving the alignments.\n"
 		"  -no  No Ordering: don't order the evalutation of reads so as to select more likely candidates first.  This option\n"
 		"       is purely for evaluating the performance effect of the read evaluation order, and specifying it will slow\n"
@@ -214,7 +214,7 @@ AlignerOptions::usageMessage()
 
     WriteErrorMessage("When specifying an input or output file, you can simply list the filename, in which case\n"
                       "SNAP will infer the type of the file from the file extension (.sam or .bam for example),\n"
-                      "or you can explicitly specify the file type by preceeding the filename with one of the\n"
+                      "or you can explicitly specify the file type by preceding the filename with one of the\n"
                       " following type specifiers (which are case sensitive):\n"
                       "    -fastq\n"
                       "    -compressedFastq\n"
