@@ -45,7 +45,7 @@ struct AlignerStats : public AbstractStats
 
     // TODO: This should also count both-aligned vs one-aligned etc.
     _int64 totalReads;
-    _int64 usefulReads;
+    _int64 uselessReads;    // Too short or too many Ns, so unalignable
     _int64 singleHits;
     _int64 multiHits;
     _int64 notFound;
@@ -54,6 +54,9 @@ struct AlignerStats : public AbstractStats
     _int64 millisReading;
     _int64 millisAligning;
     _int64 millisWriting;
+    _int64 filtered;
+    _int64 extraAlignments;
+
     static const unsigned maxMapq = 70;
     unsigned mapqHistogram[maxMapq+1];
 

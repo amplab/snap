@@ -26,7 +26,7 @@ inline double ratio(double a, double b=1)
 // Turn the value into a string with comma formatting (so 1,234,567 instead of 1234567).
 // Produces a null-terminated string.
 //
-extern char *FormatUIntWithCommas(_uint64 val, char *outputBuffer, size_t outputBufferSize);
+extern char *FormatUIntWithCommas(_uint64 val, char *outputBuffer, size_t outputBufferSize, size_t desiredWidth = 0);
 
 const int MAXLINE = 1024;
 

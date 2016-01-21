@@ -86,8 +86,13 @@ SingleAlignerContext::runIterationThread()
             result.mapq = 0;
             result.score = 0;
             result.location = InvalidGenomeLocation;
-            if (NULL != readWriter && options->passFilter(read, NotFound, false)) {
-                readWriter->writeReads(readerContext, read, &result, 1, true);
+            if (options->passFilter(read, NotFound, read->getDataLength() < minReadLength || read->countOfNs() > maxDist, false)) {
+                stats->notFound++;
+                if (NULL != readWriter) {
+                    readWriter->writeReads(readerContext, read, &result, 1, true);
+                }
+            } else {
+                stats->filtered++;
             }
             extension->writeRead(read, &result);
         }
@@ -167,17 +172,20 @@ SingleAlignerContext::runIterationThread()
 
         // Skip the read if it has too many Ns or trailing 2 quality scores.
         if (read->getDataLength() < minReadLength || read->countOfNs() > maxDist) {
-            if (readWriter != NULL && options->passFilter(read, NotFound, true)) {
-                SingleAlignmentResult result;
-                result.status = NotFound;
-                result.location = InvalidGenomeLocation;
-                result.mapq = 0;
-                result.direction = FORWARD;
-                readWriter->writeReads(readerContext, read, &result, 1, true);
+            if (!options->passFilter(read, NotFound, true, false)) {
+                stats->filtered++;
+            } else {
+                if (NULL != readWriter) {
+                    SingleAlignmentResult result;
+                    result.status = NotFound;
+                    result.location = InvalidGenomeLocation;
+                    result.mapq = 0;
+                    result.direction = FORWARD;
+                    readWriter->writeReads(readerContext, read, &result, 1, true);
+                }
+                stats->uselessReads++;
             }
             continue;
-        } else {
-            stats->usefulReads++;
         }
 
 #if     TIME_HISTOGRAM
@@ -213,15 +221,13 @@ SingleAlignerContext::runIterationThread()
 
         allocator->checkCanaries();
 
-        updateStats(stats, read, alignmentResults[0].status, alignmentResults[0].score, alignmentResults[0].mapq);
-
+        bool containsPrimary = true;
         if (NULL != readWriter) {
             //
             // Remove any reads that don't pass the filter, then send the remainder down to the writer.
             //
-            bool containsPrimary = true;
             for (int i = 0; i <= nSecondaryResults; i++) {
-                if (!options->passFilter(read, alignmentResults[i].status, false)) {
+                if (!options->passFilter(read, alignmentResults[i].status, false, i != 0 || !containsPrimary)) {
                     if (i == 0) {
                         containsPrimary = false;
                     }
@@ -238,6 +244,7 @@ SingleAlignerContext::runIterationThread()
                 }
             } // For each result
 
+            stats->extraAlignments += nSecondaryResults + (containsPrimary ? 0 : 1);    // If it doesn't contain the primary, then it's a secondary.
             readWriter->writeReads(readerContext, read, alignmentResults, nSecondaryResults + 1, containsPrimary);
 
         }
@@ -247,6 +254,11 @@ SingleAlignerContext::runIterationThread()
             stats->millisWriting = (startTime - alignFinishedTime);
         }
 
+        if (containsPrimary) {
+            updateStats(stats, read, alignmentResults[0].status, alignmentResults[0].score, alignmentResults[0].mapq);
+        } else {
+            stats->filtered++;
+        }
     }
 
     aligner->~BaseAligner(); // This calls the destructor without calling operator delete, allocator owns the memory.
