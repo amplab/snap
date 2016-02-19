@@ -8,6 +8,7 @@ using System.IO;
 using System.Xml.Linq;
 using System.Diagnostics;
 using ExpressionLib;
+using System.Threading;
 
 //
 // A bunch of aliases for string in order to make the code more readable.
@@ -64,15 +65,15 @@ namespace ExpressionMetadata
 
         public static void InitializeMachines()
         {
-            Machine.AddMachine("msr-srs-0", 8, 36);
+            Machine.AddMachine("msr-srs-0", 8, 36, true);
             Machine.AddMachine("msr-srs-1", 8, 36);
             Machine.AddMachine("msr-srs-2", 8, 36);
-            Machine.AddMachine("msr-srs-3", 8, 36);
+            Machine.AddMachine("msr-srs-3", 8, 34, true);
             Machine.AddMachine("msr-srs-4", 8, 36);
             Machine.AddMachine("msr-srs-5", 16, 36);
             Machine.AddMachine("msr-srs-6", 16, 36);
             Machine.AddMachine("msr-srs-7", 48, 48);
-            Machine.AddMachine("msr-srs-8", 48, 36);
+            Machine.AddMachine("msr-srs-8", 48, 48);
             Machine.AddMachine("fds-k25-1", 48, 6);
             Machine.AddMachine("fds-k25-2", 48, 6);
             Machine.AddMachine("fds-k25-3", 48, 6);
@@ -80,10 +81,28 @@ namespace ExpressionMetadata
             Machine.AddMachine("fds-k25-7", 48, 6);
             Machine.AddMachine("fds-k25-8", 48, 6);
             Machine.AddMachine("fds-k25-9", 48, 6);
+            Machine.AddMachine("fds-k25-11", 48, 6, true);
+            Machine.AddMachine("fds-k25-12", 48, 6);
             Machine.AddMachine("fds-k25-14", 48, 6);
             Machine.AddMachine("fds-k25-15", 48, 6);
+            Machine.AddMachine("fds-k25-17", 48, 6);
             Machine.AddMachine("fds-k25-18", 48, 6);
+            Machine.AddMachine("fds-k25-19", 48, 6);
             Machine.AddMachine("fds-k25-20", 48, 6);
+            Machine.AddMachine("fds-k24-1", 12, 40, true);
+            Machine.AddMachine("fds-k24-2", 12, 40, true);
+            Machine.AddMachine("fds-k24-3", 12, 40, true);
+            Machine.AddMachine("fds-k24-4", 12, 40, true);
+            Machine.AddMachine("fds-k24-5", 12, 40, true);
+            Machine.AddMachine("fds-k24-6", 12, 40, true);
+            Machine.AddMachine("fds-k24-7", 12, 40, true);
+            // There is no fds-k24-8.
+            Machine.AddMachine("fds-k24-9", 12, 40, true);
+            Machine.AddMachine("fds-k24-10", 12, 40, true);
+            Machine.AddMachine("fds-k24-11", 12, 40, true);
+            Machine.AddMachine("fds-k24-12", 12, 40, true);
+            Machine.AddMachine("fds-k24-13", 12, 40, true);
+            Machine.AddMachine("fds-k24-14", 12, 60, true);
             Machine.AddMachine("msr-genomics-0", 256, 240, true);
             Machine.AddMachine("msr-genomics-1", 256, 240, true);
         }
@@ -102,11 +121,11 @@ namespace ExpressionMetadata
             AddEntireTumorToMachine(tumorToMachineMapping, "gbm",  "msr-srs-4");
             AddEntireTumorToMachine(tumorToMachineMapping, "hnsc", "msr-srs-0");
             AddEntireTumorToMachine(tumorToMachineMapping, "kich", "fds-k25-9");
-            AddEntireTumorToMachine(tumorToMachineMapping, "kirc", "msr-srs-3");
+            AddEntireTumorToMachine(tumorToMachineMapping, "kirc", "fds-k25-17");
             AddEntireTumorToMachine(tumorToMachineMapping, "kirp", "msr-srs-6");
             AddEntireTumorToMachine(tumorToMachineMapping, "laml", "msr-srs-8");
             AddEntireTumorToMachine(tumorToMachineMapping, "luad", "msr-srs-6");
-            AddEntireTumorToMachine(tumorToMachineMapping, "meso", "msr-srs-3");
+            AddEntireTumorToMachine(tumorToMachineMapping, "meso", "fds-k25-15");
             AddEntireTumorToMachine(tumorToMachineMapping, "ov", "msr-srs-7");
             AddEntireTumorToMachine(tumorToMachineMapping, "paad", "fds-k25-5");
             AddEntireTumorToMachine(tumorToMachineMapping, "pcpg", "fds-k25-1");
@@ -142,9 +161,9 @@ namespace ExpressionMetadata
             tumorToMachineMapping.Add(new ExpressionTools.AnalysisType("esca", "wgs", false), "fds-k25-1");
             tumorToMachineMapping.Add(new ExpressionTools.AnalysisType("esca", "wxs", false), "msr-srs-7");
 
-            tumorToMachineMapping.Add(new ExpressionTools.AnalysisType("lgg", "rna", true), "msr-srs-3");
-            tumorToMachineMapping.Add(new ExpressionTools.AnalysisType("lgg", "wgs", true), "msr-srs-3");
-            tumorToMachineMapping.Add(new ExpressionTools.AnalysisType("lgg", "wxs", true), "msr-srs-3");
+            tumorToMachineMapping.Add(new ExpressionTools.AnalysisType("lgg", "rna", true), "fds-k25-14");
+            tumorToMachineMapping.Add(new ExpressionTools.AnalysisType("lgg", "wgs", true), "fds-k25-14");
+            tumorToMachineMapping.Add(new ExpressionTools.AnalysisType("lgg", "wxs", true), "fds-k25-14");
             tumorToMachineMapping.Add(new ExpressionTools.AnalysisType("lgg", "rna", false), "fds-k25-14");
             tumorToMachineMapping.Add(new ExpressionTools.AnalysisType("lgg", "wgs", false), "fds-k25-14");
             tumorToMachineMapping.Add(new ExpressionTools.AnalysisType("lgg", "wxs", false), "fds-k25-3");
@@ -213,14 +232,18 @@ namespace ExpressionMetadata
             // Directory structure is \\msr-srs-%n\d$\tcga\{rna,wgs,wxs}\{tumor, normal}\disease_abbr\analysis_id\*.{bam,bai}.  We need to call LoadStoredBAMsForDirectory on each
             // of the disease_abbr directories.  
             //
+            var threads = new List<Thread>();
             foreach (var machine in Machines)
             {
-                ExpressionTools.LoadStoredBamsForMachine(@"\\" + machine.Value.name + @"\d$\tcga", storedBAMs);
+                threads.Add(new Thread(() => ExpressionTools.LoadStoredBamsForMachine(@"\\" + machine.Value.name + @"\d$\tcga", storedBAMs)));
             }
 
-            ExpressionTools.LoadStoredBamsForMachine(@"\\msr-genomics-0\e$\tcga", storedBAMs);
-            ExpressionTools.LoadStoredBamsForMachine(@"\\msr-genomics-1\e$\tcga", storedBAMs);
-            ExpressionTools.LoadStoredBamsForMachine(@"\\bolosky\f$\tcga", storedBAMs);
+            threads.Add(new Thread(() => ExpressionTools.LoadStoredBamsForMachine(@"\\msr-genomics-0\e$\tcga", storedBAMs)));
+            threads.Add(new Thread(() => ExpressionTools.LoadStoredBamsForMachine(@"\\msr-genomics-1\e$\tcga", storedBAMs)));
+            threads.Add(new Thread(() => ExpressionTools.LoadStoredBamsForMachine(@"\\bolosky\f$\tcga", storedBAMs)));
+
+            threads.ForEach(t => t.Start());
+            threads.ForEach(t => t.Join());
 
             var hashScripts = new Dictionary<Pathname, StreamWriter>();
 
@@ -662,6 +685,7 @@ namespace ExpressionMetadata
                         experiment.TumorRNAAnalysis = RNAtcgaRecord;
                         //
                         // Next, find a normal sample.  Any will do, but prefer in order
+                        // 0) Ones we've realigned
                         // 1) Ones aligned with the same reference as the RNA.
                         // 2) Ones we have downloaded
                         // 3) WGS Samples
@@ -677,6 +701,10 @@ namespace ExpressionMetadata
                             foreach (var normalTCGARecord in normalSample.DNA)
                             {
                                 int score = 0;
+                                if (normalTCGARecord.localRealign)
+                                {
+                                    score += 8;
+                                }
                                 if (ExpressionTools.RefassemToIndex(normalTCGARecord.refassemShortName) == rnaIndex)
                                 {
                                     score += 4;
@@ -797,7 +825,11 @@ namespace ExpressionMetadata
                         //
                         // 1 & 3 and be 0, 1 or 2, but 2 can be 0, 1, 2 or 3, so we use powers of four.
                         //
-                        experiment.normalNeedsRealignment = ExpressionTools.RefassemToIndex(experiment.NormalDNAAnalysis.refassemShortName) != rnaIndex || experiment.NormalDNAAnalysis.localRealign && experiment.NormalDNAAnalysis.storedBAM == null;
+
+                        //
+                        // Always realign the normals for now, FreeBayes seems to have problems with some of them as they are in TCGA.
+                        //
+                        experiment.normalNeedsRealignment = /*ExpressionTools.RefassemToIndex(experiment.NormalDNAAnalysis.refassemShortName) != rnaIndex*/ !experiment.NormalDNAAnalysis.localRealign ||experiment.NormalDNAAnalysis.localRealign && experiment.NormalDNAAnalysis.storedBAM == null;
                         experiment.tumorNeedsRealignment = ExpressionTools.RefassemToIndex(experiment.TumorDNAAnalysis.refassemShortName) != rnaIndex || experiment.TumorDNAAnalysis.localRealign && experiment.TumorDNAAnalysis.storedBAM == null;
 
                         if (experiment.NormalDNAAnalysis.refassemShortName == experiment.TumorRNAAnalysis.refassemShortName)
@@ -1080,7 +1112,7 @@ namespace ExpressionMetadata
                 bool useGenomics0 = lastChunkOfGuid % 2 == 0;
                 bool useD = (lastChunkOfGuid / 2) % 3 > 0;  // Favor d over e 2 to 1.
 
-                if (cluster && (lastChunkOfGuid / 1000 ) % 4 >= 1)  // 50% of the time write to the non-genomics location
+                if (cluster && (lastChunkOfGuid / 1000 ) % 4 >= 1 && false)  // 0% of the time write to the non-genomics location
                 {
                     destinationDirectory = @"\\" + tumorToMachineMapping[analysisType] + @"\d$\tcga\" + record.disease_abbr + @"\" + tumorOrNormal + @"\" + record.library_strategy + @"\" + record.analysis_id + @"\";
                 }
@@ -1303,7 +1335,7 @@ namespace ExpressionMetadata
 
             if (realignClusterScript != null)
             {
-                realignClusterScript.WriteLine("job submit /id:%1 /scheduler:gcr");
+                //realignClusterScript.WriteLine("job submit /id:%1 /scheduler:gcr");
                 realignClusterScript.Close();
             }
 
@@ -1331,7 +1363,7 @@ namespace ExpressionMetadata
 
         static public void GenerateExtractionScripts(List<ExpressionTools.Experiment> experiments)
         {
-            Console.WriteLine("Generating exraction scripts for " + experiments.Count() + " experiments");
+            Console.WriteLine("Generating extraction scripts for " + experiments.Count() + " experiments");
             var stopwatch = Stopwatch.StartNew();
             var overallStopwatch = Stopwatch.StartNew();
             var extractRNAInputs = new Dictionary<string, StreamWriter>();  // Maps reference->input file

@@ -61,6 +61,7 @@ obj
 /apps/ExpressionMetadata/bin/x64/Release/ExpressionMetadata.exe.config
 /apps/ExpressionMetadata/bin/x64/Release/ExpressionMetadata.vshost.exe.config
 /apps/ExpressionMetadata/bin/x64/Release/ExpressionMetadata.vshost.exe.manifest
+/apps/ExpressionMetadata/bin/Release/*
 
 apps/MannWhitney/bin/Release/MannWhitney.exe.config
 apps/MannWhitney/bin/Release/MannWhitney.vshost.exe.config

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.IO;
 using System.Xml.Linq;
 using System.IO.Compression;
+using System.Diagnostics;
 
 
 //
@@ -314,16 +315,17 @@ namespace ExpressionLib
                 dirName += pathnameComponents[i] + @"\";
             }
 
-
             return dirName;
         }
 
-        static void LoadStoredBAMsForDirectory(Pathname directory, Dictionary<AnalysisID, StoredBAM> storedBAMs)
+        static int LoadStoredBAMsForDirectory(Pathname directory, Dictionary<AnalysisID, StoredBAM> storedBAMs)
         {
+            int nBamsLoaded = 0;
+
             if (!Directory.Exists(directory))
             {
                 Console.WriteLine("Unable to find expected tcga data directory " + directory);
-                return;
+                return nBamsLoaded;
             }
 
             foreach (var subdir in Directory.GetDirectories(directory))
@@ -466,13 +468,16 @@ namespace ExpressionLib
                     storedBAM.totalSize = storedBAM.bamInfo.Length + storedBAM.baiInfo.Length;
                     storedBAM.directoryName = subdir;
 
-                    if (storedBAMs.ContainsKey(analysisID))
-                    {
-                        Console.WriteLine("Duplicate stored BAM, " + subdir + " and " + storedBAMs[analysisID].directoryName);
-                    }
-                    else
-                    {
-                        storedBAMs.Add(analysisID, storedBAM);
+                    lock (storedBAMs) {
+                        if (storedBAMs.ContainsKey(analysisID))
+                        {
+                            Console.WriteLine("Duplicate stored BAM, " + subdir + " and " + storedBAMs[analysisID].directoryName);
+                        }
+                        else
+                        {
+                            storedBAMs.Add(analysisID, storedBAM);
+                            nBamsLoaded++;
+                        }
                     }
                 }
                 else if (analysisID.Contains(".partial"))
@@ -480,6 +485,8 @@ namespace ExpressionLib
                     Console.WriteLine("Partial download at " + subdir);
                 }
             }
+
+            return nBamsLoaded;
         }
 
         public static string [] TumorAndNormal = {"tumor", "normal"};
@@ -495,14 +502,15 @@ namespace ExpressionLib
             // disease subdirectories, i.e., \\msr-genomics-0\d$\tcga.
             //
 
+            int nBamsLoaded = 0;
+            var stopwatch = new Stopwatch();
+            stopwatch.Start();
+
             if (!Directory.Exists(directory))
             {
                 Console.WriteLine("Unable to find expected secondary machine directory " + directory);
                 return;
             }
-
-            Console.WriteLine("Loading bams for " + directory);
-
 
             foreach (var diseaseDir in Directory.GetDirectories(directory))
             {
@@ -518,10 +526,17 @@ namespace ExpressionLib
                         var sampleDir = diseaseDir + @"\" + tumorOrNormal + @"\" + libraryStrategy;
                         if (Directory.Exists(sampleDir))
                         {
-                            LoadStoredBAMsForDirectory(sampleDir, storedBAMs);
+                            nBamsLoaded += LoadStoredBAMsForDirectory(sampleDir, storedBAMs);
                         }
                     }
                 }
+            }
+
+            stopwatch.Stop();
+
+            lock (storedBAMs)
+            {
+                Console.WriteLine("Loaded " + nBamsLoaded + " bams for " + directory + " in " + (stopwatch.ElapsedMilliseconds + 500) / 1000 + "s, " + (nBamsLoaded * 1000 / (stopwatch.ElapsedMilliseconds + 1)) + " bams/s");
             }
         }
 
@@ -1624,6 +1639,7 @@ namespace ExpressionLib
                     Console.WriteLine("Realignment analysis " + record.analysis_id + " is realigned from an unknown source; most likely something we excluded after we generated this realignment.  Maybe you want to delete it from realigns.txt");
                     continue;
                 }
+
                 record.realignSource = tcgaRecords[record.realignedFrom];
 
                 UseAnalysis(record.realignedFrom, null, storedBAMs);
