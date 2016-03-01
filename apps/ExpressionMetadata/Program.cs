@@ -83,7 +83,7 @@ namespace ExpressionMetadata
             Machine.AddMachine("fds-k25-9", 48, 6);
             Machine.AddMachine("fds-k25-11", 48, 6, true);
             Machine.AddMachine("fds-k25-12", 48, 6);
-            Machine.AddMachine("fds-k25-14", 48, 6);
+            Machine.AddMachine("fds-k25-14", 48, 6, true);
             Machine.AddMachine("fds-k25-15", 48, 6);
             Machine.AddMachine("fds-k25-17", 48, 6);
             Machine.AddMachine("fds-k25-18", 48, 6);
@@ -1391,7 +1391,6 @@ namespace ExpressionMetadata
                 }
 
                 string refassem = experiment.TumorDNAAnalysis.refassemShortName.ToLower();
-                string chromPrefix = " " + ExpressionTools.ChromPrefixFromRefassem(refassem);
 
                 if (!extractDNAInputs.ContainsKey(refassem))
                 {
@@ -1428,7 +1427,8 @@ namespace ExpressionMetadata
                            (mafRecord.Start_position + 10);
 
                         extractDNAInputs[refassem].WriteLine(tumorDNAFileName + "\t" + mafRecord.entire_maf_line);
-                        string line = "samtools view " + experiment.TumorDNAAnalysis.storedBAM.bamInfo.FullName + chromPrefix + mafRecord.Chrom.ToUpper() + ":" + Math.Max(1, mafRecord.Start_position - 200) + "-" + (mafRecord.Start_position + 10) + @" > " +
+                        string line = "samtools view " + experiment.TumorDNAAnalysis.storedBAM.bamInfo.FullName +
+                            " " + ExpressionTools.ChromPrefixFromRefassemChromosomeAndBam(experiment.TumorDNAAnalysis.storedBAM, mafRecord.Chrom, refassem) + mafRecord.Chrom.ToUpper() + ":" + Math.Max(1, mafRecord.Start_position - 200) + "-" + (mafRecord.Start_position + 10) + @" > " +
                                                              tumorDNAFileName;
                         extractTumorDNAScript.WriteLine(line);
                     }
@@ -1449,7 +1449,8 @@ namespace ExpressionMetadata
                            (mafRecord.Start_position + 10) + "-RNA";
 
                         extractRNAInputs[refassem].WriteLine(tumorRNAFileName + "\t" + mafRecord.entire_maf_line);
-                        string line = "samtools view " + experiment.TumorRNAAnalysis.storedBAM.bamInfo.FullName + chromPrefix + mafRecord.Chrom.ToUpper() + ":" + Math.Max(1, mafRecord.Start_position - 200) + "-" + (mafRecord.Start_position + 10) + @" > " +
+                        string line = "samtools view " + experiment.TumorRNAAnalysis.storedBAM.bamInfo.FullName +
+                            " " + ExpressionTools.ChromPrefixFromRefassemChromosomeAndBam(experiment.TumorRNAAnalysis.storedBAM, mafRecord.Chrom, refassem) + mafRecord.Chrom.ToUpper() + ":" + Math.Max(1, mafRecord.Start_position - 200) + "-" + (mafRecord.Start_position + 10) + @" > " +
                                                              tumorRNAFileName;
                         extractRNAScript.WriteLine(line);
                     }

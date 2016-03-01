@@ -40,6 +40,24 @@ namespace ExpressionLib
             }
 
         }
+
+        public static string ChromPrefixFromRefassemChromosomeAndBam(StoredBAM bam, string chromosome, string refassem)
+        {
+            if (chromosome.Count() > 2 && chromosome.Substring(0, 2).ToLower() == "gl")
+            {
+                return "";  // So we don't generate chrGL000...
+            }
+            if (null == bam || !bam.chrStateKnown) {
+                return ChromPrefixFromRefassem(refassem);
+            }
+
+            if (bam.usesChr)
+            {
+                return "chr";
+            }
+
+            return "";
+        }
         public static string ShareFromPathname(string pathname)
         {
             //
