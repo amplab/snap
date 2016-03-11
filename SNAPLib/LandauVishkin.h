@@ -1,6 +1,5 @@
 #pragma once
 #include "Compat.h"
-#include "FixedSizeMap.h"
 #include "BigAlloc.h"
 #include "exit.h"
 #include "Genome.h"

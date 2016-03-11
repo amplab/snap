@@ -241,10 +241,3 @@ private:
     _int64 capacity;
     _int64 count;
 };
-
-typedef VariableSizeVector<unsigned> IdVector;
-typedef VariableSizeVector<int> IntVector;
-using util::IdPair;
-using util::IdIntPair;
-typedef VariableSizeVector<IdPair> IdPairVector;
-typedef VariableSizeVector<IdIntPair> IdIntPairVector;

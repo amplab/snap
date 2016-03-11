@@ -20,7 +20,6 @@ Environment:
 #include "HashTable.h"
 #include "BigAlloc.h"
 #include "exit.h"
-#include "Genome.h"
 #include "Error.h"
 #include "GenericFile_Blob.h"
 

@@ -261,9 +261,6 @@ private:
     _int64 smallestSkippedSeed[NUM_DIRECTIONS];
     unsigned highestWeightListChecked;
 
-    double totalProbabilityByDepth[AlignerStats::maxMaxHits];
-    void updateProbabilityMass();
-
         bool
     score(
         bool                     forceResult,

@@ -22,8 +22,6 @@ Environment:
 #include "Compat.h"
 #include "LandauVishkin.h"
 #include "PairedEndAligner.h"
-#include "VariableSizeVector.h"
-#include "BufferedAsync.h"
 #include "directions.h"
 #include "Read.h"
 #include "DataReader.h"

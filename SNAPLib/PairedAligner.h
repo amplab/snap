@@ -33,7 +33,7 @@ class PairedAlignerContext : public AlignerContext
 {
 public:
 
-    PairedAlignerContext(AlignerExtension* i_extension = NULL);
+    PairedAlignerContext();
     
 protected:
 
@@ -68,8 +68,6 @@ protected:
     const char         *fastqFile1;
     bool                ignoreMismatchedIDs;
     bool                quicklyDropUnpairedReads;
-
-	friend class AlignerContext2;
 };
 
 struct PairedAlignerOptions : public AlignerOptions

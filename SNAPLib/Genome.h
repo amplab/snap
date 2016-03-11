@@ -261,9 +261,6 @@ public:
         const Contig *getNextContigAfterLocation(GenomeLocation location) const;
         int getContigNumAtLocation(GenomeLocation location) const;    // Returns the contig number, which runs from 0 .. getNumContigs() - 1.
 
-// unused        Genome *copy() const {return copy(true,true,true);}
-// unused        Genome *copyGenomeOneSex(bool useY, bool useM) const {return copy(!useY,useY,useM);}
-
         //
         // These are only public so creators of new genomes (i.e., FASTA) can use them.
         //
@@ -293,7 +290,6 @@ private:
         Contig      *contigs;    // This is always in order (it's not possible to express it otherwise in FASTA).
 
         Contig      *contigsByName;
-        Genome *copy(bool copyX, bool copyY, bool copyM) const;
 
         static bool openFileAndGetSizes(const char *filename, GenericFile **file, GenomeDistance *nBases, unsigned *nContigs, bool map);
 
