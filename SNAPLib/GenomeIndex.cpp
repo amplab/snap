@@ -27,8 +27,6 @@ Revision History:
 #include "BigAlloc.h"
 #include "Compat.h"
 #include "FASTA.h"
-#include "FixedSizeSet.h"
-#include "FixedSizeVector.h"
 #include "GenericFile.h"
 #include "GenericFile_stdio.h"
 #include "Genome.h"
@@ -1167,7 +1165,6 @@ GenomeIndex::BuildHashTablesWorkerThreadMain(void *param)
     void
 GenomeIndex::BuildHashTablesWorkerThread(BuildHashTablesThreadContext *context)
 {
-    GenomeDistance countOfBases = context->genome->getCountOfBases();
     const Genome *genome = context->genome;
     unsigned seedLen = context->seedLen;
 	bool large = context->large;

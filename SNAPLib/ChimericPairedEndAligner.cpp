@@ -62,8 +62,6 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, noUkkonen, noOrderedEvaluation, noTruncation, maxSecondaryAlignmentsPerContig, &lv, &reverseLV, NULL, allocator);
     
     underlyingPairedEndAligner->setLandauVishkin(&lv, &reverseLV);
-
-    singleSecondary[0] = singleSecondary[1] = NULL;
 }
 
     size_t 

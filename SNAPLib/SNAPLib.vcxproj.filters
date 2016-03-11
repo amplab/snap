@@ -42,9 +42,6 @@
     <ClInclude Include="BigAlloc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="BufferedAsync.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Compat.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -67,15 +64,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="FileFormat.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="FixedSizeMap.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="FixedSizeSet.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="FixedSizeVector.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Genome.h">
@@ -153,9 +141,6 @@
     <ClInclude Include="VariableSizeVector.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="WindowsFileMapper.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="PriorityQueue.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -215,9 +200,6 @@
     <ClCompile Include="BigAlloc.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="BufferedAsync.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Compat.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -273,9 +255,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="RangeSplitter.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ReadReader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ReadSupplierQueue.cpp">

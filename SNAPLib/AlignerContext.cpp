@@ -46,13 +46,12 @@ using std::min;
 GenomeIndex *g_index = NULL;
 char *g_indexDirectory = NULL;
 
-AlignerContext::AlignerContext(int i_argc, const char **i_argv, const char *i_version, AlignerExtension* i_extension)
+AlignerContext::AlignerContext(int i_argc, const char **i_argv, const char *i_version)
     :
     index(NULL),
     writerSupplier(NULL),
     options(NULL),
     stats(NULL),
-    extension(i_extension != NULL ? i_extension : new AlignerExtension()),
     readWriter(NULL),
     argc(i_argc),
     argv(i_argv),
@@ -63,7 +62,6 @@ AlignerContext::AlignerContext(int i_argc, const char **i_argv, const char *i_ve
 
 AlignerContext::~AlignerContext()
 {
-    delete extension;
     if (NULL != perfFile) {
         fclose(perfFile);
     }
@@ -85,23 +83,19 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
 	if (!initialize()) {
 		return;
 	}
-    extension->initialize();
     
-    if (! extension->skipAlignment()) {
-        WriteStatusMessage("Aligning.\n");
+    WriteStatusMessage("Aligning.\n");
 
-        beginIteration();
+    beginIteration();
 
-        runTask();
-            
-        finishIteration();
+    runTask();
 
-        printStats();
+    finishIteration();
 
-        nextIteration();    // This probably should get rolled into something else; it's really cleanup code, not "next iteration"
-    }
+    printStats();
 
-    extension->finishAlignment();
+    nextIteration();    // This probably should get rolled into something else; it's really cleanup code, not "next iteration"
+
     PrintBigAllocProfile();
     PrintWaitProfile();
 }
@@ -110,21 +104,18 @@ void AlignerContext::runAlignment(int argc, const char **argv, const char *versi
 AlignerContext::initializeThread()
 {
     stats = newStats(); // separate copy per thread
-    stats->extra = extension->extraStats();
+	stats->extra = NULL;
     readWriter = writerSupplier != NULL ? writerSupplier->getWriter() : NULL;
-    extension = extension->copy();
 }
 
     void
 AlignerContext::runThread()
 {
-    extension->beginThread();
     runIterationThread();
     if (readWriter != NULL) {
         readWriter->close();
         delete readWriter;
     }
-    extension->finishThread();
 }
     
     void
@@ -133,8 +124,6 @@ AlignerContext::finishThread(AlignerContext* common)
     common->stats->add(stats);
     delete stats;
     stats = NULL;
-    delete extension;
-    extension = NULL;
 }
 
     bool
@@ -221,8 +210,7 @@ AlignerContext::beginIteration()
         delete stats;
     }
     stats = newStats();
-    stats->extra = extension->extraStats();
-    extension->beginIteration();
+	stats->extra = NULL;
     
     memset(&readerContext, 0, sizeof(readerContext));
     readerContext.clipping = options->clipping;
@@ -261,8 +249,6 @@ AlignerContext::beginIteration()
     void
 AlignerContext::finishIteration()
 {
-    extension->finishIteration();
-
     if (NULL != writerSupplier) {
         writerSupplier->close();
         delete writerSupplier;
@@ -413,8 +399,6 @@ AlignerContext::printStats()
     WriteStatusMessage("%llds, %lld calls in BSD close, -1\n",          stats->nanosTimeInBSD[1][0]/1000000000, stats->BSDCounts[1][0]);
     WriteStatusMessage("%llds, %lld calls in Hamming\n",                stats->hammingNanos/1000000000,         stats->hammingCount);
 #endif  // TIME_STRING_DISTANCE
-
-    extension->printStats();
 }
 
 
@@ -439,7 +423,7 @@ AlignerContext::parseOptions(
         options = new AlignerOptions("snap-aligner single <index-dir> <inputFile(s)> [<options>] where <input file(s)> is a list of files to process.\n");
     }
 
-    options->extra = extension->extraOptions();
+	options->extra = NULL;
     if (argc < 3) {
         WriteErrorMessage("Too few parameters\n");
         options->usage();

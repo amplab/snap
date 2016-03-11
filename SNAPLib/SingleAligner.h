@@ -33,7 +33,7 @@ class SingleAlignerContext : public AlignerContext
 {
 public:
 
-    SingleAlignerContext(AlignerExtension* i_extension = NULL);
+    SingleAlignerContext();
     
 
 protected:
@@ -56,8 +56,6 @@ protected:
     //RangeSplittingReadSupplierGenerator   *readSupplierGenerator;
 
     ReadSupplierGenerator *readSupplierGenerator;
-
-	friend class AlignerContext2;
 
     bool isPaired() {return false;}
 };

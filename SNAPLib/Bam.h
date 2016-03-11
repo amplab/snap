@@ -23,7 +23,6 @@ Environment:
 #include "LandauVishkin.h"
 #include "PairedEndAligner.h"
 #include "VariableSizeVector.h"
-#include "BufferedAsync.h"
 #include "SAM.h"
 #include "Read.h"
 #include "DataReader.h"

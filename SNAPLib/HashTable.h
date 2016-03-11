@@ -22,7 +22,6 @@ Environment:
 
 #include "Compat.h"
 #include "GenericFile_Blob.h"
-#include "Genome.h"
 
 
 class SNAPHashTable {
@@ -212,8 +211,6 @@ private:
         // inserted if it's not in the table.
         //
         void* getEntryForKey(__in KeyType key) const;
-
-        friend class SeedCountIterator;
 
         static const unsigned magic;
 };

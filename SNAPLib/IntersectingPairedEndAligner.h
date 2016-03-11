@@ -27,7 +27,6 @@ Revision History:
 #include "BigAlloc.h"
 #include "directions.h"
 #include "LandauVishkin.h"
-#include "FixedSizeMap.h"
 
 const unsigned DEFAULT_INTERSECTING_ALIGNER_MAX_HITS = 2000;
 const unsigned DEFAULT_MAX_CANDIDATE_POOL_SIZE = 1000000;

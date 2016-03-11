@@ -31,6 +31,7 @@ Revision History:
 #include "DataWriter.h"
 #include "directions.h"
 #include "Error.h"
+#include "exit.h"
 #include "Genome.h"
 #include "AlignmentResult.h"
 

@@ -300,8 +300,8 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
     return AlignerOptions::parse(argv, argc, n, done);
 }
 
-PairedAlignerContext::PairedAlignerContext(AlignerExtension* i_extension)
-    : AlignerContext( 0,  NULL, NULL, i_extension)
+PairedAlignerContext::PairedAlignerContext()
+    : AlignerContext( 0,  NULL, NULL)
 {
 }
 
@@ -346,11 +346,6 @@ void PairedAlignerContext::runIterationThread()
         //
         return;
     }
-
-	if (extension->runIterationThread(supplier, this)) {
-        delete supplier;
-		return;
-	}
 
     Read *reads[NUM_READS_PER_PAIR];
     int nSingleResults[2] = { 0, 0 };

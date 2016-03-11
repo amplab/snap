@@ -28,6 +28,7 @@ Revision History:
 #include "Read.h"
 #include "DataReader.h"
 #include "VariableSizeMap.h"
+#include "VariableSizeVector.h"
 #include "PairedEndAligner.h"
 #include "SAM.h"
 #include "Error.h"

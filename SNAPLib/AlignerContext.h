@@ -31,9 +31,6 @@ Revision History:
 #include "ParallelTask.h"
 #include "GenomeIndex.h"
 
-class AlignerExtension;
-
-
 /*++
     Common context state shared across threads during alignment process
 --*/
@@ -41,7 +38,7 @@ class AlignerContext : public TaskContextBase
 {
 public:
 
-    AlignerContext(int i_argc, const char **i_argv, const char *i_version, AlignerExtension* i_extension = NULL);
+    AlignerContext(int i_argc, const char **i_argv, const char *i_version);
 
     ~AlignerContext();
 
@@ -87,8 +84,6 @@ public:
     virtual void typeSpecificNextIteration() = 0;
 
     virtual bool isPaired() = 0;
-
-    friend class AlignerContext2;
  
     // common state across all threads
     GenomeIndex                         *index;
@@ -98,7 +93,6 @@ public:
     _int64                               alignTime;
     AlignerOptions                      *options;
     AlignerStats                        *stats;
-    AlignerExtension                    *extension;
     unsigned                             maxDist;
     unsigned                             numSeedsFromCommandLine;
     double                               seedCoverage;
@@ -126,39 +120,4 @@ public:
 
     // Per-thread context state used during alignment process
     ReadWriter         *readWriter;
-};
-
-// abstract class for extending base context
-
-class AlignerExtension
-{
-public:
-
-    virtual ~AlignerExtension() {}
-
-    virtual AbstractOptions* extraOptions() { return NULL; }
-
-    virtual AbstractStats* extraStats() { return NULL; }
-
-    virtual bool skipAlignment() { return false; }
-
-    virtual void initialize() {}
-
-    virtual void beginIteration() {}
-
-    virtual AlignerExtension* copy() { return new AlignerExtension(); }
-
-    virtual void beginThread() {}
-
-	virtual bool runIterationThread(PairedReadSupplier* supplier, AlignerContext* threadContext) { return false; }
-	
-	virtual bool runIterationThread(ReadSupplier* supplier, AlignerContext* threadContext) { return false; }
-
-    virtual void finishThread() {}
-
-    virtual void finishIteration() {}
-
-    virtual void printStats() {}
-
-    virtual void finishAlignment() {}
 };

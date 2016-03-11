@@ -21,7 +21,6 @@ Environment:
 #include "Compat.h"
 #include "Util.h"
 #include "DataWriter.h"
-#include "BufferedAsync.h"
 #include "VariableSizeVector.h"
 #include "FileFormat.h"
 #include "PriorityQueue.h"

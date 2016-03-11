@@ -40,8 +40,8 @@ Revision History:
 using namespace std;
 using util::stringEndsWith;
 
-SingleAlignerContext::SingleAlignerContext(AlignerExtension* i_extension)
-    : AlignerContext(0, NULL, NULL, i_extension)
+SingleAlignerContext::SingleAlignerContext()
+    : AlignerContext(0, NULL, NULL)
 {
 }
 
@@ -71,10 +71,6 @@ SingleAlignerContext::runIterationThread()
         //
         return;
     }
-	if (extension->runIterationThread(supplier, this)) {
-		delete supplier;
-		return;
-	}
     if (index == NULL) {
         // no alignment, just input/output
         Read *read;
