@@ -376,7 +376,7 @@ AlignerContext::printStats()
         (stats->filtered > 0) ? numPctAndPad(filtered, stats->filtered, 100.0 * stats->filtered / stats->totalReads, 23, strBufLen) : "",
         (stats->extraAlignments > 0) ? FormatUIntWithCommas(stats->extraAlignments, extraAlignments, strBufLen) : "",
 		isPaired() ? pctAndPad(pctPairs,  100.0 * stats->alignedAsPairs / stats->totalReads, 7, strBufLen) : "",
-		FormatUIntWithCommas((unsigned _int64)(1000 * stats->totalReads / max(alignTime, (_int64)1)), readsPerSecond, strBufLen),	// Aligntime is in ms
+		FormatUIntWithCommas((_uint64)(1000 * stats->totalReads / max(alignTime, (_int64)1)), readsPerSecond, strBufLen),	// Aligntime is in ms
 		FormatUIntWithCommas((alignTime + 500) / 1000, alignTimeString, strBufLen)
 		);
 
