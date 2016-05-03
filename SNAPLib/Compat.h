@@ -212,7 +212,12 @@ public:
 #endif // _MSC_VER
 
 
-    ExclusiveLock() : initialized(false), holderThreadId(0), wholeProgramScope(false) {}
+    ExclusiveLock() : initialized(false),
+#ifdef _MSC_VER
+      holderThreadId(0),
+#endif
+      wholeProgramScope(false)
+    {}
     ~ExclusiveLock() {_ASSERT(!initialized || wholeProgramScope);}   // Must DestroyExclusiveLock first
 };
 

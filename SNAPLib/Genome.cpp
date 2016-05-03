@@ -149,7 +149,7 @@ Genome::saveToFile(const char *fileName) const
          curChar = contigs[i].name + n;
          if (*curChar == ' '){ *curChar = '_'; }
         }
-        fprintf(saveFile,"%lld %s\n",contigs[i].beginningLocation, contigs[i].name);
+        fprintf(saveFile,"%lld %s\n",GenomeLocationAsInt64(contigs[i].beginningLocation), contigs[i].name);
     }
 
 	//

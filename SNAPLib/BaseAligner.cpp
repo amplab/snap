@@ -423,7 +423,7 @@ Return Value:
 
 #ifdef  _DEBUG
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates)  at %u\n", 
-                                            primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, primaryResult->location);
+                                            primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, primaryResult->location.location);
 #endif  // _DEBUG
                 finalizeSecondaryResults(*primaryResult, nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
                 return;
@@ -478,7 +478,7 @@ Return Value:
             printf("\tSeed offset %2d, %4d hits, %4d rcHits.", nextSeedToTest, nHits[0], nHits[1]);
             for (int rc = 0; rc < 2; rc++) {
                 for (unsigned i = 0; i < __min(nHits[rc], 5); i++) {
-                    printf(" %sHit at %9llu.", rc == 1 ? "RC " : "", doesGenomeIndexHave64BitLocations ? hits[rc][i] : (_int64)hits32[rc][i]);
+		  printf(" %sHit at %9llu.", rc == 1 ? "RC " : "", doesGenomeIndexHave64BitLocations ? hits[rc][i].location : (_int64)hits32[rc][i]);
                 }
             }
             printf("\n");
@@ -620,7 +620,7 @@ Return Value:
                     secondaryResults)) {
 
 #ifdef  _DEBUG
-                if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", primaryResult->score, primaryResult->mapq, primaryResult->location);
+                if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", primaryResult->score, primaryResult->mapq, primaryResult->location.location);
 #endif  // _DEBUG
 
                 finalizeSecondaryResults(*primaryResult, nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
@@ -645,7 +645,7 @@ Return Value:
         secondaryResults);
 
 #ifdef  _DEBUG
-    if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates) at %u\n", primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, primaryResult->location);
+    if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates) at %u\n", primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, primaryResult->location.location);
 #endif  // _DEBUG
 
     finalizeSecondaryResults(*primaryResult, nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
@@ -924,7 +924,7 @@ Return Value:
 
 
 #ifdef  _DEBUG
-                if (_DumpAlignments) printf("Scored %9u weight %2d limit %d, result %2d %s\n", genomeLocation, elementToScore->weight, scoreLimit, score, elementToScore->direction ? "RC" : "");
+                if (_DumpAlignments) printf("Scored %9u weight %2d limit %d, result %2d %s\n", genomeLocation.location, elementToScore->weight, scoreLimit, score, elementToScore->direction ? "RC" : "");
 #endif  // _DEBUG
 
                 candidateToScore->score = score;

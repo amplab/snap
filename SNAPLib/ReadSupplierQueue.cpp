@@ -666,11 +666,11 @@ PairedReadSupplierFromQueue::getNextReadPair(Read **read0, Read **read1)
     }
 
     if (NULL != currentElement && nextReadIndex >= currentElement->totalReads) {
-        //fprintf(stderr,"PairedReadSupplierFromQueue finished element %x with %d reads %d batches:", (int) currentElement, currentElement->totalReads, currentElement->batches.size()); for (BatchVector::iterator i = currentElement->batches.begin(); i != currentElement->batches.end(); i++) { fprintf(stderr," %d:%d", i->fileID, i->batchID); } fprintf(stderr,"\n");
+        //fprintf(stderr,"PairedReadSupplierFromQueue finished element %llx with %d reads %d batches:", (_uint64) currentElement, currentElement->totalReads, currentElement->batches.size()); for (BatchVector::iterator i = currentElement->batches.begin(); i != currentElement->batches.end(); i++) { fprintf(stderr," %d:%d", i->fileID, i->batchID); } fprintf(stderr,"\n");
         queue->doneWithElement(currentElement);
         currentElement = NULL;
         if (twoFiles) {
-            //fprintf(stderr,"PairedReadSupplierFromQueue finished 2nd element %x with %d reads %d batches:", (int) currentSecondElement, currentSecondElement->totalReads, currentSecondElement->batches.size()); for (BatchVector::iterator i = currentSecondElement->batches.begin(); i != currentSecondElement->batches.end(); i++) { printf(" %d:%d", i->fileID, i->batchID); } printf("\n");
+            //fprintf(stderr,"PairedReadSupplierFromQueue finished 2nd element %llx with %d reads %d batches:", (_uint64) currentSecondElement, currentSecondElement->totalReads, currentSecondElement->batches.size()); for (BatchVector::iterator i = currentSecondElement->batches.begin(); i != currentSecondElement->batches.end(); i++) { printf(" %d:%d", i->fileID, i->batchID); } printf("\n");
             queue->doneWithElement(currentSecondElement);
             currentSecondElement = NULL;
         }

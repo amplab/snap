@@ -87,7 +87,7 @@ public:
 
     virtual void *allocate(size_t amountToAllocate);
 
-#if     _DEBUG
+#ifdef _DEBUG
     void checkCanaries();
 #else  // DEBUG
     void checkCanaries() {}
@@ -99,7 +99,7 @@ private:
     size_t  maxMemory;
     size_t  allocationGranularity;
 
-#if     _DEBUG
+#ifdef _DEBUG
     //
     // Stick a canary between each allocation and 
     unsigned    nCanaries;

@@ -21,8 +21,8 @@ Revision History:
 --*/
 
 #include "stdafx.h"
-#include "BigAlloc.h"
 #include "Compat.h"
+#include "BigAlloc.h"
 #include "exit.h"
 #include "Error.h"
 

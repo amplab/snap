@@ -27,11 +27,14 @@ Environment:
 #include "zlib.h"
 #include "exit.h"
 #include "Error.h"
+#include "Util.h"
 
 using std::max;
 using std::min;
 using std::map;
 using std::string;
+
+//#define VALIDATE_STDIO
 
 //
 // Read-Based
@@ -103,7 +106,10 @@ protected:
         int             holds;
         char*           extra;
         int             next, previous; // index of next/previous in free/ready list, -1 if end
-		bool			headerBuffer;	// Set if this is a special buffer that holds the rewound header.  These get read once and deallocated.
+        bool            headerBuffer; // Set if this is a special buffer that holds the rewound header.  These get read once and deallocated.g
+#ifdef VALIDATE_STDIO
+      _uint32           dataHash;
+#endif
 
 		void operator=(BufferInfo &peer) {
 			buffer = peer.buffer;
@@ -204,6 +210,7 @@ ReadBasedDataReader::ReadBasedDataReader(
  
     nextBufferForConsumer = -1;
     lastBufferForConsumer = -1;
+    //fprintf(stderr, "DataReader.cpp:%d nextBufferForReader %d -> %d\n", __LINE__, nextBufferForReader, 0);
     nextBufferForReader = 0;
     CreateEventObject(&releaseEvent);
     releaseWaitInMillis = 5; // wait up to 5 ms before allocating a new buffer
@@ -536,8 +543,10 @@ ReadBasedDataReader::nextBatch()
     info->state = InUse;
     _uint32 overflow = max((unsigned) info->offset, info->nBytesThatMayBeginARead) - info->nBytesThatMayBeginARead;
     _int64 nextStart = info->fileOffset + info->nBytesThatMayBeginARead; // for validation
-    //fprintf(stderr, "ReadBasedDataReader:nextBatch() finished buffer %d, starting buffer %d\n", nextBufferForConsumer, info->next);
+    //fprintf(stderr, "ReadBasedDataReader:nextBatch() finished buffer %d at %llu, starting buffer %d at %llu\n", nextBufferForConsumer, info->fileOffset, info->next, bufferInfo[info->next].fileOffset);
     //fprintf(stderr, "ReadBasedDataReader:nextBatch() skipping %u overflow bytes used in previous batch\n", overflow);
+    _ASSERT(bufferInfo[info->next].fileOffset == nextStart);
+    //fprintf(stderr, "DataReader.cpp:%d nextBufferForConsumer %d -> %d\n", __LINE__, nextBufferForConsumer, info->next);
     nextBufferForConsumer = info->next;
 
     bool first = true;
@@ -545,11 +554,11 @@ ReadBasedDataReader::nextBatch()
         nextStart = 0; // can no longer count on getting sequential buffers from file
         ReleaseExclusiveLock(&lock);
         if (! first) {
-            //fprintf(stderr, "ReadBasedDataReader::nextBatch thread %d wait for release\n", GetCurrentThreadId());
+	    //fprintf(stderr, "ReadBasedDataReader::nextBatch thread %d wait for release\n", GetCurrentThreadId());
             _int64 start = timeInNanos();
             bool waitSucceeded = WaitForEventWithTimeout(&releaseEvent, releaseWaitInMillis);
-             InterlockedAdd64AndReturnNewValue(&ReleaseWaitTime, timeInNanos() - start);
-            //fprintf(stderr, "ReadBasedDataReader::nextBatch thread %d released\n", GetCurrentThreadId());
+            InterlockedAdd64AndReturnNewValue(&ReleaseWaitTime, timeInNanos() - start);
+	    //fprintf(stderr, "ReadBasedDataReader::nextBatch thread %d released\n", GetCurrentThreadId());
             if (!waitSucceeded) {
                 AcquireExclusiveLock(&lock);
                 addBuffer();
@@ -568,7 +577,7 @@ ReadBasedDataReader::nextBatch()
     bufferInfo[nextBufferForConsumer].offset = overflow;
     bufferInfo[nextBufferForConsumer].holds = 0;
     //fprintf(stderr,"emitting buffer starting at 0x%llx\n", info->fileOffset);
-    //if (nextStart != 0) fprintf(stderr, "checking NextStart 0x%llx\n", nextStart);  
+    if (nextStart != 0) fprintf(stderr, "checking NextStart 0x%llx\n", nextStart);  
     _ASSERT(nextStart == 0 || nextStart == bufferInfo[nextBufferForConsumer].fileOffset || bufferInfo[nextBufferForConsumer].isEOF);
 
     ReleaseExclusiveLock(&lock);
@@ -637,7 +646,7 @@ ReadBasedDataReader::releaseBatch(
                     info->holds--;
                 }
                 if (info->holds == 0 && i != nextBufferForConsumer) {
-                    //fprintf(stderr,"%x releaseBatch batch %d, releasing %s buffer %d\n", (unsigned) this, batch.batchID, info->state == InUse ? "InUse" : "Full", i);
+                    //fprintf(stderr,"ReadBasedDataReader:releaseBatch batch %d, releasing %s buffer %d\n", batch.batchID, info->state == InUse ? "InUse" : "Full", i);
                     info->state = Empty;
                     // remove from ready list
                     if (i == lastBufferForConsumer) {
@@ -671,11 +680,12 @@ ReadBasedDataReader::releaseBatch(
 #ifdef _DEBUG
 						//memset(info->buffer, 0xde, bufferSize + extraBytes);
 #endif
+						//fprintf(stderr, "DataReader.cpp:%d nextBufferForReader %d -> %d\n", __LINE__, nextBufferForReader, i);
 						nextBufferForReader = i;
 					}
 					result = true;
                 } else {
-                    //fprintf(stderr,"%x releaseBatch batch %d, holds on buffer %d now %d\n", (unsigned) this, batch.batchID, i, info->holds);
+                    //fprintf(stderr,"releaseBatch batch %d, holds on buffer %d now %d\n", batch.batchID, i, info->holds);
                     result = false;
                 }
                 break;
@@ -740,6 +750,7 @@ ReadBasedDataReader::addBuffer()
     bufferInfo[nBuffers].next = nextBufferForReader;
     bufferInfo[nBuffers].previous = -1;
     bufferInfo[nBuffers].headerBuffer = false;
+    //fprintf(stderr, "DataReader.cpp:%d nextBufferForReader %d -> %d\n", __LINE__, nextBufferForReader, nBuffers);
     nextBufferForReader = nBuffers;
     nBuffers++;
     _ASSERT(nBuffers <= maxBuffers);
@@ -836,6 +847,7 @@ StdioDataReader::startIo()
         BufferInfo* info = &bufferInfo[nextBufferForReader];
         _ASSERT(info->state == Empty);
         int index = nextBufferForReader;
+	//fprintf(stderr, "DataReader.cpp:%d nextBufferForReader %d -> %d\n", __LINE__, nextBufferForReader, info->next);
         nextBufferForReader = info->next;
         info->batchID = nextBatchID++;
         // add to end of consumer list
@@ -847,7 +859,7 @@ StdioDataReader::startIo()
         info->previous = lastBufferForConsumer;
         lastBufferForConsumer = index;
 		if (nextBufferForConsumer == -1) {
-            //fprintf(stderr, "StdioDataReader::startIo set nextBufferForConsumder -1 -> %d\n", index);
+		  //fprintf(stderr, "StdioDataReader::startIo set nextBufferForConsumder -1 -> %d\n", index);
 			nextBufferForConsumer = index;
 		}
        
@@ -880,7 +892,7 @@ StdioDataReader::startIo()
         // We have to run this holding the lock, because otherwise there's no way to make the overflow buffer work properly.  
         //
         size_t bytesRead = fread(info->buffer + bufferOffset, 1, amountToRead, stdin);
-        //fprintf(stderr,"StdioDataReader:startIO(): Read offset 0x%llx into buffer at 0x%llx, size %d, copied 0x%x overflow bytes, start at 0x%llx, tid %d\n", readOffset, info->buffer, bytesRead, bufferOffset, readOffset - bufferOffset, GetCurrentThreadId());
+        //fprintf(stderr,"StdioDataReader:startIO(): Read offset 0x%llx into buffer %d at 0x%llx, size %d, copied 0x%x overflow bytes, start at 0x%llx, tid %d\n", readOffset, info-bufferInfo, info->buffer, bytesRead, bufferOffset, readOffset - bufferOffset, GetThreadId());
 
         readOffset += bytesRead;
 
@@ -897,6 +909,9 @@ StdioDataReader::startIo()
         }
 
         info->validBytes = (unsigned)(bytesRead + bufferOffset);
+#ifdef VALIDATE_STDIO
+	info->dataHash = util::hash(info->buffer, info->validBytes);
+#endif
 
         if (hitEOF) {
             info->nBytesThatMayBeginARead = (unsigned)(bytesRead + bufferOffset);
@@ -920,7 +935,7 @@ StdioDataReader::startIo()
     }
 
     if (nextBufferForConsumer == -1) {
-        //fprintf(stderr, "startIo thread %x reset releaseEvent\n", GetCurrentThreadId());
+        //fprintf(stderr, "startIo thread %x reset releaseEvent\n", GetThreadId());
         PreventEventWaitersFromProceeding(&releaseEvent);
     }
 }
@@ -960,12 +975,24 @@ StdioDataReader::waitForBuffer(
     }
 
     if (info->state == Full) {
+#ifdef VALIDATE_STDIO
+      if (info->dataHash != util::hash(info->buffer, info->validBytes)) {
+	WriteErrorMessage("Buffer contents modified\n");
+	soft_exit(1);
+      }
+#endif
         return;
     }
 
     _ASSERT(info->state != Reading);    // We're synchronous, we don't use Reading
     startIo();
     
+#ifdef VALIDATE_STDIO
+    if (info->dataHash != util::hash(info->buffer, info->validBytes)) {
+      WriteErrorMessage("Buffer contents modified\n");
+      soft_exit(1);
+    }
+#endif
     info->state = Full;
     info->buffer[info->validBytes] = 0;
 }
@@ -1098,6 +1125,7 @@ WindowsOverlappedDataReader::reinit(
 
     nextBufferForConsumer = -1; 
     lastBufferForConsumer = -1;
+    //fprintf(stderr, "DataReader.cpp:%d nextBufferForReader %d -> %d\n", __LINE__, nextBufferForReader, 0);
     nextBufferForReader = 0;
 
     readOffset.QuadPart = i_startingOffset;

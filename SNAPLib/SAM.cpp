@@ -1586,7 +1586,7 @@ SAMFormat::validateCigarString(
 	GenomeDistance offsetInData = 0;
 	const char *reference = genome->getSubstring(genomeLocation, dataLength);
 	if (NULL == reference) {
-		WriteErrorMessage("validateCigarString: couldn't look up genome data for location %lld\n", genomeLocation);
+		WriteErrorMessage("validateCigarString: couldn't look up genome data for location %lld\n", genomeLocation.location);
 		soft_exit(1);
 	}
 	GenomeDistance offsetInReference = 0;
