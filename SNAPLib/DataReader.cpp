@@ -577,7 +577,7 @@ ReadBasedDataReader::nextBatch()
     bufferInfo[nextBufferForConsumer].offset = overflow;
     bufferInfo[nextBufferForConsumer].holds = 0;
     //fprintf(stderr,"emitting buffer starting at 0x%llx\n", info->fileOffset);
-    if (nextStart != 0) fprintf(stderr, "checking NextStart 0x%llx\n", nextStart);  
+    //if (nextStart != 0) fprintf(stderr, "checking NextStart 0x%llx\n", nextStart);  
     _ASSERT(nextStart == 0 || nextStart == bufferInfo[nextBufferForConsumer].fileOffset || bufferInfo[nextBufferForConsumer].isEOF);
 
     ReleaseExclusiveLock(&lock);
