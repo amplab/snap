@@ -477,6 +477,8 @@ public:
         inline unsigned getOriginalPNEXT() {return originalPNEXT;}
         inline void setAdditionalFrontClipping(int clipping)
         {
+            _ASSERT(0 <= clipping);
+
             data += clipping - additionalFrontClipping;
             dataLength -= clipping - additionalFrontClipping;
             quality += clipping - additionalFrontClipping;

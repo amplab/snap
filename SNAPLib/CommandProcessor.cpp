@@ -2,23 +2,23 @@
 
 Module Name:
 
-CommandProcessor.cpp
+    CommandProcessor.cpp
 
 Abstract:
 
-Code for running the top-level commands of SNAP
+    Code for running the top-level commands of SNAP
 
 Authors:
 
-Bill Bolosky, November, 2014
+    Bill Bolosky, November, 2014
 
 Environment:
-`
+
 User mode service.
 
 Revision History:
 
-Pulled from the main program and expanded to handle daemon mode
+    Pulled from the main program and expanded to handle daemon mode
 
 --*/
 

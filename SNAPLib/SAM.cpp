@@ -1414,7 +1414,6 @@ SAMFormat::computeCigar(
     int netIndel;
     *o_extraBasesClippedAfter = 0;
 
-
     //
     // Apply the extra clipping.
     //
@@ -1476,7 +1475,6 @@ SAMFormat::computeCigar(
     GenomeDistance newExtraBasesClippedAfter = __max(0, genomeLocation + dataLength + netIndel - (contig->beginningLocation + contig->length - genome->getChromosomePadding()));
     for (GenomeDistance pass = 0; pass < dataLength; pass++) {
         if (newExtraBasesClippedAfter == *o_extraBasesClippedAfter) {
-            *o_extraBasesClippedAfter = newExtraBasesClippedAfter;
             return;
         }
 

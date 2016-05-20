@@ -13,7 +13,7 @@ Authors:
     Bill Bolosky, August, 2011
 
 Environment:
-`
+
     User mode service.
 
 Revision History:

@@ -28,6 +28,7 @@ Revision History:
 #include "directions.h"
 #include "LandauVishkin.h"
 #include "FixedSizeMap.h"
+#include "AlignmentAdjuster.h"
 
 const unsigned DEFAULT_INTERSECTING_ALIGNER_MAX_HITS = 2000;
 const unsigned DEFAULT_MAX_CANDIDATE_POOL_SIZE = 1000000;
@@ -111,7 +112,7 @@ public:
 
 private:
 
-    IntersectingPairedEndAligner() {}  // This is for the counting allocator, it doesn't build a useful object
+    IntersectingPairedEndAligner() : alignmentAdjuster(NULL) {}  // This is for the counting allocator, it doesn't build a useful object
 
     static const int NUM_SET_PAIRS = 2;         // A "set pair" is read0 FORWARD + read1 RC, or read0 RC + read1 FORWARD.  Again, it doesn't make sense to change this.
 
@@ -138,6 +139,8 @@ private:
     bool            noUkkonen;
     bool            noOrderedEvaluation;
 	bool			noTruncation;
+
+    AlignmentAdjuster   alignmentAdjuster;
 
 	static const unsigned        maxMergeDistance;
 	

@@ -53,7 +53,7 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
     index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), numSeedsFromCommandLine(__min(MAX_MAX_SEEDS,numSeedsFromCommandLine_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
 	landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), seedCoverage(seedCoverage_),
     extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_), 
-    maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_)
+    maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome())
 {
     doesGenomeIndexHave64BitLocations = index->doesGenomeIndexHave64BitLocations();
 
@@ -168,6 +168,7 @@ IntersectingPairedEndAligner::align(
 {
     result->nLVCalls = 0;
     result->nSmallHits = 0;
+    result->clippingForReadAdjustment[0] = result->clippingForReadAdjustment[1] = 0;
 
     *nSecondaryResults = 0;
     *nSingleEndSecondaryResultsForFirstRead = 0;
@@ -846,6 +847,7 @@ doneScoring:
             result->mapq[whichRead] = 0;
             result->score[whichRead] = -1;
             result->status[whichRead] = NotFound;
+            result->clippingForReadAdjustment[whichRead] = 0;
 #ifdef  _DEBUG
             if (_DumpAlignments) {
                 printf("No sufficiently good pairs found.\n");
@@ -859,6 +861,7 @@ doneScoring:
             result->mapq[whichRead] = computeMAPQ(probabilityOfAllPairs, probabilityOfBestPair, bestResultScore[whichRead], popularSeedsSkipped[0] + popularSeedsSkipped[1]);
             result->status[whichRead] = result->mapq[whichRead] > MAPQ_LIMIT_FOR_SINGLE_HIT ? SingleHit : MultipleHits;
             result->score[whichRead] = bestResultScore[whichRead];
+            result->clippingForReadAdjustment[whichRead] = 0;
         }
 #ifdef  _DEBUG
             if (_DumpAlignments) {
@@ -872,9 +875,26 @@ doneScoring:
     //
     // Get rid of any secondary results that are too far away from the best score.  (NB: the rest of the code in align() is very similar to BaseAligner::finalizeSecondaryResults.  Sorry)
     //
+
+    //
+    // Start by adjusting the alignments.
+    //
+    Read *inputReads[2] = { read0, read1 };
+    alignmentAdjuster.AdjustAlignments(inputReads, result);
+    if (result->status[0] != NotFound && result->status[1] != NotFound) {
+        bestPairScore = result->score[0] + result->score[1];
+    }
+
+    for (int i = 0; i < *nSecondaryResults; i++) {
+        alignmentAdjuster.AdjustAlignments(inputReads, &secondaryResults[i]); // xxx - move up above the previous if once we're done debugging
+        bestPairScore = __min(bestPairScore, (unsigned)(secondaryResults[i].score[0] + secondaryResults[i].score[1]));
+    }
+
     int i = 0;
     while (i < *nSecondaryResults) {
-        if ((int)(secondaryResults[i].score[0] + secondaryResults[i].score[1]) > (int)bestPairScore + maxEditDistanceForSecondaryResults) {
+        if ((int)(secondaryResults[i].score[0] + secondaryResults[i].score[1]) >(int)bestPairScore + maxEditDistanceForSecondaryResults || 
+            secondaryResults[i].status[0] == NotFound || secondaryResults[i].status[1] == NotFound) {
+
             secondaryResults[i] = secondaryResults[(*nSecondaryResults) - 1];
             (*nSecondaryResults)--;
         } else {

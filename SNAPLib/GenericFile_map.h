@@ -2,15 +2,15 @@
 
 Module Name:
 
-GenericFile_map.h
+    GenericFile_map.h
 
 Abstract:
 
-Generic IO class for SNAP that can map an input file.
+    Generic IO class for SNAP that can map an input file.
 
 Authors:
 
-Bill Bolosky, September, 2014
+    Bill Bolosky, September, 2014
 
 Environment:
 

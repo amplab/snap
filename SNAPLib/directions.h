@@ -2,7 +2,7 @@
 
 Module Name:
 
-    directions.h
+    Directions.h
 
 Abstract:
 

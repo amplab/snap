@@ -34,6 +34,7 @@ Revision History:
 #include "AlignerStats.h"
 #include "directions.h"
 #include "GenomeIndex.h"
+#include "AlignmentAdjuster.h"
 
 extern bool doAlignerPrefetch;
 
@@ -121,6 +122,8 @@ private:
     bool ownLandauVishkin;
 
     ProbabilityDistance *probDistance;
+
+    AlignmentAdjuster alignmentAdjuster;
 
     // Maximum distance to merge candidates that differ in indels over.
 #ifdef LONG_READS
@@ -332,7 +335,8 @@ private:
                                             // of hits at edit distance 4.
 
     void finalizeSecondaryResults(
-        SingleAlignmentResult    primaryResult,
+        Read                    *read,
+        SingleAlignmentResult   *primaryResult,
         int                     *nSecondaryResults,                     // in/out
         SingleAlignmentResult   *secondaryResults,
         int                      maxSecondaryResults,
