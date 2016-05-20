@@ -146,6 +146,15 @@ private:
         friend class SAMFormat;
 };
 
+class SplitFileBarcodedSAMReader : public BarcodedReadReader {
+public:
+    virtual ~SplitFileBarcodedSAMReader();
+
+    SplitFileBarcodedSAMReader(const char *inputDirectoryName);
+
+
+};
+
 class SAMFormat : public FileFormat
 {
 public:

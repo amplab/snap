@@ -146,6 +146,20 @@ public:
     static const int MatchBuffers = 2;
 };
 
+//
+// Used for 10x data.  Provides all of the reads of a given barcode together.
+//
+class BarcodedReadReader {
+public:
+    virtual ~BarcodedReadReader() {}
+
+    // reading
+
+    virtual bool getNextBarcode(Read **reads, int readsSize, int *nReadsInBarcode, char **barcode) = 0;
+
+    virtual ReaderContext* getContext() = 0;
+};
+
 class ReadSupplier {
 public:
     virtual Read *getNextRead() = 0;    // This read is valid until you call getNextRead, then it's done.  Don't worry about deallocating it.

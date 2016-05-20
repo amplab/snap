@@ -34,8 +34,9 @@ Pulled from the main program and expanded to handle daemon mode
 #include "CommandProcessor.h"
 #include "Error.h"
 #include "Compat.h"
+#include "TenX.h"
 
-const char *SNAP_VERSION = "1.0dev.97";
+const char *SNAP_VERSION = "1.0dev.97 10x";
 
 static void usage()
 {
@@ -45,6 +46,7 @@ static void usage()
 		"   index    build a genome index\n"
 		"   single   align single-end reads\n"
 		"   paired   align paired-end reads\n"
+        "   10x      align paired-end 10x reads\n"
 		"   daemon   run in daemon mode--accept commands remotely\n"
 		"Type a command without arguments to see its help.\n");
 }
@@ -59,15 +61,18 @@ void ProcessNonDaemonCommands(int argc, const char **argv) {
 			//
 			WriteErrorMessage("The index command is not available in daemon mode.  Please run 'snap-aligner index' directly.\n");
 		}
-	} else if (strcmp(argv[1], "single") == 0 || strcmp(argv[1], "paired") == 0) {
+	} else if (strcmp(argv[1], "single") == 0 || strcmp(argv[1], "paired") == 0 || strcmp(argv[1], "10x") == 0) {
 		for (int i = 1; i < argc; /* i is increased below */) {
 			unsigned nArgsConsumed;
 			if (strcmp(argv[i], "single") == 0) {
 				SingleAlignerContext single;
 				single.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed);
-			} else if (strcmp(argv[i], "paired") == 0) {
-				PairedAlignerContext paired;
-				paired.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed);
+            } else if (strcmp(argv[i], "paired") == 0) {
+                PairedAlignerContext paired;
+                paired.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed);
+            } else if (strcmp(argv[i], "10x") == 0) {
+                TenXAlignerContext tenX;
+                tenX.runAlignment(argc - i, argv + i, SNAP_VERSION, &nArgsConsumed);
 			} else {
 				fprintf(stderr, "Invalid command: %s\n\n", argv[i]);
 				usage();
