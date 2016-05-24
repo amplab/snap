@@ -187,7 +187,6 @@ SimpleReadWriter::writeReads(
         finalLocations = new GenomeLocation[nResults];
     }
 
-
     for (int pass = 0; pass < 2; pass++) { // Make two passes, one with whatever buffer space is left and one with a clean buffer.
         bool blewBuffer = false;
 
@@ -199,7 +198,7 @@ SimpleReadWriter::writeReads(
 
         for (int whichResult = 0; whichResult < nResults; whichResult++) {
             int addFrontClipping = 0;
-            read->setAdditionalFrontClipping(0);
+            read->setAdditionalFrontClipping(results[whichResult].clippingForReadAdjustment);
             int cumulativeAddFrontClipping = 0;
             finalLocations[whichResult] = results[whichResult].location;
 
@@ -207,6 +206,8 @@ SimpleReadWriter::writeReads(
 
             while (!format->writeRead(context, &lvc, buffer + used, size - used, &usedBuffer[whichResult], read->getIdLength(), read, results[whichResult].status,
                 results[whichResult].mapq, finalLocations[whichResult], results[whichResult].direction, (whichResult > 0) || !firstIsPrimary, &addFrontClipping)) {
+
+                _ASSERT(0 == addFrontClipping); // Because of the alignment adjuster.
 
                 nAdjustments++;
 
@@ -357,8 +358,8 @@ SimpleReadWriter::writePairs(
         // Write all of the pair alignments into the buffer.
         //
         for (int whichAlignmentPair = 0; whichAlignmentPair < nResults; whichAlignmentPair++) {
-            reads[0]->setAdditionalFrontClipping(0);
-            reads[1]->setAdditionalFrontClipping(0);
+            reads[0]->setAdditionalFrontClipping(result[whichAlignmentPair].clippingForReadAdjustment[0]);
+            reads[1]->setAdditionalFrontClipping(result[whichAlignmentPair].clippingForReadAdjustment[1]);
 
             GenomeLocation locations[2];
             locations[0] = result[whichAlignmentPair].status[0] != NotFound ? result[whichAlignmentPair].location[0] : InvalidGenomeLocation;
@@ -370,6 +371,7 @@ SimpleReadWriter::writePairs(
             do {
                 size_t tentativeUsed = 0;
                 secondReadLocationChanged = false;
+
 
                 int writeOrder[2];  // The order in which we write the reads, which is just numerical by genome location.  SO writeOrder[0] gets written first, and writeOrder[1] second.
 
@@ -388,11 +390,14 @@ SimpleReadWriter::writePairs(
                     //
                     int addFrontClipping = 0;
 
+
                     while (!format->writeRead(context, &lvc, buffer + used + tentativeUsed, size - used - tentativeUsed, &usedBuffer[firstOrSecond][whichAlignmentPair],
                         idLengths[whichRead], reads[whichRead], result[whichAlignmentPair].status[whichRead], result[whichAlignmentPair].mapq[whichRead], locations[whichRead], result[whichAlignmentPair].direction[whichRead],
                         whichAlignmentPair != 0 || !firstIsPrimary, &addFrontClipping, true, writeOrder[firstOrSecond] == 0,
                         reads[1 - whichRead], result[whichAlignmentPair].status[1 - whichRead], locations[1 - whichRead], result[whichAlignmentPair].direction[1 - whichRead],
                         result[whichAlignmentPair].alignedAsPair)) {
+
+                        _ASSERT(0 == addFrontClipping); // Because of the alignment adjuster
 
                         if (0 == addFrontClipping || locations[whichRead] == InvalidGenomeLocation) {
                             //
@@ -445,7 +450,7 @@ SimpleReadWriter::writePairs(
         for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
             for (int whichAlignment = 0; whichAlignment < nSingleResults[whichRead]; whichAlignment++) {
                 int addFrontClipping;
-                reads[whichRead]->setAdditionalFrontClipping(0);
+                reads[whichRead]->setAdditionalFrontClipping(singleResults[whichRead]->clippingForReadAdjustment);
                 GenomeLocation location = singleResults[whichRead][whichAlignment].status != NotFound ? singleResults[whichRead][whichAlignment].location : InvalidGenomeLocation;
                 int cumulativePositiveAddFrontClipping = 0;
 

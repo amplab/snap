@@ -2,7 +2,7 @@
 
 Module Name:
 
-    geonome.h
+    Geonome.h
 
 Abstract:
 

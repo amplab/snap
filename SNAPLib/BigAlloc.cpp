@@ -2,11 +2,11 @@
 
 Module Name:
 
-    bigalloc.cpp
+    BigAlloc.cpp
 
 Abstract:
 
-    Allocator that uses big pages where appropriate and possible.
+    Allocator that uses big pages where appropriate and possible, and page-aligns in any case to avoid false sharing.
 
 Authors:
 

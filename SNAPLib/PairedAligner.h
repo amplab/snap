@@ -2,18 +2,18 @@
 
 Module Name:
 
-    SingleAligner.cpp
+    PairedAligner.h
 
 Abstract:
 
-    Functions for running the single end aligner sub-program.
+    Header for the paired end aligner scaffolding
 
 Authors:
 
     Matei Zaharia, February, 2012
 
 Environment:
-`
+
     User mode service.
 
 Revision History:

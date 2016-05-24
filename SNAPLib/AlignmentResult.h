@@ -55,6 +55,8 @@ struct SingleAlignmentResult {
 
     int             mapq;		// mapping quality, encoded like a Phred score (but as an integer, not ASCII Phred + 33).
 
+    int             clippingForReadAdjustment;
+
     static int compareByContigAndScore(const void *first, const void *second);      // qsort()-style compare routine
     static int compareByScore(const void *first, const void *second);               // qsort()-style compare routine
 };
@@ -81,6 +83,8 @@ struct PairedAlignmentResult {
 	int score[NUM_READS_PER_PAIR];              // score of each end if matched
 
 	int mapq[NUM_READS_PER_PAIR];               // mapping quality of each end, encoded like a Phred score (but as an integer, not ASCII Phred + 33).
+
+    int clippingForReadAdjustment[NUM_READS_PER_PAIR];
 
 	bool fromAlignTogether;                     // Was this alignment created by aligning both reads together, rather than from some combination of single-end aligners?
 	bool alignedAsPair;                         // Were the reads aligned as a pair, or separately?

@@ -2,11 +2,11 @@
 
 Module Name:
 
-    SingleAligner.cpp
+    SingleAligner.h
 
 Abstract:
 
-    Functions for running the single end aligner sub-program.
+    Headers for running the single end aligner sub-program.
 
 Authors:
 

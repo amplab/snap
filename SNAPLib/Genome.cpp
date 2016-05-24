@@ -2,7 +2,7 @@
 
 Module Name:
 
-    geonome.cpp
+    Geonome.cpp
 
 Abstract:
 

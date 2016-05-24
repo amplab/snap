@@ -2,15 +2,15 @@
 
 Module Name:
 
-AlignmentResult.cpp
+    AlignmentResult.cpp
 
 Abstract:
 
-Code for SNAP genome alignment results
+    Code for SNAP genome alignment results
 
 Authors:
 
-Bill Bolosky, March, 2015
+    Bill Bolosky, March, 2015
 
 Environment:
 

@@ -13,7 +13,7 @@ Authors:
     Matei Zaharia, February, 2012
 
 Environment:
-`
+
     User mode service.
 
 Revision History:
@@ -181,6 +181,7 @@ SingleAlignerContext::runIterationThread()
                     result.location = InvalidGenomeLocation;
                     result.mapq = 0;
                     result.direction = FORWARD;
+                    result.clippingForReadAdjustment = 0;
                     readWriter->writeReads(readerContext, read, &result, 1, true);
                 }
                 stats->uselessReads++;

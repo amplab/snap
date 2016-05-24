@@ -2,7 +2,7 @@
 
 Module Name:
 
-    compat.h
+    Compat.h
 
 Abstract:
 

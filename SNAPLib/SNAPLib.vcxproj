@@ -158,6 +158,7 @@
     <ClInclude Include="AlignerContext.h" />
     <ClInclude Include="AlignerOptions.h" />
     <ClInclude Include="AlignerStats.h" />
+    <ClInclude Include="AlignmentAdjuster.h" />
     <ClInclude Include="AlignmentResult.h" />
     <ClInclude Include="ApproximateCounter.h" />
     <ClInclude Include="Bam.h" />
@@ -218,6 +219,7 @@
     <ClCompile Include="AlignerContext.cpp" />
     <ClCompile Include="AlignerOptions.cpp" />
     <ClCompile Include="AlignerStats.cpp" />
+    <ClCompile Include="AlignmentAdjuster.cpp" />
     <ClCompile Include="AlignmentResult.cpp" />
     <ClCompile Include="ApproximateCounter.cpp" />
     <ClCompile Include="Bam.cpp" />

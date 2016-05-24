@@ -2,18 +2,18 @@
 
 Module Name:
 
-CommandProcessor.h
+    CommandProcessor.h
 
 Abstract:
 
-Header for running the top-level commands of SNAP
+    Header for running the top-level commands of SNAP
 
 Authors:
 
-Bill Bolosky, November, 2014
+    Bill Bolosky, November, 2014
 
 Environment:
-`
+
 User mode service.
 
 Revision History:

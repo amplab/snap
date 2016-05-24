@@ -2,7 +2,7 @@
 
 Module Name:
 
-    histogram.cpp
+    Histogram.cpp
 
 Abstract:
 

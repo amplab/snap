@@ -2,7 +2,7 @@
 
 Module Name:
 
-    histogram.h
+    Histogram.h
 
 Abstract:
 

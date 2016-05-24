@@ -6,7 +6,7 @@ Module Name:
 
 Abstract:
 
-    SNAP genome aligner
+   Single-end aligner
 
 Authors:
 
@@ -66,7 +66,8 @@ BaseAligner::BaseAligner(
         maxSeedCoverage(i_maxSeedCoverage), readId(-1), extraSearchDepth(i_extraSearchDepth),
         explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats), 
         noUkkonen(i_noUkkonen), noOrderedEvaluation(i_noOrderedEvaluation), noTruncation(i_noTruncation),
-		minWeightToCheck(max(1u, i_minWeightToCheck)), maxSecondaryAlignmentsPerContig(i_maxSecondaryAlignmentsPerContig)
+		minWeightToCheck(max(1u, i_minWeightToCheck)), maxSecondaryAlignmentsPerContig(i_maxSecondaryAlignmentsPerContig),
+        alignmentAdjuster(i_genomeIndex->getGenome())
 /*++
 
 Routine Description:
@@ -288,6 +289,7 @@ Return Value:
     primaryResult->direction = FORWARD;              // So we deterministically print the read forward in this case.
     primaryResult->score = UnusedScoreValue;
     primaryResult->status = NotFound;
+    primaryResult->clippingForReadAdjustment = 0;
 
     unsigned lookupsThisRun = 0;
 
@@ -425,7 +427,7 @@ Return Value:
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates)  at %u\n", 
                                             primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, primaryResult->location.location);
 #endif  // _DEBUG
-                finalizeSecondaryResults(*primaryResult, nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
+                finalizeSecondaryResults(read[FORWARD], primaryResult, nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
                 return;
             }
             nextSeedToTest = GetWrappedNextSeedToTest(seedLen, wrapCount);
@@ -623,7 +625,7 @@ Return Value:
                 if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d at %u\n", primaryResult->score, primaryResult->mapq, primaryResult->location.location);
 #endif  // _DEBUG
 
-                finalizeSecondaryResults(*primaryResult, nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
+                finalizeSecondaryResults(read[FORWARD], primaryResult, nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
                 return;
             }
         }
@@ -648,7 +650,7 @@ Return Value:
     if (_DumpAlignments) printf("\tFinal result score %d MAPQ %d (%e probability of best candidate, %e probability of all candidates) at %u\n", primaryResult->score, primaryResult->mapq, probabilityOfBestCandidate, probabilityOfAllCandidates, primaryResult->location.location);
 #endif  // _DEBUG
 
-    finalizeSecondaryResults(*primaryResult, nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
+    finalizeSecondaryResults(read[FORWARD], primaryResult, nSecondaryResults, secondaryResults, maxSecondaryResults, maxEditDistanceForSecondaryResults, bestScore);
     return;
 }
 
@@ -1034,6 +1036,7 @@ Return Value:
                         result->mapq = 0;
                         result->score = bestScore;
                         result->status = MultipleHits;
+                        result->clippingForReadAdjustment = 0;
 
                         _ASSERT(result->score != -1);
 
@@ -1047,6 +1050,7 @@ Return Value:
                     primaryResult->location = bestScoreGenomeLocation;
                     primaryResult->score = bestScore;
                     primaryResult->direction = elementToScore->direction;
+                    _ASSERT(0 == primaryResult->clippingForReadAdjustment);
 
                     lvScoresAfterBestFound = 0;
                 } else {
@@ -1074,6 +1078,7 @@ Return Value:
                         result->mapq = 0;
                         result->score = score;
                         result->status = MultipleHits;
+                        result->clippingForReadAdjustment = 0;
 
                         _ASSERT(result->score != -1);
 
@@ -1471,7 +1476,8 @@ BaseAligner::getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishki
 
     void 
 BaseAligner::finalizeSecondaryResults(
-    SingleAlignmentResult    primaryResult,
+    Read                    *read,
+    SingleAlignmentResult   *primaryResult,
     int                     *nSecondaryResults,                     // in/out
     SingleAlignmentResult   *secondaryResults,
     int                      maxSecondaryResults,
@@ -1485,6 +1491,25 @@ BaseAligner::finalizeSecondaryResults(
     //
     // NB: This code is very similar to code at the end of IntersectingPairedEndAligner::align().  Sorry.
     //
+
+    _ASSERT(bestScore == primaryResult->score);
+
+    //
+    // Start by adjusting the alignments for the primary and secondary reads, since that can affect their score
+    // and hence whether they should be kept.
+    //
+    alignmentAdjuster.AdjustAlignment(read, primaryResult);
+    if (primaryResult->status != NotFound) {
+        bestScore = primaryResult->score;
+    } else {
+        bestScore = 65536;
+    }
+
+    for (int i = 0; i < *nSecondaryResults; i++) {
+        alignmentAdjuster.AdjustAlignment(read, &secondaryResults[i]);
+        bestScore = __min(bestScore, secondaryResults[i].score);
+    }
+
 
     int worstScoreToKeep = min((int)maxK, bestScore + maxEditDistanceForSecondaryResults);
 
@@ -1503,14 +1528,14 @@ BaseAligner::finalizeSecondaryResults(
         }
     }
 
-    if (maxSecondaryAlignmentsPerContig > 0 && primaryResult.status != NotFound) {
+    if (maxSecondaryAlignmentsPerContig > 0 && primaryResult->status != NotFound) {
         //
         // Run through the results and count the number of results per contig, to see if any of them are too big.
         //
 
         bool anyContigHasTooManyResults = false;
 
-        int primaryResultContigNum = genome->getContigNumAtLocation(primaryResult.location);
+        int primaryResultContigNum = genome->getContigNumAtLocation(primaryResult->location);
         hitsPerContigCounts[primaryResultContigNum].hits = 1;
         hitsPerContigCounts[primaryResultContigNum].epoch = hashTableEpoch;
 

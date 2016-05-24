@@ -2,15 +2,15 @@
 
 Module Name:
 
-GenericFile_map.cpp
+    GenericFile_map.cpp
 
 Abstract:
 
-Generic IO class for SNAP that can map an input file.
+    Generic IO class for SNAP that can map an input file.
 
 Authors:
 
-Bill Bolosky, September, 2014
+    Bill Bolosky, September, 2014
 
 Environment:
 
