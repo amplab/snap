@@ -94,7 +94,7 @@ namespace SplitSamByBarcode
                             {
                                 outputFiles[barcode].WriteLine(headerLine);
                             }
-                            nRemainingInCurrentGroup = groupSize;
+                            nRemainingInCurrentGroup = groupSize - 1;
                         }
                     }
                     outputFiles[barcode].WriteLine(inputLine);
