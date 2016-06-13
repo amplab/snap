@@ -103,14 +103,15 @@ SingleAlignerContext::runIterationThread()
     int maxReadSize = MAX_READ_LENGTH;
 
     SingleAlignmentResult *alignmentResults = NULL;
-    unsigned alignmentResultBufferCount;
+    bool alignmentResultsReallocated = false;
+    _int64 alignmentResultBufferCount;
     if (maxSecondaryAlignmentAdditionalEditDistance < 0) {
-        alignmentResultBufferCount = 1; // For the primary alignment
+        alignmentResultBufferCount = 1;
     } else {
-        alignmentResultBufferCount = BaseAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, index->getSeedLength()) + 1; // +1 for the primary alignment
+        alignmentResultBufferCount = 32;    // Just a nice number that's not too small.  We reallocate on demand.
     }
-    size_t alignmentResultBufferSize = sizeof(*alignmentResults) * (alignmentResultBufferCount + 1); // +1 is for primary result
- 
+    size_t alignmentResultBufferSize = sizeof(*alignmentResults) * alignmentResultBufferCount; 
+
     BigAllocator *allocator = new BigAllocator(BaseAligner::getBigAllocatorReservation(index, true, maxHits, maxReadSize, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxSecondaryAlignmentsPerContig, extraSearchDepth) 
         + alignmentResultBufferSize);
    
@@ -126,6 +127,7 @@ SingleAlignerContext::runIterationThread()
             noUkkonen,
             noOrderedEvaluation,
 			noTruncation,
+            ignoreAlignmentAdjustmentForOm,
             maxSecondaryAlignmentsPerContig,
             NULL,               // LV (no need to cache in the single aligner)
             NULL,               // reverse LV
@@ -193,7 +195,7 @@ SingleAlignerContext::runIterationThread()
         _int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
 
-        int nSecondaryResults = 0;
+        _int64 nSecondaryResults = 0;
 
 #ifdef LONG_READS
         int oldMaxK = aligner->getMaxK();
@@ -202,7 +204,20 @@ SingleAlignerContext::runIterationThread()
         }
 #endif
 
-        aligner->AlignRead(read, alignmentResults, maxSecondaryAlignmentAdditionalEditDistance, alignmentResultBufferCount - 1, &nSecondaryResults, maxSecondaryAlignments, alignmentResults + 1);
+        while (!aligner->AlignRead(read, alignmentResults, maxSecondaryAlignmentAdditionalEditDistance, alignmentResultBufferCount - 1, &nSecondaryResults, maxSecondaryAlignments, alignmentResults + 1)) {
+            //
+            // Out of secondary alignment buffer.  Reallocate.
+            //
+            if (alignmentResultsReallocated) {
+                BigDealloc(alignmentResults);
+                alignmentResults = NULL;
+            }
+
+            alignmentResultBufferCount *= 2;
+            alignmentResultBufferSize = alignmentResultBufferCount * sizeof(SingleAlignmentResult);
+            alignmentResults = (SingleAlignmentResult *)BigAlloc(alignmentResultBufferSize);
+            alignmentResultsReallocated = true;
+        }
 #ifdef LONG_READS
         aligner->setMaxK(oldMaxK);
 #endif
@@ -266,6 +281,10 @@ SingleAlignerContext::runIterationThread()
  
     if (supplier != NULL) {
         delete supplier;
+    }
+
+    if (alignmentResultsReallocated) {
+        BigDealloc(alignmentResults);
     }
 
     delete allocator;   // This is what actually frees the memory.

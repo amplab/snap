@@ -114,6 +114,7 @@ public:
     bool                                 noUkkonen;
     bool                                 noOrderedEvaluation;
 	bool								 noTruncation;
+    bool                                 ignoreAlignmentAdjustmentForOm;
     int                                  maxSecondaryAlignmentAdditionalEditDistance;
 	int									 maxSecondaryAlignments;
     int                                  maxSecondaryAlignmentsPerContig;

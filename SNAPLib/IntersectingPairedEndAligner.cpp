@@ -49,11 +49,12 @@ IntersectingPairedEndAligner::IntersectingPairedEndAligner(
         BigAllocator  *allocator,
         bool          noUkkonen_,
         bool          noOrderedEvaluation_,
-		bool          noTruncation_) :
+		bool          noTruncation_,
+        bool          ignoreAlignmentAdjustmentsForOm_) :
     index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), numSeedsFromCommandLine(__min(MAX_MAX_SEEDS,numSeedsFromCommandLine_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
 	landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), seedCoverage(seedCoverage_),
     extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_), 
-    maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome())
+    maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome()), ignoreAlignmentAdjustmentsForOm(ignoreAlignmentAdjustmentsForOm_)
 {
     doesGenomeIndexHave64BitLocations = index->doesGenomeIndexHave64BitLocations();
 
@@ -150,19 +151,19 @@ IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, uns
     }
 }
 
-    void
+    bool
 IntersectingPairedEndAligner::align(
         Read                  *read0,
         Read                  *read1,
         PairedAlignmentResult *result,
         int                    maxEditDistanceForSecondaryResults,
-        int                    secondaryResultBufferSize,
-        int                   *nSecondaryResults,
+        _int64                 secondaryResultBufferSize,
+        _int64                *nSecondaryResults,
         PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
-        int                    singleSecondaryBufferSize,
-        int                    maxSecondaryResultsToReturn,
-        int                   *nSingleEndSecondaryResultsForFirstRead,
-        int                   *nSingleEndSecondaryResultsForSecondRead,
+        _int64                 singleSecondaryBufferSize,
+        _int64                 maxSecondaryResultsToReturn,
+        _int64                *nSingleEndSecondaryResultsForFirstRead,
+        _int64                *nSingleEndSecondaryResultsForSecondRead,
         SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
         )
 {
@@ -212,7 +213,7 @@ IntersectingPairedEndAligner::align(
 	// minimum enforced by our called
     //
     if (read0->getDataLength() < seedLen || read1->getDataLength() < seedLen) {
-         return;
+         return true;
     }
 
     //
@@ -252,7 +253,7 @@ IntersectingPairedEndAligner::align(
     }
 
     if (countOfNs > maxK) {
-        return;
+        return true;
     }
 
     //
@@ -739,8 +740,8 @@ IntersectingPairedEndAligner::align(
                                     //
                                     //
                                     if (*nSecondaryResults >= secondaryResultBufferSize) {
-                                        WriteErrorMessage("IntersectingPairedEndAligner::align(): out of secondary result buffer\n");
-                                        soft_exit(1);
+                                        *nSecondaryResults = secondaryResultBufferSize + 1;
+                                        return false;
                                     }
 
                                     PairedAlignmentResult *result = &secondaryResults[*nSecondaryResults];
@@ -778,8 +779,8 @@ IntersectingPairedEndAligner::align(
                                     // A secondary result to save.
                                     //
                                     if (*nSecondaryResults >= secondaryResultBufferSize) {
-                                        WriteErrorMessage("IntersectingPairedEndAligner::align(): out of secondary result buffer.  Read ID %.*s\n", read0->getIdLength(), read0->getId());
-                                        soft_exit(1);
+                                        *nSecondaryResults = secondaryResultBufferSize + 1;
+                                        return false;
                                     }
 
                                     PairedAlignmentResult *result = &secondaryResults[*nSecondaryResults];
@@ -876,18 +877,36 @@ doneScoring:
     // Get rid of any secondary results that are too far away from the best score.  (NB: the rest of the code in align() is very similar to BaseAligner::finalizeSecondaryResults.  Sorry)
     //
 
-    //
-    // Start by adjusting the alignments.
-    //
+
     Read *inputReads[2] = { read0, read1 };
-    alignmentAdjuster.AdjustAlignments(inputReads, result);
-    if (result->status[0] != NotFound && result->status[1] != NotFound) {
-        bestPairScore = result->score[0] + result->score[1];
+    for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+        result->scorePriorToClipping[whichRead] = result->score[whichRead];
     }
 
-    for (int i = 0; i < *nSecondaryResults; i++) {
-        alignmentAdjuster.AdjustAlignments(inputReads, &secondaryResults[i]); // xxx - move up above the previous if once we're done debugging
-        bestPairScore = __min(bestPairScore, (unsigned)(secondaryResults[i].score[0] + secondaryResults[i].score[1]));
+    if (!ignoreAlignmentAdjustmentsForOm) {
+        //
+        // Start by adjusting the alignments.
+        //
+        alignmentAdjuster.AdjustAlignments(inputReads, result);
+        if (result->status[0] != NotFound && result->status[1] != NotFound && !ignoreAlignmentAdjustmentsForOm) {
+            bestPairScore = result->score[0] + result->score[1];
+        }
+
+        for (int i = 0; i < *nSecondaryResults; i++) {
+            for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+                secondaryResults[i].scorePriorToClipping[whichRead] = secondaryResults[i].score[whichRead];
+            }
+            alignmentAdjuster.AdjustAlignments(inputReads, &secondaryResults[i]);
+            if (secondaryResults[i].status[0] != NotFound && secondaryResults[i].status[1] != NotFound && !ignoreAlignmentAdjustmentsForOm) {
+                bestPairScore = __min(bestPairScore, (unsigned)(secondaryResults[i].score[0] + secondaryResults[i].score[1]));
+            }
+        }
+    } else {
+        for (int i = 0; i < *nSecondaryResults; i++) {
+            for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+                secondaryResults[i].scorePriorToClipping[whichRead] = secondaryResults[i].score[whichRead];
+            }
+        }
     }
 
     int i = 0;
@@ -975,6 +994,8 @@ doneScoring:
         qsort(secondaryResults, *nSecondaryResults, sizeof(*secondaryResults), PairedAlignmentResult::compareByScore);
         *nSecondaryResults = maxSecondaryResultsToReturn;   // Just truncate it
     }
+
+    return true;
 }
 
     void
@@ -994,33 +1015,6 @@ IntersectingPairedEndAligner::scoreLocation(
     unsigned readDataLength = readToScore->getDataLength();
     GenomeDistance genomeDataLength = readDataLength + MAX_K; // Leave extra space in case the read has deletions
     const char *data = genome->getSubstring(genomeLocation, genomeDataLength);
-
-#if		0 // This only happens when genomeLocation is in the padding, which can lead to no good.  Just say no.
-    if (NULL == data) {
-        //
-        // We're up against the end of a contig.  Reduce the extra space enough that it isn't too
-        // long.  We're willing to reduce it to less than the length of a read, because the read could
-        // butt up against the end of the contig and have insertions in it.
-        //
-        const Genome::Contig *contig = genome->getContigAtLocation(genomeLocation);
-
-        GenomeLocation endLocation;
-        if (genomeLocation + readDataLength + MAX_K >= genome->getCountOfBases()) {
-            endLocation = genome->getCountOfBases();
-        } else {
-            const Genome::Contig *nextContig = genome->getContigAtLocation(genomeLocation + readDataLength + MAX_K);
-            _ASSERT(NULL != contig && contig->beginningLocation <= genomeLocation && contig != nextContig);
-
-            endLocation = nextContig->beginningLocation;
-        }
-        genomeDataLength = endLocation - genomeLocation - 1;
-        if (genomeDataLength >= readDataLength - MAX_K) {
-            data = genome->getSubstring(genomeLocation, genomeDataLength);
-            _ASSERT(NULL != data);
-        }
-    }
-
-#endif // 0 This only happens when genomeLocation is in the padding, which can lead to no good.  Just say no.
 
     if (NULL == data) {
         *score = -1;

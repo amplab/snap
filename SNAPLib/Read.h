@@ -190,15 +190,15 @@ public:
     //
     // write a batch of single reads, the first one of which is a primary alignment and the rest secondary.
     //
-    virtual bool writeReads(const ReaderContext& context, Read *read, SingleAlignmentResult *results, int nResults, bool firstIsPrimary) = 0;
+    virtual bool writeReads(const ReaderContext& context, Read *read, SingleAlignmentResult *results, _int64 nResults, bool firstIsPrimary) = 0;
 
     //
     // Write a batch of paired alignments, including some single secondary alignments.  reads needs to be exactly two reads, singleAlignmentResult is a pointer to two arrays of
     // SingleAlignmentResults for single alignments of the respective reads, and the number of results is given by the two ints pointed to by nSingleResults.  The first paired
     // result is primary, all others are secondary.
     //
-    virtual bool writePairs(const ReaderContext& context, Read **reads /* array of size 2 */, PairedAlignmentResult *result, int nResults,
-        SingleAlignmentResult **singleResults /* array of size 2*/, int *nSingleResults /* array of size 2*/, bool firstIsPrimary) = 0;
+    virtual bool writePairs(const ReaderContext& context, Read **reads /* array of size 2 */, PairedAlignmentResult *result, _int64 nResults,
+        SingleAlignmentResult **singleResults /* array of size 2*/, _int64 *nSingleResults /* array of size 2*/, bool firstIsPrimary) = 0;
 
 
     // close out this thread
@@ -215,7 +215,8 @@ public:
     virtual void close() = 0;
 
     static ReadWriterSupplier* create(const FileFormat* format, DataWriterSupplier* dataSupplier,
-        const Genome* genome, bool killIfTooSlow);
+        const Genome* genome, bool killIfTooSlowbool, bool emitInternalScore, char *internalScoreTag,
+        bool ignoreAlignmentAdjustmentsForOm);
 };
 
 #define READ_GROUP_FROM_AUX     ((const char*) -1)

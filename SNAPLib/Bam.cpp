@@ -712,7 +712,7 @@ public:
         const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result,
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int * o_addFrontClipping,
-        bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
+        int internalScore, bool emitInternalScore, char *internalScoreTag, bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
         bool alignedAsPair = false) const;
 
@@ -789,11 +789,12 @@ BAMFormat::getWriterSupplier(
         dataSupplier = DataWriterSupplier::sorted(this, genome, tempFileName,
             options->sortMemory * (1ULL << 30),
             options->numThreads, options->outputFile.fileName, filters, options->writeBufferSize,
+            options->emitInternalScore, options->internalScoreTag,
             FileEncoder::gzip(gzipSupplier, options->numThreads, options->bindToProcessors));
     } else {
-        dataSupplier = DataWriterSupplier::create(options->outputFile.fileName, options->writeBufferSize, gzipSupplier);
+        dataSupplier = DataWriterSupplier::create(options->outputFile.fileName, options->writeBufferSize, options->emitInternalScore, options->internalScoreTag, gzipSupplier);
     }
-    return ReadWriterSupplier::create(this, dataSupplier, genome, options->killIfTooSlow);
+    return ReadWriterSupplier::create(this, dataSupplier, genome, options->killIfTooSlow, options->emitInternalScore, options->internalScoreTag, options->ignoreAlignmentAdjustmentsForOm);
 }
 
     bool
@@ -869,6 +870,9 @@ BAMFormat::writeRead(
     Direction direction,
     bool secondaryAlignment,
     int *o_addFrontClipping,
+    int internalScore, 
+    bool emitInternalScore, 
+    char *internalScoreTag, 
     bool hasMate,
     bool firstInPair,
     Read * mate,
@@ -961,7 +965,14 @@ BAMFormat::writeRead(
             bamSize += context.defaultReadGroupAuxLen;
         }
     }
-    bamSize += 12; // NM:C PG:Z:SNAP fields
+
+    //
+    // Add in the size for the tags now.  We have to do this in this ugly way, because the tags are written directly into the
+    // buffer, so we can only write them if there's space.  However, BamAuxAlign::size() depends on the contents of the aux field
+    // (obviously), so we can't call it until it's filled in.  Which, of course, we can't do until the space is allocated.  Hence,
+    // this plus some asserts below.
+    //
+    bamSize += 8 + 4 + (emitInternalScore ? 7 : 0); // NM:C PG:Z:SNAP fields and optionally the internal score field (which is 32 bits rather than the 8 used in NM)
     if (bamSize > bufferSpace) {
         return false;
     }
@@ -1042,12 +1053,22 @@ BAMFormat::writeRead(
     BAMAlignAux* pg = (BAMAlignAux*) (auxLen + (char*) bam->firstAux());
     pg->tag[0] = 'P'; pg->tag[1] = 'G'; pg->val_type = 'Z';
     strcpy((char*) pg->value(), "SNAP");
+    _ASSERT(pg->size() == 8);   // Known above in the bamSize += line
     auxLen += (unsigned) pg->size();
     // NM
     BAMAlignAux* nm = (BAMAlignAux*) (auxLen + (char*) bam->firstAux());
     nm->tag[0] = 'N'; nm->tag[1] = 'M'; nm->val_type = 'C';
     *(_uint8*)nm->value() = (_uint8)editDistance;
-    auxLen += (unsigned) nm->size();
+    _ASSERT(nm->size() == 4);   // Known above in the bamSize += line
+    auxLen += (unsigned)nm->size();
+
+    if (emitInternalScore) {
+        BAMAlignAux *in = (BAMAlignAux*)(auxLen + (char *)bam->firstAux());
+        in->tag[0] = internalScoreTag[0];  in->tag[1] = internalScoreTag[1]; in->val_type = 'i';
+        *(_int32*)in->value() = (flags & SAM_UNMAPPED) ? -1 : internalScore;
+        _ASSERT(in->size() == 7);   // Known above in the bamSize += line
+        auxLen += (unsigned)in->size();
+    }
 
     if (NULL != spaceUsed) {
         *spaceUsed = bamSize;

@@ -645,7 +645,7 @@ ReadBasedDataReader::releaseBatch(
                 if (info->holds > 0) {
                     info->holds--;
                 }
-                if (info->holds == 0 && i != nextBufferForConsumer) {
+                if (info->holds == 0/* Turned off because this breaks sorting in some cases.  Ravip will fix. --bb && i != nextBufferForConsumer*/) {
                     //fprintf(stderr,"ReadBasedDataReader:releaseBatch batch %d, releasing %s buffer %d\n", batch.batchID, info->state == InUse ? "InUse" : "Full", i);
                     info->state = Empty;
                     // remove from ready list
