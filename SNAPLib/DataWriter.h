@@ -138,6 +138,8 @@ public:
     static DataWriterSupplier* create(
         const char* filename,
         size_t bufferSize,
+        bool emitInternalScore,
+        char *internalScoreTag,
         DataWriter::FilterSupplier* filterSupplier = NULL,
         FileEncoder* encoder = NULL,
         int count = 4);
@@ -151,6 +153,8 @@ public:
         const char* sortedFileName,
         DataWriter::FilterSupplier* sortedFilterSupplier,
         size_t maxBufferSize,
+        bool emitInternalScore,
+        char *internalScoreTag,
         FileEncoder* encoder = NULL);
 
     static char *generateSortIntermediateFilePathName(AlignerOptions *options);
