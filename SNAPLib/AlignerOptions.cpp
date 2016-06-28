@@ -80,7 +80,9 @@ AlignerOptions::AlignerOptions(
     dropIndexBeforeSort(false),
     killIfTooSlow(false),
     sortIntermediateDirectory(NULL),
-    profile(false)
+    profile(false),
+    ignoreAlignmentAdjustmentsForOm(true),
+    emitInternalScore(false)
 {
     if (forPairedEnd) {
         maxDist                 = 15;
@@ -182,14 +184,14 @@ AlignerOptions::usageMessage()
 #ifdef LONG_READS
         "  -dp  Edit distance as a percentage of read length (single only, overrides -d)\n"
 #endif
-		"  -nu  No Ukkonen: don't reduce edit distance search based on prior candidates. This option is purely for\n"
-		"       evaluating the performance effect of using Ukkonen's algorithm rather than Smith-Waterman, and specifying\n"
-		"       it will slow down execution without improving the alignments.\n"
-		"  -no  No Ordering: don't order the evalutation of reads so as to select more likely candidates first.  This option\n"
-		"       is purely for evaluating the performance effect of the read evaluation order, and specifying it will slow\n"
-		"       down execution without improving alignments.\n"
-		"  -nt  Don't truncate searches based on missed seed hits.  This option is purely for evaluating the performance effect\n"
-		"       of candidate truncation, and specifying it will slow down execution without improving alignments.\n"
+        "  -nu  No Ukkonen: don't reduce edit distance search based on prior candidates. This option is purely for\n"
+        "       evaluating the performance effect of using Ukkonen's algorithm rather than Smith-Waterman, and specifying\n"
+        "       it will slow down execution without improving the alignments.\n"
+        "  -no  No Ordering: don't order the evalutation of reads so as to select more likely candidates first.  This option\n"
+        "       is purely for evaluating the performance effect of the read evaluation order, and specifying it will slow\n"
+        "       down execution without improving alignments.\n"
+        "  -nt  Don't truncate searches based on missed seed hits.  This option is purely for evaluating the performance effect\n"
+        "       of candidate truncation, and specifying it will slow down execution without improving alignments.\n"
         " -wbs  Write buffer size in megabytes.  Don't specify this unless you've gotten an error message saying to make it bigger.  Default 16.\n"
         "  -di  Drop the index after aligning and before sorting.  This frees up memory for the sort at the expense of not having the index loaded for your next run.\n"
         " -kts  Kill if too slow.  Monitor our progress and kill ourself if we're not moving fast enough.  This is intended for use on machines\n"
@@ -201,6 +203,13 @@ AlignerOptions::usageMessage()
         "       final output file.  By default, the intermediate file is in the same directory as the output file, but for performance or space\n"
         "       reasons, you might want to put it elsewhere.  If so, use this option.\n"
         " -pro  Profile alignment to give you an idea of how much time is spent aligning and how much waiting for IO\n"
+        "  -ae  Apply the end-of-contig soft clipping before the -om processing rather than after it.  A read that's soft clipped because of hanging off one end or the other\n"
+        "       of a contig does not have a penalty in its NM tag, but it does in SNAP's internal scoring.  This flag says to use the NM value for -om processing\n"
+        "       rather than SNAP's internal score.\n"
+        "  -is  Write SNAP's internal score for an alignment into the output.  The value following -is specifies the tag to use, and must be a two letter\n"
+        "       value starting with X, Y or Z.  So, -is ZQ will cause SNAP to write ZQ:i:3 on a read with internal score 3.  Generally, the internal scores\n"
+        "       are the same as the NM values, except that they contain penalties for soft clipping reads that hang over the end of contigs (but not for\n"
+        "       soft clipping that's due to # quality scores or that was present in the input SAM/BAM file and retained due to -pc)\n"
 		,
             commandLine,
             maxDist,
@@ -352,8 +361,10 @@ AlignerOptions::parse(
 	} else if (strcmp(argv[n], "-pre") == 0) {
 		prefetchIndex = true;
 		return true;
-	}
-	else if (strcmp(argv[n], "-S") == 0) {
+    } else if (strcmp(argv[n], "-ae") == 0) {
+        ignoreAlignmentAdjustmentsForOm = false;
+        return true;
+    } else if (strcmp(argv[n], "-S") == 0) {
         if (n + 1 < argc) {
             n++;
             for (const char* p = argv[n]; *p; p++) {
@@ -379,6 +390,15 @@ AlignerOptions::parse(
             n++;
             return true;
         }
+    } else if (strcmp(argv[n], "-is") == 0) {
+        if (n + 1 >= argc || strlen(argv[n + 1]) != 2 || argv[n + 1][0] < 'X' || argv[n + 1][0] > 'Z' || argv[n + 1][1] < 'A' || argv[n + 1][1] > 'Z') {
+            WriteErrorMessage("-is switch must be followed by two letter tag that consists of X, Y, or Z and a capital letter.\n");
+            return false;
+        }
+        emitInternalScore = true;
+        strcpy(internalScoreTag, argv[n + 1]);
+        n++;
+        return true;
     } else if (strcmp(argv[n], "-F") == 0) {
         if (n + 1 < argc) {
             n++;

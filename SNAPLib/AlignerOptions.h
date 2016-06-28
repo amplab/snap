@@ -108,6 +108,9 @@ struct AlignerOptions : public AbstractOptions
     bool                killIfTooSlow;
     const char *        sortIntermediateDirectory;
     bool                profile;
+    bool                ignoreAlignmentAdjustmentsForOm;
+    bool                emitInternalScore;
+    char                internalScoreTag[3];
     
     static bool         useHadoopErrorMessages; // This is static because it's global (and I didn't want to push the options object to every place in the code)
     static bool         outputToStdout;         // Likewise

@@ -543,6 +543,8 @@ AsyncDataWriterSupplier::advance(
 DataWriterSupplier::create(
     const char* filename,
     size_t bufferSize,
+    bool emitInternalScore,
+    char *internalScoreTag,
     DataWriter::FilterSupplier* filterSupplier,
     FileEncoder* encoder,
     int count)

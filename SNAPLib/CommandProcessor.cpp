@@ -36,7 +36,7 @@ Revision History:
 #include "Compat.h"
 #include "TenX.h"
 
-const char *SNAP_VERSION = "1.0dev.98 10x";
+const char *SNAP_VERSION = "1.0dev.100 10x";
 
 static void usage()
 {

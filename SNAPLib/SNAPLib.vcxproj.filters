@@ -186,11 +186,10 @@
     <ClInclude Include="CommandProcessor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-<<<<<<< HEAD
     <ClInclude Include="TenX.h">
-=======
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="AlignmentAdjuster.h">
->>>>>>> dev
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -346,6 +345,8 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="TenXAligner.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="AlignmentAdjuster.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
