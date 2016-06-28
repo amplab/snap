@@ -2,24 +2,24 @@
 
 Module Name:
 
-TenXAligner.cpp
+    PairedAligner.cpp
 
 Abstract:
 
-Functions for running the paired end aligner sub-program.
+    Functions for running the paired end aligner sub-program.
 
 
 Authors:
 
-Hongyi Xin and Bill Bolosky, May, 2016
+    Matei Zaharia, February, 2012
 
 Environment:
 
-User mode service.
+    User mode service.
 
 Revision History:
 
-Cloned and modified from PairedEndAligner.cpp
+    Adapted from cSNAP, which was in turn adapted from the scala prototype
 
 --*/
 
@@ -41,13 +41,12 @@ Cloned and modified from PairedEndAligner.cpp
 #include "AlignerContext.h"
 #include "AlignerStats.h"
 #include "FASTQ.h"
-#include "PairedAligner.h"
+#include "TenX.h"
 #include "MultiInputReadSupplier.h"
 #include "Util.h"
 #include "IntersectingPairedEndAligner.h"
 #include "exit.h"
 #include "Error.h"
-#include "TenX.h"
 
 using namespace std;
 
@@ -71,12 +70,12 @@ struct TenXAlignerStats : public AlignerStats
     static const unsigned nHitsBuckets = 32;
     static const unsigned nLVCallsBuckets = 32;
 
-    _int64 alignTogetherByMapqHistogram[maxMapq + 1][nTimeBuckets];
-    _int64 totalTimeByMapqHistogram[maxMapq + 1][nTimeBuckets];
+    _int64 alignTogetherByMapqHistogram[maxMapq+1][nTimeBuckets];
+    _int64 totalTimeByMapqHistogram[maxMapq+1][nTimeBuckets];
     _int64 nSmallHitsByTimeHistogram[nHitsBuckets][nTimeBuckets];
     _int64 nLVCallsByTimeHistogram[nLVCallsBuckets][nTimeBuckets];
-    _int64 mapqByNLVCallsHistogram[maxMapq + 1][nLVCallsBuckets];
-    _int64 mapqByNSmallHitsHistogram[maxMapq + 1][nHitsBuckets];
+    _int64 mapqByNLVCallsHistogram[maxMapq+1][nLVCallsBuckets];
+    _int64 mapqByNSmallHitsHistogram[maxMapq+1][nHitsBuckets];
 
     TenXAlignerStats(AbstractStats* i_extra = NULL);
 
@@ -94,13 +93,13 @@ struct TenXAlignerStats : public AlignerStats
         if (s0 > s1) {
             int t = s0; s0 = s1; s1 = t;
         }
-        scoreCounts[s0*(MAX_SCORE + 1) + s1]++;
+        scoreCounts[s0*(MAX_SCORE+1)+s1]++;
     }
 
     inline void recordAlignTogetherMapqAndTime(unsigned mapq, _int64 timeInNanos, unsigned nSmallHits, unsigned nLVCalls) {
         int timeBucket;
         _int64 dividedTime = timeInNanos;
-        for (timeBucket = 0; timeBucket < nTimeBuckets - 1; timeBucket++) {
+        for (timeBucket = 0; timeBucket < nTimeBuckets-1; timeBucket++) {
             if (dividedTime == 0) break;
             dividedTime /= 2;
         }
@@ -144,14 +143,14 @@ const int TenXAlignerStats::MAX_DISTANCE;
 const int TenXAlignerStats::MAX_SCORE;
 
 TenXAlignerStats::TenXAlignerStats(AbstractStats* i_extra)
-: AlignerStats(i_extra),
-sameComplement(0)
+    : AlignerStats(i_extra),
+    sameComplement(0)
 {
-    int dsize = sizeof(_int64)* (MAX_DISTANCE + 1);
+    int dsize = sizeof(_int64) * (MAX_DISTANCE+1);
     distanceCounts = (_int64*)BigAlloc(dsize);
     memset(distanceCounts, 0, dsize);
 
-    int ssize = sizeof(_int64)* (MAX_SCORE + 1)*(MAX_SCORE + 1);
+    int ssize = sizeof(_int64) * (MAX_SCORE+1)*(MAX_SCORE+1);
     scoreCounts = (_int64*)BigAlloc(ssize);
     memset(scoreCounts, 0, ssize);
 
@@ -188,7 +187,7 @@ TenXAlignerStats::~TenXAlignerStats()
 void TenXAlignerStats::add(const AbstractStats * i_other)
 {
     AlignerStats::add(i_other);
-    TenXAlignerStats* other = (TenXAlignerStats*)i_other;
+    TenXAlignerStats* other = (TenXAlignerStats*) i_other;
     for (int i = 0; i < MAX_DISTANCE + 1; i++) {
         distanceCounts[i] += other->distanceCounts[i];
     }
@@ -222,19 +221,18 @@ void TenXAlignerStats::add(const AbstractStats * i_other)
 
 void TenXAlignerStats::printHistograms(FILE* output)
 {
-    TenXAlignerStats::printHistograms(output);
+    AlignerStats::printHistograms(output);
 }
 
 TenXAlignerOptions::TenXAlignerOptions(const char* i_commandLine)
-: AlignerOptions(i_commandLine, true),
-minSpacing(DEFAULT_MIN_SPACING),
-maxSpacing(DEFAULT_MAX_SPACING),
-forceSpacing(false),
-intersectingAlignerMaxHits(DEFAULT_INTERSECTING_ALIGNER_MAX_HITS),
-maxCandidatePoolSize(DEFAULT_MAX_CANDIDATE_POOL_SIZE),
-quicklyDropUnpairedReads(true)
+    : AlignerOptions(i_commandLine, true),
+    minSpacing(DEFAULT_MIN_SPACING),
+    maxSpacing(DEFAULT_MAX_SPACING),
+    forceSpacing(false),
+    intersectingAlignerMaxHits(DEFAULT_INTERSECTING_ALIGNER_MAX_HITS),
+    maxCandidatePoolSize(DEFAULT_MAX_CANDIDATE_POOL_SIZE),
+    quicklyDropUnpairedReads(true)
 {
-    preserveClipping = true;    // Override the default for the other aligners, since 10x reads come in with the barcode soft clipped.
 }
 
 void TenXAlignerOptions::usageMessage()
@@ -249,13 +247,12 @@ void TenXAlignerOptions::usageMessage()
         "       Only increase this if you get an error message saying to do so. If you're running\n"
         "       out of memory, you may want to reduce it.  Default: %d)\n"
         "  -F b additional option to -F to require both mates to satisfy filter (default is just one)\n"
-        "       If you specify -F b together with one of the other -F options, -F b MUST be second\n"
+		"       If you specify -F b together with one of the other -F options, -F b MUST be second\n"
         "  -ku  Keep unpaired-looking reads in SAM/BAM input.  Ordinarily, if a read doesn't specify\n"
         "       mate information (RNEXT field is * and/or PNEXT is 0) then the code that matches reads will immdeiately\n"
         "       discard it.  Specifying this flag may cause large memory usage for some input files,\n"
         "       but may be necessary for some strangely formatted input files.  You'll also need to specify this\n"
         "       flag for SAM/BAM files that were aligned by a single-end aligner.\n"
-        " --pc  Don't preserve clipping in SAM/BAM input files.\n"
         ,
         DEFAULT_MIN_SPACING,
         DEFAULT_MAX_SPACING,
@@ -269,59 +266,49 @@ bool TenXAlignerOptions::parse(const char** argv, int argc, int& n, bool *done)
 
     if (strcmp(argv[n], "-s") == 0) {
         if (n + 2 < argc) {
-            minSpacing = atoi(argv[n + 1]);
-            maxSpacing = atoi(argv[n + 2]);
+            minSpacing = atoi(argv[n+1]);
+            maxSpacing = atoi(argv[n+2]);
             n += 2;
             return true;
-        }
+        } 
         return false;
-    }
-    else if (strcmp(argv[n], "-H") == 0) {
+    } else if (strcmp(argv[n], "-H") == 0) {
         if (n + 1 < argc) {
-            intersectingAlignerMaxHits = atoi(argv[n + 1]);
+            intersectingAlignerMaxHits = atoi(argv[n+1]);
             n += 1;
             return true;
-        }
+        } 
         return false;
-    }
-    else if (strcmp(argv[n], "-fs") == 0) {
+    } else if (strcmp(argv[n], "-fs") == 0) {
         forceSpacing = true;
-        return true;
-    }
-    else if (strcmp(argv[n], "-ku") == 0) {
+        return true;    
+    } else if (strcmp(argv[n], "-ku") == 0) {
         quicklyDropUnpairedReads = false;
         return true;
-    }
-    else if (strcmp(argv[n], "-mcp") == 0) {
+    } else if (strcmp(argv[n], "-mcp") == 0) {
         if (n + 1 < argc) {
-            maxCandidatePoolSize = atoi(argv[n + 1]);
+            maxCandidatePoolSize = atoi(argv[n+1]);
             n += 1;
             return true;
-        }
+        } 
         return false;
-    }
-    else if (strcmp(argv[n], "-F") == 0 && n + 1 < argc && strcmp(argv[n + 1], "b") == 0) {
+    } else if (strcmp(argv[n], "-F") == 0 && n + 1 < argc && strcmp(argv[n + 1],"b") == 0) {
         filterFlags |= FilterBothMatesMatch;
         n += 1;
         return true;
     }
-    else if (strcmp(argv[n], "--pc") == 0) {
-        preserveClipping = false;
-        return true;
-    }
-
     return AlignerOptions::parse(argv, argc, n, done);
 }
 
 TenXAlignerContext::TenXAlignerContext(AlignerExtension* i_extension)
-: AlignerContext(0, NULL, NULL, i_extension)
+    : AlignerContext( 0,  NULL, NULL, i_extension)
 {
 }
 
 bool TenXAlignerContext::initialize()
 {
     AlignerContext::initialize();
-    TenXAlignerOptions* options2 = (TenXAlignerOptions*)options;
+    TenXAlignerOptions* options2 = (TenXAlignerOptions*) options;
     minSpacing = options2->minSpacing;
     maxSpacing = options2->maxSpacing;
     forceSpacing = options2->forceSpacing;
@@ -332,7 +319,7 @@ bool TenXAlignerContext::initialize()
     noUkkonen = options->noUkkonen;
     noOrderedEvaluation = options->noOrderedEvaluation;
 
-    return true;
+	return true;
 }
 
 AlignerStats* TenXAlignerContext::newStats()
@@ -349,7 +336,7 @@ void TenXAlignerContext::runTask()
 
 void TenXAlignerContext::runIterationThread()
 {
-    PreventMachineHibernationWhileThisThreadIsAlive();
+	PreventMachineHibernationWhileThisThreadIsAlive();
 
     PairedReadSupplier *supplier = pairedReadSupplierGenerator->generateNewPairedReadSupplier();
 
@@ -360,29 +347,29 @@ void TenXAlignerContext::runIterationThread()
         return;
     }
 
-    if (extension->runIterationThread(supplier, this)) {
+	if (extension->runIterationThread(supplier, this)) {
         delete supplier;
-        return;
-    }
+		return;
+	}
 
     Read *reads[NUM_READS_PER_PAIR];
-    int nSingleResults[2] = { 0, 0 };
+    _int64 nSingleResults[2] = { 0, 0 };
 
-    if (index == NULL) {
+ 	if (index == NULL) {
         // no alignment, just input/output
         PairedAlignmentResult result;
         memset(&result, 0, sizeof(result));
         result.location[0] = result.location[1] = InvalidGenomeLocation;
 
-
-        while (supplier->getNextReadPair(&reads[0], &reads[1])) {
+         
+        while (supplier->getNextReadPair(&reads[0],&reads[1])) {
             // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
             if (!ignoreMismatchedIDs && !readIdsMatch(reads[0], reads[1])) {
-                unsigned n[2] = { min(reads[0]->getIdLength(), 200u), min(reads[1]->getIdLength(), 200u) };
-                char* p[2] = { (char*)alloca(n[0] + 1), (char*)alloca(n[1] + 1) };
+                unsigned n[2] = {min(reads[0]->getIdLength(), 200u), min(reads[1]->getIdLength(), 200u)};
+                char* p[2] = {(char*) alloca(n[0] + 1), (char*) alloca(n[1] + 1)};
                 memcpy(p[0], reads[0]->getId(), n[0]); p[0][n[0]] = 0;
                 memcpy(p[1], reads[1]->getId(), n[1]); p[1][n[1]] = 0;
-                WriteErrorMessage("Unmatched read IDs '%s' and '%s'.  Use the -I option to ignore this.\n", p[0], p[1]);
+                WriteErrorMessage( "Unmatched read IDs '%s' and '%s'.  Use the -I option to ignore this.\n", p[0], p[1]);
                 soft_exit(1);
             }
             stats->totalReads += 2;
@@ -397,8 +384,7 @@ void TenXAlignerContext::runIterationThread()
                 if (NULL != readWriter) {
                     readWriter->writePairs(readerContext, reads, &result, 1, NULL, nSingleResults, true);
                 }
-            }
-            else {
+            } else {
                 stats->uselessReads++;
             }
         }
@@ -407,49 +393,55 @@ void TenXAlignerContext::runIterationThread()
     }
 
     int maxReadSize = MAX_READ_LENGTH;
-    size_t memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(),
-        numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize,
-        maxSecondaryAlignmentsPerContig);
+    size_t memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), 
+                                                                numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize,
+                                                                maxSecondaryAlignmentsPerContig);
 
     memoryPoolSize += ChimericPairedEndAligner::getBigAllocatorReservation(index, maxReadSize, maxHits, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxDist,
         extraSearchDepth, maxCandidatePoolSize, maxSecondaryAlignmentsPerContig);
 
-    unsigned maxPairedSecondaryHits;
-    unsigned maxSingleSecondaryHits;
+    _int64 maxPairedSecondaryHits;
+    _int64 maxSingleSecondaryHits;
 
     if (maxSecondaryAlignmentAdditionalEditDistance < 0) {
         maxPairedSecondaryHits = 0;
         maxSingleSecondaryHits = 0;
-    }
-    else {
-        maxPairedSecondaryHits = IntersectingPairedEndAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, index->getSeedLength(), minSpacing, maxSpacing);
-        maxSingleSecondaryHits = ChimericPairedEndAligner::getMaxSingleEndSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, index->getSeedLength());
+    } else {
+        //
+        // Since we reallocate these if they overflow, just pick a value that doesn't waste too much memory.
+        //
+        maxPairedSecondaryHits = 32;
+        maxSingleSecondaryHits = 32;
     }
 
-    memoryPoolSize += (1 + maxPairedSecondaryHits) * sizeof(PairedAlignmentResult)+maxSingleSecondaryHits * sizeof(SingleAlignmentResult);
+    bool reallocatedSingleSecondaryBuffer = false;
+    bool reallocatedPairedSecondaryBuffer = false;
+
+    memoryPoolSize += (1 + maxPairedSecondaryHits) * sizeof(PairedAlignmentResult) + maxSingleSecondaryHits * sizeof(SingleAlignmentResult);
 
     BigAllocator *allocator = new BigAllocator(memoryPoolSize);
+    
+    IntersectingPairedEndAligner *intersectingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
+                                                                seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
+                                                                maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm);
 
-    IntersectingPairedEndAligner *intersectingAligner = new (allocator)IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
-        seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth,
-        maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation);
 
-
-    ChimericPairedEndAligner *aligner = new (allocator)ChimericPairedEndAligner(
+    ChimericPairedEndAligner *aligner = new (allocator) ChimericPairedEndAligner(
         index,
         maxReadSize,
         maxHits,
         maxDist,
         numSeedsFromCommandLine,
         seedCoverage,
-        minWeightToCheck,
+		minWeightToCheck,
         forceSpacing,
         extraSearchDepth,
         noUkkonen,
         noOrderedEvaluation,
-        noTruncation,
+		noTruncation,
+        ignoreAlignmentAdjustmentForOm,
         intersectingAligner,
-        minReadLength,
+		minReadLength,
         maxSecondaryAlignmentsPerContig,
         allocator);
 
@@ -464,8 +456,7 @@ void TenXAlignerContext::runIterationThread()
     if (options->useTimingBarrier) {
         if (0 == InterlockedDecrementAndReturnNewValue(nThreadsAllocatingMemory)) {
             AllowEventWaitersToProceed(memoryAllocationCompleteBarrier);
-        }
-        else {
+        } else {
             WaitForEvent(memoryAllocationCompleteBarrier);
         }
     }
@@ -476,7 +467,7 @@ void TenXAlignerContext::runIterationThread()
     _uint64 readsWhenLastReported = 0;
 
     _int64 startTime = timeInMillis();
-    while (supplier->getNextReadPair(&reads[0], &reads[1])) {
+    while (supplier->getNextReadPair(&reads[0],&reads[1])) {
         _int64 readFinishedTime;
         if (options->profile) {
             readFinishedTime = timeInMillis();
@@ -507,6 +498,7 @@ void TenXAlignerContext::runIterationThread()
             result.location[0] = InvalidGenomeLocation;
             result.location[1] = InvalidGenomeLocation;
             nSingleResults[0] = nSingleResults[1] = 0;
+            result.clippingForReadAdjustment[0] = result.clippingForReadAdjustment[1] = 0;
 
             bool pass0 = options->passFilter(reads[0], result.status[0], true, false);
             bool pass1 = options->passFilter(reads[1], result.status[1], true, false);
@@ -532,11 +524,36 @@ void TenXAlignerContext::runIterationThread()
         _int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
 
-        int nSecondaryResults;
-        int nSingleSecondaryResults[2];
+        _int64 nSecondaryResults;
+        _int64 nSingleSecondaryResults[2];
 
-        aligner->align(reads[0], reads[1], results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, results + 1,
-            maxSingleSecondaryHits, maxSecondaryAlignments, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1], singleSecondaryResults);
+        while (!aligner->align(reads[0], reads[1], results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, results + 1,
+            maxSingleSecondaryHits, maxSecondaryAlignments, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1], singleSecondaryResults)) {
+
+            _ASSERT(nSecondaryResults > maxPairedSecondaryHits || nSingleSecondaryResults[0] > maxSingleSecondaryHits);
+
+            if (nSecondaryResults > maxPairedSecondaryHits) {
+                if (reallocatedPairedSecondaryBuffer) {
+                    BigDealloc(results);
+                    results = NULL;
+                }
+
+                maxPairedSecondaryHits *= 2;
+                results = (PairedAlignmentResult *)BigAlloc((maxPairedSecondaryHits + 1) * sizeof(PairedAlignmentResult));
+                reallocatedPairedSecondaryBuffer = true;
+            }
+
+            if (nSingleSecondaryResults[0] > maxSingleSecondaryHits) {
+                if (reallocatedSingleSecondaryBuffer) {
+                    BigDealloc(singleSecondaryResults);
+                    singleSecondaryResults = NULL;
+                }
+
+                maxSingleSecondaryHits *= 2;
+                singleSecondaryResults = (SingleAlignmentResult *)BigAlloc(maxSingleSecondaryHits * sizeof(SingleAlignmentResult));
+                reallocatedSingleSecondaryBuffer = true;
+            }
+        }
 
         _int64 alignFinishedTime;
         if (options->profile) {
@@ -604,8 +621,7 @@ void TenXAlignerContext::runIterationThread()
 
         if (firstIsPrimary) {
             updateStats((TenXAlignerStats*)stats, reads[0], reads[1], &results[0], useful0, useful1);
-        }
-        else {
+        } else {
             stats->filtered += 2;
         }
     }   // while we have a read pair
@@ -613,6 +629,16 @@ void TenXAlignerContext::runIterationThread()
     stats->lvCalls = aligner->getLocationsScored();
 
     allocator->checkCanaries();
+
+    if (reallocatedPairedSecondaryBuffer) {
+        BigDealloc(results);
+        results = NULL;
+    }
+
+    if (reallocatedSingleSecondaryBuffer) {
+        BigDealloc(singleSecondaryResults);
+        singleSecondaryResults = NULL;
+    }
 
     aligner->~ChimericPairedEndAligner();
     delete supplier;
@@ -624,29 +650,26 @@ void TenXAlignerContext::runIterationThread()
 
 void TenXAlignerContext::updateStats(TenXAlignerStats* stats, Read* read0, Read* read1, PairedAlignmentResult* result, bool useful0, bool useful1)
 {
-    bool useful[2] = { useful0, useful1 };
+	bool useful[2] = { useful0, useful1 };
 
     // Update stats
     for (int r = 0; r < 2; r++) {
-        if (useful[r]) {
-            if (isOneLocation(result->status[r])) {
-                stats->singleHits++;
-            }
-            else if (result->status[r] == MultipleHits) {
-                stats->multiHits++;
-            }
-            else {
-                _ASSERT(result->status[r] == NotFound);
-                stats->notFound++;
-            }
+		if (useful[r]) {
+			if (isOneLocation(result->status[r])) {
+				stats->singleHits++;
+			} else if (result->status[r] == MultipleHits) {
+				stats->multiHits++;
+			} else {
+				_ASSERT(result->status[r] == NotFound);
+				stats->notFound++;
+			}
             // Add in MAPQ stats
             if (result->status[r] != NotFound) {
                 int mapq = result->mapq[r];
                 _ASSERT(mapq >= 0 && mapq <= AlignerStats::maxMapq);
                 stats->mapqHistogram[mapq]++;
             }
-        }
-        else {
+        } else {
             stats->uselessReads++;
         }
 
@@ -657,7 +680,7 @@ void TenXAlignerContext::updateStats(TenXAlignerStats* stats, Read* read0, Read*
     }
 
     if (isOneLocation(result->status[0]) && isOneLocation(result->status[1])) {
-        stats->incrementDistance(abs((int)(result->location[0] - result->location[1])));
+        stats->incrementDistance(abs((int) (result->location[0] - result->location[1])));
         stats->incrementScore(result->score[0], result->score[1]);
     }
 
@@ -670,7 +693,7 @@ void TenXAlignerContext::updateStats(TenXAlignerStats* stats, Read* read0, Read*
     }
 }
 
-void
+    void 
 TenXAlignerContext::typeSpecificBeginIteration()
 {
     if (1 == options->nInputs) {
@@ -678,8 +701,7 @@ TenXAlignerContext::typeSpecificBeginIteration()
         // We've only got one input, so just connect it directly to the consumer.
         //
         pairedReadSupplierGenerator = options->inputs[0].createPairedReadSupplierGenerator(options->numThreads, quicklyDropUnpairedReads, readerContext);
-    }
-    else {
+    } else {
         //
         // We've got multiple inputs, so use a MultiInputReadSupplier to combine the individual inputs.
         //
@@ -689,7 +711,7 @@ TenXAlignerContext::typeSpecificBeginIteration()
             ReaderContext context(readerContext);
             generators[i] = options->inputs[i].createPairedReadSupplierGenerator(options->numThreads, quicklyDropUnpairedReads, context);
         }
-        pairedReadSupplierGenerator = new MultiInputPairedReadSupplierGenerator(options->nInputs, generators);
+        pairedReadSupplierGenerator = new MultiInputPairedReadSupplierGenerator(options->nInputs,generators);
     }
     ReaderContext* context = pairedReadSupplierGenerator->getContext();
     readerContext.header = context->header;
@@ -697,11 +719,11 @@ TenXAlignerContext::typeSpecificBeginIteration()
     readerContext.headerLength = context->headerLength;
     readerContext.headerMatchesIndex = context->headerMatchesIndex;
 }
-void
+    void 
 TenXAlignerContext::typeSpecificNextIteration()
 {
     if (readerContext.header != NULL) {
-        delete[] readerContext.header;
+        delete [] readerContext.header;
         readerContext.header = NULL;
         readerContext.headerLength = readerContext.headerBytes = 0;
         readerContext.headerMatchesIndex = false;

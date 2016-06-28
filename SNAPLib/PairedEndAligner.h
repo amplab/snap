@@ -20,6 +20,8 @@ Revision History:
 
 --*/
 
+#ifndef __PAIREDENDALIGNER_H__
+
 #pragma once
 
 #include "AlignmentResult.h"
@@ -60,3 +62,5 @@ public:
 
     virtual _int64 getLocationsScored() const  = 0;
 };
+
+#endif // __PAIREDENDALIGNER_H__
