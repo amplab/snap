@@ -52,7 +52,7 @@ public:
         BigAllocator  *allocator,
         bool          noUkkonen_,
         bool          noOrderedEvaluation_,
-		bool		  noTruncation_,
+        bool          noTruncation_,
         bool          ignoreAlignmentAdjustmentsForOm_);
 
      void setLandauVishkin(
@@ -80,37 +80,15 @@ public:
         SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
         );
 
-	bool align_phase_1(
+    bool align_phase_1(
         Read                  *read0,
         Read                  *read1,
-        PairedAlignmentResult *result,
-        int                    maxEditDistanceForSecondaryResults,
-        _int64                 secondaryResultBufferSize,
-        _int64                *nSecondaryResults,
-        PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
-        _int64                 singleSecondaryBufferSize,
-        _int64                 maxSecondaryResultsToReturn,
-        _int64                *nSingleEndSecondaryResultsForFirstRead,
-        _int64                *nSingleEndSecondaryResultsForSecondRead,
-        SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
-	);
+        unsigned              *popularSeedsSkipped
+    );
 
-	bool align_phase_2(
-        Read                  *read0,
-        Read                  *read1,
-        PairedAlignmentResult *result,
-        int                    maxEditDistanceForSecondaryResults,
-        _int64                 secondaryResultBufferSize,
-        _int64                *nSecondaryResults,
-        PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
-        _int64                 singleSecondaryBufferSize,
-        _int64                 maxSecondaryResultsToReturn,
-        _int64                *nSingleEndSecondaryResultsForFirstRead,
-        _int64                *nSingleEndSecondaryResultsForSecondRead,
-        SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly	
-	);
+    unsigned align_phase_2();
 
-	bool align_phase_3(
+    bool align_phase_3(
         Read                  *read0,
         Read                  *read1,
         PairedAlignmentResult *result,
@@ -122,8 +100,17 @@ public:
         _int64                 maxSecondaryResultsToReturn,
         _int64                *nSingleEndSecondaryResultsForFirstRead,
         _int64                *nSingleEndSecondaryResultsForSecondRead,
-        SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly	
-	);
+        SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
+        unsigned              maxUsedBestPossibleScoreList,   // results from phase 2
+        //Passed-in output for phase 4
+        unsigned              &bestPairScore,
+        GenomeLocation        *bestResultGenomeLocation,
+        Direction             *bestResultDirection,
+        double                &probabilityOfAllPairs,
+        unsigned              *bestResultScore,
+        unsigned              *popularSeedsSkipped,
+        double                &probabilityOfBestPair
+    );
 
     static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxBigHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsFromCommandLine, 
                                              double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize,
@@ -168,15 +155,15 @@ private:
     _int64          nLocationsScored;
     bool            noUkkonen;
     bool            noOrderedEvaluation;
-	bool			noTruncation;
+    bool            noTruncation;
     bool            ignoreAlignmentAdjustmentsForOm;
 
     AlignmentAdjuster   alignmentAdjuster;
 
-	static const unsigned        maxMergeDistance;
-	
-	//
-	// It's a template, because we 
+    static const unsigned        maxMergeDistance;
+    
+    //
+    // It's a template, because we 
     // have different sizes of genome locations depending on the hash table format.  So, GL must be unsigned or GenomeLocation
     //    
     template<class GL> struct HashTableLookup {
@@ -239,11 +226,11 @@ private:
         //
         // Record a hash table lookup.  All recording must be done before any
         // calls to getNextHitLessThanOrEqualTo.  A disjoint hit set is a set of hits
-		// that don't share any bases in the read.  This is interesting because the edit
-		// distance of a read must be at least the number of seeds that didn't hit for
-		// any disjoint hit set (because there must be a difference in the read within a
-		// seed for it not to hit, and since the reads are disjoint there can't be a case
-		// where the same difference caused two seeds to miss).
+        // that don't share any bases in the read.  This is interesting because the edit
+        // distance of a read must be at least the number of seeds that didn't hit for
+        // any disjoint hit set (because there must be a difference in the read within a
+        // seed for it not to hit, and since the reads are disjoint there can't be a case
+        // where the same difference caused two seeds to miss).
         //
         void recordLookup(unsigned seedOffset, _int64 nHits, const unsigned *hits, bool beginsDisjointHitSet);
         void recordLookup(unsigned seedOffset, _int64 nHits, const GenomeLocation *hits, bool beginsDisjointHitSet);
@@ -266,7 +253,7 @@ private:
         //
         bool    getFirstHit(GenomeLocation *genomeLocation, unsigned *seedOffsetFound);
 
-		unsigned computeBestPossibleScoreForCurrentHit();
+        unsigned computeBestPossibleScoreForCurrentHit();
 
         //
         // This is bit of storage that the 64 bit lookup needs in order to extend singleton hits into 64 bits, since they may be
@@ -293,7 +280,7 @@ private:
         unsigned                            maxSeeds;
         unsigned                            nLookupsUsed;
         GenomeLocation                      mostRecentLocationReturned;
-		unsigned		                    maxMergeDistance;
+        unsigned                            maxMergeDistance;
         bool                                doesGenomeIndexHave64BitLocations;
     };
 
@@ -317,7 +304,7 @@ private:
         unsigned        score;
         unsigned        maxK;               // The maxK that this was scored with (we may need to rescore if we need a higher maxK and score is -1)
         double          matchProbability;
-		unsigned		bestPossibleScore;
+        unsigned        bestPossibleScore;
 
         //
         // We have to be careful in the case where lots of offsets in a row match well against the read (think

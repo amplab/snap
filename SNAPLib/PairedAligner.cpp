@@ -44,7 +44,7 @@ Revision History:
 #include "PairedAligner.h"
 #include "MultiInputReadSupplier.h"
 #include "Util.h"
-#include "IntersectingPairedEndAligner.h"
+#include "TenXSingleAligner.h"
 #include "exit.h"
 #include "Error.h"
 
@@ -393,7 +393,7 @@ void PairedAlignerContext::runIterationThread()
     }
 
     int maxReadSize = MAX_READ_LENGTH;
-    size_t memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), 
+    size_t memoryPoolSize = TenXSingleAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), 
                                                                 numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize,
                                                                 maxSecondaryAlignmentsPerContig);
 
@@ -421,7 +421,7 @@ void PairedAlignerContext::runIterationThread()
 
     BigAllocator *allocator = new BigAllocator(memoryPoolSize);
     
-    IntersectingPairedEndAligner *intersectingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
+    TenXSingleAligner *intersectingAligner = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
                                                                 maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm);
 
@@ -643,7 +643,7 @@ void PairedAlignerContext::runIterationThread()
     aligner->~ChimericPairedEndAligner();
     delete supplier;
 
-    intersectingAligner->~IntersectingPairedEndAligner();
+    intersectingAligner->~TenXSingleAligner();
     delete allocator;
 }
 

@@ -192,7 +192,7 @@
     <ClInclude Include="AlignmentAdjuster.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="TenXGroupAligner.h">
+    <ClInclude Include="TenXSingleAligner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -353,7 +353,7 @@
     <ClCompile Include="AlignmentAdjuster.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="TenXGroupAligner.cpp">
+    <ClCompile Include="TenXSingleAligner.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -210,7 +210,7 @@
     <ClInclude Include="Tables.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="TenX.h" />
-    <ClInclude Include="TenXGroupAligner.h" />
+    <ClInclude Include="TenXSingleAligner.h" />
     <ClInclude Include="Util.h" />
     <ClInclude Include="VariableSizeMap.h" />
     <ClInclude Include="VariableSizeVector.h" />
@@ -273,7 +273,7 @@
     </ClCompile>
     <ClCompile Include="Tables.cpp" />
     <ClCompile Include="TenXAligner.cpp" />
-    <ClCompile Include="TenXGroupAligner.cpp" />
+    <ClCompile Include="TenXSingleAligner.cpp" />
     <ClCompile Include="Util.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
