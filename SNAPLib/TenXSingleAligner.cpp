@@ -28,6 +28,7 @@ Revision History:
 #include "Error.h"
 #include "BigAlloc.h"
 #include "AlignerOptions.h"
+#include <iostream>
 
 #ifdef  _DEBUG
 extern bool _DumpAlignments;    // From BaseAligner.cpp
@@ -508,7 +509,7 @@ TenXSingleAligner::align_phase_2_single_step(HashTableHitSet **setPair, unsigned
 		return true;
 	}
 
-	cout << "wtf" << endl;
+	std::cout << "wtf" << std::endl;
 
 	return false;
 }
@@ -522,44 +523,57 @@ TenXSingleAligner::align_phase_2()
 	//
 	unsigned maxUsedBestPossibleScoreList = 0;
 
-	for (unsigned whichSetPair = 0; whichSetPair < NUM_SET_PAIRS; whichSetPair++) {
-		HashTableHitSet *setPair[NUM_READS_PER_PAIR];
+	HashTableHitSet *setPair[NUM_SET_PAIRS][NUM_READS_PER_PAIR];
 
-		if (whichSetPair == 0) {
-			setPair[0] = hashTableHitSets[0][FORWARD];
-			setPair[1] = hashTableHitSets[1][RC];
-		}
-		else {
-			setPair[0] = hashTableHitSets[0][RC];
-			setPair[1] = hashTableHitSets[1][FORWARD];
-		}
+	unsigned            lastSeedOffsetForReadWithFewerHits[NUM_SET_PAIRS];
+	GenomeLocation      lastGenomeLocationForReadWithFewerHits[NUM_SET_PAIRS];
 
+	unsigned            lastSeedOffsetForReadWithMoreHits[NUM_SET_PAIRS];
+	GenomeLocation      lastGenomeLocationForReadWithMoreHits[NUM_SET_PAIRS];
 
-		unsigned            lastSeedOffsetForReadWithFewerHits;
-		GenomeLocation      lastGenomeLocationForReadWithFewerHits;
+	bool                outOfMoreHitsLocations[NUM_SET_PAIRS];
+	bool				stopWorkingSet[NUM_SET_PAIRS];
+	bool				keepGoing = false;
 
-		unsigned            lastSeedOffsetForReadWithMoreHits;
-		GenomeLocation      lastGenomeLocationForReadWithMoreHits;
+	//
+	// Initialize variables
+	//
+	setPair[0][0] = hashTableHitSets[0][FORWARD];
+	setPair[0][1] = hashTableHitSets[1][RC];
+	setPair[1][0] = hashTableHitSets[0][RC];
+	setPair[1][1] = hashTableHitSets[1][FORWARD];
 
-		bool                outOfMoreHitsLocations = false;
+	for (int whichSetPair = 0; whichSetPair < NUM_SET_PAIRS; whichSetPair++)
+	{
+		lastGenomeLocationForReadWithMoreHits[whichSetPair] = InvalidGenomeLocation;
+		outOfMoreHitsLocations[whichSetPair] = false;
 
-		//
-		// Seed the intersection state by doing a first lookup.
-		//
-		if (setPair[readWithFewerHits]->getFirstHit(&lastGenomeLocationForReadWithFewerHits, &lastSeedOffsetForReadWithFewerHits)) {
+		if (setPair[whichSetPair][readWithFewerHits]->getFirstHit(&lastGenomeLocationForReadWithFewerHits[whichSetPair], &lastSeedOffsetForReadWithFewerHits[whichSetPair]))
 			//
 			// No hits in this direction.
 			//
-			continue;   // The outer loop over set pairs.
+			stopWorkingSet[whichSetPair] = true;   // The outer loop over set pairs.
+		else
+			stopWorkingSet[whichSetPair] = false;
+
+		keepGoing = keepGoing || !stopWorkingSet[whichSetPair];
+	}
+
+
+	//
+	// Loop over the candidates in for the read with more hits.  At the top of the loop, we have a candidate but don't know if it has
+	// a mate.  Each pass through the loop considers a single hit on the read with fewer hits.
+	//
+	while (keepGoing) {
+		keepGoing = false;
+		for (int whichSetPair = 0; whichSetPair < NUM_SET_PAIRS; whichSetPair++) {
+			if (!stopWorkingSet[whichSetPair])
+				stopWorkingSet[whichSetPair] = align_phase_2_single_step(setPair[whichSetPair], whichSetPair, outOfMoreHitsLocations[whichSetPair], lastSeedOffsetForReadWithFewerHits[whichSetPair], lastGenomeLocationForReadWithFewerHits[whichSetPair], lastSeedOffsetForReadWithMoreHits[whichSetPair], lastGenomeLocationForReadWithMoreHits[whichSetPair], maxUsedBestPossibleScoreList);
+			//
+			// We keep working on the loop as long as one set is still not stopped
+			//
+			keepGoing = keepGoing || !stopWorkingSet[whichSetPair];
 		}
-
-		lastGenomeLocationForReadWithMoreHits = InvalidGenomeLocation;
-
-		//
-		// Loop over the candidates in for the read with more hits.  At the top of the loop, we have a candidate but don't know if it has
-		// a mate.  Each pass through the loop considers a single hit on the read with fewer hits.
-		//
-		while (!align_phase_2_single_step(setPair, whichSetPair, outOfMoreHitsLocations, lastSeedOffsetForReadWithFewerHits, lastGenomeLocationForReadWithFewerHits, lastSeedOffsetForReadWithMoreHits, lastGenomeLocationForReadWithMoreHits, maxUsedBestPossibleScoreList)) {
 /*
 			//
 			// Loop invariant: lastGenomeLocationForReadWithFewerHits is the highest genome offset that has not been considered.
@@ -702,8 +716,7 @@ TenXSingleAligner::align_phase_2()
 				break;
 			}
 */
-		}
-	} // For each set pair
+	} // while keepGoing 
 	return maxUsedBestPossibleScoreList;
 }
 
