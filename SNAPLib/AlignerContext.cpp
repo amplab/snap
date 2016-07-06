@@ -148,7 +148,7 @@ AlignerContext::initialize()
         strcpy(g_indexDirectory, options->indexDir);
 
         if (strcmp(options->indexDir, "-") != 0) {
-            WriteStatusMessage("Loading index from directory Heeeeheheheheheeh... ");
+            WriteStatusMessage("Loading index from directory... ");
  
             fflush(stdout);
             _int64 loadStart = timeInMillis();

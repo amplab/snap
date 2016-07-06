@@ -35,6 +35,9 @@ const unsigned DEFAULT_MAX_CANDIDATE_POOL_SIZE = 1000000;
 
 class TenXSingleAligner : public PairedEndAligner
 {
+private:
+    class HashTableHitSet; // Just a declaration for later use.
+
 public:
     TenXSingleAligner(
         GenomeIndex  *index_,
@@ -80,13 +83,14 @@ public:
         SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
         );
 
-    bool align_phase_1(
-        Read                  *read0,
-        Read                  *read1,
-        unsigned              *popularSeedsSkipped
-    );
+	bool align_phase_1(
+		Read                  *read0,
+		Read                  *read1,
+		unsigned              *popularSeedsSkipped
+	);
 
     unsigned align_phase_2();
+	bool align_phase_2_single_step(HashTableHitSet **setPair, unsigned whichSetPair, bool &outOfMoreHitsLocations, unsigned &lastSeedOffsetForReadWithFewerHits, GenomeLocation &lastGenomeLocationForReadWithFewerHits, unsigned &lastSeedOffsetForReadWithMoreHits, GenomeLocation &lastGenomeLocationForReadWithMoreHits, unsigned  &maxUsedBestPossibleScoreList);
 
     bool align_phase_3(
         Read                  *read0,
