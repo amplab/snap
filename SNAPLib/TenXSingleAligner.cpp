@@ -28,7 +28,6 @@ Revision History:
 #include "Error.h"
 #include "BigAlloc.h"
 #include "AlignerOptions.h"
-#include <iostream>
 
 #ifdef  _DEBUG
 extern bool _DumpAlignments;    // From BaseAligner.cpp
@@ -509,7 +508,7 @@ TenXSingleAligner::align_phase_2_single_step(HashTableHitSet **setPair, unsigned
 		return true;
 	}
 
-	std::cout << "wtf" << std::endl;
+	cout << "wtf" << endl;
 
 	return false;
 }
@@ -524,57 +523,43 @@ TenXSingleAligner::align_phase_2()
 	unsigned maxUsedBestPossibleScoreList = 0;
 
 	for (unsigned whichSetPair = 0; whichSetPair < NUM_SET_PAIRS; whichSetPair++) {
-		HashTableHitSet *setPair[NUM_SET_PAIRS][NUM_READS_PER_PAIR];
+		HashTableHitSet *setPair[NUM_READS_PER_PAIR];
 
-		unsigned            lastSeedOffsetForReadWithFewerHits[NUM_SET_PAIRS];
-		GenomeLocation      lastGenomeLocationForReadWithFewerHits[NUM_SET_PAIRS];
-
-		unsigned            lastSeedOffsetForReadWithMoreHits[NUM_SET_PAIRS];
-		GenomeLocation      lastGenomeLocationForReadWithMoreHits[NUM_SET_PAIRS];
-
-		bool                outOfMoreHitsLocations[NUM_SET_PAIRS];
-		bool				stopWorkingSet[NUM_SET_PAIRS];
-		bool				keepGoing = false;
-
-		//
-		// Initialize variables
-		//
-		setPair[0][0] = hashTableHitSets[0][FORWARD];
-		setPair[0][1] = hashTableHitSets[1][RC];
-		setPair[1][0] = hashTableHitSets[0][RC];
-		setPair[1][1] = hashTableHitSets[1][FORWARD];
-
-		for (int i = 0; i < NUM_SET_PAIRS; i++)
-		{
-			lastGenomeLocationForReadWithMoreHits[i] = InvalidGenomeLocation;
-			outOfMoreHitsLocations[i] = false;
-
-			if (setPair[i][readWithFewerHits]->getFirstHit(&lastGenomeLocationForReadWithFewerHits[i], &lastSeedOffsetForReadWithFewerHits[i]))
-				//
-				// No hits in this direction.
-				//
-				stopWorkingSet[i] = true;   // The outer loop over set pairs.
-			else
-				stopWorkingSet[i] = false;
-
-			keepGoing = keepGoing || !stopWorkingSet[i];
+		if (whichSetPair == 0) {
+			setPair[0] = hashTableHitSets[0][FORWARD];
+			setPair[1] = hashTableHitSets[1][RC];
+		}
+		else {
+			setPair[0] = hashTableHitSets[0][RC];
+			setPair[1] = hashTableHitSets[1][FORWARD];
 		}
 
+
+		unsigned            lastSeedOffsetForReadWithFewerHits;
+		GenomeLocation      lastGenomeLocationForReadWithFewerHits;
+
+		unsigned            lastSeedOffsetForReadWithMoreHits;
+		GenomeLocation      lastGenomeLocationForReadWithMoreHits;
+
+		bool                outOfMoreHitsLocations = false;
+
+		//
+		// Seed the intersection state by doing a first lookup.
+		//
+		if (setPair[readWithFewerHits]->getFirstHit(&lastGenomeLocationForReadWithFewerHits, &lastSeedOffsetForReadWithFewerHits)) {
+			//
+			// No hits in this direction.
+			//
+			continue;   // The outer loop over set pairs.
+		}
+
+		lastGenomeLocationForReadWithMoreHits = InvalidGenomeLocation;
 
 		//
 		// Loop over the candidates in for the read with more hits.  At the top of the loop, we have a candidate but don't know if it has
 		// a mate.  Each pass through the loop considers a single hit on the read with fewer hits.
 		//
-		while (keepGoing) {
-			keepGoing = false;
-			for (int i = 0; i < NUM_SET_PAIRS; i++) {
-				if (!stopWorkingSet[i])
-					stopWorkingSet[i] = align_phase_2_single_step(setPair[i], whichSetPair, outOfMoreHitsLocations[i], lastSeedOffsetForReadWithFewerHits[i], lastGenomeLocationForReadWithFewerHits[i], lastSeedOffsetForReadWithMoreHits[i], lastGenomeLocationForReadWithMoreHits[i], maxUsedBestPossibleScoreList);
-				//
-				// We keep working on the loop as long as one set is still not stopped
-				//
-				keepGoing = keepGoing || !stopWorkingSet[i];
-			}
+		while (!align_phase_2_single_step(setPair, whichSetPair, outOfMoreHitsLocations, lastSeedOffsetForReadWithFewerHits, lastGenomeLocationForReadWithFewerHits, lastSeedOffsetForReadWithMoreHits, lastGenomeLocationForReadWithMoreHits, maxUsedBestPossibleScoreList)) {
 /*
 			//
 			// Loop invariant: lastGenomeLocationForReadWithFewerHits is the highest genome offset that has not been considered.
