@@ -512,16 +512,16 @@ TenXSingleAligner::align_phase_2_single_step(HashTableHitSet *setPair[], unsigne
 		return true;
 	}
 
-	std::cout << "wtf" << std::endl;
+	std::cout << "Stepping function is working alright." << std::endl;
 
 	return false;
 }
 
 
 bool
-TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, void *clusterInfoPtr, HashTableHitSet *setPair[][NUM_READS_PER_PAIR], bool *outOfMoreHitsLocations, unsigned *lastSeedOffsetForReadWithFewerHits, GenomeLocation *lastGenomeLocationForReadWithFewerHits, unsigned *lastSeedOffsetForReadWithMoreHits, GenomeLocation *lastGenomeLocationForReadWithMoreHits, unsigned &maxUsedBestPossibleScoreList, bool *stopWorkingSet)
+TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, void *clusterInfoPtr, HashTableHitSet *setPair[][NUM_READS_PER_PAIR], bool *outOfMoreHitsLocations, unsigned *lastSeedOffsetForReadWithFewerHits, GenomeLocation *lastGenomeLocationForReadWithFewerHits, unsigned *lastSeedOffsetForReadWithMoreHits, GenomeLocation *lastGenomeLocationForReadWithMoreHits, unsigned &maxUsedBestPossibleScoreList, bool *stopWorkingSet, bool &keepGoing)
 {
-	bool keepGoing = true;
+//	bool keepGoing = true;
 	
 	/*
 	bool targetNotMet = false;
@@ -545,9 +545,9 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 			// We keep working on the loop as long as one set is still not stopped
 			//
 			keepGoing = keepGoing || !stopWorkingSet[whichSetPair];
-
 		}
 	}
+
 	/*
 	while (keepGoing) //&& targetNotMet)
 	{
@@ -621,10 +621,8 @@ TenXSingleAligner::align_phase_2()
 	// Loop over the candidates in for the read with more hits.  At the top of the loop, we have a candidate but don't know if it has
 	// a mate.  Each pass through the loop considers a single hit on the read with fewer hits.
 	//
-	if (keepGoing) {
-		GenomeLocation clusterTargetLoc = GenomeLocation(0000000000);
-		align_phase_2_to_target_loc(clusterTargetLoc, NULL, setPair, outOfMoreHitsLocations, lastSeedOffsetForReadWithFewerHits, lastGenomeLocationForReadWithFewerHits, lastSeedOffsetForReadWithMoreHits, lastGenomeLocationForReadWithMoreHits, maxUsedBestPossibleScoreList, stopWorkingSet);
-	}
+	GenomeLocation clusterTargetLoc = GenomeLocation(0000000000);
+	align_phase_2_to_target_loc(clusterTargetLoc, NULL, setPair, outOfMoreHitsLocations, lastSeedOffsetForReadWithFewerHits, lastGenomeLocationForReadWithFewerHits, lastSeedOffsetForReadWithMoreHits, lastGenomeLocationForReadWithMoreHits, maxUsedBestPossibleScoreList, stopWorkingSet, keepGoing);
 	
 /*
 	while (keepGoing) {
