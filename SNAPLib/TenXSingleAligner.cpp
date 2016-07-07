@@ -525,29 +525,30 @@ TenXSingleAligner::align_phase_2_single_step(HashTableHitSet *setPair[], unsigne
 bool
 TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, void *clusterInfoPtr, HashTableHitSet *setPair[][NUM_READS_PER_PAIR], bool *outOfMoreHitsLocations, unsigned *lastSeedOffsetForReadWithFewerHits, GenomeLocation *lastGenomeLocationForReadWithFewerHits, unsigned *lastSeedOffsetForReadWithMoreHits, GenomeLocation *lastGenomeLocationForReadWithMoreHits, unsigned &maxUsedBestPossibleScoreList, bool *stopWorkingSet, bool &keepGoing)
 {
-//	bool keepGoing = true;
-	
-	/*
+	//	bool keepGoing = true;
+
 	bool targetNotMet = false;
 	for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++)
 	{
-		//std::cout << "targetLoc:\t" << clusterTargetLoc.location << std::endl;
-		//std::cout << "ReadLoc:\t" << lastGenomeLocationForReadWithFewerHits[whichSetPair].location << std::endl;
+		//printf("beginning: targetLoc: %lld, ReadLoc: %lld\n", clusterTargetLoc.location, lastGenomeLocationForReadWithFewerHits[whichSetPair].location);
 		if (!stopWorkingSet[whichSetPair])
 			targetNotMet = targetNotMet || (lastGenomeLocationForReadWithFewerHits[whichSetPair] > clusterTargetLoc);
 	}
-	*/
 
-
-	while (keepGoing) {
+//) {//
+	while (keepGoing && targetNotMet) {
 		keepGoing = false;
 		for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++) {
 			//std::cout << "setPair[" << whichSetPair << "]" << setPair[whichSetPair] << std::endl;
-			printf("setPair[%d]: %p\n", whichSetPair, setPair[whichSetPair]);
+			//printf("setPair[%d]: %p\n", whichSetPair, setPair[whichSetPair]);
 			if (!stopWorkingSet[whichSetPair]) {
 				stopWorkingSet[whichSetPair] = align_phase_2_single_step(setPair[whichSetPair], whichSetPair, outOfMoreHitsLocations[whichSetPair], lastSeedOffsetForReadWithFewerHits[whichSetPair], lastGenomeLocationForReadWithFewerHits[whichSetPair], lastSeedOffsetForReadWithMoreHits[whichSetPair], lastGenomeLocationForReadWithMoreHits[whichSetPair], maxUsedBestPossibleScoreList, NULL);
 			}
 
+			if (!stopWorkingSet[whichSetPair]) {
+				//printf("looping: targetLoc: %lld, ReadLoc: %lld\n", clusterTargetLoc.location, lastGenomeLocationForReadWithFewerHits[whichSetPair].location);
+				targetNotMet = targetNotMet || (lastGenomeLocationForReadWithFewerHits[whichSetPair] > clusterTargetLoc);
+			}
 			//
 			// We keep working on the loop as long as one set is still not stopped
 			//
@@ -623,9 +624,7 @@ TenXSingleAligner::align_phase_2()
 		keepGoing = keepGoing || !stopWorkingSet[whichSetPair];
 	}
 
-	//std::cout << "*setPair[0]" << setPair[0] << std::endl;
-	//std::cout << "*setPair[1]" << setPair[1] << std::endl;
-	printf("setPair[0]: %p and setPair[1]: %p\n", setPair[0], setPair[1]);
+	//printf("setPair[0]: %p and setPair[1]: %p\n", setPair[0], setPair[1]);
 
 	//
 	// Loop over the candidates in for the read with more hits.  At the top of the loop, we have a candidate but don't know if it has

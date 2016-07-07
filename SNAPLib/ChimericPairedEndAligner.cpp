@@ -170,6 +170,7 @@ bool ChimericPairedEndAligner::align(
 		}
 	}
 
+	/*
     //
     // If the intersecting aligner didn't find an alignment for these reads, then they may be
     // chimeric and so we should just align them with the single end aligner and apply a MAPQ penalty.
@@ -189,7 +190,7 @@ bool ChimericPairedEndAligner::align(
 			result->score[r] = 0;
 		} else {
 			// We're using *nSingleEndSecondaryResultsForFirstRead because it's either 0 or what all we've seen (i.e., we know NUM_READS_PER_PAIR is 2)
-            bool fitInSecondaryBuffer = 
+			bool fitInSecondaryBuffer = //true;
 			singleAligner->AlignRead(read[r], &singleResult, maxEditDistanceForSecondaryResults,
 				singleSecondaryBufferSize - *nSingleEndSecondaryResultsForFirstRead, &singleEndSecondaryResultsThisTime,
                 maxSecondaryAlignmentsToReturn, singleEndSecondaryResults + *nSingleEndSecondaryResultsForFirstRead);
@@ -214,6 +215,7 @@ bool ChimericPairedEndAligner::align(
 
     result->fromAlignTogether = false;
     result->alignedAsPair = false;
+	*/
 
 #ifdef _DEBUG
     if (_DumpAlignments) {
