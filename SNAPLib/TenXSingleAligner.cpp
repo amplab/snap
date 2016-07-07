@@ -512,7 +512,11 @@ TenXSingleAligner::align_phase_2_single_step(HashTableHitSet *setPair[], unsigne
 		return true;
 	}
 
-	std::cout << "Stepping function is working alright." << std::endl;
+#ifdef  _DEBUG
+	if (_DumpAlignments) {
+		printf("Stepping function is working alright");
+	}
+#endif
 
 	return false;
 }
@@ -525,7 +529,7 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 	
 	/*
 	bool targetNotMet = false;
-	for (int whichSetPair = 0; whichSetPair < NUM_SET_PAIRS; whichSetPair++)
+	for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++)
 	{
 		//std::cout << "targetLoc:\t" << clusterTargetLoc.location << std::endl;
 		//std::cout << "ReadLoc:\t" << lastGenomeLocationForReadWithFewerHits[whichSetPair].location << std::endl;
@@ -534,9 +538,12 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 	}
 	*/
 
+
 	while (keepGoing) {
 		keepGoing = false;
-		for (int whichSetPair = 0; whichSetPair < NUM_SET_PAIRS; whichSetPair++) {
+		for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++) {
+			//std::cout << "setPair[" << whichSetPair << "]" << setPair[whichSetPair] << std::endl;
+			printf("setPair[%d]: %p\n", whichSetPair, setPair[whichSetPair]);
 			if (!stopWorkingSet[whichSetPair]) {
 				stopWorkingSet[whichSetPair] = align_phase_2_single_step(setPair[whichSetPair], whichSetPair, outOfMoreHitsLocations[whichSetPair], lastSeedOffsetForReadWithFewerHits[whichSetPair], lastGenomeLocationForReadWithFewerHits[whichSetPair], lastSeedOffsetForReadWithMoreHits[whichSetPair], lastGenomeLocationForReadWithMoreHits[whichSetPair], maxUsedBestPossibleScoreList, NULL);
 			}
@@ -553,7 +560,7 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 	{
 		keepGoing = false;
 		targetNotMet = false;
-		for (int whichSetPair = 0; whichSetPair < NUM_SET_PAIRS; whichSetPair++) {
+		for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++) {
 			std::cout << "stopWorkingSet[" << whichSetPair << "]: " << stopWorkingSet[whichSetPair] << std::endl;
 			if (!stopWorkingSet[whichSetPair]) {
 				stopWorkingSet[whichSetPair] = align_phase_2_single_step(setPair[whichSetPair], whichSetPair, outOfMoreHitsLocations[whichSetPair], lastSeedOffsetForReadWithFewerHits[whichSetPair], lastGenomeLocationForReadWithFewerHits[whichSetPair], lastSeedOffsetForReadWithMoreHits[whichSetPair], lastGenomeLocationForReadWithMoreHits[whichSetPair], maxUsedBestPossibleScoreList, NULL);
@@ -580,16 +587,16 @@ TenXSingleAligner::align_phase_2()
 	//
 	unsigned maxUsedBestPossibleScoreList = 0;
 
-	HashTableHitSet *setPair[NUM_SET_PAIRS][NUM_READS_PER_PAIR];
+	HashTableHitSet *setPair[NUM_DIRECTIONS][NUM_READS_PER_PAIR];
 
-	unsigned            lastSeedOffsetForReadWithFewerHits[NUM_SET_PAIRS];
-	GenomeLocation      lastGenomeLocationForReadWithFewerHits[NUM_SET_PAIRS];
+	unsigned            lastSeedOffsetForReadWithFewerHits[NUM_DIRECTIONS];
+	GenomeLocation      lastGenomeLocationForReadWithFewerHits[NUM_DIRECTIONS];
 
-	unsigned            lastSeedOffsetForReadWithMoreHits[NUM_SET_PAIRS];
-	GenomeLocation      lastGenomeLocationForReadWithMoreHits[NUM_SET_PAIRS];
+	unsigned            lastSeedOffsetForReadWithMoreHits[NUM_DIRECTIONS];
+	GenomeLocation      lastGenomeLocationForReadWithMoreHits[NUM_DIRECTIONS];
 
-	bool                outOfMoreHitsLocations[NUM_SET_PAIRS];
-	bool				stopWorkingSet[NUM_SET_PAIRS];
+	bool                outOfMoreHitsLocations[NUM_DIRECTIONS];
+	bool				stopWorkingSet[NUM_DIRECTIONS];
 	bool				keepGoing = false;
 
 	//
@@ -600,7 +607,7 @@ TenXSingleAligner::align_phase_2()
 	setPair[1][0] = hashTableHitSets[0][RC];
 	setPair[1][1] = hashTableHitSets[1][FORWARD];
 
-	for (int whichSetPair = 0; whichSetPair < NUM_SET_PAIRS; whichSetPair++)
+	for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++)
 	{
 		lastGenomeLocationForReadWithMoreHits[whichSetPair] = InvalidGenomeLocation;
 		outOfMoreHitsLocations[whichSetPair] = false;
@@ -616,6 +623,9 @@ TenXSingleAligner::align_phase_2()
 		keepGoing = keepGoing || !stopWorkingSet[whichSetPair];
 	}
 
+	//std::cout << "*setPair[0]" << setPair[0] << std::endl;
+	//std::cout << "*setPair[1]" << setPair[1] << std::endl;
+	printf("setPair[0]: %p and setPair[1]: %p\n", setPair[0], setPair[1]);
 
 	//
 	// Loop over the candidates in for the read with more hits.  At the top of the loop, we have a candidate but don't know if it has
@@ -627,7 +637,7 @@ TenXSingleAligner::align_phase_2()
 /*
 	while (keepGoing) {
 		keepGoing = false;
-		for (int whichSetPair = 0; whichSetPair < NUM_SET_PAIRS; whichSetPair++) {
+		for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++) {
 			if (!stopWorkingSet[whichSetPair]) {
 				stopWorkingSet[whichSetPair] = align_phase_2_single_step(setPair[whichSetPair], whichSetPair, outOfMoreHitsLocations[whichSetPair], lastSeedOffsetForReadWithFewerHits[whichSetPair], lastGenomeLocationForReadWithFewerHits[whichSetPair], lastSeedOffsetForReadWithMoreHits[whichSetPair], lastGenomeLocationForReadWithMoreHits[whichSetPair], maxUsedBestPossibleScoreList, NULL);
 			}
