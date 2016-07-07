@@ -38,6 +38,8 @@ class TenXSingleAligner : public PairedEndAligner
 private:
     class HashTableHitSet; // Just a declaration for later use.
 
+    static const int NUM_SET_PAIRS = 2;         // A "set pair" is read0 FORWARD + read1 RC, or read0 RC + read1 FORWARD.  Again, it doesn't make sense to change this.
+
 public:
     TenXSingleAligner(
         GenomeIndex  *index_,
@@ -90,7 +92,8 @@ public:
 	);
 
     unsigned align_phase_2();
-	bool align_phase_2_single_step(HashTableHitSet **setPair, unsigned whichSetPair, bool &outOfMoreHitsLocations, unsigned &lastSeedOffsetForReadWithFewerHits, GenomeLocation &lastGenomeLocationForReadWithFewerHits, unsigned &lastSeedOffsetForReadWithMoreHits, GenomeLocation &lastGenomeLocationForReadWithMoreHits, unsigned  &maxUsedBestPossibleScoreList);
+    bool align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, void *clusterInfoPtr,  HashTableHitSet* setPair[][NUM_READS_PER_PAIR], bool *outOfMoreHitsLocations, unsigned *lastSeedOffsetForReadWithFewerHits, GenomeLocation *lastGenomeLocationForReadWithFewerHits, unsigned *lastSeedOffsetForReadWithMoreHits, GenomeLocation *lastGenomeLocationForReadWithMoreHits, unsigned &maxUsedBestPossibleScoreList, bool *stopWorkingSet);
+	bool align_phase_2_single_step(HashTableHitSet* setPair[], unsigned whichSetPair, bool &outOfMoreHitsLocations, unsigned &lastSeedOffsetForReadWithFewerHits, GenomeLocation &lastGenomeLocationForReadWithFewerHits, unsigned &lastSeedOffsetForReadWithMoreHits, GenomeLocation &lastGenomeLocationForReadWithMoreHits, unsigned  &maxUsedBestPossibleScoreList, void *clusterInfoPtr);
 
     bool align_phase_3(
         Read                  *read0,
@@ -134,8 +137,6 @@ public:
 private:
 
     TenXSingleAligner() : alignmentAdjuster(NULL) {}  // This is for the counting allocator, it doesn't build a useful object
-
-    static const int NUM_SET_PAIRS = 2;         // A "set pair" is read0 FORWARD + read1 RC, or read0 RC + read1 FORWARD.  Again, it doesn't make sense to change this.
 
     void allocateDynamicMemory(BigAllocator *allocator, unsigned maxReadSize, unsigned maxBigHitsToConsider, unsigned maxSeedsToUse, 
                                unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize,
@@ -446,8 +447,10 @@ private:
 
         unsigned                bestPossibleScore;
 
+		void *					clusterInfoPtr;
+
         void init(GenomeLocation readWithFewerHitsGenomeLocation_, unsigned whichSetPair_, unsigned scoringMateCandidateIndex_, unsigned seedOffset_,
-                  unsigned bestPossibleScore_, ScoringCandidate *scoreListNext_)
+                  unsigned bestPossibleScore_, ScoringCandidate *scoreListNext_, void *clusterInfoPtr_)
         {
             readWithFewerHitsGenomeLocation = readWithFewerHitsGenomeLocation_;
             whichSetPair = whichSetPair_;
@@ -457,6 +460,7 @@ private:
             bestPossibleScore = bestPossibleScore_;
             scoreListNext = scoreListNext_;
             mergeAnchor = NULL;
+			clusterInfoPtr = clusterInfoPtr_;
          }
     };
 
