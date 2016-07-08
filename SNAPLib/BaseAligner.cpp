@@ -234,7 +234,7 @@ Arguments:
 
 
 #ifdef  _DEBUG
-bool _DumpAlignments = false;
+bool _DumpAlignments = true;
 #endif  // _DEBUG
 
     bool

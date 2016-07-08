@@ -38,7 +38,6 @@ class TenXSingleAligner : public PairedEndAligner
 private:
     class HashTableHitSet; // Just a declaration for later use.
 
-    static const int NUM_SET_PAIRS = 2;         // A "set pair" is read0 FORWARD + read1 RC, or read0 RC + read1 FORWARD.  Again, it doesn't make sense to change this.
 
 public:
     TenXSingleAligner(
@@ -94,6 +93,8 @@ public:
     unsigned align_phase_2();
     bool align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, void *clusterInfoPtr,  HashTableHitSet* setPair[][NUM_READS_PER_PAIR], bool *outOfMoreHitsLocations, unsigned *lastSeedOffsetForReadWithFewerHits, GenomeLocation *lastGenomeLocationForReadWithFewerHits, unsigned *lastSeedOffsetForReadWithMoreHits, GenomeLocation *lastGenomeLocationForReadWithMoreHits, unsigned &maxUsedBestPossibleScoreList, bool *stopWorkingSet, bool &keepGoing);
 	bool align_phase_2_single_step(HashTableHitSet* setPair[], unsigned whichSetPair, bool &outOfMoreHitsLocations, unsigned &lastSeedOffsetForReadWithFewerHits, GenomeLocation &lastGenomeLocationForReadWithFewerHits, unsigned &lastSeedOffsetForReadWithMoreHits, GenomeLocation &lastGenomeLocationForReadWithMoreHits, unsigned  &maxUsedBestPossibleScoreList, void *clusterInfoPtr);
+	bool align_phase_2_single_step_check_range(HashTableHitSet* setPair[], unsigned whichSetPair, bool &outOfMoreHitsLocations, unsigned &lastSeedOffsetForReadWithFewerHits, GenomeLocation &lastGenomeLocationForReadWithFewerHits, unsigned &lastSeedOffsetForReadWithMoreHits, GenomeLocation &lastGenomeLocationForReadWithMoreHits, unsigned  &maxUsedBestPossibleScoreList, void *clusterInfoPtr);
+	bool align_phase_2_single_step_add_candidate(HashTableHitSet* setPair[], unsigned whichSetPair, bool &outOfMoreHitsLocations, unsigned &lastSeedOffsetForReadWithFewerHits, GenomeLocation &lastGenomeLocationForReadWithFewerHits, unsigned &lastSeedOffsetForReadWithMoreHits, GenomeLocation &lastGenomeLocationForReadWithMoreHits, unsigned  &maxUsedBestPossibleScoreList, void *clusterInfoPtr);
 
     bool align_phase_3(
         Read                  *read0,
@@ -166,6 +167,8 @@ private:
     AlignmentAdjuster   alignmentAdjuster;
 
     static const unsigned        maxMergeDistance;
+    
+	static const int NUM_SET_PAIRS = 2;         // A "set pair" is read0 FORWARD + read1 RC, or read0 RC + read1 FORWARD.  Again, it doesn't make sense to change this.
     
     //
     // It's a template, because we 
