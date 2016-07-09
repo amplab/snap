@@ -575,6 +575,7 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 					// keep going until we have a good loc pair
 					//
 					if (check_range_result == -1) {
+						keepGoing = keepGoing || !stopWorkingSet[whichSetPair];
 						continue;
 					}
 				}
@@ -594,15 +595,15 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 						}
 #endif //_DEBUG
 						stopWorkingSet[whichSetPair] = align_phase_2_single_step_add_candidate(setPair[whichSetPair], whichSetPair, outOfMoreHitsLocations[whichSetPair], lastSeedOffsetForReadWithFewerHits[whichSetPair], lastGenomeLocationForReadWithFewerHits[whichSetPair], lastSeedOffsetForReadWithMoreHits[whichSetPair], lastGenomeLocationForReadWithMoreHits[whichSetPair], maxUsedBestPossibleScoreList, NULL);
+						//
+						// We keep working on the loop as long as one set is still not stopped
+						//
+						keepGoing = keepGoing || !stopWorkingSet[whichSetPair];
 					}
-				}
-				//
-				// We keep working on the loop as long as one set is still not stopped
-				//
-				keepGoing = keepGoing || !stopWorkingSet[whichSetPair];
-			}
-		}
-	}
+				} // add_candidate
+			} // check_range and add_candidate
+		} // whichSetPair
+	} // while
 
 	/*
 	while (keepGoing && targetNotMet) {
