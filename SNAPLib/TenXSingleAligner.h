@@ -93,7 +93,13 @@ public:
     unsigned align_phase_2();
     bool align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, void *clusterInfoPtr,  HashTableHitSet* setPair[][NUM_READS_PER_PAIR], bool *outOfMoreHitsLocations, unsigned *lastSeedOffsetForReadWithFewerHits, GenomeLocation *lastGenomeLocationForReadWithFewerHits, unsigned *lastSeedOffsetForReadWithMoreHits, GenomeLocation *lastGenomeLocationForReadWithMoreHits, unsigned &maxUsedBestPossibleScoreList, bool *stopWorkingSet, bool &keepGoing);
 	bool align_phase_2_single_step(HashTableHitSet* setPair[], unsigned whichSetPair, bool &outOfMoreHitsLocations, unsigned &lastSeedOffsetForReadWithFewerHits, GenomeLocation &lastGenomeLocationForReadWithFewerHits, unsigned &lastSeedOffsetForReadWithMoreHits, GenomeLocation &lastGenomeLocationForReadWithMoreHits, unsigned  &maxUsedBestPossibleScoreList, void *clusterInfoPtr);
-	bool align_phase_2_single_step_check_range(HashTableHitSet* setPair[], unsigned whichSetPair, bool &outOfMoreHitsLocations, unsigned &lastSeedOffsetForReadWithFewerHits, GenomeLocation &lastGenomeLocationForReadWithFewerHits, unsigned &lastSeedOffsetForReadWithMoreHits, GenomeLocation &lastGenomeLocationForReadWithMoreHits, unsigned  &maxUsedBestPossibleScoreList, void *clusterInfoPtr);
+	//
+	// align_phase_2_single_step_check_range returns 0 if we have found a good match. Returns 1 if seedLoc of the fewHit side has exhauseted. Returns -1 if fewHit side surpasses moreHIt side.
+	//
+	int align_phase_2_single_step_check_range(HashTableHitSet* setPair[], unsigned whichSetPair, bool &outOfMoreHitsLocations, unsigned &lastSeedOffsetForReadWithFewerHits, GenomeLocation &lastGenomeLocationForReadWithFewerHits, unsigned &lastSeedOffsetForReadWithMoreHits, GenomeLocation &lastGenomeLocationForReadWithMoreHits, unsigned  &maxUsedBestPossibleScoreList, void *clusterInfoPtr);
+	//
+	// should only call align_phase_2_single_step_add_candidate if align_phase_2_single_step_check_range returns 0
+	//
 	bool align_phase_2_single_step_add_candidate(HashTableHitSet* setPair[], unsigned whichSetPair, bool &outOfMoreHitsLocations, unsigned &lastSeedOffsetForReadWithFewerHits, GenomeLocation &lastGenomeLocationForReadWithFewerHits, unsigned &lastSeedOffsetForReadWithMoreHits, GenomeLocation &lastGenomeLocationForReadWithMoreHits, unsigned  &maxUsedBestPossibleScoreList, void *clusterInfoPtr);
 
     bool align_phase_3(
