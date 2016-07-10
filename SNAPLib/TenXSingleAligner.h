@@ -90,22 +90,21 @@ public:
 		unsigned              *popularSeedsSkipped
 	);
 
-    unsigned align_phase_2();
-    bool align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, void *clusterInfoPtr,  HashTableHitSet* setPair[][NUM_READS_PER_PAIR], bool *outOfMoreHitsLocations, unsigned *lastSeedOffsetForReadWithFewerHits, GenomeLocation *lastGenomeLocationForReadWithFewerHits, unsigned *lastSeedOffsetForReadWithMoreHits, GenomeLocation *lastGenomeLocationForReadWithMoreHits, unsigned &maxUsedBestPossibleScoreList, bool *stopWorkingSet, bool &keepGoing);
-	bool align_phase_2_single_step(HashTableHitSet* setPair[], unsigned whichSetPair, bool &outOfMoreHitsLocations, unsigned &lastSeedOffsetForReadWithFewerHits, GenomeLocation &lastGenomeLocationForReadWithFewerHits, unsigned &lastSeedOffsetForReadWithMoreHits, GenomeLocation &lastGenomeLocationForReadWithMoreHits, unsigned  &maxUsedBestPossibleScoreList, void *clusterInfoPtr);
+    void align_phase_2();
+    bool align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, void *clusterInfoPtr);
+	bool align_phase_2_single_step(unsigned whichSetPairr);
 	//
 	// align_phase_2_single_step_check_range returns 0 if we have found a good match. Returns 1 if seedLoc of the fewHit side has exhauseted. Returns -1 if fewHit side surpasses moreHIt side.
 	//
-	int align_phase_2_single_step_check_range(HashTableHitSet* setPair[], unsigned whichSetPair, bool &outOfMoreHitsLocations, unsigned &lastSeedOffsetForReadWithFewerHits, GenomeLocation &lastGenomeLocationForReadWithFewerHits, unsigned &lastSeedOffsetForReadWithMoreHits, GenomeLocation &lastGenomeLocationForReadWithMoreHits, unsigned  &maxUsedBestPossibleScoreList, void *clusterInfoPtr);
+	int align_phase_2_single_step_check_range(unsigned whichSetPair);
 	//
 	// should only call align_phase_2_single_step_add_candidate if align_phase_2_single_step_check_range returns 0
 	//
-	bool align_phase_2_single_step_add_candidate(HashTableHitSet* setPair[], unsigned whichSetPair, bool &outOfMoreHitsLocations, unsigned &lastSeedOffsetForReadWithFewerHits, GenomeLocation &lastGenomeLocationForReadWithFewerHits, unsigned &lastSeedOffsetForReadWithMoreHits, GenomeLocation &lastGenomeLocationForReadWithMoreHits, unsigned  &maxUsedBestPossibleScoreList, void *clusterInfoPtr);
+	bool align_phase_2_single_step_add_candidate(unsigned whichSetPair, void *clusterInfoPtr);
 
     bool align_phase_3(
         Read                  *read0,
         Read                  *read1,
-        PairedAlignmentResult *result,
         int                    maxEditDistanceForSecondaryResults,
         _int64                 secondaryResultBufferSize,
         _int64                *nSecondaryResults,
@@ -115,7 +114,6 @@ public:
         _int64                *nSingleEndSecondaryResultsForFirstRead,
         _int64                *nSingleEndSecondaryResultsForSecondRead,
         SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
-        unsigned              maxUsedBestPossibleScoreList,   // results from phase 2
         //Passed-in output for phase 4
         unsigned              &bestPairScore,
         GenomeLocation        *bestResultGenomeLocation,
@@ -511,4 +509,14 @@ private:
     HitsPerContigCounts *hitsPerContigCounts;   // How many alignments are we reporting for each contig.  Used to implement -mpc, otheriwse unallocated.
     int maxSecondaryAlignmentsPerContig;
     _int64 contigCountEpoch;
+
+	// For carrying over the query data
+    HashTableHitSet*		setPair[NUM_DIRECTIONS][NUM_READS_PER_PAIR];
+	bool					outOfMoreHitsLocations[NUM_DIRECTIONS];
+	unsigned				lastSeedOffsetForReadWithFewerHits[NUM_DIRECTIONS];
+	GenomeLocation			lastGenomeLocationForReadWithFewerHits[NUM_DIRECTIONS];
+	unsigned				lastSeedOffsetForReadWithMoreHits[NUM_DIRECTIONS];
+	GenomeLocation			lastGenomeLocationForReadWithMoreHits[NUM_DIRECTIONS];
+	unsigned				maxUsedBestPossibleScoreList;
+	bool					stopWorkingSet[NUM_DIRECTIONS];
 };

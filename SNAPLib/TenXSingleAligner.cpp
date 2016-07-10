@@ -84,6 +84,11 @@ TenXSingleAligner::TenXSingleAligner(
 
 	genome = index->getGenome();
 	genomeSize = genome->getCountOfBases();
+
+	setPair[0][0] = hashTableHitSets[0][FORWARD];
+	setPair[0][1] = hashTableHitSets[1][RC];
+	setPair[1][0] = hashTableHitSets[0][RC];
+	setPair[1][1] = hashTableHitSets[1][FORWARD];
 }
 
 TenXSingleAligner::~TenXSingleAligner()
@@ -367,7 +372,7 @@ TenXSingleAligner::align_phase_1(Read* read0, Read* read1, unsigned *popularSeed
 }
 
 int
-TenXSingleAligner::align_phase_2_single_step_check_range(HashTableHitSet *setPair[], unsigned whichSetPair, bool &outOfMoreHitsLocations, unsigned &lastSeedOffsetForReadWithFewerHits, GenomeLocation &lastGenomeLocationForReadWithFewerHits, unsigned &lastSeedOffsetForReadWithMoreHits, GenomeLocation &lastGenomeLocationForReadWithMoreHits, unsigned &maxUsedBestPossibleScoreList, void *clusterInfoPtr)
+TenXSingleAligner::align_phase_2_single_step_check_range(unsigned whichSetPair)
 {
 	//
 		// Loop invariant: lastGenomeLocationForReadWithFewerHits is the highest genome offset that has not been considered.
@@ -377,13 +382,13 @@ TenXSingleAligner::align_phase_2_single_step_check_range(HashTableHitSet *setPai
 		//
 		// default, not exiting early
 
-	if (lastGenomeLocationForReadWithMoreHits > lastGenomeLocationForReadWithFewerHits + maxSpacing) {
+	if (lastGenomeLocationForReadWithMoreHits[whichSetPair] > lastGenomeLocationForReadWithFewerHits[whichSetPair] + maxSpacing) {
 		//
 		// The more hits side is too high to be a mate candidate for the fewer hits side.  Move it down to the largest
 		// location that's not too high.
 		//
-		if (!setPair[readWithMoreHits]->getNextHitLessThanOrEqualTo(lastGenomeLocationForReadWithFewerHits + maxSpacing,
-			&lastGenomeLocationForReadWithMoreHits, &lastSeedOffsetForReadWithMoreHits)) {
+		if (!setPair[whichSetPair][readWithMoreHits]->getNextHitLessThanOrEqualTo(lastGenomeLocationForReadWithFewerHits[whichSetPair] + maxSpacing,
+			&lastGenomeLocationForReadWithMoreHits[whichSetPair], &lastSeedOffsetForReadWithMoreHits[whichSetPair])) {
 			return 1;  // End of all of the mates.  We're done with this set pair.
 		}
 	}
@@ -391,21 +396,21 @@ TenXSingleAligner::align_phase_2_single_step_check_range(HashTableHitSet *setPai
 	//
 	// Even though we are out of more hit locations, we might still backtrack!
 	//
-	if ((lastGenomeLocationForReadWithMoreHits + maxSpacing < lastGenomeLocationForReadWithFewerHits || outOfMoreHitsLocations) &&
+	if ((lastGenomeLocationForReadWithMoreHits[whichSetPair] + maxSpacing < lastGenomeLocationForReadWithFewerHits[whichSetPair] || outOfMoreHitsLocations[whichSetPair]) &&
 		(0 == lowestFreeScoringMateCandidate[whichSetPair] ||
-			!genomeLocationIsWithin(scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair] - 1].readWithMoreHitsGenomeLocation, lastGenomeLocationForReadWithFewerHits, maxSpacing))) {
+			!genomeLocationIsWithin(scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair] - 1].readWithMoreHitsGenomeLocation, lastGenomeLocationForReadWithFewerHits[whichSetPair], maxSpacing))) {
 		//
 		// No mates for the hit on the read with fewer hits.  Skip to the next candidate.
 		//
-		if (outOfMoreHitsLocations) {
+		if (outOfMoreHitsLocations[whichSetPair]) {
 			//
 			// Nothing left on the more hits side, we're done with this set pair.
 			//
 			return 1;
 		}
 
-		if (!setPair[readWithFewerHits]->getNextHitLessThanOrEqualTo(lastGenomeLocationForReadWithMoreHits + maxSpacing, &lastGenomeLocationForReadWithFewerHits,
-			&lastSeedOffsetForReadWithFewerHits)) {
+		if (!setPair[whichSetPair][readWithFewerHits]->getNextHitLessThanOrEqualTo(lastGenomeLocationForReadWithMoreHits[whichSetPair] + maxSpacing, &lastGenomeLocationForReadWithFewerHits[whichSetPair],
+			&lastSeedOffsetForReadWithFewerHits[whichSetPair])) {
 			//
 			// No more candidates on the read with fewer hits side.  We're done with this set pair.
 			//
@@ -418,18 +423,18 @@ TenXSingleAligner::align_phase_2_single_step_check_range(HashTableHitSet *setPai
 
 
 bool
-TenXSingleAligner::align_phase_2_single_step_add_candidate(HashTableHitSet *setPair[], unsigned whichSetPair, bool &outOfMoreHitsLocations, unsigned &lastSeedOffsetForReadWithFewerHits, GenomeLocation &lastGenomeLocationForReadWithFewerHits, unsigned &lastSeedOffsetForReadWithMoreHits, GenomeLocation &lastGenomeLocationForReadWithMoreHits, unsigned &maxUsedBestPossibleScoreList, void *clusterInfoPtr)
+TenXSingleAligner::align_phase_2_single_step_add_candidate(unsigned whichSetPair, void *clusterInfoPtr)
 {
 	//
 	// Add all of the mate candidates for this fewer side hit.
 	//
-	while (lastGenomeLocationForReadWithMoreHits + maxSpacing >= lastGenomeLocationForReadWithFewerHits && !outOfMoreHitsLocations) {
+	while (lastGenomeLocationForReadWithMoreHits[whichSetPair] + maxSpacing >= lastGenomeLocationForReadWithFewerHits[whichSetPair] && !outOfMoreHitsLocations[whichSetPair]) {
 		unsigned bestPossibleScoreForReadWithMoreHits;
 		if (noTruncation) {
 			bestPossibleScoreForReadWithMoreHits = 0;
 		}
 		else {
-			bestPossibleScoreForReadWithMoreHits = setPair[readWithMoreHits]->computeBestPossibleScoreForCurrentHit();
+			bestPossibleScoreForReadWithMoreHits = setPair[whichSetPair][readWithMoreHits]->computeBestPossibleScoreForCurrentHit();
 		}
 
 		if (lowestFreeScoringMateCandidate[whichSetPair] >= scoringCandidatePoolSize / NUM_READS_PER_PAIR) {
@@ -437,22 +442,22 @@ TenXSingleAligner::align_phase_2_single_step_add_candidate(HashTableHitSet *setP
 			soft_exit(1);
 		}
 		scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair]].init(
-			lastGenomeLocationForReadWithMoreHits, bestPossibleScoreForReadWithMoreHits, lastSeedOffsetForReadWithMoreHits);
+			lastGenomeLocationForReadWithMoreHits[whichSetPair], bestPossibleScoreForReadWithMoreHits, lastSeedOffsetForReadWithMoreHits[whichSetPair]);
 
 #ifdef _DEBUG
 		if (_DumpAlignments) {
 			printf("SetPair %d, added more hits candidate %d at genome location %u, bestPossibleScore %d, seedOffset %d\n",
-				whichSetPair, lowestFreeScoringMateCandidate[whichSetPair], lastGenomeLocationForReadWithMoreHits.location,
+				whichSetPair, lowestFreeScoringMateCandidate[whichSetPair], lastGenomeLocationForReadWithMoreHits[whichSetPair].location,
 				bestPossibleScoreForReadWithMoreHits,
-				lastSeedOffsetForReadWithMoreHits);
+				lastSeedOffsetForReadWithMoreHits[whichSetPair]);
 		}
 #endif // _DEBUG
 
 		lowestFreeScoringMateCandidate[whichSetPair]++;
 
-		if (!setPair[readWithMoreHits]->getNextLowerHit(&lastGenomeLocationForReadWithMoreHits, &lastSeedOffsetForReadWithMoreHits)) {
-			lastGenomeLocationForReadWithMoreHits = 0;
-			outOfMoreHitsLocations = true;
+		if (!setPair[whichSetPair][readWithMoreHits]->getNextLowerHit(&lastGenomeLocationForReadWithMoreHits[whichSetPair], &lastSeedOffsetForReadWithMoreHits[whichSetPair])) {
+			lastGenomeLocationForReadWithMoreHits[whichSetPair] = 0;
+			outOfMoreHitsLocations[whichSetPair] = true;
 			break; // out of the loop looking for candidates on the more hits side.
 		}
 	}
@@ -467,12 +472,12 @@ TenXSingleAligner::align_phase_2_single_step_add_candidate(HashTableHitSet *setP
 		bestPossibleScoreForReadWithFewerHits = 0;
 	}
 	else {
-		bestPossibleScoreForReadWithFewerHits = setPair[readWithFewerHits]->computeBestPossibleScoreForCurrentHit();
+		bestPossibleScoreForReadWithFewerHits = setPair[whichSetPair][readWithFewerHits]->computeBestPossibleScoreForCurrentHit();
 	}
 
 	unsigned lowestBestPossibleScoreOfAnyPossibleMate = maxK + extraSearchDepth;
 	for (int i = lowestFreeScoringMateCandidate[whichSetPair] - 1; i >= 0; i--) {
-		if (scoringMateCandidates[whichSetPair][i].readWithMoreHitsGenomeLocation > lastGenomeLocationForReadWithFewerHits + maxSpacing) {
+		if (scoringMateCandidates[whichSetPair][i].readWithMoreHitsGenomeLocation > lastGenomeLocationForReadWithFewerHits[whichSetPair] + maxSpacing) {
 			break;
 		}
 		lowestBestPossibleScoreOfAnyPossibleMate = __min(lowestBestPossibleScoreOfAnyPossibleMate, scoringMateCandidates[whichSetPair][i].bestPossibleScore);
@@ -494,8 +499,8 @@ TenXSingleAligner::align_phase_2_single_step_add_candidate(HashTableHitSet *setP
 		//
 		unsigned bestPossibleScore = noOrderedEvaluation ? 0 : lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits;
 
-		scoringCandidatePool[lowestFreeScoringCandidatePoolEntry].init(lastGenomeLocationForReadWithFewerHits, whichSetPair, lowestFreeScoringMateCandidate[whichSetPair] - 1,
-			lastSeedOffsetForReadWithFewerHits, bestPossibleScoreForReadWithFewerHits,
+		scoringCandidatePool[lowestFreeScoringCandidatePoolEntry].init(lastGenomeLocationForReadWithFewerHits[whichSetPair], whichSetPair, lowestFreeScoringMateCandidate[whichSetPair] - 1,
+			lastSeedOffsetForReadWithFewerHits[whichSetPair], bestPossibleScoreForReadWithFewerHits,
 			scoringCandidates[bestPossibleScore], NULL);
 
 
@@ -504,9 +509,9 @@ TenXSingleAligner::align_phase_2_single_step_add_candidate(HashTableHitSet *setP
 #ifdef _DEBUG
 		if (_DumpAlignments) {
 			printf("SetPair %d, added fewer hits candidate %d at genome location %u, bestPossibleScore %d, seedOffset %d\n",
-				whichSetPair, lowestFreeScoringCandidatePoolEntry, lastGenomeLocationForReadWithFewerHits.location,
+				whichSetPair, lowestFreeScoringCandidatePoolEntry, lastGenomeLocationForReadWithFewerHits[whichSetPair].location,
 				lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits,
-				lastSeedOffsetForReadWithFewerHits);
+				lastSeedOffsetForReadWithFewerHits[whichSetPair]);
 		}
 #endif // _DEBUG
 
@@ -514,7 +519,7 @@ TenXSingleAligner::align_phase_2_single_step_add_candidate(HashTableHitSet *setP
 		maxUsedBestPossibleScoreList = max(maxUsedBestPossibleScoreList, bestPossibleScore);
 	}
 
-	if (!setPair[readWithFewerHits]->getNextLowerHit(&lastGenomeLocationForReadWithFewerHits, &lastSeedOffsetForReadWithFewerHits)) {
+	if (!setPair[whichSetPair][readWithFewerHits]->getNextLowerHit(&lastGenomeLocationForReadWithFewerHits[whichSetPair], &lastSeedOffsetForReadWithFewerHits[whichSetPair])) {
 		return true;
 	}
 
@@ -529,26 +534,26 @@ TenXSingleAligner::align_phase_2_single_step_add_candidate(HashTableHitSet *setP
 
 
 bool
-TenXSingleAligner::align_phase_2_single_step(HashTableHitSet *setPair[], unsigned whichSetPair, bool &outOfMoreHitsLocations, unsigned &lastSeedOffsetForReadWithFewerHits, GenomeLocation &lastGenomeLocationForReadWithFewerHits, unsigned &lastSeedOffsetForReadWithMoreHits, GenomeLocation &lastGenomeLocationForReadWithMoreHits, unsigned &maxUsedBestPossibleScoreList, void *clusterInfoPtr)
+TenXSingleAligner::align_phase_2_single_step(unsigned whichSetPair)
 {
-	int check_range_result = align_phase_2_single_step_check_range(setPair, whichSetPair, outOfMoreHitsLocations, lastSeedOffsetForReadWithFewerHits, lastGenomeLocationForReadWithFewerHits, lastSeedOffsetForReadWithMoreHits, lastGenomeLocationForReadWithMoreHits, maxUsedBestPossibleScoreList, NULL);
+	int check_range_result = align_phase_2_single_step_check_range(whichSetPair);
 	if (check_range_result == 1)
 		return true;
 	else if (check_range_result == -1)
 		return false;
 	else 
-		return align_phase_2_single_step_add_candidate(setPair, whichSetPair, outOfMoreHitsLocations, lastSeedOffsetForReadWithFewerHits, lastGenomeLocationForReadWithFewerHits, lastSeedOffsetForReadWithMoreHits, lastGenomeLocationForReadWithMoreHits, maxUsedBestPossibleScoreList, NULL);
+		return align_phase_2_single_step_add_candidate(whichSetPair, NULL);
 	//return align_phase_2_single_step_check_range(setPair, whichSetPair, outOfMoreHitsLocations, lastSeedOffsetForReadWithFewerHits, lastGenomeLocationForReadWithFewerHits, lastSeedOffsetForReadWithMoreHits, lastGenomeLocationForReadWithMoreHits, maxUsedBestPossibleScoreList, NULL);
 }
 
 
 bool
-TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, void *clusterInfoPtr, HashTableHitSet *setPair[][NUM_READS_PER_PAIR], bool *outOfMoreHitsLocations, unsigned *lastSeedOffsetForReadWithFewerHits, GenomeLocation *lastGenomeLocationForReadWithFewerHits, unsigned *lastSeedOffsetForReadWithMoreHits, GenomeLocation *lastGenomeLocationForReadWithMoreHits, unsigned &maxUsedBestPossibleScoreList, bool *stopWorkingSet, bool &keepGoing)
+TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, void *clusterInfoPtr)
 {
-	//	bool keepGoing = true;
-
+	bool keepGoing = true;
 	bool targetNotMet = false;
 	bool targetNotMetSingleSet;
+
 	for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++)
 	{
 		//printf("beginning: targetLoc: %lld, ReadLoc: %lld\n", clusterTargetLoc.location, lastGenomeLocationForReadWithFewerHits[whichSetPair].location);
@@ -565,7 +570,7 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 			//std::cout << "setPair[" << whichSetPair << "]" << setPair[whichSetPair] << std::endl;
 			//printf("setPair[%d]: %p\n", whichSetPair, setPair[whichSetPair]);
 			if (!stopWorkingSet[whichSetPair]) {
-				int check_range_result = align_phase_2_single_step_check_range(setPair[whichSetPair], whichSetPair, outOfMoreHitsLocations[whichSetPair], lastSeedOffsetForReadWithFewerHits[whichSetPair], lastGenomeLocationForReadWithFewerHits[whichSetPair], lastSeedOffsetForReadWithMoreHits[whichSetPair], lastGenomeLocationForReadWithMoreHits[whichSetPair], maxUsedBestPossibleScoreList, NULL);
+				int check_range_result = align_phase_2_single_step_check_range(whichSetPair);
 				if (check_range_result == 1) {
 					stopWorkingSet[whichSetPair] = true;
 				}
@@ -594,7 +599,7 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 							printf("Pair: %d  targetNotMetSingleSet: %s\n", whichSetPair, (targetNotMetSingleSet ? "true" : "false"));
 						}
 #endif //_DEBUG
-						stopWorkingSet[whichSetPair] = align_phase_2_single_step_add_candidate(setPair[whichSetPair], whichSetPair, outOfMoreHitsLocations[whichSetPair], lastSeedOffsetForReadWithFewerHits[whichSetPair], lastGenomeLocationForReadWithFewerHits[whichSetPair], lastSeedOffsetForReadWithMoreHits[whichSetPair], lastGenomeLocationForReadWithMoreHits[whichSetPair], maxUsedBestPossibleScoreList, NULL);
+						stopWorkingSet[whichSetPair] = align_phase_2_single_step_add_candidate(whichSetPair, clusterInfoPtr);
 						//
 						// We keep working on the loop as long as one set is still not stopped
 						//
@@ -629,34 +634,18 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 	return keepGoing;
 }
 
-unsigned
+void
 TenXSingleAligner::align_phase_2()
 {
 	//
 	// Phase 2: find all possible candidates and add them to candidate lists (for the reads with fewer and more hits).
 	//
-	unsigned maxUsedBestPossibleScoreList = 0;
-
-	HashTableHitSet *setPair[NUM_DIRECTIONS][NUM_READS_PER_PAIR];
-
-	unsigned            lastSeedOffsetForReadWithFewerHits[NUM_DIRECTIONS];
-	GenomeLocation      lastGenomeLocationForReadWithFewerHits[NUM_DIRECTIONS];
-
-	unsigned            lastSeedOffsetForReadWithMoreHits[NUM_DIRECTIONS];
-	GenomeLocation      lastGenomeLocationForReadWithMoreHits[NUM_DIRECTIONS];
-
-	bool                outOfMoreHitsLocations[NUM_DIRECTIONS];
-	bool				stopWorkingSet[NUM_DIRECTIONS];
-	bool				keepGoing = false;
+	bool keepGoing = false;
+	maxUsedBestPossibleScoreList = 0;
 
 	//
 	// Initialize variables
 	//
-	setPair[0][0] = hashTableHitSets[0][FORWARD];
-	setPair[0][1] = hashTableHitSets[1][RC];
-	setPair[1][0] = hashTableHitSets[0][RC];
-	setPair[1][1] = hashTableHitSets[1][FORWARD];
-
 	for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++)
 	{
 		lastGenomeLocationForReadWithMoreHits[whichSetPair] = InvalidGenomeLocation;
@@ -679,172 +668,15 @@ TenXSingleAligner::align_phase_2()
 	// Loop over the candidates in for the read with more hits.  At the top of the loop, we have a candidate but don't know if it has
 	// a mate.  Each pass through the loop considers a single hit on the read with fewer hits.
 	//
-	GenomeLocation clusterTargetLoc = GenomeLocation(0000000000);
-	align_phase_2_to_target_loc(clusterTargetLoc, NULL, setPair, outOfMoreHitsLocations, lastSeedOffsetForReadWithFewerHits, lastGenomeLocationForReadWithFewerHits, lastSeedOffsetForReadWithMoreHits, lastGenomeLocationForReadWithMoreHits, maxUsedBestPossibleScoreList, stopWorkingSet, keepGoing);
-	
-/*
-	while (keepGoing) {
-		keepGoing = false;
-		for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++) {
-			if (!stopWorkingSet[whichSetPair]) {
-				stopWorkingSet[whichSetPair] = align_phase_2_single_step(setPair[whichSetPair], whichSetPair, outOfMoreHitsLocations[whichSetPair], lastSeedOffsetForReadWithFewerHits[whichSetPair], lastGenomeLocationForReadWithFewerHits[whichSetPair], lastSeedOffsetForReadWithMoreHits[whichSetPair], lastGenomeLocationForReadWithMoreHits[whichSetPair], maxUsedBestPossibleScoreList, NULL);
-			}
-
-			//
-			// We keep working on the loop as long as one set is still not stopped
-			//
-			keepGoing = keepGoing || !stopWorkingSet[whichSetPair];
-		}
+	if(keepGoing) {
+		GenomeLocation clusterTargetLoc = GenomeLocation(0000000000);
+		align_phase_2_to_target_loc(clusterTargetLoc, NULL);
 	}
-
-			//
-			// Loop invariant: lastGenomeLocationForReadWithFewerHits is the highest genome offset that has not been considered.
-			// lastGenomeLocationForReadWithMoreHits is also the highest genome offset on that side that has not been
-			// considered (or is InvalidGenomeLocation), but higher ones within the appropriate range might already be in scoringMateCandidates.
-			// We go once through this loop for each
-			//
-	// default, not exiting early
-
-			if (lastGenomeLocationForReadWithMoreHits > lastGenomeLocationForReadWithFewerHits + maxSpacing) {
-				//
-				// The more hits side is too high to be a mate candidate for the fewer hits side.  Move it down to the largest
-				// location that's not too high.
-				//
-				if (!setPair[readWithMoreHits]->getNextHitLessThanOrEqualTo(lastGenomeLocationForReadWithFewerHits + maxSpacing,
-					&lastGenomeLocationForReadWithMoreHits, &lastSeedOffsetForReadWithMoreHits)) {
-					break;  // End of all of the mates.  We're done with this set pair.
-				}
-			}
-
-			if ((lastGenomeLocationForReadWithMoreHits + maxSpacing < lastGenomeLocationForReadWithFewerHits || outOfMoreHitsLocations) &&
-				(0 == lowestFreeScoringMateCandidate[whichSetPair] ||
-					!genomeLocationIsWithin(scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair] - 1].readWithMoreHitsGenomeLocation, lastGenomeLocationForReadWithFewerHits, maxSpacing))) {
-				//
-				// No mates for the hit on the read with fewer hits.  Skip to the next candidate.
-				//
-				if (outOfMoreHitsLocations) {
-					//
-					// Nothing left on the more hits side, we're done with this set pair.
-					//
-					break;
-				}
-
-				if (!setPair[readWithFewerHits]->getNextHitLessThanOrEqualTo(lastGenomeLocationForReadWithMoreHits + maxSpacing, &lastGenomeLocationForReadWithFewerHits,
-					&lastSeedOffsetForReadWithFewerHits)) {
-					//
-					// No more candidates on the read with fewer hits side.  We're done with this set pair.
-					//
-					break;
-				}
-				continue;
-			}
-
-			//
-			// Add all of the mate candidates for this fewer side hit.
-			//
-			while (lastGenomeLocationForReadWithMoreHits + maxSpacing >= lastGenomeLocationForReadWithFewerHits && !outOfMoreHitsLocations) {
-				unsigned bestPossibleScoreForReadWithMoreHits;
-				if (noTruncation) {
-					bestPossibleScoreForReadWithMoreHits = 0;
-				}
-				else {
-					bestPossibleScoreForReadWithMoreHits = setPair[readWithMoreHits]->computeBestPossibleScoreForCurrentHit();
-				}
-
-				if (lowestFreeScoringMateCandidate[whichSetPair] >= scoringCandidatePoolSize / NUM_READS_PER_PAIR) {
-					WriteErrorMessage("Ran out of scoring candidate pool entries.  Perhaps trying with a larger value of -mcp will help.\n");
-					soft_exit(1);
-				}
-
-				scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair]].init(
-					lastGenomeLocationForReadWithMoreHits, bestPossibleScoreForReadWithMoreHits, lastSeedOffsetForReadWithMoreHits);
-
-#ifdef _DEBUG
-				if (_DumpAlignments) {
-					printf("SetPair %d, added more hits candidate %d at genome location %u, bestPossibleScore %d, seedOffset %d\n",
-						whichSetPair, lowestFreeScoringMateCandidate[whichSetPair], lastGenomeLocationForReadWithMoreHits.location,
-						bestPossibleScoreForReadWithMoreHits,
-						lastSeedOffsetForReadWithMoreHits);
-				}
-#endif // _DEBUG
-
-				lowestFreeScoringMateCandidate[whichSetPair]++;
-
-				if (!setPair[readWithMoreHits]->getNextLowerHit(&lastGenomeLocationForReadWithMoreHits, &lastSeedOffsetForReadWithMoreHits)) {
-					lastGenomeLocationForReadWithMoreHits = 0;
-					outOfMoreHitsLocations = true;
-					break; // out of the loop looking for candidates on the more hits side.
-				}
-			}
-
-			//
-			// And finally add the hit from the fewer hit side.  To compute its best possible score, we need to look at all of the mates; we couldn't do it in the
-			// loop immediately above because some of them might have already been in the mate list from a different, nearby fewer hit location.
-			//
-			unsigned bestPossibleScoreForReadWithFewerHits;
-
-			if (noTruncation) {
-				bestPossibleScoreForReadWithFewerHits = 0;
-			}
-			else {
-				bestPossibleScoreForReadWithFewerHits = setPair[readWithFewerHits]->computeBestPossibleScoreForCurrentHit();
-			}
-
-			unsigned lowestBestPossibleScoreOfAnyPossibleMate = maxK + extraSearchDepth;
-			for (int i = lowestFreeScoringMateCandidate[whichSetPair] - 1; i >= 0; i--) {
-				if (scoringMateCandidates[whichSetPair][i].readWithMoreHitsGenomeLocation > lastGenomeLocationForReadWithFewerHits + maxSpacing) {
-					break;
-				}
-				lowestBestPossibleScoreOfAnyPossibleMate = __min(lowestBestPossibleScoreOfAnyPossibleMate, scoringMateCandidates[whichSetPair][i].bestPossibleScore);
-			}
-
-			if (lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits <= maxK + extraSearchDepth) {
-				//
-				// There's a set of ends that we can't prove doesn't have too large of a score.  Allocate a fewer hit candidate and stick it in the
-				// correct weight list.
-				//
-				if (lowestFreeScoringCandidatePoolEntry >= scoringCandidatePoolSize) {
-					WriteErrorMessage("Ran out of scoring candidate pool entries.  Perhaps rerunning with a larger value of -mcp will help.\n");
-					soft_exit(1);
-				}
-
-				//
-				// If we have noOrderedEvaluation set, just stick everything on list 0, regardless of what it really is.  This will cause us to
-				// evaluate the candidates in more-or-less inverse genome order.
-				//
-				unsigned bestPossibleScore = noOrderedEvaluation ? 0 : lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits;
-
-				scoringCandidatePool[lowestFreeScoringCandidatePoolEntry].init(lastGenomeLocationForReadWithFewerHits, whichSetPair, lowestFreeScoringMateCandidate[whichSetPair] - 1,
-					lastSeedOffsetForReadWithFewerHits, bestPossibleScoreForReadWithFewerHits,
-					scoringCandidates[bestPossibleScore]);
-
-
-				scoringCandidates[bestPossibleScore] = &scoringCandidatePool[lowestFreeScoringCandidatePoolEntry];
-
-#ifdef _DEBUG
-				if (_DumpAlignments) {
-					printf("SetPair %d, added fewer hits candidate %d at genome location %u, bestPossibleScore %d, seedOffset %d\n",
-						whichSetPair, lowestFreeScoringCandidatePoolEntry, lastGenomeLocationForReadWithFewerHits.location,
-						lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits,
-						lastSeedOffsetForReadWithFewerHits);
-				}
-#endif // _DEBUG
-
-				lowestFreeScoringCandidatePoolEntry++;
-				maxUsedBestPossibleScoreList = max(maxUsedBestPossibleScoreList, bestPossibleScore);
-			}
-
-			if (!setPair[readWithFewerHits]->getNextLowerHit(&lastGenomeLocationForReadWithFewerHits, &lastSeedOffsetForReadWithFewerHits)) {
-				break;
-			}
-*/
-//	} // while keepGoing 
-	return maxUsedBestPossibleScoreList;
 }
 
 
 bool
-TenXSingleAligner::align_phase_3(Read* read0, Read* read1, PairedAlignmentResult* result, int maxEditDistanceForSecondaryResults, _int64 secondaryResultBufferSize, _int64* nSecondaryResults, PairedAlignmentResult* secondaryResults, _int64 singleSecondaryBufferSize, _int64 maxSecondaryResultsToReturn, _int64* nSingleEndSecondaryResultsForFirstRead, _int64* nSingleEndSecondaryResultsForSecondRead, SingleAlignmentResult* singleEndSecondaryResults, unsigned maxUsedBestPossibleScoreList,
+TenXSingleAligner::align_phase_3(Read* read0, Read* read1, int maxEditDistanceForSecondaryResults, _int64 secondaryResultBufferSize, _int64* nSecondaryResults, PairedAlignmentResult* secondaryResults, _int64 singleSecondaryBufferSize, _int64 maxSecondaryResultsToReturn, _int64* nSingleEndSecondaryResultsForFirstRead, _int64* nSingleEndSecondaryResultsForSecondRead, SingleAlignmentResult* singleEndSecondaryResults,
 	unsigned &bestPairScore, GenomeLocation *bestResultGenomeLocation, Direction *bestResultDirection, double &probabilityOfAllPairs, unsigned *bestResultScore, unsigned *popularSeedsSkipped, double &probabilityOfBestPair) //This is a hack. Pass in result by reference
 {
 	//
@@ -852,9 +684,6 @@ TenXSingleAligner::align_phase_3(Read* read0, Read* read1, PairedAlignmentResult
 	//
 	//Initialize results
 	*nSecondaryResults = 0;
-	result->nLVCalls = 0;
-	result->nSmallHits = 0;
-	result->clippingForReadAdjustment[0] = result->clippingForReadAdjustment[1] = 0;
 	*nSingleEndSecondaryResultsForFirstRead = 0;
 	*nSingleEndSecondaryResultsForSecondRead = 0;
 	//
@@ -1030,16 +859,16 @@ TenXSingleAligner::align_phase_3(Read* read0, Read* read1, PairedAlignmentResult
 										return true;
 									}
 
-									PairedAlignmentResult *result = &secondaryResults[*nSecondaryResults];
-									result->alignedAsPair = true;
-									result->fromAlignTogether = true;
+									PairedAlignmentResult *secondaryResult = &secondaryResults[*nSecondaryResults];
+									secondaryResult->alignedAsPair = true;
+									secondaryResult->fromAlignTogether = true;
 
 									for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
-										result->direction[r] = bestResultDirection[r];
-										result->location[r] = bestResultGenomeLocation[r];
-										result->mapq[r] = 0;
-										result->score[r] = bestResultScore[r];
-										result->status[r] = MultipleHits;
+										secondaryResult->direction[r] = bestResultDirection[r];
+										secondaryResult->location[r] = bestResultGenomeLocation[r];
+										secondaryResult->mapq[r] = 0;
+										secondaryResult->score[r] = bestResultScore[r];
+										secondaryResult->status[r] = MultipleHits;
 									}
 
 									(*nSecondaryResults)++;
@@ -1070,17 +899,17 @@ TenXSingleAligner::align_phase_3(Read* read0, Read* read1, PairedAlignmentResult
 										return true;
 									}
 
-									PairedAlignmentResult *result = &secondaryResults[*nSecondaryResults];
-									result->alignedAsPair = true;
-									result->direction[readWithMoreHits] = setPairDirection[candidate->whichSetPair][readWithMoreHits];
-									result->direction[readWithFewerHits] = setPairDirection[candidate->whichSetPair][readWithFewerHits];
-									result->fromAlignTogether = true;
-									result->location[readWithMoreHits] = mate->readWithMoreHitsGenomeLocation + mate->genomeOffset;
-									result->location[readWithFewerHits] = candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset;
-									result->mapq[0] = result->mapq[1] = 0;
-									result->score[readWithMoreHits] = mate->score;
-									result->score[readWithFewerHits] = fewerEndScore;
-									result->status[readWithFewerHits] = result->status[readWithMoreHits] = MultipleHits;
+									PairedAlignmentResult *secondaryResult = &secondaryResults[*nSecondaryResults];
+									secondaryResult->alignedAsPair = true;
+									secondaryResult->direction[readWithMoreHits] = setPairDirection[candidate->whichSetPair][readWithMoreHits];
+									secondaryResult->direction[readWithFewerHits] = setPairDirection[candidate->whichSetPair][readWithFewerHits];
+									secondaryResult->fromAlignTogether = true;
+									secondaryResult->location[readWithMoreHits] = mate->readWithMoreHitsGenomeLocation + mate->genomeOffset;
+									secondaryResult->location[readWithFewerHits] = candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset;
+									secondaryResult->mapq[0] = secondaryResult->mapq[1] = 0;
+									secondaryResult->score[readWithMoreHits] = mate->score;
+									secondaryResult->score[readWithFewerHits] = fewerEndScore;
+									secondaryResult->status[readWithFewerHits] = secondaryResult->status[readWithMoreHits] = MultipleHits;
 
 									(*nSecondaryResults)++;
 								}
@@ -1146,11 +975,14 @@ TenXSingleAligner::align(
 )
 {
 	// Initialize data before phase 1
+	result->nLVCalls = 0;
+	result->nSmallHits = 0;
+	result->clippingForReadAdjustment[0] = result->clippingForReadAdjustment[1] = 0;
 	unsigned popularSeedsSkipped[NUM_READS_PER_PAIR];
 
 	if (align_phase_1(read0, read1, popularSeedsSkipped))
 		return true;
-	unsigned maxUsedBestPossibleScoreList = align_phase_2();
+	align_phase_2();
 
 	// Initialize data before phase 3
 	unsigned bestPairScore = 65536;
@@ -1160,7 +992,7 @@ TenXSingleAligner::align(
 	unsigned bestResultScore[NUM_READS_PER_PAIR];
 	double probabilityOfBestPair = 0;
 
-	if (align_phase_3(read0, read1, result, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults, singleSecondaryBufferSize, maxSecondaryResultsToReturn, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead, singleEndSecondaryResults, maxUsedBestPossibleScoreList,
+	if (align_phase_3(read0, read1, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults, singleSecondaryBufferSize, maxSecondaryResultsToReturn, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead, singleEndSecondaryResults,
 		bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, popularSeedsSkipped, probabilityOfBestPair)) // This is a hack. Probably need to be changed later.
 		return false; // Not enough space for secondary alignment. Flag is raised
 
