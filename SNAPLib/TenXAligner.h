@@ -2,96 +2,94 @@
 
 Module Name:
 
-    ChimericPairedEndAligner.h
+TenX.h
 
 Abstract:
 
-    A paired-end aligner calls into a different paired-end aligner, and if
-    it fails to find an alignment, aligns each of the reads singly.  This handles
-    chimeric reads that would otherwise be unalignable.
+Headers for the 10x aligner
 
 Authors:
 
-    Bill Bolosky, June, 2013
+Hongyi Xin and Bill Bolosky, May, 2016
 
 Environment:
 
-    User mode service.
+User mode service.
 
 Revision History:
+
+Cloned and modified the paired end aligner
 
 --*/
 
 #pragma once
+#include "stdafx.h"
+#include "AlignerContext.h"
+#include "ReadSupplierQueue.h"
 
-#include "PairedEndAligner.h"
-#include "BaseAligner.h"
-#include "BigAlloc.h"
+struct TenXAlignerStats;
 
-class ChimericPairedEndAligner : public PairedEndAligner {
+class TenXAlignerContext : public AlignerContext
+{
 public:
-    ChimericPairedEndAligner(
-        GenomeIndex         *index_,
-        unsigned            maxReadSize,
-        unsigned            maxHits,
-        unsigned            maxK,
-        unsigned            maxSeedsFromCommandLine,
-        double              seedCoverage,
-	    unsigned            minWeightToCheck,
-        bool                forceSpacing_,
-        unsigned            extraSearchDepth,
-        bool                noUkkonen,
-        bool                noOrderedEvaluation,
-		bool				noTruncation,
-        bool                ignoreALignmentAdjustmentsForOm,
-        PairedEndAligner    *underlyingPairedEndAligner_,
-		unsigned			minReadLength_,
-        int                 maxSecondaryAlignmentsPerContig,
-        BigAllocator        *allocator);
-    
-    virtual ~ChimericPairedEndAligner();
-    
-    static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxReadSize, unsigned maxHits, unsigned seedLen, unsigned maxSeedsFromCommandLine, 
-                                             double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize,
-                                             int maxSecondaryAlignmentsPerContig);
 
-    void *operator new(size_t size, BigAllocator *allocator) {_ASSERT(size == sizeof(ChimericPairedEndAligner)); return allocator->allocate(size);}
-    void operator delete(void *ptr, BigAllocator *allocator) {/* do nothing.  Memory gets cleaned up when the allocator is deleted.*/}
+    TenXAlignerContext(AlignerExtension* i_extension = NULL);
 
-    virtual bool align(
-        Read                  *read0,
-        Read                  *read1,
-        PairedAlignmentResult *result,
-        int                    maxEditDistanceForSecondaryResults,
-        _int64                 secondaryResultBufferSize,
-        _int64                *nSecondaryResults,
-        PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
-        _int64                 singleSecondaryBufferSize,
-        _int64                 maxSecondaryAlignmentsToReturn,
-        _int64                *nSingleEndSecondaryResultsForFirstRead,
-        _int64                *nSingleEndSecondaryResultsForSecondRead,
-        SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
-        );
+protected:
 
-    void *operator new(size_t size) {return BigAlloc(size);}
-    void operator delete(void *ptr) {BigDealloc(ptr);}
+    // AlignerContext
 
-    virtual _int64 getLocationsScored() const {
-        return underlyingPairedEndAligner->getLocationsScored() + singleAligner->getLocationsScored();
-    }
+    virtual bool initialize();
 
-private:
-   
+    virtual AlignerStats* newStats();
+
+    virtual void runTask();
+
+    virtual void runIterationThread();
+
+    // for subclasses
+
+    virtual void updateStats(TenXAlignerStats* stats, Read* read0, Read* read1, PairedAlignmentResult* result, bool useful0, bool useful1);
+
+    bool isPaired() { return true; }
+
+protected:
+
+    virtual void typeSpecificBeginIteration();
+    virtual void typeSpecificNextIteration();
+
+    PairedReadSupplierGenerator *pairedReadSupplierGenerator;
+
+    int                 minSpacing;
+    int                 maxSpacing;
+    int                 maxClusterSize;
+    int                 minReadsPerCluster;
+    bool                forceSpacing;
+    unsigned            intersectingAlignerMaxHits;
+    unsigned            maxCandidatePoolSize;
+    const char         *fastqFile1;
+    bool                ignoreMismatchedIDs;
+    bool                quicklyDropUnpairedReads;
+
+    friend class AlignerContext2;
+};
+
+struct TenXAlignerOptions : public AlignerOptions
+{
+    TenXAlignerOptions(const char* i_commandLine);
+
+    virtual void usageMessage();
+
+    virtual bool parse(const char** argv, int argc, int& n, bool *done);
+
+    virtual bool isPaired() { return true; }
+
+    int         minSpacing;
+    int         maxSpacing;
+    int         maxClusterSize;
+    int         minReadsPerCluster;
     bool        forceSpacing;
-    BaseAligner *singleAligner;
-    PairedEndAligner *underlyingPairedEndAligner;
-
-    // avoid allocation in aligner calls
-    IdPairVector* singleSecondary[2];
-
-    LandauVishkin<1> lv;
-    LandauVishkin<-1> reverseLV;
-
-	GenomeIndex *index;
-	unsigned	minReadLength;
+    unsigned    intersectingAlignerMaxHits;
+    unsigned    maxCandidatePoolSize;
+    bool        quicklyDropUnpairedReads;
 };
