@@ -90,9 +90,10 @@ public:
 		unsigned              *popularSeedsSkipped
 	);
 
-    void align_phase_2();
+	//
+	// align_phase_2_to_target_loc advances all location pairs to right before clusterTargetLoc. For all loc pairs that are before clusterTargetLoc, clusterInfoPtr will be NULL. For the rest, it will be clusterInfoPtr
+	//
     bool align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, void *clusterInfoPtr);
-	bool align_phase_2_single_step(unsigned whichSetPairr);
 	//
 	// align_phase_2_single_step_check_range returns 0 if we have found a good match. Returns 1 if seedLoc of the fewHit side has exhauseted. Returns -1 if fewHit side surpasses moreHIt side.
 	//
@@ -101,6 +102,14 @@ public:
 	// should only call align_phase_2_single_step_add_candidate if align_phase_2_single_step_check_range returns 0
 	//
 	bool align_phase_2_single_step_add_candidate(unsigned whichSetPair, void *clusterInfoPtr);
+    //
+	// align_phase_2 is a dummy mimicking IntersectingPairedEndAligner
+	//
+	void align_phase_2();
+	//
+	// align_phase_2_single_step is the inner loop of align_phase_2
+	//
+	bool align_phase_2_single_step(unsigned whichSetPair);
 
     bool align_phase_3(
         Read                  *read0,
