@@ -41,7 +41,7 @@ Revision History:
 #include "AlignerContext.h"
 #include "AlignerStats.h"
 #include "FASTQ.h"
-#include "TenX.h"
+#include "TenXAligner.h"
 #include "MultiInputReadSupplier.h"
 #include "Util.h"
 #include "IntersectingPairedEndAligner.h"

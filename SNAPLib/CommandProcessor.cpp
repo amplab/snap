@@ -34,7 +34,7 @@ Revision History:
 #include "CommandProcessor.h"
 #include "Error.h"
 #include "Compat.h"
-#include "TenX.h"
+#include "TenXAligner.h"
 
 const char *SNAP_VERSION = "1.0dev.100 10x";
 

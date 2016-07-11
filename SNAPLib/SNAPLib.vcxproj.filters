@@ -186,13 +186,13 @@
     <ClInclude Include="CommandProcessor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="TenX.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="AlignmentAdjuster.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="TenXSingleAligner.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TenXAligner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

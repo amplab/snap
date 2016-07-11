@@ -209,7 +209,7 @@
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="Tables.h" />
     <ClInclude Include="targetver.h" />
-    <ClInclude Include="TenX.h" />
+    <ClInclude Include="TenXAligner.h" />
     <ClInclude Include="TenXSingleAligner.h" />
     <ClInclude Include="Util.h" />
     <ClInclude Include="VariableSizeMap.h" />
