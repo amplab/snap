@@ -676,7 +676,7 @@ TenXSingleAligner::align_phase_2()
 
 
 bool
-TenXSingleAligner::align_phase_3(Read* read0, Read* read1, int maxEditDistanceForSecondaryResults, _int64 secondaryResultBufferSize, _int64* nSecondaryResults, PairedAlignmentResult* secondaryResults, _int64 singleSecondaryBufferSize, _int64 maxSecondaryResultsToReturn, _int64* nSingleEndSecondaryResultsForFirstRead, _int64* nSingleEndSecondaryResultsForSecondRead, SingleAlignmentResult* singleEndSecondaryResults,
+TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 secondaryResultBufferSize, _int64* nSecondaryResults, PairedAlignmentResult* secondaryResults, _int64 singleSecondaryBufferSize, _int64 maxSecondaryResultsToReturn, _int64* nSingleEndSecondaryResultsForFirstRead, _int64* nSingleEndSecondaryResultsForSecondRead, SingleAlignmentResult* singleEndSecondaryResults,
 	unsigned &bestPairScore, GenomeLocation *bestResultGenomeLocation, Direction *bestResultDirection, double &probabilityOfAllPairs, unsigned *bestResultScore, unsigned *popularSeedsSkipped, double &probabilityOfBestPair) //This is a hack. Pass in result by reference
 {
 	//
@@ -992,7 +992,7 @@ TenXSingleAligner::align(
 	unsigned bestResultScore[NUM_READS_PER_PAIR];
 	double probabilityOfBestPair = 0;
 
-	if (align_phase_3(read0, read1, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults, singleSecondaryBufferSize, maxSecondaryResultsToReturn, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead, singleEndSecondaryResults,
+	if (align_phase_3(maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults, singleSecondaryBufferSize, maxSecondaryResultsToReturn, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead, singleEndSecondaryResults,
 		bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, popularSeedsSkipped, probabilityOfBestPair)) // This is a hack. Probably need to be changed later.
 		return false; // Not enough space for secondary alignment. Flag is raised
 

@@ -91,7 +91,7 @@ public:
 	);
 
 	//
-	// align_phase_2_to_target_loc advances all location pairs to right before clusterTargetLoc. For all loc pairs that are before clusterTargetLoc, clusterInfoPtr will be NULL. For the rest, it will be clusterInfoPtr
+	// align_phase_2_to_target_loc advances all location pairs to right before clusterTargetLoc. For all loc pairs that are before clusterTargetLoc, the potential mapping will be associated with cluster clusterInfoPtr
 	//
     bool align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, void *clusterInfoPtr);
 	//
@@ -112,8 +112,6 @@ public:
 	bool align_phase_2_single_step(unsigned whichSetPair);
 
     bool align_phase_3(
-        Read                  *read0,
-        Read                  *read1,
         int                    maxEditDistanceForSecondaryResults,
         _int64                 secondaryResultBufferSize,
         _int64                *nSecondaryResults,
@@ -518,7 +516,8 @@ private:
     HitsPerContigCounts *hitsPerContigCounts;   // How many alignments are we reporting for each contig.  Used to implement -mpc, otheriwse unallocated.
     int maxSecondaryAlignmentsPerContig;
     _int64 contigCountEpoch;
-
+	
+	// 10x sections
 	// For carrying over the query data
     HashTableHitSet*		setPair[NUM_DIRECTIONS][NUM_READS_PER_PAIR];
 	bool					outOfMoreHitsLocations[NUM_DIRECTIONS];
