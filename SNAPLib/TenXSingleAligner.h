@@ -69,7 +69,20 @@ public:
     
     virtual ~TenXSingleAligner();
     
-    virtual bool align(
+	// returns false if there isn't enough memory to hold secondary alignments. Fails alignment step 3
+    bool align(
+        Read                  *read0,
+        Read                  *read1,
+        PairedAlignmentResult *result,
+        int                    maxEditDistanceForSecondaryResults,
+        _int64                 secondaryResultBufferSize,
+        _int64                *nSecondaryResults,
+        PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
+        _int64                 maxSecondaryResultsToReturn
+        );
+
+	// again, this is just a place holder for virtual class
+	virtual bool align(
         Read                  *read0,
         Read                  *read1,
         PairedAlignmentResult *result,
@@ -82,8 +95,8 @@ public:
         _int64                *nSingleEndSecondaryResultsForFirstRead,
         _int64                *nSingleEndSecondaryResultsForSecondRead,
         SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
-        );
-
+        ) {return true};
+	
 	bool align_phase_1(
 		Read                  *read0,
 		Read                  *read1,
@@ -116,11 +129,7 @@ public:
         _int64                 secondaryResultBufferSize,
         _int64                *nSecondaryResults,
         PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
-        _int64                 singleSecondaryBufferSize,
         _int64                 maxSecondaryResultsToReturn,
-        _int64                *nSingleEndSecondaryResultsForFirstRead,
-        _int64                *nSingleEndSecondaryResultsForSecondRead,
-        SingleAlignmentResult *singleEndSecondaryResults,     // Single-end secondary alignments for when the paired-end alignment didn't work properly
         //Passed-in output for phase 4
         unsigned              &bestPairScore,
         GenomeLocation        *bestResultGenomeLocation,

@@ -195,6 +195,9 @@
     <ClInclude Include="TenXAligner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="TenXClusterAligner.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -354,6 +357,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="TenXSingleAligner.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TenXClusterAligner.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

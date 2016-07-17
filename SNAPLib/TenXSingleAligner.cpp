@@ -676,7 +676,7 @@ TenXSingleAligner::align_phase_2()
 
 
 bool
-TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 secondaryResultBufferSize, _int64* nSecondaryResults, PairedAlignmentResult* secondaryResults, _int64 singleSecondaryBufferSize, _int64 maxSecondaryResultsToReturn, _int64* nSingleEndSecondaryResultsForFirstRead, _int64* nSingleEndSecondaryResultsForSecondRead, SingleAlignmentResult* singleEndSecondaryResults,
+TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 secondaryResultBufferSize, _int64* nSecondaryResults, PairedAlignmentResult* secondaryResults, _int64 maxSecondaryResultsToReturn,
 	unsigned &bestPairScore, GenomeLocation *bestResultGenomeLocation, Direction *bestResultDirection, double &probabilityOfAllPairs, unsigned *bestResultScore, unsigned *popularSeedsSkipped, double &probabilityOfBestPair) //This is a hack. Pass in result by reference
 {
 	//
@@ -684,8 +684,6 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 	//
 	//Initialize results
 	*nSecondaryResults = 0;
-	*nSingleEndSecondaryResultsForFirstRead = 0;
-	*nSingleEndSecondaryResultsForSecondRead = 0;
 	//
 	// Initialize the member variables that are effectively stack locals, but are in the object
 	// to avoid having to pass them to score.
@@ -967,11 +965,7 @@ TenXSingleAligner::align(
 	_int64                 secondaryResultBufferSize,
 	_int64                *nSecondaryResults,
 	PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
-	_int64                 singleSecondaryBufferSize,
-	_int64                 maxSecondaryResultsToReturn,
-	_int64                *nSingleEndSecondaryResultsForFirstRead,
-	_int64                *nSingleEndSecondaryResultsForSecondRead,
-	SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
+	_int64                 maxSecondaryResultsToReturn
 )
 {
 	// Initialize data before phase 1
@@ -992,7 +986,7 @@ TenXSingleAligner::align(
 	unsigned bestResultScore[NUM_READS_PER_PAIR];
 	double probabilityOfBestPair = 0;
 
-	if (align_phase_3(maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults, singleSecondaryBufferSize, maxSecondaryResultsToReturn, nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead, singleEndSecondaryResults,
+	if (align_phase_3(maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults, maxSecondaryResultsToReturn,
 		bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, popularSeedsSkipped, probabilityOfBestPair)) // This is a hack. Probably need to be changed later.
 		return false; // Not enough space for secondary alignment. Flag is raised
 

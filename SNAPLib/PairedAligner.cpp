@@ -695,12 +695,14 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
 
     void 
 PairedAlignerContext::typeSpecificBeginIteration()
-{
+{	
+	printf("ever being called??\n");
     if (1 == options->nInputs) {
         //
         // We've only got one input, so just connect it directly to the consumer.
         //
         pairedReadSupplierGenerator = options->inputs[0].createPairedReadSupplierGenerator(options->numThreads, quicklyDropUnpairedReads, readerContext);
+		printf("createPairedReadSupplierGenerator\n");
     } else {
         //
         // We've got multiple inputs, so use a MultiInputReadSupplier to combine the individual inputs.
@@ -712,6 +714,7 @@ PairedAlignerContext::typeSpecificBeginIteration()
             generators[i] = options->inputs[i].createPairedReadSupplierGenerator(options->numThreads, quicklyDropUnpairedReads, context);
         }
         pairedReadSupplierGenerator = new MultiInputPairedReadSupplierGenerator(options->nInputs,generators);
+		printf("MultiInputPairedReadSupplierGenerator\n");
     }
     ReaderContext* context = pairedReadSupplierGenerator->getContext();
     readerContext.header = context->header;

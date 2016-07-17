@@ -33,63 +33,63 @@ class TenXAlignerContext : public AlignerContext
 {
 public:
 
-    TenXAlignerContext(AlignerExtension* i_extension = NULL);
+	TenXAlignerContext(AlignerExtension* i_extension = NULL);
 
 protected:
 
-    // AlignerContext
+	// AlignerContext
 
-    virtual bool initialize();
+	virtual bool initialize();
 
-    virtual AlignerStats* newStats();
+	virtual AlignerStats* newStats();
 
-    virtual void runTask();
+	virtual void runTask();
 
-    virtual void runIterationThread();
+	virtual void runIterationThread();
 
-    // for subclasses
+	// for subclasses
 
-    virtual void updateStats(TenXAlignerStats* stats, Read* read0, Read* read1, PairedAlignmentResult* result, bool useful0, bool useful1);
+	virtual void updateStats(TenXAlignerStats* stats, Read* read0, Read* read1, PairedAlignmentResult* result, bool useful0, bool useful1);
 
-    bool isPaired() { return true; }
+	bool isPaired() { return true; }
 
 protected:
 
-    virtual void typeSpecificBeginIteration();
-    virtual void typeSpecificNextIteration();
+	virtual void typeSpecificBeginIteration();
+	virtual void typeSpecificNextIteration();
 
-    PairedReadSupplierGenerator *pairedReadSupplierGenerator;
+	PairedReadSupplierGenerator *pairedReadSupplierGenerator;
 
-    int                 minSpacing;
-    int                 maxSpacing;
-    int                 maxClusterSize;
-    int                 minReadsPerCluster;
-    bool                forceSpacing;
-    unsigned            intersectingAlignerMaxHits;
-    unsigned            maxCandidatePoolSize;
-    const char         *fastqFile1;
-    bool                ignoreMismatchedIDs;
-    bool                quicklyDropUnpairedReads;
+	int					minSpacing;
+	int					maxSpacing;
+	int					maxBarcodeSize;
+	int					minReadsPerCluster;
+	bool				forceSpacing;
+	unsigned			intersectingAlignerMaxHits;
+	unsigned			maxCandidatePoolSize;
+	const char			*fastqFile1;
+	bool				ignoreMismatchedIDs;
+	bool				quicklyDropUnpairedReads;
 
-    friend class AlignerContext2;
+	friend class AlignerContext2;
 };
 
 struct TenXAlignerOptions : public AlignerOptions
 {
-    TenXAlignerOptions(const char* i_commandLine);
+	TenXAlignerOptions(const char* i_commandLine);
 
-    virtual void usageMessage();
+	virtual void usageMessage();
 
-    virtual bool parse(const char** argv, int argc, int& n, bool *done);
+	virtual bool parse(const char** argv, int argc, int& n, bool *done);
 
-    virtual bool isPaired() { return true; }
+	virtual bool isPaired() { return true; }
 
-    int         minSpacing;
-    int         maxSpacing;
-    int         maxClusterSize;
-    int         minReadsPerCluster;
-    bool        forceSpacing;
-    unsigned    intersectingAlignerMaxHits;
-    unsigned    maxCandidatePoolSize;
-    bool        quicklyDropUnpairedReads;
+	int					minSpacing;
+	int					maxSpacing;
+	int					maxBarcodeSize;
+	int					minReadsPerCluster;
+	bool				forceSpacing;
+	unsigned			intersectingAlignerMaxHits;
+	unsigned			maxCandidatePoolSize;
+	bool				quicklyDropUnpairedReads;
 };
