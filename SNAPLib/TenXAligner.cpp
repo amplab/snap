@@ -467,7 +467,7 @@ void TenXAlignerContext::runIterationThread()
 
 	memoryPoolSize += singleTenXReserve * maxBarcodeSize;
 
-	fprintf(stderr, "**singleTenXReserve:%lld  maxBarcodeSize: %lld  memoryPoolSize: %lld\n ", singleTenXReserve, maxBarcodeSize, memoryPoolSize);
+	fprintf(stderr, "**singleTenXReserve:%lld  maxBarcodeSize: %lld  memoryPoolSize: %lld\n", singleTenXReserve, maxBarcodeSize, memoryPoolSize);
 	fprintf(stderr, "**memoryPoolSize after TenXSingleAligner reservation: %lld\n", memoryPoolSize);
 	fprintf(stderr, "**memoryPoolSize after TenXSingleAligner reservation: %lld\n", memoryPoolSize);
 	fprintf(stderr, "**memoryPoolSize after TenXSingleAligner reservation: %lld\n", memoryPoolSize);
