@@ -36,6 +36,7 @@ Revision History:
 #include "Error.h"
 #include "Util.h"
 #include "CommandProcessor.h"
+#include "TenXAligner.h"
 
 using std::max;
 using std::min;
@@ -71,7 +72,7 @@ AlignerContext::~AlignerContext()
 
 void AlignerContext::runAlignment(int argc, const char **argv, const char *version, unsigned *argsConsumed)
 {
-    options = parseOptions(argc, argv, version, argsConsumed, isPaired());
+    options = parseOptions(argc, argv, version, argsConsumed, getMappingMode());
 
 	if (NULL == options) {	// Didn't parse correctly
 		*argsConsumed = argc;
@@ -361,7 +362,8 @@ AlignerContext::printStats()
     WriteStatusMessage("Total Reads    Aligned, MAPQ >= %2d    Aligned, MAPQ < %2d     Unaligned              Too Short/Too Many Ns  %s%s%sReads/s   Time in Aligner (s)%s\n", MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT,
         (stats->filtered > 0) ? "Filtered               " : "",
         (stats->extraAlignments) ? "Extra Alignments  " : "",
-        isPaired() ? "%Pairs    " : "   ",
+        getMappingMode() == m_paired ? "%Pairs    " : "   ",
+        getMappingMode() == m_tenx ? "%TenX    " : "   ",
         options->profile ? (!options->sortOutput ? " Read Align Write(& compress)" : " Read Align Write") : ""
         );
 
@@ -402,7 +404,7 @@ AlignerContext::printStats()
         numPctAndPad(tooShort, stats->uselessReads , 100.0 * stats->uselessReads / max(stats->totalReads, (_int64)1), 22, strBufLen),
         (stats->filtered > 0) ? numPctAndPad(filtered, stats->filtered, 100.0 * stats->filtered / stats->totalReads, 23, strBufLen) : "",
         (stats->extraAlignments > 0) ? FormatUIntWithCommas(stats->extraAlignments, extraAlignments, strBufLen, 18) : "",
-		isPaired() ? pctAndPad(pctPairs,  100.0 * stats->alignedAsPairs / stats->totalReads, 7, strBufLen, true) : "",
+		(getMappingMode() == m_paired || getMappingMode() == m_tenx) ? pctAndPad(pctPairs,  100.0 * stats->alignedAsPairs / stats->totalReads, 7, strBufLen, true) : "",
 		FormatUIntWithCommas((unsigned _int64)(1000 * stats->totalReads / max(alignTime, (_int64)1)), readsPerSecond, strBufLen),	// Aligntime is in ms
 		FormatUIntWithCommas((alignTime + 500) / 1000, alignTimeString, strBufLen, 20),
         options->profile ? pctAndPad(pctRead, (double)stats->millisReading / (double)totalTime, 5, strBufLen, false) : "",
@@ -455,7 +457,7 @@ AlignerContext::parseOptions(
     const char **i_argv,
     const char *i_version,
     unsigned *argsConsumed,
-    bool      paired)
+    MappingMode_t      mode)
 {
     argc = i_argc;
     argv = i_argv;
@@ -463,11 +465,17 @@ AlignerContext::parseOptions(
 
     AlignerOptions *options;
 
-    if (paired) {
-        options = new PairedAlignerOptions("snap-aligner paired <index-dir> <inputFile(s)> [<options>] where <input file(s)> is a list of files to process.\n");
-    } else {
+	switch(mode) {
+	case m_single:
         options = new AlignerOptions("snap-aligner single <index-dir> <inputFile(s)> [<options>] where <input file(s)> is a list of files to process.\n");
-    }
+		break;
+	case m_paired:
+        options = new PairedAlignerOptions("snap-aligner paired <index-dir> <inputFile(s)> [<options>] where <input file(s)> is a list of files to process.\n");
+		break;
+	case m_tenx:
+        options = new TenXAlignerOptions("snap-aligner paired <index-dir> <inputFile(s)> [<options>] where <input file(s)> is a list of files to process.\n");
+		break;
+	}
 
     options->extra = extension->extraOptions();
     if (argc < 3) {
@@ -500,7 +508,7 @@ AlignerContext::parseOptions(
 
         int argsConsumed;
         SNAPFile input;
-        if (SNAPFile::generateFromCommandLine(argv+i, argc-i, &argsConsumed, &input, paired, true)) {
+        if (SNAPFile::generateFromCommandLine(argv+i, argc-i, &argsConsumed, &input, mode, true)) {
             if (input.isStdio) {
 				if (CommandPipe != NULL) {
 					WriteErrorMessage("You may not use stdin/stdout in daemon mode\n");

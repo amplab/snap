@@ -331,7 +331,7 @@ AlignerOptions::parse(
         }
     } else if (strcmp(argv[n], "-o") == 0) {
         int argsConsumed;
-        if (!SNAPFile::generateFromCommandLine(argv + n + 1, argc - n - 1, &argsConsumed, &outputFile, false, false)) {
+        if (!SNAPFile::generateFromCommandLine(argv + n + 1, argc - n - 1, &argsConsumed, &outputFile, m_single, false)) {
             WriteErrorMessage("Must have a file specifier after -o\n");
 			return false;
         }
@@ -900,8 +900,11 @@ SNAPFile::createReadSupplierGenerator(int numThreads, const ReaderContext& conte
 }
 
         bool 
-SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsumed, SNAPFile *snapFile, bool paired, bool isInput)
+SNAPFile::generateFromCommandLine(const char **args, int nArgs, int *argsConsumed, SNAPFile *snapFile, MappingMode_t mode, bool isInput)
 {
+	//**Both tenX and paired will need paired reads. But this is not necessarily true. Obviously 10X can have single reads too.
+	bool paired = (mode == m_paired || mode == m_tenx);
+
     snapFile->fileName = NULL;
     snapFile->secondFileName = NULL;
     snapFile->isCompressed = false;

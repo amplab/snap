@@ -51,7 +51,7 @@ protected:
 
     virtual void updateStats(PairedAlignerStats* stats, Read* read0, Read* read1, PairedAlignmentResult* result, bool useful0, bool useful1);
 
-    bool isPaired() {return true;}
+    MappingMode_t getMappingMode() {return m_paired;}
 
 protected:
 

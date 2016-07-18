@@ -33,7 +33,6 @@ Revision History:
 
 class AlignerExtension;
 
-
 /*++
     Common context state shared across threads during alignment process
 --*/
@@ -69,7 +68,7 @@ public:
     // overrideable by concrete single/paired alignment subclasses
     
     // parse options from the command line
-    AlignerOptions* parseOptions(int argc, const char **argv, const char *version, unsigned *argsConsumed, bool paired);
+    AlignerOptions* parseOptions(int argc, const char **argv, const char *version, unsigned *argsConsumed, MappingMode_t mode);
     
     // initialize from options
     virtual bool initialize();
@@ -86,7 +85,7 @@ public:
     virtual void typeSpecificBeginIteration() = 0;
     virtual void typeSpecificNextIteration() = 0;
 
-    virtual bool isPaired() = 0;
+    virtual MappingMode_t getMappingMode() = 0;
 
     friend class AlignerContext2;
  

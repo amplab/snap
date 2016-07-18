@@ -24,6 +24,8 @@ Revision History:
 
 #pragma once
 
+enum MappingMode_t { m_single, m_paired, m_tenx };
+
 #include "stdafx.h"
 #include "options.h"
 #include "Genome.h"
@@ -51,7 +53,7 @@ struct SNAPFile {
 
     PairedReadSupplierGenerator *createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context);
     ReadSupplierGenerator *createReadSupplierGenerator(int numThreads, const ReaderContext& context);
-    static bool generateFromCommandLine(const char **args, int nArgs, int *argsConsumed, SNAPFile *snapFile, bool paired, bool isInput);
+    static bool generateFromCommandLine(const char **args, int nArgs, int *argsConsumed, SNAPFile *snapFile, MappingMode_t mode, bool isInput);
 };
 
 struct AlignerOptions : public AbstractOptions

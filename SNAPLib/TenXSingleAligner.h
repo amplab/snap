@@ -95,7 +95,9 @@ public:
         _int64                *nSingleEndSecondaryResultsForFirstRead,
         _int64                *nSingleEndSecondaryResultsForSecondRead,
         SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
-        ) {return true};
+	) {
+		return true;
+	};
 	
 	bool align_phase_1(
 		Read                  *read0,

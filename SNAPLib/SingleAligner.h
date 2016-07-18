@@ -59,5 +59,5 @@ protected:
 
 	friend class AlignerContext2;
 
-    bool isPaired() {return false;}
+    MappingMode_t getMappingMode() {return m_single;}
 };

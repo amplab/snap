@@ -54,6 +54,8 @@ using util::stringEndsWith;
 
 static const int DEFAULT_MIN_SPACING = 50;
 static const int DEFAULT_MAX_SPACING = 1000;
+static const int DEFAULT_MAX_BARCODE_SIZE = 60000;
+static const int DEFAULT_MIN_PAIRS_PER_CLUSTER = 10;
 
 struct TenXAlignerStats : public AlignerStats
 {
@@ -229,6 +231,12 @@ TenXAlignerOptions::TenXAlignerOptions(const char* i_commandLine)
 	// indicator that secondary result overflows
 	minSpacing(DEFAULT_MIN_SPACING),
 	maxSpacing(DEFAULT_MAX_SPACING),
+
+	// 10x specific parameter
+	maxBarcodeSize(DEFAULT_MAX_BARCODE_SIZE),
+	minPairsPerCluster(DEFAULT_MIN_PAIRS_PER_CLUSTER),
+
+	// same with pairedEndAligner
 	forceSpacing(false),
 	intersectingAlignerMaxHits(DEFAULT_INTERSECTING_ALIGNER_MAX_HITS),
 	maxCandidatePoolSize(DEFAULT_MAX_CANDIDATE_POOL_SIZE),
@@ -303,6 +311,22 @@ bool TenXAlignerOptions::parse(const char** argv, int argc, int& n, bool *done)
 		n += 1;
 		return true;
 	}
+	else if (strcmp(argv[n], "-maxBar") == 0) {
+		if (n + 1 < argc) {
+			maxBarcodeSize = atoi(argv[n + 1]);
+			n += 1;
+			return true;
+		}
+		return false;
+	}
+	else if (strcmp(argv[n], "-minCluster") == 0) {
+		if (n + 1 < argc) {
+			minPairsPerCluster = atoi(argv[n + 1]);
+			n += 1;
+			return true;
+		}
+		return false;
+	}
 	return AlignerOptions::parse(argv, argc, n, done);
 }
 
@@ -318,6 +342,7 @@ bool TenXAlignerContext::initialize()
 	minSpacing = options2->minSpacing;
 	maxSpacing = options2->maxSpacing;
 	maxBarcodeSize = options2->maxBarcodeSize;
+	minPairsPerCluster = options2->minPairsPerCluster;
 	forceSpacing = options2->forceSpacing;
 	maxCandidatePoolSize = options2->maxCandidatePoolSize;
 	intersectingAlignerMaxHits = options2->intersectingAlignerMaxHits;
@@ -422,6 +447,8 @@ void TenXAlignerContext::runIterationThread()
 		_maxSingleSecondaryHits_ref = 32;
 	}
 
+	fprintf(stderr, "**initializing\n");
+
 	/*
 	 * calculate the memory useage for reservation
 	 */
@@ -430,10 +457,22 @@ void TenXAlignerContext::runIterationThread()
 	size_t memoryPoolSize = TenXClusterAligner::getBigAllocatorReservation(index, maxReadSize, maxHits, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxDist,
 		extraSearchDepth, maxCandidatePoolSize, maxSecondaryAlignmentsPerContig);
 
+	fprintf(stderr, "**memoryPoolSize after TenXClusterAligner reservation: %lld\n", memoryPoolSize);
+	fflush(stderr);
+
 	// memory quota for all the SingleAligners 
-	memoryPoolSize += TenXSingleAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(),
+	size_t singleTenXReserve = TenXSingleAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(),
 		numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize,
-		maxSecondaryAlignmentsPerContig) * maxBarcodeSize;
+		maxSecondaryAlignmentsPerContig);
+
+	memoryPoolSize += singleTenXReserve * maxBarcodeSize;
+
+	fprintf(stderr, "**singleTenXReserve:%lld  maxBarcodeSize: %lld  memoryPoolSize: %lld\n ", singleTenXReserve, maxBarcodeSize, memoryPoolSize);
+	fprintf(stderr, "**memoryPoolSize after TenXSingleAligner reservation: %lld\n", memoryPoolSize);
+	fprintf(stderr, "**memoryPoolSize after TenXSingleAligner reservation: %lld\n", memoryPoolSize);
+	fprintf(stderr, "**memoryPoolSize after TenXSingleAligner reservation: %lld\n", memoryPoolSize);
+	fprintf(stderr, "**memoryPoolSize after TenXSingleAligner reservation: %lld\n", memoryPoolSize);
+	fflush(stderr);
 
 	// memory quota for the SingleAligner pointer array
 	memoryPoolSize += sizeof(TenXSingleAligner*) * maxBarcodeSize;
@@ -465,6 +504,9 @@ void TenXAlignerContext::runIterationThread()
 
 	// memory quota for useful tracker (useful0 and useful1)
 	memoryPoolSize += sizeof(bool) * 2 * maxBarcodeSize;
+	
+	fprintf(stderr, "**memoryPoolSize: %lld\n", memoryPoolSize);
+	fflush(stderr);
 
 	/*
 	 * Allocate space
@@ -474,6 +516,8 @@ void TenXAlignerContext::runIterationThread()
 
 	// Allocate the aligners (single + cluster)
 	TenXSingleAligner **tenXsingleAlignerArray = new (allocator) TenXSingleAligner*[maxBarcodeSize];
+
+	fprintf(stderr, "**Before going into the loop of allocating single aligners\n");
 
 	for (int singleAlignerIdx = 0; singleAlignerIdx < maxBarcodeSize; singleAlignerIdx++) {
 		tenXsingleAlignerArray[singleAlignerIdx] = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
@@ -546,6 +590,7 @@ void TenXAlignerContext::runIterationThread()
 		pairNotFinished[pairIdx] = true;
 	}
 
+	fprintf(stderr, "**begin read buffering\n");
 
 	/*
 	 * Buffer all the reads
@@ -570,27 +615,28 @@ void TenXAlignerContext::runIterationThread()
 	_int64 startTime = timeInMillis();
 	_int64 readFinishedTime;
 
+	// Record time
+	if (options->profile) {
+		readFinishedTime = timeInMillis();
+		stats->millisReading += (readFinishedTime - startTime);
+	}
+	// **This is not currently useful for the moment which we only handle a single cluster
+	if (AlignerOptions::useHadoopErrorMessages && stats->totalReads % 10000 == 0 && timeInMillis() - lastReportTime > 10000) {
+		fprintf(stderr, "reporter:counter:SNAP,readsAligned,%lu\n", stats->totalReads - readsWhenLastReported);
+		readsWhenLastReported = stats->totalReads;
+		lastReportTime = timeInMillis();
+	}
+
 	_int64 nSingleResults[NUM_READS_PER_PAIR] = { 0, 0 }; // just for the sake of outputing unmapped read pairs
 	unsigned totalPairsForBarcode = 0; // total legitimate read pairs of this barcode
 
 	while (supplier->getNextReadPair(&reads[totalPairsForBarcode * NUM_READS_PER_PAIR], &reads[totalPairsForBarcode * NUM_READS_PER_PAIR + 1])) {
-		if (options->profile) {
-			readFinishedTime = timeInMillis();
-			stats->millisReading += (readFinishedTime - startTime);
-		}
-
 		// Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
 		if (!ignoreMismatchedIDs) {
 			Read::checkIdMatch(reads[0], reads[1]);
 		}
 
 		stats->totalReads += 2;
-
-		if (AlignerOptions::useHadoopErrorMessages && stats->totalReads % 10000 == 0 && timeInMillis() - lastReportTime > 10000) {
-			fprintf(stderr, "reporter:counter:SNAP,readsAligned,%lu\n", stats->totalReads - readsWhenLastReported);
-			readsWhenLastReported = stats->totalReads;
-			lastReportTime = timeInMillis();
-		}
 
 		// Skip the pair if there are too many Ns and/or they're too short
 		int maxDist = this->maxDist;
@@ -622,23 +668,29 @@ void TenXAlignerContext::runIterationThread()
 			continue;
 		}
 		totalPairsForBarcode++;
+		_ASSERT(totalPairsForBarcode <= maxBarcodeSize);
 		// Note that useful0 and useful1 will be discarded if neither of the read of the pair is useful
 	}
 
-	// This is the align part.
+	fprintf(stderr, "**begin alignment\n");
+
+	/*
+	 * Align the read pairs
+	 */
+
 #if     TIME_HISTOGRAM
 	_int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
-	bool barcodeNotFinished = true;
-	while (barcodeNotFinished) {
+	while (true) {
 		// If there is indeed too many secondary results and the buffer size is not enough, reallocate the memory
-		barcodeNotFinished = aligner->align(reads, totalPairsForBarcode, results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, nSecondaryResults,
+		bool barcodeNotFinished = aligner->align(reads, totalPairsForBarcode, results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, nSecondaryResults,
 			maxSingleSecondaryHits, maxSecondaryAlignments, nSingleSecondaryResults, singleSecondaryResults, pairNotFinished);
 
-		// Quit if all reads are done and no overflow is detected.
+		// Quit if all reads are done and there is no secondary result overflow.
 		if (!barcodeNotFinished)
 			break;
 
+		// If there is secondary result overflow, reallocate result space for those that overflow
 		for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {
 			if (pairNotFinished[pairIdx]) {
 				_ASSERT(nSecondaryResults[pairIdx] > maxPairedSecondaryHits[pairIdx] || nSingleSecondaryResults[pairIdx * NUM_READS_PER_PAIR] > maxSingleSecondaryHits[pairIdx]);
@@ -667,82 +719,100 @@ void TenXAlignerContext::runIterationThread()
 					reallocatedSingleSecondaryBuffer[pairIdx] = true;
 				}
 			}
-
-			_int64 alignFinishedTime;
-			if (options->profile) {
-				alignFinishedTime = timeInMillis();
-				stats->millisAligning += (alignFinishedTime - readFinishedTime);
-			}
-
-#if     TIME_HISTOGRAM
-			_int64 runTime = timeInNanos() - startTime;
-			int timeBucket = min(30, cheezyLogBase2(runTime));
-			stats->countByTimeBucket[timeBucket]++;
-			stats->nanosByTimeBucket[timeBucket] += runTime;
-#endif // TIME_HISTOGRAM
-
-			if (forceSpacing && isOneLocation(results[pairIdx][0].status[0]) != isOneLocation(results[pairIdx][0].status[1])) {
-				// either both align or neither do
-				results[pairIdx][0].status[0] = results[pairIdx][0].status[1] = NotFound;
-				results[pairIdx][0].location[0] = results[pairIdx][0].location[1] = InvalidGenomeLocation;
-			}
-
-			bool firstIsPrimary = true;
-			for (int i = 0; i <= nSecondaryResults[pairIdx]; i++) {  // Loop runs to <= nSecondaryResults because there's a primary result, too.
-				bool pass0 = options->passFilter(reads[NUM_READS_PER_PAIR * pairIdx], results[pairIdx][i].status[0], !useful0[pairIdx], i != 0 || !firstIsPrimary);
-				bool pass1 = options->passFilter(reads[NUM_READS_PER_PAIR * pairIdx + 1], results[pairIdx][i].status[1], !useful1[pairIdx], i != 0 || !firstIsPrimary);
-				bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
-					? (pass0 && pass1) : (pass0 || pass1);
-
-				if (!pass) {
-					//
-					// Remove this one from the list by copying the last one here.
-					//
-					results[pairIdx][i] = results[pairIdx][nSecondaryResults[pairIdx]];
-					nSecondaryResults--;
-					if (0 == i) {
-						firstIsPrimary = false;
-					}
-					i--;
-				}
-			}
-
-			//
-			// Now check the single secondary alignments
-			//
-			SingleAlignmentResult *singleResults[2] = { singleSecondaryResults[pairIdx], singleSecondaryResults[pairIdx] + nSingleSecondaryResults[NUM_READS_PER_PAIR * pairIdx] };
-			for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
-				for (int whichAlignment = 0; whichAlignment < nSingleSecondaryResults[NUM_READS_PER_PAIR * pairIdx + whichRead]; whichAlignment++) {
-					unsigned transferedIdx = NUM_READS_PER_PAIR * pairIdx + whichRead;
-					if (!options->passFilter(reads[transferedIdx], singleResults[whichRead][whichAlignment].status, false, true)) {
-						singleResults[whichRead][whichAlignment] = singleResults[whichRead][nSingleSecondaryResults[transferedIdx] - 1];
-						nSingleSecondaryResults[transferedIdx]--;
-						whichAlignment--;
-					}
-				}
-			}
-
-			if (NULL != readWriter) {
-				readWriter->writePairs(readerContext, reads + NUM_READS_PER_PAIR * pairIdx, results[pairIdx], nSecondaryResults[pairIdx] + 1, singleResults, nSingleSecondaryResults + NUM_READS_PER_PAIR * pairIdx, firstIsPrimary);
-			}
-
-			if (options->profile) {
-				startTime = timeInMillis();
-				stats->millisWriting += (startTime - alignFinishedTime);
-			}
-
-			stats->extraAlignments += nSecondaryResults[pairIdx] + (firstIsPrimary ? 0 : 1); // If first isn't primary, it's secondary.
-
-			if (firstIsPrimary) {
-				updateStats((TenXAlignerStats*)stats, reads[NUM_READS_PER_PAIR * pairIdx], reads[NUM_READS_PER_PAIR * pairIdx + 1], results[pairIdx], useful0[pairIdx], useful1[pairIdx]);
-			}
-			else {
-				stats->filtered += 2;
-			}
-		}   // while we have a read pair
+		}
 	}
 
+	fprintf(stderr, "**begin output\n");
+
+	/*
+	 * Output the results
+	 */
+	
+	// Record time
+	_int64 alignFinishedTime;
+	if (options->profile) {
+		alignFinishedTime = timeInMillis();
+		stats->millisAligning += (alignFinishedTime - readFinishedTime);
+	}
+
+	for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {
+		
+
+#if     TIME_HISTOGRAM
+		_int64 runTime = timeInNanos() - startTime;
+		int timeBucket = min(30, cheezyLogBase2(runTime));
+		stats->countByTimeBucket[timeBucket]++;
+		stats->nanosByTimeBucket[timeBucket] += runTime;
+#endif // TIME_HISTOGRAM
+
+		if (forceSpacing && isOneLocation(results[pairIdx][0].status[0]) != isOneLocation(results[pairIdx][0].status[1])) {
+			// either both align or neither do
+			results[pairIdx][0].status[0] = results[pairIdx][0].status[1] = NotFound;
+			results[pairIdx][0].location[0] = results[pairIdx][0].location[1] = InvalidGenomeLocation;
+		}
+
+		bool firstIsPrimary = true;
+		for (int i = 0; i <= nSecondaryResults[pairIdx]; i++) {  // Loop runs to <= nSecondaryResults because there's a primary result, too.
+			bool pass0 = options->passFilter(reads[NUM_READS_PER_PAIR * pairIdx], results[pairIdx][i].status[0], !useful0[pairIdx], i != 0 || !firstIsPrimary);
+			bool pass1 = options->passFilter(reads[NUM_READS_PER_PAIR * pairIdx + 1], results[pairIdx][i].status[1], !useful1[pairIdx], i != 0 || !firstIsPrimary);
+			bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
+				? (pass0 && pass1) : (pass0 || pass1);
+
+			if (!pass) {
+				//
+				// Remove this one from the list by copying the last one here.
+				//
+				results[pairIdx][i] = results[pairIdx][nSecondaryResults[pairIdx]];
+				nSecondaryResults--;
+				if (0 == i) {
+					firstIsPrimary = false;
+				}
+				i--;
+			}
+		}
+
+		//
+		// Now check the single secondary alignments
+		//
+		SingleAlignmentResult *singleResults[2] = { singleSecondaryResults[pairIdx], singleSecondaryResults[pairIdx] + nSingleSecondaryResults[NUM_READS_PER_PAIR * pairIdx] };
+		for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+			unsigned globalIdx = NUM_READS_PER_PAIR * pairIdx + whichRead;
+			for (int whichAlignment = 0; whichAlignment < nSingleSecondaryResults[globalIdx]; whichAlignment++) {
+				if (!options->passFilter(reads[globalIdx], singleResults[whichRead][whichAlignment].status, false, true)) {
+					singleResults[whichRead][whichAlignment] = singleResults[whichRead][nSingleSecondaryResults[globalIdx] - 1];
+					nSingleSecondaryResults[globalIdx]--;
+					whichAlignment--;
+				}
+			}
+		}
+
+		if (NULL != readWriter) {
+			readWriter->writePairs(readerContext, reads + NUM_READS_PER_PAIR * pairIdx, results[pairIdx], nSecondaryResults[pairIdx] + 1, singleResults, nSingleSecondaryResults + NUM_READS_PER_PAIR * pairIdx, firstIsPrimary);
+		}
+
+		// **Not sure about all these stats. It's a legacy from the normal pairEndMapper. But now it's cluster based so it doesn't seem right no more. Whowever still wants meaningful stats from this, you need to fix this.
+		if (options->profile) {
+			startTime = timeInMillis();
+			stats->millisWriting += (startTime - alignFinishedTime);
+		}
+
+		stats->extraAlignments += nSecondaryResults[pairIdx] + (firstIsPrimary ? 0 : 1); // If first isn't primary, it's secondary.
+
+		if (firstIsPrimary) {
+			updateStats((TenXAlignerStats*)stats, reads[NUM_READS_PER_PAIR * pairIdx], reads[NUM_READS_PER_PAIR * pairIdx + 1], results[pairIdx], useful0[pairIdx], useful1[pairIdx]);
+		}
+		else {
+			stats->filtered += 2;
+		}
+	}   // while we have a read pair
+
 	stats->lvCalls = aligner->getLocationsScored();
+
+	fprintf(stderr, "**begin cleanup\n");
+
+	/*
+	 * Deallocate and clean up
+	 */
 
 	allocator->checkCanaries();
 
@@ -764,6 +834,7 @@ void TenXAlignerContext::runIterationThread()
 	for (unsigned singleAlignerIdx = 0; singleAlignerIdx < maxBarcodeSize; singleAlignerIdx++) {
 		tenXsingleAlignerArray[singleAlignerIdx]->~TenXSingleAligner();
 	}
+
 	delete allocator;
 }
 

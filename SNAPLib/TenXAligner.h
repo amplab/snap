@@ -51,7 +51,7 @@ protected:
 
 	virtual void updateStats(TenXAlignerStats* stats, Read* read0, Read* read1, PairedAlignmentResult* result, bool useful0, bool useful1);
 
-	bool isPaired() { return true; }
+	MappingMode_t getMappingMode() { return m_tenx; }
 
 protected:
 
@@ -62,8 +62,8 @@ protected:
 
 	int					minSpacing;
 	int					maxSpacing;
-	int					maxBarcodeSize;
-	int					minReadsPerCluster;
+	_uint64				maxBarcodeSize;
+	unsigned			minPairsPerCluster;
 	bool				forceSpacing;
 	unsigned			intersectingAlignerMaxHits;
 	unsigned			maxCandidatePoolSize;
@@ -86,8 +86,8 @@ struct TenXAlignerOptions : public AlignerOptions
 
 	int					minSpacing;
 	int					maxSpacing;
-	int					maxBarcodeSize;
-	int					minReadsPerCluster;
+	_uint64				maxBarcodeSize; // make it 64 bit so that the carry won't overflow...
+	unsigned			minPairsPerCluster;
 	bool				forceSpacing;
 	unsigned			intersectingAlignerMaxHits;
 	unsigned			maxCandidatePoolSize;
