@@ -384,9 +384,9 @@ void TenXAlignerContext::runIterationThread()
 		return;
 	}
 
-	if (index == NULL) { //** not sure what's going on here
-		Read *reads[NUM_READS_PER_PAIR];//**needs to be fixed
-		_int64 nSingleResults[2] = { 0, 0 };//**needs to be fixed
+	if (index == NULL) { //**** not sure what's going on here
+		Read *reads[NUM_READS_PER_PAIR];
+		_int64 nSingleResults[2] = { 0, 0 };
 
 		// no alignment, just input/output
 		PairedAlignmentResult result;
@@ -447,7 +447,7 @@ void TenXAlignerContext::runIterationThread()
 		_maxSingleSecondaryHits_ref = 32;
 	}
 
-	fprintf(stderr, "**initializing\n");
+	fprintf(stderr, "****initializing\n");
 
 	/*
 	 * calculate the memory useage for reservation
@@ -457,7 +457,7 @@ void TenXAlignerContext::runIterationThread()
 	size_t memoryPoolSize = TenXClusterAligner::getBigAllocatorReservation(index, maxReadSize, maxHits, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxDist,
 		extraSearchDepth, maxCandidatePoolSize, maxSecondaryAlignmentsPerContig);
 
-	fprintf(stderr, "**memoryPoolSize after TenXClusterAligner reservation: %lld\n", memoryPoolSize);
+	fprintf(stderr, "****memoryPoolSize after TenXClusterAligner reservation: %lld\n", memoryPoolSize);
 	fflush(stderr);
 
 	// memory quota for all the SingleAligners 
@@ -467,14 +467,9 @@ void TenXAlignerContext::runIterationThread()
 
 	memoryPoolSize += singleTenXReserve * maxBarcodeSize;
 
-	fprintf(stderr, "**singleTenXReserve:%lld  maxBarcodeSize: %lld  memoryPoolSize: %lld\n", singleTenXReserve, maxBarcodeSize, memoryPoolSize);
-	fprintf(stderr, "**memoryPoolSize after TenXSingleAligner reservation: %lld\n", memoryPoolSize);
-	fprintf(stderr, "**memoryPoolSize after TenXSingleAligner reservation: %lld\n", memoryPoolSize);
-	fprintf(stderr, "**memoryPoolSize after TenXSingleAligner reservation: %lld\n", memoryPoolSize);
-	fprintf(stderr, "**memoryPoolSize after TenXSingleAligner reservation: %lld\n", memoryPoolSize);
-	fflush(stderr);
+	fprintf(stderr, "****singleTenXReserve:%lld  maxBarcodeSize: %lld  memoryPoolSize: %lld\n", singleTenXReserve, maxBarcodeSize, memoryPoolSize);
 
-	/*
+	/* This is incorrect. BigAllocator should be only used for aligners
 	// memory quota for the SingleAligner pointer array
 	memoryPoolSize += sizeof(TenXSingleAligner*) * maxBarcodeSize;
 
@@ -593,7 +588,7 @@ void TenXAlignerContext::runIterationThread()
 		pairNotFinished[pairIdx] = true;
 	}
 
-	fprintf(stderr, "**begin read buffering\n");
+	fprintf(stderr, "****begin read buffering\n");
 
 	/*
 	 * Buffer all the reads
@@ -623,7 +618,7 @@ void TenXAlignerContext::runIterationThread()
 		readFinishedTime = timeInMillis();
 		stats->millisReading += (readFinishedTime - startTime);
 	}
-	// **This is not currently useful for the moment which we only handle a single cluster
+	// ****This is not currently useful for the moment which we only handle a single cluster
 	if (AlignerOptions::useHadoopErrorMessages && stats->totalReads % 10000 == 0 && timeInMillis() - lastReportTime > 10000) {
 		fprintf(stderr, "reporter:counter:SNAP,readsAligned,%lu\n", stats->totalReads - readsWhenLastReported);
 		readsWhenLastReported = stats->totalReads;
@@ -675,7 +670,7 @@ void TenXAlignerContext::runIterationThread()
 		// Note that useful0 and useful1 will be discarded if neither of the read of the pair is useful
 	}
 
-	fprintf(stderr, "**begin alignment\n");
+	fprintf(stderr, "****begin alignment\n");
 
 	/*
 	 * Align the read pairs
@@ -725,7 +720,7 @@ void TenXAlignerContext::runIterationThread()
 		}
 	}
 
-	fprintf(stderr, "**begin output\n");
+	fprintf(stderr, "****begin output\n");
 
 	/*
 	 * Output the results
@@ -793,7 +788,7 @@ void TenXAlignerContext::runIterationThread()
 			readWriter->writePairs(readerContext, reads + NUM_READS_PER_PAIR * pairIdx, results[pairIdx], nSecondaryResults[pairIdx] + 1, singleResults, nSingleSecondaryResults + NUM_READS_PER_PAIR * pairIdx, firstIsPrimary);
 		}
 
-		// **Not sure about all these stats. It's a legacy from the normal pairEndMapper. But now it's cluster based so it doesn't seem right no more. Whowever still wants meaningful stats from this, you need to fix this.
+		// ****Not sure about all these stats. It's a legacy from the normal pairEndMapper. But now it's cluster based so it doesn't seem right no more. Whowever still wants meaningful stats from this, you need to fix this.
 		if (options->profile) {
 			startTime = timeInMillis();
 			stats->millisWriting += (startTime - alignFinishedTime);
@@ -811,7 +806,7 @@ void TenXAlignerContext::runIterationThread()
 
 	stats->lvCalls = aligner->getLocationsScored();
 
-	fprintf(stderr, "**begin cleanup\n");
+	fprintf(stderr, "****begin cleanup\n");
 
 	/*
 	 * Deallocate and clean up
@@ -838,6 +833,7 @@ void TenXAlignerContext::runIterationThread()
 		tenXsingleAlignerArray[singleAlignerIdx]->~TenXSingleAligner();
 	}
 
+	fflush(stderr);
 	delete allocator;
 }
 

@@ -863,7 +863,7 @@ SNAPFile::createPairedReadSupplierGenerator(int numThreads, bool quicklyDropUnpa
         return BAMReader::createPairedReadSupplierGenerator(fileName,numThreads, quicklyDropUnpairedReads, context);
 
     case FASTQFile:
-		printf("correct guess\n");
+		printf("****correct guess\n");
         return PairedFASTQReader::createPairedReadSupplierGenerator(fileName, secondFileName, numThreads, context, isCompressed);
 
     case InterleavedFASTQFile:

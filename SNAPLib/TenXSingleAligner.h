@@ -81,7 +81,7 @@ public:
         _int64                 maxSecondaryResultsToReturn
         );
 
-	// again, this is just a place holder for virtual class
+	// again, this is just a place holder for virtual class, wraps the above align
 	virtual bool align(
         Read                  *read0,
         Read                  *read1,
@@ -96,7 +96,7 @@ public:
         _int64                *nSingleEndSecondaryResultsForSecondRead,
         SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
 	) {
-		return true;
+		return align(read0, read1, result, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults, maxSecondaryResultsToReturn);
 	};
 	
 	bool align_phase_1(
@@ -537,5 +537,5 @@ private:
 	unsigned				lastSeedOffsetForReadWithMoreHits[NUM_DIRECTIONS];
 	GenomeLocation			lastGenomeLocationForReadWithMoreHits[NUM_DIRECTIONS];
 	unsigned				maxUsedBestPossibleScoreList;
-	bool					stopWorkingSet[NUM_DIRECTIONS];
+	bool					noMoreLoci[NUM_DIRECTIONS];
 };

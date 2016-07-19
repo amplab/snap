@@ -30,4 +30,5 @@ Revision History:
 int main(int argc, const char **argv)
 {
 	ProcessTopLevelCommands(argc, argv);
+	return 0;
 }
