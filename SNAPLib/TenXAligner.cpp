@@ -474,6 +474,7 @@ void TenXAlignerContext::runIterationThread()
 	fprintf(stderr, "**memoryPoolSize after TenXSingleAligner reservation: %lld\n", memoryPoolSize);
 	fflush(stderr);
 
+	/*
 	// memory quota for the SingleAligner pointer array
 	memoryPoolSize += sizeof(TenXSingleAligner*) * maxBarcodeSize;
 
@@ -507,6 +508,7 @@ void TenXAlignerContext::runIterationThread()
 	
 	fprintf(stderr, "**memoryPoolSize: %lld\n", memoryPoolSize);
 	fflush(stderr);
+	*/
 
 	/*
 	 * Allocate space
@@ -514,8 +516,8 @@ void TenXAlignerContext::runIterationThread()
 
 	BigAllocator *allocator = new BigAllocator(memoryPoolSize);
 
-	// Allocate the aligners (single + cluster)
-	TenXSingleAligner **tenXsingleAlignerArray = new (allocator) TenXSingleAligner*[maxBarcodeSize];
+	// Allocate the single aligners pointers (single + cluster)
+	TenXSingleAligner **tenXsingleAlignerArray = (TenXSingleAligner**)BigAlloc(sizeof(TenXSingleAligner*) * maxBarcodeSize);
 
 	fprintf(stderr, "**Before going into the loop of allocating single aligners\n");
 
@@ -548,35 +550,36 @@ void TenXAlignerContext::runIterationThread()
 	allocator->checkCanaries();
 
 	// Allocate space for read pointers
-	Read **reads = (Read**)allocator->allocate(sizeof(Read*) * NUM_READS_PER_PAIR * maxBarcodeSize);
+	Read **reads = (Read**)BigAlloc(sizeof(Read*) * NUM_READS_PER_PAIR * maxBarcodeSize);
 
 	// Allocate space for (paired and single) results
-	PairedAlignmentResult **results = (PairedAlignmentResult**)allocator->allocate(sizeof(PairedAlignmentResult*) * maxBarcodeSize);
-	SingleAlignmentResult **singleSecondaryResults = (SingleAlignmentResult**)allocator->allocate(sizeof(SingleAlignmentResult*) * maxBarcodeSize);
+	PairedAlignmentResult **results = (PairedAlignmentResult**)BigAlloc(sizeof(PairedAlignmentResult*) * maxBarcodeSize);
+	SingleAlignmentResult **singleSecondaryResults = (SingleAlignmentResult**)BigAlloc(sizeof(SingleAlignmentResult*) * maxBarcodeSize);
+
 	for (unsigned pairIdx = 0; pairIdx < maxBarcodeSize; pairIdx++) {
 		// Allocate data for result arrays
-		results[pairIdx] = (PairedAlignmentResult*)allocator->allocate((1 + _maxPairedSecondaryHits_ref) * sizeof(*results)); // all paired results. "+1" is for the primary result
-		singleSecondaryResults[pairIdx] = (SingleAlignmentResult*)allocator->allocate(_maxSingleSecondaryHits_ref * sizeof(*singleSecondaryResults));
+		results[pairIdx] = (PairedAlignmentResult*)BigAlloc((1 + _maxPairedSecondaryHits_ref) * sizeof(*results)); // all paired results. "+1" is for the primary result
+		singleSecondaryResults[pairIdx] = (SingleAlignmentResult*)BigAlloc(_maxSingleSecondaryHits_ref * sizeof(*singleSecondaryResults)); // all single results.
 	}
 
 	// Allocate space for secondary result counters
-	_int64 *nSecondaryResults = (_int64*)allocator->allocate(sizeof(_int64) * maxBarcodeSize);
-	_int64 *nSingleSecondaryResults = (_int64*)allocator->allocate(sizeof(_int64) * NUM_READS_PER_PAIR * maxBarcodeSize);
+	_int64 *nSecondaryResults = (_int64*)BigAlloc(sizeof(_int64) * maxBarcodeSize);
+	_int64 *nSingleSecondaryResults = (_int64*)BigAlloc(sizeof(_int64) * NUM_READS_PER_PAIR * maxBarcodeSize);
 
 	// Allocate space for secondary result capacity counters
-	_int64 *maxPairedSecondaryHits = (_int64*)allocator->allocate(sizeof(_int64) * maxBarcodeSize);
-	_int64 *maxSingleSecondaryHits = (_int64*)allocator->allocate(sizeof(_int64) * maxBarcodeSize);
+	_int64 *maxPairedSecondaryHits = (_int64*)BigAlloc(sizeof(_int64) * maxBarcodeSize);
+	_int64 *maxSingleSecondaryHits = (_int64*)BigAlloc(sizeof(_int64) * maxBarcodeSize);
 
 	// Allocate space for the extra allocation buffer tracker
-	bool *reallocatedPairedSecondaryBuffer = (bool*)allocator->allocate(sizeof(bool) * maxBarcodeSize);//**needs to be fixed
-	bool *reallocatedSingleSecondaryBuffer = (bool*)allocator->allocate(sizeof(bool) * maxBarcodeSize);//**needs to be fixed
+	bool *reallocatedPairedSecondaryBuffer = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
+	bool *reallocatedSingleSecondaryBuffer = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
 
 	// Allocate space for the overflow tracker
-	bool *pairNotFinished = (bool*)allocator->allocate(sizeof(bool) * maxBarcodeSize);
+	bool *pairNotFinished = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
 
 	// Allocate space for useful0 and useful1
-	bool *useful0 = (bool*)allocator->allocate(sizeof(bool) * maxBarcodeSize);
-	bool *useful1 = (bool*)allocator->allocate(sizeof(bool) * maxBarcodeSize);
+	bool *useful0 = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
+	bool *useful1 = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
 
 	/*
 	 * Initialization of some data
