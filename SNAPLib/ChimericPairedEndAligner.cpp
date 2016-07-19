@@ -170,7 +170,6 @@ bool ChimericPairedEndAligner::align(
 		}
 	}
 
-	/*
     //
     // If the intersecting aligner didn't find an alignment for these reads, then they may be
     // chimeric and so we should just align them with the single end aligner and apply a MAPQ penalty.
@@ -215,6 +214,7 @@ bool ChimericPairedEndAligner::align(
 
     result->fromAlignTogether = false;
     result->alignedAsPair = false;
+	/*
 	*/
 
 #ifdef _DEBUG
