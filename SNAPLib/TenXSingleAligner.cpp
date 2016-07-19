@@ -116,7 +116,7 @@ TenXSingleAligner::getBigAllocatorReservation(GenomeIndex * index, unsigned maxB
 		aligner.allocateDynamicMemory(&countingAllocator, maxReadSize, maxBigHitsToConsider, maxSeedsToUse, maxEditDistanceToConsider, maxExtraSearchDepth, maxCandidatePoolSize,
 			maxSecondaryAlignmentsPerContig);
 
-		fprintf(stderr, "**sizeof(aligner): %lld  getMemoryUsed(): %lld\n", sizeof(aligner), countingAllocator.getMemoryUsed());
+		fprintf(stderr, "****sizeof(aligner): %lld  getMemoryUsed(): %lld\n", sizeof(aligner), countingAllocator.getMemoryUsed());
 
 		return sizeof(aligner) + countingAllocator.getMemoryUsed();
 	}

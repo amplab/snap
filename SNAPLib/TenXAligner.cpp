@@ -469,41 +469,6 @@ void TenXAlignerContext::runIterationThread()
 
 	fprintf(stderr, "****singleTenXReserve:%lld  maxBarcodeSize: %lld  memoryPoolSize: %lld\n", singleTenXReserve, maxBarcodeSize, memoryPoolSize);
 
-	/* This is incorrect. BigAllocator should be only used for aligners
-	// memory quota for the SingleAligner pointer array
-	memoryPoolSize += sizeof(TenXSingleAligner*) * maxBarcodeSize;
-
-	// memory quota for read pointers
-	memoryPoolSize += sizeof(Read*) * NUM_READS_PER_PAIR * maxBarcodeSize;
-
-	// memory quota for secondary result counters
-	memoryPoolSize += sizeof(_int64) * maxBarcodeSize;
-
-	// memory quota for result pointers (paired + singleEnd)
-	memoryPoolSize += sizeof(PairedAlignmentResult*) * maxBarcodeSize;
-	memoryPoolSize += sizeof(SingleAlignmentResult*) * NUM_READS_PER_PAIR * maxBarcodeSize;
-
-	// memory quota for default results (paired + single)
-	memoryPoolSize += ((1 + _maxPairedSecondaryHits_ref) * sizeof(PairedAlignmentResult) + _maxSingleSecondaryHits_ref * sizeof(SingleAlignmentResult)) * maxBarcodeSize;
-
-	// memory quota for secondary result counters (paired + single0 + single1)
-	memoryPoolSize += sizeof(_int64) * 3 * maxBarcodeSize;
-
-	// memory quota for secondary result capacity counters (paired + single)
-	memoryPoolSize += sizeof(_int64) * 2 * maxBarcodeSize;
-
-	// memory quota for dynamic allocation tracker (paired + single)
-	memoryPoolSize += sizeof(bool) * 2 * maxBarcodeSize;
-
-	// memory quota for result overflow tracker
-	memoryPoolSize += sizeof(bool) * maxBarcodeSize;
-
-	// memory quota for useful tracker (useful0 and useful1)
-	memoryPoolSize += sizeof(bool) * 2 * maxBarcodeSize;
-	
-	fprintf(stderr, "**memoryPoolSize: %lld\n", memoryPoolSize);
-	fflush(stderr);
-	*/
 
 	/*
 	 * Allocate space
