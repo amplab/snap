@@ -141,28 +141,28 @@ TenXSingleAligner::allocateDynamicMemory(BigAllocator *allocator, unsigned maxRe
 		}
 	}
 
-	fprintf(stderr, "**stage 1 getMemoryUsed(): %lld\n", allocatorCast->getMemoryUsed());
+	//fprintf(stderr, "**stage 1 getMemoryUsed(): %lld\n", allocatorCast->getMemoryUsed());
 
 	scoringCandidatePoolSize = min(maxCandidatePoolSize, maxBigHitsToConsider * maxSeedsToUse * NUM_READS_PER_PAIR);
 
 	scoringCandidates = (ScoringCandidate **)allocator->allocate(sizeof(ScoringCandidate *) * (maxEditDistanceToConsider + maxExtraSearchDepth + 1));  //+1 is for 0.
 	
-	fprintf(stderr, "**stage 1.1 getMemoryUsed(): %lld\n", allocatorCast->getMemoryUsed());
+	//fprintf(stderr, "**stage 1.1 getMemoryUsed(): %lld\n", allocatorCast->getMemoryUsed());
 	
 	scoringCandidatePool = (ScoringCandidate *)allocator->allocate(sizeof(ScoringCandidate) * scoringCandidatePoolSize);
 	
-	fprintf(stderr, "**stage 1.2 getMemoryUsed(): %lld\n", allocatorCast->getMemoryUsed());
+	//fprintf(stderr, "**stage 1.2 getMemoryUsed(): %lld\n", allocatorCast->getMemoryUsed());
 
 	for (unsigned i = 0; i < NUM_READS_PER_PAIR; i++) {
 		scoringMateCandidates[i] = (ScoringMateCandidate *)allocator->allocate(sizeof(ScoringMateCandidate) * scoringCandidatePoolSize / NUM_READS_PER_PAIR);
 	}
 
-	fprintf(stderr, "**stage 2 getMemoryUsed(): %lld\n", allocatorCast->getMemoryUsed());
+	//fprintf(stderr, "**stage 2 getMemoryUsed(): %lld\n", allocatorCast->getMemoryUsed());
 
 	mergeAnchorPoolSize = scoringCandidatePoolSize;
 	mergeAnchorPool = (MergeAnchor *)allocator->allocate(sizeof(MergeAnchor) * mergeAnchorPoolSize);
 	
-	fprintf(stderr, "**stage 2.1 getMemoryUsed(): %lld\n", allocatorCast->getMemoryUsed());
+	//fprintf(stderr, "**stage 2.1 getMemoryUsed(): %lld\n", allocatorCast->getMemoryUsed());
 
 	if (maxSecondaryAlignmentsPerContig > 0) {
 		size_t size = sizeof(*hitsPerContigCounts) * index->getGenome()->getNumContigs();
@@ -174,7 +174,7 @@ TenXSingleAligner::allocateDynamicMemory(BigAllocator *allocator, unsigned maxRe
 		hitsPerContigCounts = NULL;
 	}
 
-	fprintf(stderr, "**stage 3 getMemoryUsed(): %lld\n", allocatorCast->getMemoryUsed());
+	//fprintf(stderr, "**stage 3 getMemoryUsed(): %lld\n", allocatorCast->getMemoryUsed());
 
 }
 

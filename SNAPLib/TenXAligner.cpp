@@ -468,11 +468,6 @@ void TenXAlignerContext::runIterationThread()
 	memoryPoolSize += singleTenXReserve * maxBarcodeSize;
 
 	fprintf(stderr, "**singleTenXReserve:%lld  maxBarcodeSize: %lld  memoryPoolSize: %lld\n", singleTenXReserve, maxBarcodeSize, memoryPoolSize);
-	fprintf(stderr, "**memoryPoolSize after TenXSingleAligner reservation: %lld\n", memoryPoolSize);
-	fprintf(stderr, "**memoryPoolSize after TenXSingleAligner reservation: %lld\n", memoryPoolSize);
-	fprintf(stderr, "**memoryPoolSize after TenXSingleAligner reservation: %lld\n", memoryPoolSize);
-	fprintf(stderr, "**memoryPoolSize after TenXSingleAligner reservation: %lld\n", memoryPoolSize);
-	fflush(stderr);
 
 	/*
 	// memory quota for the SingleAligner pointer array
@@ -686,11 +681,11 @@ void TenXAlignerContext::runIterationThread()
 #endif // TIME_HISTOGRAM
 	while (true) {
 		// If there is indeed too many secondary results and the buffer size is not enough, reallocate the memory
-		bool barcodeNotFinished = aligner->align(reads, totalPairsForBarcode, results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, nSecondaryResults,
+		bool barcodeFinished = aligner->align(reads, totalPairsForBarcode, results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, nSecondaryResults,
 			maxSingleSecondaryHits, maxSecondaryAlignments, nSingleSecondaryResults, singleSecondaryResults, pairNotFinished);
 
 		// Quit if all reads are done and there is no secondary result overflow.
-		if (!barcodeNotFinished)
+		if (barcodeFinished)
 			break;
 
 		// If there is secondary result overflow, reallocate result space for those that overflow
@@ -838,6 +833,7 @@ void TenXAlignerContext::runIterationThread()
 		tenXsingleAlignerArray[singleAlignerIdx]->~TenXSingleAligner();
 	}
 
+	fflush(stderr);
 	delete allocator;
 }
 
