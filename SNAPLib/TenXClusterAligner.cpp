@@ -252,6 +252,7 @@ bool TenXClusterAligner::align_third_stage(
 			Read *read[NUM_READS_PER_PAIR] = { read0, read1 };
 			_int64 *resultCount[2] = { nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead };
 
+			bool noOverflow = true;
 			for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
 				SingleAlignmentResult singleResult;
 				_int64 singleEndSecondaryResultsThisTime = 0;
@@ -275,7 +276,8 @@ bool TenXClusterAligner::align_third_stage(
 						*nSingleEndSecondaryResultsForFirstRead = singleSecondaryBufferSize[pairIdx] + 1;
 						*nSingleEndSecondaryResultsForSecondRead = 0;
 						barcodeFinished = false;
-						continue;//return false;
+						noOverflow = false;
+						break;//return false;
 					}
 
 					*(resultCount[r]) = singleEndSecondaryResultsThisTime;
@@ -289,8 +291,12 @@ bool TenXClusterAligner::align_third_stage(
 				}
 			}
 
-			result[pairIdx]->fromAlignTogether = false;
-			result[pairIdx]->alignedAsPair = false;
+			// This pair is done processing, only if both directions has no overflow.
+			if (noOverflow) {
+				notFinished[pairIdx] = false;
+				result[pairIdx]->fromAlignTogether = false;
+				result[pairIdx]->alignedAsPair = false;
+			}
 
 #ifdef _DEBUG
 			if (_DumpAlignments) {
@@ -299,8 +305,6 @@ bool TenXClusterAligner::align_third_stage(
 			}
 #endif // _DEBUG
 
-			// This pair is done processing.
-			notFinished[pairIdx] = false;
 		}
 	}
 	return barcodeFinished;
