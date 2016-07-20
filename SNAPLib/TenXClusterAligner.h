@@ -108,7 +108,7 @@ public:
 		_int64					maxSecondaryAlignmentsToReturn,
 		_int64					*nSingleEndSecondaryResults,
 		SingleAlignmentResult	**singleEndSecondaryResults,	// Single-end secondary alignments for when the paired-end alignment didn't work properly
-		unsigned				*popularSeedSkipped,
+		unsigned				*popularSeedsSkipped,
 		bool					*notFinished					// True if the pair is done
 	);
 

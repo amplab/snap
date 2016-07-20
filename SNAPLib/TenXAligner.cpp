@@ -535,10 +535,10 @@ void TenXAlignerContext::runIterationThread()
 	bool *reallocatedSingleSecondaryBuffer = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
 
 	// Allocate space for popularSeedsSkipped array
-	bool *pairNotFinished = (bool*)BigAlloc(sizeof(bool) * NUM_READS_PER_PAIR * maxBarcodeSize);
+	unsigned *popularSeedsSkipped = (unsigned*)BigAlloc(sizeof(unsigned) * NUM_READS_PER_PAIR * maxBarcodeSize);
 
 	// Allocate space for the overflow tracker
-	unsigned *popularSeedsSkipped = (unsigned*)BigAlloc(sizeof(unsigned) * maxBarcodeSize);
+	bool *pairNotFinished = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
 
 	// Allocate space for useful0 and useful1
 	bool *useful0 = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
