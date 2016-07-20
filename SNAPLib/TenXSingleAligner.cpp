@@ -205,9 +205,6 @@ TenXSingleAligner::align_phase_1(Read* read0, Read* read1, unsigned *popularSeed
 	}
 	firstFreeMergeAnchor = 0;
 
-	Read rcReads[NUM_READS_PER_PAIR];
-
-
 	reads[0][FORWARD] = read0;
 	reads[1][FORWARD] = read1;
 
