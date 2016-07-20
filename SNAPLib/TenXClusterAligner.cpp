@@ -181,9 +181,9 @@ bool TenXClusterAligner::align_second_stage(
 			unsigned bestResultScore[NUM_READS_PER_PAIR];
 			double probabilityOfBestPair = 0;
 
-			bool fitInSecondaryBuffer = underlyingTenXSingleAligner[pairIdx]->align_phase_3(maxEditDistanceForSecondaryResults, secondaryResultBufferSize[pairIdx], &nSecondaryResults[pairIdx], &result[pairIdx][1], maxSecondaryAlignmentsToReturn, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, &popularSeedsSkipped[pairIdx * NUM_READS_PER_PAIR], probabilityOfBestPair);
+			bool secondaryBufferOverflow = underlyingTenXSingleAligner[pairIdx]->align_phase_3(maxEditDistanceForSecondaryResults, secondaryResultBufferSize[pairIdx], &nSecondaryResults[pairIdx], &result[pairIdx][1], maxSecondaryAlignmentsToReturn, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, &popularSeedsSkipped[pairIdx * NUM_READS_PER_PAIR], probabilityOfBestPair);
 
-			if (!fitInSecondaryBuffer) {
+			if (secondaryBufferOverflow) {
 				*nSingleEndSecondaryResultsForFirstRead = *nSingleEndSecondaryResultsForSecondRead = 0;
 				nSecondaryResults[pairIdx] = secondaryResultBufferSize[pairIdx] + 1; // So the caller knows it's the paired secondary buffer that overflowed
 				barcodeFinished = false;
@@ -242,65 +242,66 @@ bool TenXClusterAligner::align_third_stage(
 {
 	bool barcodeFinished = true;
 	for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
+		if (notFinished[pairIdx]) {
+			Read *read0 = pairedReads[pairIdx * NUM_READS_PER_PAIR];
+			Read *read1 = pairedReads[pairIdx * NUM_READS_PER_PAIR + 1];
 
-		Read *read0 = pairedReads[pairIdx * NUM_READS_PER_PAIR];
-		Read *read1 = pairedReads[pairIdx * NUM_READS_PER_PAIR + 1];
+			_int64 *nSingleEndSecondaryResultsForFirstRead = nSingleEndSecondaryResults + NUM_READS_PER_PAIR * pairIdx;
+			_int64 *nSingleEndSecondaryResultsForSecondRead = nSingleEndSecondaryResults + NUM_READS_PER_PAIR * pairIdx + 1;
 
-		_int64 *nSingleEndSecondaryResultsForFirstRead = nSingleEndSecondaryResults + NUM_READS_PER_PAIR * pairIdx;
-		_int64 *nSingleEndSecondaryResultsForSecondRead = nSingleEndSecondaryResults + NUM_READS_PER_PAIR * pairIdx + 1;
+			Read *read[NUM_READS_PER_PAIR] = { read0, read1 };
+			_int64 *resultCount[2] = { nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead };
 
-		Read *read[NUM_READS_PER_PAIR] = { read0, read1 };
-		_int64 *resultCount[2] = { nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead };
+			for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
+				SingleAlignmentResult singleResult;
+				_int64 singleEndSecondaryResultsThisTime = 0;
 
-		for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
-			SingleAlignmentResult singleResult;
-			_int64 singleEndSecondaryResultsThisTime = 0;
-
-			if (read[r]->getDataLength() < minReadLength) {
-				result[pairIdx]->status[r] = NotFound;
-				result[pairIdx]->mapq[r] = 0;
-				result[pairIdx]->direction[r] = FORWARD;
-				result[pairIdx]->location[r] = 0;
-				result[pairIdx]->score[r] = 0;
-			}
-			else {
-				// We're using *nSingleEndSecondaryResultsForFirstRead because it's either 0 or what all we've seen (i.e., we know NUM_READS_PER_PAIR is 2)
-				bool fitInSecondaryBuffer = //true;
-					singleAligner->AlignRead(read[r], &singleResult, maxEditDistanceForSecondaryResults,
-						singleSecondaryBufferSize[pairIdx] - *nSingleEndSecondaryResultsForFirstRead, &singleEndSecondaryResultsThisTime,
-						maxSecondaryAlignmentsToReturn, singleEndSecondaryResults[pairIdx] + *nSingleEndSecondaryResultsForFirstRead);
-
-				if (!fitInSecondaryBuffer) {
-					*nSecondaryResults = 0;
-					*nSingleEndSecondaryResultsForFirstRead = singleSecondaryBufferSize[pairIdx] + 1;
-					*nSingleEndSecondaryResultsForSecondRead = 0;
-					barcodeFinished = false;
-					continue;//return false;
+				if (read[r]->getDataLength() < minReadLength) {
+					result[pairIdx]->status[r] = NotFound;
+					result[pairIdx]->mapq[r] = 0;
+					result[pairIdx]->direction[r] = FORWARD;
+					result[pairIdx]->location[r] = 0;
+					result[pairIdx]->score[r] = 0;
 				}
+				else {
+					// We're using *nSingleEndSecondaryResultsForFirstRead because it's either 0 or what all we've seen (i.e., we know NUM_READS_PER_PAIR is 2)
+					bool fitInSecondaryBuffer = //true;
+						singleAligner->AlignRead(read[r], &singleResult, maxEditDistanceForSecondaryResults,
+							singleSecondaryBufferSize[pairIdx] - *nSingleEndSecondaryResultsForFirstRead, &singleEndSecondaryResultsThisTime,
+							maxSecondaryAlignmentsToReturn, singleEndSecondaryResults[pairIdx] + *nSingleEndSecondaryResultsForFirstRead);
 
-				*(resultCount[r]) = singleEndSecondaryResultsThisTime;
+					if (!fitInSecondaryBuffer) {
+						*nSecondaryResults = 0;
+						*nSingleEndSecondaryResultsForFirstRead = singleSecondaryBufferSize[pairIdx] + 1;
+						*nSingleEndSecondaryResultsForSecondRead = 0;
+						barcodeFinished = false;
+						continue;//return false;
+					}
 
-				result[pairIdx]->status[r] = singleResult.status;
-				result[pairIdx]->mapq[r] = singleResult.mapq / 3;   // Heavy quality penalty for chimeric reads
-				result[pairIdx]->direction[r] = singleResult.direction;
-				result[pairIdx]->location[r] = singleResult.location;
-				result[pairIdx]->score[r] = singleResult.score;
-				result[pairIdx]->scorePriorToClipping[r] = singleResult.scorePriorToClipping;
+					*(resultCount[r]) = singleEndSecondaryResultsThisTime;
+
+					result[pairIdx]->status[r] = singleResult.status;
+					result[pairIdx]->mapq[r] = singleResult.mapq / 3;   // Heavy quality penalty for chimeric reads
+					result[pairIdx]->direction[r] = singleResult.direction;
+					result[pairIdx]->location[r] = singleResult.location;
+					result[pairIdx]->score[r] = singleResult.score;
+					result[pairIdx]->scorePriorToClipping[r] = singleResult.scorePriorToClipping;
+				}
 			}
-		}
 
-		result[pairIdx]->fromAlignTogether = false;
-		result[pairIdx]->alignedAsPair = false;
+			result[pairIdx]->fromAlignTogether = false;
+			result[pairIdx]->alignedAsPair = false;
 
 #ifdef _DEBUG
-		if (_DumpAlignments) {
-			printf("TenXClusterAligner: (%u, %u) score (%d, %d), MAPQ (%d, %d)\n\n\n", result[pairIdx]->location[0].location, result[pairIdx]->location[1].location,
-				result[pairIdx]->score[0], result[pairIdx]->score[1], result[pairIdx]->mapq[0], result[pairIdx]->mapq[1]);
-		}
+			if (_DumpAlignments) {
+				printf("TenXClusterAligner: (%u, %u) score (%d, %d), MAPQ (%d, %d)\n\n\n", result[pairIdx]->location[0].location, result[pairIdx]->location[1].location,
+					result[pairIdx]->score[0], result[pairIdx]->score[1], result[pairIdx]->mapq[0], result[pairIdx]->mapq[1]);
+			}
 #endif // _DEBUG
 
-		// This pair is done processing.
-		notFinished[pairIdx] = false;
+			// This pair is done processing.
+			notFinished[pairIdx] = false;
+		}
 	}
 	return barcodeFinished;
 }
