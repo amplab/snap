@@ -696,7 +696,7 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
     void 
 PairedAlignerContext::typeSpecificBeginIteration()
 {	
-	printf("****ever being called??\n");
+	fprintf(stderr, "****ever being called??\n");
     if (1 == options->nInputs) {
         //
         // We've only got one input, so just connect it directly to the consumer.

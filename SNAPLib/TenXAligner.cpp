@@ -782,10 +782,6 @@ void TenXAlignerContext::runIterationThread()
 
 	allocator->checkCanaries();
 
-	BigDealloc(reads);
-	BigDealloc(results);
-	BigDealloc(singleSecondaryResults);
-
 	BigDealloc(nSecondaryResults);
 	BigDealloc(nSingleSecondaryResults);
 
@@ -802,16 +798,17 @@ void TenXAlignerContext::runIterationThread()
 	BigDealloc(useful1);
 
 	for (unsigned pairIdx = 0; pairIdx < maxBarcodeSize; pairIdx++) {
-		if (reallocatedPairedSecondaryBuffer[pairIdx]) {
-			BigDealloc(results[pairIdx]);
-			results[pairIdx] = NULL;
-		}
+		BigDealloc(results[pairIdx]);
+		results[pairIdx] = NULL;
 
-		if (reallocatedSingleSecondaryBuffer[pairIdx]) {
-			BigDealloc(singleSecondaryResults[pairIdx]);
-			singleSecondaryResults[pairIdx] = NULL;
-		}
+		BigDealloc(singleSecondaryResults[pairIdx]);
+		singleSecondaryResults[pairIdx] = NULL;
 	}
+
+	BigDealloc(reads);
+	BigDealloc(results);
+	BigDealloc(singleSecondaryResults);
+
 
 	aligner->~TenXClusterAligner();
 	delete supplier;
