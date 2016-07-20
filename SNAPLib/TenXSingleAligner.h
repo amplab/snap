@@ -193,6 +193,7 @@ private:
                                unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize,
                                int maxSecondaryAlignmentsPerContig);
 
+	Read			rcReads[NUM_READS_PER_PAIR];
     GenomeIndex *   index;
     const Genome *  genome;
     GenomeDistance  genomeSize;
