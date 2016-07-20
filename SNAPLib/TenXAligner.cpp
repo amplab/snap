@@ -534,8 +534,11 @@ void TenXAlignerContext::runIterationThread()
 	bool *reallocatedPairedSecondaryBuffer = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
 	bool *reallocatedSingleSecondaryBuffer = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
 
+	// Allocate space for popularSeedsSkipped array
+	bool *pairNotFinished = (bool*)BigAlloc(sizeof(bool) * NUM_READS_PER_PAIR * maxBarcodeSize);
+
 	// Allocate space for the overflow tracker
-	bool *pairNotFinished = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
+	unsigned *popularSeedsSkipped = (unsigned*)BigAlloc(sizeof(unsigned) * maxBarcodeSize);
 
 	// Allocate space for useful0 and useful1
 	bool *useful0 = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
@@ -647,7 +650,7 @@ void TenXAlignerContext::runIterationThread()
 	while (true) {
 		// If there is indeed too many secondary results and the buffer size is not enough, reallocate the memory
 		bool barcodeFinished = aligner->align(reads, totalPairsForBarcode, results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, nSecondaryResults,
-			maxSingleSecondaryHits, maxSecondaryAlignments, nSingleSecondaryResults, singleSecondaryResults, pairNotFinished);
+			maxSingleSecondaryHits, maxSecondaryAlignments, nSingleSecondaryResults, singleSecondaryResults, popularSeedsSkipped, pairNotFinished);
 
 		// Quit if all reads are done and there is no secondary result overflow.
 		if (barcodeFinished)
@@ -778,6 +781,25 @@ void TenXAlignerContext::runIterationThread()
 	 */
 
 	allocator->checkCanaries();
+
+	BigDealloc(reads);
+	BigDealloc(results);
+	BigDealloc(singleSecondaryResults);
+
+	BigDealloc(nSecondaryResults);
+	BigDealloc(nSingleSecondaryResults);
+
+	BigDealloc(maxPairedSecondaryHits);
+	BigDealloc(maxSingleSecondaryHits);
+
+	BigDealloc(reallocatedPairedSecondaryBuffer);
+	BigDealloc(reallocatedSingleSecondaryBuffer);
+
+	BigDealloc(popularSeedsSkipped);
+	BigDealloc(pairNotFinished);
+
+	BigDealloc(useful0);
+	BigDealloc(useful1);
 
 	for (unsigned pairIdx = 0; pairIdx < maxBarcodeSize; pairIdx++) {
 		if (reallocatedPairedSecondaryBuffer[pairIdx]) {

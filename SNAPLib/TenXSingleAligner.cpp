@@ -628,29 +628,20 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 		} // whichSetPair
 	} // while
 
-	/*
-	while (keepGoing && targetNotMet) {
-		keepGoing = false;
-		for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++) {
-			//std::cout << "setPair[" << whichSetPair << "]" << setPair[whichSetPair] << std::endl;
-			//printf("setPair[%d]: %p\n", whichSetPair, setPair[whichSetPair]);
-			if (!noMoreLoci[whichSetPair]) {
-				noMoreLoci[whichSetPair] = align_phase_2_single_step(setPair[whichSetPair], whichSetPair, outOfMoreHitsLocations[whichSetPair], lastSeedOffsetForReadWithFewerHits[whichSetPair], lastGenomeLocationForReadWithFewerHits[whichSetPair], lastSeedOffsetForReadWithMoreHits[whichSetPair], lastGenomeLocationForReadWithMoreHits[whichSetPair], maxUsedBestPossibleScoreList, NULL);
-			}
-
-			if (!noMoreLoci[whichSetPair]) {
-				//printf("looping: targetLoc: %lld, ReadLoc: %lld\n", clusterTargetLoc.location, lastGenomeLocationForReadWithFewerHits[whichSetPair].location);
-				targetNotMet = targetNotMet || (lastGenomeLocationForReadWithFewerHits[whichSetPair] > clusterTargetLoc);
-			}
-			//
-			// We keep working on the loop as long as one set is still not stopped
-			//
-			keepGoing = keepGoing || !noMoreLoci[whichSetPair];
-		}
-	}
-	*/
 	return keepGoing;
 }
+
+
+GenomeLocation TenXSingleAligner::align_phase_2_get_next_loci()
+{
+	GenomeLocation nextLoci(0); //1T bp, just an arbitrary big location. Hard coded. BAD!
+	for (unsigned direction = 0; direction < NUM_DIRECTIONS; direction++) {
+		if (!noMoreLoci[direction] && nextLoci < lastGenomeLocationForReadWithFewerHits[direction])
+			nextLoci = lastGenomeLocationForReadWithFewerHits[direction];
+	}
+	return nextLoci;
+}
+
 
 void
 TenXSingleAligner::align_phase_2()
@@ -973,47 +964,23 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 }
 
 
-
-bool
-TenXSingleAligner::align(
-	Read                  *read0,
-	Read                  *read1,
+void TenXSingleAligner::align_phase_4(
+	Read *read0,
+	Read *read1,
 	PairedAlignmentResult *result,
-	int                    maxEditDistanceForSecondaryResults,
-	_int64                 secondaryResultBufferSize,
-	_int64                *nSecondaryResults,
+	int maxEditDistanceForSecondaryResults,
+	_int64 *nSecondaryResults,
 	PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
-	_int64                 maxSecondaryResultsToReturn
+	_int64 maxSecondaryResultsToReturn,
+	unsigned *popularSeedsSkipped,
+	unsigned bestPairScore,
+	GenomeLocation *bestResultGenomeLocation,
+	Direction *bestResultDirection,
+	double probabilityOfAllPairs,
+	unsigned *bestResultScore,
+	double probabilityOfBestPair
 )
 {
-	// Initialize data before phase 1
-	result->nLVCalls = 0;
-	result->nSmallHits = 0;
-	result->clippingForReadAdjustment[0] = result->clippingForReadAdjustment[1] = 0;
-	unsigned popularSeedsSkipped[NUM_READS_PER_PAIR];
-
-	if (align_phase_1(read0, read1, popularSeedsSkipped))
-		return true;
-	align_phase_2();
-
-	// Initialize data before phase 3
-	unsigned bestPairScore = 65536;
-	GenomeLocation bestResultGenomeLocation[NUM_READS_PER_PAIR];
-	Direction bestResultDirection[NUM_READS_PER_PAIR];
-	double probabilityOfAllPairs = 0;
-	unsigned bestResultScore[NUM_READS_PER_PAIR];
-	double probabilityOfBestPair = 0;
-
-	if (align_phase_3(maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults, maxSecondaryResultsToReturn,
-		bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, popularSeedsSkipped, probabilityOfBestPair)) // This is a hack. Probably need to be changed later.
-		return false; // Not enough space for secondary alignment. Flag is raised
-
-	/*
-	 * Done with above three phases
-	 */
-
-doneScoring:
-
 	if (bestPairScore == 65536) {
 		//
 		// Found nothing.
@@ -1172,6 +1139,52 @@ doneScoring:
 		qsort(secondaryResults, *nSecondaryResults, sizeof(*secondaryResults), PairedAlignmentResult::compareByScore);
 		*nSecondaryResults = maxSecondaryResultsToReturn;   // Just truncate it
 	}
+
+
+}
+
+
+
+bool
+TenXSingleAligner::align(
+	Read                  *read0,
+	Read                  *read1,
+	PairedAlignmentResult *result,
+	int                    maxEditDistanceForSecondaryResults,
+	_int64                 secondaryResultBufferSize,
+	_int64                *nSecondaryResults,
+	PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
+	_int64                 maxSecondaryResultsToReturn
+)
+{
+	// Initialize data before phase 1
+	result->nLVCalls = 0;
+	result->nSmallHits = 0;
+	result->clippingForReadAdjustment[0] = result->clippingForReadAdjustment[1] = 0;
+	unsigned popularSeedsSkipped[NUM_READS_PER_PAIR];
+
+	//**** Phase 1
+	if (align_phase_1(read0, read1, popularSeedsSkipped))
+		return true;
+	
+	//**** Phase 2
+	align_phase_2();
+
+	// Declare and initialize data before phase 3
+	unsigned bestPairScore = 65536;
+	GenomeLocation bestResultGenomeLocation[NUM_READS_PER_PAIR];
+	Direction bestResultDirection[NUM_READS_PER_PAIR];
+	double probabilityOfAllPairs = 0;
+	unsigned bestResultScore[NUM_READS_PER_PAIR];
+	double probabilityOfBestPair = 0;
+
+	//**** Phase 3
+	if (align_phase_3(maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults, maxSecondaryResultsToReturn,
+		bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, popularSeedsSkipped, probabilityOfBestPair)) // This is a hack. Probably need to be changed later.
+		return false; // Not enough space for secondary alignment. Flag is raised
+
+	//**** Phase 4
+	align_phase_4(read0, read1, result, maxEditDistanceForSecondaryResults, nSecondaryResults, secondaryResults, maxSecondaryResultsToReturn, popularSeedsSkipped, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, probabilityOfBestPair);
 
 	return true;
 }

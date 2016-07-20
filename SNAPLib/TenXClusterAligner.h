@@ -59,8 +59,45 @@ public:
 	void *operator new(size_t size, BigAllocator *allocator) { _ASSERT(size == sizeof(TenXClusterAligner)); return allocator->allocate(size); }
 	void operator delete(void *ptr, BigAllocator *allocator) {/* do nothing.  Memory gets cleaned up when the allocator is deleted.*/ }
 
+	// First stage will call underlyingAligner->phase1 and phase2. First stage should be only called once
+	bool align_first_stage(
+	Read					**pairedReads,
+	unsigned				barcodeSize,
+	PairedAlignmentResult	**result,
+	unsigned				*popularSeedsSkipped,
+	bool					*notFinished
+	);
+
+	// Second stage will call underlyingAligner->phase3 and phase4. First stage should be only called once
+	bool align_second_stage(
+	Read					**pairedReads,
+	unsigned				barcodeSize,
+	PairedAlignmentResult	**result,
+	int						maxEditDistanceForSecondaryResults,
+	_int64					*secondaryResultBufferSize,
+	_int64					*nSecondaryResults,
+	_int64					maxSecondaryAlignmentsToReturn,
+	_int64					*nSingleEndSecondaryResults,
+	unsigned				*popularSeedsSkipped,
+	bool					*notFinished					// True if the pair is done
+	);
+
+	// Third stage will handle single mappings.
+	bool align_third_stage(
+	Read **pairedReads,
+	unsigned barcodeSize,
+	PairedAlignmentResult** result,
+	int maxEditDistanceForSecondaryResults,
+	_int64* nSecondaryResults,
+	_int64* singleSecondaryBufferSize,
+	_int64 maxSecondaryAlignmentsToReturn,
+	_int64* nSingleEndSecondaryResults,
+	SingleAlignmentResult** singleEndSecondaryResults,
+	bool* notFinished
+	);
+
 	// return true if all pairs within the cluster have been processed. No secondary results overflow.
-	virtual bool align(
+	bool align(
 		Read					**pairedReads,
 		unsigned				barcodeSize,
 		PairedAlignmentResult	**result,
@@ -71,6 +108,7 @@ public:
 		_int64					maxSecondaryAlignmentsToReturn,
 		_int64					*nSingleEndSecondaryResults,
 		SingleAlignmentResult	**singleEndSecondaryResults,	// Single-end secondary alignments for when the paired-end alignment didn't work properly
+		unsigned				*popularSeedSkipped,
 		bool					*notFinished					// True if the pair is done
 	);
 

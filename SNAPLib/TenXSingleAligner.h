@@ -107,8 +107,13 @@ public:
 
 	//
 	// align_phase_2_to_target_loc advances all location pairs to right before clusterTargetLoc. For all loc pairs that are before clusterTargetLoc, the potential mapping will be associated with cluster clusterInfoPtr
+	// It will terminate after advancing lastGenomeLocationForReadWithFewerHits of both directions beyond clusterTargetLoc.
 	//
     bool align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, void *clusterInfoPtr);
+	//
+	// align_phase_2_get_next_loc is accompanied with align_phase_2_to_target_loc. It returns the bigger next loci from the fewer side among the the 2 directions.
+	//
+	GenomeLocation align_phase_2_get_next_loci();
 	//
 	// align_phase_2_single_step_check_range returns 0 if we have found a good match. Returns 1 if seedLoc of the fewHit side has exhauseted. Returns -1 if fewHit side surpasses moreHIt side.
 	//
@@ -126,6 +131,9 @@ public:
 	//
 	bool align_phase_2_single_step(unsigned whichSetPair);
 
+	//
+	// align_phase_3 calculates the edit distance of each candidate mapping
+	//
     bool align_phase_3(
         int                    maxEditDistanceForSecondaryResults,
         _int64                 secondaryResultBufferSize,
@@ -141,6 +149,26 @@ public:
         unsigned              *popularSeedsSkipped,
         double                &probabilityOfBestPair
     );
+
+	//
+	// align_phase_4 cleans up the result from phase 3. Mainly deduplicate closeby mappings.
+	//
+	void align_phase_4(
+	Read *read0,
+	Read *read1,
+	PairedAlignmentResult *result,
+	int maxEditDistanceForSecondaryResults,
+	_int64 *nSecondaryResults,
+	PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
+	_int64 maxSecondaryResultsToReturn,
+	unsigned *popularSeedsSkipped,
+	unsigned bestPairScore,
+	GenomeLocation *bestResultGenomeLocation,
+	Direction *bestResultDirection,
+	double probabilityOfAllPairs,
+	unsigned *bestResultScore,
+	double probabilityOfBestPair
+	);
 
     static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxBigHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsFromCommandLine, 
                                              double seedCoverage, unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize,
@@ -528,7 +556,7 @@ private:
     int maxSecondaryAlignmentsPerContig;
     _int64 contigCountEpoch;
 	
-	// 10x sections
+	// 10x additional member variables 
 	// For carrying over the query data
     HashTableHitSet*		setPair[NUM_DIRECTIONS][NUM_READS_PER_PAIR];
 	bool					outOfMoreHitsLocations[NUM_DIRECTIONS];
