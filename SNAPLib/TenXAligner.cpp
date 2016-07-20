@@ -531,8 +531,8 @@ void TenXAlignerContext::runIterationThread()
 	_int64 *maxSingleSecondaryHits = (_int64*)BigAlloc(sizeof(_int64) * maxBarcodeSize);
 
 	// Allocate space for the extra allocation buffer tracker
-	bool *reallocatedPairedSecondaryBuffer = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
-	bool *reallocatedSingleSecondaryBuffer = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
+	//bool *reallocatedPairedSecondaryBuffer = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
+	//bool *reallocatedSingleSecondaryBuffer = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
 
 	// Allocate space for popularSeedsSkipped array
 	unsigned *popularSeedsSkipped = (unsigned*)BigAlloc(sizeof(unsigned) * NUM_READS_PER_PAIR * maxBarcodeSize);
@@ -551,8 +551,8 @@ void TenXAlignerContext::runIterationThread()
 	for (unsigned pairIdx = 0; pairIdx < maxBarcodeSize; pairIdx++) {
 		maxPairedSecondaryHits[pairIdx] = _maxPairedSecondaryHits_ref;
 		maxSingleSecondaryHits[pairIdx] = _maxSingleSecondaryHits_ref;
-		reallocatedPairedSecondaryBuffer[pairIdx] = false;
-		reallocatedSingleSecondaryBuffer[pairIdx] = false;
+		//reallocatedPairedSecondaryBuffer[pairIdx] = false;
+		//reallocatedSingleSecondaryBuffer[pairIdx] = false;
 		pairNotFinished[pairIdx] = true;
 	}
 
@@ -663,26 +663,26 @@ void TenXAlignerContext::runIterationThread()
 
 				// indicator that secondary paired result overflows
 				if (nSecondaryResults[pairIdx] > maxPairedSecondaryHits[pairIdx]) {
-					if (reallocatedPairedSecondaryBuffer[pairIdx]) {
-						BigDealloc(results[pairIdx]);
-						results[pairIdx] = NULL;
-					}
+					//if (reallocatedPairedSecondaryBuffer[pairIdx]) {
+					BigDealloc(results[pairIdx]);
+					results[pairIdx] = NULL;
+					//}
 
 					maxPairedSecondaryHits[pairIdx] *= 2;
 					results[pairIdx] = (PairedAlignmentResult *)BigAlloc((maxPairedSecondaryHits[pairIdx] + 1) * sizeof(PairedAlignmentResult));
-					reallocatedPairedSecondaryBuffer[pairIdx] = true;
+					//reallocatedPairedSecondaryBuffer[pairIdx] = true;
 				}
 
 				// indicator that secondary single result overflows
 				if (nSingleSecondaryResults[pairIdx * NUM_READS_PER_PAIR] > maxSingleSecondaryHits[pairIdx]) {
-					if (reallocatedSingleSecondaryBuffer[pairIdx]) {
-						BigDealloc(singleSecondaryResults[pairIdx]);
-						singleSecondaryResults[pairIdx] = NULL;
-					}
+					//if (reallocatedSingleSecondaryBuffer[pairIdx]) {
+					BigDealloc(singleSecondaryResults[pairIdx]);
+					singleSecondaryResults[pairIdx] = NULL;
+					//}
 
 					maxSingleSecondaryHits[pairIdx] *= 2;
 					singleSecondaryResults[pairIdx] = (SingleAlignmentResult *)BigAlloc(maxSingleSecondaryHits[pairIdx] * sizeof(SingleAlignmentResult));
-					reallocatedSingleSecondaryBuffer[pairIdx] = true;
+					//reallocatedSingleSecondaryBuffer[pairIdx] = true;
 				}
 			}
 		}
@@ -782,14 +782,13 @@ void TenXAlignerContext::runIterationThread()
 
 	allocator->checkCanaries();
 
-	BigDealloc(nSecondaryResults);
-	BigDealloc(nSingleSecondaryResults);
+	BigDealloc(reads);
 
 	BigDealloc(maxPairedSecondaryHits);
 	BigDealloc(maxSingleSecondaryHits);
 
-	BigDealloc(reallocatedPairedSecondaryBuffer);
-	BigDealloc(reallocatedSingleSecondaryBuffer);
+	//BigDealloc(reallocatedPairedSecondaryBuffer);
+	//BigDealloc(reallocatedSingleSecondaryBuffer);
 
 	BigDealloc(popularSeedsSkipped);
 	BigDealloc(pairNotFinished);
@@ -805,7 +804,8 @@ void TenXAlignerContext::runIterationThread()
 		singleSecondaryResults[pairIdx] = NULL;
 	}
 
-	BigDealloc(reads);
+	BigDealloc(nSecondaryResults);
+	BigDealloc(nSingleSecondaryResults);
 	BigDealloc(results);
 	BigDealloc(singleSecondaryResults);
 
