@@ -59,7 +59,8 @@ public:
 	void *operator new(size_t size, BigAllocator *allocator) { _ASSERT(size == sizeof(TenXClusterAligner)); return allocator->allocate(size); }
 	void operator delete(void *ptr, BigAllocator *allocator) {/* do nothing.  Memory gets cleaned up when the allocator is deleted.*/ }
 
-	// First stage will call underlyingAligner->phase1 and phase2. First stage should be only called once
+	// First stage will call underlyingAligner->phase1 and phase2. First stage should be only called once.
+	// Returns true if non
 	bool align_first_stage(
 	Read					**pairedReads,
 	unsigned				barcodeSize,
