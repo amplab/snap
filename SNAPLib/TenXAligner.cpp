@@ -447,7 +447,7 @@ void TenXAlignerContext::runIterationThread()
 		_maxSingleSecondaryHits_ref = 32;
 	}
 
-	fprintf(stderr, "****initializing\n");
+	//fprintf(stderr, "****initializing\n");
 
 	/*
 	 * calculate the memory useage for reservation
@@ -457,8 +457,7 @@ void TenXAlignerContext::runIterationThread()
 	size_t memoryPoolSize = TenXClusterAligner::getBigAllocatorReservation(index, maxReadSize, maxHits, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxDist,
 		extraSearchDepth, maxCandidatePoolSize, maxSecondaryAlignmentsPerContig);
 
-	fprintf(stderr, "****memoryPoolSize after TenXClusterAligner reservation: %lld\n", memoryPoolSize);
-	fflush(stderr);
+	//fprintf(stderr, "****memoryPoolSize after TenXClusterAligner reservation: %lld\n", memoryPoolSize);
 
 	// memory quota for all the SingleAligners 
 	size_t singleTenXReserve = TenXSingleAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(),
@@ -467,7 +466,7 @@ void TenXAlignerContext::runIterationThread()
 
 	memoryPoolSize += singleTenXReserve * maxBarcodeSize;
 
-	fprintf(stderr, "****singleTenXReserve:%lld  maxBarcodeSize: %lld  memoryPoolSize: %lld\n", singleTenXReserve, maxBarcodeSize, memoryPoolSize);
+	//fprintf(stderr, "****singleTenXReserve:%lld  maxBarcodeSize: %lld  memoryPoolSize: %lld\n", singleTenXReserve, maxBarcodeSize, memoryPoolSize);
 
 
 	/*
@@ -479,7 +478,7 @@ void TenXAlignerContext::runIterationThread()
 	// Allocate the single aligners pointers (single + cluster)
 	TenXSingleAligner **tenXsingleAlignerArray = (TenXSingleAligner**)BigAlloc(sizeof(TenXSingleAligner*) * maxBarcodeSize);
 
-	fprintf(stderr, "**Before going into the loop of allocating single aligners\n");
+	//fprintf(stderr, "****Before going into the loop of allocating single aligners\n");
 
 	for (int singleAlignerIdx = 0; singleAlignerIdx < maxBarcodeSize; singleAlignerIdx++) {
 		tenXsingleAlignerArray[singleAlignerIdx] = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
@@ -556,7 +555,7 @@ void TenXAlignerContext::runIterationThread()
 		pairNotFinished[pairIdx] = true;
 	}
 
-	fprintf(stderr, "****begin read buffering\n");
+	//fprintf(stderr, "****begin read buffering\n");
 
 	/*
 	 * Buffer all the reads
@@ -638,7 +637,7 @@ void TenXAlignerContext::runIterationThread()
 		// Note that useful0 and useful1 will be discarded if neither of the read of the pair is useful
 	}
 
-	fprintf(stderr, "****begin alignment\n");
+	//fprintf(stderr, "****begin alignment\n");
 
 	/*
 	 * Align the read pairs
@@ -729,7 +728,7 @@ void TenXAlignerContext::runIterationThread()
 	}
 	*/
 
-	fprintf(stderr, "****begin output\n");
+	//fprintf(stderr, "****begin output\n");
 
 	/*
 	 * Output the results
@@ -815,7 +814,7 @@ void TenXAlignerContext::runIterationThread()
 
 	stats->lvCalls = aligner->getLocationsScored();
 
-	fprintf(stderr, "****begin cleanup\n");
+	//fprintf(stderr, "****begin cleanup\n");
 
 	/*
 	 * Deallocate and clean up
@@ -858,7 +857,7 @@ void TenXAlignerContext::runIterationThread()
 		tenXsingleAlignerArray[singleAlignerIdx]->~TenXSingleAligner();
 	}
 
-	fflush(stderr);
+	//fflush(stderr);
 	delete allocator;
 }
 

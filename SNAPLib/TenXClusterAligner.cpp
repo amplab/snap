@@ -128,6 +128,9 @@ bool TenXClusterAligner::align_first_stage(
 				continue;//return true;
 			}
 
+			//At least one read of the pair is worthy of further examination
+			barcodeFinished = false;
+
 			if (read0->getDataLength() >= minReadLength && read1->getDataLength() >= minReadLength) {
 				//
 				// Let the LVs use the cache that we built up.
@@ -135,11 +138,7 @@ bool TenXClusterAligner::align_first_stage(
 				bool terminateAfterPhase1 =
 					underlyingTenXSingleAligner[pairIdx]->align_phase_1(read0, read1, &popularSeedsSkipped[pairIdx * NUM_READS_PER_PAIR]);
 
-				if (terminateAfterPhase1) {
-					notFinished[pairIdx] = false;
-				}
-				else {
-					barcodeFinished = false;
+				if (!terminateAfterPhase1) {
 					underlyingTenXSingleAligner[pairIdx]->align_phase_2();
 				}
 			}
@@ -329,8 +328,8 @@ bool TenXClusterAligner::align(
 {
 	if (align_first_stage(pairedReads, barcodeSize, result, popularSeedsSkipped, notFinished))
 		return true;
-	if (align_second_stage(pairedReads, barcodeSize, result, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, maxSecondaryAlignmentsToReturn, nSingleEndSecondaryResults, popularSeedsSkipped, notFinished))
-		return true;
+	if (!align_second_stage(pairedReads, barcodeSize, result, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, maxSecondaryAlignmentsToReturn, nSingleEndSecondaryResults, popularSeedsSkipped, notFinished))
+		return false;
 	if (align_third_stage(pairedReads, barcodeSize, result, maxEditDistanceForSecondaryResults, nSecondaryResults, singleSecondaryBufferSize, maxSecondaryAlignmentsToReturn, nSingleEndSecondaryResults, singleEndSecondaryResults, notFinished))
 		return true;
 	return false;
