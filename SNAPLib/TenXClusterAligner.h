@@ -60,6 +60,7 @@ public:
 	void operator delete(void *ptr, BigAllocator *allocator) {/* do nothing.  Memory gets cleaned up when the allocator is deleted.*/ }
 
 	// First stage will call underlyingAligner->phase1 and phase2. First stage should be only called once
+	// Return true is no single read is worthy of further examination
 	bool align_first_stage(
 	Read					**pairedReads,
 	unsigned				barcodeSize,
@@ -69,6 +70,7 @@ public:
 	);
 
 	// Second stage will call underlyingAligner->phase3 and phase4. First stage should be only called once
+	// Return ture if no pair requires memory reallocation.
 	bool align_second_stage(
 	Read					**pairedReads,
 	unsigned				barcodeSize,

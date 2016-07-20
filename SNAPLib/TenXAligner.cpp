@@ -647,6 +647,46 @@ void TenXAlignerContext::runIterationThread()
 #if     TIME_HISTOGRAM
 	_int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
+
+	// Stage 1, get seeds and stuff
+	bool barcodeFinished = aligner->align_first_stage(reads, totalPairsForBarcode, results, popularSeedsSkipped, pairNotFinished);
+	if (barcodeFinished)
+		return;
+
+	// Stage 2, calculate ED and store paired results
+	while (true)
+	{
+		barcodeFinished = aligner->align_second_stage(reads, totalPairsForBarcode, results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, nSecondaryResults, maxSecondaryAlignments, nSingleSecondaryResults, popularSeedsSkipped, pairNotFinished);
+		if (barcodeFinished)
+			break;
+		for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {
+			if (pairNotFinished[pairIdx]) {
+				_ASSERT(nSecondaryResults[pairIdx] > maxPairedSecondaryHits[pairIdx]);
+				BigDealloc(results[pairIdx]);
+				results[pairIdx] = NULL;
+				maxPairedSecondaryHits[pairIdx] *= 2;
+				results[pairIdx] = (PairedAlignmentResult *)BigAlloc((maxPairedSecondaryHits[pairIdx] + 1) * sizeof(PairedAlignmentResult));
+			}
+		}
+	}
+
+	// Stage 2, calculate ED and store single results
+	barcodeFinished = false;
+	while (true) {
+		barcodeFinished = aligner->align_second_stage(reads, totalPairsForBarcode, results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, nSecondaryResults, maxSecondaryAlignments, nSingleSecondaryResults, popularSeedsSkipped, pairNotFinished);
+		if (barcodeFinished)
+			break;
+		for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {
+			if (pairNotFinished[pairIdx]) {
+				_ASSERT(nSingleSecondaryResults[pairIdx * NUM_READS_PER_PAIR] > maxSingleSecondaryHits[pairIdx]);
+				BigDealloc(singleSecondaryResults[pairIdx]);
+				singleSecondaryResults[pairIdx] = NULL;
+				maxSingleSecondaryHits[pairIdx] *= 2;
+				singleSecondaryResults[pairIdx] = (SingleAlignmentResult *)BigAlloc(maxSingleSecondaryHits[pairIdx] * sizeof(SingleAlignmentResult));
+			}
+		}
+	}
+	/**** changing to stage based mapping
 	while (true) {
 		// If there is indeed too many secondary results and the buffer size is not enough, reallocate the memory
 		bool barcodeFinished = aligner->align(reads, totalPairsForBarcode, results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, nSecondaryResults,
@@ -687,6 +727,7 @@ void TenXAlignerContext::runIterationThread()
 			}
 		}
 	}
+	*/
 
 	fprintf(stderr, "****begin output\n");
 
