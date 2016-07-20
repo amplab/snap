@@ -193,7 +193,6 @@ private:
                                unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize,
                                int maxSecondaryAlignmentsPerContig);
 
-	Read			rcReads[NUM_READS_PER_PAIR];
     GenomeIndex *   index;
     const Genome *  genome;
     GenomeDistance  genomeSize;
@@ -386,7 +385,8 @@ private:
     unsigned readLen[NUM_READS_PER_PAIR];
 
     Read *reads[NUM_READS_PER_PAIR][NUM_DIRECTIONS];        // These are the reads that are provided in the align call, together with their reverse complements, which are computed.
-    Read rcReads[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
+	Read rcReads[NUM_READS_PER_PAIR];
+    //Read rcReads[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
 
     char *reversedRead[NUM_READS_PER_PAIR][NUM_DIRECTIONS]; // The reversed data for each read for forward and RC.  This is used in the backwards LV
 
