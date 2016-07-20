@@ -329,8 +329,8 @@ bool TenXClusterAligner::align(
 {
 	if (align_first_stage(pairedReads, barcodeSize, result, popularSeedsSkipped, notFinished))
 		return true;
-	if (align_second_stage(pairedReads, barcodeSize, result, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, maxSecondaryAlignmentsToReturn, nSingleEndSecondaryResults, popularSeedsSkipped, notFinished))
-		return true;
+	if (!align_second_stage(pairedReads, barcodeSize, result, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, maxSecondaryAlignmentsToReturn, nSingleEndSecondaryResults, popularSeedsSkipped, notFinished))
+		return false;
 	if (align_third_stage(pairedReads, barcodeSize, result, maxEditDistanceForSecondaryResults, nSecondaryResults, singleSecondaryBufferSize, maxSecondaryAlignmentsToReturn, nSingleEndSecondaryResults, singleEndSecondaryResults, notFinished))
 		return true;
 	return false;
