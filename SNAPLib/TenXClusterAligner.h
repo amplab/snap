@@ -67,8 +67,7 @@ public:
 	Read					**pairedReads,
 	unsigned				barcodeSize,
 	PairedAlignmentResult	**result,
-	unsigned				*popularSeedsSkipped,
-	bool					*notFinished
+	unsigned				*popularSeedsSkipped
 	);
 
 	// Second stage will call underlyingAligner->phase3 and phase4. First stage should be only called once
@@ -82,8 +81,7 @@ public:
 	_int64					*nSecondaryResults,
 	_int64					maxSecondaryAlignmentsToReturn,
 	_int64					*nSingleEndSecondaryResults,
-	unsigned				*popularSeedsSkipped,
-	bool					*notFinished					// True if the pair is done
+	unsigned				*popularSeedsSkipped
 	);
 
 	// Third stage will handle single mappings.
@@ -96,8 +94,7 @@ public:
 	_int64* singleSecondaryBufferSize,
 	_int64 maxSecondaryAlignmentsToReturn,
 	_int64* nSingleEndSecondaryResults,
-	SingleAlignmentResult** singleEndSecondaryResults,
-	bool* notFinished
+	SingleAlignmentResult** singleEndSecondaryResults
 	);
 
 	// return true if all pairs within the cluster have been processed. No secondary results overflow.
@@ -112,8 +109,7 @@ public:
 		_int64					maxSecondaryAlignmentsToReturn,
 		_int64					*nSingleEndSecondaryResults,
 		SingleAlignmentResult	**singleEndSecondaryResults,	// Single-end secondary alignments for when the paired-end alignment didn't work properly
-		unsigned				*popularSeedsSkipped,
-		bool					*notFinished					// True if the pair is done
+		unsigned				*popularSeedsSkipped
 	);
 
 	/*

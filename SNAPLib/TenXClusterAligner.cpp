@@ -102,13 +102,12 @@ bool TenXClusterAligner::align_first_stage(
 	Read					**pairedReads,
 	unsigned				barcodeSize,
 	PairedAlignmentResult	**result,
-	unsigned				*popularSeedsSkipped,
-	bool					*notFinished
+	unsigned				*popularSeedsSkipped
 )
 {
 	bool barcodeFinished = true;
 	for (int pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
-		if (notFinished[pairIdx]) {
+		if (progressTracker[pairIdx].pairNotDone) {
 			result[pairIdx]->status[0] = result[pairIdx]->status[1] = NotFound;
 
 			Read *read0 = pairedReads[pairIdx * NUM_READS_PER_PAIR];
@@ -127,7 +126,8 @@ bool TenXClusterAligner::align_first_stage(
 				result[pairIdx]->nanosInAlignTogether = 0;
 				result[pairIdx]->nLVCalls = 0;
 				result[pairIdx]->nSmallHits = 0;
-				notFinished[pairIdx] = false;
+				progressTracker[pairIdx].pairNotDone = false;
+				progressTracker[pairIdx].singleNotDone = false;
 				continue;//return true;
 			}
 
@@ -138,19 +138,13 @@ bool TenXClusterAligner::align_first_stage(
 				//
 				// Let the LVs use the cache that we built up.
 				//
-				bool terminateAfterPhase1 = !
-				// notFinished[pairIdx] =
-					!progressTracker[pairIdx].aligner->align_phase_1(read0, read1, &popularSeedsSkipped[pairIdx * NUM_READS_PER_PAIR]);
+				progressTracker[pairIdx].pairNotDone = !progressTracker[pairIdx].aligner->align_phase_1(read0, read1, &popularSeedsSkipped[pairIdx * NUM_READS_PER_PAIR]);
 				
 				// Initialize for phase_2 if the alginer if not stopped
-				//if (notFinished[pairIdx]) {
-				if (!terminateAfterPhase1) {
-					progressTracker[pairIdx].notDone = progressTracker[pairIdx].aligner->align_phase_2_init();
+				if (progressTracker[pairIdx].pairNotDone) {
+					progressTracker[pairIdx].pairNotDone = progressTracker[pairIdx].aligner->align_phase_2_init();
 					progressTracker[pairIdx].nextLoci = *(progressTracker[pairIdx].aligner->align_phase_2_get_loci() );
 					progressTracker[pairIdx].next = NULL;
-				}
-				else {
-					progressTracker[pairIdx].notDone = false;
 				}
 			}
 		}
@@ -162,10 +156,12 @@ bool TenXClusterAligner::align_first_stage(
 	GenomeLocation clusterTargetLoc = GenomeLocation(0000000000); //**** This is just for testing. Will be removed.
 
 	for (int pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
-		if (progressTracker[pairIdx].notDone) {
+		if (progressTracker[pairIdx].pairNotDone) {
 			fprintf(stderr, "lastLoci: %lld\n", progressTracker[pairIdx].nextLoci.location);
 			progressTracker[pairIdx].aligner->align_phase_2_to_target_loc(clusterTargetLoc, NULL);;
 		}
+		else
+			fprintf(stderr, "lastLoci: NULL\n");
 	}
 	
 
@@ -193,13 +189,12 @@ bool TenXClusterAligner::align_second_stage(
 	_int64					*nSecondaryResults,
 	_int64					maxSecondaryAlignmentsToReturn,
 	_int64					*nSingleEndSecondaryResults,
-	unsigned				*popularSeedsSkipped,
-	bool					*notFinished					// True if the pair is done
+	unsigned				*popularSeedsSkipped
 )
 {
 	bool barcodeFinished = true;
 	for (int pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
-		if (notFinished[pairIdx]) {
+		if (progressTracker[pairIdx].pairNotDone) {// && progressTracker[pairIdx].notDone) {
 			Read *read0 = pairedReads[pairIdx * NUM_READS_PER_PAIR];
 			Read *read1 = pairedReads[pairIdx * NUM_READS_PER_PAIR + 1];
 
@@ -245,7 +240,8 @@ bool TenXClusterAligner::align_second_stage(
 				else {
 					_ASSERT(result[pairIdx]->status[1] != NotFound); // If one's not found, so is the other
 				}
-				notFinished[pairIdx] = false;
+				progressTracker[pairIdx].pairNotDone = false;
+				progressTracker[pairIdx].singleNotDone = false;
 				continue;//return true;
 			}
 
@@ -253,9 +249,12 @@ bool TenXClusterAligner::align_second_stage(
 				//
 				// Not a chimeric read.
 				//
-				notFinished[pairIdx] = false;
+				progressTracker[pairIdx].pairNotDone = false;
+				progressTracker[pairIdx].singleNotDone = false;
 				continue;//return true;
 			}
+			//paired analysis is done anyways
+			progressTracker[pairIdx].pairNotDone = false;
 		}
 	}
 	return barcodeFinished;
@@ -271,13 +270,12 @@ bool TenXClusterAligner::align_third_stage(
 	_int64* singleSecondaryBufferSize,
 	_int64 maxSecondaryAlignmentsToReturn,
 	_int64* nSingleEndSecondaryResults,
-	SingleAlignmentResult** singleEndSecondaryResults,
-	bool* notFinished
+	SingleAlignmentResult** singleEndSecondaryResults
 )
 {
 	bool barcodeFinished = true;
 	for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
-		if (notFinished[pairIdx]) {
+		if (progressTracker[pairIdx].singleNotDone) {// && progressTracker[pairIdx].notDone) {
 			Read *read0 = pairedReads[pairIdx * NUM_READS_PER_PAIR];
 			Read *read1 = pairedReads[pairIdx * NUM_READS_PER_PAIR + 1];
 
@@ -328,7 +326,7 @@ bool TenXClusterAligner::align_third_stage(
 
 			// This pair is done processing, only if both directions has no overflow.
 			if (noOverflow) {
-				notFinished[pairIdx] = false;
+				progressTracker[pairIdx].singleNotDone = false;
 				result[pairIdx]->fromAlignTogether = false;
 				result[pairIdx]->alignedAsPair = false;
 			}
@@ -358,15 +356,14 @@ bool TenXClusterAligner::align(
 	_int64					maxSecondaryAlignmentsToReturn,
 	_int64					*nSingleEndSecondaryResults,
 	SingleAlignmentResult	**singleEndSecondaryResults,    // Single-end secondary alignments for when the paired-end alignment didn't work properly
-	unsigned				*popularSeedsSkipped,
-	bool					*notFinished
+	unsigned				*popularSeedsSkipped
 )
 {
-	if (align_first_stage(pairedReads, barcodeSize, result, popularSeedsSkipped, notFinished))
+	if (align_first_stage(pairedReads, barcodeSize, result, popularSeedsSkipped))
 		return true;
-	if (!align_second_stage(pairedReads, barcodeSize, result, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, maxSecondaryAlignmentsToReturn, nSingleEndSecondaryResults, popularSeedsSkipped, notFinished))
+	if (!align_second_stage(pairedReads, barcodeSize, result, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, maxSecondaryAlignmentsToReturn, nSingleEndSecondaryResults, popularSeedsSkipped))
 		return false;
-	if (align_third_stage(pairedReads, barcodeSize, result, maxEditDistanceForSecondaryResults, nSecondaryResults, singleSecondaryBufferSize, maxSecondaryAlignmentsToReturn, nSingleEndSecondaryResults, singleEndSecondaryResults, notFinished))
+	if (align_third_stage(pairedReads, barcodeSize, result, maxEditDistanceForSecondaryResults, nSecondaryResults, singleSecondaryBufferSize, maxSecondaryAlignmentsToReturn, nSingleEndSecondaryResults, singleEndSecondaryResults))
 		return true;
 	return false;
 }

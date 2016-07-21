@@ -98,7 +98,8 @@ public:
 	) {
 		return align(read0, read1, result, maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults, maxSecondaryResultsToReturn);
 	};
-	
+
+	// return true if the pair is done processing after phase 1--no need to go to phase 2, 3 and 4.
 	bool align_phase_1(
 		Read                  *read0,
 		Read                  *read1,
@@ -574,7 +575,8 @@ private:
 
 struct TenXProgressTracker
 {
-	bool				notDone;
+	bool				pairNotDone;
+	bool				singleNotDone;
 	TenXSingleAligner	*aligner;
 	GenomeLocation		nextLoci; // Keep it here so that hopefully lastLoci be in cache.
 	TenXProgressTracker	*next; // linked list next link
@@ -583,11 +585,11 @@ struct TenXProgressTracker
 	{
 		TenXProgressTracker* a = (TenXProgressTracker*)a_raw;
 		TenXProgressTracker* b = (TenXProgressTracker*)b_raw;
-		if (!a->notDone && !b->notDone)
+		if (!a->pairNotDone && !b->pairNotDone)
 			return 0;
-		else if (!a->notDone)
+		else if (!a->pairNotDone)
 			return 1;
-		else if (!b->notDone)
+		else if (!b->pairNotDone)
 			return -1;
 		else if (a->nextLoci == b->nextLoci)
 			return 0;

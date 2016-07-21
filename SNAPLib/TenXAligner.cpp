@@ -495,7 +495,8 @@ void TenXAlignerContext::runIterationThread()
 		tenXSingleTrackerArray[singleAlignerIdx].aligner = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
 			seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth,
 			maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm);
-		tenXSingleTrackerArray[singleAlignerIdx].notDone = false;
+		tenXSingleTrackerArray[singleAlignerIdx].pairNotDone = false;
+		tenXSingleTrackerArray[singleAlignerIdx].singleNotDone = false;
 	}
 
 	TenXClusterAligner *aligner = new (allocator) TenXClusterAligner(
@@ -550,12 +551,10 @@ void TenXAlignerContext::runIterationThread()
 	// Allocate space for popularSeedsSkipped array
 	unsigned *popularSeedsSkipped = (unsigned*)BigAlloc(sizeof(unsigned) * NUM_READS_PER_PAIR * maxBarcodeSize);
 
-	// Allocate space for the overflow tracker
-	bool *pairNotFinished = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
-
 	// Allocate space for useful0 and useful1
 	bool *useful0 = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
 	bool *useful1 = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
+
 
 	/*
 	 * Initialization of some data
@@ -566,7 +565,8 @@ void TenXAlignerContext::runIterationThread()
 		maxSingleSecondaryHits[pairIdx] = _maxSingleSecondaryHits_ref;
 		//reallocatedPairedSecondaryBuffer[pairIdx] = false;
 		//reallocatedSingleSecondaryBuffer[pairIdx] = false;
-		pairNotFinished[pairIdx] = true;
+		tenXSingleTrackerArray[pairIdx].pairNotDone = false;
+		tenXSingleTrackerArray[pairIdx].singleNotDone = false;
 	}
 
 	//fprintf(stderr, "****begin read buffering\n");
@@ -646,6 +646,14 @@ void TenXAlignerContext::runIterationThread()
 			}
 			continue;
 		}
+		// at least one of the ends is good
+		tenXSingleTrackerArray[totalPairsForBarcode].singleNotDone = true;
+		// examine pair if both ends are good
+		if (!useful0[totalPairsForBarcode] || !useful1[totalPairsForBarcode])
+			tenXSingleTrackerArray[totalPairsForBarcode].pairNotDone = false;
+		else
+			tenXSingleTrackerArray[totalPairsForBarcode].pairNotDone = true;
+
 		totalPairsForBarcode++;
 		_ASSERT(totalPairsForBarcode <= maxBarcodeSize);
 		// Note that useful0 and useful1 will be discarded if neither of the read of the pair is useful
@@ -662,18 +670,18 @@ void TenXAlignerContext::runIterationThread()
 #endif // TIME_HISTOGRAM
 
 	// Stage 1, get seeds and stuff
-	bool barcodeFinished = aligner->align_first_stage(reads, totalPairsForBarcode, results, popularSeedsSkipped, pairNotFinished);
+	bool barcodeFinished = aligner->align_first_stage(reads, totalPairsForBarcode, results, popularSeedsSkipped);
 	if (barcodeFinished)
 		return;
 
 	// Stage 2, calculate ED and store paired results
 	while (true)
 	{
-		barcodeFinished = aligner->align_second_stage(reads, totalPairsForBarcode, results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, nSecondaryResults, maxSecondaryAlignments, nSingleSecondaryResults, popularSeedsSkipped, pairNotFinished);
+		barcodeFinished = aligner->align_second_stage(reads, totalPairsForBarcode, results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, nSecondaryResults, maxSecondaryAlignments, nSingleSecondaryResults, popularSeedsSkipped);
 		if (barcodeFinished)
 			break;
 		for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {
-			if (pairNotFinished[pairIdx]) {
+			if (tenXSingleTrackerArray[pairIdx].pairNotDone && nSecondaryResults[pairIdx] > maxPairedSecondaryHits[pairIdx]) {
 				_ASSERT(nSecondaryResults[pairIdx] > maxPairedSecondaryHits[pairIdx]);
 				BigDealloc(results[pairIdx]);
 				results[pairIdx] = NULL;
@@ -686,11 +694,11 @@ void TenXAlignerContext::runIterationThread()
 	// Stage 2, calculate ED and store single results
 	barcodeFinished = false;
 	while (true) {
-		barcodeFinished = aligner->align_third_stage(reads, totalPairsForBarcode, results, maxSecondaryAlignmentAdditionalEditDistance, nSecondaryResults, maxSingleSecondaryHits, maxSecondaryAlignments, nSingleSecondaryResults, singleSecondaryResults, pairNotFinished);
+		barcodeFinished = aligner->align_third_stage(reads, totalPairsForBarcode, results, maxSecondaryAlignmentAdditionalEditDistance, nSecondaryResults, maxSingleSecondaryHits, maxSecondaryAlignments, nSingleSecondaryResults, singleSecondaryResults);
 		if (barcodeFinished)
 			break;
 		for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {
-			if (pairNotFinished[pairIdx]) {
+			if (tenXSingleTrackerArray[pairIdx].singleNotDone && nSingleSecondaryResults[pairIdx * NUM_READS_PER_PAIR] > maxSingleSecondaryHits[pairIdx]) {
 				_ASSERT(nSingleSecondaryResults[pairIdx * NUM_READS_PER_PAIR] > maxSingleSecondaryHits[pairIdx]);
 				BigDealloc(singleSecondaryResults[pairIdx]);
 				singleSecondaryResults[pairIdx] = NULL;
@@ -800,7 +808,6 @@ void TenXAlignerContext::runIterationThread()
 	BigDealloc(maxSingleSecondaryHits);
 
 	BigDealloc(popularSeedsSkipped);
-	BigDealloc(pairNotFinished);
 
 	BigDealloc(useful0);
 	BigDealloc(useful1);
