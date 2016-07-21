@@ -56,6 +56,7 @@ static const int DEFAULT_MIN_SPACING = 50;
 static const int DEFAULT_MAX_SPACING = 1000;
 static const int DEFAULT_MAX_BARCODE_SIZE = 60000;
 static const int DEFAULT_MIN_PAIRS_PER_CLUSTER = 10;
+static const int DEFAULT_MAX_CLUSTER_SPAN = 100000;
 
 struct TenXAlignerStats : public AlignerStats
 {
@@ -235,6 +236,7 @@ TenXAlignerOptions::TenXAlignerOptions(const char* i_commandLine)
 	// 10x specific parameter
 	maxBarcodeSize(DEFAULT_MAX_BARCODE_SIZE),
 	minPairsPerCluster(DEFAULT_MIN_PAIRS_PER_CLUSTER),
+	maxClusterSpan(DEFAULT_MAX_CLUSTER_SPAN),
 
 	// same with pairedEndAligner
 	forceSpacing(false),
@@ -327,6 +329,14 @@ bool TenXAlignerOptions::parse(const char** argv, int argc, int& n, bool *done)
 		}
 		return false;
 	}
+	else if (strcmp(argv[n], "-maxClusterSpan") == 0) {
+		if (n + 1 < argc) {
+			minPairsPerCluster = atoi(argv[n + 1]);
+			n += 1;
+			return true;
+		}
+		return false;
+	}
 	return AlignerOptions::parse(argv, argc, n, done);
 }
 
@@ -343,6 +353,7 @@ bool TenXAlignerContext::initialize()
 	maxSpacing = options2->maxSpacing;
 	maxBarcodeSize = options2->maxBarcodeSize;
 	minPairsPerCluster = options2->minPairsPerCluster;
+	maxClusterSpan = options2->maxClusterSpan;
 	forceSpacing = options2->forceSpacing;
 	maxCandidatePoolSize = options2->maxCandidatePoolSize;
 	intersectingAlignerMaxHits = options2->intersectingAlignerMaxHits;
@@ -476,12 +487,12 @@ void TenXAlignerContext::runIterationThread()
 	BigAllocator *allocator = new BigAllocator(memoryPoolSize);
 
 	// Allocate the single aligners pointers (single + cluster)
-	TenXSingleAligner **tenXsingleAlignerArray = (TenXSingleAligner**)BigAlloc(sizeof(TenXSingleAligner*) * maxBarcodeSize);
+	TenXProgressTracker *tenXSingleTrackerArray = (TenXProgressTracker*)BigAlloc(sizeof(TenXProgressTracker) * maxBarcodeSize);
 
 	//fprintf(stderr, "****Before going into the loop of allocating single aligners\n");
 
 	for (int singleAlignerIdx = 0; singleAlignerIdx < maxBarcodeSize; singleAlignerIdx++) {
-		tenXsingleAlignerArray[singleAlignerIdx] = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
+		tenXSingleTrackerArray[singleAlignerIdx].aligner = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
 			seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth,
 			maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm);
 	}
@@ -500,7 +511,7 @@ void TenXAlignerContext::runIterationThread()
 		noOrderedEvaluation,
 		noTruncation,
 		ignoreAlignmentAdjustmentForOm,
-		tenXsingleAlignerArray,
+		tenXSingleTrackerArray,
 		maxBarcodeSize,
 		minReadLength,
 		maxSecondaryAlignmentsPerContig,
@@ -685,48 +696,6 @@ void TenXAlignerContext::runIterationThread()
 			}
 		}
 	}
-	/**** changing to stage based mapping
-	while (true) {
-		// If there is indeed too many secondary results and the buffer size is not enough, reallocate the memory
-		bool barcodeFinished = aligner->align(reads, totalPairsForBarcode, results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, nSecondaryResults,
-			maxSingleSecondaryHits, maxSecondaryAlignments, nSingleSecondaryResults, singleSecondaryResults, popularSeedsSkipped, pairNotFinished);
-
-		// Quit if all reads are done and there is no secondary result overflow.
-		if (barcodeFinished)
-			break;
-
-		// If there is secondary result overflow, reallocate result space for those that overflow
-		for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {
-			if (pairNotFinished[pairIdx]) {
-				_ASSERT(nSecondaryResults[pairIdx] > maxPairedSecondaryHits[pairIdx] || nSingleSecondaryResults[pairIdx * NUM_READS_PER_PAIR] > maxSingleSecondaryHits[pairIdx]);
-
-				// indicator that secondary paired result overflows
-				if (nSecondaryResults[pairIdx] > maxPairedSecondaryHits[pairIdx]) {
-					//if (reallocatedPairedSecondaryBuffer[pairIdx]) {
-					BigDealloc(results[pairIdx]);
-					results[pairIdx] = NULL;
-					//}
-
-					maxPairedSecondaryHits[pairIdx] *= 2;
-					results[pairIdx] = (PairedAlignmentResult *)BigAlloc((maxPairedSecondaryHits[pairIdx] + 1) * sizeof(PairedAlignmentResult));
-					//reallocatedPairedSecondaryBuffer[pairIdx] = true;
-				}
-
-				// indicator that secondary single result overflows
-				if (nSingleSecondaryResults[pairIdx * NUM_READS_PER_PAIR] > maxSingleSecondaryHits[pairIdx]) {
-					//if (reallocatedSingleSecondaryBuffer[pairIdx]) {
-					BigDealloc(singleSecondaryResults[pairIdx]);
-					singleSecondaryResults[pairIdx] = NULL;
-					//}
-
-					maxSingleSecondaryHits[pairIdx] *= 2;
-					singleSecondaryResults[pairIdx] = (SingleAlignmentResult *)BigAlloc(maxSingleSecondaryHits[pairIdx] * sizeof(SingleAlignmentResult));
-					//reallocatedSingleSecondaryBuffer[pairIdx] = true;
-				}
-			}
-		}
-	}
-	*/
 
 	//fprintf(stderr, "****begin output\n");
 
@@ -827,9 +796,6 @@ void TenXAlignerContext::runIterationThread()
 	BigDealloc(maxPairedSecondaryHits);
 	BigDealloc(maxSingleSecondaryHits);
 
-	//BigDealloc(reallocatedPairedSecondaryBuffer);
-	//BigDealloc(reallocatedSingleSecondaryBuffer);
-
 	BigDealloc(popularSeedsSkipped);
 	BigDealloc(pairNotFinished);
 
@@ -849,13 +815,12 @@ void TenXAlignerContext::runIterationThread()
 	BigDealloc(results);
 	BigDealloc(singleSecondaryResults);
 
-
+	for (unsigned singleAlignerIdx = 0; singleAlignerIdx < maxBarcodeSize; singleAlignerIdx++) {
+		tenXSingleTrackerArray[singleAlignerIdx].aligner->~TenXSingleAligner();
+	}
+	
 	aligner->~TenXClusterAligner();
 	delete supplier;
-
-	for (unsigned singleAlignerIdx = 0; singleAlignerIdx < maxBarcodeSize; singleAlignerIdx++) {
-		tenXsingleAlignerArray[singleAlignerIdx]->~TenXSingleAligner();
-	}
 
 	//fflush(stderr);
 	delete allocator;

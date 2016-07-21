@@ -44,7 +44,7 @@ public:
 		bool				noOrderedEvaluation,
 		bool				noTruncation,
 		bool				ignoreALignmentAdjustmentsForOm,
-		TenXSingleAligner	**underlyingTenXSingleAligner_,
+		TenXProgressTracker	*progressTracker_,
 		unsigned			maxBarcodeSize_,
 		unsigned			minReadLength_,
 		int					maxSecondaryAlignmentsPerContig,
@@ -124,12 +124,12 @@ public:
 		int						maxEditDistanceForSecondaryResults,
 		_int64					secondaryResultBufferSize,
 		_int64					*nSecondaryResults,
-		PairedAlignmentResult	*secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
+		PairedAlignmentResult	*secondaryResults,				// The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
 		_int64					singleSecondaryBufferSize,
 		_int64					maxSecondaryAlignmentsToReturn,
 		_int64					*nSingleEndSecondaryResultsForFirstRead,
 		_int64					*nSingleEndSecondaryResultsForSecondRead,
-		SingleAlignmentResult	*singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
+		SingleAlignmentResult	*singleEndSecondaryResults		// Single-end secondary alignments for when the paired-end alignment didn't work properly
 	) {
 		return true;
 	};
@@ -140,7 +140,7 @@ public:
 	virtual _int64 getLocationsScored() const {
 		_int64 locationsScored = 0;
 		for (int readIdx = 0; readIdx < barcodeSize; readIdx++) {
-			locationsScored += underlyingTenXSingleAligner[readIdx]->getLocationsScored();
+			locationsScored += progressTracker[readIdx].aligner->getLocationsScored();
 		}
 		return locationsScored + singleAligner->getLocationsScored();
 	}
@@ -150,7 +150,8 @@ private:
 	bool				forceSpacing;
 	BaseAligner			*singleAligner;
 	unsigned			maxBarcodeSize;
-	TenXSingleAligner	**underlyingTenXSingleAligner;
+	//TenXSingleAligner	**progressTracker;
+	TenXProgressTracker *progressTracker;
 
 	// avoid allocation in aligner calls
 	IdPairVector*		singleSecondary[2];

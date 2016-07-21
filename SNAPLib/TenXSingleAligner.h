@@ -104,7 +104,10 @@ public:
 		Read                  *read1,
 		unsigned              *popularSeedsSkipped
 	);
-
+	//
+	// align_phase_2_init loads the initial loci pointers. 
+	//
+    bool align_phase_2_init();
 	//
 	// align_phase_2_to_target_loc advances all location pairs to right before clusterTargetLoc. For all loc pairs that are before clusterTargetLoc, the potential mapping will be associated with cluster clusterInfoPtr
 	// It will terminate after advancing lastGenomeLocationForReadWithFewerHits of both directions beyond clusterTargetLoc.
@@ -567,4 +570,11 @@ private:
 	GenomeLocation			lastGenomeLocationForReadWithMoreHits[NUM_DIRECTIONS];
 	unsigned				maxUsedBestPossibleScoreList;
 	bool					noMoreLoci[NUM_DIRECTIONS];
+};
+
+struct TenXProgressTracker
+{
+	TenXSingleAligner	*aligner;
+	GenomeLocation		lastSmallLocation; // Keep it here so that hopefully lastLoci be in cache.
+	TenXProgressTracker	*next; // linked list next link
 };

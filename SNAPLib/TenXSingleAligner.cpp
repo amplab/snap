@@ -640,12 +640,8 @@ GenomeLocation TenXSingleAligner::align_phase_2_get_next_loci()
 }
 
 
-void
-TenXSingleAligner::align_phase_2()
+bool TenXSingleAligner::align_phase_2_init()
 {
-	//
-	// Phase 2: find all possible candidates and add them to candidate lists (for the reads with fewer and more hits).
-	//
 	bool keepGoing = false;
 	maxUsedBestPossibleScoreList = 0;
 
@@ -667,14 +663,22 @@ TenXSingleAligner::align_phase_2()
 
 		keepGoing = keepGoing || !noMoreLoci[whichSetPair];
 	}
+	return keepGoing;
+}
 
-	//printf("setPair[0]: %p and setPair[1]: %p\n", setPair[0], setPair[1]);
+
+void
+TenXSingleAligner::align_phase_2()
+{
+	//
+	// Phase 2: find all possible candidates and add them to candidate lists (for the reads with fewer and more hits).
+	//
 
 	//
 	// Loop over the candidates in for the read with more hits.  At the top of the loop, we have a candidate but don't know if it has
 	// a mate.  Each pass through the loop considers a single hit on the read with fewer hits.
 	//
-	if(keepGoing) {
+	if(align_phase_2_init() ) {
 		GenomeLocation clusterTargetLoc = GenomeLocation(0000000000);
 		align_phase_2_to_target_loc(clusterTargetLoc, NULL);
 	}
