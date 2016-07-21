@@ -46,6 +46,8 @@ public:
 		bool				ignoreALignmentAdjustmentsForOm,
 		TenXProgressTracker	*progressTracker_,
 		unsigned			maxBarcodeSize_,
+		unsigned			minPairsPerCluster_,
+		_uint64				maxClusterSpan_,
 		unsigned			minReadLength_,
 		int					maxSecondaryAlignmentsPerContig,
 		BigAllocator		*allocator);
@@ -161,5 +163,9 @@ private:
 
 	GenomeIndex			*index;
 	unsigned			minReadLength;
+	
+	// 10x data	
 	unsigned			barcodeSize;
+	unsigned			minPairsPerCluster;
+	_uint64				maxClusterSpan;
 };

@@ -514,6 +514,8 @@ void TenXAlignerContext::runIterationThread()
 		ignoreAlignmentAdjustmentForOm,
 		tenXSingleTrackerArray,
 		maxBarcodeSize,
+		minPairsPerCluster,
+		maxClusterSpan,
 		minReadLength,
 		maxSecondaryAlignmentsPerContig,
 		allocator);

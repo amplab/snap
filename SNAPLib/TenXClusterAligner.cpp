@@ -55,10 +55,12 @@ TenXClusterAligner::TenXClusterAligner(
 	bool				ignoreAlignmentAdjustmentsForOm,
 	TenXProgressTracker	*progressTracker_,
 	unsigned			maxBarcodeSize_,
+	unsigned			minPairsPerCluster_,
+	_uint64				maxClusterSpan_,
 	unsigned			minReadLength_,
 	int					maxSecondaryAlignmentsPerContig,
 	BigAllocator		*allocator)
-	: progressTracker(progressTracker_), maxBarcodeSize(maxBarcodeSize_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_)
+	: progressTracker(progressTracker_), maxBarcodeSize(maxBarcodeSize_), minPairsPerCluster(minPairsPerCluster_), maxClusterSpan(maxClusterSpan_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_)
 {
 	// Create single-end aligners.
 	singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
@@ -136,24 +138,26 @@ bool TenXClusterAligner::align_first_stage(
 				//
 				// Let the LVs use the cache that we built up.
 				//
-				// bool terminateAfterPhase1 = !
-				notFinished[pairIdx] =
+				bool terminateAfterPhase1 = !
+				// notFinished[pairIdx] =
 					!progressTracker[pairIdx].aligner->align_phase_1(read0, read1, &popularSeedsSkipped[pairIdx * NUM_READS_PER_PAIR]);
 				
 				// Initialize for phase_2 if the alginer if not stopped
-				if (notFinished[pairIdx]) {
+				//if (notFinished[pairIdx]) {
+				if (!terminateAfterPhase1) {
 					progressTracker[pairIdx].notDone = progressTracker[pairIdx].aligner->align_phase_2_init();
 					progressTracker[pairIdx].nextLoci = *(progressTracker[pairIdx].aligner->align_phase_2_get_loci() );
 					progressTracker[pairIdx].next = NULL;
 				}
-				else // If not pair
+				else {
 					progressTracker[pairIdx].notDone = false;
+				}
 			}
 		}
 	}
 
 	// TenX code. Initialize and sort all trackers
-	qsort(progressTracker, barcodeSize, sizeof(TenXProgressTracker), TenXProgressTracker::compare);
+	// qsort(progressTracker, maxBarcodeSize, sizeof(TenXProgressTracker), TenXProgressTracker::compare);
 
 	GenomeLocation clusterTargetLoc = GenomeLocation(0000000000); //**** This is just for testing. Will be removed.
 
