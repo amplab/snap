@@ -28,6 +28,7 @@ Revision History:
 #include "mapq.h"
 #include "directions.h"
 #include "BigAlloc.h"
+#include <cstdlib>
 #include "Util.h"
 
 using namespace std;
@@ -135,25 +136,47 @@ bool TenXClusterAligner::align_first_stage(
 				//
 				// Let the LVs use the cache that we built up.
 				//
-				bool terminateAfterPhase1 = !
-//				notFinished[pairIdx] =
+				// bool terminateAfterPhase1 = !
+				notFinished[pairIdx] =
 					!progressTracker[pairIdx].aligner->align_phase_1(read0, read1, &popularSeedsSkipped[pairIdx * NUM_READS_PER_PAIR]);
-//			}
-//		}
-//	}
+				
+				// Initialize for phase_2 if the alginer if not stopped
+				if (notFinished[pairIdx]) {
+					progressTracker[pairIdx].notDone = progressTracker[pairIdx].aligner->align_phase_2_init();
+					progressTracker[pairIdx].nextLoci = *(progressTracker[pairIdx].aligner->align_phase_2_get_loci() );
+					progressTracker[pairIdx].next = NULL;
+				}
+				else // If not pair
+					progressTracker[pairIdx].notDone = false;
+			}
+		}
+	}
 
-	// Now phase2 is the part to add cluster code.
-	// First, 
+	// TenX code. Initialize and sort all trackers
+	qsort(progressTracker, barcodeSize, sizeof(TenXProgressTracker), TenXProgressTracker::compare);
+
+	GenomeLocation clusterTargetLoc = GenomeLocation(0000000000); //**** This is just for testing. Will be removed.
+
+	for (int pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
+		if (progressTracker[pairIdx].notDone) {
+			fprintf(stderr, "lastLoci: %lld\n", progressTracker[pairIdx].nextLoci.location);
+			progressTracker[pairIdx].aligner->align_phase_2_to_target_loc(clusterTargetLoc, NULL);;
+		}
+	}
+	
 
 
 
+/*
 				if (!terminateAfterPhase1) {
 					progressTracker[pairIdx].aligner->align_phase_2();
 				}
 			}
 		}
 	}
+*/
 	return barcodeFinished;
+
 }
 
 

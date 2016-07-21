@@ -629,12 +629,12 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 }
 
 
-GenomeLocation TenXSingleAligner::align_phase_2_get_next_loci()
+GenomeLocation* TenXSingleAligner::align_phase_2_get_loci()
 {
-	GenomeLocation nextLoci(0); //1T bp, just an arbitrary big location. Hard coded. BAD!
+	GenomeLocation* nextLoci = NULL; //1T bp, just an arbitrary big location. Hard coded. BAD!
 	for (unsigned direction = 0; direction < NUM_DIRECTIONS; direction++) {
-		if (!noMoreLoci[direction] && nextLoci < lastGenomeLocationForReadWithFewerHits[direction])
-			nextLoci = lastGenomeLocationForReadWithFewerHits[direction];
+		if (nextLoci == NULL || (!noMoreLoci[direction] && *nextLoci < lastGenomeLocationForReadWithFewerHits[direction]) )
+			nextLoci = &lastGenomeLocationForReadWithFewerHits[direction];
 	}
 	return nextLoci;
 }

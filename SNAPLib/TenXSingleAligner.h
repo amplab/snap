@@ -105,7 +105,7 @@ public:
 		unsigned              *popularSeedsSkipped
 	);
 	//
-	// align_phase_2_init loads the initial loci pointers. 
+	// align_phase_2_init loads the initial loci pointers. Return true if there is at least one common loci.
 	//
     bool align_phase_2_init();
 	//
@@ -116,7 +116,7 @@ public:
 	//
 	// align_phase_2_get_next_loc is accompanied with align_phase_2_to_target_loc. It returns the bigger next loci from the fewer side among the the 2 directions.
 	//
-	GenomeLocation align_phase_2_get_next_loci();
+	GenomeLocation* align_phase_2_get_loci();
 	//
 	// align_phase_2_single_step_check_range returns 0 if we have found a good match. Returns 1 if seedLoc of the fewHit side has exhauseted. Returns -1 if fewHit side surpasses moreHIt side.
 	//
@@ -574,7 +574,26 @@ private:
 
 struct TenXProgressTracker
 {
+	bool				notDone;
 	TenXSingleAligner	*aligner;
-	GenomeLocation		lastSmallLocation; // Keep it here so that hopefully lastLoci be in cache.
+	GenomeLocation		nextLoci; // Keep it here so that hopefully lastLoci be in cache.
 	TenXProgressTracker	*next; // linked list next link
+
+	static int compare (const void *a_raw, const void *b_raw)
+	{
+		TenXProgressTracker* a = (TenXProgressTracker*)a_raw;
+		TenXProgressTracker* b = (TenXProgressTracker*)b_raw;
+		if (!a->notDone && !b->notDone)
+			return 0;
+		else if (!a->notDone)
+			return 1;
+		else if (!b->notDone)
+			return -1;
+		else if (a->nextLoci == b->nextLoci)
+			return 0;
+		else if (a->nextLoci < b->nextLoci)
+			return 1;
+		else
+			return -1;
+	}
 };

@@ -495,6 +495,7 @@ void TenXAlignerContext::runIterationThread()
 		tenXSingleTrackerArray[singleAlignerIdx].aligner = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
 			seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth,
 			maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm);
+		tenXSingleTrackerArray[singleAlignerIdx].notDone = false;
 	}
 
 	TenXClusterAligner *aligner = new (allocator) TenXClusterAligner(
