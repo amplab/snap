@@ -135,7 +135,7 @@ bool TenXClusterAligner::align_first_stage(
 				//
 				// Let the LVs use the cache that we built up.
 				//
-				bool terminateAfterPhase1 =
+				bool terminateAfterPhase1 = !
 //				notFinished[pairIdx] =
 					!progressTracker[pairIdx].aligner->align_phase_1(read0, read1, &popularSeedsSkipped[pairIdx * NUM_READS_PER_PAIR]);
 //			}
