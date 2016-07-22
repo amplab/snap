@@ -64,37 +64,22 @@ public:
 	// First stage will call underlyingAligner->phase1 and phase2. First stage should be only called once
 	// Return true is no single read is worthy of further examination
 	bool align_first_stage(
-	Read					**pairedReads,
-	unsigned				barcodeSize,
-	PairedAlignmentResult	**result,
-	unsigned				*popularSeedsSkipped
+	unsigned				barcodeSize
 	);
 
 	// Second stage will call underlyingAligner->phase3 and phase4. First stage should be only called once
 	// Return ture if no pair requires memory reallocation.
 	bool align_second_stage(
-	Read					**pairedReads,
 	unsigned				barcodeSize,
-	PairedAlignmentResult	**result,
 	int						maxEditDistanceForSecondaryResults,
-	_int64					*secondaryResultBufferSize,
-	_int64					*nSecondaryResults,
-	_int64					maxSecondaryAlignmentsToReturn,
-	_int64					*nSingleEndSecondaryResults,
-	unsigned				*popularSeedsSkipped
+	_int64					maxSecondaryAlignmentsToReturn
 	);
 
 	// Third stage will handle single mappings.
 	bool align_third_stage(
-	Read **pairedReads,
 	unsigned barcodeSize,
-	PairedAlignmentResult** result,
 	int maxEditDistanceForSecondaryResults,
-	_int64* nSecondaryResults,
-	_int64* singleSecondaryBufferSize,
-	_int64 maxSecondaryAlignmentsToReturn,
-	_int64* nSingleEndSecondaryResults,
-	SingleAlignmentResult** singleEndSecondaryResults
+	_int64 maxSecondaryAlignmentsToReturn
 	);
 
 	// return true if all pairs within the cluster have been processed. No secondary results overflow.
