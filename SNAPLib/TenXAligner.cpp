@@ -703,7 +703,7 @@ void TenXAlignerContext::runIterationThread()
 			break;
 		for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {
 			if (tenXSingleTrackerArray[pairIdx].singleNotDone && tenXSingleTrackerArray[pairIdx].nSingleEndSecondaryResults[0] > tenXSingleTrackerArray[pairIdx].singleSecondaryBufferSize) {
-				_ASSERT(tenXSingleTrackerArray[pairIdx].nSingleEndSecondaryResultsForFirstRead > tenXSingleTrackerArray[pairIdx].singleSecondaryBufferSize);
+				_ASSERT(tenXSingleTrackerArray[pairIdx].nSingleEndSecondaryResults[0] > tenXSingleTrackerArray[pairIdx].singleSecondaryBufferSize);
 				BigDealloc(tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults);
 				tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults = NULL;
 				tenXSingleTrackerArray[pairIdx].singleSecondaryBufferSize *= 2;
@@ -829,7 +829,6 @@ void TenXAlignerContext::runIterationThread()
 		tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults = NULL;
 	}
 
-	BigDealloc(tenXSingleTrackerArray);
 	//BigDealloc(nSecondaryResults);
 	//BigDealloc(nSingleSecondaryResults);
 	//BigDealloc(results);
@@ -840,6 +839,8 @@ void TenXAlignerContext::runIterationThread()
 	}
 	
 	aligner->~TenXClusterAligner();
+	
+	BigDealloc(tenXSingleTrackerArray);
 	delete supplier;
 
 	//fflush(stderr);

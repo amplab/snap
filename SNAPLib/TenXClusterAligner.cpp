@@ -314,8 +314,8 @@ bool TenXClusterAligner::align_third_stage(
 
 #ifdef _DEBUG
 			if (_DumpAlignments) {
-				printf("TenXClusterAligner: (%u, %u) score (%d, %d), MAPQ (%d, %d)\n\n\n", progressTracker[pairIdx].result[0].location[0].location, result[pairIdx]->location[1].location,
-					progressTracker[pairIdx].result[0].score[0], result[pairIdx]->score[1], result[pairIdx]->mapq[0], result[pairIdx]->mapq[1]);
+				printf("TenXClusterAligner: (%u, %u) score (%d, %d), MAPQ (%d, %d)\n\n\n", progressTracker[pairIdx].results[0].location[0].location, progressTracker[pairIdx].results[0].location[1].location,
+					progressTracker[pairIdx].results[0].score[0], progressTracker[pairIdx].results[0].score[1], progressTracker[pairIdx].results[0].mapq[0], progressTracker[pairIdx].results[0].mapq[1]);
 			}
 #endif // _DEBUG
 
