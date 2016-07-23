@@ -150,7 +150,7 @@ bool TenXClusterAligner::align_first_stage(
 	}
 
 	// TenX code. Initialize and sort all trackers
-	// qsort(progressTracker, maxBarcodeSize, sizeof(TenXProgressTracker), TenXProgressTracker::compare);
+	qsort(progressTracker, maxBarcodeSize, sizeof(TenXProgressTracker), TenXProgressTracker::compare);
 
 	GenomeLocation clusterTargetLoc = GenomeLocation(0000000000); //**** This is just for testing. Will be removed.
 
