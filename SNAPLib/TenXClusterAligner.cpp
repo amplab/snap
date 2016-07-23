@@ -105,25 +105,25 @@ bool TenXClusterAligner::align_first_stage(
 	bool barcodeFinished = true;
 	for (int pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
 		if (progressTracker[pairIdx].pairNotDone) {
-			progressTracker[pairIdx].result[0].status[0] = progressTracker[pairIdx].result[0].status[1] = NotFound;
+			progressTracker[pairIdx].results[0].status[0] = progressTracker[pairIdx].results[0].status[1] = NotFound;
 
-			Read *read0 = progressTracker[pairIdx].pairedReads;
-			Read *read1 = progressTracker[pairIdx].pairedReads + 1;
+			Read *read0 = progressTracker[pairIdx].pairedReads[0];
+			Read *read1 = progressTracker[pairIdx].pairedReads[1];
 
 			if (read0->getDataLength() < minReadLength && read1->getDataLength() < minReadLength) {
 				TRACE("Reads are both too short -- returning");
 				// Update primary result
 				for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
-					progressTracker[pairIdx].result[0].location[whichRead] = 0;
-					progressTracker[pairIdx].result[0].mapq[whichRead] = 0;
-					progressTracker[pairIdx].result[0].score[whichRead] = 0;
-					progressTracker[pairIdx].result[0].status[whichRead] = NotFound;
+					progressTracker[pairIdx].results[0].location[whichRead] = 0;
+					progressTracker[pairIdx].results[0].mapq[whichRead] = 0;
+					progressTracker[pairIdx].results[0].score[whichRead] = 0;
+					progressTracker[pairIdx].results[0].status[whichRead] = NotFound;
 				}
-				progressTracker[pairIdx].result[0].alignedAsPair = false;
-				progressTracker[pairIdx].result[0].fromAlignTogether = false;
-				progressTracker[pairIdx].result[0].nanosInAlignTogether = 0;
-				progressTracker[pairIdx].result[0].nLVCalls = 0;
-				progressTracker[pairIdx].result[0].nSmallHits = 0;
+				progressTracker[pairIdx].results[0].alignedAsPair = false;
+				progressTracker[pairIdx].results[0].fromAlignTogether = false;
+				progressTracker[pairIdx].results[0].nanosInAlignTogether = 0;
+				progressTracker[pairIdx].results[0].nLVCalls = 0;
+				progressTracker[pairIdx].results[0].nSmallHits = 0;
 
 				progressTracker[pairIdx].pairNotDone = false;
 				progressTracker[pairIdx].singleNotDone = false;
@@ -188,11 +188,11 @@ bool TenXClusterAligner::align_second_stage(
 	bool barcodeFinished = true;
 	for (int pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
 		if (progressTracker[pairIdx].pairNotDone) {// && progressTracker[pairIdx].notDone) {
-			Read *read0 = progressTracker[pairIdx].pairedReads;
-			Read *read1 = progressTracker[pairIdx].pairedReads + 1;
+			Read *read0 = progressTracker[pairIdx].pairedReads[0];
+			Read *read1 = progressTracker[pairIdx].pairedReads[1];
 
-			progressTracker[pairIdx].nSingleEndSecondaryResultsForFirstRead = 0;
-			progressTracker[pairIdx].nSingleEndSecondaryResultsForSecondRead = 0;
+			progressTracker[pairIdx].nSingleEndSecondaryResults[0] = 0;
+			progressTracker[pairIdx].nSingleEndSecondaryResults[1] = 0;
 
 			unsigned bestPairScore = 65536;
 			GenomeLocation bestResultGenomeLocation[NUM_READS_PER_PAIR];
@@ -201,16 +201,16 @@ bool TenXClusterAligner::align_second_stage(
 			unsigned bestResultScore[NUM_READS_PER_PAIR];
 			double probabilityOfBestPair = 0;
 
-			bool secondaryBufferOverflow = progressTracker[pairIdx].aligner->align_phase_3(maxEditDistanceForSecondaryResults, progressTracker[pairIdx].secondaryResultBufferSize, &progressTracker[pairIdx].nSecondaryResults, &progressTracker[pairIdx].result[1], maxSecondaryAlignmentsToReturn, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, progressTracker[pairIdx].popularSeedsSkipped, probabilityOfBestPair);
+			bool secondaryBufferOverflow = progressTracker[pairIdx].aligner->align_phase_3(maxEditDistanceForSecondaryResults, progressTracker[pairIdx].secondaryResultBufferSize, &progressTracker[pairIdx].nSecondaryResults, &progressTracker[pairIdx].results[1], maxSecondaryAlignmentsToReturn, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, progressTracker[pairIdx].popularSeedsSkipped, probabilityOfBestPair);
 
 			if (secondaryBufferOverflow) {
-				progressTracker[pairIdx].nSingleEndSecondaryResultsForFirstRead = progressTracker[pairIdx].nSingleEndSecondaryResultsForSecondRead = 0;
+				progressTracker[pairIdx].nSingleEndSecondaryResults[0] = progressTracker[pairIdx].nSingleEndSecondaryResults[1] = 0;
 				progressTracker[pairIdx].nSecondaryResults = progressTracker[pairIdx].secondaryResultBufferSize + 1; // So the caller knows it's the paired secondary buffer that overflowed
 				barcodeFinished = false;
 				continue;//return false;
 			}
 			else {
-				progressTracker[pairIdx].aligner->align_phase_4(read0, read1, &progressTracker[pairIdx].result[0], maxEditDistanceForSecondaryResults, &progressTracker[pairIdx].nSecondaryResults, &progressTracker[pairIdx].result[1], maxSecondaryAlignmentsToReturn, progressTracker[pairIdx].popularSeedsSkipped, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, probabilityOfBestPair);
+				progressTracker[pairIdx].aligner->align_phase_4(read0, read1, &progressTracker[pairIdx].results[0], maxEditDistanceForSecondaryResults, &progressTracker[pairIdx].nSecondaryResults, &progressTracker[pairIdx].results[1], maxSecondaryAlignmentsToReturn, progressTracker[pairIdx].popularSeedsSkipped, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, probabilityOfBestPair);
 			}
 
 			/* timing no longer makes sence
@@ -219,23 +219,23 @@ bool TenXClusterAligner::align_second_stage(
 			result[pairIdx]->nanosInAlignTogether = end - start;
 			*/
 
-			progressTracker[pairIdx].result[0].nanosInAlignTogether = 0; //timing no longer makes sence
-			progressTracker[pairIdx].result[0].fromAlignTogether = true;
-			progressTracker[pairIdx].result[0].alignedAsPair = true;
+			progressTracker[pairIdx].results[0].nanosInAlignTogether = 0; //timing no longer makes sence
+			progressTracker[pairIdx].results[0].fromAlignTogether = true;
+			progressTracker[pairIdx].results[0].alignedAsPair = true;
 
 			if (forceSpacing) {
-				if (progressTracker[pairIdx].result[0].status[0] == NotFound) {
-					progressTracker[pairIdx].result[0].fromAlignTogether = false;
+				if (progressTracker[pairIdx].results[0].status[0] == NotFound) {
+					progressTracker[pairIdx].results[0].fromAlignTogether = false;
 				}
 				else {
-					_ASSERT(result[pairIdx]->status[1] != NotFound); // If one's not found, so is the other
+					_ASSERT(progressTracker[pairIdx].results[0].status[1] != NotFound); // If one's not found, so is the other
 				}
 				progressTracker[pairIdx].pairNotDone = false;
 				progressTracker[pairIdx].singleNotDone = false;
 				continue;//return true;
 			}
 
-			if (progressTracker[pairIdx].result[0].status[0] != NotFound && progressTracker[pairIdx].result[0].status[1] != NotFound) {
+			if (progressTracker[pairIdx].results[0].status[0] != NotFound && progressTracker[pairIdx].results[0].status[1] != NotFound) {
 				//
 				// Not a chimeric read.
 				//
@@ -260,11 +260,11 @@ bool TenXClusterAligner::align_third_stage(
 	bool barcodeFinished = true;
 	for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
 		if (progressTracker[pairIdx].singleNotDone) {// && progressTracker[pairIdx].notDone) {
-			Read *read0 = progressTracker[pairIdx].pairedReads;
-			Read *read1 = progressTracker[pairIdx].pairedReads + 1;
+			Read *read0 = progressTracker[pairIdx].pairedReads[0];
+			Read *read1 = progressTracker[pairIdx].pairedReads[1];
 
 			Read *read[NUM_READS_PER_PAIR] = { read0, read1 };
-			_int64 *resultCount[2] = { &progressTracker[pairIdx].nSingleEndSecondaryResultsForFirstRead, &progressTracker[pairIdx].nSingleEndSecondaryResultsForFirstRead };
+			_int64 *resultCount[2] = { &progressTracker[pairIdx].nSingleEndSecondaryResults[0], &progressTracker[pairIdx].nSingleEndSecondaryResults[1] };
 
 			bool noOverflow = true;
 			for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
@@ -272,23 +272,23 @@ bool TenXClusterAligner::align_third_stage(
 				_int64 singleEndSecondaryResultsThisTime = 0;
 
 				if (read[r]->getDataLength() < minReadLength) {
-					progressTracker[pairIdx].result[0].status[r] = NotFound;
-					progressTracker[pairIdx].result[0].mapq[r] = 0;
-					progressTracker[pairIdx].result[0].direction[r] = FORWARD;
-					progressTracker[pairIdx].result[0].location[r] = 0;
-					progressTracker[pairIdx].result[0].score[r] = 0;
+					progressTracker[pairIdx].results[0].status[r] = NotFound;
+					progressTracker[pairIdx].results[0].mapq[r] = 0;
+					progressTracker[pairIdx].results[0].direction[r] = FORWARD;
+					progressTracker[pairIdx].results[0].location[r] = 0;
+					progressTracker[pairIdx].results[0].score[r] = 0;
 				}
 				else {
 					// We're using *nSingleEndSecondaryResultsForFirstRead because it's either 0 or what all we've seen (i.e., we know NUM_READS_PER_PAIR is 2)
 					bool fitInSecondaryBuffer = //true;
 						singleAligner->AlignRead(read[r], &singleResult, maxEditDistanceForSecondaryResults,
-							progressTracker[pairIdx].singleSecondaryBufferSize - progressTracker[pairIdx].nSingleEndSecondaryResultsForFirstRead, &singleEndSecondaryResultsThisTime,
-							maxSecondaryAlignmentsToReturn, progressTracker[pairIdx].singleEndSecondaryResults + progressTracker[pairIdx].nSingleEndSecondaryResultsForFirstRead);
+							progressTracker[pairIdx].singleSecondaryBufferSize - progressTracker[pairIdx].nSingleEndSecondaryResults[0], &singleEndSecondaryResultsThisTime,
+							maxSecondaryAlignmentsToReturn, &progressTracker[pairIdx].singleEndSecondaryResults[progressTracker[pairIdx].nSingleEndSecondaryResults[0]]);
 
 					if (!fitInSecondaryBuffer) {
 						progressTracker[pairIdx].nSecondaryResults = 0;
-						progressTracker[pairIdx].nSingleEndSecondaryResultsForFirstRead = progressTracker[pairIdx].singleSecondaryBufferSize + 1;
-						progressTracker[pairIdx].nSingleEndSecondaryResultsForSecondRead = 0;
+						progressTracker[pairIdx].nSingleEndSecondaryResults[0] = progressTracker[pairIdx].singleSecondaryBufferSize + 1;
+						progressTracker[pairIdx].nSingleEndSecondaryResults[1] = 0;
 						barcodeFinished = false;
 						noOverflow = false;
 						break;//return false;
@@ -296,20 +296,20 @@ bool TenXClusterAligner::align_third_stage(
 
 					*(resultCount[r]) = singleEndSecondaryResultsThisTime;
 
-					progressTracker[pairIdx].result[0].status[r] = singleResult.status;
-					progressTracker[pairIdx].result[0].mapq[r] = singleResult.mapq / 3;   // Heavy quality penalty for chimeric reads
-					progressTracker[pairIdx].result[0].direction[r] = singleResult.direction;
-					progressTracker[pairIdx].result[0].location[r] = singleResult.location;
-					progressTracker[pairIdx].result[0].score[r] = singleResult.score;
-					progressTracker[pairIdx].result[0].scorePriorToClipping[r] = singleResult.scorePriorToClipping;
+					progressTracker[pairIdx].results[0].status[r] = singleResult.status;
+					progressTracker[pairIdx].results[0].mapq[r] = singleResult.mapq / 3;   // Heavy quality penalty for chimeric reads
+					progressTracker[pairIdx].results[0].direction[r] = singleResult.direction;
+					progressTracker[pairIdx].results[0].location[r] = singleResult.location;
+					progressTracker[pairIdx].results[0].score[r] = singleResult.score;
+					progressTracker[pairIdx].results[0].scorePriorToClipping[r] = singleResult.scorePriorToClipping;
 				}
 			}
 
 			// This pair is done processing, only if both directions has no overflow.
 			if (noOverflow) {
 				progressTracker[pairIdx].singleNotDone = false;
-				progressTracker[pairIdx].result[0].fromAlignTogether = false;
-				progressTracker[pairIdx].result[0].alignedAsPair = false;
+				progressTracker[pairIdx].results[0].fromAlignTogether = false;
+				progressTracker[pairIdx].results[0].alignedAsPair = false;
 			}
 
 #ifdef _DEBUG

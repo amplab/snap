@@ -581,15 +581,17 @@ struct TenXProgressTracker
 	GenomeLocation		nextLoci; // Keep it here so that hopefully lastLoci be in cache.
 	TenXProgressTracker	*next; // linked list next link
 
-	Read					*pairedReads;
-	PairedAlignmentResult	*result;
+	Read					*pairedReads[NUM_READS_PER_PAIR];
+	PairedAlignmentResult	*results;
 	SingleAlignmentResult	*singleEndSecondaryResults;
 	_int64					secondaryResultBufferSize;
 	_int64					singleSecondaryBufferSize;
 	_int64					nSecondaryResults;
-	_int64					nSingleEndSecondaryResultsForFirstRead;
-	_int64					nSingleEndSecondaryResultsForSecondRead;
+	_int64					nSingleEndSecondaryResults[NUM_READS_PER_PAIR];
+	//_int64					nSingleEndSecondaryResultsForFirstRead;
+	//_int64					nSingleEndSecondaryResultsForSecondRead;
 	unsigned				popularSeedsSkipped[NUM_READS_PER_PAIR];
+	bool					useful[NUM_READS_PER_PAIR];
 
 
 	static int compare (const void *a_raw, const void *b_raw)
