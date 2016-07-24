@@ -98,12 +98,42 @@ extern bool _DumpAlignments;
 #endif // _DEBUG
 
 
+void TenXClusterAligner::sortAndLink() {
+	// TenX code. Initialize and sort all trackers
+	qsort(progressTracker, maxBarcodeSize, sizeof(TenXProgressTracker), TenXProgressTracker::compare);
+
+	// Link all tracker entries based on their GenomeLocation.
+	for (unsigned pairIdx = 1; pairIdx < barcodeSize; pairIdx++) {
+		progressTracker[pairIdx - 1].nextTracker = &progressTracker[pairIdx];
+	}
+}
+
+unsigned TenXClusterAligner::trackersToMeetTargetLoci(TenXProgressTracker *&cursor, GenomeLocation targetLoci) {
+	unsigned cursorCounter = 0;
+
+	while (cursor->nextLoci < targetLoci) {
+		cursorCounter++;
+		cursor = cursor->nextTracker;
+	}
+	return cursorCounter;
+}
+
+
+void TenXClusterAligner::registerClusterForReads(TenXProgressTracker *start, TenXProgressTracker *end, GenomeLocation targetLoc, int clusterIdx) {
+	TenXProgressTracker *cursor = start;
+	while (cursor != end) {
+		cursor->aligner->align_phase_2_to_target_loc(targetLoc, clusterIdx);
+		cursor = cursor->nextTracker;
+	}
+}
+
+
 bool TenXClusterAligner::align_first_stage(
 	unsigned				barcodeSize
 )
 {
 	bool barcodeFinished = true;
-	for (int pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
+	for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
 		if (progressTracker[pairIdx].pairNotDone) {
 			progressTracker[pairIdx].results[0].status[0] = progressTracker[pairIdx].results[0].status[1] = NotFound;
 
@@ -143,18 +173,37 @@ bool TenXClusterAligner::align_first_stage(
 				if (progressTracker[pairIdx].pairNotDone) {
 					progressTracker[pairIdx].pairNotDone = progressTracker[pairIdx].aligner->align_phase_2_init();
 					progressTracker[pairIdx].nextLoci = *(progressTracker[pairIdx].aligner->align_phase_2_get_loci() );
-					progressTracker[pairIdx].next = NULL;
+					progressTracker[pairIdx].nextTracker = NULL;
 				}
 			}
 		}
 	}
 
-	// TenX code. Initialize and sort all trackers
-	qsort(progressTracker, maxBarcodeSize, sizeof(TenXProgressTracker), TenXProgressTracker::compare);
+	// Sort all trackers and link them based on location order.
+	sortAndLink();
 
-	GenomeLocation clusterTargetLoc = GenomeLocation(0000000000); //**** This is just for testing. Will be removed.
+	TenXProgressTracker *trackerRoot = &progressTracker[0];
 
-	for (int pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
+	TenXProgressTracker *cursor = trackerRoot;
+
+	while (trackerRoot != NULL) {
+
+		unsigned nPotentialPairs = trackersToMeetTargetLoci(cursor, trackerRoot->nextLoci - maxClusterSpan);
+
+		if (nPotentialPairs < minPairsPerCluster) {// this is the part to handle clustered reads correctly!
+		}
+		else {// else part is easy.
+			for (unsigned pairCounter = 0; pairCounter < nPotentialPairs; pairCounter++) {
+				GenomeLocation newTargetLoc = cursor->nextLoci - maxClusterSpan;
+				registerClusterForReads(trackerRoot, cursor, newTargetLoc, -1); //give -1 just to proclaim that there it should not be considered as clustered.
+				sortAndLink(); // fix all the tracker orders.
+			}
+		}
+	}
+
+	GenomeLocation clusterTargetLoc = GenomeLocation(2000000000); //**** This is just for testing. Will be removed.
+
+	for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
 		if (progressTracker[pairIdx].pairNotDone) {
 			//fprintf(stderr, "lastLoci: %lld\n", progressTracker[pairIdx].nextLoci.location);
 			progressTracker[pairIdx].aligner->align_phase_2_to_target_loc(clusterTargetLoc, NULL);
@@ -186,7 +235,7 @@ bool TenXClusterAligner::align_second_stage(
 )
 {
 	bool barcodeFinished = true;
-	for (int pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
+	for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
 		if (progressTracker[pairIdx].pairNotDone) {// && progressTracker[pairIdx].notDone) {
 			Read *read0 = progressTracker[pairIdx].pairedReads[0];
 			Read *read1 = progressTracker[pairIdx].pairedReads[1];

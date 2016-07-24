@@ -113,7 +113,7 @@ public:
 	// align_phase_2_to_target_loc advances all location pairs to right before clusterTargetLoc. For all loc pairs that are before clusterTargetLoc, the potential mapping will be associated with cluster clusterInfoPtr
 	// It will terminate after advancing lastGenomeLocationForReadWithFewerHits of both directions beyond clusterTargetLoc.
 	//
-    bool align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, void *clusterInfoPtr);
+    bool align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, int clusterIdx);
 	//
 	// align_phase_2_get_next_loc is accompanied with align_phase_2_to_target_loc. It returns the bigger next loci from the fewer side among the the 2 directions.
 	//
@@ -125,7 +125,7 @@ public:
 	//
 	// should only call align_phase_2_single_step_add_candidate if align_phase_2_single_step_check_range returns 0
 	//
-	bool align_phase_2_single_step_add_candidate(unsigned whichSetPair, void *clusterInfoPtr);
+	bool align_phase_2_single_step_add_candidate(unsigned whichSetPair, int clusterIdx);
     //
 	// align_phase_2 is a dummy mimicking IntersectingPairedEndAligner
 	//
@@ -505,10 +505,10 @@ private:
 
         unsigned                bestPossibleScore;
 
-		void *					clusterInfoPtr;
+		int						clusterIdx;
 
         void init(GenomeLocation readWithFewerHitsGenomeLocation_, unsigned whichSetPair_, unsigned scoringMateCandidateIndex_, unsigned seedOffset_,
-                  unsigned bestPossibleScore_, ScoringCandidate *scoreListNext_, void *clusterInfoPtr_)
+                  unsigned bestPossibleScore_, ScoringCandidate *scoreListNext_, int clusterIdx_)
         {
             readWithFewerHitsGenomeLocation = readWithFewerHitsGenomeLocation_;
             whichSetPair = whichSetPair_;
@@ -518,7 +518,7 @@ private:
             bestPossibleScore = bestPossibleScore_;
             scoreListNext = scoreListNext_;
             mergeAnchor = NULL;
-			clusterInfoPtr = clusterInfoPtr_;
+			clusterIdx = clusterIdx_;
          }
     };
 
@@ -579,7 +579,7 @@ struct TenXProgressTracker
 	bool				singleNotDone;
 	TenXSingleAligner	*aligner;
 	GenomeLocation		nextLoci; // Keep it here so that hopefully lastLoci be in cache.
-	TenXProgressTracker	*next; // linked list next link
+	TenXProgressTracker	*nextTracker; // linked list next link
 
 	Read					*pairedReads[NUM_READS_PER_PAIR];
 	PairedAlignmentResult	*results;

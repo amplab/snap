@@ -695,7 +695,8 @@ void TenXAlignerContext::runIterationThread()
 		}
 	}
 
-	// Stage 2, calculate ED and store single results
+	// Stage 3, calculate ED and store single results
+	/* No stage 3
 	barcodeFinished = false;
 	while (true) {
 		barcodeFinished = aligner->align_third_stage(totalPairsForBarcode, maxSecondaryAlignmentAdditionalEditDistance, maxSecondaryAlignments);
@@ -711,6 +712,7 @@ void TenXAlignerContext::runIterationThread()
 			}
 		}
 	}
+	*/
 
 	//fprintf(stderr, "****begin output\n");
 

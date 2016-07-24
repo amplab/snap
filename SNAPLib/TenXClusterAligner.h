@@ -82,6 +82,13 @@ public:
 	_int64 maxSecondaryAlignmentsToReturn
 	);
 
+	// TenX related functions. Used in the first stage.
+	void sortAndLink();
+	// Moves the cursor (cursor is modified!) to the first tracker that has a loci that's greater than the target.
+	unsigned trackersToMeetTargetLoci(TenXProgressTracker *&cursor, GenomeLocation targetLocation);
+	// Progress each single aligner to move pass targetLoc, while registering the candidate with clusterIdx. The process stops BEFORE processing end. [start, end)
+	void registerClusterForReads(TenXProgressTracker *start, TenXProgressTracker *end, GenomeLocation targetLoc, int clusterIdx);
+
 	// return true if all pairs within the cluster have been processed. No secondary results overflow.
 	bool align(
 		Read					**pairedReads,

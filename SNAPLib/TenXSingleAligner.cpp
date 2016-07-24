@@ -438,7 +438,7 @@ TenXSingleAligner::align_phase_2_single_step_check_range(unsigned whichSetPair)
 
 
 bool
-TenXSingleAligner::align_phase_2_single_step_add_candidate(unsigned whichSetPair, void *clusterInfoPtr)
+TenXSingleAligner::align_phase_2_single_step_add_candidate(unsigned whichSetPair, int clusterIdx)
 {
 	//
 	// Add all of the mate candidates for this fewer side hit.
@@ -516,7 +516,7 @@ TenXSingleAligner::align_phase_2_single_step_add_candidate(unsigned whichSetPair
 
 		scoringCandidatePool[lowestFreeScoringCandidatePoolEntry].init(lastGenomeLocationForReadWithFewerHits[whichSetPair], whichSetPair, lowestFreeScoringMateCandidate[whichSetPair] - 1,
 			lastSeedOffsetForReadWithFewerHits[whichSetPair], bestPossibleScoreForReadWithFewerHits,
-			scoringCandidates[bestPossibleScore], NULL);
+			scoringCandidates[bestPossibleScore], clusterIdx);
 
 
 		scoringCandidates[bestPossibleScore] = &scoringCandidatePool[lowestFreeScoringCandidatePoolEntry];
@@ -557,13 +557,13 @@ TenXSingleAligner::align_phase_2_single_step(unsigned whichSetPair)
 	else if (check_range_result == -1)
 		return false;
 	else 
-		return align_phase_2_single_step_add_candidate(whichSetPair, NULL);
+		return align_phase_2_single_step_add_candidate(whichSetPair, -1);
 	//return align_phase_2_single_step_check_range(setPair, whichSetPair, outOfMoreHitsLocations, lastSeedOffsetForReadWithFewerHits, lastGenomeLocationForReadWithFewerHits, lastSeedOffsetForReadWithMoreHits, lastGenomeLocationForReadWithMoreHits, maxUsedBestPossibleScoreList, NULL);
 }
 
 
 bool
-TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, void *clusterInfoPtr)
+TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, int clusterIdx)
 {
 	bool keepGoing = true;
 	bool targetNotMet = false;
@@ -614,7 +614,7 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 							printf("Pair: %d  targetNotMetSingleSet: %s\n", whichSetPair, (targetNotMetSingleSet ? "true" : "false"));
 						}
 #endif //_DEBUG
-						noMoreLoci[whichSetPair] = align_phase_2_single_step_add_candidate(whichSetPair, clusterInfoPtr);
+						noMoreLoci[whichSetPair] = align_phase_2_single_step_add_candidate(whichSetPair, clusterIdx);
 						//
 						// We keep working on the loop as long as one set is still not stopped
 						//
