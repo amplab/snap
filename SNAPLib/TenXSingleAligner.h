@@ -119,11 +119,11 @@ public:
 	//
 	GenomeLocation* align_phase_2_get_loci();
 	//
-	// align_phase_2_single_step_check_range returns 0 if we have found a good match. Returns 1 if seedLoc of the fewHit side has exhauseted. Returns -1 if fewHit side surpasses moreHIt side.
+	// align_phase_2_move_locus returns 0 if we have found a good match. Returns 1 if seedLoc of the fewHit side has exhauseted. Returns -1 if fewHit side surpasses moreHIt side.
 	//
-	int align_phase_2_single_step_check_range(unsigned whichSetPair);
+	int align_phase_2_move_locus(unsigned whichSetPair);
 	//
-	// should only call align_phase_2_single_step_add_candidate if align_phase_2_single_step_check_range returns 0
+	// should only call align_phase_2_single_step_add_candidate if align_phase_2_move_locus returns 0
 	//
 	bool align_phase_2_single_step_add_candidate(unsigned whichSetPair, int clusterIdx);
     //

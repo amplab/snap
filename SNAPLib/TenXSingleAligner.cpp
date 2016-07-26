@@ -386,8 +386,9 @@ TenXSingleAligner::align_phase_1(Read* read0, Read* read1, unsigned *popularSeed
 	return false;
 }
 
+
 int
-TenXSingleAligner::align_phase_2_single_step_check_range(unsigned whichSetPair)
+TenXSingleAligner::align_phase_2_move_locus(unsigned whichSetPair)
 {
 	//
 		// Loop invariant: lastGenomeLocationForReadWithFewerHits is the highest genome offset that has not been considered.
@@ -551,14 +552,14 @@ TenXSingleAligner::align_phase_2_single_step_add_candidate(unsigned whichSetPair
 bool
 TenXSingleAligner::align_phase_2_single_step(unsigned whichSetPair)
 {
-	int check_range_result = align_phase_2_single_step_check_range(whichSetPair);
+	int check_range_result = align_phase_2_move_locus(whichSetPair);
 	if (check_range_result == 1)
 		return true;
 	else if (check_range_result == -1)
 		return false;
 	else 
 		return align_phase_2_single_step_add_candidate(whichSetPair, -1);
-	//return align_phase_2_single_step_check_range(setPair, whichSetPair, outOfMoreHitsLocations, lastSeedOffsetForReadWithFewerHits, lastGenomeLocationForReadWithFewerHits, lastSeedOffsetForReadWithMoreHits, lastGenomeLocationForReadWithMoreHits, maxUsedBestPossibleScoreList, NULL);
+	//return align_phase_2_move_locus(setPair, whichSetPair, outOfMoreHitsLocations, lastSeedOffsetForReadWithFewerHits, lastGenomeLocationForReadWithFewerHits, lastSeedOffsetForReadWithMoreHits, lastGenomeLocationForReadWithMoreHits, maxUsedBestPossibleScoreList, NULL);
 }
 
 
@@ -585,7 +586,7 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 			//std::cout << "setPair[" << whichSetPair << "]" << setPair[whichSetPair] << std::endl;
 			//printf("setPair[%d]: %p\n", whichSetPair, setPair[whichSetPair]);
 			if (!noMoreLoci[whichSetPair]) {
-				int check_range_result = align_phase_2_single_step_check_range(whichSetPair);
+				int check_range_result = align_phase_2_move_locus(whichSetPair);
 				if (check_range_result == 1) {
 					noMoreLoci[whichSetPair] = true;
 				}
