@@ -126,12 +126,17 @@ unsigned TenXClusterAligner::trackersToMeetTargetLoci(
 void TenXClusterAligner::registerClusterForReads(
 	TenXProgressTracker *start,
 	TenXProgressTracker *end,
-	GenomeLocation targetLoc,
+	GenomeLocation targetLoci,
 	int clusterIdx)
 {
 	TenXProgressTracker *cursor = start;
-	while (cursor != end) {
-		cursor->aligner->align_phase_2_to_target_loc(targetLoc, clusterIdx);
+	while (cursor != end && cursor->nextLoci < targetLoci) {
+		cursor->aligner->align_phase_2_to_target_loc(targetLoci, clusterIdx);
+		GenomeLocation *answer = cursor->aligner->align_phase_2_get_loci();
+		if (answer != NULL)
+			cursor->nextLoci = *answer;
+		else
+			cursor->nextLoci = -1;
 		cursor = cursor->nextTracker;
 	}
 }
@@ -190,52 +195,43 @@ bool TenXClusterAligner::align_first_stage(
 	// Sort all trackers and link them based on location order.
 	sortAndLink();
 
-	bool clusterPotential;
+	bool registeringCluster = false;
 	int globalClusterId = 0;
 	int clusterId;
-	TenXProgressTracker *trackerRoot;
+	GenomeLocation targetLoci;
+	TenXProgressTracker *trackerRoot = &progressTracker[0];
 	TenXProgressTracker *cursor; // pointer that keeps track of the progress of walking down progress trackers
-	TenXProgressTracker *expirationCursor; // pointer that tracks of expending existing cluster
 
-	while (trackerRoot != NULL) {
+	while (trackerRoot->pairNotDone && trackerRoot->nextLoci != -1) {
 		// Initialization.
-		trackerRoot = &progressTracker[0];
 		cursor = trackerRoot;
-		expirationCursor = trackerRoot;
-		clusterPotential = false;
+		//expirationCursor = trackerRoot;
 
 		unsigned nPotentialPairs = trackersToMeetTargetLoci(cursor, trackerRoot->nextLoci - maxClusterSpan);
 
-		while (nPotentialPairs > minPairsPerCluster) {// this is the part to handle clustered reads correctly!
-			clusterPotential = true;
-			if (cursor != NULL) {
-				GenomeLocation clusterLociBound = cursor->nextLoci + maxClusterSpan;
-				unsigned nExpiredPairs = trackersToMeetTargetLoci(expirationCursor, trackerRoot->nextLoci - maxClusterSpan);
-
-				if (nPotentialPairs - nExpiredPairs + 1 > minPairsPerCluster) { //Find a legitimate pair. Obsorb the tracker and keep looping.
-					cursor = cursor->nextTracker;
-					nPotentialPairs = nPotentialPairs - nExpiredPairs + 1;
-				}
-			}
-			else
-				break;
-		}
-
-		if (clusterPotential) {
+		if (nPotentialPairs > minPairsPerCluster) { //this is a clustered pair, obsorb it! 
+			registeringCluster = true;
 			clusterId = globalClusterId;
-			globalClusterId++;
-		}
-		else {
-			clusterId = -1;
-		}
 
-		for (unsigned pairCounter = 0; pairCounter < nPotentialPairs; pairCounter++) {
-			GenomeLocation newTargetLoc = cursor->nextLoci - maxClusterSpan;
-			registerClusterForReads(trackerRoot, cursor, newTargetLoc, clusterId); //give -1 just to proclaim that there it should not be considered as clustered.
-			sortAndLink(); // fix all the tracker orders.
+			targetLoci = cursor->nextLoci - maxClusterSpan;
+			registerClusterForReads(trackerRoot, cursor, targetLoci, clusterId); //register the pairs and update the loci pointers.
 		}
+		else { //the cluster ends here.
+			if (registeringCluster) { //when we were half way of adding a cluster, we need to finish it with the old targetLoc.
+				registeringCluster = false;
+				registerClusterForReads(trackerRoot, cursor, targetLoci, clusterId); //use the previous id.
+				globalClusterId++;
+			}
+			else { //we were not adding a cluster, just tag these locus as not clustered (-1) and move the locus pointer over the new targetLoc.
+				targetLoci = cursor->nextLoci - maxClusterSpan;
+				registerClusterForReads(trackerRoot, cursor, targetLoci, -1); //use the previous id.
+			}
+		}
+		sortAndLink(); //fix the order. ****If we use this too often, it would be a potential performance problem. Might need to fix it later. (That's why I kept the linked list pointer!).
+		trackerRoot = &progressTracker[0];
 	}
 
+/*
 	GenomeLocation clusterTargetLoc = GenomeLocation(2000000000); //**** This is just for testing. Will be removed.
 
 	for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
@@ -245,17 +241,6 @@ bool TenXClusterAligner::align_first_stage(
 		}
 		//else
 			//fprintf(stderr, "lastLoci: NULL\n");
-	}
-	
-
-
-
-/*
-				if (!terminateAfterPhase1) {
-					progressTracker[pairIdx].aligner->align_phase_2();
-				}
-			}
-		}
 	}
 */
 	return barcodeFinished;

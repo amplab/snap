@@ -578,7 +578,8 @@ struct TenXProgressTracker
 	bool				pairNotDone;
 	bool				singleNotDone;
 	TenXSingleAligner	*aligner;
-	GenomeLocation		nextLoci; // Keep it here so that hopefully lastLoci be in cache.
+	GenomeLocation		nextLoci; // Keep it here so that hopefully nextLoci be in cache.
+	GenomeLocation		currentLoci; // Keep it here so that hopefully currentLoci be in cache.
 	TenXProgressTracker	*nextTracker; // linked list next link
 
 	Read					*pairedReads[NUM_READS_PER_PAIR];
