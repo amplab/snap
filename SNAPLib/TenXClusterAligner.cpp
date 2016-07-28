@@ -454,9 +454,9 @@ bool TenXClusterAligner::align(
 {
 	if (align_first_stage(barcodeSize))
 		return true;
-	if (!align_second_stage(barcodeSize, maxEditDistanceForSecondaryResults))
+	if (!align_second_stage(maxEditDistanceForSecondaryResults, maxSecondaryAlignmentsToReturn))
 		return false;
-	if (align_third_stage(barcodeSize, maxEditDistanceForSecondaryResults))
+	if (align_third_stage(maxEditDistanceForSecondaryResults, maxSecondaryAlignmentsToReturn))
 		return true;
 	return false;
 }
