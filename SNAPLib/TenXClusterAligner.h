@@ -64,31 +64,26 @@ public:
 	// First stage will call underlyingAligner->phase1 and phase2. First stage should be only called once
 	// Return true is no single read is worthy of further examination
 	bool align_first_stage(
-	unsigned				barcodeSize
+	unsigned				barcodeSize_
 	);
 
 	// Second stage will call underlyingAligner->phase3 and phase4. First stage should be only called once
 	// Return ture if no pair requires memory reallocation.
 	bool align_second_stage(
-	unsigned				barcodeSize,
 	int						maxEditDistanceForSecondaryResults,
 	_int64					maxSecondaryAlignmentsToReturn
 	);
 
 	// Third stage will handle single mappings.
 	bool align_third_stage(
-	unsigned barcodeSize,
 	int maxEditDistanceForSecondaryResults,
 	_int64 maxSecondaryAlignmentsToReturn
 	);
 
 	// TenX related functions. Used in the first stage.
 	void sortAndLink();
-	// Moves the cursor (cursor is modified!) to the first tracker that has a loci that's greater than the target.
-	unsigned trackersToMeetTargetLoci(TenXProgressTracker *&cursor, GenomeLocation targetLocation);
-	// Progress each single aligner to move pass targetLoc, while registering the candidate with clusterIdx. The process stops BEFORE processing end. [start, end)
-	// It also terminates when cursor->nextLoci >= targetLoci, whichever comes first.
-	void registerClusterForReads(TenXProgressTracker *start, TenXProgressTracker *end, GenomeLocation targetLoci, int clusterIdx);
+	// For debug purpose, quickly forward all pairs beyond the forward loc.
+	void fastForward(GenomeLocation fowardLoc);
 
 	// return true if all pairs within the cluster have been processed. No secondary results overflow.
 	bool align(
