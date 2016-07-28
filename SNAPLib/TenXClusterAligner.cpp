@@ -237,11 +237,12 @@ bool TenXClusterAligner::align_first_stage(
 	// Sort all trackers and link them based on location order.
 	sortAndLink();
 	// debug forward
-	fastForward(110000);
+	//fastForward(110000);
 	// debug sort.
-	sortAndLink();
+	//sortAndLink();
 
-
+	fastForward(0);
+	/*
 	bool registeringCluster = false;
 	int globalClusterId = 0;
 	int clusterId;
@@ -285,9 +286,6 @@ bool TenXClusterAligner::align_first_stage(
 		sortAndLink(); //fix the order. ****If we use this too often, it would be a potential performance problem. Might need to fix it later. (That's why I kept the linked list pointer!).
 		trackerRoot = &progressTracker[0];
 	}
-
-/*
-
 */
 
 	return barcodeFinished;
