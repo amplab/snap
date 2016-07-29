@@ -10,7 +10,7 @@ Abstract:
 
 Authors:
 
-    Bill Bolosky, February, 2013
+    Hongyi Xin and Bill Bolosky, June, 2016
 
 Environment:
 
@@ -19,6 +19,8 @@ Environment:
 Revision History:
 
 --*/
+#ifndef __TENX_SINGLE_ALIGNER__
+#define __TENX_SINGLE_ALIGNER__
 
 #pragma once
 
@@ -30,8 +32,11 @@ Revision History:
 #include "FixedSizeMap.h"
 #include "AlignmentAdjuster.h"
 
+#ifndef __INTERSECTING__CONSTANTS__
+#define __INTERSECTING__CONSTANTS__
 const unsigned DEFAULT_INTERSECTING_ALIGNER_MAX_HITS = 2000;
 const unsigned DEFAULT_MAX_CANDIDATE_POOL_SIZE = 1000000;
+#endif //#define __INTERSECTING__CONSTANTS__
 
 class TenXSingleAligner : public PairedEndAligner
 {
@@ -613,3 +618,5 @@ struct TenXProgressTracker
 			return -1;
 	}
 };
+
+#endif //#define __TENX_SINGLE_ALIGNER__

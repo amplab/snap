@@ -66,6 +66,7 @@ protected:
 	unsigned			minPairsPerCluster;
 	_uint64				maxClusterSpan;
 	bool				forceSpacing;
+	bool				noSingle;
 	unsigned			intersectingAlignerMaxHits;
 	unsigned			maxCandidatePoolSize;
 	const char			*fastqFile1;
@@ -91,6 +92,7 @@ struct TenXAlignerOptions : public AlignerOptions
 	unsigned			minPairsPerCluster;
 	_uint64				maxClusterSpan;
 	bool				forceSpacing;
+	bool				noSingle;
 	unsigned			intersectingAlignerMaxHits;
 	unsigned			maxCandidatePoolSize;
 	bool				quicklyDropUnpairedReads;

@@ -44,6 +44,7 @@ Revision History:
 #include "PairedAligner.h"
 #include "MultiInputReadSupplier.h"
 #include "Util.h"
+#include "IntersectingPairedEndAligner.h"
 #include "TenXSingleAligner.h"
 #include "exit.h"
 #include "Error.h"
@@ -229,6 +230,8 @@ PairedAlignerOptions::PairedAlignerOptions(const char* i_commandLine)
     minSpacing(DEFAULT_MIN_SPACING),
     maxSpacing(DEFAULT_MAX_SPACING),
     forceSpacing(false),
+    noSingle(false),
+    debugTenX(false),
     intersectingAlignerMaxHits(DEFAULT_INTERSECTING_ALIGNER_MAX_HITS),
     maxCandidatePoolSize(DEFAULT_MAX_CANDIDATE_POOL_SIZE),
     quicklyDropUnpairedReads(true)
@@ -253,6 +256,8 @@ void PairedAlignerOptions::usageMessage()
         "       discard it.  Specifying this flag may cause large memory usage for some input files,\n"
         "       but may be necessary for some strangely formatted input files.  You'll also need to specify this\n"
         "       flag for SAM/BAM files that were aligned by a single-end aligner.\n"
+        "  -noS no single-end aligner turned on. Just use paired-end aligner.\n"
+        "  -dTX Debugging 10x Single aligner. Swap out intersecting aligner.\n"
         ,
         DEFAULT_MIN_SPACING,
         DEFAULT_MAX_SPACING,
@@ -296,7 +301,15 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
         filterFlags |= FilterBothMatesMatch;
         n += 1;
         return true;
-    }
+	}
+	else if (strcmp(argv[n], "-noS") == 0) {
+		noSingle = true;
+		return true;
+	}
+	else if (strcmp(argv[n], "-dTX") == 0) {
+		debugTenX = true;
+		return true;
+	}
     return AlignerOptions::parse(argv, argc, n, done);
 }
 
@@ -318,6 +331,8 @@ bool PairedAlignerContext::initialize()
     quicklyDropUnpairedReads = options2->quicklyDropUnpairedReads;
     noUkkonen = options->noUkkonen;
     noOrderedEvaluation = options->noOrderedEvaluation;
+	noSingle = options2->noSingle;
+	debugTenX = options2->debugTenX;
 
 	return true;
 }
@@ -393,7 +408,13 @@ void PairedAlignerContext::runIterationThread()
     }
 
     int maxReadSize = MAX_READ_LENGTH;
-    size_t memoryPoolSize = TenXSingleAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), 
+	size_t memoryPoolSize;
+	if (!debugTenX)
+		memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), 
+                                                                numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize,
+                                                                maxSecondaryAlignmentsPerContig);
+	else
+		memoryPoolSize = TenXSingleAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), 
                                                                 numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize,
                                                                 maxSecondaryAlignmentsPerContig);
 
@@ -420,12 +441,17 @@ void PairedAlignerContext::runIterationThread()
     memoryPoolSize += (1 + maxPairedSecondaryHits) * sizeof(PairedAlignmentResult) + maxSingleSecondaryHits * sizeof(SingleAlignmentResult);
 
     BigAllocator *allocator = new BigAllocator(memoryPoolSize);
-    
-    TenXSingleAligner *intersectingAligner = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
+	
+	PairedEndAligner *underlyingAligner;
+	if (!debugTenX)
+		underlyingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
                                                                 maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm);
-
-
+	else
+		underlyingAligner = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
+                                                                seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
+                                                                maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm);
+	
     ChimericPairedEndAligner *aligner = new (allocator) ChimericPairedEndAligner(
         index,
         maxReadSize,
@@ -440,9 +466,10 @@ void PairedAlignerContext::runIterationThread()
         noOrderedEvaluation,
 		noTruncation,
         ignoreAlignmentAdjustmentForOm,
-        intersectingAligner,
+		underlyingAligner,
 		minReadLength,
         maxSecondaryAlignmentsPerContig,
+		noSingle,
         allocator);
 
     allocator->checkCanaries();
@@ -643,7 +670,11 @@ void PairedAlignerContext::runIterationThread()
     aligner->~ChimericPairedEndAligner();
     delete supplier;
 
-    intersectingAligner->~TenXSingleAligner();
+	if (!debugTenX)
+		((IntersectingPairedEndAligner*)underlyingAligner)->~IntersectingPairedEndAligner();
+	else
+		((TenXSingleAligner*)underlyingAligner)->~TenXSingleAligner();
+
     delete allocator;
 }
 

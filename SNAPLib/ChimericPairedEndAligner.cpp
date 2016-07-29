@@ -12,7 +12,7 @@ Abstract:
 
 Authors:
 
-    Bill Bolosky, June, 2013
+    Hongyi Xin and Bill Bolosky, June, 2016
 
 Environment:
 
@@ -55,8 +55,9 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         PairedEndAligner    *underlyingPairedEndAligner_,
 	    unsigned            minReadLength_,
         int                 maxSecondaryAlignmentsPerContig,
+	    bool                noSingle_,
         BigAllocator        *allocator)
-		: underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_)
+		: noSingle(noSingle_), underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_)
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
@@ -174,43 +175,45 @@ bool ChimericPairedEndAligner::align(
     // If the intersecting aligner didn't find an alignment for these reads, then they may be
     // chimeric and so we should just align them with the single end aligner and apply a MAPQ penalty.
     //
-    Read *read[NUM_READS_PER_PAIR] = {read0, read1};
-    _int64 *resultCount[2] = {nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead};
+	if (!noSingle) {
+		Read *read[NUM_READS_PER_PAIR] = {read0, read1};
+		_int64 *resultCount[2] = {nSingleEndSecondaryResultsForFirstRead, nSingleEndSecondaryResultsForSecondRead};
 
-    for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
-        SingleAlignmentResult singleResult;
-        _int64 singleEndSecondaryResultsThisTime = 0;
+		for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
+			SingleAlignmentResult singleResult;
+			_int64 singleEndSecondaryResultsThisTime = 0;
 
-		if (read[r]->getDataLength() < minReadLength) {
-			result->status[r] = NotFound;
-			result->mapq[r] = 0;
-			result->direction[r] = FORWARD;
-			result->location[r] = 0;
-			result->score[r] = 0;
-		} else {
-			// We're using *nSingleEndSecondaryResultsForFirstRead because it's either 0 or what all we've seen (i.e., we know NUM_READS_PER_PAIR is 2)
-			bool fitInSecondaryBuffer = //true;
-			singleAligner->AlignRead(read[r], &singleResult, maxEditDistanceForSecondaryResults,
-				singleSecondaryBufferSize - *nSingleEndSecondaryResultsForFirstRead, &singleEndSecondaryResultsThisTime,
-                maxSecondaryAlignmentsToReturn, singleEndSecondaryResults + *nSingleEndSecondaryResultsForFirstRead);
+			if (read[r]->getDataLength() < minReadLength) {
+				result->status[r] = NotFound;
+				result->mapq[r] = 0;
+				result->direction[r] = FORWARD;
+				result->location[r] = 0;
+				result->score[r] = 0;
+			} else {
+				// We're using *nSingleEndSecondaryResultsForFirstRead because it's either 0 or what all we've seen (i.e., we know NUM_READS_PER_PAIR is 2)
+				bool fitInSecondaryBuffer = //true;
+				singleAligner->AlignRead(read[r], &singleResult, maxEditDistanceForSecondaryResults,
+					singleSecondaryBufferSize - *nSingleEndSecondaryResultsForFirstRead, &singleEndSecondaryResultsThisTime,
+					maxSecondaryAlignmentsToReturn, singleEndSecondaryResults + *nSingleEndSecondaryResultsForFirstRead);
 
-            if (!fitInSecondaryBuffer) {
-                *nSecondaryResults = 0;
-                *nSingleEndSecondaryResultsForFirstRead = singleSecondaryBufferSize + 1;
-                *nSingleEndSecondaryResultsForSecondRead = 0;
-                return false;
-            }
+				if (!fitInSecondaryBuffer) {
+					*nSecondaryResults = 0;
+					*nSingleEndSecondaryResultsForFirstRead = singleSecondaryBufferSize + 1;
+					*nSingleEndSecondaryResultsForSecondRead = 0;
+					return false;
+				}
 
-			*(resultCount[r]) = singleEndSecondaryResultsThisTime;
+				*(resultCount[r]) = singleEndSecondaryResultsThisTime;
 
-			result->status[r] = singleResult.status;
-			result->mapq[r] = singleResult.mapq / 3;   // Heavy quality penalty for chimeric reads
-			result->direction[r] = singleResult.direction;
-			result->location[r] = singleResult.location;
-			result->score[r] = singleResult.score;
-            result->scorePriorToClipping[r] = singleResult.scorePriorToClipping;
+				result->status[r] = singleResult.status;
+				result->mapq[r] = singleResult.mapq / 3;   // Heavy quality penalty for chimeric reads
+				result->direction[r] = singleResult.direction;
+				result->location[r] = singleResult.location;
+				result->score[r] = singleResult.score;
+				result->scorePriorToClipping[r] = singleResult.scorePriorToClipping;
+			}
 		}
-    }
+	}
 
     result->fromAlignTogether = false;
     result->alignedAsPair = false;

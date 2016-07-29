@@ -11,7 +11,7 @@ Abstract:
 
 Authors:
 
-	Matei Zaharia, February, 2012
+	Hongyi Xin, June, 2016
 
 Environment:
 
@@ -240,6 +240,7 @@ TenXAlignerOptions::TenXAlignerOptions(const char* i_commandLine)
 
 	// same with pairedEndAligner
 	forceSpacing(false),
+	noSingle(false),
 	intersectingAlignerMaxHits(DEFAULT_INTERSECTING_ALIGNER_MAX_HITS),
 	maxCandidatePoolSize(DEFAULT_MAX_CANDIDATE_POOL_SIZE),
 	quicklyDropUnpairedReads(true)
@@ -264,6 +265,7 @@ void TenXAlignerOptions::usageMessage()
 		"       discard it.  Specifying this flag may cause large memory usage for some input files,\n"
 		"       but may be necessary for some strangely formatted input files.  You'll also need to specify this\n"
 		"       flag for SAM/BAM files that were aligned by a single-end aligner.\n"
+        "  -noS no single-end aligner turned on. Just use paired-end aligner.\n"
 		,
 		DEFAULT_MIN_SPACING,
 		DEFAULT_MAX_SPACING,
@@ -337,6 +339,10 @@ bool TenXAlignerOptions::parse(const char** argv, int argc, int& n, bool *done)
 		}
 		return false;
 	}
+	else if (strcmp(argv[n], "-noS") == 0) {
+		noSingle = true;
+		return true;
+	}
 	return AlignerOptions::parse(argv, argc, n, done);
 }
 
@@ -355,6 +361,7 @@ bool TenXAlignerContext::initialize()
 	minPairsPerCluster = options2->minPairsPerCluster;
 	maxClusterSpan = options2->maxClusterSpan;
 	forceSpacing = options2->forceSpacing;
+	noSingle = options2->noSingle;
 	maxCandidatePoolSize = options2->maxCandidatePoolSize;
 	intersectingAlignerMaxHits = options2->intersectingAlignerMaxHits;
 	ignoreMismatchedIDs = options2->ignoreMismatchedIDs;
@@ -696,20 +703,20 @@ void TenXAlignerContext::runIterationThread()
 	}
 
 	// Stage 3, calculate ED and store single results
-	/* No stage 3
-	*/
-	barcodeFinished = false;
-	while (true) {
-		barcodeFinished = aligner->align_third_stage(maxSecondaryAlignmentAdditionalEditDistance, maxSecondaryAlignments);
-		if (barcodeFinished)
-			break;
-		for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {
-			if (tenXSingleTrackerArray[pairIdx].singleNotDone && tenXSingleTrackerArray[pairIdx].nSingleEndSecondaryResults[0] > tenXSingleTrackerArray[pairIdx].singleSecondaryBufferSize) {
-				_ASSERT(tenXSingleTrackerArray[pairIdx].nSingleEndSecondaryResults[0] > tenXSingleTrackerArray[pairIdx].singleSecondaryBufferSize);
-				BigDealloc(tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults);
-				tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults = NULL;
-				tenXSingleTrackerArray[pairIdx].singleSecondaryBufferSize *= 2;
-				tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults = (SingleAlignmentResult *)BigAlloc(tenXSingleTrackerArray[pairIdx].singleSecondaryBufferSize * sizeof(SingleAlignmentResult));
+	if(!noSingle) {
+		barcodeFinished = false;
+		while (true) {
+			barcodeFinished = aligner->align_third_stage(maxSecondaryAlignmentAdditionalEditDistance, maxSecondaryAlignments);
+			if (barcodeFinished)
+				break;
+			for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {
+				if (tenXSingleTrackerArray[pairIdx].singleNotDone && tenXSingleTrackerArray[pairIdx].nSingleEndSecondaryResults[0] > tenXSingleTrackerArray[pairIdx].singleSecondaryBufferSize) {
+					_ASSERT(tenXSingleTrackerArray[pairIdx].nSingleEndSecondaryResults[0] > tenXSingleTrackerArray[pairIdx].singleSecondaryBufferSize);
+					BigDealloc(tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults);
+					tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults = NULL;
+					tenXSingleTrackerArray[pairIdx].singleSecondaryBufferSize *= 2;
+					tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults = (SingleAlignmentResult *)BigAlloc(tenXSingleTrackerArray[pairIdx].singleSecondaryBufferSize * sizeof(SingleAlignmentResult));
+				}
 			}
 		}
 	}

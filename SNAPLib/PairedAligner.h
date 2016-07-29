@@ -68,6 +68,8 @@ protected:
     const char         *fastqFile1;
     bool                ignoreMismatchedIDs;
     bool                quicklyDropUnpairedReads;
+	bool                noSingle;
+	bool                debugTenX;
 
 	friend class AlignerContext2;
 };
@@ -88,4 +90,6 @@ struct PairedAlignerOptions : public AlignerOptions
     unsigned    intersectingAlignerMaxHits;
     unsigned    maxCandidatePoolSize;
     bool        quicklyDropUnpairedReads;
+	bool        noSingle;
+	bool        debugTenX;
 };

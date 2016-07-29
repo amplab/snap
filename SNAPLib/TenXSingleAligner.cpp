@@ -10,7 +10,7 @@ Abstract:
 
 Authors:
 
-	Bill Bolosky, February, 2013
+	Hongyi Xin and Bill Bolosky, June, 2016
 
 Environment:
 

@@ -47,6 +47,7 @@ public:
         PairedEndAligner    *underlyingPairedEndAligner_,
 		unsigned			minReadLength_,
         int                 maxSecondaryAlignmentsPerContig,
+		bool                noSingle_,
         BigAllocator        *allocator);
     
     virtual ~ChimericPairedEndAligner();
@@ -82,6 +83,7 @@ public:
 
 private:
    
+    bool        noSingle;
     bool        forceSpacing;
     BaseAligner *singleAligner;
     PairedEndAligner *underlyingPairedEndAligner;
