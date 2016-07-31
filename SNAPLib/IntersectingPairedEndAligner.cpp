@@ -597,6 +597,12 @@ IntersectingPairedEndAligner::align(
             continue;
         }
 
+		ScoringCandidate *debugCursor = scoringCandidates[currentBestPossibleScoreList];
+		ScoringCandidate *debugPrevCursor = NULL;
+		while (debugCursor->scoreListNext != NULL) {
+			debugPrevCursor = debugCursor;
+			debugCursor = debugCursor->scoreListNext;
+		}
 
         //
         // Grab the first candidate on the highest list and score it.
@@ -728,8 +734,10 @@ IntersectingPairedEndAligner::align(
                             // is necessary because a + b - b is not necessarily a in floating point.  If there
                             // was no merge, the oldPairProbability is 0.
                             //
-							probabilityForED[oldPairED] = __max(0, probabilityForED[oldPairED] - oldPairProbability);
-                            probabilityOfAllPairs = __max(0, probabilityOfAllPairs - oldPairProbability);
+							if (oldPairED <= maxK) {
+								probabilityForED[oldPairED] = __max(0, probabilityForED[oldPairED] - oldPairProbability);
+								probabilityOfAllPairs = __max(0, probabilityOfAllPairs - oldPairProbability);
+							}
 
 							// New ED lower bound. Need to do some cleaning up.
 							if (pairScore + extraSearchDepth < worstED) {
@@ -813,9 +821,11 @@ IntersectingPairedEndAligner::align(
                                 }
                             }
 
-							probabilityOfAllPairs += pairProbability; // This is only a vague estimate of probability.
-                            probabilityForED[pairScore] += pairProbability;
-    #ifdef  _DEBUG
+							if (pairScore <= maxK) {
+								probabilityOfAllPairs += pairProbability; // This is only a vague estimate of probability.
+								probabilityForED[pairScore] += pairProbability;
+							}
+#ifdef  _DEBUG
                             if (_DumpAlignments) {
                                 printf("Added %e (= %e * %e) @ (%u, %u), giving new probability of all pairs %e, score %d = %d + %d%s\n",
                                     pairProbability, mate->matchProbability , fewerEndMatchProbability,
@@ -823,7 +833,7 @@ IntersectingPairedEndAligner::align(
                                     probabilityOfAllPairs,
                                     pairScore, fewerEndScore, mate->score, isBestHit ? " New best hit" : "");
                             }
-    #endif  // _DEBUG
+#endif  // _DEBUG
 
                             if (probabilityOfAllPairs >= 4.9 && -1 == maxEditDistanceForSecondaryResults) {
                                 //
