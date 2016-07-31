@@ -791,11 +791,12 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 							//
 							for (ScoringCandidate *mergeCandidate = candidate - 1;
 								mergeCandidate >= scoringCandidatePool &&
-								genomeLocationIsWithin(mergeCandidate->readWithFewerHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset, 50) &&
-								mergeCandidate->whichSetPair == candidate->whichSetPair;
+								(mergeCandidate->whichSetPair != candidate->whichSetPair ||
+								genomeLocationIsWithin(mergeCandidate->readWithFewerHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset, 50) );
 								mergeCandidate--) {
 
-								if (mergeCandidate->mergeAnchor != NULL) {
+								// Because now the candidates from both directions are mixed up, we no longer terminates the loop when we see opposite direction
+								if (mergeCandidate->whichSetPair == candidate->whichSetPair && mergeCandidate->mergeAnchor != NULL) {
 									candidate->mergeAnchor = mergeAnchor = mergeCandidate->mergeAnchor;
 									break;
 								}
@@ -804,11 +805,12 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 							if (NULL == mergeAnchor) {
 								for (ScoringCandidate *mergeCandidate = candidate + 1;
 									mergeCandidate < scoringCandidatePool + lowestFreeScoringCandidatePoolEntry &&
-									genomeLocationIsWithin(mergeCandidate->readWithFewerHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset, 50) &&
-									mergeCandidate->whichSetPair == candidate->whichSetPair;
+									(mergeCandidate->whichSetPair != candidate->whichSetPair ||
+									genomeLocationIsWithin(mergeCandidate->readWithFewerHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset, 50) );
 									mergeCandidate++) {
 
-									if (mergeCandidate->mergeAnchor != NULL) {
+									// Because now the candidates from both directions are mixed up, we no longer terminates the loop when we see opposite direction
+									if (mergeCandidate->whichSetPair == candidate->whichSetPair && mergeCandidate->mergeAnchor != NULL) {
 										candidate->mergeAnchor = mergeAnchor = mergeCandidate->mergeAnchor;
 										break;
 									}

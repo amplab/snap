@@ -213,12 +213,10 @@ bool ChimericPairedEndAligner::align(
 				result->scorePriorToClipping[r] = singleResult.scorePriorToClipping;
 			}
 		}
-	}
 
-    result->fromAlignTogether = false;
-    result->alignedAsPair = false;
-	/*
-	*/
+		result->fromAlignTogether = false;
+		result->alignedAsPair = false;
+	}
 
 #ifdef _DEBUG
     if (_DumpAlignments) {

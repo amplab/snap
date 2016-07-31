@@ -132,6 +132,7 @@ IntersectingPairedEndAligner::allocateDynamicMemory(BigAllocator *allocator, uns
     scoringCandidatePoolSize = min(maxCandidatePoolSize, maxBigHitsToConsider * maxSeedsToUse * NUM_READS_PER_PAIR);
 
     scoringCandidates = (ScoringCandidate **) allocator->allocate(sizeof(ScoringCandidate *) * (maxEditDistanceToConsider + maxExtraSearchDepth + 1));  //+1 is for 0.
+    probabilityForED = (double*) allocator->allocate(sizeof(double) * (maxEditDistanceToConsider + maxExtraSearchDepth + 1));  //+1 is for 0.
     scoringCandidatePool = (ScoringCandidate *)allocator->allocate(sizeof(ScoringCandidate) * scoringCandidatePoolSize);
 
     for (unsigned i = 0; i < NUM_READS_PER_PAIR; i++) {
@@ -191,6 +192,7 @@ IntersectingPairedEndAligner::align(
     lowestFreeScoringCandidatePoolEntry = 0;
     for (unsigned k = 0; k <= maxK + extraSearchDepth; k++) {
         scoringCandidates[k] = NULL;
+        probabilityForED[k] = 0;
     }
 
     for (unsigned i = 0; i < NUM_SET_PAIRS; i++) {
@@ -582,6 +584,7 @@ IntersectingPairedEndAligner::align(
     //
     unsigned currentBestPossibleScoreList = 0;
     scoreLimit = maxK + extraSearchDepth;
+    unsigned worstED = scoreLimit;
     //
     // Loop until we've scored all of the candidates, or proven that what's left must have too high of a score to be interesting.
     //
@@ -694,7 +697,7 @@ IntersectingPairedEndAligner::align(
                         }
 
                         bool merged;
-
+						unsigned oldPairED = 0;
                         double oldPairProbability;
 
                         if (NULL == mergeAnchor) {
@@ -715,8 +718,9 @@ IntersectingPairedEndAligner::align(
                             candidate->mergeAnchor = mergeAnchor;
                         } else {
                             merged = mergeAnchor->checkMerge(mate->readWithMoreHitsGenomeLocation + mate->genomeOffset, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset,
-                                pairProbability, pairScore, &oldPairProbability);
+                                pairProbability, pairScore, &oldPairED, &oldPairProbability);
                         }
+
 
                         if (!merged) {
                             //
@@ -724,7 +728,17 @@ IntersectingPairedEndAligner::align(
                             // is necessary because a + b - b is not necessarily a in floating point.  If there
                             // was no merge, the oldPairProbability is 0.
                             //
+							probabilityForED[oldPairED] = __max(0, probabilityForED[oldPairED] - oldPairProbability);
                             probabilityOfAllPairs = __max(0, probabilityOfAllPairs - oldPairProbability);
+
+							// New ED lower bound. Need to do some cleaning up.
+							if (pairScore + extraSearchDepth < worstED) {
+								for (unsigned scoreIdx = pairScore + extraSearchDepth + 1; scoreIdx <= worstED; scoreIdx++)
+									probabilityOfAllPairs = __max(0, probabilityOfAllPairs - probabilityForED[scoreIdx]);
+
+								// update the new worstED.
+								worstED = pairScore + extraSearchDepth;
+							}
 
                             bool isBestHit = false;
 
@@ -799,7 +813,8 @@ IntersectingPairedEndAligner::align(
                                 }
                             }
 
-                            probabilityOfAllPairs += pairProbability;
+							probabilityOfAllPairs += pairProbability; // This is only a vague estimate of probability.
+                            probabilityForED[pairScore] += pairProbability;
     #ifdef  _DEBUG
                             if (_DumpAlignments) {
                                 printf("Added %e (= %e * %e) @ (%u, %u), giving new probability of all pairs %e, score %d = %d + %d%s\n",
@@ -1388,7 +1403,7 @@ IntersectingPairedEndAligner::HashTableHitSet::getNextLowerHit(GenomeLocation *g
 
             bool
 IntersectingPairedEndAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation, double newMatchProbability, int newPairScore,
-                        double *oldMatchProbability)
+                        unsigned *oldMatchED, double *oldMatchProbability)
 {
     if (locationForReadWithMoreHits == InvalidGenomeLocation || !doesRangeMatch(newMoreHitLocation, newFewerHitLocation)) {
         //
@@ -1398,6 +1413,7 @@ IntersectingPairedEndAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitL
         locationForReadWithFewerHits = newFewerHitLocation;
         matchProbability = newMatchProbability;
         pairScore = newPairScore;
+        *oldMatchED = 0;
         *oldMatchProbability = 0.0;
         return false;
     }  else {
@@ -1412,7 +1428,7 @@ IntersectingPairedEndAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitL
                     matchProbability, newMatchProbability, pairScore, newPairScore);
             }
 #endif // DEBUG
-
+			*oldMatchED = pairScore;
             *oldMatchProbability = matchProbability;
             matchProbability = newMatchProbability;
             pairScore = newPairScore;
