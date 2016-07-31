@@ -153,8 +153,6 @@ TenXProgressTracker* traverseProgressPtr(TenXProgressTracker *cursor, unsigned s
 }
 
 
-
-
 // Progress each single aligner to move pass targetLoc, while registering the candidate with clusterIdx. The process stops BEFORE processing end. [start, end)
 // It also terminates when cursor->nextLoci >= targetLoci, whichever comes first.
 void registerClusterForReads(
@@ -179,7 +177,7 @@ void TenXClusterAligner::fastForward(GenomeLocation forwardLoc) {
 			progressTracker[pairIdx].aligner->align_phase_2_to_target_loc(forwardLoc, -1);
 			progressTracker[pairIdx].nextLoci = resolveLociPtr(progressTracker[pairIdx].aligner->align_phase_2_get_loci() );
 		}
-		fprintf(stderr, "forwardLoci: %lld  afterForward: %lld\n", forwardLoc.location, resolveLociPtr(progressTracker[pairIdx].aligner->align_phase_2_get_loci() ).location);
+		//fprintf(stderr, "forwardLoci: %lld  afterForward: %lld\n", forwardLoc.location, resolveLociPtr(progressTracker[pairIdx].aligner->align_phase_2_get_loci() ).location);
 	}
 }
 
@@ -236,13 +234,12 @@ bool TenXClusterAligner::align_first_stage(
 
 	// Sort all trackers and link them based on location order.
 	sortAndLink();
-	// debug forward
-	//fastForward(110000);
-	// debug sort.
+	// debuging
+	//fastForward(258221714);
 	//sortAndLink();
 
-	fastForward(0);
-	/*
+	//fastForward(0);
+
 	bool registeringCluster = false;
 	int globalClusterId = 0;
 	int clusterId;
@@ -272,6 +269,7 @@ bool TenXClusterAligner::align_first_stage(
 		else { //the cluster ends here.
 			if (registeringCluster) { //when we were half way of adding a cluster, we need to finish it with the old targetLoc.
 				fprintf(stderr, "clusterBoundary: %lld	globalClusterId: %d\n", clusterBoundary.location, globalClusterId);
+				fflush(stderr);
 				registeringCluster = false;
 				registerClusterForReads(trackerRoot, cursor, clusterBoundary, clusterId); //use the previous id.
 				globalClusterId++;
@@ -282,11 +280,10 @@ bool TenXClusterAligner::align_first_stage(
 				registerClusterForReads(trackerRoot, cursor, clusterBoundary, -1); //use the previous id.
 			}
 		}
-		fprintf(stderr, "clusterBoundary: %lld\n", clusterBoundary.location);
+		//fprintf(stderr, "clusterBoundary: %lld\n", clusterBoundary.location);
 		sortAndLink(); //fix the order. ****If we use this too often, it would be a potential performance problem. Might need to fix it later. (That's why I kept the linked list pointer!).
 		trackerRoot = &progressTracker[0];
 	}
-*/
 
 	return barcodeFinished;
 
