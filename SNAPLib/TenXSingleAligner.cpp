@@ -1167,7 +1167,6 @@ void TenXSingleAligner::align_phase_4(
 }
 
 
-
 bool
 TenXSingleAligner::align(
 	Read                  *read0,
