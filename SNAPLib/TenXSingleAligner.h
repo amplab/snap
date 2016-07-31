@@ -467,7 +467,7 @@ private:
         // Returns true and sets oldMatchProbability if this should be eliminated due to a match.
         //
         bool checkMerge(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation, double newMatchProbability, int newPairScore, 
-                        double *oldMatchProbability); 
+                        unsigned *oldMatchED, double *oldMatchProbability); 
     };
 
     //
@@ -542,6 +542,7 @@ private:
     //
 
     ScoringCandidate    **scoringCandidates;
+	double				*probabilityForED;
 
     //
     // The scoring mates.  The each set scoringCandidatePoolSize / 2.
