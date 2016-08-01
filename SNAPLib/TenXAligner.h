@@ -72,6 +72,7 @@ protected:
 	const char			*fastqFile1;
 	bool				ignoreMismatchedIDs;
 	bool				quicklyDropUnpairedReads;
+	double				unclusteredPenalty;
 
 	friend class AlignerContext2;
 };
@@ -96,4 +97,5 @@ struct TenXAlignerOptions : public AlignerOptions
 	unsigned			intersectingAlignerMaxHits;
 	unsigned			maxCandidatePoolSize;
 	bool				quicklyDropUnpairedReads;
+	double				unclusteredPenalty;
 };

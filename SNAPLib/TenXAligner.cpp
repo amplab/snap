@@ -57,6 +57,7 @@ static const int DEFAULT_MAX_SPACING = 1000;
 static const int DEFAULT_MAX_BARCODE_SIZE = 60000;
 static const int DEFAULT_MIN_PAIRS_PER_CLUSTER = 10;
 static const int DEFAULT_MAX_CLUSTER_SPAN = 100000;
+static const int DEFAULT_UNCLUSTERED_PENALTY = 0.000000001;
 
 struct TenXAlignerStats : public AlignerStats
 {
@@ -237,6 +238,7 @@ TenXAlignerOptions::TenXAlignerOptions(const char* i_commandLine)
 	maxBarcodeSize(DEFAULT_MAX_BARCODE_SIZE),
 	minPairsPerCluster(DEFAULT_MIN_PAIRS_PER_CLUSTER),
 	maxClusterSpan(DEFAULT_MAX_CLUSTER_SPAN),
+	unclusteredPenalty(DEFAULT_UNCLUSTERED_PENALTY),
 
 	// same with pairedEndAligner
 	forceSpacing(false),
@@ -266,6 +268,7 @@ void TenXAlignerOptions::usageMessage()
 		"       but may be necessary for some strangely formatted input files.  You'll also need to specify this\n"
 		"       flag for SAM/BAM files that were aligned by a single-end aligner.\n"
         "  -noS no single-end aligner turned on. Just use paired-end aligner.\n"
+        "  -UCP specifies the unclustered penalty.\n"
 		,
 		DEFAULT_MIN_SPACING,
 		DEFAULT_MAX_SPACING,
@@ -343,6 +346,14 @@ bool TenXAlignerOptions::parse(const char** argv, int argc, int& n, bool *done)
 		noSingle = true;
 		return true;
 	}
+	else if (strcmp(argv[n], "-uCP") == 0) {
+		if (n + 1 < argc) {
+			unclusteredPenalty = atof(argv[n + 1]);
+			n += 1;
+			return true;
+		}
+		return false;
+	}
 	return AlignerOptions::parse(argv, argc, n, done);
 }
 
@@ -362,6 +373,7 @@ bool TenXAlignerContext::initialize()
 	maxClusterSpan = options2->maxClusterSpan;
 	forceSpacing = options2->forceSpacing;
 	noSingle = options2->noSingle;
+	unclusteredPenalty = options2->unclusteredPenalty;
 	maxCandidatePoolSize = options2->maxCandidatePoolSize;
 	intersectingAlignerMaxHits = options2->intersectingAlignerMaxHits;
 	ignoreMismatchedIDs = options2->ignoreMismatchedIDs;
@@ -524,6 +536,7 @@ void TenXAlignerContext::runIterationThread()
 		maxBarcodeSize,
 		minPairsPerCluster,
 		maxClusterSpan,
+		unclusteredPenalty,
 		minReadLength,
 		maxSecondaryAlignmentsPerContig,
 		allocator);

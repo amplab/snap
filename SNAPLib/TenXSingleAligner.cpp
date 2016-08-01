@@ -690,7 +690,7 @@ TenXSingleAligner::align_phase_2()
 
 bool
 TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 secondaryResultBufferSize, _int64* nSecondaryResults, PairedAlignmentResult* secondaryResults, _int64 maxSecondaryResultsToReturn,
-	unsigned &bestPairScore, GenomeLocation *bestResultGenomeLocation, Direction *bestResultDirection, double &probabilityOfAllPairs, unsigned *bestResultScore, unsigned *popularSeedsSkipped, double &probabilityOfBestPair) //This is a hack. Pass in result by reference
+	unsigned &bestPairScore, GenomeLocation *bestResultGenomeLocation, Direction *bestResultDirection, double &probabilityOfAllPairs, unsigned *bestResultScore, unsigned *popularSeedsSkipped, double &probabilityOfBestPair, double unclusteredPenalty) //This is a hack. Pass in result by reference
 {
 	//
 	// Phase 3: score and merge the candidates we've found.
@@ -781,6 +781,11 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 
 					if (mate->score != -1) {
 						double pairProbability = mate->matchProbability * fewerEndMatchProbability;
+		
+						//10X apply cluster penalty
+						if (candidate->clusterIdx == -1)
+							pairProbability *= unclusteredPenalty;
+
 						unsigned pairScore = mate->score + fewerEndScore;
 						//
 						// See if this should be ignored as a merge, or if we need to back out a previously scored location
@@ -1202,7 +1207,7 @@ TenXSingleAligner::align(
 
 	//**** Phase 3
 	if (align_phase_3(maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults, maxSecondaryResultsToReturn,
-		bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, popularSeedsSkipped, probabilityOfBestPair)) // This is a hack. Probably need to be changed later.
+		bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, popularSeedsSkipped, probabilityOfBestPair, 1)) // This is a hack. Probably need to be changed later.
 		return false; // Not enough space for secondary alignment. Flag is raised
 
 	//**** Phase 4

@@ -48,6 +48,7 @@ public:
 		unsigned			maxBarcodeSize_,
 		unsigned			minPairsPerCluster_,
 		_uint64				maxClusterSpan_,
+		double				unclusteredPenalty_,
 		unsigned			minReadLength_,
 		int					maxSecondaryAlignmentsPerContig,
 		BigAllocator		*allocator);
@@ -136,7 +137,6 @@ private:
 	bool				forceSpacing;
 	BaseAligner			*singleAligner;
 	unsigned			maxBarcodeSize;
-	//TenXSingleAligner	**progressTracker;
 	TenXProgressTracker *progressTracker;
 
 	// avoid allocation in aligner calls
@@ -148,8 +148,9 @@ private:
 	GenomeIndex			*index;
 	unsigned			minReadLength;
 	
-	// 10x data	
+	// 10x data
 	unsigned			barcodeSize;
 	unsigned			minPairsPerCluster;
 	_uint64				maxClusterSpan;
+	double				unclusteredPenalty;
 };
