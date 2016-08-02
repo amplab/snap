@@ -725,21 +725,15 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 		//
 		ScoringCandidate *candidate = scoringCandidates[currentBestPossibleScoreList];
 
-
 		//**** 10X surrogates
 		unsigned	compensatedScoreLimit;
 		double		probabilityCorrectionFactor;
 
-		if (candidate->clusterIdx == -1) {
-			compensatedScoreLimit = scoreLimit;
+		if (candidate->clusterIdx == -1)
 			probabilityCorrectionFactor = unclusteredPenalty;
-		}
-		else {
-			compensatedScoreLimit = scoreLimit + clusterEDCompensation;
+		else
 			probabilityCorrectionFactor = 1;
-		}
 		//**** 10X surrogates
-
 
 		unsigned fewerEndScore;
 		double fewerEndMatchProbability;
@@ -765,6 +759,13 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 			unsigned mateIndex = candidate->scoringMateCandidateIndex;
 
 			for (;;) {
+
+				//**** 10X surrogates
+				if (candidate->clusterIdx == -1)
+					compensatedScoreLimit = scoreLimit;
+				else
+					compensatedScoreLimit = scoreLimit + clusterEDCompensation;
+				//**** 10X surrogates
 
 				ScoringMateCandidate *mate = &scoringMateCandidates[candidate->whichSetPair][mateIndex];
 				_ASSERT(genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, maxSpacing));
@@ -889,8 +890,11 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 							}
 
 							bool isBestHit = false;
-
-							if (pairScore <= maxK && pairProbability > probabilityOfBestPair) {
+						
+							//****10X debug switch
+							if (pairScore <= maxK && (pairScore < bestPairScore || (pairScore == bestPairScore && pairProbability > probabilityOfBestPair))) {
+							//if (pairScore <= maxK && pairProbability > probabilityOfBestPair) {
+							//****10X debug switch
 								//
 								// A new best hit.
 								//
@@ -1221,7 +1225,7 @@ TenXSingleAligner::align(
 
 	//**** Phase 3
 	if (align_phase_3(maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults, maxSecondaryResultsToReturn,
-		bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, popularSeedsSkipped, probabilityOfBestPair, 1, 0)) // This is a hack. Probably need to be changed later.
+		bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, popularSeedsSkipped, probabilityOfBestPair, 1, 0))
 		return false; // Not enough space for secondary alignment. Flag is raised
 
 	//**** Phase 4
@@ -1653,7 +1657,10 @@ TenXSingleAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitLocation, Ge
 		//
 		// Within merge distance.  Keep the better score (or if they're tied the better match probability).
 		//
-		if (newPairScore < pairScore || newMatchProbability > matchProbability) {
+		//****10X debug switch
+		if (newPairScore < pairScore || newPairScore == pairScore && newMatchProbability > matchProbability) {
+		//if (newPairScore < pairScore || newMatchProbability > matchProbability) {
+		//****10X debug switch
 #ifdef _DEBUG
 			if (_DumpAlignments) {
 				printf("Merge replacement at anchor (%u, %u), loc (%u, %u), old match prob %e, new match prob %e, old pair score %d, new pair score %d\n",
