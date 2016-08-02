@@ -782,9 +782,12 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 					if (mate->score != -1) {
 						double pairProbability = mate->matchProbability * fewerEndMatchProbability;
 		
-						//10X apply cluster penalty
-						if (candidate->clusterIdx == -1)
+						//**** 10X apply cluster penalty
+						if (candidate->clusterIdx == -1) {
+							//pairProbability /= unclusteredPenalty;
 							pairProbability *= unclusteredPenalty;
+						}
+						//**** 10X apply cluster penalty
 
 						unsigned pairScore = mate->score + fewerEndScore;
 						//

@@ -57,7 +57,7 @@ static const int DEFAULT_MAX_SPACING = 1000;
 static const int DEFAULT_MAX_BARCODE_SIZE = 60000;
 static const int DEFAULT_MIN_PAIRS_PER_CLUSTER = 10;
 static const int DEFAULT_MAX_CLUSTER_SPAN = 100000;
-static const int DEFAULT_UNCLUSTERED_PENALTY = 0.000000001;
+static const double DEFAULT_UNCLUSTERED_PENALTY = 0.000000001;
 
 struct TenXAlignerStats : public AlignerStats
 {
