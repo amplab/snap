@@ -56,7 +56,7 @@ static const int DEFAULT_MIN_SPACING = 50;
 static const int DEFAULT_MAX_SPACING = 1000;
 static const unsigned DEFAULT_MAX_BARCODE_SIZE = 60000;
 static const unsigned DEFAULT_MIN_PAIRS_PER_CLUSTER = 10;
-static const unsigned DEFAULT_MAX_CLUSTER_SPAN = 100000;
+static const unsigned DEFAULT_MIN_CLUSTER_SPAN = 100000;
 static const double DEFAULT_UNCLUSTERED_PENALTY = 0.000000001;
 static const unsigned DEFAULT_CLUSTER_ED_COMPENSATION = 4;
 
@@ -238,7 +238,7 @@ TenXAlignerOptions::TenXAlignerOptions(const char* i_commandLine)
 	// 10x specific parameter
 	maxBarcodeSize(DEFAULT_MAX_BARCODE_SIZE),
 	minPairsPerCluster(DEFAULT_MIN_PAIRS_PER_CLUSTER),
-	maxClusterSpan(DEFAULT_MAX_CLUSTER_SPAN),
+	minClusterSpan(DEFAULT_MIN_CLUSTER_SPAN),
 	unclusteredPenalty(DEFAULT_UNCLUSTERED_PENALTY),
 	clusterEDCompensation(DEFAULT_CLUSTER_ED_COMPENSATION),
 
@@ -270,13 +270,22 @@ void TenXAlignerOptions::usageMessage()
 		"       but may be necessary for some strangely formatted input files.  You'll also need to specify this\n"
 		"       flag for SAM/BAM files that were aligned by a single-end aligner.\n"
         "  -noS no single-end aligner turned on. Just use paired-end aligner.\n"
-		"  -UCP specifies the unclustered probability penalty. Default: %f\n"
-        "  -CED specifies the cluster edit-distance compensation. Default: %d\n"
+		"\nTenXTenXTenXTenXTenXTenX    Below are 10X specific parameters    TenXTenXTenXTenXTenXTenX\n\n"
+		"  -maxBar           specifies the maximum reads in a barcode. This has a direct affect on memory usage. Default: %d\n"
+		"  -minClusterPairs  specifies the maximum number of pair-ended reads for a cluster to be considered legitimate. Default: %d\n"
+		"  -minClusterSpan   specifies the maximum scope that SNAP detects clusters. If # of reads within minClusterSpan is\n"
+		"                    smaller than minClusterReads the cluster is rejected. Default: %d\n"
+		"  -UCP              specifies the unclustered probability penalty. Default: %f\n"
+        "  -CED              specifies the cluster edit-distance compensation. Default: %d\n"
 		,
 		DEFAULT_MIN_SPACING,
 		DEFAULT_MAX_SPACING,
 		DEFAULT_INTERSECTING_ALIGNER_MAX_HITS,
 		DEFAULT_MAX_CANDIDATE_POOL_SIZE,
+
+		DEFAULT_MAX_BARCODE_SIZE,
+		DEFAULT_MIN_PAIRS_PER_CLUSTER,
+		DEFAULT_MIN_CLUSTER_SPAN,
 		DEFAULT_UNCLUSTERED_PENALTY,
 		DEFAULT_CLUSTER_ED_COMPENSATION);
 }
@@ -331,7 +340,7 @@ bool TenXAlignerOptions::parse(const char** argv, int argc, int& n, bool *done)
 		}
 		return false;
 	}
-	else if (strcmp(argv[n], "-minCluster") == 0) {
+	else if (strcmp(argv[n], "-minClusterPairs") == 0) {
 		if (n + 1 < argc) {
 			minPairsPerCluster = atoi(argv[n + 1]);
 			n += 1;
@@ -339,9 +348,9 @@ bool TenXAlignerOptions::parse(const char** argv, int argc, int& n, bool *done)
 		}
 		return false;
 	}
-	else if (strcmp(argv[n], "-maxClusterSpan") == 0) {
+	else if (strcmp(argv[n], "-minClusterSpan") == 0) {
 		if (n + 1 < argc) {
-			minPairsPerCluster = atoi(argv[n + 1]);
+			minClusterSpan = atoi(argv[n + 1]);
 			n += 1;
 			return true;
 		}
@@ -383,7 +392,7 @@ bool TenXAlignerContext::initialize()
 	maxSpacing = options2->maxSpacing;
 	maxBarcodeSize = options2->maxBarcodeSize;
 	minPairsPerCluster = options2->minPairsPerCluster;
-	maxClusterSpan = options2->maxClusterSpan;
+	minClusterSpan = options2->minClusterSpan;
 	forceSpacing = options2->forceSpacing;
 	noSingle = options2->noSingle;
 	unclusteredPenalty = options2->unclusteredPenalty;
@@ -549,7 +558,7 @@ void TenXAlignerContext::runIterationThread()
 		tenXSingleTrackerArray,
 		maxBarcodeSize,
 		minPairsPerCluster,
-		maxClusterSpan,
+		minClusterSpan,
 		unclusteredPenalty,
 		clusterEDCompensation,
 		minReadLength,

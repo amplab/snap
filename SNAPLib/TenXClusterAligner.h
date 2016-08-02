@@ -47,7 +47,7 @@ public:
 		TenXProgressTracker	*progressTracker_,
 		unsigned			maxBarcodeSize_,
 		unsigned			minPairsPerCluster_,
-		_uint64				maxClusterSpan_,
+		_uint64				minClusterSpan_,
 		double				unclusteredPenalty_,
 		unsigned			clusterEDCompensation_,
 		unsigned			minReadLength_,
@@ -153,7 +153,7 @@ private:
 	// 10x data
 	unsigned			barcodeSize;
 	unsigned			minPairsPerCluster;
-	_uint64				maxClusterSpan;
+	_uint64				minClusterSpan;
 	double				unclusteredPenalty;
 	unsigned			clusterEDCompensation;
 };

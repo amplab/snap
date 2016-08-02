@@ -64,7 +64,7 @@ protected:
 	int					maxSpacing;
 	_uint64				maxBarcodeSize;
 	unsigned			minPairsPerCluster;
-	_uint64				maxClusterSpan;
+	_uint64				minClusterSpan;
 	bool				forceSpacing;
 	bool				noSingle;
 	unsigned			intersectingAlignerMaxHits;
@@ -92,7 +92,7 @@ struct TenXAlignerOptions : public AlignerOptions
 	int					maxSpacing;
 	_uint64				maxBarcodeSize; // make it 64 bit so that the carry won't overflow...
 	unsigned			minPairsPerCluster;
-	_uint64				maxClusterSpan;
+	_uint64				minClusterSpan;
 	bool				forceSpacing;
 	bool				noSingle;
 	unsigned			intersectingAlignerMaxHits;

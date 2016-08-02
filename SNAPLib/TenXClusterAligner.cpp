@@ -56,14 +56,14 @@ TenXClusterAligner::TenXClusterAligner(
 	TenXProgressTracker	*progressTracker_,
 	unsigned			maxBarcodeSize_,
 	unsigned			minPairsPerCluster_,
-	_uint64				maxClusterSpan_,
+	_uint64				minClusterSpan_,
 	double				unclusteredPenalty_,
 	unsigned			clusterEDCompensation_,
 	unsigned			minReadLength_,
 	int					maxSecondaryAlignmentsPerContig,
 	unsigned			printStatsMapQLimit,
 	BigAllocator		*allocator)
-	: progressTracker(progressTracker_), unclusteredPenalty(unclusteredPenalty_), clusterEDCompensation(clusterEDCompensation_), maxBarcodeSize(maxBarcodeSize_), minPairsPerCluster(minPairsPerCluster_), maxClusterSpan(maxClusterSpan_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_)
+	: progressTracker(progressTracker_), unclusteredPenalty(unclusteredPenalty_), clusterEDCompensation(clusterEDCompensation_), maxBarcodeSize(maxBarcodeSize_), minPairsPerCluster(minPairsPerCluster_), minClusterSpan(minClusterSpan_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_)
 {
 	// Create single-end aligners.
 	singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
@@ -256,14 +256,14 @@ bool TenXClusterAligner::align_first_stage(
 		cursor = trackerRoot;
 		//expirationCursor = trackerRoot;
 
-		unsigned nPotentialPairs = trackersToMeetTargetLoci(cursor, trackerRoot->nextLoci - maxClusterSpan);
+		unsigned nPotentialPairs = trackersToMeetTargetLoci(cursor, trackerRoot->nextLoci - minClusterSpan);
 
 		if (nPotentialPairs > minPairsPerCluster || cursor == NULL || cursor->nextLoci == -1) { //this is a clustered pair, obsorb it! Note that if nextLoci is -1 we will obsorb all pairs into the last cluster.
 			registeringCluster = true;
 			clusterId = globalClusterId;
 
 			if (cursor != NULL && cursor->nextLoci != -1)
-				clusterBoundary = cursor->nextLoci + maxClusterSpan;
+				clusterBoundary = cursor->nextLoci + minClusterSpan;
 			else
 				clusterBoundary = -1;
 
@@ -279,7 +279,7 @@ bool TenXClusterAligner::align_first_stage(
 			}
 			else { //we were not adding a cluster, just tag these locus as not clustered (-1) and move the locus pointer over the new targetLoc.
 				cursor = traverseProgressPtr(cursor, minPairsPerCluster - nPotentialPairs);
-				clusterBoundary = cursor->nextLoci + maxClusterSpan;
+				clusterBoundary = cursor->nextLoci + minClusterSpan;
 				registerClusterForReads(trackerRoot, cursor, clusterBoundary, -1); //use the previous id.
 			}
 		}

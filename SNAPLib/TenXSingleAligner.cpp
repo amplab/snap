@@ -893,8 +893,8 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 							bool isBestHit = false;
 						
 							//****10X debug switch
-							//if (pairScore <= maxK && pairProbability > probabilityOfBestPair) {
-							if (pairScore <= maxK && (pairScore < bestPairScore || (pairScore == bestPairScore && pairProbability > probabilityOfBestPair))) {
+							//if (pairScore <= maxK && (pairScore < bestPairScore || (pairScore == bestPairScore && pairProbability > probabilityOfBestPair))) {
+							if (pairScore <= maxK && pairProbability > probabilityOfBestPair) {
 							//****10X debug switch
 								//
 								// A new best hit.
@@ -1659,8 +1659,8 @@ TenXSingleAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitLocation, Ge
 		// Within merge distance.  Keep the better score (or if they're tied the better match probability).
 		//
 		//****10X debug switch
-		if (newPairScore < pairScore || newPairScore == pairScore && newMatchProbability > matchProbability) {
-		//if (newPairScore < pairScore || newMatchProbability > matchProbability) {
+		//if (newPairScore < pairScore || newPairScore == pairScore && newMatchProbability > matchProbability) {
+		if (newPairScore < pairScore || newMatchProbability > matchProbability) {
 		//****10X debug switch
 #ifdef _DEBUG
 			if (_DumpAlignments) {
