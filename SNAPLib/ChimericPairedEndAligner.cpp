@@ -55,13 +55,14 @@ ChimericPairedEndAligner::ChimericPairedEndAligner(
         PairedEndAligner    *underlyingPairedEndAligner_,
 	    unsigned            minReadLength_,
         int                 maxSecondaryAlignmentsPerContig,
+		unsigned            printStatsMapQLimit,
 	    bool                noSingle_,
         BigAllocator        *allocator)
 		: noSingle(noSingle_), underlyingPairedEndAligner(underlyingPairedEndAligner_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_)
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
-        maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentsForOm, maxSecondaryAlignmentsPerContig, &lv, &reverseLV, NULL, allocator);
+        maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentsForOm, maxSecondaryAlignmentsPerContig, printStatsMapQLimit, &lv, &reverseLV, NULL, allocator);
     
     underlyingPairedEndAligner->setLandauVishkin(&lv, &reverseLV);
 

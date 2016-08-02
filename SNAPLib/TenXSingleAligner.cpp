@@ -51,11 +51,12 @@ TenXSingleAligner::TenXSingleAligner(
 	bool          noUkkonen_,
 	bool          noOrderedEvaluation_,
 	bool          noTruncation_,
-	bool          ignoreAlignmentAdjustmentsForOm_) :
+	bool          ignoreAlignmentAdjustmentsForOm_,
+	unsigned      printStatsMapQLimit_) :
 	index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), numSeedsFromCommandLine(__min(MAX_MAX_SEEDS, numSeedsFromCommandLine_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
 	landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), seedCoverage(seedCoverage_),
 	extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_),
-	maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome()), ignoreAlignmentAdjustmentsForOm(ignoreAlignmentAdjustmentsForOm_)
+	maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome()), ignoreAlignmentAdjustmentsForOm(ignoreAlignmentAdjustmentsForOm_), printStatsMapQLimit(printStatsMapQLimit_)
 {
 	doesGenomeIndexHave64BitLocations = index->doesGenomeIndexHave64BitLocations();
 
@@ -892,8 +893,8 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 							bool isBestHit = false;
 						
 							//****10X debug switch
-							//if (pairScore <= maxK && (pairScore < bestPairScore || (pairScore == bestPairScore && pairProbability > probabilityOfBestPair))) {
-							if (pairScore <= maxK && pairProbability > probabilityOfBestPair) {
+							//if (pairScore <= maxK && pairProbability > probabilityOfBestPair) {
+							if (pairScore <= maxK && (pairScore < bestPairScore || (pairScore == bestPairScore && pairProbability > probabilityOfBestPair))) {
 							//****10X debug switch
 								//
 								// A new best hit.
@@ -1049,7 +1050,7 @@ void TenXSingleAligner::align_phase_4(
 			result->location[whichRead] = bestResultGenomeLocation[whichRead];
 			result->direction[whichRead] = bestResultDirection[whichRead];
 			result->mapq[whichRead] = computeMAPQ(probabilityOfAllPairs, probabilityOfBestPair, bestResultScore[whichRead], popularSeedsSkipped[0] + popularSeedsSkipped[1]);
-			result->status[whichRead] = result->mapq[whichRead] > MAPQ_LIMIT_FOR_SINGLE_HIT ? SingleHit : MultipleHits;
+			result->status[whichRead] = result->mapq[whichRead] > printStatsMapQLimit ? SingleHit : MultipleHits;
 			result->score[whichRead] = bestResultScore[whichRead];
 			result->clippingForReadAdjustment[whichRead] = 0;
 		}
@@ -1658,8 +1659,8 @@ TenXSingleAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitLocation, Ge
 		// Within merge distance.  Keep the better score (or if they're tied the better match probability).
 		//
 		//****10X debug switch
-		//if (newPairScore < pairScore || newPairScore == pairScore && newMatchProbability > matchProbability) {
-		if (newPairScore < pairScore || newMatchProbability > matchProbability) {
+		if (newPairScore < pairScore || newPairScore == pairScore && newMatchProbability > matchProbability) {
+		//if (newPairScore < pairScore || newMatchProbability > matchProbability) {
 		//****10X debug switch
 #ifdef _DEBUG
 			if (_DumpAlignments) {

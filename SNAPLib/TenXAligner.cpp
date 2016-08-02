@@ -527,7 +527,7 @@ void TenXAlignerContext::runIterationThread()
 	for (int singleAlignerIdx = 0; singleAlignerIdx < maxBarcodeSize; singleAlignerIdx++) {
 		tenXSingleTrackerArray[singleAlignerIdx].aligner = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
 			seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth,
-			maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm);
+			maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm, printStatsMapQLimit);
 		tenXSingleTrackerArray[singleAlignerIdx].pairNotDone = false;
 		tenXSingleTrackerArray[singleAlignerIdx].singleNotDone = false;
 	}
@@ -554,6 +554,7 @@ void TenXAlignerContext::runIterationThread()
 		clusterEDCompensation,
 		minReadLength,
 		maxSecondaryAlignmentsPerContig,
+		printStatsMapQLimit,
 		allocator);
 
 	allocator->checkCanaries();

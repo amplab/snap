@@ -118,6 +118,7 @@ public:
 	int									 maxSecondaryAlignments;
     int                                  maxSecondaryAlignmentsPerContig;
 	unsigned							 minReadLength;
+	unsigned                             printStatsMapQLimit;
 
 
     // iteration variables

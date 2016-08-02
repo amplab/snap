@@ -52,6 +52,7 @@ public:
 		unsigned			clusterEDCompensation_,
 		unsigned			minReadLength_,
 		int					maxSecondaryAlignmentsPerContig,
+		unsigned			printStatsMapQLimit,
 		BigAllocator		*allocator);
 
 	virtual ~TenXClusterAligner();

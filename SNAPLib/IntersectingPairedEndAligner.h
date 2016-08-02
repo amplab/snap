@@ -56,7 +56,8 @@ public:
         bool          noUkkonen_,
         bool          noOrderedEvaluation_,
 		bool		  noTruncation_,
-        bool          ignoreAlignmentAdjustmentsForOm_);
+        bool          ignoreAlignmentAdjustmentsForOm_,
+        unsigned      printStatsMapQLimit_);
 
      void setLandauVishkin(
         LandauVishkin<1> *landauVishkin_,
@@ -108,6 +109,8 @@ private:
                                unsigned maxEditDistanceToConsider, unsigned maxExtraSearchDepth, unsigned maxCandidatePoolSize,
                                int maxSecondaryAlignmentsPerContig);
 
+	
+    unsigned        printStatsMapQLimit;
     GenomeIndex *   index;
     const Genome *  genome;
     GenomeDistance  genomeSize;

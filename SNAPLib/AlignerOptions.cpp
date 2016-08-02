@@ -82,7 +82,8 @@ AlignerOptions::AlignerOptions(
     sortIntermediateDirectory(NULL),
     profile(false),
     ignoreAlignmentAdjustmentsForOm(true),
-    emitInternalScore(false)
+    emitInternalScore(false),
+	printStatsMapQLimit(MAPQ_LIMIT_FOR_SINGLE_HIT)
 {
     if (forPairedEnd) {
         maxDist                 = 15;
@@ -210,14 +211,16 @@ AlignerOptions::usageMessage()
         "       value starting with X, Y or Z.  So, -is ZQ will cause SNAP to write ZQ:i:3 on a read with internal score 3.  Generally, the internal scores\n"
         "       are the same as the NM values, except that they contain penalties for soft clipping reads that hang over the end of contigs (but not for\n"
         "       soft clipping that's due to # quality scores or that was present in the input SAM/BAM file and retained due to -pc)\n"
+		" -pMQ  Specifies the minimum mapQ threshold to classify if a read is single-mapped or multi-mapped. Default: %d\n"
 		,
             commandLine,
             maxDist,
             maxHits,
 			minWeightToCheck,
-            MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT,
+            printStatsMapQLimit, printStatsMapQLimit, printStatsMapQLimit,
             expansionFactor,
-			DEFAULT_MIN_READ_LENGTH);
+			DEFAULT_MIN_READ_LENGTH,
+			MAPQ_LIMIT_FOR_SINGLE_HIT);
 
     if (extra != NULL) {
         extra->usageMessage();
@@ -785,7 +788,15 @@ AlignerOptions::parse(
         } else {
             WriteErrorMessage("Must specify the desired extra search depth after -D\n");
         }
-    } else if (strlen(argv[n]) >= 2 && '-' == argv[n][0] && 'C' == argv[n][1]) {
+    } else if (strcmp(argv[n], "-pMQ") == 0) {
+        if (n + 1 < argc) {
+            printStatsMapQLimit = atoi(argv[n+1]);
+            n++;
+            return true;
+        } else {
+            WriteErrorMessage("Must specify the default mapQ threshold for single/multi-mapping barrier after -pMQ\n");
+        }
+    }	else if (strlen(argv[n]) >= 2 && '-' == argv[n][0] && 'C' == argv[n][1]) {
         if (strlen(argv[n]) != 4 || '-' != argv[n][2] && '+' != argv[n][2] ||
             '-' != argv[n][3] && '+' != argv[n][3]) {
 

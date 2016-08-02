@@ -129,6 +129,7 @@ SingleAlignerContext::runIterationThread()
 			noTruncation,
             ignoreAlignmentAdjustmentForOm,
             maxSecondaryAlignmentsPerContig,
+            printStatsMapQLimit,
             NULL,               // LV (no need to cache in the single aligner)
             NULL,               // reverse LV
             stats,

@@ -61,12 +61,13 @@ TenXClusterAligner::TenXClusterAligner(
 	unsigned			clusterEDCompensation_,
 	unsigned			minReadLength_,
 	int					maxSecondaryAlignmentsPerContig,
+	unsigned			printStatsMapQLimit,
 	BigAllocator		*allocator)
 	: progressTracker(progressTracker_), unclusteredPenalty(unclusteredPenalty_), clusterEDCompensation(clusterEDCompensation_), maxBarcodeSize(maxBarcodeSize_), minPairsPerCluster(minPairsPerCluster_), maxClusterSpan(maxClusterSpan_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_)
 {
 	// Create single-end aligners.
 	singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
-		maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentsForOm, maxSecondaryAlignmentsPerContig, &lv, &reverseLV, NULL, allocator);
+		maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentsForOm, maxSecondaryAlignmentsPerContig, printStatsMapQLimit, &lv, &reverseLV, NULL, allocator);
 	for (unsigned i = 0; i < maxBarcodeSize; i++)
 		progressTracker[i].aligner->setLandauVishkin(&lv, &reverseLV);
 

@@ -55,6 +55,7 @@ public:
 		bool			i_noTruncation,
         bool            i_ignoreAlignmentAdjustmentsForOm,
         int             i_maxSecondaryAlignmentsPerContig,
+        unsigned        i_printStatsMapQLimit,
         LandauVishkin<1>*i_landauVishkin = NULL,
         LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
         AlignerStats   *i_stats = NULL,
@@ -112,8 +113,10 @@ public:
     static size_t getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, 
         unsigned numSeedsFromCommandLine, double seedCoverage, int maxSecondaryAlignmentsPerContig, unsigned extraSearchDepth);
 
-private:
+protected:
+	unsigned printStatsMapQLimit;
 
+private:
     bool hadBigAllocator;
 
     LandauVishkin<> *landauVishkin;

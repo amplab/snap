@@ -58,6 +58,7 @@ BaseAligner::BaseAligner(
 	bool			i_noTruncation,
     bool            i_ignoreAlignmentAdjustmentsForOm,
     int             i_maxSecondaryAlignmentsPerContig,
+    unsigned        i_printStatsMapQLimit,
     LandauVishkin<1>*i_landauVishkin,
     LandauVishkin<-1>*i_reverseLandauVishkin,
     AlignerStats   *i_stats,
@@ -67,8 +68,9 @@ BaseAligner::BaseAligner(
         maxSeedCoverage(i_maxSeedCoverage), readId(-1), extraSearchDepth(i_extraSearchDepth),
         explorePopularSeeds(false), stopOnFirstHit(false), stats(i_stats), 
         noUkkonen(i_noUkkonen), noOrderedEvaluation(i_noOrderedEvaluation), noTruncation(i_noTruncation),
-		minWeightToCheck(max(1u, i_minWeightToCheck)), maxSecondaryAlignmentsPerContig(i_maxSecondaryAlignmentsPerContig),
-        alignmentAdjuster(i_genomeIndex->getGenome()), ignoreAlignmentAdjustmentsForOm(i_ignoreAlignmentAdjustmentsForOm)
+        minWeightToCheck(max(1u, i_minWeightToCheck)), maxSecondaryAlignmentsPerContig(i_maxSecondaryAlignmentsPerContig),
+        alignmentAdjuster(i_genomeIndex->getGenome()), ignoreAlignmentAdjustmentsForOm(i_ignoreAlignmentAdjustmentsForOm),
+        printStatsMapQLimit(i_printStatsMapQLimit)
 /*++
 
 Routine Description:
@@ -784,7 +786,7 @@ Return Value:
                 if (bestScore <= maxK) {
                     primaryResult->location = bestScoreGenomeLocation;
                     primaryResult->mapq = computeMAPQ(probabilityOfAllCandidates, probabilityOfBestCandidate, bestScore, popularSeedsSkipped);
-                    if (primaryResult->mapq >= MAPQ_LIMIT_FOR_SINGLE_HIT) {
+                    if (primaryResult->mapq >= printStatsMapQLimit) {
                         primaryResult->status = SingleHit;
                     } else {
                         primaryResult->status = MultipleHits;

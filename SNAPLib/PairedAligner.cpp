@@ -446,11 +446,11 @@ void PairedAlignerContext::runIterationThread()
 	if (!debugTenX)
 		underlyingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
-                                                                maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm);
+                                                                maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm, printStatsMapQLimit);
 	else
 		underlyingAligner = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
-                                                                maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm);
+                                                                maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm, printStatsMapQLimit);
 	
     ChimericPairedEndAligner *aligner = new (allocator) ChimericPairedEndAligner(
         index,
@@ -469,6 +469,7 @@ void PairedAlignerContext::runIterationThread()
 		underlyingAligner,
 		minReadLength,
         maxSecondaryAlignmentsPerContig,
+		printStatsMapQLimit,
 		noSingle,
         allocator);
 

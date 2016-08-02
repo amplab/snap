@@ -180,6 +180,7 @@ AlignerContext::initialize()
     maxSecondaryAlignmentAdditionalEditDistance = options->maxSecondaryAlignmentAdditionalEditDistance;
 	maxSecondaryAlignments = options->maxSecondaryAlignments;
     maxSecondaryAlignmentsPerContig = options->maxSecondaryAlignmentsPerContig;
+	printStatsMapQLimit = options->printStatsMapQLimit;
 
     if (maxSecondaryAlignmentAdditionalEditDistance < 0 && (maxSecondaryAlignments < 1000000 || maxSecondaryAlignmentsPerContig > 0)) {
         WriteErrorMessage("You set -omax and/or -mpc without setting -om.  They're meaningful only in the context of -om, so you probably didn't really mean to do that.\n");
@@ -359,7 +360,7 @@ char *pctAndPad(char * buffer, double pct, size_t desiredWidth, size_t bufferLen
 AlignerContext::printStats()
 {
 
-    WriteStatusMessage("Total Reads    Aligned, MAPQ >= %2d    Aligned, MAPQ < %2d     Unaligned              Too Short/Too Many Ns  %s%s%sReads/s   Time in Aligner (s)%s\n", MAPQ_LIMIT_FOR_SINGLE_HIT, MAPQ_LIMIT_FOR_SINGLE_HIT,
+    WriteStatusMessage("Total Reads    Aligned, MAPQ >= %2d    Aligned, MAPQ < %2d     Unaligned              Too Short/Too Many Ns  %s%s%sReads/s   Time in Aligner (s)%s\n", printStatsMapQLimit, printStatsMapQLimit,
         (stats->filtered > 0) ? "Filtered               " : "",
         (stats->extraAlignments) ? "Extra Alignments  " : "",
         getMappingMode() == m_paired ? "%Pairs    " : "   ",

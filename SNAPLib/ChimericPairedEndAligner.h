@@ -47,6 +47,7 @@ public:
         PairedEndAligner    *underlyingPairedEndAligner_,
 		unsigned			minReadLength_,
         int                 maxSecondaryAlignmentsPerContig,
+		unsigned            printStatsMapQLimit,
 		bool                noSingle_,
         BigAllocator        *allocator);
     

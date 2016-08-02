@@ -26,12 +26,13 @@ Revision History:
 
 enum MappingMode_t { m_single, m_paired, m_tenx };
 
+#define MAPQ_LIMIT_FOR_SINGLE_HIT 10
+
 #include "stdafx.h"
 #include "options.h"
 #include "Genome.h"
 #include "Read.h"
 
-#define MAPQ_LIMIT_FOR_SINGLE_HIT 10
 
 struct AbstractOptions
 {
@@ -113,6 +114,7 @@ struct AlignerOptions : public AbstractOptions
     bool                ignoreAlignmentAdjustmentsForOm;
     bool                emitInternalScore;
     char                internalScoreTag[3];
+	unsigned            printStatsMapQLimit;
     
     static bool         useHadoopErrorMessages; // This is static because it's global (and I didn't want to push the options object to every place in the code)
     static bool         outputToStdout;         // Likewise
