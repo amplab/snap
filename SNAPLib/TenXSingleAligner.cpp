@@ -690,7 +690,7 @@ TenXSingleAligner::align_phase_2()
 
 bool
 TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 secondaryResultBufferSize, _int64* nSecondaryResults, PairedAlignmentResult* secondaryResults, _int64 maxSecondaryResultsToReturn,
-	unsigned &bestPairScore, GenomeLocation *bestResultGenomeLocation, Direction *bestResultDirection, double &probabilityOfAllPairs, unsigned *bestResultScore, unsigned *popularSeedsSkipped, double &probabilityOfBestPair, double unclusteredPenalty) //This is a hack. Pass in result by reference
+	unsigned &bestPairScore, GenomeLocation *bestResultGenomeLocation, Direction *bestResultDirection, double &probabilityOfAllPairs, unsigned *bestResultScore, unsigned *popularSeedsSkipped, double &probabilityOfBestPair, double unclusteredPenalty, unsigned clusterEDCompensation) //This is a hack. Pass in result by reference
 {
 	//
 	// Phase 3: score and merge the candidates we've found.
@@ -720,11 +720,26 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 			continue;
 		}
 
-
 		//
 		// Grab the first candidate on the highest list and score it.
 		//
 		ScoringCandidate *candidate = scoringCandidates[currentBestPossibleScoreList];
+
+
+		//**** 10X surrogates
+		unsigned	compensatedScoreLimit;
+		double		probabilityCorrectionFactor;
+
+		if (candidate->clusterIdx == -1) {
+			compensatedScoreLimit = scoreLimit;
+			probabilityCorrectionFactor = unclusteredPenalty;
+		}
+		else {
+			compensatedScoreLimit = scoreLimit + clusterEDCompensation;
+			probabilityCorrectionFactor = 1;
+		}
+		//**** 10X surrogates
+
 
 		unsigned fewerEndScore;
 		double fewerEndMatchProbability;
@@ -739,7 +754,7 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 		if (_DumpAlignments) {
 			printf("Scored fewer end candidate %d, set pair %d, read %d, location %u, seed offset %d, score limit %d, score %d, offset %d\n", (int)(candidate - scoringCandidatePool),
 				candidate->whichSetPair, readWithFewerHits, candidate->readWithFewerHitsGenomeLocation.location, candidate->seedOffset,
-				scoreLimit, fewerEndScore, fewerEndGenomeLocationOffset);
+				compensatedScoreLimit, fewerEndScore, fewerEndGenomeLocationOffset);
 		}
 #endif // DEBUG
 
@@ -762,32 +777,29 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 					// If we haven't yet scored this mate, or we've scored it and not gotten an answer, but had a higher score limit than we'd
 					// use now, score it.
 					//
-					if (mate->score == -2 || mate->score == -1 && mate->scoreLimit < scoreLimit - fewerEndScore) {
+					if (mate->score == -2 || mate->score == -1 && mate->scoreLimit < compensatedScoreLimit - fewerEndScore) {
 						scoreLocation(readWithMoreHits, setPairDirection[candidate->whichSetPair][readWithMoreHits], GenomeLocationAsInt64(mate->readWithMoreHitsGenomeLocation),
-							mate->seedOffset, scoreLimit - fewerEndScore, &mate->score, &mate->matchProbability,
+							mate->seedOffset, compensatedScoreLimit - fewerEndScore, &mate->score, &mate->matchProbability,
 							&mate->genomeOffset);
 #ifdef _DEBUG
 						if (_DumpAlignments) {
 							printf("Scored mate candidate %d, set pair %d, read %d, location %u, seed offset %d, score limit %d, score %d, offset %d\n",
 								(int)(mate - scoringMateCandidates[candidate->whichSetPair]), candidate->whichSetPair, readWithMoreHits, mate->readWithMoreHitsGenomeLocation.location,
-								mate->seedOffset, scoreLimit - fewerEndScore, mate->score, mate->genomeOffset);
+								mate->seedOffset, compensatedScoreLimit - fewerEndScore, mate->score, mate->genomeOffset);
 						}
 #endif // _DEBUG
 
 						_ASSERT(-1 == mate->score || mate->score >= mate->bestPossibleScore);
 
-						mate->scoreLimit = scoreLimit - fewerEndScore;
+						mate->scoreLimit = compensatedScoreLimit - fewerEndScore;
 					}
 
 					if (mate->score != -1) {
 						double pairProbability = mate->matchProbability * fewerEndMatchProbability;
 		
-						//**** 10X apply cluster penalty
-						if (candidate->clusterIdx == -1) {
-							//pairProbability /= unclusteredPenalty;
-							pairProbability *= unclusteredPenalty;
-						}
-						//**** 10X apply cluster penalty
+						//**** 10X apply probability correction
+						pairProbability *= probabilityCorrectionFactor;
+						//**** 10X apply probability correction
 
 						unsigned pairScore = mate->score + fewerEndScore;
 						//
@@ -878,8 +890,7 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 
 							bool isBestHit = false;
 
-							if (pairScore <= maxK && (pairScore < bestPairScore ||
-								(pairScore == bestPairScore && pairProbability > probabilityOfBestPair))) {
+							if (pairScore <= maxK && pairProbability > probabilityOfBestPair) {
 								//
 								// A new best hit.
 								//
@@ -1210,7 +1221,7 @@ TenXSingleAligner::align(
 
 	//**** Phase 3
 	if (align_phase_3(maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults, maxSecondaryResultsToReturn,
-		bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, popularSeedsSkipped, probabilityOfBestPair, 1)) // This is a hack. Probably need to be changed later.
+		bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, popularSeedsSkipped, probabilityOfBestPair, 1, 0)) // This is a hack. Probably need to be changed later.
 		return false; // Not enough space for secondary alignment. Flag is raised
 
 	//**** Phase 4
@@ -1642,7 +1653,7 @@ TenXSingleAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitLocation, Ge
 		//
 		// Within merge distance.  Keep the better score (or if they're tied the better match probability).
 		//
-		if (newPairScore < pairScore || newPairScore == pairScore && newMatchProbability > matchProbability) {
+		if (newPairScore < pairScore || newMatchProbability > matchProbability) {
 #ifdef _DEBUG
 			if (_DumpAlignments) {
 				printf("Merge replacement at anchor (%u, %u), loc (%u, %u), old match prob %e, new match prob %e, old pair score %d, new pair score %d\n",

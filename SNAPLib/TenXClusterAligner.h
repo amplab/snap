@@ -49,6 +49,7 @@ public:
 		unsigned			minPairsPerCluster_,
 		_uint64				maxClusterSpan_,
 		double				unclusteredPenalty_,
+		unsigned			clusterEDCompensation_,
 		unsigned			minReadLength_,
 		int					maxSecondaryAlignmentsPerContig,
 		BigAllocator		*allocator);
@@ -153,4 +154,5 @@ private:
 	unsigned			minPairsPerCluster;
 	_uint64				maxClusterSpan;
 	double				unclusteredPenalty;
+	unsigned			clusterEDCompensation;
 };

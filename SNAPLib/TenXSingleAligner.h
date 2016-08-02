@@ -157,7 +157,8 @@ public:
 		unsigned				*bestResultScore,
 		unsigned				*popularSeedsSkipped,
 		double					&probabilityOfBestPair,
-		double					unclusteredPenalty
+		double					unclusteredPenalty,
+		unsigned				clusterEDCompensation
 	);
 
 	//

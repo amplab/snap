@@ -58,10 +58,11 @@ TenXClusterAligner::TenXClusterAligner(
 	unsigned			minPairsPerCluster_,
 	_uint64				maxClusterSpan_,
 	double				unclusteredPenalty_,
+	unsigned			clusterEDCompensation_,
 	unsigned			minReadLength_,
 	int					maxSecondaryAlignmentsPerContig,
 	BigAllocator		*allocator)
-	: progressTracker(progressTracker_), unclusteredPenalty(unclusteredPenalty_), maxBarcodeSize(maxBarcodeSize_), minPairsPerCluster(minPairsPerCluster_), maxClusterSpan(maxClusterSpan_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_)
+	: progressTracker(progressTracker_), unclusteredPenalty(unclusteredPenalty_), clusterEDCompensation(clusterEDCompensation_), maxBarcodeSize(maxBarcodeSize_), minPairsPerCluster(minPairsPerCluster_), maxClusterSpan(maxClusterSpan_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_)
 {
 	// Create single-end aligners.
 	singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
@@ -312,7 +313,7 @@ bool TenXClusterAligner::align_second_stage(
 			unsigned bestResultScore[NUM_READS_PER_PAIR];
 			double probabilityOfBestPair = 0;
 
-			bool secondaryBufferOverflow = progressTracker[pairIdx].aligner->align_phase_3(maxEditDistanceForSecondaryResults, progressTracker[pairIdx].secondaryResultBufferSize, &progressTracker[pairIdx].nSecondaryResults, &progressTracker[pairIdx].results[1], maxSecondaryAlignmentsToReturn, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, progressTracker[pairIdx].popularSeedsSkipped, probabilityOfBestPair, unclusteredPenalty);
+			bool secondaryBufferOverflow = progressTracker[pairIdx].aligner->align_phase_3(maxEditDistanceForSecondaryResults, progressTracker[pairIdx].secondaryResultBufferSize, &progressTracker[pairIdx].nSecondaryResults, &progressTracker[pairIdx].results[1], maxSecondaryAlignmentsToReturn, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, progressTracker[pairIdx].popularSeedsSkipped, probabilityOfBestPair, unclusteredPenalty, clusterEDCompensation);
 
 			if (secondaryBufferOverflow) {
 				progressTracker[pairIdx].nSingleEndSecondaryResults[0] = progressTracker[pairIdx].nSingleEndSecondaryResults[1] = 0;

@@ -54,10 +54,11 @@ using util::stringEndsWith;
 
 static const int DEFAULT_MIN_SPACING = 50;
 static const int DEFAULT_MAX_SPACING = 1000;
-static const int DEFAULT_MAX_BARCODE_SIZE = 60000;
-static const int DEFAULT_MIN_PAIRS_PER_CLUSTER = 10;
-static const int DEFAULT_MAX_CLUSTER_SPAN = 100000;
+static const unsigned DEFAULT_MAX_BARCODE_SIZE = 60000;
+static const unsigned DEFAULT_MIN_PAIRS_PER_CLUSTER = 10;
+static const unsigned DEFAULT_MAX_CLUSTER_SPAN = 100000;
 static const double DEFAULT_UNCLUSTERED_PENALTY = 0.000000001;
+static const unsigned DEFAULT_CLUSTER_ED_COMPENSATION = 4;
 
 struct TenXAlignerStats : public AlignerStats
 {
@@ -239,6 +240,7 @@ TenXAlignerOptions::TenXAlignerOptions(const char* i_commandLine)
 	minPairsPerCluster(DEFAULT_MIN_PAIRS_PER_CLUSTER),
 	maxClusterSpan(DEFAULT_MAX_CLUSTER_SPAN),
 	unclusteredPenalty(DEFAULT_UNCLUSTERED_PENALTY),
+	clusterEDCompensation(DEFAULT_CLUSTER_ED_COMPENSATION),
 
 	// same with pairedEndAligner
 	forceSpacing(false),
@@ -268,12 +270,15 @@ void TenXAlignerOptions::usageMessage()
 		"       but may be necessary for some strangely formatted input files.  You'll also need to specify this\n"
 		"       flag for SAM/BAM files that were aligned by a single-end aligner.\n"
         "  -noS no single-end aligner turned on. Just use paired-end aligner.\n"
-        "  -UCP specifies the unclustered penalty.\n"
+		"  -UCP specifies the unclustered probability penalty. Default: %f\n"
+        "  -CED specifies the cluster edit-distance compensation. Default: %d\n"
 		,
 		DEFAULT_MIN_SPACING,
 		DEFAULT_MAX_SPACING,
 		DEFAULT_INTERSECTING_ALIGNER_MAX_HITS,
-		DEFAULT_MAX_CANDIDATE_POOL_SIZE);
+		DEFAULT_MAX_CANDIDATE_POOL_SIZE,
+		DEFAULT_UNCLUSTERED_PENALTY,
+		DEFAULT_CLUSTER_ED_COMPENSATION);
 }
 
 bool TenXAlignerOptions::parse(const char** argv, int argc, int& n, bool *done)
@@ -354,6 +359,14 @@ bool TenXAlignerOptions::parse(const char** argv, int argc, int& n, bool *done)
 		}
 		return false;
 	}
+	else if (strcmp(argv[n], "-CED") == 0) {
+		if (n + 1 < argc) {
+			clusterEDCompensation = atoi(argv[n + 1]);
+			n += 1;
+			return true;
+		}
+		return false;
+	}
 	return AlignerOptions::parse(argv, argc, n, done);
 }
 
@@ -374,6 +387,7 @@ bool TenXAlignerContext::initialize()
 	forceSpacing = options2->forceSpacing;
 	noSingle = options2->noSingle;
 	unclusteredPenalty = options2->unclusteredPenalty;
+	clusterEDCompensation = options2->clusterEDCompensation;
 	maxCandidatePoolSize = options2->maxCandidatePoolSize;
 	intersectingAlignerMaxHits = options2->intersectingAlignerMaxHits;
 	ignoreMismatchedIDs = options2->ignoreMismatchedIDs;
@@ -537,6 +551,7 @@ void TenXAlignerContext::runIterationThread()
 		minPairsPerCluster,
 		maxClusterSpan,
 		unclusteredPenalty,
+		clusterEDCompensation,
 		minReadLength,
 		maxSecondaryAlignmentsPerContig,
 		allocator);

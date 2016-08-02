@@ -73,6 +73,7 @@ protected:
 	bool				ignoreMismatchedIDs;
 	bool				quicklyDropUnpairedReads;
 	double				unclusteredPenalty;
+	unsigned			clusterEDCompensation;
 
 	friend class AlignerContext2;
 };
@@ -98,4 +99,5 @@ struct TenXAlignerOptions : public AlignerOptions
 	unsigned			maxCandidatePoolSize;
 	bool				quicklyDropUnpairedReads;
 	double				unclusteredPenalty;
+	unsigned			clusterEDCompensation;
 };
