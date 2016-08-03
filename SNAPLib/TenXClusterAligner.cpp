@@ -392,8 +392,8 @@ bool TenXClusterAligner::align_first_stage(
 		}
 		//fprintf(stderr, "clusterBoundary: %lld\n", clusterBoundary.location);
 		//sortAndLink(); //fix the order. ****If we use this too often, it would be a potential performance problem. Might need to fix it later. (That's why I kept the linked list pointer!).
-		mergeUpdate();
 		//trackerRoot = &progressTracker[0];
+		mergeUpdate();
 	}
 
 	return barcodeFinished;
