@@ -189,6 +189,20 @@ void TenXClusterAligner::mergeUpdate()
 		updateHolder = NULL;
 		return;
 	}
+
+	/*
+	*/
+	if (trackerRoot->nextLoci == -1) {
+		TenXProgressTracker *updateCursor = updateHolder;
+
+		while (updateCursor->nextTracker != NULL)
+			updateCursor = updateCursor->nextTracker;
+
+		updateCursor->nextTracker = trackerRoot;
+		trackerRoot = updateHolder;
+		updateHolder = NULL;
+		return;
+	}
 		
 	TenXProgressTracker *parentRootCursor = trackerRoot;
 	TenXProgressTracker *rootCursor = trackerRoot->nextTracker;
@@ -204,13 +218,14 @@ void TenXClusterAligner::mergeUpdate()
 		parentUpdateCursor = updateCursor;
 		updateCursor = updateCursor->nextTracker;
 	}
-
+	// Fix the upstart link.
 	if (parentUpdateCursor != NULL)
 		parentUpdateCursor->nextTracker = parentRootCursor;
 
-	// ****10X debug
+	/*
+	//****10X debug
 	int updateListSize = 1;
-	TenXProgressTracker *updateCursorTemp = updateHolder;
+	TenXProgressTracker *updateCursorTemp = updateCursor;
 	while (updateCursorTemp != NULL) {
 		updateListSize++;
 		updateCursorTemp = updateCursorTemp->nextTracker;
@@ -223,21 +238,24 @@ void TenXClusterAligner::mergeUpdate()
 	}
 	fprintf(stderr, "updateList size: %d\n", updateListSize);
 	fflush(stderr);
-	// ****10X debug
-	
+	//****10X debug
+	*/
+
+	// Merge updateList with rootList based on nextLoci in sorted order
 	while (updateCursor != NULL && updateCursor->nextLoci != -1 && rootCursor != NULL && rootCursor->nextLoci != -1) {
+	//while (updateCursor != NULL && rootCursor != NULL) {
 		if (rootCursor->nextLoci < updateCursor->nextLoci) {
 			parentRootCursor->nextTracker = updateCursor;
 			// Remember that updateList is sorted!
 			updateCursor = updateCursor->nextTracker;
 			parentRootCursor->nextTracker->nextTracker = rootCursor;
 			parentRootCursor = parentRootCursor->nextTracker;
-			updateListSize--;
+			//updateListSize--; //****10X debug counter
 		}
 		else {
 			parentRootCursor = rootCursor;
 			rootCursor = rootCursor->nextTracker;
-			rootListSize--;
+			//rootListSize--; //****10X debug counter
 		}
 	}
 
@@ -245,6 +263,7 @@ void TenXClusterAligner::mergeUpdate()
 	if (rootCursor == NULL) {
 		parentRootCursor->nextTracker = updateCursor;
 	}
+	/* debug */
 	else if (rootCursor->nextLoci == -1) {
 		parentRootCursor->nextTracker = updateCursor;
 		
@@ -253,7 +272,7 @@ void TenXClusterAligner::mergeUpdate()
 		
 		updateCursor->nextTracker = rootCursor;
 	}
-	else if (updateCursor->nextLoci == -1) {
+	else if (updateCursor != NULL && updateCursor->nextLoci == -1) {
 		while (rootCursor->nextTracker != NULL && rootCursor->nextTracker->nextLoci != -1)
 			rootCursor = rootCursor->nextTracker;
 
@@ -264,9 +283,8 @@ void TenXClusterAligner::mergeUpdate()
 		while (updateCursor->nextTracker != NULL)
 			updateCursor = updateCursor->nextTracker;
 
-		updateCursor->nextTracker = updateCursor;
+		updateCursor->nextTracker = nextRootCursor;
 	}
-
 	updateHolder = NULL;
 }
 
