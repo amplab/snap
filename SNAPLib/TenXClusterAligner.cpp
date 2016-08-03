@@ -119,6 +119,8 @@ void TenXClusterAligner::sortAndLink()
 	if (progressTracker[maxBarcodeSize - 1].pairNotDone && progressTracker[maxBarcodeSize - 1].nextLoci >= 0)
 		nActiveTrackers++;
 
+	trackerRoot = &progressTracker[0];
+	updateHolder = NULL;
 	//fprintf(stderr, "activeTrackers: %d\n", nActiveTrackers);
 }
 
@@ -156,21 +158,104 @@ TenXProgressTracker* traverseProgressPtr(TenXProgressTracker *cursor, unsigned s
 }
 
 
+void TenXClusterAligner::pushToUpdate(TenXProgressTracker *newUpdate)
+{
+	if (updateHolder == NULL || updateHolder->nextLoci <= newUpdate->nextLoci) {
+		newUpdate->nextTracker = updateHolder;
+		updateHolder = newUpdate;
+		return;
+	}
+
+	// At least updateHolder has a bigger loci
+	TenXProgressTracker* cursor = updateHolder;
+
+	// Invariant: the loop stops when cursor->nextLoci is still > newUpdate->nextLoci but cursor->nextTracker is not!!
+	while (cursor->nextTracker != NULL && cursor->nextTracker->nextLoci > newUpdate->nextLoci)
+		cursor = cursor->nextTracker;
+
+	// Insert the newUpdate
+	newUpdate->nextTracker = cursor->nextTracker;
+	cursor->nextTracker = newUpdate;
+}
+
+
+void TenXClusterAligner::mergeUpdate()
+{
+	if (updateHolder == NULL)
+		return;
+
+	if (trackerRoot == NULL) {
+		trackerRoot = updateHolder;
+		updateHolder = NULL;
+		return;
+	}
+		
+	TenXProgressTracker *parentRootCursor = trackerRoot;
+	TenXProgressTracker *rootCursor = trackerRoot->nextTracker;
+	TenXProgressTracker *parentUpdateCursor = NULL;
+	TenXProgressTracker *updateCursor = updateHolder;
+
+	// First update the new root, if necessary
+	if (updateHolder->nextLoci >= trackerRoot->nextLoci)
+		trackerRoot = updateHolder;
+
+	// Move updateCursor to the first merge agent
+	while (updateCursor != NULL && updateCursor->nextLoci >= parentRootCursor->nextLoci) {
+		updateCursor = updateCursor->nextTracker;
+		parentUpdateCursor = updateCursor;
+	}
+
+	if (parentUpdateCursor != NULL)
+		parentUpdateCursor->nextTracker = parentRootCursor;
+	
+	while (rootCursor != NULL && updateCursor != NULL) {
+		if (rootCursor->nextLoci < updateCursor->nextLoci) {
+			parentRootCursor->nextTracker = updateCursor;
+			// Remember that updateList is sorted!
+			updateCursor = updateCursor->nextTracker;
+			parentRootCursor->nextTracker->nextTracker = rootCursor;
+			parentRootCursor = parentRootCursor->nextTracker;
+		}
+		else {
+			parentRootCursor = rootCursor;
+			rootCursor = rootCursor->nextTracker;
+		}
+	}
+
+	if (rootCursor == NULL)
+		parentRootCursor->nextTracker = updateCursor;
+
+	updateHolder = NULL;
+}
+
+
+
 // Progress each single aligner to move pass targetLoc, while registering the candidate with clusterIdx. The process stops BEFORE processing end. [start, end)
 // It also terminates when cursor->nextLoci >= targetLoci, whichever comes first.
-void registerClusterForReads(
-	TenXProgressTracker *start,
-	TenXProgressTracker *end,
-	GenomeLocation clusterBoundary,
-	int clusterIdx)
+void TenXClusterAligner::registerClusterForReads(struct TenXProgressTracker* preStart, struct TenXProgressTracker* start, struct TenXProgressTracker* end, class GenomeLocation clusterBoundary, int clusterIdx)
 {
+	if (preStart == NULL)
+		_ASSERT(start == trackerRoot);
+
 	TenXProgressTracker *cursor = start;
 	while (cursor != end && cursor->nextLoci >= 0 && cursor->nextLoci > clusterBoundary) {
 		cursor->aligner->align_phase_2_to_target_loc(clusterBoundary, clusterIdx);
 		cursor->nextLoci = resolveLociPtr(cursor->aligner->align_phase_2_get_loci() );
+
+		// Remove from root tracker list
+		if (preStart != NULL)
+			preStart->nextTracker = cursor->nextTracker;
+		else
+			trackerRoot = cursor->nextTracker;
+
+		// Push to update list
+		pushToUpdate(cursor);
+
+		// Move to next tracker
 		cursor = cursor->nextTracker;
 	}
 }
+
 
 
 void TenXClusterAligner::fastForward(GenomeLocation forwardLoc) {
@@ -247,8 +332,8 @@ bool TenXClusterAligner::align_first_stage(
 	int globalClusterId = 0;
 	int clusterId;
 	GenomeLocation clusterBoundary;
-	//GenomeLocation searchBoundary;
-	TenXProgressTracker *trackerRoot = &progressTracker[0];
+
+	// Intitialize boundary
 	TenXProgressTracker *cursor; // pointer that keeps track of the progress of walking down progress trackers
 
 	while (trackerRoot->pairNotDone && trackerRoot->nextLoci != -1) {
@@ -267,24 +352,25 @@ bool TenXClusterAligner::align_first_stage(
 			else
 				clusterBoundary = -1;
 
-			registerClusterForReads(trackerRoot, cursor, clusterBoundary, clusterId); //register the pairs and update the loci pointers.
+			registerClusterForReads(NULL, trackerRoot, cursor, clusterBoundary, clusterId); //register the pairs and update the loci pointers.
 		}
 		else { //the cluster ends here.
 			if (registeringCluster) { //when we were half way of adding a cluster, we need to finish it with the old targetLoc.
 				fprintf(stderr, "clusterBoundary: %lld	globalClusterId: %d\n", clusterBoundary.location, globalClusterId);
 				fflush(stderr);
 				registeringCluster = false;
-				registerClusterForReads(trackerRoot, cursor, clusterBoundary, clusterId); //use the previous id.
+				registerClusterForReads(NULL, trackerRoot, cursor, clusterBoundary, clusterId); //use the previous id.
 				globalClusterId++;
 			}
 			else { //we were not adding a cluster, just tag these locus as not clustered (-1) and move the locus pointer over the new targetLoc.
 				cursor = traverseProgressPtr(cursor, minPairsPerCluster - nPotentialPairs);
 				clusterBoundary = cursor->nextLoci + minClusterSpan;
-				registerClusterForReads(trackerRoot, cursor, clusterBoundary, -1); //use the previous id.
+				registerClusterForReads(NULL, trackerRoot, cursor, clusterBoundary, -1); //use the previous id.
 			}
 		}
 		//fprintf(stderr, "clusterBoundary: %lld\n", clusterBoundary.location);
-		sortAndLink(); //fix the order. ****If we use this too often, it would be a potential performance problem. Might need to fix it later. (That's why I kept the linked list pointer!).
+		//sortAndLink(); //fix the order. ****If we use this too often, it would be a potential performance problem. Might need to fix it later. (That's why I kept the linked list pointer!).
+		mergeUpdate();
 		trackerRoot = &progressTracker[0];
 	}
 

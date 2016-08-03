@@ -83,7 +83,10 @@ public:
 	_int64 maxSecondaryAlignmentsToReturn
 	);
 
-	// TenX related functions. Used in the first stage.
+	// TenX function. Move all trackers between start and end pointers beyond clusterBoundary, while registering each location with clusterID: clusterIdx.
+	// All temporary changed will be held in updateHolder and will need to be merged with mergeUpdate().
+	void registerClusterForReads(TenXProgressTracker *preStart, TenXProgressTracker *start, TenXProgressTracker *end, GenomeLocation clusterBoundary, int clusterIdx);
+	// TenX function. Sort all progress trackers and link them and initialize root.
 	void sortAndLink();
 	// For debug purpose, quickly forward all pairs beyond the forward loc.
 	void fastForward(GenomeLocation fowardLoc);
@@ -135,6 +138,10 @@ public:
 	}
 
 private:
+	// Push newUpdate to the updateList at the correct ordered position. 
+	void pushToUpdate(TenXProgressTracker *newUpdate);
+	// Merge trackers from rootList and updateList in a sorted fashion.
+	void mergeUpdate();
 
 	bool				forceSpacing;
 	BaseAligner			*singleAligner;
@@ -156,4 +163,9 @@ private:
 	_uint64				minClusterSpan;
 	double				unclusteredPenalty;
 	unsigned			clusterEDCompensation;
+
+	// 10x update pointers
+	TenXProgressTracker *trackerRoot;
+	TenXProgressTracker *updateHolder;
+
 };
