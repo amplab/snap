@@ -201,12 +201,29 @@ void TenXClusterAligner::mergeUpdate()
 
 	// Move updateCursor to the first merge agent
 	while (updateCursor != NULL && updateCursor->nextLoci >= parentRootCursor->nextLoci) {
-		updateCursor = updateCursor->nextTracker;
 		parentUpdateCursor = updateCursor;
+		updateCursor = updateCursor->nextTracker;
 	}
 
 	if (parentUpdateCursor != NULL)
 		parentUpdateCursor->nextTracker = parentRootCursor;
+
+	// ****10X debug
+	int updateListSize = 1;
+	TenXProgressTracker *updateCursorTemp = updateHolder;
+	while (updateCursorTemp != NULL) {
+		updateListSize++;
+		updateCursorTemp = updateCursorTemp->nextTracker;
+	}
+	int rootListSize = 1;
+	TenXProgressTracker *rootCursorTemp = rootCursor;
+	while (rootCursorTemp != NULL) {
+		rootListSize++;
+		rootCursorTemp = rootCursorTemp->nextTracker;
+	}
+	fprintf(stderr, "updateList size: %d\n", updateListSize);
+	fflush(stderr);
+	// ****10X debug
 	
 	while (rootCursor != NULL && updateCursor != NULL) {
 		if (rootCursor->nextLoci < updateCursor->nextLoci) {
@@ -215,10 +232,12 @@ void TenXClusterAligner::mergeUpdate()
 			updateCursor = updateCursor->nextTracker;
 			parentRootCursor->nextTracker->nextTracker = rootCursor;
 			parentRootCursor = parentRootCursor->nextTracker;
+			updateListSize--;
 		}
 		else {
 			parentRootCursor = rootCursor;
 			rootCursor = rootCursor->nextTracker;
+			rootListSize--;
 		}
 	}
 
@@ -374,7 +393,7 @@ bool TenXClusterAligner::align_first_stage(
 		//fprintf(stderr, "clusterBoundary: %lld\n", clusterBoundary.location);
 		//sortAndLink(); //fix the order. ****If we use this too often, it would be a potential performance problem. Might need to fix it later. (That's why I kept the linked list pointer!).
 		mergeUpdate();
-		trackerRoot = &progressTracker[0];
+		//trackerRoot = &progressTracker[0];
 	}
 
 	return barcodeFinished;
