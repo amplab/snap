@@ -242,17 +242,20 @@ void TenXClusterAligner::registerClusterForReads(struct TenXProgressTracker* pre
 		cursor->aligner->align_phase_2_to_target_loc(clusterBoundary, clusterIdx);
 		cursor->nextLoci = resolveLociPtr(cursor->aligner->align_phase_2_get_loci() );
 
+		// A temporary holder, because cursor will be modified in pushToUpdate
+		TenXProgressTracker *nextCursor = cursor->nextTracker;
 		// Remove from root tracker list
 		if (preStart != NULL)
-			preStart->nextTracker = cursor->nextTracker;
+			preStart->nextTracker = nextCursor;
 		else
-			trackerRoot = cursor->nextTracker;
+			trackerRoot = nextCursor;
+
 
 		// Push to update list
 		pushToUpdate(cursor);
 
 		// Move to next tracker
-		cursor = cursor->nextTracker;
+		cursor = nextCursor;
 	}
 }
 
