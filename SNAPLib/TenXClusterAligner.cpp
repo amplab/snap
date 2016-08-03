@@ -419,8 +419,8 @@ bool TenXClusterAligner::align_first_stage(
 		}
 		else { //the cluster ends here.
 			if (registeringCluster) { //when we were half way of adding a cluster, we need to finish it with the old targetLoc.
-				fprintf(stderr, "clusterBoundary: %lld	globalClusterId: %d\n", clusterBoundary.location, globalClusterId);
-				fflush(stderr);
+				//fprintf(stderr, "clusterBoundary: %lld	globalClusterId: %d\n", clusterBoundary.location, globalClusterId);
+				//fflush(stderr);
 				registeringCluster = false;
 				registerClusterForReads(NULL, trackerRoot, cursor, clusterBoundary, clusterId); //use the previous id.
 				globalClusterId++;
