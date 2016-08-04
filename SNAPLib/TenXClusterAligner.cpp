@@ -444,8 +444,9 @@ bool TenXClusterAligner::align_second_stage(
 			double probabilityOfAllPairs = 0;
 			unsigned bestResultScore[NUM_READS_PER_PAIR];
 			double probabilityOfBestPair = 0;
+			unsigned bestClusterIdx = 0;
 
-			bool secondaryBufferOverflow = progressTracker[pairIdx].aligner->align_phase_3(maxEditDistanceForSecondaryResults, progressTracker[pairIdx].secondaryResultBufferSize, &progressTracker[pairIdx].nSecondaryResults, &progressTracker[pairIdx].results[1], maxSecondaryAlignmentsToReturn, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, progressTracker[pairIdx].popularSeedsSkipped, probabilityOfBestPair, unclusteredPenalty, clusterEDCompensation);
+			bool secondaryBufferOverflow = progressTracker[pairIdx].aligner->align_phase_3(maxEditDistanceForSecondaryResults, progressTracker[pairIdx].secondaryResultBufferSize, &progressTracker[pairIdx].nSecondaryResults, &progressTracker[pairIdx].results[1], maxSecondaryAlignmentsToReturn, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, progressTracker[pairIdx].popularSeedsSkipped, probabilityOfBestPair, bestClusterIdx, unclusteredPenalty, clusterEDCompensation);
 
 			if (secondaryBufferOverflow) {
 				progressTracker[pairIdx].nSingleEndSecondaryResults[0] = progressTracker[pairIdx].nSingleEndSecondaryResults[1] = 0;
@@ -454,7 +455,7 @@ bool TenXClusterAligner::align_second_stage(
 				continue;//return false;
 			}
 			else {
-				progressTracker[pairIdx].aligner->align_phase_4(read0, read1, &progressTracker[pairIdx].results[0], maxEditDistanceForSecondaryResults, &progressTracker[pairIdx].nSecondaryResults, &progressTracker[pairIdx].results[1], maxSecondaryAlignmentsToReturn, progressTracker[pairIdx].popularSeedsSkipped, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, probabilityOfBestPair);
+				progressTracker[pairIdx].aligner->align_phase_4(read0, read1, &progressTracker[pairIdx].results[0], maxEditDistanceForSecondaryResults, &progressTracker[pairIdx].nSecondaryResults, &progressTracker[pairIdx].results[1], maxSecondaryAlignmentsToReturn, progressTracker[pairIdx].popularSeedsSkipped, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, probabilityOfBestPair, bestClusterIdx);
 			}
 
 			/* timing no longer makes sence

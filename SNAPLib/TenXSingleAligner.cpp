@@ -691,7 +691,7 @@ TenXSingleAligner::align_phase_2()
 
 bool
 TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 secondaryResultBufferSize, _int64* nSecondaryResults, PairedAlignmentResult* secondaryResults, _int64 maxSecondaryResultsToReturn,
-	unsigned &bestPairScore, GenomeLocation *bestResultGenomeLocation, Direction *bestResultDirection, double &probabilityOfAllPairs, unsigned *bestResultScore, unsigned *popularSeedsSkipped, double &probabilityOfBestPair, double unclusteredPenalty, unsigned clusterEDCompensation) //This is a hack. Pass in result by reference
+	unsigned &bestPairScore, GenomeLocation *bestResultGenomeLocation, Direction *bestResultDirection, double &probabilityOfAllPairs, unsigned *bestResultScore, unsigned *popularSeedsSkipped, double &probabilityOfBestPair, unsigned &bestClusterIdx, double unclusteredPenalty, unsigned clusterEDCompensation) //This is a hack. Pass in result by reference
 {
 	//
 	// Phase 3: score and merge the candidates we've found.
@@ -920,6 +920,7 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 										secondaryResult->mapq[r] = 0;
 										secondaryResult->score[r] = bestResultScore[r];
 										secondaryResult->status[r] = MultipleHits;
+										secondaryResult->clusterIdx = bestClusterIdx;
 									}
 
 									(*nSecondaryResults)++;
@@ -933,6 +934,7 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 								bestResultScore[readWithMoreHits] = mate->score;
 								bestResultDirection[readWithFewerHits] = setPairDirection[candidate->whichSetPair][readWithFewerHits];
 								bestResultDirection[readWithMoreHits] = setPairDirection[candidate->whichSetPair][readWithMoreHits];
+								bestClusterIdx = candidate->clusterIdx;
 
 								if (!noUkkonen) {
 									scoreLimit = bestPairScore + extraSearchDepth;
@@ -961,6 +963,7 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 									secondaryResult->score[readWithMoreHits] = mate->score;
 									secondaryResult->score[readWithFewerHits] = fewerEndScore;
 									secondaryResult->status[readWithFewerHits] = secondaryResult->status[readWithMoreHits] = MultipleHits;
+									secondaryResult->clusterIdx = candidate->clusterIdx;
 
 									(*nSecondaryResults)++;
 								}
@@ -1025,7 +1028,8 @@ void TenXSingleAligner::align_phase_4(
 	Direction *bestResultDirection,
 	double probabilityOfAllPairs,
 	unsigned *bestResultScore,
-	double probabilityOfBestPair
+	double probabilityOfBestPair,
+	unsigned bestClusterIdx
 )
 {
 	if (bestPairScore == 65536) {
@@ -1038,6 +1042,7 @@ void TenXSingleAligner::align_phase_4(
 			result->score[whichRead] = -1;
 			result->status[whichRead] = NotFound;
 			result->clippingForReadAdjustment[whichRead] = 0;
+			result->clusterIdx = -1;
 #ifdef  _DEBUG
 			if (_DumpAlignments) {
 				printf("No sufficiently good pairs found.\n");
@@ -1053,6 +1058,7 @@ void TenXSingleAligner::align_phase_4(
 			result->status[whichRead] = result->mapq[whichRead] > printStatsMapQLimit ? SingleHit : MultipleHits;
 			result->score[whichRead] = bestResultScore[whichRead];
 			result->clippingForReadAdjustment[whichRead] = 0;
+			result->clusterIdx = bestClusterIdx;
 		}
 #ifdef  _DEBUG
 		if (_DumpAlignments) {
@@ -1223,14 +1229,15 @@ TenXSingleAligner::align(
 	double probabilityOfAllPairs = 0;
 	unsigned bestResultScore[NUM_READS_PER_PAIR];
 	double probabilityOfBestPair = 0;
+	unsigned bestClusterIdx = 0;
 
 	//**** Phase 3
 	if (align_phase_3(maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults, maxSecondaryResultsToReturn,
-		bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, popularSeedsSkipped, probabilityOfBestPair, 1, 0))
+		bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, popularSeedsSkipped, probabilityOfBestPair, bestClusterIdx, 1, 0))
 		return false; // Not enough space for secondary alignment. Flag is raised
 
 	//**** Phase 4
-	align_phase_4(read0, read1, result, maxEditDistanceForSecondaryResults, nSecondaryResults, secondaryResults, maxSecondaryResultsToReturn, popularSeedsSkipped, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, probabilityOfBestPair);
+	align_phase_4(read0, read1, result, maxEditDistanceForSecondaryResults, nSecondaryResults, secondaryResults, maxSecondaryResultsToReturn, popularSeedsSkipped, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, probabilityOfBestPair, bestClusterIdx);
 
 	return true;
 }

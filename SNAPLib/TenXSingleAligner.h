@@ -158,6 +158,7 @@ public:
 		unsigned				*bestResultScore,
 		unsigned				*popularSeedsSkipped,
 		double					&probabilityOfBestPair,
+		unsigned				&bestClusterIdx,
 		double					unclusteredPenalty,
 		unsigned				clusterEDCompensation
 	);
@@ -179,7 +180,8 @@ public:
 		Direction *bestResultDirection,
 		double probabilityOfAllPairs,
 		unsigned *bestResultScore,
-		double probabilityOfBestPair
+		double probabilityOfBestPair,
+		unsigned bestClusterIdx
 	);
 
 	static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxBigHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsFromCommandLine,
