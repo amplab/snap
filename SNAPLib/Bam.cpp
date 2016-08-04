@@ -714,7 +714,7 @@ public:
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int * o_addFrontClipping,
         int internalScore, bool emitInternalScore, char *internalScoreTag, bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
-        bool alignedAsPair = false) const;
+        bool alignedAsPair = false, int clusterIdx = -1) const;
 
 private:
 
@@ -879,7 +879,9 @@ BAMFormat::writeRead(
     AlignmentResult mateResult,
     GenomeLocation mateLocation,
     Direction mateDirection,
-    bool alignedAsPair) const
+    bool alignedAsPair,
+	int clusterIdx
+) const
 {
     const int MAX_READ = MAX_READ_LENGTH;
     const int cigarBufSize = MAX_READ;

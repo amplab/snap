@@ -684,14 +684,14 @@ TenXSingleAligner::align_phase_2()
 	//
 	if(align_phase_2_init() ) {
 		GenomeLocation clusterTargetLoc = GenomeLocation(0000000000);
-		align_phase_2_to_target_loc(clusterTargetLoc, NULL);
+		align_phase_2_to_target_loc(clusterTargetLoc, -1);
 	}
 }
 
 
 bool
 TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 secondaryResultBufferSize, _int64* nSecondaryResults, PairedAlignmentResult* secondaryResults, _int64 maxSecondaryResultsToReturn,
-	unsigned &bestPairScore, GenomeLocation *bestResultGenomeLocation, Direction *bestResultDirection, double &probabilityOfAllPairs, unsigned *bestResultScore, unsigned *popularSeedsSkipped, double &probabilityOfBestPair, unsigned &bestClusterIdx, double unclusteredPenalty, unsigned clusterEDCompensation) //This is a hack. Pass in result by reference
+	unsigned &bestPairScore, GenomeLocation *bestResultGenomeLocation, Direction *bestResultDirection, double &probabilityOfAllPairs, unsigned *bestResultScore, unsigned *popularSeedsSkipped, double &probabilityOfBestPair, int &bestClusterIdx, double unclusteredPenalty, unsigned clusterEDCompensation) //This is a hack. Pass in result by reference
 {
 	//
 	// Phase 3: score and merge the candidates we've found.
@@ -1029,7 +1029,7 @@ void TenXSingleAligner::align_phase_4(
 	double probabilityOfAllPairs,
 	unsigned *bestResultScore,
 	double probabilityOfBestPair,
-	unsigned bestClusterIdx
+	int bestClusterIdx
 )
 {
 	if (bestPairScore == 65536) {
@@ -1229,7 +1229,7 @@ TenXSingleAligner::align(
 	double probabilityOfAllPairs = 0;
 	unsigned bestResultScore[NUM_READS_PER_PAIR];
 	double probabilityOfBestPair = 0;
-	unsigned bestClusterIdx = 0;
+	int bestClusterIdx = -1;
 
 	//**** Phase 3
 	if (align_phase_3(maxEditDistanceForSecondaryResults, secondaryResultBufferSize, nSecondaryResults, secondaryResults, maxSecondaryResultsToReturn,

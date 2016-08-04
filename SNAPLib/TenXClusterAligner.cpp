@@ -462,7 +462,7 @@ bool TenXClusterAligner::align_second_stage(
 			double probabilityOfAllPairs = 0;
 			unsigned bestResultScore[NUM_READS_PER_PAIR];
 			double probabilityOfBestPair = 0;
-			unsigned bestClusterIdx = 0;
+			int bestClusterIdx = 0;
 
 			bool secondaryBufferOverflow = progressTracker[pairIdx].aligner->align_phase_3(maxEditDistanceForSecondaryResults, progressTracker[pairIdx].secondaryResultBufferSize, &progressTracker[pairIdx].nSecondaryResults, &progressTracker[pairIdx].results[1], maxSecondaryAlignmentsToReturn, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, progressTracker[pairIdx].popularSeedsSkipped, probabilityOfBestPair, bestClusterIdx, unclusteredPenalty, clusterEDCompensation);
 

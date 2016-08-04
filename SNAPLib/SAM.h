@@ -177,7 +177,7 @@ public:
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int* o_addFrontClipping,
         int internalScore, bool emitInternalScore, char *internalScoreTag, bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
-        bool alignedAsPair = false) const; 
+        bool alignedAsPair = false, int clusterIdx = -1) const; 
 
     // calculate data needed to write SAM/BAM record
     // very long argument list since this was extracted from

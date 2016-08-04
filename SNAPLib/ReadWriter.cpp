@@ -411,7 +411,7 @@ SimpleReadWriter::writePairs(
                         whichAlignmentPair != 0 || !firstIsPrimary, &addFrontClipping, result[whichAlignmentPair].scorePriorToClipping[whichRead], emitInternalScore, internalScoreTag, 
                         true, writeOrder[firstOrSecond] == 0,
                         reads[1 - whichRead], result[whichAlignmentPair].status[1 - whichRead], locations[1 - whichRead], result[whichAlignmentPair].direction[1 - whichRead],
-                        result[whichAlignmentPair].alignedAsPair)) {
+                        result[whichAlignmentPair].alignedAsPair, result[whichAlignmentPair].clusterIdx)) {
 
                         _ASSERT(0 == addFrontClipping || ignoreAlignmentAdjustmentsForOm); // Because of the alignment adjuster
 

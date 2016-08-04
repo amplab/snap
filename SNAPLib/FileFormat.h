@@ -95,7 +95,7 @@ public:
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int* o_addFrontClipping, 
         int internalScore, bool emitInternalScore, char *internalScoreTag, bool hasMate = false, bool firstInPair = false, Read * mate = NULL,
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
-        bool alignedAsPair = false) const = 0; 
+        bool alignedAsPair = false, int clusterIdx = -1) const = 0; 
 
     //
     // formats

@@ -158,7 +158,7 @@ public:
 		unsigned				*bestResultScore,
 		unsigned				*popularSeedsSkipped,
 		double					&probabilityOfBestPair,
-		unsigned				&bestClusterIdx,
+		int						&bestClusterIdx,
 		double					unclusteredPenalty,
 		unsigned				clusterEDCompensation
 	);
@@ -181,7 +181,7 @@ public:
 		double probabilityOfAllPairs,
 		unsigned *bestResultScore,
 		double probabilityOfBestPair,
-		unsigned bestClusterIdx
+		int bestClusterIdx
 	);
 
 	static size_t getBigAllocatorReservation(GenomeIndex * index, unsigned maxBigHitsToConsider, unsigned maxReadSize, unsigned seedLen, unsigned maxSeedsFromCommandLine,

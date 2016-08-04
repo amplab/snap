@@ -1240,7 +1240,8 @@ SAMFormat::writeRead(
     AlignmentResult mateResult,
     GenomeLocation mateLocation,
     Direction mateDirection,
-    bool alignedAsPair
+    bool alignedAsPair,
+	int clusterIdx
     ) const
 {
     const int MAX_READ = MAX_READ_LENGTH;
@@ -1367,7 +1368,7 @@ SAMFormat::writeRead(
         internalScoreBuffer[0] = '\0';
     }
 
-    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s\n",
+    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s\t\tTXcID:%d\n",
         qnameLen, read->getId(),
         flags,
         contigName,
@@ -1382,7 +1383,9 @@ SAMFormat::writeRead(
         aux != NULL ? "\t" : "", auxLen, aux != NULL ? aux : "",
         readGroupSeparator, readGroupString,
         nmString, rglineAuxLen, rglineAux,
-        internalScoreBuffer);
+        internalScoreBuffer,
+		//10X field
+		clusterIdx);
 
     if (charsInString > bufferSpace) {
         //
