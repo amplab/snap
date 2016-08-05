@@ -54,6 +54,8 @@ TenXClusterAligner::TenXClusterAligner(
 	bool				noTruncation,
 	bool				ignoreAlignmentAdjustmentsForOm,
 	TenXProgressTracker	*progressTracker_,
+	bool				*clusterIsValid_,
+	unsigned			*mappedPairsPerCluster_,
 	unsigned			maxBarcodeSize_,
 	unsigned			minPairsPerCluster_,
 	_uint64				minClusterSpan_,
@@ -63,7 +65,7 @@ TenXClusterAligner::TenXClusterAligner(
 	int					maxSecondaryAlignmentsPerContig,
 	unsigned			printStatsMapQLimit,
 	BigAllocator		*allocator)
-	: progressTracker(progressTracker_), unclusteredPenalty(unclusteredPenalty_), clusterEDCompensation(clusterEDCompensation_), maxBarcodeSize(maxBarcodeSize_), minPairsPerCluster(minPairsPerCluster_), minClusterSpan(minClusterSpan_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_)
+	: progressTracker(progressTracker_), clusterIsValid(clusterIsValid_), mappedPairsPerCluster(mappedPairsPerCluster_), unclusteredPenalty(unclusteredPenalty_), clusterEDCompensation(clusterEDCompensation_), maxBarcodeSize(maxBarcodeSize_), minPairsPerCluster(minPairsPerCluster_), minClusterSpan(minClusterSpan_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_)
 {
 	// Create single-end aligners.
 	singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
@@ -332,12 +334,19 @@ void TenXClusterAligner::fastForward(GenomeLocation forwardLoc) {
 	}
 }
 
+
 bool TenXClusterAligner::align_first_stage(
 	unsigned		barcodeSize_)
 {
 	barcodeSize = barcodeSize_;
 	bool barcodeFinished = true;
+	maxClusterIdx = -1;
+
 	for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
+		clusterIsValid[pairIdx] = true;
+		mappedPairsPerCluster[pairIdx] = 0;
+		progressTracker[pairIdx].pairLocated = false;
+
 		if (progressTracker[pairIdx].pairNotDone) {
 			progressTracker[pairIdx].results[0].status[0] = progressTracker[pairIdx].results[0].status[1] = NotFound;
 
@@ -360,6 +369,7 @@ bool TenXClusterAligner::align_first_stage(
 				progressTracker[pairIdx].results[0].nSmallHits = 0;
 
 				progressTracker[pairIdx].pairNotDone = false;
+				progressTracker[pairIdx].pairLocated = false;
 				progressTracker[pairIdx].singleNotDone = false;
 				continue;//return true;
 			}
@@ -449,32 +459,86 @@ bool TenXClusterAligner::align_second_stage(
 {
 	bool barcodeFinished = true;
 	for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
-		if (progressTracker[pairIdx].pairNotDone) {// && progressTracker[pairIdx].notDone) {
+		if (progressTracker[pairIdx].pairNotDone && !progressTracker[pairIdx].pairLocated) {
 			Read *read0 = progressTracker[pairIdx].pairedReads[0];
 			Read *read1 = progressTracker[pairIdx].pairedReads[1];
 
 			progressTracker[pairIdx].nSingleEndSecondaryResults[0] = 0;
 			progressTracker[pairIdx].nSingleEndSecondaryResults[1] = 0;
 
-			unsigned bestPairScore = 65536;
-			GenomeLocation bestResultGenomeLocation[NUM_READS_PER_PAIR];
-			Direction bestResultDirection[NUM_READS_PER_PAIR];
-			double probabilityOfAllPairs = 0;
-			unsigned bestResultScore[NUM_READS_PER_PAIR];
-			double probabilityOfBestPair = 0;
-			int bestClusterIdx = 0;
+			progressTracker[pairIdx].bestPairScore = 65536;
+			progressTracker[pairIdx].probabilityOfAllPairs = 0;
+			progressTracker[pairIdx].probabilityOfBestPair = 0;
+			progressTracker[pairIdx].bestClusterIdx = 0;
 
-			bool secondaryBufferOverflow = progressTracker[pairIdx].aligner->align_phase_3(maxEditDistanceForSecondaryResults, progressTracker[pairIdx].secondaryResultBufferSize, &progressTracker[pairIdx].nSecondaryResults, &progressTracker[pairIdx].results[1], maxSecondaryAlignmentsToReturn, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, progressTracker[pairIdx].popularSeedsSkipped, probabilityOfBestPair, bestClusterIdx, unclusteredPenalty, clusterEDCompensation);
+			bool secondaryBufferOverflow = progressTracker[pairIdx].aligner->align_phase_3(maxEditDistanceForSecondaryResults, progressTracker[pairIdx].secondaryResultBufferSize, &progressTracker[pairIdx].nSecondaryResults, &progressTracker[pairIdx].results[1], maxSecondaryAlignmentsToReturn, progressTracker[pairIdx].bestPairScore, progressTracker[pairIdx].bestResultGenomeLocation, progressTracker[pairIdx].bestResultDirection, progressTracker[pairIdx].probabilityOfAllPairs, progressTracker[pairIdx].bestResultScore, progressTracker[pairIdx].popularSeedsSkipped, progressTracker[pairIdx].probabilityOfBestPair, progressTracker[pairIdx].bestClusterIdx, unclusteredPenalty, clusterEDCompensation);
 
 			if (secondaryBufferOverflow) {
 				progressTracker[pairIdx].nSingleEndSecondaryResults[0] = progressTracker[pairIdx].nSingleEndSecondaryResults[1] = 0;
 				progressTracker[pairIdx].nSecondaryResults = progressTracker[pairIdx].secondaryResultBufferSize + 1; // So the caller knows it's the paired secondary buffer that overflowed
 				barcodeFinished = false;
-				continue;//return false;
+				continue; //return false;
 			}
 			else {
-				progressTracker[pairIdx].aligner->align_phase_4(read0, read1, &progressTracker[pairIdx].results[0], maxEditDistanceForSecondaryResults, &progressTracker[pairIdx].nSecondaryResults, &progressTracker[pairIdx].results[1], maxSecondaryAlignmentsToReturn, progressTracker[pairIdx].popularSeedsSkipped, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, probabilityOfBestPair, bestClusterIdx);
+				progressTracker[pairIdx].pairLocated = true;
+				// Only sort secondary results
+				qsort(&progressTracker[pairIdx].results[1], progressTracker[pairIdx].nSecondaryResults, sizeof(PairedAlignmentResult), PairedAlignmentResult::compareByClusterIdx);
+
+				// Update maxClusterIdx
+				if (maxClusterIdx < progressTracker[pairIdx].bestClusterIdx)
+					maxClusterIdx = progressTracker[pairIdx].bestClusterIdx;
+				if (progressTracker[pairIdx].nSecondaryResults > 0 && maxClusterIdx < progressTracker[pairIdx].results[1].clusterIdx)
+					maxClusterIdx = progressTracker[pairIdx].bestClusterIdx;
+
+				// Register major result's clusterIdx
+				mappedPairsPerCluster[progressTracker[pairIdx].bestClusterIdx] += 1;
+
+				int prevClusterIdx = -1;
+				for (unsigned resultIdx = 1; resultIdx < progressTracker[pairIdx].nSecondaryResults + 1; resultIdx++) {
+					// We have a valid cluster and it is different from the bestClusterIdx (because bestClusterIdx is already registered)
+					if (progressTracker[pairIdx].results[resultIdx].clusterIdx != -1 && progressTracker[pairIdx].results[resultIdx].clusterIdx != progressTracker[pairIdx].bestClusterIdx) {
+						if (progressTracker[pairIdx].results[resultIdx].clusterIdx != prevClusterIdx)
+							mappedPairsPerCluster[progressTracker[pairIdx].results[resultIdx].clusterIdx]++;
+
+						prevClusterIdx = progressTracker[pairIdx].results[resultIdx].clusterIdx;
+					}
+				}
 			}
+		}
+	}
+
+	return barcodeFinished;
+}
+
+
+bool TenXClusterAligner::checkClusterStabilized() {
+	bool stabilized = true;
+	// Validate clusters
+	for (unsigned clusterIdx = 0; clusterIdx < maxClusterIdx; clusterIdx++)
+	{
+		// Check > 0 because we don't care if a cluster has 0 reads (should not happen but might happen later on)
+		if (clusterIsValid[clusterIdx] && mappedPairsPerCluster[clusterIdx] > 0 && mappedPairsPerCluster[clusterIdx] < minPairsPerCluster) {
+			clusterIsValid[clusterIdx] = false;
+			stabilized = false;
+		}
+	}
+
+	stabilized = false;
+	return stabilized;
+}
+
+
+void TenXClusterAligner::align_thrid_stage(
+	int						maxEditDistanceForSecondaryResults,
+	_int64					maxSecondaryAlignmentsToReturn
+)
+{
+	//First count the number of reads per cluster.
+	for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
+			Read *read0 = progressTracker[pairIdx].pairedReads[0];
+			Read *read1 = progressTracker[pairIdx].pairedReads[1];
+
+			progressTracker[pairIdx].aligner->align_phase_4(read0, read1, &progressTracker[pairIdx].results[0], maxEditDistanceForSecondaryResults, &progressTracker[pairIdx].nSecondaryResults, &progressTracker[pairIdx].results[1], maxSecondaryAlignmentsToReturn, progressTracker[pairIdx].popularSeedsSkipped, progressTracker[pairIdx].bestPairScore, progressTracker[pairIdx].bestResultGenomeLocation, progressTracker[pairIdx].bestResultDirection, progressTracker[pairIdx].probabilityOfAllPairs, progressTracker[pairIdx].bestResultScore, progressTracker[pairIdx].probabilityOfBestPair, progressTracker[pairIdx].bestClusterIdx);
 
 			/* timing no longer makes sence
 			_int64 start = timeInNanos();
@@ -482,7 +546,7 @@ bool TenXClusterAligner::align_second_stage(
 			result[pairIdx]->nanosInAlignTogether = end - start;
 			*/
 
-			progressTracker[pairIdx].results[0].nanosInAlignTogether = 0; //timing no longer makes sence
+			progressTracker[pairIdx].results[0].nanosInAlignTogether = 0; //timing for individual read no longer makes sence
 			progressTracker[pairIdx].results[0].fromAlignTogether = true;
 			progressTracker[pairIdx].results[0].alignedAsPair = true;
 
@@ -510,11 +574,10 @@ bool TenXClusterAligner::align_second_stage(
 			progressTracker[pairIdx].pairNotDone = false;
 		}
 	}
-	return barcodeFinished;
 }
 
 
-bool TenXClusterAligner::align_third_stage(
+bool TenXClusterAligner::align_forth_stage(
 	int maxEditDistanceForSecondaryResults,
 	_int64 maxSecondaryAlignmentsToReturn
 )
@@ -590,7 +653,7 @@ bool TenXClusterAligner::align_third_stage(
 
 bool TenXClusterAligner::align(
 	Read					**pairedReads,
-	unsigned				barcodeSize,
+	unsigned				barcodeSize_,
 	PairedAlignmentResult	**result,
 	int						maxEditDistanceForSecondaryResults,
 	_int64					*secondaryResultBufferSize,
@@ -602,11 +665,15 @@ bool TenXClusterAligner::align(
 	unsigned				*popularSeedsSkipped
 )
 {
-	if (align_first_stage(barcodeSize))
+	align_init_stage(barcodeSize_);
+	if (align_first_stage())
 		return true;
 	if (!align_second_stage(maxEditDistanceForSecondaryResults, maxSecondaryAlignmentsToReturn))
 		return false;
-	if (align_third_stage(maxEditDistanceForSecondaryResults, maxSecondaryAlignmentsToReturn))
+
+	align_second_stage(maxEditDistanceForSecondaryResults, maxSecondaryAlignmentsToReturn);
+
+	if (align_forth_stage(maxEditDistanceForSecondaryResults, maxSecondaryAlignmentsToReturn))
 		return true;
 	return false;
 }

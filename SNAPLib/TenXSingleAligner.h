@@ -588,6 +588,7 @@ private:
 struct TenXProgressTracker
 {
 	bool				pairNotDone;
+	bool				pairLocated;
 	bool				singleNotDone;
 	TenXSingleAligner	*aligner;
 	GenomeLocation		nextLoci; // Keep it here so that hopefully nextLoci be in cache.
@@ -601,10 +602,15 @@ struct TenXProgressTracker
 	_int64					singleSecondaryBufferSize;
 	_int64					nSecondaryResults;
 	_int64					nSingleEndSecondaryResults[NUM_READS_PER_PAIR];
-	//_int64					nSingleEndSecondaryResultsForFirstRead;
-	//_int64					nSingleEndSecondaryResultsForSecondRead;
 	unsigned				popularSeedsSkipped[NUM_READS_PER_PAIR];
 	bool					useful[NUM_READS_PER_PAIR];
+	unsigned				bestPairScore;
+	GenomeLocation			bestResultGenomeLocation[NUM_READS_PER_PAIR];
+	Direction				bestResultDirection[NUM_READS_PER_PAIR];
+	double					probabilityOfAllPairs;
+	unsigned				bestResultScore[NUM_READS_PER_PAIR];
+	double					probabilityOfBestPair;
+	int						bestClusterIdx;
 
 
 	static int compare(const void *a_raw, const void *b_raw)

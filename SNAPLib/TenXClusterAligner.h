@@ -45,6 +45,8 @@ public:
 		bool				noTruncation,
 		bool				ignoreALignmentAdjustmentsForOm,
 		TenXProgressTracker	*progressTracker_,
+		bool				*clusterIsValid_,
+		unsigned			*mappedPairsPerCluster_,
 		unsigned			maxBarcodeSize_,
 		unsigned			minPairsPerCluster_,
 		_uint64				minClusterSpan_,
@@ -67,7 +69,7 @@ public:
 	// First stage will call underlyingAligner->phase1 and phase2. First stage should be only called once
 	// Return true is no single read is worthy of further examination
 	bool align_first_stage(
-	unsigned				barcodeSize_
+		unsigned				barcodeSize_
 	);
 
 	// Second stage will call underlyingAligner->phase3 and phase4. First stage should be only called once
@@ -77,8 +79,17 @@ public:
 	_int64					maxSecondaryAlignmentsToReturn
 	);
 
-	// Third stage will handle single mappings.
-	bool align_third_stage(
+	// Return true if no more cluster change from true to false.
+	bool checkClusterStabilized();
+
+	// Third stage will clean up cluster mapping results.
+	void align_thrid_stage(
+	int maxEditDistanceForSecondaryResults,
+	_int64 maxSecondaryAlignmentsToReturn
+	);
+
+	// Forth stage will handle single mappings.
+	bool align_forth_stage(
 	int maxEditDistanceForSecondaryResults,
 	_int64 maxSecondaryAlignmentsToReturn
 	);
@@ -167,5 +178,10 @@ private:
 	// 10x update pointers
 	TenXProgressTracker *trackerRoot;
 	TenXProgressTracker *updateHolder;
+
+	// 10x cluster validation tracker
+	bool				*clusterIsValid;
+	unsigned			*mappedPairsPerCluster;
+	int					maxClusterIdx;
 
 };

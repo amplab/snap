@@ -531,6 +531,12 @@ void TenXAlignerContext::runIterationThread()
 	// Allocate the single aligners pointers (single + cluster)
 	TenXProgressTracker *tenXSingleTrackerArray = (TenXProgressTracker*)BigAlloc(sizeof(TenXProgressTracker) * maxBarcodeSize);
 
+	// Allocate the clusterIsValid for clusterAligner
+	bool *tenXClusterIsValid = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
+
+	// Allocate the clusterCounter for clusterAligner
+	unsigned *tenXMappedReadsCounter = (unsigned*)BigAlloc(sizeof(unsigned) * maxBarcodeSize);
+
 	//fprintf(stderr, "****Before going into the loop of allocating single aligners\n");
 
 	for (int singleAlignerIdx = 0; singleAlignerIdx < maxBarcodeSize; singleAlignerIdx++) {
@@ -556,6 +562,8 @@ void TenXAlignerContext::runIterationThread()
 		noTruncation,
 		ignoreAlignmentAdjustmentForOm,
 		tenXSingleTrackerArray,
+		tenXClusterIsValid,
+		tenXMappedReadsCounter,
 		maxBarcodeSize,
 		minPairsPerCluster,
 		minClusterSpan,
@@ -718,8 +726,12 @@ void TenXAlignerContext::runIterationThread()
 	_int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
 
-	// Stage 1, get seeds and stuff
-	bool barcodeFinished = aligner->align_first_stage(totalPairsForBarcode);
+
+	// Init, initialize data.
+	aligner->align_init_stage(totalPairsForBarcode);
+
+	// Stage 1, get seeds and find paired locations while keeping track of clusters
+	bool barcodeFinished = aligner->align_first_stage();
 	if (barcodeFinished)
 		return;
 
@@ -740,11 +752,13 @@ void TenXAlignerContext::runIterationThread()
 		}
 	}
 
-	// Stage 3, calculate ED and store single results
+	// Stage 3
+
+	// Stage 4, process single mapping for unmapped reads 
 	if(!noSingle) {
 		barcodeFinished = false;
 		while (true) {
-			barcodeFinished = aligner->align_third_stage(maxSecondaryAlignmentAdditionalEditDistance, maxSecondaryAlignments);
+			barcodeFinished = aligner->align_forth_stage(maxSecondaryAlignmentAdditionalEditDistance, maxSecondaryAlignments);
 			if (barcodeFinished)
 				break;
 			for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {

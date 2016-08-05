@@ -88,6 +88,24 @@ PairedAlignmentResult::compareByContigAndScore(const void *first_, const void *s
     }
 }
 
+    int
+PairedAlignmentResult::compareByClusterIdx(const void *first_, const void *second_)
+{
+    const PairedAlignmentResult *first = (PairedAlignmentResult *)first_;
+    const PairedAlignmentResult *second = (PairedAlignmentResult *)second_;
+
+    int firstClusterIdx = first->clusterIdx;
+    int secondClusterIdx = second->clusterIdx;
+
+    if (firstClusterIdx < secondClusterIdx) {
+        return 1;
+    } else if (firstClusterIdx > secondClusterIdx) {
+        return -1;
+    } else {
+        return 0;
+    }
+}
+
 int
 PairedAlignmentResult::compareByScore(const void *first_, const void *second_)
 {

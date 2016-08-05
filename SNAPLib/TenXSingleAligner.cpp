@@ -1106,6 +1106,7 @@ void TenXSingleAligner::align_phase_4(
 		}
 	}
 
+	//****10X unfinished yet! Needs to take cluster info into consideration!
 	int i = 0;
 	while (i < *nSecondaryResults) {
 		if ((int)(secondaryResults[i].score[0] + secondaryResults[i].score[1]) > (int)bestPairScore + maxEditDistanceForSecondaryResults ||
