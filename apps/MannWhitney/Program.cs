@@ -135,7 +135,7 @@ namespace MannWhitney
 
                 double p = MathNet.Numerics.Distributions.Normal.CDF(1.0, 1.0, z);
                 //
-                // We're doing two-tailed, so we need to see if this is on the other end]
+                // We're doing two-tailed, so we need to see if this is on the other end
                 bool reversed = false;
                 if (p > 0.5)
                 {

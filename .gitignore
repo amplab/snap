@@ -71,9 +71,11 @@ apps/MannWhitney/bin/Release/MathNet.Numerics.xml
 
 
 apps/GenerateScatterGraphs/bin/x64/Debug/
+apps/GenerateScatterGraphs/bin/Release/
 apps/GenerateScatterGraphs/bin/x64/Release/GenerateScatterGraphs.exe.config
 apps/GenerateScatterGraphs/bin/x64/Release/GenerateScatterGraphs.vshost.exe.config
 apps/GenerateScatterGraphs/bin/x64/Release/GenerateScatterGraphs.vshost.exe.manifest
+apps/GenerateScatterGraphs/bin/x64/Release/GenerateScatterGraphs.exe
 
 apps/ExpressionLib/bin/
 apps/ExpressionMetadata/bin/x64/Release/ExpressionLib.dll
