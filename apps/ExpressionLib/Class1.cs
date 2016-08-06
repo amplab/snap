@@ -609,6 +609,7 @@ namespace ExpressionLib
         {
             public AnalysisID analysis_id = null;
             public ParticipantID participant_id = null;
+            public Pathname allcountFileName = null;
             public Pathname bamFileName = null;
             public string bamHash = null;
             public Pathname baiFileName = null;
@@ -845,6 +846,8 @@ namespace ExpressionLib
                 {
                     experiment.maf = null;
                 }
+                experiment.NormalRNAAnalysis.allcountFileName = fields[17];
+                experiment.TumorRNAAnalysis.allcountFileName = fields[16];
 
                 experiments.Add(experiment);
             }
@@ -2005,7 +2008,67 @@ namespace ExpressionLib
         }
 
 
+        public struct MeanAndStdDev
+        {
+            public double mean;
+            public double stddev;
+        }
 
+        //
+        // Maps chromosomeName -> (offset -> MeanAndStdDev)
+        public static Dictionary<string, Dictionary<int, MeanAndStdDev>> LoadExpressionFile(string filename)
+        {
+            var expression = new Dictionary<string, Dictionary<int, ExpressionTools.MeanAndStdDev>>();
+
+            StreamReader reader = new StreamReader(filename);
+
+            string currentChromosome = null;
+            Dictionary<int, ExpressionTools.MeanAndStdDev> currentMapping = null;
+
+            string statLine;
+            while (null != (statLine = reader.ReadLine()))
+            {
+                string[] statLineFields = statLine.Split('\t');
+                if (statLineFields.Count() == 1)
+                {
+                    //
+                    // It's a chromosome header.
+                    //
+                    currentChromosome = statLine.ToLower();
+                    if (currentChromosome.Substring(0, 3) == "chr") // Clip off the leading "chr," if it exists
+                    {
+                        currentChromosome = currentChromosome.Substring(3);
+                    }
+                    currentMapping = new Dictionary<int, MeanAndStdDev>();
+                    expression.Add(currentChromosome, currentMapping);
+                    continue;
+                }
+
+                MeanAndStdDev stats = new MeanAndStdDev();
+                int chromosomeOffset = Convert.ToInt32(statLineFields[0]);
+                stats.mean = Convert.ToDouble(statLineFields[2]);
+                stats.stddev = Convert.ToDouble(statLineFields[3]);
+
+                if (stats.mean > 0 && stats.stddev > 0)
+                {
+                    currentMapping.Add(chromosomeOffset, stats);
+                }
+            }
+
+            return expression;
+        }
+
+        public static Dictionary<string, Experiment> BuildParticipantToExperimentMapping(List<Experiment> experiments)
+        {
+            var mapping = new Dictionary<string, Experiment>();
+
+            foreach (var experiment in experiments)
+            {
+                mapping.Add(experiment.participant.participantId, experiment);
+            }
+
+            return mapping;
+        }
 
     } // ExpressionTools
 

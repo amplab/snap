@@ -4,11 +4,11 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{BF4B5440-1F73-4D30-9868-7C92489020FF}</ProjectGuid>
+    <ProjectGuid>{A6AD6D38-BE73-453D-87B9-52DCBDD59587}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>GenerateScatterGraphs</RootNamespace>
-    <AssemblyName>GenerateScatterGraphs</AssemblyName>
+    <RootNamespace>CancerSpecificExpression</RootNamespace>
+    <AssemblyName>CancerSpecificExpression</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
   </PropertyGroup>
@@ -66,12 +66,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\ExpressionLib\ExpressionLib.csproj">
-      <Project>{6505d3d2-3994-4be6-8110-585070bcc955}</Project>
-      <Name>ExpressionLib</Name>
-    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

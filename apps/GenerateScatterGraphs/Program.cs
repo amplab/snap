@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.IO;
 using System.IO.Compression;
 using System.Diagnostics;
+using ExpressionLib;
 
 namespace GenerateScatterGraphs
 {
@@ -318,11 +319,7 @@ namespace GenerateScatterGraphs
 
         }
 
-        struct MeanAndStdDev
-        {
-            public double mean;
-            public double stddev;
-        }
+
         static void Main(string[] args)
         {
             bool useExpression = true;
@@ -417,7 +414,7 @@ namespace GenerateScatterGraphs
             Array.Sort(tumorRNA, (val1, val2) => string.Compare(RNALineToDesignator(val1), RNALineToDesignator(val2))); // Ordered by tumor type (with special ov_hg18)
 
             string loadedCancerType = "";
-            Dictionary<string, Dictionary<int,MeanAndStdDev>> expression = null;
+            Dictionary<string, Dictionary<int,ExpressionTools.MeanAndStdDev>> expression = null;
             Stopwatch stopwatch = null;
 
             //
@@ -458,42 +455,7 @@ namespace GenerateScatterGraphs
                     //
                     // Load in the expression file.  We do this the mininum number of times, because we sorted the RNA lines by tumor type already.
                     //
-                    expression = new Dictionary<string, Dictionary<int, MeanAndStdDev>>();
-
-                    StreamReader reader = new StreamReader(@"f:\sequence\reads\tcga\expression\expression_" + designator);
-
-                    string currentChromosome = null;
-                    Dictionary<int, MeanAndStdDev> currentMapping = null;
-
-                    string statLine;
-                    while (null != (statLine = reader.ReadLine()))
-                    {
-                        string[] statLineFields = statLine.Split('\t');
-                        if (statLineFields.Count() == 1)
-                        {
-                            //
-                            // It's a chromosome header.
-                            //
-                            currentChromosome = statLine.ToLower();
-                            if (currentChromosome.Substring(0, 3) == "chr") // Clip off the leading "chr," if it exists
-                            {
-                                currentChromosome = currentChromosome.Substring(3); 
-                            }
-                            currentMapping = new Dictionary<int, MeanAndStdDev>();
-                            expression.Add(currentChromosome, currentMapping);
-                            continue;
-                        }
-
-                        MeanAndStdDev stats = new MeanAndStdDev();
-                        int chromosomeOffset = Convert.ToInt32(statLineFields[0]);
-                        stats.mean = Convert.ToDouble(statLineFields[2]);
-                        stats.stddev = Convert.ToDouble(statLineFields[3]);
-
-                        if (stats.mean > 0 && stats.stddev > 0)
-                        {
-                            currentMapping.Add(chromosomeOffset, stats);
-                        }
-                    }
+                    expression = ExpressionTools.LoadExpressionFile(@"f:\sequence\reads\tcga\expression\expression_" + designator);
                 }
 
                 string tumorSampleID = fields[34];
