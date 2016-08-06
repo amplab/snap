@@ -38,6 +38,13 @@ obj
 *.pdb
 *.log
 *.unsuccessfulbuild
+/snap/*.vcxproj
+/SNAPLib/*.vcxproj
+/ComputeROC/*.vcxproj
+/wc/*.vcxproj
+/ToFASTQ/*.vcxproj
+/test/*.vcxproj
+/SNAPCommand/*.vcxproj
 
 # Compiled binaries
 /snap
