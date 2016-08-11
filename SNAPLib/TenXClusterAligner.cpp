@@ -343,9 +343,8 @@ bool TenXClusterAligner::align_first_stage(
 	maxClusterIdx = -1;
 
 	for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
-		clusterIsValid[pairIdx] = true;
+		clusterIsValid[pairIdx] = false;
 		mappedPairsPerCluster[pairIdx] = 0;
-		progressTracker[pairIdx].pairLocated = false;
 
 		if (progressTracker[pairIdx].pairNotDone) {
 			progressTracker[pairIdx].results[0].status[0] = progressTracker[pairIdx].results[0].status[1] = NotFound;
@@ -369,7 +368,6 @@ bool TenXClusterAligner::align_first_stage(
 				progressTracker[pairIdx].results[0].nSmallHits = 0;
 
 				progressTracker[pairIdx].pairNotDone = false;
-				progressTracker[pairIdx].pairLocated = false;
 				progressTracker[pairIdx].singleNotDone = false;
 				continue;//return true;
 			}
@@ -459,7 +457,7 @@ bool TenXClusterAligner::align_second_stage(
 {
 	bool barcodeFinished = true;
 	for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
-		if (progressTracker[pairIdx].pairNotDone && !progressTracker[pairIdx].pairLocated) {
+		if (progressTracker[pairIdx].pairNotDone) {
 			Read *read0 = progressTracker[pairIdx].pairedReads[0];
 			Read *read1 = progressTracker[pairIdx].pairedReads[1];
 
@@ -479,31 +477,6 @@ bool TenXClusterAligner::align_second_stage(
 				barcodeFinished = false;
 				continue; //return false;
 			}
-			else {
-				progressTracker[pairIdx].pairLocated = true;
-				// Only sort secondary results
-				qsort(&progressTracker[pairIdx].results[1], progressTracker[pairIdx].nSecondaryResults, sizeof(PairedAlignmentResult), PairedAlignmentResult::compareByClusterIdx);
-
-				// Update maxClusterIdx
-				if (maxClusterIdx < progressTracker[pairIdx].bestClusterIdx)
-					maxClusterIdx = progressTracker[pairIdx].bestClusterIdx;
-				if (progressTracker[pairIdx].nSecondaryResults > 0 && maxClusterIdx < progressTracker[pairIdx].results[1].clusterIdx)
-					maxClusterIdx = progressTracker[pairIdx].bestClusterIdx;
-
-				// Register major result's clusterIdx
-				mappedPairsPerCluster[progressTracker[pairIdx].bestClusterIdx] += 1;
-
-				int prevClusterIdx = -1;
-				for (unsigned resultIdx = 1; resultIdx < progressTracker[pairIdx].nSecondaryResults + 1; resultIdx++) {
-					// We have a valid cluster and it is different from the bestClusterIdx (because bestClusterIdx is already registered)
-					if (progressTracker[pairIdx].results[resultIdx].clusterIdx != -1 && progressTracker[pairIdx].results[resultIdx].clusterIdx != progressTracker[pairIdx].bestClusterIdx) {
-						if (progressTracker[pairIdx].results[resultIdx].clusterIdx != prevClusterIdx)
-							mappedPairsPerCluster[progressTracker[pairIdx].results[resultIdx].clusterIdx]++;
-
-						prevClusterIdx = progressTracker[pairIdx].results[resultIdx].clusterIdx;
-					}
-				}
-			}
 		}
 	}
 
@@ -511,20 +484,45 @@ bool TenXClusterAligner::align_second_stage(
 }
 
 
-bool TenXClusterAligner::checkClusterStabilized() {
-	bool stabilized = true;
+
+void TenXClusterAligner::clusterResultCleanUp()
+{
+	for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
+		if (progressTracker[pairIdx].pairNotDone) {
+
+			// Only examine the results if it has any
+			if (progressTracker[pairIdx].nSecondaryResults > 0) {
+				// Sort all results (best result might be corrected later)
+				qsort(&progressTracker[pairIdx].results[1], progressTracker[pairIdx].nSecondaryResults, sizeof(PairedAlignmentResult), PairedAlignmentResult::compareByClusterIdx);
+
+				int prevClusterIdx = -1;
+				unsigned resultIdx;
+
+				for (resultIdx = 1; resultIdx < progressTracker[pairIdx].nSecondaryResults + 1; resultIdx++) {
+					// We have a valid cluster and it is different from the bestClusterIdx (because bestClusterIdx is already registered)
+					if (progressTracker[pairIdx].results[resultIdx].clusterIdx != -1 && progressTracker[pairIdx].results[resultIdx].clusterIdx != progressTracker[pairIdx].bestClusterIdx) {
+						if (progressTracker[pairIdx].results[resultIdx].clusterIdx != prevClusterIdx)
+							mappedPairsPerCluster[progressTracker[pairIdx].results[resultIdx].clusterIdx]++;
+
+						prevClusterIdx = progressTracker[pairIdx].results[resultIdx].clusterIdx;
+					}
+
+					// Update the maxClusterIdx if necessary
+					if (progressTracker[pairIdx].results[resultIdx].clusterIdx > maxClusterIdx)
+						maxClusterIdx = progressTracker[pairIdx].results[resultIdx].clusterIdx;
+				}
+			}
+		}
+	}
+
 	// Validate clusters
 	for (unsigned clusterIdx = 0; clusterIdx < maxClusterIdx; clusterIdx++)
 	{
 		// Check > 0 because we don't care if a cluster has 0 reads (should not happen but might happen later on)
-		if (clusterIsValid[clusterIdx] && mappedPairsPerCluster[clusterIdx] > 0 && mappedPairsPerCluster[clusterIdx] < minPairsPerCluster) {
-			clusterIsValid[clusterIdx] = false;
-			stabilized = false;
+		if (mappedPairsPerCluster[clusterIdx] >= minPairsPerCluster) {
+			clusterIsValid[clusterIdx] = true;
 		}
 	}
-
-	stabilized = false;
-	return stabilized;
 }
 
 
@@ -535,44 +533,43 @@ void TenXClusterAligner::align_thrid_stage(
 {
 	//First count the number of reads per cluster.
 	for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
-			Read *read0 = progressTracker[pairIdx].pairedReads[0];
-			Read *read1 = progressTracker[pairIdx].pairedReads[1];
+		Read *read0 = progressTracker[pairIdx].pairedReads[0];
+		Read *read1 = progressTracker[pairIdx].pairedReads[1];
 
-			progressTracker[pairIdx].aligner->align_phase_4(read0, read1, &progressTracker[pairIdx].results[0], maxEditDistanceForSecondaryResults, &progressTracker[pairIdx].nSecondaryResults, &progressTracker[pairIdx].results[1], maxSecondaryAlignmentsToReturn, progressTracker[pairIdx].popularSeedsSkipped, progressTracker[pairIdx].bestPairScore, progressTracker[pairIdx].bestResultGenomeLocation, progressTracker[pairIdx].bestResultDirection, progressTracker[pairIdx].probabilityOfAllPairs, progressTracker[pairIdx].bestResultScore, progressTracker[pairIdx].probabilityOfBestPair, progressTracker[pairIdx].bestClusterIdx);
+		progressTracker[pairIdx].aligner->align_phase_4(read0, read1, &progressTracker[pairIdx].results[0], maxEditDistanceForSecondaryResults, &progressTracker[pairIdx].nSecondaryResults, &progressTracker[pairIdx].results[1], maxSecondaryAlignmentsToReturn, progressTracker[pairIdx].popularSeedsSkipped, progressTracker[pairIdx].bestPairScore, progressTracker[pairIdx].bestResultGenomeLocation, progressTracker[pairIdx].bestResultDirection, progressTracker[pairIdx].probabilityOfAllPairs, progressTracker[pairIdx].bestResultScore, progressTracker[pairIdx].probabilityOfBestPair, progressTracker[pairIdx].bestClusterIdx);
 
-			/* timing no longer makes sence
-			_int64 start = timeInNanos();
-			_int64 end = timeInNanos();
-			result[pairIdx]->nanosInAlignTogether = end - start;
-			*/
+		/* timing no longer makes sence
+		_int64 start = timeInNanos();
+		_int64 end = timeInNanos();
+		result[pairIdx]->nanosInAlignTogether = end - start;
+		*/
 
-			progressTracker[pairIdx].results[0].nanosInAlignTogether = 0; //timing for individual read no longer makes sence
-			progressTracker[pairIdx].results[0].fromAlignTogether = true;
-			progressTracker[pairIdx].results[0].alignedAsPair = true;
+		progressTracker[pairIdx].results[0].nanosInAlignTogether = 0; //timing for individual read no longer makes sence
+		progressTracker[pairIdx].results[0].fromAlignTogether = true;
+		progressTracker[pairIdx].results[0].alignedAsPair = true;
 
-			if (forceSpacing) {
-				if (progressTracker[pairIdx].results[0].status[0] == NotFound) {
-					progressTracker[pairIdx].results[0].fromAlignTogether = false;
-				}
-				else {
-					_ASSERT(progressTracker[pairIdx].results[0].status[1] != NotFound); // If one's not found, so is the other
-				}
-				progressTracker[pairIdx].pairNotDone = false;
-				progressTracker[pairIdx].singleNotDone = false;
-				continue;//return true;
+		if (forceSpacing) {
+			if (progressTracker[pairIdx].results[0].status[0] == NotFound) {
+				progressTracker[pairIdx].results[0].fromAlignTogether = false;
 			}
-
-			if (progressTracker[pairIdx].results[0].status[0] != NotFound && progressTracker[pairIdx].results[0].status[1] != NotFound) {
-				//
-				// Not a chimeric read.
-				//
-				progressTracker[pairIdx].pairNotDone = false;
-				progressTracker[pairIdx].singleNotDone = false;
-				continue;//return true;
+			else {
+				_ASSERT(progressTracker[pairIdx].results[0].status[1] != NotFound); // If one's not found, so is the other
 			}
-			//paired analysis is done anyways
 			progressTracker[pairIdx].pairNotDone = false;
+			progressTracker[pairIdx].singleNotDone = false;
+			continue;//return true;
 		}
+
+		if (progressTracker[pairIdx].results[0].status[0] != NotFound && progressTracker[pairIdx].results[0].status[1] != NotFound) {
+			//
+			// Not a chimeric read.
+			//
+			progressTracker[pairIdx].pairNotDone = false;
+			progressTracker[pairIdx].singleNotDone = false;
+			continue;//return true;
+		}
+		//paired analysis is done anyways
+		progressTracker[pairIdx].pairNotDone = false;
 	}
 }
 

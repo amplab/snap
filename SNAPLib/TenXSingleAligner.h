@@ -588,7 +588,6 @@ private:
 struct TenXProgressTracker
 {
 	bool				pairNotDone;
-	bool				pairLocated;
 	bool				singleNotDone;
 	TenXSingleAligner	*aligner;
 	GenomeLocation		nextLoci; // Keep it here so that hopefully nextLoci be in cache.

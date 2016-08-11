@@ -93,6 +93,7 @@ struct PairedAlignmentResult {
 	_int64 nanosInAlignTogether;
 	unsigned nLVCalls;
 	unsigned nSmallHits;
+	double probability;
 	int clusterIdx;
 
     static int compareByContigAndScore(const void *first, const void *second);      // qsort()-style compare routine

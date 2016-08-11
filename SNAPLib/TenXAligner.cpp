@@ -535,7 +535,7 @@ void TenXAlignerContext::runIterationThread()
 	bool *tenXClusterIsValid = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
 
 	// Allocate the clusterCounter for clusterAligner
-	unsigned *tenXMappedReadsCounter = (unsigned*)BigAlloc(sizeof(unsigned) * maxBarcodeSize);
+	unsigned *tenXClusterPairsCounter = (unsigned*)BigAlloc(sizeof(unsigned) * maxBarcodeSize);
 
 	//fprintf(stderr, "****Before going into the loop of allocating single aligners\n");
 
@@ -563,7 +563,7 @@ void TenXAlignerContext::runIterationThread()
 		ignoreAlignmentAdjustmentForOm,
 		tenXSingleTrackerArray,
 		tenXClusterIsValid,
-		tenXMappedReadsCounter,
+		tenXClusterPairsCounter,
 		maxBarcodeSize,
 		minPairsPerCluster,
 		minClusterSpan,
@@ -576,37 +576,11 @@ void TenXAlignerContext::runIterationThread()
 
 	allocator->checkCanaries();
 
-	// Allocate space for read pointers
-	//Read **reads = (Read**)BigAlloc(sizeof(Read*) * NUM_READS_PER_PAIR * maxBarcodeSize);
-
-	// Allocate space for (paired and single) results
-	//PairedAlignmentResult **results = (PairedAlignmentResult**)BigAlloc(sizeof(PairedAlignmentResult*) * maxBarcodeSize);
-	//SingleAlignmentResult **singleSecondaryResults = (SingleAlignmentResult**)BigAlloc(sizeof(SingleAlignmentResult*) * maxBarcodeSize);
-
 	for (unsigned pairIdx = 0; pairIdx < maxBarcodeSize; pairIdx++) {
 		// Allocate data for result arrays
 		tenXSingleTrackerArray[pairIdx].results = (PairedAlignmentResult*)BigAlloc((1 + _maxPairedSecondaryHits_ref) * sizeof(PairedAlignmentResult)); // all paired results. "+1" is for the primary result
 		tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults = (SingleAlignmentResult*)BigAlloc(_maxSingleSecondaryHits_ref * sizeof(SingleAlignmentResult)); // all single results.
 	}
-
-	// Allocate space for secondary result counters
-	//_int64 *nSecondaryResults = (_int64*)BigAlloc(sizeof(_int64) * maxBarcodeSize);
-	//_int64 *nSingleSecondaryResults = (_int64*)BigAlloc(sizeof(_int64) * NUM_READS_PER_PAIR * maxBarcodeSize);
-
-	// Allocate space for secondary result capacity counters
-	//_int64 *maxPairedSecondaryHits = (_int64*)BigAlloc(sizeof(_int64) * maxBarcodeSize);
-	//_int64 *maxSingleSecondaryHits = (_int64*)BigAlloc(sizeof(_int64) * maxBarcodeSize);
-
-	// Allocate space for the extra allocation buffer tracker
-	//bool *reallocatedPairedSecondaryBuffer = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
-	//bool *reallocatedSingleSecondaryBuffer = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
-
-	// Allocate space for popularSeedsSkipped array
-	//unsigned *popularSeedsSkipped = (unsigned*)BigAlloc(sizeof(unsigned) * NUM_READS_PER_PAIR * maxBarcodeSize);
-
-	// Allocate space for useful0 and useful1
-	//bool *useful0 = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
-	//bool *useful1 = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
 
 
 	/*
@@ -727,11 +701,8 @@ void TenXAlignerContext::runIterationThread()
 #endif // TIME_HISTOGRAM
 
 
-	// Init, initialize data.
-	aligner->align_init_stage(totalPairsForBarcode);
-
 	// Stage 1, get seeds and find paired locations while keeping track of clusters
-	bool barcodeFinished = aligner->align_first_stage();
+	bool barcodeFinished = aligner->align_first_stage(totalPairsForBarcode);
 	if (barcodeFinished)
 		return;
 
@@ -872,15 +843,8 @@ void TenXAlignerContext::runIterationThread()
 
 	allocator->checkCanaries();
 
-	//BigDealloc(reads);
-
-	//BigDealloc(maxPairedSecondaryHits);
-	//BigDealloc(maxSingleSecondaryHits);
-
-	//BigDealloc(popularSeedsSkipped);
-
-	//BigDealloc(useful0);
-	//BigDealloc(useful1);
+	BigDealloc(tenXClusterIsValid);
+	BigDealloc(tenXClusterPairsCounter);
 
 	for (unsigned pairIdx = 0; pairIdx < maxBarcodeSize; pairIdx++) {
 		BigDealloc(tenXSingleTrackerArray[pairIdx].results);
@@ -889,11 +853,6 @@ void TenXAlignerContext::runIterationThread()
 		BigDealloc(tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults);
 		tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults = NULL;
 	}
-
-	//BigDealloc(nSecondaryResults);
-	//BigDealloc(nSingleSecondaryResults);
-	//BigDealloc(results);
-	//BigDealloc(singleSecondaryResults);
 
 	for (unsigned singleAlignerIdx = 0; singleAlignerIdx < maxBarcodeSize; singleAlignerIdx++) {
 		tenXSingleTrackerArray[singleAlignerIdx].aligner->~TenXSingleAligner();
@@ -904,7 +863,6 @@ void TenXAlignerContext::runIterationThread()
 	BigDealloc(tenXSingleTrackerArray);
 	delete supplier;
 
-	//fflush(stderr);
 	delete allocator;
 }
 

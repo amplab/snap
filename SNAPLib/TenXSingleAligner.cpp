@@ -708,7 +708,6 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 
 	unsigned currentBestPossibleScoreList = 0;
 	unsigned scoreLimit = maxK + extraSearchDepth;
-    unsigned worstED = scoreLimit;
 	//
 	// Loop until we've scored all of the candidates, or proven that what's left must have too high of a score to be interesting.
 	//
@@ -762,10 +761,12 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 			for (;;) {
 
 				//**** 10X surrogates
-				if (candidate->clusterIdx == -1)
-					compensatedScoreLimit = scoreLimit;
-				else
-					compensatedScoreLimit = scoreLimit + clusterEDCompensation;
+				unsigned EDCompensation = 0;
+
+				if (candidate->clusterIdx != -1)
+					EDCompensation = clusterEDCompensation;
+
+				compensatedScoreLimit = scoreLimit + EDCompensation;
 				//**** 10X surrogates
 
 				ScoringMateCandidate *mate = &scoringMateCandidates[candidate->whichSetPair][mateIndex];
@@ -844,7 +845,8 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 						}
 
 						bool merged;
-						unsigned oldPairED = 0;
+						unsigned compensatedEDIdx = pairScore + clusterEDCompensation - EDCompensation;
+						unsigned oldCompensatedEDIdx = 0;
 						double oldPairProbability;
 
 						if (NULL == mergeAnchor) {
@@ -866,7 +868,7 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 						}
 						else {
 							merged = mergeAnchor->checkMerge(mate->readWithMoreHitsGenomeLocation + mate->genomeOffset, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset,
-								pairProbability, pairScore, &oldPairED, &oldPairProbability);
+								pairProbability, compensatedEDIdx, &oldCompensatedEDIdx, &oldPairProbability);
 						}
 
 						if (!merged) {
@@ -876,10 +878,7 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 							// was no merge, the oldPairProbability is 0.
 							//
 
-							if (oldPairED <= maxK) {
-								probabilityForED[oldPairED] = __max(0, probabilityForED[oldPairED] - oldPairProbability);
-								probabilityOfAllPairs = __max(0, probabilityOfAllPairs - oldPairProbability);
-							}
+							probabilityForED[oldCompensatedEDIdx] = __max(0, probabilityForED[oldCompensatedEDIdx] - oldPairProbability);
 
 							// New ED lower bound. Need to do some cleaning up.
 							if (pairScore + extraSearchDepth < worstED) {
@@ -964,6 +963,7 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 									secondaryResult->score[readWithFewerHits] = fewerEndScore;
 									secondaryResult->status[readWithFewerHits] = secondaryResult->status[readWithMoreHits] = MultipleHits;
 									secondaryResult->clusterIdx = candidate->clusterIdx;
+									secondaryResult->probability = pairProbability;
 
 									(*nSecondaryResults)++;
 								}

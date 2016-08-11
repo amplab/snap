@@ -81,6 +81,7 @@ public:
 
 	// Return true if no more cluster change from true to false.
 	bool checkClusterStabilized();
+	void clusterResultCleanUp();
 
 	// Third stage will clean up cluster mapping results.
 	void align_thrid_stage(
