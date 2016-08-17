@@ -495,8 +495,7 @@ int main(int argc, char* argv[])
 
                         regions->insert(newRegion);
                         coveredUpTo = newRegion->end;
-                    }
-                    else {
+                    } else {
                         //
                         // The region before us covers our start.
                         //
@@ -511,8 +510,7 @@ int main(int argc, char* argv[])
                             region->end = coveredUpTo;
                             newRegion->start = coveredUpTo;
                             regions->insert(newRegion);
-                        }
-                        else {
+                        } else {
                             //
                             // It starts exactly where we do.
                             //
@@ -633,8 +631,7 @@ int main(int argc, char* argv[])
                         }
                     }
                     sawZero = false;
-                }
-                else {
+                } else {
                     sawZero = true;
                     nConsecutive = 0;
                     mostRecentValue = -1;
@@ -648,8 +645,7 @@ int main(int argc, char* argv[])
 
         } // for each contig
         fprintf(outputFile, "**done**\n");
-    }
-    else {
+    } else {
         fprintf(outputFile, "%s\tExonHits(%lld)\tIsoformHits(%lld)\tFracIsoformHits\tv1.0\n", headerBuffer, ExonHits, IsoformHits);
 
         for (Isoform *isoform = isoforms; NULL != isoform; isoform = isoform->next) {

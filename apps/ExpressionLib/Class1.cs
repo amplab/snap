@@ -299,6 +299,7 @@ namespace ExpressionLib
             public FileInfo baiInfo = null;
             public FileInfo vcfInfo = null;
             public FileInfo allCountInfo = null;
+            public FileInfo regionalExpressionInfo = null;
             public long totalSize = 0;
             public bool needed = false; // Do we need this as input for some experiment?
             public bool isRealingned = false;   // Was this realined, or is it straight from TCGA
@@ -468,6 +469,22 @@ namespace ExpressionLib
                                 }
                             }
                         }
+                        else if (file.Count() > 24 && file.Substring(file.Count() - 24).ToLower() == ".regional_expression.txt")
+                        {
+                            string expectedFileName = analysisID + ".regional_expression.txt";
+                            if (file.Count() < expectedFileName.Count() || file.Substring(file.Count() - expectedFileName.Count()) != expectedFileName)
+                            {
+                                Console.WriteLine("Incorrect regional expression file " + file);
+                            }
+                            else
+                            {
+                                storedBAM.regionalExpressionInfo = new FileInfo(file);
+                                if (storedBAM.regionalExpressionInfo.Length < 1 * 1024 * 1024)
+                                {
+                                    Console.WriteLine("Unusually small regional expression file " + file + ", " + storedBAM.regionalExpressionInfo.Length);
+                                }
+                            }
+                        }
                         else
                         {
                             Console.WriteLine("Saw unexpected file " + file);
@@ -610,6 +627,7 @@ namespace ExpressionLib
             public AnalysisID analysis_id = null;
             public ParticipantID participant_id = null;
             public Pathname allcountFileName = null;
+            public Pathname regionalExpressionFileName = null;
             public Pathname bamFileName = null;
             public string bamHash = null;
             public Pathname baiFileName = null;
@@ -690,7 +708,7 @@ namespace ExpressionLib
             StreamWriter outputFile = new StreamWriter(filename);
 
             outputFile.WriteLine("disease_abbr\treference\tparticipantID\tTumorRNAAnalysis\tTumorDNAAnalysis\tNormalDNAAnalysis\tNormalRNAAnalysis\ttumorRNAPathname\ttumorDNAPathname\t" +
-                "normalDNAPathname\tNormalRNAPathname\tVCFPathname\tgender\tdaysToBirth\tdaysToDeath\tOrigTumorDNAAliquotID\tTumorAllcountFile\tNormalAllcountFile\tmafFile");
+                "normalDNAPathname\tNormalRNAPathname\tVCFPathname\tgender\tdaysToBirth\tdaysToDeath\tOrigTumorDNAAliquotID\tTumorAllcountFile\tNormalAllcountFile\tmafFile\tRegionalExpressionFilename");
 
             foreach (Experiment experiment in experiments)
             {
@@ -806,6 +824,15 @@ namespace ExpressionLib
 
                 outputFile.Write(experiment.participant.mafFile + "\t");
 
+                if (experiment.TumorRNAAnalysis.regionalExpressionFileName == null)
+                {
+                    outputFile.Write("\t");
+                }
+                else
+                {
+                    outputFile.Write(experiment.TumorRNAAnalysis.regionalExpressionFileName + "\t");
+                }
+
                 outputFile.WriteLine();
             }
 
@@ -846,8 +873,13 @@ namespace ExpressionLib
                 {
                     experiment.maf = null;
                 }
-                experiment.NormalRNAAnalysis.allcountFileName = fields[17];
+
+                if (null != experiment.NormalRNAAnalysis)
+                {
+                    experiment.NormalRNAAnalysis.allcountFileName = fields[17];
+                }
                 experiment.TumorRNAAnalysis.allcountFileName = fields[16];
+                experiment.TumorRNAAnalysis.regionalExpressionFileName = fields[17];
 
                 experiments.Add(experiment);
             }
@@ -1576,6 +1608,16 @@ namespace ExpressionLib
                     if (record.storedBAM.bamInfo.Length + record.storedBAM.baiInfo.Length != record.totalFileSize)
                     {
                         Console.WriteLine("File size mismatch for " + record.storedBAM.bamInfo.FullName + " should have total size " + record.totalFileSize + " but has " + record.storedBAM.bamInfo.Length + record.storedBAM.baiInfo.Length);
+                    }
+
+                    if (record.storedBAM.allCountInfo != null)
+                    {
+                        record.allcountFileName = record.storedBAM.allCountInfo.FullName;
+                    }
+
+                    if (record.storedBAM.regionalExpressionInfo != null)
+                    {
+                        record.regionalExpressionFileName = record.storedBAM.regionalExpressionInfo.FullName;
                     }
                 }
                 else

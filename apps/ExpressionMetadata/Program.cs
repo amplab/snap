@@ -2061,8 +2061,87 @@ namespace ExpressionMetadata
             Console.WriteLine("" + nNeedingChrState + " of " + n + " bams need to have their chr state measured.");
         }
 
+        static void AddRegionalExpressionProgramRunToScript(StreamWriter script, List<ParticipantID> participants)
+        {
+            if (participants.Count() == 0) {
+                return;
+            }
+            string line = /*@"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr" +*/ @"\\gcr\scratch\b99\bolosky\RegionalExpression \\msr-genomics-0\d$\sequence\reads\tcga\expression\ 1000 ";
+            foreach (var participant in participants) {
+                line = line + participant + " ";
+            }
+            script.WriteLine(line);
+        }
+
+        static void GenerateRegionalExpressionScripts(List<ExpressionTools.Experiment> experiments)
+        {
+            int nWithRegionalExpression = 0;
+            int nInScript = 0;
+            int nNeedingPrecursors = 0;
+            var perDiseaseLines = new Dictionary<string, List<ParticipantID>>(); // Maps disease->list of analyses waiting to be run.
+
+            const int nDiseasesPerProgramRun = 100;
+
+            StreamWriter script = null;
+
+            foreach (var experiment in experiments)
+            {
+                if (experiment.TumorRNAAnalysis.storedBAM == null)
+                {
+                    nNeedingPrecursors++;
+                }
+                else if (experiment.TumorRNAAnalysis.storedBAM.regionalExpressionInfo != null)
+                {
+                    nWithRegionalExpression++;
+                }
+                else
+                {
+                    nInScript++;
+
+                    if (script == null)
+                    {
+                        var createJobScript = new StreamWriter(baseDirectory + "createRegionalExpressionjob.cmd");
+                        createJobScript.WriteLine(@"job new /emailaddress:bolosky@microsoft.com /nodegroup:B99,ExpressQ /exclusive:true /failontaskfailure:false /jobname:regionalExpression /memorypernode:100000 /notifyoncompletion:true /numnodes:1-20 /runtime:12:00 /scheduler:gcr /jobtemplate:ExpressQ /estimatedprocessmemory:100000");
+                        createJobScript.Close();
+                        script = new StreamWriter(baseDirectory + @"runRegionalExpression.cmd");
+                    }
+
+                    string disease_abbr;
+                    if (experiment.disease_abbr == "ov" && experiment.TumorRNAAnalysis.refassemShortName == "ncbi36_bccagsc_variant")
+                    {
+                        disease_abbr = "ov_hg18";    // Special case, since this is aligned against two different references
+                    } else {
+                        disease_abbr = experiment.disease_abbr;
+                    }
+
+                    if (!perDiseaseLines.ContainsKey(disease_abbr)) {
+                        perDiseaseLines.Add(disease_abbr, new List<ParticipantID>());
+                    }
+
+                    perDiseaseLines[disease_abbr].Add(experiment.participant.participantId);
+                    if (perDiseaseLines[disease_abbr].Count() >= nDiseasesPerProgramRun) {
+                        AddRegionalExpressionProgramRunToScript(script, perDiseaseLines[disease_abbr]);
+                        perDiseaseLines[disease_abbr] = new List<ParticipantID>();
+                    }
+                }
+            } // foreach experiment
+
+            if (null != script) {
+                foreach (var entry in perDiseaseLines) {
+                    AddRegionalExpressionProgramRunToScript(script, entry.Value);
+                }
+            }
+
+            script.Close();
+
+            Console.WriteLine(nWithRegionalExpression + " analyses have regional expression, generated a script to make " + nInScript + " more and " + nNeedingPrecursors + " need to have their RNA data downloaded first.");
+        }
+
         static void Main(string[] args)
         {
+            var timer = new Stopwatch();
+            timer.Start();
+
             hg18_likeReferences.Add("NCBI36_BCCAGSC_variant".ToLower());
             hg18_likeReferences.Add("NCBI36_BCM_variant".ToLower());
             hg18_likeReferences.Add("NCBI36_WUGSC_variant".ToLower());
@@ -2127,6 +2206,7 @@ namespace ExpressionMetadata
 
             var experiments = BuildExperiments(participants);
             ExpressionTools.DumpExperimentsToFile(experiments, baseDirectory + "experiments.txt");
+            GenerateRegionalExpressionScripts(experiments);
             GenerateTP53CountScripts(experiments);
             GenerateIsoformFileListsByDiseaseAndMutation(experiments);
             //GenerateMutationDistributionByGene(experiments);
@@ -2139,6 +2219,9 @@ namespace ExpressionMetadata
             GenerateExtractionScripts(experiments);
             GenerateVariantCallingScript(experiments);
             //GenerateLAMLMoves(tcgaRecords);
+
+            timer.Stop();
+            Console.WriteLine("Expression metadata took " + (timer.ElapsedMilliseconds + 500) / 1000 + "s.");
         }
     }
 }
