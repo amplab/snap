@@ -58,6 +58,7 @@ obj
 /apps/ResortConcatenatedGermlineVariants/bin
 /apps/CancerSpecificExpression/bin
 /apps/RegionalExpression/bin
+/apps/GenerateScatterGraphs/bin
 
 /apps/ExpressionMetadata/bin/x64/Debug
 /apps/ExpressionMetadata/bin/x64/Release/ExpressionMetadata.exe.config

@@ -934,7 +934,10 @@ namespace ExpressionMetadata
             }
 
             foreach (var entry in countByDisease) {
-                Console.WriteLine(entry.Key + ":" + entry.Value + " (" + readyToGoByDisease[entry.Key] + " ready to go, " + readyToGoExceptForNormalByDisease[entry.Key] + " if you don't count normal)");
+                if (entry.Value != readyToGoByDisease[entry.Key])
+                {
+                    Console.WriteLine(entry.Key + ":" + entry.Value + " (" + readyToGoByDisease[entry.Key] + " ready to go, " + readyToGoExceptForNormalByDisease[entry.Key] + " if you don't count normal)");
+                }
             }
 
             return experiments;
@@ -2061,12 +2064,12 @@ namespace ExpressionMetadata
             Console.WriteLine("" + nNeedingChrState + " of " + n + " bams need to have their chr state measured.");
         }
 
-        static void AddRegionalExpressionProgramRunToScript(StreamWriter script, List<ParticipantID> participants)
+        static void AddRegionalExpressionProgramRunToScript(StreamWriter script, List<ParticipantID> participants, string disease_abbr)
         {
             if (participants.Count() == 0) {
                 return;
             }
-            string line = /*@"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr" +*/ @"\\gcr\scratch\b99\bolosky\RegionalExpression \\msr-genomics-0\d$\sequence\reads\tcga\expression\ 1000 ";
+            string line = /*@"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr" +*/ @"RegionalExpression f:\sequence\reads\tcga\expression\expression_" + disease_abbr + " 1000 ";
             foreach (var participant in participants) {
                 line = line + participant + " ";
             }
@@ -2080,7 +2083,7 @@ namespace ExpressionMetadata
             int nNeedingPrecursors = 0;
             var perDiseaseLines = new Dictionary<string, List<ParticipantID>>(); // Maps disease->list of analyses waiting to be run.
 
-            const int nDiseasesPerProgramRun = 100;
+            const int nDiseasesPerProgramRun = 800; // The command line is limited to 32K and GUIDs are 36 characters plus one for the space.  800 * 37 < 30K, so there's some headroom for the program name & args
 
             StreamWriter script = null;
 
@@ -2120,7 +2123,7 @@ namespace ExpressionMetadata
 
                     perDiseaseLines[disease_abbr].Add(experiment.participant.participantId);
                     if (perDiseaseLines[disease_abbr].Count() >= nDiseasesPerProgramRun) {
-                        AddRegionalExpressionProgramRunToScript(script, perDiseaseLines[disease_abbr]);
+                        AddRegionalExpressionProgramRunToScript(script, perDiseaseLines[disease_abbr], disease_abbr);
                         perDiseaseLines[disease_abbr] = new List<ParticipantID>();
                     }
                 }
@@ -2128,7 +2131,7 @@ namespace ExpressionMetadata
 
             if (null != script) {
                 foreach (var entry in perDiseaseLines) {
-                    AddRegionalExpressionProgramRunToScript(script, entry.Value);
+                    AddRegionalExpressionProgramRunToScript(script, entry.Value, entry.Key);
                 }
             }
 

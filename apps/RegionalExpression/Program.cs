@@ -128,27 +128,38 @@ namespace RegionalExpression
         }
 
         static Dictionary<string, Dictionary<int, ExpressionTools.MeanAndStdDev>> expression = null;
-        static Dictionary<string, string> sampleToParticipantIDMap = null;
-        static Dictionary<string, ExpressionTools.Participant> participants = null;
-        static List<ExpressionTools.Experiment> experiments = null;
-        static Dictionary<string, ExpressionTools.Experiment> participantToExperimentMapping = null;
-        static Dictionary<string, ExpressionTools.TCGARecord> tcgaRecords = null;
-        static Dictionary<string, ExpressionTools.Sample> allSamples = null;
+
         static int regionSize;
 
-        static void ProcessPeople(List<ExpressionTools.Experiment> experiments) {
+        class OneRun
+        {
+            public string allcountFilename;
+            public string analysis_id;
+            public string participantId;
+        }
+
+        static void ProcessRuns(List<OneRun> runs)
+        {
             while (true) {
 
-                ExpressionTools.Experiment experiment;
-                lock(experiments) {
-                    if (experiments.Count() == 0) {
+                string allcountFilename;
+                string analysis_id;
+                string participantId;
+                lock (runs)
+                {
+                    if (runs.Count() == 0)
+                    {
                         //
                         // No more work, we're done.
                         //
                         return;
                     }
-                    experiment = experiments[0];
-                    experiments.RemoveAt(0);
+
+                    allcountFilename = runs[0].allcountFilename;
+                    analysis_id = runs[0].analysis_id;
+                    participantId = runs[0].participantId;
+
+                    runs.RemoveAt(0);
                 }
 
 
@@ -157,7 +168,7 @@ namespace RegionalExpression
                 //
                 var allcountTimer = new Stopwatch();
                 allcountTimer.Start();
-                var allcountReader = new StreamReader(new GZipStream(new StreamReader(experiment.TumorRNAAnalysis.allcountFileName).BaseStream, CompressionMode.Decompress));
+                var allcountReader = new StreamReader(new GZipStream(new StreamReader(allcountFilename).BaseStream, CompressionMode.Decompress));
 
                 //
                 // The format is two header lines like:
@@ -189,27 +200,27 @@ namespace RegionalExpression
 
                 if (null == line || line.Count() < headerBeginning.Count() + 1 || line.Substring(0,headerBeginning.Count()) != headerBeginning)
                 {
-                    Console.WriteLine("Empty or corrupt allcount file " + experiment.TumorRNAAnalysis.allcountFileName);
+                    Console.WriteLine("Empty or corrupt allcount file " + allcountFilename);
                     continue;
                 }
 
                 if (line[headerBeginning.Count()] != '1')
                 {
-                    Console.WriteLine("Unsupported major version of allcount file " + experiment.TumorRNAAnalysis.allcountFileName + ".  Header line: " + line);
+                    Console.WriteLine("Unsupported major version of allcount file " + allcountFilename + ".  Header line: " + line);
                     continue;
                 }
 
                 line = allcountReader.ReadLine();
                 if (null == line)
                 {
-                    Console.WriteLine("Corrupt or tuncated allcount file " + experiment.TumorRNAAnalysis.allcountFileName);
+                    Console.WriteLine("Corrupt or tuncated allcount file " + allcountFilename);
                     continue;
                 }
 
                 var fields = line.Split(' ');
                 if (fields.Count() != 16)
                 {
-                    Console.WriteLine("Corrupt or tuncated allcount file " + experiment.TumorRNAAnalysis.allcountFileName + ".  Second line has " + fields.Count() + " fields: " + line);
+                    Console.WriteLine("Corrupt or tuncated allcount file " + allcountFilename + ".  Second line has " + fields.Count() + " fields: " + line);
                     continue;
                 }
 
@@ -220,7 +231,7 @@ namespace RegionalExpression
                 }
                 catch (FormatException)
                 {
-                    Console.WriteLine("Format exception parsing mapped HQ read count for file " + experiment.TumorRNAAnalysis.allcountFileName + " from line: " + line);
+                    Console.WriteLine("Format exception parsing mapped HQ read count for file " + allcountFilename + " from line: " + line);
                     continue;
                 }
 
@@ -228,13 +239,13 @@ namespace RegionalExpression
 
                 line = allcountReader.ReadLine();
                 if (null == line) {
-                    Console.WriteLine("Allcount file truncated before contig count: " + experiment.TumorRNAAnalysis.allcountFileName);
+                    Console.WriteLine("Allcount file truncated before contig count: " + allcountFilename);
                     continue;
                 }
 
                 const string numContigsLineBeginning = "NumContigs: ";
                 if (line.Count() < numContigsLineBeginning.Count() + 1 || line.Substring(0, numContigsLineBeginning.Count()) != numContigsLineBeginning) {
-                    Console.WriteLine("Malformed NumContigs line in " + experiment.TumorRNAAnalysis.allcountFileName + ": " + line);
+                    Console.WriteLine("Malformed NumContigs line in " + allcountFilename + ": " + line);
                     continue;
                 }
 
@@ -242,12 +253,12 @@ namespace RegionalExpression
                 try {
                     numContigs = Convert.ToInt32(line.Substring(numContigsLineBeginning.Count()));
                 } catch (FormatException) {
-                    Console.WriteLine("Couldn't parse NumContigs line in file " + experiment.TumorRNAAnalysis.allcountFileName + ": " + line);
+                    Console.WriteLine("Couldn't parse NumContigs line in file " + allcountFilename + ": " + line);
                     continue;
                 }
                 
                 if (numContigs < 1) {
-                    Console.WriteLine("Invalid numContigs in " + experiment.TumorRNAAnalysis.allcountFileName + ": " + line);
+                    Console.WriteLine("Invalid numContigs in " + allcountFilename + ": " + line);
                     continue;
                 }
 
@@ -264,14 +275,14 @@ namespace RegionalExpression
 
                     line = allcountReader.ReadLine();
                     if (null == line) {
-                        Console.WriteLine("File truncated in contig list " + experiment.TumorRNAAnalysis.allcountFileName);
+                        Console.WriteLine("File truncated in contig list " + allcountFilename);
                         fileCorrupt = true;
                         break;
                     }
 
                     fields = line.Split('\t');
                     if (fields.Count() != 2) {
-                        Console.WriteLine("Incorrect contig line format in file " + experiment.TumorRNAAnalysis.allcountFileName + ": " + line);
+                        Console.WriteLine("Incorrect contig line format in file " + allcountFilename + ": " + line);
                         fileCorrupt = true;
                         break;
                     }
@@ -280,7 +291,7 @@ namespace RegionalExpression
                     try {
                         contigs[whichContig].length = Convert.ToInt64(fields[1]);
                     } catch (FormatException) {
-                        Console.WriteLine("Incorrect contig line format in file " + experiment.TumorRNAAnalysis.allcountFileName + ": " + line);
+                        Console.WriteLine("Incorrect contig line format in file " + allcountFilename + ": " + line);
                         fileCorrupt = true;
                         break;
                     }
@@ -296,17 +307,17 @@ namespace RegionalExpression
 
                 whichContig = -1;
 
-                int indexOfLastSlash = experiment.TumorRNAAnalysis.allcountFileName.LastIndexOf('\\');
+                int indexOfLastSlash = allcountFilename.LastIndexOf('\\');
                 if (-1 == indexOfLastSlash) {
-                    Console.WriteLine("Couldn't find a backslash in allcount pathname, which is supposed to be absolute: " + experiment.TumorRNAAnalysis.allcountFileName);
+                    Console.WriteLine("Couldn't find a backslash in allcount pathname, which is supposed to be absolute: " + allcountFilename);
                     continue;
                 }
 
-                string directory = experiment.TumorRNAAnalysis.allcountFileName.Substring(0,indexOfLastSlash + 1);  // Includes trailing backslash
-                var outputFilename = directory + experiment.TumorRNAAnalysis.analysis_id + ".regional_expression.txt";
+                string directory = allcountFilename.Substring(0, indexOfLastSlash + 1);  // Includes trailing backslash
+                var outputFilename = directory + analysis_id + ".regional_expression.txt";
                 var outputFile = new StreamWriter(outputFilename);
 
-                outputFile.WriteLine("RegionalExpression v1.0\t" + experiment.TumorRNAAnalysis.analysis_id + "\t" + experiment.TumorRNAAnalysis.allcountFileName + "\t" + regionSize);
+                outputFile.WriteLine("RegionalExpression v1.0\t" + analysis_id + "\t" + allcountFilename + "\t" + regionSize);
                 outputFile.WriteLine("NumContigs: " + numContigs);
                 Region.printHeader(outputFile);
 
@@ -322,7 +333,7 @@ namespace RegionalExpression
                 {
                     if (sawDone)
                     {
-                        Console.WriteLine("File " + experiment.TumorRNAAnalysis.allcountFileName + " continues after **done** line: " + line);
+                        Console.WriteLine("File " + allcountFilename + " continues after **done** line: " + line);
                         fileCorrupt = true;
                         break;
                     }
@@ -335,7 +346,7 @@ namespace RegionalExpression
 
                     if (line.Count() == 0)
                     {
-                        Console.WriteLine("Unexpected blank line in " + experiment.TumorRNAAnalysis.allcountFileName);
+                        Console.WriteLine("Unexpected blank line in " + allcountFilename);
                         fileCorrupt = true;
                         break;
                     }
@@ -345,14 +356,14 @@ namespace RegionalExpression
                         whichContig++;
                         if (whichContig >= numContigs)
                         {
-                            Console.WriteLine("Saw too many contigs in " + experiment.TumorRNAAnalysis.allcountFileName + ": " + line);
+                            Console.WriteLine("Saw too many contigs in " + allcountFilename + ": " + line);
                             fileCorrupt = true;
                             break;
                         }
 
                         if (line.Substring(1).ToLower() != contigs[whichContig].name)
                         {
-                            Console.WriteLine("Unexpected contig in " + experiment.TumorRNAAnalysis.allcountFileName + ".  Expected " + contigs[whichContig].name + ", got ", line.Substring(1));
+                            Console.WriteLine("Unexpected contig in " + allcountFilename + ".  Expected " + contigs[whichContig].name + ", got ", line.Substring(1));
                             fileCorrupt = true;
                             break;
                         }
@@ -485,7 +496,7 @@ namespace RegionalExpression
 
                 if (!sawDone)
                 {
-                    Console.WriteLine("Truncated allcount file " + experiment.TumorRNAAnalysis.allcountFileName);
+                    Console.WriteLine("Truncated allcount file " + allcountFilename);
                     fileCorrupt = true;
                 }
 
@@ -498,19 +509,40 @@ namespace RegionalExpression
                 else
                 {
                     allcountTimer.Stop();
-                    Console.WriteLine("Processed " + experiment.participant.participantId + " in " + (allcountTimer.ElapsedMilliseconds + 500) / 1000 + "s");
+                    Console.WriteLine("Processed " + participantId + " in " + (allcountTimer.ElapsedMilliseconds + 500) / 1000 + "s");
                 }
             }
         }
 
         static void Main(string[] args)
         {
+
+
             if (args.Count() < 3) {
-                Console.WriteLine("usage: RegionalExpression expression_disease_file_directory regionSize <one or more participantIDs>");
+                Console.WriteLine("usage: RegionalExpression expression_disease_file regionSize <one or more participantIDs with the same disease>");
                 return;
             }
 
-            string expressionDirectory = args[0];
+            Stopwatch timer;
+            try
+            {
+                Console.Write("Loading expression file " + args[0] + "...");
+                timer = new Stopwatch();
+                timer.Start();
+
+                expression = null;  // Let the garbage collector get rid of the previous one while we're loading the next
+
+                expression = ExpressionTools.LoadExpressionFile(args[0]);   // This can take forever!
+
+                timer.Stop();
+                Console.WriteLine((timer.ElapsedMilliseconds + 500) / 1000 + "s");
+            }
+            catch (OutOfMemoryException)
+            {
+                Console.WriteLine("Out of memory exception loading the expresson file (I'm really not sure why this happens when there's plenty of memory).");
+                return;
+            }
+
             try {
                 regionSize = Convert.ToInt32(args[1]);
             } catch(FormatException) {
@@ -524,92 +556,57 @@ namespace RegionalExpression
                 return;
             }
 
-            //
-            // Add a trailing \ if it doesn't have one
-            //
-            if (expressionDirectory[expressionDirectory.Count() - 1] != '\\')
+            var experiments = File.ReadAllLines(@"\\gcr\scratch\b99\bolosky\experiments.txt");
+            var experimentsByParticipantId = new Dictionary<string, string[]>();
+            foreach (var experimentLine in experiments)
             {
-                expressionDirectory = expressionDirectory + @"\";
+                var fields = experimentLine.Split('\t');
+                experimentsByParticipantId.Add(fields[2], fields);
             }
 
-            tcgaRecords = ExpressionTools.LoadTCGARecords(null, null, @"\\gcr\scratch\b99\bolosky\tcga-all.xml");
-            ExpressionTools.LoadTCGARecordsForLocalRealigns(tcgaRecords, null, @"\\gcr\scratch\b99\bolosky\realigns.txt");
-            ExpressionTools.LoadTCGAAdditionalMetadata(tcgaRecords, @"\\bolosky\f$\sequence\reads\tcga\tcgaAdditionalMetadata.txt");
-          
-            participants = ExpressionTools.BuildParticipantData(tcgaRecords, out allSamples, @"\\gcr\scratch\b99\bolosky\clinical");
-
-            sampleToParticipantIDMap = ExpressionTools.CreateSampleToParticipantIDMap(tcgaRecords);
-            // do we really need these?  This is very slow and memory consumptive.  ExpressionTools.AddAllMAFFilesToParticipants(participants, sampleToParticipantIDMap, @"\\gcr\scratch\b99\bolosky\mafs\");
-            experiments = ExpressionTools.LoadExperimentsFromFile(@"\\gcr\scratch\b99\bolosky\experiments.txt", participants, tcgaRecords);
-
-            participantToExperimentMapping = ExpressionTools.BuildParticipantToExperimentMapping(experiments);
-
- 
-            string expressionDisease = "";
-
-            var peopleByDisease = new Dictionary<string, List<ExpressionTools.Experiment>>();
+            var runs = new List<OneRun>();
 
             for (int i = 2; i < args.Count(); i++)  // for each person we're processing
             {
-                ExpressionTools.Participant participant;
-                if (!participants.ContainsKey(args[i]))
+                string participantId = args[i];
+                if (!experimentsByParticipantId.ContainsKey(participantId))
                 {
                     Console.WriteLine("Couldn't find participant " + args[i] + ", are you sure it's a correct participant ID?");
                     return;
                 }
 
-                participant = participants[args[i]];
-                var experiment = participantToExperimentMapping[participant.participantId];
-                if (experiment.TumorRNAAnalysis == null || experiment.TumorRNAAnalysis.allcountFileName == null) {
-                    Console.WriteLine("Participant " + participant.participantId + " doesn't appear to have an allcount file");
+                string allcountFilename = experimentsByParticipantId[participantId][16];
+                if (allcountFilename == "")
+                {
+                    Console.WriteLine("Participant " + participantId + " doesn't appear to have an allcount file");
                     continue;
                 }
 
-                if (!peopleByDisease.ContainsKey(experiment.disease_abbr))
-                {
-                    peopleByDisease.Add(experiment.disease_abbr, new List<ExpressionTools.Experiment>());
-                }
+                var run = new OneRun();
+                run.allcountFilename = allcountFilename;
+                run.analysis_id = experimentsByParticipantId[participantId][3];
+                run.participantId = participantId;
 
-                peopleByDisease[experiment.disease_abbr].Add(experiment);
+                runs.Add(run);
             }
 
             //
-            // Now run a parallel phase for each disease.
+            // Process the runs in parallel
             //
-            foreach (var entry in peopleByDisease) {
-                //
-                // First, load the expression for that disease.
-                //
+            int totalNumberOfExperiments = experiments.Count();
+            timer.Reset();
+            timer.Start();
 
-                var experiment = entry.Value[0];
-                Console.Write("Loading expression file for " + experiment.disease_abbr + "...");
-                var timer = new Stopwatch();
-                timer.Start();
-
-                expression = null;  // Let the garbage collector get rid of the previous one while we're loading the next
-
-                expression = ExpressionTools.LoadExpressionFile(expressionDirectory + "expression_" + experiment.disease_abbr);   // This can take forever!
-                expressionDisease = experiment.disease_abbr;
-
-                timer.Stop();
-                Console.WriteLine((timer.ElapsedMilliseconds + 500) / 1000 + "s");
-
-                int totalNumberOfExperiments = experiments.Count();
-                timer.Reset();
-                timer.Start();
-
-                var threads = new List<Thread>();
-                for (int i = 0; i < Environment.ProcessorCount; i++) {
-                    threads.Add(new Thread(() => ProcessPeople(entry.Value)));
-                }
-
-                threads.ForEach(t => t.Start());
-                threads.ForEach(t => t.Join());
-
-                timer.Stop();
-                Console.WriteLine("Processed " + totalNumberOfExperiments + " experiments in " + (timer.ElapsedMilliseconds + 500) / 1000 + "seconds");
-
+            var threads = new List<Thread>();
+            for (int i = 0; i < Environment.ProcessorCount; i++) {
+                threads.Add(new Thread(() => ProcessRuns(runs)));
             }
-        }
+
+            threads.ForEach(t => t.Start());
+            threads.ForEach(t => t.Join());
+
+            timer.Stop();
+            Console.WriteLine("Processed " + (args.Count() - 2) + " experiments in " + (timer.ElapsedMilliseconds + 500) / 1000 + " seconds");
+         }
     }
 }
