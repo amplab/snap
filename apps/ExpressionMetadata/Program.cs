@@ -1504,18 +1504,7 @@ namespace ExpressionMetadata
 
         }
 
-        public static List<AnalysisID> LoadExcludedAnalyses() 
-        {
-            var excludedAnalyses = new List<AnalysisID>();
 
-            string [] analyses = File.ReadAllLines(@"f:\sequence\reads\tcga\excluded_analyses.txt");
-
-            foreach (var analysis in analyses) {
-                excludedAnalyses.Add(analysis.ToLower());
-            }
-
-            return excludedAnalyses;
-        }
 
 
         public static void AddAnalysisToMakeIsoformScript(ExpressionTools.TCGARecord analysis, Dictionary<Pathname, StreamWriter> scripts, string disease_abbr)
@@ -2133,11 +2122,50 @@ namespace ExpressionMetadata
                 foreach (var entry in perDiseaseLines) {
                     AddRegionalExpressionProgramRunToScript(script, entry.Value, entry.Key);
                 }
+                script.Close();
+            
             }
 
-            script.Close();
-
             Console.WriteLine(nWithRegionalExpression + " analyses have regional expression, generated a script to make " + nInScript + " more and " + nNeedingPrecursors + " need to have their RNA data downloaded first.");
+        }
+
+        static void CountTP53Mutations(List<ExpressionTools.Experiment> experiments)
+        {
+            var counts = new Dictionary<int, int>();
+            counts.Add(0, 0);
+            counts.Add(1, 0);
+
+            int nBiggerThanOne = 0;
+
+            foreach (var experiment in experiments)
+            {
+                int count = 0;
+                foreach (var mutation in experiment.participant.mafs[0])
+                {
+                    if (mutation.Hugo_symbol.ToLower() == "tp53")
+                    {
+                        count++;
+                    }
+                }
+
+                if (!counts.ContainsKey(count))
+                {
+                    counts.Add(count, 0);
+                }
+
+                counts[count]++;
+                if (count > 1)
+                {
+                    nBiggerThanOne++;
+                }
+            }
+
+            Console.WriteLine("" + counts[0] + " have no TP53 mutations, " +counts[1] + " have exactly one and " + nBiggerThanOne + " have more than one.");
+            foreach (var count in counts)
+            {
+                Console.WriteLine("" + count.Key + ": " + count.Value);
+            }
+
         }
 
         static void Main(string[] args)
@@ -2173,7 +2201,7 @@ namespace ExpressionMetadata
 
             //var geneToSize = GenerateSizeOfProteinCodingRegionMap();
 
-            List<AnalysisID> excludedAnalyses = LoadExcludedAnalyses();
+            List<AnalysisID> excludedAnalyses = ExpressionTools.LoadExcludedAnalyses();
 
             var tumorToMachineMapping = GenerateTumorToMachineMapping();
             var storedBAMs = LoadStoredBAMs(tumorToMachineMapping);
@@ -2204,10 +2232,12 @@ namespace ExpressionMetadata
             //var mutations = new Dictionary<string, Dictionary<string, List<ExpressionTools.MAFRecord>>>();
             ExpressionTools.AddAllMAFFilesToParticipants(participants, sampleToParticipantIDMap);
 
+
             //BuildMAFsByGene(participants);
             //AddCountsToMAFs(participants, allSamples);
 
             var experiments = BuildExperiments(participants);
+            CountTP53Mutations(experiments);
             ExpressionTools.DumpExperimentsToFile(experiments, baseDirectory + "experiments.txt");
             GenerateRegionalExpressionScripts(experiments);
             GenerateTP53CountScripts(experiments);

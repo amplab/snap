@@ -571,8 +571,8 @@ namespace RegionalExpression
                 string participantId = args[i];
                 if (!experimentsByParticipantId.ContainsKey(participantId))
                 {
-                    Console.WriteLine("Couldn't find participant " + args[i] + ", are you sure it's a correct participant ID?");
-                    return;
+                    Console.WriteLine("Couldn't find participant " + args[i] + ", are you sure it's a correct participant ID? Ignoring");
+                    continue;
                 }
 
                 string allcountFilename = experimentsByParticipantId[participantId][16];

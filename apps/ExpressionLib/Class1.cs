@@ -879,7 +879,7 @@ namespace ExpressionLib
                     experiment.NormalRNAAnalysis.allcountFileName = fields[17];
                 }
                 experiment.TumorRNAAnalysis.allcountFileName = fields[16];
-                experiment.TumorRNAAnalysis.regionalExpressionFileName = fields[17];
+                experiment.TumorRNAAnalysis.regionalExpressionFileName = fields[19];
 
                 experiments.Add(experiment);
             }
@@ -890,6 +890,18 @@ namespace ExpressionLib
         public class MAFRecord : IComparable<MAFRecord>
         {
             public string entire_maf_line;  // The raw line.
+
+            public string ReferenceClass()
+            {
+                if (NcbiBuild == "36")
+                {
+                    return "hg18";
+                }
+                else
+                {
+                    return "hg19";
+                }
+            }
 
             public string Hugo_symbol;
             public string center;
@@ -972,6 +984,7 @@ namespace ExpressionLib
 
             int tooShortLines = 0;
 
+            //
             // Do this in two phases.  First, parse all the MAF entries in the file into lists based on participant ID.  Then, add the lists to the participants.
             // Since none of the expriments we do care about mitochondrial mutations, we just filter them out here.
             //
@@ -1665,6 +1678,19 @@ namespace ExpressionLib
 
         } // LoadTCGAAdditionalMetadata
 
+        public static List<AnalysisID> LoadExcludedAnalyses()
+        {
+            var excludedAnalyses = new List<AnalysisID>();
+
+            string[] analyses = File.ReadAllLines(@"f:\sequence\reads\tcga\excluded_analyses.txt");
+
+            foreach (var analysis in analyses)
+            {
+                excludedAnalyses.Add(analysis.ToLower());
+            }
+
+            return excludedAnalyses;
+        }
 
         public static void LoadTCGARecordsForLocalRealigns(Dictionary<AnalysisID, ExpressionTools.TCGARecord> tcgaRecords, Dictionary<AnalysisID, ExpressionTools.StoredBAM> storedBAMs, string filename)
         {
