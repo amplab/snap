@@ -23,14 +23,16 @@ namespace RegionalExpression
 
         class Region
         {
-            public Region(int regionSize_, Dictionary<string, Dictionary<int, ExpressionTools.MeanAndStdDev>> expression_, long nHighQualityMappedNuclearReads_, StreamWriter outputFile_) {
+            public Region(int regionSize_, Dictionary<string, Dictionary<int, ExpressionTools.MeanAndStdDev>> expression_, Dictionary<string, int> highestOffsetForEachContig_, long nHighQualityMappedNuclearReads_, StreamWriter outputFile_) {
                 regionSize = regionSize_;
                 expression = expression_;
+                highestOffsetForEachContig = highestOffsetForEachContig_;
                 nHighQualityMappedNuclearReads = nHighQualityMappedNuclearReads_;
                 outputFile = outputFile_;
             }
 
             Dictionary<string, Dictionary<int, ExpressionTools.MeanAndStdDev>> expression;
+            Dictionary<string, int> highestOffsetForEachContig;
             int regionSize;
             long nHighQualityMappedNuclearReads;
             StreamWriter outputFile;
@@ -48,20 +50,49 @@ namespace RegionalExpression
             double minZForBasesWithBaselineExpression = 1000000000;
             double maxZForBasesWithBaselineExpression = -10000000000;
 
+            void ZeroRegion(int regionBaseOffset)
+            {
+                baseOffset = regionBaseOffset;
+                lastBaseSeen = baseOffset - 1;
+
+                closeRegion();
+            }
+
 
             public void processBase(string contig, int offset, long mappedReadCount)
             {
-                if (contig != currentContig || baseOffset + regionSize < offset)
-                {
+                if (contig != currentContig) {
+                    //
+                    // Zero out the rest of the contig.
+                    //
                     if (currentContig != "")
                     {
                         closeRegion();
+
+                        for (int i = baseOffset + regionSize; i <= highestOffsetForEachContig[currentContig]; i+= regionSize) {
+                            ZeroRegion(i);
+                        }
                     }
 
+                    baseOffset = offset - offset % regionSize;
+                    lastBaseSeen = baseOffset - 1;
                     currentContig = contig;
+
+                } else if (baseOffset + regionSize < offset) {
+                    //
+                    // Finish this region, and zero any with no expression.
+                    //
+                    closeRegion();
+
+                    int baseOffsetForNextRegionWithExpression = offset - offset % regionSize;
+                    for (int i = baseOffset + regionSize; i < baseOffsetForNextRegionWithExpression; i += regionSize) {
+                        ZeroRegion(i);
+                    }
+
                     baseOffset = offset - offset % regionSize;
                     lastBaseSeen = baseOffset - 1;
                 }
+ 
  
                 for (int i = lastBaseSeen + 1; i < offset; i++)
                 {
@@ -128,6 +159,7 @@ namespace RegionalExpression
         }
 
         static Dictionary<string, Dictionary<int, ExpressionTools.MeanAndStdDev>> expression = null;
+        static Dictionary<string, int> highestOffsetForEachContig = new Dictionary<string, int>();
 
         static int regionSize;
 
@@ -161,7 +193,6 @@ namespace RegionalExpression
 
                     runs.RemoveAt(0);
                 }
-
 
                 //
                 // Run through the allcount file
@@ -317,11 +348,11 @@ namespace RegionalExpression
                 var outputFilename = directory + analysis_id + ".regional_expression.txt";
                 var outputFile = new StreamWriter(outputFilename);
 
-                outputFile.WriteLine("RegionalExpression v1.0\t" + analysis_id + "\t" + allcountFilename + "\t" + regionSize);
+                outputFile.WriteLine("RegionalExpression v2.0\t" + analysis_id + "\t" + allcountFilename + "\t" + regionSize);
                 outputFile.WriteLine("NumContigs: " + numContigs);
                 Region.printHeader(outputFile);
 
-                Region region = new Region(regionSize, expression, mappedHQNuclearReads, outputFile);
+                Region region = new Region(regionSize, expression, highestOffsetForEachContig, mappedHQNuclearReads, outputFile);
 
                 int currentOffset = -1;
                 int currentMappedReadCount = -1;
@@ -501,6 +532,7 @@ namespace RegionalExpression
                 }
 
                 region.closeRegion();
+                outputFile.WriteLine("**done**");
                 outputFile.Close();
                 if (fileCorrupt)
                 {
@@ -533,6 +565,20 @@ namespace RegionalExpression
                 expression = null;  // Let the garbage collector get rid of the previous one while we're loading the next
 
                 expression = ExpressionTools.LoadExpressionFile(args[0]);   // This can take forever!
+
+                //
+                // Now build the list of highest offsets for each contig.
+                //
+                foreach (var expressionEntry in expression)
+                {
+                    int highestSoFar = 0;
+                    foreach (var regionEntry in expressionEntry.Value)
+                    {
+                        highestSoFar = Math.Max(highestSoFar, regionEntry.Key);
+                    }
+
+                    highestOffsetForEachContig.Add(expressionEntry.Key, highestSoFar);
+                }
 
                 timer.Stop();
                 Console.WriteLine((timer.ElapsedMilliseconds + 500) / 1000 + "s");

@@ -2167,7 +2167,6 @@ namespace ExpressionMetadata
             }
 
         }
-
         static void Main(string[] args)
         {
             var timer = new Stopwatch();

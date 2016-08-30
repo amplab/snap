@@ -270,7 +270,7 @@ namespace ExpressionNearMutations
                     continue;
                 }
 
-                if (headerLine.Substring(20, 1) != "1")
+                if (headerLine.Substring(20, 1) != "2")
                 {
                     Console.WriteLine("Unsupported version in file '" + experiment.TumorRNAAnalysis.regionalExpressionFileName + "', header line: " + headerLine);
                     nWithoutRegionalExpression++;
@@ -286,10 +286,23 @@ namespace ExpressionNearMutations
                     continue;
                 }
 
+                bool seenDone = false;
                 int lineNumber = 3;
                 while (null != (line = reader.ReadLine()))
                 {
                     lineNumber++;
+
+                    if (seenDone)
+                    {
+                        Console.WriteLine("Saw data after **done** in file " + experiment.TumorRNAAnalysis.regionalExpressionFileName + "', line " + lineNumber + ": " + line);
+                        break;
+                    }
+
+                    if (line == "**done**")
+                    {
+                        seenDone = true;
+                        continue;
+                    }
 
                     var fields = line.Split('\t');
                     if (fields.Count() != 12)
@@ -329,18 +342,16 @@ namespace ExpressionNearMutations
                     }
                 }
 
+                if (!seenDone)
+                {
+                    Console.WriteLine("Truncated regional expression file " + experiment.TumorRNAAnalysis.regionalExpressionFileName);
+                }
+
                 nExperimentsProcessed++;
                 if (timer.ElapsedMilliseconds - elapsedMillisecondsAtLastPrint > 60000)
                 {
                     elapsedMillisecondsAtLastPrint = timer.ElapsedMilliseconds;
                     Console.WriteLine("Processed " + nExperimentsProcessed + " experiments in " + (elapsedMillisecondsAtLastPrint + 30000) / 60000 + "m.  " + elapsedMillisecondsAtLastPrint / 1000 / nExperimentsProcessed + " s/experiment");
-/*BJB*/
-if (elapsedMillisecondsAtLastPrint > (long)84 * 3600 * 1000)
-{
-    Console.WriteLine("Continuting to next phase after 3.5 days for debugging.");
-    break;
-}
-/*BJB - end*/
                 }
              } // foreach experiment
 
@@ -361,7 +372,7 @@ if (elapsedMillisecondsAtLastPrint > (long)84 * 3600 * 1000)
                 outputFile.Write("\t" + Gene.regionSizeByRegionSizeIndex[regionSizeIndex]);
                 fullDumpFile.Write("\t" + Gene.regionSizeByRegionSizeIndex[regionSizeIndex]);
             }
-            outputFile.WriteLine();
+            outputFile.WriteLine("\tnTumors");
             fullDumpFile.WriteLine();
 
             foreach (var referenceClass in mutations)
@@ -372,7 +383,7 @@ if (elapsedMillisecondsAtLastPrint > (long)84 * 3600 * 1000)
                     {
                         for (nMutations = 0; nMutations < 3; nMutations++)
                         {
-                            outputFile.Write(referenceClass.Key + "\t" + gene.hugo_symbol + "\t" + gene.chromosome + "\t" + gene.minOffset + "\t" + gene.maxOffset + "\t");
+                            outputFile.Write(referenceClass.Key + "\t\"" + gene.hugo_symbol + "\"\t" + gene.chromosome + "\t" + gene.minOffset + "\t" + gene.maxOffset + "\t");
                             if (2 == nMutations)
                             {
                                 outputFile.Write(">1");

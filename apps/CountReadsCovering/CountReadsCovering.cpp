@@ -156,7 +156,6 @@ void ReaderThread(void *param)
             continue;
         }
 
-
         //
         // Run through the read and handle each chunk separated by an N in the cigar string.
         //
