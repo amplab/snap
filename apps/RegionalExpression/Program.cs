@@ -541,7 +541,10 @@ namespace RegionalExpression
                 else
                 {
                     allcountTimer.Stop();
-                    Console.WriteLine("Processed " + participantId + " in " + (allcountTimer.ElapsedMilliseconds + 500) / 1000 + "s");
+                    lock (runs)
+                    {
+                        Console.WriteLine("Processed " + participantId + " in " + (allcountTimer.ElapsedMilliseconds + 500) / 1000 + "s, " + runs.Count() + " remain in the queue.");
+                    }
                 }
             }
         }
@@ -585,7 +588,7 @@ namespace RegionalExpression
             }
             catch (OutOfMemoryException)
             {
-                Console.WriteLine("Out of memory exception loading the expresson file (I'm really not sure why this happens when there's plenty of memory).");
+                Console.WriteLine("Out of memory exception loading the expresson file (I'm really not sure why this happens when there's plenty of memory).  Running the binary (& ExpressionLib.dll) locally rather than from a share seems to help, though.");
                 return;
             }
 

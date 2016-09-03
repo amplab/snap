@@ -2129,6 +2129,66 @@ namespace ExpressionMetadata
             Console.WriteLine(nWithRegionalExpression + " analyses have regional expression, generated a script to make " + nInScript + " more and " + nNeedingPrecursors + " need to have their RNA data downloaded first.");
         }
 
+        static void GenerateGeneExpressionScripts(List<ExpressionTools.Experiment> experiments)
+        {
+            int nWithGeneExpression = 0;
+            int nInScript = 0;
+            int nNeedingPrecursors = 0;
+            var readyToGo = new List<ParticipantID>();
+
+            foreach (var experiment in experiments)
+            {
+                if (experiment.TumorRNAAnalysis.storedBAM == null || experiment.TumorRNAAnalysis.storedBAM.regionalExpressionInfo == null)
+                {
+                    nNeedingPrecursors++;
+                }
+                else if (experiment.TumorRNAAnalysis.storedBAM.geneExpressionInfo != null)
+                {
+                    nWithGeneExpression++;
+                }
+                else
+                {
+                    readyToGo.Add(experiment.participant.participantId);
+                }
+            }
+
+            nInScript = readyToGo.Count();
+            if (0 != nInScript) {
+                 var createJobScript = new StreamWriter(baseDirectory + "createGeneExpressionJob.cmd");
+                createJobScript.WriteLine(@"job new /emailaddress:bolosky@microsoft.com /nodegroup:B99,ExpressQ /exclusive:true /failontaskfailure:false /jobname:geneExpression /memorypernode:32000 /notifyoncompletion:true /numnodes:1-20 /runtime:12:00 /scheduler:gcr /jobtemplate:ExpressQ /estimatedprocessmemory:20000");
+                createJobScript.Close();
+
+                int nPerJob = 40;
+                int nInThisJob = 0;
+                string jobHeader = @"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr \\gcr\scratch\b99\bolosky\ExpressionNearMutations ";
+                string thisJob = "";
+
+                StreamWriter scheduleJobScript = new StreamWriter(baseDirectory + "scheduleGeneExpressionJob.cmd");
+
+                foreach (var participant in readyToGo)
+                {
+                    if (nInThisJob >= nPerJob) {
+                        scheduleJobScript.WriteLine(jobHeader + thisJob);
+                        thisJob = "";
+                        nInThisJob = 0;
+                    }
+
+                    thisJob += participant + " ";
+                    nInThisJob++;
+                }
+
+                if (0 != nInThisJob) {
+                    scheduleJobScript.WriteLine(jobHeader + thisJob);
+                }
+
+                scheduleJobScript.Close();
+
+            }
+
+            Console.WriteLine("" + nInScript + " are ready to have gene expression computed, " + nNeedingPrecursors + " still need preliminary work done and " + nWithGeneExpression + " are done.");
+        }
+
+
         static void CountTP53Mutations(List<ExpressionTools.Experiment> experiments)
         {
             var counts = new Dictionary<int, int>();
@@ -2236,9 +2296,10 @@ namespace ExpressionMetadata
             //AddCountsToMAFs(participants, allSamples);
 
             var experiments = BuildExperiments(participants);
-            CountTP53Mutations(experiments);
+            //CountTP53Mutations(experiments);
             ExpressionTools.DumpExperimentsToFile(experiments, baseDirectory + "experiments.txt");
             GenerateRegionalExpressionScripts(experiments);
+            GenerateGeneExpressionScripts(experiments);
             GenerateTP53CountScripts(experiments);
             GenerateIsoformFileListsByDiseaseAndMutation(experiments);
             //GenerateMutationDistributionByGene(experiments);

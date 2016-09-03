@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.IO;
 using ExpressionLib;
 using System.Diagnostics;
+using System.Threading;
 
 namespace ExpressionNearMutations
 {
@@ -14,22 +15,14 @@ namespace ExpressionNearMutations
 
         class RegionalExpressionState
         {
-            public int nTumors = 0;
+            public int nRegionsIncluded = 0;
             public double minExpression = 100000;
             public double maxExpression = -100000;
             public double totalExpression = 0;
         }
         class Gene
         {
-            static Gene()
-            {
-                regionSizeByRegionSizeIndex[0] = 0;
-                regionSizeByRegionSizeIndex[1] = 1000;
-                for (int i = 2; i < nRegionSizes; i++)
-                {
-                    regionSizeByRegionSizeIndex[i] = regionSizeByRegionSizeIndex[i - 1] * 2;
-                }
-            }
+ 
             public Gene(string hugo_symbol_, string chromosome_, int offset)
             {
                 hugo_symbol = hugo_symbol_;
@@ -37,45 +30,7 @@ namespace ExpressionNearMutations
                 minOffset = offset;
                 maxOffset = offset;
 
-                for (int nMutations = 0; nMutations < 3; nMutations++)
-                {
-                    for (int size = 0; size < nRegionSizes; size++)
-                    {
-                        regionalExpressionState[nMutations, size] = new RegionalExpressionState();
-                    }
-                }
-            }
 
-            public void AddRegionalExpression(int nMutations, int chromosomeOffset, double z)
-            {
-                int distance;
-                if (chromosomeOffset >= minOffset && chromosomeOffset <= maxOffset)
-                {
-                    distance = 0;
-                }
-                else if (chromosomeOffset < minOffset)
-                {
-                    distance = minOffset - chromosomeOffset;
-                }
-                else
-                {
-                    distance = chromosomeOffset - maxOffset;
-                }
-
-                for (int i = nRegionSizes - 1; i >= 0; i--)
-                {
-                    RegionalExpressionState state = regionalExpressionState[nMutations, i];
-
-                    if (regionSizeByRegionSizeIndex[i] < distance)
-                    {
-                        break;
-                    }
-
-                    state.nTumors++;
-                    state.totalExpression += z;
-                    state.minExpression = Math.Min(state.minExpression, z);
-                    state.maxExpression = Math.Max(state.maxExpression, z);
-                }
             }
 
             public string hugo_symbol;  // The gene name
@@ -84,13 +39,77 @@ namespace ExpressionNearMutations
             public int maxOffset;
 
             public bool inconsistent = false;
+        }
+
+        class GeneExpression 
+        {
+            static GeneExpression()
+            {
+                regionSizeByRegionSizeIndex[0] = 0;
+                regionSizeByRegionSizeIndex[1] = 1000;
+                for (int i = 2; i < nRegionSizes; i++)
+                {
+                    regionSizeByRegionSizeIndex[i] = regionSizeByRegionSizeIndex[i - 1] * 2;
+                }
+
+                comparer = StringComparer.OrdinalIgnoreCase;
+            }
+
+            public GeneExpression(Gene gene_) 
+            {
+                gene = gene_;
+
+                for (int sizeIndex = 0; sizeIndex < nRegionSizes; sizeIndex++)
+                {
+                    regionalExpressionState[sizeIndex] = new RegionalExpressionState();
+                }
+            }
+
+            public void AddRegionalExpression(int chromosomeOffset, double z)
+            {
+                int distance;
+                if (chromosomeOffset >= gene.minOffset && chromosomeOffset <= gene.maxOffset)
+                {
+                    distance = 0;
+                }
+                else if (chromosomeOffset < gene.minOffset)
+                {
+                    distance = gene.minOffset - chromosomeOffset;
+                }
+                else
+                {
+                    distance = chromosomeOffset - gene.maxOffset;
+                }
+
+                for (int sizeIndex = nRegionSizes - 1; sizeIndex >= 0; sizeIndex--)
+                {
+                    RegionalExpressionState state = regionalExpressionState[sizeIndex];
+
+                    if (regionSizeByRegionSizeIndex[sizeIndex] < distance)
+                    {
+                        break;
+                    }
+
+                    state.nRegionsIncluded++;
+                    state.totalExpression += z;
+                    state.minExpression = Math.Min(state.minExpression, z);
+                    state.maxExpression = Math.Max(state.maxExpression, z);
+                }
+            }
+
+            public static int CompareByGeneName(GeneExpression a, GeneExpression b)
+            {
+                return comparer.Compare(a.gene.hugo_symbol, b.gene.hugo_symbol);
+            }
 
             public const int nRegionSizes = 20;    // Because we have 0 (in the gene), this range is 2^(20 - 2) * 1000 = 262 Mbases on either side, i.e., the entire chromosome
             public static readonly int[] regionSizeByRegionSizeIndex = new int[nRegionSizes];
 
-            public RegionalExpressionState[,] regionalExpressionState = new RegionalExpressionState[3, nRegionSizes]; // First dimension is nMutations (0, 1, more than 1) and second is log2(regionSize) - 1
+            public RegionalExpressionState[] regionalExpressionState = new RegionalExpressionState[nRegionSizes]; // Dimension is log2(regionSize) - 1
 
-
+            public Gene gene;
+            public int mutationCount = 0;
+            public static StringComparer comparer;
         }
 
         class MutationMap
@@ -134,6 +153,7 @@ namespace ExpressionNearMutations
                             genesByChromosome.Add(gene.chromosome, new List<Gene>());
                         }
                         genesByChromosome[gene.chromosome].Add(gene);
+                        genesByName.Add(gene.hugo_symbol, gene);
                     }
                 }
             }
@@ -145,105 +165,71 @@ namespace ExpressionNearMutations
 
             Dictionary<string, Gene> genes = new Dictionary<string, Gene>();
             public Dictionary<string, List<Gene>> genesByChromosome = new Dictionary<string, List<Gene>>();
+            public Dictionary<string, Gene> genesByName = new Dictionary<string, Gene>();
         }
 
-        static void Main(string[] args)
+        static Dictionary<string, MutationMap> mutations;
+
+        static void ProcessParticipants(List<string> participantsToProcess)
         {
+            var timer = new Stopwatch();
 
-            Stopwatch timer = new Stopwatch();
-            timer.Start();
+            string participantId;
 
-            var excludedAnalyses = ExpressionTools.LoadExcludedAnalyses();
-
-            var tcgaRecords = ExpressionTools.LoadTCGARecords(null /* stored BAMs*/, excludedAnalyses, @"f:\sequence\Reads\tcga-all.xml");
-            ExpressionTools.LoadTCGARecordsForLocalRealigns(tcgaRecords, null, @"f:\sequence\reads\tcga\realigns.txt");
-            ExpressionTools.LoadTCGAAdditionalMetadata(tcgaRecords);
-
-            var sampleToParticipantIDMap = ExpressionTools.CreateSampleToParticipantIDMap(tcgaRecords);
-
-            Dictionary<string, ExpressionTools.Sample> allSamples;
-            var participants = ExpressionTools.BuildParticipantData(tcgaRecords, out allSamples);
-
-            ExpressionTools.AddAllMAFFilesToParticipants(participants, sampleToParticipantIDMap);
-
-            var experiments = ExpressionTools.LoadExperimentsFromFile(@"f:\temp\expression\experiments.txt", participants, tcgaRecords);
-
-            timer.Stop();
-            Console.WriteLine("Loaded " + experiments.Count() + " experiments with MAFs in " + (timer.ElapsedMilliseconds + 500) / 1000 + "s");
-
-            //
-            // Now build the map of mutations by gene.
-            //
-
-            timer.Reset();
-            timer.Start();
-            var mutations = new Dictionary<string, MutationMap>();  // Maps reference type (hg18 or hg19) to MutationMap
-            mutations.Add("hg18", new MutationMap());
-            mutations.Add("hg19", new MutationMap());
-
-            int nMutations = 0;
-            foreach (var experiment in experiments)
+            while (true)
             {
-                foreach (ExpressionTools.MAFRecord maf in experiment.maf)
+                lock (participantsToProcess)
                 {
-                    nMutations++;
-
-                    string chromosome;
-                    if (maf.Chrom.Count() > 3 && maf.Chrom.Substring(0, 3) == "chr")
+                    if (participantsToProcess.Count() == 0)
                     {
-                        chromosome = maf.Chrom.Substring(3);
-                    }
-                    else
-                    {
-                        chromosome = maf.Chrom;
+                        return;
                     }
 
-                    mutations[maf.ReferenceClass()].AddMutation(maf.Hugo_symbol, chromosome, maf.Start_position);
+                    participantId = participantsToProcess[0];
+                    participantsToProcess.RemoveAt(0);
                 }
-            }
 
-            foreach (var referenceClass in mutations)
-            {
-                referenceClass.Value.DoneAddingMutations();
-            }
+                timer.Reset();
+                timer.Start();
 
-            timer.Stop();
-            Console.WriteLine("Loaded " + nMutations + " mutations in " + mutations["hg19"].Count() + " genes in " + (timer.ElapsedMilliseconds + 500) / 1000 + "s.");
+                if (!experimentsByParticipant.ContainsKey(participantId))
+                {
+                    Console.WriteLine("Couldn't find experiment for participant ID " + participantId);
+                    continue;
+                }
 
-            //
-            // Run through each regional expression file and look at the regions around each mutation, categorizing it by whether the 
-            // tumor has zero, one or more than one mutation in that gene.
-            //
-            int nWithoutRegionalExpression = 0;
+                var experiment = experimentsByParticipant[participantId];
 
-            timer.Start();
-            int nExperimentsProcessed = 0;
-            long elapsedMillisecondsAtLastPrint = 0;
-            foreach (var experiment in experiments)
-            {
                 if (experiment.TumorRNAAnalysis.regionalExpressionFileName == "")
                 {
-                    nWithoutRegionalExpression++;
+                    Console.WriteLine("Participant " + participantId + " doesn't have a regional expression file yet.");
                     continue;
                 }
 
                 var mutationsForThisReference = mutations[experiment.maf[0].ReferenceClass()];
 
-                var genesWithMutations = new Dictionary<string, int>();    // hugo_symbol->{1,2} for exactly one and more than one mutation.
+                var geneExpressions = new Dictionary<string, GeneExpression>();    
                 foreach (var maf in experiment.maf)
                 {
-                    if (maf.Variant_classification == "Silent") {
+                    if (maf.Variant_classification == "Silent")
+                    {
                         continue;
                     }
 
-                    if (genesWithMutations.ContainsKey(maf.Hugo_symbol))
-                    {
-                        genesWithMutations[maf.Hugo_symbol] = 2;
+                    if (!mutationsForThisReference.genesByName.ContainsKey(maf.Hugo_symbol)) {
+                        //
+                        // Probably an inconsistent gene.  Skip it.
+                        //
+                        continue;
                     }
-                    else
+
+                    if (!geneExpressions.ContainsKey(maf.Hugo_symbol))
                     {
-                        genesWithMutations.Add(maf.Hugo_symbol, 1);
+                        geneExpressions.Add(maf.Hugo_symbol, new GeneExpression(mutationsForThisReference.genesByName[maf.Hugo_symbol]));
+ 
                     }
+ 
+                    geneExpressions[maf.Hugo_symbol].mutationCount++;
                 }
 
                 var reader = new StreamReader(experiment.TumorRNAAnalysis.regionalExpressionFileName);
@@ -252,28 +238,24 @@ namespace ExpressionNearMutations
                 if (null == headerLine)
                 {
                     Console.WriteLine("Empty regional expression file " + experiment.TumorRNAAnalysis.regionalExpressionFileName);
-                    nWithoutRegionalExpression++;
                     continue;
                 }
 
                 if (headerLine.Count() < 23)
                 {
                     Console.WriteLine("Truncated regional expression header line in file '" + experiment.TumorRNAAnalysis + "', line: ", headerLine);
-                    nWithoutRegionalExpression++;
                     continue;
                 }
 
                 if (headerLine.Substring(0, 20) != "RegionalExpression v")
                 {
                     Console.WriteLine("Corrupt header line in file '" + experiment.TumorRNAAnalysis.regionalExpressionFileName + "', line: " + headerLine);
-                    nWithoutRegionalExpression++;
                     continue;
                 }
 
                 if (headerLine.Substring(20, 1) != "2")
                 {
                     Console.WriteLine("Unsupported version in file '" + experiment.TumorRNAAnalysis.regionalExpressionFileName + "', header line: " + headerLine);
-                    nWithoutRegionalExpression++;
                     continue;
                 }
 
@@ -282,7 +264,6 @@ namespace ExpressionNearMutations
                 if (null == line)
                 {
                     Console.WriteLine("Truncated file '" + experiment.TumorRNAAnalysis.regionalExpressionFileName + "' ends after header line.");
-                    nWithoutRegionalExpression++;
                     continue;
                 }
 
@@ -320,11 +301,21 @@ namespace ExpressionNearMutations
                         chromosome = fields[0];
                         offset = Convert.ToInt32(fields[1]);
                         z = Convert.ToDouble(fields[11]);
+
+                        int nBasesExpressedWithBaselineExpression = Convert.ToInt32(fields[3]);
+                        int nBasesUnexpressedWithBaselineExpression = Convert.ToInt32(fields[7]);
+
+                        if (0 == nBasesExpressedWithBaselineExpression && 0 == nBasesUnexpressedWithBaselineExpression)
+                        {
+                            //
+                            // No baseline expression for this region, skip it.
+                            //
+                            continue;
+                        }
                     }
                     catch (FormatException)
                     {
                         Console.WriteLine("Format exception parsing data line in file '" + experiment.TumorRNAAnalysis.regionalExpressionFileName + "', line " + lineNumber + ": " + line);
-                        nWithoutRegionalExpression++;
                         break;
                     }
 
@@ -332,12 +323,12 @@ namespace ExpressionNearMutations
                     {
                         foreach (var gene in mutationsForThisReference.genesByChromosome[chromosome])
                         {
-                            if (!genesWithMutations.ContainsKey(gene.hugo_symbol))
+                            if (!geneExpressions.ContainsKey(gene.hugo_symbol))
                             {
-                                genesWithMutations.Add(gene.hugo_symbol, 0);
+                                geneExpressions.Add(gene.hugo_symbol, new GeneExpression(gene));
                             }
 
-                            gene.AddRegionalExpression(genesWithMutations[gene.hugo_symbol], offset, z);
+                            geneExpressions[gene.hugo_symbol].AddRegionalExpression(offset, z);
                         }
                     }
                 }
@@ -345,76 +336,196 @@ namespace ExpressionNearMutations
                 if (!seenDone)
                 {
                     Console.WriteLine("Truncated regional expression file " + experiment.TumorRNAAnalysis.regionalExpressionFileName);
+                    continue;
                 }
 
-                nExperimentsProcessed++;
-                if (timer.ElapsedMilliseconds - elapsedMillisecondsAtLastPrint > 60000)
+                //
+                // Write the output file.
+                //
+                int indexOfLastSlash = experiment.TumorRNAAnalysis.regionalExpressionFileName.LastIndexOf('\\');
+                if (-1 == indexOfLastSlash)
                 {
-                    elapsedMillisecondsAtLastPrint = timer.ElapsedMilliseconds;
-                    Console.WriteLine("Processed " + nExperimentsProcessed + " experiments in " + (elapsedMillisecondsAtLastPrint + 30000) / 60000 + "m.  " + elapsedMillisecondsAtLastPrint / 1000 / nExperimentsProcessed + " s/experiment");
+                    Console.WriteLine("Couldn't find a backslash in regional expression pathname, which is supposed to be absolute: " + experiment.TumorRNAAnalysis.regionalExpressionFileName);
+                    continue;
                 }
-             } // foreach experiment
 
-            //
-            // Now dump out the results.
-            //
-            var outputFile = new StreamWriter(@"f:\temp\expression\regional_expression_by_gene.txt");
-            outputFile.WriteLine("ExpressionNearMutations v1.0 ");
-            outputFile.Write("Reference class\tgene\tchromosome\tminOffset\tmaxOffset\tnMutations");
+                string directory = experiment.TumorRNAAnalysis.regionalExpressionFileName.Substring(0, indexOfLastSlash + 1);  // Includes trailing backslash
+                var outputFilename = directory + experiment.TumorRNAAnalysis.analysis_id + ".gene_expression.txt";
 
-            var fullDumpFile = new StreamWriter(@"f:\temp\expression\reginal_expression_all.txt");
-            fullDumpFile.WriteLine("ExpressionNearMutations v1.0");
-            fullDumpFile.Write("Reference class\tparticipantId\tgene\tchromosome\tminOffset\tmaxOffset\tnMutations");
+                var outputFile = new StreamWriter(outputFilename);
 
+                outputFile.WriteLine("ExpressionNearMutations v1.0 " + participantId);
+                outputFile.Write("Gene name\tnon-silent mutation count");
+                for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
+                {
+                    outputFile.Write("\t" + GeneExpression.regionSizeByRegionSizeIndex[sizeIndex]);
+                }
 
-            for (int regionSizeIndex = 0; regionSizeIndex < Gene.nRegionSizes; regionSizeIndex++)
-            {
-                outputFile.Write("\t" + Gene.regionSizeByRegionSizeIndex[regionSizeIndex]);
-                fullDumpFile.Write("\t" + Gene.regionSizeByRegionSizeIndex[regionSizeIndex]);
+                outputFile.WriteLine();
+
+                var allExpressions = new List<GeneExpression>();
+                foreach (var expressionEntry in geneExpressions)
+                {
+                    allExpressions.Add(expressionEntry.Value);
+                }
+
+                allExpressions.Sort(GeneExpression.CompareByGeneName);
+
+                for (int i = 0; i < allExpressions.Count(); i++)
+                {
+                    outputFile.Write(allExpressions[i].gene.hugo_symbol + "\t" + allExpressions[i].mutationCount);
+
+                    for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
+                    {
+                        if (allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncluded != 0)
+                        {
+                            outputFile.Write("\t" + allExpressions[i].regionalExpressionState[sizeIndex].totalExpression / allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncluded);
+                        }
+                        else
+                        {
+                            outputFile.Write("\t*");
+                        }
+                    }
+                    outputFile.WriteLine();
+                }
+
+                outputFile.WriteLine("**done**");
+                outputFile.Close();
+
+                timer.Stop();
+                lock (participantsToProcess)
+                {
+                    Console.WriteLine("Processed participant " + participantId + " in " + (timer.ElapsedMilliseconds + 500) / 1000 + "s.  " + participantsToProcess.Count() + " remain queued.");
+                }
             }
-            outputFile.WriteLine("\tnTumors");
-            fullDumpFile.WriteLine();
+        }
+
+        static List<ExpressionTools.Experiment> experiments;
+        static Dictionary<string, ExpressionTools.Participant> participants;
+        static Dictionary<string, ExpressionTools.Experiment> experimentsByParticipant = new Dictionary<string, ExpressionTools.Experiment>();
+ 
+        static void Main(string[] args)
+        {
+            if (args.Count() == 0)
+            {
+                Console.WriteLine("usage: ExpressionNearMutations <participantIdsToProcess>");
+                return;
+            }
+
+            Stopwatch timer = new Stopwatch();
+            timer.Start();
+
+            var excludedAnalyses = ExpressionTools.LoadExcludedAnalyses(@"\\gcr\scratch\b99\bolosky\excluded_analyses.txt");
+
+            var tcgaRecords = ExpressionTools.LoadTCGARecords(null /* stored BAMs*/, excludedAnalyses, @"\\gcr\scratch\b99\bolosky\tcga-all.xml");
+            ExpressionTools.LoadTCGARecordsForLocalRealigns(tcgaRecords, null, @"\\gcr\scratch\b99\bolosky\realigns.txt");
+            ExpressionTools.LoadTCGAAdditionalMetadata(tcgaRecords, @"\\gcr\scratch\b99\bolosky\tcgaAdditionalMetadata.txt");
+
+            var sampleToParticipantIDMap = ExpressionTools.CreateSampleToParticipantIDMap(tcgaRecords);
+
+            Dictionary<string, ExpressionTools.Sample> allSamples;
+            participants = ExpressionTools.BuildParticipantData(tcgaRecords, out allSamples, @"\\gcr\scratch\b99\bolosky\clinical");
+
+            ExpressionTools.AddAllMAFFilesToParticipants(participants, sampleToParticipantIDMap, @"\\gcr\scratch\b99\bolosky\mafs");
+
+            experiments = ExpressionTools.LoadExperimentsFromFile(@"\\gcr\scratch\b99\bolosky\experiments.txt", participants, tcgaRecords);
+
+            timer.Stop();
+            Console.WriteLine("Loaded " + experiments.Count() + " experiments with MAFs in " + (timer.ElapsedMilliseconds + 500) / 1000 + "s");
+
+            //
+            // Now build the map of mutations by gene.
+            //
+
+            timer.Reset();
+            timer.Start();
+
+            mutations = new Dictionary<string, MutationMap>();  // Maps reference type (hg18 or hg19) to MutationMap
+            mutations.Add("hg18", new MutationMap());
+            mutations.Add("hg19", new MutationMap());
+
+            var badHugoSymbols = new List<string>();    // These are corruped by Excel.  They're in the MAFs that I downloaded, and I'm removing them by hand.
+            badHugoSymbols.Add("1-Mar");
+            badHugoSymbols.Add("1-Dec");
+            badHugoSymbols.Add("1-Sep");
+            badHugoSymbols.Add("10-Mar");
+            badHugoSymbols.Add("11-Mar");
+            badHugoSymbols.Add("12-Sep");
+            badHugoSymbols.Add("14-Sep");
+            badHugoSymbols.Add("1SEPT4");
+            badHugoSymbols.Add("2-Mar");
+            badHugoSymbols.Add("2-Sep");
+            badHugoSymbols.Add("3-Mar");
+            badHugoSymbols.Add("3-Sep");
+            badHugoSymbols.Add("4-Mar");
+            badHugoSymbols.Add("4-Sep");
+            badHugoSymbols.Add("5-Sep");
+            badHugoSymbols.Add("6-Mar");
+            badHugoSymbols.Add("6-Sep");
+            badHugoSymbols.Add("7-Mar");
+            badHugoSymbols.Add("7-Sep");
+            badHugoSymbols.Add("8-Mar");
+            badHugoSymbols.Add("9-Sep");
+
+            int nMutations = 0;
+            foreach (var experiment in experiments)
+            {
+                experimentsByParticipant.Add(experiment.participant.participantId, experiment);
+
+                foreach (ExpressionTools.MAFRecord maf in experiment.maf)
+                {
+                    nMutations++;
+
+                    string chromosome;
+                    if (maf.Chrom.Count() > 3 && maf.Chrom.Substring(0, 3) == "chr")
+                    {
+                        chromosome = maf.Chrom.Substring(3);
+                    }
+                    else
+                    {
+                        chromosome = maf.Chrom;
+                    }
+
+                    if (badHugoSymbols.Contains(maf.Hugo_symbol))
+                    {
+                        Console.WriteLine("Bad hugo symbol " + maf.Hugo_symbol);
+                    }
+                    mutations[maf.ReferenceClass()].AddMutation(maf.Hugo_symbol, chromosome, maf.Start_position);
+                }
+            }
 
             foreach (var referenceClass in mutations)
             {
-                foreach (var chromosomeGenes in referenceClass.Value.genesByChromosome)
-                {
-                    foreach (var gene in chromosomeGenes.Value)
-                    {
-                        for (nMutations = 0; nMutations < 3; nMutations++)
-                        {
-                            outputFile.Write(referenceClass.Key + "\t\"" + gene.hugo_symbol + "\"\t" + gene.chromosome + "\t" + gene.minOffset + "\t" + gene.maxOffset + "\t");
-                            if (2 == nMutations)
-                            {
-                                outputFile.Write(">1");
-                            }
-                            else
-                            {
-                                outputFile.Write(nMutations);
-                            }
+                referenceClass.Value.DoneAddingMutations();
+            }
 
-                            for (int regionSizeIndex = 0; regionSizeIndex < Gene.nRegionSizes; regionSizeIndex++)
-                            {
-                                if (gene.regionalExpressionState[nMutations, regionSizeIndex].nTumors == 0)
-                                {
-                                    outputFile.Write("\t*");
-                                }
-                                else
-                                {
-                                    outputFile.Write("\t" + gene.regionalExpressionState[nMutations, regionSizeIndex].totalExpression / gene.regionalExpressionState[nMutations, regionSizeIndex].nTumors);
-                                }
-                            } // for each region size
-                            outputFile.WriteLine();
-                        } // for each nMutations
-                    } // foreach gene
-                } // foreach chromosome
-            } // foreach reference class
+            timer.Stop();
+            Console.WriteLine("Loaded " + nMutations + " mutations in " + mutations["hg19"].Count() + " genes in " + (timer.ElapsedMilliseconds + 500) / 1000 + "s.");
 
-            outputFile.WriteLine("**done**");
-            outputFile.Close();
+            var participantsToProcess = new List<string>();
+            foreach (var arg in args)
+            {
+                participantsToProcess.Add(arg);
+            }
 
-            fullDumpFile.WriteLine("**done**");
-            fullDumpFile.Close();
+            //
+            // Process the runs in parallel
+            //
+            int totalNumberOfExperiments = experiments.Count();
+            timer.Reset();
+            timer.Start();
+
+            var threads = new List<Thread>();
+            for (int i = 0; i < Environment.ProcessorCount; i++)
+            {
+                threads.Add(new Thread(() => ProcessParticipants(participantsToProcess)));
+            }
+
+            threads.ForEach(t => t.Start());
+            threads.ForEach(t => t.Join());
+
+            timer.Stop();
+            Console.WriteLine("Processed " + args.Count() + " experiments in " + (timer.ElapsedMilliseconds + 500) / 1000 + " seconds");
         }
     }
 }

@@ -8,6 +8,8 @@ using System.IO;
 using System.Xml.Linq;
 using System.IO.Compression;
 using System.Diagnostics;
+using MathNet.Numerics;
+using System.Threading;
 
 
 //
@@ -300,6 +302,7 @@ namespace ExpressionLib
             public FileInfo vcfInfo = null;
             public FileInfo allCountInfo = null;
             public FileInfo regionalExpressionInfo = null;
+            public FileInfo geneExpressionInfo = null;
             public long totalSize = 0;
             public bool needed = false; // Do we need this as input for some experiment?
             public bool isRealingned = false;   // Was this realined, or is it straight from TCGA
@@ -485,6 +488,22 @@ namespace ExpressionLib
                                 }
                             }
                         }
+                        else if (file.Count() > 20 && file.Substring(file.Count() - 20).ToLower() == ".gene_expression.txt")
+                        {
+                            string expectedFileName = analysisID + ".gene_expression.txt";
+                            if (file.Count() < expectedFileName.Count() || file.Substring(file.Count() - expectedFileName.Count()) != expectedFileName)
+                            {
+                                Console.WriteLine("Incorrect gene expression file " + file);
+                            }
+                            else
+                            {
+                                storedBAM.geneExpressionInfo = new FileInfo(file);
+                                if (storedBAM.geneExpressionInfo.Length < 1 * 1024 * 1024)
+                                {
+                                    Console.WriteLine("Unusually small gene expression file " + file + ", " + storedBAM.geneExpressionInfo.Length);
+                                }
+                            }
+                        }
                         else
                         {
                             Console.WriteLine("Saw unexpected file " + file);
@@ -628,6 +647,7 @@ namespace ExpressionLib
             public ParticipantID participant_id = null;
             public Pathname allcountFileName = null;
             public Pathname regionalExpressionFileName = null;
+            public Pathname geneExpressionFileName = null;
             public Pathname bamFileName = null;
             public string bamHash = null;
             public Pathname baiFileName = null;
@@ -705,10 +725,26 @@ namespace ExpressionLib
 
         public static void DumpExperimentsToFile(List<Experiment> experiments, string filename)
         {
-            StreamWriter outputFile = new StreamWriter(filename);
+            StreamWriter outputFile = null;
+
+            bool threw;
+            do
+            {
+                threw = false;
+                try
+                {
+                    outputFile = new StreamWriter(filename);
+                }
+                catch (IOException)
+                {
+                    Console.WriteLine("IOException opening file " + filename + " for write.  Do you perhaps have it open in Excel?  Sleeping and retrying.");
+                    Thread.Sleep(10000);
+                    threw = true;
+                }
+            } while (threw);
 
             outputFile.WriteLine("disease_abbr\treference\tparticipantID\tTumorRNAAnalysis\tTumorDNAAnalysis\tNormalDNAAnalysis\tNormalRNAAnalysis\ttumorRNAPathname\ttumorDNAPathname\t" +
-                "normalDNAPathname\tNormalRNAPathname\tVCFPathname\tgender\tdaysToBirth\tdaysToDeath\tOrigTumorDNAAliquotID\tTumorAllcountFile\tNormalAllcountFile\tmafFile\tRegionalExpressionFilename");
+                "normalDNAPathname\tNormalRNAPathname\tVCFPathname\tgender\tdaysToBirth\tdaysToDeath\tOrigTumorDNAAliquotID\tTumorAllcountFile\tNormalAllcountFile\tmafFile\tRegionalExpressionFilename\tGeneExpressionFilename");
 
             foreach (Experiment experiment in experiments)
             {
@@ -833,6 +869,15 @@ namespace ExpressionLib
                     outputFile.Write(experiment.TumorRNAAnalysis.regionalExpressionFileName + "\t");
                 }
 
+                if (experiment.TumorRNAAnalysis.geneExpressionFileName == null)
+                {
+                    outputFile.Write("\t");
+                }
+                else
+                {
+                    outputFile.Write(experiment.TumorRNAAnalysis.geneExpressionFileName + "\t");
+                }
+
                 outputFile.WriteLine();
             }
 
@@ -849,6 +894,12 @@ namespace ExpressionLib
             reader.ReadLine();  // Skip the header line
             while (null != (line = reader.ReadLine())) {
                 var fields = line.Split('\t');
+
+                if (fields.Count() < 21)
+                {
+                    Console.WriteLine("LoadExperimentsFromFile::line doesn't have enough fields.  Perhaps it's from an old format or damaged experiments.txt file, line " + line + ", filename " + filename);
+                    return null;
+                }
 
                 var experiment = new Experiment();
                 experiment.disease_abbr = fields[0];
@@ -880,6 +931,7 @@ namespace ExpressionLib
                 }
                 experiment.TumorRNAAnalysis.allcountFileName = fields[16];
                 experiment.TumorRNAAnalysis.regionalExpressionFileName = fields[19];
+                experiment.TumorRNAAnalysis.geneExpressionFileName = fields[20];
 
                 experiments.Add(experiment);
             }
@@ -1507,7 +1559,7 @@ namespace ExpressionLib
 
             }
         } // BuildMAFsByGene
-        public static Dictionary<AnalysisID, ExpressionTools.TCGARecord> LoadTCGARecords(Dictionary<AnalysisID, ExpressionTools.StoredBAM> storedBAMs, List<AnalysisID> excludedAnalyses, string filename)
+        public static Dictionary<AnalysisID, ExpressionTools.TCGARecord> LoadTCGARecords(Dictionary<AnalysisID, ExpressionTools.StoredBAM> storedBAMs, List<AnalysisID> excludedAnalyses, string filename = @"f:\sequence\reads\tcga-all.xml")
         {
             var tcgaRecords = new Dictionary<AnalysisID, ExpressionTools.TCGARecord>();
 
@@ -1632,6 +1684,11 @@ namespace ExpressionLib
                     {
                         record.regionalExpressionFileName = record.storedBAM.regionalExpressionInfo.FullName;
                     }
+
+                    if (record.storedBAM.geneExpressionInfo != null)
+                    {
+                        record.geneExpressionFileName = record.storedBAM.geneExpressionInfo.FullName;
+                    }
                 }
                 else
                 {
@@ -1678,11 +1735,11 @@ namespace ExpressionLib
 
         } // LoadTCGAAdditionalMetadata
 
-        public static List<AnalysisID> LoadExcludedAnalyses()
+        public static List<AnalysisID> LoadExcludedAnalyses(string filename = @"f:\sequence\reads\tcga\excluded_analyses.txt")
         {
             var excludedAnalyses = new List<AnalysisID>();
 
-            string[] analyses = File.ReadAllLines(@"f:\sequence\reads\tcga\excluded_analyses.txt");
+            string[] analyses = File.ReadAllLines(filename);
 
             foreach (var analysis in analyses)
             {
@@ -1692,7 +1749,7 @@ namespace ExpressionLib
             return excludedAnalyses;
         }
 
-        public static void LoadTCGARecordsForLocalRealigns(Dictionary<AnalysisID, ExpressionTools.TCGARecord> tcgaRecords, Dictionary<AnalysisID, ExpressionTools.StoredBAM> storedBAMs, string filename)
+        public static void LoadTCGARecordsForLocalRealigns(Dictionary<AnalysisID, ExpressionTools.TCGARecord> tcgaRecords, Dictionary<AnalysisID, ExpressionTools.StoredBAM> storedBAMs, string filename = @"f:\sequence\reads\tcga\realigns.txt")
         {
             if (!File.Exists(filename))
             {
@@ -2138,6 +2195,84 @@ namespace ExpressionLib
             return mapping;
         }
 
+        public class MannWhitney<T>
+        {
+            public delegate bool WhichGroup(T element);
+            public delegate double GetValue(T element);
+            public static double ComputeMannWhitney(List<T> elements, IComparer<T> comparer, WhichGroup whichGroup, GetValue getValue, out bool enoughData, out bool reversed, out double nFirstGroup, out double nSecondGroup, out double U, out double z)
+            {
+                elements.Sort(comparer);
+
+                reversed = false;
+
+                double Rsingle = 0;
+                nFirstGroup = 0;
+                nSecondGroup = 0;
+                U = 0;
+                z = 0;
+                for (int i = 0; i < elements.Count(); i++)
+                {
+                    if (whichGroup(elements[i]))
+                    {
+                        int cumulativeR = i + 1;// +1 because Mann-Whitney is one-based, while C# is 0-based.  BUGBUG: Handle ties properly (which would be more interesting to do if this turned up more than TP53)
+                        int n = 1;
+                        //
+                        // Now add in adjascent indices if there's a tie.  For ties, we use the mean of all the indices in the tied region for each of them (regardless of whether they're single or multiple).
+                        //
+                        for (int j = i - 1; j > 0 && getValue(elements[j]) == getValue(elements[i]); j--)
+                        {
+                            cumulativeR += j + 1;
+                            n++;
+                        }
+
+                        for (int j = i + 1; j < elements.Count() && getValue(elements[j]) == getValue(elements[i]); j++)
+                        {
+                            cumulativeR += j + 1;
+                            n++;
+                        }
+
+
+                        Rsingle += cumulativeR / n;
+                        nFirstGroup++;
+                    }
+                    else
+                    {
+                        nSecondGroup++;
+                    }
+                }
+
+                if (nFirstGroup == 0 || nSecondGroup == 0)
+                {
+                    //
+                    // Not enough data, reject this gene
+                    //
+                    enoughData = false;
+                    return -1;
+                }
+
+                U = (double)Rsingle - (double)nFirstGroup * (nFirstGroup + 1.0) / 2.0;
+
+                z = Math.Abs(U - nFirstGroup * nSecondGroup / 2) / Math.Sqrt(nSecondGroup * nFirstGroup * (nSecondGroup + nFirstGroup + 1) / 12);
+
+                double p = MathNet.Numerics.Distributions.Normal.CDF(1.0, 1.0, z);
+                //
+                // We're doing two-tailed, so we need to see if this is on the other end
+                if (p > 0.5)
+                {
+                    p = 1.0 - p;
+                    reversed = true;
+                }
+
+                //
+                // And then multiply by two (because this is a two-tailed test).
+                //
+                p *= 2.0;
+
+                enoughData = true;
+                return p;
+            }
+        }
+ 
     } // ExpressionTools
 
 }

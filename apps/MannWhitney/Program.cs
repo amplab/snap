@@ -5,22 +5,29 @@ using System.Text;
 using System.Threading.Tasks;
 using System.IO;
 using MathNet.Numerics;
+using ExpressionLib;
 
 
 namespace MannWhitney
 {
     class Program
     {
-        class Mutation
+        class Mutation: IComparer<Mutation>
         {
             public bool isSingle;
             public double RatioOfRatios;    // (RNAMut / RNANormal) / (DNAMut / DNANormal), or...how far above the main diagonal it is
-            static public int Compare(Mutation a, Mutation b)
+            public int Compare(Mutation a, Mutation b)
+            {
+                return xCompare(a, b);
+            }
+
+            static public int xCompare(Mutation a, Mutation b)
             {
                 if (a.RatioOfRatios > b.RatioOfRatios) return 1;
                 if (a.RatioOfRatios < b.RatioOfRatios) return -1;
                 return 0;
             }
+
         }
 
         class OutputLine
@@ -46,6 +53,9 @@ namespace MannWhitney
             }
 
             var outputLines = new List<OutputLine>();
+
+            ExpressionTools.MannWhitney<Mutation>.GetValue getValue = new ExpressionTools.MannWhitney<Mutation>.GetValue(m => m.RatioOfRatios);
+            ExpressionTools.MannWhitney<Mutation>.WhichGroup whichGroup = new ExpressionTools.MannWhitney<Mutation>.WhichGroup(m => m.isSingle);
 
             foreach (var file in Directory.EnumerateFiles(@"f:\temp\gene_scatter_graphs", "*.txt"))
             {
@@ -87,66 +97,23 @@ namespace MannWhitney
                 } // input lines
                 reader.Close();
 
-                mutations.Sort(Mutation.Compare);
-
-                double Rsingle = 0;
                 double nSingle = 0;
                 double nMultiple = 0;
-                for (int i = 0; i < mutations.Count(); i++)
+                double p;
+                bool reversed;
+                double U;
+                double z;
+ 
+                bool enoughData;
+                if (mutations.Count() == 0)
                 {
-                    if (mutations[i].isSingle)
-                    {
-                        int cumulativeR = i + 1;// +1 because Mann-Whitney is one-based, while C# is 0-based.  BUGBUG: Handle ties properly (which would be more interesting to do if this turned up more than TP53)
-                        int n = 1;
-                        //
-                        // Now add in adjascent indices if there's a tie.  For ties, we use the mean of all the indices in the tied region for each of them (regardless of whether they're single or multiple).
-                        //
-                        for (int j = i - 1; j > 0 && mutations[j].RatioOfRatios == mutations[i].RatioOfRatios; j--)
-                        {
-                            cumulativeR += j + 1;
-                            n++;
-                        }
-
-                        for (int j = i + 1; j < mutations.Count() && mutations[j].RatioOfRatios == mutations[i].RatioOfRatios; j++) {
-                            cumulativeR += j+1;
-                            n++;
-                        }
-
-
-                        Rsingle += cumulativeR / n;
-                        nSingle++;
-                    }
-                    else
-                    {
-                        nMultiple++;
-                    }
-                }
-
-                if (nSingle == 0 || nMultiple == 0) {
-                    //
-                    // Not enough data, reject this gene
-                    //
                     continue;
                 }
-
-                double U = (double)Rsingle - (double)nSingle * (nSingle + 1.0) / 2.0;
-
-                double z = Math.Abs(U - nSingle * nMultiple / 2) / Math.Sqrt(nMultiple * nSingle * (nMultiple + nSingle + 1) / 12);
-
-                double p = MathNet.Numerics.Distributions.Normal.CDF(1.0, 1.0, z);
-                //
-                // We're doing two-tailed, so we need to see if this is on the other end
-                bool reversed = false;
-                if (p > 0.5)
+                p = ExpressionTools.MannWhitney<Mutation>.ComputeMannWhitney(mutations, mutations[0], whichGroup, getValue, out enoughData, out reversed, out nSingle, out nMultiple, out U, out z);
+                if (!enoughData)
                 {
-                    p = 1.0 - p;
-                    reversed = true;
-                }
-
-                //
-                // And then multiply by two.
-                //
-                p *= 2.0;
+                    continue;
+                }                
 
                 allRatioOfRatios.Sort();
 
@@ -165,9 +132,6 @@ namespace MannWhitney
                 output.WriteLine(outputLine.line + "\t" + outputLine.p * outputLines.Count());
             }
             output.Close();
-
-
-
         }
     }
 }
