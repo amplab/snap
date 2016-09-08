@@ -888,7 +888,22 @@ namespace ExpressionLib
         {
             var experiments = new List<Experiment>();
 
-            var reader = new StreamReader(filename);
+            StreamReader reader = null;
+            bool threw = false;
+            do
+            {
+                threw = false;
+                try
+                {
+                    reader = new StreamReader(filename);
+                }
+                catch (IOException)
+                {
+                    Console.WriteLine("IOException opening " + filename + ".  Most likely it's open in another program, probably Excel.  Sleeping 10s and retrying.");
+                    Thread.Sleep(10000);
+                    threw = true;
+                }
+            } while (threw);
 
             string line;
             reader.ReadLine();  // Skip the header line
@@ -2199,40 +2214,43 @@ namespace ExpressionLib
         {
             public delegate bool WhichGroup(T element);
             public delegate double GetValue(T element);
-            public static double ComputeMannWhitney(List<T> elements, IComparer<T> comparer, WhichGroup whichGroup, GetValue getValue, out bool enoughData, out bool reversed, out double nFirstGroup, out double nSecondGroup, out double U, out double z)
+            public static double ComputeMannWhitney(List<T> elements, IComparer<T> comparer, WhichGroup whichGroup, GetValue getValue, out bool enoughData, out bool reversed, 
+                out double nFirstGroup, out double nSecondGroup, out double U, out double z, bool twoTailed = true, int minGroupSize = 1)
             {
                 elements.Sort(comparer);
 
                 reversed = false;
 
-                double Rsingle = 0;
+                double RfirstGroup = 0; // The rank sum for the first group
                 nFirstGroup = 0;
                 nSecondGroup = 0;
                 U = 0;
                 z = 0;
-                for (int i = 0; i < elements.Count(); i++)
+                int n = elements.Count();
+
+                for (int i = 0; i < n; i++)
                 {
                     if (whichGroup(elements[i]))
                     {
-                        int cumulativeR = i + 1;// +1 because Mann-Whitney is one-based, while C# is 0-based.  BUGBUG: Handle ties properly (which would be more interesting to do if this turned up more than TP53)
-                        int n = 1;
+                        int cumulativeR = n - i;
+                        int nTied = 1;
                         //
                         // Now add in adjascent indices if there's a tie.  For ties, we use the mean of all the indices in the tied region for each of them (regardless of whether they're single or multiple).
                         //
-                        for (int j = i - 1; j > 0 && getValue(elements[j]) == getValue(elements[i]); j--)
+                        for (int j = i - 1; j >= 0 && getValue(elements[j]) == getValue(elements[i]); j--)
                         {
-                            cumulativeR += j + 1;
-                            n++;
+                            cumulativeR += n - j;
+                            nTied++;
                         }
 
                         for (int j = i + 1; j < elements.Count() && getValue(elements[j]) == getValue(elements[i]); j++)
                         {
-                            cumulativeR += j + 1;
-                            n++;
+                            cumulativeR += n - j;
+                            nTied++;
                         }
 
 
-                        Rsingle += cumulativeR / n;
+                        RfirstGroup += cumulativeR / nTied;
                         nFirstGroup++;
                     }
                     else
@@ -2241,7 +2259,7 @@ namespace ExpressionLib
                     }
                 }
 
-                if (nFirstGroup == 0 || nSecondGroup == 0)
+                if (nFirstGroup < minGroupSize || nSecondGroup < minGroupSize)
                 {
                     //
                     // Not enough data, reject this gene
@@ -2250,27 +2268,46 @@ namespace ExpressionLib
                     return -1;
                 }
 
-                U = (double)Rsingle - (double)nFirstGroup * (nFirstGroup + 1.0) / 2.0;
+                U = (double)RfirstGroup - (double)nFirstGroup * (nFirstGroup + 1.0) / 2.0;
 
-                z = Math.Abs(U - nFirstGroup * nSecondGroup / 2) / Math.Sqrt(nSecondGroup * nFirstGroup * (nSecondGroup + nFirstGroup + 1) / 12);
+                z = (U - nFirstGroup * nSecondGroup / 2) / Math.Sqrt(nSecondGroup * nFirstGroup * (nSecondGroup + nFirstGroup + 1) / 12);
 
-                double p = MathNet.Numerics.Distributions.Normal.CDF(1.0, 1.0, z);
-                //
-                // We're doing two-tailed, so we need to see if this is on the other end
-                if (p > 0.5)
+                double p = MathNet.Numerics.Distributions.Normal.CDF(0, 1.0, z);
+
+                if (twoTailed)
                 {
-                    p = 1.0 - p;
-                    reversed = true;
-                }
+                    //
+                    // We're doing two-tailed, so we need to see if this is on the other end
+                    if (p > 0.5)
+                    {
+                        p = 1.0 - p;
+                        reversed = true;
+                    }
 
-                //
-                // And then multiply by two (because this is a two-tailed test).
-                //
-                p *= 2.0;
+                    //
+                    // And then multiply by two (because this is a two-tailed test).
+                    //
+                    p *= 2.0;
+                }
 
                 enoughData = true;
                 return p;
             }
+        }
+
+        static public List<string> GetListOfDiseases(List<Experiment> experiments)
+        {
+            var listOfDiseases = new List<string>();
+
+            foreach (var experiment in experiments)
+            {
+                if (!listOfDiseases.Contains(experiment.disease_abbr))
+                {
+                    listOfDiseases.Add(experiment.disease_abbr);
+                }
+            }
+
+            return listOfDiseases;
         }
  
     } // ExpressionTools
