@@ -47,6 +47,7 @@ namespace RegionalExpression
             long totalReadsMappedToBasesWithBaselineExpression = 0;
             long nBasesWithBaselineButNoLocalExpression = 0;
             double totalZForBasesWithBaselineExpression = 0;
+            double totalMuForBasesWithBaselineExpression = 0;   // Instead of standard deviations above/below the mean, just means.  This is 0-based (0 expression => 0 mu)
             double minZForBasesWithBaselineExpression = 1000000000;
             double maxZForBasesWithBaselineExpression = -10000000000;
 
@@ -109,6 +110,8 @@ namespace RegionalExpression
                     minZForBasesWithBaselineExpression = Math.Min(z, minZForBasesWithBaselineExpression);
                     maxZForBasesWithBaselineExpression = Math.Max(z, maxZForBasesWithBaselineExpression);
                     totalReadsMappedToBasesWithBaselineExpression += mappedReadCount;
+
+                    totalMuForBasesWithBaselineExpression += ((double)mappedReadCount / (double)nHighQualityMappedNuclearReads) / (double)expression[contig][offset].mean;
                 }
                 else
                 {
@@ -128,7 +131,7 @@ namespace RegionalExpression
 
                 outputFile.WriteLine(currentContig + "\t" + baseOffset + "\t" + nBasesExpressed + "\t" + nBasesExpressedWithBaselineExpression + "\t" + nBasesExpressedWithoutBaselineExpression + "\t" + totalReadsMappedToBasesWithBaselineExpression + "\t" +
                     totalReadsMappedToBasesWithoutBaselineExpression + "\t" + nBasesWithBaselineButNoLocalExpression + "\t" + totalZForBasesWithBaselineExpression + "\t" + minZForBasesWithBaselineExpression + "\t" + maxZForBasesWithBaselineExpression + "\t" +
-                    totalZForBasesWithBaselineExpression / (double)regionSize);
+                    totalZForBasesWithBaselineExpression / (double)regionSize + "\t" + totalMuForBasesWithBaselineExpression / regionSize);
 
                 nBasesExpressed = 0;
                 nBasesExpressedWithBaselineExpression = 0;
@@ -136,6 +139,7 @@ namespace RegionalExpression
                 totalReadsMappedToBasesWithoutBaselineExpression = 0;
                 totalReadsMappedToBasesWithBaselineExpression = 0;
                 totalZForBasesWithBaselineExpression = 0;
+                totalMuForBasesWithBaselineExpression = 0;
                 nBasesWithBaselineButNoLocalExpression = 0;
                 minZForBasesWithBaselineExpression = 1000000000;
                 maxZForBasesWithBaselineExpression = -10000000000;
@@ -147,6 +151,7 @@ namespace RegionalExpression
                 {
                     nBasesWithBaselineButNoLocalExpression++;
                     totalZForBasesWithBaselineExpression -= expression[currentContig][offset].mean / expression[currentContig][offset].stddev; // It's one mean below the mean: ie. 0 expression
+                    // No need to update totalMu, since 0 expression adds 0 there.
                 }
             }
 
@@ -154,7 +159,7 @@ namespace RegionalExpression
             {
                 outputFile.WriteLine("Contig\tContig Offset\tn Bases Expressed\tn Bases Expressed With Baseline Expression\tn Bases Expressed Without Baseline Expression\tTotal Reads Mapped To Bases With Baseline Expression\t" +
                     "Total Reads Mapped To Bases Without Baseline Expression\tCount of bases with baseline expression but not in this sample\tTotal z For Bases With Baseline Expression\tMin z For Bases With Baseline Expression\tMax z For Bases With BaselineExpression\t" +
-                    "Mean z for Bases With Baseline Expression");
+                    "Mean z for Bases With Baseline Expression\tMean mu for Bases with Baseline Expression");
             }
         }
 
@@ -223,7 +228,6 @@ namespace RegionalExpression
                 //      **done**
                 // 
                 //
-
 
                 var line = allcountReader.ReadLine();
 
@@ -348,7 +352,7 @@ namespace RegionalExpression
                 var outputFilename = directory + analysis_id + ".regional_expression.txt";
                 var outputFile = new StreamWriter(outputFilename);
 
-                outputFile.WriteLine("RegionalExpression v2.0\t" + analysis_id + "\t" + allcountFilename + "\t" + regionSize);
+                outputFile.WriteLine("RegionalExpression v3.0\t" + analysis_id + "\t" + allcountFilename + "\t" + regionSize);
                 outputFile.WriteLine("NumContigs: " + numContigs);
                 Region.printHeader(outputFile);
 
@@ -543,7 +547,7 @@ namespace RegionalExpression
                     allcountTimer.Stop();
                     lock (runs)
                     {
-                        Console.WriteLine("Processed " + participantId + " in " + (allcountTimer.ElapsedMilliseconds + 500) / 1000 + "s, " + runs.Count() + " remain in the queue.");
+                        Console.WriteLine("Processed " + participantId + " in " + (allcountTimer.ElapsedMilliseconds + 500) / 1000 + "s, " + runs.Count() + " remain" +  ((runs.Count() == 1) ? "s" : "") + " in the queue.");
                     }
                 }
             }
@@ -605,7 +609,25 @@ namespace RegionalExpression
                 return;
             }
 
-            var experiments = File.ReadAllLines(@"\\gcr\scratch\b99\bolosky\experiments.txt");
+
+            string[] experiments = null;
+
+            bool threw = false;
+            do
+            {
+                try
+                {
+                    threw = false;
+                    experiments = File.ReadAllLines(@"\\gcr\scratch\b99\bolosky\experiments.txt");
+                }
+                catch (IOException)
+                {
+                    Console.WriteLine("Error opening experiments.txt.  It's probably open, most likely in Excel.  Sleeping 10s and retrying");
+                    threw = true;
+                    Thread.Sleep(10000);
+                }
+            } while (threw);
+
             var experimentsByParticipantId = new Dictionary<string, string[]>();
             foreach (var experimentLine in experiments)
             {

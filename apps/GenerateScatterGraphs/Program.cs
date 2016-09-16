@@ -18,6 +18,7 @@ namespace GenerateScatterGraphs
         {
             public string gene;
             public List<string> output = new List<string>();
+            public List<string> outputUnfiltered = new List<string>();
 
             public Dictionary<string, int> countByCancerType = new Dictionary<string, int>();
 
@@ -500,11 +501,6 @@ namespace GenerateScatterGraphs
                         double nDNATumor = Convert.ToInt32(dnaMutation[40]);
                         double nDNANeither = Convert.ToInt32(dnaMutation[41]);
 
-                        if (nDNAReference + nDNATumor + nDNANeither < minReads)
-                        {
-                            continue;
-                        }
-
                         string outputLine = fields[1] + "\t" + dnaMutation[1];
 
                         for (int i = 2; i <= 42; i++)
@@ -518,6 +514,13 @@ namespace GenerateScatterGraphs
                         for (int i = 39; i <= 42; i++)
                         {
                             outputLine += "\t" + fields[i];
+                        }
+
+                        geneState.outputUnfiltered.Add(outputLine);
+
+                        if (nDNAReference + nDNATumor + nDNANeither < minReads || nRNAReference + nRNATumor + nRNANeither < minReads)
+                        {
+                            continue;
                         }
 
                         bool isSingle = geneState.dnaMutationsByTumorAnalysis[tumorSampleID].Count() == 1;
@@ -679,12 +682,13 @@ namespace GenerateScatterGraphs
                 string[] histogram2Lines = BuildHistogram(geneState.ratioRatiosMidDNA, histogramBucketMaxima);
 
                StreamWriter file = new StreamWriter(@"f:\temp\gene_scatter_graphs\" + geneState.gene + ".txt");
-                file.WriteLine("RNAFile\tDNAFile\t" +
-                    "Hugo_Symbol\tEntrez_Gene_Id\tCenter\tNCBI_Build\tChromosome\tStart_Position\tEnd_Position\tStrand\tVariant_Classification\tVariant_Type\tReference_Allele\tTumor_Seq_Allele_1\tTumor_Seq_Allele_2\tdbSNP_RS\tdbSNP_Val_Status\t" +
-                    "Tumor_Sample_Barcode\tMatched_Norm_Sample_Barcode\tMatch_Norm_Seq_Allele1\tMatch_Norm_Seq_Allele2\tTumor_Validation_Allele1\tTumor_Validation_Allele2\tMatch_Norm_Validation_Allele1\tMatch_Norm_Validation_Allele2\tVerification_Status\t" +
-                    "Validation_Status\tMutation_Status\tSequencing_Phase\tSequence_Source\tValidation_Method\tScore\tBAM_File\tSequencer\tTumor_Sample_UUID\tMatched_Norm_Sample_UUID\tFile_Name\tArchive_Name\tLine_Number\t" +
-                    "n_DNA_Matching_Reference\tn_DNA_Matching_Tumor\tn_DNA_Matching_Neither\tn_DNA_Matching_Both\t" +
-                    "n_RNA_Matching_Reference\tn_RNA_Matching_Tumor\tn_RNA_Matching_Neither\tn_RNA_Matching_Both\t" +
+               string unfilteredHeaderLine = "RNAFile\tDNAFile\t" +
+                   "Hugo_Symbol\tEntrez_Gene_Id\tCenter\tNCBI_Build\tChromosome\tStart_Position\tEnd_Position\tStrand\tVariant_Classification\tVariant_Type\tReference_Allele\tTumor_Seq_Allele_1\tTumor_Seq_Allele_2\tdbSNP_RS\tdbSNP_Val_Status\t" +
+                   "Tumor_Sample_Barcode\tMatched_Norm_Sample_Barcode\tMatch_Norm_Seq_Allele1\tMatch_Norm_Seq_Allele2\tTumor_Validation_Allele1\tTumor_Validation_Allele2\tMatch_Norm_Validation_Allele1\tMatch_Norm_Validation_Allele2\tVerification_Status\t" +
+                   "Validation_Status\tMutation_Status\tSequencing_Phase\tSequence_Source\tValidation_Method\tScore\tBAM_File\tSequencer\tTumor_Sample_UUID\tMatched_Norm_Sample_UUID\tFile_Name\tArchive_Name\tLine_Number\t" +
+                   "n_DNA_Matching_Reference\tn_DNA_Matching_Tumor\tn_DNA_Matching_Neither\tn_DNA_Matching_Both\t" +
+                   "n_RNA_Matching_Reference\tn_RNA_Matching_Tumor\tn_RNA_Matching_Neither\tn_RNA_Matching_Both\t";
+               file.WriteLine(unfilteredHeaderLine +
                     "tumorDNAFraction\ttumorRNAFraction\ttumorDNAMultiple\ttumorRNAMultiple\ttumorDNARatio\ttumorRNARatio\tFractionOfMeanExpression\tzOfmeanExpression\tratioOfRatios\tIsSingle\tCancerType\tgender\tzTumor\tzNormal\tz2Tumor\tz2Normal\t%MeanTumor\t%MeanNormal\t" + 
                     histogramLines[0] + "\t" + histogram2Lines[0]);
                 for (int i = 0; i < geneState.output.Count(); i++)
@@ -700,6 +704,14 @@ namespace GenerateScatterGraphs
                 }
 
                 file.Close();
+
+                var unfilteredFile = new StreamWriter(@"f:\temp\gene_mutations_with_counts\" + geneState.gene + "_unfiltered_counts.txt");
+                unfilteredFile.WriteLine(unfilteredHeaderLine);
+                foreach (var line in geneState.outputUnfiltered)
+                {
+                    unfilteredFile.WriteLine(line);
+                }
+                unfilteredFile.Close();
             }
             summaryFile.Close();
 

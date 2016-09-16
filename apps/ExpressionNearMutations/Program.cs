@@ -19,6 +19,22 @@ namespace ExpressionNearMutations
             public double minExpression = 100000;
             public double maxExpression = -100000;
             public double totalExpression = 0;
+
+            public double minMeanExpression = 100000;
+            public double maxMeanExpression = -1;
+            public double totalMeanExpression = 0;
+
+            public void AddExpression(double z, double mu)
+            {
+                nRegionsIncluded++;
+                totalExpression += z;
+                minExpression = Math.Min(minExpression, z);
+                maxExpression = Math.Max(maxExpression, z);
+
+                totalMeanExpression += mu;
+                minMeanExpression = Math.Min(minMeanExpression, mu);
+                maxMeanExpression = Math.Max(maxMeanExpression, mu);
+            }
         }
         class Gene
         {
@@ -29,8 +45,6 @@ namespace ExpressionNearMutations
                 chromosome = chromosome_;
                 minOffset = offset;
                 maxOffset = offset;
-
-
             }
 
             public string hugo_symbol;  // The gene name
@@ -65,7 +79,7 @@ namespace ExpressionNearMutations
                 }
             }
 
-            public void AddRegionalExpression(int chromosomeOffset, double z)
+            public void AddRegionalExpression(int chromosomeOffset, double z, double mu)
             {
                 int distance;
                 if (chromosomeOffset >= gene.minOffset && chromosomeOffset <= gene.maxOffset)
@@ -81,19 +95,22 @@ namespace ExpressionNearMutations
                     distance = chromosomeOffset - gene.maxOffset;
                 }
 
-                for (int sizeIndex = nRegionSizes - 1; sizeIndex >= 0; sizeIndex--)
+
+                if (0 == distance)
                 {
-                    RegionalExpressionState state = regionalExpressionState[sizeIndex];
-
-                    if (regionSizeByRegionSizeIndex[sizeIndex] < distance)
+                    regionalExpressionState[0].AddExpression(z, mu);
+                }
+                else
+                {
+                    for (int sizeIndex = nRegionSizes - 1; sizeIndex > 0; sizeIndex--)  // Don't do 0, so we exclude the gene from the surronding region
                     {
-                        break;
-                    }
+                        if (regionSizeByRegionSizeIndex[sizeIndex] < distance)
+                        {
+                            break;
+                        }
 
-                    state.nRegionsIncluded++;
-                    state.totalExpression += z;
-                    state.minExpression = Math.Min(state.minExpression, z);
-                    state.maxExpression = Math.Max(state.maxExpression, z);
+                        regionalExpressionState[sizeIndex].AddExpression(z, mu);
+                    }
                 }
             }
 
@@ -253,7 +270,7 @@ namespace ExpressionNearMutations
                     continue;
                 }
 
-                if (headerLine.Substring(20, 1) != "2")
+                if (headerLine.Substring(20, 1) != "3")
                 {
                     Console.WriteLine("Unsupported version in file '" + experiment.TumorRNAAnalysis.regionalExpressionFileName + "', header line: " + headerLine);
                     continue;
@@ -295,12 +312,14 @@ namespace ExpressionNearMutations
                     string chromosome;
                     int offset;
                     double z;
+                    double mu;
 
                     try
                     {
                         chromosome = fields[0];
                         offset = Convert.ToInt32(fields[1]);
                         z = Convert.ToDouble(fields[11]);
+                        mu = Convert.ToDouble(fields[12]);
 
                         int nBasesExpressedWithBaselineExpression = Convert.ToInt32(fields[3]);
                         int nBasesUnexpressedWithBaselineExpression = Convert.ToInt32(fields[7]);
@@ -328,7 +347,7 @@ namespace ExpressionNearMutations
                                 geneExpressions.Add(gene.hugo_symbol, new GeneExpression(gene));
                             }
 
-                            geneExpressions[gene.hugo_symbol].AddRegionalExpression(offset, z);
+                            geneExpressions[gene.hugo_symbol].AddRegionalExpression(offset, z, mu);
                         }
                     }
                 }
@@ -354,11 +373,16 @@ namespace ExpressionNearMutations
 
                 var outputFile = new StreamWriter(outputFilename);
 
-                outputFile.WriteLine("ExpressionNearMutations v1.0 " + participantId);
+                outputFile.WriteLine("ExpressionNearMutations v2.0 " + participantId);
                 outputFile.Write("Gene name\tnon-silent mutation count");
                 for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
                 {
-                    outputFile.Write("\t" + GeneExpression.regionSizeByRegionSizeIndex[sizeIndex]);
+                    outputFile.Write("\t" + GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + "(z)");
+                }
+
+                for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
+                {
+                    outputFile.Write("\t" + GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + "(mu)");
                 }
 
                 outputFile.WriteLine();
@@ -380,6 +404,18 @@ namespace ExpressionNearMutations
                         if (allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncluded != 0)
                         {
                             outputFile.Write("\t" + allExpressions[i].regionalExpressionState[sizeIndex].totalExpression / allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncluded);
+                        }
+                        else
+                        {
+                            outputFile.Write("\t*");
+                        }
+                    }
+
+                    for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
+                    {
+                        if (allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncluded != 0)
+                        {
+                            outputFile.Write("\t" + allExpressions[i].regionalExpressionState[sizeIndex].totalMeanExpression / allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncluded);
                         }
                         else
                         {
