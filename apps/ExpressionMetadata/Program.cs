@@ -2074,6 +2074,9 @@ namespace ExpressionMetadata
 
             const int nDiseasesPerProgramRun = 800; // The command line is limited to 32K and GUIDs are 36 characters plus one for the space.  800 * 37 < 30K, so there's some headroom for the program name & args
 
+            string createJobScriptFilename = baseDirectory + "createRegionalExpressionjob.cmd";
+            string runJobScriptFilename = baseDirectory + @"runRegionalExpression.cmd";
+
             StreamWriter script = null;
 
             foreach (var experiment in experiments)
@@ -2092,10 +2095,10 @@ namespace ExpressionMetadata
 
                     if (script == null)
                     {
-                        var createJobScript = new StreamWriter(baseDirectory + "createRegionalExpressionjob.cmd");
+                        var createJobScript = new StreamWriter(createJobScriptFilename);
                         createJobScript.WriteLine(@"job new /emailaddress:bolosky@microsoft.com /nodegroup:B99,ExpressQ /exclusive:true /failontaskfailure:false /jobname:regionalExpression /memorypernode:100000 /notifyoncompletion:true /numnodes:1-20 /runtime:12:00 /scheduler:gcr /jobtemplate:ExpressQ /estimatedprocessmemory:100000");
                         createJobScript.Close();
-                        script = new StreamWriter(baseDirectory + @"runRegionalExpression.cmd");
+                        script = new StreamWriter(runJobScriptFilename);
                     }
 
                     string disease_abbr;
@@ -2123,10 +2126,71 @@ namespace ExpressionMetadata
                     AddRegionalExpressionProgramRunToScript(script, entry.Value, entry.Key);
                 }
                 script.Close();
-            
+            }
+            else
+            {
+                //
+                // Get rid of any stale scripts from previous runs.  File.Delete does nothing if the file doesn't exist.
+                //
+                File.Delete(createJobScriptFilename);
+                File.Delete(runJobScriptFilename);
             }
 
             Console.WriteLine(nWithRegionalExpression + " analyses have regional expression, generated a script to make " + nInScript + " more and " + nNeedingPrecursors + " need to have their RNA data downloaded first.");
+        }
+
+        static void GenerateSelectedVariantsScript(List<ExpressionTools.Experiment> experiments)
+        {
+            int nWithSelectedVariants = 0;
+            int nNeedingPrecursors = 0;
+            int nReadyToGo = 0;
+
+            string scriptFilename = baseDirectory + "generateSelectedVariants.cmd";
+            File.Delete(scriptFilename);
+
+            StreamWriter scriptFile = null;
+            int nOnCurrentLine = 0;
+
+            foreach (var experiment in experiments)
+            {
+                if (experiment.NormalDNAAnalysis.storedBAM == null || experiment.NormalDNAAnalysis.storedBAM.vcfInfo == null) {
+                    nNeedingPrecursors++;
+                }
+                else if (experiment.NormalDNAAnalysis.storedBAM.selectedVariantsInfo != null)
+                {
+                    nWithSelectedVariants++;
+                }
+                else
+                {
+                    if (null == scriptFile)
+                    {
+                        scriptFile = new StreamWriter(scriptFilename);
+                    }
+
+                    if (nOnCurrentLine >= 800)
+                    {
+                        scriptFile.WriteLine();
+                        nOnCurrentLine = 0;
+                    }
+
+                    if (0 == nOnCurrentLine)
+                    {
+                        scriptFile.Write("SelectGermlineVariants");
+                    }
+
+                    scriptFile.Write(" " + experiment.participant.participantId);
+                    nOnCurrentLine++;
+                    nReadyToGo++;
+                }
+            }
+
+            if (null != scriptFile)
+            {
+                scriptFile.WriteLine();
+                scriptFile.Close();
+            }
+
+            Console.WriteLine("" + nWithSelectedVariants + " have selected variants, " + nNeedingPrecursors + " aren't ready to select and " + nReadyToGo + " added to script to select.");
         }
 
         static void GenerateGeneExpressionScripts(List<ExpressionTools.Experiment> experiments)
@@ -2135,6 +2199,9 @@ namespace ExpressionMetadata
             int nInScript = 0;
             int nNeedingPrecursors = 0;
             var readyToGo = new List<ParticipantID>();
+
+            string createJobScriptFilename = baseDirectory + "createGeneExpressionJob.cmd";
+            string scheduleJobScriptFilename = baseDirectory + "scheduleGeneExpressionJob.cmd";
 
             foreach (var experiment in experiments)
             {
@@ -2154,7 +2221,7 @@ namespace ExpressionMetadata
 
             nInScript = readyToGo.Count();
             if (0 != nInScript) {
-                 var createJobScript = new StreamWriter(baseDirectory + "createGeneExpressionJob.cmd");
+                var createJobScript = new StreamWriter(createJobScriptFilename);
                 createJobScript.WriteLine(@"job new /emailaddress:bolosky@microsoft.com /nodegroup:B99,ExpressQ /exclusive:true /failontaskfailure:false /jobname:geneExpression /memorypernode:32000 /notifyoncompletion:true /numnodes:1-20 /runtime:12:00 /scheduler:gcr /jobtemplate:ExpressQ /estimatedprocessmemory:20000");
                 createJobScript.Close();
 
@@ -2163,7 +2230,7 @@ namespace ExpressionMetadata
                 string jobHeader = @"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr \\gcr\scratch\b99\bolosky\ExpressionNearMutations ";
                 string thisJob = "";
 
-                StreamWriter scheduleJobScript = new StreamWriter(baseDirectory + "scheduleGeneExpressionJob.cmd");
+                StreamWriter scheduleJobScript = new StreamWriter(scheduleJobScriptFilename);
 
                 foreach (var participant in readyToGo)
                 {
@@ -2183,6 +2250,14 @@ namespace ExpressionMetadata
 
                 scheduleJobScript.Close();
 
+            }
+            else
+            {
+                //
+                // Get rid of any stale scripts left over from a previous run.  File.Delete does nothing if the file doesn't exist.
+                //
+                File.Delete(createJobScriptFilename);
+                File.Delete(scheduleJobScriptFilename);
             }
 
             Console.WriteLine("" + nInScript + " are ready to have gene expression computed, " + nNeedingPrecursors + " still need preliminary work done and " + nWithGeneExpression + " are done.");
@@ -2298,6 +2373,7 @@ namespace ExpressionMetadata
             var experiments = BuildExperiments(participants);
             //CountTP53Mutations(experiments);
             ExpressionTools.DumpExperimentsToFile(experiments, baseDirectory + "experiments.txt");
+            GenerateSelectedVariantsScript(experiments);
             GenerateRegionalExpressionScripts(experiments);
             GenerateGeneExpressionScripts(experiments);
             GenerateTP53CountScripts(experiments);

@@ -303,7 +303,7 @@ namespace ExpressionNearMutations
                     }
 
                     var fields = line.Split('\t');
-                    if (fields.Count() != 12)
+                    if (fields.Count() != 13)
                     {
                         Console.WriteLine("Badly formatted data line in file '" + experiment.TumorRNAAnalysis.regionalExpressionFileName + "', line " + lineNumber + ": " + line);
                         break;
@@ -431,7 +431,8 @@ namespace ExpressionNearMutations
                 timer.Stop();
                 lock (participantsToProcess)
                 {
-                    Console.WriteLine("Processed participant " + participantId + " in " + (timer.ElapsedMilliseconds + 500) / 1000 + "s.  " + participantsToProcess.Count() + " remain queued.");
+                    var nRemaining = participantsToProcess.Count();
+                    Console.WriteLine("Processed participant " + participantId + " in " + (timer.ElapsedMilliseconds + 500) / 1000 + "s.  " + nRemaining + " remain" + ((1 == nRemaining) ? "s" : "") + " queued.");
                 }
             }
         }

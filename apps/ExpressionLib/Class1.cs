@@ -10,6 +10,8 @@ using System.IO.Compression;
 using System.Diagnostics;
 using MathNet.Numerics;
 using System.Threading;
+using System.Runtime.InteropServices;
+
 
 
 //
@@ -300,6 +302,7 @@ namespace ExpressionLib
             public FileInfo bamInfo = null;
             public FileInfo baiInfo = null;
             public FileInfo vcfInfo = null;
+            public FileInfo selectedVariantsInfo = null;
             public FileInfo allCountInfo = null;
             public FileInfo regionalExpressionInfo = null;
             public FileInfo geneExpressionInfo = null;
@@ -443,6 +446,10 @@ namespace ExpressionLib
                         else if (file == subdir + @"\" + analysisID + @".vcf")
                         {
                             storedBAM.vcfInfo = new FileInfo(file);
+                        }
+                        else if (file == subdir + @"\" + analysisID + @".selectedVariants")
+                        {
+                            storedBAM.selectedVariantsInfo = new FileInfo(file);
                         }
                         else if (file.Count() > 12 && file.Substring(file.Count() - 13).ToLower() == "-isoforms.txt")
                         {
@@ -590,7 +597,8 @@ namespace ExpressionLib
 
             lock (storedBAMs)
             {
-                Console.WriteLine("Loaded " + nBamsLoaded + " bams for " + directory + " in " + (stopwatch.ElapsedMilliseconds + 500) / 1000 + "s, " + (nBamsLoaded * 1000 / (stopwatch.ElapsedMilliseconds + 1)) + " bams/s");
+                Console.WriteLine("Loaded " + nBamsLoaded + " bams for " + directory + " in " + (stopwatch.ElapsedMilliseconds + 500) / 1000 + "s, " + (nBamsLoaded * 1000 / (stopwatch.ElapsedMilliseconds + 1)) + " bams/s, "
+                    + SizeToUnits(GetVolumeFreeSpace(directory)) + " free");
             }
         }
 
@@ -712,7 +720,7 @@ namespace ExpressionLib
 
         public class Experiment
         {
-            public Participant participant;
+            public Participant participant = null;
             public string disease_abbr;
             public TCGARecord TumorRNAAnalysis;
             public TCGARecord TumorDNAAnalysis;
@@ -744,7 +752,7 @@ namespace ExpressionLib
             } while (threw);
 
             outputFile.WriteLine("disease_abbr\treference\tparticipantID\tTumorRNAAnalysis\tTumorDNAAnalysis\tNormalDNAAnalysis\tNormalRNAAnalysis\ttumorRNAPathname\ttumorDNAPathname\t" +
-                "normalDNAPathname\tNormalRNAPathname\tVCFPathname\tgender\tdaysToBirth\tdaysToDeath\tOrigTumorDNAAliquotID\tTumorAllcountFile\tNormalAllcountFile\tmafFile\tRegionalExpressionFilename\tGeneExpressionFilename");
+                "normalDNAPathname\tNormalRNAPathname\tVCFPathname\tgender\tdaysToBirth\tdaysToDeath\tOrigTumorDNAAliquotID\tTumorAllcountFile\tNormalAllcountFile\tmafFile\tRegionalExpressionFilename\tGeneExpressionFilename\tSelectedVariantsFilename");
 
             foreach (Experiment experiment in experiments)
             {
@@ -878,6 +886,15 @@ namespace ExpressionLib
                     outputFile.Write(experiment.TumorRNAAnalysis.geneExpressionFileName + "\t");
                 }
 
+                if (experiment.NormalDNAAnalysis.storedBAM != null && experiment.NormalDNAAnalysis.storedBAM.selectedVariantsInfo != null)
+                {
+                    outputFile.Write(experiment.NormalDNAAnalysis.storedBAM.selectedVariantsInfo.FullName + "\t");
+                }
+                else
+                {
+                    outputFile.Write("\t");
+                }
+
                 outputFile.WriteLine();
             }
 
@@ -918,7 +935,10 @@ namespace ExpressionLib
 
                 var experiment = new Experiment();
                 experiment.disease_abbr = fields[0];
-                experiment.participant = participants[fields[2]];
+                if (null != participants)
+                {
+                    experiment.participant = participants[fields[2]];
+                }
                 experiment.TumorRNAAnalysis = tcgaRecords[fields[3]];
                 experiment.TumorRNAAnalysis.bamFileName = fields[7];
                 experiment.TumorDNAAnalysis = tcgaRecords[fields[4]];
@@ -931,7 +951,7 @@ namespace ExpressionLib
                     experiment.NormalRNAAnalysis = tcgaRecords[fields[6]];
                     experiment.NormalRNAAnalysis.bamFileName = fields[10];
                 }
-                if (experiment.participant.mafs.Count() > 0)
+                if (null != experiment.participant && experiment.participant.mafs.Count() > 0)
                 {
                     experiment.maf = experiment.participant.mafs[0];
                 }
@@ -2309,6 +2329,49 @@ namespace ExpressionLib
 
             return listOfDiseases;
         }
+
+        //
+        // Code for GetVolumeFreeSpace adapted from http://stackoverflow.com/questions/14465187/get-available-disk-free-space-for-a-given-path-on-windows
+        //
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool GetDiskFreeSpaceEx(string lpDirectoryName,
+           out ulong lpFreeBytesAvailable,
+           out ulong lpTotalNumberOfBytes,
+           out ulong lpTotalNumberOfFreeBytes);
+
+        public static ulong GetVolumeFreeSpace(string pathname)
+        {
+            ulong FreeBytesAvailable;
+            ulong TotalNumberOfBytes;
+            ulong TotalNumberOfFreeBytes;
+
+            if (!GetDiskFreeSpaceEx(pathname,
+                                        out FreeBytesAvailable,
+                                        out TotalNumberOfBytes,
+                                        out TotalNumberOfFreeBytes))
+            {
+                throw new System.ComponentModel.Win32Exception();
+            }
+
+            return FreeBytesAvailable;
+        }
+
+        public static string SizeToUnits(ulong size)
+        {
+            if (size < 1024) return "" + size;
+
+            if (size < 1024 * 1024) return "" + ((size + 512) / 1024) + "K";
+
+            if (size < 1024 * 1024 * 1024) return "" + ((size + 512 * 1024) / (1024 * 1024)) + "M";
+
+            if (size < (ulong)1024 * 1024 * 1024 * 1024) return "" + ((size + 512 * 1024 * 1024) / (1024 * 1024 * 1024)) + "G";
+
+            if (size < (ulong)1024 * 1024 * 1024 * 1024 * 1024) return "" + ((size + (ulong)512 * 1024 * 1204 * 1024) / ((ulong)1024 * 1024 * 1024 * 1024)) + "T";
+
+            return "" + ((size + (ulong)512 * 1024 * 1204 * 1024 * 1024) / ((ulong)1024 * 1024 * 1024 * 1024 * 1024)) + "P";
+        }
+
  
     } // ExpressionTools
 

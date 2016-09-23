@@ -63,6 +63,7 @@ obj
 /apps/ExpressionByMutationCount/bin
 /apps/MannWhitney/Bin/x64
 /apps/ExpressionMetadata/bin
+/apps/SelectGermlineVariants/bin
 
 /apps/ExpressionMetadata/bin/x64/Debug
 /apps/ExpressionMetadata/bin/x64/Release/ExpressionMetadata.exe.config

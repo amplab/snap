@@ -49,6 +49,8 @@ namespace ExpressionByMutationCount
             public int currentNMutations = 0;
             public double[] currentZ = new double[nWidths];
             public bool[] currentZValid = new bool[nWidths];
+            public double[] currentMu = new double[nWidths];
+            public bool[] currentMuValid = new bool[nWidths];
             public const int nWidths = 20;
             const string headerPrefix = "ExpressionNearMutations v";
             public string currentLine = null;
@@ -107,7 +109,7 @@ namespace ExpressionByMutationCount
                 }
 
                 var fields = line.Split('\t');
-                if (fields.Count() != nWidths + 2)
+                if (fields.Count() != 2 * nWidths + 2)
                 {
                     Console.WriteLine("File " + filename + " has unparsable line " + line);
                     return false;
@@ -128,6 +130,16 @@ namespace ExpressionByMutationCount
                         {
                             currentZ[i] = Convert.ToDouble(fields[i + 2]);
                             currentZValid[i] = true;
+                        }
+
+                        if (fields[i + nWidths + 2] == "*")
+                        {
+                            currentMuValid[i] = false;
+                        }
+                        else
+                        {
+                            currentMu[i] = Convert.ToDouble(fields[i + nWidths + 2]);
+                            currentMuValid[i] = true;
                         }
                     }
                 }
@@ -564,6 +576,8 @@ namespace ExpressionByMutationCount
                             geneToProcess.AddExpression(inputFile.tumorType, i, inputFile.currentNMutations, inputFile.currentZ[i], inputFile.participantID);
                         }
                     }
+
+                    now add in the Mu's  ANd do something with them.
 
                     if (!inputFile.GetNextLine())
                     {
