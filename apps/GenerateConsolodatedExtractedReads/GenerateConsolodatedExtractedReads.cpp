@@ -423,6 +423,29 @@ int main(int argc, char* argv[])
         samtoolsPathname = argv[4];
     }
 
+    HANDLE hInputFile = CreateFile(argv[1], GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (INVALID_HANDLE_VALUE == hInputFile) {
+        fprintf(stderr, "Unable to open input file '%s', %d\n", argv[1], GetLastError());
+        exit(1);
+    }
+
+    BY_HANDLE_FILE_INFORMATION fileInfo[1];
+    if (!GetFileInformationByHandle(hInputFile, fileInfo)) {
+        fprintf(stderr, "Unable to get size of input file, %d\n", GetLastError());
+        exit(1);
+    }
+
+    LARGE_INTEGER liFileSize;
+    liFileSize.HighPart = fileInfo->nFileSizeHigh;
+    liFileSize.LowPart = fileInfo->nFileSizeLow;
+
+    size_t inputFileSize = liFileSize.QuadPart;
+
+    if (0 == inputFileSize) {
+        fprintf(stderr, "Empty input script file, not creating output files.\n");
+        return -1;
+    }
+
     hOutputFile = CreateFile(argv[2], GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (INVALID_HANDLE_VALUE == hOutputFile) {
         fprintf(stderr, "Unable to open output file '%s', %d\n", argv[2], GetLastError());
@@ -450,24 +473,6 @@ int main(int argc, char* argv[])
     //
     // Read in the input file.
     //
-    HANDLE hInputFile = CreateFile(argv[1], GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (INVALID_HANDLE_VALUE == hInputFile) {
-        fprintf(stderr, "Unable to open input file '%s', %d\n", argv[1], GetLastError());
-        exit(1);
-    }
-
-    BY_HANDLE_FILE_INFORMATION fileInfo[1];
-    if (!GetFileInformationByHandle(hInputFile, fileInfo)) {
-        fprintf(stderr, "Unable to get size of input file, %d\n", GetLastError());
-        exit(1);
-    }
-
-    LARGE_INTEGER liFileSize;
-    liFileSize.HighPart = fileInfo->nFileSizeHigh;
-    liFileSize.LowPart = fileInfo->nFileSizeLow;
-
-    size_t inputFileSize = liFileSize.QuadPart;
-
     char *inputFileData = new char[inputFileSize + 1];
     size_t bytesRead = 0;
     while (bytesRead < inputFileSize) {

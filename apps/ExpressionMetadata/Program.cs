@@ -579,7 +579,10 @@ namespace ExpressionMetadata
             }
             globalScript.Close();
 
-            Console.WriteLine("" + nNeedingExtraction + " analyses require extraction of additional metadata (read length).");
+            if (nNeedingExtraction > 0)
+            {
+                Console.WriteLine("" + nNeedingExtraction + " analyses require extraction of additional metadata (read length).");
+            }
         }
 
 
@@ -908,9 +911,21 @@ namespace ExpressionMetadata
 
             Console.WriteLine("Of " + participants.Count() + " participants we generated " + experiments.Count() + " experiments containing " + String.Format("{0:n0}",nMutations) + " mutatuions, for which we need to download " + (nNormalDownloads + nTumorDownloads + nRNADownloads) + 
                 " analyses consiting of " + String.Format("{0:n0}", (normalBytesToDownload + tumorBytesToDownload + rnaBytesToDownload)) + " bytes and realign " + (nNormalRealigns + nTumorRealigns) + " analyses.");
-            Console.WriteLine("Normal: " + nNormalDownloads + " downloads, " + String.Format("{0:n0}", normalBytesToDownload) + " bytes and " + nNormalRealigns + " realigns of " + String.Format("{0:n0}",nNormalRealignBytes) + " source bytes");
-            Console.WriteLine("Tumor: " + nTumorDownloads + " downloads, " + String.Format("{0:n0}", tumorBytesToDownload) + " bytes and " + nTumorRealigns + " realigns of " + String.Format("{0:n0}",nTumorRealignBytes) + " source bytes");
-            Console.WriteLine("RNA: " + nRNADownloads + " downloads, " + String.Format("{0:n0}", rnaBytesToDownload) + " bytes.");
+
+            if (nNormalDownloads + nNormalRealigns > 0)
+            {
+                Console.WriteLine("Normal: " + nNormalDownloads + " downloads, " + String.Format("{0:n0}", normalBytesToDownload) + " bytes and " + nNormalRealigns + " realigns of " + String.Format("{0:n0}", nNormalRealignBytes) + " source bytes");
+            }
+
+            if (nTumorDownloads + nTumorRealigns > 0)
+            {
+                Console.WriteLine("Tumor: " + nTumorDownloads + " downloads, " + String.Format("{0:n0}", tumorBytesToDownload) + " bytes and " + nTumorRealigns + " realigns of " + String.Format("{0:n0}", nTumorRealignBytes) + " source bytes");
+            }
+
+            if (nRNADownloads > 0)
+            {
+                Console.WriteLine("RNA: " + nRNADownloads + " downloads, " + String.Format("{0:n0}", rnaBytesToDownload) + " bytes.");
+            }
 
             var countByDisease = new Dictionary<string, int>();
             var readyToGoByDisease = new Dictionary<string, int>();
@@ -1063,7 +1078,7 @@ namespace ExpressionMetadata
             foreach (var machineEntry in perMachineDeleteBytes)
             {
                 string machine = machineEntry.Key;
-                Console.WriteLine(machine + " doesn't need " + String.Format("{0:n0}", perMachineDeleteBytes[machine]) + " bytes that it's storing.");
+                //Console.WriteLine(machine + " doesn't need " + String.Format("{0:n0}", perMachineDeleteBytes[machine]) + " bytes that it's storing.");
                 foreach (var storedBAM in perMachineLists[machine])
                 {
                     deleteLog.WriteLine("" + (storedBAM.bamInfo.Length + storedBAM.baiInfo.Length) + "\t" + machine + "\t" + storedBAM.bamInfo.FullName);
@@ -1363,6 +1378,67 @@ namespace ExpressionMetadata
         static Dictionary<string, string> refassemChrStateSwitched = new Dictionary<string, string>();
         static Dictionary<string, string> refassemTranslation = new Dictionary<string, string>();        // refassems in the input that are equivalent to ones we actually have
 
+        const string GenReadsNearVariantsScriptFilenameBase = "GenReadsNearVariants-";
+
+        static void GenerateExtractionEntryIfNecessary(Dictionary<string, StreamWriter> scriptsByHostname, ExpressionTools.TCGARecord normalAnalysis, ExpressionTools.TCGARecord tumorAnalysis, ref int nExtant, ref int nToGenerate, ref int nWaitingForPrerequisites)
+        {
+            if (tumorAnalysis.storedBAM != null && tumorAnalysis.storedBAM.readsAtSelectedVariantsInfo != null)
+            {
+                if (normalAnalysis.storedBAM == null || normalAnalysis.storedBAM.selectedVariantsInfo == null || normalAnalysis.storedBAM.selectedVariantsInfo.CreationTime > tumorAnalysis.storedBAM.readsAtSelectedVariantsInfo.CreationTime)
+                {
+                    Console.WriteLine("Found read-at-selected-variants for experiment with no or newer selected variants file: " + tumorAnalysis.storedBAM.selectedVariantsInfo.FullName);
+                }
+                nExtant++;
+            }
+            else if (normalAnalysis.storedBAM == null || normalAnalysis.storedBAM.selectedVariantsInfo == null || tumorAnalysis.storedBAM == null || tumorAnalysis.storedBAM.bamInfo == null || !tumorAnalysis.storedBAM.chrStateKnown)
+            {
+                nWaitingForPrerequisites++;
+            }
+            else
+            {
+                string machine = tumorAnalysis.storedBAM.machineName;
+                if (!scriptsByHostname.ContainsKey(machine))
+                {
+                    scriptsByHostname.Add(machine, new StreamWriter(baseDirectory + GenReadsNearVariantsScriptFilenameBase + machine + ".cmd"));
+                }
+
+                scriptsByHostname[machine].WriteLine(@"del \temp\SamtoolsForVcf.cmd");
+                scriptsByHostname[machine].WriteLine("GenerateScriptFromVariants " + normalAnalysis.storedBAM.selectedVariantsInfo.FullName + " " + tumorAnalysis.storedBAM.bamInfo.FullName + @" \temp\SamtoolsForVcf.cmd" + (tumorAnalysis.storedBAM.usesChr ? " chr" : " \"\""));
+                scriptsByHostname[machine].WriteLine(@"GenerateConsolodatedExtractedReads \temp\SamtoolsForVcf.cmd " + ExpressionTools.GetDirectoryPathFromFullyQualifiedFilename(tumorAnalysis.storedBAM.bamInfo.FullName) +
+                    tumorAnalysis.analysis_id + ExpressionTools.readsAtSelectedVariantsExtension);
+                nToGenerate++;
+            }
+        }
+
+        static public void GenerateExtractionScriptsForSelectedVariants(List<ExpressionTools.Experiment> experiments)
+        {
+            //
+            // First, delete all of the extant scripts so that we don't accidentally run a stale one.
+            //
+            foreach (var machine in Machines)
+            {
+                File.Delete(baseDirectory + GenReadsNearVariantsScriptFilenameBase + machine.Key + ".cmd");
+            }
+
+            var scriptsByHostname = new Dictionary<string, StreamWriter>();
+            int nExtant = 0;
+            int nToGenerate = 0;
+            int nWaitingForPrerequisites = 0;
+
+            foreach (var experiment in experiments) {
+                GenerateExtractionEntryIfNecessary(scriptsByHostname, experiment.NormalDNAAnalysis, experiment.TumorRNAAnalysis, ref nExtant, ref nToGenerate, ref nWaitingForPrerequisites);
+                GenerateExtractionEntryIfNecessary(scriptsByHostname, experiment.NormalDNAAnalysis, experiment.TumorDNAAnalysis, ref nExtant, ref nToGenerate, ref nWaitingForPrerequisites);
+            }
+
+            foreach (var scriptEntry in scriptsByHostname) {
+                scriptEntry.Value.Close();
+            }
+
+            if (nToGenerate + nWaitingForPrerequisites > 0)
+            {
+                Console.WriteLine("Generated scripts to extract reads near selected variants for " + nToGenerate + " analyses on " + scriptsByHostname.Count() + " machines, " + nExtant + " are already done and " + nWaitingForPrerequisites + " are waiting for other work.");
+            }
+        }
 
         static public void GenerateExtractionScripts(List<ExpressionTools.Experiment> experiments)
         {
@@ -1907,7 +1983,10 @@ namespace ExpressionMetadata
                 variantCallScript.Close();
             }
 
-            Console.WriteLine("" + nSamplesAlreadyCalled + " have been variant called, " + nSamplesNotYetReadyToCall + " are waiting for other things, " + nSkipped + " are skipped, and " + nSamplesToVariantCall + " are ready to call.");
+            if (nSamplesNotYetReadyToCall + nSkipped + nSamplesToVariantCall > 0)
+            {
+                Console.WriteLine("" + nSamplesAlreadyCalled + " have been variant called, " + nSamplesNotYetReadyToCall + " are waiting for other things, " + nSkipped + " are skipped, and " + nSamplesToVariantCall + " are ready to call.");
+            }
             if (referencesNeedingAlternateChrState.Count() != 0)
             {
                 Console.Write("References needing alternate chr state: ");
@@ -2050,7 +2129,10 @@ namespace ExpressionMetadata
             }
 
             writer.Close();
-            Console.WriteLine("" + nNeedingChrState + " of " + n + " bams need to have their chr state measured.");
+            if (nNeedingChrState > 0)
+            {
+                Console.WriteLine("" + nNeedingChrState + " of " + n + " bams need to have their chr state measured.");
+            }
         }
 
         static void AddRegionalExpressionProgramRunToScript(StreamWriter script, List<ParticipantID> participants, string disease_abbr)
@@ -2136,7 +2218,10 @@ namespace ExpressionMetadata
                 File.Delete(runJobScriptFilename);
             }
 
-            Console.WriteLine(nWithRegionalExpression + " analyses have regional expression, generated a script to make " + nInScript + " more and " + nNeedingPrecursors + " need to have their RNA data downloaded first.");
+            if (nInScript + nNeedingPrecursors > 0)
+            {
+                Console.WriteLine(nWithRegionalExpression + " analyses have regional expression, generated a script to make " + nInScript + " more and " + nNeedingPrecursors + " need to have their RNA data downloaded first.");
+            }
         }
 
         static void GenerateSelectedVariantsScript(List<ExpressionTools.Experiment> experiments)
@@ -2190,7 +2275,10 @@ namespace ExpressionMetadata
                 scriptFile.Close();
             }
 
-            Console.WriteLine("" + nWithSelectedVariants + " have selected variants, " + nNeedingPrecursors + " aren't ready to select and " + nReadyToGo + " added to script to select.");
+            if (nNeedingPrecursors + nReadyToGo > 0)
+            {
+                Console.WriteLine("" + nWithSelectedVariants + " have selected variants, " + nNeedingPrecursors + " aren't ready to select and " + nReadyToGo + " added to script to select.");
+            }
         }
 
         static void GenerateGeneExpressionScripts(List<ExpressionTools.Experiment> experiments)
@@ -2202,6 +2290,9 @@ namespace ExpressionMetadata
 
             string createJobScriptFilename = baseDirectory + "createGeneExpressionJob.cmd";
             string scheduleJobScriptFilename = baseDirectory + "scheduleGeneExpressionJob.cmd";
+
+            File.Delete(createJobScriptFilename);
+            File.Delete(scheduleJobScriptFilename);
 
             foreach (var experiment in experiments)
             {
@@ -2260,7 +2351,10 @@ namespace ExpressionMetadata
                 File.Delete(scheduleJobScriptFilename);
             }
 
-            Console.WriteLine("" + nInScript + " are ready to have gene expression computed, " + nNeedingPrecursors + " still need preliminary work done and " + nWithGeneExpression + " are done.");
+            if (nInScript + nNeedingPrecursors > 0)
+            {
+                Console.WriteLine("" + nInScript + " are ready to have gene expression computed, " + nNeedingPrecursors + " still need preliminary work done and " + nWithGeneExpression + " are done.");
+            }
         }
 
 
@@ -2386,11 +2480,12 @@ namespace ExpressionMetadata
             GenerateDownloadScripts(experiments, tumorToMachineMapping);
 
             GenerateExtractionScripts(experiments);
+            GenerateExtractionScriptsForSelectedVariants(experiments);
             GenerateVariantCallingScript(experiments);
             //GenerateLAMLMoves(tcgaRecords);
 
             timer.Stop();
-            Console.WriteLine("Expression metadata took " + (timer.ElapsedMilliseconds + 500) / 1000 + "s.");
+            Console.WriteLine("Expression metadata took " + (timer.ElapsedMilliseconds + 500) / 1000 + "s and finished at " + DateTime.Now);
         }
     }
 }

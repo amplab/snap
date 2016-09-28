@@ -306,6 +306,8 @@ namespace ExpressionLib
             public FileInfo allCountInfo = null;
             public FileInfo regionalExpressionInfo = null;
             public FileInfo geneExpressionInfo = null;
+            public FileInfo readsAtSelectedVariantsInfo = null;
+            public FileInfo readsAtSelectedVariantsIndexInfo = null;
             public long totalSize = 0;
             public bool needed = false; // Do we need this as input for some experiment?
             public bool isRealingned = false;   // Was this realined, or is it straight from TCGA
@@ -343,6 +345,75 @@ namespace ExpressionLib
             return dirName;
         }
 
+        //
+        // For filenames of the from ...\analysis-id\filename
+        //
+        static public string GetAnalysisIdFromPathname(string pathname)
+        {
+            if (!pathname.Contains('\\'))
+            {
+                Console.WriteLine("ExpressionTools.GetAnalysisIdFromPathname: invalid pathname input " + pathname);
+                return "";
+            }
+
+            string directoryName;
+            if (pathname.LastIndexOf('\\') != pathname.Count())
+            {
+                //
+                // Does not end in a trailing \.
+                //
+                directoryName = pathname.Substring(0, pathname.LastIndexOf('\\'));
+            }
+            else
+            {
+                //
+                // Ends in a trailing backslash, just trim it off.
+                //
+                directoryName = pathname.Substring(0, pathname.Count() - 1);
+            }
+
+            if (directoryName.Contains('\\'))
+            {
+                directoryName = directoryName.Substring(directoryName.LastIndexOf('\\') + 1);
+            }
+
+            if (directoryName.Count() != 36)
+            {
+                Console.WriteLine("ExpressionTools.GetAnalysisIdFromPathname: invalid pathname input does not include analysis id as last directory " + pathname);
+                return "";
+            }
+
+
+            return directoryName;
+        }
+
+        public const string bamExtension = ".bam";
+        public const string baiExtension = ".bai";
+        public const string tarExtension = ".tar";
+        public const string md5Extension = ".md5";
+        public const string vcfExtension = ".vcf";
+        public const string isoformsExtension = "-isoforms.txt";
+        public const string allcountsExtension = ".allcount.gz";
+        public const string regionalExpressionExtension = ".regional_expression.txt";
+        public const string geneExpressionExtension = ".gene_expression.txt";
+        public const string selectedVariantsExtension = ".selectedVariants";
+        public const string readsAtSelectedVariantsExtension = ".reads-at-selected-variants";
+        public const string readsAtSelectedVariantsIndexExtension = readsAtSelectedVariantsExtension + ".index";
+
+        static readonly int bamExtensionLength = bamExtension.Count();
+        static readonly int baiExtensionLength = baiExtension.Count();
+        static readonly int tarExtensionLength = tarExtension.Count();
+        static readonly int md5ExtensionLength = md5Extension.Count();
+        static readonly int vcfExtensionLength = vcfExtension.Count();
+        static readonly int isoformsExtensionLength = isoformsExtension.Count();
+        static readonly int allcountsExtensionLength = allcountsExtension.Count();
+        static readonly int regionalExpressionExtensionLength = regionalExpressionExtension.Count();
+        static readonly int geneExpressionExtensionLength = geneExpressionExtension.Count();
+        static readonly int selectedVariantsExtensionLength = selectedVariantsExtension.Count();
+        static readonly int readsAtSelectedVariantsExtensionLength = readsAtSelectedVariantsExtension.Count();
+        static readonly int readsAtSelectedVariantsIndexExtensionLength = readsAtSelectedVariantsIndexExtension.Count();
+
+
         static int LoadStoredBAMsForDirectory(Pathname directory, Dictionary<AnalysisID, StoredBAM> storedBAMs)
         {
             int nBamsLoaded = 0;
@@ -374,7 +445,7 @@ namespace ExpressionLib
 
                     foreach (var file in Directory.GetFiles(subdir))
                     {
-                        if (file.Count() > 4 && file.Substring(file.Count() - 4) == ".bam")
+                        if (file.Count() > bamExtensionLength && file.Substring(file.Count() - bamExtensionLength) == bamExtension)
                         {
                             if (-1 != file.IndexOf("HOLD_QC"))
                             {
@@ -385,7 +456,7 @@ namespace ExpressionLib
                                 Console.WriteLine("Saw multiple BAM files in the same analysis directory " + file + " and " + storedBAM.bamInfo.FullName);
                             }
                             storedBAM.bamInfo = new FileInfo(file);
-                            string md5Pathname = file + ".md5";
+                            string md5Pathname = file + md5Extension;
                             if (File.Exists(md5Pathname))
                             {
                                 try
@@ -406,14 +477,14 @@ namespace ExpressionLib
                                 }
                             }
                         }
-                        else if (file.Count() > 4 && file.Substring(file.Count() - 4) == ".bai")
+                        else if (file.Count() > baiExtensionLength && file.Substring(file.Count() - baiExtensionLength) == baiExtension)
                         {
                             if (null != storedBAM.baiInfo)
                             {
                                 Console.WriteLine("Saw multiple BAI files in the same analysis directory " + file + " and " + storedBAM.baiInfo.FullName);
                             }
                             storedBAM.baiInfo = new FileInfo(file);
-                            string md5Pathname = file + ".md5";
+                            string md5Pathname = file + md5Extension;
 
                             if (File.Exists(md5Pathname))
                             {
@@ -435,25 +506,29 @@ namespace ExpressionLib
                                 }
                             }
                         }
-                        else if (file.Count() > 4 && file.Substring(file.Count() - 4) == ".tar")
+                        else if (file.Count() > tarExtensionLength && file.Substring(file.Count() - tarExtensionLength) == tarExtension)
                         {
                             hasTarFile = true;
                         }
-                        else if (file.Count() > 3 && file.Substring(file.Count() - 4) == ".md5")
+                        else if (file.Count() > md5ExtensionLength && file.Substring(file.Count() - md5ExtensionLength) == md5Extension)
                         {
                             // Do nothing; checksum files are expected.
                         }
-                        else if (file == subdir + @"\" + analysisID + @".vcf")
+                        else if (file == subdir + @"\" + analysisID + vcfExtension)
                         {
                             storedBAM.vcfInfo = new FileInfo(file);
+                            if (storedBAM.vcfInfo.Length < 1024 * 1024)
+                            {
+                                Console.WriteLine("Unusually small vcf file: " + file + ", " + storedBAM.vcfInfo.Length);
+                            }
                         }
-                        else if (file == subdir + @"\" + analysisID + @".selectedVariants")
+                        else if (file == subdir + @"\" + analysisID + selectedVariantsExtension)
                         {
                             storedBAM.selectedVariantsInfo = new FileInfo(file);
                         }
-                        else if (file.Count() > 12 && file.Substring(file.Count() - 13).ToLower() == "-isoforms.txt")
+                        else if (file.Count() > isoformsExtensionLength && file.Substring(file.Count() - isoformsExtensionLength).ToLower() == isoformsExtension)
                         {
-                            string expectedFilename = analysisID + "-isoforms.txt";
+                            string expectedFilename = analysisID + isoformsExtension;
                             if (file.Count() < expectedFilename.Count() || file.Substring(file.Count() - expectedFilename.Count()) != expectedFilename)
                             {
                                 Console.WriteLine("Incorrect isoform file " + file);
@@ -463,9 +538,9 @@ namespace ExpressionLib
                                 storedBAM.isoformCount = file;
                             }
                         }
-                        else if (file.Count() > 12 && file.Substring(file.Count() - 12).ToLower() == ".allcount.gz")
+                        else if (file.Count() > allcountsExtensionLength && file.Substring(file.Count() - allcountsExtensionLength).ToLower() == allcountsExtension)
                         {
-                            string expectedFilename = analysisID + ".allcount.gz";
+                            string expectedFilename = analysisID + allcountsExtension;
                             if (file.Count() < expectedFilename.Count() || file.Substring(file.Count() - expectedFilename.Count()) != expectedFilename)
                             {
                                 Console.WriteLine("Incorrect allcount file " + file);
@@ -479,9 +554,9 @@ namespace ExpressionLib
                                 }
                             }
                         }
-                        else if (file.Count() > 24 && file.Substring(file.Count() - 24).ToLower() == ".regional_expression.txt")
+                        else if (file.Count() > regionalExpressionExtensionLength && file.Substring(file.Count() - regionalExpressionExtensionLength).ToLower() == regionalExpressionExtension)
                         {
-                            string expectedFileName = analysisID + ".regional_expression.txt";
+                            string expectedFileName = analysisID + regionalExpressionExtension;
                             if (file.Count() < expectedFileName.Count() || file.Substring(file.Count() - expectedFileName.Count()) != expectedFileName)
                             {
                                 Console.WriteLine("Incorrect regional expression file " + file);
@@ -495,9 +570,9 @@ namespace ExpressionLib
                                 }
                             }
                         }
-                        else if (file.Count() > 20 && file.Substring(file.Count() - 20).ToLower() == ".gene_expression.txt")
+                        else if (file.Count() > geneExpressionExtensionLength && file.Substring(file.Count() - geneExpressionExtensionLength).ToLower() == geneExpressionExtension)
                         {
-                            string expectedFileName = analysisID + ".gene_expression.txt";
+                            string expectedFileName = analysisID + geneExpressionExtension;
                             if (file.Count() < expectedFileName.Count() || file.Substring(file.Count() - expectedFileName.Count()) != expectedFileName)
                             {
                                 Console.WriteLine("Incorrect gene expression file " + file);
@@ -509,6 +584,30 @@ namespace ExpressionLib
                                 {
                                     Console.WriteLine("Unusually small gene expression file " + file + ", " + storedBAM.geneExpressionInfo.Length);
                                 }
+                            }
+                        }
+                        else if (file.Count() > readsAtSelectedVariantsExtensionLength && file.Substring(file.Count() - readsAtSelectedVariantsExtensionLength).ToLower() == readsAtSelectedVariantsExtension)
+                        {
+                            string expectedFileName = analysisID + readsAtSelectedVariantsExtension;
+                            if (file.Count() < expectedFileName.Count() || file.Substring(file.Count() - expectedFileName.Count()) != expectedFileName)
+                            {
+                                Console.WriteLine("Incorrect reads at expected variants file " + file);
+                            }
+                            else
+                            {
+                                storedBAM.readsAtSelectedVariantsInfo = new FileInfo(file);
+                            }
+                        }
+                        else if (file.Count() > readsAtSelectedVariantsIndexExtensionLength && file.Substring(file.Count() - readsAtSelectedVariantsIndexExtensionLength).ToLower() == readsAtSelectedVariantsIndexExtension)
+                        {
+                            string expectedFileName = analysisID + readsAtSelectedVariantsIndexExtension;
+                            if (file.Count() < expectedFileName.Count() || file.Substring(file.Count() - expectedFileName.Count()) != expectedFileName)
+                            {
+                                Console.WriteLine("Incorrect reads at expected variants index file " + file);
+                            }
+                            else
+                            {
+                                storedBAM.readsAtSelectedVariantsIndexInfo = new FileInfo(file);
                             }
                         }
                         else
@@ -524,6 +623,11 @@ namespace ExpressionLib
                             Console.WriteLine("Analysis directory " + subdir + " doesn't contain both .bam and .bai files");
                         }
                         continue;
+                    }
+
+                    if ((storedBAM.readsAtSelectedVariantsInfo == null) != (storedBAM.readsAtSelectedVariantsIndexInfo == null))
+                    {
+                        Console.WriteLine("Analysis directory " + subdir + " has exactly one of the .reads-at-selected-variants and reads-at-selected-variants.index files.");
                     }
 
                     storedBAM.totalSize = storedBAM.bamInfo.Length + storedBAM.baiInfo.Length;
