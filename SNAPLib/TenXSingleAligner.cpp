@@ -442,7 +442,7 @@ TenXSingleAligner::align_phase_2_move_locus(unsigned whichSetPair)
 
 
 bool
-TenXSingleAligner::align_phase_2_single_step_add_candidate(unsigned whichSetPair, int clusterIdx)
+TenXSingleAligner::align_phase_2_single_step_add_candidate(unsigned whichSetPair, int clusterIdx, unsigned clusterEDCompensation)
 {
 	//
 	// Add all of the mate candidates for this fewer side hit.
@@ -512,11 +512,14 @@ TenXSingleAligner::align_phase_2_single_step_add_candidate(unsigned whichSetPair
 			soft_exit(1);
 		}
 
+		// Add 10X cluster penalty
+		unsigned clusterScorePenalty = clusterIdx == -1 ? clusterEDCompensation : 0;
+
 		//
 		// If we have noOrderedEvaluation set, just stick everything on list 0, regardless of what it really is.  This will cause us to
 		// evaluate the candidates in more-or-less inverse genome order.
 		//
-		unsigned bestPossibleScore = noOrderedEvaluation ? 0 : lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits;
+		unsigned bestPossibleScore = noOrderedEvaluation ? 0 : lowestBestPossibleScoreOfAnyPossibleMate + bestPossibleScoreForReadWithFewerHits + clusterScorePenalty;
 
 		scoringCandidatePool[lowestFreeScoringCandidatePoolEntry].init(lastGenomeLocationForReadWithFewerHits[whichSetPair], whichSetPair, lowestFreeScoringMateCandidate[whichSetPair] - 1,
 			lastSeedOffsetForReadWithFewerHits[whichSetPair], bestPossibleScoreForReadWithFewerHits,
@@ -552,6 +555,7 @@ TenXSingleAligner::align_phase_2_single_step_add_candidate(unsigned whichSetPair
 }
 
 
+/*
 bool
 TenXSingleAligner::align_phase_2_single_step(unsigned whichSetPair)
 {
@@ -561,13 +565,14 @@ TenXSingleAligner::align_phase_2_single_step(unsigned whichSetPair)
 	else if (check_range_result == -1)
 		return false;
 	else 
-		return align_phase_2_single_step_add_candidate(whichSetPair, -1);
+		return align_phase_2_single_step_add_candidate(whichSetPair, -1, 0);
 	//return align_phase_2_move_locus(setPair, whichSetPair, outOfMoreHitsLocations, lastSeedOffsetForReadWithFewerHits, lastGenomeLocationForReadWithFewerHits, lastSeedOffsetForReadWithMoreHits, lastGenomeLocationForReadWithMoreHits, maxUsedBestPossibleScoreList, NULL);
 }
+*/
 
 
 bool
-TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, int clusterIdx)
+TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, int clusterIdx, unsigned clusterEDCompensation)
 {
 	bool keepGoing = true;
 	bool targetNotMet = false;
@@ -618,7 +623,7 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 							printf("Pair: %d  targetNotMetSingleSet: %s\n", whichSetPair, (targetNotMetSingleSet ? "true" : "false"));
 						}
 #endif //_DEBUG
-						noMoreLoci[whichSetPair] = align_phase_2_single_step_add_candidate(whichSetPair, clusterIdx);
+						noMoreLoci[whichSetPair] = align_phase_2_single_step_add_candidate(whichSetPair, clusterIdx, clusterEDCompensation);
 						//
 						// We keep working on the loop as long as one set is still not stopped
 						//
@@ -684,7 +689,7 @@ TenXSingleAligner::align_phase_2()
 	//
 	if(align_phase_2_init() ) {
 		GenomeLocation clusterTargetLoc = GenomeLocation(0000000000);
-		align_phase_2_to_target_loc(clusterTargetLoc, -1);
+		align_phase_2_to_target_loc(clusterTargetLoc, -1, 0);
 	}
 }
 
@@ -867,6 +872,7 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 							candidate->mergeAnchor = mergeAnchor;
 						}
 						else {
+							//return true if this mapping should be ignored
 							merged = mergeAnchor->checkMerge(mate->readWithMoreHitsGenomeLocation + mate->genomeOffset, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset,
 								pairProbability, compensatedEDIdx, &oldCompensatedEDIdx, &oldPairProbability);
 						}

@@ -119,7 +119,7 @@ public:
 	// align_phase_2_to_target_loc advances all location pairs to right before clusterTargetLoc. For all loc pairs that are before clusterTargetLoc, the potential mapping will be associated with cluster clusterInfoPtr
 	// It will terminate after advancing lastGenomeLocationForReadWithFewerHits of both directions beyond clusterTargetLoc.
 	//
-	bool align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, int clusterIdx);
+	bool align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, int clusterIdx, unsigned clusterEDCompensation);
 	//
 	// align_phase_2_get_next_loc is accompanied with align_phase_2_to_target_loc. It returns the bigger next loci from the fewer side among the the 2 directions.
 	//
@@ -131,7 +131,7 @@ public:
 	//
 	// should only call align_phase_2_single_step_add_candidate if align_phase_2_move_locus returns 0
 	//
-	bool align_phase_2_single_step_add_candidate(unsigned whichSetPair, int clusterIdx);
+	bool align_phase_2_single_step_add_candidate(unsigned whichSetPair, int clusterIdx, unsigned clusterEDCompensation);
 	//
 	// align_phase_2 is a dummy mimicking IntersectingPairedEndAligner
 	//
@@ -139,7 +139,7 @@ public:
 	//
 	// align_phase_2_single_step is the inner loop of align_phase_2
 	//
-	bool align_phase_2_single_step(unsigned whichSetPair);
+	// bool align_phase_2_single_step(unsigned whichSetPair);
 
 	//
 	// align_phase_3 calculates the edit distance of each candidate mapping
@@ -449,6 +449,7 @@ private:
 		double          matchProbability;
 		GenomeLocation  locationForReadWithMoreHits;
 		GenomeLocation  locationForReadWithFewerHits;
+		PairedAlignmentResult  *resultPtr;
 		int             pairScore;
 
 		void init(GenomeLocation locationForReadWithMoreHits_, GenomeLocation locationForReadWithFewerHits_, double matchProbability_, int pairScore_) {
