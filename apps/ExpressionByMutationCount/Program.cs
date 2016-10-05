@@ -568,19 +568,11 @@ namespace ExpressionByMutationCount
                 var completedInputFiles = new List<GeneExpressionFile>();
                 var geneToProcess = new GeneState(nextHugoSymbol);
 
-                StreamWriter tp53Data = null;
-
-                if (nextHugoSymbol == "TP53")
-                {
-                    tp53Data = new StreamWriter(@"f:\temp\expression\tp53_lines.txt");
-                }
+                var perGeneLines = new List<string>();
 
                 foreach (var inputFile in inputFiles.Where(f => f.currentHugoSymbol == nextHugoSymbol))
                 {
-                    if (null != tp53Data)
-                    {
-                        tp53Data.WriteLine(inputFile.participantID + "\t" + inputFile.currentLine);
-                    }
+                    perGeneLines.Add(inputFile.participantID + "\t" + inputFile.currentLine);
 
                     for (int i = 0 ; i < GeneExpressionFile.nWidths; i++) {
                         if (inputFile.currentZValid[i])
@@ -599,10 +591,6 @@ namespace ExpressionByMutationCount
                     }
                 }
 
-                if (null != tp53Data)
-                {
-                    tp53Data.Close();
-                }
 
                 if (!geneToProcess.loadPerExperimentState(sampleToParticipantIDMap, experimentsByRNAAnalysisID))
                 {
@@ -613,6 +601,14 @@ namespace ExpressionByMutationCount
                     nGenesSkipped++;
                     continue;
                 }
+
+                var perGeneLinesFile = new StreamWriter(@"f:\temp\expression\RegionalExpressionByGene\" + nextHugoSymbol.ToLower() + "_lines.txt");
+                foreach (var line in perGeneLines)
+                {
+                    perGeneLinesFile.WriteLine(line);
+                }
+                perGeneLinesFile.Close();
+
 
                 //
                 // Compute and write out the results.
