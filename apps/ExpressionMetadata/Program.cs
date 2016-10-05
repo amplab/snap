@@ -224,9 +224,15 @@ namespace ExpressionMetadata
             hashScripts[machine].WriteLine(@"ComputeMD5 " + unqualifiedFilename + @"> " + unqualifiedFilename + ".md5");
         }
 
+
         public static Dictionary<AnalysisID, ExpressionTools.StoredBAM> LoadStoredBAMs(Dictionary<ExpressionTools.AnalysisType, Pathname> tumorToMachineMapping)
         {
+            ulong totalFreeDiskSpace = 0;
+
             var storedBAMs = new Dictionary<AnalysisID, ExpressionTools.StoredBAM>();
+
+            var timer = new Stopwatch();
+            timer.Start();
 
             //
             // Directory structure is \\msr-srs-%n\d$\tcga\{rna,wgs,wxs}\{tumor, normal}\disease_abbr\analysis_id\*.{bam,bai}.  We need to call LoadStoredBAMsForDirectory on each
@@ -235,17 +241,25 @@ namespace ExpressionMetadata
             var threads = new List<Thread>();
             foreach (var machine in Machines)
             {
-                threads.Add(new Thread(() => ExpressionTools.LoadStoredBamsForMachine(@"\\" + machine.Value.name + @"\d$\tcga", storedBAMs)));
+                threads.Add(new Thread(() => ExpressionTools.LoadStoredBamsForMachine(@"\\" + machine.Value.name + @"\d$\tcga", storedBAMs, ref totalFreeDiskSpace)));
             }
 
-            threads.Add(new Thread(() => ExpressionTools.LoadStoredBamsForMachine(@"\\msr-genomics-0\e$\tcga", storedBAMs)));
-            threads.Add(new Thread(() => ExpressionTools.LoadStoredBamsForMachine(@"\\msr-genomics-1\e$\tcga", storedBAMs)));
-            threads.Add(new Thread(() => ExpressionTools.LoadStoredBamsForMachine(@"\\bolosky\f$\tcga", storedBAMs)));
+            threads.Add(new Thread(() => ExpressionTools.LoadStoredBamsForMachine(@"\\msr-genomics-0\e$\tcga", storedBAMs, ref totalFreeDiskSpace)));
+            threads.Add(new Thread(() => ExpressionTools.LoadStoredBamsForMachine(@"\\msr-genomics-1\e$\tcga", storedBAMs, ref totalFreeDiskSpace)));
+            threads.Add(new Thread(() => ExpressionTools.LoadStoredBamsForMachine(@"\\bolosky\f$\tcga", storedBAMs, ref totalFreeDiskSpace)));
 
             threads.ForEach(t => t.Start());
             threads.ForEach(t => t.Join());
 
             var hashScripts = new Dictionary<Pathname, StreamWriter>();
+
+            //
+            // Blow away all the old hash scripts so we don't leave stale ones around.
+            //
+            foreach (var machine in Machines)
+            {
+                File.Delete(baseDirectory + "hashdata-" + machine.Key + ".cmd");
+            }
 
             foreach (var entry in storedBAMs)
             {
@@ -266,6 +280,10 @@ namespace ExpressionMetadata
             {
                 entry.Value.Close();
             }
+
+            timer.Stop();
+            Console.WriteLine("Loaded bams from " + threads.Count() + " file systems in " + ((timer.ElapsedMilliseconds + 500) / 1000) + "s, total free space " + ExpressionTools.SizeToUnits(totalFreeDiskSpace));
+            Console.WriteLine();
 
             return storedBAMs;
         }
@@ -345,13 +363,6 @@ namespace ExpressionMetadata
                 if (tcgaRecord.library_strategy.ToLower() != pathComponents[libraryComponent] || tcgaRecord.tumorSample != (pathComponents[tumorNormalComponent] == "tumor") || tcgaRecord.disease_abbr != pathComponents[diseaseComponent])
                 {
                     Console.WriteLine("Analysis " + analysisID + " is in the wrong directory.  It's at " + fullPath + " but it should be at " + tcgaRecord.disease_abbr + @"\" + (tcgaRecord.tumorSample ? "tumor" : "normal") + @"\" + tcgaRecord.library_strategy.ToLower());
-                    continue;
-                }
-
-                string correctMachine = tumorTypeToMachineMapping[new ExpressionTools.AnalysisType(tcgaRecord)].ToLower();
-                if (correctMachine != pathComponents[2] && (!Machines.ContainsKey(pathComponents[2]) || !Machines[pathComponents[2]].secondaryMachine)) 
-                {
-                    Console.WriteLine("BAM stored on wrong machine " + fullPath + " expected to be on " + correctMachine);
                     continue;
                 }
 
@@ -512,8 +523,18 @@ namespace ExpressionMetadata
 
         static void GenereateAdditionalTCGAMetadataGeneratingScript(Dictionary<AnalysisID, ExpressionTools.TCGARecord> tcgaRecords, Dictionary<AnalysisID, ExpressionTools.StoredBAM> storedBAMs, Dictionary<ExpressionTools.AnalysisType, Pathname> tumorToMachineMapping)
         {
-            var globalScript = new StreamWriter(baseDirectory + @"extractTCGAAdditionalMetadata-all.cmd");
-            globalScript.WriteLine(@"del \temp\analysisSummaries.txt");
+            StreamWriter globalScript = null;
+            string globalScriptFilename = baseDirectory + @"extractTCGAAdditionalMetadata-all.cmd";
+            string scriptBaseName = baseDirectory + @"extractTCGAAdditionalMetadata-";
+
+            //
+            // Delete any scripts lying around so that we don't have stale ones.
+            //
+            File.Delete(globalScriptFilename);
+            foreach (var machine in Machines)
+            {
+                File.Delete(scriptBaseName + machine.Key + ".cmd");
+            }
 
             var writers = new Dictionary<Pathname, StreamWriter>();
             int nNeedingExtraction = 0;
@@ -563,12 +584,19 @@ namespace ExpressionMetadata
 
                 if (!writers.ContainsKey(machine))
                 {
-                    writers.Add(machine, new StreamWriter(baseDirectory + @"extractTCGAAdditionalMetadata-" + machine + ".cmd"));
+                    writers.Add(machine, new StreamWriter(scriptBaseName + machine + ".cmd"));
                     writers[machine].WriteLine(@"del \temp\analysisSummaries.txt");
                 }
 
                 string line = @"SummarizeReads \sequence\indices\hg19-24 " + record.analysis_id + " " + storedBAMs[record.analysis_id].bamInfo.FullName + @" \temp\analysisSummaries.txt";
                 writers[machine].WriteLine(line);
+
+                if (null == globalScript)
+                {
+                     globalScript = new StreamWriter(globalScriptFilename);
+                     globalScript.WriteLine(@"del \temp\analysisSummaries.txt");
+
+                }
                 globalScript.WriteLine(line);
                 nNeedingExtraction++;
             }
@@ -577,7 +605,11 @@ namespace ExpressionMetadata
             {
                 entry.Value.Close();
             }
-            globalScript.Close();
+
+            if (null != globalScript)
+            {
+                globalScript.Close();
+            }
 
             if (nNeedingExtraction > 0)
             {
@@ -980,7 +1012,14 @@ namespace ExpressionMetadata
 
         public static void GenerateDownloadScripts(List<ExpressionTools.Experiment> experiments, Dictionary<ExpressionTools.AnalysisType, Pathname> tumorToMachineMapping)
         {
-            Console.WriteLine();
+            //
+            // First, delete any existing download scripts so that we don't leave stale ones lying around.
+            //
+            foreach (var machine in Machines)
+            {
+                File.Delete(baseDirectory + "loadFromTCGA-" + machine.Key + ".cmd");
+            }
+
             var downloadScripts = new Dictionary<string, StreamWriter>();
             var downloadAmounts = new Dictionary<string, long>();
             foreach (var experiment in experiments)
@@ -1089,7 +1128,7 @@ namespace ExpressionMetadata
 
 
         public static void AddSingleRealignmentToScript(ExpressionTools.TCGARecord record, StreamWriter script, Dictionary<AnalysisID, ExpressionTools.TCGARecord> tcgaRecords, Dictionary<AnalysisID, ExpressionTools.StoredBAM> storedBAMs,
-            Dictionary<ExpressionTools.AnalysisType, Pathname> tumorToMachineMapping, bool local, bool bigMem, bool cluster)
+            Dictionary<ExpressionTools.AnalysisType, Pathname> tumorToMachineMapping, bool local, bool bigMem, bool cluster, bool addReadGroup)
         {
             long lastChunkOfGuid = long.Parse(record.analysis_id.Substring(24), System.Globalization.NumberStyles.HexNumber);
             var analysisType = new ExpressionTools.AnalysisType(record);
@@ -1198,6 +1237,11 @@ namespace ExpressionMetadata
                 script.Write(@" -sid d:\scratch\bolosky\ -pre");
             }
 
+            if (addReadGroup)
+            {
+                script.Write(@" -R @RG\tID:0");
+            }
+
             script.WriteLine(" -lp -map -pc -pro -mrl " + Math.Min(50, seedLength * 2));
 
             if (bigMem)
@@ -1223,6 +1267,8 @@ namespace ExpressionMetadata
             Dictionary<AnalysisID, ExpressionTools.StoredBAM>   storedBAMs, 
             Dictionary<ExpressionTools.AnalysisType, Pathname>  tumorToMachineMapping)
         {
+            var analysesToWhichToAddReadGroups = File.ReadAllLines(@"f:\sequence\reads\tcga\AnalysesToWhichToAddReadGroups");   // Some of the source BAMs don't have RG tags on the reads, which confuses freebayes.  Add them.
+
             //
             // Find any experiments that rely on a realignment, and generate the SNAP command to do the realignment.
             //
@@ -1231,6 +1277,27 @@ namespace ExpressionMetadata
             StreamWriter realignBigMemScript = null;
             StreamWriter realignClusterScript = null;
             var perMachineScripts = new Dictionary<Pathname, StreamWriter>();
+
+            string realignNormalScriptFilename = baseDirectory + @"realignNormal.cmd";
+            string realignTumorScriptFilename = baseDirectory + @"realignTumor.cmd";
+            string realignBigMemScriptFilename = baseDirectory + @"realignBigMem.cmd";
+            string realignClusterScriptFilename = baseDirectory + "realignCluster.cmd";
+            string createJobScriptFilename = baseDirectory + "createjob.cmd";
+            string perMachineScriptBaseFilename = baseDirectory + @"realign-";
+
+            //
+            // Delete any stale scripts.
+            //
+            File.Delete(realignNormalScriptFilename);
+            File.Delete(realignTumorScriptFilename);
+            File.Delete(realignBigMemScriptFilename);
+            File.Delete(realignClusterScriptFilename);
+            File.Delete(createJobScriptFilename);
+
+            foreach (var machine in Machines)
+            {
+                File.Delete(perMachineScriptBaseFilename + machine.Key + ".cmd");
+            }
 
             var perMachineOutput = new Dictionary<Pathname, long>();
 
@@ -1268,7 +1335,7 @@ namespace ExpressionMetadata
                     {
                         if (realignBigMemScript == null)
                         {
-                            realignBigMemScript = new StreamWriter(baseDirectory + @"realignBigMem.cmd");
+                            realignBigMemScript = new StreamWriter(realignBigMemScriptFilename);
                         }
                         script = realignBigMemScript;
                         local = false;
@@ -1288,7 +1355,7 @@ namespace ExpressionMetadata
                             {
                                 if (realignTumorScript == null)
                                 {
-                                    realignTumorScript = new StreamWriter(baseDirectory + @"realignTumor.cmd");
+                                    realignTumorScript = new StreamWriter(realignTumorScriptFilename);
                                 }
                                 script = realignTumorScript;
                             }
@@ -1296,7 +1363,7 @@ namespace ExpressionMetadata
                             {
                                 if (realignNormalScript == null)
                                 {
-                                    realignNormalScript = new StreamWriter(baseDirectory + @"realignNormal.cmd");
+                                    realignNormalScript = new StreamWriter(realignNormalScriptFilename);
                                 }
                                 script = realignNormalScript;
                             }
@@ -1305,7 +1372,7 @@ namespace ExpressionMetadata
                         {
                             if (!perMachineScripts.ContainsKey(tumorToMachineMapping[analysisType]))
                             {
-                                perMachineScripts.Add(tumorToMachineMapping[analysisType], new StreamWriter(@"f:\temp\expression\realign-" + tumorToMachineMapping[analysisType] + ".cmd"));
+                                perMachineScripts.Add(tumorToMachineMapping[analysisType], new StreamWriter(perMachineScriptBaseFilename + tumorToMachineMapping[analysisType] + ".cmd"));
                             }
 
                             script = perMachineScripts[tumorToMachineMapping[analysisType]];
@@ -1318,16 +1385,19 @@ namespace ExpressionMetadata
                     {
                         perMachineOutput.Add(destMachine, 0);
                     }
+
+                    bool addReadGroup = analysesToWhichToAddReadGroups.Contains(analysis.realignSource.analysis_id.ToLower());
+
                     perMachineOutput[destMachine] += analysis.realignSource.totalFileSize;
-                    AddSingleRealignmentToScript(analysis, script, tcgaRecords, storedBAMs, tumorToMachineMapping, local, bigMem, false);
+                    AddSingleRealignmentToScript(analysis, script, tcgaRecords, storedBAMs, tumorToMachineMapping, local, bigMem, false, addReadGroup);
                     if (realignClusterScript == null)
                     {
-                        var createJobScript = new StreamWriter(baseDirectory + "createjob.cmd");
-                        createJobScript.WriteLine(@"job new /emailaddress:bolosky@microsoft.com /nodegroup:B99,ExpressQ /exclusive:true /failontaskfailure:false /jobname:align12 /memorypernode:100000 /notifyoncompletion:true /numnodes:1-10 /runtime:12:00 /scheduler:gcr /jobtemplate:ExpressQ /estimatedprocessmemory:100000");
+                        var createJobScript = new StreamWriter(createJobScriptFilename);
+                        createJobScript.WriteLine(@"job new /emailaddress:bolosky@microsoft.com /nodegroup:B99,LongRunQ /exclusive:true /failontaskfailure:false /jobname:align12 /memorypernode:100000 /notifyoncompletion:true /numnodes:1-10 /runtime:2:12:00 /scheduler:gcr /jobtemplate:LongRunQ /estimatedprocessmemory:100000");
                         createJobScript.Close();
-                        realignClusterScript = new StreamWriter(baseDirectory + "realignCluster.cmd");
+                        realignClusterScript = new StreamWriter(realignClusterScriptFilename);
                     }
-                    AddSingleRealignmentToScript(analysis, realignClusterScript, tcgaRecords, storedBAMs, tumorToMachineMapping, false, false, true);
+                    AddSingleRealignmentToScript(analysis, realignClusterScript, tcgaRecords, storedBAMs, tumorToMachineMapping, false, false, true, addReadGroup);
                 }
              }
 
@@ -1382,31 +1452,38 @@ namespace ExpressionMetadata
 
         static void GenerateExtractionEntryIfNecessary(Dictionary<string, StreamWriter> scriptsByHostname, ExpressionTools.TCGARecord normalAnalysis, ExpressionTools.TCGARecord tumorAnalysis, ref int nExtant, ref int nToGenerate, ref int nWaitingForPrerequisites)
         {
-            if (tumorAnalysis.storedBAM != null && tumorAnalysis.storedBAM.readsAtSelectedVariantsInfo != null)
+            try
             {
-                if (normalAnalysis.storedBAM == null || normalAnalysis.storedBAM.selectedVariantsInfo == null || normalAnalysis.storedBAM.selectedVariantsInfo.CreationTime > tumorAnalysis.storedBAM.readsAtSelectedVariantsInfo.CreationTime)
+                if (tumorAnalysis.storedBAM != null && tumorAnalysis.storedBAM.readsAtSelectedVariantsInfo != null)
                 {
-                    Console.WriteLine("Found read-at-selected-variants for experiment with no or newer selected variants file: " + tumorAnalysis.storedBAM.selectedVariantsInfo.FullName);
+                    if (normalAnalysis.storedBAM == null || normalAnalysis.storedBAM.selectedVariantsInfo == null || normalAnalysis.storedBAM.selectedVariantsInfo.CreationTime > tumorAnalysis.storedBAM.readsAtSelectedVariantsInfo.CreationTime)
+                    {
+                        Console.WriteLine("Found read-at-selected-variants for experiment with no or newer selected variants file for normal analysis id: " + normalAnalysis.analysis_id);
+                    }
+                    nExtant++;
                 }
-                nExtant++;
-            }
-            else if (normalAnalysis.storedBAM == null || normalAnalysis.storedBAM.selectedVariantsInfo == null || tumorAnalysis.storedBAM == null || tumorAnalysis.storedBAM.bamInfo == null || !tumorAnalysis.storedBAM.chrStateKnown)
-            {
-                nWaitingForPrerequisites++;
-            }
-            else
-            {
-                string machine = tumorAnalysis.storedBAM.machineName;
-                if (!scriptsByHostname.ContainsKey(machine))
+                else if (normalAnalysis.storedBAM == null || normalAnalysis.storedBAM.selectedVariantsInfo == null || tumorAnalysis.storedBAM == null || tumorAnalysis.storedBAM.bamInfo == null || !tumorAnalysis.storedBAM.chrStateKnown)
                 {
-                    scriptsByHostname.Add(machine, new StreamWriter(baseDirectory + GenReadsNearVariantsScriptFilenameBase + machine + ".cmd"));
+                    nWaitingForPrerequisites++;
                 }
+                else
+                {
+                    string machine = tumorAnalysis.storedBAM.machineName;
+                    if (!scriptsByHostname.ContainsKey(machine))
+                    {
+                        scriptsByHostname.Add(machine, new StreamWriter(baseDirectory + GenReadsNearVariantsScriptFilenameBase + machine + ".cmd"));
+                    }
 
-                scriptsByHostname[machine].WriteLine(@"del \temp\SamtoolsForVcf.cmd");
-                scriptsByHostname[machine].WriteLine("GenerateScriptFromVariants " + normalAnalysis.storedBAM.selectedVariantsInfo.FullName + " " + tumorAnalysis.storedBAM.bamInfo.FullName + @" \temp\SamtoolsForVcf.cmd" + (tumorAnalysis.storedBAM.usesChr ? " chr" : " \"\""));
-                scriptsByHostname[machine].WriteLine(@"GenerateConsolodatedExtractedReads \temp\SamtoolsForVcf.cmd " + ExpressionTools.GetDirectoryPathFromFullyQualifiedFilename(tumorAnalysis.storedBAM.bamInfo.FullName) +
-                    tumorAnalysis.analysis_id + ExpressionTools.readsAtSelectedVariantsExtension);
-                nToGenerate++;
+                    scriptsByHostname[machine].WriteLine(@"del \temp\SamtoolsForVcf.cmd");
+                    scriptsByHostname[machine].WriteLine("GenerateScriptFromVariants " + normalAnalysis.storedBAM.selectedVariantsInfo.FullName + " " + tumorAnalysis.storedBAM.bamInfo.FullName + @" \temp\SamtoolsForVcf.cmd" + (tumorAnalysis.storedBAM.usesChr ? " chr" : " \"\""));
+                    scriptsByHostname[machine].WriteLine(@"GenerateConsolodatedExtractedReads \temp\SamtoolsForVcf.cmd " + ExpressionTools.GetDirectoryPathFromFullyQualifiedFilename(tumorAnalysis.storedBAM.bamInfo.FullName) +
+                        tumorAnalysis.analysis_id + ExpressionTools.readsAtSelectedVariantsExtension);
+                    nToGenerate++;
+                }
+            }
+            catch (IOException)
+            {
+                Console.WriteLine("Ignoring IO exception deciding whether to generate a read extraction script for analysis ID " + normalAnalysis.analysis_id + ", which sometimes happens when it's running.");
             }
         }
 
@@ -1438,6 +1515,66 @@ namespace ExpressionMetadata
             {
                 Console.WriteLine("Generated scripts to extract reads near selected variants for " + nToGenerate + " analyses on " + scriptsByHostname.Count() + " machines, " + nExtant + " are already done and " + nWaitingForPrerequisites + " are waiting for other work.");
             }
+        }
+
+        static public void GenerateScriptToAnnotateSelectedVariants(List<ExpressionTools.Experiment> experiments)
+        {
+            int nDone = 0;
+            int nNeedingPrecursors = 0;
+            int nReadyToGo = 0;
+
+            string scriptFilenameBase = baseDirectory + "annotateSelectedVariants-";
+
+            //
+            // Delete any existing scripts so that we don't leave stale stuff around.
+            foreach (var machine in Machines)
+            {
+                File.Delete(scriptFilenameBase + machine.Key + ".cmd");
+            }
+
+            var scripts = new Dictionary<string, StreamWriter>();
+
+            foreach (var experiment in experiments)
+            {
+                if (experiment.NormalDNAAnalysis.storedBAM != null && experiment.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo != null)
+                {
+                    nDone++;
+                } else if (experiment.TumorDNAAnalysis.storedBAM == null || experiment.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsInfo == null || experiment.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsIndexInfo == null ||
+                           experiment.TumorRNAAnalysis.storedBAM == null || experiment.TumorRNAAnalysis.storedBAM.readsAtSelectedVariantsInfo == null || experiment.TumorRNAAnalysis.storedBAM.readsAtSelectedVariantsIndexInfo == null ||
+                           experiment.NormalDNAAnalysis.storedBAM == null || experiment.NormalDNAAnalysis.storedBAM.selectedVariantsInfo == null)
+                {
+                    nNeedingPrecursors++;
+                }
+                else
+                {
+                    //
+                    // Run them on the machine with the DNA reads.
+                    //
+                    var machineName = experiment.TumorDNAAnalysis.storedBAM.machineName;
+                    if (!scripts.ContainsKey(machineName))
+                    {
+                        scripts.Add(machineName, new StreamWriter(scriptFilenameBase + machineName + ".cmd"));
+                    }
+
+                    scripts[machineName].WriteLine(@"mutant-expression d:\sequence\indices\" + experiment.TumorRNAAnalysis.refassemShortName + "-24 " + experiment.NormalDNAAnalysis.storedBAM.selectedVariantsInfo.FullName +
+                        @" -h -selectedReads " + experiment.TumorDNAAnalysis.analysis_id + " " + experiment.TumorRNAAnalysis.analysis_id + @" -consolodatedInput " + experiment.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsInfo.FullName +
+                        @" -consolodatedInput " + experiment.TumorRNAAnalysis.storedBAM.readsAtSelectedVariantsInfo.FullName + 
+                        @" > " + ExpressionTools.GetDirectoryPathFromFullyQualifiedFilename(experiment.NormalDNAAnalysis.storedBAM.bamInfo.FullName) + experiment.NormalDNAAnalysis.analysis_id + ExpressionTools.annotatedSelectedVariantsExtension);
+
+                    nReadyToGo++;
+                }
+            }
+
+
+            foreach (var script in scripts)
+            {
+                script.Value.Close();
+            }
+
+            if (nReadyToGo + nNeedingPrecursors > 0) {
+                Console.WriteLine("Generated scripts for " + scripts.Count() + " machines to annotate " + nReadyToGo + " selected variants files, " + nNeedingPrecursors + " are waiting for other work and " + nDone + " are already done.");
+            }
+
         }
 
         static public void GenerateExtractionScripts(List<ExpressionTools.Experiment> experiments)
@@ -2009,7 +2146,70 @@ namespace ExpressionMetadata
             outputFile.Close();
         }
 
-        static public void GenerateAllcountScript(Dictionary<AnalysisID, ExpressionTools.TCGARecord> tcgaRecords)
+        static public void GenerateAllcountScript(List<ExpressionTools.Experiment> experiments)
+        {
+            int nWithAllcount = 0;
+            int nAllcountsToGenerate = 0;
+            int nAwaitingPrecursors = 0;
+            StreamWriter allcountScript = null;
+            int indexMachine = 0;
+
+            string allcountScriptFilename = baseDirectory + "allcountCluster.cmd";
+            string allcountJobScriptFilename = baseDirectory + "createAllcountJob.cmd";
+
+            //
+            // Get rid of any stale scripts lying around.
+            //
+            File.Delete(allcountScriptFilename);
+            File.Delete(allcountJobScriptFilename);
+
+            foreach (var experiment in experiments)
+            {
+                for (int i = 0; i < 2; i++)
+                {
+                    ExpressionTools.StoredBAM storedBam = (i == 0) ? experiment.TumorRNAAnalysis.storedBAM : experiment.TumorDNAAnalysis.storedBAM; // Sorry about this ugliness...
+
+                    if (storedBam.allCountInfo != null)
+                    {
+                        nWithAllcount++;
+                        continue;
+                    }
+
+                    if (storedBam.bamInfo == null)
+                    {
+                        nAwaitingPrecursors++;
+                        continue;
+                    }
+
+                    nAllcountsToGenerate++;
+                    if (null == allcountScript)
+                    {
+                        allcountScript = new StreamWriter(baseDirectory + "allcountCluster.cmd");
+                        var allcountJobScript = new StreamWriter(allcountJobScriptFilename);
+                        allcountJobScript.WriteLine("job new /emailaddress:bolosky@microsoft.com /nodegroup:B99,LongRunQ /exclusive:true /failontaskfailure:false /jobname:allcount /memorypernode:10000 /notifyoncompletion:true /numnodes:1-40 /runtime:2:12:00 /scheduler:gcr /jobtemplate:LongRunQ /estimatedprocessmemory:10000");
+                        allcountJobScript.Close();
+
+                    }
+                    allcountScript.WriteLine(@"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr " + @"\\gcr\scratch\b99\bolosky\countAll.cmd \\msr-genomics-" + indexMachine + @"\d$\sequence\indices\" + experiment.TumorDNAAnalysis.refassemShortName + "-24 " +
+                        storedBam.bamInfo.FullName + " " + storedBam.bamInfo.DirectoryName + @"\" + storedBam.analysisID + ".allcount.gz");
+
+                    indexMachine = 1 - indexMachine;
+                }
+            }
+
+
+            if (null != allcountScript)
+            {
+                allcountScript.Close();
+            }
+
+            if (nAllcountsToGenerate + nAwaitingPrecursors > 0)
+            {
+                Console.WriteLine("Generated a script to make " + nAllcountsToGenerate + " allcount files, " + nAwaitingPrecursors + " need precursors, and " + nWithAllcount + " are done.");
+            }
+        }
+
+        static public void GenerateAllcountScript_Old(Dictionary<AnalysisID, ExpressionTools.TCGARecord> tcgaRecords)   // This is deprecated and just left here for reference
         {
             int nWithAllcount = 0;
             int nAllcountsToGenerate = 0;
@@ -2435,13 +2635,12 @@ namespace ExpressionMetadata
             var storedBAMs = LoadStoredBAMs(tumorToMachineMapping);
             ExpressionTools.LoadChrStateFile( @"f:\sequence\reads\tcga\chrState", storedBAMs);
             GenerateListOfBamsNeedingChrState(storedBAMs);
-            GenerateListOfAllcountFiles(storedBAMs);
             var tcgaRecords = ExpressionTools.LoadTCGARecords(storedBAMs, excludedAnalyses, @"f:\sequence\Reads\tcga-all.xml");
             ExpressionTools.LoadTCGARecordsForLocalRealigns(tcgaRecords, storedBAMs, realignPathname);
             ExpressionTools.LoadTCGAAdditionalMetadata(tcgaRecords);
             GenereateAdditionalTCGAMetadataGeneratingScript(tcgaRecords, storedBAMs, tumorToMachineMapping);
             VerifyStoredBAMPaths(storedBAMs, tcgaRecords, tumorToMachineMapping);
-            GenerateAllcountScript(tcgaRecords);
+            //GenerateAllcountScript(tcgaRecords);
 
             var sampleToParticipantIDMap = ExpressionTools.CreateSampleToParticipantIDMap(tcgaRecords);
             DumpSampleToParticipantIDMap(sampleToParticipantIDMap);
@@ -2482,7 +2681,10 @@ namespace ExpressionMetadata
             GenerateExtractionScripts(experiments);
             GenerateExtractionScriptsForSelectedVariants(experiments);
             GenerateVariantCallingScript(experiments);
+            GenerateScriptToAnnotateSelectedVariants(experiments);
+            GenerateAllcountScript(experiments);
             //GenerateLAMLMoves(tcgaRecords);
+            
 
             timer.Stop();
             Console.WriteLine("Expression metadata took " + (timer.ElapsedMilliseconds + 500) / 1000 + "s and finished at " + DateTime.Now);

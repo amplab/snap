@@ -25,7 +25,14 @@ namespace GenerateScriptFromVariants
 
             var outputScript = new StreamWriter(outputScriptFilename);
 
-            var inputFile = new StreamReader(selectedVariantsFilename);
+            StreamReader inputFile = null;
+            try
+            {
+                inputFile = new StreamReader(selectedVariantsFilename);
+            } catch (FileNotFoundException) {
+                Console.WriteLine("Error opening input file " + selectedVariantsFilename + ", aborting.");
+                return;
+            }
 
             string line = inputFile.ReadLine();
 
@@ -96,7 +103,7 @@ namespace GenerateScriptFromVariants
                 }
 
                 outputScript.WriteLine("samtools view " + args[1] + " " + chromosomeName + ":" + Math.Max(1, snvPosition - 200) + "-" + (snvPosition + 10) +
-                    @" > " + ExpressionTools.GetDirectoryPathFromFullyQualifiedFilename(inputBamFilename) + ExpressionTools.GetAnalysisIdFromPathname(inputBamFilename) + ExpressionTools.readsAtSelectedVariantsExtension);
+                    @" > " + ExpressionTools.GetAnalysisIdFromPathname(inputBamFilename) + "-" + chromosomeName + "-" + snvPosition);
             }
 
             if (!seenDone && !failed)

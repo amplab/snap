@@ -86,7 +86,16 @@ namespace SelectGermlineVariants
                     Console.WriteLine("" + workItems.Count() + " vcf" + (workItems.Count() == 1 ? " remains" : "s remain") + " queued.");
                 }
 
-                var vcfFile = new StreamReader(vcfPathname);
+                StreamReader vcfFile = null;
+                try
+                {
+                    vcfFile = new StreamReader(vcfPathname);
+                }
+                catch (FileNotFoundException)
+                {
+                    Console.WriteLine("File not found on vcf " + vcfPathname + ".  Skipping.");
+                    continue;
+                }
 
                 string line;
                 while (null != (line = vcfFile.ReadLine()) && line.Count() != 0 && line[0] == '#') {

@@ -308,6 +308,7 @@ namespace ExpressionLib
             public FileInfo geneExpressionInfo = null;
             public FileInfo readsAtSelectedVariantsInfo = null;
             public FileInfo readsAtSelectedVariantsIndexInfo = null;
+            public FileInfo annotatedSelectedVariantsInfo = null;
             public long totalSize = 0;
             public bool needed = false; // Do we need this as input for some experiment?
             public bool isRealingned = false;   // Was this realined, or is it straight from TCGA
@@ -397,6 +398,7 @@ namespace ExpressionLib
         public const string regionalExpressionExtension = ".regional_expression.txt";
         public const string geneExpressionExtension = ".gene_expression.txt";
         public const string selectedVariantsExtension = ".selectedVariants";
+        public const string annotatedSelectedVariantsExtension = ".annotatedSelectedVariants";
         public const string readsAtSelectedVariantsExtension = ".reads-at-selected-variants";
         public const string readsAtSelectedVariantsIndexExtension = readsAtSelectedVariantsExtension + ".index";
 
@@ -410,6 +412,7 @@ namespace ExpressionLib
         static readonly int regionalExpressionExtensionLength = regionalExpressionExtension.Count();
         static readonly int geneExpressionExtensionLength = geneExpressionExtension.Count();
         static readonly int selectedVariantsExtensionLength = selectedVariantsExtension.Count();
+        static readonly int annotatedSelectedVariantsExtensionLength = annotatedSelectedVariantsExtension.Count();
         static readonly int readsAtSelectedVariantsExtensionLength = readsAtSelectedVariantsExtension.Count();
         static readonly int readsAtSelectedVariantsIndexExtensionLength = readsAtSelectedVariantsIndexExtension.Count();
 
@@ -525,6 +528,10 @@ namespace ExpressionLib
                         else if (file == subdir + @"\" + analysisID + selectedVariantsExtension)
                         {
                             storedBAM.selectedVariantsInfo = new FileInfo(file);
+                        }
+                        else if (file == subdir + @"\" + analysisID + annotatedSelectedVariantsExtension)
+                        {
+                            storedBAM.annotatedSelectedVariantsInfo = new FileInfo(file);
                         }
                         else if (file.Count() > isoformsExtensionLength && file.Substring(file.Count() - isoformsExtensionLength).ToLower() == isoformsExtension)
                         {
@@ -658,7 +665,7 @@ namespace ExpressionLib
         public static string[] LibraryStrategies = { "wgs", "wxs", "rna" };
 
 
-        public static void LoadStoredBamsForMachine(Pathname directory, Dictionary<AnalysisID, StoredBAM> storedBAMs)
+        public static void LoadStoredBamsForMachine(Pathname directory, Dictionary<AnalysisID, StoredBAM> storedBAMs, ref ulong totalFreeDiskSpace)
         {
             //
             // Load BAMs from a machine that offloads storage from the main machines.  These machines are allowed to store data
@@ -701,8 +708,10 @@ namespace ExpressionLib
 
             lock (storedBAMs)
             {
+                var freeDiskSpace = GetVolumeFreeSpace(directory);
+                totalFreeDiskSpace += freeDiskSpace;
                 Console.WriteLine("Loaded " + nBamsLoaded + " bams for " + directory + " in " + (stopwatch.ElapsedMilliseconds + 500) / 1000 + "s, " + (nBamsLoaded * 1000 / (stopwatch.ElapsedMilliseconds + 1)) + " bams/s, "
-                    + SizeToUnits(GetVolumeFreeSpace(directory)) + " free");
+                    + SizeToUnits(freeDiskSpace) + " free");
             }
         }
 
@@ -856,7 +865,9 @@ namespace ExpressionLib
             } while (threw);
 
             outputFile.WriteLine("disease_abbr\treference\tparticipantID\tTumorRNAAnalysis\tTumorDNAAnalysis\tNormalDNAAnalysis\tNormalRNAAnalysis\ttumorRNAPathname\ttumorDNAPathname\t" +
-                "normalDNAPathname\tNormalRNAPathname\tVCFPathname\tgender\tdaysToBirth\tdaysToDeath\tOrigTumorDNAAliquotID\tTumorAllcountFile\tNormalAllcountFile\tmafFile\tRegionalExpressionFilename\tGeneExpressionFilename\tSelectedVariantsFilename");
+                "normalDNAPathname\tNormalRNAPathname\tVCFPathname\tgender\tdaysToBirth\tdaysToDeath\tOrigTumorDNAAliquotID\tTumorRNAAllcountFile\tNormalRNAAllcountFile\tmafFile\t" +
+                "RegionalExpressionFilename\tGeneExpressionFilename\tSelectedVariantsFilename\tReadsAtSelectedVariantsDNAFilename\tReadsAtSelectedVariantsRNAFilename\tAnotatedSelectedVariantsFile" +
+                "SourceNormalDNA\tSourceTumorDNA\tTumorDNAAllcountFilename");
 
             foreach (Experiment experiment in experiments)
             {
@@ -993,6 +1004,56 @@ namespace ExpressionLib
                 if (experiment.NormalDNAAnalysis.storedBAM != null && experiment.NormalDNAAnalysis.storedBAM.selectedVariantsInfo != null)
                 {
                     outputFile.Write(experiment.NormalDNAAnalysis.storedBAM.selectedVariantsInfo.FullName + "\t");
+                }
+                else
+                {
+                    outputFile.Write("\t");
+                }
+
+                if (experiment.TumorDNAAnalysis.storedBAM != null && experiment.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsInfo != null)
+                {
+                    outputFile.Write(experiment.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsInfo.FullName + "\t");
+                }
+                else
+                {
+                    outputFile.Write("\t");
+                }
+
+                if (experiment.TumorRNAAnalysis.storedBAM != null && experiment.TumorRNAAnalysis.storedBAM.readsAtSelectedVariantsInfo != null)
+                {
+                    outputFile.Write(experiment.TumorRNAAnalysis.storedBAM.readsAtSelectedVariantsInfo.FullName + "\t");
+                }
+                else
+                {
+                    outputFile.Write("\t");
+                }
+
+                if (experiment.NormalDNAAnalysis.storedBAM != null && experiment.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo != null)
+                {
+                    outputFile.Write(experiment.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo.FullName + "\t");
+                }
+                else
+                {
+                    outputFile.Write("\t");
+                }
+
+                if (experiment.NormalDNAAnalysis.realignSource != null && experiment.NormalDNAAnalysis.realignSource.storedBAM != null && experiment.NormalDNAAnalysis.realignSource.storedBAM.bamInfo != null)
+                {
+                    outputFile.Write(experiment.NormalDNAAnalysis.realignSource.storedBAM.bamInfo.FullName);
+                } else {
+                    outputFile.Write("\t");
+                }
+
+                if (experiment.TumorDNAAnalysis.realignSource != null && experiment.TumorDNAAnalysis.realignSource.storedBAM != null && experiment.TumorDNAAnalysis.realignSource.storedBAM.bamInfo != null)
+                {
+                    outputFile.Write(experiment.TumorDNAAnalysis.realignSource.storedBAM.bamInfo.FullName);
+                } else {
+                    outputFile.Write("\t");
+                }
+
+                if (experiment.TumorDNAAnalysis.storedBAM != null && experiment.TumorDNAAnalysis.storedBAM.allCountInfo != null)
+                {
+                    outputFile.Write(experiment.TumorDNAAnalysis.storedBAM.allCountInfo.FullName + "\t");
                 }
                 else
                 {
