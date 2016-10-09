@@ -68,7 +68,7 @@ namespace ExpressionMetadata
             Machine.AddMachine("msr-srs-0", 8, 36, true);
             Machine.AddMachine("msr-srs-1", 8, 36);
             Machine.AddMachine("msr-srs-2", 8, 36);
-            Machine.AddMachine("msr-srs-3", 8, 34, true);
+            // Machine.AddMachine("msr-srs-3", 8, 34, true); srs-3 has bad memory in its RAID controller, so in practice it can't run RAID, which leaves it with no redundancy.  So, it's out of the mix.
             Machine.AddMachine("msr-srs-4", 8, 36);
             Machine.AddMachine("msr-srs-5", 16, 36);
             Machine.AddMachine("msr-srs-6", 16, 36);
@@ -246,7 +246,7 @@ namespace ExpressionMetadata
 
             threads.Add(new Thread(() => ExpressionTools.LoadStoredBamsForMachine(@"\\msr-genomics-0\e$\tcga", storedBAMs, ref totalFreeDiskSpace)));
             threads.Add(new Thread(() => ExpressionTools.LoadStoredBamsForMachine(@"\\msr-genomics-1\e$\tcga", storedBAMs, ref totalFreeDiskSpace)));
-            threads.Add(new Thread(() => ExpressionTools.LoadStoredBamsForMachine(@"\\bolosky\f$\tcga", storedBAMs, ref totalFreeDiskSpace)));
+            // no longer storing on my desktop now that there's enough space on the servers.  threads.Add(new Thread(() => ExpressionTools.LoadStoredBamsForMachine(@"\\bolosky\f$\tcga", storedBAMs, ref totalFreeDiskSpace)));
 
             threads.ForEach(t => t.Start());
             threads.ForEach(t => t.Join());
@@ -282,7 +282,7 @@ namespace ExpressionMetadata
             }
 
             timer.Stop();
-            Console.WriteLine("Loaded bams from " + threads.Count() + " file systems in " + ((timer.ElapsedMilliseconds + 500) / 1000) + "s, total free space " + ExpressionTools.SizeToUnits(totalFreeDiskSpace));
+            Console.WriteLine("Loaded bams from " + threads.Count() + " file systems in " + ((timer.ElapsedMilliseconds + 500) / 1000) + "s, total free space " + ExpressionTools.SizeToUnits(totalFreeDiskSpace) + "B");
             Console.WriteLine();
 
             return storedBAMs;
@@ -1449,8 +1449,11 @@ namespace ExpressionMetadata
         static Dictionary<string, string> refassemTranslation = new Dictionary<string, string>();        // refassems in the input that are equivalent to ones we actually have
 
         const string GenReadsNearVariantsScriptFilenameBase = "GenReadsNearVariants-";
+        const string GenReadsNearVariantsClusterScriptFilename = "GenReadsNearVariants-cluster.cmd";
+        const string CreateGenReadsNearVariantsJobScriptFilename = "CreateGenReadsNearVariantsJob.cmd";
 
-        static void GenerateExtractionEntryIfNecessary(Dictionary<string, StreamWriter> scriptsByHostname, ExpressionTools.TCGARecord normalAnalysis, ExpressionTools.TCGARecord tumorAnalysis, ref int nExtant, ref int nToGenerate, ref int nWaitingForPrerequisites)
+        static void GenerateExtractionEntryIfNecessary(Dictionary<string, StreamWriter> scriptsByHostname, ExpressionTools.TCGARecord normalAnalysis, ExpressionTools.TCGARecord tumorAnalysis, 
+            ref int nExtant, ref int nToGenerate, ref int nWaitingForPrerequisites, ref StreamWriter clusterScript)
         {
             try
             {
@@ -1474,14 +1477,28 @@ namespace ExpressionMetadata
                         scriptsByHostname.Add(machine, new StreamWriter(baseDirectory + GenReadsNearVariantsScriptFilenameBase + machine + ".cmd"));
                     }
 
+                    if (null == clusterScript)
+                    {
+                        var jobScript = new StreamWriter(baseDirectory + CreateGenReadsNearVariantsJobScriptFilename);
+                        jobScript.WriteLine(@"job new /emailaddress:bolosky@microsoft.com /nodegroup:B99,LongRunQ /exclusive:true /failontaskfailure:false /jobname:GenReadsNearVariants /memorypernode:100000 /notifyoncompletion:true /numnodes:1-40 /runtime:10:12:00 /scheduler:gcr /jobtemplate:LongRunQ /estimatedprocessmemory:100000");
+                        jobScript.Close();
+
+                        clusterScript = new StreamWriter(baseDirectory + GenReadsNearVariantsClusterScriptFilename);
+                    }
+
                     scriptsByHostname[machine].WriteLine(@"del \temp\SamtoolsForVcf.cmd");
                     scriptsByHostname[machine].WriteLine("GenerateScriptFromVariants " + normalAnalysis.storedBAM.selectedVariantsInfo.FullName + " " + tumorAnalysis.storedBAM.bamInfo.FullName + @" \temp\SamtoolsForVcf.cmd" + (tumorAnalysis.storedBAM.usesChr ? " chr" : " \"\""));
                     scriptsByHostname[machine].WriteLine(@"GenerateConsolodatedExtractedReads \temp\SamtoolsForVcf.cmd " + ExpressionTools.GetDirectoryPathFromFullyQualifiedFilename(tumorAnalysis.storedBAM.bamInfo.FullName) +
                         tumorAnalysis.analysis_id + ExpressionTools.readsAtSelectedVariantsExtension);
+
+                    clusterScript.WriteLine(@"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr \\gcr\scratch\b99\bolosky\clusterGenReadsNearVariants.cmd " + normalAnalysis.storedBAM.selectedVariantsInfo.FullName + " " + tumorAnalysis.storedBAM.bamInfo.FullName +
+                        (tumorAnalysis.storedBAM.usesChr ? " chr" : " \"\"") + " " + ExpressionTools.GetDirectoryPathFromFullyQualifiedFilename(tumorAnalysis.storedBAM.bamInfo.FullName) + tumorAnalysis.analysis_id + ExpressionTools.readsAtSelectedVariantsExtension);
+
                     nToGenerate++;
                 }
             }
             catch (IOException)
+
             {
                 Console.WriteLine("Ignoring IO exception deciding whether to generate a read extraction script for analysis ID " + normalAnalysis.analysis_id + ", which sometimes happens when it's running.");
             }
@@ -1492,6 +1509,8 @@ namespace ExpressionMetadata
             //
             // First, delete all of the extant scripts so that we don't accidentally run a stale one.
             //
+            File.Delete(baseDirectory + GenReadsNearVariantsClusterScriptFilename);
+            File.Delete(baseDirectory +  CreateGenReadsNearVariantsJobScriptFilename);
             foreach (var machine in Machines)
             {
                 File.Delete(baseDirectory + GenReadsNearVariantsScriptFilenameBase + machine.Key + ".cmd");
@@ -1501,14 +1520,19 @@ namespace ExpressionMetadata
             int nExtant = 0;
             int nToGenerate = 0;
             int nWaitingForPrerequisites = 0;
+            StreamWriter clusterScript = null;
 
             foreach (var experiment in experiments) {
-                GenerateExtractionEntryIfNecessary(scriptsByHostname, experiment.NormalDNAAnalysis, experiment.TumorRNAAnalysis, ref nExtant, ref nToGenerate, ref nWaitingForPrerequisites);
-                GenerateExtractionEntryIfNecessary(scriptsByHostname, experiment.NormalDNAAnalysis, experiment.TumorDNAAnalysis, ref nExtant, ref nToGenerate, ref nWaitingForPrerequisites);
+                GenerateExtractionEntryIfNecessary(scriptsByHostname, experiment.NormalDNAAnalysis, experiment.TumorRNAAnalysis, ref nExtant, ref nToGenerate, ref nWaitingForPrerequisites, ref clusterScript);
+                GenerateExtractionEntryIfNecessary(scriptsByHostname, experiment.NormalDNAAnalysis, experiment.TumorDNAAnalysis, ref nExtant, ref nToGenerate, ref nWaitingForPrerequisites, ref clusterScript);
             }
 
             foreach (var scriptEntry in scriptsByHostname) {
                 scriptEntry.Value.Close();
+            }
+            if (null != clusterScript)
+            {
+                clusterScript.Close();
             }
 
             if (nToGenerate + nWaitingForPrerequisites > 0)
@@ -2041,6 +2065,9 @@ namespace ExpressionMetadata
 
             StreamWriter variantCallScript = null;
 
+            string callVariantsFilename = baseDirectory + @"callVariants";
+            File.Delete(callVariantsFilename);  // In case there's a stale one around.
+
             foreach (var experiment in experiments)
             {
                 string refassem = experiment.NormalDNAAnalysis.refassemShortName.ToLower();
@@ -2097,7 +2124,7 @@ namespace ExpressionMetadata
 
                     if (variantCallScript == null)
                     {
-                        variantCallScript = new StreamWriter(baseDirectory + @"callVariants");
+                        variantCallScript = new StreamWriter(callVariantsFilename);
                     }
 
                     variantCallScript.Write("date\n");
@@ -2481,28 +2508,29 @@ namespace ExpressionMetadata
             }
         }
 
-        static void GenerateGeneExpressionScripts(List<ExpressionTools.Experiment> experiments)
+        static void GenerateGeneExpressionScripts(List<ExpressionTools.Experiment> experiments, bool forAlleleSpecificExpression)
         {
-            int nWithGeneExpression = 0;
+            int nDone = 0;
             int nInScript = 0;
             int nNeedingPrecursors = 0;
             var readyToGo = new List<ParticipantID>();
 
-            string createJobScriptFilename = baseDirectory + "createGeneExpressionJob.cmd";
-            string scheduleJobScriptFilename = baseDirectory + "scheduleGeneExpressionJob.cmd";
+            string createJobScriptFilename = baseDirectory + (forAlleleSpecificExpression ? "createAlleleSpecificGeneExpressionJob.cmd" : "createGeneExpressionJob.cmd");
+            string scheduleJobScriptFilename = baseDirectory + (forAlleleSpecificExpression ? "scheduleAlleleSpecificGeneExpressionJob.cmd" : "scheduleGeneExpressionJob.cmd");
 
             File.Delete(createJobScriptFilename);
             File.Delete(scheduleJobScriptFilename);
 
             foreach (var experiment in experiments)
             {
-                if (experiment.TumorRNAAnalysis.storedBAM == null || experiment.TumorRNAAnalysis.storedBAM.regionalExpressionInfo == null)
+                if ((forAlleleSpecificExpression && (experiment.NormalDNAAnalysis.storedBAM == null || experiment.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo == null)) ||
+                    (!forAlleleSpecificExpression && (experiment.TumorRNAAnalysis.storedBAM == null || experiment.TumorRNAAnalysis.storedBAM.regionalExpressionInfo == null)))
                 {
                     nNeedingPrecursors++;
                 }
-                else if (experiment.TumorRNAAnalysis.storedBAM.geneExpressionInfo != null)
+                else if (forAlleleSpecificExpression && experiment.NormalDNAAnalysis.storedBAM.alleleSpecificGeneExpressionInfo != null|| !forAlleleSpecificExpression && experiment.TumorRNAAnalysis.storedBAM.geneExpressionInfo != null)
                 {
-                    nWithGeneExpression++;
+                    nDone++;
                 }
                 else
                 {
@@ -2513,12 +2541,13 @@ namespace ExpressionMetadata
             nInScript = readyToGo.Count();
             if (0 != nInScript) {
                 var createJobScript = new StreamWriter(createJobScriptFilename);
-                createJobScript.WriteLine(@"job new /emailaddress:bolosky@microsoft.com /nodegroup:B99,ExpressQ /exclusive:true /failontaskfailure:false /jobname:geneExpression /memorypernode:32000 /notifyoncompletion:true /numnodes:1-20 /runtime:12:00 /scheduler:gcr /jobtemplate:ExpressQ /estimatedprocessmemory:20000");
+                createJobScript.WriteLine(@"job new /emailaddress:bolosky@microsoft.com /nodegroup:B99,LongRunQ /exclusive:true /failontaskfailure:false /jobname:" + 
+                    (forAlleleSpecificExpression ? "alleleSpecificGeneExpression" : "geneExpression") + " /memorypernode:32000 /notifyoncompletion:true /numnodes:1-20 /runtime:7:12:00 /scheduler:gcr /jobtemplate:LongRunQ /estimatedprocessmemory:20000");
                 createJobScript.Close();
 
                 int nPerJob = 40;
                 int nInThisJob = 0;
-                string jobHeader = @"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr \\gcr\scratch\b99\bolosky\ExpressionNearMutations ";
+                string jobHeader = @"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr \\gcr\scratch\b99\bolosky\ExpressionNearMutations " + (forAlleleSpecificExpression ? "-a " : "");
                 string thisJob = "";
 
                 StreamWriter scheduleJobScript = new StreamWriter(scheduleJobScriptFilename);
@@ -2540,20 +2569,11 @@ namespace ExpressionMetadata
                 }
 
                 scheduleJobScript.Close();
-
-            }
-            else
-            {
-                //
-                // Get rid of any stale scripts left over from a previous run.  File.Delete does nothing if the file doesn't exist.
-                //
-                File.Delete(createJobScriptFilename);
-                File.Delete(scheduleJobScriptFilename);
             }
 
             if (nInScript + nNeedingPrecursors > 0)
             {
-                Console.WriteLine("" + nInScript + " are ready to have gene expression computed, " + nNeedingPrecursors + " still need preliminary work done and " + nWithGeneExpression + " are done.");
+                Console.WriteLine("" + nInScript + " are ready to have " + (forAlleleSpecificExpression ? "allele specific " : "") +  "gene expression computed, " + nNeedingPrecursors + " still need preliminary work done and " + nDone + " are done.");
             }
         }
 
@@ -2600,6 +2620,10 @@ namespace ExpressionMetadata
         {
             var timer = new Stopwatch();
             timer.Start();
+
+
+            var beatAMLGuids = new Dictionary<string, ExpressionTools.BeatAMLSample>(); // Temp until we have the load function
+            //ExpressionTools.GenerateBeatAMLGuids(beatAMLGuids);
 
             hg18_likeReferences.Add("NCBI36_BCCAGSC_variant".ToLower());
             hg18_likeReferences.Add("NCBI36_BCM_variant".ToLower());
@@ -2668,7 +2692,8 @@ namespace ExpressionMetadata
             ExpressionTools.DumpExperimentsToFile(experiments, baseDirectory + "experiments.txt");
             GenerateSelectedVariantsScript(experiments);
             GenerateRegionalExpressionScripts(experiments);
-            GenerateGeneExpressionScripts(experiments);
+            GenerateGeneExpressionScripts(experiments, false);
+            GenerateGeneExpressionScripts(experiments, true);
             GenerateTP53CountScripts(experiments);
             GenerateIsoformFileListsByDiseaseAndMutation(experiments);
             //GenerateMutationDistributionByGene(experiments);

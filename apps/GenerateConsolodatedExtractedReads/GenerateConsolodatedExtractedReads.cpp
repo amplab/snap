@@ -415,8 +415,10 @@ int main(int argc, char* argv[])
     if (argc < 3 || argc > 5) usage();
 
     if (argc > 3) {
-        nThreadsRunning = atoi(argv[3]);
-        if (0 == nThreadsRunning) usage();
+        int arg = atoi(argv[3]);
+        if (arg != 0) {
+            nThreadsRunning = arg;
+        }
     }
 
     if (argc > 4) {

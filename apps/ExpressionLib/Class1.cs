@@ -309,6 +309,7 @@ namespace ExpressionLib
             public FileInfo readsAtSelectedVariantsInfo = null;
             public FileInfo readsAtSelectedVariantsIndexInfo = null;
             public FileInfo annotatedSelectedVariantsInfo = null;
+            public FileInfo alleleSpecificGeneExpressionInfo = null;
             public long totalSize = 0;
             public bool needed = false; // Do we need this as input for some experiment?
             public bool isRealingned = false;   // Was this realined, or is it straight from TCGA
@@ -401,6 +402,7 @@ namespace ExpressionLib
         public const string annotatedSelectedVariantsExtension = ".annotatedSelectedVariants";
         public const string readsAtSelectedVariantsExtension = ".reads-at-selected-variants";
         public const string readsAtSelectedVariantsIndexExtension = readsAtSelectedVariantsExtension + ".index";
+        public const string alleleSpecificGeneExpressionExtension = ".allele_specific_gene_expression";
 
         static readonly int bamExtensionLength = bamExtension.Count();
         static readonly int baiExtensionLength = baiExtension.Count();
@@ -415,6 +417,7 @@ namespace ExpressionLib
         static readonly int annotatedSelectedVariantsExtensionLength = annotatedSelectedVariantsExtension.Count();
         static readonly int readsAtSelectedVariantsExtensionLength = readsAtSelectedVariantsExtension.Count();
         static readonly int readsAtSelectedVariantsIndexExtensionLength = readsAtSelectedVariantsIndexExtension.Count();
+        static readonly int alleleSpecificGeneExpressionExtensionLength = alleleSpecificGeneExpressionExtension.Count();
 
 
         static int LoadStoredBAMsForDirectory(Pathname directory, Dictionary<AnalysisID, StoredBAM> storedBAMs)
@@ -528,6 +531,19 @@ namespace ExpressionLib
                         else if (file == subdir + @"\" + analysisID + selectedVariantsExtension)
                         {
                             storedBAM.selectedVariantsInfo = new FileInfo(file);
+
+                            if (storedBAM.selectedVariantsInfo.Length < 1024 * 1024)
+                            {
+                                //
+                                // Check to see if it's truncated by reading it and looking for **done**
+                                //
+
+                                var lines = File.ReadAllLines(file);
+                                if (lines.Count() == 0 || lines[lines.Count() - 1] != "**done**")
+                                {
+                                    Console.WriteLine("Truncated (or empty) selected variants file " + file);
+                                }
+                            }
                         }
                         else if (file == subdir + @"\" + analysisID + annotatedSelectedVariantsExtension)
                         {
@@ -590,6 +606,29 @@ namespace ExpressionLib
                                 if (storedBAM.geneExpressionInfo.Length < 1 * 1024 * 1024)
                                 {
                                     Console.WriteLine("Unusually small gene expression file " + file + ", " + storedBAM.geneExpressionInfo.Length);
+                                }
+                            }
+                        }
+                        else if (file.Count() > alleleSpecificGeneExpressionExtensionLength && file.Substring(file.Count() - alleleSpecificGeneExpressionExtensionLength).ToLower() == alleleSpecificGeneExpressionExtension)
+                        {
+                            string expectedFileName = analysisID + alleleSpecificGeneExpressionExtension;
+                            if (file.Count() < expectedFileName.Count() || file.Substring(file.Count() - expectedFileName.Count()) != expectedFileName)
+                            {
+                                Console.WriteLine("Incorrect allele-specific gene expression file " + file);
+                            }
+                            else
+                            {
+                                storedBAM.alleleSpecificGeneExpressionInfo = new FileInfo(file);
+                                if (storedBAM.alleleSpecificGeneExpressionInfo.Length < 1 * 1024 * 1024)
+                                {
+                                    //
+                                    // Check it to see if it's truncated.
+                                    //
+                                    var lines = File.ReadAllLines(file);
+                                    if (lines.Count() == 0 || lines[lines.Count() - 1] != "**done**")
+                                    {
+                                        Console.WriteLine("Truncated allele-specific gene expression file " + file + ", size " + storedBAM.alleleSpecificGeneExpressionInfo.Length);
+                                    }
                                 }
                             }
                         }
@@ -711,7 +750,7 @@ namespace ExpressionLib
                 var freeDiskSpace = GetVolumeFreeSpace(directory);
                 totalFreeDiskSpace += freeDiskSpace;
                 Console.WriteLine("Loaded " + nBamsLoaded + " bams for " + directory + " in " + (stopwatch.ElapsedMilliseconds + 500) / 1000 + "s, " + (nBamsLoaded * 1000 / (stopwatch.ElapsedMilliseconds + 1)) + " bams/s, "
-                    + SizeToUnits(freeDiskSpace) + " free");
+                    + SizeToUnits(freeDiskSpace) + "B free");
             }
         }
 
@@ -769,6 +808,9 @@ namespace ExpressionLib
             public Pathname allcountFileName = null;
             public Pathname regionalExpressionFileName = null;
             public Pathname geneExpressionFileName = null;
+            public Pathname selectedVariantsFileName = null;
+            public Pathname readsAtSelectedVariantsFileName = null;
+            public Pathname annotatedSelectedVariantsFileName = null;
             public Pathname bamFileName = null;
             public string bamHash = null;
             public Pathname baiFileName = null;
@@ -866,13 +908,15 @@ namespace ExpressionLib
 
             outputFile.WriteLine("disease_abbr\treference\tparticipantID\tTumorRNAAnalysis\tTumorDNAAnalysis\tNormalDNAAnalysis\tNormalRNAAnalysis\ttumorRNAPathname\ttumorDNAPathname\t" +
                 "normalDNAPathname\tNormalRNAPathname\tVCFPathname\tgender\tdaysToBirth\tdaysToDeath\tOrigTumorDNAAliquotID\tTumorRNAAllcountFile\tNormalRNAAllcountFile\tmafFile\t" +
-                "RegionalExpressionFilename\tGeneExpressionFilename\tSelectedVariantsFilename\tReadsAtSelectedVariantsDNAFilename\tReadsAtSelectedVariantsRNAFilename\tAnotatedSelectedVariantsFile" +
+                "RegionalExpressionFilename\tGeneExpressionFilename\tSelectedVariantsFilename\tReadsAtSelectedVariantsDNAFilename\tReadsAtSelectedVariantsRNAFilename\tAnotatedSelectedVariantsFile\t" +
                 "SourceNormalDNA\tSourceTumorDNA\tTumorDNAAllcountFilename");
 
             foreach (Experiment experiment in experiments)
             {
+                // 0-5
                 outputFile.Write(experiment.disease_abbr + "\t" + experiment.TumorRNAAnalysis.refassemShortName + "\t" + experiment.participant.participantId + "\t" + experiment.TumorRNAAnalysis.analysis_id + "\t" + experiment.TumorDNAAnalysis.analysis_id + "\t" + experiment.NormalDNAAnalysis.analysis_id + "\t");
 
+                // 6
                 if (null != experiment.NormalRNAAnalysis)
                 {
                     outputFile.Write(experiment.NormalRNAAnalysis.analysis_id + "\t");
@@ -883,6 +927,7 @@ namespace ExpressionLib
                 }
 
 
+                // 7
                 if (experiment.TumorRNAAnalysis.storedBAM != null)
                 {
                     outputFile.Write(experiment.TumorRNAAnalysis.storedBAM.bamInfo.FullName + "\t");
@@ -892,6 +937,7 @@ namespace ExpressionLib
                     outputFile.Write("\t");
                 }
 
+                // 8
                 if (experiment.TumorDNAAnalysis.storedBAM != null)
                 {
                     outputFile.Write(experiment.TumorDNAAnalysis.storedBAM.bamInfo.FullName + "\t");
@@ -901,6 +947,7 @@ namespace ExpressionLib
                     outputFile.Write("\t");
                 }
 
+                // 9
                 if (experiment.NormalDNAAnalysis.storedBAM != null)
                 {
                     outputFile.Write(experiment.NormalDNAAnalysis.storedBAM.bamInfo.FullName + "\t");
@@ -910,6 +957,7 @@ namespace ExpressionLib
                     outputFile.Write("\t");
                 }
 
+                // 10
                 if (experiment.NormalRNAAnalysis != null && experiment.NormalRNAAnalysis.storedBAM != null)
                 {
                     outputFile.Write(experiment.NormalRNAAnalysis.storedBAM.bamInfo.FullName + "\t");
@@ -919,6 +967,7 @@ namespace ExpressionLib
                     outputFile.Write("\t");
                 }
 
+                // 11
                 if (experiment.NormalDNAAnalysis.storedBAM != null && experiment.NormalDNAAnalysis.storedBAM.vcfInfo != null)
                 {
                     outputFile.Write(experiment.NormalDNAAnalysis.storedBAM.vcfInfo.FullName + "\t");
@@ -928,6 +977,7 @@ namespace ExpressionLib
                     outputFile.Write("\t");
                 }
 
+                // 12 - 14
                 if (experiment.participant == null || !experiment.participant.metadataPresent)
                 {
                     outputFile.Write("\t\t\t");
@@ -954,6 +1004,7 @@ namespace ExpressionLib
                     }
                 }
 
+                // 15
                 if (experiment.TumorDNAAnalysis.realignSource != null)
                 {
                     outputFile.Write(experiment.TumorDNAAnalysis.realignSource.aliquot_id + "\t");
@@ -963,6 +1014,7 @@ namespace ExpressionLib
                     outputFile.Write(experiment.TumorDNAAnalysis.aliquot_id + "\t");
                 }
 
+                // 16
                 if (experiment.TumorRNAAnalysis.storedBAM != null && experiment.TumorRNAAnalysis.storedBAM.allCountInfo != null)
                 {
                     outputFile.Write(experiment.TumorRNAAnalysis.storedBAM.allCountInfo.FullName + "\t");
@@ -972,6 +1024,7 @@ namespace ExpressionLib
                     outputFile.Write("\t");
                 }
 
+                // 17
                 if (experiment.NormalRNAAnalysis != null && experiment.NormalRNAAnalysis.storedBAM != null && experiment.NormalRNAAnalysis.storedBAM.allCountInfo != null)
                 {
                     outputFile.Write(experiment.NormalRNAAnalysis.storedBAM.allCountInfo.FullName + "\t");
@@ -981,8 +1034,10 @@ namespace ExpressionLib
                     outputFile.Write("\t");
                 }
 
+                // 18
                 outputFile.Write(experiment.participant.mafFile + "\t");
 
+                // 19
                 if (experiment.TumorRNAAnalysis.regionalExpressionFileName == null)
                 {
                     outputFile.Write("\t");
@@ -992,6 +1047,7 @@ namespace ExpressionLib
                     outputFile.Write(experiment.TumorRNAAnalysis.regionalExpressionFileName + "\t");
                 }
 
+                // 20
                 if (experiment.TumorRNAAnalysis.geneExpressionFileName == null)
                 {
                     outputFile.Write("\t");
@@ -1001,6 +1057,7 @@ namespace ExpressionLib
                     outputFile.Write(experiment.TumorRNAAnalysis.geneExpressionFileName + "\t");
                 }
 
+                // 21
                 if (experiment.NormalDNAAnalysis.storedBAM != null && experiment.NormalDNAAnalysis.storedBAM.selectedVariantsInfo != null)
                 {
                     outputFile.Write(experiment.NormalDNAAnalysis.storedBAM.selectedVariantsInfo.FullName + "\t");
@@ -1010,6 +1067,7 @@ namespace ExpressionLib
                     outputFile.Write("\t");
                 }
 
+                // 22
                 if (experiment.TumorDNAAnalysis.storedBAM != null && experiment.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsInfo != null)
                 {
                     outputFile.Write(experiment.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsInfo.FullName + "\t");
@@ -1019,6 +1077,7 @@ namespace ExpressionLib
                     outputFile.Write("\t");
                 }
 
+                // 23
                 if (experiment.TumorRNAAnalysis.storedBAM != null && experiment.TumorRNAAnalysis.storedBAM.readsAtSelectedVariantsInfo != null)
                 {
                     outputFile.Write(experiment.TumorRNAAnalysis.storedBAM.readsAtSelectedVariantsInfo.FullName + "\t");
@@ -1028,6 +1087,7 @@ namespace ExpressionLib
                     outputFile.Write("\t");
                 }
 
+                // 24
                 if (experiment.NormalDNAAnalysis.storedBAM != null && experiment.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo != null)
                 {
                     outputFile.Write(experiment.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo.FullName + "\t");
@@ -1037,20 +1097,23 @@ namespace ExpressionLib
                     outputFile.Write("\t");
                 }
 
+                // 25
                 if (experiment.NormalDNAAnalysis.realignSource != null && experiment.NormalDNAAnalysis.realignSource.storedBAM != null && experiment.NormalDNAAnalysis.realignSource.storedBAM.bamInfo != null)
                 {
-                    outputFile.Write(experiment.NormalDNAAnalysis.realignSource.storedBAM.bamInfo.FullName);
+                    outputFile.Write(experiment.NormalDNAAnalysis.realignSource.storedBAM.bamInfo.FullName + "\t");
                 } else {
                     outputFile.Write("\t");
                 }
 
+                // 26
                 if (experiment.TumorDNAAnalysis.realignSource != null && experiment.TumorDNAAnalysis.realignSource.storedBAM != null && experiment.TumorDNAAnalysis.realignSource.storedBAM.bamInfo != null)
                 {
-                    outputFile.Write(experiment.TumorDNAAnalysis.realignSource.storedBAM.bamInfo.FullName);
+                    outputFile.Write(experiment.TumorDNAAnalysis.realignSource.storedBAM.bamInfo.FullName + "\t");
                 } else {
                     outputFile.Write("\t");
                 }
 
+                // 27
                 if (experiment.TumorDNAAnalysis.storedBAM != null && experiment.TumorDNAAnalysis.storedBAM.allCountInfo != null)
                 {
                     outputFile.Write(experiment.TumorDNAAnalysis.storedBAM.allCountInfo.FullName + "\t");
@@ -1092,7 +1155,7 @@ namespace ExpressionLib
             while (null != (line = reader.ReadLine())) {
                 var fields = line.Split('\t');
 
-                if (fields.Count() < 21)
+                if (fields.Count() < 28)
                 {
                     Console.WriteLine("LoadExperimentsFromFile::line doesn't have enough fields.  Perhaps it's from an old format or damaged experiments.txt file, line " + line + ", filename " + filename);
                     return null;
@@ -1132,6 +1195,11 @@ namespace ExpressionLib
                 experiment.TumorRNAAnalysis.allcountFileName = fields[16];
                 experiment.TumorRNAAnalysis.regionalExpressionFileName = fields[19];
                 experiment.TumorRNAAnalysis.geneExpressionFileName = fields[20];
+                experiment.NormalDNAAnalysis.selectedVariantsFileName = fields[21];
+                experiment.TumorDNAAnalysis.readsAtSelectedVariantsFileName = fields[22];
+                experiment.TumorRNAAnalysis.readsAtSelectedVariantsFileName = fields[23];
+                experiment.NormalDNAAnalysis.annotatedSelectedVariantsFileName = fields[24];
+                experiment.TumorDNAAnalysis.allcountFileName = fields[27];
 
                 experiments.Add(experiment);
             }
@@ -1337,7 +1405,7 @@ namespace ExpressionLib
         }
 
 
-        public static Dictionary<string, Participant> BuildParticipantData(Dictionary<string, TCGARecord> tcgaEntries, out Dictionary<string, Sample> allSamples, string clinicalDirectory = @"f:\sequence\reads\tcga\clinical")
+        public static Dictionary<ParticipantID, Participant> BuildParticipantData(Dictionary<string, TCGARecord> tcgaEntries, out Dictionary<string, Sample> allSamples, string clinicalDirectory = @"f:\sequence\reads\tcga\clinical")
         {
             var participants = new Dictionary<string, Participant>();
 
@@ -1888,6 +1956,18 @@ namespace ExpressionLib
                     if (record.storedBAM.geneExpressionInfo != null)
                     {
                         record.geneExpressionFileName = record.storedBAM.geneExpressionInfo.FullName;
+                    }
+
+                    if (record.storedBAM.selectedVariantsInfo != null) {
+                        record.selectedVariantsFileName = record.storedBAM.selectedVariantsInfo.FullName;
+                    }
+
+                    if (record.storedBAM.readsAtSelectedVariantsInfo != null) {
+                        record.readsAtSelectedVariantsFileName = record.storedBAM.readsAtSelectedVariantsIndexInfo.FullName;
+                    }
+
+                    if (record.storedBAM.annotatedSelectedVariantsInfo != null) {
+                        record.annotatedSelectedVariantsFileName = record.storedBAM.annotatedSelectedVariantsInfo.FullName;
                     }
                 }
                 else
@@ -2537,6 +2617,312 @@ namespace ExpressionLib
             return "" + ((size + (ulong)512 * 1024 * 1204 * 1024 * 1024) / ((ulong)1024 * 1024 * 1024 * 1024 * 1024)) + "P";
         }
 
+        //
+        // The BeatAML dataset doesn't have TCGA records or GUIDs for its participants and analyses.  Generate them together with filename mappings.
+        //
+        const string BeatAMLBaseDirectory = @"\\msr-genomics-1\e$\BeatAML\";
+        const string BeatAMLGuidsFile = @"f:\sequence\reads\tcga\BeatAMLGuids";
+
+        public static string BeatAMLFilenameToSampleName(string filename) 
+        {
+            //
+            // First strip off the directory, if it's there.
+            //
+            string workingString;
+
+            if (filename.Contains('\\'))
+            {
+                workingString = filename.Substring(filename.LastIndexOf('\\') + 1).ToLower();
+            }
+            else
+            {
+                workingString = filename.ToLower();
+            }
+
+            //
+            // Now strip off anything after the second _.
+            //
+
+            if (!workingString.Contains('_'))
+            {
+                throw new FormatException();
+            }
+
+            var indexOfFirstUnderscore = workingString.IndexOf('_');
+            if (workingString.Substring(indexOfFirstUnderscore + 1).Contains('_'))
+            {
+                workingString = workingString.Substring(0, workingString.Substring(indexOfFirstUnderscore + 1).IndexOf('_') + indexOfFirstUnderscore + 1);
+            }
+
+            if (workingString.Count() != 15 || workingString.Substring(0, 7) != "sample_" || workingString[9] != '-')
+            {
+                throw new FormatException();
+            }
+
+            return workingString;
+        }
+
+        public class BeatAMLSample
+        {
+            public BeatAMLSample(string sampleName_) {
+                sampleName = sampleName_;
+            }
+
+            public string sampleName;
+            public string normalDNAGuid = null;
+            public string tumorDNAGuid = null;
+            public string tumorRNAGuid = null;
+        }
+
+        static public void GenerateBeatAMLGuids(Dictionary<string, BeatAMLSample> extantGuids)
+        {
+            bool anyChanged = false;
+            foreach (string filename in Directory.GetFiles(BeatAMLBaseDirectory + @"seqcap\bam\" , "*_Skin.realign.bam"))
+            {
+                var sampleName = BeatAMLFilenameToSampleName(filename);
+
+                if (!extantGuids.ContainsKey(sampleName))
+                {
+                    extantGuids.Add(sampleName, new BeatAMLSample(sampleName));
+                    anyChanged = true;
+                }
+
+                if (extantGuids[sampleName].normalDNAGuid == null)
+                {
+                    extantGuids[sampleName].normalDNAGuid = Guid.NewGuid().ToString();
+                    anyChanged = true;
+                }
+            }
+
+            foreach (string filename in Directory.GetFiles(BeatAMLBaseDirectory + @"seqcap\bam\" , "*_AML.realign.bam"))
+            {
+                var sampleName = BeatAMLFilenameToSampleName(filename);
+
+                if (!extantGuids.ContainsKey(sampleName))
+                {
+                    extantGuids.Add(sampleName, new BeatAMLSample(sampleName));
+                    anyChanged = true;
+                }
+
+                if (extantGuids[sampleName].tumorDNAGuid == null)
+                {
+                    extantGuids[sampleName].tumorDNAGuid = Guid.NewGuid().ToString();
+                    anyChanged = true;
+                }
+            }
+
+            foreach (string filename in Directory.GetFiles(BeatAMLBaseDirectory + @"rnaseq\bam-sorted\", "*_sorted.bam"))
+            {
+                var sampleName = BeatAMLFilenameToSampleName(filename);
+
+                if (!extantGuids.ContainsKey(sampleName))
+                {
+                    extantGuids.Add(sampleName, new BeatAMLSample(sampleName));
+                    anyChanged = true;
+                }
+
+                if (extantGuids[sampleName].tumorRNAGuid == null)
+                {
+                    extantGuids[sampleName].tumorRNAGuid = Guid.NewGuid().ToString();
+                    anyChanged = true;
+                }
+            }
+
+            if (anyChanged)
+            {
+                var outputFile = new StreamWriter(BeatAMLGuidsFile);
+
+                foreach (var guidSet in extantGuids)
+                {
+                    outputFile.Write(guidSet.Key + "\t");
+
+                    if (guidSet.Value.normalDNAGuid != null)
+                    {
+                        outputFile.Write(guidSet.Value.normalDNAGuid);
+                    }
+                    outputFile.Write("\t");
+
+                    if (guidSet.Value.tumorDNAGuid != null)
+                    {
+                        outputFile.Write(guidSet.Value.tumorDNAGuid);
+                    }
+                    outputFile.Write("\t");
+
+                    if (guidSet.Value.tumorRNAGuid != null)
+                    {
+                        outputFile.Write(guidSet.Value.tumorRNAGuid);
+                    }
+                    outputFile.WriteLine();
+                }
+
+                outputFile.Close();
+            }
+        }
+
+
+        static public void LoadStateFromExperimentsFile(out List<AnalysisID> excludedAnalyses, out Dictionary<ParticipantID, TCGARecord> tcgaRecords, out Dictionary<SampleID, ParticipantID> sampleToParticipantIDMap,
+            out Dictionary<ParticipantID, Participant> participants, out List<Experiment> experiments, out Dictionary<string, ExpressionTools.Sample> allSamples)
+        {
+            excludedAnalyses = ExpressionTools.LoadExcludedAnalyses(@"\\gcr\scratch\b99\bolosky\excluded_analyses.txt");
+
+            tcgaRecords = ExpressionTools.LoadTCGARecords(null /* stored BAMs*/, excludedAnalyses, @"\\gcr\scratch\b99\bolosky\tcga-all.xml");
+            ExpressionTools.LoadTCGARecordsForLocalRealigns(tcgaRecords, null, @"\\gcr\scratch\b99\bolosky\realigns.txt");
+            ExpressionTools.LoadTCGAAdditionalMetadata(tcgaRecords, @"\\gcr\scratch\b99\bolosky\tcgaAdditionalMetadata.txt");
+
+            sampleToParticipantIDMap = ExpressionTools.CreateSampleToParticipantIDMap(tcgaRecords);
+
+            participants = ExpressionTools.BuildParticipantData(tcgaRecords, out allSamples, @"\\gcr\scratch\b99\bolosky\clinical");
+
+            ExpressionTools.AddAllMAFFilesToParticipants(participants, sampleToParticipantIDMap, @"\\gcr\scratch\b99\bolosky\mafs");
+
+            experiments = ExpressionTools.LoadExperimentsFromFile(@"\\gcr\scratch\b99\bolosky\experiments.txt", participants, tcgaRecords);
+        }
+
+        public class Gene
+        {
+
+            public Gene(string hugo_symbol_, string chromosome_, int offset)
+            {
+                hugo_symbol = hugo_symbol_;
+                chromosome = chromosome_;
+                minOffset = offset;
+                maxOffset = offset;
+            }
+
+            public string hugo_symbol;  // The gene name
+            public string chromosome;
+            public int minOffset;
+            public int maxOffset;
+
+            public bool inconsistent = false;
+        }
+
+        public class MutationMap
+        {
+            public static int largestAllowedGene = 2100000; // At little bigger than DMD, the largest human gene
+            public MutationMap() { }
+
+            public void AddMutation(string hugo_symbol, string chromosome, int offset)
+            {
+                if (!genes.ContainsKey(hugo_symbol))
+                {
+                    genes.Add(hugo_symbol, new Gene(hugo_symbol, chromosome, offset));
+                }
+
+                var gene = genes[hugo_symbol];
+
+                if (!genes[hugo_symbol].inconsistent)
+                {
+                    if (gene.chromosome != chromosome)
+                    {
+                        Console.WriteLine("Gene " + hugo_symbol + " occurs on (at least) two different chromosomes: " + chromosome + " and " + gene.chromosome + ".  Ignoring gene.");
+                        gene.inconsistent = true;
+                    }
+                    else
+                    {
+                        gene.minOffset = Math.Min(gene.minOffset, offset);
+                        gene.maxOffset = Math.Max(gene.maxOffset, offset);
+                        if (gene.maxOffset - gene.minOffset > largestAllowedGene)
+                        {
+                            Console.WriteLine("Gene " + hugo_symbol + " has too big a range of mutation offsets: " + chromosome + ":" + gene.minOffset + "-" + gene.maxOffset);
+                            gene.inconsistent = true;
+                        }
+                    }
+                }
+            }
+
+            public void DoneAddingMutations()
+            {
+                foreach (var geneEntry in genes)
+                {
+                    var gene = geneEntry.Value;
+
+                    if (!gene.inconsistent)
+                    {
+                        if (!genesByChromosome.ContainsKey(gene.chromosome))
+                        {
+                            genesByChromosome.Add(gene.chromosome, new List<Gene>());
+                        }
+                        genesByChromosome[gene.chromosome].Add(gene);
+                        genesByName.Add(gene.hugo_symbol, gene);
+                    }
+                }
+            }
+
+            public int Count()
+            {
+                return genes.Count();
+            }
+
+            Dictionary<string, Gene> genes = new Dictionary<string, Gene>();
+            public Dictionary<string, List<Gene>> genesByChromosome = new Dictionary<string, List<Gene>>();
+            public Dictionary<string, Gene> genesByName = new Dictionary<string, Gene>();
+        }
+
+        static public Dictionary<string, MutationMap> GenerateMutationMapFromExperiments(List<Experiment> experiments, Dictionary<string, ExpressionTools.Experiment> experimentsByParticipant)
+        {
+
+            var mutations = new Dictionary<string, ExpressionTools.MutationMap>();  // Maps reference type (hg18 or hg19) to MutationMap
+            mutations.Add("hg18", new ExpressionTools.MutationMap());
+            mutations.Add("hg19", new ExpressionTools.MutationMap());
+
+            var badHugoSymbols = new List<string>();    // These are corruped by Excel.  They're in the MAFs that I downloaded, and I'm removing them by hand.
+            badHugoSymbols.Add("1-Mar");
+            badHugoSymbols.Add("1-Dec");
+            badHugoSymbols.Add("1-Sep");
+            badHugoSymbols.Add("10-Mar");
+            badHugoSymbols.Add("11-Mar");
+            badHugoSymbols.Add("12-Sep");
+            badHugoSymbols.Add("14-Sep");
+            badHugoSymbols.Add("1SEPT4");
+            badHugoSymbols.Add("2-Mar");
+            badHugoSymbols.Add("2-Sep");
+            badHugoSymbols.Add("3-Mar");
+            badHugoSymbols.Add("3-Sep");
+            badHugoSymbols.Add("4-Mar");
+            badHugoSymbols.Add("4-Sep");
+            badHugoSymbols.Add("5-Sep");
+            badHugoSymbols.Add("6-Mar");
+            badHugoSymbols.Add("6-Sep");
+            badHugoSymbols.Add("7-Mar");
+            badHugoSymbols.Add("7-Sep");
+            badHugoSymbols.Add("8-Mar");
+            badHugoSymbols.Add("9-Sep");
+
+            int nMutations = 0;
+            foreach (var experiment in experiments)
+            {
+                experimentsByParticipant.Add(experiment.participant.participantId, experiment);
+
+                foreach (ExpressionTools.MAFRecord maf in experiment.maf)
+                {
+                    nMutations++;
+
+                    string chromosome;
+                    if (maf.Chrom.Count() > 3 && maf.Chrom.Substring(0, 3) == "chr")
+                    {
+                        chromosome = maf.Chrom.Substring(3);
+                    }
+                    else
+                    {
+                        chromosome = maf.Chrom;
+                    }
+
+                    if (badHugoSymbols.Contains(maf.Hugo_symbol))
+                    {
+                        Console.WriteLine("Bad hugo symbol " + maf.Hugo_symbol);
+                    }
+                    mutations[maf.ReferenceClass()].AddMutation(maf.Hugo_symbol, chromosome, maf.Start_position);
+                }
+            }
+
+            foreach (var referenceClass in mutations)
+            {
+                referenceClass.Value.DoneAddingMutations();
+            }
+
+            return mutations;
+        }
  
     } // ExpressionTools
 
