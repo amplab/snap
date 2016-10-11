@@ -1110,7 +1110,7 @@ namespace ExpressionMetadata
 
             }
 
-            Console.WriteLine("Need " + nNeededBAMs + " bams consisting of " + String.Format("{0:n0}", totalNeededBytes) + " bytes; do not need " + nUnneededBAMs + " consisting of " + String.Format("{0:n0}", totalUnneededBytes));
+            Console.WriteLine("Need " + nNeededBAMs + " bams consisting of " + ExpressionTools.SizeToUnits((ulong)totalNeededBytes) + "B; do not need " + nUnneededBAMs + " consisting of " + ExpressionTools.SizeToUnits((ulong)totalUnneededBytes) + "B");
 
             var deleteLog = new StreamWriter(baseDirectory + @"deletable-files.txt");
 
@@ -2616,6 +2616,7 @@ namespace ExpressionMetadata
             }
 
         }
+
         static void Main(string[] args)
         {
             var timer = new Stopwatch();
@@ -2657,6 +2658,13 @@ namespace ExpressionMetadata
 
             var tumorToMachineMapping = GenerateTumorToMachineMapping();
             var storedBAMs = LoadStoredBAMs(tumorToMachineMapping);
+            ulong totalSpaceUsed = 0;
+            foreach (var storedBAM in storedBAMs)
+            {
+                totalSpaceUsed += storedBAM.Value.DiskSpaceUsed();
+            }
+            Console.WriteLine("Total space for all stored files is " + ExpressionTools.SizeToUnits(totalSpaceUsed) + "B");
+            Console.WriteLine();
             ExpressionTools.LoadChrStateFile( @"f:\sequence\reads\tcga\chrState", storedBAMs);
             GenerateListOfBamsNeedingChrState(storedBAMs);
             var tcgaRecords = ExpressionTools.LoadTCGARecords(storedBAMs, excludedAnalyses, @"f:\sequence\Reads\tcga-all.xml");

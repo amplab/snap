@@ -320,6 +320,25 @@ namespace ExpressionLib
             public string isoformCount = null;  // File with the count of isoform references
             public bool chrStateKnown = false;  // Do we know whether this analysis uses "chr" before chromosome names (i.e, is usesChr set)
             public bool usesChr; // Does this analysis use "chr" before chromosome names (you can only check this is chrStateKnown is set)
+
+            public ulong DiskSpaceUsed()
+            {
+                ulong totalSpace = 0;
+
+                if (bamInfo != null) totalSpace += (ulong)bamInfo.Length;
+                if (baiInfo != null) totalSpace += (ulong)baiInfo.Length;
+                if (vcfInfo != null) totalSpace += (ulong)vcfInfo.Length;
+                if (selectedVariantsInfo != null) totalSpace += (ulong)selectedVariantsInfo.Length;
+                if (allCountInfo != null) totalSpace += (ulong)allCountInfo.Length;
+                if (regionalExpressionInfo != null) totalSpace += (ulong)regionalExpressionInfo.Length;
+                if (geneExpressionInfo != null) totalSpace += (ulong)geneExpressionInfo.Length;
+                if (readsAtSelectedVariantsInfo != null) totalSpace += (ulong)readsAtSelectedVariantsInfo.Length;
+                if (readsAtSelectedVariantsIndexInfo != null) totalSpace += (ulong)readsAtSelectedVariantsIndexInfo.Length;
+                if (annotatedSelectedVariantsInfo != null) totalSpace += (ulong)annotatedSelectedVariantsInfo.Length;
+                if (alleleSpecificGeneExpressionInfo != null) totalSpace += (ulong)alleleSpecificGeneExpressionInfo.Length;
+
+                return totalSpace;
+            }
         }
 
         static public string GetDirectoryPathFromFullyQualifiedFilename(string filename)
@@ -418,6 +437,22 @@ namespace ExpressionLib
         static readonly int readsAtSelectedVariantsExtensionLength = readsAtSelectedVariantsExtension.Count();
         static readonly int readsAtSelectedVariantsIndexExtensionLength = readsAtSelectedVariantsIndexExtension.Count();
         static readonly int alleleSpecificGeneExpressionExtensionLength = alleleSpecificGeneExpressionExtension.Count();
+
+        static public bool CheckFileForDone(string filename) // Check that the given file is a text file who's last line is **done**
+        {
+            string[] lines;
+            try
+            {
+                lines = File.ReadAllLines(filename);
+            }
+            catch (IOException)
+            {
+                Console.WriteLine("Unable to to open file " + filename + " to check to see if it's truncated.  It's probably being written now, so assuming it's OK");
+                return true;
+            }
+
+            return !(lines.Count() == 0 || (lines[lines.Count() - 1] != "**done**" && lines[lines.Count() -1] != "**done**\t\t"));
+        }
 
 
         static int LoadStoredBAMsForDirectory(Pathname directory, Dictionary<AnalysisID, StoredBAM> storedBAMs)
@@ -534,12 +569,7 @@ namespace ExpressionLib
 
                             if (storedBAM.selectedVariantsInfo.Length < 1024 * 1024)
                             {
-                                //
-                                // Check to see if it's truncated by reading it and looking for **done**
-                                //
-
-                                var lines = File.ReadAllLines(file);
-                                if (lines.Count() == 0 || lines[lines.Count() - 1] != "**done**")
+                                if (!CheckFileForDone(file))
                                 {
                                     Console.WriteLine("Truncated (or empty) selected variants file " + file);
                                 }
@@ -548,6 +578,11 @@ namespace ExpressionLib
                         else if (file == subdir + @"\" + analysisID + annotatedSelectedVariantsExtension)
                         {
                             storedBAM.annotatedSelectedVariantsInfo = new FileInfo(file);
+                            if (storedBAM.annotatedSelectedVariantsInfo.Length < 1024 * 1024 && !CheckFileForDone(file))
+                            {
+                                Console.WriteLine("Truncated annotated selected variants file " + file);
+                                storedBAM.annotatedSelectedVariantsInfo = null;
+                            }
                         }
                         else if (file.Count() > isoformsExtensionLength && file.Substring(file.Count() - isoformsExtensionLength).ToLower() == isoformsExtension)
                         {
@@ -624,8 +659,7 @@ namespace ExpressionLib
                                     //
                                     // Check it to see if it's truncated.
                                     //
-                                    var lines = File.ReadAllLines(file);
-                                    if (lines.Count() == 0 || lines[lines.Count() - 1] != "**done**")
+                                    if (!CheckFileForDone(file)) 
                                     {
                                         Console.WriteLine("Truncated allele-specific gene expression file " + file + ", size " + storedBAM.alleleSpecificGeneExpressionInfo.Length);
                                     }
@@ -654,6 +688,11 @@ namespace ExpressionLib
                             else
                             {
                                 storedBAM.readsAtSelectedVariantsIndexInfo = new FileInfo(file);
+                                if (storedBAM.readsAtSelectedVariantsIndexInfo.Length < 1024 * 1024 && !CheckFileForDone(file))
+                                {
+                                    Console.WriteLine("File " + file + " is truncated.");
+                                    storedBAM.readsAtSelectedVariantsIndexInfo = null;
+                                }
                             }
                         }
                         else
@@ -808,6 +847,7 @@ namespace ExpressionLib
             public Pathname allcountFileName = null;
             public Pathname regionalExpressionFileName = null;
             public Pathname geneExpressionFileName = null;
+            public Pathname alleleSpecificGeneExpressionFileName = null;
             public Pathname selectedVariantsFileName = null;
             public Pathname readsAtSelectedVariantsFileName = null;
             public Pathname annotatedSelectedVariantsFileName = null;
@@ -886,6 +926,36 @@ namespace ExpressionLib
             public bool tumorNeedsRealignment = false;
         }
 
+        const int DiseaseAbbrFieldNumber = 0;
+        const int ReferenceFieldNumber = 1;
+        const int ParticipantIDFieldNumber = 2;
+        const int TumorRNAAnalysisFieldNumber = 3;
+        const int TumorDNAAnalysisFieldNumber = 4;
+        const int NormalDNAAnalysisFieldNumber = 5;
+        const int NormalRNAAnalysisFieldNumber = 6;
+        const int TumorRNAPathnameFieldNumber = 7;
+        const int TumorDNAPathnameFieldNumber = 8;
+        const int NormalDNAPathnameFieldNumber = 9;
+        const int NormalRNAPathnameFieldNumber = 10;
+        const int VCFPathnameFieldNumber = 11;
+        const int GenderFieldNumber = 12;
+        const int DaysToBirthFieldNumber = 13;
+        const int DaysToDeathFieldNumber = 14;
+        const int OrigTumorDNAAliquotIDFieldNumber = 15;
+        const int TumorRNAAllcountFileFieldNumber = 16;
+        const int NormalRNAAllcountFileFieldNumber = 17;
+        const int MAFFileFieldNumber = 18;
+        const int RegionallExpressionFileFieldNumber = 19;
+        const int GeneExpressionFileFieldNumber = 20;
+        const int SelectedVariantsFileFieldNumber = 21;
+        const int ReadsAtSelectedVariantsDNAFileFieldNumber = 22;
+        const int ReadsAtSelectedVariantsRNAFileFieldNumber = 23;
+        const int AnnotatedSelectedVariantsFieldNumber = 24;
+        const int SourceNormalDNAFileFieldNumber = 25;
+        const int SourceTumorDNAFileFieldNumber = 26;
+        const int TumorDNAAllcountFileFieldNumber = 27;
+        const int AlleleSpecificGeneExpressionFileFieldNumber = 28;
+
         public static void DumpExperimentsToFile(List<Experiment> experiments, string filename)
         {
             StreamWriter outputFile = null;
@@ -909,7 +979,7 @@ namespace ExpressionLib
             outputFile.WriteLine("disease_abbr\treference\tparticipantID\tTumorRNAAnalysis\tTumorDNAAnalysis\tNormalDNAAnalysis\tNormalRNAAnalysis\ttumorRNAPathname\ttumorDNAPathname\t" +
                 "normalDNAPathname\tNormalRNAPathname\tVCFPathname\tgender\tdaysToBirth\tdaysToDeath\tOrigTumorDNAAliquotID\tTumorRNAAllcountFile\tNormalRNAAllcountFile\tmafFile\t" +
                 "RegionalExpressionFilename\tGeneExpressionFilename\tSelectedVariantsFilename\tReadsAtSelectedVariantsDNAFilename\tReadsAtSelectedVariantsRNAFilename\tAnotatedSelectedVariantsFile\t" +
-                "SourceNormalDNA\tSourceTumorDNA\tTumorDNAAllcountFilename");
+                "SourceNormalDNA\tSourceTumorDNA\tTumorDNAAllcountFilename\tAlleleSpecifcGeneExpressionFile\tAlleleSpecificGeneExpressionFile");
 
             foreach (Experiment experiment in experiments)
             {
@@ -1123,6 +1193,16 @@ namespace ExpressionLib
                     outputFile.Write("\t");
                 }
 
+                // 28
+                if (experiment.NormalDNAAnalysis.storedBAM == null || experiment.NormalDNAAnalysis.storedBAM.alleleSpecificGeneExpressionInfo == null)
+                {
+                    outputFile.Write("\t");
+                }
+                else
+                {
+                    outputFile.Write(experiment.NormalDNAAnalysis.storedBAM.alleleSpecificGeneExpressionInfo.FullName + "\t");
+                }
+
                 outputFile.WriteLine();
             }
 
@@ -1162,22 +1242,23 @@ namespace ExpressionLib
                 }
 
                 var experiment = new Experiment();
-                experiment.disease_abbr = fields[0];
+                experiment.disease_abbr = fields[DiseaseAbbrFieldNumber];
                 if (null != participants)
                 {
-                    experiment.participant = participants[fields[2]];
+                    experiment.participant = participants[fields[ParticipantIDFieldNumber]];
                 }
-                experiment.TumorRNAAnalysis = tcgaRecords[fields[3]];
-                experiment.TumorRNAAnalysis.bamFileName = fields[7];
-                experiment.TumorDNAAnalysis = tcgaRecords[fields[4]];
-                experiment.TumorDNAAnalysis.bamFileName = fields[8];
-                experiment.NormalDNAAnalysis = tcgaRecords[fields[5]];
-                experiment.NormalDNAAnalysis.bamFileName = fields[9];
-                if (fields[6] == "") {
+                experiment.TumorRNAAnalysis = tcgaRecords[fields[TumorRNAAnalysisFieldNumber]];
+                experiment.TumorRNAAnalysis.bamFileName = fields[TumorRNAPathnameFieldNumber];
+                experiment.TumorDNAAnalysis = tcgaRecords[fields[TumorDNAAnalysisFieldNumber]];
+                experiment.TumorDNAAnalysis.bamFileName = fields[TumorDNAPathnameFieldNumber];
+                experiment.NormalDNAAnalysis = tcgaRecords[fields[NormalDNAAnalysisFieldNumber]];
+                experiment.NormalDNAAnalysis.bamFileName = fields[NormalDNAPathnameFieldNumber];
+                if (fields[NormalRNAAnalysisFieldNumber] == "")
+                {
                     experiment.NormalRNAAnalysis = null;
                 } else {
-                    experiment.NormalRNAAnalysis = tcgaRecords[fields[6]];
-                    experiment.NormalRNAAnalysis.bamFileName = fields[10];
+                    experiment.NormalRNAAnalysis = tcgaRecords[fields[NormalRNAAnalysisFieldNumber]];
+                    experiment.NormalRNAAnalysis.bamFileName = fields[NormalRNAPathnameFieldNumber];
                 }
                 if (null != experiment.participant && experiment.participant.mafs.Count() > 0)
                 {
@@ -1190,16 +1271,17 @@ namespace ExpressionLib
 
                 if (null != experiment.NormalRNAAnalysis)
                 {
-                    experiment.NormalRNAAnalysis.allcountFileName = fields[17];
+                    experiment.NormalRNAAnalysis.allcountFileName = fields[NormalRNAAllcountFileFieldNumber];
                 }
-                experiment.TumorRNAAnalysis.allcountFileName = fields[16];
-                experiment.TumorRNAAnalysis.regionalExpressionFileName = fields[19];
-                experiment.TumorRNAAnalysis.geneExpressionFileName = fields[20];
-                experiment.NormalDNAAnalysis.selectedVariantsFileName = fields[21];
-                experiment.TumorDNAAnalysis.readsAtSelectedVariantsFileName = fields[22];
-                experiment.TumorRNAAnalysis.readsAtSelectedVariantsFileName = fields[23];
-                experiment.NormalDNAAnalysis.annotatedSelectedVariantsFileName = fields[24];
-                experiment.TumorDNAAnalysis.allcountFileName = fields[27];
+                experiment.TumorRNAAnalysis.allcountFileName = fields[TumorRNAAllcountFileFieldNumber];
+                experiment.TumorRNAAnalysis.regionalExpressionFileName = fields[RegionallExpressionFileFieldNumber];
+                experiment.TumorRNAAnalysis.geneExpressionFileName = fields[GeneExpressionFileFieldNumber];
+                experiment.NormalDNAAnalysis.selectedVariantsFileName = fields[SelectedVariantsFileFieldNumber];
+                experiment.TumorDNAAnalysis.readsAtSelectedVariantsFileName = fields[ReadsAtSelectedVariantsDNAFileFieldNumber];
+                experiment.TumorRNAAnalysis.readsAtSelectedVariantsFileName = fields[ReadsAtSelectedVariantsRNAFileFieldNumber];
+                experiment.NormalDNAAnalysis.annotatedSelectedVariantsFileName = fields[AnnotatedSelectedVariantsFieldNumber];
+                experiment.TumorDNAAnalysis.allcountFileName = fields[TumorDNAAllcountFileFieldNumber];
+                experiment.NormalDNAAnalysis.alleleSpecificGeneExpressionFileName = fields[AlleleSpecificGeneExpressionFileFieldNumber];
 
                 experiments.Add(experiment);
             }
@@ -1963,7 +2045,7 @@ namespace ExpressionLib
                     }
 
                     if (record.storedBAM.readsAtSelectedVariantsInfo != null) {
-                        record.readsAtSelectedVariantsFileName = record.storedBAM.readsAtSelectedVariantsIndexInfo.FullName;
+                        record.readsAtSelectedVariantsFileName = record.storedBAM.readsAtSelectedVariantsInfo.FullName;
                     }
 
                     if (record.storedBAM.annotatedSelectedVariantsInfo != null) {

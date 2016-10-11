@@ -13,10 +13,11 @@ namespace ExpressionByMutationCount
     class Program
     {
         class GeneExpressionFile {
-            public GeneExpressionFile(string filename_, string tumorType_, string participantID_) {
+            public GeneExpressionFile(string filename_, string tumorType_, string participantID_, bool forAlleleSpecificExpression_) {
                 filename = filename_;
                 tumorType = tumorType_;
                 participantID = participantID_;
+                forAlleleSpecificExpression = forAlleleSpecificExpression_;
 
                 int headerPrefixLength = headerPrefix.Count();
 
@@ -54,6 +55,7 @@ namespace ExpressionByMutationCount
             public const int nWidths = 20;
             const string headerPrefix = "ExpressionNearMutations v";
             public string currentLine = null;
+            bool forAlleleSpecificExpression;
 
             System.Random random = new System.Random();
 
@@ -109,7 +111,7 @@ namespace ExpressionByMutationCount
                 }
 
                 var fields = line.Split('\t');
-                if (fields.Count() != 2 * nWidths + 2)
+                if (fields.Count() != (forAlleleSpecificExpression ? 1 : 2) * nWidths + 2)
                 {
                     Console.WriteLine("File " + filename + " has unparsable line " + line);
                     return false;
@@ -132,7 +134,7 @@ namespace ExpressionByMutationCount
                             currentZValid[i] = true;
                         }
 
-                        if (fields[i + nWidths + 2] == "*")
+                        if (forAlleleSpecificExpression || fields[i + nWidths + 2] == "*")
                         {
                             currentMuValid[i] = false;
                         }
@@ -367,11 +369,11 @@ namespace ExpressionByMutationCount
 
         static ExpressionTools.MannWhitney<ExpressionInstance>.GetValue getValue = new ExpressionTools.MannWhitney<ExpressionInstance>.GetValue(x => x.z);
 
-        static void WriteFileHeader(StreamWriter outputFile)
+        static void WriteFileHeader(StreamWriter outputFile, bool forAlleleSpecificExpression)
         {
             outputFile.Write("Hugo Symbol");
             int width = 0;
-            for (int mu = 0; mu < 2; mu++)
+            for (int mu = 0; mu < (forAlleleSpecificExpression ? 1 : 2); mu++)
             {
                 string muString = (mu == 0) ? "" : " mu";
                 for (int i = 0; i < GeneExpressionFile.nWidths; i++)
@@ -443,6 +445,14 @@ namespace ExpressionByMutationCount
 
         static void Main(string[] args)
         {
+            if (args.Count() > 1 || args.Count() == 1 && args[0] != "-a")
+            {
+                Console.WriteLine("usage: ExpressionByMutationCount {-a}");
+                return;
+            }
+
+            bool forAlleleSpecificExpression = args.Count() == 1;
+
             Stopwatch timer = new Stopwatch();
             timer.Start();
 
@@ -479,9 +489,10 @@ namespace ExpressionByMutationCount
             timer.Start();
             foreach (var experiment in experiments)
             {
-                if (experiment.TumorRNAAnalysis != null && experiment.TumorRNAAnalysis.geneExpressionFileName != null && experiment.TumorRNAAnalysis.geneExpressionFileName != "")
+                string filename = forAlleleSpecificExpression ? experiment.NormalDNAAnalysis.alleleSpecificGeneExpressionFileName : experiment.TumorRNAAnalysis.geneExpressionFileName;
+                if (filename != null && filename != "")
                 {
-                    var file = new GeneExpressionFile(experiment.TumorRNAAnalysis.geneExpressionFileName, experiment.disease_abbr, experiment.participant.participantId);
+                    var file = new GeneExpressionFile(filename, experiment.disease_abbr, experiment.participant.participantId, forAlleleSpecificExpression);
   
                     inputFiles.Add(file);
                 }
@@ -501,10 +512,10 @@ namespace ExpressionByMutationCount
             timer.Stop();
             Console.WriteLine("Opened " + inputFiles.Count() + " files and read their first lines in " + (timer.ElapsedMilliseconds + 500) / 1000 + "s");
 
-            string baseFileName = @"f:\temp\expression\ExpressionDistributionByMutationCount";
+            string baseFileName = @"f:\temp\expression\" + (forAlleleSpecificExpression ? "AlleleSpecific" : "") + "ExpressionDistributionByMutationCount";
 
             var panCancerOutputFile = new StreamWriter(baseFileName + ".txt");
-            WriteFileHeader(panCancerOutputFile);
+            WriteFileHeader(panCancerOutputFile, forAlleleSpecificExpression);
  
             var outputFilesByDisease = new Dictionary<string, StreamWriter>();
 
@@ -515,7 +526,7 @@ namespace ExpressionByMutationCount
             foreach (var disease in listOfDiseases)
             {
                 outputFilesByDisease.Add(disease, new StreamWriter(baseFileName + "_" + disease + ".txt"));
-                WriteFileHeader(outputFilesByDisease[disease]);
+                WriteFileHeader(outputFilesByDisease[disease], forAlleleSpecificExpression);
             }
 
             ExpressionTools.MannWhitney<ExpressionInstance>.WhichGroup isZero = new ExpressionTools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nMutations == 0);
@@ -580,7 +591,7 @@ namespace ExpressionByMutationCount
                             geneToProcess.AddExpression(inputFile.tumorType, i, inputFile.currentNMutations, inputFile.currentZ[i], inputFile.participantID, false);
                         }
 
-                        if (inputFile.currentMuValid[i]) {
+                        if (!forAlleleSpecificExpression && inputFile.currentMuValid[i]) {
                             geneToProcess.AddExpression(inputFile.tumorType, i, inputFile.currentNMutations, inputFile.currentMu[i], inputFile.participantID, true);
                         }
                     }
@@ -597,77 +608,86 @@ namespace ExpressionByMutationCount
                     //
                     // There wasn't a scatter graphs file for it, probably because it had too few mutations.  Skip it.
                     //
-                    nGenesProcessed++;
                     nGenesSkipped++;
-                    continue;
                 }
-
-                var perGeneLinesFile = new StreamWriter(@"f:\temp\expression\RegionalExpressionByGene\" + nextHugoSymbol.ToLower() + "_lines.txt");
-                foreach (var line in perGeneLines)
+                else
                 {
-                    perGeneLinesFile.WriteLine(line);
-                }
-                perGeneLinesFile.Close();
 
-
-                //
-                // Compute and write out the results.
-                //
-
-                panCancerOutputFile.Write(nextHugoSymbol);
-                foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
-                {
-                    perDiseaseOutputFileEntry.Value.Write(nextHugoSymbol);
-                }
-
-                for (int mu = 0; mu < 2; mu++)  // shouldn't we be able to do this for a bool somehow?
-                {
-                    Dictionary<int, List<ExpressionInstance>> byRange;
-                    if (mu == 0)
+                    var perGeneLinesFile = new StreamWriter(@"f:\temp\expression\RegionalExpressionByGene\" + nextHugoSymbol.ToLower() + (forAlleleSpecificExpression ? "_allele_specific" : "") + "_lines.txt");
+                    perGeneLinesFile.Write("ParticipantID\tHugo Symbol\tMutation Count\t0");
+                    ulong width = 1000;
+                    for (int i = 1; i < GeneExpressionFile.nWidths; i++)
                     {
-                        byRange = geneToProcess.expressionByRange;
-                    }
-                    else
-                    {
-                        byRange = geneToProcess.meanExpressionByRange;
+                        perGeneLinesFile.Write("\t" + ExpressionTools.SizeToUnits(width) + "b");
+                        width *= 2;
                     }
 
-                    for (int i = 0; i < GeneExpressionFile.nWidths; i++)
+                    foreach (var line in perGeneLines)
                     {
-                        if (byRange.ContainsKey(i))
+                        perGeneLinesFile.WriteLine(line);
+                    }
+                    perGeneLinesFile.Close();
+
+
+                    //
+                    // Compute and write out the results.
+                    //
+
+                    panCancerOutputFile.Write(nextHugoSymbol);
+                    foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
+                    {
+                        perDiseaseOutputFileEntry.Value.Write(nextHugoSymbol);
+                    }
+
+                    for (int mu = 0; mu < (forAlleleSpecificExpression ? 1 : 2); mu++)  // shouldn't we be able to do this for a bool somehow?
+                    {
+                        Dictionary<int, List<ExpressionInstance>> byRange;
+                        if (mu == 0)
                         {
-                            foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
-                            {
-                                var perDiseaseOutputFile = perDiseaseOutputFileEntry.Value;
-                                var disease = perDiseaseOutputFileEntry.Key;
-
-                                ComputeMannWhitneyAndPrint(perDiseaseOutputFile, byRange[i].Where(x => x.nMutations < 2 && x.tumorType == disease).ToList(), isZero, true, geneToProcess, true);
-                                ComputeMannWhitneyAndPrint(perDiseaseOutputFile, byRange[i].Where(x => x.tumorType == disease).ToList(), isZero, true, geneToProcess, true);
-                                ComputeMannWhitneyAndPrint(perDiseaseOutputFile, byRange[i].Where(x => x.nMutations != 0 && x.tumorType == disease).ToList(), isNotOne, false, geneToProcess, true);
-                                ComputeMannWhitneyAndPrint(perDiseaseOutputFile, byRange[i].Where(x => x.tumorType == disease).ToList(), isNotOne, false, geneToProcess, true);
-                            }
-
-                            ComputeMannWhitneyAndPrint(panCancerOutputFile, byRange[i].Where(x => x.nMutations < 2).ToList(), isZero, true, geneToProcess, true);
-                            ComputeMannWhitneyAndPrint(panCancerOutputFile, byRange[i], isZero, true, geneToProcess, true);
-                            ComputeMannWhitneyAndPrint(panCancerOutputFile, byRange[i].Where(x => x.nMutations != 0).ToList(), isNotOne, false, geneToProcess, true);
-                            ComputeMannWhitneyAndPrint(panCancerOutputFile, byRange[i], isNotOne, false, geneToProcess, true);
+                            byRange = geneToProcess.expressionByRange;
                         }
                         else
                         {
-                            foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
+                            byRange = geneToProcess.meanExpressionByRange;
+                        }
+
+                        for (int i = 0; i < GeneExpressionFile.nWidths; i++)
+                        {
+                            if (byRange.ContainsKey(i))
                             {
-                                perDiseaseOutputFileEntry.Value.WriteLine("\t*\t*\t*\t*");
+                                foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
+                                {
+                                    var perDiseaseOutputFile = perDiseaseOutputFileEntry.Value;
+                                    var disease = perDiseaseOutputFileEntry.Key;
+
+                                    ComputeMannWhitneyAndPrint(perDiseaseOutputFile, byRange[i].Where(x => x.nMutations < 2 && x.tumorType == disease).ToList(), isZero, true, geneToProcess, true);
+                                    ComputeMannWhitneyAndPrint(perDiseaseOutputFile, byRange[i].Where(x => x.tumorType == disease).ToList(), isZero, true, geneToProcess, true);
+                                    ComputeMannWhitneyAndPrint(perDiseaseOutputFile, byRange[i].Where(x => x.nMutations != 0 && x.tumorType == disease).ToList(), isOne, false, geneToProcess, true);
+                                    ComputeMannWhitneyAndPrint(perDiseaseOutputFile, byRange[i].Where(x => x.tumorType == disease).ToList(), isOne, false, geneToProcess, true);
+                                }
+
+                                ComputeMannWhitneyAndPrint(panCancerOutputFile, byRange[i].Where(x => x.nMutations < 2).ToList(), isZero, true, geneToProcess, true);
+                                ComputeMannWhitneyAndPrint(panCancerOutputFile, byRange[i], isZero, true, geneToProcess, true);
+                                ComputeMannWhitneyAndPrint(panCancerOutputFile, byRange[i].Where(x => x.nMutations != 0).ToList(), isOne, false, geneToProcess, true);
+                                ComputeMannWhitneyAndPrint(panCancerOutputFile, byRange[i], isOne, false, geneToProcess, true);
                             }
-                            panCancerOutputFile.Write("\t*\t*\t*\t*");
+                            else
+                            {
+                                foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
+                                {
+                                    perDiseaseOutputFileEntry.Value.WriteLine("\t*\t*\t*\t*");
+                                }
+                                panCancerOutputFile.Write("\t*\t*\t*\t*");
+                            }
                         }
                     }
-                }
 
-                WriteCounts(panCancerOutputFile, geneToProcess, "", experimentsByParticipantId);
-                foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
-                {
-                    WriteCounts(perDiseaseOutputFileEntry.Value, geneToProcess, perDiseaseOutputFileEntry.Key, experimentsByParticipantId);
-                }                    
+                    WriteCounts(panCancerOutputFile, geneToProcess, "", experimentsByParticipantId);
+                    foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
+                    {
+                        WriteCounts(perDiseaseOutputFileEntry.Value, geneToProcess, perDiseaseOutputFileEntry.Key, experimentsByParticipantId);
+                    }
+                }
 
                 foreach (var inputFile in completedInputFiles)
                 {
