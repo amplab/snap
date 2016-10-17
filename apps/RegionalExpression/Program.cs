@@ -15,11 +15,7 @@ namespace RegionalExpression
     class Program
     {
 
-        class Contig
-        {
-            public string name = "";
-            public long length = -1;
-        }
+
 
         class Region
         {
@@ -204,134 +200,14 @@ namespace RegionalExpression
                 //
                 var allcountTimer = new Stopwatch();
                 allcountTimer.Start();
-                var allcountReader = new StreamReader(new GZipStream(new StreamReader(allcountFilename).BaseStream, CompressionMode.Decompress));
 
-                //
-                // The format is two header lines like:
-                //      CountReadsCovering v1.1 \\msr-genomics-0\d$\sequence\indices\grch37-24 -a \\msr-genomics-0\e$\tcga\hnsc\tumor\rna\0415c9cc-48e6-46e7-9076-06b6b56bb4be\PCAWG.e7697e88-96df-4c96-ad8d-6c54df95d29b.STAR.v1.bam -
-                //      83303682 mapped high quality nuclear reads, 9891899 low quality reads, 0 mitochondrial reads, 100740272 total reads
-                // followed by a blank line followed by
-                //      NumContigs: 93
-                //      ContigName\tLength
-                //      <ContigName\tLength> x numContigs
-                // Then for each contig:
-                //      >ContigName
-                // And within each contig one of three line types:
-                //      offset\tcount
-                // Which is an offset in the contig (in HEX) followed by the count of high quality reads that map there (also in hex) or:
-                //      xnumber
-                // which is the number of consecutive loci with the same number of HQ reads mapped as the previous locus (x is literal, count is in hex) or:
-                //      count
-                // which is the new count of reads mapped for the next locus (in hex)
-                //
-                // And the final line in the file is
-                //      **done**
-                // 
-                //
+                StreamReader allcountReader;
+                int numContigs;
+                ExpressionTools.Contig[] contigs;
+                long mappedHQNuclearReads;
 
-                var line = allcountReader.ReadLine();
-
-                const string headerBeginning = "CountReadsCovering v";
-
-                if (null == line || line.Count() < headerBeginning.Count() + 1 || line.Substring(0,headerBeginning.Count()) != headerBeginning)
-                {
-                    Console.WriteLine("Empty or corrupt allcount file " + allcountFilename);
-                    continue;
-                }
-
-                if (line[headerBeginning.Count()] != '1')
-                {
-                    Console.WriteLine("Unsupported major version of allcount file " + allcountFilename + ".  Header line: " + line);
-                    continue;
-                }
-
-                line = allcountReader.ReadLine();
-                if (null == line)
-                {
-                    Console.WriteLine("Corrupt or tuncated allcount file " + allcountFilename);
-                    continue;
-                }
-
-                var fields = line.Split(' ');
-                if (fields.Count() != 16)
-                {
-                    Console.WriteLine("Corrupt or tuncated allcount file " + allcountFilename + ".  Second line has " + fields.Count() + " fields: " + line);
-                    continue;
-                }
-
-                long mappedHQNuclearReads = 0;
-                try
-                {
-                    mappedHQNuclearReads = Convert.ToInt64(fields[0]);
-                }
-                catch (FormatException)
-                {
-                    Console.WriteLine("Format exception parsing mapped HQ read count for file " + allcountFilename + " from line: " + line);
-                    continue;
-                }
-
-                line = allcountReader.ReadLine();   // The blank line
-
-                line = allcountReader.ReadLine();
-                if (null == line) {
-                    Console.WriteLine("Allcount file truncated before contig count: " + allcountFilename);
-                    continue;
-                }
-
-                const string numContigsLineBeginning = "NumContigs: ";
-                if (line.Count() < numContigsLineBeginning.Count() + 1 || line.Substring(0, numContigsLineBeginning.Count()) != numContigsLineBeginning) {
-                    Console.WriteLine("Malformed NumContigs line in " + allcountFilename + ": " + line);
-                    continue;
-                }
-
-                int numContigs = 0;
-                try {
-                    numContigs = Convert.ToInt32(line.Substring(numContigsLineBeginning.Count()));
-                } catch (FormatException) {
-                    Console.WriteLine("Couldn't parse NumContigs line in file " + allcountFilename + ": " + line);
-                    continue;
-                }
-                
-                if (numContigs < 1) {
-                    Console.WriteLine("Invalid numContigs in " + allcountFilename + ": " + line);
-                    continue;
-                }
-
-                line = allcountReader.ReadLine();   // The header line for the contigs.
-
-                var contigs = new Contig[numContigs];
-                bool fileCorrupt = false;
-
-                int whichContig;
-
-                for (whichContig = 0; whichContig < numContigs; whichContig++)
-                {
-                    contigs[whichContig] = new Contig();
-
-                    line = allcountReader.ReadLine();
-                    if (null == line) {
-                        Console.WriteLine("File truncated in contig list " + allcountFilename);
-                        fileCorrupt = true;
-                        break;
-                    }
-
-                    fields = line.Split('\t');
-                    if (fields.Count() != 2) {
-                        Console.WriteLine("Incorrect contig line format in file " + allcountFilename + ": " + line);
-                        fileCorrupt = true;
-                        break;
-                    }
-
-                    contigs[whichContig].name = fields[0].ToLower();
-                    try {
-                        contigs[whichContig].length = Convert.ToInt64(fields[1]);
-                    } catch (FormatException) {
-                        Console.WriteLine("Incorrect contig line format in file " + allcountFilename + ": " + line);
-                        fileCorrupt = true;
-                        break;
-                    }
-                } // for all expected contigs
-
+                bool fileCorrupt = ExpressionTools.OpenAllcountFileAndParseHeader(allcountFilename, out allcountReader, out numContigs,
+                    out contigs, out mappedHQNuclearReads);
                 if (fileCorrupt) {
                     continue;
                 }
@@ -340,7 +216,7 @@ namespace RegionalExpression
                 // Now process the body of the file.
                 //
 
-                whichContig = -1;
+                int whichContig = -1;
 
                 int indexOfLastSlash = allcountFilename.LastIndexOf('\\');
                 if (-1 == indexOfLastSlash) {
@@ -363,6 +239,8 @@ namespace RegionalExpression
 
                 bool sawDone = false;
                 string strippedContigName = "";
+
+                string line;
 
                 while (null != (line = allcountReader.ReadLine()))
                 {
@@ -425,7 +303,7 @@ namespace RegionalExpression
                         break;
                     }
 
-                    fields = line.Split('\t');
+                    var fields = line.Split('\t');
                     if (fields.Count() == 1)
                     {
                         //
