@@ -201,14 +201,15 @@ namespace RegionalExpression
                 var allcountTimer = new Stopwatch();
                 allcountTimer.Start();
 
-                StreamReader allcountReader;
-                int numContigs;
-                ExpressionTools.Contig[] contigs;
+                var allcountReader = new ExpressionTools.AllcountReader(allcountFilename);
                 long mappedHQNuclearReads;
+                int numContigs;
 
-                bool fileCorrupt = ExpressionTools.OpenAllcountFileAndParseHeader(allcountFilename, out allcountReader, out numContigs,
-                    out contigs, out mappedHQNuclearReads);
-                if (fileCorrupt) {
+                bool fileCorrupt = !allcountReader.openFile(out mappedHQNuclearReads, out numContigs);
+
+                if (fileCorrupt)
+                {
+                    Console.WriteLine("Ignoring corrupt allcount file " + allcountFilename);
                     continue;
                 }
 
@@ -216,7 +217,6 @@ namespace RegionalExpression
                 // Now process the body of the file.
                 //
 
-                int whichContig = -1;
 
                 int indexOfLastSlash = allcountFilename.LastIndexOf('\\');
                 if (-1 == indexOfLastSlash) {
@@ -234,194 +234,22 @@ namespace RegionalExpression
 
                 Region region = new Region(regionSize, expression, highestOffsetForEachContig, mappedHQNuclearReads, outputFile);
 
-                int currentOffset = -1;
-                int currentMappedReadCount = -1;
+                ExpressionTools.AllcountReader.ProcessBase processBase = (x, y, z) => region.processBase(x, y, z);
 
-                bool sawDone = false;
-                string strippedContigName = "";
-
-                string line;
-
-                while (null != (line = allcountReader.ReadLine()))
-                {
-                    if (sawDone)
-                    {
-                        Console.WriteLine("File " + allcountFilename + " continues after **done** line: " + line);
-                        fileCorrupt = true;
-                        break;
-                    }
-
-                    if ("**done**" == line)
-                    {
-                        sawDone = true;
-                        continue;
-                    }
-
-                    if (line.Count() == 0)
-                    {
-                        Console.WriteLine("Unexpected blank line in " + allcountFilename);
-                        fileCorrupt = true;
-                        break;
-                    }
-
-                    if (line[0] == '>')
-                    {
-                        whichContig++;
-                        if (whichContig >= numContigs)
-                        {
-                            Console.WriteLine("Saw too many contigs in " + allcountFilename + ": " + line);
-                            fileCorrupt = true;
-                            break;
-                        }
-
-                        if (line.Substring(1).ToLower() != contigs[whichContig].name)
-                        {
-                            Console.WriteLine("Unexpected contig in " + allcountFilename + ".  Expected " + contigs[whichContig].name + ", got ", line.Substring(1));
-                            fileCorrupt = true;
-                            break;
-                        }
-
-                        if (line.Count() > 4 && line.Substring(1, 3).ToLower() == "chr")
-                        {
-                            strippedContigName = line.Substring(4).ToLower();
-                        }
-                        else
-                        {
-                            strippedContigName = line.Substring(1).ToLower();
-                        }
-
-
-                        currentOffset = -1;
-                        currentMappedReadCount = -1;
-                        continue;
-                    }
-
-                    if (-1 == whichContig)
-                    {
-                        Console.WriteLine("Expected contig line after list of contigs, got " + line);
-                        fileCorrupt = true;
-                        break;
-                    }
-
-                    var fields = line.Split('\t');
-                    if (fields.Count() == 1)
-                    {
-                        //
-                        // Either xRepeatCount or newCount
-                        //
-                        if (line[0] == 'x')
-                        {
-                            if (currentMappedReadCount < 0 || currentOffset < 0) {
-                                Console.WriteLine("Got unexpected x line " + line);
-                                fileCorrupt = true;
-                                break;
-                            }
-
-                            int repeatCount;
-                            try
-                            {
-                                repeatCount = Convert.ToInt32(line.Substring(1), 16); // 16 means the string is in hex
-                                if (repeatCount <= 0)
-                                {
-                                    Console.WriteLine("Bogus repeat count " + line);
-                                    fileCorrupt = true;
-                                    break;
-                                }
-                            }
-                            catch (FormatException)
-                            {
-                                Console.WriteLine("Format exception processing x line " + line);
-                                fileCorrupt = true;
-                                break;
-                            }
-                            for (; repeatCount > 0;repeatCount-- )
-                            {
-                                currentOffset++;
-                                region.processBase(strippedContigName, currentOffset, currentMappedReadCount);
-                            }
-                        }
-                        else
-                        {
-                            //
-                            // A new mapped read count line
-                            //
-                            if (currentOffset <= 0)
-                            {
-                                Console.WriteLine("Got unexpected mapped read count line " + line);
-                                fileCorrupt = true;
-                                break;
-                            }
-                            try
-                            {
-                                currentMappedReadCount = Convert.ToInt32(line, 16); // 16 means the string is in hex
-                                if (currentMappedReadCount <= 0)
-                                {
-                                    Console.WriteLine("Bogus current count " + line);
-                                    fileCorrupt = true;
-                                    break;
-                                }
-                            }
-                            catch (FormatException)
-                            {
-                                Console.WriteLine("Format exception processing count line " + line);
-                                fileCorrupt = true;
-                                break;
-                            }
-
-                            currentOffset++;
-                            region.processBase(strippedContigName, currentOffset, currentMappedReadCount);
-                        }
-
-                        continue;
-                    }
-
-                    if (fields.Count() != 2)
-                    {
-                        Console.WriteLine("Saw too many fields in line " + line);
-                        fileCorrupt = true;
-                        continue;
-                    }
-
-                    //
-                    // An offset + count line
-                    //
-                    try
-                    {
-                        currentOffset = Convert.ToInt32(fields[0], 16); // 16 means the string is in hex
-                        currentMappedReadCount = Convert.ToInt32(fields[1], 16); // 16 means the string is in hex
-
-                        if (currentOffset <= 0 || currentMappedReadCount <= 0)
-                        {
-                            Console.WriteLine("Bogus offset + count line " + line);
-                            fileCorrupt = true;
-                            break;
-                        }
-                    }
-                    catch (FormatException)
-                    {
-                        Console.WriteLine("Unable to parse offset + count line " + line);
-                        fileCorrupt = true;
-                        break;
-                    }
-
-                    region.processBase(strippedContigName, currentOffset, currentMappedReadCount);
-                }
-
-                if (!sawDone)
-                {
-                    Console.WriteLine("Truncated allcount file " + allcountFilename);
-                    fileCorrupt = true;
-                }
+                fileCorrupt = !allcountReader.ReadAllcountFile(processBase);
 
                 region.closeRegion();
-                outputFile.WriteLine("**done**");
-                outputFile.Close();
+
                 if (fileCorrupt)
                 {
+                    outputFile.Close();
                     File.Delete(outputFilename);
                 }
                 else
                 {
+                    outputFile.WriteLine("**done**");
+                    outputFile.Close();
+
                     allcountTimer.Stop();
                     lock (runs)
                     {
@@ -433,8 +261,6 @@ namespace RegionalExpression
 
         static void Main(string[] args)
         {
-
-
             if (args.Count() < 3) {
                 Console.WriteLine("usage: RegionalExpression expression_disease_file regionSize <one or more participantIDs with the same disease>");
                 return;

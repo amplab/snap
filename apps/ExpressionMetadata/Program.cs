@@ -2213,7 +2213,7 @@ namespace ExpressionMetadata
                     {
                         allcountScript = new StreamWriter(baseDirectory + "allcountCluster.cmd");
                         var allcountJobScript = new StreamWriter(allcountJobScriptFilename);
-                        allcountJobScript.WriteLine("job new /emailaddress:bolosky@microsoft.com /nodegroup:B99,LongRunQ /exclusive:true /failontaskfailure:false /jobname:allcount /memorypernode:10000 /notifyoncompletion:true /numnodes:1-40 /runtime:2:12:00 /scheduler:gcr /jobtemplate:LongRunQ /estimatedprocessmemory:10000");
+                        allcountJobScript.WriteLine("job new /emailaddress:bolosky@microsoft.com /nodegroup:B99,LongRunQ /exclusive:true /failontaskfailure:false /jobname:allcount /memorypernode:10000 /notifyoncompletion:true /numnodes:1-40 /runtime:13:12:00 /scheduler:gcr /jobtemplate:LongRunQ /estimatedprocessmemory:10000");
                         allcountJobScript.Close();
 
                     }
@@ -2390,7 +2390,7 @@ namespace ExpressionMetadata
 
             foreach (var experiment in experiments)
             {
-                if (experiment.TumorRNAAnalysis.storedBAM == null)
+                if (experiment.TumorRNAAnalysis.storedBAM == null || experiment.TumorRNAAnalysis.storedBAM.allCountInfo == null)
                 {
                     nNeedingPrecursors++;
                 }
@@ -2465,7 +2465,8 @@ namespace ExpressionMetadata
 
             foreach (var experiment in experiments)
             {
-                if (experiment.NormalDNAAnalysis.storedBAM == null || experiment.NormalDNAAnalysis.storedBAM.vcfInfo == null) {
+                if (experiment.NormalDNAAnalysis.storedBAM == null || experiment.NormalDNAAnalysis.storedBAM.vcfInfo == null || experiment.TumorRNAAnalysis.storedBAM == null || experiment.TumorRNAAnalysis.storedBAM.allCountInfo == null ||
+                    experiment.NormalDNAAnalysis.storedBAM == null || experiment.NormalDNAAnalysis.storedBAM.allCountInfo == null) {
                     nNeedingPrecursors++;
                 }
                 else if (experiment.NormalDNAAnalysis.storedBAM.selectedVariantsInfo != null)
@@ -2672,7 +2673,6 @@ namespace ExpressionMetadata
             ExpressionTools.LoadTCGAAdditionalMetadata(tcgaRecords);
             GenereateAdditionalTCGAMetadataGeneratingScript(tcgaRecords, storedBAMs, tumorToMachineMapping);
             VerifyStoredBAMPaths(storedBAMs, tcgaRecords, tumorToMachineMapping);
-            //GenerateAllcountScript(tcgaRecords);
 
             var sampleToParticipantIDMap = ExpressionTools.CreateSampleToParticipantIDMap(tcgaRecords);
             DumpSampleToParticipantIDMap(sampleToParticipantIDMap);
@@ -2705,7 +2705,7 @@ namespace ExpressionMetadata
             GenerateTP53CountScripts(experiments);
             GenerateIsoformFileListsByDiseaseAndMutation(experiments);
             //GenerateMutationDistributionByGene(experiments);
-            GenerateMakeIsoformsScripts(experiments);
+            //GenerateMakeIsoformsScripts(experiments);
             GenerateRealignmentScript(experiments, tcgaRecords, storedBAMs, tumorToMachineMapping);
             GenerateUnneededLists(storedBAMs);
             GenerateRealignmentAnalyses(experiments);

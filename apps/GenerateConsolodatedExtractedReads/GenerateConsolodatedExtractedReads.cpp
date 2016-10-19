@@ -125,15 +125,28 @@ DWORD __stdcall
                 exit(1);
             }
 
-            DWORD bytesWritten;
-            if (!WriteFile(hOutputFile, consolodatedOutputBuffer, sizeOfRunsToWrite, &bytesWritten, NULL)) {
-                fprintf(stderr, "Write to output file failed, %d\n", GetLastError());
-                exit(1);
-            }
+            size_t sizeLeftToWrite = sizeOfRunsToWrite;
 
-            if (sizeOfRunsToWrite != bytesWritten) {
-                fprintf(stderr, "Partial write on output file!\n");
-                exit(1);
+            while (0 != sizeLeftToWrite) {
+                DWORD bytesWritten;
+                DWORD bytesToWrite;
+                if (sizeLeftToWrite <= 1024 * 1024 * 1024) {
+                    bytesToWrite = (DWORD)sizeLeftToWrite;
+                } else {
+                    bytesToWrite = 1024 * 1024 * 1024;
+                }
+
+                if (!WriteFile(hOutputFile, consolodatedOutputBuffer, bytesToWrite, &bytesWritten, NULL)) {
+                    fprintf(stderr, "Write to output file failed, %d\n", GetLastError());
+                    exit(1);
+                }
+
+                if (0 == bytesWritten) {
+                    fprintf(stderr, "Empty write on output file!\n");
+                    exit(1);
+                }
+
+                sizeLeftToWrite -= bytesWritten;
             }
 
             nBytesWritten += sizeOfRunsToWrite;

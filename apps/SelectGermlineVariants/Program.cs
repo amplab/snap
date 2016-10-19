@@ -14,21 +14,25 @@ namespace SelectGermlineVariants
     class Program
     {
 
-        const long granularity = 10000; // How often to select a variant if one is available.
+        const long granularity = 1000; // How often to select a variant if one is available.
         const long isolationDistance = 150; // How many bases around a selected variant must match the germline exclusively.
 
         class CandidateVariant
         {
-            public CandidateVariant(string line_, long locus_, double odds_)
+            public CandidateVariant(string line_, long locus_, double odds_, string chromosome_)
             {
                 line = line_;
                 locus = locus_;
                 odds = odds_;
+                chromosome = chromosome_;
             }
 
+            public string chromosome;
             public string line;
             public long locus;
             public double odds;
+            public int nRNAReads = -1;
+            public int nDNAReads = -1;
         }
 
         static void EmitBestCandidate(StreamWriter outputFile, string chromosome, List<CandidateVariant> liveCandidates)
@@ -68,11 +72,48 @@ namespace SelectGermlineVariants
             }
         }
 
-        static void ProcessRuns(List<string> workItems)
+
+        static void markReadCount(Dictionary<string, Dictionary<long, CandidateVariant>> viableCandidates, bool dna, string contigName, long locus, int mappedReadCount)
+        {
+            contigName = contigName.ToLower();
+
+            if (!viableCandidates.ContainsKey(contigName))
+            {
+                contigName = ExpressionTools.switchChrState(contigName);
+
+                if (!viableCandidates.ContainsKey(contigName))
+                {
+                    //
+                    // Probably a minor contig that doesn't have a high quality SNV called for it.  Just ignore it.
+                    //
+                    return;
+                }
+            }
+
+            if (viableCandidates[contigName].ContainsKey(locus))
+            {
+                if (dna && viableCandidates[contigName][locus].nDNAReads != -1 || !dna && viableCandidates[contigName][locus].nRNAReads != -1)
+                {
+                    Console.WriteLine("Got read count more than once for same variant " + contigName + ":" + locus);
+                    throw new FormatException();
+                }
+
+                if (dna)
+                {
+                    viableCandidates[contigName][locus].nDNAReads = mappedReadCount;
+                }
+                else
+                {
+                    viableCandidates[contigName][locus].nRNAReads = mappedReadCount;
+                }
+            }
+        }
+
+        static void ProcessRuns(List<FileSet> workItems)
         {
             while (true)
             {
-                string vcfPathname;
+                FileSet fileSet;
                 lock (workItems)
                 {
                     if (workItems.Count() == 0)
@@ -80,7 +121,7 @@ namespace SelectGermlineVariants
                         return;
                     }
 
-                    vcfPathname = workItems[0];
+                    fileSet = workItems[0];
                     workItems.RemoveAt(0);
 
                     Console.WriteLine("" + workItems.Count() + " vcf" + (workItems.Count() == 1 ? " remains" : "s remain") + " queued.");
@@ -89,11 +130,11 @@ namespace SelectGermlineVariants
                 StreamReader vcfFile = null;
                 try
                 {
-                    vcfFile = new StreamReader(vcfPathname);
+                    vcfFile = new StreamReader(fileSet.vcfPathname);
                 }
                 catch (FileNotFoundException)
                 {
-                    Console.WriteLine("File not found on vcf " + vcfPathname + ".  Skipping.");
+                    Console.WriteLine("File not found on vcf " + fileSet.vcfPathname + ".  Skipping.");
                     continue;
                 }
 
@@ -103,13 +144,13 @@ namespace SelectGermlineVariants
                 }
 
                 if (null == line || line.Count() == 0) {
-                    Console.WriteLine("Corrupt vcf: missing body: " + vcfPathname);
+                    Console.WriteLine("Corrupt vcf: missing body: " + fileSet.vcfPathname);
                     continue;
                 }
 
-                var outputFilename = vcfPathname.Substring(0, vcfPathname.LastIndexOf('.')) + ".selectedVariants";
-                var outputFile = new StreamWriter(outputFilename);
-                outputFile.WriteLine("SelectGermlineVariants v1.0 for input file " + vcfPathname);
+                //
+                // First, read in all of the variants, saving those that we can't immediately exclude because of one reason or another.
+                //
 
                 string currentChromosome = "";
 
@@ -117,6 +158,8 @@ namespace SelectGermlineVariants
 
                 var liveCandidates = new List<CandidateVariant>();
                 var previousGrainsCandidates = new List<CandidateVariant>();
+                var savedGrains = new List<List<CandidateVariant>>();               // Grains and all the candidate variants in them
+
                 long lastLocus = -isolationDistance - 1;
 
                 while (null != (line = vcfFile.ReadLine()))
@@ -125,7 +168,7 @@ namespace SelectGermlineVariants
 
                     if (fields.Count() != 10)
                     {
-                        Console.WriteLine("Wrong number of fields (" + fields.Count() + " != 10) in vcf line: '" + line + "' in file " + vcfPathname + ".  Ignoring file.");
+                        Console.WriteLine("Wrong number of fields (" + fields.Count() + " != 10) in vcf line: '" + line + "' in file " + fileSet.vcfPathname + ".  Ignoring file.");
 
                         badFile = true;
                         break;
@@ -139,7 +182,7 @@ namespace SelectGermlineVariants
                         var keyValue = infoField.Split('=');
                         if (keyValue.Count() != 2)
                         {
-                            Console.WriteLine("Unable to parse info field '" + infoField + " in file " + vcfPathname);
+                            Console.WriteLine("Unable to parse info field '" + infoField + " in file " + fileSet.vcfPathname);
                             badFile = true;
                             break;
                         }
@@ -149,7 +192,7 @@ namespace SelectGermlineVariants
 
                     if (!info.ContainsKey("AN") || !info.ContainsKey("AC") || !info.ContainsKey("CIGAR") || !info.ContainsKey("DP") || !info.ContainsKey("AF") || !info.ContainsKey("AB") || !info.ContainsKey("ODDS"))
                     {
-                        Console.WriteLine("vcf line '" + line + " doesn't contain one or more required info fields.  Skipping file " + vcfPathname);
+                        Console.WriteLine("vcf line '" + line + " doesn't contain one or more required info fields.  Skipping file " + fileSet.vcfPathname);
                         badFile = true;
                     }
 
@@ -186,24 +229,24 @@ namespace SelectGermlineVariants
                     }
                     catch (FormatException)
                     {
-                        Console.WriteLine("Error parsing info fields in line " + line + " of file " + vcfPathname + ".  Skipping file.");
+                        Console.WriteLine("Error parsing info fields in line " + line + " of file " + fileSet.vcfPathname + ".  Skipping file.");
                         badFile = true;
                         break;
                     }
 
                     if (fields[0] == currentChromosome && locus < lastLocus)
                     {
-                        Console.WriteLine("out-of-order variant " + line + " in file " + vcfPathname + ". Skipping file.");
+                        Console.WriteLine("out-of-order variant " + line + " in file " + fileSet.vcfPathname + ". Skipping file.");
                         badFile = true;
                         break;
                     }
 
                     //
-                    // Figure out if we've moved into anothe grain, in which case we emit the best candidate we've got for the previous grain.
+                    // Figure out if we've moved into another grain, in which case we save the candidates we have from previous grains
                     //
                     if (currentChromosome != fields[0] || locus / granularity != lastLocus / granularity)
                     {
-                        EmitBestCandidate(outputFile, currentChromosome, previousGrainsCandidates);
+                        savedGrains.Add(previousGrainsCandidates);
                         previousGrainsCandidates = liveCandidates;
                         liveCandidates = new List<CandidateVariant>();
 
@@ -214,7 +257,7 @@ namespace SelectGermlineVariants
                             // chromosome's candidates to make sure that we don't have any variants too close to
                             // the end of the old grain.
                             //
-                            EmitBestCandidate(outputFile, currentChromosome, previousGrainsCandidates);
+                            savedGrains.Add(previousGrainsCandidates);
                             previousGrainsCandidates = new List<CandidateVariant>();
                             currentChromosome = fields[0];
                             lastLocus = -isolationDistance - 1;
@@ -228,21 +271,94 @@ namespace SelectGermlineVariants
 
                     if (goodCandidate)
                     {
-                        liveCandidates.Add(new CandidateVariant(line, locus, odds));
+                        liveCandidates.Add(new CandidateVariant(line, locus, odds, currentChromosome.ToLower()));
                     }
 
                     lastLocus = locus;
                 } // While we have a VCF line
 
+
+
                 if (badFile) {
-                    outputFile.Close();
-                    File.Delete(outputFilename);
                     continue;
                 }
                 else
                 {
-                    EmitBestCandidate(outputFile, currentChromosome, previousGrainsCandidates);
-                    EmitBestCandidate(outputFile, currentChromosome, liveCandidates);
+                    //
+                    // We now have a list of grains.  Make a map of the candidates in those grains that we can use to add in the DNA/RNA read count.
+                    //
+
+                    var viableCandidates = new Dictionary<string, Dictionary<long, CandidateVariant>>(); // Maps chromosome -> (locus -> candidate)
+
+                    foreach (var grain in savedGrains)
+                    {
+                        foreach (var candidateVariant in grain)
+                        {
+                            if (!viableCandidates.ContainsKey(candidateVariant.chromosome))
+                            {
+                                viableCandidates.Add(candidateVariant.chromosome, new Dictionary<long, CandidateVariant>());
+                            }
+
+                            viableCandidates[candidateVariant.chromosome].Add(candidateVariant.locus, candidateVariant);
+                        }
+                    }
+
+                    //
+                    // Now read in the allcount files and use them to annotate the candidates.
+                    //
+
+
+                    ExpressionTools.AllcountReader.ProcessBase processDNABase = (contigName, locus, mappedReadCount) => markReadCount(viableCandidates, true, contigName, locus, mappedReadCount);
+                    var dnaAllcountReader = new ExpressionTools.AllcountReader(fileSet.dnaAllcountPathmame);
+                    long mappedHQNUclearReads;
+                    int numContigs;
+                    if (!dnaAllcountReader.openFile(out mappedHQNUclearReads, out numContigs))
+                    {
+                        Console.WriteLine("Couldn't open or bad header format in " + fileSet.dnaAllcountPathmame);
+                        break;
+                    }
+
+                    if (!dnaAllcountReader.ReadAllcountFile(processDNABase))
+                    {
+                        Console.WriteLine("Bad internal format or truncation in " + fileSet.dnaAllcountPathmame);
+                    }
+
+                    ExpressionTools.AllcountReader.ProcessBase processRNABase = (contigName, locus, mappedReadCount) => markReadCount(viableCandidates, false, contigName, locus, mappedReadCount);
+                    var rnaAllcountReader = new ExpressionTools.AllcountReader(fileSet.rnaAllcountPathmame);
+                    if (!rnaAllcountReader.openFile(out mappedHQNUclearReads, out numContigs)) {
+                        Console.WriteLine("Couldn't open or bad header format in " + fileSet.rnaAllcountPathmame);
+                        break;
+                    }
+                    
+                    if (!rnaAllcountReader.ReadAllcountFile(processRNABase)) {
+                        Console.WriteLine("Bad internal format or truncation in " + fileSet.rnaAllcountPathmame);
+                    }
+
+                    //
+                    // Now run through the grains, select only the variants that have enough reads, and emit the best one for each grain.
+                    //
+                    var outputFilename = fileSet.vcfPathname.Substring(0, fileSet.vcfPathname.LastIndexOf('.')) + ".selectedVariants";
+                    var outputFile = new StreamWriter(outputFilename);
+                    outputFile.WriteLine("SelectGermlineVariants v1.1 for input file " + fileSet.vcfPathname);      // v1.0 didn't take into account the read counts when selecting variants.
+
+                    foreach (var grain in savedGrains)
+                    {
+                        var remainingCandidates = new List<CandidateVariant>();
+
+                        foreach (var candidate in grain)
+                        {
+                            if (candidate.nDNAReads >= 10 && candidate.nRNAReads >= 10)
+                            {
+                                remainingCandidates.Add(candidate);
+                            }
+                        }
+
+                        if (remainingCandidates.Count() > 0)
+                        {
+                            EmitBestCandidate(outputFile, remainingCandidates[0].chromosome, remainingCandidates);
+                        }
+                    }
+
                     outputFile.WriteLine("**done**");
                     outputFile.Close();
                 }
@@ -251,6 +367,22 @@ namespace SelectGermlineVariants
             }
         }
 
+
+        class FileSet
+        {
+            public FileSet(string participantId_, string vcfPathname_, string dnaAllcountPathname_, string rnaAllcountPathname_)
+            {
+                participantId = participantId_;
+                vcfPathname = vcfPathname_;
+                dnaAllcountPathmame = dnaAllcountPathname_;
+                rnaAllcountPathmame = rnaAllcountPathname_;
+            }
+
+            public readonly string participantId;
+            public readonly string vcfPathname;
+            public readonly string dnaAllcountPathmame;
+            public readonly string rnaAllcountPathmame;
+        }
         static void Main(string[] args)
         {
             if (args.Count() == 0)
@@ -258,18 +390,22 @@ namespace SelectGermlineVariants
                 Console.WriteLine("usage: SelectGermlineVariants <participant ID>");
                 return;
             }
+
+            var filesetByParticipantId = new Dictionary<string, FileSet>();
                 
-            var vcfPathnameByParticipantId = new Dictionary<string, string>();
-            List<string> workItems = new List<string>();
+            var workItems = new List<FileSet>();
 
             var experimentsFile = new StreamReader(@"\\gcr\scratch\b99\bolosky\experiments.txt");
             string line;
+
+            experimentsFile.ReadLine(); // Skip the header
 
             while (null != (line = experimentsFile.ReadLine()))
             {
                 var fields = line.Split('\t');
 
-                vcfPathnameByParticipantId.Add(fields[2], fields[11]);
+                filesetByParticipantId.Add(fields[ExpressionTools.ParticipantIDFieldNumber], new
+                    FileSet(fields[ExpressionTools.ParticipantIDFieldNumber], fields[ExpressionTools.VCFPathnameFieldNumber], fields[ExpressionTools.TumorDNAAllcountFileFieldNumber], fields[ExpressionTools.TumorRNAAllcountFileFieldNumber]));
             }
             
             experimentsFile.Close();
@@ -279,19 +415,19 @@ namespace SelectGermlineVariants
 
             foreach (var arg in args)
             {
-                if (!vcfPathnameByParticipantId.ContainsKey(arg))
+                if (!filesetByParticipantId.ContainsKey(arg))
                 {
                     Console.WriteLine(arg + " does not appear to be a participant ID; ignoring.");
                     continue;
                 }
 
-                if (vcfPathnameByParticipantId[arg] == "")
+                if (filesetByParticipantId[arg].vcfPathname == "" || filesetByParticipantId[arg].dnaAllcountPathmame == "" || filesetByParticipantId[arg].rnaAllcountPathmame == "")
                 {
-                    Console.WriteLine(arg + " doesn't appear to have a vcf yet.  Ignoring.");
+                    Console.WriteLine(arg + " doesn't appear to have a cmoplete set of vcf and allcount files yet.  Ignoring.");
                     continue;
                 }
 
-                workItems.Add(vcfPathnameByParticipantId[arg]);
+                workItems.Add(filesetByParticipantId[arg]);
                 nValidParticipants++;
             }
 
