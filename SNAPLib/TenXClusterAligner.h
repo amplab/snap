@@ -79,6 +79,7 @@ public:
 	// Second stage will call underlyingAligner->phase3 but not generate results. First stage should be only called once
 	// Return ture if no pair requires memory reallocation.
 	bool align_second_stage_check_reallocate (
+	int						maxEditDistanceForSecondaryResults
 	);
 	
 	// Third stage will generate results and call phase4.

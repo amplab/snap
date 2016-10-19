@@ -250,7 +250,7 @@ void PairedAlignerOptions::usageMessage()
         "       Only increase this if you get an error message saying to do so. If you're running\n"
         "       out of memory, you may want to reduce it.  Default: %d)\n"
         "  -F b additional option to -F to require both mates to satisfy filter (default is just one)\n"
-		"       If you specify -F b together with one of the other -F options, -F b MUST be second\n"
+        "       If you specify -F b together with one of the other -F options, -F b MUST be second\n"
         "  -ku  Keep unpaired-looking reads in SAM/BAM input.  Ordinarily, if a read doesn't specify\n"
         "       mate information (RNEXT field is * and/or PNEXT is 0) then the code that matches reads will immdeiately\n"
         "       discard it.  Specifying this flag may cause large memory usage for some input files,\n"
@@ -301,15 +301,15 @@ bool PairedAlignerOptions::parse(const char** argv, int argc, int& n, bool *done
         filterFlags |= FilterBothMatesMatch;
         n += 1;
         return true;
-	}
-	else if (strcmp(argv[n], "-noS") == 0) {
-		noSingle = true;
-		return true;
-	}
-	else if (strcmp(argv[n], "-dTX") == 0) {
-		debugTenX = true;
-		return true;
-	}
+    }
+    else if (strcmp(argv[n], "-noS") == 0) {
+        noSingle = true;
+        return true;
+    }
+    else if (strcmp(argv[n], "-dTX") == 0) {
+        debugTenX = true;
+        return true;
+    }
     return AlignerOptions::parse(argv, argc, n, done);
 }
 
@@ -331,10 +331,10 @@ bool PairedAlignerContext::initialize()
     quicklyDropUnpairedReads = options2->quicklyDropUnpairedReads;
     noUkkonen = options->noUkkonen;
     noOrderedEvaluation = options->noOrderedEvaluation;
-	noSingle = options2->noSingle;
-	debugTenX = options2->debugTenX;
+    noSingle = options2->noSingle;
+    debugTenX = options2->debugTenX;
 
-	return true;
+    return true;
 }
 
 AlignerStats* PairedAlignerContext::newStats()
@@ -351,7 +351,7 @@ void PairedAlignerContext::runTask()
 
 void PairedAlignerContext::runIterationThread()
 {
-	PreventMachineHibernationWhileThisThreadIsAlive();
+    PreventMachineHibernationWhileThisThreadIsAlive();
 
     PairedReadSupplier *supplier = pairedReadSupplierGenerator->generateNewPairedReadSupplier();
 
@@ -362,15 +362,15 @@ void PairedAlignerContext::runIterationThread()
         return;
     }
 
-	if (extension->runIterationThread(supplier, this)) {
+    if (extension->runIterationThread(supplier, this)) {
         delete supplier;
-		return;
-	}
+        return;
+    }
 
     Read *reads[NUM_READS_PER_PAIR];
     _int64 nSingleResults[2] = { 0, 0 };
 
- 	if (index == NULL) {
+     if (index == NULL) {
         // no alignment, just input/output
         PairedAlignmentResult result;
         memset(&result, 0, sizeof(result));
@@ -408,13 +408,16 @@ void PairedAlignerContext::runIterationThread()
     }
 
     int maxReadSize = MAX_READ_LENGTH;
-	size_t memoryPoolSize;
-	if (!debugTenX)
-		memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), 
+    size_t memoryPoolSize;
+    
+    /*
+    if (debugTenX)
+        memoryPoolSize = TenXSingleAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), 
                                                                 numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize,
                                                                 maxSecondaryAlignmentsPerContig);
-	else
-		memoryPoolSize = TenXSingleAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), 
+    else
+   */
+        memoryPoolSize = IntersectingPairedEndAligner::getBigAllocatorReservation(index, intersectingAlignerMaxHits, maxReadSize, index->getSeedLength(), 
                                                                 numSeedsFromCommandLine, seedCoverage, maxDist, extraSearchDepth, maxCandidatePoolSize,
                                                                 maxSecondaryAlignmentsPerContig);
 
@@ -441,17 +444,20 @@ void PairedAlignerContext::runIterationThread()
     memoryPoolSize += (1 + maxPairedSecondaryHits) * sizeof(PairedAlignmentResult) + maxSingleSecondaryHits * sizeof(SingleAlignmentResult);
 
     BigAllocator *allocator = new BigAllocator(memoryPoolSize);
-	
-	PairedEndAligner *underlyingAligner;
-	if (!debugTenX)
-		underlyingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
+    
+    PairedEndAligner *underlyingAligner;
+    /*
+    if (debugTenX)
+        underlyingAligner = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
                                                                 maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm, printStatsMapQLimit);
-	else
-		underlyingAligner = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
+   else
+   */
+        underlyingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
                                                                 maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm, printStatsMapQLimit);
-	
+
+    
     ChimericPairedEndAligner *aligner = new (allocator) ChimericPairedEndAligner(
         index,
         maxReadSize,
@@ -459,18 +465,18 @@ void PairedAlignerContext::runIterationThread()
         maxDist,
         numSeedsFromCommandLine,
         seedCoverage,
-		minWeightToCheck,
+        minWeightToCheck,
         forceSpacing,
         extraSearchDepth,
         noUkkonen,
         noOrderedEvaluation,
-		noTruncation,
+        noTruncation,
         ignoreAlignmentAdjustmentForOm,
-		underlyingAligner,
-		minReadLength,
+        underlyingAligner,
+        minReadLength,
         maxSecondaryAlignmentsPerContig,
-		printStatsMapQLimit,
-		noSingle,
+        printStatsMapQLimit,
+        noSingle,
         allocator);
 
     allocator->checkCanaries();
@@ -671,10 +677,10 @@ void PairedAlignerContext::runIterationThread()
     aligner->~ChimericPairedEndAligner();
     delete supplier;
 
-	if (!debugTenX)
-		((IntersectingPairedEndAligner*)underlyingAligner)->~IntersectingPairedEndAligner();
-	else
-		((TenXSingleAligner*)underlyingAligner)->~TenXSingleAligner();
+    if (!debugTenX)
+        ((IntersectingPairedEndAligner*)underlyingAligner)->~IntersectingPairedEndAligner();
+    else
+        ((TenXSingleAligner*)underlyingAligner)->~TenXSingleAligner();
 
     delete allocator;
 }
@@ -682,19 +688,19 @@ void PairedAlignerContext::runIterationThread()
 
 void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, Read* read1, PairedAlignmentResult* result, bool useful0, bool useful1)
 {
-	bool useful[2] = { useful0, useful1 };
+    bool useful[2] = { useful0, useful1 };
 
     // Update stats
     for (int r = 0; r < 2; r++) {
-		if (useful[r]) {
-			if (isOneLocation(result->status[r])) {
-				stats->singleHits++;
-			} else if (result->status[r] == MultipleHits) {
-				stats->multiHits++;
-			} else {
-				_ASSERT(result->status[r] == NotFound);
-				stats->notFound++;
-			}
+        if (useful[r]) {
+            if (isOneLocation(result->status[r])) {
+                stats->singleHits++;
+            } else if (result->status[r] == MultipleHits) {
+                stats->multiHits++;
+            } else {
+                _ASSERT(result->status[r] == NotFound);
+                stats->notFound++;
+            }
             // Add in MAPQ stats
             if (result->status[r] != NotFound) {
                 int mapq = result->mapq[r];
@@ -727,14 +733,14 @@ void PairedAlignerContext::updateStats(PairedAlignerStats* stats, Read* read0, R
 
     void 
 PairedAlignerContext::typeSpecificBeginIteration()
-{	
-	fprintf(stderr, "****ever being called??\n");
+{    
+    fprintf(stderr, "****ever being called??\n");
     if (1 == options->nInputs) {
         //
         // We've only got one input, so just connect it directly to the consumer.
         //
         pairedReadSupplierGenerator = options->inputs[0].createPairedReadSupplierGenerator(options->numThreads, quicklyDropUnpairedReads, readerContext);
-		printf("createPairedReadSupplierGenerator\n");
+        printf("createPairedReadSupplierGenerator\n");
     } else {
         //
         // We've got multiple inputs, so use a MultiInputReadSupplier to combine the individual inputs.
@@ -746,7 +752,7 @@ PairedAlignerContext::typeSpecificBeginIteration()
             generators[i] = options->inputs[i].createPairedReadSupplierGenerator(options->numThreads, quicklyDropUnpairedReads, context);
         }
         pairedReadSupplierGenerator = new MultiInputPairedReadSupplierGenerator(options->nInputs,generators);
-		printf("MultiInputPairedReadSupplierGenerator\n");
+        printf("MultiInputPairedReadSupplierGenerator\n");
     }
     ReaderContext* context = pairedReadSupplierGenerator->getContext();
     readerContext.header = context->header;

@@ -497,13 +497,17 @@ void TenXClusterAligner::align_second_stage_clustering()
 }
 
 
-bool TenXClusterAligner::align_second_stage_check_reallocate() 
+bool TenXClusterAligner::align_second_stage_check_reallocate(
+    int                       maxEditDistanceForSecondaryResults
+) 
 {
     bool noOverflow = true;
     
     for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
         if (progressTracker[pairIdx].pairNotDone) {
-            bool overflow = progressTracker[pairIdx].aligner->align_phase_3_count_results(progressTracker[pairIdx].bestPairScore, minPairsPerCluster, &progressTracker[pairIdx].nSecondaryResults, progressTracker[pairIdx].secondaryResultBufferSize);
+            bool overflow = progressTracker[pairIdx].aligner->align_phase_3_count_results(maxEditDistanceForSecondaryResults,
+			progressTracker[pairIdx].bestPairScore, minPairsPerCluster, &progressTracker[pairIdx].nSecondaryResults,
+			progressTracker[pairIdx].secondaryResultBufferSize, progressTracker[pairIdx].probabilityOfAllPairs);
             
             if (overflow)
                 noOverflow = false;

@@ -450,7 +450,7 @@ TenXSingleAligner::align_phase_2_move_locus(unsigned whichSetPair)
 
 
 bool
-TenXSingleAligner::align_phase_2_single_step_add_candidate(unsigned whichSetPair, int clusterIdx, unsigned clusterEDCompensation)
+TenXSingleAligner::align_phase_2_single_step_add_candidate(unsigned whichSetPair, int clusterIdx)
 {
 	//
 	// Add all of the mate candidates for this fewer side hit.
@@ -631,7 +631,7 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 							printf("Pair: %d  targetNotMetSingleSet: %s\n", whichSetPair, (targetNotMetSingleSet ? "true" : "false"));
 						}
 #endif //_DEBUG
-						noMoreLocus[whichSetPair] = align_phase_2_single_step_add_candidate(whichSetPair, clusterIdx, clusterEDCompensation);
+						noMoreLocus[whichSetPair] = align_phase_2_single_step_add_candidate(whichSetPair, clusterIdx);
 						//
 						// We keep working on the loop as long as one set is still not stopped
 						//
@@ -708,8 +708,6 @@ TenXSingleAligner::align_phase_3_score(unsigned &bestCompensatedScore, bool inRe
 	//
 	// Phase 3: score and merge the candidates we've found.
 	//
-	//Initialize results
-	*nSecondaryResults = 0;
 	//
 	// Initialize the member variables that are effectively stack locals, but are in the object
 	// to avoid having to pass them to score.
@@ -720,7 +718,8 @@ TenXSingleAligner::align_phase_3_score(unsigned &bestCompensatedScore, bool inRe
 
 	unsigned currentBestPossibleScoreList = 0;
 	unsigned scoreLimit;
-	
+
+	// If we are in revise mode, we should have a fixed scoreLimit
 	if (inRevise) 
 		scoreLimit = bestCompensatedScore + extraSearchDepth + clusterEDCompensation;
 	else
@@ -872,8 +871,8 @@ TenXSingleAligner::align_phase_3_score(unsigned &bestCompensatedScore, bool inRe
 						}
 
 						// Here we check if we have to update the scoreLimit (best mapping score and whether it belongs to a cluster)
-
-						if (!inRevise && anchorUpdate && compensatedScore <= maxK + EDCompensation && compensatedScore < bestCompensatedScore) {
+						// We only update bestScore when we are not in revise mode (revise mode uses a fixed bestScore).
+						if (!inRevise && anchorUpdate && compensatedScore <= maxK + clusterEDCompensation && compensatedScore < bestCompensatedScore) {
 							bestCompensatedScore = compensatedScore;
 							if (!noUkkonen) {
 								scoreLimit = bestCompensatedScore + extraSearchDepth;
@@ -902,20 +901,20 @@ TenXSingleAligner::align_phase_3_score(unsigned &bestCompensatedScore, bool inRe
  *!!! Haven't added the clusterToggle yet.
  */
 void
-align_phase_3_increment_cluster(unsigned bestCompensatedScore) {
+TenXSingleAligner::align_phase_3_increment_cluster(unsigned bestCompensatedScore) {
 
 	for (_uint32 anchorIdx = 0; anchorIdx < firstFreeMergeAnchor; anchorIdx++) {
 
-		unsigned int astrayEDPenalty = (mergeAnchor[anchorIdx].clusterIdx == -1)? clusterEDCompensation : 0;
+		unsigned int astrayEDPenalty = (mergeAnchorPool[anchorIdx].clusterIdx == -1)? clusterEDCompensation : 0;
 		
 		// At least good secondary result
-		if (mergeAnchor[anchorIdx].pairScore + astrayEDPenalty <= bestCompensatedScore + extraSearchDepth) {
-			int clusterIdx = mergeAnchor[anchorIdx].clusterIdx;
+		if (mergeAnchorPool[anchorIdx].pairScore + astrayEDPenalty <= bestCompensatedScore + extraSearchDepth) {
+			int clusterIdx = mergeAnchorPool[anchorIdx].clusterIdx;
 			// haven't seen this cluster before
 			if (clusterIdx != -1 && !clusterToggle[clusterIdx]) {
-				// only increment when we haven't reached the limit
-				if (clusterCounterAry[mergeAnchor[anchorIdx].clusterIdx] != std::numeric_limits<_uint8>::max() )
-					clusterCounterAry[mergeAnchor[anchorIdx].clusterIdx]++;
+				// only increment when we haven't reached the limit to prevent overflow
+				if (clusterCounterAry[mergeAnchorPool[anchorIdx].clusterIdx] != std::numeric_limits<_uint8>::max() )
+					clusterCounterAry[mergeAnchorPool[anchorIdx].clusterIdx]++;
 				clusterToggle[clusterIdx] = true;
 			}
 		}
@@ -924,7 +923,7 @@ align_phase_3_increment_cluster(unsigned bestCompensatedScore) {
 
 
 bool
-TenXSingleAligner::align_phase_3_correct_best_score(unsigned bestCompensatedScore, _uint8 minClusterSize) {
+TenXSingleAligner::align_phase_3_correct_best_score(unsigned &bestCompensatedScore, _uint8 minClusterSize) {
 	// The absolutely max
     unsigned newBestCompensatedScore = maxK + clusterEDCompensation + 1;
 	
@@ -932,7 +931,7 @@ TenXSingleAligner::align_phase_3_correct_best_score(unsigned bestCompensatedScor
  
 		unsigned astrayEDPenalty;
 
-		int clusterIdx = mergeAnchor[anchorIdx].clusterIdx;
+		int clusterIdx = mergeAnchorPool[anchorIdx].clusterIdx;
 		// This is a valid cluster
 		if (clusterIdx != -1 && clusterCounterAry[clusterIdx] >= minClusterSize) {
 		     astrayEDPenalty = 0;
@@ -941,8 +940,8 @@ TenXSingleAligner::align_phase_3_correct_best_score(unsigned bestCompensatedScor
 		     astrayEDPenalty = clusterEDCompensation;
 		}
 
-		if (mergeAnchor[anchorIdx].pairScore + astrayEDPenalty < newBestCompensatedScore) {
-			newBestCompensatedScore = mergeAnchor[anchorIdx].pairScore + astrayEDPenalty;
+		if (mergeAnchorPool[anchorIdx].pairScore + astrayEDPenalty < newBestCompensatedScore) {
+			newBestCompensatedScore = mergeAnchorPool[anchorIdx].pairScore + astrayEDPenalty;
 		}
     }
 	
@@ -956,11 +955,13 @@ TenXSingleAligner::align_phase_3_correct_best_score(unsigned bestCompensatedScor
 
 
 bool
-align_phase_3_correct_count_results(
+TenXSingleAligner::align_phase_3_count_results(
+		int						maxEditDistanceForSecondaryResults,
 		unsigned				&bestCompensatedScore,
 		_uint8					minClusterSize,
 		_int64					*nSecondaryResults,
-		_int64					secondaryResultBufferSize
+		_int64					secondaryResultBufferSize,
+		double					&probabilityOfAllPairs
 	) {
 	// Serrogate
 	Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = { {FORWARD, RC}, {65, FORWARD} };
@@ -973,11 +974,11 @@ align_phase_3_correct_count_results(
 	
 	// Init
 	probabilityOfAllPairs = 0;
-	probabilityOfBestPair = 0;
+	*nSecondaryResults = 0;
 	
 	// Iterate through all the anchors to sum up the probability.
 	for (_uint32 anchorIdx = 0; anchorIdx < firstFreeMergeAnchor; anchorIdx++) {
-		int clusterIdx = mergeAnchor[anchorIdx].clusterIdx;
+		int clusterIdx = mergeAnchorPool[anchorIdx].clusterIdx;
 		// This is a valid cluster
 		if (clusterIdx != -1 && clusterCounterAry[clusterIdx] >= minClusterSize) {
 			astrayEDPenalty = 0;
@@ -988,11 +989,11 @@ align_phase_3_correct_count_results(
 			astrayProbabilityPenalty = unclusteredPenalty;
 		}
 		
-		unsigned compensatedScore = mergeAnchor[anchorIdx].score + astrayEDPenalty;			
+		unsigned compensatedScore = mergeAnchorPool[anchorIdx].pairScore + astrayEDPenalty;			
 		
 		// sum up mapQ penalty if the mapping score is good enough
 		if (compensatedScore <= EDMapQCutOff) {
-			double compensatedProbability = mergeAnchor[anchorIdx].matchProbability * astrayProbabilityPenalty;
+			double compensatedProbability = mergeAnchorPool[anchorIdx].matchProbability * astrayProbabilityPenalty;
 			probabilityOfAllPairs  += compensatedProbability;
 		}
 
@@ -1011,7 +1012,7 @@ align_phase_3_correct_count_results(
 
 
 bool
-align_phase_3_generate_results(
+TenXSingleAligner::align_phase_3_generate_results(
 		_uint8					minClusterSize,
 		int						maxEditDistanceForSecondaryResults,
 		_int64					*nSecondaryResults,
@@ -1040,11 +1041,11 @@ align_phase_3_generate_results(
 	probabilityOfBestPair = 0;
 
 	// Iterate through all the anchors to generate results.
-	nextResultIdx = 0;
-	bestResultIdx = -1;
+	int nextResultIdx = 0;
+	int bestResultIdx = -1;
 	
 	for (_uint32 anchorIdx = 0; anchorIdx < firstFreeMergeAnchor; anchorIdx++) {
-		int clusterIdx = mergeAnchor[anchorIdx].clusterIdx;
+		int clusterIdx = mergeAnchorPool[anchorIdx].clusterIdx;
 		// This is a valid cluster
 		if (clusterIdx != -1 && clusterCounterAry[clusterIdx] >= minClusterSize) {
 			astrayEDPenalty = 0;
@@ -1056,16 +1057,16 @@ align_phase_3_generate_results(
 			astrayProbabilityPenalty = unclusteredPenalty;
 		}
 		
-		unsigned compensatedScore = mergeAnchor[anchorIdx].score + astrayEDPenalty;	
+		unsigned compensatedScore = mergeAnchorPool[anchorIdx].pairScore + astrayEDPenalty;	
 		
 		// we would score this result	
 		if (compensatedScore <= EDResultCutOff) {
 			// probability
-			double compensatedProbability = mergeAnchor[anchorIdx].matchProbability * astrayProbabilityPenalty;
+			double compensatedProbability = mergeAnchorPool[anchorIdx].matchProbability * astrayProbabilityPenalty;
 
 			// pointers
-			ScoringCandidate		*candidatePtr = mergeAnchor[anchorIdx].candidate;
-			ScoringMateCandidate	*matePtr = mergeAnchor[anchorIdx].mate;
+			ScoringCandidate		*candidatePtr = mergeAnchorPool[anchorIdx].candidate;
+			ScoringMateCandidate	*matePtr = mergeAnchorPool[anchorIdx].mate;
 			PairedAlignmentResult	*secondaryResult = &secondaryResults[nextResultIdx];
 
 			secondaryResult->alignedAsPair = true;
@@ -1099,7 +1100,7 @@ align_phase_3_generate_results(
 		PairedAlignmentResult *bestResult = &secondaryResults[bestResultIdx];
 		
 		// fill the best results
-		bestPairScore = bestResult->score[readWithMoreHits] + bestResult->score[readWithFewerHits];
+		bestCompensatedScore = bestResult->score[readWithMoreHits] + bestResult->score[readWithFewerHits];
 		probabilityOfBestPair = bestResult->probability;
 		bestResultGenomeLocation[readWithFewerHits] = bestResult->location[readWithFewerHits];
 		bestResultGenomeLocation[readWithMoreHits] = bestResult->location[readWithMoreHits];
@@ -1315,6 +1316,8 @@ TenXSingleAligner::align(
 	_int64                 maxSecondaryResultsToReturn
 )
 {
+	// this should be useless tools
+	/*	
 	// Initialize data before phase 1
 	result->nLVCalls = 0;
 	result->nSmallHits = 0;
@@ -1345,6 +1348,7 @@ TenXSingleAligner::align(
 	//**** Phase 4
 	align_phase_4(read0, read1, result, maxEditDistanceForSecondaryResults, nSecondaryResults, secondaryResults, maxSecondaryResultsToReturn, popularSeedsSkipped, bestPairScore, bestResultGenomeLocation, bestResultDirection, probabilityOfAllPairs, bestResultScore, probabilityOfBestPair, bestClusterIdx);
 
+	*/
 	return true;
 }
 

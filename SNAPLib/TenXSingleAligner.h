@@ -178,10 +178,12 @@ public:
 	// align_phase_3_correct_count_results counts the number of secondary results and returns ture if reallocation is required
 	//
 	bool align_phase_3_count_results(
+		int						maxEditDistanceForSecondaryResults,
 		unsigned				&bestCompensatedScore,
 		_uint8					minClusterSize,
 		_int64					*nSecondaryResults,
-		_int64					secondaryResultBufferSize
+		_int64					secondaryResultBufferSize,
+		double					&probabilityOfAllPairs
 	);
 
 	//

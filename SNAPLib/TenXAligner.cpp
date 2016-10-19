@@ -745,7 +745,7 @@ void TenXAlignerContext::runIterationThread()
 	// Stage 2, calculate ED and store paired results
 	aligner->align_second_stage_clustering();
 
-	barcodeFinished = aligner->align_second_stage_check_reallocate();
+	barcodeFinished = aligner->align_second_stage_check_reallocate(maxSecondaryAlignmentAdditionalEditDistance);
 	if (!barcodeFinished) {
 		for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {
 			if (tenXSingleTrackerArray[pairIdx].pairNotDone && tenXSingleTrackerArray[pairIdx].nSecondaryResults > tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize) {
