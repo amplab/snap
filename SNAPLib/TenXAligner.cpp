@@ -28,6 +28,7 @@ Revision History:
 // to avoid code duplication.
 //
 
+
 #include "stdafx.h"
 #include "options.h"
 #include <time.h>
@@ -59,6 +60,7 @@ static const unsigned DEFAULT_MIN_PAIRS_PER_CLUSTER = 10;
 static const unsigned DEFAULT_MIN_CLUSTER_SPAN = 100000;
 static const double DEFAULT_UNCLUSTERED_PENALTY = 0.000000001;
 static const unsigned DEFAULT_CLUSTER_ED_COMPENSATION = 4;
+static const unsigned DEFAULT_MAX_CLUSTER_SIZE = 100000;
 
 struct TenXAlignerStats : public AlignerStats
 {
@@ -241,6 +243,7 @@ TenXAlignerOptions::TenXAlignerOptions(const char* i_commandLine)
 	minClusterSpan(DEFAULT_MIN_CLUSTER_SPAN),
 	unclusteredPenalty(DEFAULT_UNCLUSTERED_PENALTY),
 	clusterEDCompensation(DEFAULT_CLUSTER_ED_COMPENSATION),
+	maxClusterNum(DEFAULT_MAX_CLUSTER_SIZE),
 
 	// same with pairedEndAligner
 	forceSpacing(false),
@@ -277,6 +280,8 @@ void TenXAlignerOptions::usageMessage()
 		"                    smaller than minClusterReads the cluster is rejected. Default: %d\n"
 		"  -UCP              specifies the unclustered probability penalty. Default: %f\n"
         "  -CED              specifies the cluster edit-distance compensation. Default: %d\n"
+        "  -mCS              specifies the maximum potential cluster size. Increase it would increase the memory usage.\n"
+        "                    This parameter will be taken out in the future. Default: %d\n"
 		,
 		DEFAULT_MIN_SPACING,
 		DEFAULT_MAX_SPACING,
@@ -287,7 +292,9 @@ void TenXAlignerOptions::usageMessage()
 		DEFAULT_MIN_PAIRS_PER_CLUSTER,
 		DEFAULT_MIN_CLUSTER_SPAN,
 		DEFAULT_UNCLUSTERED_PENALTY,
-		DEFAULT_CLUSTER_ED_COMPENSATION);
+		DEFAULT_CLUSTER_ED_COMPENSATION,
+		DEFAULT_MAX_CLUSTER_SIZE
+		);
 }
 
 bool TenXAlignerOptions::parse(const char** argv, int argc, int& n, bool *done)
@@ -371,6 +378,14 @@ bool TenXAlignerOptions::parse(const char** argv, int argc, int& n, bool *done)
 	else if (strcmp(argv[n], "-CED") == 0) {
 		if (n + 1 < argc) {
 			clusterEDCompensation = atoi(argv[n + 1]);
+			n += 1;
+			return true;
+		}
+		return false;
+	}
+	else if (strcmp(argv[n], "-mCS") == 0) {
+		if (n + 1 < argc) {
+			maxClusterNum = atoi(argv[n + 1]);
 			n += 1;
 			return true;
 		}
@@ -539,12 +554,33 @@ void TenXAlignerContext::runIterationThread()
 
 	//fprintf(stderr, "****Before going into the loop of allocating single aligners\n");
 
+	// Allocate and initialize erasers
+	bool *clusterCounterEraser = (bool*)BigAlloc(sizeof(bool) * maxClusterNum);
+	_uint8 *clusterToggleEraser = (_uint8*)BigAlloc(sizeof(_uint8) * maxClusterNum);
+	for (int clusterIdx = 0; clusterIdx < maxClusterNum; clusterIdx++) {
+		clusterCounterEraser[clusterIdx] = 0;
+		clusterToggleEraser[clusterIdx] = false;
+	}
+
+	// Allocate shared cluster counter array	
+	_uint8 *sharedClusterCounterAry = (_uint8*)BigAlloc(sizeof(_uint8) * maxClusterNum);
+
 	for (int singleAlignerIdx = 0; singleAlignerIdx < maxBarcodeSize; singleAlignerIdx++) {
-		tenXSingleTrackerArray[singleAlignerIdx].aligner = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
-			seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth,
-			maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm, printStatsMapQLimit);
+		// Allocate and initilazing tracker
 		tenXSingleTrackerArray[singleAlignerIdx].pairNotDone = false;
 		tenXSingleTrackerArray[singleAlignerIdx].singleNotDone = false;
+		tenXSingleTrackerArray[singleAlignerIdx].clusterCounterAry = sharedClusterCounterAry;
+		tenXSingleTrackerArray[singleAlignerIdx].clusterToggle = (bool*)BigAlloc(sizeof(bool) * maxClusterNum);
+
+		// Allocate and initilazing aligner
+		tenXSingleTrackerArray[singleAlignerIdx].aligner = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,
+			seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth,
+			maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm, printStatsMapQLimit, clusterEDCompensation, unclusteredPenalty,
+			tenXSingleTrackerArray[singleAlignerIdx].clusterCounterAry, tenXSingleTrackerArray[singleAlignerIdx].clusterToggle);
+		
+		// Initialization	
+		memcpy(clusterCounterEraser, tenXSingleTrackerArray[singleAlignerIdx].clusterCounterAry, sizeof(_uint8) * maxClusterNum);
+		memcpy(clusterToggleEraser, tenXSingleTrackerArray[singleAlignerIdx].clusterToggle, sizeof(_uint8) * maxClusterNum);
 	}
 
 	TenXClusterAligner *aligner = new (allocator) TenXClusterAligner(
@@ -707,21 +743,30 @@ void TenXAlignerContext::runIterationThread()
 		return;
 
 	// Stage 2, calculate ED and store paired results
-	while (true)
-	{
-		barcodeFinished = aligner->align_second_stage(maxSecondaryAlignmentAdditionalEditDistance, maxSecondaryAlignments);
-		if (barcodeFinished)
-			break;
+	aligner->align_second_stage_clustering();
+
+	barcodeFinished = aligner->align_second_stage_check_reallocate();
+	if (!barcodeFinished) {
 		for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {
 			if (tenXSingleTrackerArray[pairIdx].pairNotDone && tenXSingleTrackerArray[pairIdx].nSecondaryResults > tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize) {
-				_ASSERT(tenXSingleTrackerArray[pairIdx].nSecondaryResults > tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize);
 				BigDealloc(tenXSingleTrackerArray[pairIdx].results);
 				tenXSingleTrackerArray[pairIdx].results = NULL;
-				tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize *= 2;
+				// calculate shifts here. I actually don't get it why we prefer to always make it 2-folds
+				unsigned multiple = tenXSingleTrackerArray[pairIdx].nSecondaryResults / tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize;
+				unsigned shifter = 2;
+				unsigned shiftMask = 1;
+				while (multiple & ~(shiftMask) != 0) {
+					shifter = shifter << 1;
+					shiftMask = (shiftMask << 1) | 1;
+				}
+				
+				tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize *= shifter;
 				tenXSingleTrackerArray[pairIdx].results = (PairedAlignmentResult *)BigAlloc((tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize + 1) * sizeof(PairedAlignmentResult));
 			}
 		}
 	}
+
+	aligner->align_second_stage_generate_results(maxSecondaryAlignmentAdditionalEditDistance, maxSecondaryAlignments);
 
 	// Stage 3
 
@@ -852,6 +897,9 @@ void TenXAlignerContext::runIterationThread()
 
 		BigDealloc(tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults);
 		tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults = NULL;
+
+		BigDealloc(tenXSingleTrackerArray[pairIdx].clusterToggle);
+		tenXSingleTrackerArray[pairIdx].clusterToggle = NULL;
 	}
 
 	for (unsigned singleAlignerIdx = 0; singleAlignerIdx < maxBarcodeSize; singleAlignerIdx++) {
@@ -861,6 +909,10 @@ void TenXAlignerContext::runIterationThread()
 	aligner->~TenXClusterAligner();
 	
 	BigDealloc(tenXSingleTrackerArray);
+	BigDealloc(sharedClusterCounterAry);
+	BigDealloc(clusterCounterEraser);
+	BigDealloc(clusterToggleEraser);
+	
 	delete supplier;
 
 	delete allocator;

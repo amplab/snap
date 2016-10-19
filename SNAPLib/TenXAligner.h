@@ -74,6 +74,7 @@ protected:
 	bool				quicklyDropUnpairedReads;
 	double				unclusteredPenalty;
 	unsigned			clusterEDCompensation;
+	unsigned			maxClusterNum;
 
 	friend class AlignerContext2;
 };
@@ -100,4 +101,5 @@ struct TenXAlignerOptions : public AlignerOptions
 	bool				quicklyDropUnpairedReads;
 	double				unclusteredPenalty;
 	unsigned			clusterEDCompensation;
+	unsigned			maxClusterNum;
 };

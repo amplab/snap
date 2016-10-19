@@ -63,7 +63,11 @@ public:
 		bool			noOrderedEvaluation_,
 		bool			noTruncation_,
 		bool			ignoreAlignmentAdjustmentsForOm_,
-		unsigned		printStatsMapQLimit_);
+		unsigned		printStatsMapQLimit_,
+		unsigned		clusterEDCompensation_,
+		double			unclusteredPenalty_,
+		_uint8			*clusterCounter_,
+		bool			*clusterToggle_);
 
 	void	setLandauVishkin(
 		LandauVishkin<1> *landauVishkin_,
@@ -112,18 +116,18 @@ public:
 		unsigned              *popularSeedsSkipped
 	);
 	//
-	// align_phase_2_init loads the initial loci pointers. Return true if there is at least one common loci.
+	// align_phase_2_init loads the initial locus pointers. Return true if there is at least one common locus.
 	//
 	bool align_phase_2_init();
 	//
 	// align_phase_2_to_target_loc advances all location pairs to right before clusterTargetLoc. For all loc pairs that are before clusterTargetLoc, the potential mapping will be associated with cluster clusterInfoPtr
 	// It will terminate after advancing lastGenomeLocationForReadWithFewerHits of both directions beyond clusterTargetLoc.
 	//
-	bool align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, int clusterIdx, unsigned clusterEDCompensation);
+	bool align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, int clusterIdx);
 	//
-	// align_phase_2_get_next_loc is accompanied with align_phase_2_to_target_loc. It returns the bigger next loci from the fewer side among the the 2 directions.
+	// align_phase_2_get_next_loc is accompanied with align_phase_2_to_target_loc. It returns the bigger next locus from the fewer side among the the 2 directions.
 	//
-	GenomeLocation* align_phase_2_get_loci();
+	GenomeLocation* align_phase_2_get_locus();
 	//
 	// align_phase_2_move_locus returns 0 if we have found a good match. Returns 1 if seedLoc of the fewHit side has exhauseted. Returns -1 if fewHit side surpasses moreHIt side.
 	//
@@ -131,7 +135,7 @@ public:
 	//
 	// should only call align_phase_2_single_step_add_candidate if align_phase_2_move_locus returns 0
 	//
-	bool align_phase_2_single_step_add_candidate(unsigned whichSetPair, int clusterIdx, unsigned clusterEDCompensation);
+	bool align_phase_2_single_step_add_candidate(unsigned whichSetPair, int clusterIdx);
 	//
 	// align_phase_2 is a dummy mimicking IntersectingPairedEndAligner
 	//
@@ -144,9 +148,48 @@ public:
 	//
 	// align_phase_3 calculates the edit distance of each candidate mapping
 	//
-	bool align_phase_3(
+
+	//
+	// align_phase_3_coarse_score calculates the mapping when considering all clusters to be valid
+	// when inRevise is set to ture, we don't update bestCompensatedScore
+	//
+	void align_phase_3_score(
+		unsigned				&bestCompensatedScore,
+		bool					inRevise
+	);
+
+	//
+	// align_phase_3_increment_cluster increments the cluster counter
+	//
+	void align_phase_3_increment_cluster(
+		unsigned				bestCompensatedScore
+	);
+
+	//
+	// align_phase_3_refine corrects the best mapping, while adding more secondary mappings
+	// returns false if no change in bestCompensatedScore. Return true otherwise
+	//
+	bool align_phase_3_correct_best_score(
+		unsigned				&bestCompensatedScore,
+		_uint8					minClusterSize
+	);
+	
+	//
+	// align_phase_3_correct_count_results counts the number of secondary results and returns ture if reallocation is required
+	//
+	bool align_phase_3_count_results(
+		unsigned				&bestCompensatedScore,
+		_uint8					minClusterSize,
+		_int64					*nSecondaryResults,
+		_int64					secondaryResultBufferSize
+	);
+
+	//
+	// align_phase_3_finalize computes overall probability, but adds no new secondary mappings
+	//
+	bool align_phase_3_generate_results(
+		_uint8					minClusterSize,
 		int						maxEditDistanceForSecondaryResults,
-		_int64					secondaryResultBufferSize,
 		_int64					*nSecondaryResults,
 		PairedAlignmentResult	*secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
 		_int64					maxSecondaryResultsToReturn,
@@ -158,9 +201,7 @@ public:
 		unsigned				*bestResultScore,
 		unsigned				*popularSeedsSkipped,
 		double					&probabilityOfBestPair,
-		int						&bestClusterIdx,
-		double					unclusteredPenalty,
-		unsigned				clusterEDCompensation
+		int						&bestClusterIdx
 	);
 
 	//
@@ -442,46 +483,13 @@ private:
 	);
 
 	//
-	// These are used to keep track of places where we should merge together candidate locations for MAPQ purposes, because they're sufficiently
-	// close in the genome.
-	//
-	struct MergeAnchor {
-		double          matchProbability;
-		GenomeLocation  locationForReadWithMoreHits;
-		GenomeLocation  locationForReadWithFewerHits;
-		PairedAlignmentResult  *resultPtr;
-		int             pairScore;
-
-		void init(GenomeLocation locationForReadWithMoreHits_, GenomeLocation locationForReadWithFewerHits_, double matchProbability_, int pairScore_) {
-			locationForReadWithMoreHits = locationForReadWithMoreHits_;
-			locationForReadWithFewerHits = locationForReadWithFewerHits_;
-			matchProbability = matchProbability_;
-			pairScore = pairScore_;
-		}
-
-		//
-		// Returns whether this candidate is a match for this merge anchor.
-		//
-		bool doesRangeMatch(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation) {
-			GenomeDistance deltaMore = DistanceBetweenGenomeLocations(locationForReadWithMoreHits, newMoreHitLocation);
-			GenomeDistance deltaFewer = DistanceBetweenGenomeLocations(locationForReadWithFewerHits, newFewerHitLocation);
-
-			return deltaMore < 50 && deltaFewer < 50;
-		}
-
-
-		//
-		// Returns true and sets oldMatchProbability if this should be eliminated due to a match.
-		//
-		bool checkMerge(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation, double newMatchProbability, int newPairScore,
-			unsigned *oldMatchED, double *oldMatchProbability);
-	};
-
-	//
 	// We keep track of pairs of locations to score using two structs, one for each end.  The ends for the read with fewer hits points into
 	// a list of structs for the end with more hits, so that we don't need one stuct for each pair, just one for each end, and also so that 
 	// we don't need to score the mates more than once if they could be paired with more than one location from the end with fewer hits.
 	//
+	
+	// Declare
+	struct MergeAnchor;
 
 	struct ScoringMateCandidate {
 		//
@@ -512,10 +520,12 @@ private:
 		MergeAnchor *           mergeAnchor;
 		unsigned                scoringMateCandidateIndex;  // Index into the array of scoring mate candidates where we should look 
 		GenomeLocation          readWithFewerHitsGenomeLocation;
+		int						fewerEndGenomeLocationOffset;
 		unsigned                whichSetPair;
 		unsigned                seedOffset;
 
 		unsigned                bestPossibleScore;
+		unsigned				fewerEndScore;
 
 		int						clusterIdx;
 
@@ -531,6 +541,66 @@ private:
 			scoreListNext = scoreListNext_;
 			mergeAnchor = NULL;
 			clusterIdx = clusterIdx_;
+		}
+	};
+
+	//
+	// These are used to keep track of places where we should merge together candidate locations for MAPQ purposes, because they're sufficiently
+	// close in the genome.
+	//
+	struct MergeAnchor {
+		double          		matchProbability;
+		GenomeLocation  		locationForReadWithMoreHits;
+		GenomeLocation  		locationForReadWithFewerHits;
+		PairedAlignmentResult	*resultPtr;
+		int             		pairScore;
+		int						clusterIdx;
+		ScoringCandidate		*candidate;
+		ScoringMateCandidate	*mate;
+
+		void init(GenomeLocation locationForReadWithMoreHits_, GenomeLocation locationForReadWithFewerHits_, double matchProbability_, int pairScore_, int clusterIdx_, ScoringCandidate *candidate_, ScoringMateCandidate	*mate_) {
+			locationForReadWithMoreHits = locationForReadWithMoreHits_;
+			locationForReadWithFewerHits = locationForReadWithFewerHits_;
+			matchProbability = matchProbability_;
+			pairScore = pairScore_;
+			clusterIdx = clusterIdx_;
+			candidate = candidate_;
+			mate = mate_;
+			resultPtr = NULL;
+		}
+
+		//
+		// Returns whether this candidate is a match for this merge anchor.
+		//
+		bool doesRangeMatch(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation) {
+			GenomeDistance deltaMore = DistanceBetweenGenomeLocations(locationForReadWithMoreHits, newMoreHitLocation);
+			GenomeDistance deltaFewer = DistanceBetweenGenomeLocations(locationForReadWithFewerHits, newFewerHitLocation);
+
+			return deltaMore < 50 && deltaFewer < 50;
+		}
+
+
+		//
+		// Returns true and sets oldMatchProbability if this should be eliminated due to a match.
+		//
+		bool checkMerge(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation, double newMatchProbability, int newPairScore, int newClusterIdx, ScoringCandidate *newCandidate, ScoringMateCandidate *newMate);
+
+		static int
+		compareByClusterIdx(const void *first_, const void *second_)
+		{
+			const MergeAnchor *first = (MergeAnchor *)first_;
+			const MergeAnchor *second = (MergeAnchor *)second_;
+
+			int firstClusterIdx = first->clusterIdx;
+			int secondClusterIdx = second->clusterIdx;
+			
+			if (firstClusterIdx < secondClusterIdx) {
+				return 1;
+			} else if (firstClusterIdx > secondClusterIdx) {
+				return -1;
+			} else {
+				return 0;
+			}
 		}
 	};
 
@@ -583,7 +653,15 @@ private:
 	unsigned				lastSeedOffsetForReadWithMoreHits[NUM_DIRECTIONS];
 	GenomeLocation			lastGenomeLocationForReadWithMoreHits[NUM_DIRECTIONS];
 	unsigned				maxUsedBestPossibleScoreList;
-	bool					noMoreLoci[NUM_DIRECTIONS];
+	bool					noMoreLocus[NUM_DIRECTIONS];
+
+	// Cluster toggles. The caller makes sure that there are enough space in the array
+	_uint8					*clusterCounterAry;
+	bool					*clusterToggle;
+	
+	// Unclustered compensation
+	unsigned				clusterEDCompensation;
+	double					unclusteredPenalty;
 };
 
 struct TenXProgressTracker
@@ -591,8 +669,8 @@ struct TenXProgressTracker
 	bool				pairNotDone;
 	bool				singleNotDone;
 	TenXSingleAligner	*aligner;
-	GenomeLocation		nextLoci; // Keep it here so that hopefully nextLoci be in cache.
-	GenomeLocation		currentLoci; // Keep it here so that hopefully currentLoci be in cache.
+	GenomeLocation		nextLocus; // Keep it here so that hopefully nextLocus be in cache.
+	GenomeLocation		currentLocus; // Keep it here so that hopefully currentLocus be in cache.
 	TenXProgressTracker	*nextTracker; // linked list next link
 
 	Read					*pairedReads[NUM_READS_PER_PAIR];
@@ -611,7 +689,11 @@ struct TenXProgressTracker
 	unsigned				bestResultScore[NUM_READS_PER_PAIR];
 	double					probabilityOfBestPair;
 	int						bestClusterIdx;
-
+	
+	_uint8					*clusterCounterAry;
+	bool					*clusterToggle;
+	
+	bool					updatedBestScore;
 
 	static int compare(const void *a_raw, const void *b_raw)
 	{
@@ -623,13 +705,15 @@ struct TenXProgressTracker
 			return 1;
 		else if (!b->pairNotDone)
 			return -1;
-		else if (a->nextLoci == b->nextLoci)
+		else if (a->nextLocus == b->nextLocus)
 			return 0;
-		else if (a->nextLoci < b->nextLoci)
+		else if (a->nextLocus < b->nextLocus)
 			return 1;
 		else
 			return -1;
 	}
+
+
 };
 
 #endif //#define __TENX_SINGLE_ALIGNER__

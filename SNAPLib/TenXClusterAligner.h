@@ -72,12 +72,22 @@ public:
 		unsigned				barcodeSize_
 	);
 
-	// Second stage will call underlyingAligner->phase3 and phase4. First stage should be only called once
+	// Second stage will call underlyingAligner->phase3 but will not generate results.
+	void align_second_stage_clustering (
+	);
+
+	// Second stage will call underlyingAligner->phase3 but not generate results. First stage should be only called once
 	// Return ture if no pair requires memory reallocation.
-	bool align_second_stage(
+	bool align_second_stage_check_reallocate (
+	);
+	
+	// Third stage will generate results and call phase4.
+	// Return ture if no pair requires memory reallocation.
+	void align_second_stage_generate_results (
 	int						maxEditDistanceForSecondaryResults,
 	_int64					maxSecondaryAlignmentsToReturn
 	);
+
 
 	// Return true if no more cluster change from true to false.
 	bool checkClusterStabilized();

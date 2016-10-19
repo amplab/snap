@@ -29,6 +29,7 @@ Revision History:
 #include "BigAlloc.h"
 #include "AlignerOptions.h"
 #include <iostream>
+#include <limits>
 
 #ifdef  _DEBUG
 extern bool _DumpAlignments;    // From BaseAligner.cpp
@@ -52,11 +53,17 @@ TenXSingleAligner::TenXSingleAligner(
 	bool          noOrderedEvaluation_,
 	bool          noTruncation_,
 	bool          ignoreAlignmentAdjustmentsForOm_,
-	unsigned      printStatsMapQLimit_) :
+	unsigned      printStatsMapQLimit_,
+	unsigned      clusterEDCompensation_,
+	double       unclusteredPenalty_,
+	_uint8        *clusterCounter_,
+	bool          *clusterToggle_) :
 	index(index_), maxReadSize(maxReadSize_), maxHits(maxHits_), maxK(maxK_), numSeedsFromCommandLine(__min(MAX_MAX_SEEDS, numSeedsFromCommandLine_)), minSpacing(minSpacing_), maxSpacing(maxSpacing_),
 	landauVishkin(NULL), reverseLandauVishkin(NULL), maxBigHits(maxBigHits_), seedCoverage(seedCoverage_),
 	extraSearchDepth(extraSearchDepth_), nLocationsScored(0), noUkkonen(noUkkonen_), noOrderedEvaluation(noOrderedEvaluation_), noTruncation(noTruncation_),
-	maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome()), ignoreAlignmentAdjustmentsForOm(ignoreAlignmentAdjustmentsForOm_), printStatsMapQLimit(printStatsMapQLimit_)
+	maxSecondaryAlignmentsPerContig(maxSecondaryAlignmentsPerContig_), alignmentAdjuster(index->getGenome()), ignoreAlignmentAdjustmentsForOm(ignoreAlignmentAdjustmentsForOm_), printStatsMapQLimit(printStatsMapQLimit_),
+	clusterEDCompensation(clusterEDCompensation_), unclusteredPenalty(unclusteredPenalty_),
+	clusterCounterAry(clusterCounter_), clusterToggle(clusterToggle_)
 {
 	doesGenomeIndexHave64BitLocations = index->doesGenomeIndexHave64BitLocations();
 
@@ -179,6 +186,7 @@ TenXSingleAligner::allocateDynamicMemory(BigAllocator *allocator, unsigned maxRe
 	//fprintf(stderr, "**stage 3 getMemoryUsed(): %lld\n", allocatorCast->getMemoryUsed());
 
 }
+
 
 bool
 TenXSingleAligner::align_phase_1(Read* read0, Read* read1, unsigned *popularSeedsSkipped)
@@ -572,7 +580,7 @@ TenXSingleAligner::align_phase_2_single_step(unsigned whichSetPair)
 
 
 bool
-TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, int clusterIdx, unsigned clusterEDCompensation)
+TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, int clusterIdx)
 {
 	bool keepGoing = true;
 	bool targetNotMet = false;
@@ -581,7 +589,7 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 	for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++)
 	{
 		//fprintf(stderr, "beginning: targetLoc: %lld, ReadLoc: %lld\n", clusterTargetLoc.location, lastGenomeLocationForReadWithFewerHits[whichSetPair].location);
-		if (!noMoreLoci[whichSetPair]) {
+		if (!noMoreLocus[whichSetPair]) {
 			targetNotMetSingleSet = lastGenomeLocationForReadWithFewerHits[whichSetPair] > clusterTargetLoc;
 			targetNotMet = targetNotMet || targetNotMetSingleSet;
 		}
@@ -593,23 +601,23 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 		for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++) {
 			//std::cout << "setPair[" << whichSetPair << "]" << setPair[whichSetPair] << std::endl;
 			//printf("setPair[%d]: %p\n", whichSetPair, setPair[whichSetPair]);
-			if (!noMoreLoci[whichSetPair]) {
+			if (!noMoreLocus[whichSetPair]) {
 				int check_range_result = align_phase_2_move_locus(whichSetPair);
 				if (check_range_result == 1) {
-					noMoreLoci[whichSetPair] = true;
+					noMoreLocus[whichSetPair] = true;
 				}
 				else {
-					noMoreLoci[whichSetPair] = false;
+					noMoreLocus[whichSetPair] = false;
 					//
 					// keep going until we have a good loc pair
 					//
 					if (check_range_result == -1) {
-						keepGoing = keepGoing || !noMoreLoci[whichSetPair];
+						keepGoing = keepGoing || !noMoreLocus[whichSetPair];
 						continue;
 					}
 				}
 
-				if (!noMoreLoci[whichSetPair]) {
+				if (!noMoreLocus[whichSetPair]) {
 #ifdef _DEBUG
 					if (_DumpAlignments) {
 						printf("Pair: %d  beginning: targetLoc: %lld, ReadLoc: %lld\n", whichSetPair, clusterTargetLoc.location, lastGenomeLocationForReadWithFewerHits[whichSetPair].location);
@@ -623,11 +631,11 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 							printf("Pair: %d  targetNotMetSingleSet: %s\n", whichSetPair, (targetNotMetSingleSet ? "true" : "false"));
 						}
 #endif //_DEBUG
-						noMoreLoci[whichSetPair] = align_phase_2_single_step_add_candidate(whichSetPair, clusterIdx, clusterEDCompensation);
+						noMoreLocus[whichSetPair] = align_phase_2_single_step_add_candidate(whichSetPair, clusterIdx, clusterEDCompensation);
 						//
 						// We keep working on the loop as long as one set is still not stopped
 						//
-						keepGoing = keepGoing || !noMoreLoci[whichSetPair];
+						keepGoing = keepGoing || !noMoreLocus[whichSetPair];
 					}
 				} // add_candidate
 			} // check_range and add_candidate
@@ -638,14 +646,14 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 }
 
 
-GenomeLocation* TenXSingleAligner::align_phase_2_get_loci()
+GenomeLocation* TenXSingleAligner::align_phase_2_get_locus()
 {
-	GenomeLocation* nextLoci = NULL;
+	GenomeLocation* nextLocus = NULL;
 	for (unsigned direction = 0; direction < NUM_DIRECTIONS; direction++) {
-		if (!noMoreLoci[direction] && (nextLoci == NULL || *nextLoci < lastGenomeLocationForReadWithFewerHits[direction]) )
-			nextLoci = &lastGenomeLocationForReadWithFewerHits[direction];
+		if (!noMoreLocus[direction] && (nextLocus == NULL || *nextLocus < lastGenomeLocationForReadWithFewerHits[direction]) )
+			nextLocus = &lastGenomeLocationForReadWithFewerHits[direction];
 	}
-	return nextLoci;
+	return nextLocus;
 }
 
 
@@ -666,11 +674,11 @@ bool TenXSingleAligner::align_phase_2_init()
 			//
 			// No hits in this direction.
 			//
-			noMoreLoci[whichSetPair] = true;   // The outer loop over set pairs.
+			noMoreLocus[whichSetPair] = true;   // The outer loop over set pairs.
 		else
-			noMoreLoci[whichSetPair] = false;
+			noMoreLocus[whichSetPair] = false;
 
-		keepGoing = keepGoing || !noMoreLoci[whichSetPair];
+		keepGoing = keepGoing || !noMoreLocus[whichSetPair];
 	}
 	return keepGoing;
 }
@@ -689,14 +697,13 @@ TenXSingleAligner::align_phase_2()
 	//
 	if(align_phase_2_init() ) {
 		GenomeLocation clusterTargetLoc = GenomeLocation(0000000000);
-		align_phase_2_to_target_loc(clusterTargetLoc, -1, 0);
+		align_phase_2_to_target_loc(clusterTargetLoc, -1);
 	}
 }
 
 
-bool
-TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 secondaryResultBufferSize, _int64* nSecondaryResults, PairedAlignmentResult* secondaryResults, _int64 maxSecondaryResultsToReturn,
-	unsigned &bestPairScore, GenomeLocation *bestResultGenomeLocation, Direction *bestResultDirection, double &probabilityOfAllPairs, unsigned *bestResultScore, unsigned *popularSeedsSkipped, double &probabilityOfBestPair, int &bestClusterIdx, double unclusteredPenalty, unsigned clusterEDCompensation) //This is a hack. Pass in result by reference
+void
+TenXSingleAligner::align_phase_3_score(unsigned &bestCompensatedScore, bool inRevise)
 {
 	//
 	// Phase 3: score and merge the candidates we've found.
@@ -709,12 +716,19 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 	//
 	localBestPairProbability[0] = 0;
 	localBestPairProbability[1] = 0;
-	Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = { {FORWARD, RC}, {RC, FORWARD} };
+	Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = { {FORWARD, RC}, {65, FORWARD} };
 
 	unsigned currentBestPossibleScoreList = 0;
-	unsigned scoreLimit = maxK + extraSearchDepth;
+	unsigned scoreLimit;
+	
+	if (inRevise) 
+		scoreLimit = bestCompensatedScore + extraSearchDepth + clusterEDCompensation;
+	else
+		scoreLimit = maxK + extraSearchDepth + clusterEDCompensation;
 	//
 	// Loop until we've scored all of the candidates, or proven that what's left must have too high of a score to be interesting.
+	// Note here that in scoringCandidates[idx], idx has already been penaltized with non-clustering penalty, if it is astray.
+	// However, idx does not reflect the ture ED score. It is simply a estimation.
 	//
 	while (currentBestPossibleScoreList <= maxUsedBestPossibleScoreList && currentBestPossibleScoreList <= scoreLimit) {
 		if (scoringCandidates[currentBestPossibleScoreList] == NULL) {
@@ -731,33 +745,27 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 		ScoringCandidate *candidate = scoringCandidates[currentBestPossibleScoreList];
 
 		//**** 10X surrogates
-		unsigned	compensatedScoreLimit;
-		double		probabilityCorrectionFactor;
-
-		if (candidate->clusterIdx == -1)
-			probabilityCorrectionFactor = unclusteredPenalty;
-		else
-			probabilityCorrectionFactor = 1;
+		unsigned	astrayEDPenalty = (candidate->clusterIdx == -1) ? clusterEDCompensation : 0;
+		// scoreLimit always take cluster compensation into consideration. We need to offset it if the mapping is not clustered.
+		unsigned	compensatedScoreLimit = scoreLimit - astrayEDPenalty;
 		//**** 10X surrogates
 
-		unsigned fewerEndScore;
 		double fewerEndMatchProbability;
-		int fewerEndGenomeLocationOffset;
 
 		scoreLocation(readWithFewerHits, setPairDirection[candidate->whichSetPair][readWithFewerHits], candidate->readWithFewerHitsGenomeLocation,
-			candidate->seedOffset, scoreLimit, &fewerEndScore, &fewerEndMatchProbability, &fewerEndGenomeLocationOffset);
+			candidate->seedOffset, compensatedScoreLimit, &candidate->fewerEndScore, &fewerEndMatchProbability, &candidate->fewerEndGenomeLocationOffset);
 
-		_ASSERT(-1 == fewerEndScore || fewerEndScore >= candidate->bestPossibleScore);
+		_ASSERT(-1 == candidate->fewerEndScore || candidate->fewerEndScore >= candidate->bestPossibleScore);
 
 #ifdef _DEBUG
 		if (_DumpAlignments) {
 			printf("Scored fewer end candidate %d, set pair %d, read %d, location %u, seed offset %d, score limit %d, score %d, offset %d\n", (int)(candidate - scoringCandidatePool),
 				candidate->whichSetPair, readWithFewerHits, candidate->readWithFewerHitsGenomeLocation.location, candidate->seedOffset,
-				compensatedScoreLimit, fewerEndScore, fewerEndGenomeLocationOffset);
+				compensatedScoreLimit, candidate->fewerEndScore, candidate->fewerEndGenomeLocationOffset);
 		}
 #endif // DEBUG
 
-		if (fewerEndScore != -1) {
+		if (candidate->fewerEndScore != -1) {
 			//
 			// Find and score mates.  The index in scoringMateCandidateIndex is the lowest mate (i.e., the highest index number).
 			//
@@ -765,18 +773,9 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 
 			for (;;) {
 
-				//**** 10X surrogates
-				unsigned EDCompensation = 0;
-
-				if (candidate->clusterIdx != -1)
-					EDCompensation = clusterEDCompensation;
-
-				compensatedScoreLimit = scoreLimit + EDCompensation;
-				//**** 10X surrogates
-
 				ScoringMateCandidate *mate = &scoringMateCandidates[candidate->whichSetPair][mateIndex];
 				_ASSERT(genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, maxSpacing));
-				if (!genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, minSpacing) && mate->bestPossibleScore <= scoreLimit - fewerEndScore) {
+				if (!genomeLocationIsWithin(mate->readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, minSpacing) && mate->bestPossibleScore <= scoreLimit - candidate->fewerEndScore) {
 					//
 					// It's within the range and not necessarily too poor of a match.  Consider it.
 					//
@@ -785,31 +784,27 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 					// If we haven't yet scored this mate, or we've scored it and not gotten an answer, but had a higher score limit than we'd
 					// use now, score it.
 					//
-					if (mate->score == -2 || mate->score == -1 && mate->scoreLimit < compensatedScoreLimit - fewerEndScore) {
+					if (mate->score == -2 || mate->score == -1 && mate->scoreLimit < compensatedScoreLimit - candidate->fewerEndScore) {
 						scoreLocation(readWithMoreHits, setPairDirection[candidate->whichSetPair][readWithMoreHits], GenomeLocationAsInt64(mate->readWithMoreHitsGenomeLocation),
-							mate->seedOffset, compensatedScoreLimit - fewerEndScore, &mate->score, &mate->matchProbability,
+							mate->seedOffset, compensatedScoreLimit - candidate->fewerEndScore, &mate->score, &mate->matchProbability,
 							&mate->genomeOffset);
 #ifdef _DEBUG
 						if (_DumpAlignments) {
 							printf("Scored mate candidate %d, set pair %d, read %d, location %u, seed offset %d, score limit %d, score %d, offset %d\n",
 								(int)(mate - scoringMateCandidates[candidate->whichSetPair]), candidate->whichSetPair, readWithMoreHits, mate->readWithMoreHitsGenomeLocation.location,
-								mate->seedOffset, compensatedScoreLimit - fewerEndScore, mate->score, mate->genomeOffset);
+								mate->seedOffset, compensatedScoreLimit - candidate->fewerEndScore, mate->score, mate->genomeOffset);
 						}
 #endif // _DEBUG
 
 						_ASSERT(-1 == mate->score || mate->score >= mate->bestPossibleScore);
 
-						mate->scoreLimit = compensatedScoreLimit - fewerEndScore;
+						mate->scoreLimit = compensatedScoreLimit - candidate->fewerEndScore;
 					}
 
 					if (mate->score != -1) {
 						double pairProbability = mate->matchProbability * fewerEndMatchProbability;
 		
-						//**** 10X apply probability correction
-						pairProbability *= probabilityCorrectionFactor;
-						//**** 10X apply probability correction
-
-						unsigned pairScore = mate->score + fewerEndScore;
+						unsigned pairScore = mate->score + candidate->fewerEndScore;
 						//
 						// See if this should be ignored as a merge, or if we need to back out a previously scored location
 						// because it's a worse version of this location.
@@ -823,7 +818,7 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 							for (ScoringCandidate *mergeCandidate = candidate - 1;
 								mergeCandidate >= scoringCandidatePool &&
 								(mergeCandidate->whichSetPair != candidate->whichSetPair ||
-								genomeLocationIsWithin(mergeCandidate->readWithFewerHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset, 50) );
+								genomeLocationIsWithin(mergeCandidate->readWithFewerHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation + candidate->fewerEndGenomeLocationOffset, 50) );
 								mergeCandidate--) {
 
 								// Because now the candidates from both directions are mixed up, we no longer terminates the loop when we see opposite direction
@@ -837,7 +832,7 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 								for (ScoringCandidate *mergeCandidate = candidate + 1;
 									mergeCandidate < scoringCandidatePool + lowestFreeScoringCandidatePoolEntry &&
 									(mergeCandidate->whichSetPair != candidate->whichSetPair ||
-									genomeLocationIsWithin(mergeCandidate->readWithFewerHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset, 50) );
+									genomeLocationIsWithin(mergeCandidate->readWithFewerHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation + candidate->fewerEndGenomeLocationOffset, 50) );
 									mergeCandidate++) {
 
 									// Because now the candidates from both directions are mixed up, we no longer terminates the loop when we see opposite direction
@@ -849,156 +844,45 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 							}
 						}
 
-						bool merged;
-						unsigned compensatedEDIdx = pairScore + clusterEDCompensation - EDCompensation;
-						unsigned oldCompensatedEDIdx = 0;
-						double oldPairProbability;
+						unsigned compensatedScore = pairScore + astrayEDPenalty;
+						bool anchorUpdate = false;	
 
+						// If mergeAnchor is NULL, then we have to create an anchor
 						if (NULL == mergeAnchor) {
 							if (firstFreeMergeAnchor >= mergeAnchorPoolSize) {
 								WriteErrorMessage("Ran out of merge anchor pool entries.  Perhaps rerunning with a larger value of -mcp will help\n");
 								soft_exit(1);
 							}
 
+							anchorUpdate = true;
+
 							mergeAnchor = &mergeAnchorPool[firstFreeMergeAnchor];
 
 							firstFreeMergeAnchor++;
 
-							mergeAnchor->init(mate->readWithMoreHitsGenomeLocation + mate->genomeOffset, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset,
-								pairProbability, pairScore);
+							mergeAnchor->init(mate->readWithMoreHitsGenomeLocation + mate->genomeOffset, candidate->readWithFewerHitsGenomeLocation + candidate->fewerEndGenomeLocationOffset,
+								pairProbability, pairScore, candidate->clusterIdx, candidate, mate);
 
-							merged = false;
-							oldPairProbability = 0;
 							candidate->mergeAnchor = mergeAnchor;
 						}
 						else {
 							//return true if this mapping should be ignored
-							merged = mergeAnchor->checkMerge(mate->readWithMoreHitsGenomeLocation + mate->genomeOffset, candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset,
-								pairProbability, compensatedEDIdx, &oldCompensatedEDIdx, &oldPairProbability);
+							anchorUpdate = mergeAnchor->checkMerge(mate->readWithMoreHitsGenomeLocation + mate->genomeOffset, candidate->readWithFewerHitsGenomeLocation + candidate->fewerEndGenomeLocationOffset,
+								pairProbability, pairScore, candidate->clusterIdx, candidate, mate);
 						}
 
-						if (!merged) {
-							//
-							// Back out the probability of the old match that we're merged with, if any.  The max
-							// is necessary because a + b - b is not necessarily a in floating point.  If there
-							// was no merge, the oldPairProbability is 0.
-							//
+						// Here we check if we have to update the scoreLimit (best mapping score and whether it belongs to a cluster)
 
-							probabilityForED[oldCompensatedEDIdx] = __max(0, probabilityForED[oldCompensatedEDIdx] - oldPairProbability);
-
-							// New ED lower bound. Need to do some cleaning up.
-							if (pairScore + extraSearchDepth < worstED) {
-								for (unsigned scoreIdx = pairScore + extraSearchDepth + 1; scoreIdx <= worstED; scoreIdx++)
-									probabilityOfAllPairs = __max(0, probabilityOfAllPairs - probabilityForED[scoreIdx]);
-
-								// update the new worstED.
-								worstED = pairScore + extraSearchDepth;
-							}
-
-							bool isBestHit = false;
-						
-							//****10X debug switch
-							//if (pairScore <= maxK && (pairScore < bestPairScore || (pairScore == bestPairScore && pairProbability > probabilityOfBestPair))) {
-							if (pairScore <= maxK && pairProbability > probabilityOfBestPair) {
-							//****10X debug switch
-								//
-								// A new best hit.
-								//
-								if (maxEditDistanceForSecondaryResults != -1 && (unsigned)maxEditDistanceForSecondaryResults >= bestPairScore - pairScore) {
-									//
-									// Move the old best to be a secondary alignment.  This won't happen on the first time we get a valid alignment,
-									// because bestPairScore is initialized to be very large.
-									//
-									//
-									if (*nSecondaryResults >= secondaryResultBufferSize) {
-										*nSecondaryResults = secondaryResultBufferSize + 1;
-										return true;
-									}
-
-									PairedAlignmentResult *secondaryResult = &secondaryResults[*nSecondaryResults];
-									secondaryResult->alignedAsPair = true;
-									secondaryResult->fromAlignTogether = true;
-
-									for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
-										secondaryResult->direction[r] = bestResultDirection[r];
-										secondaryResult->location[r] = bestResultGenomeLocation[r];
-										secondaryResult->mapq[r] = 0;
-										secondaryResult->score[r] = bestResultScore[r];
-										secondaryResult->status[r] = MultipleHits;
-										secondaryResult->clusterIdx = bestClusterIdx;
-									}
-
-									(*nSecondaryResults)++;
-
-								}
-								bestPairScore = pairScore;
-								probabilityOfBestPair = pairProbability;
-								bestResultGenomeLocation[readWithFewerHits] = candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset;
-								bestResultGenomeLocation[readWithMoreHits] = mate->readWithMoreHitsGenomeLocation + mate->genomeOffset;
-								bestResultScore[readWithFewerHits] = fewerEndScore;
-								bestResultScore[readWithMoreHits] = mate->score;
-								bestResultDirection[readWithFewerHits] = setPairDirection[candidate->whichSetPair][readWithFewerHits];
-								bestResultDirection[readWithMoreHits] = setPairDirection[candidate->whichSetPair][readWithMoreHits];
-								bestClusterIdx = candidate->clusterIdx;
-
-								if (!noUkkonen) {
-									scoreLimit = bestPairScore + extraSearchDepth;
-								}
-
-								isBestHit = true;
-							}
-							else {
-								if (maxEditDistanceForSecondaryResults != -1 && pairScore <= maxK && (unsigned)maxEditDistanceForSecondaryResults >= pairScore - bestPairScore) {
-									//
-									// A secondary result to save.
-									//
-									if (*nSecondaryResults >= secondaryResultBufferSize) {
-										*nSecondaryResults = secondaryResultBufferSize + 1;
-										return true;
-									}
-
-									PairedAlignmentResult *secondaryResult = &secondaryResults[*nSecondaryResults];
-									secondaryResult->alignedAsPair = true;
-									secondaryResult->direction[readWithMoreHits] = setPairDirection[candidate->whichSetPair][readWithMoreHits];
-									secondaryResult->direction[readWithFewerHits] = setPairDirection[candidate->whichSetPair][readWithFewerHits];
-									secondaryResult->fromAlignTogether = true;
-									secondaryResult->location[readWithMoreHits] = mate->readWithMoreHitsGenomeLocation + mate->genomeOffset;
-									secondaryResult->location[readWithFewerHits] = candidate->readWithFewerHitsGenomeLocation + fewerEndGenomeLocationOffset;
-									secondaryResult->mapq[0] = secondaryResult->mapq[1] = 0;
-									secondaryResult->score[readWithMoreHits] = mate->score;
-									secondaryResult->score[readWithFewerHits] = fewerEndScore;
-									secondaryResult->status[readWithFewerHits] = secondaryResult->status[readWithMoreHits] = MultipleHits;
-									secondaryResult->clusterIdx = candidate->clusterIdx;
-									secondaryResult->probability = pairProbability;
-
-									(*nSecondaryResults)++;
-								}
-							}
-
-							if (pairScore <= maxK) {
-								probabilityOfAllPairs += pairProbability; // This is only a vague estimate of probability.
-								probabilityForED[pairScore] += pairProbability;
-							}
-#ifdef  _DEBUG
-							if (_DumpAlignments) {
-								printf("Added %e (= %e * %e) @ (%u, %u), giving new probability of all pairs %e, score %d = %d + %d%s\n",
-									pairProbability, mate->matchProbability, fewerEndMatchProbability,
-									candidate->readWithFewerHitsGenomeLocation.location + fewerEndGenomeLocationOffset, mate->readWithMoreHitsGenomeLocation.location + mate->genomeOffset,
-									probabilityOfAllPairs,
-									pairScore, fewerEndScore, mate->score, isBestHit ? " New best hit" : "");
-							}
-#endif  // _DEBUG
-
-							if (probabilityOfAllPairs >= 4.9 && -1 == maxEditDistanceForSecondaryResults) {
-								//
-								// Nothing will rescue us from a 0 MAPQ, so just stop looking. Perceed to next stage.
-								// default, not exiting early
-								return false;
+						if (!inRevise && anchorUpdate && compensatedScore <= maxK + EDCompensation && compensatedScore < bestCompensatedScore) {
+							bestCompensatedScore = compensatedScore;
+							if (!noUkkonen) {
+								scoreLimit = bestCompensatedScore + extraSearchDepth;
 							}
 						}
-					}// if the mate has a non -1 score
+					}
 				}
-
+				
+				// move up the mate pointer
 				if (mateIndex == 0 || !genomeLocationIsWithin(scoringMateCandidates[candidate->whichSetPair][mateIndex - 1].readWithMoreHitsGenomeLocation, candidate->readWithFewerHitsGenomeLocation, maxSpacing)) {
 					//
 					// Out of mate candidates.
@@ -1009,17 +893,232 @@ TenXSingleAligner::align_phase_3(int maxEditDistanceForSecondaryResults, _int64 
 				mateIndex--;
 			}
 		}
-
-		//
-		// Remove us from the head of the list and proceed to the next candidate to score.
-		//
 		scoringCandidates[currentBestPossibleScoreList] = candidate->scoreListNext;
 	}
-	// default, not exiting early
+}
+
+
+/*
+ *!!! Haven't added the clusterToggle yet.
+ */
+void
+align_phase_3_increment_cluster(unsigned bestCompensatedScore) {
+
+	for (_uint32 anchorIdx = 0; anchorIdx < firstFreeMergeAnchor; anchorIdx++) {
+
+		unsigned int astrayEDPenalty = (mergeAnchor[anchorIdx].clusterIdx == -1)? clusterEDCompensation : 0;
+		
+		// At least good secondary result
+		if (mergeAnchor[anchorIdx].pairScore + astrayEDPenalty <= bestCompensatedScore + extraSearchDepth) {
+			int clusterIdx = mergeAnchor[anchorIdx].clusterIdx;
+			// haven't seen this cluster before
+			if (clusterIdx != -1 && !clusterToggle[clusterIdx]) {
+				// only increment when we haven't reached the limit
+				if (clusterCounterAry[mergeAnchor[anchorIdx].clusterIdx] != std::numeric_limits<_uint8>::max() )
+					clusterCounterAry[mergeAnchor[anchorIdx].clusterIdx]++;
+				clusterToggle[clusterIdx] = true;
+			}
+		}
+	}
+}
+
+
+bool
+TenXSingleAligner::align_phase_3_correct_best_score(unsigned bestCompensatedScore, _uint8 minClusterSize) {
+	// The absolutely max
+    unsigned newBestCompensatedScore = maxK + clusterEDCompensation + 1;
+	
+	for (_uint32 anchorIdx = 0; anchorIdx < firstFreeMergeAnchor; anchorIdx++) {
+ 
+		unsigned astrayEDPenalty;
+
+		int clusterIdx = mergeAnchor[anchorIdx].clusterIdx;
+		// This is a valid cluster
+		if (clusterIdx != -1 && clusterCounterAry[clusterIdx] >= minClusterSize) {
+		     astrayEDPenalty = 0;
+		} 
+		else {
+		     astrayEDPenalty = clusterEDCompensation;
+		}
+
+		if (mergeAnchor[anchorIdx].pairScore + astrayEDPenalty < newBestCompensatedScore) {
+			newBestCompensatedScore = mergeAnchor[anchorIdx].pairScore + astrayEDPenalty;
+		}
+    }
+	
+	if (bestCompensatedScore != newBestCompensatedScore) {
+		bestCompensatedScore = newBestCompensatedScore;
+		return true;
+	}
+
 	return false;
 }
 
 
+bool
+align_phase_3_correct_count_results(
+		unsigned				&bestCompensatedScore,
+		_uint8					minClusterSize,
+		_int64					*nSecondaryResults,
+		_int64					secondaryResultBufferSize
+	) {
+	// Serrogate
+	Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = { {FORWARD, RC}, {65, FORWARD} };
+	unsigned astrayEDPenalty;
+	double astrayProbabilityPenalty;
+	
+	// Bounds
+	unsigned EDMapQCutOff = bestCompensatedScore + extraSearchDepth;
+	unsigned EDResultCutOff = bestCompensatedScore + maxEditDistanceForSecondaryResults;
+	
+	// Init
+	probabilityOfAllPairs = 0;
+	probabilityOfBestPair = 0;
+	
+	// Iterate through all the anchors to sum up the probability.
+	for (_uint32 anchorIdx = 0; anchorIdx < firstFreeMergeAnchor; anchorIdx++) {
+		int clusterIdx = mergeAnchor[anchorIdx].clusterIdx;
+		// This is a valid cluster
+		if (clusterIdx != -1 && clusterCounterAry[clusterIdx] >= minClusterSize) {
+			astrayEDPenalty = 0;
+			astrayProbabilityPenalty = 1;
+		} 
+		else {
+			astrayEDPenalty = clusterEDCompensation;
+			astrayProbabilityPenalty = unclusteredPenalty;
+		}
+		
+		unsigned compensatedScore = mergeAnchor[anchorIdx].score + astrayEDPenalty;			
+		
+		// sum up mapQ penalty if the mapping score is good enough
+		if (compensatedScore <= EDMapQCutOff) {
+			double compensatedProbability = mergeAnchor[anchorIdx].matchProbability * astrayProbabilityPenalty;
+			probabilityOfAllPairs  += compensatedProbability;
+		}
+
+		// we would score this result	
+		if (compensatedScore <= EDResultCutOff)
+			*nSecondaryResults++;
+	}
+
+	// suspend if we need to reallocate the result buffer.	
+	if (*nSecondaryResults > secondaryResultBufferSize) {
+		return true;
+	}
+	else
+		return false;
+}
+
+
+bool
+align_phase_3_generate_results(
+		_uint8					minClusterSize,
+		int						maxEditDistanceForSecondaryResults,
+		_int64					*nSecondaryResults,
+		PairedAlignmentResult	*secondaryResults,   // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
+		_int64					maxSecondaryResultsToReturn,
+		//Passed-in output for phase 4
+		unsigned				&bestCompensatedScore,
+		GenomeLocation			*bestResultGenomeLocation,
+		Direction				*bestResultDirection,
+		double					&probabilityOfAllPairs,
+		unsigned				*bestResultScore,
+		unsigned				*popularSeedsSkipped,
+		double					&probabilityOfBestPair,
+		int						&bestClusterIdx
+	) {
+	// Serrogate
+	Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = { {FORWARD, RC}, {65, FORWARD} };
+	unsigned astrayEDPenalty;
+	double astrayProbabilityPenalty;
+	
+	// Bounds
+	unsigned EDMapQCutOff = bestCompensatedScore + extraSearchDepth;
+	unsigned EDResultCutOff = bestCompensatedScore + maxEditDistanceForSecondaryResults;
+	
+	// Init
+	probabilityOfBestPair = 0;
+
+	// Iterate through all the anchors to generate results.
+	nextResultIdx = 0;
+	bestResultIdx = -1;
+	
+	for (_uint32 anchorIdx = 0; anchorIdx < firstFreeMergeAnchor; anchorIdx++) {
+		int clusterIdx = mergeAnchor[anchorIdx].clusterIdx;
+		// This is a valid cluster
+		if (clusterIdx != -1 && clusterCounterAry[clusterIdx] >= minClusterSize) {
+			astrayEDPenalty = 0;
+			astrayProbabilityPenalty = 1;
+		} 
+		else {
+			clusterIdx = -1;
+			astrayEDPenalty = clusterEDCompensation;
+			astrayProbabilityPenalty = unclusteredPenalty;
+		}
+		
+		unsigned compensatedScore = mergeAnchor[anchorIdx].score + astrayEDPenalty;	
+		
+		// we would score this result	
+		if (compensatedScore <= EDResultCutOff) {
+			// probability
+			double compensatedProbability = mergeAnchor[anchorIdx].matchProbability * astrayProbabilityPenalty;
+
+			// pointers
+			ScoringCandidate		*candidatePtr = mergeAnchor[anchorIdx].candidate;
+			ScoringMateCandidate	*matePtr = mergeAnchor[anchorIdx].mate;
+			PairedAlignmentResult	*secondaryResult = &secondaryResults[nextResultIdx];
+
+			secondaryResult->alignedAsPair = true;
+			secondaryResult->direction[readWithMoreHits] = setPairDirection[candidatePtr->whichSetPair][readWithMoreHits];
+			secondaryResult->direction[readWithFewerHits] = setPairDirection[candidatePtr->whichSetPair][readWithFewerHits];
+			secondaryResult->fromAlignTogether = true;
+			secondaryResult->location[readWithMoreHits] = matePtr->readWithMoreHitsGenomeLocation + matePtr->genomeOffset;
+			secondaryResult->location[readWithFewerHits] = candidatePtr->readWithFewerHitsGenomeLocation + candidatePtr->fewerEndGenomeLocationOffset;
+			secondaryResult->mapq[0] = secondaryResult->mapq[1] = 0;
+			secondaryResult->score[readWithMoreHits] = matePtr->score;
+			secondaryResult->score[readWithFewerHits] = candidatePtr->fewerEndScore;
+			secondaryResult->status[readWithFewerHits] = secondaryResult->status[readWithMoreHits] = MultipleHits;
+			secondaryResult->probability = compensatedProbability;
+			secondaryResult->clusterIdx = candidatePtr->clusterIdx;
+
+			nextResultIdx++;
+			
+			if (compensatedScore <= bestCompensatedScore && compensatedProbability >= probabilityOfBestPair) {
+				bestCompensatedScore = compensatedScore;
+				probabilityOfBestPair = compensatedProbability;
+				bestResultIdx = nextResultIdx;
+			}
+		}
+	}
+	
+	_ASSERT(nextResultIdx == *nSecondaryResults);
+	_ASSERT(bestResultIdx != -1 || *nSecondaryResults == 0);
+
+	if (bestResultIdx != -1) {
+		// best result ptr
+		PairedAlignmentResult *bestResult = &secondaryResults[bestResultIdx];
+		
+		// fill the best results
+		bestPairScore = bestResult->score[readWithMoreHits] + bestResult->score[readWithFewerHits];
+		probabilityOfBestPair = bestResult->probability;
+		bestResultGenomeLocation[readWithFewerHits] = bestResult->location[readWithFewerHits];
+		bestResultGenomeLocation[readWithMoreHits] = bestResult->location[readWithMoreHits];
+		bestResultScore[readWithFewerHits] = bestResult->score[readWithFewerHits];
+		bestResultScore[readWithMoreHits] = bestResult->score[readWithMoreHits];
+		bestResultDirection[readWithFewerHits] = bestResult->direction[readWithFewerHits];
+		bestResultDirection[readWithMoreHits] = bestResult->direction[readWithMoreHits];
+		bestClusterIdx = bestResult->clusterIdx;
+	}
+	
+	if (*nSecondaryResults > maxSecondaryResultsToReturn) {
+        qsort(secondaryResults, *nSecondaryResults, sizeof(*secondaryResults), PairedAlignmentResult::compareByScore);
+        *nSecondaryResults = maxSecondaryResultsToReturn;   // Just truncate it
+    }
+	
+	return false;
+}
+
+	
 void TenXSingleAligner::align_phase_4(
 	Read *read0,
 	Read *read1,
@@ -1653,8 +1752,7 @@ TenXSingleAligner::HashTableHitSet::getNextLowerHit(GenomeLocation *genomeLocati
 }
 
 bool
-TenXSingleAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation, double newMatchProbability, int newPairScore,
-	unsigned *oldMatchED, double *oldMatchProbability)
+TenXSingleAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitLocation, GenomeLocation newFewerHitLocation, double newMatchProbability, int newPairScore, int newClusterIdx, ScoringCandidate *newCandidate, ScoringMateCandidate *newMate)
 {
 	if (locationForReadWithMoreHits == InvalidGenomeLocation || !doesRangeMatch(newMoreHitLocation, newFewerHitLocation)) {
 		//
@@ -1664,8 +1762,9 @@ TenXSingleAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitLocation, Ge
 		locationForReadWithFewerHits = newFewerHitLocation;
 		matchProbability = newMatchProbability;
 		pairScore = newPairScore;
-		*oldMatchED = 0;
-		*oldMatchProbability = 0.0;
+		clusterIdx = newClusterIdx;
+		candidate = newCandidate;
+		mate = newMate;
 		return false;
 	}
 	else {
@@ -1673,8 +1772,8 @@ TenXSingleAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitLocation, Ge
 		// Within merge distance.  Keep the better score (or if they're tied the better match probability).
 		//
 		//****10X debug switch
-		//if (newPairScore < pairScore || newPairScore == pairScore && newMatchProbability > matchProbability) {
-		if (newPairScore < pairScore || newMatchProbability > matchProbability) {
+		if ( (clusterIdx == -1 && newClusterIdx != -1) || newPairScore < pairScore || newPairScore == pairScore && newMatchProbability > matchProbability) {
+		//if (newPairScore < pairScore || newMatchProbability > matchProbability) {
 		//****10X debug switch
 #ifdef _DEBUG
 			if (_DumpAlignments) {
@@ -1683,10 +1782,11 @@ TenXSingleAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitLocation, Ge
 					matchProbability, newMatchProbability, pairScore, newPairScore);
 			}
 #endif // DEBUG
-			*oldMatchED = pairScore;
-			*oldMatchProbability = matchProbability;
 			matchProbability = newMatchProbability;
 			pairScore = newPairScore;
+			clusterIdx = newClusterIdx;
+			candidate = newCandidate;
+			mate = newMate;
 			return false;
 		}
 		else {
