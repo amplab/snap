@@ -31,12 +31,12 @@ Revision History:
 class TenXClusterAligner : public PairedEndAligner {
 public:
     TenXClusterAligner(
-        GenomeIndex            *index_,
+        GenomeIndex         *index_,
         unsigned            maxReadSize,
         unsigned            maxHits,
         unsigned            maxK,
         unsigned            maxSeedsFromCommandLine,
-        double                seedCoverage,
+        double              seedCoverage,
         unsigned            minWeightToCheck,
         bool                forceSpacing_,
         unsigned            extraSearchDepth,
@@ -44,17 +44,19 @@ public:
         bool                noOrderedEvaluation,
         bool                noTruncation,
         bool                ignoreALignmentAdjustmentsForOm,
-        TenXProgressTracker    *progressTracker_,
+        TenXProgressTracker *progressTracker_,
         bool                *clusterIsValid_,
         unsigned            *mappedPairsPerCluster_,
         unsigned            maxBarcodeSize_,
         unsigned            minPairsPerCluster_,
-        _uint64                minClusterSpan_,
-        double                unclusteredPenalty_,
+        _uint64             minClusterSpan_,
+        double              unclusteredPenalty_,
         unsigned            clusterEDCompensation_,
         unsigned            minReadLength_,
-        int                    maxSecondaryAlignmentsPerContig,
+        int                 maxSecondaryAlignmentsPerContig,
         unsigned            printStatsMapQLimit,
+        int                 maxEditDistanceForSecondaryResults,
+        _int64              maxSecondaryAlignmentsToReturn,
         BigAllocator        *allocator);
 
     virtual ~TenXClusterAligner();
@@ -79,14 +81,11 @@ public:
     // Second stage will call underlyingAligner->phase3 but not generate results. First stage should be only called once
     // Return ture if no pair requires memory reallocation.
     bool align_second_stage_check_reallocate (
-    int                        maxEditDistanceForSecondaryResults
     );
     
     // Third stage will generate results and call phase4.
     // Return ture if no pair requires memory reallocation.
     void align_second_stage_generate_results (
-    int                        maxEditDistanceForSecondaryResults,
-    _int64                    maxSecondaryAlignmentsToReturn
     );
 
 
@@ -95,15 +94,11 @@ public:
     void clusterResultCleanUp();
 
     // Third stage will clean up cluster mapping results.
-    void align_thrid_stage(
-    int maxEditDistanceForSecondaryResults,
-    _int64 maxSecondaryAlignmentsToReturn
+    void align_third_stage(
     );
 
     // Forth stage will handle single mappings.
     bool align_forth_stage(
-    int maxEditDistanceForSecondaryResults,
-    _int64 maxSecondaryAlignmentsToReturn
     );
 
     // TenX function. Move all trackers between start and end pointers beyond clusterBoundary, while registering each location with clusterID: clusterIdx.
@@ -170,6 +165,8 @@ private:
     BaseAligner         *singleAligner;
     unsigned            maxBarcodeSize;
     TenXProgressTracker *progressTracker;
+    int                 maxEditDistanceForSecondaryResults;
+    _int64              maxSecondaryAlignmentsToReturn;
 
     // avoid allocation in aligner calls
     IdPairVector*       singleSecondary[2];

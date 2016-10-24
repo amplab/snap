@@ -608,6 +608,8 @@ void TenXAlignerContext::runIterationThread()
 		minReadLength,
 		maxSecondaryAlignmentsPerContig,
 		printStatsMapQLimit,
+	    maxSecondaryAlignmentAdditionalEditDistance,
+        maxSecondaryAlignments,
 		allocator);
 
 	allocator->checkCanaries();
@@ -745,7 +747,7 @@ void TenXAlignerContext::runIterationThread()
 	// Stage 2, calculate ED and store paired results
 	aligner->align_second_stage_clustering();
 
-	barcodeFinished = aligner->align_second_stage_check_reallocate(maxSecondaryAlignmentAdditionalEditDistance);
+	barcodeFinished = aligner->align_second_stage_check_reallocate();
 	if (!barcodeFinished) {
 		for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {
 			if (tenXSingleTrackerArray[pairIdx].pairNotDone && tenXSingleTrackerArray[pairIdx].nSecondaryResults > tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize) {
@@ -766,15 +768,16 @@ void TenXAlignerContext::runIterationThread()
 		}
 	}
 
-	aligner->align_second_stage_generate_results(maxSecondaryAlignmentAdditionalEditDistance, maxSecondaryAlignments);
+	aligner->align_second_stage_generate_results();
 
 	// Stage 3
+	aligner->align_third_stage();
 
 	// Stage 4, process single mapping for unmapped reads 
 	if(!noSingle) {
 		barcodeFinished = false;
 		while (true) {
-			barcodeFinished = aligner->align_forth_stage(maxSecondaryAlignmentAdditionalEditDistance, maxSecondaryAlignments);
+			barcodeFinished = aligner->align_forth_stage();
 			if (barcodeFinished)
 				break;
 			for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {

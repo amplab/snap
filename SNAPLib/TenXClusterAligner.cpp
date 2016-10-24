@@ -40,12 +40,12 @@ using namespace std;
 #endif
 
 TenXClusterAligner::TenXClusterAligner(
-    GenomeIndex            *index_,
+    GenomeIndex         *index_,
     unsigned            maxReadSize,
     unsigned            maxHits,
     unsigned            maxK,
     unsigned            maxSeedsFromCommandLine,
-    double                seedCoverage,
+    double              seedCoverage,
     unsigned            minWeightToCheck,
     bool                forceSpacing_,
     unsigned            extraSearchDepth,
@@ -53,19 +53,21 @@ TenXClusterAligner::TenXClusterAligner(
     bool                noOrderedEvaluation,
     bool                noTruncation,
     bool                ignoreAlignmentAdjustmentsForOm,
-    TenXProgressTracker    *progressTracker_,
+    TenXProgressTracker *progressTracker_,
     bool                *clusterIsValid_,
     unsigned            *mappedPairsPerCluster_,
     unsigned            maxBarcodeSize_,
     unsigned            minPairsPerCluster_,
-    _uint64                minClusterSpan_,
-    double                unclusteredPenalty_,
+    _uint64             minClusterSpan_,
+    double              unclusteredPenalty_,
     unsigned            clusterEDCompensation_,
     unsigned            minReadLength_,
-    int                    maxSecondaryAlignmentsPerContig,
+    int                 maxSecondaryAlignmentsPerContig,
     unsigned            printStatsMapQLimit,
+    int                 maxEditDistanceForSecondaryResults_,
+    _int64              maxSecondaryAlignmentsToReturn_,
     BigAllocator        *allocator)
-    : progressTracker(progressTracker_), clusterIsValid(clusterIsValid_), mappedPairsPerCluster(mappedPairsPerCluster_), unclusteredPenalty(unclusteredPenalty_), clusterEDCompensation(clusterEDCompensation_), maxBarcodeSize(maxBarcodeSize_), minPairsPerCluster(minPairsPerCluster_), minClusterSpan(minClusterSpan_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_)
+    : progressTracker(progressTracker_), clusterIsValid(clusterIsValid_), mappedPairsPerCluster(mappedPairsPerCluster_), unclusteredPenalty(unclusteredPenalty_), clusterEDCompensation(clusterEDCompensation_), maxBarcodeSize(maxBarcodeSize_), minPairsPerCluster(minPairsPerCluster_), minClusterSpan(minClusterSpan_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_), maxEditDistanceForSecondaryResults(maxEditDistanceForSecondaryResults_), maxSecondaryAlignmentsToReturn(maxSecondaryAlignmentsToReturn)
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
@@ -497,9 +499,7 @@ void TenXClusterAligner::align_second_stage_clustering()
 }
 
 
-bool TenXClusterAligner::align_second_stage_check_reallocate(
-    int                       maxEditDistanceForSecondaryResults
-) 
+bool TenXClusterAligner::align_second_stage_check_reallocate() 
 {
     bool noOverflow = true;
     
@@ -518,10 +518,7 @@ bool TenXClusterAligner::align_second_stage_check_reallocate(
 }
 
 
-void TenXClusterAligner::align_second_stage_generate_results(
-    int                       maxEditDistanceForSecondaryResults,
-    _int64                    maxSecondaryAlignmentsToReturn
-)
+void TenXClusterAligner::align_second_stage_generate_results()
 {
     bool barcodeFinished = true;
     for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
@@ -580,10 +577,7 @@ void TenXClusterAligner::clusterResultCleanUp()
 }
 
 
-void TenXClusterAligner::align_thrid_stage(
-    int                       maxEditDistanceForSecondaryResults,
-    _int64                    maxSecondaryAlignmentsToReturn
-)
+void TenXClusterAligner::align_third_stage()
 {
     //First count the number of reads per cluster.
     for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
@@ -640,8 +634,6 @@ void TenXClusterAligner::align_thrid_stage(
 
 
 bool TenXClusterAligner::align_forth_stage(
-    int maxEditDistanceForSecondaryResults,
-    _int64 maxSecondaryAlignmentsToReturn
 )
 {
     bool barcodeFinished = true;
