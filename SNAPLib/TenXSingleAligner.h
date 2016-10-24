@@ -238,30 +238,30 @@ private:
         int maxSecondaryAlignmentsPerContig);
 
     unsigned        printStatsMapQLimit;
-    GenomeIndex        *index;
+    GenomeIndex     *index;
     const Genome    *genome;
-    GenomeDistance    genomeSize;
+    GenomeDistance  genomeSize;
     unsigned        maxReadSize;
     unsigned        maxHits;
     unsigned        maxBigHits;
     unsigned        extraSearchDepth;
     unsigned        maxK;
     unsigned        numSeedsFromCommandLine;
-    double            seedCoverage;
+    double          seedCoverage;
     static const unsigned    MAX_MAX_SEEDS = 30;
     unsigned        minSpacing;
     unsigned        maxSpacing;
     unsigned        seedLen;
     bool            doesGenomeIndexHave64BitLocations;
-    _int64            nLocationsScored;
+    _int64          nLocationsScored;
     bool            noUkkonen;
     bool            noOrderedEvaluation;
     bool            noTruncation;
     bool            ignoreAlignmentAdjustmentsForOm;
 
-    AlignmentAdjuster            alignmentAdjuster;
+    AlignmentAdjuster           alignmentAdjuster;
 
-    static const unsigned        maxMergeDistance;
+    static const unsigned       maxMergeDistance;
 
     static const int            NUM_SET_PAIRS = 2; // A "set pair" is read0 FORWARD + read1 RC, or read0 RC + read1 FORWARD.  Again, it doesn't make sense to change this.
 
@@ -290,7 +290,7 @@ private:
         // it gets stuck here.
         //
         int            limit[2]; // The upper and lower limits of the current binary search in hits
-        GL            maxGenomeLocationToFindThisSeed;
+        GL             maxGenomeLocationToFindThisSeed;
 
         //
         // A linked list of lookups that haven't yet completed this binary search.  This is a linked
@@ -301,7 +301,7 @@ private:
         HashTableLookup<GL>    *nextLookupForCurrentBinarySearch;
         HashTableLookup<GL>    *prevLookupForCurrentBinarySearch;
 
-        _int64            currentHitForIntersection;
+        _int64         currentHitForIntersection;
 
         //
         // A place for the hash table to write in singletons.  We need this because when the hash table is
@@ -309,7 +309,7 @@ private:
         // provide the lookup function a place to write the result.  Since we need one per
         // lookup, it goes here.
         //
-        GL singletonGenomeLocation[2];  // The [2] is because we need to look one before sometimes, and that allows space
+        GL             singletonGenomeLocation[2];  // The [2] is because we need to look one before sometimes, and that allows space
     };
 
     //
@@ -374,26 +374,26 @@ private:
             unsigned missCount;
         };
 
-        int            currentDisjointHitSet;
-        DisjointHitSet                    *disjointHitSets;
+        int                              currentDisjointHitSet;
+        DisjointHitSet                   *disjointHitSets;
         HashTableLookup<unsigned>        *lookups32;
-        HashTableLookup<GenomeLocation>    *lookups64;
+        HashTableLookup<GenomeLocation>  *lookups64;
         HashTableLookup<unsigned>        lookupListHead32[1];
-        HashTableLookup<GenomeLocation>    lookupListHead64[1];
-        unsigned                    maxSeeds;
-        unsigned                    nLookupsUsed;
-        GenomeLocation                mostRecentLocationReturned;
-        unsigned                    maxMergeDistance;
-        bool                        doesGenomeIndexHave64BitLocations;
+        HashTableLookup<GenomeLocation>  lookupListHead64[1];
+        unsigned                         maxSeeds;
+        unsigned                         nLookupsUsed;
+        GenomeLocation                   mostRecentLocationReturned;
+        unsigned                         maxMergeDistance;
+        bool                             doesGenomeIndexHave64BitLocations;
     };
 
-    HashTableHitSet                    *hashTableHitSets[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
+    HashTableHitSet                      *hashTableHitSets[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
 
-    int                                countOfHashTableLookups[NUM_READS_PER_PAIR];
-    _int64                            totalHashTableHits[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
-    _int64                            largestHashTableHit[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
-    unsigned                        readWithMoreHits;
-    unsigned                        readWithFewerHits;
+    int                                  countOfHashTableLookups[NUM_READS_PER_PAIR];
+    _int64                               totalHashTableHits[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
+    _int64                               largestHashTableHit[NUM_READS_PER_PAIR][NUM_DIRECTIONS];
+    unsigned                             readWithMoreHits;
+    unsigned                             readWithFewerHits;
 
     //
     // A location that's been scored (or waiting to be scored).  This is needed in order to do merging
@@ -401,13 +401,13 @@ private:
     //
     struct HitLocation {
         GenomeLocation        genomeLocation;
-        int                    genomeLocationOffset;   // This is needed because we might get an offset back from scoring (because it's really scoring a range).
-        unsigned            seedOffset;
-        bool                isScored;           // Mate pairs are sometimes not scored when they're inserted, because they
-        unsigned            score;
-        unsigned            maxK;               // The maxK that this was scored with (we may need to rescore if we need a higher maxK and score is -1)
+        int                   genomeLocationOffset;   // This is needed because we might get an offset back from scoring (because it's really scoring a range).
+        unsigned              seedOffset;
+        bool                  isScored;           // Mate pairs are sometimes not scored when they're inserted, because they
+        unsigned              score;
+        unsigned              maxK;               // The maxK that this was scored with (we may need to rescore if we need a higher maxK and score is -1)
         double                matchProbability;
-        unsigned            bestPossibleScore;
+        unsigned              bestPossibleScore;
 
         //
         // We have to be careful in the case where lots of offsets in a row match well against the read (think
@@ -466,9 +466,9 @@ private:
         GenomeLocation       genomeLocation,
         unsigned             seedOffset,
         unsigned             scoreLimit,
-        unsigned            *score,
-        double              *matchProbability,
-        int                 *genomeLocationOffset   // The computed offset for genomeLocation (which is needed because we scan several different possible starting locations)
+        unsigned             *score,
+        double               *matchProbability,
+        int                  *genomeLocationOffset   // The computed offset for genomeLocation (which is needed because we scan several different possible starting locations)
     );
 
     //
@@ -509,14 +509,14 @@ private:
         MergeAnchor *           mergeAnchor;
         unsigned                scoringMateCandidateIndex;  // Index into the array of scoring mate candidates where we should look 
         GenomeLocation          readWithFewerHitsGenomeLocation;
-        int                        fewerEndGenomeLocationOffset;
+        int                     fewerEndGenomeLocationOffset;
         unsigned                whichSetPair;
         unsigned                seedOffset;
 
         unsigned                bestPossibleScore;
         unsigned                fewerEndScore;
 
-        int                        clusterIdx;
+        int                     clusterIdx;
 
         void init(GenomeLocation readWithFewerHitsGenomeLocation_, unsigned whichSetPair_, unsigned scoringMateCandidateIndex_, unsigned seedOffset_,
             unsigned bestPossibleScore_, ScoringCandidate *scoreListNext_, int clusterIdx_)
@@ -541,9 +541,9 @@ private:
         double                  matchProbability;
         GenomeLocation          locationForReadWithMoreHits;
         GenomeLocation          locationForReadWithFewerHits;
-        PairedAlignmentResult    *resultPtr;
+        PairedAlignmentResult   *resultPtr;
         int                     pairScore;
-        int                        clusterIdx;
+        int                     clusterIdx;
         ScoringCandidate        *candidate;
         ScoringMateCandidate    *mate;
 
@@ -608,12 +608,12 @@ private:
     //
 
     ScoringCandidate    **scoringCandidates;
-    double                *probabilityForED;
+    double              *probabilityForED;
 
     //
     // The scoring mates.  The each set scoringCandidatePoolSize / 2.
     //
-    ScoringMateCandidate * scoringMateCandidates[NUM_SET_PAIRS];
+    ScoringMateCandidate *scoringMateCandidates[NUM_SET_PAIRS];
     unsigned lowestFreeScoringMateCandidate[NUM_SET_PAIRS];
 
     //
@@ -638,19 +638,19 @@ private:
     HashTableHitSet*        setPair[NUM_DIRECTIONS][NUM_READS_PER_PAIR];
     bool                    outOfMoreHitsLocations[NUM_DIRECTIONS];
     unsigned                lastSeedOffsetForReadWithFewerHits[NUM_DIRECTIONS];
-    GenomeLocation            lastGenomeLocationForReadWithFewerHits[NUM_DIRECTIONS];
+    GenomeLocation          lastGenomeLocationForReadWithFewerHits[NUM_DIRECTIONS];
     unsigned                lastSeedOffsetForReadWithMoreHits[NUM_DIRECTIONS];
-    GenomeLocation            lastGenomeLocationForReadWithMoreHits[NUM_DIRECTIONS];
+    GenomeLocation          lastGenomeLocationForReadWithMoreHits[NUM_DIRECTIONS];
     unsigned                maxUsedBestPossibleScoreList;
     bool                    noMoreLocus[NUM_DIRECTIONS];
 
     // Cluster toggles. The caller makes sure that there are enough space in the array
-    _uint8                    *clusterCounterAry;
+    _uint8                  *clusterCounterAry;
     bool                    *clusterToggle;
     
     // Unclustered compensation
     unsigned                clusterEDCompensation;
-    double                    unclusteredPenalty;
+    double                  unclusteredPenalty;
 };
 
 struct TenXProgressTracker

@@ -94,12 +94,10 @@ public:
     void clusterResultCleanUp();
 
     // Third stage will clean up cluster mapping results.
-    void align_third_stage(
-    );
+    void align_third_stage();
 
     // Forth stage will handle single mappings.
-    bool align_forth_stage(
-    );
+    bool align_forth_stage();
 
     // TenX function. Move all trackers between start and end pointers beyond clusterBoundary, while registering each location with clusterID: clusterIdx.
     // All temporary changed will be held in updateHolder and will need to be merged with mergeUpdate().
@@ -113,14 +111,14 @@ public:
     bool align(
         Read                    **pairedReads,
         unsigned                barcodeSize,
-        PairedAlignmentResult    **result,
-        int                        maxEditDistanceForSecondaryResults,
-        _int64                    *secondaryResultBufferSize,
-        _int64                    *nSecondaryResults,
-        _int64                    *singleSecondaryBufferSize,
-        _int64                    maxSecondaryAlignmentsToReturn,
-        _int64                    *nSingleEndSecondaryResults,
-        SingleAlignmentResult    **singleEndSecondaryResults,    // Single-end secondary alignments for when the paired-end alignment didn't work properly
+        PairedAlignmentResult   **result,
+        int                     maxEditDistanceForSecondaryResults,
+        _int64                  *secondaryResultBufferSize,
+        _int64                  *nSecondaryResults,
+        _int64                  *singleSecondaryBufferSize,
+        _int64                  maxSecondaryAlignmentsToReturn,
+        _int64                  *nSingleEndSecondaryResults,
+        SingleAlignmentResult   **singleEndSecondaryResults,    // Single-end secondary alignments for when the paired-end alignment didn't work properly
         unsigned                *popularSeedsSkipped
     );
 
@@ -130,16 +128,16 @@ public:
     virtual bool align(
         Read                    *read0,
         Read                    *read1,
-        PairedAlignmentResult    *result,
-        int                        maxEditDistanceForSecondaryResults,
-        _int64                    secondaryResultBufferSize,
-        _int64                    *nSecondaryResults,
-        PairedAlignmentResult    *secondaryResults,                // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
-        _int64                    singleSecondaryBufferSize,
-        _int64                    maxSecondaryAlignmentsToReturn,
-        _int64                    *nSingleEndSecondaryResultsForFirstRead,
-        _int64                    *nSingleEndSecondaryResultsForSecondRead,
-        SingleAlignmentResult    *singleEndSecondaryResults        // Single-end secondary alignments for when the paired-end alignment didn't work properly
+        PairedAlignmentResult   *result,
+        int                     maxEditDistanceForSecondaryResults,
+        _int64                  secondaryResultBufferSize,
+        _int64                  *nSecondaryResults,
+        PairedAlignmentResult   *secondaryResults,                // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
+        _int64                  singleSecondaryBufferSize,
+        _int64                  maxSecondaryAlignmentsToReturn,
+        _int64                  *nSingleEndSecondaryResultsForFirstRead,
+        _int64                  *nSingleEndSecondaryResultsForSecondRead,
+        SingleAlignmentResult   *singleEndSecondaryResults        // Single-end secondary alignments for when the paired-end alignment didn't work properly
     ) {
         return true;
     };

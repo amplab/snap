@@ -1015,7 +1015,7 @@ bool
 TenXSingleAligner::align_phase_3_generate_results(
         _uint8                    minClusterSize,
         int                       maxEditDistanceForSecondaryResults,
-		int                       &bestCompensatedScore,
+        int                       &bestCompensatedScore,
         _int64                    *nSecondaryResults,
         PairedAlignmentResult     *secondaryResults,
         PairedAlignmentResult     *bestResult
@@ -1093,35 +1093,35 @@ TenXSingleAligner::align_phase_3_generate_results(
         
         // fill the best results
         bestResult->compensatedScore = bestResultPtr->compensatedScore;
-		bestResult->alignedAsPair = bestResultPtr->alignedAsPair;
-		bestResult->direction[readWithMoreHits] = bestResultPtr->direction[readWithMoreHits];
+        bestResult->alignedAsPair = bestResultPtr->alignedAsPair;
+        bestResult->direction[readWithMoreHits] = bestResultPtr->direction[readWithMoreHits];
         bestResult->direction[readWithFewerHits] = bestResultPtr->direction[readWithFewerHits];
-		bestResult->fromAlignTogether = true;
-		bestResult->location[readWithMoreHits] = bestResultPtr->location[readWithMoreHits];
-		bestResult->location[readWithFewerHits] = bestResultPtr->location[readWithFewerHits];
-		bestResult->mapq[0] = bestResultPtr->mapq[0];
-		bestResult->mapq[1] = bestResultPtr->mapq[1];
-		bestResult->score[readWithMoreHits] = bestResultPtr->score[readWithMoreHits];
-		bestResult->score[readWithFewerHits] = bestResultPtr->score[readWithFewerHits];
-		bestResult->status[readWithFewerHits] = bestResultPtr->status[readWithFewerHits];
-		bestResult->status[readWithMoreHits] = bestResultPtr->status[readWithMoreHits];
+        bestResult->fromAlignTogether = true;
+        bestResult->location[readWithMoreHits] = bestResultPtr->location[readWithMoreHits];
+        bestResult->location[readWithFewerHits] = bestResultPtr->location[readWithFewerHits];
+        bestResult->mapq[0] = bestResultPtr->mapq[0];
+        bestResult->mapq[1] = bestResultPtr->mapq[1];
+        bestResult->score[readWithMoreHits] = bestResultPtr->score[readWithMoreHits];
+        bestResult->score[readWithFewerHits] = bestResultPtr->score[readWithFewerHits];
+        bestResult->status[readWithFewerHits] = bestResultPtr->status[readWithFewerHits];
+        bestResult->status[readWithMoreHits] = bestResultPtr->status[readWithMoreHits];
         bestResult->probability = bestResultPtr->probability;
         bestResult->clusterIdx = bestResultPtr->clusterIdx;
     }
     else {
-		bestResult->compensatedScore = -1;
+        bestResult->compensatedScore = -1;
         bestResult->clusterIdx = -1;
         for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
-			bestResult->location[whichRead] = InvalidGenomeLocation;
-			bestResult->mapq[whichRead] = 0;
-			bestResult->score[whichRead] = -1;
-			bestResult->status[whichRead] = NotFound;
+            bestResult->location[whichRead] = InvalidGenomeLocation;
+            bestResult->mapq[whichRead] = 0;
+            bestResult->score[whichRead] = -1;
+            bestResult->status[whichRead] = NotFound;
 #ifdef  _DEBUG
             if (_DumpAlignments) {
                 printf("No sufficiently good pairs found.\n");
             }
 #endif  // DEBUG
-		}
+        }
     }
     
     return false;
@@ -1131,7 +1131,7 @@ TenXSingleAligner::align_phase_3_generate_results(
 void TenXSingleAligner::align_phase_4(
     Read *read0,
     Read *read1,
-	int maxEditDistanceForSecondaryResults,
+    int maxEditDistanceForSecondaryResults,
     _int64 maxSecondaryResultsToReturn,
     unsigned *popularSeedsSkipped,
     int &bestCompensatedScore,
@@ -1140,13 +1140,13 @@ void TenXSingleAligner::align_phase_4(
     PairedAlignmentResult *secondaryResults,
     PairedAlignmentResult *bestResult
 ) {
-	
-	// Update the best result information
+    
+    // Update the best result information
     if (bestCompensatedScore != -1) {
         for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
-			// Calculate mapQ
+            // Calculate mapQ
             bestResult->mapq[whichRead] = computeMAPQ(probabilityOfAllPairs, bestResult->probability, bestResult->score[whichRead], popularSeedsSkipped[0] + popularSeedsSkipped[1]);
-			// Fill the status and initialize clipping
+            // Fill the status and initialize clipping
             bestResult->status[whichRead] = bestResult->mapq[whichRead] > printStatsMapQLimit ? SingleHit : MultipleHits;
             bestResult->clippingForReadAdjustment[whichRead] = 0;
         }
@@ -1168,8 +1168,8 @@ void TenXSingleAligner::align_phase_4(
     for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
         bestResult->scorePriorToClipping[whichRead] = bestResult->score[whichRead];
     }
-	
-	unsigned astrayEDPenalty;
+    
+    unsigned astrayEDPenalty;
 
     if (!ignoreAlignmentAdjustmentsForOm) {
         //
@@ -1177,13 +1177,13 @@ void TenXSingleAligner::align_phase_4(
         //
         alignmentAdjuster.AdjustAlignments(inputReads, bestResult);
         if (bestResult->status[0] != NotFound && bestResult->status[1] != NotFound && !ignoreAlignmentAdjustmentsForOm) {
-			
-			// get ED compensation
-			if (bestResult->clusterIdx != -1)
-				astrayEDPenalty = 0;
-			else
-				astrayEDPenalty = clusterEDCompensation;
-			
+            
+            // get ED compensation
+            if (bestResult->clusterIdx != -1)
+                astrayEDPenalty = 0;
+            else
+                astrayEDPenalty = clusterEDCompensation;
+            
             bestCompensatedScore = bestResult->compensatedScore = bestResult->score[0] + bestResult->score[1] + astrayEDPenalty;
         }
 
@@ -1193,14 +1193,14 @@ void TenXSingleAligner::align_phase_4(
             
             alignmentAdjuster.AdjustAlignments(inputReads, &secondaryResults[i]);
             if (secondaryResults[i].status[0] != NotFound && secondaryResults[i].status[1] != NotFound && !ignoreAlignmentAdjustmentsForOm) {
-				
-				// get ED compensation
-				if (secondaryResults[i].clusterIdx != -1)
-					astrayEDPenalty = 0;
-				else
-					astrayEDPenalty = clusterEDCompensation;
-					
-				secondaryResults[i].compensatedScore = secondaryResults[i].score[0] + secondaryResults[i].score[1] + astrayEDPenalty;
+                
+                // get ED compensation
+                if (secondaryResults[i].clusterIdx != -1)
+                    astrayEDPenalty = 0;
+                else
+                    astrayEDPenalty = clusterEDCompensation;
+                    
+                secondaryResults[i].compensatedScore = secondaryResults[i].score[0] + secondaryResults[i].score[1] + astrayEDPenalty;
 
                 bestCompensatedScore = __min(bestCompensatedScore, secondaryResults[i].compensatedScore);
             }
@@ -1214,7 +1214,7 @@ void TenXSingleAligner::align_phase_4(
         }
     }
 
-	// clean up some of the results
+    // clean up some of the results
     int i = 0;
     while (i < *nSecondaryResults) {
         if ((secondaryResults[i].compensatedScore) > bestCompensatedScore + maxEditDistanceForSecondaryResults ||
@@ -1359,9 +1359,9 @@ TenXSingleAligner::scoreLocation(
     GenomeLocation       genomeLocation,
     unsigned             seedOffset,
     unsigned             scoreLimit,
-    unsigned            *score,
-    double              *matchProbability,
-    int                 *genomeLocationOffset)
+    unsigned             *score,
+    double               *matchProbability,
+    int                  *genomeLocationOffset)
 {
     nLocationsScored++;
 
