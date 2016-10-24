@@ -81,6 +81,7 @@ struct PairedAlignmentResult {
 	// in a translocation event, which would cause both ends of a fragment aligning
 	// there to be in the same orientation w.r.t. the reference genome.
 
+    int compensatedScore;                       // score used in 10x
 	int score[NUM_READS_PER_PAIR];              // score of each end if matched
     int scorePriorToClipping[NUM_READS_PER_PAIR]; // Score prior to soft clipping generated when a read aligns off the end of a contig
 
