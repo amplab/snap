@@ -562,6 +562,7 @@ void TenXAlignerContext::runIterationThread()
         clusterToggleEraser[clusterIdx] = false;
     }
 
+    fprintf(stderr, "****TenX allocating\n");
     // Allocate shared cluster counter array    
     _uint8 *sharedClusterCounterAry = (_uint8*)BigAlloc(sizeof(_uint8) * maxClusterNum);
 
@@ -738,15 +739,18 @@ void TenXAlignerContext::runIterationThread()
     _int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
 
+    fprintf(stderr, "****TenX stage 1\n");
 
     // Stage 1, get seeds and find paired locations while keeping track of clusters
     bool barcodeFinished = aligner->align_first_stage(totalPairsForBarcode);
     if (barcodeFinished)
         return;
 
+    fprintf(stderr, "****TenX stage 2A\n");
     // Stage 2, calculate ED and store paired results
     aligner->align_second_stage_clustering();
 
+    fprintf(stderr, "****TenX stage 2B\n");
     barcodeFinished = aligner->align_second_stage_check_reallocate();
     if (!barcodeFinished) {
         for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {
@@ -768,12 +772,15 @@ void TenXAlignerContext::runIterationThread()
         }
     }
 
+    fprintf(stderr, "****TenX stage 2C\n");
     aligner->align_second_stage_generate_results();
 
     // Stage 3
+    fprintf(stderr, "****TenX stage 3\n");
     aligner->align_third_stage();
 
     // Stage 4, process single mapping for unmapped reads 
+    fprintf(stderr, "****TenX stage 4\n");
     if(!noSingle) {
         barcodeFinished = false;
         while (true) {
@@ -792,7 +799,7 @@ void TenXAlignerContext::runIterationThread()
         }
     }
 
-    //fprintf(stderr, "****begin output\n");
+    fprintf(stderr, "****generate output\n");
 
     /*
      * Output the results
