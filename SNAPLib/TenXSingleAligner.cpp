@@ -714,7 +714,7 @@ TenXSingleAligner::align_phase_3_score(int &bestCompensatedScore, bool inRevise)
     //
     localBestPairProbability[0] = 0;
     localBestPairProbability[1] = 0;
-    Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = { {FORWARD, RC}, {65, FORWARD} };
+    Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = { {FORWARD, RC}, {RC, FORWARD} };
 
     unsigned currentBestPossibleScoreList = 0;
     unsigned scoreLimit;
