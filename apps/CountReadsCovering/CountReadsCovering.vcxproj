@@ -74,7 +74,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)\obj\bin\$(Configuration)\$(Platform)\</OutDir>
-    <IntDir>$(SolutionDir)\obj\obj\mutant-expression\$(Configuration)\$(Platform)\</IntDir>
+    <IntDir>$(SolutionDir)\obj\obj\CountReadsCovering\$(Configuration)\$(Platform)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>

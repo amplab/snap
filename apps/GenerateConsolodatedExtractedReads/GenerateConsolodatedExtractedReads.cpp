@@ -205,7 +205,7 @@ DWORD __stdcall
      return 0;
 }
 
-DWORD __cdecl
+DWORD __stdcall
 ProcessorThreadMain(void *param)
 {
     SECURITY_ATTRIBUTES sAttr;
