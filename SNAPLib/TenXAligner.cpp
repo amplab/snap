@@ -572,6 +572,8 @@ void TenXAlignerContext::runIterationThread()
         tenXSingleTrackerArray[singleAlignerIdx].singleNotDone = false;
         tenXSingleTrackerArray[singleAlignerIdx].clusterCounterAry = sharedClusterCounterAry;
         tenXSingleTrackerArray[singleAlignerIdx].clusterToggle = (bool*)BigAlloc(sizeof(bool) * maxClusterNum);
+        tenXSingleTrackerArray[singleAlignerIdx].nSecondaryResults = 0;
+        tenXSingleTrackerArray[singleAlignerIdx].nSingleEndSecondaryResults[0] = tenXSingleTrackerArray[singleAlignerIdx].nSingleEndSecondaryResults[1] = 0;
 
         // Allocate and initilazing aligner
         tenXSingleTrackerArray[singleAlignerIdx].aligner = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine,

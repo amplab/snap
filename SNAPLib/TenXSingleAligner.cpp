@@ -751,8 +751,9 @@ TenXSingleAligner::align_phase_3_score(int &bestCompensatedScore, bool inRevise)
 
         double fewerEndMatchProbability;
 
-        scoreLocation(readWithFewerHits, setPairDirection[candidate->whichSetPair][readWithFewerHits], candidate->readWithFewerHitsGenomeLocation,
-            candidate->seedOffset, compensatedScoreLimit, &candidate->fewerEndScore, &fewerEndMatchProbability, &candidate->fewerEndGenomeLocationOffset);
+        scoreLocation(readWithFewerHits, setPairDirection[candidate->whichSetPair][readWithFewerHits],
+            candidate->readWithFewerHitsGenomeLocation, candidate->seedOffset, compensatedScoreLimit, &candidate->fewerEndScore,
+            &fewerEndMatchProbability, &candidate->fewerEndGenomeLocationOffset);
 
         _ASSERT(-1 == candidate->fewerEndScore || candidate->fewerEndScore >= candidate->bestPossibleScore);
 
@@ -1058,7 +1059,7 @@ TenXSingleAligner::align_phase_3_generate_results(
             // pointers
             ScoringCandidate        *candidatePtr = mergeAnchorPool[anchorIdx].candidate;
             ScoringMateCandidate    *matePtr = mergeAnchorPool[anchorIdx].mate;
-            PairedAlignmentResult    *secondaryResult = &secondaryResults[nextResultIdx];
+            PairedAlignmentResult   *secondaryResult = &secondaryResults[nextResultIdx];
 
             secondaryResult->compensatedScore = compensatedScore;
             secondaryResult->alignedAsPair = true;
@@ -1776,7 +1777,7 @@ TenXSingleAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitLocation, Ge
         // Within merge distance.  Keep the better score (or if they're tied the better match probability).
         //
         //****10X debug switch
-        if ( (clusterIdx == -1 && newClusterIdx != -1) || newPairScore < pairScore || newPairScore == pairScore && newMatchProbability > matchProbability) {
+        if ( (clusterIdx == -1 && newClusterIdx != -1) || (!(clusterIdx != -1 && newClusterIdx == -1) && (newPairScore < pairScore || (newPairScore == pairScore && newMatchProbability > matchProbability) ) ) ) {
         //if (newPairScore < pairScore || newMatchProbability > matchProbability) {
         //****10X debug switch
 #ifdef _DEBUG
@@ -1786,6 +1787,8 @@ TenXSingleAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitLocation, Ge
                     matchProbability, newMatchProbability, pairScore, newPairScore);
             }
 #endif // DEBUG
+            locationForReadWithMoreHits = newMoreHitLocation;
+            locationForReadWithFewerHits = newFewerHitLocation;
             matchProbability = newMatchProbability;
             pairScore = newPairScore;
             clusterIdx = newClusterIdx;
