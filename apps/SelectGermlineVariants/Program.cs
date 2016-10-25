@@ -111,8 +111,12 @@ namespace SelectGermlineVariants
 
         static void ProcessRuns(List<FileSet> workItems)
         {
+            bool firstRun = true;
+            int nVariantsSelected = 0;
             while (true)
             {
+                var timer = new Stopwatch();
+
                 FileSet fileSet;
                 lock (workItems)
                 {
@@ -124,8 +128,19 @@ namespace SelectGermlineVariants
                     fileSet = workItems[0];
                     workItems.RemoveAt(0);
 
-                    Console.WriteLine("" + workItems.Count() + " vcf" + (workItems.Count() == 1 ? " remains" : "s remain") + " queued.");
+                    if (!firstRun)
+                    {
+                        timer.Stop(); 
+                        Console.Write("Found " + nVariantsSelected + " variants in " + ((timer.ElapsedMilliseconds + 500) / 1000) + "s;\t");
+                        timer.Reset();
+                        nVariantsSelected = 0;
+                    }
+
+                    Console.WriteLine("" + workItems.Count() + " remain" + (workItems.Count() == 1 ? "s" : "") + " queued.");
                 }
+
+                firstRun = false;
+                timer.Start();
 
                 StreamReader vcfFile = null;
                 try
@@ -355,6 +370,7 @@ namespace SelectGermlineVariants
 
                         if (remainingCandidates.Count() > 0)
                         {
+                            nVariantsSelected++;
                             EmitBestCandidate(outputFile, remainingCandidates[0].chromosome, remainingCandidates);
                         }
                     }

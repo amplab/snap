@@ -76,12 +76,12 @@ DWORD __stdcall
      _int64 startTime = GetTickCount64();
 
      for (;;) {
-         if (0 != nThreadsRunning) {
-             if (WAIT_OBJECT_0 != WaitForSingleObject(runsReadyToWriteQueueHasEnoughDataEvent, INFINITE)) {
-                 fprintf(stderr, "WriterThread: WaitForSingleObject failed, %d\n", GetLastError());
-                 exit(1);
-             }
-         }
+        if (0 != nThreadsRunning) {
+            if (WAIT_OBJECT_0 != WaitForSingleObject(runsReadyToWriteQueueHasEnoughDataEvent, INFINITE)) {
+                fprintf(stderr, "WriterThread: WaitForSingleObject failed, %d\n", GetLastError());
+                exit(1);
+            }
+        }
 
         //
         // Enter the critical section and grab what work's available, if any.
@@ -567,7 +567,8 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    for (int i = 0; i < nThreadsRunning; i++) {
+    long nThreadsToStart = nThreadsRunning;
+    for (int i = 0; i < nThreadsToStart; i++) {
         DWORD processorThreadId;
         if (!CreateThread(NULL, 0, ProcessorThreadMain, NULL, 0, &processorThreadId)) {
             fprintf(stderr, "Unable to create processor thread, %d\n", GetLastError());

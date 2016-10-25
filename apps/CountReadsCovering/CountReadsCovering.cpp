@@ -281,6 +281,8 @@ int main(int argc, char* argv[])
 {
     _int64 start = timeInMillis();
 
+    DataSupplier::ExpansionFactor = 2;
+
     if (5 != argc) {
         usage();
     }
@@ -316,6 +318,10 @@ int main(int argc, char* argv[])
     // Open the input file.
     //
     int nThreads = GetNumberOfProcessors();
+#if _DEBUG
+    /*BJB*/ nThreads = 1;
+#endif // _DEBUG
+
     DataSupplier::ThreadCount = nThreads;
 
     ReaderContext readerContext;

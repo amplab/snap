@@ -3305,10 +3305,14 @@ namespace ExpressionLib
                                     return false;
                                 }
                             }
-                            catch (FormatException)
+                            catch (SystemException ex)
                             {
-                                Console.WriteLine("Format exception processing x line " + line);
-                                return false;
+                                if (ex is FormatException || ex is ArgumentOutOfRangeException) {
+                                    Console.WriteLine("Format exception processing x line " + line);
+                                    return false;
+                                } else {
+                                    throw ex;
+                                }
                             }
                             for (; repeatCount > 1; repeatCount--)  // > 1 because this count includes the locus that specified the mapped read count (the previous non-x line) and we already emitted that one.
                             {
@@ -3335,10 +3339,17 @@ namespace ExpressionLib
                                     return false;
                                 }
                             }
-                            catch (FormatException)
+                            catch (SystemException ex)
                             {
-                                Console.WriteLine("Format exception processing count line " + line);
-                                return false;
+                                if (ex is FormatException || ex is ArgumentOutOfRangeException)
+                                {
+                                    Console.WriteLine("Format exception processing count line " + line);
+                                    return false;
+                                }
+                                else
+                                {
+                                    throw ex;
+                                }
                             }
 
                             currentOffset++;
@@ -3358,8 +3369,7 @@ namespace ExpressionLib
                     // An offset + count line
                     //
                     try
-                    {
-                        
+                    {  
                         currentOffset = Convert.ToInt32(fields[0], 16); // 16 means the string is in hex
                         currentMappedReadCount = Convert.ToInt32(fields[1], 16); // 16 means the string is in hex
 
@@ -3369,10 +3379,17 @@ namespace ExpressionLib
                             return false;
                         }
                     }
-                    catch (FormatException)
+                    catch (SystemException ex)
                     {
-                        Console.WriteLine("Unable to parse offset + count line " + line);
-                        return false;
+                        if (ex is FormatException || ex is ArgumentOutOfRangeException)
+                        {
+                            Console.WriteLine("Unable to parse offset + count line " + line);
+                            return false;
+                        }
+                        else
+                        {
+                            throw ex;
+                        }
                     }
 
                     processBase(strippedContigName, currentOffset, currentMappedReadCount);

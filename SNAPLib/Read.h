@@ -706,7 +706,7 @@ private:
         const char *originalRNEXT;
         unsigned originalRNEXTLength;
         unsigned originalPNEXT;
-        static const int MaxBAMCigarSlots = 50;
+        static const int MaxBAMCigarSlots = 60;
         _uint16 originalNBAMCigar;
         _uint32 originalBAMCigar[MaxBAMCigarSlots];
 

@@ -2466,7 +2466,8 @@ namespace ExpressionMetadata
             foreach (var experiment in experiments)
             {
                 if (experiment.NormalDNAAnalysis.storedBAM == null || experiment.NormalDNAAnalysis.storedBAM.vcfInfo == null || experiment.TumorRNAAnalysis.storedBAM == null || experiment.TumorRNAAnalysis.storedBAM.allCountInfo == null ||
-                    experiment.NormalDNAAnalysis.storedBAM == null || experiment.NormalDNAAnalysis.storedBAM.allCountInfo == null) {
+                    experiment.TumorDNAAnalysis.storedBAM == null || experiment.TumorDNAAnalysis.storedBAM.allCountInfo == null)
+                {
                     nNeedingPrecursors++;
                 }
                 else if (experiment.NormalDNAAnalysis.storedBAM.selectedVariantsInfo != null)
