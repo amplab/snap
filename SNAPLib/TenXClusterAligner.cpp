@@ -482,7 +482,7 @@ void TenXClusterAligner::align_second_stage_clustering()
         }
     }
 
-    // If the bestScore is updated, we have to add more potential candidates    
+    // If the bestScore is updated, we have to add more potential candidates
     for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
         if (progressTracker[pairIdx].pairNotDone && progressTracker[pairIdx].updatedBestScore) {
             progressTracker[pairIdx].aligner->align_phase_3_score(progressTracker[pairIdx].bestPairScore, true);

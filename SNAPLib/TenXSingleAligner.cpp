@@ -926,7 +926,7 @@ TenXSingleAligner::align_phase_3_increment_cluster(int bestCompensatedScore) {
 bool
 TenXSingleAligner::align_phase_3_correct_best_score(int &bestCompensatedScore, _uint8 minClusterSize) {
     // The absolutely max
-    unsigned newBestCompensatedScore = maxK + clusterEDCompensation + 1;
+    unsigned newBestCompensatedScore = maxK + extraSearchDepth + clusterEDCompensation + 1;
     
     for (_uint32 anchorIdx = 0; anchorIdx < firstFreeMergeAnchor; anchorIdx++) {
  
