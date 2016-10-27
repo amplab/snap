@@ -1000,7 +1000,7 @@ TenXSingleAligner::align_phase_3_count_results(
 
         // we would score this result    
         if (compensatedScore <= EDResultCutOff)
-            *nSecondaryResults++;
+            (*nSecondaryResults)++;
     }
 
     // suspend if we need to reallocate the result buffer.    
@@ -1108,6 +1108,10 @@ TenXSingleAligner::align_phase_3_generate_results(
         bestResult->status[readWithMoreHits] = bestResultPtr->status[readWithMoreHits];
         bestResult->probability = bestResultPtr->probability;
         bestResult->clusterIdx = bestResultPtr->clusterIdx;
+
+        // remove best result from secondary results
+        secondaryResults[bestResultIdx] = secondaryResults[(*nSecondaryResults) - 1];
+        (*nSecondaryResults)--;
     }
     else {
         bestResult->compensatedScore = -1;
