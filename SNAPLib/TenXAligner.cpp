@@ -763,7 +763,7 @@ void TenXAlignerContext::runIterationThread()
                 unsigned multiple = (tenXSingleTrackerArray[pairIdx].nSecondaryResults - 1) / tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize + 1;
                 unsigned shifter = 2;
                 while (multiple > shifter) {
-                    shifter = shifter << 1;
+                    shifter *= 2;
                 }
                 
                 tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize *= shifter;
