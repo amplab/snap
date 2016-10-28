@@ -1030,7 +1030,7 @@ TenXSingleAligner::align_phase_3_generate_results(
     unsigned EDResultCutOff = bestCompensatedScore + maxEditDistanceForSecondaryResults;
     
     // Init
-    int probabilityOfBestPair = 0;
+    double probabilityOfBestPair = 0;
 
     // Iterate through all the anchors to generate results.
     int nextResultIdx = 0;
