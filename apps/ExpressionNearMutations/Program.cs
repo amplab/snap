@@ -146,7 +146,7 @@ namespace ExpressionNearMutations
 
                 var experiment = experimentsByParticipant[participantId];
 
-                var inputFilename = forAlleleSpecificExpression ? experiment.NormalDNAAnalysis.annotatedSelectedVariantsFileName : experiment.TumorDNAAnalysis.regionalExpressionFileName;
+                var inputFilename = forAlleleSpecificExpression ? experiment.NormalDNAAnalysis.annotatedSelectedVariantsFileName : experiment.TumorRNAAnalysis.regionalExpressionFileName;
 
                 if (inputFilename == "")
                 {

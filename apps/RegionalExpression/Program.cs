@@ -261,8 +261,8 @@ namespace RegionalExpression
 
         static void Main(string[] args)
         {
-            if (args.Count() < 3) {
-                Console.WriteLine("usage: RegionalExpression expression_disease_file regionSize <one or more participantIDs with the same disease>");
+            if (args.Count() < 3 || args[2] == "-f" && args.Count() != 4) {
+                Console.WriteLine("usage: RegionalExpression expression_disease_file regionSize <one or more participantIDs with the same disease | -f inputFilename>");
                 return;
             }
 
@@ -296,7 +296,7 @@ namespace RegionalExpression
             }
             catch (OutOfMemoryException)
             {
-                Console.WriteLine("Out of memory exception loading the expresson file (I'm really not sure why this happens when there's plenty of memory).  Running the binary (& ExpressionLib.dll) locally rather than from a share seems to help, though.");
+                Console.WriteLine("Out of memory exception loading the expresson file (I'm really not sure why this happens when there's plenty of memory).  Running in the visual studio debugger seems to help, though.");
                 return;
             }
 
@@ -341,12 +341,26 @@ namespace RegionalExpression
 
             var runs = new List<OneRun>();
 
-            for (int i = 2; i < args.Count(); i++)  // for each person we're processing
+            List<string> participants;
+
+            if (args[2] == "-f")
             {
-                string participantId = args[i];
+                participants = File.ReadAllLines(args[3]).ToList();
+            }
+            else
+            {
+                participants = new List<string>();
+                for (int i = 2; i < args.Count(); i++)
+                {
+                    participants.Add(args[i]);
+                }
+            }
+           
+            foreach (var participantId in participants)  // for each person we're processing
+            {
                 if (!experimentsByParticipantId.ContainsKey(participantId))
                 {
-                    Console.WriteLine("Couldn't find participant " + args[i] + ", are you sure it's a correct participant ID? Ignoring");
+                    Console.WriteLine("Couldn't find participant " + participantId + ", are you sure it's a correct participant ID? Ignoring");
                     continue;
                 }
 

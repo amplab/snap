@@ -591,6 +591,8 @@ namespace ExpressionLib
                             storedBAM.vcfInfo = new FileInfo(file);
                             if (storedBAM.vcfInfo.Length < 1024 * 1024)
                             {
+                                // This isn't my format and doesn't have a **done** terminator, so I can't check it, just report.
+
                                 Console.WriteLine("Unusually small vcf file: " + file + ", " + storedBAM.vcfInfo.Length);
                             }
                         }
@@ -654,25 +656,27 @@ namespace ExpressionLib
                             else
                             {
                                 storedBAM.regionalExpressionInfo = new FileInfo(file);
-                                if (storedBAM.regionalExpressionInfo.Length < 1 * 1024 * 1024)
+                                if (storedBAM.regionalExpressionInfo.Length < 1 * 1024 * 1024 && !CheckFileForDone(file, false))
                                 {
-                                    Console.WriteLine("Unusually small regional expression file " + file + ", " + storedBAM.regionalExpressionInfo.Length);
+                                    Console.WriteLine("Truncated small regional expression file " + file + ", " + storedBAM.regionalExpressionInfo.Length);
+                                    storedBAM.regionalExpressionInfo = null;
                                 }
                             }
                         }
                         else if (file.Count() > geneExpressionExtensionLength && file.Substring(file.Count() - geneExpressionExtensionLength).ToLower() == geneExpressionExtension)
                         {
                             string expectedFileName = analysisID + geneExpressionExtension;
-                            if (file.Count() < expectedFileName.Count() || file.Substring(file.Count() - expectedFileName.Count()) != expectedFileName)
+                            if (file.Count() < expectedFileName.Count() || file.Substring(file.Count() - expectedFileName.Count()).ToLower() != expectedFileName.ToLower())
                             {
-                                Console.WriteLine("Incorrect gene expression file " + file);
+                                Console.WriteLine("Incorrect gene expression file " + file + ", expected filename " + expectedFileName);
                             }
                             else
                             {
                                 storedBAM.geneExpressionInfo = new FileInfo(file);
-                                if (storedBAM.geneExpressionInfo.Length < 1 * 1024 * 1024)
+                                if (storedBAM.geneExpressionInfo.Length < 1 * 1024 * 1024 && !CheckFileForDone(file, false))
                                 {
-                                    Console.WriteLine("Unusually small gene expression file " + file + ", " + storedBAM.geneExpressionInfo.Length);
+                                    Console.WriteLine("Truncated gene expression file " + file + ", " + storedBAM.geneExpressionInfo.Length);
+                                    storedBAM.geneExpressionInfo = null;
                                 }
                             }
                         }
@@ -694,6 +698,7 @@ namespace ExpressionLib
                                     if (!CheckFileForDone(file, false)) 
                                     {
                                         Console.WriteLine("Truncated allele-specific gene expression file " + file + ", size " + storedBAM.alleleSpecificGeneExpressionInfo.Length);
+                                        storedBAM.alleleSpecificGeneExpressionInfo = null;
                                     }
                                 }
                             }

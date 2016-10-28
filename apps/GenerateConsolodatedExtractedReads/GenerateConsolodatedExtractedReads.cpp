@@ -40,7 +40,7 @@ volatile long nextSamtoolsRunToProcess = 0;  // Which is to say index into input
 long nInputLines;
 char **inputLines;
 
-volatile long nThreadsRunning = 12;  // Default parallelism
+volatile long nThreadsRunning = 16;  // Default parallelism
 
 char *samtoolsPathname = "c:\\bolosky\\bin\\samtools.exe";
 
@@ -246,152 +246,212 @@ ProcessorThreadMain(void *param)
             outputFilename++;
         }
 
-        HANDLE hStdOutRead, hStdOutWrite;
-        if (!CreatePipe(&hStdOutRead, &hStdOutWrite, &sAttr, 0)) {
-            fprintf(stderr, "CreatePipe failed, %d\n", GetLastError());
-            exit(1);
-        }
-
-        if (!SetHandleInformation(hStdOutRead, HANDLE_FLAG_INHERIT, 0)) {   // Make sure the child doesn't inhert the read handle, only the write one.
-            fprintf(stderr, "SetHandleInformation failed, %d\n", GetLastError());
-            exit(1);
-        }
-
-        HANDLE hStdErrRead, hStdErrWrite;
-        if (!CreatePipe(&hStdErrRead, &hStdErrWrite, &sAttr, 0)) {
-            fprintf(stderr, "CreatePipe failed, %d\n", GetLastError());
-            exit(1);
-        }
-
-        if (!SetHandleInformation(hStdErrRead, HANDLE_FLAG_INHERIT, 0)) {   // Make sure the child doesn't inhert the read handle, only the write one.
-            fprintf(stderr, "SetHandleInformation failed, %d\n", GetLastError());
-            exit(1);
-        }
-
-        PROCESS_INFORMATION piProcInfo;
-        STARTUPINFO siStartInfo;
-
-        ZeroMemory(&piProcInfo, sizeof(PROCESS_INFORMATION));
-
-        ZeroMemory(&siStartInfo, sizeof(STARTUPINFO));
-        siStartInfo.cb = sizeof(STARTUPINFO);
-        siStartInfo.hStdError = hStdErrWrite;
-        siStartInfo.hStdOutput = hStdOutWrite;
-        siStartInfo.hStdInput = NULL;
-        siStartInfo.dwFlags |= STARTF_USESTDHANDLES;
-
-        BOOL createProcessWorked;
-        for (int retryCount = 0; retryCount <= 20; retryCount++) {
-            createProcessWorked = CreateProcess(samtoolsPathname, line, NULL, NULL, TRUE, 0, NULL, NULL, &siStartInfo, &piProcInfo);
-            if (createProcessWorked) {
-                break;
+        //
+        // There's a common problem caused by samtools being case sensitive to the contig name, which generally causes problems with
+        // sex chromosomes, because we'll generate chrx and it will expect chrX.  So, if we get an error the first time through we'll
+        // capitalize the last letter of the contig name and retry once.
+        //
+        SamtoolsRun *run;
+        for (int samtoolsRetryCount = 0; samtoolsRetryCount < 2; samtoolsRetryCount++) {
+            HANDLE hStdOutRead, hStdOutWrite;
+            if (!CreatePipe(&hStdOutRead, &hStdOutWrite, &sAttr, 0)) {
+                fprintf(stderr, "CreatePipe failed, %d\n", GetLastError());
+                exit(1);
             }
 
-            fprintf(stderr, "CreateProcess failed, %d, pausing and retrying, retry count %d\n", GetLastError(), retryCount);
+            if (!SetHandleInformation(hStdOutRead, HANDLE_FLAG_INHERIT, 0)) {   // Make sure the child doesn't inhert the read handle, only the write one.
+                fprintf(stderr, "SetHandleInformation failed, %d\n", GetLastError());
+                exit(1);
+            }
 
-            Sleep(4 << retryCount); // when retryCount is 20, this is a little more than an hour.
-        }
-        if (!createProcessWorked) {
-            fprintf(stderr, "Too many retries on CreateProcess(%s...), giving up.\n", line);
-            exit(1);
-        }
-        CloseHandle(piProcInfo.hThread);    // Don't need this one.
-        piProcInfo.hThread = NULL;
+            HANDLE hStdErrRead, hStdErrWrite;
+            if (!CreatePipe(&hStdErrRead, &hStdErrWrite, &sAttr, 0)) {
+                fprintf(stderr, "CreatePipe failed, %d\n", GetLastError());
+                exit(1);
+            }
 
-        //
-        // Have to close the far ends of these pipes, else we don't get EOF when the child process exits, because we could still conceivably write to our
-        // handle to the pipe.
-        //
-        CloseHandle(hStdOutWrite);
-        CloseHandle(hStdErrWrite);
+            if (!SetHandleInformation(hStdErrRead, HANDLE_FLAG_INHERIT, 0)) {   // Make sure the child doesn't inhert the read handle, only the write one.
+                fprintf(stderr, "SetHandleInformation failed, %d\n", GetLastError());
+                exit(1);
+            }
 
-        size_t readsBufferSize = 16 * 1024; // We grow this exponentially as we get more output.
+            PROCESS_INFORMATION piProcInfo;
+            STARTUPINFO siStartInfo;
 
-        nRunsThisThread++;
+            ZeroMemory(&piProcInfo, sizeof(PROCESS_INFORMATION));
 
-        SamtoolsRun *run = new SamtoolsRun;
-        run->filename = outputFilename;
-        run->size = 0;
-        run->readsBuffers = new ReadsBuffer;
-        run->readsBuffers->buffer = new char[readsBufferSize];
-        run->readsBuffers->size = 0;
-        run->readsBuffers->next = NULL;
+            ZeroMemory(&siStartInfo, sizeof(STARTUPINFO));
+            siStartInfo.cb = sizeof(STARTUPINFO);
+            siStartInfo.hStdError = hStdErrWrite;
+            siStartInfo.hStdOutput = hStdOutWrite;
+            siStartInfo.hStdInput = NULL;
+            siStartInfo.dwFlags |= STARTF_USESTDHANDLES;
 
-        ReadsBuffer *readsBuffer = run->readsBuffers;
-
-        //
-        // Now read the output from samtools.
-        //
-        DWORD bytesRead;
-        for (;;) {
-            if (!ReadFile(hStdOutRead, readsBuffer->buffer + readsBuffer->size, readsBufferSize - readsBuffer->size, &bytesRead, NULL)) {
-                if (GetLastError() == ERROR_BROKEN_PIPE) {
+            BOOL createProcessWorked;
+            for (int retryCount = 0; retryCount <= 20; retryCount++) {
+                createProcessWorked = CreateProcess(samtoolsPathname, line, NULL, NULL, TRUE, 0, NULL, NULL, &siStartInfo, &piProcInfo);
+                if (createProcessWorked) {
                     break;
                 }
-                else {
-                    fprintf(stderr, "Read from stdout pipe to samtools failed, %d\n", GetLastError());
-                    exit(1);
+
+                fprintf(stderr, "CreateProcess failed, %d, pausing and retrying, retry count %d\n", GetLastError(), retryCount);
+
+                Sleep(4 << retryCount); // when retryCount is 20, this is a little more than an hour.
+            }
+            if (!createProcessWorked) {
+                fprintf(stderr, "Too many retries on CreateProcess(%s...), giving up.\n", line);
+                exit(1);
+            }
+            CloseHandle(piProcInfo.hThread);    // Don't need this one.
+            piProcInfo.hThread = NULL;
+
+            //
+            // Have to close the far ends of these pipes, else we don't get EOF when the child process exits, because we could still conceivably write to our
+            // handle to the pipe.
+            //
+            CloseHandle(hStdOutWrite);
+            CloseHandle(hStdErrWrite);
+
+            size_t readsBufferSize = 16 * 1024; // We grow this exponentially as we get more output.
+
+            nRunsThisThread++;
+
+            run = new SamtoolsRun;
+            run->filename = outputFilename;
+            run->size = 0;
+            run->readsBuffers = new ReadsBuffer;
+            run->readsBuffers->buffer = new char[readsBufferSize];
+            run->readsBuffers->size = 0;
+            run->readsBuffers->next = NULL;
+
+            ReadsBuffer *readsBuffer = run->readsBuffers;
+
+            //
+            // Now read the output from samtools.
+            //
+            DWORD bytesRead;
+            for (;;) {
+                if (!ReadFile(hStdOutRead, readsBuffer->buffer + readsBuffer->size, readsBufferSize - readsBuffer->size, &bytesRead, NULL)) {
+                    if (GetLastError() == ERROR_BROKEN_PIPE) {
+                        break;
+                    }
+                    else {
+                        fprintf(stderr, "Read from stdout pipe to samtools failed, %d\n", GetLastError());
+                        exit(1);
+                    }
+                }
+
+                if (0 == bytesRead) {
+                    break;
+                }
+
+                readsBuffer->size += bytesRead;
+                run->size += bytesRead;
+                if (readsBuffer->size == readsBufferSize) {
+                    //
+                    // Allocate a new buffer.
+                    //
+                    readsBufferSize *= 2;
+                    readsBuffer->next = new ReadsBuffer;
+                    readsBuffer = readsBuffer->next;
+
+                    readsBuffer->buffer = new char[readsBufferSize];
+                    readsBuffer->size = 0;
+                    readsBuffer->next = NULL;
                 }
             }
 
-            if (0 == bytesRead) {
-                break;
+            //
+            // See if there's anything on stderr.
+            //
+            const size_t stdErrorBufferSize = 10 * 1024;
+            char stdErrorBuffer[stdErrorBufferSize + 1];
+            bool anythingWrittenToStdError = false;
+            while (ReadFile(hStdErrRead, stdErrorBuffer, stdErrorBufferSize, &bytesRead, NULL)) {
+                if (0 == bytesRead) {
+                    break;
+                }
+                stdErrorBuffer[bytesRead] = '\0';
+                if (!anythingWrittenToStdError) {
+                    if (0 != samtoolsRetryCount) {
+                        fprintf(stderr, "stderr output for line %d '%s': %s", lineToProcess + 1, line, stdErrorBuffer);
+                    }
+                    anythingWrittenToStdError = true;
+                } else if (0 != samtoolsRetryCount) {
+                    fprintf(stderr, "%s", stdErrorBuffer);
+                }
             }
 
-            readsBuffer->size += bytesRead;
-            run->size += bytesRead;
-            if (readsBuffer->size == readsBufferSize) {
-                //
-                // Allocate a new buffer.
-                //
-                readsBufferSize *= 2;
-                readsBuffer->next = new ReadsBuffer;
-                readsBuffer = readsBuffer->next;
+            //
+            // Clean up the samtools process.
+            //
+            WaitForSingleObject(piProcInfo.hProcess, INFINITE); // Wait for the process to really exit.
 
-                readsBuffer->buffer = new char[readsBufferSize];
-                readsBuffer->size = 0;
-                readsBuffer->next = NULL;
+            DWORD exitCode;
+            if (!GetExitCodeProcess(piProcInfo.hProcess, &exitCode)) {
+                fprintf(stderr, "GetProcessExitCode failed, %d\n", GetLastError());
+                CloseHandle(hStdOutRead);
+                CloseHandle(hStdErrRead);
+                CloseHandle(piProcInfo.hProcess);
+            } else {
+
+                CloseHandle(hStdOutRead);
+                CloseHandle(hStdErrRead);
+                CloseHandle(piProcInfo.hProcess);
+
+                if (exitCode != 0) {
+                    fprintf(stderr, "\nsamtools run failed with exit code %d, line number %d, command line: %s\n", exitCode, lineToProcess + 1, line);
+                } else if (0 == samtoolsRetryCount && anythingWrittenToStdError) {
+                    while (NULL != run->readsBuffers) {
+                        ReadsBuffer *toDelete = run->readsBuffers;
+                        run->readsBuffers = toDelete->next;
+                        delete[] toDelete->buffer;
+                        delete toDelete;
+                    }
+                    delete run;
+
+                    //
+                    // Now fix up line to have a cap right before the : in the fourth item in the line.  Get there by scanning for the third space.
+                    //
+                    char *linePtr = line;
+                    for (int spaceCount = 0; spaceCount < 3; spaceCount++) {
+                        linePtr = strchr(linePtr + 1, ' ');
+                        if (NULL == linePtr) {
+                            fprintf(stderr, "Couldn't find enough spaces in input line to capitalize for retry: %s\n", line);
+                            break;
+                        }
+                    }
+
+                    //
+                    // Now find the colon.
+                    //
+                    linePtr = strchr(linePtr, ':');
+                    if (NULL == linePtr) {
+                        fprintf(stderr, "Unable to find colon in input line: ", line);
+                        samtoolsRetryCount++;   // Don't retry
+                        break;
+                    }
+
+                    //
+                    // Back up to the character before the colon, and capitalize it if possible.
+                    // 
+                    linePtr--;
+
+                    if (*linePtr >= 'a' && *linePtr <= 'z') {
+                        *linePtr += 'A' - 'a';
+                    } else {
+                        fprintf(stderr, "Not retrying because character before the colon wasn't a lower case letter.\n");
+                        samtoolsRetryCount++;   // Don't retry
+                        break;
+                    }
+                } else {
+                    //
+                    // It worked, no need to retry.
+                    //
+                    break;
+                }
             }
         }
-
-        //
-        // See if there's anything on stderr.
-        //
-        const size_t stdErrorBufferSize = 10 * 1024;
-        char stdErrorBuffer[stdErrorBufferSize + 1];
-        bool anythingWrittenToStdError = false;
-        while (ReadFile(hStdErrRead, stdErrorBuffer, stdErrorBufferSize, &bytesRead, NULL)) {
-            if (0 == bytesRead) {
-                break;
-            }
-            stdErrorBuffer[bytesRead] = '\0';
-            if (!anythingWrittenToStdError) {
-                fprintf(stderr, "stderr output for line %d '%s': %s", lineToProcess + 1, line, stdErrorBuffer);
-                anythingWrittenToStdError = true;
-            }
-            else {
-                fprintf(stderr, "%s", stdErrorBuffer);
-            }
-        }
-
-        //
-        // Clean up the samtools process.
-        //
-        WaitForSingleObject(piProcInfo.hProcess, INFINITE); // Wait for the process to really exit.
-
-        DWORD exitCode;
-        if (!GetExitCodeProcess(piProcInfo.hProcess, &exitCode)) {
-            fprintf(stderr, "GetProcessExitCode failed, %d\n", GetLastError());
-        }
-        else {
-            if (exitCode != 0) {
-                fprintf(stderr, "\nsamtools run failed with exit code %d, line number %d, command line: %s\n", exitCode, lineToProcess + 1, line);
-            }
-        }
-
-        CloseHandle(hStdOutRead);
-        CloseHandle(hStdErrRead);
-        CloseHandle(piProcInfo.hProcess);
 
         //
         // And add our buffer to the queue for the writer.
