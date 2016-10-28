@@ -645,6 +645,8 @@ bool TenXClusterAligner::align_forth_stage(
             Read *read[NUM_READS_PER_PAIR] = { read0, read1 };
             _int64 *resultCount[2] = { &progressTracker[pairIdx].nSingleEndSecondaryResults[0], &progressTracker[pairIdx].nSingleEndSecondaryResults[1] };
 
+            *resultCount[0] = *resultCount[1] = 0;
+
             bool noOverflow = true;
             for (int r = 0; r < NUM_READS_PER_PAIR; r++) {
                 SingleAlignmentResult singleResult;
