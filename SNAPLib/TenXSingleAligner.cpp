@@ -1027,7 +1027,7 @@ TenXSingleAligner::align_phase_3_generate_results(
     double astrayProbabilityPenalty;
     
     // Bounds
-    unsigned EDResultCutOff = bestCompensatedScore + maxEditDistanceForSecondaryResults;
+    unsigned EDResultCutOff = __min(bestCompensatedScore, maxK + clusterEDCompensation) + maxEditDistanceForSecondaryResults;
     
     // Init
     double probabilityOfBestPair = 0;
