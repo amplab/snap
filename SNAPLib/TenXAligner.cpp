@@ -760,12 +760,10 @@ void TenXAlignerContext::runIterationThread()
                 BigDealloc(tenXSingleTrackerArray[pairIdx].results);
                 tenXSingleTrackerArray[pairIdx].results = NULL;
                 // calculate shifts here. I actually don't get it why we prefer to always make it 2-folds
-                unsigned multiple = tenXSingleTrackerArray[pairIdx].nSecondaryResults / tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize;
+                unsigned multiple = (tenXSingleTrackerArray[pairIdx].nSecondaryResults - 1) / tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize + 1;
                 unsigned shifter = 2;
-                unsigned shiftMask = 1;
-                while (multiple & ~(shiftMask) != 0) {
+                while (multiple > shifter) {
                     shifter = shifter << 1;
-                    shiftMask = (shiftMask << 1) | 1;
                 }
                 
                 tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize *= shifter;
