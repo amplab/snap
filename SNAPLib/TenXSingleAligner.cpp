@@ -1075,18 +1075,19 @@ TenXSingleAligner::align_phase_3_generate_results(
             secondaryResult->probability = compensatedProbability;
             secondaryResult->clusterIdx = clusterIdx;
 
-            nextResultIdx++;
-            
             if (compensatedScore <= bestCompensatedScore && compensatedProbability >= probabilityOfBestPair) {
                 bestCompensatedScore = compensatedScore;
                 probabilityOfBestPair = compensatedProbability;
                 bestResultIdx = nextResultIdx;
             }
+
+            nextResultIdx++;
         }
     }
     
     _ASSERT(nextResultIdx == *nSecondaryResults);
     _ASSERT(bestResultIdx != -1 || *nSecondaryResults == 0);
+    _ASSERT(nextResultIdx == *nSecondaryResults);
 
     if (bestResultIdx != -1) {
         // best result ptr
