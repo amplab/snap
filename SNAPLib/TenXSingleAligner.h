@@ -189,7 +189,7 @@ public:
     //
     // align_phase_3_finalize computes overall probability, but adds no new secondary mappings
     //
-    bool align_phase_3_generate_results(
+    void align_phase_3_generate_results(
         _uint8                 minClusterSize,
         int                    maxEditDistanceForSecondaryResults,
         int                    &bestCompensatedScore,

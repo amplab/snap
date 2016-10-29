@@ -947,7 +947,9 @@ TenXSingleAligner::align_phase_3_correct_best_score(int &bestCompensatedScore, _
     }
     
     // Only updates best score when it's better and within the range.
-    if (bestCompensatedScore != newBestCompensatedScore && bestCompensatedScore <= maxK + extraSearchDepth + clusterEDCompensation) {
+    if (newBestCompensatedScore > maxK + extraSearchDepth + clusterEDCompensation) {
+        bestCompensatedScore = -1;
+    } else if (bestCompensatedScore != newBestCompensatedScore) {
         bestCompensatedScore = newBestCompensatedScore;
         return true;
     }
@@ -965,6 +967,10 @@ TenXSingleAligner::align_phase_3_count_results(
         _int64                    secondaryResultBufferSize,
         double                    &probabilityOfAllPairs
     ) {
+    // return immediately if there is no result at all
+    if (bestCompensatedScore == -1)
+        return false;
+
     // Serrogate
     Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = { {FORWARD, RC}, {65, FORWARD} };
     unsigned astrayEDPenalty;
@@ -1003,7 +1009,7 @@ TenXSingleAligner::align_phase_3_count_results(
         if (compensatedScore <= EDResultCutOff)
             (*nSecondaryResults)++;
     }
-
+    
     // suspend if we need to reallocate the result buffer.    
     if (*nSecondaryResults > secondaryResultBufferSize) {
         return true;
@@ -1013,7 +1019,7 @@ TenXSingleAligner::align_phase_3_count_results(
 }
 
 
-bool
+void
 TenXSingleAligner::align_phase_3_generate_results(
         _uint8                    minClusterSize,
         int                       maxEditDistanceForSecondaryResults,
@@ -1022,6 +1028,18 @@ TenXSingleAligner::align_phase_3_generate_results(
         PairedAlignmentResult     *secondaryResults,
         PairedAlignmentResult     *bestResult
     ) {
+    // return immediately if there is no result at all
+    if (bestCompensatedScore == -1) {
+        for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+            bestResult->compensatedScore = -1;
+            bestResult->location[whichRead] = InvalidGenomeLocation;
+            bestResult->mapq[whichRead] = 0;
+            bestResult->score[whichRead] = -1;
+            bestResult->status[whichRead] = NotFound;
+        }
+        return;
+    }
+        
     // Serrogate
     Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = { {FORWARD, RC}, {65, FORWARD} };
     unsigned astrayEDPenalty;
@@ -1119,6 +1137,7 @@ TenXSingleAligner::align_phase_3_generate_results(
         bestResult->compensatedScore = -1;
         bestResult->clusterIdx = -1;
         for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
+            bestResult->compensatedScore = -1;
             bestResult->location[whichRead] = InvalidGenomeLocation;
             bestResult->mapq[whichRead] = 0;
             bestResult->score[whichRead] = -1;
@@ -1131,7 +1150,7 @@ TenXSingleAligner::align_phase_3_generate_results(
         }
     }
     
-    return false;
+    return;
 }
 
     
