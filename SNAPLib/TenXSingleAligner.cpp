@@ -946,7 +946,8 @@ TenXSingleAligner::align_phase_3_correct_best_score(int &bestCompensatedScore, _
         }
     }
     
-    if (bestCompensatedScore != newBestCompensatedScore) {
+    // Only updates best score when it's better and within the range.
+    if (bestCompensatedScore != newBestCompensatedScore && bestCompensatedScore <= maxK + extraSearchDepth + clusterEDCompensation) {
         bestCompensatedScore = newBestCompensatedScore;
         return true;
     }
@@ -1148,7 +1149,7 @@ void TenXSingleAligner::align_phase_4(
 ) {
     
     // Update the best result information
-    if (bestCompensatedScore != -1) {
+    if (bestResult->status[0] != NotFound && bestResult->status[1] != NotFound) {
         for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
             // Calculate mapQ
             bestResult->mapq[whichRead] = computeMAPQ(probabilityOfAllPairs, bestResult->probability, bestResult->score[whichRead], popularSeedsSkipped[0] + popularSeedsSkipped[1]);
