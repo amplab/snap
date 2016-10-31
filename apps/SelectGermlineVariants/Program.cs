@@ -330,23 +330,25 @@ namespace SelectGermlineVariants
                     if (!dnaAllcountReader.openFile(out mappedHQNUclearReads, out numContigs))
                     {
                         Console.WriteLine("Couldn't open or bad header format in " + fileSet.dnaAllcountPathmame);
-                        break;
+                        continue;
                     }
 
                     if (!dnaAllcountReader.ReadAllcountFile(processDNABase))
                     {
                         Console.WriteLine("Bad internal format or truncation in " + fileSet.dnaAllcountPathmame);
+                        continue;
                     }
 
                     ExpressionTools.AllcountReader.ProcessBase processRNABase = (contigName, locus, mappedReadCount) => markReadCount(viableCandidates, false, contigName, locus, mappedReadCount);
                     var rnaAllcountReader = new ExpressionTools.AllcountReader(fileSet.rnaAllcountPathmame);
                     if (!rnaAllcountReader.openFile(out mappedHQNUclearReads, out numContigs)) {
                         Console.WriteLine("Couldn't open or bad header format in " + fileSet.rnaAllcountPathmame);
-                        break;
+                        continue;
                     }
                     
                     if (!rnaAllcountReader.ReadAllcountFile(processRNABase)) {
                         Console.WriteLine("Bad internal format or truncation in " + fileSet.rnaAllcountPathmame);
+                        continue;
                     }
 
                     //

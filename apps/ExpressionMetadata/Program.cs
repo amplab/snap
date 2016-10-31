@@ -1459,10 +1459,6 @@ namespace ExpressionMetadata
             {
                 if (tumorAnalysis.storedBAM != null && tumorAnalysis.storedBAM.readsAtSelectedVariantsInfo != null)
                 {
-                    if (normalAnalysis.storedBAM == null || normalAnalysis.storedBAM.selectedVariantsInfo == null || normalAnalysis.storedBAM.selectedVariantsInfo.CreationTime > tumorAnalysis.storedBAM.readsAtSelectedVariantsInfo.CreationTime)
-                    {
-                        Console.WriteLine("Found read-at-selected-variants for experiment with no or newer selected variants file for normal analysis id: " + normalAnalysis.analysis_id);
-                    }
                     nExtant++;
                 }
                 else if (normalAnalysis.storedBAM == null || normalAnalysis.storedBAM.selectedVariantsInfo == null || tumorAnalysis.storedBAM == null || tumorAnalysis.storedBAM.bamInfo == null || !tumorAnalysis.storedBAM.chrStateKnown)
@@ -1548,15 +1544,21 @@ namespace ExpressionMetadata
             int nReadyToGo = 0;
 
             string scriptFilenameBase = baseDirectory + "annotateSelectedVariants-";
+            string createJobFilename = baseDirectory + "createAnnotateSelectedVariantsJob.cmd";
+            string scheduleJobFilename = baseDirectory + "scheduleAnnotateSelectedVariantsJob.cmd";
 
             //
             // Delete any existing scripts so that we don't leave stale stuff around.
+            //
+            File.Delete(createJobFilename);
+            File.Delete(scheduleJobFilename);
             foreach (var machine in Machines)
             {
                 File.Delete(scriptFilenameBase + machine.Key + ".cmd");
             }
 
             var scripts = new Dictionary<string, StreamWriter>();
+            StreamWriter scheduleJobScript = null;
 
             foreach (var experiment in experiments)
             {
@@ -1580,10 +1582,22 @@ namespace ExpressionMetadata
                         scripts.Add(machineName, new StreamWriter(scriptFilenameBase + machineName + ".cmd"));
                     }
 
-                    scripts[machineName].WriteLine(@"mutant-expression d:\sequence\indices\" + experiment.TumorRNAAnalysis.refassemShortName + "-24 " + experiment.NormalDNAAnalysis.storedBAM.selectedVariantsInfo.FullName +
+                    if (null == scheduleJobScript) {
+                        var createJobScript = new StreamWriter(createJobFilename);
+                        createJobScript.WriteLine(@"job new /emailaddress:bolosky@microsoft.com /nodegroup:B99,LongRunQ /exclusive:true /failontaskfailure:false /jobname:annotateVariants /memorypernode:100000 /notifyoncompletion:true /numnodes:1-40 /runtime:2:12:00 /scheduler:gcr /jobtemplate:LongRunQ /estimatedprocessmemory:100000");
+                        createJobScript.Close();
+
+                        scheduleJobScript = new StreamWriter(scheduleJobFilename);
+                    }
+                    
+                    string commandLine = @"\sequence\indices\" + experiment.TumorRNAAnalysis.refassemShortName + "-24 " + experiment.NormalDNAAnalysis.storedBAM.selectedVariantsInfo.FullName +
                         @" -h -selectedReads " + experiment.TumorDNAAnalysis.analysis_id + " " + experiment.TumorRNAAnalysis.analysis_id + @" -consolodatedInput " + experiment.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsInfo.FullName +
                         @" -consolodatedInput " + experiment.TumorRNAAnalysis.storedBAM.readsAtSelectedVariantsInfo.FullName + 
-                        @" > " + ExpressionTools.GetDirectoryPathFromFullyQualifiedFilename(experiment.NormalDNAAnalysis.storedBAM.bamInfo.FullName) + experiment.NormalDNAAnalysis.analysis_id + ExpressionTools.annotatedSelectedVariantsExtension);
+                        @" -outputFile " + ExpressionTools.GetDirectoryPathFromFullyQualifiedFilename(experiment.NormalDNAAnalysis.storedBAM.bamInfo.FullName) + experiment.NormalDNAAnalysis.analysis_id + ExpressionTools.annotatedSelectedVariantsExtension;
+
+                    scripts[machineName].WriteLine(@"mutant-expression d:" + commandLine);
+
+                    scheduleJobScript.WriteLine(@"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr \\gcr\scratch\b99\bolosky\mutant-expression \\msr-genomics-" + (nReadyToGo % 2) + @"\d$" + commandLine);
 
                     nReadyToGo++;
                 }
@@ -1593,6 +1607,10 @@ namespace ExpressionMetadata
             foreach (var script in scripts)
             {
                 script.Value.Close();
+            }
+
+            if (null != scheduleJobScript) {
+                scheduleJobScript.Close();
             }
 
             if (nReadyToGo + nNeedingPrecursors > 0) {
@@ -2619,11 +2637,56 @@ namespace ExpressionMetadata
 
         }
 
+        delegate FileInfo getDependents(bool isPrecursor, ExpressionTools.Experiment experiment);
+
+        static void CheckDependencies(List<ExpressionTools.Experiment> experiments)
+        {
+            var dependencies = new List<getDependents>();
+            dependencies.Add((x, y) => x ? y.TumorRNAAnalysis.storedBAM.bamInfo : y.TumorRNAAnalysis.storedBAM.allCountInfo);
+            dependencies.Add((x, y) => x ? y.NormalDNAAnalysis.storedBAM.bamInfo : y.NormalDNAAnalysis.storedBAM.allCountInfo);
+            dependencies.Add((x, y) => x ? y.TumorDNAAnalysis.storedBAM.bamInfo : y.TumorDNAAnalysis.storedBAM.allCountInfo);
+            dependencies.Add((x, y) => x ? y.NormalDNAAnalysis.storedBAM.bamInfo : y.NormalDNAAnalysis.storedBAM.vcfInfo);
+            dependencies.Add((x, y) => x ? y.TumorRNAAnalysis.storedBAM.allCountInfo : y.TumorRNAAnalysis.storedBAM.regionalExpressionInfo);
+            dependencies.Add((x, y) => x ? y.TumorRNAAnalysis.storedBAM.regionalExpressionInfo : y.TumorRNAAnalysis.storedBAM.geneExpressionInfo);
+            dependencies.Add((x, y) => x ? y.NormalDNAAnalysis.storedBAM.vcfInfo : y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo);
+            dependencies.Add((x, y) => x ? y.TumorRNAAnalysis.storedBAM.allCountInfo : y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo);
+            dependencies.Add((x, y) => x ? y.TumorDNAAnalysis.storedBAM.allCountInfo : y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo);
+            dependencies.Add((x, y) => x ? y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo : y.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsInfo);
+            dependencies.Add((x, y) => x ? y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo : y.TumorRNAAnalysis.storedBAM.readsAtSelectedVariantsInfo);
+            dependencies.Add((x, y) => x ? y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo : y.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo);
+            dependencies.Add((x, y) => x ? y.TumorRNAAnalysis.storedBAM.readsAtSelectedVariantsIndexInfo : y.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo);
+            dependencies.Add((x, y) => x ? y.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsIndexInfo : y.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo);
+            dependencies.Add((x, y) => x ? y.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo : y.NormalDNAAnalysis.storedBAM.alleleSpecificGeneExpressionInfo);
+
+            int nDependenciesChecked = 0;
+            foreach (var experiment in experiments)
+            {
+                foreach (var dependency in dependencies)
+                {
+                    FileInfo dependantFile = dependency(false, experiment);
+                    if (dependantFile != null)
+                    {
+                        nDependenciesChecked++;
+                        FileInfo precursor = dependency(true, experiment);
+                        if (null == precursor)
+                        {
+                            Console.WriteLine("Dependency violation: a precursor to " + dependantFile.FullName + " doesn't exist.");
+                        }
+                        else if (precursor.LastWriteTime > dependantFile.LastWriteTime)
+                        {
+                            Console.WriteLine("Dependency violation: precursor " + precursor.FullName + " is newer than dependent " + dependantFile.FullName);
+                        }
+                    }
+                }
+            }
+
+            Console.WriteLine("Checked " + nDependenciesChecked + " dependencies among files for " + experiments.Count() + " experiments.");
+        }
+
         static void Main(string[] args)
         {
             var timer = new Stopwatch();
             timer.Start();
-
 
             var beatAMLGuids = new Dictionary<string, ExpressionTools.BeatAMLSample>(); // Temp until we have the load function
             //ExpressionTools.GenerateBeatAMLGuids(beatAMLGuids);
@@ -2699,6 +2762,7 @@ namespace ExpressionMetadata
             var experiments = BuildExperiments(participants);
             //CountTP53Mutations(experiments);
             ExpressionTools.DumpExperimentsToFile(experiments, baseDirectory + "experiments.txt");
+            CheckDependencies(experiments);
             GenerateSelectedVariantsScript(experiments);
             GenerateRegionalExpressionScripts(experiments);
             GenerateGeneExpressionScripts(experiments, false);

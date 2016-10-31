@@ -252,6 +252,7 @@ ProcessorThreadMain(void *param)
         // capitalize the last letter of the contig name and retry once.
         //
         SamtoolsRun *run;
+        BOOL worked = false;
         for (int samtoolsRetryCount = 0; samtoolsRetryCount < 2; samtoolsRetryCount++) {
             HANDLE hStdOutRead, hStdOutWrite;
             if (!CreatePipe(&hStdOutRead, &hStdOutWrite, &sAttr, 0)) {
@@ -440,7 +441,7 @@ ProcessorThreadMain(void *param)
                     if (*linePtr >= 'a' && *linePtr <= 'z') {
                         *linePtr += 'A' - 'a';
                     } else {
-                        fprintf(stderr, "Not retrying because character before the colon wasn't a lower case letter.\n");
+                        fprintf(stderr, "Not retrying because character before the colon wasn't a lower case letter.  Line: %s\n", line);
                         samtoolsRetryCount++;   // Don't retry
                         break;
                     }
@@ -448,6 +449,7 @@ ProcessorThreadMain(void *param)
                     //
                     // It worked, no need to retry.
                     //
+                    worked = true;
                     break;
                 }
             }
@@ -456,20 +458,22 @@ ProcessorThreadMain(void *param)
         //
         // And add our buffer to the queue for the writer.
         //
-        EnterCriticalSection(criticalSection);
-        run->next = runsReadyToWrite;
-        runsReadyToWrite = run;
-        dataSizeOnWriteQueue += run->size;
+        if (worked) {
+            EnterCriticalSection(criticalSection);
+            run->next = runsReadyToWrite;
+            runsReadyToWrite = run;
+            dataSizeOnWriteQueue += run->size;
 
-        if (dataSizeOnWriteQueue >= MinWriteSize) {
-            SetEvent(runsReadyToWriteQueueHasEnoughDataEvent);
+            if (dataSizeOnWriteQueue >= MinWriteSize) {
+                SetEvent(runsReadyToWriteQueueHasEnoughDataEvent);
 
-            if (dataSizeOnWriteQueue >= MaxWriteQueueSize) {
-                ResetEvent(runsReadyToWriteNotTooFullEvent);
+                if (dataSizeOnWriteQueue >= MaxWriteQueueSize) {
+                    ResetEvent(runsReadyToWriteNotTooFullEvent);
+                }
             }
+            run = NULL;
+            LeaveCriticalSection(criticalSection);
         }
-        run = NULL;
-        LeaveCriticalSection(criticalSection);
     }
 
     if (InterlockedDecrement(&nThreadsRunning) == 0) {

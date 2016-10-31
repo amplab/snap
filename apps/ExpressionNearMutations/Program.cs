@@ -59,6 +59,7 @@ namespace ExpressionNearMutations
                 for (int sizeIndex = 0; sizeIndex < nRegionSizes; sizeIndex++)
                 {
                     regionalExpressionState[sizeIndex] = new RegionalExpressionState();
+                    exclusiveRegionalExpressionState[sizeIndex] = new RegionalExpressionState();
                 }
             }
 
@@ -82,6 +83,7 @@ namespace ExpressionNearMutations
                 if (0 == distance)
                 {
                     regionalExpressionState[0].AddExpression(z, mu);
+                    exclusiveRegionalExpressionState[0].AddExpression(z, mu);
                 }
                 else
                 {
@@ -89,6 +91,7 @@ namespace ExpressionNearMutations
                     {
                         if (regionSizeByRegionSizeIndex[sizeIndex] < distance)
                         {
+                            exclusiveRegionalExpressionState[sizeIndex - 1].AddExpression(z, mu);
                             break;
                         }
 
@@ -106,6 +109,7 @@ namespace ExpressionNearMutations
             public static readonly int[] regionSizeByRegionSizeIndex = new int[nRegionSizes];
 
             public RegionalExpressionState[] regionalExpressionState = new RegionalExpressionState[nRegionSizes]; // Dimension is log2(regionSize) - 1
+            public RegionalExpressionState[] exclusiveRegionalExpressionState = new RegionalExpressionState[nRegionSizes];  // Expression in this region but not closer, so from log2(regionSize - 1) to log2(regionSize) - 1.  The zero element is the same as regionalExpressionState
 
             public ExpressionTools.Gene gene;
             public int mutationCount = 0;
@@ -355,17 +359,30 @@ namespace ExpressionNearMutations
 
                 var outputFile = new StreamWriter(outputFilename);
 
-                outputFile.WriteLine("ExpressionNearMutations v2.1 " + participantId + (forAlleleSpecificExpression ? " -a" : ""));
+                outputFile.WriteLine("ExpressionNearMutations v2.2 " + participantId + (forAlleleSpecificExpression ? " -a" : ""));
                 outputFile.Write("Gene name\tnon-silent mutation count");
                 for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
                 {
-                    outputFile.Write("\t" + GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + "(ase)");
+                    outputFile.Write("\t" + GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + (forAlleleSpecificExpression ? "(ase)" : "(z)"));
                 }
 
                 if (!forAlleleSpecificExpression) {
                     for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
                     {
                         outputFile.Write("\t" + GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + "(mu)");
+                    }
+                }
+
+                for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
+                {
+                    outputFile.Write("\t" + GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + " exclusive " + (forAlleleSpecificExpression ? "(ase)" : "(z)"));
+                }
+
+                if (!forAlleleSpecificExpression)
+                {
+                    for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
+                    {
+                        outputFile.Write("\t" + GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + " exclusive (mu)");
                     }
                 }
 
@@ -408,6 +425,34 @@ namespace ExpressionNearMutations
                             }
                         }
                     }
+
+                    for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
+                    {
+                        if (allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncluded != 0)
+                        {
+                            outputFile.Write("\t" + allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].totalExpression / allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncluded);
+                        }
+                        else
+                        {
+                            outputFile.Write("\t*");
+                        }
+                    }
+
+                    if (!forAlleleSpecificExpression)
+                    {
+                        for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
+                        {
+                            if (allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncluded != 0)
+                            {
+                                outputFile.Write("\t" + allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].totalMeanExpression / allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncluded);
+                            }
+                            else
+                            {
+                                outputFile.Write("\t*");
+                            }
+                        }
+                    }
+                    
                     outputFile.WriteLine();
                 }
 

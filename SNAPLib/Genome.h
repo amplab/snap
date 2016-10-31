@@ -237,7 +237,7 @@ public:
 
         inline GenomeDistance getCountOfBases() const {return nBases;}
 
-        bool getLocationOfContig(const char *contigName, GenomeLocation *location, int* index = NULL) const;
+        bool getLocationOfContig(const char *contigName, GenomeLocation *location, int* index = NULL, bool caseSensitive = true) const;
 
         inline void prefetchData(GenomeLocation genomeLocation) const {
             _mm_prefetch(bases + GenomeLocationAsInt64(genomeLocation), _MM_HINT_T2);

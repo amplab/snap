@@ -1016,7 +1016,7 @@ namespace ExpressionLib
             outputFile.WriteLine("disease_abbr\treference\tparticipantID\tTumorRNAAnalysis\tTumorDNAAnalysis\tNormalDNAAnalysis\tNormalRNAAnalysis\ttumorRNAPathname\ttumorDNAPathname\t" +
                 "normalDNAPathname\tNormalRNAPathname\tVCFPathname\tgender\tdaysToBirth\tdaysToDeath\tOrigTumorDNAAliquotID\tTumorRNAAllcountFile\tNormalRNAAllcountFile\tmafFile\t" +
                 "RegionalExpressionFilename\tGeneExpressionFilename\tSelectedVariantsFilename\tReadsAtSelectedVariantsDNAFilename\tReadsAtSelectedVariantsRNAFilename\tAnotatedSelectedVariantsFile\t" +
-                "SourceNormalDNA\tSourceTumorDNA\tTumorDNAAllcountFilename\tAlleleSpecifcGeneExpressionFile\tAlleleSpecificGeneExpressionFile");
+                "SourceNormalDNA\tSourceTumorDNA\tTumorDNAAllcountFilename\tAlleleSpecifcGeneExpressionFile");
 
             foreach (Experiment experiment in experiments)
             {

@@ -351,14 +351,14 @@ Genome::getSizeFromFile(const char *fileName, GenomeDistance *nBases, unsigned *
 
 
     bool
-Genome::getLocationOfContig(const char *contigName, GenomeLocation *location, int * index) const
+Genome::getLocationOfContig(const char *contigName, GenomeLocation *location, int * index, bool caseSensitive) const
 {
     if (contigsByName) {
         int low = 0;
         int high = nContigs - 1;
         while (low <= high) {
             int mid = (low + high) / 2;
-            int c = strcmp(contigsByName[mid].name, contigName);
+            int c = caseSensitive ? strcmp(contigsByName[mid].name, contigName) : _stricmp(contigsByName[mid].name, contigName);
             if (c == 0) {
                 if (location != NULL) {
                     *location = contigsByName[mid].beginningLocation;
@@ -376,7 +376,7 @@ Genome::getLocationOfContig(const char *contigName, GenomeLocation *location, in
         return false;
     }
     for (int i = 0; i < nContigs; i++) {
-        if (!strcmp(contigName,contigs[i].name)) {
+        if (!(caseSensitive ? strcmp(contigName, contigs[i].name) : _stricmp(contigName, contigs[i].name))) {
             if (NULL != location) {
                 *location = contigs[i].beginningLocation;
             }
