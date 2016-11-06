@@ -1452,22 +1452,22 @@ namespace ExpressionMetadata
         const string GenReadsNearVariantsClusterScriptFilename = "GenReadsNearVariants-cluster.cmd";
         const string CreateGenReadsNearVariantsJobScriptFilename = "CreateGenReadsNearVariantsJob.cmd";
 
-        static void GenerateExtractionEntryIfNecessary(Dictionary<string, StreamWriter> scriptsByHostname, ExpressionTools.TCGARecord normalAnalysis, ExpressionTools.TCGARecord tumorAnalysis, 
+        static void GenerateExtractionEntryIfNecessary(Dictionary<string, StreamWriter> scriptsByHostname, ExpressionTools.TCGARecord normalDNAAnalysis, ExpressionTools.TCGARecord analysisFromWhichToExtractReads, 
             ref int nExtant, ref int nToGenerate, ref int nWaitingForPrerequisites, ref StreamWriter clusterScript)
         {
             try
             {
-                if (tumorAnalysis.storedBAM != null && tumorAnalysis.storedBAM.readsAtSelectedVariantsInfo != null)
+                if (analysisFromWhichToExtractReads.storedBAM != null && analysisFromWhichToExtractReads.storedBAM.readsAtSelectedVariantsInfo != null)
                 {
                     nExtant++;
                 }
-                else if (normalAnalysis.storedBAM == null || normalAnalysis.storedBAM.selectedVariantsInfo == null || tumorAnalysis.storedBAM == null || tumorAnalysis.storedBAM.bamInfo == null || !tumorAnalysis.storedBAM.chrStateKnown)
+                else if (normalDNAAnalysis.storedBAM == null || normalDNAAnalysis.storedBAM.selectedVariantsInfo == null || analysisFromWhichToExtractReads.storedBAM == null || analysisFromWhichToExtractReads.storedBAM.bamInfo == null || !analysisFromWhichToExtractReads.storedBAM.chrStateKnown)
                 {
                     nWaitingForPrerequisites++;
                 }
                 else
                 {
-                    string machine = tumorAnalysis.storedBAM.machineName;
+                    string machine = analysisFromWhichToExtractReads.storedBAM.machineName;
                     if (!scriptsByHostname.ContainsKey(machine))
                     {
                         scriptsByHostname.Add(machine, new StreamWriter(baseDirectory + GenReadsNearVariantsScriptFilenameBase + machine + ".cmd"));
@@ -1483,12 +1483,12 @@ namespace ExpressionMetadata
                     }
 
                     scriptsByHostname[machine].WriteLine(@"del \temp\SamtoolsForVcf.cmd");
-                    scriptsByHostname[machine].WriteLine("GenerateScriptFromVariants " + normalAnalysis.storedBAM.selectedVariantsInfo.FullName + " " + tumorAnalysis.storedBAM.bamInfo.FullName + @" \temp\SamtoolsForVcf.cmd" + (tumorAnalysis.storedBAM.usesChr ? " chr" : " \"\""));
-                    scriptsByHostname[machine].WriteLine(@"GenerateConsolodatedExtractedReads \temp\SamtoolsForVcf.cmd " + ExpressionTools.GetDirectoryPathFromFullyQualifiedFilename(tumorAnalysis.storedBAM.bamInfo.FullName) +
-                        tumorAnalysis.analysis_id + ExpressionTools.readsAtSelectedVariantsExtension);
+                    scriptsByHostname[machine].WriteLine("GenerateScriptFromVariants " + normalDNAAnalysis.storedBAM.selectedVariantsInfo.FullName + " " + analysisFromWhichToExtractReads.storedBAM.bamInfo.FullName + @" \temp\SamtoolsForVcf.cmd" + (analysisFromWhichToExtractReads.storedBAM.usesChr ? " chr" : " \"\""));
+                    scriptsByHostname[machine].WriteLine(@"GenerateConsolodatedExtractedReads \temp\SamtoolsForVcf.cmd " + ExpressionTools.GetDirectoryPathFromFullyQualifiedFilename(analysisFromWhichToExtractReads.storedBAM.bamInfo.FullName) +
+                        analysisFromWhichToExtractReads.analysis_id + ExpressionTools.readsAtSelectedVariantsExtension);
 
-                    clusterScript.WriteLine(@"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr \\gcr\scratch\b99\bolosky\clusterGenReadsNearVariants.cmd " + normalAnalysis.storedBAM.selectedVariantsInfo.FullName + " " + tumorAnalysis.storedBAM.bamInfo.FullName +
-                        (tumorAnalysis.storedBAM.usesChr ? " chr" : " none") + " " + ExpressionTools.GetDirectoryPathFromFullyQualifiedFilename(tumorAnalysis.storedBAM.bamInfo.FullName) + tumorAnalysis.analysis_id + ExpressionTools.readsAtSelectedVariantsExtension);
+                    clusterScript.WriteLine(@"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr \\gcr\scratch\b99\bolosky\clusterGenReadsNearVariants.cmd " + normalDNAAnalysis.storedBAM.selectedVariantsInfo.FullName + " " + analysisFromWhichToExtractReads.storedBAM.bamInfo.FullName +
+                        (analysisFromWhichToExtractReads.storedBAM.usesChr ? " chr" : " none") + " " + ExpressionTools.GetDirectoryPathFromFullyQualifiedFilename(analysisFromWhichToExtractReads.storedBAM.bamInfo.FullName) + analysisFromWhichToExtractReads.analysis_id + ExpressionTools.readsAtSelectedVariantsExtension);
 
                     nToGenerate++;
                 }
@@ -1496,7 +1496,7 @@ namespace ExpressionMetadata
             catch (IOException)
 
             {
-                Console.WriteLine("Ignoring IO exception deciding whether to generate a read extraction script for analysis ID " + normalAnalysis.analysis_id + ", which sometimes happens when it's running.");
+                Console.WriteLine("Ignoring IO exception deciding whether to generate a read extraction script for analysis ID " + normalDNAAnalysis.analysis_id + ", which sometimes happens when it's running.");
             }
         }
 
@@ -1521,6 +1521,10 @@ namespace ExpressionMetadata
             foreach (var experiment in experiments) {
                 GenerateExtractionEntryIfNecessary(scriptsByHostname, experiment.NormalDNAAnalysis, experiment.TumorRNAAnalysis, ref nExtant, ref nToGenerate, ref nWaitingForPrerequisites, ref clusterScript);
                 GenerateExtractionEntryIfNecessary(scriptsByHostname, experiment.NormalDNAAnalysis, experiment.TumorDNAAnalysis, ref nExtant, ref nToGenerate, ref nWaitingForPrerequisites, ref clusterScript);
+                if (experiment.NormalRNAAnalysis != null)
+                {
+                    GenerateExtractionEntryIfNecessary(scriptsByHostname, experiment.NormalDNAAnalysis, experiment.NormalRNAAnalysis, ref nExtant, ref nToGenerate, ref nWaitingForPrerequisites, ref clusterScript);
+                }
             }
 
             foreach (var scriptEntry in scriptsByHostname) {
@@ -1565,7 +1569,8 @@ namespace ExpressionMetadata
                 if (experiment.NormalDNAAnalysis.storedBAM != null && experiment.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo != null)
                 {
                     nDone++;
-                } else if (experiment.TumorDNAAnalysis.storedBAM == null || experiment.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsInfo == null || experiment.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsIndexInfo == null ||
+                } 
+                else if (experiment.TumorDNAAnalysis.storedBAM == null || experiment.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsInfo == null || experiment.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsIndexInfo == null ||
                            experiment.TumorRNAAnalysis.storedBAM == null || experiment.TumorRNAAnalysis.storedBAM.readsAtSelectedVariantsInfo == null || experiment.TumorRNAAnalysis.storedBAM.readsAtSelectedVariantsIndexInfo == null ||
                            experiment.NormalDNAAnalysis.storedBAM == null || experiment.NormalDNAAnalysis.storedBAM.selectedVariantsInfo == null)
                 {

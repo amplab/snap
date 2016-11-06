@@ -106,6 +106,9 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColumnizeSam", "apps\ColumnizeSam\ColumnizeSam.csproj", "{5993E92A-4AC1-418E-80C4-D2B6E890958B}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GenerateConsolodatedExtractedReads", "apps\GenerateConsolodatedExtractedReads\GenerateConsolodatedExtractedReads.vcxproj", "{784CA826-F61A-4E50-978E-E3D5641E28EF}"
+	ProjectSection(ProjectDependencies) = postProject
+		{E620DC13-195C-41EF-B33B-8FE7DE9F8ADC} = {E620DC13-195C-41EF-B33B-8FE7DE9F8ADC}
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RegionalExpression", "apps\RegionalExpression\RegionalExpression.csproj", "{208481B1-95D8-4C5A-9D62-F353C58A077C}"
 EndProject

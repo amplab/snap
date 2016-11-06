@@ -750,6 +750,8 @@ namespace ExpressionLib
                     if ((storedBAM.readsAtSelectedVariantsInfo == null) != (storedBAM.readsAtSelectedVariantsIndexInfo == null))
                     {
                         Console.WriteLine("Analysis directory " + subdir + " has exactly one of the .reads-at-selected-variants and reads-at-selected-variants.index files.");
+                        storedBAM.readsAtSelectedVariantsInfo = null;
+                        storedBAM.readsAtSelectedVariantsIndexInfo = null;
                     }
 
                     storedBAM.totalSize = storedBAM.bamInfo.Length + storedBAM.baiInfo.Length;
@@ -957,7 +959,7 @@ namespace ExpressionLib
             public TCGARecord TumorRNAAnalysis;
             public TCGARecord TumorDNAAnalysis;
             public TCGARecord NormalDNAAnalysis;
-            public TCGARecord NormalRNAAnalysis;    // This is optional, and filled in if it exists, but we'll generate the experiment even if it doesn't.
+            public TCGARecord NormalRNAAnalysis = null;    // This is optional, and filled in if it exists, but we'll generate the experiment even if it doesn't.
             public List<MAFRecord> maf;
             public bool normalNeedsRealignment = false;
             public bool tumorNeedsRealignment = false;
@@ -992,6 +994,7 @@ namespace ExpressionLib
         public const int SourceTumorDNAFileFieldNumber = 26;
         public const int TumorDNAAllcountFileFieldNumber = 27;
         public const int AlleleSpecificGeneExpressionFileFieldNumber = 28;
+        public const int ReadsAtSelectedVariantsNormalRNAFileFieldNumber = 29;
 
         public static void DumpExperimentsToFile(List<Experiment> experiments, string filename)
         {
@@ -1016,7 +1019,7 @@ namespace ExpressionLib
             outputFile.WriteLine("disease_abbr\treference\tparticipantID\tTumorRNAAnalysis\tTumorDNAAnalysis\tNormalDNAAnalysis\tNormalRNAAnalysis\ttumorRNAPathname\ttumorDNAPathname\t" +
                 "normalDNAPathname\tNormalRNAPathname\tVCFPathname\tgender\tdaysToBirth\tdaysToDeath\tOrigTumorDNAAliquotID\tTumorRNAAllcountFile\tNormalRNAAllcountFile\tmafFile\t" +
                 "RegionalExpressionFilename\tGeneExpressionFilename\tSelectedVariantsFilename\tReadsAtSelectedVariantsDNAFilename\tReadsAtSelectedVariantsRNAFilename\tAnotatedSelectedVariantsFile\t" +
-                "SourceNormalDNA\tSourceTumorDNA\tTumorDNAAllcountFilename\tAlleleSpecifcGeneExpressionFile");
+                "SourceNormalDNA\tSourceTumorDNA\tTumorDNAAllcountFilename\tAlleleSpecifcGeneExpressionFile\tNormal RNA ReadsAtSelectedVariants");
 
             foreach (Experiment experiment in experiments)
             {
@@ -1240,6 +1243,16 @@ namespace ExpressionLib
                     outputFile.Write(experiment.NormalDNAAnalysis.storedBAM.alleleSpecificGeneExpressionInfo.FullName + "\t");
                 }
 
+                // 28
+                if (experiment.NormalRNAAnalysis == null || experiment.NormalRNAAnalysis.storedBAM == null || experiment.NormalDNAAnalysis.storedBAM.readsAtSelectedVariantsInfo == null)
+                {
+                    outputFile.Write("\t");
+                }
+                else
+                {
+                    outputFile.Write(experiment.NormalDNAAnalysis.storedBAM.readsAtSelectedVariantsInfo.FullName + "\t");
+                }
+
                 outputFile.WriteLine();
             }
 
@@ -1319,6 +1332,10 @@ namespace ExpressionLib
                 experiment.NormalDNAAnalysis.annotatedSelectedVariantsFileName = fields[AnnotatedSelectedVariantsFieldNumber];
                 experiment.TumorDNAAnalysis.allcountFileName = fields[TumorDNAAllcountFileFieldNumber];
                 experiment.NormalDNAAnalysis.alleleSpecificGeneExpressionFileName = fields[AlleleSpecificGeneExpressionFileFieldNumber];
+                if (experiment.NormalRNAAnalysis != null)
+                {
+                    experiment.NormalRNAAnalysis.readsAtSelectedVariantsFileName = fields[ReadsAtSelectedVariantsNormalRNAFileFieldNumber];
+                }
 
                 experiments.Add(experiment);
             }
