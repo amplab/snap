@@ -1488,7 +1488,7 @@ namespace ExpressionMetadata
                         tumorAnalysis.analysis_id + ExpressionTools.readsAtSelectedVariantsExtension);
 
                     clusterScript.WriteLine(@"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr \\gcr\scratch\b99\bolosky\clusterGenReadsNearVariants.cmd " + normalAnalysis.storedBAM.selectedVariantsInfo.FullName + " " + tumorAnalysis.storedBAM.bamInfo.FullName +
-                        (tumorAnalysis.storedBAM.usesChr ? " chr" : " \"\"") + " " + ExpressionTools.GetDirectoryPathFromFullyQualifiedFilename(tumorAnalysis.storedBAM.bamInfo.FullName) + tumorAnalysis.analysis_id + ExpressionTools.readsAtSelectedVariantsExtension);
+                        (tumorAnalysis.storedBAM.usesChr ? " chr" : " none") + " " + ExpressionTools.GetDirectoryPathFromFullyQualifiedFilename(tumorAnalysis.storedBAM.bamInfo.FullName) + tumorAnalysis.analysis_id + ExpressionTools.readsAtSelectedVariantsExtension);
 
                     nToGenerate++;
                 }
@@ -2565,7 +2565,7 @@ namespace ExpressionMetadata
                     (forAlleleSpecificExpression ? "alleleSpecificGeneExpression" : "geneExpression") + " /memorypernode:32000 /notifyoncompletion:true /numnodes:1-20 /runtime:7:12:00 /scheduler:gcr /jobtemplate:LongRunQ /estimatedprocessmemory:20000");
                 createJobScript.Close();
 
-                int nPerJob = 40;
+                int nPerJob = forAlleleSpecificExpression ? 200 : 30;
                 int nInThisJob = 0;
                 string jobHeader = @"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr \\gcr\scratch\b99\bolosky\ExpressionNearMutations " + (forAlleleSpecificExpression ? "-a " : "");
                 string thisJob = "";
@@ -2767,8 +2767,8 @@ namespace ExpressionMetadata
             GenerateRegionalExpressionScripts(experiments);
             GenerateGeneExpressionScripts(experiments, false);
             GenerateGeneExpressionScripts(experiments, true);
-            GenerateTP53CountScripts(experiments);
-            GenerateIsoformFileListsByDiseaseAndMutation(experiments);
+            //GenerateTP53CountScripts(experiments);
+            //GenerateIsoformFileListsByDiseaseAndMutation(experiments);
             //GenerateMutationDistributionByGene(experiments);
             //GenerateMakeIsoformsScripts(experiments);
             GenerateRealignmentScript(experiments, tcgaRecords, storedBAMs, tumorToMachineMapping);

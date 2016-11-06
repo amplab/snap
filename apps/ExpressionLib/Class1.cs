@@ -1465,7 +1465,7 @@ namespace ExpressionLib
                 MAFRecord mafRecord = new MAFRecord();
                 mafRecord.entire_maf_line = inputLines[i];
 
-                mafRecord.Hugo_symbol = fields[0];
+                mafRecord.Hugo_symbol = ConvertToNonExcelString(fields[0]);
                 mafRecord.center = fields[2];
                 mafRecord.NcbiBuild = fields[3].ToLower();
                 mafRecord.Chrom = fields[4].ToLower();
@@ -2897,6 +2897,23 @@ namespace ExpressionLib
             experiments = ExpressionTools.LoadExperimentsFromFile(@"\\gcr\scratch\b99\bolosky\experiments.txt", participants, tcgaRecords);
         }
 
+        static public bool isChromosomeSex(string chromosome)
+        {
+            string lowerChromosome = chromosome.ToLower();
+            return lowerChromosome == "x" || lowerChromosome == "chrx" || lowerChromosome == "y" || lowerChromosome == "chry";
+        }
+
+        static public bool isChromosomeMitochondrial(string chromosome)
+        {
+            string lowerChromosome = chromosome.ToLower();
+            return lowerChromosome == "m" || lowerChromosome == "mt" || lowerChromosome == "chrm" || lowerChromosome == "chrmt";
+        }
+
+        static public bool isChromosomeAutosomal(string chromosome)
+        {
+            return !isChromosomeSex(chromosome) && !isChromosomeMitochondrial(chromosome);
+        }
+
         public class Gene
         {
 
@@ -2906,12 +2923,19 @@ namespace ExpressionLib
                 chromosome = chromosome_;
                 minOffset = offset;
                 maxOffset = offset;
+
+                sex = isChromosomeSex(chromosome);
+                mitochondrial = isChromosomeMitochondrial(chromosome);
+                autosomal = isChromosomeAutosomal(chromosome);
             }
 
             public string hugo_symbol;  // The gene name
             public string chromosome;
             public int minOffset;
             public int maxOffset;
+            public readonly bool autosomal;
+            public readonly bool sex;
+            public readonly bool mitochondrial;
 
             public bool inconsistent = false;
         }
@@ -3422,6 +3446,37 @@ namespace ExpressionLib
                 public long length = -1;
             }
 
+        }
+
+        //
+        // Excel has the bad habit of taking strings that looks like dates and converting them into actual dates.  This is a problem for some gene names ("MARCH1"), which is
+        // bad enough that it's actually made into the literature (not to mention the mafs that I imported).  This takes a string and converts it into a format that Excel
+        // will not munge.
+        //
+        public static string ConvertToExcelString(string input)
+        {
+            if (input.Count() < 3 || input.Substring(0, 2) != "=\"" || input[input.Count() - 1] != '\"')
+            {
+                return "=\"" + input + "\"";
+            }
+
+            //
+            // It's already in excel format, just keep it.
+            //
+            return input;
+        }
+
+        public static string ConvertToNonExcelString(string input)
+        {
+            if (input.Count() < 3 || input.Substring(0, 2) != "=\"" || input[input.Count() - 1] != '\"')
+            {
+                //
+                // It's not an excel string, just return it.
+                //
+                return input;
+            }
+
+            return input.Substring(2, input.Count() - 3);
         }
  
     } // ExpressionTools

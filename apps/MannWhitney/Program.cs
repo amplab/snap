@@ -93,7 +93,7 @@ namespace MannWhitney
 
                     mutations.Add(mutation);
 
-                    hugoSymbol = fields[2]; 
+                    hugoSymbol = ExpressionTools.ConvertToNonExcelString(fields[2]); 
                 } // input lines
                 reader.Close();
 
@@ -118,7 +118,7 @@ namespace MannWhitney
                 allRatioOfRatios.Sort();
 
                 var outputLine = new OutputLine();
-                outputLine.line = hugoSymbol + "\t" + nSingle + "\t" + nMultiple + "\t" + U + "\t" + z + "\t" + reversed + "\t" + p + "\t" + allRatioOfRatios[allRatioOfRatios.Count() / 2] + "\t" + sexGenes.Contains(hugoSymbol.ToLower());
+                outputLine.line = ExpressionTools.ConvertToExcelString(hugoSymbol) + "\t" + nSingle + "\t" + nMultiple + "\t" + U + "\t" + z + "\t" + reversed + "\t" + p + "\t" + allRatioOfRatios[allRatioOfRatios.Count() / 2] + "\t" + sexGenes.Contains(hugoSymbol.ToLower());
                 outputLine.p = p;
                 outputLines.Add(outputLine);
                 // Probably should tweak median for even-sized distributions

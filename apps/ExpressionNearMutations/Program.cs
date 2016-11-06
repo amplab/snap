@@ -40,7 +40,7 @@ namespace ExpressionNearMutations
 
         class GeneExpression 
         {
-            static GeneExpression()
+            static GeneExpression() // This is a static initializer that runs once at program start time, it's not a constructor.
             {
                 regionSizeByRegionSizeIndex[0] = 0;
                 regionSizeByRegionSizeIndex[1] = 1000;
@@ -79,27 +79,26 @@ namespace ExpressionNearMutations
                     distance = chromosomeOffset - gene.maxOffset;
                 }
 
-
-                if (0 == distance)
+                for (int sizeIndex = nRegionSizes - 1; sizeIndex >= 0; sizeIndex--)
                 {
-                    regionalExpressionState[0].AddExpression(z, mu);
-                    exclusiveRegionalExpressionState[0].AddExpression(z, mu);
-                }
-                else
-                {
-                    for (int sizeIndex = nRegionSizes - 1; sizeIndex > 0; sizeIndex--)  // Don't do 0, so we exclude the gene from the surronding region
+                    if (regionSizeByRegionSizeIndex[sizeIndex] < distance)
                     {
-                        if (regionSizeByRegionSizeIndex[sizeIndex] < distance)
+                        if (sizeIndex != nRegionSizes - 1)
                         {
-                            exclusiveRegionalExpressionState[sizeIndex - 1].AddExpression(z, mu);
+                            exclusiveRegionalExpressionState[sizeIndex + 1].AddExpression(z, mu);
                             break;
                         }
-
-                        regionalExpressionState[sizeIndex].AddExpression(z, mu);
                     }
+                    regionalExpressionState[sizeIndex].AddExpression(z, mu);
+                }
+
+                if (0 == distance)  // Have to special case this, since exclusive gets added when we're one smaller, and there is nothing smaller than sizeIndex 0.
+                {
+                    exclusiveRegionalExpressionState[0].AddExpression(z, mu);
                 }
             }
 
+ 
             public static int CompareByGeneName(GeneExpression a, GeneExpression b)
             {
                 return comparer.Compare(a.gene.hugo_symbol, b.gene.hugo_symbol);
@@ -220,6 +219,18 @@ namespace ExpressionNearMutations
                     lineNumber = 3;
                 }
 
+                var wholeAutosomeRegionalExpression = new RegionalExpressionState();
+                var allButThisChromosomeAutosomalRegionalExpressionState = new Dictionary<string, RegionalExpressionState>();   // "This chromosome" is the dictionary key
+
+                foreach (var geneEntry in mutationsForThisReference.genesByName)
+                {
+                    var chromosome = geneEntry.Value.chromosome;
+                    if (!allButThisChromosomeAutosomalRegionalExpressionState.ContainsKey(chromosome))
+                    {
+                        allButThisChromosomeAutosomalRegionalExpressionState.Add(chromosome, new RegionalExpressionState());
+                    }
+                }
+               
                 bool seenDone = false;
                 while (null != (line = reader.ReadLine()))
                 {
@@ -312,6 +323,29 @@ namespace ExpressionNearMutations
                             nMatchingReferenceDNA * 3 >= nMatchingVariantDNA * 2 &&         // It's not more than 2/3 variant DNA
                             nMatchingVariantDNA * 3 >= nMatchingReferenceDNA * 2))          // It's not more than 2/3 reference DNA
                     {
+                        if (forAlleleSpecificExpression)
+                        {
+                            double rnaFraction = nMatchingVariantRNA / (nMatchingReferenceRNA + nMatchingVariantRNA);
+
+                            //
+                            // Now convert to the amount of allele-specific expression.  50% is no ASE, while 0 or 100% is 100% ASE.
+                            //
+                            z = Math.Abs(rnaFraction * 2.0 - 1.0); // Not really z, really alleleSpecificExpression
+                            mu = 0;
+                        }
+
+                        if (ExpressionTools.isChromosomeAutosomal(chromosome))
+                        {
+                            wholeAutosomeRegionalExpression.AddExpression(z, mu);
+
+                            foreach (var entry in allButThisChromosomeAutosomalRegionalExpressionState) 
+                            {
+                                if (entry.Key != chromosome) {
+                                    entry.Value.AddExpression(z, mu);
+                                }
+                            }
+                        }
+
                         foreach (var gene in mutationsForThisReference.genesByChromosome[chromosome])
                         {
                             if (!geneExpressions.ContainsKey(gene.hugo_symbol))
@@ -319,20 +353,18 @@ namespace ExpressionNearMutations
                                 geneExpressions.Add(gene.hugo_symbol, new GeneExpression(gene));
                             }
 
-                            if (forAlleleSpecificExpression) 
-                            { 
-                                double rnaFraction = nMatchingVariantRNA / (nMatchingReferenceRNA + nMatchingVariantRNA);
+                            geneExpressions[gene.hugo_symbol].AddRegionalExpression(offset, z, mu); // Recall that for allele-specifc expresion, z is really the level of allele-specific expression, not the expression z score.
+                        }
 
-                                //
-                                // Now convert to the amount of allele-specific expression.  50% is no ASE, while 0 or 100% is 100% ASE.
-                                //
-                                double alleleSpecificExpression = Math.Abs(rnaFraction * 2.0 - 1.0);
-
-                                geneExpressions[gene.hugo_symbol].AddRegionalExpression(offset, alleleSpecificExpression, 0 /* no equivalent of mu for ASE */);
-                            }
-                            else
+                        if (ExpressionTools.isChromosomeAutosomal(chromosome)) {
+                            foreach (var geneEntry in mutationsForThisReference.genesByName)
                             {
-                                geneExpressions[gene.hugo_symbol].AddRegionalExpression(offset, z, mu);
+                                var gene = geneEntry.Value;
+
+                                if (!geneExpressions.ContainsKey(gene.hugo_symbol))
+                                {
+                                    geneExpressions.Add(gene.hugo_symbol, new GeneExpression(gene));
+                                }
                             }
                         }
                     }
@@ -359,18 +391,21 @@ namespace ExpressionNearMutations
 
                 var outputFile = new StreamWriter(outputFilename);
 
-                outputFile.WriteLine("ExpressionNearMutations v2.2 " + participantId + (forAlleleSpecificExpression ? " -a" : ""));
+                outputFile.WriteLine("ExpressionNearMutations v3.0 " + participantId + (forAlleleSpecificExpression ? " -a" : ""));
                 outputFile.Write("Gene name\tnon-silent mutation count");
                 for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
                 {
                     outputFile.Write("\t" + GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + (forAlleleSpecificExpression ? "(ase)" : "(z)"));
                 }
 
+                outputFile.Write("\tWhole Autosome " + (forAlleleSpecificExpression ? "(ase)" : "(z)"));
+
                 if (!forAlleleSpecificExpression) {
                     for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
                     {
                         outputFile.Write("\t" + GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + "(mu)");
                     }
+                    outputFile.Write("\tWhole Autosome (mu)");
                 }
 
                 for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
@@ -378,12 +413,15 @@ namespace ExpressionNearMutations
                     outputFile.Write("\t" + GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + " exclusive " + (forAlleleSpecificExpression ? "(ase)" : "(z)"));
                 }
 
+                outputFile.Write("\tWhole Autosome exclusive " + (forAlleleSpecificExpression ? "(ase)" : "(z)"));
+
                 if (!forAlleleSpecificExpression)
                 {
                     for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
                     {
                         outputFile.Write("\t" + GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + " exclusive (mu)");
                     }
+                    outputFile.Write("\tWhole Autosome exclusive (mu)");
                 }
 
                 outputFile.WriteLine();
@@ -398,7 +436,7 @@ namespace ExpressionNearMutations
 
                 for (int i = 0; i < allExpressions.Count(); i++)
                 {
-                    outputFile.Write(allExpressions[i].gene.hugo_symbol + "\t" + allExpressions[i].mutationCount);
+                    outputFile.Write(ExpressionTools.ConvertToExcelString(allExpressions[i].gene.hugo_symbol) + "\t" + allExpressions[i].mutationCount);
 
                     for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
                     {
@@ -412,6 +450,15 @@ namespace ExpressionNearMutations
                         }
                     }
 
+                    if (wholeAutosomeRegionalExpression.nRegionsIncluded > 0)
+                    {
+                        outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalExpression / wholeAutosomeRegionalExpression.nRegionsIncluded);
+                    }
+                    else
+                    {
+                        outputFile.Write("\t*");
+                    }
+
                     if (!forAlleleSpecificExpression) {
                         for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
                         {
@@ -423,6 +470,15 @@ namespace ExpressionNearMutations
                             {
                                 outputFile.Write("\t*");
                             }
+                        }
+
+                        if (wholeAutosomeRegionalExpression.nRegionsIncluded > 0)
+                        {
+                            outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalMeanExpression / wholeAutosomeRegionalExpression.nRegionsIncluded);
+                        }
+                        else
+                        {
+                            outputFile.Write("\t*");
                         }
                     }
 
@@ -438,6 +494,15 @@ namespace ExpressionNearMutations
                         }
                     }
 
+                    if (allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].gene.chromosome].nRegionsIncluded > 0)
+                    {
+                        outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].gene.chromosome].totalExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].gene.chromosome].nRegionsIncluded);
+                    }
+                    else
+                    {
+                        outputFile.Write("\t*");
+                    }
+
                     if (!forAlleleSpecificExpression)
                     {
                         for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
@@ -450,6 +515,15 @@ namespace ExpressionNearMutations
                             {
                                 outputFile.Write("\t*");
                             }
+                        }
+
+                        if (allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].gene.chromosome].nRegionsIncluded > 0)
+                        {
+                            outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].gene.chromosome].totalMeanExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].gene.chromosome].nRegionsIncluded);
+                        }
+                        else
+                        {
+                            outputFile.Write("\t*");
                         }
                     }
                     

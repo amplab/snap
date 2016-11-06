@@ -295,6 +295,11 @@ ProcessorThreadMain(void *param)
                     break;
                 }
 
+                if (ERROR_PATH_NOT_FOUND == GetLastError()) {
+                    fprintf(stderr, "Path not found attempting to start samtools at '%s', aborting.\n", samtoolsPathname);
+                    exit(1);
+                }
+
                 fprintf(stderr, "CreateProcess failed, %d, pausing and retrying, retry count %d\n", GetLastError(), retryCount);
 
                 Sleep(4 << retryCount); // when retryCount is 20, this is a little more than an hour.
@@ -558,8 +563,7 @@ int main(int argc, char* argv[])
         DWORD amountToRead;
         if (inputFileSize - bytesRead > 100 * 1024 * 1024) {
             amountToRead = 100 * 1024 * 1024;
-        }
-        else {
+        } else {
             amountToRead = (DWORD)(inputFileSize - bytesRead);  // Cast OK because of if above
         }
 
@@ -610,13 +614,19 @@ int main(int argc, char* argv[])
                 //
                 // Just ignore the last one, since we're recording the next line at the previous one's \n
                 //
-            }
-            else {
+            } else {
                 inputLines[whichInputLine] = ptr + 1;
             }
             *ptr = '\0';    // Make each line its own string.
             whichInputLine++;
         }
+    }
+
+    if (1 == nInputLines && !strcmp(inputLines[0], "This script intentionally left blank.")) {
+        nInputLines = 0;
+    } else if (0 == nInputLines) {
+        fprintf(stderr, "Empty script file (which doesn't happen on purpose).\n");
+        exit(1);
     }
 
     printf("Extracting %d samples\n", nInputLines);

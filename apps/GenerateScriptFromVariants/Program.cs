@@ -23,6 +23,13 @@ namespace GenerateScriptFromVariants
             var outputScriptFilename = args[2];
             var chromosomePrefix = args[3];
 
+            if (chromosomePrefix == "none")
+            {
+                chromosomePrefix = "";
+            }
+
+            int nVariants = 0;
+
             var outputScript = new StreamWriter(outputScriptFilename);
 
             StreamReader inputFile = null;
@@ -87,9 +94,9 @@ namespace GenerateScriptFromVariants
                     chromosomeName = fields[0]; // So as not to generate "chrgl000..."
                 } else {
                     if (fields[0].Count() > 3 && fields[0].Substring(0,3).ToLower() == "chr") {
-                        chromosomeName = args[3] + fields[0].Substring(3);
+                        chromosomeName = chromosomePrefix + fields[0].Substring(3);
                     } else {
-                        chromosomeName = args[3] + fields[0];
+                        chromosomeName = chromosomePrefix + fields[0];
                     }
                 }
 
@@ -102,8 +109,10 @@ namespace GenerateScriptFromVariants
                     break;
                 }
 
-                outputScript.WriteLine("samtools view " + args[1] + " " + chromosomeName + ":" + Math.Max(1, snvPosition - 200) + "-" + (snvPosition + 10) +
+                outputScript.WriteLine("samtools view " + inputBamFilename + " " + chromosomeName + ":" + Math.Max(1, snvPosition - 200) + "-" + (snvPosition + 10) +
                     @" > " + ExpressionTools.GetAnalysisIdFromPathname(inputBamFilename) + "-" + chromosomeName + "-" + snvPosition);
+
+                nVariants++;
             }
 
             if (!seenDone && !failed)
@@ -119,6 +128,11 @@ namespace GenerateScriptFromVariants
 
                 outputScript.Close();
                 outputScript = new StreamWriter(outputScriptFilename);
+            }
+
+            if (0 == nVariants)
+            {
+                outputScript.WriteLine("This script intentionally left blank.");
             }
 
             outputScript.Close();

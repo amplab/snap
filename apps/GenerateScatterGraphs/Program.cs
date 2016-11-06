@@ -369,7 +369,7 @@ namespace GenerateScatterGraphs
                     continue;
                 }
 
-                string gene = fields[2].ToLower();
+                string gene = ExpressionTools.ConvertToNonExcelString(fields[2].ToLower());
 
                 if (gene == "unknown" || gene == ".")
                 {
@@ -378,7 +378,7 @@ namespace GenerateScatterGraphs
 
                 string tumorSampleID = fields[34];
                 string chrom = fields[6].ToLower();
-                bool sex = chrom == "x" || chrom == "y" || chrom == "chrx" || chrom == "chry";
+                bool sex = ExpressionTools.isChromosomeSex(chrom);
 
                 if (!geneStates.ContainsKey(gene))
                 {
@@ -435,7 +435,7 @@ namespace GenerateScatterGraphs
 
                 string cancerType = fields[0].ToLower();
                 string designator = RNALineToDesignator(line);
-                string gene = fields[2].ToLower();
+                string gene = ExpressionTools.ConvertToNonExcelString(fields[2].ToLower());
 
                 if (gene == "unknown")
                 {
@@ -501,7 +501,7 @@ namespace GenerateScatterGraphs
                         double nDNATumor = Convert.ToInt32(dnaMutation[40]);
                         double nDNANeither = Convert.ToInt32(dnaMutation[41]);
 
-                        string outputLine = fields[1] + "\t" + dnaMutation[1];
+                        string outputLine = ExpressionTools.ConvertToExcelString(fields[1]) + "\t" + dnaMutation[1];
 
                         for (int i = 2; i <= 42; i++)
                         {
