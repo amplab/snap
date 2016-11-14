@@ -308,6 +308,9 @@ void TenXClusterAligner::registerClusterForReads(struct TenXProgressTracker* pre
         id[0] = cursor->pairedReads[0]->getId();
         id[1] = cursor->pairedReads[1]->getId();
 
+        id[0] = id[0].substr(0, 41);
+        id[1] = id[1].substr(0, 41);
+
         if (id[0] == "HISEQ-002:213:HCGHVADXX:2:1207:11698:6700" || id[1] == "HISEQ-002:213:HCGHVADXX:2:1207:11698:6700")
             printf("found the debugging cursor\n");
 
