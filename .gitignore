@@ -66,6 +66,7 @@ obj
 /apps/SelectGermlineVariants/bin
 /apps/GenerateScriptFromVariants/bin
 /apps/ApplyBonferroniCorrection/bin
+/apps/CreateExpressionByRangeGraphs/bin/
 
 /apps/ExpressionMetadata/bin/x64/Debug
 /apps/ExpressionMetadata/bin/x64/Release/ExpressionMetadata.exe.config

@@ -447,7 +447,11 @@ namespace ExpressionLib
             {
                 if (!compressedFile)
                 {
-                    reader = new StreamReader(filename);
+                    var fileStream = new FileStream(filename, FileMode.Open);
+                    if (fileStream.Length > 10 * 1024) {
+                        fileStream.Seek(-10 * 1024, SeekOrigin.End);
+                    }
+                    reader = new StreamReader(fileStream);
                 }
                 else
                 {
@@ -673,7 +677,7 @@ namespace ExpressionLib
                             else
                             {
                                 storedBAM.geneExpressionInfo = new FileInfo(file);
-                                if (storedBAM.geneExpressionInfo.Length < 1 * 1024 * 1024 && !CheckFileForDone(file, false))
+                                if (/*storedBAM.geneExpressionInfo.Length < 1 * 1024 * 1024 &&*/ !CheckFileForDone(file, false))
                                 {
                                     Console.WriteLine("Truncated gene expression file " + file + ", " + storedBAM.geneExpressionInfo.Length);
                                     storedBAM.geneExpressionInfo = null;
@@ -1340,6 +1344,7 @@ namespace ExpressionLib
                 experiments.Add(experiment);
             }
 
+            reader.Close();
             return experiments;
         }
 
@@ -2611,6 +2616,25 @@ namespace ExpressionLib
             return mapping;
         }
 
+        public static double MeanOfList(List<double> values)
+        {
+            return values.Sum() / values.Count();
+        }
+
+        public static double StandardDeviationOfList(List<double> values)
+        {
+            var mean = MeanOfList(values);
+
+            double variance = 0;
+            foreach (var value in values)
+            {
+                var difference = value - mean;
+                variance = difference * difference;
+            }
+
+            return Math.Sqrt(variance);
+        }
+
         public class MannWhitney<T>
         {
             public delegate bool WhichGroup(T element);
@@ -3494,6 +3518,40 @@ namespace ExpressionLib
             }
 
             return input.Substring(2, input.Count() - 3);
+        }
+
+        public static StreamWriter CreateStreamWriterWithRetry(string filename)
+        {
+            while (true)
+            {
+                try
+                {
+                    var writer = new StreamWriter(filename);
+                    return writer;
+                }
+                catch (IOException)
+                {
+                    Console.WriteLine("IOException opening " + filename + " for write.  Sleeping and retrying.");
+                    Thread.Sleep(10 * 1000);
+                }
+            }
+        }
+
+        public static StreamReader CreateStreamReaderWithRetry(string filename)
+        {
+            while (true)
+            {
+                try
+                {
+                    var reader = new StreamReader(filename);
+                    return reader;
+                }
+                catch (IOException)
+                {
+                    Console.WriteLine("IOException opening " + filename + " for read.  Sleeping and retrying.");
+                    Thread.Sleep(10 * 1000);
+                }
+            }
         }
  
     } // ExpressionTools

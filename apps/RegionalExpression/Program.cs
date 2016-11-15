@@ -14,9 +14,6 @@ namespace RegionalExpression
 {
     class Program
     {
-
-
-
         class Region
         {
             public Region(int regionSize_, Dictionary<string, Dictionary<int, ExpressionTools.MeanAndStdDev>> expression_, Dictionary<string, int> highestOffsetForEachContig_, long nHighQualityMappedNuclearReads_, StreamWriter outputFile_) {
@@ -296,7 +293,7 @@ namespace RegionalExpression
             }
             catch (OutOfMemoryException)
             {
-                Console.WriteLine("Out of memory exception loading the expresson file (I'm really not sure why this happens when there's plenty of memory).  Running in the visual studio debugger seems to help, though.");
+                Console.WriteLine("Out of memory exception loading the expression file (I'm really not sure why this happens when there's plenty of memory).  Running in the visual studio debugger seems to help, though.");
                 return;
             }
 

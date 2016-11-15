@@ -202,7 +202,7 @@ namespace ExpressionNearMutations
                         continue;
                     }
 
-                    if (headerLine.Substring(20, 1) != "3")
+                    if (headerLine.Substring(20, 2) != "3.")
                     {
                         Console.WriteLine("Unsupported version in file '" + inputFilename + "', header line: " + headerLine);
                         continue;
@@ -267,7 +267,7 @@ namespace ExpressionNearMutations
                     // for regional expression
                     double z = 0;
                     double mu = 0;
- 
+
                     try {
                         if (forAlleleSpecificExpression) {
                             chromosome = fields[0].ToLower();
@@ -354,18 +354,6 @@ namespace ExpressionNearMutations
                             }
 
                             geneExpressions[gene.hugo_symbol].AddRegionalExpression(offset, z, mu); // Recall that for allele-specifc expresion, z is really the level of allele-specific expression, not the expression z score.
-                        }
-
-                        if (ExpressionTools.isChromosomeAutosomal(chromosome)) {
-                            foreach (var geneEntry in mutationsForThisReference.genesByName)
-                            {
-                                var gene = geneEntry.Value;
-
-                                if (!geneExpressions.ContainsKey(gene.hugo_symbol))
-                                {
-                                    geneExpressions.Add(gene.hugo_symbol, new GeneExpression(gene));
-                                }
-                            }
                         }
                     }
  

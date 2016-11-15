@@ -127,6 +127,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateScriptFromVariants"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApplyBonferroniCorrection", "apps\ApplyBonferroniCorrection\ApplyBonferroniCorrection.csproj", "{A430C0AB-8F2C-4B49-826C-E6DB9BA16D41}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CreateExpressionByRangeGraphs", "apps\CreateExpressionByRangeGraphs\CreateExpressionByRangeGraphs.csproj", "{1810C21E-08CF-45D5-93BF-B22337B21DAF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DebugApp", "apps\DebugApp\DebugApp.csproj", "{26362B60-CEBF-4A90-BA6A-5AF407525ABE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -612,8 +616,35 @@ Global
 		{A430C0AB-8F2C-4B49-826C-E6DB9BA16D41}.Release|Win32.ActiveCfg = Release|Any CPU
 		{A430C0AB-8F2C-4B49-826C-E6DB9BA16D41}.Release|x64.ActiveCfg = Release|x64
 		{A430C0AB-8F2C-4B49-826C-E6DB9BA16D41}.Release|x64.Build.0 = Release|x64
+		{1810C21E-08CF-45D5-93BF-B22337B21DAF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1810C21E-08CF-45D5-93BF-B22337B21DAF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1810C21E-08CF-45D5-93BF-B22337B21DAF}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{1810C21E-08CF-45D5-93BF-B22337B21DAF}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{1810C21E-08CF-45D5-93BF-B22337B21DAF}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{1810C21E-08CF-45D5-93BF-B22337B21DAF}.Debug|x64.ActiveCfg = Debug|x64
+		{1810C21E-08CF-45D5-93BF-B22337B21DAF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1810C21E-08CF-45D5-93BF-B22337B21DAF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1810C21E-08CF-45D5-93BF-B22337B21DAF}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{1810C21E-08CF-45D5-93BF-B22337B21DAF}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{1810C21E-08CF-45D5-93BF-B22337B21DAF}.Release|Win32.ActiveCfg = Release|Any CPU
+		{1810C21E-08CF-45D5-93BF-B22337B21DAF}.Release|x64.ActiveCfg = Release|x64
+		{26362B60-CEBF-4A90-BA6A-5AF407525ABE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{26362B60-CEBF-4A90-BA6A-5AF407525ABE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{26362B60-CEBF-4A90-BA6A-5AF407525ABE}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{26362B60-CEBF-4A90-BA6A-5AF407525ABE}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{26362B60-CEBF-4A90-BA6A-5AF407525ABE}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{26362B60-CEBF-4A90-BA6A-5AF407525ABE}.Debug|x64.ActiveCfg = Debug|x64
+		{26362B60-CEBF-4A90-BA6A-5AF407525ABE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{26362B60-CEBF-4A90-BA6A-5AF407525ABE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{26362B60-CEBF-4A90-BA6A-5AF407525ABE}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{26362B60-CEBF-4A90-BA6A-5AF407525ABE}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{26362B60-CEBF-4A90-BA6A-5AF407525ABE}.Release|Win32.ActiveCfg = Release|Any CPU
+		{26362B60-CEBF-4A90-BA6A-5AF407525ABE}.Release|x64.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
 	EndGlobalSection
 EndGlobal
