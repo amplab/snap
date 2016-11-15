@@ -584,24 +584,25 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 {
     bool keepGoing = true;
     bool targetNotMet = false;
-    bool targetNotMetSingleSet;
+    bool targetNotMetSingleSet[NUM_DIRECTIONS];
 
     for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++)
     {
         //fprintf(stderr, "beginning: targetLoc: %lld, ReadLoc: %lld\n", clusterTargetLoc.location, lastGenomeLocationForReadWithFewerHits[whichSetPair].location);
         if (!noMoreLocus[whichSetPair]) {
-            targetNotMetSingleSet = lastGenomeLocationForReadWithFewerHits[whichSetPair] > clusterTargetLoc;
-            targetNotMet = targetNotMet || targetNotMetSingleSet;
+            targetNotMetSingleSet[whichSetPair] = lastGenomeLocationForReadWithFewerHits[whichSetPair] > clusterTargetLoc;
+            targetNotMet = targetNotMet || targetNotMetSingleSet[whichSetPair];
         }
     }
 
 //) {//
     while (keepGoing && targetNotMet) {
         keepGoing = false;
+        targetNotMet = false;
         for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++) {
             //std::cout << "setPair[" << whichSetPair << "]" << setPair[whichSetPair] << std::endl;
             //printf("setPair[%d]: %p\n", whichSetPair, setPair[whichSetPair]);
-            if (!noMoreLocus[whichSetPair]) {
+            if (!noMoreLocus[whichSetPair] && targetNotMetSingleSet[whichSetPair]) {
                 int check_range_result = align_phase_2_move_locus(whichSetPair);
                 if (check_range_result == 1) {
                     noMoreLocus[whichSetPair] = true;
@@ -623,9 +624,9 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
                         printf("Pair: %d  beginning: targetLoc: %lld, ReadLoc: %lld\n", whichSetPair, clusterTargetLoc.location, lastGenomeLocationForReadWithFewerHits[whichSetPair].location);
                     }
 #endif
-                    targetNotMetSingleSet = lastGenomeLocationForReadWithFewerHits[whichSetPair] > clusterTargetLoc;
-                    targetNotMet = targetNotMet || targetNotMetSingleSet;
-                    if (targetNotMetSingleSet) {
+                    targetNotMetSingleSet[whichSetPair] = lastGenomeLocationForReadWithFewerHits[whichSetPair] > clusterTargetLoc;
+                    targetNotMet = targetNotMet || targetNotMetSingleSet[whichSetPair];
+                    if (targetNotMetSingleSet[whichSetPair]) {
 #ifdef _DEBUG
                         if (_DumpAlignments) {
                             printf("Pair: %d  targetNotMetSingleSet: %s\n", whichSetPair, (targetNotMetSingleSet ? "true" : "false"));
