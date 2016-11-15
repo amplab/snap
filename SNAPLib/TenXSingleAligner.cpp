@@ -598,7 +598,6 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
 //) {//
     while (keepGoing && targetNotMet) {
         keepGoing = false;
-        targetNotMet = false;
         for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++) {
             //std::cout << "setPair[" << whichSetPair << "]" << setPair[whichSetPair] << std::endl;
             //printf("setPair[%d]: %p\n", whichSetPair, setPair[whichSetPair]);
@@ -625,7 +624,7 @@ TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTarg
                     }
 #endif
                     targetNotMetSingleSet[whichSetPair] = lastGenomeLocationForReadWithFewerHits[whichSetPair] > clusterTargetLoc;
-                    targetNotMet = targetNotMet || targetNotMetSingleSet[whichSetPair];
+                    targetNotMet = targetNotMetSingleSet[0] || targetNotMetSingleSet[1];
                     if (targetNotMetSingleSet[whichSetPair]) {
 #ifdef _DEBUG
                         if (_DumpAlignments) {
