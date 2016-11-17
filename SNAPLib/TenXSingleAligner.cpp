@@ -398,54 +398,58 @@ TenXSingleAligner::align_phase_1(Read* read0, Read* read1, unsigned *popularSeed
 }
 
 
-int
+bool
 TenXSingleAligner::align_phase_2_move_locus(unsigned whichSetPair)
 {
-    //
-        // Loop invariant: lastGenomeLocationForReadWithFewerHits is the highest genome offset that has not been considered.
-        // lastGenomeLocationForReadWithMoreHits is also the highest genome offset on that side that has not been
-        // considered (or is InvalidGenomeLocation), but higher ones within the appropriate range might already be in scoringMateCandidates.
-        // We go once through this loop for each
-        //
-        // default, not exiting early
+	//
+	// Loop invariant: lastGenomeLocationForReadWithFewerHits is the highest genome offset that has not been considered.
+	// lastGenomeLocationForReadWithMoreHits is also the highest genome offset on that side that has not been
+	// considered (or is InvalidGenomeLocation), but higher ones within the appropriate range might already be in scoringMateCandidates.
+	// We go once through this loop for each
+	//
+	// default, not exiting early
+	while (true) {
+		if (lastGenomeLocationForReadWithMoreHits[whichSetPair] > lastGenomeLocationForReadWithFewerHits[whichSetPair] + maxSpacing) {
+			//
+			// The more hits side is too high to be a mate candidate for the fewer hits side.  Move it down to the largest
+			// location that's not too high.
+			//
+			if (!setPair[whichSetPair][readWithMoreHits]->getNextHitLessThanOrEqualTo(lastGenomeLocationForReadWithFewerHits[whichSetPair] + maxSpacing,
+				&lastGenomeLocationForReadWithMoreHits[whichSetPair], &lastSeedOffsetForReadWithMoreHits[whichSetPair])) {
+				noMoreLocus[whichSetPair] = true;  // End of all of the mates.  We're done with this set pair.
+				return false;
+			}
+		}
 
-    if (lastGenomeLocationForReadWithMoreHits[whichSetPair] > lastGenomeLocationForReadWithFewerHits[whichSetPair] + maxSpacing) {
-        //
-        // The more hits side is too high to be a mate candidate for the fewer hits side.  Move it down to the largest
-        // location that's not too high.
-        //
-        if (!setPair[whichSetPair][readWithMoreHits]->getNextHitLessThanOrEqualTo(lastGenomeLocationForReadWithFewerHits[whichSetPair] + maxSpacing,
-            &lastGenomeLocationForReadWithMoreHits[whichSetPair], &lastSeedOffsetForReadWithMoreHits[whichSetPair])) {
-            return 1;  // End of all of the mates.  We're done with this set pair.
-        }
-    }
+		//
+		// Even though we are out of more hit locations, we might still backtrack!
+		//
+		if ((lastGenomeLocationForReadWithMoreHits[whichSetPair] + maxSpacing < lastGenomeLocationForReadWithFewerHits[whichSetPair] || outOfMoreHitsLocations[whichSetPair]) &&
+			(0 == lowestFreeScoringMateCandidate[whichSetPair] ||
+				!genomeLocationIsWithin(scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair] - 1].readWithMoreHitsGenomeLocation, lastGenomeLocationForReadWithFewerHits[whichSetPair], maxSpacing))) {
+			//
+			// No mates for the hit on the read with fewer hits.  Skip to the next candidate.
+			//
+			if (outOfMoreHitsLocations[whichSetPair]) {
+				//
+				// Nothing left on the more hits side, we're done with this set pair.
+				//
+				noMoreLocus[whichSetPair] = true;
+				return false;
+			}
 
-    //
-    // Even though we are out of more hit locations, we might still backtrack!
-    //
-    if ((lastGenomeLocationForReadWithMoreHits[whichSetPair] + maxSpacing < lastGenomeLocationForReadWithFewerHits[whichSetPair] || outOfMoreHitsLocations[whichSetPair]) &&
-        (0 == lowestFreeScoringMateCandidate[whichSetPair] ||
-            !genomeLocationIsWithin(scoringMateCandidates[whichSetPair][lowestFreeScoringMateCandidate[whichSetPair] - 1].readWithMoreHitsGenomeLocation, lastGenomeLocationForReadWithFewerHits[whichSetPair], maxSpacing))) {
-        //
-        // No mates for the hit on the read with fewer hits.  Skip to the next candidate.
-        //
-        if (outOfMoreHitsLocations[whichSetPair]) {
-            //
-            // Nothing left on the more hits side, we're done with this set pair.
-            //
-            return 1;
-        }
-
-        if (!setPair[whichSetPair][readWithFewerHits]->getNextHitLessThanOrEqualTo(lastGenomeLocationForReadWithMoreHits[whichSetPair] + maxSpacing, &lastGenomeLocationForReadWithFewerHits[whichSetPair],
-            &lastSeedOffsetForReadWithFewerHits[whichSetPair])) {
-            //
-            // No more candidates on the read with fewer hits side.  We're done with this set pair.
-            //
-            return 1;
-        }
-        return -1;
-    }
-    return 0;
+			if (!setPair[whichSetPair][readWithFewerHits]->getNextHitLessThanOrEqualTo(lastGenomeLocationForReadWithMoreHits[whichSetPair] + maxSpacing, &lastGenomeLocationForReadWithFewerHits[whichSetPair],
+				&lastSeedOffsetForReadWithFewerHits[whichSetPair])) {
+				//
+				// No more candidates on the read with fewer hits side.  We're done with this set pair.
+				//
+				noMoreLocus[whichSetPair] = true;
+				return false;
+			}
+		}
+		else
+			return true;
+	}
 }
 
 
@@ -582,67 +586,47 @@ TenXSingleAligner::align_phase_2_single_step(unsigned whichSetPair)
 bool
 TenXSingleAligner::align_phase_2_to_target_loc(const GenomeLocation &clusterTargetLoc, int clusterIdx)
 {
-    bool keepGoing = true;
-    bool targetNotMet = false;
-    bool targetNotMetSingleSet[NUM_DIRECTIONS];
-
-    for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++)
-    {
-        //fprintf(stderr, "beginning: targetLoc: %lld, ReadLoc: %lld\n", clusterTargetLoc.location, lastGenomeLocationForReadWithFewerHits[whichSetPair].location);
-        if (!noMoreLocus[whichSetPair]) {
-            targetNotMetSingleSet[whichSetPair] = lastGenomeLocationForReadWithFewerHits[whichSetPair] > clusterTargetLoc;
-            targetNotMet = targetNotMet || targetNotMetSingleSet[whichSetPair];
-        }
-    }
+    bool lociNotExhausted = true;
+    bool targetNotMet = true;
+	bool targetNotMetSingleSet = true;
 
 //) {//
-    while (keepGoing && targetNotMet) {
-        keepGoing = false;
+    while (lociNotExhausted && targetNotMet) {
+		lociNotExhausted = false;
+		targetNotMet = false;
         for (int whichSetPair = 0; whichSetPair < NUM_DIRECTIONS; whichSetPair++) {
-            //std::cout << "setPair[" << whichSetPair << "]" << setPair[whichSetPair] << std::endl;
-            //printf("setPair[%d]: %p\n", whichSetPair, setPair[whichSetPair]);
-            if (!noMoreLocus[whichSetPair] && targetNotMetSingleSet[whichSetPair]) {
-                int check_range_result = align_phase_2_move_locus(whichSetPair);
-                if (check_range_result == 1) {
-                    noMoreLocus[whichSetPair] = true;
-                }
-                else {
-                    noMoreLocus[whichSetPair] = false;
-                    //
-                    // keep going until we have a good loc pair
-                    //
-                    if (check_range_result == -1) {
-                        keepGoing = keepGoing || !noMoreLocus[whichSetPair];
-                        continue;
-                    }
-                }
+			if (!noMoreLocus[whichSetPair]) {
+				lociNotExhausted = true;
+				targetNotMetSingleSet = lastGenomeLocationForReadWithFewerHits[whichSetPair] > clusterTargetLoc;
+				
+				if (targetNotMetSingleSet) {
+					targetNotMet = true;
+					noMoreLocus[whichSetPair] = align_phase_2_single_step_add_candidate(whichSetPair, clusterIdx);
 
-                if (!noMoreLocus[whichSetPair]) {
+					if (!noMoreLocus[whichSetPair]) {
+						align_phase_2_move_locus(whichSetPair);
+						
 #ifdef _DEBUG
-                    if (_DumpAlignments) {
-                        printf("Pair: %d  beginning: targetLoc: %lld, ReadLoc: %lld\n", whichSetPair, clusterTargetLoc.location, lastGenomeLocationForReadWithFewerHits[whichSetPair].location);
-                    }
-#endif
-                    targetNotMetSingleSet[whichSetPair] = lastGenomeLocationForReadWithFewerHits[whichSetPair] > clusterTargetLoc;
-                    targetNotMet = targetNotMetSingleSet[0] || targetNotMetSingleSet[1];
-                    if (targetNotMetSingleSet[whichSetPair]) {
-#ifdef _DEBUG
-                        if (_DumpAlignments) {
-                            printf("Pair: %d  targetNotMetSingleSet: %s\n", whichSetPair, (targetNotMetSingleSet ? "true" : "false"));
-                        }
+							if (_DumpAlignments) {
+								printf("Pair: %d  beginning: targetLoc: %lld, ReadLoc: %lld\n", whichSetPair, clusterTargetLoc.location, lastGenomeLocationForReadWithFewerHits[whichSetPair].location);
+							}
+
+								
+							if (targetNotMetSingleSet) {
+
+								if (_DumpAlignments) {
+									printf("Pair: %d  targetNotMetSingleSet: %s\n", whichSetPair, (targetNotMetSingleSet ? "true" : "false"));
+								}
+							}
 #endif //_DEBUG
-                        noMoreLocus[whichSetPair] = align_phase_2_single_step_add_candidate(whichSetPair, clusterIdx);
-                        //
-                        // We keep working on the loop as long as one set is still not stopped
-                        //
-                        keepGoing = keepGoing || !noMoreLocus[whichSetPair];
-                    }
-                } // add_candidate
-            } // check_range and add_candidate
+									
+					} // !noMoreLocus -- set lociNotExhausted
+				} // targetNotMetSingleSet
+			} // !noMoreLocus
         } // whichSetPair
     } // while
 
-    return keepGoing;
+    return lociNotExhausted;
 }
 
 
@@ -677,6 +661,10 @@ bool TenXSingleAligner::align_phase_2_init()
             noMoreLocus[whichSetPair] = true;   // The outer loop over set pairs.
         else
             noMoreLocus[whichSetPair] = false;
+
+		// Move to the first common loci for both directions
+		if (noMoreLocus[whichSetPair])
+			align_phase_2_move_locus(whichSetPair);
 
         keepGoing = keepGoing || !noMoreLocus[whichSetPair];
     }

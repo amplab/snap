@@ -131,7 +131,7 @@ public:
     //
     // align_phase_2_move_locus returns 0 if we have found a good match. Returns 1 if seedLoc of the fewHit side has exhauseted. Returns -1 if fewHit side surpasses moreHIt side.
     //
-    int align_phase_2_move_locus(unsigned whichSetPair);
+    bool align_phase_2_move_locus(unsigned whichSetPair);
     //
     // should only call align_phase_2_single_step_add_candidate if align_phase_2_move_locus returns 0
     //
