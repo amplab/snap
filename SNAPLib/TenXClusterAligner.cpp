@@ -482,7 +482,7 @@ void TenXClusterAligner::align_second_stage_clustering()
             progressTracker[pairIdx].bestPairScore = 65536;
             progressTracker[pairIdx].probabilityOfAllPairs = 0;
             progressTracker[pairIdx].probabilityOfBestPair = 0;
-            progressTracker[pairIdx].bestClusterIdx = 0;
+            progressTracker[pairIdx].bestClusterIdx = -1;
 
             progressTracker[pairIdx].aligner->align_phase_3_score(progressTracker[pairIdx].bestPairScore, false);
             progressTracker[pairIdx].aligner->align_phase_3_increment_cluster(progressTracker[pairIdx].bestPairScore);
@@ -652,6 +652,9 @@ bool TenXClusterAligner::align_forth_stage(
     bool barcodeFinished = true;
     for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
         if (progressTracker[pairIdx].singleNotDone) {// && progressTracker[pairIdx].notDone) {
+            // Tag single mapping's clusterIdx to -1
+            progressTracker[pairIdx].results[0].clusterIdx = -1;
+            
             Read *read0 = progressTracker[pairIdx].pairedReads[0];
             Read *read1 = progressTracker[pairIdx].pairedReads[1];
 
@@ -696,6 +699,7 @@ bool TenXClusterAligner::align_forth_stage(
                     progressTracker[pairIdx].results[0].location[r] = singleResult.location;
                     progressTracker[pairIdx].results[0].score[r] = singleResult.score;
                     progressTracker[pairIdx].results[0].scorePriorToClipping[r] = singleResult.scorePriorToClipping;
+    
                 }
             }
 
