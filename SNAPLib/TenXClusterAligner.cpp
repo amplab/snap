@@ -305,7 +305,7 @@ void TenXClusterAligner::registerClusterForReads(struct TenXProgressTracker* pre
     TenXProgressTracker *cursor = start;
     while (cursor != end && cursor->nextLocus >= 0 && cursor->nextLocus > clusterBoundary) {
 
-        // debug
+        /*/ debug
         string **id = cursor->id;
         if (clusterIdx == 0) {
             printf("clusterIdx is 0, read id is %s\n", id[0]->c_str());
@@ -314,7 +314,7 @@ void TenXClusterAligner::registerClusterForReads(struct TenXProgressTracker* pre
 
         if (*id[0] == "HISEQ-002:213:HCGHVADXX:2:1207:11698:6700" || *id[1] == "HISEQ-002:213:HCGHVADXX:2:1207:11698:6700")
             printf("found the debugging cursor. ClusterId: %d\n", clusterIdx);
-        // debug
+        */// debug
 
         cursor->aligner->align_phase_2_to_target_loc(clusterBoundary, clusterIdx);
         cursor->nextLocus = resolveLocusPtr(cursor->aligner->align_phase_2_get_locus() );

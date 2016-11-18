@@ -726,7 +726,7 @@ void TenXAlignerContext::runIterationThread()
             tenXSingleTrackerArray[totalPairsForBarcode].pairNotDone = true;
 
 
-        // Debugging
+        /*/ Debugging
         if (tenXSingleTrackerArray[totalPairsForBarcode].pairNotDone) {
             char id[42];
 
@@ -737,7 +737,7 @@ void TenXAlignerContext::runIterationThread()
             id[41] = '\0';
             tenXSingleTrackerArray[totalPairsForBarcode].id[1] = new string(id);
         }
-        // Debugging
+        */// Debugging
 
 
         totalPairsForBarcode++;

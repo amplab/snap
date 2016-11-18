@@ -657,7 +657,7 @@ private:
 struct TenXProgressTracker
 {
     // Debugging Field
-    std::string* id[NUM_DIRECTIONS];
+    //std::string* id[NUM_DIRECTIONS];
     // Debugging Field
 
     bool                  pairNotDone;
