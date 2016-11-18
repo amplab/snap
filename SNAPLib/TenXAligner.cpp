@@ -725,9 +725,6 @@ void TenXAlignerContext::runIterationThread()
         else
             tenXSingleTrackerArray[totalPairsForBarcode].pairNotDone = true;
 
-        totalPairsForBarcode++;
-        _ASSERT(totalPairsForBarcode <= maxBarcodeSize);
-        // Note that useful0 and useful1 will be discarded if neither of the read of the pair is useful
 
         // Debugging
         if (tenXSingleTrackerArray[totalPairsForBarcode].pairNotDone) {
@@ -739,6 +736,9 @@ void TenXAlignerContext::runIterationThread()
         // Debugging
 
 
+        totalPairsForBarcode++;
+        _ASSERT(totalPairsForBarcode <= maxBarcodeSize);
+        // Note that useful0 and useful1 will be discarded if neither of the read of the pair is useful
     }
 
     //fprintf(stderr, "****begin alignment\n");
