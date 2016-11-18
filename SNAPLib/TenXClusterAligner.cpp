@@ -653,8 +653,8 @@ bool TenXClusterAligner::align_forth_stage(
     for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
         if (progressTracker[pairIdx].singleNotDone) {// && progressTracker[pairIdx].notDone) {
             // Tag single mapping's clusterIdx to -1
-            progressTracker[pairIdx].results[0].clusterIdx = -1;
-            
+            progressTracker[pairIdx].results[0].clusterIdx = -2;
+
             Read *read0 = progressTracker[pairIdx].pairedReads[0];
             Read *read1 = progressTracker[pairIdx].pairedReads[1];
 
