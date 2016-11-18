@@ -32,6 +32,7 @@ Revision History:
 #include "FixedSizeMap.h"
 #include "AlignmentAdjuster.h"
 
+
 #ifndef __INTERSECTING__CONSTANTS__
 #define __INTERSECTING__CONSTANTS__
 const unsigned DEFAULT_INTERSECTING_ALIGNER_MAX_HITS = 2000;
@@ -656,7 +657,7 @@ private:
 struct TenXProgressTracker
 {
     // Debugging Field
-    std::string id[NUM_DIRECTIONS];
+    std::string* id[NUM_DIRECTIONS];
     // Debugging Field
 
     bool                  pairNotDone;

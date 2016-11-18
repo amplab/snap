@@ -306,13 +306,13 @@ void TenXClusterAligner::registerClusterForReads(struct TenXProgressTracker* pre
     while (cursor != end && cursor->nextLocus >= 0 && cursor->nextLocus > clusterBoundary) {
 
         // debug
-        string *id = cursor->id;
+        string **id = cursor->id;
         if (clusterIdx == 0) {
-            printf("clusterIdx is 0, read id is %s\n", id[0].c_str());
+            printf("clusterIdx is 0, read id is %s\n", id[0]->c_str());
             fflush(stdout);
         }
 
-        if (id[0] == "HISEQ-002:213:HCGHVADXX:2:1207:11698:6700" || id[1] == "HISEQ-002:213:HCGHVADXX:2:1207:11698:6700")
+        if (*id[0] == "HISEQ-002:213:HCGHVADXX:2:1207:11698:6700" || *id[1] == "HISEQ-002:213:HCGHVADXX:2:1207:11698:6700")
             printf("found the debugging cursor. ClusterId: %d\n", clusterIdx);
         // debug
 
