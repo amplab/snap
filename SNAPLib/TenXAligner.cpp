@@ -677,8 +677,10 @@ void TenXAlignerContext::runIterationThread()
 
     while (supplier->getNextReadPair(&tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[0], &tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[1])) {
         // Debugging
-        tenXSingleTrackerArray[totalPairsForBarcode].id[0] = ((string)tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[0]->getId()).substr(0, 41);
-        tenXSingleTrackerArray[totalPairsForBarcode].id[1] = ((string)tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[1]->getId()).substr(0, 41);
+        tenXSingleTrackerArray[totalPairsForBarcode].id[0] = tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[0]->getId();
+        tenXSingleTrackerArray[totalPairsForBarcode].id[1] = tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[1]->getId();
+        tenXSingleTrackerArray[totalPairsForBarcode].id[0] = tenXSingleTrackerArray[totalPairsForBarcode].id[0].substr(0, 41);
+        tenXSingleTrackerArray[totalPairsForBarcode].id[1] = tenXSingleTrackerArray[totalPairsForBarcode].id[1].substr(0, 41);
         // Debugging
 
         // A bunch of pointers delegates... For readability!
