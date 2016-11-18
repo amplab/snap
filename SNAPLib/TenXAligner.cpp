@@ -676,13 +676,6 @@ void TenXAlignerContext::runIterationThread()
     unsigned totalPairsForBarcode = 0; // total legitimate read pairs of this barcode
 
     while (supplier->getNextReadPair(&tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[0], &tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[1])) {
-        // Debugging
-        tenXSingleTrackerArray[totalPairsForBarcode].id[0] = tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[0]->getId();
-        tenXSingleTrackerArray[totalPairsForBarcode].id[1] = tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[1]->getId();
-        tenXSingleTrackerArray[totalPairsForBarcode].id[0] = tenXSingleTrackerArray[totalPairsForBarcode].id[0].substr(0, 41);
-        tenXSingleTrackerArray[totalPairsForBarcode].id[1] = tenXSingleTrackerArray[totalPairsForBarcode].id[1].substr(0, 41);
-        // Debugging
-
         // A bunch of pointers delegates... For readability!
         Read **reads = tenXSingleTrackerArray[totalPairsForBarcode].pairedReads;
         bool *useful = tenXSingleTrackerArray[totalPairsForBarcode].useful;
@@ -735,6 +728,17 @@ void TenXAlignerContext::runIterationThread()
         totalPairsForBarcode++;
         _ASSERT(totalPairsForBarcode <= maxBarcodeSize);
         // Note that useful0 and useful1 will be discarded if neither of the read of the pair is useful
+
+        // Debugging
+        if (tenXSingleTrackerArray[totalPairsForBarcode].pairNotDone) {
+            tenXSingleTrackerArray[totalPairsForBarcode].id[0] = tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[0]->getId();
+            tenXSingleTrackerArray[totalPairsForBarcode].id[1] = tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[1]->getId();
+            tenXSingleTrackerArray[totalPairsForBarcode].id[0] = tenXSingleTrackerArray[totalPairsForBarcode].id[0].substr(0, 41);
+            tenXSingleTrackerArray[totalPairsForBarcode].id[1] = tenXSingleTrackerArray[totalPairsForBarcode].id[1].substr(0, 41);
+        }
+        // Debugging
+
+
     }
 
     //fprintf(stderr, "****begin alignment\n");
