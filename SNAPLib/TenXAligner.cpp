@@ -676,7 +676,11 @@ void TenXAlignerContext::runIterationThread()
     unsigned totalPairsForBarcode = 0; // total legitimate read pairs of this barcode
 
     while (supplier->getNextReadPair(&tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[0], &tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[1])) {
-        
+        // Debugging
+        tenXSingleTrackerArray[totalPairsForBarcode].id[0] = ((string)tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[0]->getId()).substr(0, 41);
+        tenXSingleTrackerArray[totalPairsForBarcode].id[1] = ((string)tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[1]->getId()).substr(0, 41);
+        // Debugging
+
         // A bunch of pointers delegates... For readability!
         Read **reads = tenXSingleTrackerArray[totalPairsForBarcode].pairedReads;
         bool *useful = tenXSingleTrackerArray[totalPairsForBarcode].useful;

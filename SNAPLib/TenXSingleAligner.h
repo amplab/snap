@@ -655,6 +655,10 @@ private:
 
 struct TenXProgressTracker
 {
+    // Debugging Field
+    std::string id[NUM_DIRECTIONS];
+    // Debugging Field
+
     bool                  pairNotDone;
     bool                  singleNotDone;
     TenXSingleAligner     *aligner;
