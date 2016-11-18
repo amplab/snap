@@ -728,10 +728,14 @@ void TenXAlignerContext::runIterationThread()
 
         // Debugging
         if (tenXSingleTrackerArray[totalPairsForBarcode].pairNotDone) {
-            tenXSingleTrackerArray[totalPairsForBarcode].id[0] = tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[0]->getId();
-            tenXSingleTrackerArray[totalPairsForBarcode].id[1] = tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[1]->getId();
-            tenXSingleTrackerArray[totalPairsForBarcode].id[0] = tenXSingleTrackerArray[totalPairsForBarcode].id[0].substr(0, 41);
-            tenXSingleTrackerArray[totalPairsForBarcode].id[1] = tenXSingleTrackerArray[totalPairsForBarcode].id[1].substr(0, 41);
+            char id[42];
+
+            memcpy(id, tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[0]->getId(), 41);
+            id[41] = '\0';
+            tenXSingleTrackerArray[totalPairsForBarcode].id[0] = string(id);
+            memcpy(id, tenXSingleTrackerArray[totalPairsForBarcode].pairedReads[1]->getId(), 41);
+            id[41] = '\0';
+            tenXSingleTrackerArray[totalPairsForBarcode].id[1] = string(id);
         }
         // Debugging
 
