@@ -221,6 +221,12 @@ namespace ExpressionNearMutations
 
                 var wholeAutosomeRegionalExpression = new RegionalExpressionState();
                 var allButThisChromosomeAutosomalRegionalExpressionState = new Dictionary<string, RegionalExpressionState>();   // "This chromosome" is the dictionary key
+                var perChromosomeRegionalExpressionState = new RegionalExpressionState[ExpressionTools.nHumanNuclearChromosomes];
+
+                for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                {
+                    perChromosomeRegionalExpressionState[whichChromosome] = new RegionalExpressionState();
+                }
 
                 foreach (var geneEntry in mutationsForThisReference.genesByName)
                 {
@@ -346,6 +352,12 @@ namespace ExpressionNearMutations
                             }
                         }
 
+                        int chromosomeId = ExpressionTools.ChromosomeNameToIndex(chromosome);
+                        if (chromosomeId != -1)
+                        {
+                            perChromosomeRegionalExpressionState[chromosomeId].AddExpression(z, mu);
+                        }
+
                         foreach (var gene in mutationsForThisReference.genesByChromosome[chromosome])
                         {
                             if (!geneExpressions.ContainsKey(gene.hugo_symbol))
@@ -410,6 +422,19 @@ namespace ExpressionNearMutations
                         outputFile.Write("\t" + GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + " exclusive (mu)");
                     }
                     outputFile.Write("\tWhole Autosome exclusive (mu)");
+                }
+
+                for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                {
+                    outputFile.Write("\t" + ExpressionTools.ChromosomeIndexToName(whichChromosome, true));
+                }
+
+                if (!forAlleleSpecificExpression)
+                {
+                    for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                    {
+                        outputFile.Write("\t" + ExpressionTools.ChromosomeIndexToName(whichChromosome, true) + " mu");
+                    }
                 }
 
                 outputFile.WriteLine();
@@ -514,9 +539,36 @@ namespace ExpressionNearMutations
                             outputFile.Write("\t*");
                         }
                     }
-                    
+
+                    for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                    {
+                        if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncluded > 0)
+                        {
+                            outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncluded);
+                        }
+                        else
+                        {
+                            outputFile.Write("\t*");
+                        }
+                    }
+
+                    if (!forAlleleSpecificExpression)
+                    {
+                        for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                        {
+                            if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncluded > 0)
+                            {
+                                outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalMeanExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncluded);
+                            }
+                            else
+                            {
+                                outputFile.Write("\t*");
+                            }
+                        }                        
+                    }
+
                     outputFile.WriteLine();
-                }
+                } // for each gene
 
                 outputFile.WriteLine("**done**");
                 outputFile.Close();

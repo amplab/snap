@@ -30,6 +30,41 @@ namespace ExpressionLib
 {
     public class ExpressionTools
     {
+
+        public const int nHumanNuclearChromosomes = 24;   // 1-22, X and Y.
+
+        public static int ChromosomeNameToIndex(string chromosomeName)
+        {
+            var name = chromosomeName.ToLower();
+
+            for (int i = 1; i < 22; i++)
+            {
+                var comp = Convert.ToString(i);
+                if (name == comp || name == "chr" + comp) return i;
+            }
+
+            //
+            // Use 0 and 23 for the sex chromosomes, so the array indices correspond to the chromosome names.
+            //
+            if (name == "chrx" || name == "x") return 0;
+            if (name == "chry" || name == "y") return 23;
+
+            return -1;
+        }
+
+        public static string ChromosomeIndexToName(int index, bool useChr = false)
+        {
+            if (index >= 1 && index <= 22)
+            {
+                return useChr ? "chr" : "" + index;
+            }
+
+            if (index == 0) return useChr ? "chr" : "" + "X";
+
+            if (index == 23) return useChr ? "chr" : "" + "Y";
+
+            return "Invalid chromosome index: " + index;
+        }
         public static string ChromPrefixFromRefassem(string refassem)
         {
             refassem = refassem.ToLower();

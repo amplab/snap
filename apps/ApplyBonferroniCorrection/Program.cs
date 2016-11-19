@@ -10,7 +10,7 @@ namespace ApplyBonferroniCorrection
 {
     class Program
     {
-        const string baseDirectory = @"f:\temp\expression\";
+        static string baseDirectory = @"f:\temp\expression\";
         const string addedExtension = "_bonferroni.txt";
 
         static void ProcessFile(string filename)
@@ -144,7 +144,12 @@ namespace ApplyBonferroniCorrection
                     {
                         try
                         {
-                            double value = Convert.ToDouble(fields[whichField]) * /*validCount[whichField - 1]*/ overallValidCount;
+                            double value = Convert.ToDouble(fields[whichField]);
+                            if (fieldsToConvert[whichField])
+                            {
+                                value *= overallValidCount;
+                            }
+
                             if (fieldsToConvert[whichField] && value < minP)
                             {
                                 minP = value;
@@ -195,7 +200,7 @@ namespace ApplyBonferroniCorrection
                 }
                 else
                 {
-                    outputFile.WriteLine("\t*\t*" + restOfOutputLine);
+                    outputFile.WriteLine("\t*\t*\t*\t*" + restOfOutputLine);
                 }
             }
 
@@ -205,6 +210,15 @@ namespace ApplyBonferroniCorrection
 
         static void Main(string[] args)
         {
+            if (args.Count() == 1)
+            {
+                baseDirectory = args[0];
+            }
+            else if (args.Count() != 0)
+            {
+                Console.WriteLine("usage: ApplyBonferroniCorrection {base directory}");
+                return;
+            }
             //
             // Get the list of input files.  Note that these lists will also include the output files, so we need to 
             // skip them.

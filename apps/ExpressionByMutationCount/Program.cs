@@ -53,6 +53,10 @@ namespace ExpressionByMutationCount
             public bool[] currentZExclusiveValid = new bool[nWidths];
             public double[] currentMuExclusive = new double[nWidths];
             public bool[] currentMuExclusiveValid = new bool[nWidths];
+            public double[] perChromosomeZ = new double[ExpressionTools.nHumanNuclearChromosomes];
+            public bool[] perChromosomeZValid = new bool[ExpressionTools.nHumanNuclearChromosomes];
+            public double[] perChromosomeMu = new double[ExpressionTools.nHumanNuclearChromosomes];
+            public bool[] perChromosomeMuValid = new bool[ExpressionTools.nHumanNuclearChromosomes];
             public double wholeAutosomeZ = 0;
             public bool wholeAutosomeZValid = false;
             public double wholeAutosomeZExclusive = 0;
@@ -214,6 +218,34 @@ namespace ExpressionByMutationCount
                         wholeAutosomeMuExclusive = Convert.ToDouble(fields[2 * nWidths + exclusiveOffset + 3]);
                         wholeAutosomeMuExclusiveValid = true;
                     }
+
+                    //
+                    // Now do the per-chromosome ones.  There is no exclusive, but there is a mu iff !forAlleleSpecificExpression.
+                    //
+                    int perChromosomeOffset = forAlleleSpecificExpression ? nWidths + 2 + exclusiveOffset + 1 : 2 * nWidths + exclusiveOffset + 4;
+                    int perChromosomeMuOffset = perChromosomeOffset + ExpressionTools.nHumanNuclearChromosomes;
+                    for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                    {
+                        if (fields[whichChromosome + perChromosomeOffset] == "*")
+                        {
+                            perChromosomeZValid[whichChromosome] = false;
+                        }
+                        else
+                        {
+                            perChromosomeZValid[whichChromosome] = true;
+                            perChromosomeZ[whichChromosome] = Convert.ToDouble(fields[whichChromosome + perChromosomeOffset]);
+                        }
+
+                        if (forAlleleSpecificExpression || fields[whichChromosome + perChromosomeMuOffset] == "*")
+                        {
+                            perChromosomeMuValid[whichChromosome] = false;
+                        }
+                        else
+                        {
+                            perChromosomeMuValid[whichChromosome] = true;
+                            perChromosomeMu[whichChromosome] = Convert.ToDouble(fields[whichChromosome + perChromosomeMuOffset]);
+                        }
+                    } // For each chromosome
                 }
                 catch (FormatException)
                 {
@@ -283,6 +315,12 @@ namespace ExpressionByMutationCount
             public GeneState(string hugo_symbol_)
             {
                 hugo_symbol = hugo_symbol_;
+
+                for (int i = 0; i < ExpressionTools.nHumanNuclearChromosomes; i++)
+                {
+                    perChromosomeExpression[i] = new List<ExpressionInstance>();
+                    perChromosomeMeanExpression[i] = new List<ExpressionInstance>();
+                }
             }
 
             public void AddExpression(string tumorType, int range, int nMutations, double z /* or mu, as approproate*/, string participantID, bool usingMu, bool exclusive)
@@ -338,6 +376,20 @@ namespace ExpressionByMutationCount
                     {
                         wholeAutosomeExpression.Add(newEi);
                     }
+                }
+            }
+
+            public void AddPerChromosomeExpression(string tumorType, int nMutations, double z /*or mu as appropriate*/, string participantID, bool usingMu, int whichChromosome)
+            {
+                var newEi = new ExpressionInstance(tumorType, nMutations, z, participantID);
+
+                if (usingMu)
+                {
+                    perChromosomeMeanExpression[whichChromosome].Add(newEi);
+                }
+                else
+                {
+                    perChromosomeExpression[whichChromosome].Add(newEi);
                 }
             }
 
@@ -419,7 +471,9 @@ namespace ExpressionByMutationCount
             public List<ExpressionInstance> wholeAutosomeExpressionExclusive = new List<ExpressionInstance>();
             public List<ExpressionInstance> wholeAutosomeMeanExpression = new List<ExpressionInstance>();
             public List<ExpressionInstance> wholeAutosomeMeanExpressionExclusive = new List<ExpressionInstance>();
-            public Dictionary<string, Mutation> perExperimentState = new Dictionary<string,Mutation>();
+            public List<ExpressionInstance>[] perChromosomeExpression = new List<ExpressionInstance>[ExpressionTools.nHumanNuclearChromosomes];
+            public List<ExpressionInstance>[] perChromosomeMeanExpression = new List<ExpressionInstance>[ExpressionTools.nHumanNuclearChromosomes];
+            public Dictionary<string, Mutation> perExperimentState = new Dictionary<string, Mutation>();
 
             public int nInputFilesPastThisGene = 0;
         }
@@ -835,6 +889,19 @@ namespace ExpressionByMutationCount
                             geneToProcess.AddWholeAutosomeExpression(inputFile.tumorType, inputFile.currentNMutations, inputFile.wholeAutosomeMuExclusive, inputFile.participantID, true, true);
                         }
 
+                        for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                        {
+                            if (inputFile.perChromosomeZValid[whichChromosome]) 
+                            {
+                                geneToProcess.AddPerChromosomeExpression(inputFile.tumorType, inputFile.currentNMutations, inputFile.perChromosomeZ[whichChromosome], inputFile.participantID, false, whichChromosome);
+                            }                            
+                            
+                            if (inputFile.perChromosomeMuValid[whichChromosome]) 
+                            {
+                                geneToProcess.AddPerChromosomeExpression(inputFile.tumorType, inputFile.currentNMutations, inputFile.perChromosomeMu[whichChromosome], inputFile.participantID, true, whichChromosome);
+                            }
+                        }
+
                         if (!inputFile.GetNextLine())
                         {
                             completedInputFiles.Add(inputFile);
@@ -865,6 +932,19 @@ namespace ExpressionByMutationCount
                             }
 
                             perGeneLinesFile.Write("\tWhole Autosome mean " + ((exclusive == 1) ? " exclusive\t" : "\t"));
+                        }
+                    }
+
+                    for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                    {
+                        perGeneLinesFile.Write("\t" + ExpressionTools.ChromosomeIndexToName(whichChromosome, true));
+                    }
+
+                    if (!forAlleleSpecificExpression) 
+                    {
+                        for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                        {
+                            perGeneLinesFile.Write("\t" + ExpressionTools.ChromosomeIndexToName(whichChromosome, true) + " mean");
                         }
                     }
 
@@ -934,6 +1014,23 @@ namespace ExpressionByMutationCount
 
 
                             WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, wholeAutosome, geneToProcess, wholeAutosome.Count() > 0);
+
+
+                        } // exclusive and not
+
+                        for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                        {
+                            WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, geneToProcess.perChromosomeExpression[whichChromosome],
+                                geneToProcess, geneToProcess.perChromosomeExpression[whichChromosome].Count() > 0);
+                        }
+
+                        if (!forAlleleSpecificExpression)
+                        {
+                            for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                            {
+                                WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, geneToProcess.perChromosomeMeanExpression[whichChromosome],
+                                    geneToProcess, geneToProcess.perChromosomeExpression[whichChromosome].Count() > 0);
+                            }
                         }
                     }
 
