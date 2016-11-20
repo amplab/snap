@@ -1,5 +1,5 @@
 ifndef CXXFLAGS
-  CXXFLAGS = -g -Wno-format
+  CXXFLAGS = -ggdb --std=c++11 -O0 -Wno-format
 endif
 
 CXXFLAGS += -MMD -ISNAPLib -msse
