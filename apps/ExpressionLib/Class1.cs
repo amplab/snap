@@ -37,7 +37,7 @@ namespace ExpressionLib
         {
             var name = chromosomeName.ToLower();
 
-            for (int i = 1; i < 22; i++)
+            for (int i = 1; i <= 22; i++)
             {
                 var comp = Convert.ToString(i);
                 if (name == comp || name == "chr" + comp) return i;
@@ -56,12 +56,12 @@ namespace ExpressionLib
         {
             if (index >= 1 && index <= 22)
             {
-                return useChr ? "chr" : "" + index;
+                return (useChr ? "chr" : "") + index;
             }
 
-            if (index == 0) return useChr ? "chr" : "" + "X";
+            if (index == 0) return (useChr ? "chr" : "") + "X";
 
-            if (index == 23) return useChr ? "chr" : "" + "Y";
+            if (index == 23) return (useChr ? "chr" : "") + "Y";
 
             return "Invalid chromosome index: " + index;
         }
@@ -1476,7 +1476,7 @@ namespace ExpressionLib
 
         public static void AddMAFFileToParticipants(Pathname inputFilename, Dictionary<ParticipantID, Participant> participants, Dictionary<SampleID, ParticipantID> sampleToParticipantIDMap)
         {
-            string[] inputLines = File.ReadAllLines(inputFilename);
+            string[] inputLines = ReadAllLinesWithRetry(inputFilename);
 
             int tooShortLines = 0;
 
@@ -3584,6 +3584,23 @@ namespace ExpressionLib
                 catch (IOException)
                 {
                     Console.WriteLine("IOException opening " + filename + " for read.  Sleeping and retrying.");
+                    Thread.Sleep(10 * 1000);
+                }
+            }
+        }
+
+        public static string[] ReadAllLinesWithRetry(string filename)
+        {
+            while (true)
+            {
+                try
+                {
+                    var lines = File.ReadAllLines(filename);
+                    return lines;
+                }
+                catch (IOException)
+                {
+                    Console.WriteLine("IOException reading " + filename + ".  Sleeping and retrying.");
                     Thread.Sleep(10 * 1000);
                 }
             }

@@ -183,7 +183,7 @@ namespace ExpressionNearMutations
                     geneExpressions[maf.Hugo_symbol].mutationCount++;
                 }
 
-                var reader = new StreamReader(inputFilename);
+                var reader = ExpressionTools.CreateStreamReaderWithRetry(inputFilename);
 
                 var headerLine = reader.ReadLine();
                 if (null == headerLine)
@@ -389,7 +389,7 @@ namespace ExpressionNearMutations
 
                 var outputFilename = directory + analysisId + (forAlleleSpecificExpression ? ExpressionTools.alleleSpecificGeneExpressionExtension : ExpressionTools.geneExpressionExtension);
 
-                var outputFile = new StreamWriter(outputFilename);
+                var outputFile = ExpressionTools.CreateStreamWriterWithRetry(outputFilename);
 
                 outputFile.WriteLine("ExpressionNearMutations v3.0 " + participantId + (forAlleleSpecificExpression ? " -a" : ""));
                 outputFile.Write("Gene name\tnon-silent mutation count");

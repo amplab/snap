@@ -103,7 +103,7 @@ namespace ApplyBonferroniCorrection
             // the input in order.
             //
             var outputFile = ExpressionTools.CreateStreamWriterWithRetry(outputFilename);
-            outputFile.Write(headerFields[0] + "\tMin p\tMin p at\t0 vs. 1 ratio at MinP\tSignificant@.01");
+            outputFile.Write(headerFields[0] + "\tMin p\tMin p at\t0 vs. 1 ratio at MinP\tSignificant@.01\tBest 0 vs. 1 ratio for significant results\tBest 0 vs. 1 ratio at");
             for (int i = nFields - 4; i < nFields; i++)
             {
                 outputFile.Write("\t" + headerFields[i]);
@@ -129,11 +129,15 @@ namespace ApplyBonferroniCorrection
          
                 bool foundAny = false;
                 double minP = 10000000;
+                double bestZeroVsOne = 1;
+                int bestZeroVsOneAt = -1;
+                bool significant = false;
                 double zeroVsOne = 0;
                 double zeroValue = -1;
                 double oneValue = -1;
                 bool justSetMinP = false;
                 int minPAt = -1;
+
                 for (int whichField = 1; whichField < nFields - 4; whichField++)    // First field is gene name, last four are nTumors, nZero, nOne, nMore
                 {
                     if (fields[whichField] == "*" || (!fieldsToConvert[whichField] && !zeroValueFields[whichField] && !oneValueFields[whichField]) )
@@ -161,27 +165,56 @@ namespace ApplyBonferroniCorrection
                                 foundAny = true;
                             }
 
-                            if (justSetMinP && zeroValueFields[whichField])
+                            if (fieldsToConvert[whichField] && value <= .01)
+                            {
+                                significant = true;
+                                zeroValue = -1;
+                                oneValue = -1;
+                            }
+
+                            if (zeroValueFields[whichField])
                             {
                                 zeroValue = value;
                             }
 
-                            if (justSetMinP && oneValueFields[whichField])
+                            if (oneValueFields[whichField])
                             {
                                 oneValue = value;
                             }
 
                             if (-1 != zeroValue && -1 != oneValue)
                             {
-                                if (0 == oneValue)
+                                if (justSetMinP)
                                 {
-                                    zeroVsOne = 100000; // Something big.
+                                    if (0 == oneValue)
+                                    {
+                                        zeroVsOne = 100000; // Something big.
+                                    }
+                                    else
+                                    {
+                                        zeroVsOne = zeroValue / oneValue;
+                                    }
                                 }
-                                else
+
+                                if (significant && 0 != oneValue)
                                 {
-                                    zeroVsOne = zeroValue / oneValue;
-                                    justSetMinP = false;
+                                    double candidate = zeroValue / oneValue;
+                                    if (candidate > 1)
+                                    {
+                                        candidate = 1 / candidate;
+                                    }
+
+                                    if (candidate < bestZeroVsOne)
+                                    {
+                                        bestZeroVsOne = candidate;
+                                        bestZeroVsOneAt = whichField;
+                                    }
                                 }
+
+                                justSetMinP = false;
+                                zeroValue = -1;
+                                oneValue = -1;
+                                significant = false;
                             }
 
                             restOfOutputLine += "\t" + Convert.ToString(value);
@@ -196,12 +229,23 @@ namespace ApplyBonferroniCorrection
 
                 if (foundAny)
                 {
-                    outputFile.WriteLine("\t" + minP + "\t" + headerFields[minPAt] + "\t" + zeroVsOne + "\t" + ((minP < .01) ? "yes" : "no") + restOfOutputLine);
+                    outputFile.Write("\t" + minP + "\t" + headerFields[minPAt] + "\t" + zeroVsOne + "\t" + ((minP < .01) ? "yes" : "no"));
                 }
                 else
                 {
-                    outputFile.WriteLine("\t*\t*\t*\t*" + restOfOutputLine);
+                    outputFile.Write("\t*\t*\t*\t*");
                 }
+
+                if (bestZeroVsOneAt != -1)
+                {
+                    outputFile.Write("\t" + bestZeroVsOne + "\t" + headerFields[bestZeroVsOneAt]);
+                }
+                else
+                {
+                    outputFile.Write("\t*\t*");
+                }
+
+                outputFile.WriteLine(restOfOutputLine);
             }
 
 

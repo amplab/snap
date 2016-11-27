@@ -73,7 +73,7 @@ namespace ExpressionMetadata
             Machine.AddMachine("msr-srs-5", 16, 36);
             Machine.AddMachine("msr-srs-6", 16, 36);
             Machine.AddMachine("msr-srs-7", 48, 48);
-            Machine.AddMachine("msr-srs-8", 48, 48);
+            // Machine.AddMachine("msr-srs-8", 48, 48); It died.  :-(
             Machine.AddMachine("fds-k25-1", 48, 6);
             Machine.AddMachine("fds-k25-2", 48, 6);
             Machine.AddMachine("fds-k25-3", 48, 6);
@@ -123,7 +123,7 @@ namespace ExpressionMetadata
             AddEntireTumorToMachine(tumorToMachineMapping, "kich", "fds-k25-9");
             AddEntireTumorToMachine(tumorToMachineMapping, "kirc", "fds-k25-17");
             AddEntireTumorToMachine(tumorToMachineMapping, "kirp", "msr-srs-6");
-            AddEntireTumorToMachine(tumorToMachineMapping, "laml", "msr-srs-8");
+            AddEntireTumorToMachine(tumorToMachineMapping, "laml", "msr-srs-7");
             AddEntireTumorToMachine(tumorToMachineMapping, "luad", "msr-srs-6");
             AddEntireTumorToMachine(tumorToMachineMapping, "meso", "fds-k25-15");
             AddEntireTumorToMachine(tumorToMachineMapping, "ov", "msr-srs-7");
@@ -2219,13 +2219,13 @@ namespace ExpressionMetadata
                 {
                     ExpressionTools.StoredBAM storedBam = (i == 0) ? experiment.TumorRNAAnalysis.storedBAM : experiment.TumorDNAAnalysis.storedBAM; // Sorry about this ugliness...
 
-                    if (storedBam.allCountInfo != null)
+                    if (storedBam != null && storedBam.allCountInfo != null)
                     {
                         nWithAllcount++;
                         continue;
                     }
 
-                    if (storedBam.bamInfo == null)
+                    if (storedBam == null || storedBam.bamInfo == null)
                     {
                         nAwaitingPrecursors++;
                         continue;
@@ -2647,21 +2647,65 @@ namespace ExpressionMetadata
         static void CheckDependencies(List<ExpressionTools.Experiment> experiments)
         {
             var dependencies = new List<getDependents>();
-            dependencies.Add((x, y) => x ? y.TumorRNAAnalysis.storedBAM.bamInfo : y.TumorRNAAnalysis.storedBAM.allCountInfo);
-            dependencies.Add((x, y) => x ? y.NormalDNAAnalysis.storedBAM.bamInfo : y.NormalDNAAnalysis.storedBAM.allCountInfo);
-            dependencies.Add((x, y) => x ? y.TumorDNAAnalysis.storedBAM.bamInfo : y.TumorDNAAnalysis.storedBAM.allCountInfo);
-            dependencies.Add((x, y) => x ? y.NormalDNAAnalysis.storedBAM.bamInfo : y.NormalDNAAnalysis.storedBAM.vcfInfo);
-            dependencies.Add((x, y) => x ? y.TumorRNAAnalysis.storedBAM.allCountInfo : y.TumorRNAAnalysis.storedBAM.regionalExpressionInfo);
-            dependencies.Add((x, y) => x ? y.TumorRNAAnalysis.storedBAM.regionalExpressionInfo : y.TumorRNAAnalysis.storedBAM.geneExpressionInfo);
-            dependencies.Add((x, y) => x ? y.NormalDNAAnalysis.storedBAM.vcfInfo : y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo);
-            dependencies.Add((x, y) => x ? y.TumorRNAAnalysis.storedBAM.allCountInfo : y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo);
-            dependencies.Add((x, y) => x ? y.TumorDNAAnalysis.storedBAM.allCountInfo : y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo);
-            dependencies.Add((x, y) => x ? y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo : y.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsInfo);
-            dependencies.Add((x, y) => x ? y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo : y.TumorRNAAnalysis.storedBAM.readsAtSelectedVariantsInfo);
-            dependencies.Add((x, y) => x ? y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo : y.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo);
-            dependencies.Add((x, y) => x ? y.TumorRNAAnalysis.storedBAM.readsAtSelectedVariantsIndexInfo : y.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo);
-            dependencies.Add((x, y) => x ? y.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsIndexInfo : y.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo);
-            dependencies.Add((x, y) => x ? y.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo : y.NormalDNAAnalysis.storedBAM.alleleSpecificGeneExpressionInfo);
+            dependencies.Add((x, y) => x ? 
+                ((y.TumorRNAAnalysis.storedBAM == null) ? null : y.TumorRNAAnalysis.storedBAM.bamInfo) : 
+                ((y.TumorRNAAnalysis.storedBAM == null) ? null : y.TumorRNAAnalysis.storedBAM.allCountInfo));
+
+            dependencies.Add((x, y) => x ? 
+                ((y.NormalDNAAnalysis.storedBAM == null) ? null : y.NormalDNAAnalysis.storedBAM.bamInfo) : 
+                ((y.NormalDNAAnalysis.storedBAM == null) ? null : y.NormalDNAAnalysis.storedBAM.allCountInfo));
+
+            dependencies.Add((x, y) => x ? 
+                ((y.TumorDNAAnalysis.storedBAM == null) ? null : y.TumorDNAAnalysis.storedBAM.bamInfo) : 
+                ((y.TumorDNAAnalysis.storedBAM == null) ? null : y.TumorDNAAnalysis.storedBAM.allCountInfo));
+
+            dependencies.Add((x, y) => x ? 
+                ((y.NormalDNAAnalysis.storedBAM == null) ? null :y.NormalDNAAnalysis.storedBAM.bamInfo) : 
+                ((y.NormalDNAAnalysis.storedBAM == null) ? null :y.NormalDNAAnalysis.storedBAM.vcfInfo));
+
+            dependencies.Add((x, y) => x ? 
+                ((y.TumorRNAAnalysis.storedBAM == null) ? null : y.TumorRNAAnalysis.storedBAM.allCountInfo) : 
+                ((y.TumorRNAAnalysis.storedBAM == null) ? null : y.TumorRNAAnalysis.storedBAM.regionalExpressionInfo));
+
+            dependencies.Add((x, y) => x ? 
+                ((y.TumorRNAAnalysis.storedBAM == null) ? null : y.TumorRNAAnalysis.storedBAM.regionalExpressionInfo) : 
+                ((y.TumorRNAAnalysis.storedBAM == null) ? null : y.TumorRNAAnalysis.storedBAM.geneExpressionInfo));
+
+            dependencies.Add((x, y) => x ? 
+                ((y.NormalDNAAnalysis.storedBAM == null) ? null : y.NormalDNAAnalysis.storedBAM.vcfInfo) : 
+                ((y.NormalDNAAnalysis.storedBAM == null) ? null : y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo));
+
+            dependencies.Add((x, y) => x ? 
+                ((y.TumorRNAAnalysis.storedBAM == null) ? null : y.TumorRNAAnalysis.storedBAM.allCountInfo) : 
+                ((y.NormalDNAAnalysis.storedBAM == null) ? null : y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo));
+
+            dependencies.Add((x, y) => x ? 
+                ((y.TumorDNAAnalysis.storedBAM == null) ? null : y.TumorDNAAnalysis.storedBAM.allCountInfo) : 
+                ((y.NormalDNAAnalysis.storedBAM == null) ? null : y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo));
+
+            dependencies.Add((x, y) => x ? 
+                ((y.NormalDNAAnalysis.storedBAM == null) ? null : y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo) : 
+                ((y.TumorDNAAnalysis.storedBAM == null) ? null : y.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsInfo));
+
+            dependencies.Add((x, y) => x ? 
+                ((y.NormalDNAAnalysis.storedBAM == null) ? null :y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo) : 
+                ((y.TumorRNAAnalysis.storedBAM == null) ? null : y.TumorRNAAnalysis.storedBAM.readsAtSelectedVariantsInfo));
+
+            dependencies.Add((x, y) => x ? 
+                ((y.NormalDNAAnalysis.storedBAM == null) ? null : y.NormalDNAAnalysis.storedBAM.selectedVariantsInfo) : 
+                ((y.NormalDNAAnalysis.storedBAM == null) ? null : y.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo));
+
+            dependencies.Add((x, y) => x ? 
+                ((y.TumorRNAAnalysis.storedBAM == null) ? null : y.TumorRNAAnalysis.storedBAM.readsAtSelectedVariantsIndexInfo) : 
+                ((y.NormalDNAAnalysis.storedBAM == null) ? null : y.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo));
+
+            dependencies.Add((x, y) => x ? 
+                ((y.TumorDNAAnalysis.storedBAM == null) ? null : y.TumorDNAAnalysis.storedBAM.readsAtSelectedVariantsIndexInfo) : 
+                ((y.NormalDNAAnalysis.storedBAM == null) ? null : y.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo));
+
+            dependencies.Add((x, y) => x ? 
+                ((y.NormalDNAAnalysis.storedBAM == null) ? null : y.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo) : 
+                ((y.NormalDNAAnalysis.storedBAM == null) ? null : y.NormalDNAAnalysis.storedBAM.alleleSpecificGeneExpressionInfo));
 
             int nDependenciesChecked = 0;
             foreach (var experiment in experiments)
