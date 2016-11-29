@@ -574,9 +574,9 @@ namespace ExpressionByMutationCount
             outputFile.Write("Hugo Symbol");
             for (int exclusive = 0; exclusive < 2; exclusive++)
             {
-                int width = 0;
                 for (int mu = 0; mu < (forAlleleSpecificExpression ? 1 : 2); mu++)
                 {
+                    int width = 0;
                     string muString = ((mu == 0) ? "" : " mu") + (exclusive == 0 ? "" : " exclusive");
                     for (int i = 0; i < GeneExpressionFile.nWidths; i++)
                     {
@@ -929,11 +929,11 @@ namespace ExpressionByMutationCount
                     }
 
                     var perGeneLinesFile = ExpressionTools.CreateStreamWriterWithRetry(@"f:\temp\expression\RegionalExpressionByGene\" + nextHugoSymbol.ToLower() + (forAlleleSpecificExpression ? "_allele_specific" : "") + "_lines.txt");
-                    perGeneLinesFile.Write("ParticipantID\tdisease abbr.\tHugo Symbol\tMutation Count\t");
+                    perGeneLinesFile.Write("ParticipantID\tdisease abbr.\tHugo Symbol\tMutation Count");
                     for (int exclusive = 0; exclusive < 2; exclusive++)
                     {
                         ulong width = 1000;
-                        perGeneLinesFile.Write("0" + (exclusive == 1 ? " exclusive" : ""));
+                        perGeneLinesFile.Write("\t0" + (exclusive == 1 ? " exclusive" : ""));
 
                         for (int i = 1; i < GeneExpressionFile.nWidths; i++)
                         {
@@ -941,7 +941,7 @@ namespace ExpressionByMutationCount
                             width *= 2;
                         }
 
-                        perGeneLinesFile.Write("\tWhole Autosome" + ((exclusive == 1) ? " exclusive\t" : "\t"));
+                        perGeneLinesFile.Write("\tWhole Autosome" + ((exclusive == 1) ? " exclusive" : ""));
 
                         if (!forAlleleSpecificExpression)
                         {
@@ -951,7 +951,7 @@ namespace ExpressionByMutationCount
                                 width *= 2;
                             }
 
-                            perGeneLinesFile.Write("\tWhole Autosome mean " + ((exclusive == 1) ? " exclusive\t" : "\t"));
+                            perGeneLinesFile.Write("\tWhole Autosome mean " + ((exclusive == 1) ? " exclusive" : ""));
                         }
                     }
 
