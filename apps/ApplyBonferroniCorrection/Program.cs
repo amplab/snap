@@ -13,7 +13,7 @@ namespace ApplyBonferroniCorrection
         static string baseDirectory = @"f:\temp\expression\";
         const string addedExtension = "_bonferroni.txt";
 
-        static void ProcessFile(string filename)
+        static void ProcessFile(string filename, StreamWriter allSignificantResultsFile)
         {
             if (filename.Count() < 5 || filename.Substring(filename.Count() - 4, 4).ToLower() != ".txt")
             {
@@ -170,6 +170,8 @@ namespace ApplyBonferroniCorrection
                                 significant = true;
                                 zeroValue = -1;
                                 oneValue = -1;
+
+
                             }
 
                             if (zeroValueFields[whichField])
@@ -209,6 +211,12 @@ namespace ApplyBonferroniCorrection
                                         bestZeroVsOne = candidate;
                                         bestZeroVsOneAt = whichField;
                                     }
+
+                                    allSignificantResultsFile.WriteLine(value + "\t" + fields[0] + "\t" + filename + "\t" + headerFields[whichField] + "\t" + candidate);
+                                }
+                                else if (significant)
+                                {
+                                    allSignificantResultsFile.WriteLine(value + "\t" + fields[0] + "\t" + filename + "\t" + headerFields[whichField]);
                                 }
 
                                 justSetMinP = false;
@@ -270,13 +278,17 @@ namespace ApplyBonferroniCorrection
             var inputFiles = Directory.GetFiles(baseDirectory, "ExpressionDistributionByMutationCount*.txt").ToList();
             inputFiles.AddRange(Directory.GetFiles(baseDirectory, "AlleleSpecificExpressionDistributionByMutationCount*.txt"));
 
+            var allSignificantResultsFile = ExpressionTools.CreateStreamWriterWithRetry(baseDirectory + "AllSignificantResults.txt");
+
             foreach (var inputFile in inputFiles)
             {
                 if (inputFile.ToLower().IndexOf(addedExtension) == -1 && inputFile.ToLower().IndexOf("_by_range_graphs") == -1)
                 {
-                    ProcessFile(inputFile);
+                    ProcessFile(inputFile, allSignificantResultsFile);
                 }
             }
+
+            allSignificantResultsFile.Close();
         }
     }
 }

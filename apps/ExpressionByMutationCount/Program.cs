@@ -945,6 +945,10 @@ namespace ExpressionByMutationCount
 
                         if (!forAlleleSpecificExpression)
                         {
+
+                            perGeneLinesFile.Write("\t0" + (exclusive == 1 ? " exclusive" : "") + " mean");
+
+                            width = 1000;
                             for (int i = 1; i < GeneExpressionFile.nWidths; i++)
                             {
                                 perGeneLinesFile.Write("\t" + ExpressionTools.SizeToUnits(width) + "b mean" + ((exclusive == 1) ? " exclusive" : ""));
