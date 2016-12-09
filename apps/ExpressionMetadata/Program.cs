@@ -2642,6 +2642,32 @@ namespace ExpressionMetadata
 
         }
 
+        static void DumpDiseaseTypesAndCounts(List<ExpressionTools.Experiment> experiments)
+        {
+            var counts = new Dictionary<string, int>();
+
+            foreach (var experiment in experiments)
+            {
+                if (!counts.ContainsKey(experiment.disease_abbr))
+                {
+                    counts.Add(experiment.disease_abbr, 0);
+                }
+
+                counts[experiment.disease_abbr]++;
+            }
+
+            var diseasesInAlphabeticalOrder = new List<string>();
+            foreach (var count in counts) {
+                diseasesInAlphabeticalOrder.Add(count.Key);
+            }
+
+            diseasesInAlphabeticalOrder.Sort();
+
+            for (int i = 0; i < diseasesInAlphabeticalOrder.Count(); i++) {
+                Console.WriteLine(diseasesInAlphabeticalOrder[i] + "\t" + counts[diseasesInAlphabeticalOrder[i]]);
+            }
+        }
+
         delegate FileInfo getDependents(bool isPrecursor, ExpressionTools.Experiment experiment);
 
         static void CheckDependencies(List<ExpressionTools.Experiment> experiments)
@@ -2811,6 +2837,7 @@ namespace ExpressionMetadata
             var experiments = BuildExperiments(participants);
             //CountTP53Mutations(experiments);
             ExpressionTools.DumpExperimentsToFile(experiments, baseDirectory + "experiments.txt");
+            DumpDiseaseTypesAndCounts(experiments);
             CheckDependencies(experiments);
             GenerateSelectedVariantsScript(experiments);
             GenerateRegionalExpressionScripts(experiments);
