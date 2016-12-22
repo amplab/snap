@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using System.IO;
 using ExpressionLib;
 using System.Diagnostics;
-using System.Threading;
 
 namespace ExpressionByMutationCount
 {
@@ -25,7 +24,7 @@ namespace ExpressionByMutationCount
 
                 var line = reader.ReadLine();
 
-                if (line == null || line.Count() < headerPrefixLength || line.Substring(0, headerPrefixLength) != headerPrefix || line.Substring(headerPrefixLength, 4) != "3.0 ") // v 3.0 adds whole autosome
+                if (line == null || line.Count() < headerPrefixLength || line.Substring(0, headerPrefixLength) != headerPrefix || line.Substring(headerPrefixLength, 4) != "3.1 ") // v 3.1 uses ucsc gene coordinates
                 {
                     Console.WriteLine("Truncated corrupt or wrong version gene expression file " + filename);
                     seenDone = true;
@@ -403,22 +402,8 @@ namespace ExpressionByMutationCount
                 }
 
                 StreamReader reader = null;
-                bool threw = false;
 
-                do
-                {
-                    threw = false;
-                    try
-                    {
-                        reader = ExpressionTools.CreateStreamReaderWithRetry(scatterPlotFilename);
-                    }
-                    catch (IOException)
-                    {
-                        Console.WriteLine("IOException opening file " + scatterPlotFilename + " perhaps it's open in another app (like Excel).  Sleeping 10s and retrying.");
-                        threw = true;
-                        Thread.Sleep(10000);
-                    }
-                } while (threw);
+                reader = ExpressionTools.CreateStreamReaderWithRetry(scatterPlotFilename);
 
                 reader.ReadLine(); // Skip the header
 
@@ -569,7 +554,7 @@ namespace ExpressionByMutationCount
             }
         }
 
-        static void WriteFileHeader(StreamWriter outputFile, bool forAlleleSpecificExpression)
+        static void WriteFileHeader(StreamWriter outputFile, bool forAlleleSpecificExpression, bool perChromosome)
         {
             outputFile.Write("Hugo Symbol");
             for (int exclusive = 0; exclusive < 2; exclusive++)
@@ -596,15 +581,18 @@ namespace ExpressionByMutationCount
                 }
             }
 
-            for (int mu = 0; mu < (forAlleleSpecificExpression ? 1 : 2); mu++)
+            if (perChromosome)
             {
-                string muString = (mu == 0) ? "" : " mu";
-
-                for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                for (int mu = 0; mu < (forAlleleSpecificExpression ? 1 : 2); mu++)
                 {
-                    var name = ExpressionTools.ChromosomeIndexToName(whichChromosome, true);
+                    string muString = (mu == 0) ? "" : " mu";
 
-                    WriteHeaderGroup(ExpressionTools.ChromosomeIndexToName(whichChromosome, true), outputFile, muString);
+                    for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                    {
+                        var name = ExpressionTools.ChromosomeIndexToName(whichChromosome, true);
+
+                        WriteHeaderGroup(ExpressionTools.ChromosomeIndexToName(whichChromosome, true), outputFile, muString);
+                    }
                 }
             }
 
@@ -708,17 +696,38 @@ namespace ExpressionByMutationCount
             }
         }
 
+        static void PrintUsage()
+        {
+            Console.WriteLine("usage: ExpressionByMutationCount {-a} {-c}");
+            Console.WriteLine("-a means allele-specific");
+            Console.WriteLine("-c means do per-chromosome");
+        }
+
 
         static void Main(string[] args)
         {
 
-            if (args.Count() > 1 || args.Count() == 1 && args[0] != "-a")
+            bool forAlleleSpecificExpression = false;
+            bool perChromosome = false;
+
+            foreach (var arg in args)
             {
-                Console.WriteLine("usage: ExpressionByMutationCount {-a}");
-                return;
+                if (arg == "-a")
+                {
+                    forAlleleSpecificExpression = true;
+                }
+                else if (arg == "-c")
+                {
+                    perChromosome = true;
+                }
+                else
+                {
+                    PrintUsage();
+                    return;
+                }
             }
 
-            bool forAlleleSpecificExpression = args.Count() == 1;
+
 
             Stopwatch timer = new Stopwatch();
             timer.Start();
@@ -788,7 +797,7 @@ namespace ExpressionByMutationCount
             string baseFileName = @"f:\temp\expression\" + (forAlleleSpecificExpression ? "AlleleSpecific" : "") + "ExpressionDistributionByMutationCount";
 
             var panCancerOutputFile = ExpressionTools.CreateStreamWriterWithRetry(baseFileName + ".txt");
-            WriteFileHeader(panCancerOutputFile, forAlleleSpecificExpression);
+            WriteFileHeader(panCancerOutputFile, forAlleleSpecificExpression, perChromosome);
  
             var outputFilesByDisease = new Dictionary<string, StreamWriter>();
 
@@ -797,10 +806,10 @@ namespace ExpressionByMutationCount
             foreach (var disease in listOfDiseases)
             {
                 outputFilesByDisease.Add(disease, ExpressionTools.CreateStreamWriterWithRetry(baseFileName + "_" + disease + ".txt"));
-                WriteFileHeader(outputFilesByDisease[disease], forAlleleSpecificExpression);
+                WriteFileHeader(outputFilesByDisease[disease], forAlleleSpecificExpression, perChromosome);
             }
             
-            char currentFirstLetter = 'A';
+            char currentFirstLetter = '1';  // There are some odd entries in the ucsc list that start with numbers, so this is first.
             int nGenesWithCurrentFirstLetter = 0;
             timer.Reset();
             timer.Start();
@@ -814,7 +823,7 @@ namespace ExpressionByMutationCount
             while (inputFiles.Count() > 0)
             {
 
-                string tooBigHugoSymbol = "ZZZZZZZZZZ";   // Larger than the larges gene name, which is ZZZ3
+                string tooBigHugoSymbol = "ZZZZZZZZZZ";   // Larger than the largest gene name, which is ZZZ3
                 string nextHugoSymbol = tooBigHugoSymbol;
                 
                 foreach (var inputFile in inputFiles)
@@ -909,16 +918,19 @@ namespace ExpressionByMutationCount
                             geneToProcess.AddWholeAutosomeExpression(inputFile.tumorType, inputFile.currentNMutations, inputFile.wholeAutosomeMuExclusive, inputFile.participantID, true, true);
                         }
 
-                        for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                        if (perChromosome)
                         {
-                            if (inputFile.perChromosomeZValid[whichChromosome]) 
+                            for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
                             {
-                                geneToProcess.AddPerChromosomeExpression(inputFile.tumorType, inputFile.currentNMutations, inputFile.perChromosomeZ[whichChromosome], inputFile.participantID, false, whichChromosome);
-                            }                            
-                            
-                            if (inputFile.perChromosomeMuValid[whichChromosome]) 
-                            {
-                                geneToProcess.AddPerChromosomeExpression(inputFile.tumorType, inputFile.currentNMutations, inputFile.perChromosomeMu[whichChromosome], inputFile.participantID, true, whichChromosome);
+                                if (inputFile.perChromosomeZValid[whichChromosome])
+                                {
+                                    geneToProcess.AddPerChromosomeExpression(inputFile.tumorType, inputFile.currentNMutations, inputFile.perChromosomeZ[whichChromosome], inputFile.participantID, false, whichChromosome);
+                                }
+
+                                if (inputFile.perChromosomeMuValid[whichChromosome])
+                                {
+                                    geneToProcess.AddPerChromosomeExpression(inputFile.tumorType, inputFile.currentNMutations, inputFile.perChromosomeMu[whichChromosome], inputFile.participantID, true, whichChromosome);
+                                }
                             }
                         }
 
@@ -959,16 +971,19 @@ namespace ExpressionByMutationCount
                         }
                     }
 
-                    for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
-                    {
-                        perGeneLinesFile.Write("\t" + ExpressionTools.ChromosomeIndexToName(whichChromosome, true));
-                    }
-
-                    if (!forAlleleSpecificExpression) 
+                    if (perChromosome)
                     {
                         for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
                         {
-                            perGeneLinesFile.Write("\t" + ExpressionTools.ChromosomeIndexToName(whichChromosome, true) + " mean");
+                            perGeneLinesFile.Write("\t" + ExpressionTools.ChromosomeIndexToName(whichChromosome, true));
+                        }
+
+                        if (!forAlleleSpecificExpression)
+                        {
+                            for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                            {
+                                perGeneLinesFile.Write("\t" + ExpressionTools.ChromosomeIndexToName(whichChromosome, true) + " mean");
+                            }
                         }
                     }
 
@@ -1043,18 +1058,21 @@ namespace ExpressionByMutationCount
                         } // mu
                     } // exclusive
 
-                    for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
-                    {
-                        WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, geneToProcess.perChromosomeExpression[whichChromosome],
-                            geneToProcess, geneToProcess.perChromosomeExpression[whichChromosome].Count() > 0);
-                    }
-
-                    if (!forAlleleSpecificExpression)
+                    if (perChromosome)
                     {
                         for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
                         {
-                            WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, geneToProcess.perChromosomeMeanExpression[whichChromosome],
+                            WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, geneToProcess.perChromosomeExpression[whichChromosome],
                                 geneToProcess, geneToProcess.perChromosomeExpression[whichChromosome].Count() > 0);
+                        }
+
+                        if (!forAlleleSpecificExpression)
+                        {
+                            for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                            {
+                                WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, geneToProcess.perChromosomeMeanExpression[whichChromosome],
+                                    geneToProcess, geneToProcess.perChromosomeExpression[whichChromosome].Count() > 0);
+                            }
                         }
                     }
 

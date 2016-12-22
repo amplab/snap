@@ -52,9 +52,9 @@ namespace ExpressionNearMutations
                 comparer = StringComparer.OrdinalIgnoreCase;
             }
 
-            public GeneExpression(ExpressionTools.Gene gene_) 
+            public GeneExpression(ExpressionTools.GeneLocationInfo gene_) 
             {
-                gene = gene_;
+                geneLocationInfo = gene_;
 
                 for (int sizeIndex = 0; sizeIndex < nRegionSizes; sizeIndex++)
                 {
@@ -66,17 +66,17 @@ namespace ExpressionNearMutations
             public void AddRegionalExpression(int chromosomeOffset, double z, double mu)
             {
                 int distance;
-                if (chromosomeOffset >= gene.minOffset && chromosomeOffset <= gene.maxOffset)
+                if (chromosomeOffset >= geneLocationInfo.minLocus && chromosomeOffset <= geneLocationInfo.maxLocus)
                 {
                     distance = 0;
                 }
-                else if (chromosomeOffset < gene.minOffset)
+                else if (chromosomeOffset < geneLocationInfo.minLocus)
                 {
-                    distance = gene.minOffset - chromosomeOffset;
+                    distance = geneLocationInfo.minLocus - chromosomeOffset;
                 }
                 else
                 {
-                    distance = chromosomeOffset - gene.maxOffset;
+                    distance = chromosomeOffset - geneLocationInfo.maxLocus;
                 }
 
                 for (int sizeIndex = nRegionSizes - 1; sizeIndex >= 0; sizeIndex--)
@@ -101,7 +101,7 @@ namespace ExpressionNearMutations
  
             public static int CompareByGeneName(GeneExpression a, GeneExpression b)
             {
-                return comparer.Compare(a.gene.hugo_symbol, b.gene.hugo_symbol);
+                return comparer.Compare(a.geneLocationInfo.hugoSymbol, b.geneLocationInfo.hugoSymbol);
             }
 
             public const int nRegionSizes = 20;    // Because we have 0 (in the gene), this range is 2^(20 - 2) * 1000 = 262 Mbases on either side, i.e., the entire chromosome
@@ -110,16 +110,18 @@ namespace ExpressionNearMutations
             public RegionalExpressionState[] regionalExpressionState = new RegionalExpressionState[nRegionSizes]; // Dimension is log2(regionSize) - 1
             public RegionalExpressionState[] exclusiveRegionalExpressionState = new RegionalExpressionState[nRegionSizes];  // Expression in this region but not closer, so from log2(regionSize - 1) to log2(regionSize) - 1.  The zero element is the same as regionalExpressionState
 
-            public ExpressionTools.Gene gene;
+            public ExpressionTools.GeneLocationInfo geneLocationInfo;
             public int mutationCount = 0;
             public static StringComparer comparer;
         }
 
 
 
-        static Dictionary<string, ExpressionTools.MutationMap> mutations;
+        //static Dictionary<string, ExpressionTools.MutationMap> mutations;
 
-        static void ProcessParticipants(List<string> participantsToProcess, bool forAlleleSpecificExpression)
+        static Dictionary<string, ExpressionTools.GeneLocationsByNameAndChromosome> geneLocationInformation;
+
+        static void ProcessParticipants(List<string> participantsToProcess, bool forAlleleSpecificExpression, int minExamplesPerRegion)
         {
             var timer = new Stopwatch();
 
@@ -157,7 +159,8 @@ namespace ExpressionNearMutations
                     continue;
                 }
 
-                var mutationsForThisReference = mutations[experiment.maf[0].ReferenceClass()];
+                //var mutationsForThisReference = mutations[experiment.maf[0].ReferenceClass()];
+                var geneLocationsForThisReference = geneLocationInformation[experiment.maf[0].ReferenceClass()];
 
                 var geneExpressions = new Dictionary<string, GeneExpression>();    
                 foreach (var maf in experiment.maf)
@@ -167,7 +170,8 @@ namespace ExpressionNearMutations
                         continue;
                     }
 
-                    if (!mutationsForThisReference.genesByName.ContainsKey(maf.Hugo_symbol)) {
+                    if (!geneLocationsForThisReference.genesByName.ContainsKey(maf.Hugo_symbol))
+                    {
                         //
                         // Probably an inconsistent gene.  Skip it.
                         //
@@ -176,8 +180,7 @@ namespace ExpressionNearMutations
 
                     if (!geneExpressions.ContainsKey(maf.Hugo_symbol))
                     {
-                        geneExpressions.Add(maf.Hugo_symbol, new GeneExpression(mutationsForThisReference.genesByName[maf.Hugo_symbol]));
- 
+                        geneExpressions.Add(maf.Hugo_symbol, new GeneExpression(geneLocationsForThisReference.genesByName[maf.Hugo_symbol]));
                     }
  
                     geneExpressions[maf.Hugo_symbol].mutationCount++;
@@ -228,7 +231,7 @@ namespace ExpressionNearMutations
                     perChromosomeRegionalExpressionState[whichChromosome] = new RegionalExpressionState();
                 }
 
-                foreach (var geneEntry in mutationsForThisReference.genesByName)
+                foreach (var geneEntry in geneLocationsForThisReference.genesByName)
                 {
                     var chromosome = geneEntry.Value.chromosome;
                     if (!allButThisChromosomeAutosomalRegionalExpressionState.ContainsKey(chromosome))
@@ -283,7 +286,7 @@ namespace ExpressionNearMutations
                             nMatchingReferenceRNA = Convert.ToInt32(fields[16]);
                             nMatchingVariantRNA = Convert.ToInt32(fields[17]);
 
-                            if (!mutationsForThisReference.genesByChromosome.ContainsKey(chromosome))
+                            if (!geneLocationsForThisReference.genesByChromosome.ContainsKey(chromosome))
                             {
                                 //
                                 // Try reversing the "chr" state of the chromosome.
@@ -322,7 +325,7 @@ namespace ExpressionNearMutations
                         break;
                     }
 
-                    if (mutationsForThisReference.genesByChromosome.ContainsKey(chromosome) && 
+                    if (geneLocationsForThisReference.genesByChromosome.ContainsKey(chromosome) && 
                         (!forAlleleSpecificExpression ||                                    // We only keep samples for allele specific expression if they meet certain criteria, to wit:
                             nMatchingReferenceDNA + nMatchingVariantDNA >= 10 &&            // We have at least 10 DNA reads
                             nMatchingReferenceRNA + nMatchingVariantRNA >= 10 &&            // We have at least 10 RNA reads
@@ -358,18 +361,17 @@ namespace ExpressionNearMutations
                             perChromosomeRegionalExpressionState[chromosomeId].AddExpression(z, mu);
                         }
 
-                        foreach (var gene in mutationsForThisReference.genesByChromosome[chromosome])
+                        foreach (var geneLocation in geneLocationsForThisReference.genesByChromosome[chromosome])
                         {
-                            if (!geneExpressions.ContainsKey(gene.hugo_symbol))
+                            if (!geneExpressions.ContainsKey(geneLocation.hugoSymbol))
                             {
-                                geneExpressions.Add(gene.hugo_symbol, new GeneExpression(gene));
+                                geneExpressions.Add(geneLocation.hugoSymbol, new GeneExpression(geneLocation));
                             }
 
-                            geneExpressions[gene.hugo_symbol].AddRegionalExpression(offset, z, mu); // Recall that for allele-specifc expresion, z is really the level of allele-specific expression, not the expression z score.
+                            geneExpressions[geneLocation.hugoSymbol].AddRegionalExpression(offset, z, mu); // Recall that for allele-specifc expresion, z is really the level of allele-specific expression, not the expression z score.
                         }
                     }
- 
-                }
+                } // for each line in the input file
 
                 if (!seenDone)
                 {
@@ -391,7 +393,7 @@ namespace ExpressionNearMutations
 
                 var outputFile = ExpressionTools.CreateStreamWriterWithRetry(outputFilename);
 
-                outputFile.WriteLine("ExpressionNearMutations v3.0 " + participantId + (forAlleleSpecificExpression ? " -a" : ""));
+                outputFile.WriteLine("ExpressionNearMutations v3.1 " + participantId + (forAlleleSpecificExpression ? " -a" : "")); // v3.1 uses ucsc gene locations
                 outputFile.Write("Gene name\tnon-silent mutation count");
                 for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
                 {
@@ -449,11 +451,11 @@ namespace ExpressionNearMutations
 
                 for (int i = 0; i < allExpressions.Count(); i++)
                 {
-                    outputFile.Write(ExpressionTools.ConvertToExcelString(allExpressions[i].gene.hugo_symbol) + "\t" + allExpressions[i].mutationCount);
+                    outputFile.Write(ExpressionTools.ConvertToExcelString(allExpressions[i].geneLocationInfo.hugoSymbol) + "\t" + allExpressions[i].mutationCount);
 
                     for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
                     {
-                        if (allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncluded != 0)
+                        if (allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncluded >= minExamplesPerRegion)
                         {
                             outputFile.Write("\t" + allExpressions[i].regionalExpressionState[sizeIndex].totalExpression / allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncluded);
                         }
@@ -463,7 +465,7 @@ namespace ExpressionNearMutations
                         }
                     }
 
-                    if (wholeAutosomeRegionalExpression.nRegionsIncluded > 0)
+                    if (wholeAutosomeRegionalExpression.nRegionsIncluded >= minExamplesPerRegion)
                     {
                         outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalExpression / wholeAutosomeRegionalExpression.nRegionsIncluded);
                     }
@@ -475,7 +477,7 @@ namespace ExpressionNearMutations
                     if (!forAlleleSpecificExpression) {
                         for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
                         {
-                            if (allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncluded != 0)
+                            if (allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncluded >= minExamplesPerRegion)
                             {
                                 outputFile.Write("\t" + allExpressions[i].regionalExpressionState[sizeIndex].totalMeanExpression / allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncluded);
                             }
@@ -485,7 +487,7 @@ namespace ExpressionNearMutations
                             }
                         }
 
-                        if (wholeAutosomeRegionalExpression.nRegionsIncluded > 0)
+                        if (wholeAutosomeRegionalExpression.nRegionsIncluded >= minExamplesPerRegion)
                         {
                             outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalMeanExpression / wholeAutosomeRegionalExpression.nRegionsIncluded);
                         }
@@ -497,7 +499,7 @@ namespace ExpressionNearMutations
 
                     for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
                     {
-                        if (allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncluded != 0)
+                        if (allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncluded >= minExamplesPerRegion)
                         {
                             outputFile.Write("\t" + allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].totalExpression / allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncluded);
                         }
@@ -507,9 +509,9 @@ namespace ExpressionNearMutations
                         }
                     }
 
-                    if (allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].gene.chromosome].nRegionsIncluded > 0)
+                    if (allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].nRegionsIncluded >= minExamplesPerRegion)
                     {
-                        outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].gene.chromosome].totalExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].gene.chromosome].nRegionsIncluded);
+                        outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].totalExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].nRegionsIncluded);
                     }
                     else
                     {
@@ -520,7 +522,7 @@ namespace ExpressionNearMutations
                     {
                         for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
                         {
-                            if (allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncluded != 0)
+                            if (allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncluded >= minExamplesPerRegion)
                             {
                                 outputFile.Write("\t" + allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].totalMeanExpression / allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncluded);
                             }
@@ -530,9 +532,9 @@ namespace ExpressionNearMutations
                             }
                         }
 
-                        if (allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].gene.chromosome].nRegionsIncluded > 0)
+                        if (allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].nRegionsIncluded >= minExamplesPerRegion)
                         {
-                            outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].gene.chromosome].totalMeanExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].gene.chromosome].nRegionsIncluded);
+                            outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].totalMeanExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].nRegionsIncluded);
                         }
                         else
                         {
@@ -542,7 +544,7 @@ namespace ExpressionNearMutations
 
                     for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
                     {
-                        if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncluded > 0)
+                        if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncluded >= minExamplesPerRegion)
                         {
                             outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncluded);
                         }
@@ -556,7 +558,7 @@ namespace ExpressionNearMutations
                     {
                         for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
                         {
-                            if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncluded > 0)
+                            if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncluded >= minExamplesPerRegion)
                             {
                                 outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalMeanExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncluded);
                             }
@@ -586,16 +588,43 @@ namespace ExpressionNearMutations
         static Dictionary<string, ExpressionTools.Participant> participants;
         static Dictionary<string, ExpressionTools.Experiment> experimentsByParticipant = new Dictionary<string, ExpressionTools.Experiment>();
 
+        static void PrintUsageMessage()
+        {
+            Console.WriteLine("usage: ExpressionNearMutations {-a} {-f fileContainingParticipantIds | <participantIdsToProcess>}");
+            Console.WriteLine("-a means to use allele-specific expression rather than total expression.");
+        }
+
         static void Main(string[] args)
         {
             if (args.Count() == 0 || args.Count() == 1 && args[0] == "-a")
             {
-                Console.WriteLine("usage: ExpressionNearMutations {-a} <participantIdsToProcess>");
-                Console.WriteLine("-a means to use allele-specific expression rather than total expression.");
+                PrintUsageMessage();
                 return;
             }
 
+            int minExamplesPerRegion;   // If there are fewer than this, then ignore the region.
+
             bool forAlleleSpecificExpression = args[0] == "-a";
+
+            int argsConsumed = 0;
+            if (forAlleleSpecificExpression) {
+                argsConsumed = 1;
+            }
+
+            if (args[argsConsumed] == "-f" && args.Count() != argsConsumed + 2)
+            {
+                PrintUsageMessage();
+                return;
+            }
+
+            if (forAlleleSpecificExpression)
+            {
+                minExamplesPerRegion = 1;
+            }
+            else
+            {
+                minExamplesPerRegion = 1;
+            }
 
             Stopwatch timer = new Stopwatch();
             timer.Start();
@@ -617,15 +646,33 @@ namespace ExpressionNearMutations
             timer.Reset();
             timer.Start();
 
-            mutations = ExpressionTools.GenerateMutationMapFromExperiments(experiments, experimentsByParticipant);
+            //mutations = ExpressionTools.GenerateMutationMapFromExperiments(experiments, experimentsByParticipant);
+
+            foreach (var experiment in experiments) // This got done in GenerateMutationMapFromExperiments, but now we need to do it here.
+            {
+                experimentsByParticipant.Add(experiment.participant.participantId, experiment);
+            }
+
+            geneLocationInformation = new Dictionary<string, ExpressionTools.GeneLocationsByNameAndChromosome>(); // // Maps reference type (hg18 or hg19) to map from hugo symbol to location info
+            geneLocationInformation.Add("hg18", new ExpressionTools.GeneLocationsByNameAndChromosome(ExpressionTools.LoadGeneLocationInfo(@"\\gcr\scratch\b99\bolosky\knownGene-hg18.txt", @"\\gcr\scratch\b99\bolosky\kgXref-hg18.txt")));
+            geneLocationInformation.Add("hg19", new ExpressionTools.GeneLocationsByNameAndChromosome(ExpressionTools.LoadGeneLocationInfo(@"\\gcr\scratch\b99\bolosky\knownGene-hg19.txt", @"\\gcr\scratch\b99\bolosky\kgXref-hg19.txt")));
 
             timer.Stop();
-            Console.WriteLine("Loaded mutations in " + mutations["hg19"].Count() + " genes in " + (timer.ElapsedMilliseconds + 500) / 1000 + "s.");
+            Console.WriteLine("Loaded mutations in " + geneLocationInformation["hg19"].genesByName.Count() + " genes in " + (timer.ElapsedMilliseconds + 500) / 1000 + "s.");
 
-            var participantsToProcess = new List<string>();
-            for (int i = forAlleleSpecificExpression ? 1 : 0; i < args.Count(); i++ )
+            List<string> participantsToProcess;
+
+            if (args[argsConsumed] == "-f")
             {
-                participantsToProcess.Add(args[i]);
+                participantsToProcess = ExpressionTools.ReadAllLinesWithRetry(args[argsConsumed + 1]).ToList();
+            }
+            else
+            {
+                participantsToProcess = new List<string>();
+                for (int i = argsConsumed; i < args.Count(); i++)
+                {
+                    participantsToProcess.Add(args[i]);
+                }
             }
 
             //
@@ -636,9 +683,9 @@ namespace ExpressionNearMutations
             timer.Start();
 
             var threads = new List<Thread>();
-            for (int i = 0; i < /*Environment.ProcessorCount*/ 1; i++)
+            for (int i = 0; i < Environment.ProcessorCount/* 1*/; i++)
             {
-                threads.Add(new Thread(() => ProcessParticipants(participantsToProcess, forAlleleSpecificExpression)));
+                threads.Add(new Thread(() => ProcessParticipants(participantsToProcess, forAlleleSpecificExpression, minExamplesPerRegion)));
             }
 
             threads.ForEach(t => t.Start());

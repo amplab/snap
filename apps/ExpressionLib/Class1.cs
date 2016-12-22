@@ -12,8 +12,6 @@ using MathNet.Numerics;
 using System.Threading;
 using System.Runtime.InteropServices;
 
-
-
 //
 // A bunch of aliases for string in order to make the code more readable.
 //
@@ -97,6 +95,17 @@ namespace ExpressionLib
 
             return "";
         }
+
+        public static string chromosomeNameToNonChrForm(string rawName)
+        {
+            if (rawName.Substring(0, 3).ToLower() != "chr")
+            {
+                return rawName.ToLower();
+            }
+
+            return rawName.Substring(3).ToLower();
+        }
+
         public static string ShareFromPathname(string pathname)
         {
             //
@@ -117,6 +126,26 @@ namespace ExpressionLib
             }
 
             return share;
+        }
+
+        public static string GetFileNameFromPathname(Pathname pathname, bool excludeExtension = false)
+        {
+            string lastComponent;
+            if (pathname.LastIndexOf('\\') == -1)
+            {
+                lastComponent = pathname;
+            }
+            else
+            {
+                lastComponent = pathname.Substring(pathname.LastIndexOf('\\') + 1);
+            }
+
+            if (!excludeExtension || lastComponent.LastIndexOf('.') == -1)
+            {
+                return lastComponent;
+            }
+
+            return lastComponent.Substring(0, lastComponent.LastIndexOf('.'));
         }
 
         public class Variant : IComparable<Variant>
@@ -3085,6 +3114,8 @@ namespace ExpressionLib
             mutations.Add("hg18", new ExpressionTools.MutationMap());
             mutations.Add("hg19", new ExpressionTools.MutationMap());
 
+
+                
             var badHugoSymbols = new List<string>();    // These are corruped by Excel.  They're in the MAFs that I downloaded, and I'm removing them by hand.
             badHugoSymbols.Add("1-Mar");
             badHugoSymbols.Add("1-Dec");
@@ -3117,15 +3148,7 @@ namespace ExpressionLib
                 {
                     nMutations++;
 
-                    string chromosome;
-                    if (maf.Chrom.Count() > 3 && maf.Chrom.Substring(0, 3) == "chr")
-                    {
-                        chromosome = maf.Chrom.Substring(3);
-                    }
-                    else
-                    {
-                        chromosome = maf.Chrom;
-                    }
+                    string chromosome = chromosomeNameToNonChrForm(maf.Chrom);
 
                     if (badHugoSymbols.Contains(maf.Hugo_symbol))
                     {
@@ -3589,6 +3612,11 @@ namespace ExpressionLib
             }
         }
 
+        public static StreamReader CreateCompressedStreamReaderWithRetry(string filename)
+        {
+            return new StreamReader(new GZipStream(CreateStreamReaderWithRetry(filename).BaseStream, CompressionMode.Decompress));
+        }
+
         public static string[] ReadAllLinesWithRetry(string filename)
         {
             while (true)
@@ -3605,7 +3633,806 @@ namespace ExpressionLib
                 }
             }
         }
- 
+
+
+        public class HistogramResultLine
+        {
+            public string minValue;
+            public int count = 0;
+            public double total = 0;    // The sum of all of the values in this line
+            public double pdfValue = 0;
+            public double cdfValue = 0;
+        }
+
+        public class Histogram
+        {
+            public Histogram() { }
+
+            public void addValue(double value)
+            {
+                values.Add(value);
+            }
+
+            public double min() // Throws ArgumentNullExcpetion if no data jas been added
+            {
+                return values.Min();
+            }
+
+            public double max()
+            {
+                return values.Max();
+            }
+
+
+            public int count()
+            {
+                return values.Count();
+            }
+            public HistogramResultLine [] ComputeHistogram(double min, double max, double increment, string format = "G")
+            {
+                int nBuckets = (int)((max - min) / increment) + 1;  // +1 is for "more"
+
+                var result = new HistogramResultLine[nBuckets];
+
+                double x = min;
+                for (int i = 0; i < nBuckets - 1; i++)
+                {
+                    result[i] = new HistogramResultLine();
+                    result[i].minValue = x.ToString(format);
+                    x += increment;
+                }
+                result[nBuckets - 1] = new HistogramResultLine();
+                result[nBuckets - 1].minValue = "More";
+
+                foreach (var value in values)
+                {
+                    int whichBucket;
+                    if (value > max)
+                    {
+                        whichBucket = nBuckets - 1;
+                    } else {
+                        whichBucket = (int)((value - min) / increment);
+                    }
+
+                    result[whichBucket].count++;
+                    result[whichBucket].total += value;
+                }
+
+                int overallCount = values.Count();
+                int runningCount = 0;
+                for (int whichBucket = 0; whichBucket < nBuckets; whichBucket++)
+                {
+                    runningCount += result[whichBucket].count;
+
+                    result[whichBucket].pdfValue = ((double)result[whichBucket].count) / overallCount;
+                    result[whichBucket].cdfValue = ((double)runningCount) / overallCount;
+                }
+
+                return result;  
+            }
+
+            List<double> values = new List<double>();
+        } // Histogram
+
+        public class GeneScatterGraphLine
+        {
+            public string RNAFile;
+            public string DNAFile;
+            public string Hugo_Symbol;
+            public string Entrez_Gene_Id;
+            public string Center;
+            public string NCBI_Build;
+            public string Chromosome;
+            public string Start_Position;
+            public string End_Position;
+            public string Strand;
+            public string Variant_Classification;
+            public string Variant_Type;
+            public string Reference_Allele;
+            public string Tumor_Seq_Allele_1;
+            public string Tumor_Seq_Allele_2;
+            public string dbSNP_RS;
+            public string dbSNP_Val_Status;
+            public string Tumor_Sample_Barcode;
+            public string Matched_Norm_Sample_Barcode;
+            public string Match_Norm_Seq_Allele1;
+            public string Match_Norm_Seq_Allele2;
+            public string Tumor_Validation_Allele1;
+            public string Tumor_Validation_Allele2;
+            public string Match_Norm_Validation_Allele1;
+            public string Match_Norm_Validation_Allele2;
+            public string Verification_Status;
+            public string Validation_Status;
+            public string Mutation_Status;
+            public string Sequencing_Phase;
+            public string Sequence_Source;
+            public string Validation_Method;
+            public string Score;
+            public string BAM_File;
+            public string Sequencer;
+            public string Tumor_Sample_UUID;
+            public string Matched_Norm_Sample_UUID;
+            public string File_Name;
+            public string Archive_Name;
+            public int Line_Number;
+            public int n_DNA_Matching_Reference;
+            public int n_DNA_Matching_Tumor;
+            public int n_DNA_Matching_Neither;
+            public int n_DNA_Matching_Both;
+            public int n_RNA_Matching_Reference;
+            public int n_RNA_Matching_Tumor;
+            public int n_RNA_Matching_Neither;
+            public int n_RNA_Matching_Both;
+            public double tumorDNAFraction;
+            public double tumorRNAFraction;
+            public double tumorDNAMultiple;
+            public double tumorRNAMultiple;
+            public double tumorDNARatio;
+            public double tumorRNARatio;
+            public string FractionOfMeanExpression; // This doesn't seem to be filled in, hence string
+            public string zOfmeanExpression;
+            public double ratioOfRatios;
+            public bool IsSingle;
+            public string CancerType;
+            public string gender;
+            public double zTumor;
+            public double zNormal;
+            public double z2Tumor;
+            public double z2Normal;
+            public double percentMeanTumor; // Expressed as a fraction (i.e., 100% -> 1.0)
+            public double percentMeanNormal;// Expressed as a fraction (i.e., 100% -> 1.0)
+
+            static GeneScatterGraphLine fromLine(string inputLine)
+            {
+                var newLine = new GeneScatterGraphLine();
+
+                var fields = inputLine.Split('\t');
+
+                if (fields.Count() < 65) {
+                    Console.WriteLine("GeneScatterGraphEntry.fromLine: too few fields " + fields.Count() + " in input line " + inputLine);
+                    return null;
+                }
+
+                try
+                {
+                    newLine.RNAFile = fields[0];
+                    newLine.DNAFile = fields[1];
+                    newLine.Hugo_Symbol = ConvertToNonExcelString(fields[2]);
+                    newLine.Entrez_Gene_Id = fields[3];
+                    newLine.Center = fields[4];
+                    newLine.NCBI_Build = fields[5];
+                    newLine.Chromosome = fields[6];
+                    newLine.Start_Position = fields[7];
+                    newLine.End_Position = fields[8];
+                    newLine.Strand = fields[9];
+                    newLine.Variant_Classification = fields[10];
+                    newLine.Variant_Type = fields[11];
+                    newLine.Reference_Allele = fields[12];
+                    newLine.Tumor_Seq_Allele_1 = fields[13];
+                    newLine.Tumor_Seq_Allele_2 = fields[14];
+                    newLine.dbSNP_RS = fields[15];
+                    newLine.dbSNP_Val_Status = fields[16];
+                    newLine.Tumor_Sample_Barcode = fields[17];
+                    newLine.Matched_Norm_Sample_Barcode = fields[18];
+                    newLine.Match_Norm_Seq_Allele1 = fields[19];
+                    newLine.Match_Norm_Seq_Allele2 = fields[20];
+                    newLine.Tumor_Validation_Allele1 = fields[21];
+                    newLine.Tumor_Validation_Allele2 = fields[22];
+                    newLine.Match_Norm_Validation_Allele1 = fields[23];
+                    newLine.Match_Norm_Validation_Allele2 = fields[24];
+                    newLine.Verification_Status = fields[25];
+                    newLine.Validation_Status = fields[26];
+                    newLine.Mutation_Status = fields[27];
+                    newLine.Sequencing_Phase = fields[28];
+                    newLine.Sequence_Source = fields[29];
+                    newLine.Validation_Method = fields[30];
+                    newLine.Score = fields[31];
+                    newLine.BAM_File = fields[32];
+                    newLine.Sequencer = fields[33];
+                    newLine.Tumor_Sample_UUID = fields[34];
+                    newLine.Matched_Norm_Sample_UUID = fields[35];
+                    newLine.File_Name = fields[36];
+                    newLine.Archive_Name = fields[37];
+                    newLine.Line_Number = Convert.ToInt32(fields[38]);
+                    newLine.n_DNA_Matching_Reference = Convert.ToInt32(fields[39]);
+                    newLine.n_DNA_Matching_Tumor = Convert.ToInt32(fields[40]);
+                    newLine.n_DNA_Matching_Neither = Convert.ToInt32(fields[41]);
+                    newLine.n_DNA_Matching_Both = Convert.ToInt32(fields[42]);
+                    newLine.n_RNA_Matching_Reference = Convert.ToInt32(fields[43]);
+                    newLine.n_RNA_Matching_Tumor = Convert.ToInt32(fields[44]);
+                    newLine.n_RNA_Matching_Neither = Convert.ToInt32(fields[45]);
+                    newLine.n_RNA_Matching_Both = Convert.ToInt32(fields[46]);
+                    newLine.tumorDNAFraction = Convert.ToDouble(fields[47]);
+                    newLine.tumorRNAFraction = Convert.ToDouble(fields[48]);
+                    newLine.tumorDNAMultiple = Convert.ToDouble(fields[49]);
+                    newLine.tumorRNAMultiple = Convert.ToDouble(fields[50]);
+                    newLine.tumorDNARatio = Convert.ToDouble(fields[51]);
+                    newLine.tumorRNARatio = Convert.ToDouble(fields[52]);
+                    newLine.FractionOfMeanExpression = fields[53];
+                    newLine.zOfmeanExpression = fields[54];
+                    newLine.ratioOfRatios = Convert.ToDouble(fields[55]);
+                    newLine.IsSingle = Convert.ToBoolean(fields[56]);
+                    newLine.CancerType = fields[57];
+                    newLine.gender = fields[58];
+                    newLine.zTumor = Convert.ToDouble(fields[59]);
+                    newLine.zNormal = Convert.ToDouble(fields[60]);
+                    newLine.z2Tumor = Convert.ToDouble(fields[61]);
+                    newLine.z2Normal = Convert.ToDouble(fields[62]);
+                    newLine.percentMeanTumor = Convert.ToDouble(fields[63]) / 100.0; // Expressed as a fraction (i.e., 100% -> 1.0 = fields[];
+                    newLine.percentMeanNormal = Convert.ToDouble(fields[64]) / 100.0;// Expressed as a fraction (i.e., 100% -> 1.0 = fields[];
+                }
+                catch (FormatException)
+                {
+                    Console.WriteLine("GeneScatterGraphEntry.fromLine: error parsing line " + inputLine);
+                    return null;
+                }
+
+                return newLine;
+            } // fromLine
+        }
+
+        public static void LoadAllGeneScatterGraphEntries(out List<GeneScatterGraphLine> geneScatterGraphEntries, string directoryName = @"f:\temp\gene_scatter_graphs")
+        {
+            geneScatterGraphEntries = new List<GeneScatterGraphLine>();
+
+            foreach (var filename in Directory.EnumerateFiles(directoryName, "*.txt")) {
+                if (filename.Count() == 0 || filename[0] == '_')
+                {
+                    continue;   // Summary file like _MannWhitney rather than a gene file
+                }
+
+                var lines = ReadAllLinesWithRetry(filename);
+                for (int i = 1 ; i < lines.Count(); i++) {
+
+                }
+            }
+
+        }
+
+        public class Exon
+        {
+            public Exon(string startString, string endString)
+            {
+                start = Convert.ToInt32(startString);
+                end = Convert.ToInt32(endString);
+            }
+
+            public int start;
+            public int end;
+        }
+
+        public class Isoform    // These come from the knownGene file
+        {
+            public string ucscId;
+            public string chromosome;   // The non-chr version
+            public string strand;
+            public int txStart;
+            public int txEnd;
+            public int cdsStart;
+            public int cdsEnd;
+            public string proteinId;
+            public string alignId;
+            public Exon [] exons;
+
+            static Isoform fromFileLine(string fileLine)
+            {
+                var fields = fileLine.Split('\t');
+                if (fields.Count() != 12)
+                {
+                    Console.WriteLine("Isoform.fromFileLine: line had wrong number of fields, " + fields.Count() + " != 12");
+                    return null;
+                }
+
+                var isoform = new Isoform();
+
+                isoform.ucscId = ConvertToNonExcelString(fields[0]);
+                isoform.chromosome = chromosomeNameToNonChrForm(ConvertToNonExcelString(fields[1]));
+                isoform.strand = ConvertToNonExcelString(fields[2]);
+
+                int exonCount;
+                try
+                {
+                    isoform.txStart = Convert.ToInt32(ConvertToNonExcelString(fields[3]));
+                    isoform.txEnd = Convert.ToInt32(ConvertToNonExcelString(fields[4]));
+
+                    if (isoform.txEnd <= isoform.txStart)
+                    {
+                        Console.WriteLine("Isoform.fromFileLine: warning: isoform " + isoform.ucscId + " has empty or negative transcription region " + fileLine);
+                    }
+
+                    isoform.cdsStart = Convert.ToInt32(ConvertToNonExcelString(fields[5]));
+                    isoform.cdsEnd = Convert.ToInt32(ConvertToNonExcelString(fields[6]));
+                    exonCount = Convert.ToInt32(ConvertToNonExcelString(fields[7]));
+
+
+                    var exonStartStrings = ConvertToNonExcelString(fields[8]).Split(',');
+                    var exonEndStrings = ConvertToNonExcelString(fields[9]).Split(',');
+
+                    //
+                    // They have trailing commas, so they should have one more field than there are exons, and also should have an empty string
+                    // as their last element.
+                    //
+                    if (exonStartStrings.Count() != exonCount + 1 || exonEndStrings.Count() != exonCount + 1 || exonStartStrings[exonCount] != "" || exonEndStrings[exonCount] != "")
+                    {
+                        Console.WriteLine("Isoform.fromFileLine: Bad exon start/end: " + fileLine);
+                    }
+
+                    isoform.exons = new Exon[exonCount];
+                    for (int i = 0; i < exonCount; i++)
+                    {
+                        isoform.exons[i] = new Exon(exonStartStrings[i], exonEndStrings[i]);
+                    }
+
+
+                }
+                catch (FormatException)
+                {
+                    Console.WriteLine("Isoform.fromFileLine: Format exception parsing a numeric field in line: " + fileLine);
+                    return null;
+                }
+
+                isoform.proteinId = fields[10];
+                isoform.alignId = fields[11];
+
+                return isoform;
+            }
+
+            public static Dictionary<string, Isoform> readKnownGeneFile(string fileName)
+            {
+                var file = CreateStreamReaderWithRetry(fileName);
+
+                var result = new Dictionary<string, Isoform>();
+
+                file.ReadLine();    // Skip the header
+                string line;
+
+                while (null != (line = file.ReadLine()))
+                {
+                    var isoform = Isoform.fromFileLine(line);
+                    result.Add(isoform.ucscId, isoform);
+                }
+
+                file.Close();
+
+                return result;
+            }
+        }
+
+            
+
+        public static Dictionary<string, List<Isoform>> loadIsoformGroupMapFromFile(string filename, Dictionary<string, Isoform> isoforms)    // This loads the known isoforms file.
+        {
+            var file = CreateStreamReaderWithRetry(filename);
+
+            var result = new Dictionary<string, List<Isoform>>();
+
+            file.ReadLine();    // Header
+
+            string line;
+            int currentClusterId = 0;
+            List<Isoform> currentCluster = new List<Isoform>();
+
+            while (null != (line = file.ReadLine()))
+            {
+                var fields = line.Split('\t');
+                if (fields.Count() != 2)
+                {
+                    Console.WriteLine("loadIsoformGroupMapFromFile: wrong field count in input file line " + line);
+                    return null;
+                }
+
+                var clusterId = Convert.ToInt32(ConvertToNonExcelString(fields[0]));
+
+                if (clusterId != currentClusterId)
+                {
+                    foreach (var isoform in currentCluster)
+                    {
+                        result.Add(isoform.ucscId, currentCluster); // Maps one isoform to the whole cluster (gene)
+                    }
+
+                    currentCluster = new List<Isoform>();
+                }
+
+                currentClusterId = clusterId;
+
+                var isoformId = ConvertToNonExcelString(fields[1]);
+
+                if (!isoforms.ContainsKey(isoformId))
+                {
+                    Console.WriteLine("Isoform group file contains isoform ID " + isoformId + " that's not in the isoform dictionary.  Ignoring.");
+                    continue;
+                }
+
+                currentCluster.Add(isoforms[isoformId]);
+            }
+
+            file.Close();
+
+            return result;
+        }
+
+        static string UcscNameToStrippedUcscName(string ucscIdWithVersion)
+        {
+            if (-1 == ucscIdWithVersion.LastIndexOf('.'))
+            {
+                Console.WriteLine("UcscNameToStrippedUcscName: ucsc ID doesn't contain a dot: " + ucscIdWithVersion);
+                return ucscIdWithVersion;
+            }
+
+            return ucscIdWithVersion.Substring(0, ucscIdWithVersion.LastIndexOf('.'));
+        }
+
+        public static Dictionary<string, List<Isoform>> LoadUcscNameToIsoformsMap(string knownGenesFilename, string knownIsoformsFilename, bool stripVersionFromUcscName)  // Produces a map from non-version ucsc id to isoform groups
+        {
+            var isoforms = Isoform.readKnownGeneFile(knownGenesFilename);
+            var groupMap = loadIsoformGroupMapFromFile(knownIsoformsFilename, isoforms);
+
+            var result = new Dictionary<string, List<Isoform>>();
+
+            //
+            // Chop off the version numbers in the keys, and build a map from the chopped versions to all of the isoforms.
+            //
+            foreach (var entry in groupMap)
+            {
+                var ucscIdWithVersion = entry.Key;
+                var ucscIdToUse = stripVersionFromUcscName ? UcscNameToStrippedUcscName(ucscIdWithVersion) : ucscIdWithVersion;
+
+                if (!result.ContainsKey(ucscIdToUse))
+                {
+                    result.Add(ucscIdToUse, new List<Isoform>());
+                }
+
+                result[ucscIdToUse].AddRange(entry.Value);
+            }
+
+
+            return result;
+        }
+
+        public static Dictionary<string, GeneInformation> LoadGeneInformationFromGeneWithProtein(string geneWithProteinProductFilename, string knownGenesFilename, string knownIsoformsFilename)
+        {
+            var isoformsByNonVersionName = LoadUcscNameToIsoformsMap(knownGenesFilename, knownIsoformsFilename, true);
+
+            var genesByHugoId = GeneInformation.LoadFromFile(geneWithProteinProductFilename);
+
+            foreach (var geneEntry in genesByHugoId)
+            {
+                var gene = geneEntry.Value;
+
+                if (gene.ucsc_id == "")
+                {
+                    continue;   // No ucsc_id means no idea about the gene.
+                }
+
+                var strippedUcscId = UcscNameToStrippedUcscName(gene.ucsc_id);
+
+                if (!isoformsByNonVersionName.ContainsKey(strippedUcscId) || isoformsByNonVersionName[strippedUcscId].Count() == 0)
+                {
+                    Console.WriteLine("Hugo symbol " + gene.symbol + " with ucsc id " + gene.ucsc_id + " doens't appear in known genes file or has no isoforms.");
+                    continue;
+                }
+
+                var isoformList = isoformsByNonVersionName[strippedUcscId];
+                var chromosome = isoformList[0].chromosome;
+                int minLocus = isoformList[0].txStart;
+                int maxLocus = isoformList[0].txEnd;
+
+                for (int i = 1; i < isoformList.Count(); i++)
+                {
+                    if (chromosome != isoformList[i].chromosome)
+                    {
+                        Console.WriteLine("LoadGeneInformation: Warning: different isoforms of " + gene.symbol + " are on different chromosomes: " + chromosome + " and " + isoformList[i].chromosome);
+                    }
+                    else
+                    {
+                        minLocus = Math.Min(minLocus, isoformList[i].txStart);
+                        maxLocus = Math.Max(maxLocus, isoformList[i].txEnd);
+                    }
+                }
+
+                gene.chromosome = chromosome;
+                gene.minLocus = minLocus;
+                gene.maxLocus = maxLocus;
+                gene.isoforms = isoformList;
+            }
+
+            return genesByHugoId;
+        }
+
+        public class GeneLocationInfo {
+            public string hugoSymbol;
+            public string chromosome;   // in non-chr form
+            public int minLocus;
+            public int maxLocus;
+
+            public bool inconsistent = false;
+
+            public List<Isoform> isoforms = new List<Isoform>();
+        }
+
+        public static Dictionary<string, GeneLocationInfo> LoadGeneLocationInfo(string knownGenesFilename, string kgXrefFilename)
+        {
+            var isoforms = Isoform.readKnownGeneFile(knownGenesFilename);
+
+            var result = new Dictionary<string, GeneLocationInfo>();
+
+            var kgXrefFile = CreateStreamReaderWithRetry(kgXrefFilename);
+
+            string line;
+            while (null != (line = kgXrefFile.ReadLine()))
+            {
+                var fields = line.Split('\t');
+                if (fields.Count() != 10 && fields.Count() != 8)
+                {
+                    Console.WriteLine("LoadGeneLocationInfo: wrong number of fields in kgXref file " + fields.Count() + " != 10 or 8 " + ": " + line);
+                    continue;
+                }
+
+                var ucscId = ConvertToNonExcelString(fields[0]);
+
+                if (!isoforms.ContainsKey(ucscId)) {
+                    Console.WriteLine("LoadGeneLocationInfo: found unknown isoform: " + line);
+                    continue;
+                }
+
+                var isoform = isoforms[ucscId];
+
+                var hugoSymbol = ConvertToNonExcelString(fields[4]);
+                if (!result.ContainsKey(hugoSymbol))
+                {
+                    result.Add(hugoSymbol, new GeneLocationInfo());
+                    result[hugoSymbol].hugoSymbol = hugoSymbol;
+                    result[hugoSymbol].chromosome = isoform.chromosome;
+                    result[hugoSymbol].minLocus = isoform.txStart;
+                    result[hugoSymbol].maxLocus = isoform.txEnd;
+                }
+                else
+                {
+                    if (result[hugoSymbol].chromosome != isoform.chromosome && !result[hugoSymbol].inconsistent)
+                    {
+                        Console.WriteLine("LoadGeneLocationInfo: mismatched chromsome for " + hugoSymbol + ": " + result[hugoSymbol].chromosome + " != " + isoform.chromosome);
+                        result[hugoSymbol].inconsistent = true;
+                        continue;
+                    }
+
+                    result[hugoSymbol].minLocus = Math.Min(result[hugoSymbol].minLocus, isoform.txStart);
+                    result[hugoSymbol].maxLocus = Math.Max(result[hugoSymbol].maxLocus, isoform.txEnd);
+                }
+
+                result[hugoSymbol].isoforms.Add(isoform);
+            }
+
+            kgXrefFile.Close();
+            return result;
+        }
+
+        public class GeneLocationsByNameAndChromosome
+        {
+            public GeneLocationsByNameAndChromosome(Dictionary<string, GeneLocationInfo> genesByName_)
+            {
+                genesByName = genesByName_;
+
+                foreach (var geneEntry in genesByName)
+                {
+                    var gene = geneEntry.Value;
+                    if (!genesByChromosome.ContainsKey(gene.chromosome))
+                    {
+                        genesByChromosome.Add(gene.chromosome, new List<GeneLocationInfo>());
+                    }
+
+                    genesByChromosome[gene.chromosome].Add(gene);
+                }
+            }
+
+            public Dictionary<string, GeneLocationInfo> genesByName;
+            public Dictionary<string, List<GeneLocationInfo>> genesByChromosome = new Dictionary<string ,List<GeneLocationInfo>>();    // chromosome is in non-chr form.
+        }
+
+        public class ExonicMap
+        {
+            public ExonicMap(GeneLocationsByNameAndChromosome geneMap)
+            {
+                foreach (var entry in geneMap.genesByChromosome)
+                {
+                    chromsomeMapSizes.Add(entry.Key, 0);
+                }
+
+                foreach (var geneEntry in geneMap.genesByName)
+                {
+                    var gene = geneEntry.Value;
+
+                    foreach (var isoform in gene.isoforms)
+                    {
+                        foreach (var exon in isoform.exons)
+                        {
+                            chromsomeMapSizes[gene.chromosome] = Math.Max(chromsomeMapSizes[gene.chromosome], exon.end);
+                        }
+                    }
+                }
+
+                //
+                // We now know the largest base in any exon in each chromosome.  Allocate the maps.
+                //
+
+                foreach (var chromsomeEntry in chromsomeMapSizes)
+                {
+                    var chromosome = chromsomeEntry.Key;
+                    var highestBaseInAnExon = chromsomeEntry.Value;
+                    map.Add(chromosome, new bool[highestBaseInAnExon + 1]);  // +1 becuase the genome isn't 0 based.  Biologists, what can you do?
+                    for (int i = 0; i <= highestBaseInAnExon; i++)
+                    {
+                        map[chromosome][i] = false;
+                    }
+                }
+
+                //
+                // Now run through all the exons again and populate the map.
+                //
+                foreach (var geneEntry in geneMap.genesByName)
+                {
+                    var gene = geneEntry.Value;
+
+                    foreach (var isoform in gene.isoforms)
+                    {
+                        foreach (var exon in isoform.exons)
+                        {
+                            for (int i = exon.start; i <= exon.end; i++)
+                            {
+                                map[gene.chromosome][i] = true;
+                            }
+                        }
+                    }
+                }
+
+            }
+
+            public bool isLocationInAnExon(string chromosome, int location)
+            {
+                return map.ContainsKey(chromosome) && chromsomeMapSizes[chromosome] <= location && map[chromosome][location];
+            }
+
+            Dictionary<string, int> chromsomeMapSizes = new Dictionary<string,int>();
+            Dictionary<string, bool[]> map = new Dictionary<string,bool[]>(); // Maps non-chr chromosome name->array of bools.  And yes, this could be done more space efficiently, but it's peanuts compared to a lot of stuff we do.
+        }
+
+        public class GeneInformation
+        {
+            public GeneInformation(string gene_with_protein_product_line)
+            {
+                var fields = gene_with_protein_product_line.Split('\t');
+
+                if (fields.Count() != 48)
+                {
+                    Console.WriteLine("GeneInformation.GeneInfomation: wrong field count in input line, " + fields.Count() + " != 48");
+                    return;
+                }
+
+                HgncId = ConvertToNonExcelString(fields[0]);
+                symbol = ConvertToNonExcelString(fields[1]);
+                name = ConvertToNonExcelString(fields[2]);
+                locus_group = ConvertToNonExcelString(fields[3]);
+                locus_type = ConvertToNonExcelString(fields[4]);
+                status = ConvertToNonExcelString(fields[5]);
+                location = ConvertToNonExcelString(fields[6]);
+                location_sortable = ConvertToNonExcelString(fields[7]);
+                alias_symbol = ConvertToNonExcelString(fields[8]);
+                alias_name = ConvertToNonExcelString(fields[9]);
+                prev_symbol = ConvertToNonExcelString(fields[10]);
+                prev_name = ConvertToNonExcelString(fields[11]);
+                gene_family = ConvertToNonExcelString(fields[12]);
+                gene_family_id = ConvertToNonExcelString(fields[13]);
+                date_approved_reserved = ConvertToNonExcelString(fields[14]);
+                date_symbol_changed = ConvertToNonExcelString(fields[15]);
+                date_name_changed = ConvertToNonExcelString(fields[16]);
+                date_modified = ConvertToNonExcelString(fields[17]);
+                entrez_id = ConvertToNonExcelString(fields[18]);
+                ensembl_gene_id = ConvertToNonExcelString(fields[19]);
+                vega_id = ConvertToNonExcelString(fields[20]);
+                ucsc_id = ConvertToNonExcelString(fields[21]);
+                ena = ConvertToNonExcelString(fields[22]);
+                refseq_accession = ConvertToNonExcelString(fields[23]);
+                ccds_id = ConvertToNonExcelString(fields[24]);
+                uniprot_ids = ConvertToNonExcelString(fields[25]);
+                pubmed_id = ConvertToNonExcelString(fields[26]);
+                mgd_id = ConvertToNonExcelString(fields[27]);
+                rgd_id = ConvertToNonExcelString(fields[28]);
+                lsdb = ConvertToNonExcelString(fields[29]);
+                cosmic = ConvertToNonExcelString(fields[30]);
+                omim_id = ConvertToNonExcelString(fields[31]);
+                mirbase = ConvertToNonExcelString(fields[32]);
+                homeodb = ConvertToNonExcelString(fields[33]);
+                snornabase = ConvertToNonExcelString(fields[34]);
+                bioparadigms_slc = ConvertToNonExcelString(fields[35]);
+                orphanet = ConvertToNonExcelString(fields[36]);
+                pseudogene_dot_org = ConvertToNonExcelString(fields[37]);
+                horde_id = ConvertToNonExcelString(fields[38]);
+                merops = ConvertToNonExcelString(fields[39]);
+                imgt = ConvertToNonExcelString(fields[40]);
+                iuphar = ConvertToNonExcelString(fields[41]);
+                kznf_gene_catalog = ConvertToNonExcelString(fields[42]);
+                mamit_trnadb = ConvertToNonExcelString(fields[43]);
+                cd = ConvertToNonExcelString(fields[44]);
+                lncrnadb = ConvertToNonExcelString(fields[45]);
+                enzyme_id = ConvertToNonExcelString(fields[46]);
+                intermediate_filament_db = ConvertToNonExcelString(fields[47]);
+            }
+            public static Dictionary<string, GeneInformation> LoadFromFile(string filename)
+            {
+                var genes = new Dictionary<string, GeneInformation>();
+
+                var reader = CreateStreamReaderWithRetry(filename);
+
+                reader.ReadLine();  // Skip the header
+
+                string line;
+                while (null != (line = reader.ReadLine()))
+                {
+                    var gene = new GeneInformation(line);
+
+                    genes.Add(gene.symbol, gene);
+                }
+
+                reader.Close();
+
+                return genes;
+            }
+
+            public string HgncId;
+            public string symbol;
+            public string name;
+            public string locus_group;
+            public string locus_type;
+            public string status;
+            public string location;
+            public string location_sortable;
+            public string alias_symbol;
+            public string alias_name;
+            public string prev_symbol;
+            public string prev_name;
+            public string gene_family;
+            public string gene_family_id;
+            public string date_approved_reserved;
+            public string date_symbol_changed;
+            public string date_name_changed;
+            public string date_modified;
+            public string entrez_id;
+            public string ensembl_gene_id;
+            public string vega_id;
+            public string ucsc_id;
+            public string ena;
+            public string refseq_accession;
+            public string ccds_id;
+            public string uniprot_ids;
+            public string pubmed_id;
+            public string mgd_id;
+            public string rgd_id;
+            public string lsdb;
+            public string cosmic;
+            public string omim_id;
+            public string mirbase;
+            public string homeodb;
+            public string snornabase;
+            public string bioparadigms_slc;
+            public string orphanet;
+            public string pseudogene_dot_org;
+            public string horde_id;
+            public string merops;
+            public string imgt;
+            public string iuphar;
+            public string kznf_gene_catalog;
+            public string mamit_trnadb;
+            public string cd;
+            public string lncrnadb;
+            public string enzyme_id;
+            public string intermediate_filament_db;
+
+            public List<Isoform> isoforms = new List<Isoform>();
+            public string chromosome = "Unknown";               // In the non-chr form
+            public int minLocus = 0;                            // Min locus of any isoform
+            public int maxLocus = 0;                            // Max locus of any isoform
+
+        } // GeneInformation
+
     } // ExpressionTools
 
 }
