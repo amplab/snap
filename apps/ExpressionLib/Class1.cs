@@ -374,6 +374,7 @@ namespace ExpressionLib
             public FileInfo readsAtSelectedVariantsIndexInfo = null;
             public FileInfo annotatedSelectedVariantsInfo = null;
             public FileInfo alleleSpecificGeneExpressionInfo = null;
+            public FileInfo geneCoverageInfo = null;
             public long totalSize = 0;
             public bool needed = false; // Do we need this as input for some experiment?
             public bool isRealingned = false;   // Was this realined, or is it straight from TCGA
@@ -486,6 +487,7 @@ namespace ExpressionLib
         public const string readsAtSelectedVariantsExtension = ".reads-at-selected-variants";
         public const string readsAtSelectedVariantsIndexExtension = readsAtSelectedVariantsExtension + ".index";
         public const string alleleSpecificGeneExpressionExtension = ".allele_specific_gene_expression";
+        public const string geneCoverageExtension = ".gene_coverage.txt";
 
         static readonly int bamExtensionLength = bamExtension.Count();
         static readonly int baiExtensionLength = baiExtension.Count();
@@ -501,6 +503,7 @@ namespace ExpressionLib
         static readonly int readsAtSelectedVariantsExtensionLength = readsAtSelectedVariantsExtension.Count();
         static readonly int readsAtSelectedVariantsIndexExtensionLength = readsAtSelectedVariantsIndexExtension.Count();
         static readonly int alleleSpecificGeneExpressionExtensionLength = alleleSpecificGeneExpressionExtension.Count();
+        static readonly int geneCoverageExtensionLength = geneCoverageExtension.Count();
 
         static public bool CheckFileForDone(string filename, bool compressedFile) // Check that the given file is a text file who's last line is **done**
         {
@@ -800,6 +803,23 @@ namespace ExpressionLib
                                 }
                             }
                         }
+                        else if (file.Count() > geneCoverageExtensionLength && file.Substring(file.Count() - geneCoverageExtensionLength).ToLower() == geneCoverageExtension)
+                        {
+                            string expectedFileName = analysisID + geneCoverageExtension;
+                            if (file.Count() < expectedFileName.Count() || file.Substring(file.Count() - expectedFileName.Count()) != expectedFileName)
+                            {
+                                Console.WriteLine("Incorrect gene coverage file " + file);
+                            }
+                            else
+                            {
+                                storedBAM.geneCoverageInfo = new FileInfo(file);
+                                if (storedBAM.geneCoverageInfo.Length < 1024 * 1024 && !CheckFileForDone(file, false))
+                                {
+                                    Console.WriteLine("File " + file + " is truncated.");
+                                    storedBAM.geneCoverageInfo = null;
+                                }
+                            }
+                        }
                         else
                         {
                             Console.WriteLine("Saw unexpected file " + file);
@@ -958,6 +978,7 @@ namespace ExpressionLib
             public Pathname selectedVariantsFileName = null;
             public Pathname readsAtSelectedVariantsFileName = null;
             public Pathname annotatedSelectedVariantsFileName = null;
+            public Pathname geneCoverageFileName = null;
             public Pathname bamFileName = null;
             public string bamHash = null;
             public Pathname baiFileName = null;
@@ -1063,6 +1084,7 @@ namespace ExpressionLib
         public const int TumorDNAAllcountFileFieldNumber = 27;
         public const int AlleleSpecificGeneExpressionFileFieldNumber = 28;
         public const int ReadsAtSelectedVariantsNormalRNAFileFieldNumber = 29;
+        public const int TumorDNAGeneCoverageFileFieldNumber = 30;
 
         public static void DumpExperimentsToFile(List<Experiment> experiments, string filename)
         {
@@ -1087,7 +1109,7 @@ namespace ExpressionLib
             outputFile.WriteLine("disease_abbr\treference\tparticipantID\tTumorRNAAnalysis\tTumorDNAAnalysis\tNormalDNAAnalysis\tNormalRNAAnalysis\ttumorRNAPathname\ttumorDNAPathname\t" +
                 "normalDNAPathname\tNormalRNAPathname\tVCFPathname\tgender\tdaysToBirth\tdaysToDeath\tOrigTumorDNAAliquotID\tTumorRNAAllcountFile\tNormalRNAAllcountFile\tmafFile\t" +
                 "RegionalExpressionFilename\tGeneExpressionFilename\tSelectedVariantsFilename\tReadsAtSelectedVariantsDNAFilename\tReadsAtSelectedVariantsRNAFilename\tAnotatedSelectedVariantsFile\t" +
-                "SourceNormalDNA\tSourceTumorDNA\tTumorDNAAllcountFilename\tAlleleSpecifcGeneExpressionFile\tNormal RNA ReadsAtSelectedVariants");
+                "SourceNormalDNA\tSourceTumorDNA\tTumorDNAAllcountFilename\tAlleleSpecifcGeneExpressionFile\tNormal RNA ReadsAtSelectedVariants\tGene Coverage");
 
             foreach (Experiment experiment in experiments)
             {
@@ -1321,6 +1343,16 @@ namespace ExpressionLib
                     outputFile.Write(experiment.NormalDNAAnalysis.storedBAM.readsAtSelectedVariantsInfo.FullName + "\t");
                 }
 
+                // 29
+                if (experiment.TumorDNAAnalysis == null || experiment.TumorDNAAnalysis.storedBAM == null || experiment.TumorDNAAnalysis.geneCoverageFileName == null)
+                {
+                    outputFile.Write("\t");
+                }
+                else
+                {
+                    outputFile.Write(experiment.TumorDNAAnalysis.geneCoverageFileName + "\t");
+                }
+
                 outputFile.WriteLine();
             }
 
@@ -1404,7 +1436,7 @@ namespace ExpressionLib
                 {
                     experiment.NormalRNAAnalysis.readsAtSelectedVariantsFileName = fields[ReadsAtSelectedVariantsNormalRNAFileFieldNumber];
                 }
-
+                experiment.TumorDNAAnalysis.geneCoverageFileName = fields[TumorDNAGeneCoverageFileFieldNumber];
                 experiments.Add(experiment);
             }
 
@@ -3184,6 +3216,7 @@ namespace ExpressionLib
                 filename = filename_;
             }
 
+
             public bool openFile(out long mappedHQNuclearReads, out int out_numContigs)
             {
                 if (null != allcountReader)
@@ -3198,7 +3231,8 @@ namespace ExpressionLib
 
                 try
                 {
-                    allcountReader = new StreamReader(new GZipStream(new StreamReader(filename).BaseStream, CompressionMode.Decompress));
+                    compressedStreamReader = CreateCompressedStreamReaderWithRetry(filename);
+                    allcountReader = new StreamReader(new GZipStream(compressedStreamReader.BaseStream, CompressionMode.Decompress));
                 }
                 catch (IOException)
                 {
@@ -3340,7 +3374,7 @@ namespace ExpressionLib
                 return true;
             }
 
-            public delegate void ProcessBase(string strippedContigName, int currentOffset, int currentMappedReadCount);
+            public delegate void ProcessBase(string strippedContigName, int location, int currentMappedReadCount);
 
             public bool ReadAllcountFile(ProcessBase processBase)
             {
@@ -3532,6 +3566,16 @@ namespace ExpressionLib
                 return true;
             }
 
+            public void Close()
+            {
+                if (null != allcountReader)
+                {
+                    allcountReader.Close();
+                    compressedStreamReader.Close();
+                }
+            }
+
+            StreamReader compressedStreamReader = null;
             StreamReader allcountReader = null;
             int numContigs = 0;
             Contig[] contigs = null;
@@ -4278,7 +4322,11 @@ namespace ExpressionLib
                         {
                             for (int i = exon.start; i <= exon.end; i++)
                             {
-                                map[gene.chromosome][i] = true;
+                                if (!map[gene.chromosome][i])
+                                {
+                                    nExonicLoci++;
+                                    map[gene.chromosome][i] = true;
+                                }
                             }
                         }
                     }
@@ -4293,6 +4341,10 @@ namespace ExpressionLib
 
             Dictionary<string, int> chromsomeMapSizes = new Dictionary<string,int>();
             Dictionary<string, bool[]> map = new Dictionary<string,bool[]>(); // Maps non-chr chromosome name->array of bools.  And yes, this could be done more space efficiently, but it's peanuts compared to a lot of stuff we do.
+
+            int nExonicLoci = 0;
+
+            public int getNExonicLoci() { return nExonicLoci; }
         }
 
         public class GeneInformation

@@ -2758,6 +2758,72 @@ namespace ExpressionMetadata
             Console.WriteLine("Checked " + nDependenciesChecked + " dependencies among files for " + experiments.Count() + " experiments.");
         }
 
+        static void GenerateGeneCoverageScripts(List<ExpressionTools.Experiment> experiments)
+        {
+            string createJobFilename = baseDirectory + "createGeneCoverageJob.cmd";
+            string scheduleJobFilename = baseDirectory + "scheduleGeneCoverageJob.cmd";
+
+            File.Delete(createJobFilename);
+            File.Delete(scheduleJobFilename);
+
+
+
+            int nDone = 0;
+            int nInScript = 0;
+            int nNeedingPrecursors = 0;
+            var readyToGo = new List<ParticipantID>();
+
+            foreach (var experiment in experiments)
+            {
+                if (experiment.TumorDNAAnalysis == null || experiment.TumorDNAAnalysis.storedBAM == null || experiment.TumorDNAAnalysis.storedBAM.allCountInfo == null)
+                {
+                    nNeedingPrecursors++;
+                }
+                else if (experiment.TumorDNAAnalysis.storedBAM.geneCoverageInfo != null)
+                {
+                    nDone++;
+                }
+                else
+                {
+                    nInScript++;
+                    readyToGo.Add(experiment.participant.participantId);
+                }
+            }
+
+            if (nInScript != 0)
+            {
+                const int nJobsToGenerate = 20;
+                var createJobScript = ExpressionTools.CreateStreamWriterWithRetry(createJobFilename);
+                createJobScript.WriteLine(@"job new /emailaddress:bolosky@microsoft.com /nodegroup:B99,LongRunQ /exclusive:true /failontaskfailure:false /jobname:geneCoverage /memorypernode:32000 /notifyoncompletion:true /numnodes:1-" +
+                    nJobsToGenerate + @" /runtime:7:12:00 /scheduler:gcr /jobtemplate:LongRunQ /estimatedprocessmemory:20000");
+                createJobScript.Close();
+
+                var scheduleJobFile = ExpressionTools.CreateStreamWriterWithRetry(scheduleJobFilename);
+                int baseNumber = readyToGo.Count() / nJobsToGenerate;
+                int nExtra = readyToGo.Count() % nJobsToGenerate;
+                for (int i = 0; i < nJobsToGenerate; i++)
+                {
+                    scheduleJobFile.Write(@"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr \\gcr\scratch\b99\bolosky\MeasureGeneCoverage");
+
+                    for (int j = 0; j < baseNumber + ((i < nExtra) ? 1 : 0); j++)
+                    {
+                        scheduleJobFile.Write(" " + readyToGo[0]);
+                        readyToGo.RemoveAt(0);
+                    }
+                    scheduleJobFile.WriteLine();
+                }
+
+                scheduleJobFile.Close();
+                
+            }
+
+            if (nInScript > 0 || nNeedingPrecursors > 0)
+            {
+                Console.WriteLine("Generated gene coverage script for " + nInScript + " and " + nNeedingPrecursors + " still need precursors.");
+            }
+
+        }
+
         static void Main(string[] args)
         {
             var timer = new Stopwatch();
@@ -2843,6 +2909,7 @@ namespace ExpressionMetadata
             GenerateRegionalExpressionScripts(experiments);
             GenerateGeneExpressionScripts(experiments, false);
             GenerateGeneExpressionScripts(experiments, true);
+            GenerateGeneCoverageScripts(experiments);
             //GenerateTP53CountScripts(experiments);
             //GenerateIsoformFileListsByDiseaseAndMutation(experiments);
             //GenerateMutationDistributionByGene(experiments);
