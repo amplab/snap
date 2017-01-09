@@ -2259,51 +2259,6 @@ namespace ExpressionMetadata
             }
         }
 
-        static public void GenerateAllcountScript_Old(Dictionary<AnalysisID, ExpressionTools.TCGARecord> tcgaRecords)   // This is deprecated and just left here for reference
-        {
-            int nWithAllcount = 0;
-            int nAllcountsToGenerate = 0;
-            int nAwaitingDownload = 0;
-            int indexMachine = 0;
-            StreamWriter allcountScript = null;
-            foreach (var entry in tcgaRecords)
-            {
-                var tcgaRecord = entry.Value;
-                AnalysisID analysisID = entry.Key;
-
-                if (tcgaRecord.library_strategy == "RNA")
-                {
-                    if (tcgaRecord.storedBAM == null)
-                    {
-                        nAwaitingDownload++;
-                    }
-                    else if (tcgaRecord.storedBAM.allCountInfo != null)
-                    {
-                        nWithAllcount++;
-                    }
-                    else
-                    {
-                        nAllcountsToGenerate++;
-                        if (allcountScript == null)
-                        {
-                            allcountScript = new StreamWriter(baseDirectory + "allcountCluster.cmd");
-                            StreamWriter jobScript = new StreamWriter(baseDirectory + "createAllcountJob.cmd");
-                            jobScript.WriteLine("job new /emailaddress:bolosky@microsoft.com /nodegroup:B99,ExpressQ /exclusive:true /failontaskfailure:false /jobname:allcount /memorypernode:10000 /notifyoncompletion:true /numnodes:1-40 /runtime:12:00 /scheduler:gcr /jobtemplate:ExpressQ /estimatedprocessmemory:10000");
-                            jobScript.Close();
-                        }
-                        allcountScript.WriteLine(@"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr " + @"\\gcr\scratch\b99\bolosky\countAll.cmd \\msr-genomics-" + indexMachine + @"\d$\sequence\indices\" + tcgaRecord.refassemShortName + "-24 " + tcgaRecord.storedBAM.bamInfo.FullName + " " +
-                            tcgaRecord.storedBAM.bamInfo.DirectoryName + @"\" + analysisID + ".allcount.gz");
-                        indexMachine = 1 - indexMachine;
-                    }
-                }
-            } // foreach TCGA record
-            if (allcountScript != null)
-            {
-                allcountScript.Close();
-            }
-            Console.WriteLine("Found " + nWithAllcount + " RNA analyses with allcounts, generated a script to build " + nAllcountsToGenerate + " more, and " + nAwaitingDownload + " are awaiting downloads");
-        }
-
         static void GenerateListOfAllcountFiles(Dictionary<AnalysisID, ExpressionTools.StoredBAM> storedBAMs)
         {
             StreamWriter output = new StreamWriter(baseDirectory + "allcount_files.txt");
@@ -2570,27 +2525,36 @@ namespace ExpressionMetadata
                     (forAlleleSpecificExpression ? "alleleSpecificGeneExpression" : "geneExpression") + " /memorypernode:32000 /notifyoncompletion:true /numnodes:1-20 /runtime:7:12:00 /scheduler:gcr /jobtemplate:LongRunQ /estimatedprocessmemory:20000");
                 createJobScript.Close();
 
-                int nPerJob = forAlleleSpecificExpression ? 200 : 30;
-                int nInThisJob = 0;
-                string jobHeader = @"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr \\gcr\scratch\b99\bolosky\ExpressionNearMutations " + (forAlleleSpecificExpression ? "-a " : "");
-                string thisJob = "";
-
                 StreamWriter scheduleJobScript = new StreamWriter(scheduleJobScriptFilename);
 
-                foreach (var participant in readyToGo)
+                ExpressionTools.GenerateJobExecutionScript(scheduleJobScript, @"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr \\gcr\scratch\b99\bolosky\ExpressionNearMutations " + (forAlleleSpecificExpression ? "-a " : ""),
+                    readyToGo, 20);
+
+                if (false)
                 {
-                    if (nInThisJob >= nPerJob) {
-                        scheduleJobScript.WriteLine(jobHeader + thisJob);
-                        thisJob = "";
-                        nInThisJob = 0;
+                    int nPerJob = forAlleleSpecificExpression ? 200 : 30;
+                    int nInThisJob = 0;
+                    string jobHeader = @"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr \\gcr\scratch\b99\bolosky\ExpressionNearMutations " + (forAlleleSpecificExpression ? "-a " : "");
+                    string thisJob = "";
+
+
+                    foreach (var participant in readyToGo)
+                    {
+                        if (nInThisJob >= nPerJob)
+                        {
+                            scheduleJobScript.WriteLine(jobHeader + thisJob);
+                            thisJob = "";
+                            nInThisJob = 0;
+                        }
+
+                        thisJob += participant + " ";
+                        nInThisJob++;
                     }
 
-                    thisJob += participant + " ";
-                    nInThisJob++;
-                }
-
-                if (0 != nInThisJob) {
-                    scheduleJobScript.WriteLine(jobHeader + thisJob);
+                    if (0 != nInThisJob)
+                    {
+                        scheduleJobScript.WriteLine(jobHeader + thisJob);
+                    }
                 }
 
                 scheduleJobScript.Close();
@@ -2733,6 +2697,11 @@ namespace ExpressionMetadata
                 ((y.NormalDNAAnalysis.storedBAM == null) ? null : y.NormalDNAAnalysis.storedBAM.annotatedSelectedVariantsInfo) : 
                 ((y.NormalDNAAnalysis.storedBAM == null) ? null : y.NormalDNAAnalysis.storedBAM.alleleSpecificGeneExpressionInfo));
 
+            dependencies.Add((x, y) => x ?
+                ((y.TumorDNAAnalysis.storedBAM == null) ? null : y.TumorDNAAnalysis.storedBAM.allCountInfo) :
+                ((y.TumorDNAAnalysis.storedBAM == null) ? null : y.TumorDNAAnalysis.storedBAM.geneCoverageInfo));
+
+
             int nDependenciesChecked = 0;
             foreach (var experiment in experiments)
             {
@@ -2799,18 +2768,24 @@ namespace ExpressionMetadata
                 createJobScript.Close();
 
                 var scheduleJobFile = ExpressionTools.CreateStreamWriterWithRetry(scheduleJobFilename);
-                int baseNumber = readyToGo.Count() / nJobsToGenerate;
-                int nExtra = readyToGo.Count() % nJobsToGenerate;
-                for (int i = 0; i < nJobsToGenerate; i++)
-                {
-                    scheduleJobFile.Write(@"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr \\gcr\scratch\b99\bolosky\MeasureGeneCoverage");
 
-                    for (int j = 0; j < baseNumber + ((i < nExtra) ? 1 : 0); j++)
+                ExpressionTools.GenerateJobExecutionScript(scheduleJobFile, @"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr \\gcr\scratch\b99\bolosky\MeasureGeneCoverage", readyToGo, 20);
+
+                if (false)  // Code to be deleted
+                {
+                    int baseNumber = readyToGo.Count() / nJobsToGenerate;
+                    int nExtra = readyToGo.Count() % nJobsToGenerate;
+                    for (int i = 0; i < nJobsToGenerate; i++)
                     {
-                        scheduleJobFile.Write(" " + readyToGo[0]);
-                        readyToGo.RemoveAt(0);
+                        scheduleJobFile.Write(@"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr \\gcr\scratch\b99\bolosky\MeasureGeneCoverage");
+
+                        for (int j = 0; j < baseNumber + ((i < nExtra) ? 1 : 0); j++)
+                        {
+                            scheduleJobFile.Write(" " + readyToGo[0]);
+                            readyToGo.RemoveAt(0);
+                        }
+                        scheduleJobFile.WriteLine();
                     }
-                    scheduleJobFile.WriteLine();
                 }
 
                 scheduleJobFile.Close();

@@ -68,6 +68,7 @@ obj
 /apps/ApplyBonferroniCorrection/bin
 /apps/CreateExpressionByRangeGraphs/bin/
 /apps/MeasureGeneCoverage/bin
+/apps/ClassifyGenes/bin
 
 /apps/ExpressionMetadata/bin/x64/Debug
 /apps/ExpressionMetadata/bin/x64/Release/ExpressionMetadata.exe.config

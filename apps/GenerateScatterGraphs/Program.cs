@@ -658,7 +658,7 @@ namespace GenerateScatterGraphs
                 } // for each possible matching DNA mutation
             } // foreach line in the RNA input file.
 
-            StreamWriter summaryFile = new StreamWriter(@"f:\temp\gene_scatter_graphs\_summary.txt");
+            StreamWriter summaryFile = new StreamWriter(ExpressionTools.geneScatterGraphsDirectory +  "_summary.txt");
             summaryFile.WriteLine("Gene\tnSingle\tnMultiple\tnInteresting\t%Interesting\tsex\tmedian single\tmedian multi\tmedian combined\tmedian heterozygous");
 
             var histogramBucketMaxima = new List<double>();
@@ -681,7 +681,7 @@ namespace GenerateScatterGraphs
                 string[] histogramLines = BuildHistogram(geneState.ratioRatios, histogramBucketMaxima);
                 string[] histogram2Lines = BuildHistogram(geneState.ratioRatiosMidDNA, histogramBucketMaxima);
 
-               StreamWriter file = new StreamWriter(@"f:\temp\gene_scatter_graphs\" + geneState.gene + ".txt");
+                StreamWriter file = new StreamWriter(ExpressionTools.geneScatterGraphsDirectory + geneState.gene + ".txt");
                string unfilteredHeaderLine = "RNAFile\tDNAFile\t" +
                    "Hugo_Symbol\tEntrez_Gene_Id\tCenter\tNCBI_Build\tChromosome\tStart_Position\tEnd_Position\tStrand\tVariant_Classification\tVariant_Type\tReference_Allele\tTumor_Seq_Allele_1\tTumor_Seq_Allele_2\tdbSNP_RS\tdbSNP_Val_Status\t" +
                    "Tumor_Sample_Barcode\tMatched_Norm_Sample_Barcode\tMatch_Norm_Seq_Allele1\tMatch_Norm_Seq_Allele2\tTumor_Validation_Allele1\tTumor_Validation_Allele2\tMatch_Norm_Validation_Allele1\tMatch_Norm_Validation_Allele2\tVerification_Status\t" +
@@ -705,7 +705,7 @@ namespace GenerateScatterGraphs
 
                 file.Close();
 
-                var unfilteredFile = new StreamWriter(@"f:\temp\gene_mutations_with_counts\" + geneState.gene + "_unfiltered_counts.txt");
+                var unfilteredFile = new StreamWriter(ExpressionTools.unfilteredCountsDirectory + geneState.gene + ExpressionTools.unfilteredCountsExtention);
                 unfilteredFile.WriteLine(unfilteredHeaderLine);
                 foreach (var line in geneState.outputUnfiltered)
                 {

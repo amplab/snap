@@ -130,7 +130,7 @@ namespace ExpressionByMutationCount
                     return false;
                 }
 
-                currentHugoSymbol = ExpressionTools.ConvertToNonExcelString(fields[0]);
+                currentHugoSymbol = ExpressionTools.ConvertToNonExcelString(fields[0]).ToUpper();
 
                 try
                 {
@@ -257,7 +257,7 @@ namespace ExpressionByMutationCount
             }
 
             List<string> queuedLines = new List<string>();
-            const int minLinesToQueue = 1000;
+            const int minLinesToQueue = 500;
         }
 
         class ExpressionInstance : IComparer<ExpressionInstance>
@@ -395,53 +395,87 @@ namespace ExpressionByMutationCount
 
             public bool loadPerExperimentState(Dictionary<string, string> sampleToParticipantIDMap, Dictionary<string, ExpressionTools.Experiment> experimentsByRNAAnalysisID)
             {
-                string scatterPlotFilename = @"f:\temp\gene_mutations_with_counts\" + hugo_symbol + "_unfiltered_counts.txt";
-                if (!File.Exists(scatterPlotFilename))
+
+                var geneScatterPlotLines = ExpressionTools.GeneScatterGraphLine.LoadAllGeneScatterGraphEntries(ExpressionTools.unfilteredCountsDirectory, true, experimentsByRNAAnalysisID, hugo_symbol);
+                if (null == geneScatterPlotLines || geneScatterPlotLines.Count() == 0)
                 {
                     return false;
                 }
 
-                StreamReader reader = null;
+                foreach (var geneScatterPlotLine in geneScatterPlotLines)
+                {
 
-                reader = ExpressionTools.CreateStreamReaderWithRetry(scatterPlotFilename);
-
-                reader.ReadLine(); // Skip the header
-
-                string line = null;
-
-                while (null != (line = reader.ReadLine())) {
-                    var fields = line.Split('\t');
-
-                    int nDNAMatchingReference = Convert.ToInt32(fields[39]);
-                    int nDNAMatchingTumor = Convert.ToInt32(fields[40]);
-                    int nDNAMatchingNeither = Convert.ToInt32(fields[41]);
-                    bool insufficientDNA = nDNAMatchingReference + nDNAMatchingTumor + nDNAMatchingNeither < 30;
-
-                    double tumorDNAFraction;
-                    if (insufficientDNA) {
-                        tumorDNAFraction = 0.5;
-                    } else {
-                        tumorDNAFraction = (double)nDNAMatchingTumor / ((double)(nDNAMatchingReference + nDNAMatchingTumor + nDNAMatchingNeither));
-                    }
-                    
-                    string variantClassification = fields[10];
-
-                    //
-                    // Because I cleverly didn't put the participant ID in scatter graph file, we just parse the tumor RNA analysis ID out of the
-                    // filename, which is of format <disease_abbr>\<analysis_id>-<gene>-<chromosome>-<begin-offset>-<end-offset>-RNA
-                    //
-                    string tumorRNAAnalysisID = fields[0].Substring(fields[0].IndexOf('\\') + 1, 36);
-                    if (!experimentsByRNAAnalysisID.ContainsKey(tumorRNAAnalysisID))
+                    if (perExperimentState.ContainsKey(geneScatterPlotLine.participantId))
                     {
-                        Console.WriteLine("Can't find experiment for line " + line);
-                        continue;
+                        perExperimentState[geneScatterPlotLine.participantId].Update(
+                            geneScatterPlotLine.tumorDNAFraction < 1.0 / 3.0, geneScatterPlotLine.tumorDNAFraction > 2.0 / 3.0, geneScatterPlotLine.Variant_Classification == "Nonsense_Mutation" || geneScatterPlotLine.Variant_Classification == "Splice_Site", 
+                            geneScatterPlotLine.insufficientDNA);
+                    }
+                    else
+                    {
+                        perExperimentState.Add(geneScatterPlotLine.participantId,
+                            new Mutation(geneScatterPlotLine.tumorDNAFraction < 1.0 / 3.0, geneScatterPlotLine.tumorDNAFraction > 2.0 / 3.0,
+                                geneScatterPlotLine.Variant_Classification == "Nonsense_Mutation" || geneScatterPlotLine.Variant_Classification == "Splice_Site", geneScatterPlotLine.insufficientDNA));
+                    }
+                }
+
+                if (false)  // The old way
+                {
+                    string scatterPlotFilename = ExpressionTools.unfilteredCountsDirectory + hugo_symbol + ExpressionTools.unfilteredCountsExtention;
+                    if (!File.Exists(scatterPlotFilename))
+                    {
+                        return false;
                     }
 
-                    string participantId = experimentsByRNAAnalysisID[tumorRNAAnalysisID].participant.participantId;
-                    if (perExperimentState.ContainsKey(participantId)) {
-                        perExperimentState[participantId].Update(tumorDNAFraction < 1.0 / 3.0, tumorDNAFraction > 2.0 / 3.0, variantClassification == "Nonsense_Mutation" || variantClassification == "Splice_Site", insufficientDNA);
-                    } else {
-                        perExperimentState.Add(participantId, new Mutation(tumorDNAFraction < 1.0 / 3.0, tumorDNAFraction > 2.0 / 3.0, variantClassification == "Nonsense_Mutation" || variantClassification == "Splice_Site", insufficientDNA));
+                    StreamReader reader = null;
+
+                    reader = ExpressionTools.CreateStreamReaderWithRetry(scatterPlotFilename);
+
+                    reader.ReadLine(); // Skip the header
+
+                    string line = null;
+
+                    while (null != (line = reader.ReadLine()))
+                    {
+                        var fields = line.Split('\t');
+
+                        int nDNAMatchingReference = Convert.ToInt32(fields[39]);
+                        int nDNAMatchingTumor = Convert.ToInt32(fields[40]);
+                        int nDNAMatchingNeither = Convert.ToInt32(fields[41]);
+                        bool insufficientDNA = nDNAMatchingReference + nDNAMatchingTumor + nDNAMatchingNeither < 30;
+
+                        double tumorDNAFraction;
+                        if (insufficientDNA)
+                        {
+                            tumorDNAFraction = 0.5;
+                        }
+                        else
+                        {
+                            tumorDNAFraction = (double)nDNAMatchingTumor / ((double)(nDNAMatchingReference + nDNAMatchingTumor + nDNAMatchingNeither));
+                        }
+
+                        string variantClassification = fields[10];
+
+                        //
+                        // Because I cleverly didn't put the participant ID in scatter graph file, we just parse the tumor RNA analysis ID out of the
+                        // filename, which is of format <disease_abbr>\<analysis_id>-<gene>-<chromosome>-<begin-offset>-<end-offset>-RNA
+                        //
+                        string tumorRNAAnalysisID = fields[0].Substring(fields[0].IndexOf('\\') + 1, 36);
+                        if (!experimentsByRNAAnalysisID.ContainsKey(tumorRNAAnalysisID))
+                        {
+                            Console.WriteLine("Can't find experiment for line " + line);
+                            continue;
+                        }
+
+                        string participantId = experimentsByRNAAnalysisID[tumorRNAAnalysisID].participant.participantId;
+                        if (perExperimentState.ContainsKey(participantId))
+                        {
+                            perExperimentState[participantId].Update(tumorDNAFraction < 1.0 / 3.0, tumorDNAFraction > 2.0 / 3.0, variantClassification == "Nonsense_Mutation" || variantClassification == "Splice_Site", insufficientDNA);
+                        }
+                        else
+                        {
+                            perExperimentState.Add(participantId, new Mutation(tumorDNAFraction < 1.0 / 3.0, tumorDNAFraction > 2.0 / 3.0, variantClassification == "Nonsense_Mutation" || variantClassification == "Splice_Site", insufficientDNA));
+                        }
                     }
                 }
 
@@ -727,8 +761,6 @@ namespace ExpressionByMutationCount
                 }
             }
 
-
-
             Stopwatch timer = new Stopwatch();
             timer.Start();
 
@@ -820,10 +852,12 @@ namespace ExpressionByMutationCount
             fiveMinuteTimer.Start();
             long lastFiveMinutePrint = 0;
 
+            string prevHugoSymbol = "";
+
             while (inputFiles.Count() > 0)
             {
 
-                string tooBigHugoSymbol = "ZZZZZZZZZZ";   // Larger than the largest gene name, which is ZZZ3
+                string tooBigHugoSymbol = "[ZZZZ]";   // Larger than the largest gene name, which is "[EPSILON] IGE"
                 string nextHugoSymbol = tooBigHugoSymbol;
                 
                 foreach (var inputFile in inputFiles)
@@ -834,9 +868,19 @@ namespace ExpressionByMutationCount
                     }
                 }
 
+                if (StringComparer.OrdinalIgnoreCase.Compare(nextHugoSymbol,prevHugoSymbol) < 1)
+                {
+                    Console.WriteLine("Not making progress or input files out of order, hugo symbol went from  " + prevHugoSymbol + " to " + nextHugoSymbol);
+                }
+
+                prevHugoSymbol = nextHugoSymbol;
+
                 if (nextHugoSymbol == tooBigHugoSymbol)
                 {
                     Console.WriteLine("Some input files seem to have a hugo symbol bigger than " + tooBigHugoSymbol);
+                    foreach (var inputFile in inputFiles) {
+                        Console.WriteLine("For example: " + inputFile.currentHugoSymbol);
+                    }
                     break;
                 }
 
@@ -866,7 +910,7 @@ namespace ExpressionByMutationCount
                     //
                     // Eat up the lines for the skipped genes, and remember any files that have hit EOF.
                     //
-                    foreach (var inputFile in inputFiles.Where(f => f.currentHugoSymbol == nextHugoSymbol))
+                    foreach (var inputFile in inputFiles.Where(f => f.currentHugoSymbol.ToUpper() == nextHugoSymbol))
                     {
                         if (!inputFile.GetNextLine())
                         {
@@ -877,7 +921,7 @@ namespace ExpressionByMutationCount
                 }
                 else
                 {
-                    foreach (var inputFile in inputFiles.Where(f => f.currentHugoSymbol == nextHugoSymbol))
+                    foreach (var inputFile in inputFiles.Where(f => StringComparer.OrdinalIgnoreCase.Compare(f.currentHugoSymbol, nextHugoSymbol) == 0))    // Weird comparison is because that's the sort order used in the input file.
                     {
                         perGeneLines.Add(inputFile.participantID + "\t" + experimentsByParticipantId[inputFile.participantID].disease_abbr + "\t" + inputFile.currentLine);
 

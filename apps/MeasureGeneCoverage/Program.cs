@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Threading;
 using System.IO;
 using ExpressionLib;
+using System.Diagnostics;
 
 namespace MeasureGeneCoverage
 {
@@ -94,6 +95,9 @@ namespace MeasureGeneCoverage
                     participantId = queuedParticipantIDs[0];
                     queuedParticipantIDs.RemoveAt(0);
                 }
+
+                Stopwatch timer = new Stopwatch();
+                timer.Start();
 
                 if (!experimentsByParticipantId.ContainsKey(participantId))
                 {
@@ -203,7 +207,7 @@ namespace MeasureGeneCoverage
                      
                 for (int i = 0; i < genes.Count(); i++)
                 {
-                    outputFile.Write(genes[i].geneLocationInfo.hugoSymbol + "\t" + genes[i].totalBasesCovered + "\t" + genes[i].totalBaseCoverage + "\t" +
+                    outputFile.Write(ExpressionTools.ConvertToExcelString(genes[i].geneLocationInfo.hugoSymbol) + "\t" + genes[i].totalBasesCovered + "\t" + genes[i].totalBaseCoverage + "\t" +
                         genes[i].isoforms.Count());
 
                     foreach (var isoform in genes[i].isoforms)
@@ -214,6 +218,9 @@ namespace MeasureGeneCoverage
                 }
                 outputFile.WriteLine("**done**");
                 outputFile.Close();
+
+                timer.Stop();
+                Console.WriteLine("Processed " + participantId + " in " + (timer.ElapsedMilliseconds + 500) / 1000 + "s");
             } // while (true) (the outer loop over pariticpants)
         } // ProcessParticipants
 

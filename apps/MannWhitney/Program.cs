@@ -42,7 +42,7 @@ namespace MannWhitney
             //
 
             List<string> sexGenes = new List<string>();
-            string[] summaryLines = File.ReadAllLines(@"f:\temp\gene_scatter_graphs\_summary.txt");
+            string[] summaryLines = File.ReadAllLines(ExpressionTools.geneScatterGraphsDirectory + "_summary.txt");
             foreach (var summaryLine in summaryLines)
             {
                 string[] fields = summaryLine.Split('\t');
@@ -57,7 +57,7 @@ namespace MannWhitney
             ExpressionTools.MannWhitney<Mutation>.GetValue getValue = new ExpressionTools.MannWhitney<Mutation>.GetValue(m => m.RatioOfRatios);
             ExpressionTools.MannWhitney<Mutation>.WhichGroup whichGroup = new ExpressionTools.MannWhitney<Mutation>.WhichGroup(m => m.isSingle);
 
-            foreach (var file in Directory.EnumerateFiles(@"f:\temp\gene_scatter_graphs", "*.txt"))
+            foreach (var file in Directory.EnumerateFiles(ExpressionTools.geneScatterGraphsDirectory, "*.txt"))
             {
                 string []pathComponents = file.Split('\\');
                 string filename = pathComponents[pathComponents.Count() - 1];
@@ -124,7 +124,7 @@ namespace MannWhitney
                 // Probably should tweak median for even-sized distributions
 
             }
-            var output = new StreamWriter(@"f:\temp\gene_scatter_graphs\_MannWhitney.txt");
+            var output = new StreamWriter(ExpressionTools.geneScatterGraphsDirectory + "_MannWhitney.txt");
             output.WriteLine("HugoSymbol\tnSingle\tnMultiple\tU\tz\treversed\tp (Pre-Bonferroni)\tmedian ratio-of-ratios\tsex\tp (post-Bonferroni)");
 
             foreach (var outputLine in outputLines)

@@ -28,6 +28,10 @@ namespace ExpressionLib
 {
     public class ExpressionTools
     {
+        public const string unfilteredCountsDirectory = @"f:\temp\gene_mutations_with_counts\";
+        public const string unfilteredCountsExtention = @"_unfiltered_counts.txt";
+
+        public const string geneScatterGraphsDirectory = @"f:\temp\gene_scatter_graphs\";
 
         public const int nHumanNuclearChromosomes = 24;   // 1-22, X and Y.
 
@@ -401,6 +405,7 @@ namespace ExpressionLib
                 if (readsAtSelectedVariantsIndexInfo != null) totalSpace += (ulong)readsAtSelectedVariantsIndexInfo.Length;
                 if (annotatedSelectedVariantsInfo != null) totalSpace += (ulong)annotatedSelectedVariantsInfo.Length;
                 if (alleleSpecificGeneExpressionInfo != null) totalSpace += (ulong)alleleSpecificGeneExpressionInfo.Length;
+                if (geneCoverageInfo != null) totalSpace += (ulong)geneCoverageInfo.Length;
 
                 return totalSpace;
             }
@@ -2206,6 +2211,11 @@ namespace ExpressionLib
                     if (record.storedBAM.annotatedSelectedVariantsInfo != null) {
                         record.annotatedSelectedVariantsFileName = record.storedBAM.annotatedSelectedVariantsInfo.FullName;
                     }
+
+                    if (record.storedBAM.geneCoverageInfo != null)
+                    {
+                        record.geneCoverageFileName = record.storedBAM.geneCoverageInfo.FullName;
+                    }
                 }
                 else
                 {
@@ -3231,7 +3241,7 @@ namespace ExpressionLib
 
                 try
                 {
-                    compressedStreamReader = CreateCompressedStreamReaderWithRetry(filename);
+                    compressedStreamReader = CreateStreamReaderWithRetry(filename);
                     allcountReader = new StreamReader(new GZipStream(compressedStreamReader.BaseStream, CompressionMode.Decompress));
                 }
                 catch (IOException)
@@ -3819,6 +3829,9 @@ namespace ExpressionLib
             public bool IsSingle;
             public string CancerType;
             public string gender;
+
+            public bool zKnown; // The next 6 fields are valid iff zKnown.
+
             public double zTumor;
             public double zNormal;
             public double z2Tumor;
@@ -3826,13 +3839,20 @@ namespace ExpressionLib
             public double percentMeanTumor; // Expressed as a fraction (i.e., 100% -> 1.0)
             public double percentMeanNormal;// Expressed as a fraction (i.e., 100% -> 1.0)
 
-            static GeneScatterGraphLine fromLine(string inputLine)
+            public bool fromUnfilteredFile; // If this is true, then the fields after n_RNA_Matching_Both are uninitialized and invalid.
+
+            public ParticipantID participantId; // Gotten by parsing the RNA analysis ID and then looking it up in the rna analysis id->participant id map, since it's not in the raw file.
+
+            public bool insufficientDNA;    // Do we have fewer than 30 DNA reads that don't match both alleles
+
+            public static GeneScatterGraphLine fromLine(string inputLine, bool fromUnfilteredFile, Dictionary<string, Experiment> experimentsByRNAAnalysisID)
             {
                 var newLine = new GeneScatterGraphLine();
+                newLine.fromUnfilteredFile = fromUnfilteredFile;
 
                 var fields = inputLine.Split('\t');
 
-                if (fields.Count() < 65) {
+                if (fields.Count() < (fromUnfilteredFile ? 47 : 65)) {
                     Console.WriteLine("GeneScatterGraphEntry.fromLine: too few fields " + fields.Count() + " in input line " + inputLine);
                     return null;
                 }
@@ -3877,7 +3897,14 @@ namespace ExpressionLib
                     newLine.Matched_Norm_Sample_UUID = fields[35];
                     newLine.File_Name = fields[36];
                     newLine.Archive_Name = fields[37];
-                    newLine.Line_Number = Convert.ToInt32(fields[38]);
+                    if (fields[38] == "") // sometimes this is not filled in.
+                    {
+                        newLine.Line_Number = -1;
+                    }
+                    else
+                    {
+                        newLine.Line_Number = Convert.ToInt32(fields[38]);
+                    }
                     newLine.n_DNA_Matching_Reference = Convert.ToInt32(fields[39]);
                     newLine.n_DNA_Matching_Tumor = Convert.ToInt32(fields[40]);
                     newLine.n_DNA_Matching_Neither = Convert.ToInt32(fields[41]);
@@ -3886,24 +3913,55 @@ namespace ExpressionLib
                     newLine.n_RNA_Matching_Tumor = Convert.ToInt32(fields[44]);
                     newLine.n_RNA_Matching_Neither = Convert.ToInt32(fields[45]);
                     newLine.n_RNA_Matching_Both = Convert.ToInt32(fields[46]);
-                    newLine.tumorDNAFraction = Convert.ToDouble(fields[47]);
-                    newLine.tumorRNAFraction = Convert.ToDouble(fields[48]);
-                    newLine.tumorDNAMultiple = Convert.ToDouble(fields[49]);
-                    newLine.tumorRNAMultiple = Convert.ToDouble(fields[50]);
-                    newLine.tumorDNARatio = Convert.ToDouble(fields[51]);
-                    newLine.tumorRNARatio = Convert.ToDouble(fields[52]);
-                    newLine.FractionOfMeanExpression = fields[53];
-                    newLine.zOfmeanExpression = fields[54];
-                    newLine.ratioOfRatios = Convert.ToDouble(fields[55]);
-                    newLine.IsSingle = Convert.ToBoolean(fields[56]);
-                    newLine.CancerType = fields[57];
-                    newLine.gender = fields[58];
-                    newLine.zTumor = Convert.ToDouble(fields[59]);
-                    newLine.zNormal = Convert.ToDouble(fields[60]);
-                    newLine.z2Tumor = Convert.ToDouble(fields[61]);
-                    newLine.z2Normal = Convert.ToDouble(fields[62]);
-                    newLine.percentMeanTumor = Convert.ToDouble(fields[63]) / 100.0; // Expressed as a fraction (i.e., 100% -> 1.0 = fields[];
-                    newLine.percentMeanNormal = Convert.ToDouble(fields[64]) / 100.0;// Expressed as a fraction (i.e., 100% -> 1.0 = fields[];
+
+                    if (!fromUnfilteredFile)
+                    {
+                        newLine.tumorDNAFraction = Convert.ToDouble(fields[47]);
+                        newLine.tumorRNAFraction = Convert.ToDouble(fields[48]);
+                        newLine.tumorDNAMultiple = Convert.ToDouble(fields[49]);
+                        newLine.tumorRNAMultiple = Convert.ToDouble(fields[50]);
+                        newLine.tumorDNARatio = Convert.ToDouble(fields[51]);
+                        newLine.tumorRNARatio = Convert.ToDouble(fields[52]);
+                        newLine.FractionOfMeanExpression = fields[53];
+                        newLine.zOfmeanExpression = fields[54];
+                        newLine.ratioOfRatios = Convert.ToDouble(fields[55]);
+                        newLine.IsSingle = Convert.ToBoolean(fields[56]);
+                        newLine.CancerType = fields[57];
+                        newLine.gender = fields[58];
+
+                        if (fields[59] == "")
+                        {
+                            newLine.zKnown = false;
+                        }
+                        else
+                        {
+                            newLine.zKnown = true;
+                            newLine.zTumor = Convert.ToDouble(fields[59]);
+                            newLine.zNormal = Convert.ToDouble(fields[60]);
+                            newLine.z2Tumor = Convert.ToDouble(fields[61]);
+                            newLine.z2Normal = Convert.ToDouble(fields[62]);
+                            newLine.percentMeanTumor = Convert.ToDouble(fields[63]); // Expressed as a fraction (i.e., 100% -> 1.0 = fields[];
+                            newLine.percentMeanNormal = Convert.ToDouble(fields[64]);// Expressed as a fraction (i.e., 100% -> 1.0 = fields[];
+                        }
+                    }
+                    else
+                    {
+                        newLine.zKnown = false;
+                    }
+
+                    //
+                    // Because I cleverly didn't put the participant ID in scatter graph file, we just parse the tumor RNA analysis ID out of the
+                    // filename, which is of format <disease_abbr>\<analysis_id>-<gene>-<chromosome>-<begin-offset>-<end-offset>-RNA
+                    //
+                    string tumorRNAAnalysisID = fields[0].Substring(fields[0].IndexOf('\\') + 1, 36);
+                    if (!experimentsByRNAAnalysisID.ContainsKey(tumorRNAAnalysisID))
+                    {
+                        Console.WriteLine("Can't find experiment for line " + inputLine);
+                        return null;
+                    }
+
+                    newLine.participantId = experimentsByRNAAnalysisID[tumorRNAAnalysisID].participant.participantId;
+                    newLine.insufficientDNA = newLine.n_DNA_Matching_Neither + newLine.n_DNA_Matching_Reference + newLine.n_DNA_Matching_Tumor < 30;
                 }
                 catch (FormatException)
                 {
@@ -3913,25 +3971,42 @@ namespace ExpressionLib
 
                 return newLine;
             } // fromLine
-        }
 
-        public static void LoadAllGeneScatterGraphEntries(out List<GeneScatterGraphLine> geneScatterGraphEntries, string directoryName = @"f:\temp\gene_scatter_graphs")
-        {
-            geneScatterGraphEntries = new List<GeneScatterGraphLine>();
+            public static List<GeneScatterGraphLine> LoadAllGeneScatterGraphEntries(string directoryName, bool fromUnfiltered, Dictionary<string, Experiment> experimentsByRNAAnalysisID, string hugoSymbol /* this may be * to load all*/)
+            {
+                var geneScatterGraphEntries = new List<GeneScatterGraphLine>();
 
-            foreach (var filename in Directory.EnumerateFiles(directoryName, "*.txt")) {
-                if (filename.Count() == 0 || filename[0] == '_')
+                if (hugoSymbol.Contains('/') || hugoSymbol.Contains(':'))
+                {    // Some funky gene names have a slash or colon.  We're just ignoring them.  They cause EnumerateFiles to throw an exception if you let them through.
+                    return null;
+                }
+
+                foreach (var filename in Directory.EnumerateFiles(directoryName, hugoSymbol + (fromUnfiltered ? unfilteredCountsExtention : ".txt")))
                 {
-                    continue;   // Summary file like _MannWhitney rather than a gene file
+                    if (filename.Count() == 0 || GetFileNameFromPathname(filename)[0] == '_')
+                    {
+                        continue;   // Summary file like _MannWhitney rather than a gene file
+                    }
+
+                    var lines = ReadAllLinesWithRetry(filename);
+                    for (int i = 1 /* starting at 1 skips the header */; i < lines.Count(); i++)
+                    {
+                        var line = GeneScatterGraphLine.fromLine(lines[i], fromUnfiltered, experimentsByRNAAnalysisID);
+                        if (null == line)
+                        {
+                            Console.WriteLine("GeneScatterGraphLine.LoadAllGeneScatteGraphEntries: bad line in input file " + filename + ".  Punting.");
+                            return null;
+                        }
+                        geneScatterGraphEntries.Add(line);
+                    }
                 }
 
-                var lines = ReadAllLinesWithRetry(filename);
-                for (int i = 1 ; i < lines.Count(); i++) {
-
-                }
+                return geneScatterGraphEntries;
             }
 
-        }
+        } // GeneScatterGraphLine
+
+
 
         public class Exon
         {
@@ -4336,7 +4411,7 @@ namespace ExpressionLib
 
             public bool isLocationInAnExon(string chromosome, int location)
             {
-                return map.ContainsKey(chromosome) && chromsomeMapSizes[chromosome] <= location && map[chromosome][location];
+                return map.ContainsKey(chromosome) && location <= chromsomeMapSizes[chromosome]  && map[chromosome][location];
             }
 
             Dictionary<string, int> chromsomeMapSizes = new Dictionary<string,int>();
@@ -4484,6 +4559,60 @@ namespace ExpressionLib
             public int maxLocus = 0;                            // Max locus of any isoform
 
         } // GeneInformation
+
+        //
+        // Take a bunch of work items and group them into the appropriate number of job lines.  The idea is to split them as evenly as possible
+        // subject to the constraints that we'd like to have at least desiredParallelism lines (if possible), and that no line is over 30K 
+        // characters (so windows can handle it with the 32K limit).
+        //
+        public static void GenerateJobExecutionScript(StreamWriter outputFile, string lineHeader, List<string> workItems, int desiredParallelism, int maxLineSize = 30000)
+        {
+            var nWorkItems = workItems.Count();
+
+            if (nWorkItems == 0)
+            {
+                return;
+            }
+
+            int maxWorkItemSize = workItems.Max(x => x.Count());
+
+            int maxWorkItemsPerJob = (maxLineSize - lineHeader.Count()) / (maxWorkItemSize + 1);   // +1 is for the space between work items
+
+            int minJobsForAllWorkItems = (nWorkItems + maxWorkItemsPerJob - 1) / maxWorkItemsPerJob;
+            int nJobs;
+
+            if (minJobsForAllWorkItems >= desiredParallelism)
+            {
+                nJobs = minJobsForAllWorkItems;
+            }
+            else
+            {
+                //
+                // We don't have enough work items to completely fill the lines for our max parallelism.  We'll run exactly maxParallelism jobs, unless
+                // we don't have enough work items, in which case we'll run that many.
+                //
+                nJobs = Math.Min(desiredParallelism, nWorkItems);
+            }
+
+            //
+            // Now generate the job lines.
+            //
+            int baseWorkItemsPerJob = nWorkItems / nJobs;
+            int nJobsWithExtraWorkItem = nWorkItems % nJobs;
+
+            int nWorkItemsEmitted = 0;
+
+            for (int i = 0; i < nJobs; i++)
+            {
+                outputFile.Write(lineHeader);
+                for (int j = 0; j < baseWorkItemsPerJob + ((i < nJobsWithExtraWorkItem) ? 1 : 0); j++)
+                {
+                    outputFile.Write(" " + workItems[nWorkItemsEmitted]);
+                    nWorkItemsEmitted++;
+                }
+                outputFile.WriteLine();
+            }
+        }
 
     } // ExpressionTools
 
