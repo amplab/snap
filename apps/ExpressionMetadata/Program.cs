@@ -563,6 +563,8 @@ namespace ExpressionMetadata
                         record.meanGoodBases = record.realignSource.meanGoodBases;
                         record.anyPaired = record.realignSource.anyPaired;
                         record.allPaired = record.realignSource.allPaired;
+                        record.meanPairedReadGap = record.realignSource.meanPairedReadGap;
+                        record.medianPairedReadGap = record.realignSource.medianPairedReadGap;
                         record.hasAdditionalData = true;
                     }
 
@@ -2734,8 +2736,6 @@ namespace ExpressionMetadata
 
             File.Delete(createJobFilename);
             File.Delete(scheduleJobFilename);
-
-
 
             int nDone = 0;
             int nInScript = 0;

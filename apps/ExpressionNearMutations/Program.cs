@@ -257,13 +257,7 @@ namespace ExpressionNearMutations
                         continue;
                     }
 
-                    var fields = line.Split('\t');
-                    if (fields.Count() != (forAlleleSpecificExpression ? 20 : 13))
-                    {
-                        Console.WriteLine("Badly formatted data line in file '" + inputFilename + "', line " + lineNumber + ": " + line);
-                        break;
-                    }
-
+ 
                     string chromosome;
                     int offset;
 
@@ -279,12 +273,20 @@ namespace ExpressionNearMutations
 
                     try {
                         if (forAlleleSpecificExpression) {
-                            chromosome = fields[0].ToLower();
-                            offset = Convert.ToInt32(fields[1]);
-                            nMatchingReferenceDNA = Convert.ToInt32(fields[12]);
-                            nMatchingVariantDNA = Convert.ToInt32(fields[13]);
-                            nMatchingReferenceRNA = Convert.ToInt32(fields[16]);
-                            nMatchingVariantRNA = Convert.ToInt32(fields[17]);
+                            var alleleData = ExpressionTools.AnnotatedSelectedVariantLine.fromText(line);
+
+                            if (null == alleleData)
+                            {
+                                Console.WriteLine("Error parsing input line " + lineNumber + " in file " + inputFilename);
+                                break;
+                            }
+
+                            chromosome = alleleData.contig;
+                            offset = alleleData.loc;
+                            nMatchingReferenceDNA = alleleData.nMatchingReferenceDNA;
+                            nMatchingVariantRNA = alleleData.nMatchingVariantDNA;
+                            nMatchingReferenceRNA = alleleData.nMatchingReferenceRNA;
+                            nMatchingVariantRNA = alleleData.nMatchingVariantRNA;
 
                             if (!geneLocationsForThisReference.genesByChromosome.ContainsKey(chromosome))
                             {
@@ -302,6 +304,14 @@ namespace ExpressionNearMutations
                                 }
                             }
                         } else {
+
+                            var fields = line.Split('\t');
+                            if (fields.Count() != 13)
+                            {
+                                Console.WriteLine("Badly formatted data line in file '" + inputFilename + "', line " + lineNumber + ": " + line);
+                                break;
+                            }
+
                             chromosome = fields[0];
                             offset = Convert.ToInt32(fields[1]);
                             z = Convert.ToDouble(fields[11]);

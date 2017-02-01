@@ -1015,22 +1015,23 @@ namespace ExpressionByMutationCount
                         }
                     }
 
-                    if (perChromosome)
+
+                    //
+                    // Even if we're not doing per-chromosome, write the headers, since they're in the input file that's being copied here.
+                    //
+                    for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                    {
+                        perGeneLinesFile.Write("\t" + ExpressionTools.ChromosomeIndexToName(whichChromosome, true));
+                    }
+
+                    if (!forAlleleSpecificExpression)
                     {
                         for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
                         {
-                            perGeneLinesFile.Write("\t" + ExpressionTools.ChromosomeIndexToName(whichChromosome, true));
-                        }
-
-                        if (!forAlleleSpecificExpression)
-                        {
-                            for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
-                            {
-                                perGeneLinesFile.Write("\t" + ExpressionTools.ChromosomeIndexToName(whichChromosome, true) + " mean");
-                            }
+                            perGeneLinesFile.Write("\t" + ExpressionTools.ChromosomeIndexToName(whichChromosome, true) + " mean");
                         }
                     }
-
+ 
                     perGeneLinesFile.WriteLine();
 
                     foreach (var line in perGeneLines)

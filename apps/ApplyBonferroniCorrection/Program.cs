@@ -59,6 +59,8 @@ namespace ApplyBonferroniCorrection
             bool[] fieldsToConvert = new bool[nFields];
             bool[] zeroValueFields = new bool[nFields];
             bool[] oneValueFields = new bool[nFields];
+            bool[] zeroValueLocalFields = new bool[nFields];
+            bool[] oneValueLocalFields = new bool[nFields];
 
             for (int i = 0; i < nFields; i++)
             {
@@ -81,6 +83,10 @@ namespace ApplyBonferroniCorrection
                     headerFields[i].IndexOf(">1 mutation  exclusive mean") == -1 || headerFields[i].IndexOf(">1 mutation exclusive mean") == -1 ||
                     headerFields[i].IndexOf(">1 mutation  mu") == -1 || headerFields[i].IndexOf(">1 mutation mu") == -1 ||
                     headerFields[i].IndexOf(">1 mutation  exclusive mu") == -1 || headerFields[i].IndexOf(">1 mutation exclusive mu") == -1);
+
+                zeroValueLocalFields[i] = zeroValueFields[i] && headerFields[i].IndexOf("whole") == -1 && headerFields[i].IndexOf("chr") == -1;
+
+                oneValueLocalFields[i] = oneValueFields[i] && headerFields[i].IndexOf("whole") == -1 && headerFields[i].IndexOf("chr") == -1;
             }
 
             string[] fields;
@@ -119,7 +125,7 @@ namespace ApplyBonferroniCorrection
             // the input in order.
             //
             var outputFile = ExpressionTools.CreateStreamWriterWithRetry(outputFilename);
-            outputFile.Write(headerFields[0] + "\tMin p\tMin p at\t0 vs. 1 ratio at MinP\tSignificant@.01\tBest 0 vs. 1 ratio for significant results\tBest 0 vs. 1 ratio at");
+            outputFile.Write(headerFields[0] + "\tMin p\tMin p at\t0 vs. 1 ratio at MinP\tSignificant@.01\tBest 0 vs. 1 ratio for significant results\tBest 0 vs. 1 ratio at\tBest 0 vs. 1 ratio for local significant results\tBest 0 vs. 1 ratio for local significant results at");
             for (int i = nFields - 4; i < nFields; i++)
             {
                 outputFile.Write("\t" + headerFields[i]);
@@ -148,6 +154,8 @@ namespace ApplyBonferroniCorrection
                 double minP = 10000000;
                 double bestZeroVsOne = 1;
                 int bestZeroVsOneAt = -1;
+                double bestLocalZeroVsOne = 1;
+                int bestLocalZeroVsOneAt = -1;
                 bool significant = false;
                 double zeroVsOne = 0;
                 double zeroValue = -1;
@@ -231,6 +239,12 @@ namespace ApplyBonferroniCorrection
                                         bestZeroVsOneAt = whichField;
                                     }
 
+                                    if (zeroValueLocalFields[whichField] || oneValueLocalFields[whichField] && candidate < bestLocalZeroVsOne)
+                                    {
+                                        bestLocalZeroVsOne = candidate;
+                                        bestLocalZeroVsOneAt = whichField;
+                                    }
+
                                     allSignificantResultsFile.WriteLine(value + "\t" + fields[0] + "\t" + ExpressionTools.GetFileNameFromPathname(filename, true) + "\t" + headerFields[whichField] + "\t" + candidate);
                                     nSignificantReuslts++;
                                 }
@@ -268,6 +282,15 @@ namespace ApplyBonferroniCorrection
                 if (bestZeroVsOneAt != -1)
                 {
                     outputFile.Write("\t" + bestZeroVsOne + "\t" + headerFields[bestZeroVsOneAt]);
+                }
+                else
+                {
+                    outputFile.Write("\t*\t*");
+                }
+
+                if (bestLocalZeroVsOneAt != -1)
+                {
+                    outputFile.Write("\t" + bestLocalZeroVsOne + "\t" + headerFields[bestLocalZeroVsOneAt]);
                 }
                 else
                 {

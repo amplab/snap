@@ -56,6 +56,11 @@ struct ThreadContext {
     _int64 minReadLength, maxReadLength, totalReadLength;
     _int64 minGoodBases, maxGoodBases, totalGoodBases;
 
+    _int64 nCrossContigPairs, totalPairedReads, totalPairedReadDistance, maxPairedReadDistance, minPairedReadDistance, nBeyondTrackedPairedDistance;
+
+#define THREAD_CONTEXT_PAIRED_READ_MAX_FOR_MEDIAN   5000
+    _int64 nAtPairedDistance[THREAD_CONTEXT_PAIRED_READ_MAX_FOR_MEDIAN];
+
     bool anyPaired;
     bool allPaired;
 
@@ -76,9 +81,15 @@ WorkerThreadMain(void *param)
 
     Read *read;
     context->totalReads = context->maxReadLength = context->maxGoodBases = context->totalReadLength = context->totalGoodBases = 0;
-    context->minGoodBases = context->minReadLength = 10000000000;
+    context->minGoodBases = context->minReadLength = context->minPairedReadDistance = 10000000000;
     context->allPaired = true;
     context->anyPaired = false;
+
+    context->nCrossContigPairs = context->totalPairedReads = context->totalPairedReadDistance = context->maxPairedReadDistance = context->nBeyondTrackedPairedDistance = 0;
+
+    for (int i = 0; i < THREAD_CONTEXT_PAIRED_READ_MAX_FOR_MEDIAN; i++) {
+        context->nAtPairedDistance[i] = 0;
+    }
 
     while (NULL != (read = readSupplier->getNextRead())) {
         context->minReadLength = __min(read->getDataLength(), context->minReadLength);
@@ -100,6 +111,37 @@ WorkerThreadMain(void *param)
         context->maxGoodBases = __max(nGoodBases, context->maxGoodBases);
         context->totalGoodBases += nGoodBases;
 
+        if (read->getOriginalSAMFlags() & SAM_MULTI_SEGMENT) {
+            context->totalPairedReads++;
+
+            if ((read->getOriginalSAMFlags() & SAM_UNMAPPED) == 0 && read->getOriginalPNEXT() != 0) {
+                GenomeLocation alignedLocation = read->getOriginalAlignedLocation();
+                
+                const Genome::Contig* contig = genome->getContigAtLocation(alignedLocation);
+                if (NULL != contig) {
+
+                    if (memcmp(read->getOriginalRNEXT(), "*", 1) != 0 && (read->getOriginalRNEXTLength() != contig->nameLength || memcmp(contig->name, read->getOriginalRNEXT(), contig->nameLength))) {
+                        context->nCrossContigPairs++;
+                    } else if ((read->getOriginalSAMFlags() & SAM_ALL_ALIGNED) == SAM_ALL_ALIGNED && (read->getOriginalSAMFlags() & SAM_UNMAPPED) == 0 && (read->getOriginalSAMFlags() & SAM_NEXT_UNMAPPED) == 0 &&
+                        ((read->getOriginalSAMFlags() & SAM_REVERSE_COMPLEMENT) == 0) != ((read->getOriginalSAMFlags() & SAM_NEXT_REVERSED) == 0)) {
+                        _int64 distance = read->getOriginalPNEXT() - (alignedLocation - contig->beginningLocation);
+                        if (distance < 0) {
+                            distance = 0 - distance;
+                        }
+
+                        context->totalPairedReadDistance += distance;
+                        context->maxPairedReadDistance = __max(context->maxPairedReadDistance, distance);
+                        context->minPairedReadDistance = __min(context->minPairedReadDistance, distance);
+                        if (distance < THREAD_CONTEXT_PAIRED_READ_MAX_FOR_MEDIAN) {
+                            context->nAtPairedDistance[distance]++;
+                        } else {
+                            context->nBeyondTrackedPairedDistance++;
+                        }
+                    }
+                } // if we have a contig
+            }
+        }
+
         if (context->totalReads >= nReadsPerThread) {
             break;
         }
@@ -118,7 +160,7 @@ int main(int argc, char * argv[])
     BigAllocUseHugePages = false;
     CreateSingleWaiterObject(&allThreadsDone);
 
-    int nReadsToSample = 10000;
+    int nReadsToSample = 10000000;
 
     if (5 != argc && 6 != argc) usage();
 
@@ -199,6 +241,14 @@ int main(int argc, char * argv[])
     _int64 totalReads = 0;
     _int64 minReadLength = 1000000, maxReadLength = 0, totalReadLength = 0;
     _int64 minGoodBases = 1000000, maxGoodBases = 0, totalGoodBases = 0;
+    _int64 totalPairedReads = 0, totalPairedReadDistance = 0, nCrossContigPairs = 0;
+    _int64 minPairedReadDistance = 100000000, maxPairedReadDistance = 0, nBeyondTrackedPairedDistance = 0;
+
+    _int64 nAtPairedDistance[THREAD_CONTEXT_PAIRED_READ_MAX_FOR_MEDIAN];
+    for (int i = 0; i < THREAD_CONTEXT_PAIRED_READ_MAX_FOR_MEDIAN; i++) {
+        nAtPairedDistance[i] = 0;
+    }
+    _int64 totalForMedian = 0;
 
     bool anyPaired = false;
     bool allPaired = true;
@@ -213,12 +263,42 @@ int main(int argc, char * argv[])
         maxGoodBases = __max(threadContexts[i].maxGoodBases, maxGoodBases);
         totalGoodBases += threadContexts[i].totalGoodBases;
 
+        totalPairedReads += threadContexts[i].totalPairedReads;
+        totalPairedReadDistance += threadContexts[i].totalPairedReadDistance;
+        nCrossContigPairs += threadContexts[i].nCrossContigPairs;
+        minPairedReadDistance = __min(minPairedReadDistance, threadContexts[i].minPairedReadDistance);
+        maxPairedReadDistance = __max(maxPairedReadDistance, threadContexts[i].maxPairedReadDistance);
+
+        for (int j = 0; j < THREAD_CONTEXT_PAIRED_READ_MAX_FOR_MEDIAN; j++) {
+            nAtPairedDistance[j] += threadContexts[i].nAtPairedDistance[j];
+            totalForMedian += threadContexts[i].nAtPairedDistance[j];
+        }
+        nBeyondTrackedPairedDistance += threadContexts[i].nBeyondTrackedPairedDistance;
+
         anyPaired |= threadContexts[i].anyPaired;
         allPaired &= threadContexts[i].allPaired;
     }
 
-    fprintf(outputFile, "%s\t%s\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%d\t%d\n",
-        argv[2], argv[3], totalReads, minReadLength, maxReadLength, totalReadLength, minGoodBases, maxGoodBases, totalGoodBases, anyPaired, allPaired);
+    int median = -1;
+
+    if (nBeyondTrackedPairedDistance > totalForMedian || totalForMedian == 0) {
+        median = -1;
+    } else {
+        _int64 countRemaining = (nBeyondTrackedPairedDistance + totalForMedian) / 2;
+
+        for (int i = 0; i < THREAD_CONTEXT_PAIRED_READ_MAX_FOR_MEDIAN; i++) {
+            countRemaining -= nAtPairedDistance[i];
+            if (countRemaining <= 0) {
+                median = i;
+                break;
+            }
+        }
+    }
+
+
+    fprintf(outputFile, "%s\t%s\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%d\t%d\t%lld\t%lld\t%d\t%lld\t%lf\n",
+        argv[2], argv[3], totalReads, minReadLength, maxReadLength, totalReadLength, minGoodBases, maxGoodBases, totalGoodBases, anyPaired, allPaired, 
+        minPairedReadDistance, maxPairedReadDistance, median, nCrossContigPairs, (double)totalPairedReadDistance / (double) (totalPairedReads - nCrossContigPairs));
 
     fclose(outputFile);
     fclose(inputFile);

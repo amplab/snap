@@ -102,7 +102,7 @@ namespace ExpressionLib
 
         public static string chromosomeNameToNonChrForm(string rawName)
         {
-            if (rawName.Substring(0, 3).ToLower() != "chr")
+            if (rawName.Count() < 4 || rawName.Substring(0, 3).ToLower() != "chr")
             {
                 return rawName.ToLower();
             }
@@ -1013,7 +1013,8 @@ namespace ExpressionLib
             public float meanGoodBases = 0;
             public bool anyPaired = false;
             public bool allPaired = false;
-
+            public int medianPairedReadGap = -1;
+            public double meanPairedReadGap = -1;
 
             public string chromPrefix = null;
             public StoredBAM storedBAM = null;
@@ -1349,13 +1350,13 @@ namespace ExpressionLib
                 }
 
                 // 29
-                if (experiment.TumorDNAAnalysis == null || experiment.TumorDNAAnalysis.storedBAM == null || experiment.TumorDNAAnalysis.geneCoverageFileName == null)
+                if (experiment.TumorDNAAnalysis == null || experiment.TumorDNAAnalysis.storedBAM == null || experiment.TumorDNAAnalysis.storedBAM.geneCoverageInfo == null)
                 {
                     outputFile.Write("\t");
                 }
                 else
                 {
-                    outputFile.Write(experiment.TumorDNAAnalysis.geneCoverageFileName + "\t");
+                    outputFile.Write(experiment.TumorDNAAnalysis.storedBAM.geneCoverageInfo.FullName + "\t");
                 }
 
                 outputFile.WriteLine();
@@ -2238,7 +2239,13 @@ namespace ExpressionLib
             string[] additionalMetadata = File.ReadAllLines(additonalMetadataFilename);
             foreach (var line in additionalMetadata)
             {
-                string[] fields = line.Split('\t'); // Format is 0:analysisID 1:filename 2:readsSampled 3:minLength 4:maxLength 5:totalLength 6:minGood 7:maxGood 8:totalGoodBases 9:anyPaired 10:allPaired
+                string[] fields = line.Split('\t'); // Format is 0:analysisID 1:filename 2:readsSampled 3:minLength 4:maxLength 5:totalLength 6:minGood 7:maxGood 8:totalGoodBases 9:anyPaired 10:allPaired 11:minPairedReadDistance 12:maxPairedReadDistance 13: medianPairedReadDistance 14:nCrossContigPairs 15:meanPairedReadDistance
+
+                if (fields.Count() != 16)
+                {
+                    Console.WriteLine("Corrupt or old format TCGAAdditionalMetadata file line: " + line);
+                    continue;
+                }
 
                 if (!tcgaRecords.ContainsKey(fields[0]))
                 {
@@ -2257,6 +2264,15 @@ namespace ExpressionLib
                     record.meanGoodBases = Convert.ToSingle(fields[8]) / (float)record.readSampleSize;
                     record.anyPaired = fields[9] == "1";
                     record.allPaired = fields[10] == "1";
+                    record.medianPairedReadGap = Convert.ToInt32(fields[13]);
+                    if (fields[15] == "-1.#IND00")
+                    {
+                        record.medianPairedReadGap = -1;
+                    }
+                    else
+                    {
+                        record.meanPairedReadGap = Convert.ToDouble(fields[15]);
+                    }
                 }
             }
 
@@ -3777,8 +3793,8 @@ namespace ExpressionLib
             public string Center;
             public string NCBI_Build;
             public string Chromosome;
-            public string Start_Position;
-            public string End_Position;
+            public int Start_Position;
+            public int End_Position;
             public string Strand;
             public string Variant_Classification;
             public string Variant_Type;
@@ -3866,8 +3882,8 @@ namespace ExpressionLib
                     newLine.Center = fields[4];
                     newLine.NCBI_Build = fields[5];
                     newLine.Chromosome = fields[6];
-                    newLine.Start_Position = fields[7];
-                    newLine.End_Position = fields[8];
+                    newLine.Start_Position = Convert.ToInt32(fields[7]);
+                    newLine.End_Position = Convert.ToInt32(fields[8]);
                     newLine.Strand = fields[9];
                     newLine.Variant_Classification = fields[10];
                     newLine.Variant_Type = fields[11];
@@ -4612,6 +4628,120 @@ namespace ExpressionLib
                 }
                 outputFile.WriteLine();
             }
+        }
+
+        public class AnnotatedSelectedVariantLine
+        {
+            public static AnnotatedSelectedVariantLine fromText(string inputLine)
+            {
+                var retVal = new AnnotatedSelectedVariantLine();
+
+                var fields = inputLine.Split('\t');
+
+                if (fields.Count() != 20)
+                {
+                    Console.WriteLine("AnnotatedSelectedVariantLine.fromText: wrong field count (" + fields.Count() + " != 14) in line: " + inputLine);
+                    return null;
+                }
+
+                try
+                {
+                    retVal.contig = fields[0];
+                    retVal.loc = Convert.ToInt32(fields[1]);
+                    retVal.id = fields[4];
+                    retVal.Ref = fields[5];
+                    retVal.alt = fields[6];
+                    retVal.qual = fields[7];
+                    retVal.filter = fields[8];
+                    retVal.info = fields[9];
+                    retVal.format = fields[10];
+                    retVal.nMatchingReferenceDNA = Convert.ToInt32(fields[12]);
+                    retVal.nMatchingVariantDNA = Convert.ToInt32(fields[13]);
+                    retVal.nMatchingNeitherDNA = Convert.ToInt32(fields[14]);
+                    retVal.nMatchingBothDNA = Convert.ToInt32(fields[15]);
+                    retVal.nMatchingReferenceRNA = Convert.ToInt32(fields[16]);
+                    retVal.nMatchingVariantRNA = Convert.ToInt32(fields[17]);
+                    retVal.nMatchingNeitherRNA = Convert.ToInt32(fields[18]);
+                    retVal.nMatchingBothRNA = Convert.ToInt32(fields[19]);
+                }
+                catch (FormatException)
+                {
+                    Console.WriteLine("Format exception parsing annotated selected variant line " + inputLine);
+                    return null;
+                }
+
+                return retVal;
+            }
+
+            public static List<AnnotatedSelectedVariantLine> readFile(string filename)
+            {
+                var file = CreateStreamReaderWithRetry(filename);
+
+                if (null == file)
+                {
+                    Console.WriteLine("AnnotatedSelectedVariantLine.readFile: unable to open file " + filename);
+                    return null;
+                }
+
+                file.ReadLine();    // Skip the header.
+
+                var retVal = new List<AnnotatedSelectedVariantLine>();
+
+                string line;
+                bool seenDone = false;
+                while (null != (line = file.ReadLine()))
+                {
+                    if (seenDone)
+                    {
+                        Console.WriteLine("AnnotatedSelectedVariantLine.readFile: file continues after **done**: " + filename);
+                        return null;
+                    }
+
+                    if (line == "**done**")
+                    {
+                        seenDone = true;
+                        continue;
+                    }
+
+                    var variantLine = fromText(line);
+                    if (null == variantLine)
+                    {
+                        Console.WriteLine("AnnotatedSelectedVariantLine.readFile: giving up due to parsing error in file " + filename);
+                        return null;
+                    }
+
+                    retVal.Add(variantLine);
+                }
+
+                if (!seenDone)
+                {
+                    Console.WriteLine("AnnotatedSelectedVariantLine.readFile: file is truncated " + filename);
+                    return null;
+                }
+
+                return retVal;
+            }
+
+            public string contig;               // 0
+            public int loc;                     // 1
+                                                // second copy of contig in column 2
+                                                // second copy of loc in column 3
+            public string id;                   // 4
+            public string Ref;                  // 5 (capitalized to avoid conflict with C# ref keyword)
+            public string alt;                  // 6
+            public string qual;                 // 7
+            public string filter;               // 8
+            public string info;                 // 9
+            public string format;               // 10
+                                                // ?? for column 11
+            public int nMatchingReferenceDNA;   // 12
+            public int nMatchingVariantDNA;     // 13
+            public int nMatchingNeitherDNA;     // 14
+            public int nMatchingBothDNA;        // 15
+            public int nMatchingReferenceRNA;   // 16
+            public int nMatchingVariantRNA;     // 17
+            public int nMatchingNeitherRNA;     // 18
+            public int nMatchingBothRNA;        // 19
         }
 
     } // ExpressionTools

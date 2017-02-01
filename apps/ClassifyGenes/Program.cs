@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.IO;
 using ExpressionLib;
+using System.Diagnostics;
 
 namespace ClassifyGenes
 {
@@ -23,13 +24,20 @@ namespace ClassifyGenes
             //
             // The classification counts.  These are mutatally exclusive catagories, with a tumor being slotted into the first one that fits.
             //
-            public int nSex = 0;                               // Sex chromosome genes
-            public int nAbnormalDNA = 0;                       // Tumors with DNA not close to overall coverage level, which is intended to exclude copy number variants
-            public int nDoubleMutant = 0;                      // Tumors with two (or more) mutations in this gene.
-            public int nOneMutationPlusLackOfExpression = 0;   // Tumors that lost one through mutation and one through epigenetic loss (as determined at the mutation site).
-            public int nOneMutationWithExpression = 0;         // Tumors with exactly one muation, but with reasonable expression of the wild type allele
-            public int nZeroMutationsWithLowExpression = 0;    // Tumors with no mutations, but no more than 10% of mean overall expression across all isoforms
-            public int nZeroMutationsWithSomeExpression = 0;   // Everything else
+            public int nSex = 0;                                // Sex chromosome genes
+            public int nDNACoverageOff = 0;                     // Tumors with DNA coverage not close enough to overall average
+            public int nZUnknown = 0;                           // z score unknown for this mutation
+            public int nLowTumorDNA = 0;                        // Tumors with too little tumor DNA (minor subclones)
+            public int nHighTumorDNA = 0;                       // Tumors with too little normal DNA (loss of heterozygozity or copy number variations)
+            public int nDoubleMutant = 0;                       // Tumors with two (or more) mutations in this gene.
+            public int nOneMutationPlusLackOfExpression = 0;    // Tumors that lost one through mutation and one through epigenetic loss (as determined at the mutation site).
+            public int nOneMutationWithExpression = 0;          // Tumors with exactly one muation, but with reasonable expression of the wild type allele
+            public int nZeroMutationsWithLowExpression = 0;     // Tumors with no mutations, but no more than 10% of mean overall expression across all isoforms
+            public int nZeroMutationsWithSomeExpression = 0;    // Everything else
+
+            public int overallZeroMutations = 0;                // No mutations regardless of coverage
+            public int overallOneMutation = 0;                  // One mutation, regardless of coverage
+            // No special field for multiple mutations, since nDoubleMutant covers them
         }
 
         static string ComputeFraction(int numerator, int denominator)
@@ -94,9 +102,23 @@ namespace ClassifyGenes
             int nExperimentsProcessed = 0;
             int nExperimentsWithMissingPrecursors = 0;
 
+            var timer = new Stopwatch();
+            timer.Start();
+
+            var lastPrint = timer.ElapsedMilliseconds;
+            var nExperimentsSkippedForLowDNACoverage = 0;
+
 
             foreach (var experiment in experiments)
             {
+                nExperimentsProcessed++;
+
+                if (timer.ElapsedMilliseconds - lastPrint > 60000)
+                {
+                    Console.WriteLine("Processed " + nExperimentsProcessed + " experiments in " + (timer.ElapsedMilliseconds + 500) / 1000 + "s");
+                    lastPrint = timer.ElapsedMilliseconds;
+                }
+
                 if (experiment.TumorDNAAnalysis == null || experiment.TumorDNAAnalysis.geneCoverageFileName == null || experiment.TumorDNAAnalysis.geneCoverageFileName == "")
                 {
                     nExperimentsWithMissingPrecursors++;
@@ -130,7 +152,8 @@ namespace ClassifyGenes
 
                     if (overallCoverage < 5)
                     {
-                        Console.WriteLine("Participant " + experiment.participant.participantId + " doesn't have enough Tumor DNA coverage to proceed. " + overallCoverage + " < 5.  Skipping.");
+                        //Console.WriteLine("Participant " + experiment.participant.participantId + " doesn't have enough Tumor DNA coverage to proceed. " + overallCoverage + " < 5.  Skipping.");
+                        nExperimentsSkippedForLowDNACoverage++;
                         continue;
                     }
 
@@ -174,15 +197,18 @@ namespace ClassifyGenes
 
                         double coverage = coverageInGeneExome / nBasesInGeneExome;
 
-                        if (coverage * 1.3 < overallCoverage || overallCoverage * 1.3 > coverage)
-                        {
-                            genesToConsider[hugo_symbol].nAbnormalDNA++;
-                            continue;
-                        }
-
                         var mutations =  scatterGraphLinesByParticipant[experiment.participant.participantId].Where(x => x.Hugo_Symbol.ToUpper() == hugo_symbol && x.participantId == experiment.participant.participantId && x.Variant_Classification.ToLower() != "silent").ToList();
 
-                        if (mutations.Count() > 1)
+                        if (mutations.Count() == 0)
+                        {
+                            genesToConsider[hugo_symbol].overallZeroMutations++;
+                        }
+                        else if (mutations.Count() == 1)
+                        {
+                            genesToConsider[hugo_symbol].overallOneMutation++;
+
+                        }
+                        else
                         {
                             genesToConsider[hugo_symbol].nDoubleMutant++;
                             continue;
@@ -195,13 +221,22 @@ namespace ClassifyGenes
                             int nDNATotal = mutation.n_DNA_Matching_Neither + mutation.n_DNA_Matching_Reference + mutation.n_DNA_Matching_Tumor;
                             int nRNATotal = mutation.n_RNA_Matching_Neither + mutation.n_RNA_Matching_Reference + mutation.n_RNA_Matching_Tumor;
 
-                            if (nDNATotal < 10 || (double)mutation.n_DNA_Matching_Tumor / nDNATotal >= .6 || (double)mutation.n_DNA_Matching_Tumor / nDNATotal < .1 || !mutation.zKnown)
+                            if (nDNATotal < 10)
                             {
-                                genesToConsider[hugo_symbol].nAbnormalDNA++;
-                            }
+                                genesToConsider[hugo_symbol].nDNACoverageOff++;
+                            } 
+                            else if ((double)mutation.n_DNA_Matching_Tumor / nDNATotal >= .6) {
+                                genesToConsider[hugo_symbol].nHighTumorDNA++;
+                            } 
+                            else if ((double)mutation.n_DNA_Matching_Tumor / nDNATotal < .1) {
+                                genesToConsider[hugo_symbol].nLowTumorDNA++;
+                            } 
+                            else if (!mutation.zKnown) {
+                                genesToConsider[hugo_symbol].nZUnknown++;
+                            } 
                             else
                             {
-                                if (mutation.percentMeanNormal <= 0.1)
+                                if (mutation.percentMeanNormal <= 0.25)
                                 {
                                     genesToConsider[hugo_symbol].nOneMutationPlusLackOfExpression++;
                                 }
@@ -213,8 +248,15 @@ namespace ClassifyGenes
                         }
                         else
                         {
-                            // Figure out expression over whole gene (get from "lines" files).  For now, just dump them in one bucket.
-                            genesToConsider[hugo_symbol].nZeroMutationsWithSomeExpression++;
+                            if (coverage * 1.5 < overallCoverage || overallCoverage * 1.5 < coverage)
+                            {
+                                genesToConsider[hugo_symbol].nDNACoverageOff++;
+                            }
+                            else
+                            {
+                                // Figure out expression over whole gene (get from "lines" files).  For now, just dump them in one bucket.
+                                genesToConsider[hugo_symbol].nZeroMutationsWithSomeExpression++;
+                            }
 
                         }
                     }
@@ -233,26 +275,35 @@ namespace ClassifyGenes
             // And write the output.
             //
             var outputFile = ExpressionTools.CreateStreamWriterWithRetry(@"f:\temp\expression\gene_classification.txt");
-            outputFile.WriteLine("Hugo Symbol\texcluded for funny DNA\t>1 mutation\t% >1 mutation\t1 mutation, one loss\t% 1 mutation, one loss\tsingle mutation\t% single mutation\tlow overall expression\t% low overall expression\tnone of the above\t% none of the above");
+            outputFile.WriteLine("Hugo Symbol\tDNA Coverage low\tz Unknown\tlow tumor DNA\thigh tumor DNA\t% high tumor DNA\t>1 mutation\t% >1 mutation\t1 mutation, one loss\t% 1 mutation, one loss\tsingle mutation\t% single mutation\tlow overall expression\t% low overall expression\tnone of the above\t% none of the above\tZero mutations\tOne mutation\tMultiple mutations");
 
             foreach (var geneEntry in genesToConsider)
             {
                 var hugo_symbol = geneEntry.Key;
                 var gene = geneEntry.Value;
 
-                int totalNonAbnormal = gene.nDoubleMutant + gene.nOneMutationPlusLackOfExpression + gene.nOneMutationWithExpression + gene.nZeroMutationsWithLowExpression + gene.nZeroMutationsWithSomeExpression;
+                int totalNonAbnormal = gene.nHighTumorDNA + gene.nDoubleMutant + gene.nOneMutationPlusLackOfExpression + gene.nOneMutationWithExpression + gene.nZeroMutationsWithLowExpression + gene.nZeroMutationsWithSomeExpression;
 
                 outputFile.WriteLine(
-                    hugo_symbol +
-                    "\t" + gene.nAbnormalDNA +
+                    ExpressionTools.ConvertToExcelString(hugo_symbol) +
+                    "\t" + (gene.nDNACoverageOff + nExperimentsSkippedForLowDNACoverage) +
+                    "\t" + gene.nZUnknown +
+                    "\t" + gene.nLowTumorDNA +
+                    "\t" + gene.nHighTumorDNA + "\t" + ComputeFraction(gene.nHighTumorDNA, totalNonAbnormal) +
                     "\t" + gene.nDoubleMutant + "\t" + ComputeFraction(gene.nDoubleMutant, totalNonAbnormal) +
                     "\t" + gene.nOneMutationPlusLackOfExpression + "\t" + ComputeFraction(gene.nOneMutationPlusLackOfExpression, totalNonAbnormal) +
                     "\t" + gene.nOneMutationWithExpression + "\t" + ComputeFraction(gene.nOneMutationWithExpression, totalNonAbnormal) +
                     "\t" + gene.nZeroMutationsWithLowExpression + "\t" + ComputeFraction(gene.nZeroMutationsWithLowExpression, totalNonAbnormal) +
-                    "\t" + gene.nZeroMutationsWithSomeExpression + "\t" + ComputeFraction(gene.nZeroMutationsWithSomeExpression, totalNonAbnormal));
+                    "\t" + gene.nZeroMutationsWithSomeExpression + "\t" + ComputeFraction(gene.nZeroMutationsWithSomeExpression, totalNonAbnormal) +
+                    "\t" + gene.overallZeroMutations +
+                    "\t" + gene.overallOneMutation +
+                    "\t" + gene.nDoubleMutant +
+                    "");
             }
 
             outputFile.Close();
+
+            Console.WriteLine("Processed " + experiments.Count() + " experiments in " + (timer.ElapsedMilliseconds + 500) / 1000 + "s, of which " + nExperimentsSkippedForLowDNACoverage + " were skipped due to low DNA coverage.");
         }
     }
 }
