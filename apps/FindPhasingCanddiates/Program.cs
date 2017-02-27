@@ -103,7 +103,7 @@ namespace FindPhasingCanddiates
                             {
                                 lock (outputFile)
                                 {
-                                    outputFile.WriteLine(experiment.participant.participantId + "\t" + ExpressionTools.ConvertToExcelString(mutation.Hugo_Symbol) + "\t" + (mutation.IsSingle ? "Single" : "Multiple") + "\t" +
+                                    outputFile.WriteLine(experiment.participant.participantId + "\t" + ExpressionTools.ConvertToExcelString(mutation.Hugo_Symbol) + "\t" + (mutation.IsSingle ? "Single" : "Multiple") + "\t" + mutation.Variant_Classification + "\t" +
                                         chromosome + "\t" + mutation.Start_Position + "\t" + mutation.Tumor_Seq_Allele_1 + "\t" + mutation.Match_Norm_Seq_Allele1 + "\t" +
                                         mutation.n_DNA_Matching_Tumor + "\t" + mutation.n_DNA_Matching_Reference + "\t" + mutation.n_RNA_Matching_Tumor + "\t" + mutation.n_RNA_Matching_Reference + "\t" +
                                         variant.loc + "\t" + variant.alt + "\t" + variant.Ref + "\t" + variant.nMatchingVariantDNA + "\t" + variant.nMatchingReferenceDNA + "\t" + variant.nMatchingVariantRNA + "\t" + variant.nMatchingReferenceRNA + "\t" +
@@ -165,7 +165,7 @@ namespace FindPhasingCanddiates
 
             outputFile = ExpressionTools.CreateStreamWriterWithRetry(@"f:\temp\expression\phasingCandidates.txt");
 
-            outputFile.WriteLine("ParticipantID\tGene\tIsSingle\tChromosome\tMutation Start Location\tMutatant Allele\tMutant Wild Type\tMutant DNA Count\tWild Type DNA Count\tMutant RNA Count\tWild Type RNA Count" + 
+            outputFile.WriteLine("ParticipantID\tGene\tIsSingle\tMutationType\tChromosome\tMutation Start Location\tMutatant Allele\tMutant Wild Type\tMutant DNA Count\tWild Type DNA Count\tMutant RNA Count\tWild Type RNA Count" + 
                 "\tVariant Location\tVariant Allele 1\tVariant Allele 2\tVariant Allele 1 DNA count\tVariant Allele 2 DNA count\t" +
                 "Variant Allele 1 RNA Count\tVariant Allele 2 RNA Count\tTumor DNA BAM\tTumor RNA Bam\tNormal DNA Bam");
 

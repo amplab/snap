@@ -11,6 +11,7 @@ using System.Diagnostics;
 using MathNet.Numerics;
 using System.Threading;
 using System.Runtime.InteropServices;
+using System.Numerics;
 
 //
 // A bunch of aliases for string in order to make the code more readable.
@@ -4742,6 +4743,81 @@ namespace ExpressionLib
             public int nMatchingVariantRNA;     // 17
             public int nMatchingNeitherRNA;     // 18
             public int nMatchingBothRNA;        // 19
+        }
+
+        //
+        // Computes n choose k.
+        //
+        public static System.Numerics.BigInteger Choose(int n, int k)
+        {
+            //
+            // n choose k is defined as n! / (k! * (n-k)!).  n! / k! is the product as i runs from k to n of i.
+            // so n choose k is (product i=k..n i / product i = 1 .. n-k i).  Note that the products in the
+            // numerator and denominator both have n-k+1 terms.  Even better the partial products always divide evenly,
+            // (which I could prove by induction, but essentially is just because when you divide by i in the denominator
+            // the numerator has i consecutive integers multiplied into it, one of which must be a multiple of i).
+            //
+            // Computing it this way keeps the partial terms smaller than they otherwise would be.
+            //
+
+            if (k == n || k == 0) return 1;
+            if (k > n || k < 0) {
+                throw new ArgumentOutOfRangeException();
+            }
+
+            if (k * 2 > n)
+            {
+                k = n - k;  // The binomial distribution is symmetric around k = n / 2, so choose the one with fewer ops.
+            }
+
+            System.Numerics.BigInteger partialProduct = 1;
+            for (int i = k + 1; i <= n; i++)
+            {
+                partialProduct *= i;
+                partialProduct /= i - k;
+            }
+
+            return partialProduct;
+        }
+
+        public static long ChooseLong(int n, int k)
+        {
+            var result = Choose(n, k);
+            if (result > System.Int64.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException();
+            }
+
+            return (long)result;
+        }
+
+        //
+        // What's the probability that if an event occurs with probability 0.5 that it will occur at least k times
+        // in n trials.
+        public static double OneTailedBinomialTest(int n, int k)
+        {
+            System.Numerics.BigInteger totalCases = 0;
+
+            for (int i = k; i <= n; i++)
+            {
+                totalCases += Choose(n, i);
+            }
+
+            //
+            // The probability is totalCases / 2^n.  This may be too big for doubles, so we'll multiply by 10^9, divide by 2^n, covert to a double (which
+            // will then necessarily fit, because it will be at most 10^9), and divide by 10^9 to get the final result.
+            //
+
+            long scaleFactor = 1000000000;  // You could imagine dynamically computing this in order to get a certain number of significant digits.
+
+            var probabilityTimesScaleFactor = totalCases * scaleFactor;
+            
+            for (int i = 0; i < n; i++)
+            {
+                probabilityTimesScaleFactor /= 2;
+            }
+
+            return ((double)probabilityTimesScaleFactor) / scaleFactor;
         }
 
     } // ExpressionTools
