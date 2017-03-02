@@ -47,18 +47,18 @@ private:
 
 public:
     TenXSingleAligner(
-        GenomeIndex        *index_,
+        GenomeIndex     *index_,
         unsigned        maxReadSize_,
         unsigned        maxHits_,
         unsigned        maxK_,
         unsigned        maxSeedsFromCommandLine_,
-        double            seedCoverage_,
+        double          seedCoverage_,
         unsigned        minSpacing_,                 // Minimum distance to allow between the two ends.
         unsigned        maxSpacing_,                 // Maximum distance to allow between the two ends.
         unsigned        maxBigHits_,
         unsigned        extraSearchDepth_,
         unsigned        maxCandidatePoolSize,
-        int                maxSecondaryAlignmentsPerContig_,
+        int             maxSecondaryAlignmentsPerContig_,
         BigAllocator    *allocator,
         bool            noUkkonen_,
         bool            noOrderedEvaluation_,
@@ -66,8 +66,8 @@ public:
         bool            ignoreAlignmentAdjustmentsForOm_,
         unsigned        printStatsMapQLimit_,
         unsigned        clusterEDCompensation_,
-        double            unclusteredPenalty_,
-        _uint8            *clusterCounter_,
+        double          unclusteredPenalty_,
+        _uint8          *clusterCounter_,
         bool            *clusterToggle_);
 
     void    setLandauVishkin(

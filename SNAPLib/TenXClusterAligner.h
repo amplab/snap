@@ -44,10 +44,8 @@ public:
         bool                noOrderedEvaluation,
         bool                noTruncation,
         bool                ignoreALignmentAdjustmentsForOm,
+		PairedAlignmentResult *anchorResults_,
         TenXProgressTracker *progressTracker_,
-        bool                *clusterIsValid_,
-        unsigned            *mappedPairsPerCluster_,
-        unsigned            maxBarcodeSize_,
         unsigned            minPairsPerCluster_,
         _uint64             minClusterSpan_,
         double              unclusteredPenalty_,
@@ -87,11 +85,6 @@ public:
     // Return ture if no pair requires memory reallocation.
     void align_second_stage_generate_results (
     );
-
-
-    // Return true if no more cluster change from true to false.
-    bool checkClusterStabilized();
-    void clusterResultCleanUp();
 
     // Third stage will clean up cluster mapping results.
     void align_third_stage();
@@ -161,7 +154,9 @@ private:
 
     bool                forceSpacing;
     BaseAligner         *singleAligner;
-    unsigned            maxBarcodeSize;
+    unsigned            anchorNum;
+    unsigned            multiPairNum;
+    PairedAlignmentResult *anchorResults;
     TenXProgressTracker *progressTracker;
     int                 maxEditDistanceForSecondaryResults;
     _int64              maxSecondaryAlignmentsToReturn;
@@ -187,8 +182,6 @@ private:
     TenXProgressTracker *updateHolder;
 
     // 10x cluster validation tracker
-    bool                *clusterIsValid;
-    unsigned            *mappedPairsPerCluster;
     int                 maxClusterIdx;
 
 };

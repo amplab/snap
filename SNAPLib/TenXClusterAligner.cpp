@@ -53,10 +53,8 @@ TenXClusterAligner::TenXClusterAligner(
     bool                noOrderedEvaluation,
     bool                noTruncation,
     bool                ignoreAlignmentAdjustmentsForOm,
+	PairedAlignmentResult *anchorResults_,
     TenXProgressTracker *progressTracker_,
-    bool                *clusterIsValid_,
-    unsigned            *mappedPairsPerCluster_,
-    unsigned            maxBarcodeSize_,
     unsigned            minPairsPerCluster_,
     _uint64             minClusterSpan_,
     double              unclusteredPenalty_,
@@ -67,12 +65,12 @@ TenXClusterAligner::TenXClusterAligner(
     int                 maxEditDistanceForSecondaryResults_,
     _int64              maxSecondaryAlignmentsToReturn_,
     BigAllocator        *allocator)
-    : progressTracker(progressTracker_), clusterIsValid(clusterIsValid_), mappedPairsPerCluster(mappedPairsPerCluster_), unclusteredPenalty(unclusteredPenalty_), clusterEDCompensation(clusterEDCompensation_), maxBarcodeSize(maxBarcodeSize_), minPairsPerCluster(minPairsPerCluster_), minClusterSpan(minClusterSpan_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_), maxEditDistanceForSecondaryResults(maxEditDistanceForSecondaryResults_), maxSecondaryAlignmentsToReturn(maxSecondaryAlignmentsToReturn)
+    : progressTracker(progressTracker_), anchorResults(anchorResults_), unclusteredPenalty(unclusteredPenalty_), clusterEDCompensation(clusterEDCompensation_), minPairsPerCluster(minPairsPerCluster_), minClusterSpan(minClusterSpan_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_), maxEditDistanceForSecondaryResults(maxEditDistanceForSecondaryResults_), maxSecondaryAlignmentsToReturn(maxSecondaryAlignmentsToReturn_)
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
         maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentsForOm, maxSecondaryAlignmentsPerContig, printStatsMapQLimit, &lv, &reverseLV, NULL, allocator);
-    for (unsigned i = 0; i < maxBarcodeSize; i++)
+    for (unsigned i = 0; i < multiPairNum; i++)
         progressTracker[i].aligner->setLandauVishkin(&lv, &reverseLV);
 
     singleSecondary[0] = singleSecondary[1] = NULL;
@@ -108,11 +106,11 @@ extern bool _DumpAlignments;
 void TenXClusterAligner::sortAndLink()
 {
     // TenX code. Initialize and sort all trackers
-    qsort(progressTracker, maxBarcodeSize, sizeof(TenXProgressTracker), TenXProgressTracker::compare);
+    qsort(progressTracker, multiPairNum, sizeof(TenXProgressTracker), TenXProgressTracker::compare);
 
     // Link all tracker entries based on their GenomeLocation.
     unsigned nActiveTrackers = 0;
-    for (unsigned pairIdx = 1; pairIdx < maxBarcodeSize; pairIdx++) {
+    for (unsigned pairIdx = 1; pairIdx < multiPairNum; pairIdx++) {
 
         if (progressTracker[pairIdx - 1].pairNotDone && progressTracker[pairIdx - 1].nextLocus >= 0)
             nActiveTrackers++;
@@ -120,7 +118,7 @@ void TenXClusterAligner::sortAndLink()
         progressTracker[pairIdx - 1].nextTracker = &progressTracker[pairIdx];
     }
     
-    if (progressTracker[maxBarcodeSize - 1].pairNotDone && progressTracker[maxBarcodeSize - 1].nextLocus >= 0)
+    if (progressTracker[multiPairNum - 1].pairNotDone && progressTracker[multiPairNum - 1].nextLocus >= 0)
         nActiveTrackers++;
 
     trackerRoot = &progressTracker[0];
@@ -357,8 +355,6 @@ bool TenXClusterAligner::align_first_stage(
     maxClusterIdx = -1;
 
     for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
-        clusterIsValid[pairIdx] = false;
-        mappedPairsPerCluster[pairIdx] = 0;
 
         if (progressTracker[pairIdx].pairNotDone) {
             progressTracker[pairIdx].results[0].status[0] = progressTracker[pairIdx].results[0].status[1] = NotFound;
@@ -544,47 +540,6 @@ void TenXClusterAligner::align_second_stage_generate_results()
                 &progressTracker[pairIdx].results[1],
                 &progressTracker[pairIdx].results[0]
             );
-        }
-    }
-}
-
-
-void TenXClusterAligner::clusterResultCleanUp()
-{
-    for (unsigned pairIdx = 0; pairIdx < barcodeSize; pairIdx++) {
-        if (progressTracker[pairIdx].pairNotDone) {
-
-            // Only examine the results if it has any
-            if (progressTracker[pairIdx].nSecondaryResults > 0) {
-                // Sort all results (best result might be corrected later)
-                qsort(&progressTracker[pairIdx].results[1], progressTracker[pairIdx].nSecondaryResults, sizeof(PairedAlignmentResult), PairedAlignmentResult::compareByClusterIdx);
-
-                int prevClusterIdx = -1;
-                unsigned resultIdx;
-
-                for (resultIdx = 1; resultIdx < progressTracker[pairIdx].nSecondaryResults + 1; resultIdx++) {
-                    // We have a valid cluster and it is different from the bestClusterIdx (because bestClusterIdx is already registered)
-                    if (progressTracker[pairIdx].results[resultIdx].clusterIdx != -1 && progressTracker[pairIdx].results[resultIdx].clusterIdx != progressTracker[pairIdx].bestClusterIdx) {
-                        if (progressTracker[pairIdx].results[resultIdx].clusterIdx != prevClusterIdx)
-                            mappedPairsPerCluster[progressTracker[pairIdx].results[resultIdx].clusterIdx]++;
-
-                        prevClusterIdx = progressTracker[pairIdx].results[resultIdx].clusterIdx;
-                    }
-
-                    // Update the maxClusterIdx if necessary
-                    if (progressTracker[pairIdx].results[resultIdx].clusterIdx > maxClusterIdx)
-                        maxClusterIdx = progressTracker[pairIdx].results[resultIdx].clusterIdx;
-                }
-            }
-        }
-    }
-
-    // Validate clusters
-    for (unsigned clusterIdx = 0; clusterIdx < maxClusterIdx; clusterIdx++)
-    {
-        // Check > 0 because we don't care if a cluster has 0 reads (should not happen but might happen later on)
-        if (mappedPairsPerCluster[clusterIdx] >= minPairsPerCluster) {
-            clusterIsValid[clusterIdx] = true;
         }
     }
 }

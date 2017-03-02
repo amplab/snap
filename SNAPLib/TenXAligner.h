@@ -63,6 +63,7 @@ protected:
 	int					minSpacing;
 	int					maxSpacing;
 	_uint64				maxBarcodeSize;
+	_uint64				maxMultiPairSize;
 	unsigned			minPairsPerCluster;
 	_uint64				minClusterSpan;
 	bool				forceSpacing;
@@ -91,7 +92,8 @@ struct TenXAlignerOptions : public AlignerOptions
 
 	int					minSpacing;
 	int					maxSpacing;
-	_uint64				maxBarcodeSize; // make it 64 bit so that the carry won't overflow...
+	_uint64				maxBarcodeSize;   // the max number of read pairs
+	_uint64				maxMultiPairSize; // the max number of multi-mapping pairs 
 	unsigned			minPairsPerCluster;
 	_uint64				minClusterSpan;
 	bool				forceSpacing;
@@ -102,4 +104,9 @@ struct TenXAlignerOptions : public AlignerOptions
 	double				unclusteredPenalty;
 	unsigned			clusterEDCompensation;
 	unsigned			maxClusterNum;
+};
+
+struct TenXClusterToggler {
+	bool clusterToggle;
+	unsigned clusterCounter;
 };

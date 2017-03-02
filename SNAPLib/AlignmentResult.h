@@ -98,6 +98,7 @@ struct PairedAlignmentResult {
 	int clusterIdx;
 
     static int compareByContigAndScore(const void *first, const void *second);      // qsort()-style compare routine
+    static int compareByLocation(const void *first, const void *second);     		// qsort()-style compare routine, bigger loc gets to the front.
     static int compareByClusterIdx(const void *first, const void *second);			// qsort()-style compare routine
     static int compareByScore(const void *first, const void *second);               // qsort()-style compare routine
 };

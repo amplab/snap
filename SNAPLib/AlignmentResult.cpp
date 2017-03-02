@@ -89,6 +89,25 @@ PairedAlignmentResult::compareByContigAndScore(const void *first_, const void *s
 }
 
     int
+PairedAlignmentResult::compareByLocation(const void *first_, const void *second_)
+{
+    extern GenomeIndex *g_index;    // Sorry, but no easy way to get this into here
+
+    const PairedAlignmentResult *first = (PairedAlignmentResult *)first_;
+    const PairedAlignmentResult *second = (PairedAlignmentResult *)second_;
+
+    int secondContig = g_index->getGenome()->getContigNumAtLocation(second->location[0]);
+
+    if (first->location[0] < second->location[0]) {
+        return 1;
+    } else if (first->location[0] > second->location[0]) {
+        return -1;
+    } else {
+        return 0;
+    }
+}
+
+    int
 PairedAlignmentResult::compareByClusterIdx(const void *first_, const void *second_)
 {
     const PairedAlignmentResult *first = (PairedAlignmentResult *)first_;
