@@ -22,11 +22,91 @@ Revision History:
 
 --*/
 
+#ifndef __TENX_CLUSTER_ALIGNER__
+#define __TENX_CLUSTER_ALIGNER__
+
 #pragma once
 
 #include "TenXSingleAligner.h"
 #include "BaseAligner.h"
 #include "BigAlloc.h"
+
+// declare trackers first
+struct TenXMultiTracker
+{
+    // Debugging Field
+    //std::string* id[NUM_DIRECTIONS];
+    // Debugging Field
+
+    bool                  pairNotDone;
+    bool                  singleNotDone;
+    TenXSingleAligner     *aligner;
+    GenomeLocation        nextLocus; // Keep it here so that hopefully nextLocus be in cache.
+    GenomeLocation        currentLocus; // Keep it here so that hopefully currentLocus be in cache.
+    TenXMultiTracker      *nextTracker; // linked list next link
+
+    Read                  *pairedReads[NUM_READS_PER_PAIR];
+    PairedAlignmentResult *results;
+    SingleAlignmentResult *singleEndSecondaryResults;
+    _int64                secondaryResultBufferSize;
+    _int64                singleSecondaryBufferSize;
+    _int64                nSecondaryResults;
+    _int64                nSingleEndSecondaryResults[NUM_READS_PER_PAIR];
+    unsigned              popularSeedsSkipped[NUM_READS_PER_PAIR];
+    bool                  useful[NUM_READS_PER_PAIR];
+    int                   bestPairScore;
+    GenomeLocation        bestResultGenomeLocation[NUM_READS_PER_PAIR];
+    Direction             bestResultDirection[NUM_READS_PER_PAIR];
+    double                probabilityOfAllPairs;
+    unsigned              bestResultScore[NUM_READS_PER_PAIR];
+    double                probabilityOfBestPair;
+    int                   bestClusterIdx;
+    
+    _uint8                *clusterCounterAry;
+    bool                  *clusterToggle;
+    
+    bool                  updatedBestScore;
+
+    static int compare(const void *a_raw, const void *b_raw)
+    {
+        TenXMultiTracker* a = (TenXMultiTracker*)a_raw;
+        TenXMultiTracker* b = (TenXMultiTracker*)b_raw;
+        if (!a->pairNotDone && !b->pairNotDone)
+            return 0;
+        else if (!a->pairNotDone)
+            return 1;
+        else if (!b->pairNotDone)
+            return -1;
+        else if (a->nextLocus == b->nextLocus)
+            return 0;
+        else if (a->nextLocus < b->nextLocus)
+            return 1;
+        else
+            return -1;
+    }
+
+};
+
+struct TenXAnchorTracker {
+    Read                  *pairedReads[NUM_READS_PER_PAIR];
+	PairedAlignmentResult result;
+
+    static int compare(const void *first_, const void *second_)
+	{
+		const TenXAnchorTracker *first = (TenXAnchorTracker *)first_;
+		const TenXAnchorTracker *second = (TenXAnchorTracker *)second_;
+
+		if (first->result.location[0] < second->result.location[0]) {
+			return 1;
+		} else if (first->result.location[0] > second->result.location[0]) {
+			return -1;
+		} else {
+			return 0;
+		}
+	}
+
+};
+
 
 class TenXClusterAligner : public PairedEndAligner {
 public:
@@ -44,8 +124,8 @@ public:
         bool                noOrderedEvaluation,
         bool                noTruncation,
         bool                ignoreALignmentAdjustmentsForOm,
-		PairedAlignmentResult *anchorResults_,
-        TenXProgressTracker *progressTracker_,
+		TenXAnchorTracker   *anchorTracker_,
+        TenXMultiTracker    *multiTracker_,
         unsigned            minPairsPerCluster_,
         _uint64             minClusterSpan_,
         double              unclusteredPenalty_,
@@ -69,7 +149,8 @@ public:
     // First stage will call underlyingAligner->phase1 and phase2. First stage should be only called once
     // Return true is no single read is worthy of further examination
     bool align_first_stage(
-        unsigned                barcodeSize_
+        unsigned                anchorNum_,
+        unsigned                multiPairNum_
     );
 
     // Second stage will call underlyingAligner->phase3 but will not generate results.
@@ -94,7 +175,7 @@ public:
 
     // TenX function. Move all trackers between start and end pointers beyond clusterBoundary, while registering each location with clusterID: clusterIdx.
     // All temporary changed will be held in updateHolder and will need to be merged with mergeUpdate().
-    void registerClusterForReads(TenXProgressTracker *preStart, TenXProgressTracker *start, TenXProgressTracker *end, GenomeLocation clusterBoundary, int clusterIdx);
+    void registerClusterForReads(TenXMultiTracker *preStart, TenXMultiTracker *start, TenXMultiTracker *end, GenomeLocation clusterBoundary, int clusterIdx);
     // TenX function. Sort all progress trackers and link them and initialize root.
     void sortAndLink();
     // For debug purpose, quickly forward all pairs beyond the forward loc.
@@ -103,7 +184,7 @@ public:
     // return true if all pairs within the cluster have been processed. No secondary results overflow.
     bool align(
         Read                    **pairedReads,
-        unsigned                barcodeSize,
+        unsigned                multiPairNum,
         PairedAlignmentResult   **result,
         int                     maxEditDistanceForSecondaryResults,
         _int64                  *secondaryResultBufferSize,
@@ -140,24 +221,22 @@ public:
 
     virtual _int64 getLocationsScored() const {
         _int64 locationsScored = 0;
-        for (int readIdx = 0; readIdx < barcodeSize; readIdx++) {
-            locationsScored += progressTracker[readIdx].aligner->getLocationsScored();
+        for (int readIdx = 0; readIdx < multiPairNum; readIdx++) {
+            locationsScored += multiTracker[readIdx].aligner->getLocationsScored();
         }
         return locationsScored + singleAligner->getLocationsScored();
     }
 
 private:
     // Push newUpdate to the updateList at the correct ordered position. 
-    void pushToUpdate(TenXProgressTracker *newUpdate);
+    void pushToUpdate(TenXMultiTracker *newUpdate);
     // Merge trackers from rootList and updateList in a sorted fashion.
     void mergeUpdate();
 
     bool                forceSpacing;
     BaseAligner         *singleAligner;
-    unsigned            anchorNum;
-    unsigned            multiPairNum;
-    PairedAlignmentResult *anchorResults;
-    TenXProgressTracker *progressTracker;
+    TenXAnchorTracker   *anchorTracker;
+    TenXMultiTracker    *multiTracker;
     int                 maxEditDistanceForSecondaryResults;
     _int64              maxSecondaryAlignmentsToReturn;
 
@@ -171,17 +250,20 @@ private:
     unsigned            minReadLength;
     
     // 10x data
-    unsigned            barcodeSize;
+    unsigned            anchorNum;
+    unsigned            multiPairNum;
     _uint8              minPairsPerCluster;
     _uint64             minClusterSpan;
     double              unclusteredPenalty;
     unsigned            clusterEDCompensation;
 
     // 10x update pointers
-    TenXProgressTracker *trackerRoot;
-    TenXProgressTracker *updateHolder;
+    TenXMultiTracker *trackerRoot;
+    TenXMultiTracker *updateHolder;
 
     // 10x cluster validation tracker
     int                 maxClusterIdx;
 
 };
+
+#endif //#define __TENX_CLUSTER_ALIGNER__

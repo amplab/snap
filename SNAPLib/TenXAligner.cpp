@@ -564,12 +564,13 @@ void TenXAlignerContext::runIterationThread()
 	bool * useful1Ary = (bool*)BigAlloc(sizeof(bool) * maxBarcodeSize);
 
     // Allocate the progress trackers
-    TenXProgressTracker *tenXSingleTrackerArray = (TenXProgressTracker*)BigAlloc(sizeof(TenXProgressTracker) * maxMultiPairSize);
+    TenXMultiTracker *tenXMultiTrackerArray = (TenXMultiTracker*)BigAlloc(sizeof(TenXMultiTracker) * maxMultiPairSize);
+
+    // Allocate tracker for anchors 
+    TenXAnchorTracker *anchorTrackerArray = (TenXAnchorTracker*)BigAlloc(sizeof(TenXAnchorTracker) * maxBarcodeSize);
 
     //fprintf(stderr, "****Before g/eoing into the loop of allocating single aligners\n");
 
-        // Allocate data for result arrays
-    PairedAlignmentResult* anchorResults = (PairedAlignmentResult*)BigAlloc(maxBarcodeSize * sizeof(PairedAlignmentResult)); // all paired results. "+1" is for the primary result
 
     // Allocate and initialize erasers
     bool *clusterToggleEraser = (bool*)BigAlloc(sizeof(bool) * maxClusterNum);
@@ -590,21 +591,21 @@ void TenXAlignerContext::runIterationThread()
 								extraSearchDepth, maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen,
 								noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm, printStatsMapQLimit);
 
-    // Allocate and initilaze tracker and singleAligner
+    // Allocate and initilaze multi-pair tracker and tenXSingleAligner
     for (int singleAlignerIdx = 0; singleAlignerIdx < maxMultiPairSize; singleAlignerIdx++) {
         // Allocate and initilazing tracker
-        tenXSingleTrackerArray[singleAlignerIdx].pairNotDone = false;
-        tenXSingleTrackerArray[singleAlignerIdx].singleNotDone = false;
-        tenXSingleTrackerArray[singleAlignerIdx].clusterCounterAry = (_uint8*)BigAlloc(sizeof(_uint8) * maxClusterNum);
-        tenXSingleTrackerArray[singleAlignerIdx].clusterToggle = (bool*)BigAlloc(sizeof(bool) * maxClusterNum);
-        tenXSingleTrackerArray[singleAlignerIdx].nSecondaryResults = 0;
-        tenXSingleTrackerArray[singleAlignerIdx].nSingleEndSecondaryResults[0] = tenXSingleTrackerArray[singleAlignerIdx].nSingleEndSecondaryResults[1] = 0;
+        tenXMultiTrackerArray[singleAlignerIdx].pairNotDone = false;
+        tenXMultiTrackerArray[singleAlignerIdx].singleNotDone = false;
+        tenXMultiTrackerArray[singleAlignerIdx].clusterCounterAry = (_uint8*)BigAlloc(sizeof(_uint8) * maxClusterNum);
+        tenXMultiTrackerArray[singleAlignerIdx].clusterToggle = (bool*)BigAlloc(sizeof(bool) * maxClusterNum);
+        tenXMultiTrackerArray[singleAlignerIdx].nSecondaryResults = 0;
+        tenXMultiTrackerArray[singleAlignerIdx].nSingleEndSecondaryResults[0] = tenXMultiTrackerArray[singleAlignerIdx].nSingleEndSecondaryResults[1] = 0;
 
     	// Allocate singleAligner
-        tenXSingleTrackerArray[singleAlignerIdx].aligner = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist,
+        tenXMultiTrackerArray[singleAlignerIdx].aligner = new (allocator) TenXSingleAligner(index, maxReadSize, maxHits, maxDist,
 		    numSeedsFromCommandLine, seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth,
             maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm, printStatsMapQLimit, clusterEDCompensation, unclusteredPenalty,
-            sharedClusterCounterAry, tenXSingleTrackerArray[singleAlignerIdx].clusterToggle);
+            sharedClusterCounterAry, tenXMultiTrackerArray[singleAlignerIdx].clusterToggle);
     }
 
     // Allocate clusterAligner
@@ -622,8 +623,8 @@ void TenXAlignerContext::runIterationThread()
         noOrderedEvaluation,
         noTruncation,
         ignoreAlignmentAdjustmentForOm,
-		anchorResults,
-        tenXSingleTrackerArray,
+		anchorTrackerArray,
+        tenXMultiTrackerArray,
         minPairsPerCluster,
         minClusterSpan,
         unclusteredPenalty,
@@ -639,8 +640,8 @@ void TenXAlignerContext::runIterationThread()
 
     for (unsigned pairIdx = 0; pairIdx < maxMultiPairSize; pairIdx++) {
         // Allocate data for result arrays
-        tenXSingleTrackerArray[pairIdx].results = (PairedAlignmentResult*)BigAlloc((1 + _maxPairedSecondaryHits_ref) * sizeof(PairedAlignmentResult)); // all paired results. "+1" is for the primary result
-        tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults = (SingleAlignmentResult*)BigAlloc(_maxSingleSecondaryHits_ref * sizeof(SingleAlignmentResult)); // all single results.
+        tenXMultiTrackerArray[pairIdx].results = (PairedAlignmentResult*)BigAlloc((1 + _maxPairedSecondaryHits_ref) * sizeof(PairedAlignmentResult)); // all paired results. "+1" is for the primary result
+        tenXMultiTrackerArray[pairIdx].singleEndSecondaryResults = (SingleAlignmentResult*)BigAlloc(_maxSingleSecondaryHits_ref * sizeof(SingleAlignmentResult)); // all single results.
     }
     
 	allocator->checkCanaries();
@@ -682,18 +683,18 @@ void TenXAlignerContext::runIterationThread()
     memcpy(clusterCounterEraser, sharedClusterCounterAry, sizeof(_uint8) * maxClusterNum);
 
     for (int singleAlignerIdx = 0; singleAlignerIdx < maxMultiPairSize; singleAlignerIdx++) {
-    	memcpy(clusterToggleEraser, tenXSingleTrackerArray[singleAlignerIdx].clusterToggle, sizeof(bool) * maxClusterNum);
+    	memcpy(clusterToggleEraser, tenXMultiTrackerArray[singleAlignerIdx].clusterToggle, sizeof(bool) * maxClusterNum);
 	}
 
     for (unsigned pairIdx = 0; pairIdx < maxMultiPairSize; pairIdx++) {
-        tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize = _maxPairedSecondaryHits_ref;
-        tenXSingleTrackerArray[pairIdx].singleSecondaryBufferSize = _maxSingleSecondaryHits_ref;
-        tenXSingleTrackerArray[pairIdx].pairNotDone = false;
-        tenXSingleTrackerArray[pairIdx].singleNotDone = false;
+        tenXMultiTrackerArray[pairIdx].secondaryResultBufferSize = _maxPairedSecondaryHits_ref;
+        tenXMultiTrackerArray[pairIdx].singleSecondaryBufferSize = _maxSingleSecondaryHits_ref;
+        tenXMultiTrackerArray[pairIdx].pairNotDone = false;
+        tenXMultiTrackerArray[pairIdx].singleNotDone = false;
     }
 
-	unsigned multiPairSize = 0;
-	unsigned anchorPairSize = 0;
+	unsigned multiPairNum = 0;
+	unsigned anchorNum = 0;
 
     ReadWriter *readWriter = this->readWriter;
 
@@ -766,29 +767,30 @@ void TenXAlignerContext::runIterationThread()
         Read *reads[2] = {read0Ary[readIdx], read1Ary[readIdx]};
         bool useful[2] = {useful0Ary[readIdx], useful1Ary[readIdx]};
 
-        //Read *reads[2] = tenXSingleTrackerArray[readIdx].pairedReads;
-        //bool useful[2] = tenXSingleTrackerArray[readIdx].useful;
+        //Read *reads[2] = tenXMultiTrackerArray[readIdx].pairedReads;
+        //bool useful[2] = tenXMultiTrackerArray[readIdx].useful;
 
 		// check if it is an anchor
         if (useful[0] && useful[1]) {
-			if (anchorAligner->align(reads[0], reads[1], &anchorResults[anchorPairSize]) == 1) { // anchor
-				anchorPairSize++;
-        		_ASSERT(anchorPairSize <= maxBarcodeSize);
+			if (anchorAligner->align(reads[0], reads[1], &anchorTrackerArray[anchorNum].result) == 1) { // anchor
+				anchorTrackerArray[anchorNum].pairedReads[0] = reads[0];
+				anchorTrackerArray[anchorNum].pairedReads[1] = reads[1];
+				anchorNum++;
+        		_ASSERT(anchorNum <= maxBarcodeSize);
 			}
 			else { // not an anchor read. It's a multi mapping read
-
-        		tenXSingleTrackerArray[readIdx].pairedReads[0] = reads[0];
-        		tenXSingleTrackerArray[readIdx].pairedReads[1] = reads[1];
-        		tenXSingleTrackerArray[readIdx].useful[0] = useful[0];
-        		tenXSingleTrackerArray[readIdx].useful[1] = useful[1];
+        		tenXMultiTrackerArray[readIdx].pairedReads[0] = reads[0];
+        		tenXMultiTrackerArray[readIdx].pairedReads[1] = reads[1];
+        		tenXMultiTrackerArray[readIdx].useful[0] = useful[0];
+        		tenXMultiTrackerArray[readIdx].useful[1] = useful[1];
 
 				// at least one of the ends is good
-				tenXSingleTrackerArray[multiPairSize].singleNotDone = true;
+				tenXMultiTrackerArray[multiPairNum].singleNotDone = true;
 				// examine pair if both ends are good
-				tenXSingleTrackerArray[multiPairSize].pairNotDone = true;
+				tenXMultiTrackerArray[multiPairNum].pairNotDone = true;
 
-				multiPairSize++;
-        		_ASSERT(multiPairSize <= maxMultiPairSize);
+				multiPairNum++;
+        		_ASSERT(multiPairNum <= maxMultiPairSize);
 			}		
 		}
 		else {
@@ -796,32 +798,31 @@ void TenXAlignerContext::runIterationThread()
 		}
 
         /*/ Debugging
-        if (tenXSingleTrackerArray[readIdx].pairNotDone) {
+        if (tenXMultiTrackerArray[readIdx].pairNotDone) {
             char id[42];
 
-            memcpy(id, tenXSingleTrackerArray[readIdx].pairedReads[0]->getId(), 41);
+            memcpy(id, tenXMultiTrackerArray[readIdx].pairedReads[0]->getId(), 41);
             id[41] = '\0';
-            tenXSingleTrackerArray[readIdx].id[0] = new string(id);
-            memcpy(id, tenXSingleTrackerArray[readIdx].pairedReads[1]->getId(), 41);
+            tenXMultiTrackerArray[readIdx].id[0] = new string(id);
+            memcpy(id, tenXMultiTrackerArray[readIdx].pairedReads[1]->getId(), 41);
             id[41] = '\0';
-            tenXSingleTrackerArray[readIdx].id[1] = new string(id);
+            tenXMultiTrackerArray[readIdx].id[1] = new string(id);
         }
         */// Debugging
     }
 
 	// sort all anchors
-    qsort(anchorResults, anchorPairSize, sizeof(PairedAlignmentResult), PairedAlignmentResult::compareByLocation);
+    qsort(anchorTrackerArray, anchorNum, sizeof(TenXAnchorTracker), TenXAnchorTracker::compare);
     //fprintf(stderr, "****begin alignment\n");
 
     /*
      * Process the rest of the multi-mapping reads
 	 */
 
-
     fprintf(stderr, "****TenX stage 1\n");
 
     // Stage 1, get seeds and find paired locations while keeping track of clusters
-    bool barcodeFinished = aligner->align_first_stage(totalPairsForBarcode);
+    bool barcodeFinished = aligner->align_first_stage(anchorNum, multiPairNum);
     if (barcodeFinished)
         return;
 
@@ -833,18 +834,18 @@ void TenXAlignerContext::runIterationThread()
     barcodeFinished = aligner->align_second_stage_check_reallocate();
     if (!barcodeFinished) {
         for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {
-            if (tenXSingleTrackerArray[pairIdx].pairNotDone && tenXSingleTrackerArray[pairIdx].nSecondaryResults > tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize) {
-                BigDealloc(tenXSingleTrackerArray[pairIdx].results);
-                tenXSingleTrackerArray[pairIdx].results = NULL;
+            if (tenXMultiTrackerArray[pairIdx].pairNotDone && tenXMultiTrackerArray[pairIdx].nSecondaryResults > tenXMultiTrackerArray[pairIdx].secondaryResultBufferSize) {
+                BigDealloc(tenXMultiTrackerArray[pairIdx].results);
+                tenXMultiTrackerArray[pairIdx].results = NULL;
                 // reallocate memory. Allocate with powers of 2.
-                unsigned multiple = (tenXSingleTrackerArray[pairIdx].nSecondaryResults - 1) / tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize + 1;
+                unsigned multiple = (tenXMultiTrackerArray[pairIdx].nSecondaryResults - 1) / tenXMultiTrackerArray[pairIdx].secondaryResultBufferSize + 1;
                 unsigned shifter = 2;
                 while (multiple > shifter) {
                     shifter *= 2;
                 }
                 
-                tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize *= shifter;
-                tenXSingleTrackerArray[pairIdx].results = (PairedAlignmentResult *)BigAlloc((tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize + 1) * sizeof(PairedAlignmentResult));
+                tenXMultiTrackerArray[pairIdx].secondaryResultBufferSize *= shifter;
+                tenXMultiTrackerArray[pairIdx].results = (PairedAlignmentResult *)BigAlloc((tenXMultiTrackerArray[pairIdx].secondaryResultBufferSize + 1) * sizeof(PairedAlignmentResult));
             }
         }
     }
@@ -856,6 +857,7 @@ void TenXAlignerContext::runIterationThread()
     fprintf(stderr, "****TenX stage 3\n");
     aligner->align_third_stage();
 
+	/*
     // Stage 4, process single mapping for unmapped reads 
     fprintf(stderr, "****TenX stage 4\n");
     if(!noSingle) {
@@ -865,16 +867,17 @@ void TenXAlignerContext::runIterationThread()
             if (barcodeFinished)
                 break;
             for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {
-                if (tenXSingleTrackerArray[pairIdx].singleNotDone && tenXSingleTrackerArray[pairIdx].nSingleEndSecondaryResults[0] > tenXSingleTrackerArray[pairIdx].singleSecondaryBufferSize) {
-                    _ASSERT(tenXSingleTrackerArray[pairIdx].nSingleEndSecondaryResults[0] > tenXSingleTrackerArray[pairIdx].singleSecondaryBufferSize);
-                    BigDealloc(tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults);
-                    tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults = NULL;
-                    tenXSingleTrackerArray[pairIdx].singleSecondaryBufferSize *= 2;
-                    tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults = (SingleAlignmentResult *)BigAlloc(tenXSingleTrackerArray[pairIdx].singleSecondaryBufferSize * sizeof(SingleAlignmentResult));
+                if (tenXMultiTrackerArray[pairIdx].singleNotDone && tenXMultiTrackerArray[pairIdx].nSingleEndSecondaryResults[0] > tenXMultiTrackerArray[pairIdx].singleSecondaryBufferSize) {
+                    _ASSERT(tenXMultiTrackerArray[pairIdx].nSingleEndSecondaryResults[0] > tenXMultiTrackerArray[pairIdx].singleSecondaryBufferSize);
+                    BigDealloc(tenXMultiTrackerArray[pairIdx].singleEndSecondaryResults);
+                    tenXMultiTrackerArray[pairIdx].singleEndSecondaryResults = NULL;
+                    tenXMultiTrackerArray[pairIdx].singleSecondaryBufferSize *= 2;
+                    tenXMultiTrackerArray[pairIdx].singleEndSecondaryResults = (SingleAlignmentResult *)BigAlloc(tenXMultiTrackerArray[pairIdx].singleSecondaryBufferSize * sizeof(SingleAlignmentResult));
                 }
             }
         }
     }
+	*/
 
     fprintf(stderr, "****generate output\n");
 
@@ -889,13 +892,13 @@ void TenXAlignerContext::runIterationThread()
         stats->millisAligning += (alignFinishedTime - readFinishedTime);
     }
 
-    for (unsigned pairIdx = 0; pairIdx < totalPairsForBarcode; pairIdx++) {
+    for (unsigned pairIdx = 0; pairIdx < multiPairNum; pairIdx++) {
         // A bunch of pointers delegates... For readability!
-        Read **reads = tenXSingleTrackerArray[pairIdx].pairedReads;
-        bool *useful = tenXSingleTrackerArray[pairIdx].useful;
-        PairedAlignmentResult* results = tenXSingleTrackerArray[pairIdx].results;
-        _int64 &nSecondaryResults = tenXSingleTrackerArray[pairIdx].nSecondaryResults;
-        _int64 *nSingleEndSecondaryResults = tenXSingleTrackerArray[pairIdx].nSingleEndSecondaryResults;
+        Read **reads = tenXMultiTrackerArray[pairIdx].pairedReads;
+        bool *useful = tenXMultiTrackerArray[pairIdx].useful;
+        PairedAlignmentResult* results = tenXMultiTrackerArray[pairIdx].results;
+        _int64 &nSecondaryResults = tenXMultiTrackerArray[pairIdx].nSecondaryResults;
+        _int64 *nSingleEndSecondaryResults = tenXMultiTrackerArray[pairIdx].nSingleEndSecondaryResults;
 
 
 #if     TIME_HISTOGRAM
@@ -912,7 +915,7 @@ void TenXAlignerContext::runIterationThread()
         }
 
         bool firstIsPrimary = true;
-        for (int i = 0; i <= tenXSingleTrackerArray[pairIdx].secondaryResultBufferSize; i++) {  // Loop runs to <= nSecondaryResults because there's a primary result, too.
+        for (int i = 0; i <= tenXMultiTrackerArray[pairIdx].secondaryResultBufferSize; i++) {  // Loop runs to <= nSecondaryResults because there's a primary result, too.
             bool pass0 = options->passFilter(reads[0], results[i].status[0], !useful[0], i != 0 || !firstIsPrimary);
             bool pass1 = options->passFilter(reads[1], results[i].status[1], !useful[1], i != 0 || !firstIsPrimary);
             bool pass = (options->filterFlags & AlignerOptions::FilterBothMatesMatch)
@@ -934,7 +937,7 @@ void TenXAlignerContext::runIterationThread()
         //
         // Now check the single secondary alignments
         //
-        SingleAlignmentResult *singleResults[2] = { &tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults[0], &tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults[nSingleEndSecondaryResults[0]] };
+        SingleAlignmentResult *singleResults[2] = { &tenXMultiTrackerArray[pairIdx].singleEndSecondaryResults[0], &tenXMultiTrackerArray[pairIdx].singleEndSecondaryResults[nSingleEndSecondaryResults[0]] };
         for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
             for (int whichAlignment = 0; whichAlignment < nSingleEndSecondaryResults[whichRead]; whichAlignment++) {
                 if (!options->passFilter(reads[whichRead], singleResults[whichRead][whichAlignment].status, false, true)) {
@@ -976,25 +979,25 @@ void TenXAlignerContext::runIterationThread()
     allocator->checkCanaries();
 
     for (unsigned pairIdx = 0; pairIdx < maxMultiPairSize; pairIdx++) {
-        BigDealloc(tenXSingleTrackerArray[pairIdx].results);
-        tenXSingleTrackerArray[pairIdx].results = NULL;
+        BigDealloc(tenXMultiTrackerArray[pairIdx].results);
+        tenXMultiTrackerArray[pairIdx].results = NULL;
 
-        BigDealloc(tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults);
-        tenXSingleTrackerArray[pairIdx].singleEndSecondaryResults = NULL;
+        BigDealloc(tenXMultiTrackerArray[pairIdx].singleEndSecondaryResults);
+        tenXMultiTrackerArray[pairIdx].singleEndSecondaryResults = NULL;
 
-        BigDealloc(tenXSingleTrackerArray[pairIdx].clusterToggle);
-        tenXSingleTrackerArray[pairIdx].clusterToggle = NULL;
+        BigDealloc(tenXMultiTrackerArray[pairIdx].clusterToggle);
+        tenXMultiTrackerArray[pairIdx].clusterToggle = NULL;
     }
 
     for (unsigned singleAlignerIdx = 0; singleAlignerIdx < maxMultiPairSize; singleAlignerIdx++) {
-        tenXSingleTrackerArray[singleAlignerIdx].aligner->~TenXSingleAligner();
+        tenXMultiTrackerArray[singleAlignerIdx].aligner->~TenXSingleAligner();
     }
     
     aligner->~TenXClusterAligner();
     
     BigDealloc(read0Ary);
     BigDealloc(read1Ary);
-    BigDealloc(tenXSingleTrackerArray);
+    BigDealloc(tenXMultiTrackerArray);
     BigDealloc(sharedClusterCounterAry);
     BigDealloc(clusterCounterEraser);
     BigDealloc(clusterToggleEraser);
