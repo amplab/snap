@@ -232,6 +232,9 @@ private:
     void pushToUpdate(TenXMultiTracker *newUpdate);
     // Merge trackers from rootList and updateList in a sorted fashion.
     void mergeUpdate();
+    // Find the anchor next that is alone, out of the cluster range
+	unsigned nextLoneAnchorIdx (unsigned anchorIdx);
+	unsigned anchorIdxPassLocus (unsigned anchorIdx, const GenomeLocation& targetLocus);
 
     bool                forceSpacing;
     BaseAligner         *singleAligner;

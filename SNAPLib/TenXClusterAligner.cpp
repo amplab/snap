@@ -140,6 +140,18 @@ unsigned trackersToMeetTargetLocus(
     return cursorCounter;
 }
 
+unsigned TenXClusterAligner::nextLoneAnchorIdx(unsigned anchorIdx) {
+	while (anchorIdx < anchorNum - 1 && 
+		anchorTracker[anchorIdx].result.location[0] - anchorTracker[anchorIdx + 1].result.location[0] < minClusterSpan)
+		anchorIdx++;
+	return 0;
+}
+
+unsigned TenXClusterAligner::anchorIdxPassLocus(unsigned anchorIdx, const GenomeLocation& targetLocus) {
+	while (anchorIdx < anchorNum && anchorTracker[anchorIdx].result.location[0] > targetLocus)
+		anchorIdx++;
+	return 0;
+}
 
 //reference 
 GenomeLocation resolveLocusPtr(GenomeLocation *locusPtr) {
@@ -418,42 +430,54 @@ bool TenXClusterAligner::align_first_stage(
     GenomeLocation clusterBoundary;
 
     // Intitialize boundary
-    TenXMultiTracker *cursor; // pointer that keeps track of the progress of walking down progress trackers
+	int anchorIdx = 0;
+    TenXMultiTracker *multiCursor; // pointer that keeps track of the progress of walking down progress trackers
+	bool magnetized = false;
 
     while (trackerRoot->pairNotDone && trackerRoot->nextLocus != -1) {
         // Initialization.
-        cursor = trackerRoot;
+        multiCursor = trackerRoot;
         //expirationCursor = trackerRoot;
 
-        unsigned nPotentialPairs = trackersToMeetTargetLocus(cursor, trackerRoot->nextLocus - minClusterSpan);
+		if (anchorIdx < anchorNum && anchorTracker[anchorIdx].result.location[0] > multiCursor->nextLocus + minClusterSpan)
+			anchorIdx = anchorIdxPassLocus(anchorIdx, multiCursor->nextLocus + minClusterSpan);
 
-        if (nPotentialPairs > minPairsPerCluster || cursor == NULL || cursor->nextLocus == -1) { // this is a clustered pair,
+		//anchorIdx = nextLoneAnchorIdx(anchorIdx);
+
+        unsigned nPotentialPairs = trackersToMeetTargetLocus(multiCursor, trackerRoot->nextLocus - minClusterSpan);
+
+        if (nPotentialPairs > minPairsPerCluster || multiCursor == NULL || multiCursor->nextLocus == -1) { // this is a clustered pair,
         // tag it with clusterId! Note that if we are at the end (nextLocus is -1) we will add remaining pairs into the last
         // cluster (even though nPotentialPairs is not big enough).
             registeringCluster = true;
             clusterId = globalClusterId;
 
-            if (cursor != NULL && cursor->nextLocus != -1)
-                clusterBoundary = cursor->nextLocus + minClusterSpan;
-            else
+            if (multiCursor != NULL && multiCursor->nextLocus != -1)
+                clusterBoundary = multiCursor->nextLocus + minClusterSpan;
+			else
                 clusterBoundary = -1;
 
-            registerClusterForReads(NULL, trackerRoot, cursor, clusterBoundary, clusterId); //register the pairs and update the locus pointers.
+			if (anchorIdx < anchorNum && clusterBoundary < anchorTracker[anchorIdx].result.location[0]){
+
+			}
+
+
+            registerClusterForReads(NULL, trackerRoot, multiCursor, clusterBoundary, clusterId); //register the pairs and update the locus pointers.
         }
         else { //the cluster ends here.
             if (registeringCluster) { //when we were half way of adding a cluster, we need to finish it with the old targetLoc.
                 //fprintf(stderr, "clusterBoundary: %lld    globalClusterId: %d\n", clusterBoundary.location, globalClusterId);
                 //fflush(stderr);
-                registerClusterForReads(NULL, trackerRoot, cursor, clusterBoundary, clusterId); //use the previous id.
+                registerClusterForReads(NULL, trackerRoot, multiCursor, clusterBoundary, clusterId); //use the previous id.
                 globalClusterId++;
                 printf("globalClusterId++: %d\n", globalClusterId);
                 registeringCluster = false;
 
             }
             else { //we were not adding a cluster, just tag these locus as not clustered (-1) and move the locus pointer over the new targetLoc.
-                cursor = traverseProgressPtr(cursor, minPairsPerCluster - nPotentialPairs);
-                clusterBoundary = cursor->nextLocus + minClusterSpan;
-                registerClusterForReads(NULL, trackerRoot, cursor, clusterBoundary, -1); //use the previous id.
+                multiCursor = traverseProgressPtr(multiCursor, minPairsPerCluster - nPotentialPairs);
+                clusterBoundary = multiCursor->nextLocus + minClusterSpan;
+                registerClusterForReads(NULL, trackerRoot, multiCursor, clusterBoundary, -1); //use the previous id.
             }
         }
         //fprintf(stderr, "clusterBoundary: %lld\n", clusterBoundary.location);
