@@ -886,9 +886,6 @@ TenXSingleAligner::align_phase_3_score(int &bestCompensatedScore, bool inRevise)
 }
 
 
-/*
- *!!! Haven't added the clusterToggle yet.
- */
 void
 TenXSingleAligner::align_phase_3_increment_cluster(int bestCompensatedScore) {
 
@@ -900,7 +897,7 @@ TenXSingleAligner::align_phase_3_increment_cluster(int bestCompensatedScore) {
         if (mergeAnchorPool[anchorIdx].pairScore + astrayEDPenalty <= bestCompensatedScore + extraSearchDepth) {
             int clusterIdx = mergeAnchorPool[anchorIdx].clusterIdx;
             // haven't seen this cluster before
-            if (clusterIdx != UNLINKED_ID && !clusterToggle[clusterIdx]) {
+            if (clusterIdx >= 0 && !clusterToggle[clusterIdx]) {
                 // only increment when we haven't reached the limit to prevent overflow
                 if (clusterCounterAry[mergeAnchorPool[anchorIdx].clusterIdx] != std::numeric_limits<_uint8>::max() )
                     clusterCounterAry[mergeAnchorPool[anchorIdx].clusterIdx]++;
@@ -922,7 +919,7 @@ TenXSingleAligner::align_phase_3_correct_best_score(int &bestCompensatedScore, _
 
         int clusterIdx = mergeAnchorPool[anchorIdx].clusterIdx;
         // This is a valid cluster
-        if (clusterIdx != UNLINKED_ID && clusterCounterAry[clusterIdx] >= minClusterSize) {
+        if (clusterIdx == MAGNET_ID || (clusterIdx >= 0 && clusterCounterAry[clusterIdx] >= minClusterSize) ) {
              astrayEDPenalty = 0;
         } 
         else {
@@ -976,7 +973,7 @@ TenXSingleAligner::align_phase_3_count_results(
     for (_uint32 anchorIdx = 0; anchorIdx < firstFreeMergeAnchor; anchorIdx++) {
         int clusterIdx = mergeAnchorPool[anchorIdx].clusterIdx;
         // This is a valid cluster
-        if (clusterIdx != UNLINKED_ID && clusterCounterAry[clusterIdx] >= minClusterSize) {
+        if (clusterIdx == MAGNET_ID || (clusterIdx >=0 && clusterCounterAry[clusterIdx] >= minClusterSize) ) {
             astrayEDPenalty = 0;
             astrayProbabilityPenalty = 1;
         } 
@@ -1045,8 +1042,8 @@ TenXSingleAligner::align_phase_3_generate_results(
     
     for (_uint32 anchorIdx = 0; anchorIdx < firstFreeMergeAnchor; anchorIdx++) {
         int clusterIdx = mergeAnchorPool[anchorIdx].clusterIdx;
-        // This is a valid cluster
-        if (clusterIdx != UNLINKED_ID && clusterCounterAry[clusterIdx] >= minClusterSize) {
+        // This is a valid cluster or magnet read
+        if (clusterIdx == MAGNET_ID || (clusterIdx >= UNLINKED_ID && clusterCounterAry[clusterIdx] >= minClusterSize) ) {
             astrayEDPenalty = 0;
             astrayProbabilityPenalty = 1;
         } 
@@ -1123,7 +1120,7 @@ TenXSingleAligner::align_phase_3_generate_results(
     }
     else {
         bestResult->compensatedScore = -1;
-        bestResult->clusterIdx = -1;
+        bestResult->clusterIdx = UNLINKED_ID;
         for (unsigned whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
             bestResult->compensatedScore = -1;
             bestResult->location[whichRead] = InvalidGenomeLocation;
