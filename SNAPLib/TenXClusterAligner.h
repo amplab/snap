@@ -233,8 +233,8 @@ private:
     // Merge trackers from rootList and updateList in a sorted fashion.
     void mergeUpdate();
     // Find the anchor next that is alone, out of the cluster range
-	unsigned nextLoneAnchorIdx (unsigned anchorIdx);
-	unsigned anchorIdxPassLocus (unsigned anchorIdx, const GenomeLocation& targetLocus);
+	unsigned endOfAnchorChain (unsigned anchorIdx);
+	unsigned moveAnchorPassLocus (unsigned anchorIdx, const GenomeLocation& targetLocus);
 
     bool                forceSpacing;
     BaseAligner         *singleAligner;
@@ -256,7 +256,8 @@ private:
     unsigned            anchorNum;
     unsigned            multiPairNum;
     _uint8              minPairsPerCluster;
-    _uint64             minClusterSpan;
+    _uint64             coverageScanRange;
+    _uint64             magnetRange;
     double              unclusteredPenalty;
     unsigned            clusterEDCompensation;
 

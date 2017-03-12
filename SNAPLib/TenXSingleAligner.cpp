@@ -525,7 +525,7 @@ TenXSingleAligner::align_phase_2_single_step_add_candidate(unsigned whichSetPair
         }
 
         // Add 10X cluster penalty
-        unsigned clusterScorePenalty = clusterIdx == -1 ? clusterEDCompensation : 0;
+        unsigned clusterScorePenalty = clusterIdx == UNLINKED_ID ? clusterEDCompensation : 0;
 
         //
         // If we have noOrderedEvaluation set, just stick everything on list 0, regardless of what it really is.  This will cause us to
@@ -685,7 +685,7 @@ TenXSingleAligner::align_phase_2()
     //
     if(align_phase_2_init() ) {
         GenomeLocation clusterTargetLoc = GenomeLocation(0000000000);
-        align_phase_2_to_target_loc(clusterTargetLoc, -1);
+        align_phase_2_to_target_loc(clusterTargetLoc, UNLINKED_ID);
     }
 }
 
@@ -732,7 +732,7 @@ TenXSingleAligner::align_phase_3_score(int &bestCompensatedScore, bool inRevise)
         ScoringCandidate *candidate = scoringCandidates[currentBestPossibleScoreList];
 
         //**** 10X surrogates
-        unsigned    astrayEDPenalty = (candidate->clusterIdx == -1) ? clusterEDCompensation : 0;
+        unsigned    astrayEDPenalty = (candidate->clusterIdx == UNLINKED_ID) ? clusterEDCompensation : 0;
         // scoreLimit always take cluster compensation into consideration. We need to offset it if the mapping is not clustered.
         unsigned    compensatedScoreLimit = scoreLimit - astrayEDPenalty;
         //**** 10X surrogates
@@ -894,13 +894,13 @@ TenXSingleAligner::align_phase_3_increment_cluster(int bestCompensatedScore) {
 
     for (_uint32 anchorIdx = 0; anchorIdx < firstFreeMergeAnchor; anchorIdx++) {
 
-        unsigned int astrayEDPenalty = (mergeAnchorPool[anchorIdx].clusterIdx == -1)? clusterEDCompensation : 0;
+        unsigned int astrayEDPenalty = (mergeAnchorPool[anchorIdx].clusterIdx == UNLINKED_ID)? clusterEDCompensation : 0;
         
         // At least good secondary result
         if (mergeAnchorPool[anchorIdx].pairScore + astrayEDPenalty <= bestCompensatedScore + extraSearchDepth) {
             int clusterIdx = mergeAnchorPool[anchorIdx].clusterIdx;
             // haven't seen this cluster before
-            if (clusterIdx != -1 && !clusterToggle[clusterIdx]) {
+            if (clusterIdx != UNLINKED_ID && !clusterToggle[clusterIdx]) {
                 // only increment when we haven't reached the limit to prevent overflow
                 if (clusterCounterAry[mergeAnchorPool[anchorIdx].clusterIdx] != std::numeric_limits<_uint8>::max() )
                     clusterCounterAry[mergeAnchorPool[anchorIdx].clusterIdx]++;
@@ -922,7 +922,7 @@ TenXSingleAligner::align_phase_3_correct_best_score(int &bestCompensatedScore, _
 
         int clusterIdx = mergeAnchorPool[anchorIdx].clusterIdx;
         // This is a valid cluster
-        if (clusterIdx != -1 && clusterCounterAry[clusterIdx] >= minClusterSize) {
+        if (clusterIdx != UNLINKED_ID && clusterCounterAry[clusterIdx] >= minClusterSize) {
              astrayEDPenalty = 0;
         } 
         else {
@@ -976,7 +976,7 @@ TenXSingleAligner::align_phase_3_count_results(
     for (_uint32 anchorIdx = 0; anchorIdx < firstFreeMergeAnchor; anchorIdx++) {
         int clusterIdx = mergeAnchorPool[anchorIdx].clusterIdx;
         // This is a valid cluster
-        if (clusterIdx != -1 && clusterCounterAry[clusterIdx] >= minClusterSize) {
+        if (clusterIdx != UNLINKED_ID && clusterCounterAry[clusterIdx] >= minClusterSize) {
             astrayEDPenalty = 0;
             astrayProbabilityPenalty = 1;
         } 
@@ -1041,17 +1041,17 @@ TenXSingleAligner::align_phase_3_generate_results(
 
     // Iterate through all the anchors to generate results.
     int nextResultIdx = 0;
-    int bestResultIdx = -1;
+    int bestResultIdx = UNLINKED_ID;
     
     for (_uint32 anchorIdx = 0; anchorIdx < firstFreeMergeAnchor; anchorIdx++) {
         int clusterIdx = mergeAnchorPool[anchorIdx].clusterIdx;
         // This is a valid cluster
-        if (clusterIdx != -1 && clusterCounterAry[clusterIdx] >= minClusterSize) {
+        if (clusterIdx != UNLINKED_ID && clusterCounterAry[clusterIdx] >= minClusterSize) {
             astrayEDPenalty = 0;
             astrayProbabilityPenalty = 1;
         } 
         else {
-            clusterIdx = -1;
+            clusterIdx = UNLINKED_ID;
             astrayEDPenalty = clusterEDCompensation;
             astrayProbabilityPenalty = unclusteredPenalty;
         }
@@ -1093,10 +1093,10 @@ TenXSingleAligner::align_phase_3_generate_results(
     }
     
     _ASSERT(nextResultIdx == *nSecondaryResults);
-    _ASSERT(bestResultIdx != -1 || *nSecondaryResults == 0);
+    _ASSERT(bestResultIdx != UNLINKED_ID || *nSecondaryResults == 0);
     _ASSERT(nextResultIdx == *nSecondaryResults);
 
-    if (bestResultIdx != -1) {
+    if (bestResultIdx != UNLINKED_ID) {
         // best result ptr
         PairedAlignmentResult *bestResultPtr = &secondaryResults[bestResultIdx];
         
@@ -1790,7 +1790,7 @@ TenXSingleAligner::MergeAnchor::checkMerge(GenomeLocation newMoreHitLocation, Ge
         // Within merge distance.  Keep the better score (or if they're tied the better match probability).
         //
         //****10X debug switch
-        if ( (clusterIdx == -1 && newClusterIdx != -1) || (!(clusterIdx != -1 && newClusterIdx == -1) && (newPairScore < pairScore || (newPairScore == pairScore && newMatchProbability > matchProbability) ) ) ) {
+        if ( (clusterIdx == UNLINKED_ID && newClusterIdx != UNLINKED_ID) || (!(clusterIdx != UNLINKED_ID && newClusterIdx == UNLINKED_ID) && (newPairScore < pairScore || (newPairScore == pairScore && newMatchProbability > matchProbability) ) ) ) {
         //if (newPairScore < pairScore || newMatchProbability > matchProbability) {
         //****10X debug switch
 #ifdef _DEBUG

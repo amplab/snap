@@ -22,6 +22,7 @@ Revision History:
 
 #include "stdafx.h"
 #include "TenXAnchorAligner.h"
+#include "TenXSingleAligner.h"
 #include "SeedSequencer.h"
 #include "mapq.h"
 #include "exit.h"
@@ -745,7 +746,7 @@ TenXAnchorAligner::align(
                                 result->score[readWithFewerHits] = fewerEndScore;
                                 result->score[readWithMoreHits] = mate->score;
             					result->status[readWithFewerHits] = result->status[readWithMoreHits] = SingleHit;
-								result->clusterIdx = -2;
+								result->clusterIdx = ANCHOR_ID;
         
                                 probabilityOfBestPair = pairProbability;
 

@@ -56,7 +56,7 @@ TenXClusterAligner::TenXClusterAligner(
 	TenXAnchorTracker   *anchorTracker_,
     TenXMultiTracker    *multiTracker_,
     unsigned            minPairsPerCluster_,
-    _uint64             minClusterSpan_,
+    _uint64             coverageScanRange_,
     double              unclusteredPenalty_,
     unsigned            clusterEDCompensation_,
     unsigned            minReadLength_,
@@ -65,7 +65,7 @@ TenXClusterAligner::TenXClusterAligner(
     int                 maxEditDistanceForSecondaryResults_,
     _int64              maxSecondaryAlignmentsToReturn_,
     BigAllocator        *allocator)
-    : multiTracker(multiTracker_), anchorTracker(anchorTracker_), unclusteredPenalty(unclusteredPenalty_), clusterEDCompensation(clusterEDCompensation_), minPairsPerCluster(minPairsPerCluster_), minClusterSpan(minClusterSpan_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_), maxEditDistanceForSecondaryResults(maxEditDistanceForSecondaryResults_), maxSecondaryAlignmentsToReturn(maxSecondaryAlignmentsToReturn_)
+    : multiTracker(multiTracker_), anchorTracker(anchorTracker_), unclusteredPenalty(unclusteredPenalty_), clusterEDCompensation(clusterEDCompensation_), minPairsPerCluster(minPairsPerCluster_), coverageScanRange(coverageScanRange_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_), maxEditDistanceForSecondaryResults(maxEditDistanceForSecondaryResults_), maxSecondaryAlignmentsToReturn(maxSecondaryAlignmentsToReturn_)
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
@@ -129,25 +129,28 @@ void TenXClusterAligner::sortAndLink()
 // Moves the cursor (cursor is modified!) to the first tracker that has a locus that's greater than the target.
 unsigned trackersToMeetTargetLocus(
     TenXMultiTracker *&cursor,
-    GenomeLocation clusterBoundary)
+    GenomeLocation clusterBoundary,
+    GenomeLocation &lastScanLoc)
 {
+    lastScanLoc = cursor->nextLocus;
     unsigned cursorCounter = 0;
 
     while (cursor->nextLocus >= 0 && cursor->nextLocus >= clusterBoundary) {
+        lastScanLoc = cursor->nextLocus;
         cursorCounter++;
         cursor = cursor->nextTracker;
     }
     return cursorCounter;
 }
 
-unsigned TenXClusterAligner::nextLoneAnchorIdx(unsigned anchorIdx) {
+unsigned TenXClusterAligner::endOfAnchorChain(unsigned anchorIdx) {
 	while (anchorIdx < anchorNum - 1 && 
-		anchorTracker[anchorIdx].result.location[0] - anchorTracker[anchorIdx + 1].result.location[0] < minClusterSpan)
+		anchorTracker[anchorIdx].result.location[0] - anchorTracker[anchorIdx + 1].result.location[0] < coverageScanRange)
 		anchorIdx++;
 	return 0;
 }
 
-unsigned TenXClusterAligner::anchorIdxPassLocus(unsigned anchorIdx, const GenomeLocation& targetLocus) {
+unsigned TenXClusterAligner::moveAnchorPassLocus(unsigned anchorIdx, const GenomeLocation& targetLocus) {
 	while (anchorIdx < anchorNum && anchorTracker[anchorIdx].result.location[0] > targetLocus)
 		anchorIdx++;
 	return 0;
@@ -428,6 +431,8 @@ bool TenXClusterAligner::align_first_stage(
     int globalClusterId = 0;
     int clusterId;
     GenomeLocation clusterBoundary;
+    GenomeLocation coverageScanEnd;
+    GenomeLocation lastScanLoc;
 
     // Intitialize boundary
 	int anchorIdx = 0;
@@ -437,14 +442,28 @@ bool TenXClusterAligner::align_first_stage(
     while (trackerRoot->pairNotDone && trackerRoot->nextLocus != -1) {
         // Initialization.
         multiCursor = trackerRoot;
-        //expirationCursor = trackerRoot;
+        coverageScanEnd = trackerRoot->nextLocus - coverageScanRange;
 
-		if (anchorIdx < anchorNum && anchorTracker[anchorIdx].result.location[0] > multiCursor->nextLocus + minClusterSpan)
-			anchorIdx = anchorIdxPassLocus(anchorIdx, multiCursor->nextLocus + minClusterSpan);
+		if (anchorIdx < anchorNum && anchorTracker[anchorIdx].result.location[0] > trackerRoot->nextLocus + magnetRange)
+			anchorIdx = moveAnchorPassLocus(anchorIdx, multiCursor->nextLocus + magnetRange);
 
-		//anchorIdx = nextLoneAnchorIdx(anchorIdx);
+        unsigned nPotentialPairs = trackersToMeetTargetLocus(multiCursor, coverageScanEnd, lastScanLoc);
 
-        unsigned nPotentialPairs = trackersToMeetTargetLocus(multiCursor, trackerRoot->nextLocus - minClusterSpan);
+        // this cluster has moved into an anchor range 
+        if (anchorIdx < anchorNum && lastScanLoc < anchorTracker[anchorIdx].result.location[0] + magnetRange){
+            // find the end of the anchor chain
+            anchorIdx = endOfAnchorChain(anchorIdx);
+
+            clusterBoundary = anchorTracker[anchorIdx].result.location[0];
+            trackersToMeetTargetLocus(multiCursor, anchorTracker[anchorIdx].result.location[0] - magnetRange, lastScanLoc);
+            registerClusterForReads(NULL, trackerRoot, multiCursor, clusterBoundary, -3); //register the pairs as magnets
+
+            if (registeringCluster) {
+                globalClusterId++;
+                registeringCluster = false;
+            }
+            continue;
+		}
 
         if (nPotentialPairs > minPairsPerCluster || multiCursor == NULL || multiCursor->nextLocus == -1) { // this is a clustered pair,
         // tag it with clusterId! Note that if we are at the end (nextLocus is -1) we will add remaining pairs into the last
@@ -452,15 +471,12 @@ bool TenXClusterAligner::align_first_stage(
             registeringCluster = true;
             clusterId = globalClusterId;
 
-            if (multiCursor != NULL && multiCursor->nextLocus != -1)
-                clusterBoundary = multiCursor->nextLocus + minClusterSpan;
-			else
+            if (multiCursor != NULL && multiCursor->nextLocus != -1) {
+                clusterBoundary = multiCursor->nextLocus + coverageScanRange;
+                if (clusterBoundary < coverageScanEnd)
+                    clusterBoundary = coverageScanEnd;
+			} else
                 clusterBoundary = -1;
-
-			if (anchorIdx < anchorNum && clusterBoundary < anchorTracker[anchorIdx].result.location[0]){
-
-			}
-
 
             registerClusterForReads(NULL, trackerRoot, multiCursor, clusterBoundary, clusterId); //register the pairs and update the locus pointers.
         }
@@ -468,7 +484,7 @@ bool TenXClusterAligner::align_first_stage(
             if (registeringCluster) { //when we were half way of adding a cluster, we need to finish it with the old targetLoc.
                 //fprintf(stderr, "clusterBoundary: %lld    globalClusterId: %d\n", clusterBoundary.location, globalClusterId);
                 //fflush(stderr);
-                registerClusterForReads(NULL, trackerRoot, multiCursor, clusterBoundary, clusterId); //use the previous id.
+                registerClusterForReads(NULL, trackerRoot, multiCursor, clusterBoundary, MAGNET_ID); //use the previous id.
                 globalClusterId++;
                 printf("globalClusterId++: %d\n", globalClusterId);
                 registeringCluster = false;
@@ -476,8 +492,8 @@ bool TenXClusterAligner::align_first_stage(
             }
             else { //we were not adding a cluster, just tag these locus as not clustered (-1) and move the locus pointer over the new targetLoc.
                 multiCursor = traverseProgressPtr(multiCursor, minPairsPerCluster - nPotentialPairs);
-                clusterBoundary = multiCursor->nextLocus + minClusterSpan;
-                registerClusterForReads(NULL, trackerRoot, multiCursor, clusterBoundary, -1); //use the previous id.
+                clusterBoundary = multiCursor->nextLocus + coverageScanRange;
+                registerClusterForReads(NULL, trackerRoot, multiCursor, clusterBoundary, UNLINKED_ID); //use the previous id.
             }
         }
         //fprintf(stderr, "clusterBoundary: %lld\n", clusterBoundary.location);

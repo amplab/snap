@@ -22,6 +22,10 @@ Revision History:
 #ifndef __TENX_SINGLE_ALIGNER__
 #define __TENX_SINGLE_ALIGNER__
 
+#define UNLINKED_ID -1
+#define ANCHOR_ID -2
+#define MAGNET_ID -3
+
 #pragma once
 
 #include "PairedEndAligner.h"
