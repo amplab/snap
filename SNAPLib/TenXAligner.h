@@ -65,7 +65,8 @@ protected:
 	_uint64				maxBarcodeSize;
 	_uint64				maxMultiPairSize;
 	unsigned			minPairsPerCluster;
-	_uint64				minClusterSpan;
+	_uint64				coverageScanRange;
+	_uint64				magnetRange;
 	bool				forceSpacing;
 	bool				noSingle;
 	unsigned			intersectingAlignerMaxHits;
@@ -95,7 +96,8 @@ struct TenXAlignerOptions : public AlignerOptions
 	_uint64				maxBarcodeSize;   // the max number of read pairs
 	_uint64				maxMultiPairSize; // the max number of multi-mapping pairs 
 	unsigned			minPairsPerCluster;
-	_uint64				minClusterSpan;
+	_uint64				coverageScanRange;
+	_uint64				magnetRange;
 	bool				forceSpacing;
 	bool				noSingle;
 	unsigned			intersectingAlignerMaxHits;

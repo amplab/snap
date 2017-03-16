@@ -57,6 +57,7 @@ TenXClusterAligner::TenXClusterAligner(
     TenXMultiTracker    *multiTracker_,
     unsigned            minPairsPerCluster_,
     _uint64             coverageScanRange_,
+    _uint64             magnetRange_,
     double              unclusteredPenalty_,
     unsigned            clusterEDCompensation_,
     unsigned            minReadLength_,
@@ -65,7 +66,7 @@ TenXClusterAligner::TenXClusterAligner(
     int                 maxEditDistanceForSecondaryResults_,
     _int64              maxSecondaryAlignmentsToReturn_,
     BigAllocator        *allocator)
-    : multiTracker(multiTracker_), anchorTracker(anchorTracker_), unclusteredPenalty(unclusteredPenalty_), clusterEDCompensation(clusterEDCompensation_), minPairsPerCluster(minPairsPerCluster_), coverageScanRange(coverageScanRange_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_), maxEditDistanceForSecondaryResults(maxEditDistanceForSecondaryResults_), maxSecondaryAlignmentsToReturn(maxSecondaryAlignmentsToReturn_)
+    : multiTracker(multiTracker_), anchorTracker(anchorTracker_), unclusteredPenalty(unclusteredPenalty_), clusterEDCompensation(clusterEDCompensation_), minPairsPerCluster(minPairsPerCluster_), coverageScanRange(coverageScanRange_), magnetRange(magnetRange_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_), maxEditDistanceForSecondaryResults(maxEditDistanceForSecondaryResults_), maxSecondaryAlignmentsToReturn(maxSecondaryAlignmentsToReturn_)
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
@@ -437,7 +438,6 @@ bool TenXClusterAligner::align_first_stage(
     // Intitialize boundary
 	int anchorIdx = 0;
     TenXMultiTracker *multiCursor; // pointer that keeps track of the progress of walking down progress trackers
-	bool magnetized = false;
 
     while (trackerRoot->pairNotDone && trackerRoot->nextLocus != -1) {
         // Initialization.
@@ -458,6 +458,7 @@ bool TenXClusterAligner::align_first_stage(
             trackersToMeetTargetLocus(multiCursor, anchorTracker[anchorIdx].result.location[0] - magnetRange, lastScanLoc);
             registerClusterForReads(NULL, trackerRoot, multiCursor, clusterBoundary, -3); //register the pairs as magnets
 
+            // if we are in the middle of a cluster, end that cluster
             if (registeringCluster) {
                 globalClusterId++;
                 registeringCluster = false;

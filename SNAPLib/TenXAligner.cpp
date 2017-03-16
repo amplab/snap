@@ -58,7 +58,8 @@ static const int DEFAULT_MIN_SPACING = 50;
 static const int DEFAULT_MAX_SPACING = 1000;
 static const unsigned DEFAULT_MAX_BARCODE_SIZE = 60000;
 static const unsigned DEFAULT_MIN_PAIRS_PER_CLUSTER = 10;
-static const unsigned DEFAULT_MIN_CLUSTER_SPAN = 100000;
+static const unsigned DEFAULT_COVERAGE_SCAN_RANGE = 100000;
+static const unsigned DEFAULT_MAGNET_RANGE = 50000;
 static const double DEFAULT_UNCLUSTERED_PENALTY = 0.000000001;
 static const unsigned DEFAULT_CLUSTER_ED_COMPENSATION = 4;
 static const unsigned DEFAULT_MAX_CLUSTER_SIZE = 100000;
@@ -241,7 +242,8 @@ TenXAlignerOptions::TenXAlignerOptions(const char* i_commandLine)
     // 10x specific parameter
     maxMultiPairSize(DEFAULT_MAX_BARCODE_SIZE),
     minPairsPerCluster(DEFAULT_MIN_PAIRS_PER_CLUSTER),
-    minClusterSpan(DEFAULT_MIN_CLUSTER_SPAN),
+    coverageScanRange(DEFAULT_COVERAGE_SCAN_RANGE),
+    magnetRange(DEFAULT_MAGNET_RANGE),
     unclusteredPenalty(DEFAULT_UNCLUSTERED_PENALTY),
     clusterEDCompensation(DEFAULT_CLUSTER_ED_COMPENSATION),
     maxClusterNum(DEFAULT_MAX_CLUSTER_SIZE),
@@ -277,8 +279,10 @@ void TenXAlignerOptions::usageMessage()
         "\nTenXTenXTenXTenXTenXTenX    Below are 10X specific parameters    TenXTenXTenXTenXTenXTenX\n\n"
         "  -maxBar           specifies the maximum reads in a barcode. This has a direct affect on memory usage. Default: %d\n"
         "  -minClusterPairs  specifies the maximum number of pair-ended reads for a cluster to be considered legitimate. Default: %d\n"
-        "  -minClusterSpan   specifies the maximum scope that SNAP detects clusters. If # of reads within minClusterSpan is\n"
+        "  -coverageScanRange   specifies the maximum scope that SNAP detects clusters. If # of reads within coverageScanRange is\n"
         "                    smaller than minClusterReads the cluster is rejected. Default: %d\n"
+        "  -magnetRange      specifies the maximum scope that SNAP attaches multi-pairs to anchors. If a multi-mapping read pairs is\n"
+        "                    within magnetRange of an anchor, it is attached to the anchor. Default: %d\n"
         "  -UCP              specifies the unclustered probability penalty. Default: %f\n"
         "  -CED              specifies the cluster edit-distance compensation. Default: %d\n"
         "  -mCS              specifies the maximum potential cluster size. Increase it would increase the memory usage.\n"
@@ -291,7 +295,8 @@ void TenXAlignerOptions::usageMessage()
 
         DEFAULT_MAX_BARCODE_SIZE,
         DEFAULT_MIN_PAIRS_PER_CLUSTER,
-        DEFAULT_MIN_CLUSTER_SPAN,
+        DEFAULT_COVERAGE_SCAN_RANGE,
+        DEFAULT_MAGNET_RANGE,
         DEFAULT_UNCLUSTERED_PENALTY,
         DEFAULT_CLUSTER_ED_COMPENSATION,
         DEFAULT_MAX_CLUSTER_SIZE
@@ -356,9 +361,17 @@ bool TenXAlignerOptions::parse(const char** argv, int argc, int& n, bool *done)
         }
         return false;
     }
-    else if (strcmp(argv[n], "-minClusterSpan") == 0) {
+    else if (strcmp(argv[n], "-coverageScanRange") == 0) {
         if (n + 1 < argc) {
-            minClusterSpan = atoi(argv[n + 1]);
+            coverageScanRange = atoi(argv[n + 1]);
+            n += 1;
+            return true;
+        }
+        return false;
+    }
+    else if (strcmp(argv[n], "-magnetRange") == 0) {
+        if (n + 1 < argc) {
+            magnetRange = atoi(argv[n + 1]);
             n += 1;
             return true;
         }
@@ -408,7 +421,8 @@ bool TenXAlignerContext::initialize()
     maxSpacing = options2->maxSpacing;
     maxMultiPairSize = options2->maxMultiPairSize;
     minPairsPerCluster = options2->minPairsPerCluster;
-    minClusterSpan = options2->minClusterSpan;
+    coverageScanRange = options2->coverageScanRange;
+    magnetRange = options2->magnetRange;
     forceSpacing = options2->forceSpacing;
     noSingle = options2->noSingle;
     unclusteredPenalty = options2->unclusteredPenalty;
@@ -588,7 +602,7 @@ void TenXAlignerContext::runIterationThread()
 	// Allocate the AnchorAligner
     TenXAnchorAligner *anchorAligner = new (allocator) TenXAnchorAligner(index, maxReadSize, maxHits, maxDist,
 							    numSeedsFromCommandLine, seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits,
-								extraSearchDepth, maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen,
+								extraSearchDepth + clusterEDCompensation, maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen,
 								noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm, printStatsMapQLimit);
 
     // Allocate and initilaze multi-pair tracker and tenXSingleAligner
@@ -626,7 +640,8 @@ void TenXAlignerContext::runIterationThread()
 		anchorTrackerArray,
         tenXMultiTrackerArray,
         minPairsPerCluster,
-        minClusterSpan,
+        coverageScanRange,
+        magnetRange,
         unclusteredPenalty,
         clusterEDCompensation,
         minReadLength,
@@ -891,7 +906,22 @@ void TenXAlignerContext::runIterationThread()
         alignFinishedTime = timeInMillis();
         stats->millisAligning += (alignFinishedTime - readFinishedTime);
     }
+    
+    // Output results of the anchor pairs first
+    for (unsigned anchorIdx = 0; anchorIdx < anchorNum; anchorIdx++) {
+        // A bunch of pointers delegates... For readability!
+        Read **reads = anchorTrackerArray[anchorIdx].pairedReads;
+        PairedAlignmentResult* result = &(anchorTrackerArray[anchorIdx].result);
 
+        if (NULL != readWriter) {
+            readWriter->writePairs(readerContext, reads, result, 1, NULL, 0, true);
+            //readWriter->writePairs(readerContext, reads, results, nSecondaryResults + 1, singleResults, nSingleEndSecondaryResults, firstIsPrimary);
+        }
+
+        updateStats((TenXAlignerStats*)stats, reads[0], reads[1], result, true, true);
+    }   // while we have an anchor
+
+    // Then output results of the multi-mapping pairs
     for (unsigned pairIdx = 0; pairIdx < multiPairNum; pairIdx++) {
         // A bunch of pointers delegates... For readability!
         Read **reads = tenXMultiTrackerArray[pairIdx].pairedReads;
