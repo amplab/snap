@@ -56,6 +56,7 @@ using util::stringEndsWith;
 
 static const int DEFAULT_MIN_SPACING = 50;
 static const int DEFAULT_MAX_SPACING = 1000;
+static const unsigned DEFAULT_MAX_MULTI_SIZE = 30000;
 static const unsigned DEFAULT_MAX_BARCODE_SIZE = 60000;
 static const unsigned DEFAULT_MIN_PAIRS_PER_CLUSTER = 10;
 static const unsigned DEFAULT_COVERAGE_SCAN_RANGE = 100000;
@@ -240,7 +241,8 @@ TenXAlignerOptions::TenXAlignerOptions(const char* i_commandLine)
     maxSpacing(DEFAULT_MAX_SPACING),
 
     // 10x specific parameter
-    maxMultiPairSize(DEFAULT_MAX_BARCODE_SIZE),
+    maxMultiPairSize(DEFAULT_MAX_MULTI_SIZE),
+    maxBarcodeSize(DEFAULT_MAX_BARCODE_SIZE),
     minPairsPerCluster(DEFAULT_MIN_PAIRS_PER_CLUSTER),
     coverageScanRange(DEFAULT_COVERAGE_SCAN_RANGE),
     magnetRange(DEFAULT_MAGNET_RANGE),
@@ -277,7 +279,8 @@ void TenXAlignerOptions::usageMessage()
         "       flag for SAM/BAM files that were aligned by a single-end aligner.\n"
         "  -noS no single-end aligner turned on. Just use paired-end aligner.\n"
         "\nTenXTenXTenXTenXTenXTenX    Below are 10X specific parameters    TenXTenXTenXTenXTenXTenX\n\n"
-        "  -maxBar           specifies the maximum reads in a barcode. This has a direct affect on memory usage. Default: %d\n"
+        "  -maxMulti         specifies the number of multi-mapping reads in a barcode. This has a big affect on memory usage. Default: %d\n"
+        "  -maxBar           specifies the number of read pairs in a barcode. Default: %d\n"
         "  -minClusterPairs  specifies the maximum number of pair-ended reads for a cluster to be considered legitimate. Default: %d\n"
         "  -coverageScanRange   specifies the maximum scope that SNAP detects clusters. If # of reads within coverageScanRange is\n"
         "                    smaller than minClusterReads the cluster is rejected. Default: %d\n"
@@ -293,6 +296,7 @@ void TenXAlignerOptions::usageMessage()
         DEFAULT_INTERSECTING_ALIGNER_MAX_HITS,
         DEFAULT_MAX_CANDIDATE_POOL_SIZE,
 
+        DEFAULT_MAX_MULTI_SIZE,
         DEFAULT_MAX_BARCODE_SIZE,
         DEFAULT_MIN_PAIRS_PER_CLUSTER,
         DEFAULT_COVERAGE_SCAN_RANGE,
@@ -345,9 +349,17 @@ bool TenXAlignerOptions::parse(const char** argv, int argc, int& n, bool *done)
         n += 1;
         return true;
     }
-    else if (strcmp(argv[n], "-maxBar") == 0) {
+    else if (strcmp(argv[n], "-maxMulti") == 0) {
         if (n + 1 < argc) {
             maxMultiPairSize = atoi(argv[n + 1]);
+            n += 1;
+            return true;
+        }
+        return false;
+    }
+    else if (strcmp(argv[n], "-maxBar") == 0) {
+        if (n + 1 < argc) {
+            maxBarcodeSize = atoi(argv[n + 1]);
             n += 1;
             return true;
         }
