@@ -431,6 +431,7 @@ bool TenXAlignerContext::initialize()
     TenXAlignerOptions* options2 = (TenXAlignerOptions*)options;
     minSpacing = options2->minSpacing;
     maxSpacing = options2->maxSpacing;
+    maxBarcodeSize = options2->maxBarcodeSize;
     maxMultiPairSize = options2->maxMultiPairSize;
     minPairsPerCluster = options2->minPairsPerCluster;
     coverageScanRange = options2->coverageScanRange;
