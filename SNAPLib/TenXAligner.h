@@ -60,6 +60,9 @@ protected:
 
 	PairedReadSupplierGenerator *pairedReadSupplierGenerator;
 
+    LandauVishkin<1>    landauVishkin;
+    LandauVishkin<-1>   reverseLandauVishkin;
+
 	int					minSpacing;
 	int					maxSpacing;
 	_uint64				maxBarcodeSize;

@@ -65,14 +65,17 @@ TenXClusterAligner::TenXClusterAligner(
     unsigned            printStatsMapQLimit,
     int                 maxEditDistanceForSecondaryResults_,
     _int64              maxSecondaryAlignmentsToReturn_,
+    LandauVishkin<1>    *landauVishkin_,
+    LandauVishkin<-1>   *reverseLandauVishkin_,
     BigAllocator        *allocator)
-    : multiTracker(multiTracker_), anchorTracker(anchorTracker_), unclusteredPenalty(unclusteredPenalty_), clusterEDCompensation(clusterEDCompensation_), minPairsPerCluster(minPairsPerCluster_), coverageScanRange(coverageScanRange_), magnetRange(magnetRange_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_), maxEditDistanceForSecondaryResults(maxEditDistanceForSecondaryResults_), maxSecondaryAlignmentsToReturn(maxSecondaryAlignmentsToReturn_)
+    : multiTracker(multiTracker_), anchorTracker(anchorTracker_), unclusteredPenalty(unclusteredPenalty_), clusterEDCompensation(clusterEDCompensation_), minPairsPerCluster(minPairsPerCluster_), coverageScanRange(coverageScanRange_), magnetRange(magnetRange_), forceSpacing(forceSpacing_), index(index_), minReadLength(minReadLength_), maxEditDistanceForSecondaryResults(maxEditDistanceForSecondaryResults_), maxSecondaryAlignmentsToReturn(maxSecondaryAlignmentsToReturn_),
+      lv(landauVishkin_), reverseLV(reverseLandauVishkin_)
 {
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
-        maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentsForOm, maxSecondaryAlignmentsPerContig, printStatsMapQLimit, &lv, &reverseLV, NULL, allocator);
+        maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentsForOm, maxSecondaryAlignmentsPerContig, printStatsMapQLimit, lv, reverseLV, NULL, allocator);
     for (unsigned i = 0; i < multiPairNum; i++)
-        multiTracker[i].aligner->setLandauVishkin(&lv, &reverseLV);
+        multiTracker[i].aligner->setLandauVishkin(lv, reverseLV);
 
     singleSecondary[0] = singleSecondary[1] = NULL;
 }

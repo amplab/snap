@@ -661,6 +661,8 @@ void TenXAlignerContext::runIterationThread()
         printStatsMapQLimit,
         maxSecondaryAlignmentAdditionalEditDistance,
         maxSecondaryAlignments,
+        &landauVishkin,
+        &reverseLandauVishkin,
         allocator);
 
     allocator->checkCanaries();
@@ -706,6 +708,8 @@ void TenXAlignerContext::runIterationThread()
 	/*
 	 * Initialization    
 	 */
+
+    anchorAligner->setLandauVishkin(&landauVishkin, &reverseLandauVishkin);
 
     memcpy(clusterCounterEraser, sharedClusterCounterAry, sizeof(_uint8) * maxClusterNum);
 

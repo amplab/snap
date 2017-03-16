@@ -136,6 +136,8 @@ public:
         unsigned            printStatsMapQLimit,
         int                 maxEditDistanceForSecondaryResults,
         _int64              maxSecondaryAlignmentsToReturn,
+        LandauVishkin<1>    *landauVishkin_,
+        LandauVishkin<-1>   *reverseLandauVishkin_,
         BigAllocator        *allocator);
 
     virtual ~TenXClusterAligner();
@@ -247,8 +249,8 @@ private:
     // avoid allocation in aligner calls
     IdPairVector*       singleSecondary[2];
 
-    LandauVishkin<1>    lv;
-    LandauVishkin<-1>   reverseLV;
+    LandauVishkin<1>    *lv;
+    LandauVishkin<-1>   *reverseLV;
 
     GenomeIndex         *index;
     unsigned            minReadLength;

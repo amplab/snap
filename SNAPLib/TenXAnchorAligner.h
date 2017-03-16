@@ -318,8 +318,8 @@ private:
 
     char *reversedRead[NUM_READS_PER_PAIR][NUM_DIRECTIONS]; // The reversed data for each read for forward and RC.  This is used in the backwards LV
 
-    LandauVishkin<> *landauVishkin;
-    LandauVishkin<-1> *reverseLandauVishkin;
+    LandauVishkin<1>   *landauVishkin;
+    LandauVishkin<-1>  *reverseLandauVishkin;
 
     char rcTranslationTable[256];
     unsigned nTable[256];
