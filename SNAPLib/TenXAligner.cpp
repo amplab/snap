@@ -930,6 +930,7 @@ void TenXAlignerContext::runIterationThread()
         stats->millisAligning += (alignFinishedTime - readFinishedTime);
     }
     
+    _int64 dummySingleMapNum[NUM_READS_PER_PAIR] = {0, 0};
     // Output results of the anchor pairs first
     for (unsigned anchorIdx = 0; anchorIdx < anchorNum; anchorIdx++) {
         // A bunch of pointers delegates... For readability!
@@ -937,7 +938,7 @@ void TenXAlignerContext::runIterationThread()
         PairedAlignmentResult* result = &(anchorTrackerArray[anchorIdx].result);
 
         if (NULL != readWriter) {
-            readWriter->writePairs(readerContext, reads, result, 1, NULL, 0, true);
+            readWriter->writePairs(readerContext, reads, result, 1, NULL, dummySingleMapNum, true);
             //readWriter->writePairs(readerContext, reads, results, nSecondaryResults + 1, singleResults, nSingleEndSecondaryResults, firstIsPrimary);
         }
 
