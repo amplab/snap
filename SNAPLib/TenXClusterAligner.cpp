@@ -76,7 +76,7 @@ TenXClusterAligner::TenXClusterAligner(
     // Create single-end aligners.
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
         maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentsForOm, maxSecondaryAlignmentsPerContig, printStatsMapQLimit, lv, reverseLV, NULL, allocator);
-    for (unsigned i = 0; i < multiPairNum; i++)
+    for (unsigned i = 0; i < maxMultiPairNum; i++)
         multiTracker[i].aligner->setLandauVishkin(lv, reverseLV);
 
     singleSecondary[0] = singleSecondary[1] = NULL;
@@ -373,7 +373,9 @@ bool TenXClusterAligner::align_first_stage(
     unsigned        multiPairNum_
 	)
 {
-    multiPairNum = anchorNum_,
+    _ASSERT(anchorNum_ <= maxAnchorNum);
+    _ASSERT(multiPairNum_ <= maxMultiPairNum);
+    anchorNum = anchorNum_,
     multiPairNum = multiPairNum_;
     bool barcodeFinished = true;
     maxClusterIdx = -1;
