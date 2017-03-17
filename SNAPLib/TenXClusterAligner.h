@@ -124,7 +124,9 @@ public:
         bool                noOrderedEvaluation,
         bool                noTruncation,
         bool                ignoreALignmentAdjustmentsForOm,
-		TenXAnchorTracker   *anchorTracker_,
+        unsigned            maxAnchorNum_,
+        TenXAnchorTracker   *anchorTracker_,
+        unsigned            maxMultiPairNum_,
         TenXMultiTracker    *multiTracker_,
         unsigned            minPairsPerCluster_,
         _uint64             coverageScanRange_,
@@ -258,6 +260,8 @@ private:
     // 10x data
     unsigned            anchorNum;
     unsigned            multiPairNum;
+    unsigned            maxAnchorNum;
+    unsigned            maxMultiPairNum;
     _uint8              minPairsPerCluster;
     _uint64             coverageScanRange;
     _uint64             magnetRange;
