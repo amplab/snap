@@ -815,10 +815,10 @@ void TenXAlignerContext::runIterationThread()
         		_ASSERT(anchorNum <= maxBarcodeSize);
 			}
 			else { // not an anchor read. It's a multi mapping read
-        		tenXMultiTrackerArray[readIdx].pairedReads[0] = reads[0];
-        		tenXMultiTrackerArray[readIdx].pairedReads[1] = reads[1];
-        		tenXMultiTrackerArray[readIdx].useful[0] = useful[0];
-        		tenXMultiTrackerArray[readIdx].useful[1] = useful[1];
+        		tenXMultiTrackerArray[multiPairNum].pairedReads[0] = reads[0];
+        		tenXMultiTrackerArray[multiPairNum].pairedReads[1] = reads[1];
+        		tenXMultiTrackerArray[multiPairNum].useful[0] = useful[0];
+        		tenXMultiTrackerArray[multiPairNum].useful[1] = useful[1];
 
 				// at least one of the ends is good
 				tenXMultiTrackerArray[multiPairNum].singleNotDone = true;
