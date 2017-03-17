@@ -635,6 +635,10 @@ void TenXAlignerContext::runIterationThread()
             sharedClusterCounterAry, tenXMultiTrackerArray[singleAlignerIdx].clusterToggle);
     }
 
+    // This is not a permanent solution...
+    LandauVishkin<1>    landauVishkin;
+    LandauVishkin<-1>   reverseLandauVishkin;
+
     // Allocate clusterAligner
     TenXClusterAligner *aligner = new (allocator) TenXClusterAligner(
         index,
