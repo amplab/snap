@@ -153,13 +153,13 @@ unsigned TenXClusterAligner::endOfAnchorChain(unsigned anchorIdx) {
 	while (anchorIdx < anchorNum - 1 && 
 		anchorTracker[anchorIdx].result.location[0] - anchorTracker[anchorIdx + 1].result.location[0] < coverageScanRange)
 		anchorIdx++;
-	return 0;
+	return anchorIdx;
 }
 
 unsigned TenXClusterAligner::moveAnchorPassLocus(unsigned anchorIdx, const GenomeLocation& targetLocus) {
 	while (anchorIdx < anchorNum && anchorTracker[anchorIdx].result.location[0] > targetLocus)
 		anchorIdx++;
-	return 0;
+	return anchorIdx;
 }
 
 //reference 
@@ -470,6 +470,7 @@ bool TenXClusterAligner::align_first_stage(
                 globalClusterId++;
                 registeringCluster = false;
             }
+            anchorIdx++; // move pass this anchor chain
             continue;
 		}
 
