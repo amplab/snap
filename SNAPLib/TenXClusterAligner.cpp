@@ -75,7 +75,7 @@ TenXClusterAligner::TenXClusterAligner(
     singleAligner = new (allocator) BaseAligner(index, maxHits, maxK, maxReadSize,
         maxSeedsFromCommandLine, seedCoverage, minWeightToCheck, extraSearchDepth, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentsForOm, maxSecondaryAlignmentsPerContig, printStatsMapQLimit, lv, reverseLV, NULL, allocator);
     for (unsigned i = 0; i < multiPairNum; i++)
-        multiTracker[i].aligner->setLandauVishkin(lv, reverseLV);
+        multiTracker[i].aligner->setLandauVishkin(landauVishkin_, reverseLandauVishkin_);
 
     singleSecondary[0] = singleSecondary[1] = NULL;
 }
