@@ -45,3 +45,9 @@ obj
 /SNAPCommand
 /SNAP
 /snap-aligner
+/ASELib/bin
+/apps/ASEProcessManager/bin
+/apps/GenerateCases/bin
+/apps/GenerateMAFConfiguration/bin
+
+
