@@ -54,7 +54,7 @@ TenXClusterAligner::TenXClusterAligner(
     bool                noTruncation,
     bool                ignoreAlignmentAdjustmentsForOm,
     unsigned            maxAnchorNum_,
-	TenXAnchorTracker   *anchorTracker_,
+    TenXAnchorTracker   *anchorTracker_,
     unsigned            maxMultiPairNum_,
     TenXMultiTracker    *multiTracker_,
     unsigned            minPairsPerCluster_,
@@ -150,16 +150,16 @@ unsigned trackersToMeetTargetLocus(
 }
 
 unsigned TenXClusterAligner::endOfAnchorChain(unsigned anchorIdx) {
-	while (anchorIdx < anchorNum - 1 && 
-		anchorTracker[anchorIdx].result.location[0] - anchorTracker[anchorIdx + 1].result.location[0] < coverageScanRange)
-		anchorIdx++;
-	return anchorIdx;
+    while (anchorIdx < anchorNum - 1 && 
+        anchorTracker[anchorIdx].result.location[0] - anchorTracker[anchorIdx + 1].result.location[0] < coverageScanRange)
+        anchorIdx++;
+    return anchorIdx;
 }
 
 unsigned TenXClusterAligner::moveAnchorPassLocus(unsigned anchorIdx, const GenomeLocation& targetLocus) {
-	while (anchorIdx < anchorNum && anchorTracker[anchorIdx].result.location[0] > targetLocus)
-		anchorIdx++;
-	return anchorIdx;
+    while (anchorIdx < anchorNum && anchorTracker[anchorIdx].result.location[0] > targetLocus)
+        anchorIdx++;
+    return anchorIdx;
 }
 
 //reference 
@@ -360,7 +360,7 @@ void TenXClusterAligner::fastForward(GenomeLocation forwardLoc) {
     for (unsigned pairIdx = 0; pairIdx < multiPairNum; pairIdx++) {
         if (multiTracker[pairIdx].pairNotDone) {
             //fprintf(stderr, "lastLocus: %lld\n", multiTracker[pairIdx].nextLocus.location);
-            multiTracker[pairIdx].aligner->align_phase_2_to_target_loc(forwardLoc, -1);
+            multiTracker[pairIdx].aligner->align_phase_2_to_target_loc(forwardLoc, UNLINKED_ID);
             multiTracker[pairIdx].nextLocus = resolveLocusPtr(multiTracker[pairIdx].aligner->align_phase_2_get_locus() );
         }
         //fprintf(stderr, "forwardLocus: %lld  afterForward: %lld\n", forwardLoc.location, resolveLocusPtr(multiTracker[pairIdx].aligner->align_phase_2_get_locus() ).location);
@@ -371,14 +371,14 @@ void TenXClusterAligner::fastForward(GenomeLocation forwardLoc) {
 bool TenXClusterAligner::align_first_stage(
     unsigned        anchorNum_,
     unsigned        multiPairNum_
-	)
+    )
 {
     _ASSERT(anchorNum_ <= maxAnchorNum);
     _ASSERT(multiPairNum_ <= maxMultiPairNum);
     anchorNum = anchorNum_,
     multiPairNum = multiPairNum_;
     bool barcodeFinished = true;
-    maxClusterIdx = -1;
+    maxClusterIdx = UNLINKED_ID;
 
     for (unsigned pairIdx = 0; pairIdx < multiPairNum; pairIdx++) {
 
@@ -443,7 +443,7 @@ bool TenXClusterAligner::align_first_stage(
     GenomeLocation lastScanLoc;
 
     // Intitialize boundary
-	int anchorIdx = 0;
+    int anchorIdx = 0;
     TenXMultiTracker *multiCursor; // pointer that keeps track of the progress of walking down progress trackers
 
     while (trackerRoot->pairNotDone && trackerRoot->nextLocus != -1) {
@@ -451,8 +451,8 @@ bool TenXClusterAligner::align_first_stage(
         multiCursor = trackerRoot;
         coverageScanEnd = trackerRoot->nextLocus - coverageScanRange;
 
-		if (anchorIdx < anchorNum && anchorTracker[anchorIdx].result.location[0] > trackerRoot->nextLocus + magnetRange)
-			anchorIdx = moveAnchorPassLocus(anchorIdx, multiCursor->nextLocus + magnetRange);
+        if (anchorIdx < anchorNum && anchorTracker[anchorIdx].result.location[0] > trackerRoot->nextLocus + magnetRange)
+            anchorIdx = moveAnchorPassLocus(anchorIdx, multiCursor->nextLocus + magnetRange);
 
         unsigned nPotentialPairs = trackersToMeetTargetLocus(multiCursor, coverageScanEnd, lastScanLoc);
 
@@ -463,7 +463,7 @@ bool TenXClusterAligner::align_first_stage(
 
             clusterBoundary = anchorTracker[anchorIdx].result.location[0];
             trackersToMeetTargetLocus(multiCursor, anchorTracker[anchorIdx].result.location[0] - magnetRange, lastScanLoc);
-            registerClusterForReads(NULL, trackerRoot, multiCursor, clusterBoundary, -3); //register the pairs as magnets
+            registerClusterForReads(NULL, trackerRoot, multiCursor, clusterBoundary, MAGNET_ID); //register the pairs as magnets
 
             // if we are in the middle of a cluster, end that cluster
             if (registeringCluster) {
@@ -472,7 +472,7 @@ bool TenXClusterAligner::align_first_stage(
             }
             anchorIdx++; // move pass this anchor chain
             continue;
-		}
+        }
 
         if (nPotentialPairs > minPairsPerCluster || multiCursor == NULL || multiCursor->nextLocus == -1) { // this is a clustered pair,
         // tag it with clusterId! Note that if we are at the end (nextLocus is -1) we will add remaining pairs into the last
@@ -484,7 +484,7 @@ bool TenXClusterAligner::align_first_stage(
                 clusterBoundary = multiCursor->nextLocus + coverageScanRange;
                 if (clusterBoundary < coverageScanEnd)
                     clusterBoundary = coverageScanEnd;
-			} else
+            } else
                 clusterBoundary = -1;
 
             registerClusterForReads(NULL, trackerRoot, multiCursor, clusterBoundary, clusterId); //register the pairs and update the locus pointers.
@@ -530,7 +530,7 @@ void TenXClusterAligner::align_second_stage_clustering()
             multiTracker[pairIdx].bestPairScore = 65536;
             multiTracker[pairIdx].probabilityOfAllPairs = 0;
             multiTracker[pairIdx].probabilityOfBestPair = 0;
-            multiTracker[pairIdx].bestClusterIdx = -1;
+            multiTracker[pairIdx].bestClusterIdx = UNLINKED_ID;
 
             multiTracker[pairIdx].aligner->align_phase_3_score(multiTracker[pairIdx].bestPairScore, false);
             multiTracker[pairIdx].aligner->align_phase_3_increment_cluster(multiTracker[pairIdx].bestPairScore);
@@ -660,7 +660,7 @@ bool TenXClusterAligner::align_forth_stage(
     for (unsigned pairIdx = 0; pairIdx < multiPairNum; pairIdx++) {
         if (multiTracker[pairIdx].singleNotDone) {// && multiTracker[pairIdx].notDone) {
             // Tag single mapping's clusterIdx to -1
-            multiTracker[pairIdx].results[0].clusterIdx = -2;
+            multiTracker[pairIdx].results[0].clusterIdx = UNLINKED_ID;
 
             Read *read0 = multiTracker[pairIdx].pairedReads[0];
             Read *read1 = multiTracker[pairIdx].pairedReads[1];
