@@ -54,7 +54,7 @@ BAMAlignment::getNextLocation(const BAMReader * bamReader) const
 }
 
 
-BAMReader::BAMReader(const ReaderContext& i_context) : ReadReader(i_context), refLocation(0), n_ref(0), data(NULL)
+BAMReader::BAMReader(const ReaderContext& i_context) : ReadReader(i_context), refLocation(0), n_ref(0), refNames(NULL), data(NULL)
 {
 }
 
@@ -64,6 +64,9 @@ BAMReader::~BAMReader()
     refLocation = NULL;
     if (NULL != data) {
         delete data;
+    }
+    if (NULL != refNames) {
+        delete[] refNames;
     }
 }
 
@@ -171,7 +174,7 @@ BAMReader::readHeader(
 		_ASSERT(textHeaderSize == header->l_text);	// We got the same thing this time
 	}
 
-	if (!SAMReader::parseHeader(fileName, header->text(), header->text() + headerSize - sizeof(BAMHeader), context.genome, &textHeaderSize, &context.headerMatchesIndex, &sawWholeHeader, &n_ref, &refLocation)) {
+	if (!SAMReader::parseHeader(fileName, header->text(), header->text() + headerSize - sizeof(BAMHeader), context.genome, &textHeaderSize, &context.headerMatchesIndex, &sawWholeHeader, &n_ref, &refLocation, &refNames)) {
 		WriteErrorMessage("BAMReader: failed to parse header on '%s'\n", fileName);
 		soft_exit(1);
 	}
@@ -256,16 +259,6 @@ _uint8 BAMAlignment::SeqToCode[256];
 const char* BAMAlignment::CodeToCigar = "MIDNSHP=X";
 _uint8 BAMAlignment::CigarToCode[256];
 _uint8 BAMAlignment::CigarCodeToRefBase[9] = {1, 0, 1, 1, 0, 0, 1, 1, 1};
-
-const _uint8 BAM_CIGAR_M = 0;
-const _uint8 BAM_CIGAR_I = 1;
-const _uint8 BAM_CIGAR_D = 2;
-const _uint8 BAM_CIGAR_N = 3;
-const _uint8 BAM_CIGAR_S = 4;
-const _uint8 BAM_CIGAR_H = 5;
-const _uint8 BAM_CIGAR_P = 6;
-const _uint8 BAM_CIGAR_EQUAL = 7;
-const _uint8 BAM_CIGAR_X = 8;
 
 BAMAlignment::_init BAMAlignment::_init_;
 
@@ -649,7 +642,7 @@ BAMReader::getReadFromLine(
             rnextLen = genome->getContigs()[bam->next_refID].nameLength;
         }
         read->init(bam->read_name(), bam->l_read_name - 1, seqBuffer, qualBuffer, bam->l_seq, genomeLocation, bam->MAPQ, bam->FLAG,
-            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping, rnext, rnextLen, bam->next_pos + 1, true);
+            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping, rnext, rnextLen, bam->next_pos + 1, bam->n_cigar_op, bam->cigar(), true);
         read->setBatch(data->getBatch());
         read->clip(clipping);
     }

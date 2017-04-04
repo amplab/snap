@@ -38,6 +38,7 @@ obj
 *.pdb
 *.log
 *.unsuccessfulbuild
+*.csproj.user
 
 # Compiled binaries
 /snap
@@ -49,5 +50,7 @@ obj
 /apps/ASEProcessManager/bin
 /apps/GenerateCases/bin
 /apps/GenerateMAFConfiguration/bin
+/apps/SplitIntoPieces/bin
+
 
 

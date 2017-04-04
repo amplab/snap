@@ -202,6 +202,16 @@ struct BAMAlignment
 #define HEX_VAL_TYPE        'H'
 #define ARRAY_VAL_TYPE      'B'
 
+#define  BAM_CIGAR_M  0
+#define  BAM_CIGAR_I  1
+#define  BAM_CIGAR_D  2
+#define  BAM_CIGAR_N  3
+#define  BAM_CIGAR_S  4
+#define  BAM_CIGAR_H  5
+#define  BAM_CIGAR_P  6
+#define  BAM_CIGAR_EQUAL  7
+#define  BAM_CIGAR_X  8
+
 // header for each auxiliary data field
 struct BAMAlignAux
 {
@@ -432,6 +442,15 @@ public:
             return refLocation[ref] + offset;
         }
 
+        int GetNRef() const {
+            return n_ref;
+        }
+
+        const char *getRefName(int which) const {
+            _ASSERT(which < n_ref);
+            return refNames[which];
+        }
+
 protected:
 
         virtual bool getNextRead(Read *read, AlignmentResult *alignmentResult, 
@@ -451,4 +470,5 @@ private:
         int                 n_ref; // number of reference sequences
         GenomeLocation*     refLocation; // array mapping ref sequence ID to contig genome location
         _int64              extraOffset; // offset into extra data
+        char **             refNames;
 };

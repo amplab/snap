@@ -46,7 +46,7 @@ namespace GenerateCases
             }
         }
 
-        static List<ASETools.MAFLine> LoadMAFs(ASETools.ASEConfirguation configuration)
+        static List<ASETools.MAFLine> LoadMAFs(ASETools.ASEConfirguation configuration, Dictionary<string, ASETools.DownloadedFile> downloadedFiles)
         {
             var stopwatch = new Stopwatch();
             stopwatch.Start();
@@ -64,8 +64,7 @@ namespace GenerateCases
                 return null;
             }
 
-            var downloadedFiles = ASETools.DownloadedFile.ScanFilesystems(configuration);
-
+ 
             foreach (var mafEntry in mafManifest)
             {
                 var mafInfo = mafEntry.Value;
@@ -85,11 +84,45 @@ namespace GenerateCases
             var loadStatus = new MAFLoadStatus();
             loadStatus.nToLoad = mafManifest.Count();
 
-            foreach (var mafEntry in mafManifest)
-            {
-                var mafInfo = mafEntry.Value;
+            if (false) {
+                //
+                // For debugging, download only the two smallest MAF files
+                //
 
-                threads.Add(new Thread(() => ReadMafFileAndAppendToList(downloadedFiles[mafInfo.file_id].fileInfo.FullName, mafInfo.file_id, allMAFLines, loadStatus)));
+                ASETools.MAFInfo smallestMAFInfo = null;
+                ASETools.MAFInfo secondSmallestMAFInfo = null;
+
+                foreach (var mafEntry in mafManifest)
+                {
+                    var mafInfo = mafEntry.Value;
+
+                    if (null == smallestMAFInfo || downloadedFiles[mafInfo.file_id].fileInfo.Length < downloadedFiles[smallestMAFInfo.file_id].fileInfo.Length)
+                    {
+                        secondSmallestMAFInfo = smallestMAFInfo;
+                        smallestMAFInfo = mafInfo;
+                    }
+                    else if (null == secondSmallestMAFInfo || downloadedFiles[mafInfo.file_id].fileInfo.Length < downloadedFiles[secondSmallestMAFInfo.file_id].fileInfo.Length)
+                    {
+                        secondSmallestMAFInfo = mafInfo;
+                    }
+                }
+
+                Console.WriteLine("Loading MAFs " + smallestMAFInfo.filename + " and " + secondSmallestMAFInfo.filename);
+
+                threads.Add(new Thread(() => ReadMafFileAndAppendToList(downloadedFiles[smallestMAFInfo.file_id].fileInfo.FullName, smallestMAFInfo.file_id, allMAFLines, loadStatus)));
+                threads.Add(new Thread(() => ReadMafFileAndAppendToList(downloadedFiles[secondSmallestMAFInfo.file_id].fileInfo.FullName, secondSmallestMAFInfo.file_id, allMAFLines, loadStatus)));
+
+                loadStatus.nToLoad = 2;
+              
+            }
+            else
+            {
+                foreach (var mafEntry in mafManifest)
+                {
+                    var mafInfo = mafEntry.Value;
+
+                    threads.Add(new Thread(() => ReadMafFileAndAppendToList(downloadedFiles[mafInfo.file_id].fileInfo.FullName, mafInfo.file_id, allMAFLines, loadStatus)));
+                }
             }
 
             threads.ForEach(t => t.Start());
@@ -113,7 +146,12 @@ namespace GenerateCases
 
             var configuration = ASETools.ASEConfirguation.loadFromFile(args);
 
-            var allMafLines = LoadMAFs(configuration);
+            Dictionary<string, ASETools.DownloadedFile> downloadedFiles = null;
+            Dictionary<string, List<ASETools.DerivedFile>> derivedFiles = null;
+
+            ASETools.ScanFilesystems(configuration, out downloadedFiles, out derivedFiles);
+
+            var allMafLines = LoadMAFs(configuration, downloadedFiles);
             if (null == allMafLines)
             {
                 return;
@@ -163,6 +201,7 @@ namespace GenerateCases
 
             var casesSerializer = new DataContractJsonSerializer(typeof(ASETools.GDCData<ASETools.GDCCase>));
             int from = 1;
+            int nDuplicateCases = 0;
 
             string tcgaFiltersString = "{\"op\":\"in\", \"content\": {\"field\": \"project.program.name\", \"value\": " + ASETools.generateFilterList(configuration.programNames) + "}}";
  
@@ -175,7 +214,7 @@ namespace GenerateCases
 
             for (; ; )
             {
-                var serverData = webClient.DownloadString(ASETools.urlPrefix + "cases?from=" + from + "&size=100&filters=" + HttpUtility.UrlEncode(tcgaFiltersString) +
+                var serverData = ASETools.DownloadStringWithRetry(webClient,ASETools.urlPrefix + "cases?from=" + from + "&size=100&filters=" + HttpUtility.UrlEncode(tcgaFiltersString) +
                     "&fields=" + ASETools.GDCCase.fields);
 
                 ASETools.GDCData<ASETools.GDCCase> caseData = (ASETools.GDCData<ASETools.GDCCase>)casesSerializer.ReadObject(new MemoryStream(Encoding.ASCII.GetBytes(serverData)));
@@ -207,11 +246,17 @@ namespace GenerateCases
                 {
                     if (allCases.ContainsKey(case_.case_id))
                     {
+                        nDuplicateCases++;
                         Console.WriteLine("Duplicate caseID " + case_.case_id);
+//Console.WriteLine(case_.debugString());
+//Console.WriteLine(allCases[case_.case_id].debugString());
                     }
                     else
                     {
-                        allCases.Add(case_.case_id, case_);
+                        if (case_.project.project_id.Contains("UCS") || case_.project.project_id.Contains("UVM") || true)   // BJB - debugging - only do these diesases for now.
+                        {
+                            allCases.Add(case_.case_id, case_);
+                        }
                     }
                 }
 
@@ -229,16 +274,18 @@ namespace GenerateCases
                     periodicStopwatch.Reset();
                     periodicStopwatch.Start();
                 }
-/*BJB*/ break; // test the file part below
+        
+
+                if (allCases.Count() > 100 && false) break;  // BJB - debugging - just load a few.
             }
-            Console.WriteLine(allCases.Count() + " in " + ASETools.ElapsedTimeInSeconds(stopwatch) + ", " + allCases.Count() * 1000 / stopwatch.ElapsedMilliseconds + "/s");
+            Console.WriteLine(allCases.Count() + " (plus " + nDuplicateCases + " duplicates) in " + ASETools.ElapsedTimeInSeconds(stopwatch) + ", " + allCases.Count() * 1000 / stopwatch.ElapsedMilliseconds + "/s");
 
             //
             // Now run through all of the cases looking to see which have files for tumor and matched normal DNA and tumor RNA.
             //
             int nMissingTumorDNA = 0;
             int nMissingNormalDNA = 0;
-            int nMissingVCF = 0;
+            int nMissingMatchedDNA = 0; // We have DNA, but not a pair that corresponds to what was used to generate the MAF
             int nMissingTumorRNA = 0;
             int nMissingMAF = 0;
             int nComplete = 0;
@@ -256,14 +303,13 @@ namespace GenerateCases
 
             foreach (var caseEntry in allCases)
             {
-                var case_ = caseEntry.Value;
+                var gdcCase = caseEntry.Value;
 
                 ASETools.GDCFile tumorRNA = null;
-                ASETools.GDCFile tumorDNA = null;
-                ASETools.GDCFile normalDNA = null;
+                List<ASETools.GDCFile> tumorDNA = new List<ASETools.GDCFile>();
+                List<ASETools.GDCFile> normalDNA = new List<ASETools.GDCFile>();
                 ASETools.GDCFile normalRNA = null;
                 ASETools.GDCFile methylation = null;
-                List<ASETools.GDCFile> vcf = new List<ASETools.GDCFile>();
                 List<ASETools.GDCFile> maf = new List<ASETools.GDCFile>();
 
                 from = 1;
@@ -280,8 +326,11 @@ namespace GenerateCases
 
                     nCasesProcessed++;
 
-                    string fileFilter = "{\"op\":\"in\",\"content\":{\"field\":\"cases.case_id\",\"value\":[\"" + case_.case_id + "\"]}}";
-                    var response = webClient.DownloadString(ASETools.urlPrefix + "files?from=" + from + "&size=100&pretty=true&filters=" + fileFilter + "&fields=data_type,updated_datetime,created_datetime,file_name,md5sum,data_format,access,platform,state,file_id,data_category,file_size,type,experimental_strategy,submitter_id,cases.samples.sample_type_id,cases.samples.sample_type,platform,cases.samples.sample_id,analysis.workflow_link");
+                    string fileFilter = "{\"op\":\"in\",\"content\":{\"field\":\"cases.case_id\",\"value\":[\"" + gdcCase.case_id + "\"]}}";
+                    var response = ASETools.DownloadStringWithRetry(webClient, 
+                        ASETools.urlPrefix + "files?from=" + from + "&size=100&pretty=true&filters=" + fileFilter + 
+                        "&fields=data_type,updated_datetime,created_datetime,file_name,md5sum,data_format,access,platform,state,file_id,data_category,file_size,type,experimental_strategy,submitter_id," + 
+                        "cases.samples.sample_type_id,cases.samples.sample_type,platform,cases.samples.sample_id,analysis.workflow_link");
 
                     ASETools.GDCData<ASETools.GDCFile> fileData = (ASETools.GDCData<ASETools.GDCFile>)filesSerializer.ReadObject(new MemoryStream(Encoding.ASCII.GetBytes(response)));
 
@@ -367,17 +416,13 @@ namespace GenerateCases
                                 {
                                     if (tumor)
                                     {
-                                        tumorDNA = ASETools.GDCFile.selectNewestUpdated(tumorDNA, file);
+                                        tumorDNA.Add(file);
                                     }
                                     else
                                     {
-                                        normalDNA = ASETools.GDCFile.selectNewestUpdated(normalDNA, file);
+                                        normalDNA.Add(file);
                                     }
                                 }
-                            }
-                            else if (file.data_format == "VCF")
-                            {
-                                vcf.Add(file);
                             }
                             else if (file.data_format == "MAF")
                             {
@@ -390,7 +435,6 @@ namespace GenerateCases
                         } // Foreach file in this batch
                     } // If file data parsed
 
-///*BJB - just to get it out of the loop scope for the debugger*/ filesData = fileData;
                     from += pagination.count;
 
                     if (from > pagination.total)
@@ -400,11 +444,11 @@ namespace GenerateCases
 
                 } // forever (looping over file pagination)
 
-                if (null == tumorDNA)
+                if (tumorDNA.Count() == 0)
                 {
                     nMissingTumorDNA++;
                 }
-                else if (null == normalDNA)
+                else if (normalDNA.Count() == 0)
                 {
                     nMissingNormalDNA++;
                 }
@@ -412,33 +456,119 @@ namespace GenerateCases
                 {
                     nMissingTumorRNA++;
                 }
-                else if (vcf.Count() == 0)
-                {
-                    nMissingVCF++;
-                }
                 else if (maf.Count() == 0)
                 {
                     nMissingMAF++;
                 }
                 else
                 {
-                    nComplete++;
-                    if (null != normalRNA)
+                    ASETools.GDCFile normalDNAFile = null;
+                    ASETools.GDCFile tumorDNAFile = null;
+
+                    if (false) // this matches on file_id, while the MAF contains sample_id.  Need to get the samples for the files above
                     {
-                        nWithNormalRNA++;
+                        //
+                        // Figure out if we have a matching pair of DNA files that correspond to the MAF.
+                        //
+
+                        foreach (var normalDNACandidate in normalDNA)
+                        {
+                            if (tumorSampleByNormalSample.ContainsKey(normalDNACandidate.file_id))
+                            {
+                                foreach (var tumorSampleCandidate in tumorDNA)
+                                {
+                                    if (tumorSampleByNormalSample[normalDNACandidate.file_id].Contains(tumorSampleCandidate.file_id))
+                                    {
+                                        if (ASETools.GDCFile.selectNewestUpdated(tumorDNAFile, tumorSampleCandidate) == tumorSampleCandidate)
+                                        {
+                                            tumorDNAFile = tumorSampleCandidate;
+                                            normalDNAFile = normalDNACandidate;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        //
+                        // Just take the newest ones for now.
+                        //
+                        foreach (var file in normalDNA)
+                        {
+                            normalDNAFile = ASETools.GDCFile.selectNewestUpdated(normalDNAFile, file);
+                        }
+
+                        foreach (var file in tumorDNA)
+                        {
+                            tumorDNAFile = ASETools.GDCFile.selectNewestUpdated(tumorDNAFile, file);
+                        }
                     }
 
-                    if (null != methylation)
-                    {
-                        nWithMethylation++;
+                    if (normalDNAFile == null) {
+                        nMissingMatchedDNA++;
+                    } else {
+                        nComplete++;
+
+                        var case_ = new ASETools.Case();
+                        case_.case_id = gdcCase.case_id;
+                        case_.tumor_dna_file_id = tumorDNAFile.file_id;
+                        case_.normal_dna_file_id = normalDNAFile.file_id;
+                        case_.tumor_rna_file_id = tumorRNA.file_id;
+                        case_.tumor_rna_file_bam_md5 = tumorRNA.md5sum;
+                        case_.normal_dna_file_bam_md5 = normalDNAFile.md5sum;
+                        case_.project_id = gdcCase.project.project_id;
+
+                        if (downloadedFiles.ContainsKey(case_.tumor_dna_file_id)) {
+                            case_.tumor_dna_filename = downloadedFiles[case_.tumor_dna_file_id].fileInfo.FullName;
+                        }
+
+                        if (downloadedFiles.ContainsKey(case_.normal_dna_file_id)) {
+                            case_.normal_dna_filename = downloadedFiles[case_.normal_dna_file_id].fileInfo.FullName;
+                        }
+
+                        if (downloadedFiles.ContainsKey(case_.tumor_rna_file_id)) {
+                            case_.tumor_rna_filename = downloadedFiles[case_.tumor_rna_file_id].fileInfo.FullName;
+                        }
+
+                        if (null != normalRNA)
+                        {
+                            nWithNormalRNA++;
+
+                            case_.normal_rna_file_id = normalRNA.file_id;
+                            case_.normal_rna_file_bam_md5 = normalRNA.md5sum;
+
+                            if (downloadedFiles.ContainsKey(case_.normal_rna_file_id)) {
+                                case_.normal_rna_filename = downloadedFiles[case_.normal_rna_file_id].fileInfo.FullName;
+                            }
+                        }
+
+                        if (null != methylation)
+                        {
+                            nWithMethylation++;
+
+                            case_.methylation_file_id = methylation.file_id;
+                            case_.methylation_file_md5 = methylation.md5sum;
+
+                            if (downloadedFiles.ContainsKey(case_.methylation_file_id)) {
+                                case_.methylation_filename = downloadedFiles[case_.methylation_file_id].fileInfo.FullName;
+                            }
+                        }
+
+                        cases.Add(case_.case_id, case_);
                     }
                 }
 
-            }// foreach case
+            } // foreach case
 
-            Console.WriteLine();
+            Console.WriteLine(ASETools.ElapsedTimeInSeconds(periodicStopwatch));
 
-            Console.WriteLine("Of " + allCases.Count() + ", " + nMissingTumorDNA + " don't have tumor DNA, " + nMissingNormalDNA + " don't have matched normal DNA, " + nMissingTumorRNA + " don't have tumor RNA, " + nMissingVCF + " don't have variant calls, " + nMissingMAF + " don't have MAFs and " + nComplete + " are complete.  Of the complete, " + nWithNormalRNA + " also have normal RNA and " + nWithMethylation + " have methylation.");
+            Console.WriteLine("Of " + allCases.Count() + ", " + nMissingTumorDNA + " don't have tumor DNA, " + nMissingNormalDNA + " don't have matched normal DNA, " + nMissingTumorRNA + " don't have tumor RNA, " 
+                + nMissingMAF + " don't have MAFs and " + nComplete + " are complete.  Of the complete, " + nWithNormalRNA + " also have normal RNA and " + nWithMethylation + " have methylation.");
+
+            ASETools.Case.SaveToFile(cases, configuration.casesFilePathname);
+
+            Console.WriteLine("Overall run took " + ASETools.ElapsedTimeInSeconds(stopwatch));
         } // Main
 
     }

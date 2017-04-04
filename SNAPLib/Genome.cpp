@@ -252,6 +252,7 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
 	      curName[pos] = contigNameBuffer[pos + n];
 	    }
         curName[contigSize] = '\0';
+        genome->contigs[i].mitochondrial = (!_stricmp(curName, "m")) || (!_stricmp(curName, "mt")) || (!_stricmp(curName, "chrm")) || (!_stricmp(curName, "chrmt"));
     } // for each contig
 
     if (0 != loadFile->advance(GenomeLocationAsInt64(minLocation))) {

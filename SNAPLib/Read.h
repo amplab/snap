@@ -370,7 +370,7 @@ public:
                 const char *i_quality, 
                 unsigned i_dataLength)
         {
-            init(i_id, i_idLength, i_data, i_quality, i_dataLength, InvalidGenomeLocation, -1, 0, 0, 0, 0, 0, NULL, 0, 0);
+            init(i_id, i_idLength, i_data, i_quality, i_dataLength, InvalidGenomeLocation, -1, 0, 0, 0, 0, 0, NULL, 0, 0, 0, NULL, false);
         }
 
         void init(
@@ -389,6 +389,8 @@ public:
                 const char *        i_originalRNEXT,
                 unsigned            i_originalRNEXTLength,
                 unsigned            i_originalPNEXT,
+                _uint16             i_originalNBAMCigar,
+                _uint32 *           i_originalBAMCigar,
                 bool                allUpper = false)
         {
             id = i_id;
@@ -410,6 +412,17 @@ public:
             originalRNEXT = i_originalRNEXT;
             originalRNEXTLength = i_originalRNEXTLength;
             originalPNEXT = i_originalPNEXT;
+            if (i_originalNBAMCigar > MaxBAMCigarSlots) {
+                static bool warned = false;
+                if (!warned) {
+                    warned = true;
+                    WriteErrorMessage("Too many BAM fields to save in read (need %d, have %d), dropping.  This is your only warning.\n", i_originalNBAMCigar, MaxBAMCigarSlots);
+                }
+                originalNBAMCigar = 0;
+            } else {
+                originalNBAMCigar = i_originalNBAMCigar;
+            }
+            memcpy(originalBAMCigar, i_originalBAMCigar, sizeof(*originalBAMCigar) * originalNBAMCigar);
             currentReadDirection = FORWARD;
 
             localBufferAllocationOffset = 0;    // Clears out any allocations that might previously have been in the buffer
@@ -476,6 +489,8 @@ public:
         inline const char *getOriginalRNEXT() {return originalRNEXT;}
         inline unsigned getOriginalRNEXTLength() {return originalRNEXTLength;}
         inline unsigned getOriginalPNEXT() {return originalPNEXT;}
+        inline _uint16 getOriginalNBAMCigar() { return originalNBAMCigar; }
+        inline _uint32 *getOriginalBAMCigar() { return originalBAMCigar; }
         inline void setAdditionalFrontClipping(int clipping)
         {
             _ASSERT(0 <= clipping);
@@ -691,6 +706,9 @@ private:
         const char *originalRNEXT;
         unsigned originalRNEXTLength;
         unsigned originalPNEXT;
+        static const int MaxBAMCigarSlots = 60;
+        _uint16 originalNBAMCigar;
+        _uint32 originalBAMCigar[MaxBAMCigarSlots];
 
 
         //
