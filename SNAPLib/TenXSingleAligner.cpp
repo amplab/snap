@@ -1027,7 +1027,7 @@ TenXSingleAligner::align_phase_3_generate_results(
     }
         
     // Serrogate
-    Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = { {FORWARD, RC}, {65, FORWARD} };
+    Direction setPairDirection[NUM_SET_PAIRS][NUM_READS_PER_PAIR] = { {FORWARD, RC}, {RC, FORWARD} };
     unsigned astrayEDPenalty;
     double astrayProbabilityPenalty;
     
