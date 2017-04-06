@@ -51,6 +51,8 @@ obj
 /apps/GenerateCases/bin
 /apps/GenerateMAFConfiguration/bin
 /apps/SplitIntoPieces/bin
+/apps/SelectGermlineVariants/bin
+
 
 
 

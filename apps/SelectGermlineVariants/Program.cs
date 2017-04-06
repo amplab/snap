@@ -310,25 +310,25 @@ namespace SelectGermlineVariants
                     //
 
                     ASETools.AllcountReader.ProcessBase processRNABase = (contigName, locus, mappedReadCount) => markReadCount(viableCandidates, contigName, locus, mappedReadCount);
-                    var rnaAllcountReader = new ASETools.AllcountReader(fileSet.rnaAllcountPathmame);
+                    var rnaAllcountReader = new ASETools.AllcountReader(case_.tumor_rna_allcount_filename);
                     long mappedHQNUclearReads;
                     int numContigs;
                     if (!rnaAllcountReader.openFile(out mappedHQNUclearReads, out numContigs)) {
-                        Console.WriteLine("Couldn't open or bad header format in " + fileSet.rnaAllcountPathmame);
+                        Console.WriteLine("Couldn't open or bad header format in " + case_.tumor_rna_allcount_filename);
                         continue;
                     }
                     
                     if (!rnaAllcountReader.ReadAllcountFile(processRNABase)) {
-                        Console.WriteLine("Bad internal format or truncation in " + fileSet.rnaAllcountPathmame);
+                        Console.WriteLine("Bad internal format or truncation in " + case_.tumor_rna_allcount_filename);
                         continue;
                     }
 
                     //
                     // Now run through the grains, select only the variants that have enough reads, and emit the best one for each grain.
                     //
-                    var outputFilename = fileSet.vcfPathname.Substring(0, fileSet.vcfPathname.LastIndexOf('.')) + ".selectedVariants";
+                    var outputFilename = case_.vcf_filename.Substring(0, case_.vcf_filename.LastIndexOf('.')) + ".selectedVariants";
                     var outputFile = new StreamWriter(outputFilename);
-                    outputFile.WriteLine("SelectGermlineVariants v1.1 for input file " + fileSet.vcfPathname);      // v1.0 didn't take into account the read counts when selecting variants.
+                    outputFile.WriteLine("SelectGermlineVariants v1.1 for input file " + case_.vcf_filename);      // v1.0 didn't take into account the read counts when selecting variants.
 
                     foreach (var grain in savedGrains)
                     {
@@ -397,7 +397,7 @@ namespace SelectGermlineVariants
 
                 if (cases[caseId].vcf_filename == "" || cases[caseId].tumor_rna_allcount_filename == "")
                 {
-                    Console.WriteLine(caseId + " doesn't appear to have a cmoplete set of vcf and allcount files yet.  Ignoring.");
+                    Console.WriteLine(caseId + " doesn't appear to have a complete set of vcf and allcount files yet.  Ignoring.");
                     continue;
                 }
 

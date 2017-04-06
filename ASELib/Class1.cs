@@ -52,6 +52,7 @@ namespace ASELib
             //
             //public string tumor_dna_allcount_filename = "";
             public string tumor_rna_allcount_filename = "";
+            public string normal_dna_allcount_filename = "";
             public string maf_filename = "";
             public string regional_expression_filename = "";
             public string gene_expression_filename = "";
@@ -75,6 +76,21 @@ namespace ASELib
             public string normal_dna_file_bai_md5 = "";
             public string methylation_file_md5 = "";
 
+            public string disease()
+            {
+                if (project_id.Contains('-'))
+                {
+                    return project_id.Substring(project_id.LastIndexOf('-') + 1).ToLower();
+                }
+
+                if (project_id.Contains('_'))
+                {
+                    return project_id.Substring(project_id.LastIndexOf('_') + 1).ToLower();
+                }
+
+                return project_id.ToLower();
+            }
+
             public static Dictionary<string, Case> LoadCases(string inputFilename)
             {
                 if (!File.Exists(inputFilename))
@@ -97,8 +113,8 @@ namespace ASELib
                 wantedFields.Add("Tumor RNA Filename");
                 wantedFields.Add("VCF Filename");
                 wantedFields.Add("Methylation Filename");
-                //wantedFields.Add("Tumor DNA Allcount Filename"); // We're not doing this
                 wantedFields.Add("Tumor RNA Allcount Filename");
+                wantedFields.Add("Normal DNA Allcount Filename");
                 wantedFields.Add("MAF Filename");
                 wantedFields.Add("Regional Expression Filename");
                 wantedFields.Add("Gene Expression Filename");
@@ -153,8 +169,8 @@ namespace ASELib
                 case_.tumor_rna_filename = fields[fieldMappings["Tumor RNA Filename"]];
                 case_.vcf_filename = fields[fieldMappings["VCF Filename"]];
                 case_.methylation_filename = fields[fieldMappings["Methylation Filename"]];
-                //case_.tumor_dna_allcount_filename = fields[fieldMappings["Tumor DNA Allcount Filename"]];
                 case_.tumor_rna_allcount_filename = fields[fieldMappings["Tumor RNA Allcount Filename"]];
+                case_.normal_dna_allcount_filename = fields[fieldMappings["Normal DNA Allcount Filename"]];
                 case_.maf_filename = fields[fieldMappings["MAF Filename"]];
                 case_.regional_expression_filename = fields[fieldMappings["Regional Expression Filename"]];
                 case_.gene_expression_filename = fields[fieldMappings["Gene Expression Filename"]];
@@ -178,7 +194,7 @@ namespace ASELib
             public string GenerateLine()
             {
                 return case_id + "\t" + normal_dna_file_id + "\t" + tumor_dna_file_id + "\t" + normal_rna_file_id + "\t" + tumor_rna_file_id + "\t" + maf_file_id + "\t" + methylation_file_id + "\t" + project_id + "\t" +
-                    normal_dna_filename + "\t" + tumor_dna_filename + "\t" + normal_rna_filename + "\t" + tumor_rna_filename  + "\t" + methylation_filename + /*"\t" + tumor_dna_allcount_filename +*/ "\t" + tumor_rna_allcount_filename + "\t" +
+                    normal_dna_filename + "\t" + tumor_dna_filename + "\t" + normal_rna_filename + "\t" + tumor_rna_filename  + "\t" + methylation_filename + /*"\t" + tumor_dna_allcount_filename +*/ "\t" + tumor_rna_allcount_filename + "\t" + normal_dna_allcount_filename + "\t" +
                     maf_filename + "\t" + regional_expression_filename + "\t" + gene_expression_filename + "\t" +
                     selected_variants_filename + "\t" + dna_reads_at_selected_variants_filename + "\t" + rna_reads_at_selected_variants_filename + "\t" + annotated_selected_variants_filename + "\t" +
                     allele_specific_gene_expression_filename + "\t" + tumor_dna_gene_coverage_filname + "\t" + "\t" + vcf_filename +
@@ -202,8 +218,8 @@ namespace ASELib
                     "Normal RNA Filename" + "\t" +
                     "Tumor RNA Filename" + "\t" +
                     "Methylation Filename" + "\t" +
-                    //"Tumor DNA Allcount Filename" + "\t" +
                     "Tumor RNA Allcount Filename" + "\t" +
+                    "Normal DNA Allcount Filename" + "\t" +
                     "MAF Filename" + "\t" +
                     "Regional Expression Filename" + "\t" +
                     "Gene Expression Filename" + "\t" +
@@ -290,9 +306,9 @@ namespace ASELib
                     }
                 }
 
-                if (derivedFilesByType[DerivedFile.Type.Allcount].Count() > 0)
+                if (derivedFilesByType[DerivedFile.Type.TumorRNAAllcount].Count() > 0)
                 {
-                    tumor_rna_allcount_filename = derivedFilesByType[DerivedFile.Type.Allcount][0].fileinfo.FullName;
+                    tumor_rna_allcount_filename = derivedFilesByType[DerivedFile.Type.TumorRNAAllcount][0].fileinfo.FullName;
                 }
 
                 if (derivedFilesByType[DerivedFile.Type.AlleleSpecificGeneExpression].Count() > 0)
@@ -413,6 +429,7 @@ namespace ASELib
             public string hpcScheduler = "gcr";
             public string hpcBinariesDirectory = @"\\gcr\scratch\b99\bolosky\";
             public string hpcIndexDirectory = @"\\msr-genomics-0\d$\gdc\indices\hg38-20";
+            public string expressionFilesDirectory = @"\\msr-genomics-0\d$\gdc\expression\";
 
             ASEConfirguation()
             {
@@ -481,7 +498,6 @@ namespace ASELib
                             retVal.programNames = new List<string>();
                             seenProgramNames = true;
                         }
-
                         retVal.programNames.Add(fields[1]);
                     } else if (type == "binary directory") {
                         retVal.binaryDirectory = fields[1];
@@ -499,6 +515,8 @@ namespace ASELib
                         retVal.hpcBinariesDirectory = fields[1];
                     } else if (type == "hpc index directory") {
                         retVal.hpcIndexDirectory = fields[1];
+                    } else if (type == "expression files directory") {
+                        retVal.expressionFilesDirectory = fields[1];
                     } else {
                         Console.WriteLine("ASEConfiguration.loadFromFile: configuration file " + pathname + " contains a line with an unknown configuration parameter type: " + line + ".  Ignoring.");
                         continue;
@@ -945,7 +963,11 @@ namespace ASELib
                 var extension = filename.Substring(FileIdLength);
  
                 if (extension == ".allcount.gz") {
-                    type = Type.Allcount;
+                    type = Type.TumorRNAAllcount;
+                }
+                else if (extension == ".normal_dna_allcount.gz")
+                {
+                    type = Type.NormalDNAAllcount;
                 }
                 else if (extension == ".selectedVariants")
                 {
@@ -972,7 +994,7 @@ namespace ASELib
             } // DerviedFile.DerivedFile
 
 
-            public enum Type { Unknown, Allcount, RegionalExpression, GeneExpression, SelectedVariants, DNAReadsAtSelectedVariants, RNAReadsAtSelectedVariants, AnnotatedSelectedVariants, AlleleSpecificGeneExpression, VCF };
+            public enum Type { Unknown, TumorRNAAllcount, NormalDNAAllcount, RegionalExpression, GeneExpression, SelectedVariants, DNAReadsAtSelectedVariants, RNAReadsAtSelectedVariants, AnnotatedSelectedVariants, AlleleSpecificGeneExpression, VCF };
         } // DerivedFile
 
         class ScanFilesystemState
@@ -1339,9 +1361,31 @@ namespace ASELib
 
                 if (fieldMappings.Count() != wantedFields.Count())
                 {
-                    Console.WriteLine("Headerized file: missing some columns.");
-                    result = null;
-                    return false;
+                    var missingColumns = new List<string>();
+                    foreach (var wantedField in wantedFields)
+                    {
+                        if (!fieldMappings.ContainsKey(wantedField))
+                        {
+                            missingColumns.Add(wantedField);
+                        }
+                    }
+
+                    if (fieldMappings.Count() + missingColumns.Count() != wantedFields.Count())
+                    {
+                        Console.WriteLine("Got the wrong number of missing fields.  Code bug.");
+                        result = null;
+                        return false;
+
+                    }
+                    Console.Write("Headerized file: missing columns:");
+                    foreach (var missingColumn in missingColumns)
+                    {
+                        Console.Write(" " + missingColumn);
+                        fieldMappings.Add(missingColumn, maxNeededField + 1);
+                    }
+                    Console.WriteLine(".  Filling in with the empty string.");
+                    hasMissingFields = true;
+
                 }
 
                 string inputLine;
@@ -1365,6 +1409,20 @@ namespace ASELib
                         Console.WriteLine("HeaderizedFile.Parse: input line didn't include a needed field " + inputLine);
                         result = null;
                         return false;
+                    }
+                    else if (hasMissingFields && fields.Count() <= maxNeededField + 1)
+                    {
+                        var extendedFields = new string[maxNeededField + 2];
+                        for (int i = 0; i <= maxNeededField; i++)
+                        {
+                            extendedFields[i] = fields[i];
+                        }
+                        fields = extendedFields;
+                    }
+
+                    if (hasMissingFields)
+                    {
+                        fields[maxNeededField + 1] = "";    // This is for all missing fields
                     }
 
                     result.Add(parser(fieldMappings, fields));
@@ -1391,6 +1449,7 @@ namespace ASELib
             bool hasDone;
             string expectedVersion;
             List<string> wantedFields;
+            bool hasMissingFields = false;
         } // HeaderizedFile
 
         public class MAFLine
@@ -1943,6 +2002,29 @@ namespace ASELib
             return linuxPathname;
         } // WindowsToLinuxPathname
 
+        static public string GetDirectoryPathFromFullyQualifiedFilename(string filename)
+        {
+            if (filename.Count() < 1 || filename[0] != '\\')
+            {
+                Console.WriteLine("GetDirectoryPathFromFullyQualifiedFilename -- invalid input " + filename);
+                return "";
+            }
 
+            string[] pathnameComponents = filename.Split('\\');
+            if (pathnameComponents.Count() < 4 || pathnameComponents[0] != "" || pathnameComponents[1] != "" || pathnameComponents[3].Count() != 2 || pathnameComponents[3].Substring(1) != "$")
+            {
+                Console.WriteLine("GetDirectoryPathFromFullyQualifiedFilename: expected \\ pathname, got " + filename);
+                return "";
+            }
+
+            string dirName = @"";
+
+            for (int i = 0; i < pathnameComponents.Count() - 1; i++)
+            {
+                dirName += pathnameComponents[i] + @"\";
+            }
+
+            return dirName;
+        }
     } // ASETools
 }
