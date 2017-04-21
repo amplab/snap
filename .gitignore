@@ -52,6 +52,10 @@ obj
 /apps/GenerateMAFConfiguration/bin
 /apps/SplitIntoPieces/bin
 /apps/SelectGermlineVariants/bin
+/apps/RegionalExpression/bin
+/apps/ExtractMAFLines/bin
+/apps/ValidateVCFs/bin
+
 
 
 

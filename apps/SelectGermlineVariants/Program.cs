@@ -32,6 +32,7 @@ namespace SelectGermlineVariants
             public long locus;
             public double odds;
             public int nRNAReads = -1;
+            public int nDNAReads = -1;
         }
 
         static void EmitBestCandidate(StreamWriter outputFile, string chromosome, List<CandidateVariant> liveCandidates)
@@ -72,7 +73,7 @@ namespace SelectGermlineVariants
         }
 
 
-        static void markReadCount(Dictionary<string, Dictionary<long, CandidateVariant>> viableCandidates, string contigName, long locus, int mappedReadCount)
+        static void markReadCount(Dictionary<string, Dictionary<long, CandidateVariant>> viableCandidates, bool dna, string contigName, long locus, int mappedReadCount)
         {
             contigName = contigName.ToLower();
 
@@ -86,13 +87,20 @@ namespace SelectGermlineVariants
 
             if (viableCandidates[contigName].ContainsKey(locus))
             {
-                if (viableCandidates[contigName][locus].nRNAReads != -1)
+                if (dna && viableCandidates[contigName][locus].nDNAReads != -1 || !dna && viableCandidates[contigName][locus].nRNAReads != -1)
                 {
                     Console.WriteLine("Got read count more than once for same variant " + contigName + ":" + locus);
                     throw new FormatException();
                 }
 
-                viableCandidates[contigName][locus].nRNAReads = mappedReadCount;
+                if (dna)
+                {
+                    viableCandidates[contigName][locus].nDNAReads = mappedReadCount;
+                }
+                else
+                {
+                    viableCandidates[contigName][locus].nRNAReads = mappedReadCount;
+                }
             }
         }
 
@@ -118,7 +126,7 @@ namespace SelectGermlineVariants
                     if (!firstRun)
                     {
                         timer.Stop(); 
-                        Console.Write("Found " + nVariantsSelected + " variants in " + ((timer.ElapsedMilliseconds + 500) / 1000) + "s;\t");
+                        Console.Write("Found " + nVariantsSelected + " variants in " + ASETools.ElapsedTimeInSeconds(timer) + ";\t");
                         timer.Reset();
                         nVariantsSelected = 0;
                     }
@@ -130,15 +138,7 @@ namespace SelectGermlineVariants
                 timer.Start();
 
                 StreamReader vcfFile = null;
-                if (case_.vcf_filename.Substring(case_.vcf_filename.Count() - 7, 7) == ".vcf.gz")
-                {
-                    vcfFile = ASETools.CreateCompressedStreamReaderWithRetry(case_.vcf_filename);
-                }
-                else
-                {
-                    vcfFile = ASETools.CreateStreamReaderWithRetry(case_.vcf_filename);
-                }
-
+                vcfFile = ASETools.CreateStreamReaderWithRetry(case_.vcf_filename);
 
                 string line;
                 while (null != (line = vcfFile.ReadLine()) && line.Count() != 0 && line[0] == '#') {
@@ -168,7 +168,7 @@ namespace SelectGermlineVariants
                 {
                     var fields = line.Split('\t');
 
-                    if (fields.Count() != 11)
+                    if (fields.Count() != 10)
                     {
                         Console.WriteLine("Wrong number of fields (" + fields.Count() + " != 11) in vcf line: '" + line + "' in file " + case_.vcf_filename + ".  Ignoring file.");
 
@@ -306,13 +306,27 @@ namespace SelectGermlineVariants
                     }
 
                     //
-                    // Now read in the RNA allcount file and use it to annotate the candidates.
+                    // Now read in the allcount files and use them to annotate the candidates.
                     //
 
-                    ASETools.AllcountReader.ProcessBase processRNABase = (contigName, locus, mappedReadCount) => markReadCount(viableCandidates, contigName, locus, mappedReadCount);
+                    ASETools.AllcountReader.ProcessBase processRNABase = (contigName, locus, mappedReadCount) => markReadCount(viableCandidates, false, contigName, locus, mappedReadCount);
+                    ASETools.AllcountReader.ProcessBase processDNABase = (contigName, locus, mappedReadCount) => markReadCount(viableCandidates, true, contigName, locus, mappedReadCount);
                     var rnaAllcountReader = new ASETools.AllcountReader(case_.tumor_rna_allcount_filename);
+                    var dnaAllcountReader = new ASETools.AllcountReader(case_.tumor_dna_allcount_filename);
                     long mappedHQNUclearReads;
                     int numContigs;
+                    if (!dnaAllcountReader.openFile(out mappedHQNUclearReads, out numContigs))
+                    {
+                        Console.WriteLine("Couldn't open or bad header format in " + case_.tumor_dna_allcount_filename);
+                        continue;
+                    }
+
+                    if (!dnaAllcountReader.ReadAllcountFile(processDNABase))
+                    {
+                        Console.WriteLine("Bad internal format or truncation in " + case_.tumor_dna_allcount_filename);
+                        continue;
+                    }
+
                     if (!rnaAllcountReader.openFile(out mappedHQNUclearReads, out numContigs)) {
                         Console.WriteLine("Couldn't open or bad header format in " + case_.tumor_rna_allcount_filename);
                         continue;
@@ -326,7 +340,7 @@ namespace SelectGermlineVariants
                     //
                     // Now run through the grains, select only the variants that have enough reads, and emit the best one for each grain.
                     //
-                    var outputFilename = case_.vcf_filename.Substring(0, case_.vcf_filename.LastIndexOf('.')) + ".selectedVariants";
+                    var outputFilename = case_.vcf_filename.Substring(0, case_.vcf_filename.LastIndexOf('.')) + ASETools.selectedVariantsExtension;
                     var outputFile = new StreamWriter(outputFilename);
                     outputFile.WriteLine("SelectGermlineVariants v1.1 for input file " + case_.vcf_filename);      // v1.0 didn't take into account the read counts when selecting variants.
 
@@ -336,7 +350,7 @@ namespace SelectGermlineVariants
 
                         foreach (var candidate in grain)
                         {
-                            if (candidate.nRNAReads >= 10)
+                            if (candidate.nDNAReads >= 10 && candidate.nRNAReads >= 10)
                             {
                                 remainingCandidates.Add(candidate);
                             }
@@ -368,12 +382,7 @@ namespace SelectGermlineVariants
                 return;
             }
 
-            var caseIds = new List<string>();
-
-            for (int i = (args.Count() > 1 && args[0] == "-configuration") ? 2 : 0; i < args.Count(); i++)
-            {
-                caseIds.Add(args[i]);
-            }
+            var caseIds = configuration.commandLineArgs.ToList();
 
             if (caseIds.Count() == 0)
             {
