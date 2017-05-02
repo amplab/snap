@@ -461,8 +461,8 @@ bool TenXClusterAligner::align_first_stage(
             // find the end of the anchor chain
             anchorIdx = endOfAnchorChain(anchorIdx);
 
-            clusterBoundary = anchorTracker[anchorIdx].result.location[0];
-            trackersToMeetTargetLocus(multiCursor, anchorTracker[anchorIdx].result.location[0] - magnetRange, lastScanLoc);
+            clusterBoundary = anchorTracker[anchorIdx].result.location[0] - magnetRange;
+            trackersToMeetTargetLocus(multiCursor, clusterBoundary, lastScanLoc);
             registerClusterForReads(NULL, trackerRoot, multiCursor, clusterBoundary, MAGNET_ID); //register the pairs as magnets
 
             // if we are in the middle of a cluster, end that cluster
