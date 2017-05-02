@@ -77,7 +77,7 @@ namespace ASELib
             public string allele_specific_gene_expression_filename = "";
             public string tumor_dna_gene_coverage_filname = "";
             public string vcf_filename = "";
-            public string extracted_maf_lines = "";
+            public string extracted_maf_lines_filename = "";
 
             //
             // Checksums for downloaded files. The tumor DNA BAMs aren't included here
@@ -93,6 +93,13 @@ namespace ASELib
             public string tumor_dna_file_bai_md5 = "";
             public string methylation_file_md5 = "";
             public string copy_number_file_md5 = "";
+
+            //
+            // The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
+            // so so just take the column numbers on the command line.  (That seemed better than compiling file format knowledge into them.)
+            //
+            static public int ProjectColumn = -1;
+            static public int TumorRNAAllcountFilenameColumn = -1;
 
             public string disease()
             {
@@ -118,7 +125,6 @@ namespace ASELib
 
                 var wantedFields = new List<string>();
 
-
                 foreach (var info in fieldInformation)
                 {
                     wantedFields.Add(info.getColumnName());
@@ -133,10 +139,14 @@ namespace ASELib
                 var headerizedFile = new HeaderizedFile<Case>(inputFile, false, true, "", wantedFields);
 
                 List<Case> listOfCases;
-                if (!headerizedFile.ParseFile(fromSaveFileLine, out listOfCases)) {
+                Dictionary<string, int> fieldMappings;
+                if (!headerizedFile.ParseFile(fromSaveFileLine, out listOfCases, out fieldMappings)) {
                     inputFile.Close();
                     return null;
                 }
+
+                ProjectColumn = fieldMappings["Project ID"];
+                TumorRNAAllcountFilenameColumn = fieldMappings["Tumor RNA Allcount Filename"];
 
                 inputFile.Close();
 
@@ -221,7 +231,7 @@ namespace ASELib
                 new FieldInformation("Allele Specific Gene Expression Filename",    c => c.allele_specific_gene_expression_filename, (c,v) => c.allele_specific_gene_expression_filename = v),
                 new FieldInformation("Tumor DNA Gene Coverage Filename",            c => c.tumor_dna_gene_coverage_filname, (c,v) => c.tumor_dna_gene_coverage_filname = v),
                 new FieldInformation("VCF Filename",                                c => c.vcf_filename, (c,v) => c.vcf_filename = v),
-                new FieldInformation("Extracted MAF Lines Filename",                c => c.extracted_maf_lines, (c,v) => c.extracted_maf_lines = v),
+                new FieldInformation("Extracted MAF Lines Filename",                c => c.extracted_maf_lines_filename, (c,v) => c.extracted_maf_lines_filename = v),
 
                 new FieldInformation("Normal RNA BAM MD5",                          c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
                 new FieldInformation("Normal RNA BAI MD5",                          c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
@@ -316,6 +326,7 @@ namespace ASELib
             //
             public void loadFileLocations(Dictionary<string, DownloadedFile> downloadedFiles, Dictionary<string, List<DerivedFile>> derivedFiles)
             {
+
                 if (downloadedFiles.ContainsKey(normal_dna_file_id)) {
                     normal_dna_filename = downloadedFiles[normal_dna_file_id].fileInfo.FullName;
                 }
@@ -394,8 +405,9 @@ namespace ASELib
                 }
 
                 Dictionary<DerivedFile.Type, List<DerivedFile>> derivedFilesByType = new Dictionary<DerivedFile.Type,List<DerivedFile>>();
+                var derivedFilesForThisCase = derivedFiles[case_id];
                 foreach (var type in (DerivedFile.Type[])Enum.GetValues(typeof(DerivedFile.Type))) {
-                    derivedFilesByType.Add(type, derivedFiles[case_id].Where(x => x.type == type).ToList());
+                    derivedFilesByType.Add(type, derivedFilesForThisCase.Where(x => x.type == type).ToList());
                     if (type != DerivedFile.Type.Unknown && derivedFilesByType[type].Count() > 1) {
                         Console.Write("Found more than one file of type " + type + " for case " + case_id + ":");
                         foreach (var file in derivedFilesByType[type]) {
@@ -408,6 +420,12 @@ namespace ASELib
                 if (derivedFilesByType[DerivedFile.Type.TumorRNAAllcount].Count() > 0)
                 {
                     tumor_rna_allcount_filename = derivedFilesByType[DerivedFile.Type.TumorRNAAllcount][0].fileinfo.FullName;
+                    if (GetFileIdFromPathname(tumor_rna_allcount_filename) != tumor_rna_file_id)
+                    {
+                        Console.WriteLine("Found tumor rna allcount file with wrong file ID: " + tumor_rna_allcount_filename + ", but the tumor rna has file id " + tumor_rna_file_id);
+                        tumor_rna_allcount_filename = null;
+                        derivedFilesByType[DerivedFile.Type.TumorRNAAllcount] = new List<DerivedFile>();
+                    }
                 }
                 else
                 {
@@ -417,19 +435,46 @@ namespace ASELib
                 if (derivedFilesByType[DerivedFile.Type.NormalDNAAllcount].Count() > 0)
                 {
                     normal_dna_allcount_filename = derivedFilesByType[DerivedFile.Type.NormalDNAAllcount][0].fileinfo.FullName;
+                    if (GetFileIdFromPathname(normal_dna_allcount_filename) != normal_dna_file_id)
+                    {
+                        Console.WriteLine("Found normal dna allcount file with wrong file ID: " + normal_dna_allcount_filename + ", but the normal dna has file id " + normal_dna_file_id);
+                        normal_dna_allcount_filename = null;
+                        derivedFilesByType[DerivedFile.Type.NormalDNAAllcount] = new List<DerivedFile>();
+                    }
                 }
                 else
                 {
-                    tumor_rna_allcount_filename = "";
+                    normal_dna_allcount_filename = "";
                 }
 
                 if (derivedFilesByType[DerivedFile.Type.TumorDNAAllcount].Count() > 0)
                 {
                     tumor_dna_allcount_filename = derivedFilesByType[DerivedFile.Type.TumorDNAAllcount][0].fileinfo.FullName;
+                    if (GetFileIdFromPathname(tumor_dna_allcount_filename) != tumor_dna_file_id)
+                    {
+                        Console.WriteLine("Found tumor dna allcount file with wrong file ID: " + tumor_dna_allcount_filename + ", but the tumor dna has file id " + tumor_dna_file_id);
+                        tumor_dna_allcount_filename = null;
+                        derivedFilesByType[DerivedFile.Type.TumorDNAAllcount] = new List<DerivedFile>();
+                    }
                 }
                 else
                 {
                     tumor_dna_allcount_filename = "";
+                }
+
+                if (derivedFilesByType[DerivedFile.Type.NormalRNAAllcount].Count() > 0)
+                {
+                    normal_rna_allcount_filename = derivedFilesByType[DerivedFile.Type.NormalRNAAllcount][0].fileinfo.FullName;
+                    if (GetFileIdFromPathname(normal_rna_allcount_filename) != normal_rna_file_id)
+                    {
+                        Console.WriteLine("Found normal rna allcount file with wrong file ID: " + normal_rna_allcount_filename + ", but the normal rna has file id " + normal_rna_file_id);
+                        normal_rna_allcount_filename = null;
+                        derivedFilesByType[DerivedFile.Type.NormalRNAAllcount] = new List<DerivedFile>();
+                    }
+                }
+                else
+                {
+                    normal_rna_allcount_filename = "";
                 }
 
                 if (derivedFilesByType[DerivedFile.Type.AlleleSpecificGeneExpression].Count() > 0)
@@ -493,17 +538,23 @@ namespace ASELib
                 if (derivedFilesByType[DerivedFile.Type.VCF].Count() > 0)
                 {
                     vcf_filename = derivedFilesByType[DerivedFile.Type.VCF][0].fileinfo.FullName;
+                    if (GetFileIdFromPathname(vcf_filename) != normal_dna_file_id)
+                    {
+                        Console.WriteLine("Found vcf file with wrong file ID: " + vcf_filename + ", but the normal dna has file id " + normal_dna_file_id);
+                        vcf_filename = null;
+                        derivedFilesByType[DerivedFile.Type.VCF] = new List<DerivedFile>();
+                    }
                 } else {
                     vcf_filename = "";
                 }
 
                 if (derivedFilesByType[DerivedFile.Type.ExtractedMAFLines].Count() > 0)
                 {
-                    extracted_maf_lines = derivedFilesByType[DerivedFile.Type.ExtractedMAFLines][0].fileinfo.FullName;
+                    extracted_maf_lines_filename = derivedFilesByType[DerivedFile.Type.ExtractedMAFLines][0].fileinfo.FullName;
                 }
                 else
                 {
-                    extracted_maf_lines = "";
+                    extracted_maf_lines_filename = "";
                 }
 
             } // loadFileLocations
@@ -550,8 +601,12 @@ namespace ASELib
                     var reader = new StreamReader(filename);
                     return reader;
                 }
-                catch (IOException)
+                catch (IOException e)
                 {
+                    if (e is FileNotFoundException)
+                    {
+                        return null;
+                    }
                     Console.WriteLine("IOException opening " + filename + " for read.  Sleeping and retrying.");
                     Thread.Sleep(10 * 1000);
                 }
@@ -560,7 +615,11 @@ namespace ASELib
 
         public static StreamReader CreateCompressedStreamReaderWithRetry(string filename)
         {
-            return new StreamReader(new GZipStream(CreateStreamReaderWithRetry(filename).BaseStream, CompressionMode.Decompress));
+            var innerReader = CreateStreamReaderWithRetry(filename);
+            if (innerReader == null) {
+                return null;
+            }
+            return new StreamReader(new GZipStream(innerReader.BaseStream, CompressionMode.Decompress));
         }
 
         public static string[] ReadAllLinesWithRetry(string filename)
@@ -599,7 +658,9 @@ namespace ASELib
             public string hpcScheduler = "gcr";
             public string hpcBinariesDirectory = @"\\gcr\scratch\b99\bolosky\";
             public string hpcIndexDirectory = @"\\msr-genomics-0\d$\gdc\indices\hg38-20";
+            public string azureScriptFilename = ""; // The empty string says to black hole this script
             public string expressionFilesDirectory = @"\\msr-genomics-0\d$\gdc\expression\";
+            public string completedVCFsDirectory = "";  // Where completed VCFs from Azure are dropped
             public string[] commandLineArgs = null;    // The args excluding -configuration <filename>
 
             ASEConfirguation()
@@ -695,6 +756,10 @@ namespace ASELib
                         retVal.hpcIndexDirectory = fields[1];
                     } else if (type == "expression files directory") {
                         retVal.expressionFilesDirectory = fields[1];
+                    } else if (type == "azure script name") {
+                        retVal.azureScriptFilename = fields[1];
+                    } else if (type == "completed vcfs directory") {
+                        retVal.completedVCFsDirectory = fields[1];
                     } else {
                         Console.WriteLine("ASEConfiguration.loadFromFile: configuration file " + pathname + " contains a line with an unknown configuration parameter type: " + line + ".  Ignoring.");
                         continue;
@@ -1097,6 +1162,18 @@ namespace ASELib
             return pathname.Substring(0, pathname.LastIndexOf('\\'));
         }
 
+        public static string GetFileIdFromPathname(string pathname) 
+        {
+            string filename = GetFileNameFromPathname(pathname);
+
+            if (filename.Count() < FileIdLength)
+            {
+                throw new FormatException();
+            }
+
+            return filename.Substring(0, FileIdLength);
+        }
+
         static readonly int FileIdLength = "01c5f902-ec3c-4eb7-9e38-1d29ae6ab959".Count();
 
         public class DownloadedFile
@@ -1126,6 +1203,7 @@ namespace ASELib
 
 
         public const string allcountExtension = ".allcount.gz";
+        public const string normalRNAAllcountExtension = ".normal_rna_allcount.gz";
         public const string normalDNAAllcountExtension = ".normal_dna_allcount.gz";
         public const string tumorDNAAllcountExtension = ".tumor_dna_allcount.gz";
         public const string selectedVariantsExtension = ".selectedVariants";
@@ -1173,6 +1251,10 @@ namespace ASELib
                 {
                     type = Type.TumorDNAAllcount;
                 }
+                else if (extension == normalRNAAllcountExtension)
+                {
+                    type = Type.NormalRNAAllcount;
+                }
                 else if (extension == selectedVariantsExtension.ToLower())
                 {
                     type = Type.SelectedVariants;
@@ -1209,7 +1291,7 @@ namespace ASELib
             } // DerviedFile.DerivedFile
 
 
-            public enum Type { Unknown, TumorRNAAllcount, NormalDNAAllcount, TumorDNAAllcount, RegionalExpression, GeneExpression, SelectedVariants, DNAReadsAtSelectedVariants, RNAReadsAtSelectedVariants, AnnotatedSelectedVariants, AlleleSpecificGeneExpression, VCF, ExtractedMAFLines };
+            public enum Type { Unknown, NormalRNAAllcount, TumorRNAAllcount, NormalDNAAllcount, TumorDNAAllcount, RegionalExpression, GeneExpression, SelectedVariants, DNAReadsAtSelectedVariants, RNAReadsAtSelectedVariants, AnnotatedSelectedVariants, AlleleSpecificGeneExpression, VCF, ExtractedMAFLines };
         } // DerivedFile
 
         class ScanFilesystemState
@@ -1565,8 +1647,20 @@ namespace ASELib
                 wantedFields = wantedFields_;
             }
 
+            //
+            // Just eat the fieldMappings output the clunky way, since out parameters can't have default values.
+            //
             public bool ParseFile(Parse parser, out List<outputType> result)
             {
+                Dictionary<string, int> fieldMappings;
+
+                return ParseFile(parser, out result, out fieldMappings);
+            }
+
+            public bool ParseFile(Parse parser, out List<outputType> result, out Dictionary<string, int> fieldMappings_out)
+            {
+                fieldMappings_out = null;
+
                 if (hasVersion)
                 {
                     var versionString = inputFile.ReadLine();
@@ -1687,6 +1781,8 @@ namespace ASELib
                     return false;
                 }
 
+
+                fieldMappings_out = fieldMappings;
                 return true;
             } // ParseFile
 
@@ -1717,7 +1813,7 @@ namespace ASELib
             public readonly string tumor_bam_uuid;
             public readonly string normal_bam_uuid;
 
-            public readonly string file_id; // Of the MAF file
+            public readonly string maf_file_id; // Of the MAF file
 
             MAFLine(string Hugo_Symbol_, 
              string NCBI_Build_,
@@ -1735,7 +1831,7 @@ namespace ASELib
              string Matched_Norm_Sample_UUID_,
              string tumor_bam_uuid_,
              string normal_bam_uuid_,
-             string file_id_)
+             string maf_file_id_)
             {
                 Hugo_Symbol = Hugo_Symbol_;
                 NCBI_Build = NCBI_Build_;
@@ -1753,10 +1849,10 @@ namespace ASELib
                 Matched_Norm_Sample_UUID = Matched_Norm_Sample_UUID_;
                 tumor_bam_uuid = tumor_bam_uuid_;
                 normal_bam_uuid = normal_bam_uuid_;
-                file_id = file_id_;
+                maf_file_id = maf_file_id_;
             }
 
-            static MAFLine ParseLine(Dictionary<string, int> fieldMappings, string[] fields, string file_id)
+            static MAFLine ParseLine(Dictionary<string, int> fieldMappings, string[] fields, string maf_file_id)
             {
                 return new MAFLine(
                     fields[fieldMappings["Hugo_Symbol"]],
@@ -1775,15 +1871,22 @@ namespace ASELib
                     fields[fieldMappings["Matched_Norm_Sample_UUID"]],
                     fields[fieldMappings["tumor_bam_uuid"]],
                     fields[fieldMappings["normal_bam_uuid"]],
-                    file_id
+                    maf_file_id
                     );
             }
 
-            static public List<MAFLine> ReadFile(string filename, string file_id)
+            static public List<MAFLine> ReadFile(string filename, string file_id, bool fileHasVersion)
             {
-                var compressedStreamReader = CreateStreamReaderWithRetry(filename);
+                StreamReader inputFile;
 
-                var inputFile = new StreamReader(new GZipStream(compressedStreamReader.BaseStream, CompressionMode.Decompress));
+                if (filename.Count() > 2 && filename.Substring(filename.Count() - 3, 3) == ".gz")
+                {
+                    inputFile = CreateCompressedStreamReaderWithRetry(filename);
+                }
+                else
+                {
+                    inputFile = CreateStreamReaderWithRetry(filename);
+                }
 
                 var neededFields = new List<string>();
                 neededFields.Add("Hugo_Symbol");
@@ -1803,7 +1906,7 @@ namespace ASELib
                 neededFields.Add("tumor_bam_uuid");
                 neededFields.Add("normal_bam_uuid");
 
-                var headerizedFile = new HeaderizedFile<MAFLine>(inputFile, true, false, "#version 2.4", neededFields);
+                var headerizedFile = new HeaderizedFile<MAFLine>(inputFile, fileHasVersion, !fileHasVersion, "#version 2.4", neededFields);
 
                 List<MAFLine> result;
 
@@ -1814,7 +1917,6 @@ namespace ASELib
                 }
 
                 inputFile.Close();
-                compressedStreamReader.Close();
 
                 return result;
             } // ReadFile
@@ -1902,146 +2004,154 @@ namespace ASELib
                 {
                     compressedStreamReader = CreateStreamReaderWithRetry(filename);
                     allcountReader = new StreamReader(new GZipStream(compressedStreamReader.BaseStream, CompressionMode.Decompress));
-                }
-                catch (IOException)
-                {
-                    Console.WriteLine("IOException opening allcount file " + filename);
-                    return false;
-                }
 
-                //
-                // The format is two header lines like:
-                //      CountReadsCovering v1.1 \\msr-genomics-0\d$\sequence\indices\grch37-24 -a \\msr-genomics-0\e$\tcga\hnsc\tumor\rna\0415c9cc-48e6-46e7-9076-06b6b56bb4be\PCAWG.e7697e88-96df-4c96-ad8d-6c54df95d29b.STAR.v1.bam -
-                //      83303682 mapped high quality nuclear reads, 9891899 low quality reads, 0 mitochondrial reads, 100740272 total reads
-                // followed by a blank line followed by
-                //      NumContigs: 93
-                //      ContigName\tLength
-                //      <ContigName\tLength> x numContigs
-                // Then for each contig:
-                //      >ContigName
-                // And within each contig one of three line types:
-                //      offset\tcount
-                // Which is an offset in the contig (in HEX) followed by the count of high quality reads that map there (also in hex) or:
-                //      xnumber
-                // which is the number of consecutive loci with the same number of HQ reads mapped as the previous locus (x is literal, count is in hex) or:
-                //      count
-                // which is the new count of reads mapped for the next locus (in hex)
-                //
-                // And the final line in the file is
-                //      **done**
-                // 
-                //
 
-                var line = allcountReader.ReadLine();
+                    //
+                    // The format is two header lines like:
+                    //      CountReadsCovering v1.1 \\msr-genomics-0\d$\sequence\indices\grch37-24 -a \\msr-genomics-0\e$\tcga\hnsc\tumor\rna\0415c9cc-48e6-46e7-9076-06b6b56bb4be\PCAWG.e7697e88-96df-4c96-ad8d-6c54df95d29b.STAR.v1.bam -
+                    //      83303682 mapped high quality nuclear reads, 9891899 low quality reads, 0 mitochondrial reads, 100740272 total reads
+                    // followed by a blank line followed by
+                    //      NumContigs: 93
+                    //      ContigName\tLength
+                    //      <ContigName\tLength> x numContigs
+                    // Then for each contig:
+                    //      >ContigName
+                    // And within each contig one of three line types:
+                    //      offset\tcount
+                    // Which is an offset in the contig (in HEX) followed by the count of high quality reads that map there (also in hex) or:
+                    //      xnumber
+                    // which is the number of consecutive loci with the same number of HQ reads mapped as the previous locus (x is literal, count is in hex) or:
+                    //      count
+                    // which is the new count of reads mapped for the next locus (in hex)
+                    //
+                    // And the final line in the file is
+                    //      **done**
+                    // 
+                    //
 
-                const string headerBeginning = "CountReadsCovering v";
+                    var line = allcountReader.ReadLine();
 
-                if (null == line || line.Count() < headerBeginning.Count() + 1 || line.Substring(0, headerBeginning.Count()) != headerBeginning)
-                {
-                    Console.WriteLine("Empty or corrupt allcount file " + filename);
-                    return false;
-                }
+                    const string headerBeginning = "CountReadsCovering v";
 
-                if (line[headerBeginning.Count()] != '1')
-                {
-                    Console.WriteLine("Unsupported major version of allcount file " + filename + ".  Header line: " + line);
-                    return false;
-                }
+                    if (null == line || line.Count() < headerBeginning.Count() + 1 || line.Substring(0, headerBeginning.Count()) != headerBeginning)
+                    {
+                        Console.WriteLine("Empty or corrupt allcount file " + filename);
+                        return false;
+                    }
 
-                line = allcountReader.ReadLine();
-                if (null == line)
-                {
-                    Console.WriteLine("Corrupt or tuncated allcount file " + filename);
-                    return false;
-                }
-
-                var fields = line.Split(' ');
-                if (fields.Count() != 16)
-                {
-                    Console.WriteLine("Corrupt or tuncated allcount file " + filename + ".  Second line has " + fields.Count() + " fields: " + line);
-                    return false;
-                }
-
-                try
-                {
-                    mappedHQNuclearReads = Convert.ToInt64(fields[0]);
-                }
-                catch (FormatException)
-                {
-                    Console.WriteLine("Format exception parsing mapped HQ read count for file " + filename + " from line: " + line);
-                    return false;
-                }
-
-                line = allcountReader.ReadLine();   // The blank line
-
-                line = allcountReader.ReadLine();
-                if (null == line)
-                {
-                    Console.WriteLine("Allcount file truncated before contig count: " + filename);
-                    return false;
-                }
-
-                const string numContigsLineBeginning = "NumContigs: ";
-                if (line.Count() < numContigsLineBeginning.Count() + 1 || line.Substring(0, numContigsLineBeginning.Count()) != numContigsLineBeginning)
-                {
-                    Console.WriteLine("Malformed NumContigs line in " + filename + ": " + line);
-                    return false;
-                }
-
-                try
-                {
-                    out_numContigs = numContigs = Convert.ToInt32(line.Substring(numContigsLineBeginning.Count()));
-                }
-                catch (FormatException)
-                {
-                    Console.WriteLine("Couldn't parse NumContigs line in file " + filename + ": " + line);
-                    return false;
-                }
-
-                if (numContigs < 1)
-                {
-                    Console.WriteLine("Invalid numContigs in " + filename + ": " + line);
-                    return false;
-                }
-
-                line = allcountReader.ReadLine();   // The header line for the contigs.
-
-                contigs = new Contig[numContigs];
-
-                int whichContig;
-
-                for (whichContig = 0; whichContig < numContigs; whichContig++)
-                {
-                    contigs[whichContig] = new Contig();
+                    if (line[headerBeginning.Count()] != '1')
+                    {
+                        Console.WriteLine("Unsupported major version of allcount file " + filename + ".  Header line: " + line);
+                        return false;
+                    }
 
                     line = allcountReader.ReadLine();
                     if (null == line)
                     {
-                        Console.WriteLine("File truncated in contig list " + filename);
+                        Console.WriteLine("Corrupt or tuncated allcount file " + filename);
                         return false;
                     }
 
-                    fields = line.Split('\t');
-                    if (fields.Count() != 2)
+                    var fields = line.Split(' ');
+                    if (fields.Count() != 16)
                     {
-                        Console.WriteLine("Incorrect contig line format in file " + filename + ": " + line);
+                        Console.WriteLine("Corrupt or tuncated allcount file " + filename + ".  Second line has " + fields.Count() + " fields: " + line);
                         return false;
                     }
 
-                    contigs[whichContig].name = fields[0].ToLower();
                     try
                     {
-                        contigs[whichContig].length = Convert.ToInt64(fields[1]);
+                        mappedHQNuclearReads = Convert.ToInt64(fields[0]);
                     }
                     catch (FormatException)
                     {
-                        Console.WriteLine("Incorrect contig line format in file " + filename + ": " + line);
+                        Console.WriteLine("Format exception parsing mapped HQ read count for file " + filename + " from line: " + line);
                         return false;
                     }
-                } // for all expected contigs
+
+                    line = allcountReader.ReadLine();   // The blank line
+
+                    line = allcountReader.ReadLine();
+                    if (null == line)
+                    {
+                        Console.WriteLine("Allcount file truncated before contig count: " + filename);
+                        return false;
+                    }
+
+                    const string numContigsLineBeginning = "NumContigs: ";
+                    if (line.Count() < numContigsLineBeginning.Count() + 1 || line.Substring(0, numContigsLineBeginning.Count()) != numContigsLineBeginning)
+                    {
+                        Console.WriteLine("Malformed NumContigs line in " + filename + ": " + line);
+                        return false;
+                    }
+
+                    try
+                    {
+                        out_numContigs = numContigs = Convert.ToInt32(line.Substring(numContigsLineBeginning.Count()));
+                    }
+                    catch (FormatException)
+                    {
+                        Console.WriteLine("Couldn't parse NumContigs line in file " + filename + ": " + line);
+                        return false;
+                    }
+
+                    if (numContigs < 1)
+                    {
+                        Console.WriteLine("Invalid numContigs in " + filename + ": " + line);
+                        return false;
+                    }
+
+                    line = allcountReader.ReadLine();   // The header line for the contigs.
+
+                    contigs = new Contig[numContigs];
+
+                    int whichContig;
+
+                    for (whichContig = 0; whichContig < numContigs; whichContig++)
+                    {
+                        contigs[whichContig] = new Contig();
+
+                        line = allcountReader.ReadLine();
+                        if (null == line)
+                        {
+                            Console.WriteLine("File truncated in contig list " + filename);
+                            return false;
+                        }
+
+                        fields = line.Split('\t');
+                        if (fields.Count() != 2)
+                        {
+                            Console.WriteLine("Incorrect contig line format in file " + filename + ": " + line);
+                            return false;
+                        }
+
+                        contigs[whichContig].name = fields[0].ToLower();
+                        try
+                        {
+                            contigs[whichContig].length = Convert.ToInt64(fields[1]);
+                        }
+                        catch (FormatException)
+                        {
+                            Console.WriteLine("Incorrect contig line format in file " + filename + ": " + line);
+                            return false;
+                        }
+                    } // for all expected contigs
+                } // try
+                catch (Exception e)
+                {
+                    if (e is IOException || e is InvalidDataException)
+                    {
+                        Console.WriteLine("IOException or InvalidDataException opening allcount file " + filename);
+                        return false;
+                    }
+                    else
+                    {
+                        throw e;
+                    }
+                }
 
                 return true;
-            }
+            } // openFile
 
             public delegate void ProcessBase(string strippedContigName, int location, int currentMappedReadCount);
 
@@ -2328,7 +2438,7 @@ namespace ASELib
 
         static void ReadMafFileAndAppendToList(string filename, string file_id, List<ASETools.MAFLine> allMAFLines, MAFLoadStatus loadStatus)
         {
-            var mafLinesForThisFile = ASETools.MAFLine.ReadFile(filename, file_id);
+            var mafLinesForThisFile = ASETools.MAFLine.ReadFile(filename, file_id, true);
 
             lock (loadStatus)
             {

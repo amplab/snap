@@ -20,6 +20,11 @@ namespace ASEProcessManager
     //
     class Program
     {
+        const string scriptFilename = "ASENextSteps.cmd";
+        const string linuxScriptFilename = "ASENextStepsLinux";
+        const string downloadScriptFilename = "ASEDownload.cmd";
+
+        static string jobAddString = "";
 
         //
         // A ProcessingStage examines the state of the world and if the prerequisites are there and the step isn't completed adds commands to the script to do some
@@ -28,7 +33,8 @@ namespace ASEProcessManager
         interface ProcessingStage
         {
             string GetStageName();
-            void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites);
+            bool NeedsCases();
+            void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites);
             bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld);
         }
 
@@ -41,7 +47,9 @@ namespace ASEProcessManager
                 return "Generate MAF Configuration";
             }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public bool NeedsCases() { return false; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
 
@@ -78,7 +86,9 @@ namespace ASEProcessManager
                 return "Generate Cases";
             }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public bool NeedsCases() { return false; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
 
@@ -150,18 +160,15 @@ namespace ASEProcessManager
                 return "Generate Allcount files";
             }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
                 nDone = 0;
                 nAddedToScript = 0;
                 nWaitingForPrerequisites = 0;
-
-                if (stateOfTheWorld.cases == null)
-                {
-                    nWaitingForPrerequisites = 1;
-                    return;
-                }
+                filesToDownload = new List<string>();
 
                 foreach (var caseEntry in stateOfTheWorld.cases)
                 {
@@ -184,10 +191,6 @@ namespace ASEProcessManager
 
                 if (!stateOfTheWorld.downloadedFiles.ContainsKey(file_id))
                 {
-                    if (null == filesToDownload)
-                    {
-                        filesToDownload = new List<string>();
-                    }
                     filesToDownload.Add(file_id);
                 }
                 else
@@ -210,7 +213,7 @@ namespace ASEProcessManager
                         script.WriteLine(stateOfTheWorld.configuration.binaryDirectory + "CountReadsCovering " + stateOfTheWorld.configuration.indexDirectory + " -a " + stateOfTheWorld.downloadedFiles[file_id].fileInfo.FullName + " - | gzip -9 > " +
                             caseDirectory + file_id + extension);
 
-                        hpcScript.WriteLine(@"job add %1 /exclusive /numnodes:1-1 /scheduler:" + stateOfTheWorld.configuration.hpcScheduler + " " +
+                        hpcScript.WriteLine(jobAddString + 
                             stateOfTheWorld.configuration.hpcBinariesDirectory + "MakeDirectoryAndCountReadsCovering.cmd " + caseDirectory + " " + stateOfTheWorld.configuration.hpcBinariesDirectory + " " +
                             stateOfTheWorld.configuration.hpcIndexDirectory + " " + stateOfTheWorld.downloadedFiles[file_id].fileInfo.FullName + " " + caseDirectory + file_id + extension);
                     }
@@ -266,19 +269,14 @@ namespace ASEProcessManager
             {
                 return "Download";
             }
+            public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
                 nAddedToScript = 0;
                 nWaitingForPrerequisites = 0;
-
-                if (stateOfTheWorld.cases == null)
-                {
-                    nWaitingForPrerequisites = 1;
-                    return;
-                }
 
                 foreach (var caseEntry in stateOfTheWorld.cases)
                 {
@@ -313,17 +311,13 @@ namespace ASEProcessManager
                 return "MD5 Computation";
             }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null; // This stage never generates downloads
                 nAddedToScript = 0;
                 nDone = 0;
-
-                if (stateOfTheWorld.cases == null)
-                {
-                    nWaitingForPrerequisites = 1;
-                    return;
-                }
 
                 nWaitingForPrerequisites = 0;
 
@@ -348,13 +342,21 @@ namespace ASEProcessManager
 
             void HandleFile(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, string fileId, string expectedMD5, ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites)
             {
-                if (!stateOfTheWorld.downloadedFiles.ContainsKey(fileId) || null == expectedMD5 || "" == expectedMD5 || stateOfTheWorld.downloadedFiles[fileId].fileInfo.FullName.ToLower().Contains("partial"))
+                if (!stateOfTheWorld.downloadedFiles.ContainsKey(fileId) || null == expectedMD5 || "" == expectedMD5)
                 {
                     nWaitingForPrerequisites++;
                     return;
                 }
 
                 var downloadedFile = stateOfTheWorld.downloadedFiles[fileId];
+
+                if (downloadedFile.fileInfo.FullName.ToLower().EndsWith(".partial")) {
+                    if (downloadedFile.fileInfo.LastWriteTime < DateTime.Now.AddDays(-1)) {
+                        Console.WriteLine("Found partial download file that's more than a day old, it's probably abandoned and should be deleted: " + downloadedFile.fileInfo.FullName);
+                    }
+                    nWaitingForPrerequisites++;
+                    return;
+                }
 
                 if (downloadedFile.storedMD5 != null && downloadedFile.storedMD5 != "")
                 {
@@ -369,7 +371,7 @@ namespace ASEProcessManager
                 }
 
                 script.WriteLine(stateOfTheWorld.configuration.binaryDirectory + "ComputeMD5 " + downloadedFile.fileInfo.FullName + " > " + downloadedFile.fileInfo.FullName + ".md5");
-                hpcScript.WriteLine(@"job add %1 /numnodes:1-1 /scheduler:" + stateOfTheWorld.configuration.hpcScheduler + " " + stateOfTheWorld.configuration.hpcBinariesDirectory + "ComputeMD5IntoFile.cmd " +
+                hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "ComputeMD5IntoFile.cmd " +
                     stateOfTheWorld.configuration.hpcBinariesDirectory + " " + downloadedFile.fileInfo.FullName + " " + downloadedFile.fileInfo.FullName + ".md5");
                 nAddedToScript++;
             }   // HandleFile
@@ -402,32 +404,50 @@ namespace ASEProcessManager
                 return "Germline Variant Calling";
             }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
                 nAddedToScript = 0;
- 
-                if (stateOfTheWorld.cases == null)
-                {
-                    nWaitingForPrerequisites = 1;
-                    return;
-                }
                 nWaitingForPrerequisites = 0;
 
                 foreach (var caseEntry in stateOfTheWorld.cases)
                 {
                     var case_ = caseEntry.Value;
 
-                    if (!stateOfTheWorld.fileDownloadedAndVerified(case_.normal_dna_file_id, case_.normal_dna_file_bam_md5))
-                    {
-                        nWaitingForPrerequisites++;
-                        continue;
-                    }
-
                     if (stateOfTheWorld.containsDerivedFile(case_.case_id, case_.normal_dna_file_id, ASETools.DerivedFile.Type.VCF))
                     {
                         nDone++;
+                        continue;
+                    }
+
+                    //
+                    // The Azure script downloads on the fly, so add every one that isn't done.
+                    //
+                    azureScript.Write("date\n");  // NB: we use Write and \n rather than WriteLine to avoid generating crlf text that would confuse Linux
+                    azureScript.Write("rm -rf /mnt/downloaded_files/*\n"); // /mnt is a big but temporary filesystem on these azure instances
+                    azureScript.Write("cd /mnt/downloaded_files\n");
+                    azureScript.Write(@"~/gdc-client download --token-file ~/" + ASETools.GetFileNameFromPathname(stateOfTheWorld.configuration.accessTokenPathname) + " " + case_.normal_dna_file_id + "\n");
+                    azureScript.Write("cd ~\n");
+                    azureScript.Write("rm ~/x\n");    // We use a link from x to /mnt/downloaded_files/<download_directory> to make the command line shorter
+                    azureScript.Write("ln -s /mnt/downloaded_files/" + case_.normal_dna_file_id + " ~/x\n");
+                    azureScript.Write("cat ~/genomes/hg38-100k-regions | parallel -k -j `cat ~/ncores` \" freebayes --region {} --fasta-reference ~/genomes/hg38.fa ~/x/*.bam" +
+                        " \" | ~/freebayes/vcflib/bin/vcffirstheader | ~/freebayes/vcflib/bin/vcfstreamsort -w 1000 | ~/freebayes/vcflib/bin/vcfuniq > ~/" +
+                        case_.normal_dna_file_id + ASETools.vcfExtension + "\n");
+                    azureScript.Write("if [ $? = 0 ]; then\n");
+                    azureScript.Write("    mv " + case_.normal_dna_file_id + ASETools.vcfExtension + " ~/completed_vcfs/\n");
+                    azureScript.Write("else\n");
+                    azureScript.Write("    echo " + case_.normal_dna_file_id + " >> variant_calling_errors\n");
+                    azureScript.Write("fi\n");
+                    azureScript.Write("rm ~/" + case_.normal_dna_file_id + ASETools.vcfExtension + "\n");
+                    azureScript.Write("rm -rf ~/downloaded_files/" + case_.normal_dna_file_id + "\n");
+                    azureScript.Write("rm ~/x\n");
+
+                    if (!stateOfTheWorld.fileDownloadedAndVerified(case_.normal_dna_file_id, case_.normal_dna_file_bam_md5))
+                    {
+                        nWaitingForPrerequisites++;
                         continue;
                     }
 
@@ -472,18 +492,13 @@ namespace ASEProcessManager
                 return "Select Germline Variants";
             }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
                 filesToDownload = null;
-
-                if (stateOfTheWorld.cases == null)
-                {
-                    nWaitingForPrerequisites = 1;
-                    return;
-                }
-
                 nWaitingForPrerequisites = 0;
 
                 int nOnCurrentLine = 0;
@@ -496,6 +511,7 @@ namespace ASEProcessManager
                     if (case_.selected_variants_filename != null && case_.selected_variants_filename != "")
                     {
                         nDone++;
+                        continue;
                     }
 
                     if (case_.vcf_filename == "" || case_.tumor_rna_allcount_filename == "" || case_.tumor_dna_allcount_filename == "")
@@ -552,56 +568,47 @@ namespace ASEProcessManager
                 return "Per-disease mRNA expression distribution";
             }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
                 nWaitingForPrerequisites = 0;
                 filesToDownload = null;
 
-                if (stateOfTheWorld.cases == null || stateOfTheWorld.diseases == null)
-                {
-                    nWaitingForPrerequisites = 1;
-                    return;
-                }
-
-                bool missingAny = false;
-
                 foreach (var disease in stateOfTheWorld.diseases)
                 {
-                    if (!stateOfTheWorld.expressionFiles.ContainsKey(disease))
-                    {
-                        missingAny = true;
-                        break;
+                    if (stateOfTheWorld.expressionFiles.ContainsKey(disease)) {
+                        nDone++;
+                    } else {
+                        bool missingAny = false;
+                        foreach (var caseEntry in stateOfTheWorld.cases.Where(x => x.Value.disease() == disease))
+                        {
+                            var case_ = caseEntry.Value;
+
+                            if (!stateOfTheWorld.containsDerivedFile(case_.case_id, case_.tumor_rna_file_id, ASETools.DerivedFile.Type.TumorRNAAllcount))
+                            {
+                                nWaitingForPrerequisites++;
+                                missingAny = true;
+                                break;
+                            }
+                        }
+
+                        if (missingAny)
+                        {
+                            continue;
+                        }
+
+                        script.WriteLine(stateOfTheWorld.configuration.binaryDirectory + "ExpressionDistribution.exe " + stateOfTheWorld.configuration.casesFilePathname + " " +
+                            stateOfTheWorld.configuration.expressionFilesDirectory + " " + ASETools.Case.ProjectColumn + " " + ASETools.Case.TumorRNAAllcountFilenameColumn + " " + disease);
+
+                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "ExpressionDistribution.exe " + stateOfTheWorld.configuration.casesFilePathname + " " +
+                            stateOfTheWorld.configuration.expressionFilesDirectory + " " + ASETools.Case.ProjectColumn + " " + ASETools.Case.TumorRNAAllcountFilenameColumn + " " + disease);
+                        nAddedToScript++;
                     }
-                }
-
-
-                if (!missingAny)
-                {
-                    nDone = 1;
-                    return;
-                }
-
-                foreach (var caseEntry in stateOfTheWorld.cases)
-                {
-                    var case_ = caseEntry.Value;
-
-                    if (!stateOfTheWorld.containsDerivedFile(case_.case_id, case_.tumor_rna_file_id, ASETools.DerivedFile.Type.TumorRNAAllcount))
-                    {
-                        nWaitingForPrerequisites = 1;
-                        return;
-                    }
-                }
-
-                script.WriteLine(stateOfTheWorld.configuration.binaryDirectory + "ExpressionDistibution.exe " + stateOfTheWorld.configuration.casesFilePathname + " " +
-                    stateOfTheWorld.configuration.expressionFilesDirectory);
-
-                hpcScript.WriteLine(stateOfTheWorld.configuration.hpcBinariesDirectory + "ExpressionDistibution.exe " + stateOfTheWorld.configuration.casesFilePathname + " " +
-                    stateOfTheWorld.configuration.expressionFilesDirectory);
-
-                nAddedToScript++;
-            }
+                } // foreach disease
+            } // EvaluateStage
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
             {
@@ -617,20 +624,15 @@ namespace ASEProcessManager
         {
             public string GetStageName() { return "Extract MAF Lines"; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
 
                 nWaitingForPrerequisites = 0;
                 nDone = 0;
                 nAddedToScript = 0;
-
-                if (stateOfTheWorld.cases == null)
-                {
-                    nWaitingForPrerequisites = 1;
-                    return;
-                }
-
 
                 foreach (var caseEntry in stateOfTheWorld.cases)
                 {
@@ -640,7 +642,7 @@ namespace ASEProcessManager
                     {
                         nWaitingForPrerequisites++;
                     }
-                    else if (case_.extracted_maf_lines != null && case_.extracted_maf_lines != "")
+                    else if (case_.extracted_maf_lines_filename != null && case_.extracted_maf_lines_filename != "")
                     {
                         nDone++;
                     }
@@ -653,7 +655,7 @@ namespace ASEProcessManager
                 if (nAddedToScript > 0)
                 {
                     script.WriteLine(stateOfTheWorld.configuration.binaryDirectory + "ExtractMAFLines");
-                    hpcScript.WriteLine(@"job add %1 /exclusive /numnodes:1-1 /scheduler:" + stateOfTheWorld.configuration.hpcScheduler + " " + stateOfTheWorld.configuration.hpcBinariesDirectory + "ExtractMAFLines");
+                    hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "ExtractMAFLines");
                 }
             }
 
@@ -696,20 +698,16 @@ namespace ASEProcessManager
         {
             public RegionalExpressionProcessingStage() { }
 
-            public string getStageName() { return "Regional Expression"; }
+            public string GetStageName() { return "Regional Expression"; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
                 nWaitingForPrerequisites = 0;
                 filesToDownload = null;
-
-                if (stateOfTheWorld.cases == null)
-                {
-                    nWaitingForPrerequisites = 1;
-                    return;
-                }
 
                 var casesReadyToGoByDisease = new Dictionary<string, List<ASETools.Case>>();
                 const int maxCasesPerCommandLine = 800;
@@ -756,14 +754,14 @@ namespace ASEProcessManager
             void WriteScripts(StateOfTheWorld stateOfTheWorld, List<ASETools.Case> cases, StreamWriter script, StreamWriter hpcScript)
             {
                 script.Write(stateOfTheWorld.configuration.binaryDirectory + "RegionalExpression " + stateOfTheWorld.expressionFiles[cases[0].disease()].FullName );
-                hpcScript.Write(@"job add %1 /exclusive /numnodes:1-1 /scheduler:gcr " + stateOfTheWorld.configuration.hpcBinariesDirectory + "RegionalExpression " + stateOfTheWorld.expressionFiles[cases[0].disease()].FullName);
+                hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "RegionalExpression " + stateOfTheWorld.expressionFiles[cases[0].disease()].FullName);
                 foreach (var case_ in cases) {
                     script.Write(" " + case_.case_id);
                     hpcScript.Write(" " + case_.case_id);
                 }
                 script.WriteLine();
                 hpcScript.WriteLine();
-            }
+            } // WriteScripts
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
             {
@@ -812,6 +810,98 @@ namespace ASEProcessManager
             } // EvaluateDependencies
 
         } // RegionalExpressionProcessingStage
+
+        class ExpressionNearMutationsProcessingStage : ProcessingStage
+        {
+            public ExpressionNearMutationsProcessingStage() { }
+
+            public string GetStageName() { return "Expresssion Near Mutations"; }
+
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+                filesToDownload = null;
+
+                foreach (var caseEntry in stateOfTheWorld.cases)
+                {
+                    var case_ = caseEntry.Value;
+                    if (case_.maf_filename == "" || case_.regional_expression_filename == ""  /* unfiltered counts, which we don't have a place for yet */)
+                    {
+                        nWaitingForPrerequisites++;
+                    }
+                }
+            } // EvaluateStage
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
+            {
+                return true; // just to get it to compile
+            } // EvaluateDependencies
+
+        } // ExpressionNearMutationsProcessingStage
+
+        class ExtractReadsProcessingStage : ProcessingStage
+        {
+            public ExtractReadsProcessingStage() { }
+
+            public string GetStageName() { return "Extract Reads"; }
+
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = null;
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                foreach (var caseEntry in stateOfTheWorld.cases)
+                {
+                    var case_ = caseEntry.Value;
+
+                    if (case_.dna_reads_at_selected_variants_filename != "")
+                    {
+                        nDone++;
+                    }
+                    else if (!stateOfTheWorld.fileDownloadedAndVerified(case_.tumor_dna_file_id, case_.tumor_dna_file_bam_md5) || case_.selected_variants_filename == "" || case_.extracted_maf_lines_filename == "")
+                    {
+                        nWaitingForPrerequisites++;
+                    }
+                    else
+                    {
+                        script.WriteLine(stateOfTheWorld.configuration.binaryDirectory + "ExtractReads " + case_.case_id + "-d");
+                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "ExtractReads "  + case_.case_id + "-d");
+
+                        nAddedToScript++;
+                    }
+
+                    if (case_.rna_reads_at_selected_variants_filename != "")
+                    {
+                        nDone++;
+                    }
+                    else if (!stateOfTheWorld.fileDownloadedAndVerified(case_.tumor_rna_file_id, case_.tumor_rna_file_bam_md5) || case_.selected_variants_filename == "" || case_.extracted_maf_lines_filename == "")
+                    {
+                        nWaitingForPrerequisites++;
+                    }
+                    else
+                    {
+                        script.WriteLine(stateOfTheWorld.configuration.binaryDirectory + "ExtractReads " + case_.case_id + "-r");
+                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "ExtractReads " + case_.case_id + "-r");
+
+                        nAddedToScript++;
+                    }
+                }
+            } // EvaluateStage
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
+            {
+                // Fill this in later
+                return true;
+            } // EvaluateDependencies
+        } // ExtractReadsProcessingStage
 
         //
         // This represents the state of the world.  Processing stages look at this state and generate actions to move us along.
@@ -873,36 +963,32 @@ namespace ASEProcessManager
                         }
                     }
 
+                    //
+                    // Check that the derived file cases are real cases.
+                    //
 
-                    if (true)
+                    foreach (var derivedFileCaseEntry in derivedFiles)
                     {
-                        //
-                        // Check that the derived file cases are real cases.
-                        //
+                        var caseId = derivedFileCaseEntry.Key;
+                        var derivedFilesForThisCase = derivedFileCaseEntry.Value;
 
-
-                        foreach (var derivedFileCaseEntry in derivedFiles)
+                        if (cases.ContainsKey(caseId))
                         {
-                            var caseId = derivedFileCaseEntry.Key;
-                            var derivedFilesForThisCase = derivedFileCaseEntry.Value;
-
-                            if (cases.ContainsKey(caseId))
-                            {
-                                continue;
-                            }
-
-                            Console.Write("There's a derived files directory for case id " + caseId + ", which isn't a known case.  It contains:");
-                            foreach (var badDrivedFile in derivedFilesForThisCase)
-                            {
-                                Console.Write(" " + badDrivedFile.fileinfo.FullName);
-                                if (fileIdToCaseId.ContainsKey(badDrivedFile.derived_from_file_id))
-                                {
-                                    Console.WriteLine(" (derived from a fileID associated with case " + fileIdToCaseId[badDrivedFile.derived_from_file_id] + ")");
-                                }
-                            }
-                            Console.WriteLine();
+                            continue;
                         }
+
+                        Console.Write("There's a derived files directory for case id " + caseId + ", which isn't a known case.  It contains:");
+                        foreach (var badDrivedFile in derivedFilesForThisCase)
+                        {
+                            Console.Write(" " + badDrivedFile.fileinfo.FullName);
+                            if (fileIdToCaseId.ContainsKey(badDrivedFile.derived_from_file_id))
+                            {
+                                Console.WriteLine(" (derived from a fileID associated with case " + fileIdToCaseId[badDrivedFile.derived_from_file_id] + ")");
+                            }
+                        }
+                        Console.WriteLine();
                     }
+
 
                     ASETools.Case.loadAllFileLocations(cases, downloadedFiles, derivedFiles);
 
@@ -960,8 +1046,7 @@ namespace ASEProcessManager
 
                 if (Directory.Exists(configuration.expressionFilesDirectory))
                 {
-                    foreach (var filename in Directory.EnumerateFiles(configuration.expressionFilesDirectory + "expression_*"))
-                    {
+                    foreach (var filename in Directory.EnumerateFiles(configuration.expressionFilesDirectory, "expression_*")) {
                         var disease = filename.Substring(filename.LastIndexOf('_') + 1).ToLower();
                         if (!diseases.Contains(disease))
                         {
@@ -1019,6 +1104,7 @@ namespace ASEProcessManager
             var stopwatch = new Stopwatch();
             stopwatch.Start();
 
+
             var configuration = ASETools.ASEConfirguation.loadFromFile(args);
 
             if (null == configuration)
@@ -1034,10 +1120,28 @@ namespace ASEProcessManager
                 Console.WriteLine("-d means to check dependencies.");
             }
 
+            
+            //
+            // Delete any existing scripts.
+            //
+            File.Delete(scriptFilename);
+            File.Delete(linuxScriptFilename);
+            File.Delete(downloadScriptFilename);
+            if (configuration.hpcScriptFilename != "")
+            {
+                File.Delete(configuration.hpcScriptFilename);
+            }
+            if (configuration.azureScriptFilename != "")
+            {
+                File.Delete(configuration.azureScriptFilename);
+            }
+
             bool checkDependencies = configuration.commandLineArgs.Count() >= 1 && configuration.commandLineArgs.Contains("-d");
 
             var stateOfTheWorld = new StateOfTheWorld(configuration);
             stateOfTheWorld.DetermineTheStateOfTheWorld();
+
+            jobAddString = @"job add %1 /exclusive /numnodes:1-1 /scheduler:" + stateOfTheWorld.configuration.hpcScheduler + " ";
             
             Console.WriteLine();
 
@@ -1048,6 +1152,100 @@ namespace ASEProcessManager
                 //
                 ASETools.Case.SaveToFile(stateOfTheWorld.cases, configuration.casesFilePathname);
             }
+
+            var script = ASETools.CreateStreamWriterWithRetry(scriptFilename);
+
+            if (configuration.completedVCFsDirectory != "")
+            {
+                //
+                // Check to see if there are any completed VCFs (downloaded from Auzure) that need to be moved.
+                //
+
+                var casesByNormalDNAId = new Dictionary<string, ASETools.Case>();
+                foreach (var caseEntry in stateOfTheWorld.cases) {
+                    var case_ = caseEntry.Value;
+                    casesByNormalDNAId.Add(case_.normal_dna_file_id, case_);
+                }
+
+
+                var vcfsToBeMoved = new List<string>();
+                foreach (var completedVCF in Directory.EnumerateFiles(configuration.completedVCFsDirectory)) {
+                    if (!completedVCF.EndsWith(ASETools.vcfExtension))
+                    {
+                        Console.WriteLine("Found non-VCF file in completed VCFs directory: " + completedVCF + ".  Ignoring.");
+                        continue;
+                    }
+
+                    string fileId = ASETools.GetFileIdFromPathname(completedVCF);
+                    if (!casesByNormalDNAId.ContainsKey(fileId)) {
+                        Console.WriteLine("completed VCFs directory contains a file that doesn't seem to correspond to a normal DNA file id: " + completedVCF + ".  Ignoring.");
+                        continue;
+                    }
+
+                    vcfsToBeMoved.Add(completedVCF);
+                }
+
+                if (vcfsToBeMoved.Count() > 0) {
+                    var completedVCFsPathComponents = configuration.completedVCFsDirectory.Split('\\');
+
+                    if (completedVCFsPathComponents.Count() < 2)
+                    {
+                        Console.WriteLine("The completed VCF directory in the configuration should be a pathname: " + configuration.completedVCFsDirectory);
+                        return;
+                    }
+
+
+                    bool failed = false;
+                    string [] dataPathComponents = null;
+                    int completedComponentsToSkip = configuration.completedVCFsDirectory.EndsWith(@"\") ? 2 : 1;
+
+                    foreach (var dataDirectory in configuration.dataDirectories)
+                    {
+                        dataPathComponents = dataDirectory.Split('\\');
+
+                        failed = false;
+                        for (int i = 0; i < completedVCFsPathComponents.Count() - completedComponentsToSkip; i++)
+                        {
+                            if (dataPathComponents[i] != completedVCFsPathComponents[i])
+                            {
+                                failed = true;
+                                break;
+                            }
+                        }
+
+                        if (!failed) {
+                            break;
+                        }
+                    } // foreach data directory
+
+                    if (failed) {
+                        Console.WriteLine("Unable to find destination for completed VCFs (the completed VCFs directory doesn't share a parent with any data directory, and it must.)  Look at your configuration file.");
+                        return;
+                    }
+
+
+                    string destinationDirectory = dataPathComponents[0];
+
+                    for (int i = 1; i < completedVCFsPathComponents.Count() - completedComponentsToSkip; i++)
+                    {
+                        destinationDirectory += '\\' + dataPathComponents[i];
+                    }
+
+                    destinationDirectory += '\\' + configuration.derivedFilesDirectory + '\\';
+
+                    foreach (var completedVCF in vcfsToBeMoved)
+                    {
+                        string normalDNAFileId = ASETools.GetFileIdFromPathname(completedVCF);
+
+                        var case_ = casesByNormalDNAId[normalDNAFileId];
+                        script.WriteLine("md " + destinationDirectory + case_.case_id);
+                        script.WriteLine("mv " + completedVCF + " " + destinationDirectory + case_.case_id + @"\" + ASETools.GetFileNameFromPathname(completedVCF));
+                    }
+
+                    Console.WriteLine("Added " + vcfsToBeMoved.Count() + " vcfs to be moved from the completed_vcfs directory to their final locations.");
+                }// If we had any completed VCFs to be moved.
+            } // if we have a completed VCFs directory
+
 
             List<ProcessingStage> processingStages = new List<ProcessingStage>();
 
@@ -1060,13 +1258,19 @@ namespace ASEProcessManager
             processingStages.Add(new SelectVariantsProcessingStage());
             processingStages.Add(new ExpressionDistributionProcessingStage());
             processingStages.Add(new ExtractMAFLinesProcessingStage());
+            processingStages.Add(new RegionalExpressionProcessingStage());
+            processingStages.Add(new ExpressionNearMutationsProcessingStage());
+            processingStages.Add(new ExtractReadsProcessingStage());
 
             if (checkDependencies)
             {
                 bool allDependenciesOK = true;
                 foreach (var processingStage in processingStages)
                 {
-                    allDependenciesOK &= processingStage.EvaluateDependencies(stateOfTheWorld);
+                    if (stateOfTheWorld.cases != null || !processingStage.NeedsCases())
+                    {
+                        allDependenciesOK &= processingStage.EvaluateDependencies(stateOfTheWorld);
+                    }
                 }
 
                 if (!allDependenciesOK)
@@ -1076,8 +1280,8 @@ namespace ASEProcessManager
                 }
             }
 
-            var script = ASETools.CreateStreamWriterWithRetry("ASENextSteps.cmd");
             StreamWriter hpcScript;
+            StreamWriter azureScript;
 
             if (configuration.hpcScriptFilename == "")  // The empty string means not to generate an output.  We do this by making a Null stream.
             {
@@ -1088,7 +1292,17 @@ namespace ASEProcessManager
                 hpcScript = ASETools.CreateStreamWriterWithRetry(configuration.hpcScriptFilename);
             }
 
-            var linuxScript = ASETools.CreateStreamWriterWithRetry("ASENextStepsLinux");
+
+            if (configuration.azureScriptFilename == "")
+            {
+                azureScript = new StreamWriter(Stream.Null);
+            }
+            else
+            {
+                azureScript = ASETools.CreateStreamWriterWithRetry(configuration.azureScriptFilename);
+            }
+
+            var linuxScript = ASETools.CreateStreamWriterWithRetry(linuxScriptFilename);
 
             var allFilesToDownload = new List<string>();
 
@@ -1124,7 +1338,17 @@ namespace ASEProcessManager
                 int nWaitingForPrerequisites;
                 List<string> stageFilesToDownload;
 
-                processingStage.EvaluateStage(stateOfTheWorld, script, hpcScript, linuxScript, out stageFilesToDownload, out nDone, out nAddedToScript, out nWaitingForPrerequisites);
+                if (stateOfTheWorld.cases != null || !processingStage.NeedsCases())
+                {
+                    processingStage.EvaluateStage(stateOfTheWorld, script, hpcScript, linuxScript, azureScript, out stageFilesToDownload, out nDone, out nAddedToScript, out nWaitingForPrerequisites);
+                }
+                else
+                {
+                    nDone = 0;
+                    nAddedToScript = 0;
+                    nWaitingForPrerequisites = 1;
+                    stageFilesToDownload = null;
+                }
 
                 int nDownloadsRequested = 0;
                 if (null != stageFilesToDownload)
@@ -1139,15 +1363,15 @@ namespace ASEProcessManager
                     }
                 }
 
-                Console.WriteLine(String.Format("{0," + (stageNameHeader.Count() + paddingSize) + "}", processingStage.GetStageName()) + " " + String.Format("{0,6}", nDone) + " " + String.Format("{0,6}", nAddedToScript) + " " +
-                    String.Format("{0,7}", nWaitingForPrerequisites) + " " + String.Format("{0,11}", nDownloadsRequested));
+                Console.WriteLine(String.Format("{0," + (stageNameHeader.Count() + paddingSize) + "}", processingStage.GetStageName()) + " " + String.Format("{0,6}", nDone) + " " + String.Format("{0,8}", nAddedToScript) + " " +
+                    String.Format("{0,10}", nWaitingForPrerequisites) + " " + String.Format("{0,11}", nDownloadsRequested));
             } // foreach stage
 
             //
             // Now put downloads in their own script. They're separated out because they need to be run in one of the download
             // directories, and the user may want to split them across machines.
             //
-            const string downloadScriptFilename = "ASEDownload.cmd";
+
             long bytesToDownload = 0;
             if (allFilesToDownload.Count() == 0)
             {
@@ -1169,6 +1393,7 @@ namespace ASEProcessManager
             script.Close();
             hpcScript.Close();
             linuxScript.Close();
+            azureScript.Close();
 
             Console.WriteLine();
             Console.WriteLine("Downloading " + ASETools.SizeToUnits((ulong)bytesToDownload) + "B in " + allFilesToDownload.Count() + " files.");

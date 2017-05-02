@@ -55,6 +55,9 @@ obj
 /apps/RegionalExpression/bin
 /apps/ExtractMAFLines/bin
 /apps/ValidateVCFs/bin
+/apps/CheckGzip/bin
+/apps/GenerateReadExtractionScript/bin
+
 
 
 

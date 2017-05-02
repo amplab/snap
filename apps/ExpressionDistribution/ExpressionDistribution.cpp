@@ -240,6 +240,8 @@ void ProcessAllcountFile(char *filename, Disease *disease)
         goto done;
     }
 
+    lineBuffer[lineBufferSize - 1] = '\0';
+
     for (int i = 0; i < numContigs; i++) {
         if (!reader->getNextLine(lineBuffer, lineBufferSize)) {
             fprintf(stderr, "File truncated reading contigs, %s\n", filename);
@@ -420,7 +422,8 @@ void ProcessAllcountFile(char *filename, Disease *disease)
     //
     // If we get here, we fell off the end of the file without seeing **done**, so it's been truncated.
     //
-    fprintf(stderr, "Truncated file %s\n", filename);
+    lineBuffer[lineBufferSize - 1] = '\0';
+    fprintf(stderr, "Truncated file %s, last line: %s\n", filename, lineBuffer);
     disease->nCorruptFiles++;
 
 
@@ -445,17 +448,46 @@ void ProcessDisease(Disease *disease)
 }
 
 
+void usage()
+{
+    fprintf(stderr, "usage: ExpressionDistribution casesFilename expressionFilesDirectory projectColumn tumorRNAAllcountColumn <diseaseName>\n");
+}
 
 int main(int argc, char* argv[])
 {
 
-    FILE *experimentsFile = NULL;
+    FILE *casesFile = NULL;
     
     int retryCount = 0;
-    while (NULL == (experimentsFile = fopen("\\\\bolosky\\f$\\temp\\expression\\experiments.txt", "r"))) {
+    
+    if (argc != 5 && argc != 6) {
+        usage();
+    }
+
+    int projectColumn;
+    int tumorRNAAllcountColumn;
+
+    projectColumn = atoi(argv[3]);
+    tumorRNAAllcountColumn = atoi(argv[4]);
+
+    if (projectColumn < 0|| tumorRNAAllcountColumn < 0) {
+        fprintf(stderr, "Invalid project or allcount columns.\n");
+        return -1;
+    }
+
+    const size_t maxColumn = 100;
+
+    int highestInterestingColumnNumber = __max(projectColumn, tumorRNAAllcountColumn);
+
+    if (highestInterestingColumnNumber >= maxColumn) {
+        fprintf(stderr, "One or both of the column numbers are bigger than permitted.\n");
+        return -1;
+    }
+
+    while (NULL == (casesFile = fopen(argv[1], "r"))) {
         if (retryCount++ == 100) {
-            fprintf(stderr, "Gave up opening experiments file after 100 tries\n");
-            return 1;
+            fprintf(stderr, "Gave up opening cases file ('%s') after 100 tries\n", argv[1]);
+            return -1;
         }
         Sleep(1000);
     }
@@ -467,39 +499,74 @@ int main(int argc, char* argv[])
     const size_t bufferSize = 10000;
     char inputBuffer[bufferSize];
 
-    fgets(inputBuffer, bufferSize, experimentsFile);    // Skip the header line
+    fgets(inputBuffer, bufferSize, casesFile);    // Skip the header line
 
-    while (fgets(inputBuffer, bufferSize, experimentsFile)) {
-        // format is tab separated columns.  Column 0 is disease_abbr, column 16 tumorAllcountFile
+    bool seenDone = false;
 
-        const int diseaseNameBufferSize = 100;
-        char diseaseNameBuffer[diseaseNameBufferSize];
-        memcpy(diseaseNameBuffer, inputBuffer, __min(diseaseNameBufferSize, strlen(inputBuffer)));
-        diseaseNameBuffer[diseaseNameBufferSize - 1] = '\0';
-        char *tab = strchr(diseaseNameBuffer, '\t');
-        if (NULL == tab) {
-            fprintf(stderr, "Unparsable experiment line %s\n", inputBuffer);
-            return 1;
+    while (fgets(inputBuffer, bufferSize, casesFile)) {
+
+        //
+        // fgets leaves the newline around.  Kill it if it's there.
+        //
+        char *newline = strchr(inputBuffer, '\n');
+        if (NULL != newline) {
+            *newline = '\0';
         }
 
-        *tab = '\0';
+        if (seenDone) {
+            fprintf(stderr, "cases file continues beyond **done**.\n");
+            return -1;
+        }
 
-        if (!strcmp(diseaseNameBuffer, "ov")) {
-            char *reference = tab + 1;
-            tab = strchr(reference, '\t');
+        if (!strcmp(inputBuffer, "**done**")) {
+            seenDone = true;
+            continue;
+        }
+
+        // format is tab separated columns.  The project ID is of the form TCGA-DISEASE
+        char *fields[maxColumn];
+
+        char *nextField = inputBuffer;
+        for (int i = 0; i <= highestInterestingColumnNumber; i++) {
+            if (nextField == NULL) {
+                fprintf(stderr, "Truncated cases file, line has too few fields.\n");
+                return -1;
+            }
+
+            fields[i] = nextField;
+
+            char *tab = strchr(nextField, '\t');
             if (NULL == tab) {
-                fprintf(stderr, "Unparsable ov line %s", inputBuffer);
-                return 1;
+                nextField = NULL;
+            } else {
+                *tab = '\0';
+                nextField = tab + 1;
             }
-            *tab = '\0';
-            if (!strcmp(reference, "ncbi36_bccagsc_variant")) {
-                strcpy(diseaseNameBuffer, "ov_hg18");
-            }
+        }
+
+        //
+        // Null terminate the highest column string (if it isn't already).
+        //
+        char *charToCheck;
+        for (charToCheck = fields[highestInterestingColumnNumber]; *charToCheck != '\t' && *charToCheck != '\0'; charToCheck++) {
+            // This loop body intentionally left blank
+        }
+        *charToCheck = '\0';
+
+        char *diseaseName;
+        if (strlen(fields[projectColumn]) < 6 || fields[projectColumn][0] != 'T' || fields[projectColumn][1] != 'C' || fields[projectColumn][2] != 'G' || fields[projectColumn][3] != 'A' || fields[projectColumn][4] != '-') {
+            fprintf(stderr, "Invalid project name (%s), doesn't start with TCGA-", fields[projectColumn]);
+            return -1;
+        }
+
+        diseaseName = fields[projectColumn] + 5;
+        for (char *charToLower = diseaseName; *charToLower != '\0'; charToLower++) {
+            *charToLower = tolower(*charToLower);
         }
 
         Disease *disease = NULL;
         for (int i = 0; i < nDiseases; i++) {
-            if (!strcmp(diseases[i].diseaseName, diseaseNameBuffer)) {
+            if (!strcmp(diseases[i].diseaseName, diseaseName)) {
                 disease = &diseases[i];
                 break;
             }
@@ -508,32 +575,17 @@ int main(int argc, char* argv[])
         if (NULL == disease) {
             if (nDiseases == maxDiseases) {
                 fprintf(stderr, "Ran out of diseases!\n");
-                return 1;
+                return -1;
             }
             disease = &diseases[nDiseases];
             nDiseases++;
 
-            disease->diseaseName = new char[strlen(diseaseNameBuffer) + 1];
-            strcpy(disease->diseaseName, diseaseNameBuffer);
+            disease->diseaseName = new char[strlen(diseaseName) + 1];
+            strcpy(disease->diseaseName, diseaseName);
         }
 
 
-        char *tumorAllcountsFileField = inputBuffer;
-        for (int i = 1; i <= 16; i++) {
-            tumorAllcountsFileField = strchr(tumorAllcountsFileField, '\t');
-            if (NULL == tumorAllcountsFileField) {
-                fprintf(stderr, "Couldn't find enough tabs in experiment line %s\n", inputBuffer);
-                return 1;
-            }
-            tumorAllcountsFileField++; // Skip over the tab
-        }
-
-        char *nextTab = strchr(tumorAllcountsFileField, '\t');
-        if (NULL == nextTab) {
-            fprintf(stderr, "Can't find trailing tab in experiments like %s\n", inputBuffer);
-            return 1;
-        }
-        *nextTab = '\0';
+        char *tumorAllcountsFileField = fields[tumorRNAAllcountColumn];
 
         if (strcmp(tumorAllcountsFileField, "")) {
             //
@@ -546,14 +598,20 @@ int main(int argc, char* argv[])
             disease->allCountFiles = entry;
             disease->nTotalFiles++;
         }
-    } // while there's another line in the experiments file
-    fclose(experimentsFile);
-    experimentsFile = NULL;
+    } // while there's another line in the cases file
+
+    if (!seenDone) {
+        fprintf(stderr, "Truncated cases file: does not end with **done**\n");
+        return -1;
+    }
+
+    fclose(casesFile);
+    casesFile = NULL;
 
     _int64 start = timeInMillis();
     for (int i = 0; i < nDiseases; i++) {
         Disease *disease = &diseases[i];
-        if (argc == 2 && strcmp(argv[1], disease->diseaseName)) {
+        if (argc == 6 && strcmp(argv[5], disease->diseaseName)) {
             continue;
         }
         ProcessDisease(disease);
@@ -561,28 +619,30 @@ int main(int argc, char* argv[])
         int nGoodFiles = disease->nTotalFiles - disease->nMissingFiles - disease->nCorruptFiles;
 
         char fileNameBuffer[1000];
-        sprintf(fileNameBuffer, "\\\\msr-genomics-1\\d$\\temp\\expression_%s", disease->diseaseName);
+        sprintf(fileNameBuffer, "%s\\expression_%s", argv[2], disease->diseaseName);
         FILE *outputFile = fopen(fileNameBuffer, "w");
-        for (ListOfChromosomes *entry = disease->listOfChromosomes; NULL != entry; entry = entry->next) {
-            Chromosome *chromosome = entry->chromosome;
-            fprintf(outputFile, "%s\n", chromosome->name);
-            for (int i = 0; i <= chromosome->size; i++) {
-                if (chromosome->stdDevState[i] != 0 && chromosome->stdDevState[i]->n * 10 >= nGoodFiles) {  // Only bother with ones where there's at least 10% with at least one read mapped
-                    _int64 oldN = chromosome->stdDevState[i]->n;
-                    chromosome->stdDevState[i]->n = nGoodFiles; // Account for the ones with zero reads mapped here
-                    fprintf(outputFile, "%d\t%lld\t%e\t%e\n", i, oldN, chromosome->stdDevState[i]->getMean(), chromosome->stdDevState[i]->getStdDev());
+        if (NULL == outputFile) {
+            fprintf(stderr, "Unable to open output file '%s'\n", argv[2]);
+        } else {
+            for (ListOfChromosomes *entry = disease->listOfChromosomes; NULL != entry; entry = entry->next) {
+                Chromosome *chromosome = entry->chromosome;
+                fprintf(outputFile, "%s\n", chromosome->name);
+                for (int i = 0; i <= chromosome->size; i++) {
+                    if (chromosome->stdDevState[i] != 0 && chromosome->stdDevState[i]->n * 10 >= nGoodFiles) {  // Only bother with ones where there's at least 10% with at least one read mapped
+                        _int64 oldN = chromosome->stdDevState[i]->n;
+                        chromosome->stdDevState[i]->n = nGoodFiles; // Account for the ones with zero reads mapped here
+                        fprintf(outputFile, "%d\t%lld\t%e\t%e\n", i, oldN, chromosome->stdDevState[i]->getMean(), chromosome->stdDevState[i]->getStdDev());
+                    }
                 }
             }
+            fclose(outputFile);
         }
-        fclose(outputFile);
 
         delete disease->listOfChromosomes;  // This deletes the whole thing in one fell swoop.
         disease->listOfChromosomes = NULL;
 
     }
-    fprintf(stderr, "Took %lldms\n", timeInMillis() - start);
-
-
+    fprintf(stderr, "Took %lldm\n", (timeInMillis() - start + 30000)/60000);
 
 	return 0;
 }

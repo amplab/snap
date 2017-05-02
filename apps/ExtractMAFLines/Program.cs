@@ -35,7 +35,7 @@ namespace ExtractMAFLines
             {
                 var case_ = caseEntry.Value;
 
-                if (case_.extracted_maf_lines != null && case_.extracted_maf_lines != "" || case_.maf_filename == null || case_.maf_filename == "")
+                if (case_.extracted_maf_lines_filename != null && case_.extracted_maf_lines_filename != "" || case_.maf_filename == null || case_.maf_filename == "")
                 {
                     continue;
                 }
