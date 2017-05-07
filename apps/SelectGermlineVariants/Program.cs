@@ -108,10 +108,10 @@ namespace SelectGermlineVariants
         {
             bool firstRun = true;
             int nVariantsSelected = 0;
+            var timer = new Stopwatch();
+
             while (true)
             {
-                var timer = new Stopwatch();
-
                 ASETools.Case case_;
                 lock (workItems)
                 {

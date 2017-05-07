@@ -62,7 +62,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                script.WriteLine(stateOfTheWorld.configuration.binaryDirectory + "GenerateMAFConfiguration -configuration " + stateOfTheWorld.configuration.configuationFilePathname);
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateMAFConfiguration -configuration " + stateOfTheWorld.configuration.configuationFilePathname);
 
                 nDone = 0;
                 nAddedToScript = 1;
@@ -130,7 +130,7 @@ namespace ASEProcessManager
 
                 if (null == filesToDownload)
                 {
-                    script.WriteLine(stateOfTheWorld.configuration.binaryDirectory + "GenerateCases -configuration " + stateOfTheWorld.configuration.configuationFilePathname);
+                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateCases -configuration " + stateOfTheWorld.configuration.configuationFilePathname);
                     nAddedToScript = 1;
                     nWaitingForPrerequisites = 0;
                 }
@@ -175,7 +175,7 @@ namespace ASEProcessManager
                     var case_ = caseEntry.Value;
 
                     HandleFile(stateOfTheWorld, case_.tumor_rna_file_id, case_.tumor_rna_file_bam_md5, case_.case_id, ASETools.DerivedFile.Type.TumorRNAAllcount,
-                        ASETools.allcountExtension, script, hpcScript, ref filesToDownload, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                        ASETools.tumorRNAAllcountExtension, script, hpcScript, ref filesToDownload, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
 
                     HandleFile(stateOfTheWorld, case_.normal_dna_file_id, case_.normal_dna_file_bam_md5, case_.case_id, ASETools.DerivedFile.Type.NormalDNAAllcount,
                         ASETools.normalDNAAllcountExtension, script, hpcScript, ref filesToDownload, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
@@ -203,6 +203,10 @@ namespace ASEProcessManager
                     }
                     else if (stateOfTheWorld.containsDerivedFile(case_id, file_id, type))
                     {
+                        if (stateOfTheWorld.getDrivedFile(case_id, file_id, type).fileinfo.Length < 200 * 1024)
+                        {
+                            Console.WriteLine("Suspiciously small allcount file of size " + stateOfTheWorld.getDrivedFile(case_id, file_id, type).fileinfo.Length + ": " + stateOfTheWorld.getDrivedFile(case_id, file_id, type).fileinfo.FullName);
+                        }
                         nDone++;
                     }
                     else
@@ -210,7 +214,7 @@ namespace ASEProcessManager
                         nAddedToScript++;
                         string caseDirectory = ASETools.GetDirectoryFromPathname(stateOfTheWorld.downloadedFiles[file_id].fileInfo.FullName) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_id + @"\";
                         script.WriteLine("md " + caseDirectory);
-                        script.WriteLine(stateOfTheWorld.configuration.binaryDirectory + "CountReadsCovering " + stateOfTheWorld.configuration.indexDirectory + " -a " + stateOfTheWorld.downloadedFiles[file_id].fileInfo.FullName + " - | gzip -9 > " +
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "CountReadsCovering " + stateOfTheWorld.configuration.indexDirectory + " -a " + stateOfTheWorld.downloadedFiles[file_id].fileInfo.FullName + " - | gzip -9 > " +
                             caseDirectory + file_id + extension);
 
                         hpcScript.WriteLine(jobAddString + 
@@ -370,7 +374,7 @@ namespace ASEProcessManager
                     return;
                 }
 
-                script.WriteLine(stateOfTheWorld.configuration.binaryDirectory + "ComputeMD5 " + downloadedFile.fileInfo.FullName + " > " + downloadedFile.fileInfo.FullName + ".md5");
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ComputeMD5 " + downloadedFile.fileInfo.FullName + " > " + downloadedFile.fileInfo.FullName + ".md5");
                 hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "ComputeMD5IntoFile.cmd " +
                     stateOfTheWorld.configuration.hpcBinariesDirectory + " " + downloadedFile.fileInfo.FullName + " " + downloadedFile.fileInfo.FullName + ".md5");
                 nAddedToScript++;
@@ -531,7 +535,7 @@ namespace ASEProcessManager
 
                     if (nOnCurrentLine == 0) 
                     {
-                        script.Write(stateOfTheWorld.configuration.binaryDirectory + "SelectGermlineVariants.exe");
+                        script.Write(stateOfTheWorld.configuration.binariesDirectory + "SelectGermlineVariants.exe");
                         hpcScript.Write(stateOfTheWorld.configuration.hpcBinariesDirectory + "SelectGermlineVariants.exe");
                     }
 
@@ -600,7 +604,7 @@ namespace ASEProcessManager
                             continue;
                         }
 
-                        script.WriteLine(stateOfTheWorld.configuration.binaryDirectory + "ExpressionDistribution.exe " + stateOfTheWorld.configuration.casesFilePathname + " " +
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ExpressionDistribution.exe " + stateOfTheWorld.configuration.casesFilePathname + " " +
                             stateOfTheWorld.configuration.expressionFilesDirectory + " " + ASETools.Case.ProjectColumn + " " + ASETools.Case.TumorRNAAllcountFilenameColumn + " " + disease);
 
                         hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "ExpressionDistribution.exe " + stateOfTheWorld.configuration.casesFilePathname + " " +
@@ -654,7 +658,7 @@ namespace ASEProcessManager
 
                 if (nAddedToScript > 0)
                 {
-                    script.WriteLine(stateOfTheWorld.configuration.binaryDirectory + "ExtractMAFLines");
+                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ExtractMAFLines");
                     hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "ExtractMAFLines");
                 }
             }
@@ -753,7 +757,7 @@ namespace ASEProcessManager
 
             void WriteScripts(StateOfTheWorld stateOfTheWorld, List<ASETools.Case> cases, StreamWriter script, StreamWriter hpcScript)
             {
-                script.Write(stateOfTheWorld.configuration.binaryDirectory + "RegionalExpression " + stateOfTheWorld.expressionFiles[cases[0].disease()].FullName );
+                script.Write(stateOfTheWorld.configuration.binariesDirectory + "RegionalExpression " + stateOfTheWorld.expressionFiles[cases[0].disease()].FullName );
                 hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "RegionalExpression " + stateOfTheWorld.expressionFiles[cases[0].disease()].FullName);
                 foreach (var case_ in cases) {
                     script.Write(" " + case_.case_id);
@@ -872,8 +876,12 @@ namespace ASEProcessManager
                     }
                     else
                     {
-                        script.WriteLine(stateOfTheWorld.configuration.binaryDirectory + "ExtractReads " + case_.case_id + "-d");
-                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "ExtractReads "  + case_.case_id + "-d");
+                        string outputFilename = ASETools.GetDirectoryFromPathname(case_.tumor_dna_filename) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + case_.tumor_dna_file_id + ASETools.dnaReadsAtSelectedVariantsExtension;
+
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -d " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
+                            stateOfTheWorld.configuration.binariesDirectory + "samtools.exe");
+                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -d " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
+                            stateOfTheWorld.configuration.hpcBinariesDirectory + "samtools.exe");
 
                         nAddedToScript++;
                     }
@@ -888,8 +896,12 @@ namespace ASEProcessManager
                     }
                     else
                     {
-                        script.WriteLine(stateOfTheWorld.configuration.binaryDirectory + "ExtractReads " + case_.case_id + "-r");
-                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "ExtractReads " + case_.case_id + "-r");
+                        string outputFilename = ASETools.GetDirectoryFromPathname(case_.tumor_rna_filename) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + case_.tumor_rna_file_id + ASETools.rnaReadsAtSelectedVariantsExtension;
+
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -r " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
+                            stateOfTheWorld.configuration.binariesDirectory + "samtools.exe");
+                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -r " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
+                            stateOfTheWorld.configuration.hpcBinariesDirectory + "samtools.exe");
 
                         nAddedToScript++;
                     }
@@ -1095,6 +1107,23 @@ namespace ASEProcessManager
             public bool containsDerivedFile(string case_id, string derived_from_file_id, ASETools.DerivedFile.Type type)
             {
                 return derivedFiles.ContainsKey(case_id) && derivedFiles[case_id].Where(x => x.derived_from_file_id == derived_from_file_id && x.type == type).Count() != 0;
+            }
+
+            public ASETools.DerivedFile getDrivedFile(string case_id, string derived_from_file_id, ASETools.DerivedFile.Type type)
+            {
+                if (!derivedFiles.ContainsKey(case_id))
+                {
+                    return null;
+                }
+
+                var set = derivedFiles[case_id].Where(x => x.derived_from_file_id == derived_from_file_id && x.type == type);
+
+                if (set.Count() == 0)
+                {
+                    return null;
+                }
+
+                return set.ToList()[0];
             }
         } // StateOfTheWorld
 
@@ -1383,7 +1412,7 @@ namespace ASEProcessManager
 
                 foreach (var file in allFilesToDownload)
                 {
-                    downloadScript.WriteLine(configuration.binaryDirectory + "gdc-client download --token-file " + configuration.accessTokenPathname + " " + file);
+                    downloadScript.WriteLine(configuration.binariesDirectory + "gdc-client download --no-file-md5sum --token-file " + configuration.accessTokenPathname + " " + file);    // use the no MD5 sum option because we compute it ourselves later (and all a failed check does is print a message that we'll never see anyway)
                     bytesToDownload += stateOfTheWorld.fileSizesFromGDC[file];
                 }
 

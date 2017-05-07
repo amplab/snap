@@ -51,8 +51,6 @@ namespace ExtractMAFLines
 
             Console.WriteLine("Processing " + nCasesToProcess + " cases with " + casesByMAF.Count() + " MAF files.");
 
-
-
             foreach (var casesForThisMAFEntry in casesByMAF)
             {
                 var casesForThisMAF = casesForThisMAFEntry.Value;

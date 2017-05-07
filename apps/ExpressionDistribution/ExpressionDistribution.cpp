@@ -178,6 +178,8 @@ void ProcessAllcountFile(char *filename, Disease *disease)
     static _int64 nAllocated = 0;
     static _int64 nHit = 0;
 
+    int lineNumber = 0;
+
     HANDLE hFile = CreateFile(filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (INVALID_HANDLE_VALUE == hFile) {
         disease->nMissingFiles++;
@@ -188,7 +190,6 @@ void ProcessAllcountFile(char *filename, Disease *disease)
 
     CompressedLineReader *reader = new CompressedLineReader(filename);
 
-
     const int lineBufferSize = 1000;
     char lineBuffer[lineBufferSize];
 
@@ -197,6 +198,7 @@ void ProcessAllcountFile(char *filename, Disease *disease)
         disease->nCorruptFiles++;
         goto done;
     }
+    lineNumber++;
 
     //
     // Second line is the total and mapped read count
@@ -206,6 +208,7 @@ void ProcessAllcountFile(char *filename, Disease *disease)
         disease->nCorruptFiles++;
         goto done;
     }
+    lineNumber++;
 
     _int64 nMappedReads, nLowQualityReads, nMitochondrialReads, nTotalReads;
 
@@ -226,6 +229,7 @@ void ProcessAllcountFile(char *filename, Disease *disease)
         disease->nCorruptFiles++;
         goto done;
     }
+    lineNumber += 2;
 
     int numContigs;
     if (1 != sscanf(lineBuffer, "NumContigs: %d\n", &numContigs) || numContigs < 1 || numContigs > 1000) {
@@ -239,6 +243,7 @@ void ProcessAllcountFile(char *filename, Disease *disease)
         disease->nCorruptFiles++;
         goto done;
     }
+    lineNumber++;
 
     lineBuffer[lineBufferSize - 1] = '\0';
 
@@ -248,6 +253,7 @@ void ProcessAllcountFile(char *filename, Disease *disease)
             disease->nCorruptFiles++;
             goto done;
         }
+        lineNumber++;
 
         char chromosomeName[lineBufferSize];
         int chromosomeSize;
@@ -308,6 +314,8 @@ void ProcessAllcountFile(char *filename, Disease *disease)
     int nextOffset = 0;
     int currentMappedCount = 0;
     while (reader->getNextLine(lineBuffer, lineBufferSize)) {
+        lineNumber++;
+
         if (lineBuffer[0] == '>') {
             char chromosomeName[lineBufferSize];
             if (lineBuffer[1] != 'c' || lineBuffer[2] != 'h' || lineBuffer[3] != 'r') {
@@ -423,7 +431,7 @@ void ProcessAllcountFile(char *filename, Disease *disease)
     // If we get here, we fell off the end of the file without seeing **done**, so it's been truncated.
     //
     lineBuffer[lineBufferSize - 1] = '\0';
-    fprintf(stderr, "Truncated file %s, last line: %s\n", filename, lineBuffer);
+    fprintf(stderr, "Truncated file %s, last line (%d): %s\n", filename, lineNumber, lineBuffer);
     disease->nCorruptFiles++;
 
 
@@ -440,6 +448,7 @@ void ProcessDisease(Disease *disease)
     disease->listOfChromosomes = NULL;
     int nFiles = 0;
     _int64 start = timeInMillis();
+
     for (ListOfFilenames *allcountFile = disease->allCountFiles; NULL != allcountFile; allcountFile = allcountFile->next) {
         nFiles++;
         //printf("%d: %s\t(%llds)\n", nFiles, allcountFile->filename, (timeInMillis() - start) / 1000); fflush(stdout);
@@ -451,6 +460,7 @@ void ProcessDisease(Disease *disease)
 void usage()
 {
     fprintf(stderr, "usage: ExpressionDistribution casesFilename expressionFilesDirectory projectColumn tumorRNAAllcountColumn <diseaseName>\n");
+    exit(1);
 }
 
 int main(int argc, char* argv[])
