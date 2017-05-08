@@ -566,6 +566,8 @@ namespace ASELib
             public string azureScriptFilename = ""; // The empty string says to black hole this script
             public string expressionFilesDirectory = @"\\msr-genomics-0\d$\gdc\expression\";
             public string completedVCFsDirectory = "";  // Where completed VCFs from Azure are dropped
+            public int regionalExpressionRegionSize = 1000;
+
             public string[] commandLineArgs = null;    // The args excluding -configuration <filename>
 
             ASEConfirguation()
@@ -665,6 +667,8 @@ namespace ASELib
                         retVal.azureScriptFilename = fields[1];
                     } else if (type == "completed vcfs directory") {
                         retVal.completedVCFsDirectory = fields[1];
+                    } else if (type == "regional expression region size") {
+                        retVal.regionalExpressionRegionSize = Convert.ToInt32(fields[1]);   // should probably wrap this in a try
                     } else {
                         Console.WriteLine("ASEConfiguration.loadFromFile: configuration file " + pathname + " contains a line with an unknown configuration parameter type: " + line + ".  Ignoring.");
                         continue;
@@ -1327,7 +1331,7 @@ namespace ASELib
             lock (state)
             {
                 Console.WriteLine(String.Format("{0," + directoryFieldLength + "}", downloadedFilesDirectory) + " " + String.Format("{0,16}", "" + nDownloadedFiles + " (" + SizeToUnits(totalBytesInDownloadedFiles) + "B)") + " " +
-                    String.Format("{0,13}", "" + nDerivedFiles + " (" + SizeToUnits(totalBytesInDerivedFiles) + ")") + " " + String.Format("{0,9}", SizeToUnits(freeBytesAvailable) +"B") + " " +
+                    String.Format("{0,13}", "" + nDerivedFiles + " (" + SizeToUnits(totalBytesInDerivedFiles) + "B)") + " " + String.Format("{0,10}", SizeToUnits(freeBytesAvailable) +"B") + " " +
                     String.Format("{0,9}", ElapsedTimeInSeconds(stopwatch)));
 
                 state.nDownloadedFiles += nDownloadedFiles;
@@ -1369,7 +1373,7 @@ namespace ASELib
             {
                 Console.Write("-");
             }
-            Console.WriteLine(" ---------------- ------------- --------- ---------");
+            Console.WriteLine(" ---------------- ------------- ---------- ---------");
 
             var state = new ScanFilesystemState();
             var threads = new List<Thread>();

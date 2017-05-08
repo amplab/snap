@@ -319,7 +319,7 @@ int main(int argc, char* argv[])
     //
     int nThreads = GetNumberOfProcessors();
 #if _DEBUG
-    /*BJB*/ nThreads = 1;
+    /*BJB*/// nThreads = 1;
 #endif // _DEBUG
 
     DataSupplier::ThreadCount = nThreads;
