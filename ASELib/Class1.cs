@@ -2437,10 +2437,6 @@ namespace ASELib
                     // It's a chromosome header.
                     //
                     currentChromosome = statLine.ToLower();
-                    if (currentChromosome.Substring(0, 3) == "chr") // Clip off the leading "chr," if it exists
-                    {
-                        currentChromosome = currentChromosome.Substring(3);
-                    }
                     currentMapping = new Dictionary<int, MeanAndStdDev>();
                     expression.Add(currentChromosome, currentMapping);
                     continue;

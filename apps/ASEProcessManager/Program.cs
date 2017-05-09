@@ -714,7 +714,7 @@ namespace ASEProcessManager
                 filesToDownload = null;
 
                 var casesReadyToGoByDisease = new Dictionary<string, List<ASETools.Case>>();
-                const int maxCasesPerCommandLine = 800;
+                const int maxCasesPerCommandLine = 500;
 
                 foreach (var caseEntry in stateOfTheWorld.cases)
                 {

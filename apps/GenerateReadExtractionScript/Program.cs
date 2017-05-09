@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ASELib;
 using System.IO;
 using System.Diagnostics;
+using System.Threading;
 
 namespace GenerateScriptFromVariants
 {
@@ -157,10 +158,39 @@ namespace GenerateScriptFromVariants
             }
 
             //
+            // Copy the generate consolodated extracted reads and samtools binaries to be local, so that we don't have a problem with overused remote
+            // shares.
+            //
+            const string localSamtoolsPathname = @".\samtools.exe";
+            const string localGCERPathname = @".\GenerateConsolodatedExtractedReads.exe";
+            bool copyWorked = false;
+            for (int retryCount = 0; retryCount < 10; retryCount++)
+            {
+                try
+                {
+                    File.Copy(generateConsoldatedExtractedReadsPathname, localGCERPathname, true);
+                    File.Copy(samtoolsPathname, localSamtoolsPathname, true);
+                    copyWorked = true;
+                    break;
+                } catch {
+                    Console.WriteLine("Failed to copy binaries.  Sleeping 10s and retrying.");
+                    Thread.Sleep(10000);
+                }
+            }
+
+            if (!copyWorked)
+            {
+                Console.WriteLine("Too many retries copying binaries.  Giving up.");
+                File.Delete(localSamtoolsPathname);
+                File.Delete(localGCERPathname);
+                return 1;
+            }
+
+            //
             // And run GeneateConsolodatedExtractedReads on the file we created.
             //
 
-            var startInfo = new ProcessStartInfo(generateConsoldatedExtractedReadsPathname, " - " + outputFilename + " 0 " + samtoolsPathname);
+            var startInfo = new ProcessStartInfo(localGCERPathname, " - " + outputFilename + " 0 " + localSamtoolsPathname);
             startInfo.RedirectStandardInput = true;
             startInfo.UseShellExecute = false;
             var process = Process.Start(startInfo);
@@ -181,6 +211,9 @@ namespace GenerateScriptFromVariants
                 File.Delete(outputFilename);
                 File.Delete(outputFilename + ".index");
             }
+
+            File.Delete(localSamtoolsPathname);
+            File.Delete(localGCERPathname);
 
             return process.ExitCode;
         }
