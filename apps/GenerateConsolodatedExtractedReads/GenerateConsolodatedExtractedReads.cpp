@@ -445,7 +445,7 @@ ProcessorThreadMain(void *param)
                         //
                         linePtr = strchr(linePtr, ':');
                         if (NULL == linePtr) {
-                            fprintf(stderr, "Unable to find colon in input line: ", line);
+                            fprintf(stderr, "Unable to find colon in input line: %s\n", line);
                             samtoolsRetryCount++;   // Don't retry
                             break;
                         }

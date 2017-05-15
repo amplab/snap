@@ -39,6 +39,7 @@ obj
 *.log
 *.unsuccessfulbuild
 *.csproj.user
+.vs
 
 # Compiled binaries
 /snap
@@ -57,6 +58,8 @@ obj
 /apps/ValidateVCFs/bin
 /apps/CheckGzip/bin
 /apps/GenerateReadExtractionScript/bin
+/apps/SelectGenes/bin
+
 
 
 

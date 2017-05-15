@@ -22,6 +22,11 @@ namespace GenerateMAFConfiguration
 
             var configuration = ASETools.ASEConfirguation.loadFromFile(args);
 
+            if (configuration == null)
+            {
+                return;
+            }
+
             var webClient = ASETools.getWebClient();
 
             if (null == webClient)
@@ -48,7 +53,7 @@ namespace GenerateMAFConfiguration
             int from = 1;
             for (; ; )
             {
-                var response = webClient.DownloadString(ASETools.urlPrefix + "files?from=" + from + "&size=100&pretty=true&filters=" + mafFilesRequest + "&fields=data_type,updated_datetime,created_datetime,file_name,md5sum,data_format,access,platform,state,file_id,data_category,file_size,type,experimental_strategy,submitter_id,cases.samples.sample_id,analysis.workflow_link");
+                var response = webClient.DownloadString(ASETools.urlPrefix + "files?from=" + from + "&size=100&pretty=true&filters=" + mafFilesRequest + "&fields=data_type,updated_datetime,created_datetime,file_name,md5sum,data_format,access,platform,state,file_id,data_category,file_size,type,experimental_strategy,submitter_id,cases.samples.sample_id,analysis.workflow_link&sort=file_id:asc");
                 ASETools.GDCData<ASETools.GDCFile> fileData = (ASETools.GDCData<ASETools.GDCFile>)filesSerializer.ReadObject(new MemoryStream(Encoding.ASCII.GetBytes(response)));
 
                 if (null == fileData || null == fileData.data || null == fileData.data.hits)

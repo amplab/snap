@@ -603,7 +603,7 @@ int main(int argc, char* argv[])
         fprintf(outputFile, "%s\nNumContigs: %d\nContigName\tLength\n", headerBuffer, genome->getNumContigs());
         for (int i = 0; i < genome->getNumContigs(); i++) {
             const Genome::Contig *contig = genome->getContigs() + i;
-            fprintf(outputFile, "%s\t%d\n", contig->name, contig->length);
+            fprintf(outputFile, "%s\t%lld\n", contig->name, contig->length);
         }
 
         bool sawZero = true;

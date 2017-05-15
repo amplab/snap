@@ -61,6 +61,11 @@ namespace GenerateCases
 
             var configuration = ASETools.ASEConfirguation.loadFromFile(args);
 
+            if (null == configuration)
+            {
+                return;
+            }
+
             var diseaseSelector = new DiseaseSelector(configuration.commandLineArgs);
 
             Dictionary<string, ASETools.DownloadedFile> downloadedFiles = new Dictionary<string,ASETools.DownloadedFile>();
@@ -289,7 +294,7 @@ namespace GenerateCases
                     {
                         foreach (var file in fileData.data.hits)
                         {
-                            if (file.state != "live" && file.state != "submitted")
+                            if (file.state != "live" && file.state != "submitted" || configuration.excludedFileIDs.Contains(file.file_id))
                             {
                                 continue;
                             }                         

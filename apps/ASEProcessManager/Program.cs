@@ -526,7 +526,7 @@ namespace ASEProcessManager
 
                     nAddedToScript++;
 
-                    if (nOnCurrentLine >= 800)
+                    if (nOnCurrentLine >= 16)
                     {
                         script.WriteLine();
                         hpcScript.WriteLine();
@@ -714,7 +714,7 @@ namespace ASEProcessManager
                 filesToDownload = null;
 
                 var casesReadyToGoByDisease = new Dictionary<string, List<ASETools.Case>>();
-                const int maxCasesPerCommandLine = 500;
+                const int maxCasesPerCommandLine = 200;
 
                 foreach (var caseEntry in stateOfTheWorld.cases)
                 {
@@ -758,7 +758,7 @@ namespace ASEProcessManager
             void WriteScripts(StateOfTheWorld stateOfTheWorld, List<ASETools.Case> cases, StreamWriter script, StreamWriter hpcScript)
             {
                 script.Write(stateOfTheWorld.configuration.binariesDirectory + "RegionalExpression " + stateOfTheWorld.expressionFiles[cases[0].disease()].FullName + " " + stateOfTheWorld.configuration.regionalExpressionRegionSize + " ");
-                hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "RegionalExpression " + stateOfTheWorld.expressionFiles[cases[0].disease()].FullName);
+                hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "RegionalExpression " + stateOfTheWorld.expressionFiles[cases[0].disease()].FullName + " " + stateOfTheWorld.configuration.regionalExpressionRegionSize + " ");
                 foreach (var case_ in cases) {
                     script.Write(" " + case_.case_id);
                     hpcScript.Write(" " + case_.case_id);
@@ -866,17 +866,17 @@ namespace ASEProcessManager
                 {
                     var case_ = caseEntry.Value;
 
-                    if (case_.dna_reads_at_selected_variants_filename != "")
+                    if (case_.normal_dna_reads_at_selected_variants_filename != "")
                     {
                         nDone++;
                     }
-                    else if (!stateOfTheWorld.fileDownloadedAndVerified(case_.tumor_dna_file_id, case_.tumor_dna_file_bam_md5) || case_.selected_variants_filename == "" || case_.extracted_maf_lines_filename == "")
+                    else if (!stateOfTheWorld.fileDownloadedAndVerified(case_.normal_dna_file_id, case_.normal_dna_file_bam_md5) || case_.selected_variants_filename == "" || case_.extracted_maf_lines_filename == "")
                     {
                         nWaitingForPrerequisites++;
                     }
                     else
                     {
-                        string outputFilename = ASETools.GetDirectoryFromPathname(case_.tumor_dna_filename) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + case_.tumor_dna_file_id + ASETools.dnaReadsAtSelectedVariantsExtension;
+                        string outputFilename = ASETools.GetDirectoryFromPathname(case_.normal_dna_filename) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + case_.normal_dna_file_id + ASETools.normalDNAReadsAtSelectedVariantsExtension;
 
                         script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -d " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
                             stateOfTheWorld.configuration.binariesDirectory + "samtools.exe");
@@ -886,7 +886,27 @@ namespace ASEProcessManager
                         nAddedToScript++;
                     }
 
-                    if (case_.rna_reads_at_selected_variants_filename != "")
+                    if (case_.tumor_dna_reads_at_selected_variants_filename != "")
+                    {
+                        nDone++;
+                    }
+                    else if (!stateOfTheWorld.fileDownloadedAndVerified(case_.tumor_dna_file_id, case_.tumor_dna_file_bam_md5) || case_.selected_variants_filename == "" || case_.extracted_maf_lines_filename == "")
+                    {
+                        nWaitingForPrerequisites++;
+                    }
+                    else
+                    {
+                        string outputFilename = ASETools.GetDirectoryFromPathname(case_.tumor_dna_filename) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + case_.tumor_dna_file_id + ASETools.tumorDNAReadsAtSelectedVariantsExtension;
+
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -d " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
+                            stateOfTheWorld.configuration.binariesDirectory + "samtools.exe");
+                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -d " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
+                            stateOfTheWorld.configuration.hpcBinariesDirectory + "samtools.exe");
+
+                        nAddedToScript++;
+                    }
+
+                    if (case_.tumor_rna_reads_at_selected_variants_filename != "")
                     {
                         nDone++;
                     }
@@ -896,7 +916,7 @@ namespace ASEProcessManager
                     }
                     else
                     {
-                        string outputFilename = ASETools.GetDirectoryFromPathname(case_.tumor_rna_filename) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + case_.tumor_rna_file_id + ASETools.rnaReadsAtSelectedVariantsExtension;
+                        string outputFilename = ASETools.GetDirectoryFromPathname(case_.tumor_rna_filename) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + case_.tumor_rna_file_id + ASETools.tumorRNAReadsAtSelectedVariantsExtension;
 
                         script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -r " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
                             stateOfTheWorld.configuration.binariesDirectory + "samtools.exe");
@@ -905,8 +925,32 @@ namespace ASEProcessManager
 
                         nAddedToScript++;
                     }
+
+                    if (case_.normal_rna_file_id != "")
+                    {
+                        if (case_.normal_rna_reads_at_selected_variants_filename != "")
+                        {
+                            nDone++;
+                        }
+                        else if (!stateOfTheWorld.fileDownloadedAndVerified(case_.normal_rna_file_id, case_.normal_rna_file_bam_md5) || case_.selected_variants_filename == "" || case_.extracted_maf_lines_filename == "")
+                        {
+                            nWaitingForPrerequisites++;
+                        }
+                        else
+                        {
+                            string outputFilename = ASETools.GetDirectoryFromPathname(case_.normal_rna_filename) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + case_.normal_rna_file_id + ASETools.normalRNAReadsAtSelectedVariantsExtension;
+
+                            script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -r " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
+                                stateOfTheWorld.configuration.binariesDirectory + "samtools.exe");
+                            hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -r " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
+                                stateOfTheWorld.configuration.hpcBinariesDirectory + "samtools.exe");
+
+                            nAddedToScript++;
+                        }
+                    } // If we even have normal RNA
                 }
             } // EvaluateStage
+
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
             {
@@ -914,6 +958,83 @@ namespace ASEProcessManager
                 return true;
             } // EvaluateDependencies
         } // ExtractReadsProcessingStage
+
+        class SelectGenesProcessingStage : ProcessingStage
+        {
+            public SelectGenesProcessingStage() { }
+
+            public string GetStageName()
+            {
+                return "Select Genes";
+            }
+
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+                filesToDownload = new List<string>();
+
+                if (stateOfTheWorld.selectedGenes != null)
+                {
+                    nDone++;
+                    return;
+                }
+
+                foreach (var caseEntry in stateOfTheWorld.cases)
+                {
+                    if (caseEntry.Value.extracted_maf_lines_filename == "")
+                    {
+                        nWaitingForPrerequisites++;
+                        return;
+                    }
+                }
+
+                nAddedToScript++;
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "SelectGenes.exe");
+                hpcScript.WriteLine(stateOfTheWorld.configuration.hpcBinariesDirectory + "SelectGenes.exe");
+            }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
+            {
+                if (stateOfTheWorld.selectedGenes == null)
+                {
+                    return true;    // No output means no violated dependencies
+                }
+
+                if (stateOfTheWorld.cases == null)
+                {
+                    Console.WriteLine("Dependency violation: Have a selected genes file without having cases.");
+                    return false;
+                }
+
+                var selectedGenesWriteTime = new FileInfo(stateOfTheWorld.configuration.selectedGenesFilename).LastWriteTime;
+
+                foreach (var caseEntry in stateOfTheWorld.cases)
+                {
+                    var case_ = caseEntry.Value;
+
+                    if (case_.extracted_maf_lines_filename == "" )
+                    {
+                        Console.WriteLine("Dependency violation: case " + case_.case_id + " does not have extracted MAF lines, but we have selected genes.");
+                        return false;   // Don't worry about the others, we need to regenerate the selected genes file regardless.
+                    }
+
+                    if (new FileInfo (case_.extracted_maf_lines_filename).LastWriteTime > selectedGenesWriteTime)
+                    {
+                        Console.WriteLine("Dependency violation: the selected genes file is older than an extracted MAF lines file " + case_.extracted_maf_lines_filename);
+                        return false;
+                    }
+                }
+
+                return true;
+            } // EvaluateDependencies
+
+
+
+        } // SelectGenesProcessingStage
 
         //
         // This represents the state of the world.  Processing stages look at this state and generate actions to move us along.
@@ -934,10 +1055,16 @@ namespace ASEProcessManager
             public List<string> diseases = null;
             public Dictionary<string, string> fileIdToCaseId = null;
             public Dictionary<string, long> fileSizesFromGDC = null;
+            public List<ASETools.SeletedGene> selectedGenes = null;
 
             public void DetermineTheStateOfTheWorld()
             {
                 ASETools.ScanFilesystems(configuration, out downloadedFiles, out derivedFiles);
+
+                if (File.Exists(configuration.selectedGenesFilename))
+                {
+                    selectedGenes = ASETools.SeletedGene.LoadFromFile(configuration.selectedGenesFilename);
+                }
 
                 mafInfo = ASETools.MAFInfo.LoadMAFManifest(configuration.mafManifestPathname);
                 cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
@@ -1290,6 +1417,7 @@ namespace ASEProcessManager
             processingStages.Add(new RegionalExpressionProcessingStage());
             processingStages.Add(new ExpressionNearMutationsProcessingStage());
             processingStages.Add(new ExtractReadsProcessingStage());
+            processingStages.Add(new SelectGenesProcessingStage());
 
             if (checkDependencies)
             {
@@ -1318,7 +1446,7 @@ namespace ASEProcessManager
             }
             else
             {
-                hpcScript = ASETools.CreateStreamWriterWithRetry(configuration.hpcScriptFilename);
+                hpcScript = ASETools.CreateStreamWriterWithRetry(configuration.scriptOutputDirectory + configuration.hpcScriptFilename);
             }
 
 
@@ -1328,10 +1456,10 @@ namespace ASEProcessManager
             }
             else
             {
-                azureScript = ASETools.CreateStreamWriterWithRetry(configuration.azureScriptFilename);
+                azureScript = ASETools.CreateStreamWriterWithRetry(configuration.scriptOutputDirectory + configuration.azureScriptFilename);
             }
 
-            var linuxScript = ASETools.CreateStreamWriterWithRetry(linuxScriptFilename);
+            var linuxScript = ASETools.CreateStreamWriterWithRetry(configuration.scriptOutputDirectory + linuxScriptFilename);
 
             var allFilesToDownload = new List<string>();
 

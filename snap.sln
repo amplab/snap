@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2013
-VisualStudioVersion = 12.0.21005.1
+# Visual Studio 15
+VisualStudioVersion = 15.0.26403.7
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "snap", "apps\snap\snap.vcxproj", "{76E127A5-2247-4A10-9DC8-59518C7C6636}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -36,9 +36,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SNAPCommand", "apps\SNAPCom
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{12F27CBC-65ED-4B17-A4F3-55481C5CE4CE}"
-	ProjectSection(SolutionItems) = preProject
-		Performance1.psess = Performance1.psess
-	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ASEProcessManager", "apps\ASEProcessManager\ASEProcessManager.csproj", "{FBD81148-0D0D-4F9C-B78C-7BF97369B41C}"
 EndProject
@@ -78,6 +75,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GenerateConsolodatedExtract
 	ProjectSection(ProjectDependencies) = postProject
 		{E620DC13-195C-41EF-B33B-8FE7DE9F8ADC} = {E620DC13-195C-41EF-B33B-8FE7DE9F8ADC}
 	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SelectGenes", "apps\SelectGenes\SelectGenes.csproj", "{8FFC45BF-451B-428E-872F-6BEF0E70A55B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -372,6 +371,22 @@ Global
 		{784CA826-F61A-4E50-978E-E3D5641E28EF}.Release|Win32.Build.0 = Release|Win32
 		{784CA826-F61A-4E50-978E-E3D5641E28EF}.Release|x64.ActiveCfg = Release|x64
 		{784CA826-F61A-4E50-978E-E3D5641E28EF}.Release|x64.Build.0 = Release|x64
+		{8FFC45BF-451B-428E-872F-6BEF0E70A55B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8FFC45BF-451B-428E-872F-6BEF0E70A55B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8FFC45BF-451B-428E-872F-6BEF0E70A55B}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{8FFC45BF-451B-428E-872F-6BEF0E70A55B}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{8FFC45BF-451B-428E-872F-6BEF0E70A55B}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{8FFC45BF-451B-428E-872F-6BEF0E70A55B}.Debug|Win32.Build.0 = Debug|Any CPU
+		{8FFC45BF-451B-428E-872F-6BEF0E70A55B}.Debug|x64.ActiveCfg = Debug|x64
+		{8FFC45BF-451B-428E-872F-6BEF0E70A55B}.Debug|x64.Build.0 = Debug|x64
+		{8FFC45BF-451B-428E-872F-6BEF0E70A55B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8FFC45BF-451B-428E-872F-6BEF0E70A55B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8FFC45BF-451B-428E-872F-6BEF0E70A55B}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{8FFC45BF-451B-428E-872F-6BEF0E70A55B}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{8FFC45BF-451B-428E-872F-6BEF0E70A55B}.Release|Win32.ActiveCfg = Release|Any CPU
+		{8FFC45BF-451B-428E-872F-6BEF0E70A55B}.Release|Win32.Build.0 = Release|Any CPU
+		{8FFC45BF-451B-428E-872F-6BEF0E70A55B}.Release|x64.ActiveCfg = Release|x64
+		{8FFC45BF-451B-428E-872F-6BEF0E70A55B}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
