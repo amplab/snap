@@ -126,7 +126,7 @@ namespace GenerateCases
             periodicStopwatch.Start();
 
             //
-            // Rrun through all the case Ids we saw and load the info on all cases.
+            // Run through all the case Ids we saw and load the info on all cases.
             //
             Console.Write("Loading cases...");
 

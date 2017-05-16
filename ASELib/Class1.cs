@@ -21,6 +21,31 @@ namespace ASELib
 
         public const int GuidStringLength = 36;
 
+
+        // enumeration of variant classification values in MAF files.
+        // See https://wiki.nci.nih.gov/display/TCGA/Mutation+Annotation+Format+%28MAF%29+Specification
+        // for more information
+        public class VariantClassification {
+            public static string Frame_Shift_Del = "Frame_Shift_Del";
+            public static string Frame_Shift_Ins = "Frame_Shift_Ins";
+            public static string In_Frame_Del = "In_Frame_Del";
+            public static string In_Frame_Ins = "In_Frame_Ins";
+            public static string Missense_Mutation = "Missense_Mutation";
+            public static string Nonsense_Mutation = "Nonsense_Mutation";
+            public static string Silent = "Silent";
+            public static string Splice_Site = "Splice_Site";
+            public static string Translation_Start_Site = "Translation_Start_Site";
+            public static string Nonstop_Mutation = "Nonstop_Mutation";
+            public static string _3UTR = "3'UTR";
+            public static string _3Flank = "3'Flank";
+            public static string _5UTR = "5'UTR";
+            public static string _5Flank = "5'Flank";
+            public static string IGR = "IGR";
+            public static string Intron = "Intron";
+            public static string RNA = "RNA";
+            public static string Targeted_Region = "Targeted_Region";
+        }
+
         //
         // A Case is a person with TCGA data.
         //
@@ -1877,7 +1902,157 @@ namespace ASELib
             return Convert.ToInt32(value);
         }
 
-        public class MAFLine
+		// contains annotation data from one line in a methylation file
+		public class AnnotationLine
+		{
+			// Methylation types
+			public enum FeatureType {
+				// Feature type not specified
+				Other,
+				// methylation found in 2kb region upstream from island
+				N_Shore,
+				// methylation found in 2kb region downstream from island
+				S_Shore,
+				// CpG island
+				Island,
+			}
+
+			public readonly string Composite_Element_REF;
+			public readonly double Beta_Value;
+			public readonly string Chromsome;
+			public readonly int Start;
+			public readonly int End;
+			public readonly string[] Gene_Symbol;
+			public readonly string[] Gene_Type;
+			public readonly string[] Transcript_ID;
+			public readonly int[] Positive_to_TSS;
+			public readonly string CGI_Coordinate;
+			public readonly FeatureType Feature_Type;
+
+			// this is not in the original file, but calculated from beta_value
+			public readonly double M_Value;
+
+			AnnotationLine(string Composite_Element_REF_,
+			double Beta_Value_,
+			string Chromosome_,
+			int Start_,
+			int End_,
+			string[] Gene_Symbol_,
+			string[] Gene_Type_,
+			string[] Transcript_ID_,
+			int[] Positive_to_TSS_,
+			string CGI_Coordinate_,
+			FeatureType Feature_Type_)
+			{
+				var geneCount = Gene_Symbol_.Length;
+
+				if (Gene_Type_.Length != geneCount || Transcript_ID_.Length != geneCount || Positive_to_TSS_.Length != geneCount)
+				{
+					Console.WriteLine("Error: Gene Count does not match supporting gene data");
+				}
+
+				Composite_Element_REF = Composite_Element_REF_;
+				Beta_Value = Beta_Value_;
+				Chromsome = Chromosome_;
+				Start = Start_;
+				End = End_;
+				Gene_Symbol = Gene_Symbol_;
+				Gene_Type = Gene_Type_;
+				Transcript_ID = Transcript_ID_;
+				Positive_to_TSS = Positive_to_TSS_;
+				CGI_Coordinate = CGI_Coordinate_;
+				Feature_Type = Feature_Type_;
+
+				// M_value calculated as shown in Du et. al. 2010
+				M_Value = Math.Log(Beta_Value / (1 - Beta_Value));
+			}
+
+			// Converts strings to doubles, returning 1 if empty string.
+			// We return 1 here because this function parses beta values, which must be between 0 and 1
+			static Double ConvertToDoubleTreatingNullStringAsOne(string value)
+			{
+				Double n;
+				if (!Double.TryParse(value, out n))
+					n = 1;
+				return n;
+			}
+
+			// splits string to array by specified delimiter. This is used mainly when gene symbols are left blank,
+			// which is specified by a '.'
+			static string[] splitPotentialString(string value, char delim)
+			{
+				string[] parsed = new string[] { };
+				if (value != ".")
+					parsed = value.Split(delim);
+				return parsed;
+			}
+
+			static AnnotationLine ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
+			{
+				// delimiter separating columns
+				var delim = ';';
+
+				Enum.TryParse(fields[fieldMappings["Feature_Type"]], out FeatureType Feature_Type);
+
+				 return new AnnotationLine(
+				fields[fieldMappings["Composite Element REF"]],
+				ConvertToDoubleTreatingNullStringAsOne(fields[fieldMappings["Beta_value"]]),
+				fields[fieldMappings["Chromosome"]],
+				Convert.ToInt32(fields[fieldMappings["Start"]]),
+				Convert.ToInt32(fields[fieldMappings["End"]]),
+				splitPotentialString(fields[fieldMappings["Gene_Symbol"]], delim),
+				splitPotentialString(fields[fieldMappings["Gene_Type"]], delim),
+				splitPotentialString(fields[fieldMappings["Transcript_ID"]], delim),
+				splitPotentialString(fields[fieldMappings["Position_to_TSS"]], delim).Select(s => Convert.ToInt32(s)).ToArray(),
+				fields[fieldMappings["CGI_Coordinate"]],
+				Feature_Type
+				);
+
+			}
+
+			// TODO: what is fileHasVersion for
+			static public List<AnnotationLine> ReadFile(string filename, string file_id, bool fileHasVersion)
+			{
+				StreamReader inputFile;
+
+				inputFile = CreateStreamReaderWithRetry(filename);
+
+				var neededFields = new List<string>();
+				neededFields.Add("Composite Element REF");
+				neededFields.Add("Beta_value");
+				neededFields.Add("Chromosome");
+				neededFields.Add("Start");
+				neededFields.Add("End");
+				neededFields.Add("Gene_Symbol");
+				neededFields.Add("Gene_Type");
+				neededFields.Add("Transcript_ID");
+				neededFields.Add("Position_to_TSS");
+				neededFields.Add("CGI_Coordinate");
+				neededFields.Add("Feature_Type");
+
+				bool hasDone = false;
+				var headerizedFile = new HeaderizedFile<AnnotationLine>(inputFile, fileHasVersion, hasDone, "#version gdc-1.0.0", neededFields);
+
+				List<AnnotationLine> result;
+
+				if (!headerizedFile.ParseFile((a, b) => ParseLine(a, b), out result))
+				{
+					Console.WriteLine("Error reading Annotation File " + filename);
+					return null;
+				}
+
+				inputFile.Close();
+
+				// filter out invalid results. Invalid results include records without valid M values and records without gene symbols.
+				result = result.Where(c => (c.M_Value != double.PositiveInfinity) && (c.Gene_Symbol.Length > 0)).ToList();
+
+				return result;
+			} // ReadFile
+
+
+		}
+
+		public class MAFLine
         {
             public readonly string Hugo_Symbol;
             public readonly string NCBI_Build;

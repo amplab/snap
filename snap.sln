@@ -80,6 +80,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SelectGenes", "apps\SelectG
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AnnotateVariants", "apps\AnnotateVariants\AnnotateVariants.csproj", "{EDE14D47-81F7-481A-8C54-B605177C8BE3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MethylationAnalysis", "apps\MethylationAnalysis\MethylationAnalysis.csproj", "{6D95A49B-6B26-44D8-85A2-538804FBF02A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
