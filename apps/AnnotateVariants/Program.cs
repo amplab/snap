@@ -1,0 +1,132 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using ASELib;
+using System.IO;
+using System.Diagnostics;
+using System.Threading;
+
+namespace AnnotateVariants
+{
+    class Program
+    {
+        static ASETools.Genome genome = new ASETools.Genome();
+
+        static void ProcessCases(List<ASETools.Case> casesToProcess, ASETools.ASEConfirguation configuration)
+        {
+            while (true)
+            {
+                ASETools.Case case_ = null;
+
+                lock (casesToProcess)
+                {
+                    if (casesToProcess.Count() == 0)
+                    {
+                        return;
+                    }
+
+                    case_ = casesToProcess[0];
+                    casesToProcess.RemoveAt(0);
+                }
+
+                if (case_.extracted_maf_lines_filename == "" || case_.selected_variants_filename == "" || case_.tumor_dna_reads_at_selected_variants_filename == "" || case_.tumor_dna_reads_at_selected_variants_index_filename == "" ||
+                    case_.tumor_rna_reads_at_selected_variants_filename == "" || case_.tumor_rna_reads_at_selected_variants_index_filename == "" || case_.normal_dna_reads_at_selected_variants_filename == "" || case_.normal_dna_reads_at_selected_variants_index_filename == "")
+                {
+                    Console.WriteLine("Case " + case_.case_id + " is missing some required data.  Ignoring.");
+                    continue;
+                }
+
+                var annotatedVariants = new List<ASETools.AnnotatedVariant>();
+
+                var mafLines = ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, case_.maf_file_id, false);
+
+                if (null == mafLines)
+                {
+                    Console.WriteLine("Case " + case_.case_id + " failed to load extracted MAF lines.  Ignoring.");
+                    continue;
+                }
+
+                foreach (var mafLine in mafLines)
+                {
+                    //HandleVariant(annotatedVariants, true, case_, mafLine.Chromosome, mafLine.Start_Position, mafLine.Tumor_Seq_Allele2, mafLine.Variant_Type)
+                }
+
+                var selectedVariants = ASETools.SelectedVariant.LoadFromFile(case_.selected_variants_filename);
+                if (null == selectedVariants)
+                {
+                    Console.WriteLine("Case " + case_.case_id + " failed to load selected variants.  Ignoring.");
+                    continue;
+                }
+
+                foreach (var selectedVariant in selectedVariants)
+                {
+                    //HandleVariant(annotatedVariants, false, case_, selectedVariant.contig, selectedVariant.locus, Convert.ToString(selectedVariant.altBase), "SNV");
+                }
+
+                string outputFilename = ASETools.GetDirectoryFromPathname(case_.selected_variants_filename) + @"\" + case_.case_id + ASETools.annotatedSelectedVariantsExtension;
+
+            }
+
+        }
+
+        static void Main(string[] args)
+        {
+            var timer = new Stopwatch();
+            timer.Start();
+
+            var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+
+            if (null == configuration)
+            {
+                Console.WriteLine("Giving up because we were unable to load configuration.");
+                return;
+            }
+
+            if (configuration.commandLineArgs.Count() <2 || configuration.commandLineArgs[0] != "-s" && configuration.commandLineArgs[0] != "-g")
+            {
+                Console.WriteLine("usage: AnnotateVariants {-s|-g} <case_ids>");
+                Console.WriteLine("-s means semantic and -g means germline");
+                return;
+            }
+
+            bool sematicVariants = configuration.commandLineArgs[0] == "-s";
+
+            var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
+
+            if (null == cases)
+            {
+                Console.WriteLine("Unable to load cases file " + configuration.casesFilePathname + ".  You must generate cases before annotating variants.");
+            }
+
+            var casesToProcess = new List<ASETools.Case>();
+            int nCasesToProcess = casesToProcess.Count();
+
+            for (int i = 1; i < configuration.commandLineArgs.Count(); i++)
+            {
+                if (!cases.ContainsKey(configuration.commandLineArgs[i]))
+                {
+                    Console.WriteLine(configuration.commandLineArgs[i] + " does not appear to be a case ID.  Ignoring.");
+                } else
+                {
+                    casesToProcess.Add(cases[configuration.commandLineArgs[i]]);
+                }
+            }
+
+            genome.load(configuration.indexDirectory);
+
+            var threads = new List<Thread>();
+
+            for (int i = 0; i < Environment.ProcessorCount; i++)
+            {
+                threads.Add(new Thread(() => ProcessCases(casesToProcess, configuration)));
+            }
+
+            threads.ForEach(t => t.Start());
+            threads.ForEach(t => t.Join());
+
+            Console.WriteLine("Processed " + nCasesToProcess + " in " + ASETools.ElapsedTimeInSeconds(timer));
+        } // Main
+    }
+}

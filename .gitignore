@@ -59,6 +59,8 @@ obj
 /apps/CheckGzip/bin
 /apps/GenerateReadExtractionScript/bin
 /apps/SelectGenes/bin
+/apps/AnnotateVariants/bin
+
 
 
 

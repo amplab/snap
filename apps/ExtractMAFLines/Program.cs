@@ -53,9 +53,10 @@ namespace ExtractMAFLines
                       x.Variant_Classification == "IGR" ||
                       x.Variant_Classification == "Intron" ||
                       x.Variant_Classification == "Silent" || 
-                      x.t_alt_count * 5 < x.t_depth
+                      x.t_alt_count * 5 < x.t_depth ||
+                      x.Chromosome.StartsWith("chrM")
                       )
-                    ).ToList();    // The second half of the condition rejects MAF lines that look like germline variants (or pseudogenes that are mismapped), or are in uninteresting regions (IGRs, Introns, etc.) and minor subclones (< 20%)
+                    ).ToList();    // The second half of the condition rejects MAF lines that look like germline variants (or pseudogenes that are mismapped), or are in uninteresting regions (IGRs, Introns, etc.) and minor subclones (< 20%) and mitochondrial genes
 
                     nSelectedThisDisease += selectedLines.Count();
 

@@ -34,7 +34,7 @@ namespace ASEProcessManager
         {
             string GetStageName();
             bool NeedsCases();
-            void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites);
+            void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites);
             bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld);
         }
 
@@ -49,7 +49,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return false; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
 
@@ -88,7 +88,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return false; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
 
@@ -162,7 +162,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
                 nDone = 0;
@@ -186,7 +186,7 @@ namespace ASEProcessManager
                 } // Foreach case
             }// EvaluateStage
 
-            void HandleFile(StateOfTheWorld stateOfTheWorld, string file_id, string expectedMD5, string case_id, ASETools.DerivedFile.Type type, string extension, StreamWriter script, StreamWriter hpcScript, ref List<string> filesToDownload,ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites)
+            void HandleFile(StateOfTheWorld stateOfTheWorld, string file_id, string expectedMD5, string case_id, ASETools.DerivedFile.Type type, string extension, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, ref List<string> filesToDownload,ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites)
             {
 
                 if (!stateOfTheWorld.downloadedFiles.ContainsKey(file_id))
@@ -275,7 +275,7 @@ namespace ASEProcessManager
             }
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -317,7 +317,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null; // This stage never generates downloads
                 nAddedToScript = 0;
@@ -344,7 +344,7 @@ namespace ASEProcessManager
                 }
             } // EvaluateStage
 
-            void HandleFile(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, string fileId, string expectedMD5, ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites)
+            void HandleFile(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, string fileId, string expectedMD5, ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites)
             {
                 if (!stateOfTheWorld.downloadedFiles.ContainsKey(fileId) || null == expectedMD5 || "" == expectedMD5)
                 {
@@ -410,7 +410,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = new List<string>();
                 nDone = 0;
@@ -498,7 +498,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
@@ -510,7 +510,6 @@ namespace ASEProcessManager
                 foreach (var caseEntry in stateOfTheWorld.cases)
                 {
                     var case_ = caseEntry.Value;
-
 
                     if (case_.selected_variants_filename != null && case_.selected_variants_filename != "")
                     {
@@ -536,7 +535,7 @@ namespace ASEProcessManager
                     if (nOnCurrentLine == 0) 
                     {
                         script.Write(stateOfTheWorld.configuration.binariesDirectory + "SelectGermlineVariants.exe");
-                        hpcScript.Write(stateOfTheWorld.configuration.hpcBinariesDirectory + "SelectGermlineVariants.exe");
+                        hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "SelectGermlineVariants.exe");
                     }
 
                     script.Write(" " + case_.case_id);
@@ -574,7 +573,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
@@ -630,7 +629,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
 
@@ -706,7 +705,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
@@ -755,7 +754,7 @@ namespace ASEProcessManager
                 }
             } // EvaluateStage
 
-            void WriteScripts(StateOfTheWorld stateOfTheWorld, List<ASETools.Case> cases, StreamWriter script, StreamWriter hpcScript)
+            void WriteScripts(StateOfTheWorld stateOfTheWorld, List<ASETools.Case> cases, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript)
             {
                 script.Write(stateOfTheWorld.configuration.binariesDirectory + "RegionalExpression " + stateOfTheWorld.expressionFiles[cases[0].disease()].FullName + " " + stateOfTheWorld.configuration.regionalExpressionRegionSize + " ");
                 hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "RegionalExpression " + stateOfTheWorld.expressionFiles[cases[0].disease()].FullName + " " + stateOfTheWorld.configuration.regionalExpressionRegionSize + " ");
@@ -823,7 +822,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
@@ -855,7 +854,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
                 nDone = 0;
@@ -970,7 +969,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, StreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 nDone = 0;
                 nAddedToScript = 0;
@@ -994,7 +993,7 @@ namespace ASEProcessManager
 
                 nAddedToScript++;
                 script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "SelectGenes.exe");
-                hpcScript.WriteLine(stateOfTheWorld.configuration.hpcBinariesDirectory + "SelectGenes.exe");
+                hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "SelectGenes.exe");
             }
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
@@ -1260,7 +1259,6 @@ namespace ASEProcessManager
             var stopwatch = new Stopwatch();
             stopwatch.Start();
 
-
             var configuration = ASETools.ASEConfirguation.loadFromFile(args);
 
             if (null == configuration)
@@ -1269,13 +1267,11 @@ namespace ASEProcessManager
                 return;
             }
 
-
             if (configuration.commandLineArgs.Count() > 1 || configuration.commandLineArgs.Count() == 1 && configuration.commandLineArgs[0] != "-d")
             {
                 Console.WriteLine("usage: ASEProcessManager {-configuration configurationFilename} {-d}");
                 Console.WriteLine("-d means to check dependencies.");
             }
-
             
             //
             // Delete any existing scripts.
@@ -1437,16 +1433,16 @@ namespace ASEProcessManager
                 }
             }
 
-            StreamWriter hpcScript;
+            ASETools.RandomizingStreamWriter hpcScript;
             StreamWriter azureScript;
 
             if (configuration.hpcScriptFilename == "")  // The empty string means not to generate an output.  We do this by making a Null stream.
             {
-                hpcScript = new StreamWriter(Stream.Null);
+                hpcScript = new ASETools.RandomizingStreamWriter(new StreamWriter(Stream.Null));
             }
             else
             {
-                hpcScript = ASETools.CreateStreamWriterWithRetry(configuration.scriptOutputDirectory + configuration.hpcScriptFilename);
+                hpcScript = new ASETools.RandomizingStreamWriter(ASETools.CreateStreamWriterWithRetry(configuration.scriptOutputDirectory + configuration.hpcScriptFilename));
             }
 
 

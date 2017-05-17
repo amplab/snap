@@ -428,7 +428,7 @@ namespace SelectGermlineVariants
             threads.ForEach(t => t.Join());
 
             timer.Stop();
-            Console.WriteLine("Processed " + nValidCases + " participants in " + (timer.ElapsedMilliseconds + 500) / 1000 + "s");
+            Console.WriteLine("Processed " + nValidCases + " participants in " + ASETools.ElapsedTimeInSeconds(timer));
         }
     }
 }

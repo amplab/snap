@@ -784,7 +784,7 @@ namespace ASELib
 
             static SeletedGene parser(Dictionary<string, int> fieldMappings, string[] fields)
             {
-                var tumorsByMutationCountList = fields[fieldMappings["tumorsByCountOfMutations"]].Split(',');
+                var tumorsByMutationCountList = fields[fieldMappings["TumorsByMutationCount"]].Split(',');
 
                 var tumorsByMutationCount = new Dictionary<int, int>();
                 for (int i = 0; i < tumorsByMutationCountList.Count() - 1; i++) // -1 is because the list ends with a comma, so there's an empty field at the end that we ignore
@@ -803,7 +803,7 @@ namespace ASELib
                 wantedFields.Add("nMutations");
                 wantedFields.Add("nRNAMutations");
                 wantedFields.Add("nFlankingMutations");
-                wantedFields.Add("tumorsByCountOfMutations");
+                wantedFields.Add("TumorsByMutationCount");
 
                 var inputFile = CreateStreamReaderWithRetry(filename);
 
@@ -1318,7 +1318,8 @@ namespace ASELib
 
 
             public enum Type { Unknown, NormalRNAAllcount, TumorRNAAllcount, NormalDNAAllcount, TumorDNAAllcount, RegionalExpression, GeneExpression, TumorDNAGeneCoverage,
-            SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants, TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, AlleleSpecificGeneExpression, VCF, ExtractedMAFLines
+                SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
+                TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, AlleleSpecificGeneExpression, VCF, ExtractedMAFLines,
             };
         } // DerivedFile
 
@@ -2046,7 +2047,7 @@ namespace ASELib
                     Start_Position                      + "\t" +
                     End_Positon                         + "\t" +
                     Variant_Classification              + "\t" +
-                    Reference_Allele                    + "\t" +
+                    Variant_Type                        + "\t" +
                     Reference_Allele                    + "\t" +
                     Tumor_Seq_Allele1                   + "\t" +
                     Tumor_Seq_Allele2                   + "\t" +
@@ -2270,7 +2271,7 @@ namespace ASELib
                 return true;
             } // openFile
 
-            public delegate void ProcessBase(string strippedContigName, int location, int currentMappedReadCount);
+            public delegate void ProcessBase(string contigName, int location, int currentMappedReadCount);
 
             public bool ReadAllcountFile(ProcessBase processBase)
             {
@@ -2516,7 +2517,6 @@ namespace ASELib
             {
                 linuxPathname += @"/" + components[i];
             }
-
 
             return linuxPathname;
         } // WindowsToLinuxPathname
@@ -2811,6 +2811,333 @@ namespace ASELib
 
             FileStream filestream;
             Dictionary<string, SubFile> subfiles = new Dictionary<string, SubFile>();
+        }
+
+        public class Genome
+        {
+            public Genome()
+            {
+            }
+
+            public bool load(string snapIndexDirectory)
+            {
+                var metadataFilename = snapIndexDirectory + @"\GenomeIndex";
+
+                if (!File.Exists(metadataFilename))
+                {
+                    Console.WriteLine("Genome.load: can't find SNAP index metadata in expected file " + metadataFilename);
+                    return false;
+                }
+
+                var metadata = File.ReadAllLines(snapIndexDirectory + @"\GenomeIndex");
+
+                if (metadata.Count() != 1)
+                {
+                    Console.WriteLine("Genome.load: SNAP index metadata has other than one line (" + metadataFilename + ")");
+                    return false;
+                }
+
+                var fields = metadata[0].Split(' ');
+                if (fields.Count() < 2 || fields[0] != "5")
+                {
+                    Console.WriteLine("Genome.load: Wrong version or corrupt snap index in directory " + snapIndexDirectory);
+                    return false;
+                }
+
+                if (fields.Count() != 10)
+                {
+                    Console.WriteLine("Genome.load: wrong field count in snap index metadata: " + metadataFilename);
+                    return false;
+                }
+
+                try
+                {
+                    chromosomePadding = Convert.ToInt32(fields[5]);
+                } catch (FormatException)
+                {
+                    Console.WriteLine("Genome.load: error parsing snap index metadata line in " + metadataFilename);
+                    return false;
+                }
+
+                var genomeFilename = snapIndexDirectory + @"\Genome";
+
+                var genomeReader = CreateStreamReaderWithRetry(genomeFilename);
+                var line = genomeReader.ReadLine();
+
+                if (null == line)
+                {
+                    Console.WriteLine("Genome.load: empty genome file " + genomeFilename);
+                    return false;
+                }
+
+                fields = line.Split(' ');
+
+                if (fields.Count() != 2)
+                {
+                    Console.WriteLine("Genome.load: wrong field count on genome header line in file " + genomeFilename);
+                    return false;
+                }
+
+                try
+                {
+                    genomeLength = Convert.ToInt64(fields[0]);
+                    nContigs = Convert.ToInt32(fields[1]);
+
+                    for (int i = 0; i < nContigs; i++)
+                    {
+                        line = genomeReader.ReadLine();
+
+                        if (null == line)
+                        {
+                            Console.WriteLine("Genome.load: truncated genome file " + genomeFilename);
+                            return false;
+                        }
+
+                        fields = line.Split(' ');
+                        if (fields.Count() != 2)
+                        {
+                            Console.WriteLine("Genome.load: corrupt contig line in " + genomeFilename);
+                            return false;
+                        }
+
+                        if (contigsByName.ContainsKey(fields[1]))
+                        {
+                            Console.WriteLine("Genome.load: duplicate contig (" + fields[1] + " in header of " + genomeFilename);
+                            return false;
+                        }
+
+                        contigsByName.Add(fields[1], new Contig(fields[1], Convert.ToInt64(fields[0])));
+                        contigsInOrder.Add(contigsByName[fields[1]]);
+                    }
+                } catch (FormatException)
+                {
+                    Console.WriteLine("Genome.load: Format error parsing header of genome file " + genomeFilename);
+                    return false;
+                }
+
+                for (int i = 0; i < contigsInOrder.Count() - 1; i++)
+                {
+                    contigsInOrder[i].size = (int)(contigsInOrder[i + 1].offset - contigsInOrder[i].offset - chromosomePadding);
+                }
+                contigsInOrder[contigsInOrder.Count() - 1].size = (int)(genomeLength - contigsInOrder[contigsInOrder.Count() - 1].offset);    // Yes, this throws an exception for a single contig genome, but we know we don't have that.
+
+                long currentOffset = 0;
+                for (int i = 0; i < contigsInOrder.Count(); i++)
+                {
+                    int charsRead;
+                    if (currentOffset < contigsInOrder[i].offset)
+                    {
+                        int sizeToSkip = (int)(contigsInOrder[i].offset - currentOffset);
+                        var garbageBuffer = new char[sizeToSkip];
+                        charsRead = genomeReader.ReadBlock(garbageBuffer, 0, sizeToSkip);
+
+                        if (charsRead != sizeToSkip)
+                        {
+                            Console.WriteLine("Genome.load: failed to read in as much padding as expected, " + charsRead + " != " + sizeToSkip);
+                            return false;
+                        }
+
+                        currentOffset += charsRead;
+                    }
+
+                    contigsInOrder[i].data = new char[contigsInOrder[i].size];
+
+                    charsRead = genomeReader.ReadBlock(contigsInOrder[i].data, 0, contigsInOrder[i].size);
+
+                    if (charsRead != contigsInOrder[i].size)
+                    {
+                        Console.WriteLine("Genome.load: read unexpected number of bytes " + charsRead + " != " + contigsInOrder[i].size);
+                        return false;
+                    }
+
+                    currentOffset += charsRead;
+                }
+
+                return true;
+            }
+
+            public char getBase(string contigName, int offset)
+            {
+                return contigsByName[contigName].data[offset - 1];   // Offset - 1 because genome coordinates are 1 based, while C# is 0 based.
+            }
+
+            int chromosomePadding;
+            long genomeLength;
+            int nContigs;
+            List<Contig> contigsInOrder = new List<Contig>();
+            Dictionary<string, Contig> contigsByName = new Dictionary<string, Contig>();
+
+            class Contig
+            {
+                public Contig(string name_, long offset_)
+                {
+                    name = name_;
+                    offset = offset_;
+                }
+
+                public string name;
+                public long offset;
+                public int size;
+
+                public char[] data;
+            }
+
+
+        }// Genome
+
+        public class RandomizingStreamWriter
+        {
+            public RandomizingStreamWriter(StreamWriter underlyingWriter_)
+            {
+                underlyingWriter = underlyingWriter_;
+            }
+
+            public void Write(string newData)
+            {
+                unfinishedLine += newData;
+            }
+
+            public void WriteLine(string newData)
+            {
+                unfinishedLine += newData;
+                queuedLines.Add(unfinishedLine);
+                unfinishedLine = "";
+            }
+
+            public void WriteLine()
+            {
+                WriteLine("");
+            }
+
+            public void Close()
+            {
+                if (unfinishedLine != "")
+                {
+                    WriteLine("");
+                }
+
+                var random = new Random();
+
+                while (queuedLines.Count() > 0)
+                {
+                    int lineToEmit = random.Next(queuedLines.Count());
+                    underlyingWriter.WriteLine(queuedLines[lineToEmit]);
+                    queuedLines.RemoveAt(lineToEmit);
+                }
+
+                underlyingWriter.Close();
+            }
+
+            StreamWriter underlyingWriter;
+            string unfinishedLine = "";
+            List<string> queuedLines = new List<string>();
+        }
+
+        public class SelectedVariant
+        {
+            SelectedVariant(string contig_, int locus_, char referenceBase_, char altBase_)
+            {
+                contig = contig_;
+                locus = locus_;
+                referenceBase = referenceBase_;
+                altBase = altBase_;
+            }
+
+            public static List<SelectedVariant> LoadFromFile(string filename)
+            {
+                //
+                // Alas, this file type doesn't have a header, so we can't use HeaderizedFile.
+                //
+
+                var retVal = new List<SelectedVariant>();
+
+                bool seenDone = false;
+
+                var reader = CreateStreamReaderWithRetry(filename);
+
+                var line = reader.ReadLine();
+
+                if (null == line)
+                {
+                    Console.WriteLine("Empty selected variants file " + filename);
+                    return null;
+                }
+
+                while (null != (line = reader.ReadLine()))
+                {
+                    if (seenDone)
+                    {
+                        Console.WriteLine("Saw data after **done** in " + filename);
+                        return null;
+                    }
+
+                    if (line == "**done**")
+                    {
+                        seenDone = true;
+                        continue;
+                    }
+
+                    var fields = line.Split('\t');
+                    if (fields.Count() < 7)
+                    {
+                        Console.WriteLine("Not enough fields in a line of " + filename + ".  It's probably truncated.");
+                        return null;
+                    }
+
+                    try
+                    {
+                        retVal.Add(new SelectedVariant(fields[0], Convert.ToInt32(fields[1]), fields[5][0], fields[6][0]));
+                    } catch (FormatException) {
+                        Console.WriteLine("Format exception in " + filename + ".  It's probably truncated.");
+                        return null;
+                    }
+                }
+
+                if (!seenDone)
+                {
+                    Console.WriteLine("Truncated selected variants file " + filename);
+                    return null;
+                }
+
+                return retVal;
+            }
+
+            public readonly string contig;
+            public readonly int locus;
+            public readonly char referenceBase;
+            public readonly char altBase;
+        }
+
+        public class ReadCounts
+        {
+            public ReadCounts(int nMatchingReference_, int nMatchingAlt_, int nMatchingNeither_, int nMatchingBoth_)
+            {
+                nMatchingReference = nMatchingReference_;
+                nMatchingAlt = nMatchingAlt_;
+                nMatchingNeither = nMatchingNeither_;
+                nMatchingBoth = nMatchingBoth_;
+            }
+
+            public readonly int nMatchingReference;
+            public readonly int nMatchingAlt;
+            public readonly int nMatchingNeither;
+            public readonly int nMatchingBoth;
+
+
+        }
+
+        public class AnnotatedVariant
+        {
+            public readonly bool somaticMutation;
+            public readonly string contig;
+            public readonly int locus;
+            public readonly string reference;
+            public readonly string alt;
+
+            public readonly ReadCounts tumorDNAReadCounts;
+            public readonly ReadCounts normalDNAReadCounts;
+            public readonly ReadCounts tumorRNAReadCounts;
+            public readonly ReadCounts normalRNAReadCounts; // This will be null if there is no normal RNA for this case.
         }
 
     } // ASETools

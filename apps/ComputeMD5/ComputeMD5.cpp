@@ -71,7 +71,6 @@ int main(int argc, char* argv[])
             amountToHash = 0x70000000;
         }
 
-
         const BYTE *fileData = (const BYTE *)MapViewOfFile(hMapping, FILE_MAP_READ, fileOffset.HighPart, fileOffset.LowPart, amountToHash);
         if (NULL == fileData) {
             fprintf(stderr, "Unable to MapViewOfFile, %d\n", GetLastError());
