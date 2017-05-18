@@ -3171,7 +3171,7 @@ namespace ASELib
 
                 if (fields.Count() < 11)
                 {
-                    throw new FormatException;
+                    throw new FormatException();
                 }
 
                 qname = fields[0];

@@ -110,7 +110,7 @@ namespace AnnotateVariants
                 return null;
             }
 
-            var subfileReader = consolodatedFile.getSubfile()
+            //var subfileReader = consolodatedFile.getSubfile()
 
             return new ASETools.ReadCounts(nMatchingRef, nMatchingAlt, nMatchingNeither, nMatchingBoth);
         }
