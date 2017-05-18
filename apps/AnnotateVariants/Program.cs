@@ -50,7 +50,7 @@ namespace AnnotateVariants
 
                 foreach (var mafLine in mafLines)
                 {
-                    //HandleVariant(annotatedVariants, true, case_, mafLine.Chromosome, mafLine.Start_Position, mafLine.Tumor_Seq_Allele2, mafLine.Variant_Type)
+                    annotatedVariants.Add(AnnotateVariant(true, case_, mafLine.Chromosome, mafLine.Start_Position, mafLine.Match_Norm_Seq_Allele1, mafLine.Tumor_Seq_Allele2, mafLine.Variant_Type));
                 }
 
                 var selectedVariants = ASETools.SelectedVariant.LoadFromFile(case_.selected_variants_filename);
@@ -62,13 +62,57 @@ namespace AnnotateVariants
 
                 foreach (var selectedVariant in selectedVariants)
                 {
-                    //HandleVariant(annotatedVariants, false, case_, selectedVariant.contig, selectedVariant.locus, Convert.ToString(selectedVariant.altBase), "SNV");
+                    annotatedVariants.Add(AnnotateVariant(false, case_, selectedVariant.contig, selectedVariant.locus, Convert.ToString(selectedVariant.referenceBase), Convert.ToString(selectedVariant.altBase), "SNP"));   // All of the variants we selected are SNPs, so it's just a constant
                 }
 
                 string outputFilename = ASETools.GetDirectoryFromPathname(case_.selected_variants_filename) + @"\" + case_.case_id + ASETools.annotatedSelectedVariantsExtension;
 
             }
 
+        }
+
+        static ASETools.AnnotatedVariant AnnotateVariant(bool somatic, ASETools.Case case_, string contig, int start_position, string reference_allele, string alt_allele, string variantType )
+        {
+            ASETools.ReadCounts tumorDNAReadCounts = ComputeReadCounts(case_.tumor_dna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType);
+            ASETools.ReadCounts tumorRNAReadCounts = ComputeReadCounts(case_.tumor_rna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType);
+            ASETools.ReadCounts normalDNAReadCounts = ComputeReadCounts(case_.normal_dna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType);
+
+            if (tumorDNAReadCounts == null || tumorRNAReadCounts == null || normalDNAReadCounts == null)
+            {
+                Console.WriteLine("Failed to correctly compute annotated variant for case " + case_.case_id);
+                throw new FileNotFoundException();
+            }
+
+            ASETools.ReadCounts normalRNAReadCounts;
+            if (case_.normal_rna_reads_at_selected_variants_filename != "")
+            {
+                normalRNAReadCounts = ComputeReadCounts(case_.normal_rna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType);
+            } else
+            {
+                normalRNAReadCounts = null;
+            }
+
+            return new ASETools.AnnotatedVariant(somatic, contig, start_position, reference_allele, alt_allele, variantType, tumorDNAReadCounts, tumorRNAReadCounts, normalDNAReadCounts, normalRNAReadCounts);
+        }
+
+        static ASETools.ReadCounts ComputeReadCounts(string selectedReadsFilename, string contig, int start_position, string reference_allele, string alt_allele, string variantType)
+        {
+            int nMatchingRef = 0;
+            int nMatchingAlt = 0;
+            int nMatchingNeither = 0;
+            int nMatchingBoth = 0;
+
+            var consolodatedFile = new ASETools.ConsolodatedFileReader();
+
+            if (!consolodatedFile.open(selectedReadsFilename))
+            {
+                Console.WriteLine("Unable to open reads at selected variants file " + selectedReadsFilename);
+                return null;
+            }
+
+            var subfileReader = consolodatedFile.getSubfile()
+
+            return new ASETools.ReadCounts(nMatchingRef, nMatchingAlt, nMatchingNeither, nMatchingBoth);
         }
 
         static void Main(string[] args)

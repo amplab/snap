@@ -231,6 +231,7 @@ namespace ASELib
                 new FieldInformation("Normal RNA Filename",                                 c => c.normal_rna_filename, (c,v) => c.normal_rna_filename = v),
                 new FieldInformation("Tumor RNA Filename",                                  c => c.tumor_rna_filename, (c,v) => c.tumor_rna_filename = v),
                 new FieldInformation("Methylation Filename",                                c => c.methylation_filename, (c,v) => c.methylation_filename = v),
+
                 new FieldInformation("Copy Number Filename",                                c => c.copy_number_filename, (c,v) => c.copy_number_filename = v),
                 new FieldInformation("MAF Filename",                                        c => c.maf_filename, (c,v) => c.maf_filename = v),
 
@@ -356,7 +357,8 @@ namespace ASELib
             public void loadFileLocations(Dictionary<string, DownloadedFile> downloadedFiles, Dictionary<string, List<DerivedFile>> derivedFiles)
             {
 
-                if (downloadedFiles.ContainsKey(normal_dna_file_id)) {
+                if (downloadedFiles.ContainsKey(normal_dna_file_id))
+                {
                     normal_dna_filename = downloadedFiles[normal_dna_file_id].fileInfo.FullName;
                 }
                 else
@@ -400,7 +402,7 @@ namespace ASELib
                     maf_filename = "";
                 }
 
-                if (methylation_filename != "" && downloadedFiles.ContainsKey(methylation_file_id))
+                if (methylation_file_id != "" && downloadedFiles.ContainsKey(methylation_file_id))
                 {
                   methylation_filename  = downloadedFiles[methylation_file_id].fileInfo.FullName;
                 }
@@ -409,7 +411,7 @@ namespace ASELib
                     methylation_filename = "";
                 }
 
-                if (copy_number_filename != "" && downloadedFiles.ContainsKey(copy_number_file_id))
+                if (copy_number_file_id != "" && downloadedFiles.ContainsKey(copy_number_file_id))
                 {
                     copy_number_filename = downloadedFiles[copy_number_file_id].fileInfo.FullName;
                 }
@@ -2081,6 +2083,11 @@ namespace ASELib
                 output.Close();
             }
 
+            public string getExtractedReadsExtension()
+            {
+                return Chromosome + "-" + Math.Max(1, Start_Position - 200) + "-" + (End_Positon + 10);
+            }
+
         } // MAFLine
 
         public static string SizeToUnits(ulong size)
@@ -2727,7 +2734,7 @@ namespace ASELib
 
         public class ConsolodatedFileReader
         {
-            public ConsolodatedFileReader(string filename)
+            public ConsolodatedFileReader()
             {
             }
 
@@ -3128,17 +3135,70 @@ namespace ASELib
 
         public class AnnotatedVariant
         {
+            public AnnotatedVariant(bool somaticMutation_, string contig_, int locus_, string reference_allele_, string alt_allele_, string variantType_, ReadCounts tumorDNAReadCounts_, ReadCounts tumorRNAReadCounts_, ReadCounts normalDNAReadCounts_, ReadCounts normalRNAReadCounts_)
+            {
+                somaticMutation = somaticMutation_;
+                contig = contig_;
+                locus = locus_;
+                reference_allele = reference_allele_;
+                alt_allele = alt_allele_;
+                variantType = variantType_;
+
+                tumorDNAReadCounts = tumorDNAReadCounts_;
+                tumorRNAReadCounts = tumorRNAReadCounts_;
+                normalDNAReadCounts = normalDNAReadCounts_;
+                normalRNAReadCounts = normalRNAReadCounts_;
+            }
+
             public readonly bool somaticMutation;
             public readonly string contig;
             public readonly int locus;
-            public readonly string reference;
-            public readonly string alt;
+            public readonly string reference_allele;
+            public readonly string alt_allele;
+            public readonly string variantType;
 
             public readonly ReadCounts tumorDNAReadCounts;
-            public readonly ReadCounts normalDNAReadCounts;
             public readonly ReadCounts tumorRNAReadCounts;
+            public readonly ReadCounts normalDNAReadCounts;
             public readonly ReadCounts normalRNAReadCounts; // This will be null if there is no normal RNA for this case.
-        }
+        } // AnnotatedVariant
+
+        public class SAMLine
+        {
+            SAMLine(string rawline)
+            {
+                var fields = rawline.Split('\t');
+
+                if (fields.Count() < 11)
+                {
+                    throw new FormatException;
+                }
+
+                qname = fields[0];
+                flag = Convert.ToInt32(fields[1]);
+                rname = fields[2];
+                pos = Convert.ToInt32(fields[3]);
+                mapq = Convert.ToInt32(fields[4]);
+                cigar = fields[5];
+                rnext = fields[6];
+                pnext = Convert.ToInt32(fields[7]);
+                tlen = Convert.ToInt32(fields[8]);
+                seq = fields[9];
+                qual = fields[10];
+            }
+
+            public readonly string qname;
+            public readonly int flag;
+            public readonly string rname;
+            public readonly int pos;
+            public readonly int mapq;
+            public readonly string cigar;
+            public readonly string rnext;
+            public readonly int pnext;
+            public readonly int tlen;
+            public readonly string seq;
+            public readonly string qual;
+        } // SAMLine
 
     } // ASETools
 }
