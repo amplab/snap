@@ -33,9 +33,9 @@ namespace GenerateScriptFromVariants
             var case_id = configuration.commandLineArgs[0];
             bool forDNA = configuration.commandLineArgs[1] == "-d";
             bool forTumor = configuration.commandLineArgs[2] == "-t";
-            string generateConsoldatedExtractedReadsPathname = configuration.commandLineArgs[2];
-            string outputFilename = configuration.commandLineArgs[3];
-            string samtoolsPathname = configuration.commandLineArgs[4];
+            string generateConsoldatedExtractedReadsPathname = configuration.commandLineArgs[3];
+            string outputFilename = configuration.commandLineArgs[4];
+            string samtoolsPathname = configuration.commandLineArgs[5];
 
 
 
@@ -92,16 +92,10 @@ namespace GenerateScriptFromVariants
             foreach (var selectedVariant in selectedVariants)
             { 
 
-                generatedScript.Add("samtools view " + inputBamFilename + " " + chromosomeName + ":" + Math.Max(1, snvPosition - 200) + "-" + (snvPosition + 10) +
-                    @" > " + bamFileId + "-" + chromosomeName + "-" + snvPosition);
+                generatedScript.Add("samtools view " + inputBamFilename + " " + selectedVariant.contig + ":" + Math.Max(1, selectedVariant.locus - 200) + "-" + (selectedVariant.locus + 10) +
+                    @" > " + bamFileId + selectedVariant.getExtractedReadsExtension());
 
                 nVariants++;
-            }
-
-            if (!seenDone && !failed)
-            {
-                Console.WriteLine("Selected variants file " + selectedVariantsFilename + " is truncated.");
-                return 1;
             }
 
             //
@@ -117,7 +111,7 @@ namespace GenerateScriptFromVariants
             foreach (var mafLine in mafLines)
             {
                 generatedScript.Add("samtools view " + inputBamFilename + " " + mafLine.Chromosome + ":" + Math.Max(1, mafLine.Start_Position - 200) + "-" + (mafLine.End_Positon + 10) +
-                    @" > " + bamFileId + "-" + mafLine.getExtractedReadsExtension());
+                    @" > " + bamFileId + mafLine.getExtractedReadsExtension());
             }
 
             //
@@ -145,7 +139,7 @@ namespace GenerateScriptFromVariants
                     File.Copy(samtoolsPathname, localSamtoolsPathname, true);
                     copyWorked = true;
                     break;
-                } catch {
+                } catch (Exception e) {
                     Console.WriteLine("Failed to copy binaries.  Sleeping 10s and retrying.");
                     Thread.Sleep(10000);
                 }

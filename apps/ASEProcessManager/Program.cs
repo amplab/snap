@@ -877,9 +877,9 @@ namespace ASEProcessManager
                     {
                         string outputFilename = ASETools.GetDirectoryFromPathname(case_.normal_dna_filename) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + case_.normal_dna_file_id + ASETools.normalDNAReadsAtSelectedVariantsExtension;
 
-                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -d " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -d -n " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
                             stateOfTheWorld.configuration.binariesDirectory + "samtools.exe");
-                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -d " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
+                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -d -n " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
                             stateOfTheWorld.configuration.hpcBinariesDirectory + "samtools.exe");
 
                         nAddedToScript++;
@@ -897,9 +897,9 @@ namespace ASEProcessManager
                     {
                         string outputFilename = ASETools.GetDirectoryFromPathname(case_.tumor_dna_filename) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + case_.tumor_dna_file_id + ASETools.tumorDNAReadsAtSelectedVariantsExtension;
 
-                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -d " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -d -t " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
                             stateOfTheWorld.configuration.binariesDirectory + "samtools.exe");
-                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -d " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
+                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -d -t " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
                             stateOfTheWorld.configuration.hpcBinariesDirectory + "samtools.exe");
 
                         nAddedToScript++;
@@ -917,9 +917,9 @@ namespace ASEProcessManager
                     {
                         string outputFilename = ASETools.GetDirectoryFromPathname(case_.tumor_rna_filename) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + case_.tumor_rna_file_id + ASETools.tumorRNAReadsAtSelectedVariantsExtension;
 
-                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -r " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -r -t " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
                             stateOfTheWorld.configuration.binariesDirectory + "samtools.exe");
-                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -r " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
+                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -r -t " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
                             stateOfTheWorld.configuration.hpcBinariesDirectory + "samtools.exe");
 
                         nAddedToScript++;
@@ -939,9 +939,9 @@ namespace ASEProcessManager
                         {
                             string outputFilename = ASETools.GetDirectoryFromPathname(case_.normal_rna_filename) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + case_.normal_rna_file_id + ASETools.normalRNAReadsAtSelectedVariantsExtension;
 
-                            script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -r " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
+                            script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -r -n " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
                                 stateOfTheWorld.configuration.binariesDirectory + "samtools.exe");
-                            hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -r " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
+                            hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -r -n " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
                                 stateOfTheWorld.configuration.hpcBinariesDirectory + "samtools.exe");
 
                             nAddedToScript++;
@@ -1276,16 +1276,16 @@ namespace ASEProcessManager
             //
             // Delete any existing scripts.
             //
-            File.Delete(scriptFilename);
-            File.Delete(linuxScriptFilename);
-            File.Delete(downloadScriptFilename);
+            File.Delete(configuration.scriptOutputDirectory + scriptFilename);
+            File.Delete(configuration.scriptOutputDirectory + linuxScriptFilename);
+            File.Delete(configuration.scriptOutputDirectory + downloadScriptFilename);
             if (configuration.hpcScriptFilename != "")
             {
-                File.Delete(configuration.hpcScriptFilename);
+                File.Delete(configuration.scriptOutputDirectory + configuration.hpcScriptFilename);
             }
             if (configuration.azureScriptFilename != "")
             {
-                File.Delete(configuration.azureScriptFilename);
+                File.Delete(configuration.scriptOutputDirectory + configuration.azureScriptFilename);
             }
 
             bool checkDependencies = configuration.commandLineArgs.Count() >= 1 && configuration.commandLineArgs.Contains("-d");
@@ -1528,11 +1528,11 @@ namespace ASEProcessManager
             long bytesToDownload = 0;
             if (allFilesToDownload.Count() == 0)
             {
-                File.Delete(downloadScriptFilename);
+                File.Delete(configuration.scriptOutputDirectory + downloadScriptFilename);
             } 
             else
             {
-                var downloadScript = ASETools.CreateStreamWriterWithRetry(downloadScriptFilename);
+                var downloadScript = ASETools.CreateStreamWriterWithRetry(configuration.scriptOutputDirectory + downloadScriptFilename);
 
                 foreach (var file in allFilesToDownload)
                 {

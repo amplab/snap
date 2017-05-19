@@ -2085,7 +2085,7 @@ namespace ASELib
 
             public string getExtractedReadsExtension()
             {
-                return Chromosome + "-" + Math.Max(1, Start_Position - 200) + "-" + (End_Positon + 10);
+                return "-" + Chromosome + "-" + Math.Max(1, Start_Position - 200) + "-" + (End_Positon + 10);
             }
 
         } // MAFLine
@@ -3109,11 +3109,16 @@ namespace ASELib
                 return retVal;
             }
 
+            public string getExtractedReadsExtension()
+            {
+                return "-" + contig + "-" + locus;
+            }
+
             public readonly string contig;
             public readonly int locus;
             public readonly char referenceBase;
             public readonly char altBase;
-        }
+        } // SelectedVariant
 
         public class ReadCounts
         {
@@ -3165,7 +3170,7 @@ namespace ASELib
 
         public class SAMLine
         {
-            SAMLine(string rawline)
+            public SAMLine(string rawline)
             {
                 var fields = rawline.Split('\t');
 
@@ -3185,6 +3190,52 @@ namespace ASELib
                 tlen = Convert.ToInt32(fields[8]);
                 seq = fields[9];
                 qual = fields[10];
+
+
+                //
+                // Break down the bases in seq based on their mapped location.  Orindarily, this is one
+                // base per location, but in the cases of insertions or deletions (or skipped bases for RNA) it could be zero or more than one.
+                //
+                int currentPos = pos;
+                int offsetInCigarString = 0;
+                int offsetInSeq = 0;
+
+                while (offsetInCigarString < cigar.Count())
+                {
+                    switch (cigar[offsetInCigarString])
+                    {
+                        case 'M':
+                        case '=':
+                        case 'X':
+                            offsetInCigarString++;  // Consume the M, = or X
+                            int count = GetNextNumberFromString(cigar.Substring(offsetInCigarString));
+
+                            if (0 == count)
+                            {
+                                throw new FormatException();
+                            }
+
+                            for (int i = 0; i < count; i++)
+                            {
+                                mappedBases.Add(currentPos, Convert.ToString(seq[offsetInSeq]));
+
+                                currentPos++;
+                                offsetInSeq++;
+                            }
+
+                            break;
+
+                    }
+                }
+
+
+
+
+            }
+
+            public bool isUnmapped()
+            {
+                return (flag & Unmapped) == Unmapped;
             }
 
             public readonly string qname;
@@ -3198,7 +3249,30 @@ namespace ASELib
             public readonly int tlen;
             public readonly string seq;
             public readonly string qual;
+
+            public const int Unmapped = 0x4;
+
+            Dictionary<int, string> mappedBases = new Dictionary<int, string>();
         } // SAMLine
+
+        //
+        // Take a string of form ###<otherstuff> and return ### as an int.
+        //
+        public static int GetNextNumberFromString(string input)
+        {
+            int nDigits = 0;
+            while (input.Count() < nDigits && input[nDigits] >= '0' && input[nDigits] <= '9')
+            {
+                nDigits++;
+            }
+
+            if (0 == nDigits)
+            {
+                throw new FormatException();
+            }
+
+            return Convert.ToInt32(input.Substring(0, nDigits));
+        }
 
     } // ASETools
 }

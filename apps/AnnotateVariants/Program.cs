@@ -50,7 +50,7 @@ namespace AnnotateVariants
 
                 foreach (var mafLine in mafLines)
                 {
-                    annotatedVariants.Add(AnnotateVariant(true, case_, mafLine.Chromosome, mafLine.Start_Position, mafLine.Match_Norm_Seq_Allele1, mafLine.Tumor_Seq_Allele2, mafLine.Variant_Type));
+                    annotatedVariants.Add(AnnotateVariant(true, case_, mafLine.Chromosome, mafLine.Start_Position, mafLine.Match_Norm_Seq_Allele1, mafLine.Tumor_Seq_Allele2, mafLine.Variant_Type, mafLine.getExtractedReadsExtension()));
                 }
 
                 var selectedVariants = ASETools.SelectedVariant.LoadFromFile(case_.selected_variants_filename);
@@ -62,7 +62,8 @@ namespace AnnotateVariants
 
                 foreach (var selectedVariant in selectedVariants)
                 {
-                    annotatedVariants.Add(AnnotateVariant(false, case_, selectedVariant.contig, selectedVariant.locus, Convert.ToString(selectedVariant.referenceBase), Convert.ToString(selectedVariant.altBase), "SNP"));   // All of the variants we selected are SNPs, so it's just a constant
+                    annotatedVariants.Add(AnnotateVariant(false, case_, selectedVariant.contig, selectedVariant.locus, Convert.ToString(selectedVariant.referenceBase), Convert.ToString(selectedVariant.altBase), "SNP",
+                        selectedVariant.getExtractedReadsExtension()));   // All of the variants we selected are SNPs, so it's just a constant
                 }
 
                 string outputFilename = ASETools.GetDirectoryFromPathname(case_.selected_variants_filename) + @"\" + case_.case_id + ASETools.annotatedSelectedVariantsExtension;
@@ -71,11 +72,11 @@ namespace AnnotateVariants
 
         }
 
-        static ASETools.AnnotatedVariant AnnotateVariant(bool somatic, ASETools.Case case_, string contig, int start_position, string reference_allele, string alt_allele, string variantType )
+        static ASETools.AnnotatedVariant AnnotateVariant(bool somatic, ASETools.Case case_, string contig, int start_position, string reference_allele, string alt_allele, string variantType, string subfileExtension)
         {
-            ASETools.ReadCounts tumorDNAReadCounts = ComputeReadCounts(case_.tumor_dna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType);
-            ASETools.ReadCounts tumorRNAReadCounts = ComputeReadCounts(case_.tumor_rna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType);
-            ASETools.ReadCounts normalDNAReadCounts = ComputeReadCounts(case_.normal_dna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType);
+            ASETools.ReadCounts tumorDNAReadCounts = ComputeReadCounts(case_.tumor_dna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType, case_.tumor_dna_file_id + subfileExtension);
+            ASETools.ReadCounts tumorRNAReadCounts = ComputeReadCounts(case_.tumor_rna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType, case_.tumor_rna_file_id + subfileExtension);
+            ASETools.ReadCounts normalDNAReadCounts = ComputeReadCounts(case_.normal_dna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType, case_.normal_dna_file_id + subfileExtension);
 
             if (tumorDNAReadCounts == null || tumorRNAReadCounts == null || normalDNAReadCounts == null)
             {
@@ -86,7 +87,11 @@ namespace AnnotateVariants
             ASETools.ReadCounts normalRNAReadCounts;
             if (case_.normal_rna_reads_at_selected_variants_filename != "")
             {
-                normalRNAReadCounts = ComputeReadCounts(case_.normal_rna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType);
+                normalRNAReadCounts = ComputeReadCounts(case_.normal_rna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType, case_.normal_rna_file_id + subfileExtension);
+                if (null == normalDNAReadCounts)
+                {
+                    Console.WriteLine("Failed to correctly compute annotated variant for normal RNA for case " + case_.case_id);
+                }
             } else
             {
                 normalRNAReadCounts = null;
@@ -95,7 +100,7 @@ namespace AnnotateVariants
             return new ASETools.AnnotatedVariant(somatic, contig, start_position, reference_allele, alt_allele, variantType, tumorDNAReadCounts, tumorRNAReadCounts, normalDNAReadCounts, normalRNAReadCounts);
         }
 
-        static ASETools.ReadCounts ComputeReadCounts(string selectedReadsFilename, string contig, int start_position, string reference_allele, string alt_allele, string variantType)
+        static ASETools.ReadCounts ComputeReadCounts(string selectedReadsFilename, string contig, int start_position, string reference_allele, string alt_allele, string variantType, string subfileName)
         {
             int nMatchingRef = 0;
             int nMatchingAlt = 0;
@@ -110,8 +115,52 @@ namespace AnnotateVariants
                 return null;
             }
 
-            //var subfileReader = consolodatedFile.getSubfile()
+            var subfileReader = consolodatedFile.getSubfile(subfileName);
+            if (null == subfileReader)
+            {
+                Console.WriteLine("ComputeReadCounts: no subfile named " + subfileName);
+                return null;
+            }
 
+            string line;
+            while (null != (line = subfileReader.ReadLine()))
+            {
+                ASETools.SAMLine samLine;
+
+                try
+                {
+                    samLine = new ASETools.SAMLine(line);
+                } catch (FormatException)
+                {
+                    Console.WriteLine("Unable to parse sam line in extracted reads subfile " + subfileName + ": " + line);
+                    subfileReader.Close();
+                    return null;
+                }
+
+                if (samLine.isUnmapped())
+                {
+                    //
+                    // Probably half of a paired-end read with the other end mapped.  Ignore it.
+                    //
+                    continue;
+                }
+
+                switch (variantType)
+                {
+                    case "SNP":
+
+
+                        break;
+
+
+                    default:
+                        Console.WriteLine("Unknown variant type: " + variantType);
+                        subfileReader.Close();
+                        return null;
+                }
+            }
+
+            subfileReader.Close();
             return new ASETools.ReadCounts(nMatchingRef, nMatchingAlt, nMatchingNeither, nMatchingBoth);
         }
 
