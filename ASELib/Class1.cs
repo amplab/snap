@@ -247,7 +247,7 @@ namespace ASELib
                 new FieldInformation("Normal RNA Allcount Filename",                        c => c.normal_rna_allcount_filename, (c,v) => c.normal_rna_allcount_filename = v, DerivedFile.Type.NormalRNAAllcount, normalRNAAllcountExtension, c => c.normal_rna_file_id),
                 new FieldInformation("Tumor RNA Allcount Filename",                         c => c.tumor_rna_allcount_filename, (c,v) => c.tumor_rna_allcount_filename = v, DerivedFile.Type.TumorRNAAllcount, tumorRNAAllcountExtension, c => c.tumor_rna_file_id),
                 new FieldInformation("Regional Expression Filename",                        c => c.regional_expression_filename, (c,v) => c.regional_expression_filename = v, DerivedFile.Type.RegionalExpression, regionalExpressionExtension, c => c.tumor_rna_file_id),
-                new FieldInformation("Gene Expression Filename",                            c => c.gene_expression_filename, (c,v) => c.gene_expression_filename = v, DerivedFile.Type.GeneExpression, geneExpressionExtension, c => c.tumor_rna_file_id),
+                new FieldInformation("Gene Expression Filename",                            c => c.gene_expression_filename, (c,v) => c.gene_expression_filename = v, DerivedFile.Type.GeneExpression, geneExpressionExtension, c => c.case_id),
                 new FieldInformation("Selected Variants Filename",                          c => c.selected_variants_filename, (c,v) => c.selected_variants_filename = v, DerivedFile.Type.SelectedVariants, selectedVariantsExtension, c => c.normal_dna_file_id),
                 new FieldInformation("Normal DNA Reads At Selected Variants Filename",      c => c.normal_dna_reads_at_selected_variants_filename, (c,v) => c.normal_dna_reads_at_selected_variants_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariants, normalDNAReadsAtSelectedVariantsExtension, c => c.normal_dna_file_id),
                 new FieldInformation("Normal DNA Reads At Selected Variants Index Filename",c => c.normal_dna_reads_at_selected_variants_index_filename, (c,v) => c.normal_dna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariantsIndex, normalDNAReadsAtSelectedVariantsIndexExtension, c => c.normal_dna_file_id),
@@ -3272,6 +3272,35 @@ namespace ASELib
             }
 
             return Convert.ToInt32(input.Substring(0, nDigits));
+        }
+
+        //
+        // Generate a pathname that's the equivalent of pathname\..\..\..\.. (where there levelsToGoUp copies of \..) by truncating the top levels
+        // rather than adding the \..'s.  Returns a pathname with a trailing backslash.
+        //
+        public static string GoUpFilesystemLevels(string pathname, int levelsToGoUp)
+        {
+            string outputPathname = pathname;
+
+            if (outputPathname.EndsWith(@"\"))
+            {
+                outputPathname = outputPathname.Substring(0, outputPathname.Count() - 1);
+            }
+
+            for (int i = 0; i < levelsToGoUp; i++)
+            {
+                int lastBackslash = outputPathname.LastIndexOf('\\');
+
+                if (lastBackslash <= 0)
+                {
+                    Console.WriteLine("GoUpFilesystemLevels: not " + levelsToGoUp + " levels to go up in " + pathname);
+                    return @"\";
+                }
+
+                outputPathname = outputPathname.Substring(0, lastBackslash);
+            }
+
+            return outputPathname + @"\";
         }
 
     } // ASETools

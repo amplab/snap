@@ -854,6 +854,55 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
+            void HandleFileAndType(StateOfTheWorld stateOfTheWorld, ASETools.Case case_, string flagsString, string readsAtSelectedVariantsFilename, string fileId, string md5Checksum, string inputFilename, string outputExtension,
+                ref string outputSoFar, ref string outputSoFarHpc, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites)
+            {
+                if (fileId == "")
+                {
+                    //
+                    // Sometimes there is no normal RNA, which shows up as an empty fileID.
+                    //
+                    return;
+                }
+
+                if (readsAtSelectedVariantsFilename != "")
+                {
+                    nDone++;
+                    return;
+                }
+
+                if (!stateOfTheWorld.fileDownloadedAndVerified(fileId, md5Checksum) || case_.selected_variants_filename == "" || case_.extracted_maf_lines_filename == "")
+                {
+                    nWaitingForPrerequisites++;
+                    return;
+                }
+
+                nAddedToScript++;
+
+                if (outputSoFar == "")
+                {
+                    outputSoFar = stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + flagsString + " " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " +
+                                stateOfTheWorld.configuration.binariesDirectory + "samtools.exe ";
+
+                    outputSoFarHpc = jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + flagsString + " " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " +
+                                stateOfTheWorld.configuration.hpcBinariesDirectory + "samtools.exe ";
+                }
+
+                string outputFilename = ASETools.GoUpFilesystemLevels(ASETools.GetDirectoryFromPathname(inputFilename), 2) + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + fileId + outputExtension + " ";
+
+                outputSoFar += case_.case_id + " " + outputFilename;
+                outputSoFarHpc += case_.case_id + " " + outputFilename;
+
+                if (Math.Max(outputSoFar.Count(), outputSoFarHpc.Count()) > 2000)
+                {
+                    script.WriteLine(outputSoFar);
+                    hpcScript.WriteLine(outputSoFarHpc);
+
+                    outputSoFar = "";
+                    outputSoFarHpc = "";
+                }
+            }
+
             public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
             {
                 filesToDownload = null;
@@ -861,92 +910,41 @@ namespace ASEProcessManager
                 nAddedToScript = 0;
                 nWaitingForPrerequisites = 0;
 
+                string tumorDNAOutput = "";
+                string tumorDNAHpcOutput = "";
+                string normalDNAOutput = "";
+                string normalDNAHpcOutput = "";
+                string tumorRNAOutput = "";
+                string tumorRNAHpcOutput = "";
+                string normalRNAOutput = "";
+                string normalRNAHpcOutput = "";
+
                 foreach (var caseEntry in stateOfTheWorld.cases)
                 {
                     var case_ = caseEntry.Value;
 
-                    if (case_.normal_dna_reads_at_selected_variants_filename != "")
+                    HandleFileAndType(stateOfTheWorld, case_, "-d -t", case_.tumor_dna_reads_at_selected_variants_filename,  case_.tumor_dna_file_id,  case_.tumor_dna_file_bam_md5,  case_.tumor_dna_filename,  ASETools.tumorDNAReadsAtSelectedVariantsExtension,  ref tumorDNAOutput,  ref tumorDNAHpcOutput,  script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFileAndType(stateOfTheWorld, case_, "-d -n", case_.normal_dna_reads_at_selected_variants_filename, case_.normal_dna_file_id, case_.normal_dna_file_bam_md5, case_.normal_dna_filename, ASETools.normalDNAReadsAtSelectedVariantsExtension, ref normalDNAOutput, ref normalDNAHpcOutput, script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFileAndType(stateOfTheWorld, case_, "-r -t", case_.tumor_rna_reads_at_selected_variants_filename,  case_.tumor_rna_file_id,  case_.tumor_rna_file_bam_md5,  case_.tumor_rna_filename,  ASETools.tumorRNAReadsAtSelectedVariantsExtension,  ref tumorRNAOutput,  ref tumorRNAHpcOutput,  script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFileAndType(stateOfTheWorld, case_, "-r -n", case_.normal_rna_reads_at_selected_variants_filename, case_.normal_rna_file_id, case_.normal_rna_file_bam_md5, case_.normal_rna_filename, ASETools.normalRNAReadsAtSelectedVariantsExtension, ref normalRNAOutput, ref normalRNAHpcOutput, script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                }
+
+                string[] outputs = { tumorDNAOutput, normalDNAOutput, tumorRNAOutput, normalRNAOutput };
+                foreach (var output in outputs)
+                {
+                    if (output != "")
                     {
-                        nDone++;
+                        script.WriteLine(output);
                     }
-                    else if (!stateOfTheWorld.fileDownloadedAndVerified(case_.normal_dna_file_id, case_.normal_dna_file_bam_md5) || case_.selected_variants_filename == "" || case_.extracted_maf_lines_filename == "")
+                }
+
+                string[] hpcOutputs = { tumorDNAHpcOutput, normalDNAHpcOutput, tumorRNAHpcOutput, normalRNAHpcOutput };
+                foreach (var hpcOutput in hpcOutputs)
+                {
+                    if (hpcOutput != "")
                     {
-                        nWaitingForPrerequisites++;
+                        hpcScript.WriteLine(hpcOutput);
                     }
-                    else
-                    {
-                        string outputFilename = ASETools.GetDirectoryFromPathname(case_.normal_dna_filename) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + case_.normal_dna_file_id + ASETools.normalDNAReadsAtSelectedVariantsExtension;
-
-                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -d -n " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
-                            stateOfTheWorld.configuration.binariesDirectory + "samtools.exe");
-                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -d -n " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
-                            stateOfTheWorld.configuration.hpcBinariesDirectory + "samtools.exe");
-
-                        nAddedToScript++;
-                    }
-
-                    if (case_.tumor_dna_reads_at_selected_variants_filename != "")
-                    {
-                        nDone++;
-                    }
-                    else if (!stateOfTheWorld.fileDownloadedAndVerified(case_.tumor_dna_file_id, case_.tumor_dna_file_bam_md5) || case_.selected_variants_filename == "" || case_.extracted_maf_lines_filename == "")
-                    {
-                        nWaitingForPrerequisites++;
-                    }
-                    else
-                    {
-                        string outputFilename = ASETools.GetDirectoryFromPathname(case_.tumor_dna_filename) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + case_.tumor_dna_file_id + ASETools.tumorDNAReadsAtSelectedVariantsExtension;
-
-                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -d -t " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
-                            stateOfTheWorld.configuration.binariesDirectory + "samtools.exe");
-                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -d -t " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
-                            stateOfTheWorld.configuration.hpcBinariesDirectory + "samtools.exe");
-
-                        nAddedToScript++;
-                    }
-
-                    if (case_.tumor_rna_reads_at_selected_variants_filename != "")
-                    {
-                        nDone++;
-                    }
-                    else if (!stateOfTheWorld.fileDownloadedAndVerified(case_.tumor_rna_file_id, case_.tumor_rna_file_bam_md5) || case_.selected_variants_filename == "" || case_.extracted_maf_lines_filename == "")
-                    {
-                        nWaitingForPrerequisites++;
-                    }
-                    else
-                    {
-                        string outputFilename = ASETools.GetDirectoryFromPathname(case_.tumor_rna_filename) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + case_.tumor_rna_file_id + ASETools.tumorRNAReadsAtSelectedVariantsExtension;
-
-                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -r -t " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
-                            stateOfTheWorld.configuration.binariesDirectory + "samtools.exe");
-                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -r -t " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
-                            stateOfTheWorld.configuration.hpcBinariesDirectory + "samtools.exe");
-
-                        nAddedToScript++;
-                    }
-
-                    if (case_.normal_rna_file_id != "")
-                    {
-                        if (case_.normal_rna_reads_at_selected_variants_filename != "")
-                        {
-                            nDone++;
-                        }
-                        else if (!stateOfTheWorld.fileDownloadedAndVerified(case_.normal_rna_file_id, case_.normal_rna_file_bam_md5) || case_.selected_variants_filename == "" || case_.extracted_maf_lines_filename == "")
-                        {
-                            nWaitingForPrerequisites++;
-                        }
-                        else
-                        {
-                            string outputFilename = ASETools.GetDirectoryFromPathname(case_.normal_rna_filename) + @"\..\..\" + stateOfTheWorld.configuration.derivedFilesDirectory + @"\" + case_.case_id + @"\" + case_.normal_rna_file_id + ASETools.normalRNAReadsAtSelectedVariantsExtension;
-
-                            script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -r -n " + stateOfTheWorld.configuration.binariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
-                                stateOfTheWorld.configuration.binariesDirectory + "samtools.exe");
-                            hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateReadExtractionScript " + case_.case_id + " -r -n " + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateConsolodatedExtractedReads.exe " + outputFilename + " " +
-                                stateOfTheWorld.configuration.hpcBinariesDirectory + "samtools.exe");
-
-                            nAddedToScript++;
-                        }
-                    } // If we even have normal RNA
                 }
             } // EvaluateStage
 
