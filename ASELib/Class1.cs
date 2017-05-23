@@ -23,29 +23,10 @@ namespace ASELib
 
 		public const int nHumanNuclearChromosomes = 24;   // 1-22, X and Y.
 
+
         // enumeration of variant classification values in MAF files.
         // See https://wiki.nci.nih.gov/display/TCGA/Mutation+Annotation+Format+%28MAF%29+Specification
         // for more information
-        public class VariantClassification {
-            public static string Frame_Shift_Del = "Frame_Shift_Del";
-            public static string Frame_Shift_Ins = "Frame_Shift_Ins";
-            public static string In_Frame_Del = "In_Frame_Del";
-            public static string In_Frame_Ins = "In_Frame_Ins";
-            public static string Missense_Mutation = "Missense_Mutation";
-            public static string Nonsense_Mutation = "Nonsense_Mutation";
-            public static string Silent = "Silent";
-            public static string Splice_Site = "Splice_Site";
-            public static string Translation_Start_Site = "Translation_Start_Site";
-            public static string Nonstop_Mutation = "Nonstop_Mutation";
-            public static string _3UTR = "3'UTR";
-            public static string _3Flank = "3'Flank";
-            public static string _5UTR = "5'UTR";
-            public static string _5Flank = "5'Flank";
-            public static string IGR = "IGR";
-            public static string Intron = "Intron";
-            public static string RNA = "RNA";
-            public static string Targeted_Region = "Targeted_Region";
-        }
 
 		static public bool isChromosomeMitochondrial(string chromosome)
 		{

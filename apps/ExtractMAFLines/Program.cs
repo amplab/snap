@@ -48,13 +48,13 @@ namespace ExtractMAFLines
                     !(x.n_alt_count >= 10 ||
                       x.t_depth == 0 ||
                       x.n_depth > 0 && (double)x.n_alt_count / (double)x.n_depth * 5.0 >= (double)x.t_alt_count / (double)x.t_depth ||
-                      x.Variant_Classification == ASETools.VariantClassification._3Flank ||
-                      x.Variant_Classification == ASETools.VariantClassification._5Flank ||
-                      x.Variant_Classification == ASETools.VariantClassification.IGR ||
-                      x.Variant_Classification == ASETools.VariantClassification.Intron ||
-                      x.Variant_Classification == ASETools.VariantClassification.Silent ||
-					  x.t_alt_count * 5 < x.t_depth ||
-					  x.Chromosome.StartsWith("chrM")
+                      x.Variant_Classification == "3'Flank" ||
+                      x.Variant_Classification == "5'Flank" ||
+                      x.Variant_Classification == "IGR" ||
+                      x.Variant_Classification == "Intron" ||
+                      x.Variant_Classification == "Silent" || 
+                      x.t_alt_count * 5 < x.t_depth ||
+                      x.Chromosome.StartsWith("chrM")
                       )
                     ).ToList();    // The second half of the condition rejects MAF lines that look like germline variants (or pseudogenes that are mismapped), or are in uninteresting regions (IGRs, Introns, etc.) and minor subclones (< 20%) and mitochondrial genes
 

@@ -34,7 +34,7 @@ namespace MethylationAnalysis
 					var annotations = ASELib.ASETools.AnnotationLine.ReadFile(case_.methylation_filename, case_.methylation_file_id, false);
 					Console.WriteLine(annotations[0].Beta_Value);
 				}
-
+				
 			}
 
 			return 0;

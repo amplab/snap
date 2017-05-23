@@ -14,11 +14,7 @@ namespace SelectGenes
         class Gene
         {
             public string Hugo_Symbol = "";
-
-            // Stores the number of tumors that have X nonflanking mutations.
             public Dictionary<int, int> tumorsByMutationCount = new Dictionary<int, int>();
-
-            // Number of mutations with variant classification of "5'Flank" or "3'Flank"
             public int nFlankingMutations = 0;
             public int nRNAMutations = 0;
             public int nTumorsWithFlankingMutations = 0;
@@ -29,7 +25,6 @@ namespace SelectGenes
 
         static void ProcessSample(string Hugo_Symbol, int nNonFlankingMutations, int nFlankingMutations, int nRNAMutations)
         {
-            // If gene has not yet been evaluated, add it to the dictionary
             if (!genesByHugoSymbol.ContainsKey(Hugo_Symbol))
             {
                 genesByHugoSymbol.Add(Hugo_Symbol, new Gene());
@@ -37,14 +32,11 @@ namespace SelectGenes
             }
 
             var gene = genesByHugoSymbol[Hugo_Symbol];
-
-            // Set the number of non flanking mutations
             if (!gene.tumorsByMutationCount.ContainsKey(nNonFlankingMutations))
             {
                 gene.tumorsByMutationCount.Add(nNonFlankingMutations, 0);
             }
 
-            // Update the flanking and non flanking mutations for this gene
             gene.tumorsByMutationCount[nNonFlankingMutations]++;
             gene.nFlankingMutations += nFlankingMutations;
             if (nFlankingMutations > 0)
@@ -116,8 +108,7 @@ namespace SelectGenes
                         currentHugoSymbol = mafLine.Hugo_Symbol;
                     }
 
-                    if (mafLine.Variant_Classification == ASETools.VariantClassification._5Flank ||
-                        mafLine.Variant_Classification == ASETools.VariantClassification._3Flank)
+                    if (mafLine.Variant_Classification == "5'Flank" || mafLine.Variant_Classification == "3'Flank")
                     {
                         nFlankingMutations++;
                     }
@@ -125,7 +116,7 @@ namespace SelectGenes
                     {
                         nNonFlankingMutations++;
 
-                        if (mafLine.Variant_Classification == ASETools.VariantClassification.RNA)
+                        if (mafLine.Variant_Classification == "RNA")
                         {
                             nRNAMutations++;
                         }
