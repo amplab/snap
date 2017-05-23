@@ -82,6 +82,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AnnotateVariants", "apps\An
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MethylationAnalysis", "apps\MethylationAnalysis\MethylationAnalysis.csproj", "{6D95A49B-6B26-44D8-85A2-538804FBF02A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressionNearMutations", "apps\ExpressionNearMutations\ExpressionNearMutations.csproj", "{49FF4094-4B75-480A-9B53-E5C66B79A98B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

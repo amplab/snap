@@ -816,7 +816,11 @@ namespace ASEProcessManager
 
         class ExpressionNearMutationsProcessingStage : ProcessingStage
         {
-            public ExpressionNearMutationsProcessingStage() { }
+			bool forAlleleSpecificExpression;
+
+            public ExpressionNearMutationsProcessingStage(bool forAlleleSpecificExpression_) {
+				forAlleleSpecificExpression = forAlleleSpecificExpression_;
+			}
 
             public string GetStageName() { return "Expresssion Near Mutations"; }
 
@@ -832,17 +836,125 @@ namespace ASEProcessManager
                 foreach (var caseEntry in stateOfTheWorld.cases)
                 {
                     var case_ = caseEntry.Value;
-                    if (case_.maf_filename == "" || case_.regional_expression_filename == ""  /* unfiltered counts, which we don't have a place for yet */)
-                    {
-                        nWaitingForPrerequisites++;
-                    }
-                }
-            } // EvaluateStage
+					if (forAlleleSpecificExpression)
+					{
+						if (case_.allele_specific_gene_expression_filename != "")
+						{
+							nDone++;
+							continue;
+						}
+						else if (case_.maf_filename == "" || case_.annotated_selected_variants_filename == "")
+						{
+							nWaitingForPrerequisites++;
+							continue;
+						}
+						else
+						{
+							nAddedToScript++;
+						}
+					}
+					else
+					{
+						if (case_.gene_expression_filename != "")
+						{
+							nDone++;
+							continue;
+						}
+						else if (case_.maf_filename == "" || case_.regional_expression_filename == ""  /* unfiltered counts, which we don't have a place for yet */)
+						{
+							nWaitingForPrerequisites++;
+							continue;
+						}
+						else
+						{
+							nAddedToScript++;
+						}
+					}
+
+					// write a command for each case id
+					script.Write(stateOfTheWorld.configuration.binariesDirectory + "ExpressionNearMutations.exe");
+					hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "ExpressionNearMutations.exe");
+
+					if (forAlleleSpecificExpression)
+					{
+						script.Write(" -a");
+						hpcScript.Write(" -a");
+					}
+
+					script.Write(" " + case_.case_id);
+					hpcScript.Write(" " + case_.case_id);
+
+					script.WriteLine();
+					hpcScript.WriteLine();
+
+				}
+
+
+			} // EvaluateStage
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
             {
-                return true; // just to get it to compile
-            } // EvaluateDependencies
+				bool allOK = true;
+
+				foreach (var caseEntry in stateOfTheWorld.cases)
+				{
+					var case_ = caseEntry.Value;
+
+					if (case_.maf_filename == "")
+					{
+						Console.WriteLine("Gene expression file " + case_.gene_expression_filename + " exists, but the MAF file does not.");
+						allOK = false;
+						continue;
+					}
+
+					if (forAlleleSpecificExpression)
+					{
+						if (case_.allele_specific_gene_expression_filename == "")
+						{
+							continue;
+						}
+
+						var asGeneExpressionWriteTime = new FileInfo(case_.allele_specific_gene_expression_filename).LastWriteTime;
+						if (case_.annotated_selected_variants_filename == "")
+						{
+							Console.WriteLine("AS gene expression file " + case_.allele_specific_gene_expression_filename + " exists, but the precursor annotated selected variants file does not.");
+							allOK = false;
+							continue;
+						}
+
+						if (new FileInfo(case_.annotated_selected_variants_filename).LastWriteTime > asGeneExpressionWriteTime)
+						{
+							Console.WriteLine("AS gene expression file " + case_.allele_specific_gene_expression_filename + " is older than its regional file " + case_.regional_expression_filename);
+							allOK = false;
+							continue;
+						}
+					}
+					else
+					{
+						if (case_.gene_expression_filename == "")
+						{
+							continue;
+						}
+
+						var geneExpressionWriteTime = new FileInfo(case_.gene_expression_filename).LastWriteTime;
+
+						if (case_.regional_expression_filename == "")
+						{
+							Console.WriteLine("Gene expression file " + case_.gene_expression_filename + " exists, but the precursor regional expression file does not.");
+							allOK = false;
+							continue;
+						}
+
+						if (new FileInfo(case_.regional_expression_filename).LastWriteTime > geneExpressionWriteTime)
+						{
+							Console.WriteLine("Gene expression file " + case_.gene_expression_filename + " is older than its regional file " + case_.regional_expression_filename);
+							allOK = false;
+							continue;
+						}
+					}
+				}
+				return allOK;
+			} // EvaluateDependencies
 
         } // ExpressionNearMutationsProcessingStage
 
@@ -1399,6 +1511,8 @@ namespace ASEProcessManager
 
             List<ProcessingStage> processingStages = new List<ProcessingStage>();
 
+			var forAlleleSpecificExpression = false;
+
             processingStages.Add(new MAFConfigurationProcessingStage());
             processingStages.Add(new GenerateCasesProcessingStage());
             processingStages.Add(new AllcountProcesingStage());
@@ -1409,7 +1523,7 @@ namespace ASEProcessManager
             processingStages.Add(new ExpressionDistributionProcessingStage());
             processingStages.Add(new ExtractMAFLinesProcessingStage());
             processingStages.Add(new RegionalExpressionProcessingStage());
-            processingStages.Add(new ExpressionNearMutationsProcessingStage());
+            processingStages.Add(new ExpressionNearMutationsProcessingStage(forAlleleSpecificExpression));
             processingStages.Add(new ExtractReadsProcessingStage());
             processingStages.Add(new SelectGenesProcessingStage());
 

@@ -21,6 +21,7 @@ namespace ASELib
 
         public const int GuidStringLength = 36;
 
+		public const int nHumanNuclearChromosomes = 24;   // 1-22, X and Y.
 
         // enumeration of variant classification values in MAF files.
         // See https://wiki.nci.nih.gov/display/TCGA/Mutation+Annotation+Format+%28MAF%29+Specification
@@ -46,10 +47,313 @@ namespace ASELib
             public static string Targeted_Region = "Targeted_Region";
         }
 
-        //
-        // A Case is a person with TCGA data.
-        //
-        public class Case
+		static public bool isChromosomeMitochondrial(string chromosome)
+		{
+			string lowerChromosome = chromosome.ToLower();
+			return lowerChromosome == "m" || lowerChromosome == "mt" || lowerChromosome == "chrm" || lowerChromosome == "chrmt";
+		}
+		static public bool isChromosomeSex(string chromosome)
+		{
+			string lowerChromosome = chromosome.ToLower();
+			return lowerChromosome == "x" || lowerChromosome == "chrx" || lowerChromosome == "y" || lowerChromosome == "chry";
+		}
+
+		static public bool isChromosomeAutosomal(string chromosome)
+		{
+			return !isChromosomeSex(chromosome) && !isChromosomeMitochondrial(chromosome);
+		}
+
+		public static int ChromosomeNameToIndex(string chromosomeName)
+		{
+			var name = chromosomeName.ToLower();
+
+			for (int i = 1; i <= 22; i++)
+			{
+				var comp = Convert.ToString(i);
+				if (name == comp || name == "chr" + comp) return i;
+			}
+
+			//
+			// Use 0 and 23 for the sex chromosomes, so the array indices correspond to the chromosome names.
+			//
+			if (name == "chrx" || name == "x") return 0;
+			if (name == "chry" || name == "y") return 23;
+
+			return -1;
+		}
+
+
+		public static string ChromosomeIndexToName(int index, bool useChr = false)
+		{
+			if (index >= 1 && index <= 22)
+			{
+				return (useChr ? "chr" : "") + index;
+			}
+
+			if (index == 0) return (useChr ? "chr" : "") + "X";
+
+			if (index == 23) return (useChr ? "chr" : "") + "Y";
+
+			return "Invalid chromosome index: " + index;
+		}
+
+		public static string chromosomeNameToNonChrForm(string rawName)
+		{
+			if (rawName.Count() < 4 || rawName.Substring(0, 3).ToLower() != "chr")
+			{
+				return rawName.ToLower();
+			}
+
+			return rawName.Substring(3).ToLower();
+		}
+
+		public class Exon
+		{
+			public Exon(string startString, string endString)
+			{
+				start = Convert.ToInt32(startString);
+				end = Convert.ToInt32(endString);
+			}
+
+			public int start;
+			public int end;
+		}
+
+		public class Isoform    // These come from the knownGene file
+		{
+			public string ucscId;
+			public string chromosome;   // The non-chr version
+			public string strand;
+			public int txStart;
+			public int txEnd;
+			public int cdsStart;
+			public int cdsEnd;
+			public string proteinId;
+			public string alignId;
+			public Exon[] exons;
+
+			public static Isoform fromFileLine(string fileLine)
+			{
+				var fields = fileLine.Split('\t');
+				if (fields.Count() < 12)
+				{
+					Console.WriteLine("Isoform.fromFileLine: line had wrong number of fields, " + fields.Count() + " != 12");
+					return null;
+				}
+
+				var isoform = new Isoform();
+
+				isoform.ucscId = ConvertToNonExcelString(fields[0]);
+				isoform.chromosome = chromosomeNameToNonChrForm(ConvertToNonExcelString(fields[1]));
+				isoform.strand = ConvertToNonExcelString(fields[2]);
+
+				int exonCount;
+				try
+				{
+					isoform.txStart = Convert.ToInt32(ConvertToNonExcelString(fields[3]));
+					isoform.txEnd = Convert.ToInt32(ConvertToNonExcelString(fields[4]));
+
+					if (isoform.txEnd <= isoform.txStart)
+					{
+						Console.WriteLine("Isoform.fromFileLine: warning: isoform " + isoform.ucscId + " has empty or negative transcription region " + fileLine);
+					}
+
+					isoform.cdsStart = Convert.ToInt32(ConvertToNonExcelString(fields[5]));
+					isoform.cdsEnd = Convert.ToInt32(ConvertToNonExcelString(fields[6]));
+					exonCount = Convert.ToInt32(ConvertToNonExcelString(fields[7]));
+
+
+					var exonStartStrings = ConvertToNonExcelString(fields[8]).Split(',');
+					var exonEndStrings = ConvertToNonExcelString(fields[9]).Split(',');
+
+					//
+					// They have trailing commas, so they should have one more field than there are exons, and also should have an empty string
+					// as their last element.
+					//
+					if (exonStartStrings.Count() != exonCount + 1 || exonEndStrings.Count() != exonCount + 1 || exonStartStrings[exonCount] != "" || exonEndStrings[exonCount] != "")
+					{
+						Console.WriteLine("Isoform.fromFileLine: Bad exon start/end: " + fileLine);
+					}
+
+					isoform.exons = new Exon[exonCount];
+					for (int i = 0; i < exonCount; i++)
+					{
+						isoform.exons[i] = new Exon(exonStartStrings[i], exonEndStrings[i]);
+					}
+
+
+				}
+				catch (FormatException)
+				{
+					Console.WriteLine("Isoform.fromFileLine: Format exception parsing a numeric field in line: " + fileLine);
+					return null;
+				}
+
+				isoform.proteinId = fields[10];
+				isoform.alignId = fields[11];
+
+				return isoform;
+			}
+		}
+
+
+		// TODO: why do you have to map by chromosome?
+		// Holds Gene location and isoform information
+		public class GeneLocationInfo
+		{
+			public string hugoSymbol;
+			public string chromosome;   // in non-chr form
+			public int minLocus;
+			public int maxLocus;
+
+			public bool inconsistent = false;
+
+			public List<Isoform> isoforms = new List<Isoform>();
+		}
+
+		// Stores a dictionary of genes for each chromosome
+		public class GeneLocationsByNameAndChromosome
+		{
+			public GeneLocationsByNameAndChromosome(Dictionary<string, GeneLocationInfo> genesByName_)
+			{
+				genesByName = genesByName_;
+
+				foreach (var geneEntry in genesByName)
+				{
+					var gene = geneEntry.Value;
+					if (!genesByChromosome.ContainsKey(gene.chromosome))
+					{
+						genesByChromosome.Add(gene.chromosome, new List<GeneLocationInfo>());
+					}
+
+					genesByChromosome[gene.chromosome].Add(gene);
+				}
+			}
+
+			public Dictionary<string, GeneLocationInfo> genesByName;
+			public Dictionary<string, List<GeneLocationInfo>> genesByChromosome = new Dictionary<string, List<GeneLocationInfo>>();    // chromosome is in non-chr form.
+		}
+
+
+		public class AnnotatedSelectedVariantLine
+		{
+			public static AnnotatedSelectedVariantLine fromText(string inputLine)
+			{
+				var retVal = new AnnotatedSelectedVariantLine();
+
+				var fields = inputLine.Split('\t');
+
+				if (fields.Count() != 20)
+				{
+					Console.WriteLine("AnnotatedSelectedVariantLine.fromText: wrong field count (" + fields.Count() + " != 14) in line: " + inputLine);
+					return null;
+				}
+
+				try
+				{
+					retVal.contig = fields[0];
+					retVal.loc = Convert.ToInt32(fields[1]);
+					retVal.id = fields[4];
+					retVal.Ref = fields[5];
+					retVal.alt = fields[6];
+					retVal.qual = fields[7];
+					retVal.filter = fields[8];
+					retVal.info = fields[9];
+					retVal.format = fields[10];
+					retVal.nMatchingReferenceDNA = Convert.ToInt32(fields[12]);
+					retVal.nMatchingVariantDNA = Convert.ToInt32(fields[13]);
+					retVal.nMatchingNeitherDNA = Convert.ToInt32(fields[14]);
+					retVal.nMatchingBothDNA = Convert.ToInt32(fields[15]);
+					retVal.nMatchingReferenceRNA = Convert.ToInt32(fields[16]);
+					retVal.nMatchingVariantRNA = Convert.ToInt32(fields[17]);
+					retVal.nMatchingNeitherRNA = Convert.ToInt32(fields[18]);
+					retVal.nMatchingBothRNA = Convert.ToInt32(fields[19]);
+				}
+				catch (FormatException)
+				{
+					Console.WriteLine("Format exception parsing annotated selected variant line " + inputLine);
+					return null;
+				}
+
+				return retVal;
+			}
+
+			public static List<AnnotatedSelectedVariantLine> readFile(string filename)
+			{
+				var file = CreateStreamReaderWithRetry(filename);
+
+				if (null == file)
+				{
+					Console.WriteLine("AnnotatedSelectedVariantLine.readFile: unable to open file " + filename);
+					return null;
+				}
+
+				file.ReadLine();    // Skip the header.
+
+				var retVal = new List<AnnotatedSelectedVariantLine>();
+
+				string line;
+				bool seenDone = false;
+				while (null != (line = file.ReadLine()))
+				{
+					if (seenDone)
+					{
+						Console.WriteLine("AnnotatedSelectedVariantLine.readFile: file continues after **done**: " + filename);
+						return null;
+					}
+
+					if (line == "**done**")
+					{
+						seenDone = true;
+						continue;
+					}
+
+					var variantLine = fromText(line);
+					if (null == variantLine)
+					{
+						Console.WriteLine("AnnotatedSelectedVariantLine.readFile: giving up due to parsing error in file " + filename);
+						return null;
+					}
+
+					retVal.Add(variantLine);
+				}
+
+				if (!seenDone)
+				{
+					Console.WriteLine("AnnotatedSelectedVariantLine.readFile: file is truncated " + filename);
+					return null;
+				}
+
+				return retVal;
+			}
+
+			public string contig;               // 0
+			public int loc;                     // 1
+												// second copy of contig in column 2
+												// second copy of loc in column 3
+			public string id;                   // 4
+			public string Ref;                  // 5 (capitalized to avoid conflict with C# ref keyword)
+			public string alt;                  // 6
+			public string qual;                 // 7
+			public string filter;               // 8
+			public string info;                 // 9
+			public string format;               // 10
+												// ?? for column 11
+			public int nMatchingReferenceDNA;   // 12
+			public int nMatchingVariantDNA;     // 13
+			public int nMatchingNeitherDNA;     // 14
+			public int nMatchingBothDNA;        // 15
+			public int nMatchingReferenceRNA;   // 16
+			public int nMatchingVariantRNA;     // 17
+			public int nMatchingNeitherRNA;     // 18
+			public int nMatchingBothRNA;        // 19
+		}
+
+
+		//
+		// A Case is a person with TCGA data.
+		//
+		public class Case
         {
             //
             // Mandatory metadata that's created by GenerateCases.
@@ -543,7 +847,7 @@ namespace ASELib
                 }
                 catch (IOException e)
                 {
-                    if (e is FileNotFoundException)
+                    if (e is FileNotFoundException || e is DirectoryNotFoundException)
                     {
                         return null;
                     }
@@ -585,6 +889,10 @@ namespace ASELib
             public const string defaultConfigurationFilePathame = defaultBaseDirectory + "configuration.txt";
 
             public string accessTokenPathname = defaultBaseDirectory +  @"access_token.txt";
+
+			public const string defaultGenomeBuild = "hg38";
+			public const string defaultGeneLocationInformation = defaultBaseDirectory + "knownGene-" + defaultGenomeBuild + ".txt";
+
             public List<string> dataDirectories = new List<string>();
             public string mafManifestPathname = defaultBaseDirectory + "mafManifest.txt";
             public string mutationCaller = "mutect";
@@ -1256,6 +1564,47 @@ namespace ASELib
         }
 
         static readonly int FileIdLength = "01c5f902-ec3c-4eb7-9e38-1d29ae6ab959".Count();
+		//
+		// For filenames of the from ...\analysis-id\filename
+		//
+		static public string GetAnalysisIdFromPathname(string pathname)
+		{
+			if (!pathname.Contains('\\'))
+			{
+				Console.WriteLine("ExpressionTools.GetAnalysisIdFromPathname: invalid pathname input " + pathname);
+				return "";
+			}
+
+			string directoryName;
+			if (pathname.LastIndexOf('\\') != pathname.Count())
+			{
+				//
+				// Does not end in a trailing \.
+				//
+				directoryName = pathname.Substring(0, pathname.LastIndexOf('\\'));
+			}
+			else
+			{
+				//
+				// Ends in a trailing backslash, just trim it off.
+				//
+				directoryName = pathname.Substring(0, pathname.Count() - 1);
+			}
+
+			if (directoryName.Contains('\\'))
+			{
+				directoryName = directoryName.Substring(directoryName.LastIndexOf('\\') + 1);
+			}
+
+			if (directoryName.Count() != 36)
+			{
+				Console.WriteLine("ExpressionTools.GetAnalysisIdFromPathname: invalid pathname input does not include analysis id as last directory " + pathname);
+				return "";
+			}
+
+
+			return directoryName;
+		}
 
         public class DownloadedFile
         {
@@ -2292,7 +2641,7 @@ namespace ASELib
             {
                 if (null != allcountReader)
                 {
-                    Console.WriteLine("ExpressionTools.AllcountReader.openFile(): file is already open.  You can only do this once per allcount file.");
+                    Console.WriteLine("ASETools.AllcountReader.openFile(): file is already open.  You can only do this once per allcount file.");
                 }
 
                 allcountReader = null;
@@ -2682,9 +3031,56 @@ namespace ASELib
             }
         } // DownloadStringWithRetry
 
-        public static string WindowsToLinuxPathname(string windowsPathname)
-        {
-            string[] components = windowsPathname.Split('\\');
+		// Loads gene information from a reference file from UCSC Genome Browser
+		public static Dictionary<string, GeneLocationInfo> readKnownGeneFile(string knownGenesFilename) 
+		{
+			var result = new Dictionary<string, GeneLocationInfo>();
+
+			var refFile = CreateStreamReaderWithRetry(knownGenesFilename);
+
+
+
+			refFile.ReadLine();    // Skip the header
+
+			string line;
+			while (null != (line = refFile.ReadLine()))
+			{
+				// Parse required fields
+				var fields = line.Split('\t');
+
+				if (fields.Count() != 22)
+				{
+					Console.WriteLine("LoadGeneLocationInfo: wrong number of fields in file " + fields.Count() + " != 22 " + ": " + line);
+					continue;
+				}
+
+				var hugoSymbol = ConvertToNonExcelString(fields[16]);
+				var isoform = Isoform.fromFileLine(line);
+
+				if (!result.ContainsKey(hugoSymbol))
+				{
+					result.Add(hugoSymbol, new GeneLocationInfo());
+					result[hugoSymbol].hugoSymbol = hugoSymbol;
+					result[hugoSymbol].chromosome = isoform.chromosome;
+					result[hugoSymbol].minLocus = isoform.txStart;
+					result[hugoSymbol].maxLocus = isoform.txEnd;
+				}
+				else
+				{
+					result[hugoSymbol].minLocus = Math.Min(result[hugoSymbol].minLocus, isoform.txStart);
+					result[hugoSymbol].maxLocus = Math.Max(result[hugoSymbol].maxLocus, isoform.txEnd);
+				}
+
+				result[hugoSymbol].isoforms.Add(isoform);
+			}
+
+			refFile.Close();
+			return result;
+		}
+
+		public static string WindowsToLinuxPathname(string windowsPathname)
+		{
+			string[] components = windowsPathname.Split('\\');
 
 
             if (components.Count() < 5)
