@@ -286,7 +286,8 @@ namespace ASEProcessManager
                 {
                     var case_ = caseEntry.Value;
 
-                    string[] idsToDownload = {case_.normal_dna_file_id, case_.tumor_dna_file_id, case_.normal_rna_file_id, case_.tumor_rna_file_id, case_.methylation_file_id, case_.copy_number_file_id};
+                    string[] idsToDownload = {case_.normal_dna_file_id, case_.tumor_dna_file_id, case_.normal_rna_file_id, case_.tumor_rna_file_id, case_.normal_methylation_file_id,
+						case_.tumor_methylation_file_id, case_.normal_copy_number_file_id, case_.tumor_copy_number_file_id};
 
                     foreach (var id in idsToDownload) {
                         if (id != null && id != "" && !stateOfTheWorld.downloadedFiles.ContainsKey(id)) {
@@ -333,15 +334,26 @@ namespace ASEProcessManager
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_dna_file_id, case_.normal_dna_file_bam_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_dna_file_id, case_.tumor_dna_file_bam_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_rna_file_id, case_.normal_rna_file_bam_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-                    if (case_.methylation_file_id != null && case_.methylation_file_id != "")
+                    if (case_.tumor_methylation_file_id != null && case_.tumor_methylation_file_id != "")
                     {
-                        HandleFile(stateOfTheWorld, script, hpcScript, case_.methylation_file_id, case_.methylation_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                        HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_methylation_file_id, case_.tumor_methylation_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     }
-                    if (case_.copy_number_file_id != null && case_.copy_number_file_id != "")
+
+					if (case_.normal_methylation_file_id != null && case_.normal_methylation_file_id != "")
+					{
+						HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_methylation_file_id, case_.normal_methylation_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+					}
+
+					if (case_.tumor_copy_number_file_id != null && case_.tumor_copy_number_file_id != "")
                     {
-                        HandleFile(stateOfTheWorld, script, hpcScript, case_.copy_number_file_id, case_.copy_number_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                        HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_copy_number_file_id, case_.tumor_copy_number_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     }
-                }
+
+					if (case_.normal_copy_number_file_id != null && case_.normal_copy_number_file_id != "")
+					{
+						HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_copy_number_file_id, case_.normal_copy_number_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+					}
+				}
             } // EvaluateStage
 
             void HandleFile(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, string fileId, string expectedMD5, ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites)
@@ -1205,11 +1217,15 @@ namespace ASEProcessManager
                         {
                             fileIdToCaseId.Add(case_.normal_rna_file_id, case_.case_id);
                         }
-                        if (null != case_.methylation_file_id && "" != case_.methylation_file_id)
+                        if (null != case_.tumor_methylation_file_id && "" != case_.tumor_methylation_file_id)
                         {
-                            fileIdToCaseId.Add(case_.methylation_file_id, case_.case_id);
+                            fileIdToCaseId.Add(case_.tumor_methylation_file_id, case_.case_id);
                         }
-                    }
+						if (null != case_.normal_methylation_file_id && "" != case_.normal_methylation_file_id)
+						{
+							fileIdToCaseId.Add(case_.normal_methylation_file_id, case_.case_id);
+						}
+					}
 
                     //
                     // Check that the derived file cases are real cases.
@@ -1271,18 +1287,30 @@ namespace ASEProcessManager
                             bytesTumorRNA += (ulong)downloadedFiles[case_.tumor_rna_file_id].fileInfo.Length;
                         }
 
-                        if (downloadedFiles.ContainsKey(case_.methylation_file_id))
+                        if (downloadedFiles.ContainsKey(case_.normal_methylation_file_id))
                         {
                             nMethylation++;
-                            bytesMethylation += (ulong)downloadedFiles[case_.methylation_file_id].fileInfo.Length;
+                            bytesMethylation += (ulong)downloadedFiles[case_.normal_methylation_file_id].fileInfo.Length;
                         }
 
-                        if (downloadedFiles.ContainsKey(case_.copy_number_file_id))
+						if (downloadedFiles.ContainsKey(case_.tumor_methylation_file_id))
+						{
+							nMethylation++;
+							bytesMethylation += (ulong)downloadedFiles[case_.tumor_methylation_file_id].fileInfo.Length;
+						}
+
+						if (downloadedFiles.ContainsKey(case_.normal_copy_number_file_id))
                         {
                             nCopyNumber++;
-                            bytesCopyNumber += (ulong)downloadedFiles[case_.copy_number_file_id].fileInfo.Length;
+                            bytesCopyNumber += (ulong)downloadedFiles[case_.normal_copy_number_file_id].fileInfo.Length;
                         }
-                    } // foreach case
+
+						if (downloadedFiles.ContainsKey(case_.tumor_copy_number_file_id))
+						{
+							nCopyNumber++;
+							bytesCopyNumber += (ulong)downloadedFiles[case_.tumor_copy_number_file_id].fileInfo.Length;
+						}
+					} // foreach case
 
                     Console.WriteLine(nNormalDNA + "(" + ASETools.SizeToUnits(bytesNormalDNA) + "B) normal DNA, " + nTumorDNA + "(" + ASETools.SizeToUnits(bytesTumorDNA) + "B) tumor DNA, " +
                                       nNormalRNA + "(" + ASETools.SizeToUnits(bytesNormalRNA) + "B) normal RNA, " + nTumorRNA + "(" + ASETools.SizeToUnits(bytesTumorRNA) + "B) tumor RNA, " +
@@ -1322,16 +1350,26 @@ namespace ASEProcessManager
                         fileSizesFromGDC.Add(case_.normal_rna_file_id, case_.normal_rna_size);
                     }
 
-                    if (case_.methylation_file_id != "")
+                    if (case_.tumor_methylation_file_id != "")
                     {
-                        fileSizesFromGDC.Add(case_.methylation_file_id, case_.methylation_size);
+                        fileSizesFromGDC.Add(case_.tumor_methylation_file_id, case_.tumor_methylation_size);
                     }
 
-                    if (case_.copy_number_file_id != "")
+					if (case_.normal_methylation_file_id != "")
+					{
+						fileSizesFromGDC.Add(case_.normal_methylation_file_id, case_.normal_methylation_size);
+					}
+
+					if (case_.tumor_copy_number_file_id != "")
                     {
-                        fileSizesFromGDC.Add(case_.copy_number_file_id, case_.copy_number_size);
+                        fileSizesFromGDC.Add(case_.tumor_copy_number_file_id, case_.tumor_copy_number_size);
                     }
-                }
+
+					if (case_.normal_copy_number_file_id != "")
+					{
+						fileSizesFromGDC.Add(case_.normal_copy_number_file_id, case_.normal_copy_number_size);
+					}
+				}
 
             }
 

@@ -345,9 +345,11 @@ namespace ASELib
             public string normal_rna_file_id = "";    // This is optional
             public string tumor_rna_file_id;
             public string maf_file_id;
-            public string methylation_file_id;
-            public string copy_number_file_id = "";
-            public string project_id;   // This is TCGA_<DiseaseType> for TCGA.
+            public string tumor_methylation_file_id = "";
+			public string normal_methylation_file_id = "";
+			public string tumor_copy_number_file_id = "";
+			public string normal_copy_number_file_id = "";
+			public string project_id;   // This is TCGA_<DiseaseType> for TCGA.
             public List<string> sample_ids = new List<string>();
 
             //
@@ -357,23 +359,28 @@ namespace ASELib
             public string tumor_dna_filename = "";
             public string normal_rna_filename = "";
             public string tumor_rna_filename = "";
-            public string methylation_filename = "";
-            public string copy_number_filename = "";
+            public string tumor_methylation_filename = "";
+			public string normal_methylation_filename = "";
+			public string tumor_copy_number_filename = "";
+			public string normal_copy_number_filename = "";
 
-            //
-            // Sizes for downloaded files.
-            //
-            public long normal_dna_size = 0;
+			//
+			// Sizes for downloaded files.
+			//
+			public long normal_dna_size = 0;
             public long tumor_dna_size = 0;
             public long normal_rna_size = 0;
             public long tumor_rna_size = 0;
-            public long methylation_size = 0;
-            public long copy_number_size = 0;
+            public long tumor_methylation_size = 0;
+			public long normal_methylation_size = 0;
+			public long tumor_copy_number_size = 0;
+			public long normal_copy_number_size = 0;
 
-            //
-            // Pathnames for derived files.
-            //
-            public string normal_dna_allcount_filename = "";
+
+			//
+			// Pathnames for derived files.
+			//
+			public string normal_dna_allcount_filename = "";
             public string tumor_dna_allcount_filename = "";
             public string normal_rna_allcount_filename = "";
             public string tumor_rna_allcount_filename = "";
@@ -407,14 +414,16 @@ namespace ASELib
             public string normal_dna_file_bai_md5 = "";
             public string tumor_dna_file_bam_md5 = "";
             public string tumor_dna_file_bai_md5 = "";
-            public string methylation_file_md5 = "";
-            public string copy_number_file_md5 = "";
+            public string tumor_methylation_file_md5 = "";
+			public string normal_methylation_file_md5 = "";
+			public string tumor_copy_number_file_md5 = "";
+			public string normal_copy_number_file_md5 = "";
 
-            //
-            // The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
-            // so so just take the column numbers on the command line.  (That seemed better than compiling file format knowledge into them.)
-            //
-            static public int ProjectColumn = -1;
+			//
+			// The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
+			// so so just take the column numbers on the command line.  (That seemed better than compiling file format knowledge into them.)
+			//
+			static public int ProjectColumn = -1;
             static public int TumorRNAAllcountFilenameColumn = -1;
 
             public string disease()
@@ -531,28 +540,33 @@ namespace ASELib
                 new FieldInformation("Normal RNA File ID",                                  c => c.normal_rna_file_id, (c,v) => c.normal_rna_file_id = v),
                 new FieldInformation("Tumor RNA File ID",                                   c => c.tumor_rna_file_id, (c,v) => c.tumor_rna_file_id = v),
                 new FieldInformation("MAF File ID",                                         c => c.maf_file_id, (c,v) => c.maf_file_id = v),
-                new FieldInformation("Methylation File ID",                                 c => c.methylation_file_id, (c,v) => c.methylation_file_id = v),
-                new FieldInformation("Copy Number File ID",                                 c => c.copy_number_file_id, (c,v) => c.copy_number_file_id = v),
-                new FieldInformation("Project ID",                                          c => c.project_id, (c,v) => c.project_id = v),
+                new FieldInformation("Tumor Methylation File ID",                           c => c.tumor_methylation_file_id, (c,v) => c.tumor_methylation_file_id = v),
+				new FieldInformation("Normal Methylation File ID",                          c => c.normal_methylation_file_id, (c,v) => c.normal_methylation_file_id = v),
+				new FieldInformation("Tumor Copy Number File ID",                           c => c.tumor_copy_number_file_id, (c,v) => c.tumor_copy_number_file_id = v),
+				new FieldInformation("Normal Copy Number File ID",                          c => c.normal_copy_number_file_id, (c,v) => c.normal_copy_number_file_id = v),
+				new FieldInformation("Project ID",                                          c => c.project_id, (c,v) => c.project_id = v),
                 new FieldInformation("Sample IDs",                                          c => c.sampleIdsInCommaSeparatedList(), (c,v) => c.sample_ids = v.Split(',').ToList()),
 
                 new FieldInformation("Normal DNA Filename",                                 c => c.normal_dna_filename, (c,v) => c.normal_dna_filename = v),
                 new FieldInformation("Tumor DNA Filename",                                  c => c.tumor_dna_filename, (c,v) => c.tumor_dna_filename = v),
                 new FieldInformation("Normal RNA Filename",                                 c => c.normal_rna_filename, (c,v) => c.normal_rna_filename = v),
                 new FieldInformation("Tumor RNA Filename",                                  c => c.tumor_rna_filename, (c,v) => c.tumor_rna_filename = v),
-                new FieldInformation("Methylation Filename",                                c => c.methylation_filename, (c,v) => c.methylation_filename = v),
-
-                new FieldInformation("Copy Number Filename",                                c => c.copy_number_filename, (c,v) => c.copy_number_filename = v),
-                new FieldInformation("MAF Filename",                                        c => c.maf_filename, (c,v) => c.maf_filename = v),
+                new FieldInformation("Tumor Methylation Filename",                          c => c.tumor_methylation_filename, (c,v) => c.tumor_methylation_filename = v),
+				new FieldInformation("Normal Methylation Filename",                         c => c.normal_methylation_filename, (c,v) => c.normal_methylation_filename = v),
+				new FieldInformation("Tumor Copy Number Filename",                          c => c.tumor_copy_number_filename, (c,v) => c.tumor_copy_number_filename = v),
+				new FieldInformation("Normal Copy Number Filename",                         c => c.normal_copy_number_filename, (c,v) => c.normal_copy_number_filename = v),
+				new FieldInformation("MAF Filename",                                        c => c.maf_filename, (c,v) => c.maf_filename = v),
 
                 new FieldInformation("Normal DNA Size",                                     c => Convert.ToString(c.normal_dna_size), (c,v) => c.normal_dna_size = LongFromString(v)),
                 new FieldInformation("Tumor DNA Size",                                      c => Convert.ToString(c.tumor_dna_size), (c,v) => c.tumor_dna_size = LongFromString(v)),
                 new FieldInformation("Normal RNA Size",                                     c => Convert.ToString(c.normal_rna_size), (c,v) => c.normal_rna_size = LongFromString(v)),
                 new FieldInformation("Tumor RNA Size",                                      c => Convert.ToString(c.tumor_rna_size), (c,v) => c.tumor_rna_size = LongFromString(v)),
-                new FieldInformation("Methylation Size",                                    c => Convert.ToString(c.methylation_size), (c,v) => c.methylation_size = LongFromString(v)),
-                new FieldInformation("Copy Number Size",                                    c => Convert.ToString(c.copy_number_size), (c,v) => c.copy_number_size = LongFromString(v)),
+                new FieldInformation("Tumor Methylation Size",                              c => Convert.ToString(c.tumor_methylation_size), (c,v) => c.tumor_methylation_size = LongFromString(v)),
+				new FieldInformation("Normal Methylation Size",                             c => Convert.ToString(c.normal_methylation_size), (c,v) => c.normal_methylation_size = LongFromString(v)),
+				new FieldInformation("Tumor Copy Number Size",                              c => Convert.ToString(c.tumor_copy_number_size), (c,v) => c.tumor_copy_number_size = LongFromString(v)),
+				new FieldInformation("Normal Copy Number Size",                             c => Convert.ToString(c.normal_copy_number_size), (c,v) => c.normal_copy_number_size = LongFromString(v)),
 
-                new FieldInformation("Normal DNA Allcount Filename",                        c => c.normal_dna_allcount_filename, (c,v) => c.normal_dna_allcount_filename = v, DerivedFile.Type.NormalDNAAllcount, normalDNAAllcountExtension, c => c.normal_dna_file_id),
+				new FieldInformation("Normal DNA Allcount Filename",                        c => c.normal_dna_allcount_filename, (c,v) => c.normal_dna_allcount_filename = v, DerivedFile.Type.NormalDNAAllcount, normalDNAAllcountExtension, c => c.normal_dna_file_id),
                 new FieldInformation("Tumor DNA Allcount Filename",                         c => c.tumor_dna_allcount_filename, (c,v) => c.tumor_dna_allcount_filename = v, DerivedFile.Type.TumorDNAAllcount, tumorDNAAllcountExtension, c => c.tumor_dna_file_id),
                 new FieldInformation("Normal RNA Allcount Filename",                        c => c.normal_rna_allcount_filename, (c,v) => c.normal_rna_allcount_filename = v, DerivedFile.Type.NormalRNAAllcount, normalRNAAllcountExtension, c => c.normal_rna_file_id),
                 new FieldInformation("Tumor RNA Allcount Filename",                         c => c.tumor_rna_allcount_filename, (c,v) => c.tumor_rna_allcount_filename = v, DerivedFile.Type.TumorRNAAllcount, tumorRNAAllcountExtension, c => c.tumor_rna_file_id),
@@ -581,9 +595,12 @@ namespace ASELib
                 new FieldInformation("Normal DNA BAI MD5",                                  c => c.normal_dna_file_bai_md5, (c,v) => c.normal_dna_file_bai_md5 = v),
                 new FieldInformation("Tumor DNA BAM MD5",                                   c => c.tumor_dna_file_bam_md5, (c,v) => c.tumor_dna_file_bam_md5 = v),
                 new FieldInformation("Tumor DNA BAI MD5",                                   c => c.tumor_dna_file_bai_md5, (c,v) => c.tumor_dna_file_bai_md5 = v),
-                new FieldInformation("Methylation MD5",                                     c => c.methylation_file_md5, (c,v) => c.methylation_file_md5 = v),
-                new FieldInformation("Copy Number MD5",                                     c => c.copy_number_file_md5, (c,v) => c.copy_number_file_md5 = v),
-            }; // fieldInformation
+                new FieldInformation("Tumor Methylation MD5",                               c => c.tumor_methylation_file_md5, (c,v) => c.tumor_methylation_file_md5 = v),
+				new FieldInformation("Normal Methylation MD5",                              c => c.normal_methylation_file_md5, (c,v) => c.normal_methylation_file_md5 = v),
+				new FieldInformation("Tumor Copy Number MD5",                               c => c.tumor_copy_number_file_md5, (c,v) => c.tumor_copy_number_file_md5 = v),
+				new FieldInformation("Normal Copy Number MD5",                              c => c.normal_copy_number_file_md5, (c,v) => c.normal_copy_number_file_md5 = v),
+
+			}; // fieldInformation
 
   
             static public Case fromSaveFileLine(Dictionary<string, int> fieldMappings, string[] fields) 
@@ -712,25 +729,43 @@ namespace ASELib
                     maf_filename = "";
                 }
 
-                if (methylation_file_id != "" && downloadedFiles.ContainsKey(methylation_file_id))
+                if (tumor_methylation_file_id != "" && downloadedFiles.ContainsKey(tumor_methylation_file_id))
                 {
-                  methylation_filename  = downloadedFiles[methylation_file_id].fileInfo.FullName;
+                  tumor_methylation_filename  = downloadedFiles[tumor_methylation_file_id].fileInfo.FullName;
                 }
                 else
                 {
-                    methylation_filename = "";
+                    tumor_methylation_filename = "";
                 }
 
-                if (copy_number_file_id != "" && downloadedFiles.ContainsKey(copy_number_file_id))
+				if (normal_methylation_file_id != "" && downloadedFiles.ContainsKey(normal_methylation_file_id))
+				{
+					normal_methylation_filename = downloadedFiles[normal_methylation_file_id].fileInfo.FullName;
+				}
+				else
+				{
+					normal_methylation_filename = "";
+				}
+
+				if (tumor_copy_number_file_id != "" && downloadedFiles.ContainsKey(tumor_copy_number_file_id))
                 {
-                    copy_number_filename = downloadedFiles[copy_number_file_id].fileInfo.FullName;
+                    tumor_copy_number_filename = downloadedFiles[tumor_copy_number_file_id].fileInfo.FullName;
                 }
                 else
                 {
-                    copy_number_filename = "";
+                    tumor_copy_number_filename = "";
                 }
 
-                if (!derivedFiles.ContainsKey(case_id))
+				if (normal_copy_number_file_id != "" && downloadedFiles.ContainsKey(normal_copy_number_file_id))
+				{
+					normal_copy_number_filename = downloadedFiles[normal_copy_number_file_id].fileInfo.FullName;
+				}
+				else
+				{
+					normal_copy_number_filename = "";
+				}
+
+				if (!derivedFiles.ContainsKey(case_id))
                 {
                     tumor_rna_allcount_filename = "";
                     allele_specific_gene_expression_filename = "";
@@ -880,7 +915,7 @@ namespace ASELib
             public List<string> programNames = new List<string>();
             public string binariesDirectory = defaultBaseDirectory + @"bin\";
             public string configuationFilePathname = defaultConfigurationFilePathame;
-            public string casesFilePathname = defaultBaseDirectory + "cases.txt";
+            public string casesFilePathname = defaultBaseDirectory + "cases_withTNMethylation.txt";
             public string indexDirectory = @"d:\gdc\indices\hg38-20";
             public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
             public string hpcScriptFilename = "";    // The empty string says to black hole this script
