@@ -12,6 +12,7 @@ using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using MathNet.Numerics;
 
 namespace ASELib
 {
@@ -24,9 +25,9 @@ namespace ASELib
 		public const int nHumanNuclearChromosomes = 24;   // 1-22, X and Y.
 
 
-        // enumeration of variant classification values in MAF files.
-        // See https://wiki.nci.nih.gov/display/TCGA/Mutation+Annotation+Format+%28MAF%29+Specification
-        // for more information
+		// enumeration of variant classification values in MAF files.
+		// See https://wiki.nci.nih.gov/display/TCGA/Mutation+Annotation+Format+%28MAF%29+Specification
+		// for more information
 
 		static public bool isChromosomeMitochondrial(string chromosome)
 		{
@@ -87,6 +88,354 @@ namespace ASELib
 
 			return rawName.Substring(3).ToLower();
 		}
+
+
+		public class MannWhitney<T>
+		{
+			public delegate bool WhichGroup(T element);
+			public delegate double GetValue(T element);
+			public static double ComputeMannWhitney(List<T> elements, IComparer<T> comparer, WhichGroup whichGroup, GetValue getValue, out bool enoughData, out bool reversed,
+				out double nFirstGroup, out double nSecondGroup, out double U, out double z, bool twoTailed = true, int minGroupSize = 1)
+			{
+				elements.Sort(comparer);
+
+				reversed = false;
+
+				double RfirstGroup = 0; // The rank sum for the first group
+				nFirstGroup = 0;
+				nSecondGroup = 0;
+				U = 0;
+				z = 0;
+				int n = elements.Count();
+
+				for (int i = 0; i < n; i++)
+				{
+					if (whichGroup(elements[i]))
+					{
+						int cumulativeR = n - i;
+						int nTied = 1;
+						//
+						// Now add in adjascent indices if there's a tie.  For ties, we use the mean of all the indices in the tied region for each of them (regardless of whether they're single or multiple).
+						//
+						for (int j = i - 1; j >= 0 && getValue(elements[j]) == getValue(elements[i]); j--)
+						{
+							cumulativeR += n - j;
+							nTied++;
+						}
+
+						for (int j = i + 1; j < elements.Count() && getValue(elements[j]) == getValue(elements[i]); j++)
+						{
+							cumulativeR += n - j;
+							nTied++;
+						}
+
+
+						RfirstGroup += cumulativeR / nTied;
+						nFirstGroup++;
+					}
+					else
+					{
+						nSecondGroup++;
+					}
+				}
+
+				if (nFirstGroup < minGroupSize || nSecondGroup < minGroupSize)
+				{
+					//
+					// Not enough data, reject this gene
+					//
+					enoughData = false;
+					return -1;
+				}
+
+				U = (double)RfirstGroup - (double)nFirstGroup * (nFirstGroup + 1.0) / 2.0;
+
+				z = (U - nFirstGroup * nSecondGroup / 2) / Math.Sqrt(nSecondGroup * nFirstGroup * (nSecondGroup + nFirstGroup + 1) / 12);
+
+				double p = MathNet.Numerics.Distributions.Normal.CDF(0, 1.0, z);
+
+
+				if (twoTailed)
+				{
+					//
+					// We're doing two-tailed, so we need to see if this is on the other end
+					if (p > 0.5)
+					{
+						p = 1.0 - p;
+						reversed = true;
+					}
+
+					//
+					// And then multiply by two (because this is a two-tailed test).
+					//
+					p *= 2.0;
+				}
+
+				enoughData = true;
+				return p;
+			}
+		}
+
+
+		public class GeneScatterGraphLine
+		{
+			public string RNAFile;
+			public string DNAFile;
+			public string Hugo_Symbol;
+			public string Entrez_Gene_Id;
+			public string Center;
+			public string NCBI_Build;
+			public string Chromosome;
+			public int Start_Position;
+			public int End_Position;
+			public string Strand;
+			public string Variant_Classification;
+			public string Variant_Type;
+			public string Reference_Allele;
+			public string Tumor_Seq_Allele_1;
+			public string Tumor_Seq_Allele_2;
+			public string dbSNP_RS;
+			public string dbSNP_Val_Status;
+			public string Tumor_Sample_Barcode;
+			public string Matched_Norm_Sample_Barcode;
+			public string Match_Norm_Seq_Allele1;
+			public string Match_Norm_Seq_Allele2;
+			public string Tumor_Validation_Allele1;
+			public string Tumor_Validation_Allele2;
+			public string Match_Norm_Validation_Allele1;
+			public string Match_Norm_Validation_Allele2;
+			public string Verification_Status;
+			public string Validation_Status;
+			public string Mutation_Status;
+			public string Sequencing_Phase;
+			public string Sequence_Source;
+			public string Validation_Method;
+			public string Score;
+			public string BAM_File;
+			public string Sequencer;
+			public string Tumor_Sample_UUID;
+			public string Matched_Norm_Sample_UUID;
+			public string File_Name;
+			public string Archive_Name;
+			public int Line_Number;
+			public int n_DNA_Matching_Reference;
+			public int n_DNA_Matching_Tumor;
+			public int n_DNA_Matching_Neither;
+			public int n_DNA_Matching_Both;
+			public int n_RNA_Matching_Reference;
+			public int n_RNA_Matching_Tumor;
+			public int n_RNA_Matching_Neither;
+			public int n_RNA_Matching_Both;
+			public double tumorDNAFraction;
+			public double tumorRNAFraction;
+			public double tumorDNAMultiple;
+			public double tumorRNAMultiple;
+			public double tumorDNARatio;
+			public double tumorRNARatio;
+			public string FractionOfMeanExpression; // This doesn't seem to be filled in, hence string
+			public string zOfmeanExpression;
+			public double ratioOfRatios;
+			public bool IsSingle;
+			public string CancerType;
+			public string gender;
+
+			public bool zKnown; // The next 6 fields are valid iff zKnown.
+
+			public double zTumor;
+			public double zNormal;
+			public double z2Tumor;
+			public double z2Normal;
+			public double percentMeanTumor; // Expressed as a fraction (i.e., 100% -> 1.0)
+			public double percentMeanNormal;// Expressed as a fraction (i.e., 100% -> 1.0)
+
+			public bool fromUnfilteredFile; // If this is true, then the fields after n_RNA_Matching_Both are uninitialized and invalid.
+
+			public string caseId; // Gotten by parsing the RNA analysis ID and then looking it up in the rna analysis id->participant id map, since it's not in the raw file.
+
+			public bool insufficientDNA;    // Do we have fewer than 30 DNA reads that don't match both alleles
+
+			public static GeneScatterGraphLine fromLine(string inputLine, bool fromUnfilteredFile, Dictionary<string, Case> experimentsByRNAAnalysisID)
+			{
+				var newLine = new GeneScatterGraphLine();
+				newLine.fromUnfilteredFile = fromUnfilteredFile;
+
+				var fields = inputLine.Split('\t');
+
+				if (fields.Count() < (fromUnfilteredFile ? 47 : 65))
+				{
+					Console.WriteLine("GeneScatterGraphEntry.fromLine: too few fields " + fields.Count() + " in input line " + inputLine);
+					return null;
+				}
+
+				try
+				{
+					newLine.RNAFile = fields[0];
+					newLine.DNAFile = fields[1];
+					newLine.Hugo_Symbol = ConvertToNonExcelString(fields[2]);
+					newLine.Entrez_Gene_Id = fields[3];
+					newLine.Center = fields[4];
+					newLine.NCBI_Build = fields[5];
+					newLine.Chromosome = fields[6];
+					newLine.Start_Position = Convert.ToInt32(fields[7]);
+					newLine.End_Position = Convert.ToInt32(fields[8]);
+					newLine.Strand = fields[9];
+					newLine.Variant_Classification = fields[10];
+					newLine.Variant_Type = fields[11];
+					newLine.Reference_Allele = fields[12];
+					newLine.Tumor_Seq_Allele_1 = fields[13];
+					newLine.Tumor_Seq_Allele_2 = fields[14];
+					newLine.dbSNP_RS = fields[15];
+					newLine.dbSNP_Val_Status = fields[16];
+					newLine.Tumor_Sample_Barcode = fields[17];
+					newLine.Matched_Norm_Sample_Barcode = fields[18];
+					newLine.Match_Norm_Seq_Allele1 = fields[19];
+					newLine.Match_Norm_Seq_Allele2 = fields[20];
+					newLine.Tumor_Validation_Allele1 = fields[21];
+					newLine.Tumor_Validation_Allele2 = fields[22];
+					newLine.Match_Norm_Validation_Allele1 = fields[23];
+					newLine.Match_Norm_Validation_Allele2 = fields[24];
+					newLine.Verification_Status = fields[25];
+					newLine.Validation_Status = fields[26];
+					newLine.Mutation_Status = fields[27];
+					newLine.Sequencing_Phase = fields[28];
+					newLine.Sequence_Source = fields[29];
+					newLine.Validation_Method = fields[30];
+					newLine.Score = fields[31];
+					newLine.BAM_File = fields[32];
+					newLine.Sequencer = fields[33];
+					newLine.Tumor_Sample_UUID = fields[34];
+					newLine.Matched_Norm_Sample_UUID = fields[35];
+					newLine.File_Name = fields[36];
+					newLine.Archive_Name = fields[37];
+					if (fields[38] == "") // sometimes this is not filled in.
+					{
+						newLine.Line_Number = -1;
+					}
+					else
+					{
+						newLine.Line_Number = Convert.ToInt32(fields[38]);
+					}
+					newLine.n_DNA_Matching_Reference = Convert.ToInt32(fields[39]);
+					newLine.n_DNA_Matching_Tumor = Convert.ToInt32(fields[40]);
+					newLine.n_DNA_Matching_Neither = Convert.ToInt32(fields[41]);
+					newLine.n_DNA_Matching_Both = Convert.ToInt32(fields[42]);
+					newLine.n_RNA_Matching_Reference = Convert.ToInt32(fields[43]);
+					newLine.n_RNA_Matching_Tumor = Convert.ToInt32(fields[44]);
+					newLine.n_RNA_Matching_Neither = Convert.ToInt32(fields[45]);
+					newLine.n_RNA_Matching_Both = Convert.ToInt32(fields[46]);
+
+					if (!fromUnfilteredFile)
+					{
+						newLine.tumorDNAFraction = Convert.ToDouble(fields[47]);
+						newLine.tumorRNAFraction = Convert.ToDouble(fields[48]);
+						newLine.tumorDNAMultiple = Convert.ToDouble(fields[49]);
+						newLine.tumorRNAMultiple = Convert.ToDouble(fields[50]);
+						newLine.tumorDNARatio = Convert.ToDouble(fields[51]);
+						newLine.tumorRNARatio = Convert.ToDouble(fields[52]);
+						newLine.FractionOfMeanExpression = fields[53];
+						newLine.zOfmeanExpression = fields[54];
+						newLine.ratioOfRatios = Convert.ToDouble(fields[55]);
+						newLine.IsSingle = Convert.ToBoolean(fields[56]);
+						newLine.CancerType = fields[57];
+						newLine.gender = fields[58];
+
+						if (fields[59] == "")
+						{
+							newLine.zKnown = false;
+						}
+						else
+						{
+							newLine.zKnown = true;
+							newLine.zTumor = Convert.ToDouble(fields[59]);
+							newLine.zNormal = Convert.ToDouble(fields[60]);
+							newLine.z2Tumor = Convert.ToDouble(fields[61]);
+							newLine.z2Normal = Convert.ToDouble(fields[62]);
+							newLine.percentMeanTumor = Convert.ToDouble(fields[63]); // Expressed as a fraction (i.e., 100% -> 1.0 = fields[];
+							newLine.percentMeanNormal = Convert.ToDouble(fields[64]);// Expressed as a fraction (i.e., 100% -> 1.0 = fields[];
+						}
+					}
+					else
+					{
+						newLine.zKnown = false;
+					}
+
+					//
+					// Because I cleverly didn't put the participant ID in scatter graph file, we just parse the tumor RNA analysis ID out of the
+					// filename, which is of format <disease_abbr>\<analysis_id>-<gene>-<chromosome>-<begin-offset>-<end-offset>-RNA
+					//
+					string tumorRNAAnalysisID = fields[0].Substring(fields[0].IndexOf('\\') + 1, 36);
+					if (!experimentsByRNAAnalysisID.ContainsKey(tumorRNAAnalysisID))
+					{
+						Console.WriteLine("Can't find experiment for line " + inputLine);
+						return null;
+					}
+
+					newLine.caseId = experimentsByRNAAnalysisID[tumorRNAAnalysisID].case_id;
+					newLine.insufficientDNA = newLine.n_DNA_Matching_Neither + newLine.n_DNA_Matching_Reference + newLine.n_DNA_Matching_Tumor < 30;
+				}
+				catch (FormatException)
+				{
+					Console.WriteLine("GeneScatterGraphEntry.fromLine: error parsing line " + inputLine);
+					return null;
+				}
+
+				return newLine;
+			} // fromLine
+
+			public static List<GeneScatterGraphLine> LoadAllGeneScatterGraphEntries(string directoryName, bool fromUnfiltered, Dictionary<string, Case> experimentsByRNAAnalysisID, string hugoSymbol /* this may be * to load all*/)
+			{
+				var geneScatterGraphEntries = new List<GeneScatterGraphLine>();
+
+				if (hugoSymbol.Contains('/') || hugoSymbol.Contains(':'))
+				{    // Some funky gene names have a slash or colon.  We're just ignoring them.  They cause EnumerateFiles to throw an exception if you let them through.
+					return null;
+				}
+
+				foreach (var filename in Directory.EnumerateFiles(directoryName, hugoSymbol + (fromUnfiltered ? ASEConfirguation.unfilteredCountsExtention : ".txt")))
+				{
+					if (filename.Count() == 0 || GetFileNameFromPathname(filename)[0] == '_')
+					{
+						continue;   // Summary file like _MannWhitney rather than a gene file
+					}
+
+					var lines = ReadAllLinesWithRetry(filename);
+					for (int i = 1 /* starting at 1 skips the header */; i < lines.Count(); i++)
+					{
+						var line = GeneScatterGraphLine.fromLine(lines[i], fromUnfiltered, experimentsByRNAAnalysisID);
+						if (null == line)
+						{
+							Console.WriteLine("GeneScatterGraphLine.LoadAllGeneScatteGraphEntries: bad line in input file " + filename + ".  Punting.");
+							return null;
+						}
+						geneScatterGraphEntries.Add(line);
+					}
+				}
+
+				return geneScatterGraphEntries;
+			}
+
+		} // GeneScatterGraphLine
+
+
+		public static double MeanOfList(List<double> values)
+		{
+			return values.Sum() / values.Count();
+		}
+
+		public static double StandardDeviationOfList(List<double> values)
+		{
+			var mean = MeanOfList(values);
+
+			double variance = 0;
+			foreach (var value in values)
+			{
+				var difference = value - mean;
+				variance = difference * difference;
+			}
+
+			return Math.Sqrt(variance);
+		}
+
 
 		public class Exon
 		{
@@ -942,7 +1291,12 @@ namespace ASELib
             public string selectedGenesFilename = @"\\msr-genomics-0\d$\gdc\seleted_genes.txt";
             public string scriptOutputDirectory = @"\temp\";
 
-            public string[] commandLineArgs = null;    // The args excluding -configuration <filename>
+			public const string geneScatterGraphsDirectory = defaultBaseDirectory + @"\gene_scatter_graphs\";
+
+			public const string unfilteredCountsDirectory = defaultBaseDirectory + @"\gene_mutations_with_counts\";
+			public const string unfilteredCountsExtention = @"_unfiltered_counts.txt";
+
+			public string[] commandLineArgs = null;    // The args excluding -configuration <filename>
 
             ASEConfirguation()
             {
@@ -1598,7 +1952,7 @@ namespace ASELib
 		{
 			if (!pathname.Contains('\\'))
 			{
-				Console.WriteLine("ExpressionTools.GetAnalysisIdFromPathname: invalid pathname input " + pathname);
+				Console.WriteLine("ASETools.GetAnalysisIdFromPathname: invalid pathname input " + pathname);
 				return "";
 			}
 
@@ -1625,7 +1979,7 @@ namespace ASELib
 
 			if (directoryName.Count() != 36)
 			{
-				Console.WriteLine("ExpressionTools.GetAnalysisIdFromPathname: invalid pathname input does not include analysis id as last directory " + pathname);
+				Console.WriteLine("ASETools.GetAnalysisIdFromPathname: invalid pathname input does not include analysis id as last directory " + pathname);
 				return "";
 			}
 
@@ -2286,6 +2640,11 @@ namespace ASELib
 		// contains annotation data from one line in a methylation file
 		public class AnnotationLine
 		{
+			public static double betaToM(double beta) {
+				// M_value calculated as shown in Du et. al. 2010
+				return Math.Log(beta / (1 - beta));
+			}
+
 			// Methylation types
 			public enum FeatureType {
 				// Feature type not specified
@@ -2298,17 +2657,17 @@ namespace ASELib
 				Island,
 			}
 
-			public readonly string Composite_Element_REF;
-			public readonly double Beta_Value;
-			public readonly string Chromsome;
-			public readonly int Start;
-			public readonly int End;
-			public readonly string[] Gene_Symbol;
-			public readonly string[] Gene_Type;
-			public readonly string[] Transcript_ID;
-			public readonly int[] Positive_to_TSS;
-			public readonly string CGI_Coordinate;
-			public readonly FeatureType Feature_Type;
+			public string Composite_Element_REF;
+			public double Beta_Value;
+			public string Chromsome;
+			public int Start;
+			public int End;
+			public string[] Gene_Symbol;
+			public string[] Gene_Type;
+			public string[] Transcript_ID;
+			public int[] Positive_to_TSS;
+			public string CGI_Coordinate;
+			public FeatureType Feature_Type;
 
 			// this is not in the original file, but calculated from beta_value
 			public readonly double M_Value;
@@ -2345,7 +2704,7 @@ namespace ASELib
 				Feature_Type = Feature_Type_;
 
 				// M_value calculated as shown in Du et. al. 2010
-				M_Value = Math.Log(Beta_Value / (1 - Beta_Value));
+				M_Value = betaToM(Beta_Value);
 			}
 
 			// Converts strings to doubles, returning 1 if empty string.
