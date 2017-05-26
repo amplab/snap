@@ -478,8 +478,10 @@ namespace ASEProcessManager
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
             {
                 //
-                // Placeholder.
+                // Skip this becuase we ran the variant calling on Azure, which downloaded the normal DNA files and then deleted them, 
+                // so the local download of normal DNA may well be after the VCF was created.
                 //
+
                 return true;
             } // EvaluateDependencies
 
@@ -511,7 +513,7 @@ namespace ASEProcessManager
                 {
                     var case_ = caseEntry.Value;
 
-                    if (case_.selected_variants_filename != null && case_.selected_variants_filename != "")
+                    if (case_.selected_variants_filename != "")
                     {
                         nDone++;
                         continue;
@@ -554,12 +556,43 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
             {
-                //
-                // Placeholder.
-                //
-                return true;
+                bool allOK = true;
+
+                foreach (var caseEntry in stateOfTheWorld.cases)
+                {
+                    var case_ = caseEntry.Value;
+
+                    if (!stateOfTheWorld.containsDerivedFile(case_.case_id, case_.normal_dna_file_id, ASETools.DerivedFile.Type.SelectedVariants))
+                    {
+                        continue;
+                    }
+
+                    if (case_.vcf_filename == "" || case_.tumor_rna_allcount_filename == "" || case_.tumor_dna_allcount_filename == "")
+                    {
+                        Console.WriteLine(case_.selected_variants_filename + " depends on a file that is missing.");
+                        allOK = false;
+                        continue;
+                    }
+
+                    var selectedVariantsWriteTime = new FileInfo(case_.selected_variants_filename).LastWriteTime;
+                    allOK &= checkOneDependency(case_.selected_variants_filename, selectedVariantsWriteTime, case_.vcf_filename);
+                    allOK &= checkOneDependency(case_.selected_variants_filename, selectedVariantsWriteTime, case_.tumor_dna_allcount_filename);
+                    allOK &= checkOneDependency(case_.selected_variants_filename, selectedVariantsWriteTime, case_.tumor_rna_allcount_filename);
+                }
+
+                return allOK;
             } // EvaluateDependencies
 
+            bool checkOneDependency(string selectedVariantsFilename, DateTime selectedVariantsLastWriteTime, string sourceFilename)
+            {
+                if (selectedVariantsLastWriteTime < new FileInfo(sourceFilename).LastWriteTime)
+                {
+                    Console.WriteLine(selectedVariantsFilename + " is older than " + sourceFilename + ", upon which it depends.");
+                    return false;
+                }
+
+                return true;
+            } // checkOneDependency
         } // SelectVariantsProcessingStage
 
         class ExpressionDistributionProcessingStage : ProcessingStage

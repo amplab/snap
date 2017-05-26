@@ -60,6 +60,8 @@ obj
 /apps/GenerateReadExtractionScript/bin
 /apps/SelectGenes/bin
 /apps/AnnotateVariants/bin
+/apps/CheckDone/bin
+
 
 
 

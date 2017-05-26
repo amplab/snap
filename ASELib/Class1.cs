@@ -49,6 +49,7 @@ namespace ASELib
             public string tumor_rna_filename = "";
             public string methylation_filename = "";
             public string copy_number_filename = "";
+            public string maf_filename = "";
 
             //
             // Sizes for downloaded files.
@@ -67,7 +68,6 @@ namespace ASELib
             public string tumor_dna_allcount_filename = "";
             public string normal_rna_allcount_filename = "";
             public string tumor_rna_allcount_filename = "";
-            public string maf_filename = "";
             public string regional_expression_filename = "";
             public string gene_expression_filename = "";
             public string selected_variants_filename = "";
@@ -84,6 +84,7 @@ namespace ASELib
             public string tumor_dna_gene_coverage_filname = "";
             public string vcf_filename = "";
             public string extracted_maf_lines_filename = "";
+            // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
 
             //
             // Checksums for downloaded files. The tumor DNA BAMs aren't included here
@@ -3301,6 +3302,18 @@ namespace ASELib
             }
 
             return outputPathname + @"\";
+        }
+
+        public static string GetDataDirectoryFromFilename(string filename, ASEConfirguation configuration)
+        {
+            foreach (var dataDirectory in configuration.dataDirectories)
+            {
+                if (filename.ToLower().StartsWith(dataDirectory.ToLower())) {
+                    return dataDirectory;
+                }
+            }
+
+            return "none";
         }
 
     } // ASETools
