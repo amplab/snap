@@ -21,10 +21,320 @@ namespace ASELib
 
         public const int GuidStringLength = 36;
 
-        //
-        // A Case is a person with TCGA data.
-        //
-        public class Case
+		public const int nHumanNuclearChromosomes = 24;   // 1-22, X and Y.
+
+
+        // enumeration of variant classification values in MAF files.
+        // See https://wiki.nci.nih.gov/display/TCGA/Mutation+Annotation+Format+%28MAF%29+Specification
+        // for more information
+
+		static public bool isChromosomeMitochondrial(string chromosome)
+		{
+			string lowerChromosome = chromosome.ToLower();
+			return lowerChromosome == "m" || lowerChromosome == "mt" || lowerChromosome == "chrm" || lowerChromosome == "chrmt";
+		}
+		static public bool isChromosomeSex(string chromosome)
+		{
+			string lowerChromosome = chromosome.ToLower();
+			return lowerChromosome == "x" || lowerChromosome == "chrx" || lowerChromosome == "y" || lowerChromosome == "chry";
+		}
+
+		static public bool isChromosomeAutosomal(string chromosome)
+		{
+			return !isChromosomeSex(chromosome) && !isChromosomeMitochondrial(chromosome);
+		}
+
+		public static int ChromosomeNameToIndex(string chromosomeName)
+		{
+			var name = chromosomeName.ToLower();
+
+			for (int i = 1; i <= 22; i++)
+			{
+				var comp = Convert.ToString(i);
+				if (name == comp || name == "chr" + comp) return i;
+			}
+
+			//
+			// Use 0 and 23 for the sex chromosomes, so the array indices correspond to the chromosome names.
+			//
+			if (name == "chrx" || name == "x") return 0;
+			if (name == "chry" || name == "y") return 23;
+
+			return -1;
+		}
+
+
+		public static string ChromosomeIndexToName(int index, bool useChr = false)
+		{
+			if (index >= 1 && index <= 22)
+			{
+				return (useChr ? "chr" : "") + index;
+			}
+
+			if (index == 0) return (useChr ? "chr" : "") + "X";
+
+			if (index == 23) return (useChr ? "chr" : "") + "Y";
+
+			return "Invalid chromosome index: " + index;
+		}
+
+		public static string chromosomeNameToNonChrForm(string rawName)
+		{
+			if (rawName.Count() < 4 || rawName.Substring(0, 3).ToLower() != "chr")
+			{
+				return rawName.ToLower();
+			}
+
+			return rawName.Substring(3).ToLower();
+		}
+
+		public class Exon
+		{
+			public Exon(string startString, string endString)
+			{
+				start = Convert.ToInt32(startString);
+				end = Convert.ToInt32(endString);
+			}
+
+			public int start;
+			public int end;
+		}
+
+		public class Isoform    // These come from the knownGene file
+		{
+			public string ucscId;
+			public string chromosome;   // The non-chr version
+			public string strand;
+			public int txStart;
+			public int txEnd;
+			public int cdsStart;
+			public int cdsEnd;
+			public string proteinId;
+			public string alignId;
+			public Exon[] exons;
+
+			public static Isoform fromFileLine(string fileLine)
+			{
+				var fields = fileLine.Split('\t');
+				if (fields.Count() < 12)
+				{
+					Console.WriteLine("Isoform.fromFileLine: line had wrong number of fields, " + fields.Count() + " != 12");
+					return null;
+				}
+
+				var isoform = new Isoform();
+
+				isoform.ucscId = ConvertToNonExcelString(fields[0]);
+				isoform.chromosome = chromosomeNameToNonChrForm(ConvertToNonExcelString(fields[1]));
+				isoform.strand = ConvertToNonExcelString(fields[2]);
+
+				int exonCount;
+				try
+				{
+					isoform.txStart = Convert.ToInt32(ConvertToNonExcelString(fields[3]));
+					isoform.txEnd = Convert.ToInt32(ConvertToNonExcelString(fields[4]));
+
+					if (isoform.txEnd <= isoform.txStart)
+					{
+						Console.WriteLine("Isoform.fromFileLine: warning: isoform " + isoform.ucscId + " has empty or negative transcription region " + fileLine);
+					}
+
+					isoform.cdsStart = Convert.ToInt32(ConvertToNonExcelString(fields[5]));
+					isoform.cdsEnd = Convert.ToInt32(ConvertToNonExcelString(fields[6]));
+					exonCount = Convert.ToInt32(ConvertToNonExcelString(fields[7]));
+
+
+					var exonStartStrings = ConvertToNonExcelString(fields[8]).Split(',');
+					var exonEndStrings = ConvertToNonExcelString(fields[9]).Split(',');
+
+					//
+					// They have trailing commas, so they should have one more field than there are exons, and also should have an empty string
+					// as their last element.
+					//
+					if (exonStartStrings.Count() != exonCount + 1 || exonEndStrings.Count() != exonCount + 1 || exonStartStrings[exonCount] != "" || exonEndStrings[exonCount] != "")
+					{
+						Console.WriteLine("Isoform.fromFileLine: Bad exon start/end: " + fileLine);
+					}
+
+					isoform.exons = new Exon[exonCount];
+					for (int i = 0; i < exonCount; i++)
+					{
+						isoform.exons[i] = new Exon(exonStartStrings[i], exonEndStrings[i]);
+					}
+
+
+				}
+				catch (FormatException)
+				{
+					Console.WriteLine("Isoform.fromFileLine: Format exception parsing a numeric field in line: " + fileLine);
+					return null;
+				}
+
+				isoform.proteinId = fields[10];
+				isoform.alignId = fields[11];
+
+				return isoform;
+			}
+		}
+
+
+		// TODO: why do you have to map by chromosome?
+		// Holds Gene location and isoform information
+		public class GeneLocationInfo
+		{
+			public string hugoSymbol;
+			public string chromosome;   // in non-chr form
+			public int minLocus;
+			public int maxLocus;
+
+			public bool inconsistent = false;
+
+			public List<Isoform> isoforms = new List<Isoform>();
+		}
+
+		// Stores a dictionary of genes for each chromosome
+		public class GeneLocationsByNameAndChromosome
+		{
+			public GeneLocationsByNameAndChromosome(Dictionary<string, GeneLocationInfo> genesByName_)
+			{
+				genesByName = genesByName_;
+
+				foreach (var geneEntry in genesByName)
+				{
+					var gene = geneEntry.Value;
+					if (!genesByChromosome.ContainsKey(gene.chromosome))
+					{
+						genesByChromosome.Add(gene.chromosome, new List<GeneLocationInfo>());
+					}
+
+					genesByChromosome[gene.chromosome].Add(gene);
+				}
+			}
+
+			public Dictionary<string, GeneLocationInfo> genesByName;
+			public Dictionary<string, List<GeneLocationInfo>> genesByChromosome = new Dictionary<string, List<GeneLocationInfo>>();    // chromosome is in non-chr form.
+		}
+
+
+		public class AnnotatedSelectedVariantLine
+		{
+			public static AnnotatedSelectedVariantLine fromText(string inputLine)
+			{
+				var retVal = new AnnotatedSelectedVariantLine();
+
+				var fields = inputLine.Split('\t');
+
+				if (fields.Count() != 20)
+				{
+					Console.WriteLine("AnnotatedSelectedVariantLine.fromText: wrong field count (" + fields.Count() + " != 14) in line: " + inputLine);
+					return null;
+				}
+
+				try
+				{
+					retVal.contig = fields[0];
+					retVal.loc = Convert.ToInt32(fields[1]);
+					retVal.id = fields[4];
+					retVal.Ref = fields[5];
+					retVal.alt = fields[6];
+					retVal.qual = fields[7];
+					retVal.filter = fields[8];
+					retVal.info = fields[9];
+					retVal.format = fields[10];
+					retVal.nMatchingReferenceDNA = Convert.ToInt32(fields[12]);
+					retVal.nMatchingVariantDNA = Convert.ToInt32(fields[13]);
+					retVal.nMatchingNeitherDNA = Convert.ToInt32(fields[14]);
+					retVal.nMatchingBothDNA = Convert.ToInt32(fields[15]);
+					retVal.nMatchingReferenceRNA = Convert.ToInt32(fields[16]);
+					retVal.nMatchingVariantRNA = Convert.ToInt32(fields[17]);
+					retVal.nMatchingNeitherRNA = Convert.ToInt32(fields[18]);
+					retVal.nMatchingBothRNA = Convert.ToInt32(fields[19]);
+				}
+				catch (FormatException)
+				{
+					Console.WriteLine("Format exception parsing annotated selected variant line " + inputLine);
+					return null;
+				}
+
+				return retVal;
+			}
+
+			public static List<AnnotatedSelectedVariantLine> readFile(string filename)
+			{
+				var file = CreateStreamReaderWithRetry(filename);
+
+				if (null == file)
+				{
+					Console.WriteLine("AnnotatedSelectedVariantLine.readFile: unable to open file " + filename);
+					return null;
+				}
+
+				file.ReadLine();    // Skip the header.
+
+				var retVal = new List<AnnotatedSelectedVariantLine>();
+
+				string line;
+				bool seenDone = false;
+				while (null != (line = file.ReadLine()))
+				{
+					if (seenDone)
+					{
+						Console.WriteLine("AnnotatedSelectedVariantLine.readFile: file continues after **done**: " + filename);
+						return null;
+					}
+
+					if (line == "**done**")
+					{
+						seenDone = true;
+						continue;
+					}
+
+					var variantLine = fromText(line);
+					if (null == variantLine)
+					{
+						Console.WriteLine("AnnotatedSelectedVariantLine.readFile: giving up due to parsing error in file " + filename);
+						return null;
+					}
+
+					retVal.Add(variantLine);
+				}
+
+				if (!seenDone)
+				{
+					Console.WriteLine("AnnotatedSelectedVariantLine.readFile: file is truncated " + filename);
+					return null;
+				}
+
+				return retVal;
+			}
+
+			public string contig;               // 0
+			public int loc;                     // 1
+												// second copy of contig in column 2
+												// second copy of loc in column 3
+			public string id;                   // 4
+			public string Ref;                  // 5 (capitalized to avoid conflict with C# ref keyword)
+			public string alt;                  // 6
+			public string qual;                 // 7
+			public string filter;               // 8
+			public string info;                 // 9
+			public string format;               // 10
+												// ?? for column 11
+			public int nMatchingReferenceDNA;   // 12
+			public int nMatchingVariantDNA;     // 13
+			public int nMatchingNeitherDNA;     // 14
+			public int nMatchingBothDNA;        // 15
+			public int nMatchingReferenceRNA;   // 16
+			public int nMatchingVariantRNA;     // 17
+			public int nMatchingNeitherRNA;     // 18
+			public int nMatchingBothRNA;        // 19
+		}
+
+
+		//
+		// A Case is a person with TCGA data.
+		//
+		public class Case
         {
             //
             // Mandatory metadata that's created by GenerateCases.
@@ -35,9 +345,11 @@ namespace ASELib
             public string normal_rna_file_id = "";    // This is optional
             public string tumor_rna_file_id;
             public string maf_file_id;
-            public string methylation_file_id;
-            public string copy_number_file_id = "";
-            public string project_id;   // This is TCGA_<DiseaseType> for TCGA.
+            public string tumor_methylation_file_id = "";
+			public string normal_methylation_file_id = "";
+			public string tumor_copy_number_file_id = "";
+			public string normal_copy_number_file_id = "";
+			public string project_id;   // This is TCGA_<DiseaseType> for TCGA.
             public List<string> sample_ids = new List<string>();
 
             //
@@ -47,23 +359,28 @@ namespace ASELib
             public string tumor_dna_filename = "";
             public string normal_rna_filename = "";
             public string tumor_rna_filename = "";
-            public string methylation_filename = "";
-            public string copy_number_filename = "";
+            public string tumor_methylation_filename = "";
+			public string normal_methylation_filename = "";
+			public string tumor_copy_number_filename = "";
+			public string normal_copy_number_filename = "";
 
-            //
-            // Sizes for downloaded files.
-            //
-            public long normal_dna_size = 0;
+			//
+			// Sizes for downloaded files.
+			//
+			public long normal_dna_size = 0;
             public long tumor_dna_size = 0;
             public long normal_rna_size = 0;
             public long tumor_rna_size = 0;
-            public long methylation_size = 0;
-            public long copy_number_size = 0;
+            public long tumor_methylation_size = 0;
+			public long normal_methylation_size = 0;
+			public long tumor_copy_number_size = 0;
+			public long normal_copy_number_size = 0;
 
-            //
-            // Pathnames for derived files.
-            //
-            public string normal_dna_allcount_filename = "";
+
+			//
+			// Pathnames for derived files.
+			//
+			public string normal_dna_allcount_filename = "";
             public string tumor_dna_allcount_filename = "";
             public string normal_rna_allcount_filename = "";
             public string tumor_rna_allcount_filename = "";
@@ -97,14 +414,16 @@ namespace ASELib
             public string normal_dna_file_bai_md5 = "";
             public string tumor_dna_file_bam_md5 = "";
             public string tumor_dna_file_bai_md5 = "";
-            public string methylation_file_md5 = "";
-            public string copy_number_file_md5 = "";
+            public string tumor_methylation_file_md5 = "";
+			public string normal_methylation_file_md5 = "";
+			public string tumor_copy_number_file_md5 = "";
+			public string normal_copy_number_file_md5 = "";
 
-            //
-            // The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
-            // so so just take the column numbers on the command line.  (That seemed better than compiling file format knowledge into them.)
-            //
-            static public int ProjectColumn = -1;
+			//
+			// The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
+			// so so just take the column numbers on the command line.  (That seemed better than compiling file format knowledge into them.)
+			//
+			static public int ProjectColumn = -1;
             static public int TumorRNAAllcountFilenameColumn = -1;
 
             public string disease()
@@ -221,28 +540,33 @@ namespace ASELib
                 new FieldInformation("Normal RNA File ID",                                  c => c.normal_rna_file_id, (c,v) => c.normal_rna_file_id = v),
                 new FieldInformation("Tumor RNA File ID",                                   c => c.tumor_rna_file_id, (c,v) => c.tumor_rna_file_id = v),
                 new FieldInformation("MAF File ID",                                         c => c.maf_file_id, (c,v) => c.maf_file_id = v),
-                new FieldInformation("Methylation File ID",                                 c => c.methylation_file_id, (c,v) => c.methylation_file_id = v),
-                new FieldInformation("Copy Number File ID",                                 c => c.copy_number_file_id, (c,v) => c.copy_number_file_id = v),
-                new FieldInformation("Project ID",                                          c => c.project_id, (c,v) => c.project_id = v),
+                new FieldInformation("Tumor Methylation File ID",                           c => c.tumor_methylation_file_id, (c,v) => c.tumor_methylation_file_id = v),
+				new FieldInformation("Normal Methylation File ID",                          c => c.normal_methylation_file_id, (c,v) => c.normal_methylation_file_id = v),
+				new FieldInformation("Tumor Copy Number File ID",                           c => c.tumor_copy_number_file_id, (c,v) => c.tumor_copy_number_file_id = v),
+				new FieldInformation("Normal Copy Number File ID",                          c => c.normal_copy_number_file_id, (c,v) => c.normal_copy_number_file_id = v),
+				new FieldInformation("Project ID",                                          c => c.project_id, (c,v) => c.project_id = v),
                 new FieldInformation("Sample IDs",                                          c => c.sampleIdsInCommaSeparatedList(), (c,v) => c.sample_ids = v.Split(',').ToList()),
 
                 new FieldInformation("Normal DNA Filename",                                 c => c.normal_dna_filename, (c,v) => c.normal_dna_filename = v),
                 new FieldInformation("Tumor DNA Filename",                                  c => c.tumor_dna_filename, (c,v) => c.tumor_dna_filename = v),
                 new FieldInformation("Normal RNA Filename",                                 c => c.normal_rna_filename, (c,v) => c.normal_rna_filename = v),
                 new FieldInformation("Tumor RNA Filename",                                  c => c.tumor_rna_filename, (c,v) => c.tumor_rna_filename = v),
-                new FieldInformation("Methylation Filename",                                c => c.methylation_filename, (c,v) => c.methylation_filename = v),
-
-                new FieldInformation("Copy Number Filename",                                c => c.copy_number_filename, (c,v) => c.copy_number_filename = v),
-                new FieldInformation("MAF Filename",                                        c => c.maf_filename, (c,v) => c.maf_filename = v),
+                new FieldInformation("Tumor Methylation Filename",                          c => c.tumor_methylation_filename, (c,v) => c.tumor_methylation_filename = v),
+				new FieldInformation("Normal Methylation Filename",                         c => c.normal_methylation_filename, (c,v) => c.normal_methylation_filename = v),
+				new FieldInformation("Tumor Copy Number Filename",                          c => c.tumor_copy_number_filename, (c,v) => c.tumor_copy_number_filename = v),
+				new FieldInformation("Normal Copy Number Filename",                         c => c.normal_copy_number_filename, (c,v) => c.normal_copy_number_filename = v),
+				new FieldInformation("MAF Filename",                                        c => c.maf_filename, (c,v) => c.maf_filename = v),
 
                 new FieldInformation("Normal DNA Size",                                     c => Convert.ToString(c.normal_dna_size), (c,v) => c.normal_dna_size = LongFromString(v)),
                 new FieldInformation("Tumor DNA Size",                                      c => Convert.ToString(c.tumor_dna_size), (c,v) => c.tumor_dna_size = LongFromString(v)),
                 new FieldInformation("Normal RNA Size",                                     c => Convert.ToString(c.normal_rna_size), (c,v) => c.normal_rna_size = LongFromString(v)),
                 new FieldInformation("Tumor RNA Size",                                      c => Convert.ToString(c.tumor_rna_size), (c,v) => c.tumor_rna_size = LongFromString(v)),
-                new FieldInformation("Methylation Size",                                    c => Convert.ToString(c.methylation_size), (c,v) => c.methylation_size = LongFromString(v)),
-                new FieldInformation("Copy Number Size",                                    c => Convert.ToString(c.copy_number_size), (c,v) => c.copy_number_size = LongFromString(v)),
+                new FieldInformation("Tumor Methylation Size",                              c => Convert.ToString(c.tumor_methylation_size), (c,v) => c.tumor_methylation_size = LongFromString(v)),
+				new FieldInformation("Normal Methylation Size",                             c => Convert.ToString(c.normal_methylation_size), (c,v) => c.normal_methylation_size = LongFromString(v)),
+				new FieldInformation("Tumor Copy Number Size",                              c => Convert.ToString(c.tumor_copy_number_size), (c,v) => c.tumor_copy_number_size = LongFromString(v)),
+				new FieldInformation("Normal Copy Number Size",                             c => Convert.ToString(c.normal_copy_number_size), (c,v) => c.normal_copy_number_size = LongFromString(v)),
 
-                new FieldInformation("Normal DNA Allcount Filename",                        c => c.normal_dna_allcount_filename, (c,v) => c.normal_dna_allcount_filename = v, DerivedFile.Type.NormalDNAAllcount, normalDNAAllcountExtension, c => c.normal_dna_file_id),
+				new FieldInformation("Normal DNA Allcount Filename",                        c => c.normal_dna_allcount_filename, (c,v) => c.normal_dna_allcount_filename = v, DerivedFile.Type.NormalDNAAllcount, normalDNAAllcountExtension, c => c.normal_dna_file_id),
                 new FieldInformation("Tumor DNA Allcount Filename",                         c => c.tumor_dna_allcount_filename, (c,v) => c.tumor_dna_allcount_filename = v, DerivedFile.Type.TumorDNAAllcount, tumorDNAAllcountExtension, c => c.tumor_dna_file_id),
                 new FieldInformation("Normal RNA Allcount Filename",                        c => c.normal_rna_allcount_filename, (c,v) => c.normal_rna_allcount_filename = v, DerivedFile.Type.NormalRNAAllcount, normalRNAAllcountExtension, c => c.normal_rna_file_id),
                 new FieldInformation("Tumor RNA Allcount Filename",                         c => c.tumor_rna_allcount_filename, (c,v) => c.tumor_rna_allcount_filename = v, DerivedFile.Type.TumorRNAAllcount, tumorRNAAllcountExtension, c => c.tumor_rna_file_id),
@@ -271,9 +595,12 @@ namespace ASELib
                 new FieldInformation("Normal DNA BAI MD5",                                  c => c.normal_dna_file_bai_md5, (c,v) => c.normal_dna_file_bai_md5 = v),
                 new FieldInformation("Tumor DNA BAM MD5",                                   c => c.tumor_dna_file_bam_md5, (c,v) => c.tumor_dna_file_bam_md5 = v),
                 new FieldInformation("Tumor DNA BAI MD5",                                   c => c.tumor_dna_file_bai_md5, (c,v) => c.tumor_dna_file_bai_md5 = v),
-                new FieldInformation("Methylation MD5",                                     c => c.methylation_file_md5, (c,v) => c.methylation_file_md5 = v),
-                new FieldInformation("Copy Number MD5",                                     c => c.copy_number_file_md5, (c,v) => c.copy_number_file_md5 = v),
-            }; // fieldInformation
+                new FieldInformation("Tumor Methylation MD5",                               c => c.tumor_methylation_file_md5, (c,v) => c.tumor_methylation_file_md5 = v),
+				new FieldInformation("Normal Methylation MD5",                              c => c.normal_methylation_file_md5, (c,v) => c.normal_methylation_file_md5 = v),
+				new FieldInformation("Tumor Copy Number MD5",                               c => c.tumor_copy_number_file_md5, (c,v) => c.tumor_copy_number_file_md5 = v),
+				new FieldInformation("Normal Copy Number MD5",                              c => c.normal_copy_number_file_md5, (c,v) => c.normal_copy_number_file_md5 = v),
+
+			}; // fieldInformation
 
   
             static public Case fromSaveFileLine(Dictionary<string, int> fieldMappings, string[] fields) 
@@ -402,25 +729,43 @@ namespace ASELib
                     maf_filename = "";
                 }
 
-                if (methylation_file_id != "" && downloadedFiles.ContainsKey(methylation_file_id))
+                if (tumor_methylation_file_id != "" && downloadedFiles.ContainsKey(tumor_methylation_file_id))
                 {
-                  methylation_filename  = downloadedFiles[methylation_file_id].fileInfo.FullName;
+                  tumor_methylation_filename  = downloadedFiles[tumor_methylation_file_id].fileInfo.FullName;
                 }
                 else
                 {
-                    methylation_filename = "";
+                    tumor_methylation_filename = "";
                 }
 
-                if (copy_number_file_id != "" && downloadedFiles.ContainsKey(copy_number_file_id))
+				if (normal_methylation_file_id != "" && downloadedFiles.ContainsKey(normal_methylation_file_id))
+				{
+					normal_methylation_filename = downloadedFiles[normal_methylation_file_id].fileInfo.FullName;
+				}
+				else
+				{
+					normal_methylation_filename = "";
+				}
+
+				if (tumor_copy_number_file_id != "" && downloadedFiles.ContainsKey(tumor_copy_number_file_id))
                 {
-                    copy_number_filename = downloadedFiles[copy_number_file_id].fileInfo.FullName;
+                    tumor_copy_number_filename = downloadedFiles[tumor_copy_number_file_id].fileInfo.FullName;
                 }
                 else
                 {
-                    copy_number_filename = "";
+                    tumor_copy_number_filename = "";
                 }
 
-                if (!derivedFiles.ContainsKey(case_id))
+				if (normal_copy_number_file_id != "" && downloadedFiles.ContainsKey(normal_copy_number_file_id))
+				{
+					normal_copy_number_filename = downloadedFiles[normal_copy_number_file_id].fileInfo.FullName;
+				}
+				else
+				{
+					normal_copy_number_filename = "";
+				}
+
+				if (!derivedFiles.ContainsKey(case_id))
                 {
                     tumor_rna_allcount_filename = "";
                     allele_specific_gene_expression_filename = "";
@@ -518,7 +863,7 @@ namespace ASELib
                 }
                 catch (IOException e)
                 {
-                    if (e is FileNotFoundException)
+                    if (e is FileNotFoundException || e is DirectoryNotFoundException)
                     {
                         return null;
                     }
@@ -560,13 +905,17 @@ namespace ASELib
             public const string defaultConfigurationFilePathame = defaultBaseDirectory + "configuration.txt";
 
             public string accessTokenPathname = defaultBaseDirectory +  @"access_token.txt";
+
+			public const string defaultGenomeBuild = "hg38";
+			public const string defaultGeneLocationInformation = defaultBaseDirectory + "knownGene-" + defaultGenomeBuild + ".txt";
+
             public List<string> dataDirectories = new List<string>();
             public string mafManifestPathname = defaultBaseDirectory + "mafManifest.txt";
             public string mutationCaller = "mutect";
             public List<string> programNames = new List<string>();
             public string binariesDirectory = defaultBaseDirectory + @"bin\";
             public string configuationFilePathname = defaultConfigurationFilePathame;
-            public string casesFilePathname = defaultBaseDirectory + "cases.txt";
+            public string casesFilePathname = defaultBaseDirectory + "cases_withTNMethylation.txt";
             public string indexDirectory = @"d:\gdc\indices\hg38-20";
             public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
             public string hpcScriptFilename = "";    // The empty string says to black hole this script
@@ -1231,6 +1580,47 @@ namespace ASELib
         }
 
         static readonly int FileIdLength = "01c5f902-ec3c-4eb7-9e38-1d29ae6ab959".Count();
+		//
+		// For filenames of the from ...\analysis-id\filename
+		//
+		static public string GetAnalysisIdFromPathname(string pathname)
+		{
+			if (!pathname.Contains('\\'))
+			{
+				Console.WriteLine("ExpressionTools.GetAnalysisIdFromPathname: invalid pathname input " + pathname);
+				return "";
+			}
+
+			string directoryName;
+			if (pathname.LastIndexOf('\\') != pathname.Count())
+			{
+				//
+				// Does not end in a trailing \.
+				//
+				directoryName = pathname.Substring(0, pathname.LastIndexOf('\\'));
+			}
+			else
+			{
+				//
+				// Ends in a trailing backslash, just trim it off.
+				//
+				directoryName = pathname.Substring(0, pathname.Count() - 1);
+			}
+
+			if (directoryName.Contains('\\'))
+			{
+				directoryName = directoryName.Substring(directoryName.LastIndexOf('\\') + 1);
+			}
+
+			if (directoryName.Count() != 36)
+			{
+				Console.WriteLine("ExpressionTools.GetAnalysisIdFromPathname: invalid pathname input does not include analysis id as last directory " + pathname);
+				return "";
+			}
+
+
+			return directoryName;
+		}
 
         public class DownloadedFile
         {
@@ -1877,7 +2267,157 @@ namespace ASELib
             return Convert.ToInt32(value);
         }
 
-        public class MAFLine
+		// contains annotation data from one line in a methylation file
+		public class AnnotationLine
+		{
+			// Methylation types
+			public enum FeatureType {
+				// Feature type not specified
+				Other,
+				// methylation found in 2kb region upstream from island
+				N_Shore,
+				// methylation found in 2kb region downstream from island
+				S_Shore,
+				// CpG island
+				Island,
+			}
+
+			public readonly string Composite_Element_REF;
+			public readonly double Beta_Value;
+			public readonly string Chromsome;
+			public readonly int Start;
+			public readonly int End;
+			public readonly string[] Gene_Symbol;
+			public readonly string[] Gene_Type;
+			public readonly string[] Transcript_ID;
+			public readonly int[] Positive_to_TSS;
+			public readonly string CGI_Coordinate;
+			public readonly FeatureType Feature_Type;
+
+			// this is not in the original file, but calculated from beta_value
+			public readonly double M_Value;
+
+			AnnotationLine(string Composite_Element_REF_,
+			double Beta_Value_,
+			string Chromosome_,
+			int Start_,
+			int End_,
+			string[] Gene_Symbol_,
+			string[] Gene_Type_,
+			string[] Transcript_ID_,
+			int[] Positive_to_TSS_,
+			string CGI_Coordinate_,
+			FeatureType Feature_Type_)
+			{
+				var geneCount = Gene_Symbol_.Length;
+
+				if (Gene_Type_.Length != geneCount || Transcript_ID_.Length != geneCount || Positive_to_TSS_.Length != geneCount)
+				{
+					Console.WriteLine("Error: Gene Count does not match supporting gene data");
+				}
+
+				Composite_Element_REF = Composite_Element_REF_;
+				Beta_Value = Beta_Value_;
+				Chromsome = Chromosome_;
+				Start = Start_;
+				End = End_;
+				Gene_Symbol = Gene_Symbol_;
+				Gene_Type = Gene_Type_;
+				Transcript_ID = Transcript_ID_;
+				Positive_to_TSS = Positive_to_TSS_;
+				CGI_Coordinate = CGI_Coordinate_;
+				Feature_Type = Feature_Type_;
+
+				// M_value calculated as shown in Du et. al. 2010
+				M_Value = Math.Log(Beta_Value / (1 - Beta_Value));
+			}
+
+			// Converts strings to doubles, returning 1 if empty string.
+			// We return 1 here because this function parses beta values, which must be between 0 and 1
+			static Double ConvertToDoubleTreatingNullStringAsOne(string value)
+			{
+				Double n;
+				if (!Double.TryParse(value, out n))
+					n = 1;
+				return n;
+			}
+
+			// splits string to array by specified delimiter. This is used mainly when gene symbols are left blank,
+			// which is specified by a '.'
+			static string[] splitPotentialString(string value, char delim)
+			{
+				string[] parsed = new string[] { };
+				if (value != ".")
+					parsed = value.Split(delim);
+				return parsed;
+			}
+
+			static AnnotationLine ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
+			{
+				// delimiter separating columns
+				var delim = ';';
+
+				Enum.TryParse(fields[fieldMappings["Feature_Type"]], out FeatureType Feature_Type);
+
+				 return new AnnotationLine(
+				fields[fieldMappings["Composite Element REF"]],
+				ConvertToDoubleTreatingNullStringAsOne(fields[fieldMappings["Beta_value"]]),
+				fields[fieldMappings["Chromosome"]],
+				Convert.ToInt32(fields[fieldMappings["Start"]]),
+				Convert.ToInt32(fields[fieldMappings["End"]]),
+				splitPotentialString(fields[fieldMappings["Gene_Symbol"]], delim),
+				splitPotentialString(fields[fieldMappings["Gene_Type"]], delim),
+				splitPotentialString(fields[fieldMappings["Transcript_ID"]], delim),
+				splitPotentialString(fields[fieldMappings["Position_to_TSS"]], delim).Select(s => Convert.ToInt32(s)).ToArray(),
+				fields[fieldMappings["CGI_Coordinate"]],
+				Feature_Type
+				);
+
+			}
+
+			// TODO: what is fileHasVersion for
+			static public List<AnnotationLine> ReadFile(string filename, string file_id, bool fileHasVersion)
+			{
+				StreamReader inputFile;
+
+				inputFile = CreateStreamReaderWithRetry(filename);
+
+				var neededFields = new List<string>();
+				neededFields.Add("Composite Element REF");
+				neededFields.Add("Beta_value");
+				neededFields.Add("Chromosome");
+				neededFields.Add("Start");
+				neededFields.Add("End");
+				neededFields.Add("Gene_Symbol");
+				neededFields.Add("Gene_Type");
+				neededFields.Add("Transcript_ID");
+				neededFields.Add("Position_to_TSS");
+				neededFields.Add("CGI_Coordinate");
+				neededFields.Add("Feature_Type");
+
+				bool hasDone = false;
+				var headerizedFile = new HeaderizedFile<AnnotationLine>(inputFile, fileHasVersion, hasDone, "#version gdc-1.0.0", neededFields);
+
+				List<AnnotationLine> result;
+
+				if (!headerizedFile.ParseFile((a, b) => ParseLine(a, b), out result))
+				{
+					Console.WriteLine("Error reading Annotation File " + filename);
+					return null;
+				}
+
+				inputFile.Close();
+
+				// filter out invalid results. Invalid results include records without valid M values and records without gene symbols.
+				result = result.Where(c => (c.M_Value != double.PositiveInfinity) && (c.Gene_Symbol.Length > 0)).ToList();
+
+				return result;
+			} // ReadFile
+
+
+		}
+
+		public class MAFLine
         {
             public readonly string Hugo_Symbol;
             public readonly string NCBI_Build;
@@ -2117,7 +2657,7 @@ namespace ASELib
             {
                 if (null != allcountReader)
                 {
-                    Console.WriteLine("ExpressionTools.AllcountReader.openFile(): file is already open.  You can only do this once per allcount file.");
+                    Console.WriteLine("ASETools.AllcountReader.openFile(): file is already open.  You can only do this once per allcount file.");
                 }
 
                 allcountReader = null;
@@ -2507,9 +3047,56 @@ namespace ASELib
             }
         } // DownloadStringWithRetry
 
-        public static string WindowsToLinuxPathname(string windowsPathname)
-        {
-            string[] components = windowsPathname.Split('\\');
+		// Loads gene information from a reference file from UCSC Genome Browser
+		public static Dictionary<string, GeneLocationInfo> readKnownGeneFile(string knownGenesFilename) 
+		{
+			var result = new Dictionary<string, GeneLocationInfo>();
+
+			var refFile = CreateStreamReaderWithRetry(knownGenesFilename);
+
+
+
+			refFile.ReadLine();    // Skip the header
+
+			string line;
+			while (null != (line = refFile.ReadLine()))
+			{
+				// Parse required fields
+				var fields = line.Split('\t');
+
+				if (fields.Count() != 22)
+				{
+					Console.WriteLine("LoadGeneLocationInfo: wrong number of fields in file " + fields.Count() + " != 22 " + ": " + line);
+					continue;
+				}
+
+				var hugoSymbol = ConvertToNonExcelString(fields[16]);
+				var isoform = Isoform.fromFileLine(line);
+
+				if (!result.ContainsKey(hugoSymbol))
+				{
+					result.Add(hugoSymbol, new GeneLocationInfo());
+					result[hugoSymbol].hugoSymbol = hugoSymbol;
+					result[hugoSymbol].chromosome = isoform.chromosome;
+					result[hugoSymbol].minLocus = isoform.txStart;
+					result[hugoSymbol].maxLocus = isoform.txEnd;
+				}
+				else
+				{
+					result[hugoSymbol].minLocus = Math.Min(result[hugoSymbol].minLocus, isoform.txStart);
+					result[hugoSymbol].maxLocus = Math.Max(result[hugoSymbol].maxLocus, isoform.txEnd);
+				}
+
+				result[hugoSymbol].isoforms.Add(isoform);
+			}
+
+			refFile.Close();
+			return result;
+		}
+
+		public static string WindowsToLinuxPathname(string windowsPathname)
+		{
+			string[] components = windowsPathname.Split('\\');
 
 
             if (components.Count() < 5)
