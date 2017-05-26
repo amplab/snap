@@ -286,7 +286,8 @@ namespace ASEProcessManager
                 {
                     var case_ = caseEntry.Value;
 
-                    string[] idsToDownload = {case_.normal_dna_file_id, case_.tumor_dna_file_id, case_.normal_rna_file_id, case_.tumor_rna_file_id, case_.methylation_file_id, case_.copy_number_file_id};
+                    string[] idsToDownload = {case_.normal_dna_file_id, case_.tumor_dna_file_id, case_.normal_rna_file_id, case_.tumor_rna_file_id, case_.normal_methylation_file_id,
+						case_.tumor_methylation_file_id, case_.normal_copy_number_file_id, case_.tumor_copy_number_file_id};
 
                     foreach (var id in idsToDownload) {
                         if (id != null && id != "" && !stateOfTheWorld.downloadedFiles.ContainsKey(id)) {
@@ -333,15 +334,26 @@ namespace ASEProcessManager
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_dna_file_id, case_.normal_dna_file_bam_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_dna_file_id, case_.tumor_dna_file_bam_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_rna_file_id, case_.normal_rna_file_bam_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-                    if (case_.methylation_file_id != null && case_.methylation_file_id != "")
+                    if (case_.tumor_methylation_file_id != null && case_.tumor_methylation_file_id != "")
                     {
-                        HandleFile(stateOfTheWorld, script, hpcScript, case_.methylation_file_id, case_.methylation_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                        HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_methylation_file_id, case_.tumor_methylation_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     }
-                    if (case_.copy_number_file_id != null && case_.copy_number_file_id != "")
+
+					if (case_.normal_methylation_file_id != null && case_.normal_methylation_file_id != "")
+					{
+						HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_methylation_file_id, case_.normal_methylation_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+					}
+
+					if (case_.tumor_copy_number_file_id != null && case_.tumor_copy_number_file_id != "")
                     {
-                        HandleFile(stateOfTheWorld, script, hpcScript, case_.copy_number_file_id, case_.copy_number_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                        HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_copy_number_file_id, case_.tumor_copy_number_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     }
-                }
+
+					if (case_.normal_copy_number_file_id != null && case_.normal_copy_number_file_id != "")
+					{
+						HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_copy_number_file_id, case_.normal_copy_number_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+					}
+				}
             } // EvaluateStage
 
             void HandleFile(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, string fileId, string expectedMD5, ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites)
@@ -849,7 +861,11 @@ namespace ASEProcessManager
 
         class ExpressionNearMutationsProcessingStage : ProcessingStage
         {
-            public ExpressionNearMutationsProcessingStage() { }
+			bool forAlleleSpecificExpression;
+
+            public ExpressionNearMutationsProcessingStage(bool forAlleleSpecificExpression_) {
+				forAlleleSpecificExpression = forAlleleSpecificExpression_;
+			}
 
             public string GetStageName() { return "Expresssion Near Mutations"; }
 
@@ -865,17 +881,125 @@ namespace ASEProcessManager
                 foreach (var caseEntry in stateOfTheWorld.cases)
                 {
                     var case_ = caseEntry.Value;
-                    if (case_.maf_filename == "" || case_.regional_expression_filename == ""  /* unfiltered counts, which we don't have a place for yet */)
-                    {
-                        nWaitingForPrerequisites++;
-                    }
-                }
-            } // EvaluateStage
+					if (forAlleleSpecificExpression)
+					{
+						if (case_.allele_specific_gene_expression_filename != "")
+						{
+							nDone++;
+							continue;
+						}
+						else if (case_.maf_filename == "" || case_.annotated_selected_variants_filename == "")
+						{
+							nWaitingForPrerequisites++;
+							continue;
+						}
+						else
+						{
+							nAddedToScript++;
+						}
+					}
+					else
+					{
+						if (case_.gene_expression_filename != "")
+						{
+							nDone++;
+							continue;
+						}
+						else if (case_.maf_filename == "" || case_.regional_expression_filename == ""  /* unfiltered counts, which we don't have a place for yet */)
+						{
+							nWaitingForPrerequisites++;
+							continue;
+						}
+						else
+						{
+							nAddedToScript++;
+						}
+					}
+
+					// write a command for each case id
+					script.Write(stateOfTheWorld.configuration.binariesDirectory + "ExpressionNearMutations.exe");
+					hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "ExpressionNearMutations.exe");
+
+					if (forAlleleSpecificExpression)
+					{
+						script.Write(" -a");
+						hpcScript.Write(" -a");
+					}
+
+					script.Write(" " + case_.case_id);
+					hpcScript.Write(" " + case_.case_id);
+
+					script.WriteLine();
+					hpcScript.WriteLine();
+
+				}
+
+
+			} // EvaluateStage
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
             {
-                return true; // just to get it to compile
-            } // EvaluateDependencies
+				bool allOK = true;
+
+				foreach (var caseEntry in stateOfTheWorld.cases)
+				{
+					var case_ = caseEntry.Value;
+
+					if (case_.maf_filename == "")
+					{
+						Console.WriteLine("Gene expression file " + case_.gene_expression_filename + " exists, but the MAF file does not.");
+						allOK = false;
+						continue;
+					}
+
+					if (forAlleleSpecificExpression)
+					{
+						if (case_.allele_specific_gene_expression_filename == "")
+						{
+							continue;
+						}
+
+						var asGeneExpressionWriteTime = new FileInfo(case_.allele_specific_gene_expression_filename).LastWriteTime;
+						if (case_.annotated_selected_variants_filename == "")
+						{
+							Console.WriteLine("AS gene expression file " + case_.allele_specific_gene_expression_filename + " exists, but the precursor annotated selected variants file does not.");
+							allOK = false;
+							continue;
+						}
+
+						if (new FileInfo(case_.annotated_selected_variants_filename).LastWriteTime > asGeneExpressionWriteTime)
+						{
+							Console.WriteLine("AS gene expression file " + case_.allele_specific_gene_expression_filename + " is older than its regional file " + case_.regional_expression_filename);
+							allOK = false;
+							continue;
+						}
+					}
+					else
+					{
+						if (case_.gene_expression_filename == "")
+						{
+							continue;
+						}
+
+						var geneExpressionWriteTime = new FileInfo(case_.gene_expression_filename).LastWriteTime;
+
+						if (case_.regional_expression_filename == "")
+						{
+							Console.WriteLine("Gene expression file " + case_.gene_expression_filename + " exists, but the precursor regional expression file does not.");
+							allOK = false;
+							continue;
+						}
+
+						if (new FileInfo(case_.regional_expression_filename).LastWriteTime > geneExpressionWriteTime)
+						{
+							Console.WriteLine("Gene expression file " + case_.gene_expression_filename + " is older than its regional file " + case_.regional_expression_filename);
+							allOK = false;
+							continue;
+						}
+					}
+				}
+				return allOK;
+			} // EvaluateDependencies
 
         } // ExpressionNearMutationsProcessingStage
 
@@ -1126,11 +1250,15 @@ namespace ASEProcessManager
                         {
                             fileIdToCaseId.Add(case_.normal_rna_file_id, case_.case_id);
                         }
-                        if (null != case_.methylation_file_id && "" != case_.methylation_file_id)
+                        if (null != case_.tumor_methylation_file_id && "" != case_.tumor_methylation_file_id)
                         {
-                            fileIdToCaseId.Add(case_.methylation_file_id, case_.case_id);
+                            fileIdToCaseId.Add(case_.tumor_methylation_file_id, case_.case_id);
                         }
-                    }
+						if (null != case_.normal_methylation_file_id && "" != case_.normal_methylation_file_id)
+						{
+							fileIdToCaseId.Add(case_.normal_methylation_file_id, case_.case_id);
+						}
+					}
 
                     //
                     // Check that the derived file cases are real cases.
@@ -1192,18 +1320,30 @@ namespace ASEProcessManager
                             bytesTumorRNA += (ulong)downloadedFiles[case_.tumor_rna_file_id].fileInfo.Length;
                         }
 
-                        if (downloadedFiles.ContainsKey(case_.methylation_file_id))
+                        if (downloadedFiles.ContainsKey(case_.normal_methylation_file_id))
                         {
                             nMethylation++;
-                            bytesMethylation += (ulong)downloadedFiles[case_.methylation_file_id].fileInfo.Length;
+                            bytesMethylation += (ulong)downloadedFiles[case_.normal_methylation_file_id].fileInfo.Length;
                         }
 
-                        if (downloadedFiles.ContainsKey(case_.copy_number_file_id))
+						if (downloadedFiles.ContainsKey(case_.tumor_methylation_file_id))
+						{
+							nMethylation++;
+							bytesMethylation += (ulong)downloadedFiles[case_.tumor_methylation_file_id].fileInfo.Length;
+						}
+
+						if (downloadedFiles.ContainsKey(case_.normal_copy_number_file_id))
                         {
                             nCopyNumber++;
-                            bytesCopyNumber += (ulong)downloadedFiles[case_.copy_number_file_id].fileInfo.Length;
+                            bytesCopyNumber += (ulong)downloadedFiles[case_.normal_copy_number_file_id].fileInfo.Length;
                         }
-                    } // foreach case
+
+						if (downloadedFiles.ContainsKey(case_.tumor_copy_number_file_id))
+						{
+							nCopyNumber++;
+							bytesCopyNumber += (ulong)downloadedFiles[case_.tumor_copy_number_file_id].fileInfo.Length;
+						}
+					} // foreach case
 
                     Console.WriteLine(nNormalDNA + "(" + ASETools.SizeToUnits(bytesNormalDNA) + "B) normal DNA, " + nTumorDNA + "(" + ASETools.SizeToUnits(bytesTumorDNA) + "B) tumor DNA, " +
                                       nNormalRNA + "(" + ASETools.SizeToUnits(bytesNormalRNA) + "B) normal RNA, " + nTumorRNA + "(" + ASETools.SizeToUnits(bytesTumorRNA) + "B) tumor RNA, " +
@@ -1243,16 +1383,26 @@ namespace ASEProcessManager
                         fileSizesFromGDC.Add(case_.normal_rna_file_id, case_.normal_rna_size);
                     }
 
-                    if (case_.methylation_file_id != "")
+                    if (case_.tumor_methylation_file_id != "")
                     {
-                        fileSizesFromGDC.Add(case_.methylation_file_id, case_.methylation_size);
+                        fileSizesFromGDC.Add(case_.tumor_methylation_file_id, case_.tumor_methylation_size);
                     }
 
-                    if (case_.copy_number_file_id != "")
+					if (case_.normal_methylation_file_id != "")
+					{
+						fileSizesFromGDC.Add(case_.normal_methylation_file_id, case_.normal_methylation_size);
+					}
+
+					if (case_.tumor_copy_number_file_id != "")
                     {
-                        fileSizesFromGDC.Add(case_.copy_number_file_id, case_.copy_number_size);
+                        fileSizesFromGDC.Add(case_.tumor_copy_number_file_id, case_.tumor_copy_number_size);
                     }
-                }
+
+					if (case_.normal_copy_number_file_id != "")
+					{
+						fileSizesFromGDC.Add(case_.normal_copy_number_file_id, case_.normal_copy_number_size);
+					}
+				}
 
             }
 
@@ -1432,6 +1582,8 @@ namespace ASEProcessManager
 
             List<ProcessingStage> processingStages = new List<ProcessingStage>();
 
+			var forAlleleSpecificExpression = false;
+
             processingStages.Add(new MAFConfigurationProcessingStage());
             processingStages.Add(new GenerateCasesProcessingStage());
             processingStages.Add(new AllcountProcesingStage());
@@ -1442,7 +1594,7 @@ namespace ASEProcessManager
             processingStages.Add(new ExpressionDistributionProcessingStage());
             processingStages.Add(new ExtractMAFLinesProcessingStage());
             processingStages.Add(new RegionalExpressionProcessingStage());
-            processingStages.Add(new ExpressionNearMutationsProcessingStage());
+            processingStages.Add(new ExpressionNearMutationsProcessingStage(forAlleleSpecificExpression));
             processingStages.Add(new ExtractReadsProcessingStage());
             processingStages.Add(new SelectGenesProcessingStage());
 

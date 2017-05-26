@@ -126,7 +126,7 @@ namespace GenerateCases
             periodicStopwatch.Start();
 
             //
-            // Rrun through all the case Ids we saw and load the info on all cases.
+            // Run through all the case Ids we saw and load the info on all cases.
             //
             Console.Write("Loading cases...");
 
@@ -210,8 +210,10 @@ namespace GenerateCases
             int nMissingMAF = 0;
             int nComplete = 0;
             int nWithNormalRNA = 0;
-            int nWithMethylation = 0;
-            int nWithCopyNumber = 0;
+            int nWithTumorMethylation = 0;
+			int nWithTNMethylation = 0;
+			int nWithTumorCopyNumber = 0;
+			int nWithTNCopyNumber = 0;
 
             Console.Write("Loading files for cases...");
             periodicStopwatch.Stop();
@@ -234,11 +236,13 @@ namespace GenerateCases
                 List<ASETools.GDCFile> tumorDNA = new List<ASETools.GDCFile>();
                 List<ASETools.GDCFile> normalDNA = new List<ASETools.GDCFile>();
                 ASETools.GDCFile normalRNA = null;
-                ASETools.GDCFile methylation = null;
-                List<ASETools.GDCFile> maf = new List<ASETools.GDCFile>();
-                ASETools.GDCFile copyNumber = null;
+				ASETools.GDCFile tumorMethylation = null;
+				ASETools.GDCFile normalMethylation = null;
+				List<ASETools.GDCFile> maf = new List<ASETools.GDCFile>();
+				ASETools.GDCFile tumorCopyNumber = null;
+				ASETools.GDCFile normalCopyNumber = null;
 
-                from = 1;
+				from = 1;
 
 
 
@@ -299,7 +303,7 @@ namespace GenerateCases
                                 continue;
                             }                         
 
-                            if (file.data_format == "BAM" && file.data_type == "Aligned Reads")
+                            if (file.data_format == "BAM" && file.data_type == "Aligned Reads" || file.data_format == "TXT")
                             {
                                 if (0 == file.cases.Count() || 0 == file.cases[0].samples.Count())
                                 {
@@ -355,18 +359,32 @@ namespace GenerateCases
                                         normalDNA.Add(file);
                                     }
                                 }
-                            }
+								else if (file.data_type == "Methylation Beta Value")
+								{
+									if (tumor)
+									{
+										tumorMethylation = ASETools.GDCFile.selectNewestUpdated(tumorMethylation, file);
+									}
+									else
+									{
+										normalMethylation = ASETools.GDCFile.selectNewestUpdated(normalMethylation, file);
+									}
+								}
+								else if (file.data_type == "Copy Number Segment")
+								{
+									if (tumor)
+									{
+										tumorCopyNumber = ASETools.GDCFile.selectNewestUpdated(tumorCopyNumber, file);
+									}
+									else
+									{
+										normalCopyNumber = ASETools.GDCFile.selectNewestUpdated(normalCopyNumber, file);
+									}
+								}
+							}
                             else if (file.data_format == "MAF")
                             {
                                 maf.Add(file);
-                            }
-                            else if (file.data_format == "TXT" && file.data_type == "Methylation Beta Value")
-                            {
-                                methylation = ASETools.GDCFile.selectNewestUpdated(methylation, file);
-                            }
-                            else if (file.data_format == "TXT" && file.data_type == "Copy Number Segment")
-                            {
-                                copyNumber = ASETools.GDCFile.selectNewestUpdated(copyNumber, file);
                             }
                         } // Foreach file in this batch
                     } // If file data parsed
@@ -467,35 +485,77 @@ namespace GenerateCases
                             }
                         }
 
-                        if (null != methylation)
+						var hasTumorMethylation = false;
+
+                        if (null != tumorMethylation)
                         {
-                            nWithMethylation++;
+							hasTumorMethylation = true;
+                            nWithTumorMethylation++;
 
-                            case_.methylation_file_id = methylation.file_id;
-                            case_.methylation_size = methylation.file_size;
-                            case_.methylation_file_md5 = methylation.md5sum;
+							case_.tumor_methylation_file_id = tumorMethylation.file_id;
+                            case_.tumor_methylation_size = tumorMethylation.file_size;
+                            case_.tumor_methylation_file_md5 = tumorMethylation.md5sum;
 
-                            if (downloadedFiles.ContainsKey(case_.methylation_file_id)) {
-                                case_.methylation_filename = downloadedFiles[case_.methylation_file_id].fileInfo.FullName;
+                            if (downloadedFiles.ContainsKey(case_.tumor_methylation_file_id)) {
+                                case_.tumor_methylation_filename = downloadedFiles[case_.tumor_methylation_file_id].fileInfo.FullName;
                             }
                         }
 
-                        if (null != copyNumber)
+						if (null != normalMethylation)
+						{
+							// keep track of samples that have both tumor and normal methylation
+							if (hasTumorMethylation)
+							{
+								nWithTNMethylation++;
+							}
+
+							case_.normal_methylation_file_id = normalMethylation.file_id;
+							case_.normal_methylation_size = normalMethylation.file_size;
+							case_.normal_methylation_file_md5 = normalMethylation.md5sum;
+
+							if (downloadedFiles.ContainsKey(case_.normal_methylation_file_id))
+							{
+								case_.normal_methylation_filename = downloadedFiles[case_.normal_methylation_file_id].fileInfo.FullName;
+							}
+						}
+
+						bool hasTumorCopyNumber = false;
+
+						if (null != tumorCopyNumber)
                         {
-                            nWithCopyNumber++;
+							hasTumorCopyNumber = true;
 
-                            case_.copy_number_file_id = copyNumber.file_id;
-                            case_.copy_number_size = copyNumber.file_size;
-                            case_.copy_number_file_md5 = copyNumber.md5sum;
+                            nWithTumorCopyNumber++;
 
-                            if (downloadedFiles.ContainsKey(case_.copy_number_file_id))
+							case_.tumor_copy_number_file_id = tumorCopyNumber.file_id;
+                            case_.tumor_copy_number_size = tumorCopyNumber.file_size;
+                            case_.tumor_copy_number_file_md5 = tumorCopyNumber.md5sum;
+
+                            if (downloadedFiles.ContainsKey(case_.tumor_copy_number_file_id))
                             {
-                                case_.copy_number_filename = downloadedFiles[case_.copy_number_file_id].fileInfo.FullName;
+                                case_.tumor_copy_number_filename = downloadedFiles[case_.tumor_copy_number_file_id].fileInfo.FullName;
                             }
-
                         }
 
-                        case_.maf_file_id = mafFileIds.Intersect(mafManifestFileIds).ToList()[0];
+						if (null != normalCopyNumber)
+						{
+							// keep track of samples that have both tumor and normal copy number
+							if (hasTumorCopyNumber)
+							{
+								nWithTNCopyNumber++;
+							}
+
+							case_.normal_copy_number_file_id = normalCopyNumber.file_id;
+							case_.normal_copy_number_size = normalCopyNumber.file_size;
+							case_.normal_copy_number_file_md5 = normalCopyNumber.md5sum;
+
+							if (downloadedFiles.ContainsKey(case_.normal_copy_number_file_id))
+							{
+								case_.normal_copy_number_filename = downloadedFiles[case_.normal_copy_number_file_id].fileInfo.FullName;
+							}
+						}
+
+						case_.maf_file_id = mafFileIds.Intersect(mafManifestFileIds).ToList()[0];
 
                         if (downloadedFiles.ContainsKey(case_.maf_file_id))
                         {
@@ -513,9 +573,11 @@ namespace GenerateCases
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(periodicStopwatch));
 
             Console.WriteLine("Of " + allCases.Count() + ", " + nMissingTumorDNA + " don't have tumor DNA, " + nMissingNormalDNA + " don't have matched normal DNA, " + nMissingTumorRNA + " don't have tumor RNA, " 
-                + nMissingMAF + " don't have MAFs and " + nComplete + " are complete.  Of the complete, " + nWithNormalRNA + " also have normal RNA and " + nWithMethylation + " have methylation.");
+                + nMissingMAF + " don't have MAFs and " + nComplete + " are complete.  Of the complete, " + nWithNormalRNA + " also have normal RNA. \n " 
+				+ nWithTumorMethylation + " have tumor methylation, and " + nWithTNMethylation + " have both normal and tumor methylation.\n" 
+				+ nWithTumorCopyNumber + " have tumor copy number, and " + nWithTNCopyNumber + " have both normal and tumor copy number.\n");
 
-            ASETools.Case.SaveToFile(cases, configuration.casesFilePathname);
+			ASETools.Case.SaveToFile(cases, configuration.casesFilePathname);
 
             Console.WriteLine("Overall run took " + ASETools.ElapsedTimeInSeconds(stopwatch));
         } // Main
