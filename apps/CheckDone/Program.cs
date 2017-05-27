@@ -16,14 +16,23 @@ namespace CheckDone
         static Dictionary<string, List<string>> FilenamesByDataDirectory = new Dictionary<string, List<string>>();
         static ASETools.ASEConfirguation configuration;
         static int totalFiles = 0;
+        static int nFilesProcessed = 0;
 
         static void ProcessOneDataDirectory(List<string> filenames)
         {
             const int nBytesToCheck = 10; // **done**\n\r
-            var lastBitOfFile = new byte[nBytesToCheck];   
+            const int nBytesToCheckIndex = 12; // **done**\t\t\n\r
+            var lastBitOfFile = new byte[nBytesToCheck];
+            var lastBitOfFileIndex = new byte[nBytesToCheckIndex];
 
             foreach (var filename in filenames)
             {
+                lock (FilenamesByDataDirectory)
+                {
+                    nFilesProcessed++;
+                    if (nFilesProcessed % 100 == 0) Console.Write(".");
+                }
+
                 if (filename.ToLower().EndsWith(".gz"))
                 {
                     //
@@ -67,29 +76,51 @@ namespace CheckDone
                         continue;
                     }
 
-                    if (filestream.Length < nBytesToCheck)
+                    bool isIndex = filename.EndsWith(".index");
+
+                    int bytesToCheckThisFile = isIndex ? nBytesToCheckIndex : nBytesToCheck;
+                    byte[] buffer = isIndex ? lastBitOfFileIndex : lastBitOfFile;
+
+                    if (filestream.Length < bytesToCheckThisFile)
                     {
                         Console.WriteLine(filename + " is truncated.");
                         continue;
                     }
 
-                    filestream.Position = filestream.Length - nBytesToCheck;
-                    if (nBytesToCheck != filestream.Read(lastBitOfFile, 0, nBytesToCheck))
+                    filestream.Position = filestream.Length - bytesToCheckThisFile;
+                    if (bytesToCheckThisFile != filestream.Read(buffer, 0, bytesToCheckThisFile))
                     {
                         Console.WriteLine("Error reading " + filename);
                         continue;
                     }
 
-                    if (lastBitOfFile[0] != '*' ||
-                        lastBitOfFile[1] != '*' ||
-                        lastBitOfFile[2] != 'd' ||
-                        lastBitOfFile[3] != 'o' ||
-                        lastBitOfFile[4] != 'n' ||
-                        lastBitOfFile[5] != 'e' ||
-                        lastBitOfFile[6] != '*' ||
-                        lastBitOfFile[7] != '*' ||
-                        lastBitOfFile[8] != '\r' ||
-                        lastBitOfFile[9] != '\n')
+                    if (isIndex)
+                    {
+                        if (lastBitOfFile[0] != '*' ||
+                                                buffer[1] != '*' ||
+                                                buffer[2] != 'd' ||
+                                                buffer[3] != 'o' ||
+                                                buffer[4] != 'n' ||
+                                                buffer[5] != 'e' ||
+                                                buffer[6] != '*' ||
+                                                buffer[7] != '*' ||
+                                                buffer[8] != '\t' ||
+                                                buffer[9] != '\t' ||
+                                                buffer[10] != '\r' ||
+                                                buffer[11] != '\n')
+                        {
+                            Console.WriteLine(filename + " is truncated.");
+                        }
+                    } else if (buffer[0] != '*' ||
+                        buffer[1] != '*' ||
+                        buffer[2] != 'd' ||
+                        buffer[3] != 'o' ||
+                        buffer[4] != 'n' ||
+                        buffer[5] != 'e' ||
+                        buffer[6] != '*' ||
+                        buffer[7] != '*' ||
+                        buffer[8] != '\r' ||
+                        buffer[9] != '\n')
                     {
                         Console.WriteLine(filename + " is truncated.");
                     }
@@ -132,11 +163,13 @@ namespace CheckDone
                 HandleFilename(case_.normal_dna_reads_at_selected_variants_index_filename);
                 HandleFilename(case_.normal_rna_reads_at_selected_variants_index_filename);
                 HandleFilename(case_.tumor_dna_reads_at_selected_variants_index_filename);
-                HandleFilename(case_.tumor_rna_reads_at_selected_variants_filename);
+                HandleFilename(case_.tumor_rna_reads_at_selected_variants_index_filename);
                 HandleFilename(case_.annotated_selected_variants_filename);
                 HandleFilename(case_.tumor_dna_gene_coverage_filname);
                 HandleFilename(case_.extracted_maf_lines_filename);
             }
+
+            Console.Write("Processing " + totalFiles + " files in + " + FilenamesByDataDirectory.Count() + " data directories (one dot/hundred): ");
 
             //
             // Run one thread per data directory, since this is likely IO bound by the server disks rather than
@@ -156,6 +189,11 @@ namespace CheckDone
 
         static void HandleFilename(string filename)
         {
+            if (filename == "")
+            {
+                return;
+            }
+
             var dataDirectory = ASETools.GetDataDirectoryFromFilename(filename, configuration);
 
             if (!FilenamesByDataDirectory.ContainsKey(dataDirectory))

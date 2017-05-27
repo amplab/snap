@@ -916,7 +916,7 @@ namespace ASELib
             public List<string> programNames = new List<string>();
             public string binariesDirectory = defaultBaseDirectory + @"bin\";
             public string configuationFilePathname = defaultConfigurationFilePathame;
-            public string casesFilePathname = defaultBaseDirectory + "cases_withTNMethylation.txt";
+            public string casesFilePathname = defaultBaseDirectory + "cases.txt";
             public string indexDirectory = @"d:\gdc\indices\hg38-20";
             public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
             public string hpcScriptFilename = "";    // The empty string says to black hole this script
