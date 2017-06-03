@@ -24,10 +24,12 @@ namespace ASELib
 
 		public const int nHumanNuclearChromosomes = 24;   // 1-22, X and Y.
 
-
-		// enumeration of variant classification values in MAF files.
-		// See https://wiki.nci.nih.gov/display/TCGA/Mutation+Annotation+Format+%28MAF%29+Specification
-		// for more information
+		// Used for writing out Bonferroni corrected p values in Mann Whitney tests
+		public class OutputLine
+		{
+			public string line;
+			public double p;
+		}
 
 		static public bool isChromosomeMitochondrial(string chromosome)
 		{
@@ -1259,7 +1261,7 @@ namespace ASELib
             }
         }
 
-        public class ASEConfirguation
+		public class ASEConfirguation
         {
             public const string defaultBaseDirectory = @"\\msr-genomics-0\d$\gdc\";
             public const string defaultConfigurationFilePathame = defaultBaseDirectory + "configuration.txt";
@@ -1278,9 +1280,9 @@ namespace ASELib
             public string casesFilePathname = defaultBaseDirectory + "cases.txt";
             public string indexDirectory = @"d:\gdc\indices\hg38-20";
             public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
-            public string hpcScriptFilename = "";    // The empty string says to black hole this script
+            public string hpcScriptFilename = "outputScript";    // The empty string says to black hole this script
             public string hpcScheduler = "gcr";
-            public string hpcBinariesDirectory = @"\\gcr\scratch\b99\bolosky\";
+            public string hpcBinariesDirectory = @"\\gcr\scratch\b99\almorr\";
             public string hpcIndexDirectory = @"\\msr-genomics-0\d$\gdc\indices\hg38-20";
             public string azureScriptFilename = ""; // The empty string says to black hole this script
             public string expressionFilesDirectory = @"\\msr-genomics-0\d$\gdc\expression\";
@@ -1289,12 +1291,13 @@ namespace ASELib
             public int regionalExpressionRegionSize = 1000;
             public int nTumorsToIncludeGene = 30;   // How many tumors must have at least one mutation in a gene in order to include it.
             public string selectedGenesFilename = @"\\msr-genomics-0\d$\gdc\seleted_genes.txt";
-            public string scriptOutputDirectory = @"\temp\";
+            public string scriptOutputDirectory = @"C:\Users\t-almorr\temp\";
 
 			public const string geneScatterGraphsDirectory = defaultBaseDirectory + @"\gene_scatter_graphs\";
 
 			public const string unfilteredCountsDirectory = defaultBaseDirectory + @"\gene_mutations_with_counts\";
 			public const string unfilteredCountsExtention = @"_unfiltered_counts.txt";
+			public const string methylationREFsFilename = defaultBaseDirectory + "compositeREFs.txt";
 
 			public string[] commandLineArgs = null;    // The args excluding -configuration <filename>
 
@@ -2637,6 +2640,59 @@ namespace ASELib
             return Convert.ToInt32(value);
         }
 
+		// Gives information on CompositeREFs from methylation and corresponding gene information
+		public class CompositeREFInfoLine
+		{
+			public string Composite_Element_REF;
+			public string Chromsome;
+			public int Position;
+			public string Hugo_Symbol;
+
+			static KeyValuePair<string, GeneLocationInfo> ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
+			{
+				// delimiter separating columns
+				var delim = '\t';
+
+				var composite = fields[fieldMappings["CompositeREF"]];
+				var geneInfo = new GeneLocationInfo();
+				geneInfo.chromosome = fields[fieldMappings["Chromosome"]];
+				geneInfo.minLocus = Convert.ToInt32(fields[fieldMappings["Position"]]);
+				geneInfo.hugoSymbol = fields[fieldMappings["Hugo Symbol"]];
+
+				return new KeyValuePair<string, GeneLocationInfo>(composite, geneInfo);
+
+			}
+
+
+			static public List<KeyValuePair<string, GeneLocationInfo>> ReadFile(string filename)
+			{
+				StreamReader inputFile;
+
+				inputFile = CreateStreamReaderWithRetry(filename);
+
+				var neededFields = new List<string>();
+				neededFields.Add("CompositeREF");
+				neededFields.Add("Chromosome");
+				neededFields.Add("Position");
+				neededFields.Add("Hugo Symbol");
+
+				bool hasDone = false;
+				var headerizedFile = new HeaderizedFile<KeyValuePair<string, GeneLocationInfo>>(inputFile, false, hasDone, "#version gdc-1.0.0", neededFields);
+
+				List<KeyValuePair<string, GeneLocationInfo>> result;
+
+				if (!headerizedFile.ParseFile((a, b) => ParseLine(a, b), out result))
+				{
+					Console.WriteLine("Error reading Composite REF File " + filename);
+					return null;
+				}
+
+				inputFile.Close();
+				return result;
+			} // ReadFile
+
+		} // CompositeREFInfoFile
+
 		// contains annotation data from one line in a methylation file
 		public class AnnotationLine
 		{
@@ -2665,7 +2721,7 @@ namespace ASELib
 			public string[] Gene_Symbol;
 			public string[] Gene_Type;
 			public string[] Transcript_ID;
-			public int[] Positive_to_TSS;
+			public int[] Position_to_TSS;
 			public string CGI_Coordinate;
 			public FeatureType Feature_Type;
 
@@ -2680,13 +2736,13 @@ namespace ASELib
 			string[] Gene_Symbol_,
 			string[] Gene_Type_,
 			string[] Transcript_ID_,
-			int[] Positive_to_TSS_,
+			int[] Position_to_TSS_,
 			string CGI_Coordinate_,
 			FeatureType Feature_Type_)
 			{
 				var geneCount = Gene_Symbol_.Length;
 
-				if (Gene_Type_.Length != geneCount || Transcript_ID_.Length != geneCount || Positive_to_TSS_.Length != geneCount)
+				if (Gene_Type_.Length != geneCount || Transcript_ID_.Length != geneCount || Position_to_TSS_.Length != geneCount)
 				{
 					Console.WriteLine("Error: Gene Count does not match supporting gene data");
 				}
@@ -2699,7 +2755,7 @@ namespace ASELib
 				Gene_Symbol = Gene_Symbol_;
 				Gene_Type = Gene_Type_;
 				Transcript_ID = Transcript_ID_;
-				Positive_to_TSS = Positive_to_TSS_;
+				Position_to_TSS = Position_to_TSS_;
 				CGI_Coordinate = CGI_Coordinate_;
 				Feature_Type = Feature_Type_;
 
@@ -2750,7 +2806,6 @@ namespace ASELib
 
 			}
 
-			// TODO: what is fileHasVersion for
 			static public List<AnnotationLine> ReadFile(string filename, string file_id, bool fileHasVersion)
 			{
 				StreamReader inputFile;
@@ -3780,7 +3835,8 @@ namespace ASELib
                     if (line == "**done**")
                     {
                         sawDone = true;
-                    }
+						continue;
+					}
                     var fields = line.Split('\t');
                     if (fields.Count() != 3)
                     {

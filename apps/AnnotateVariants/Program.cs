@@ -177,14 +177,15 @@ namespace AnnotateVariants
                 return;
             }
 
-            if (configuration.commandLineArgs.Count() <2 || configuration.commandLineArgs[0] != "-s" && configuration.commandLineArgs[0] != "-g")
+			if (configuration.commandLineArgs.Count() < 1) // || configuration.commandLineArgs[0] != "-s" && configuration.commandLineArgs[0] != "-g")
             {
-                Console.WriteLine("usage: AnnotateVariants {-s|-g} <case_ids>");
-                Console.WriteLine("-s means semantic and -g means germline");
+                Console.WriteLine("usage: AnnotateVariants <case_ids>");
+                //Console.WriteLine("-s means somatic and -g means germline");
                 return;
             }
 
-            bool sematicVariants = configuration.commandLineArgs[0] == "-s";
+			// we arent using this
+            // bool sematicVariants = configuration.commandLineArgs[0] == "-s";
 
             var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
@@ -196,7 +197,7 @@ namespace AnnotateVariants
             var casesToProcess = new List<ASETools.Case>();
             int nCasesToProcess = casesToProcess.Count();
 
-            for (int i = 1; i < configuration.commandLineArgs.Count(); i++)
+            for (int i = 0; i < configuration.commandLineArgs.Count(); i++)
             {
                 if (!cases.ContainsKey(configuration.commandLineArgs[i]))
                 {
@@ -211,12 +212,12 @@ namespace AnnotateVariants
 
             var threads = new List<Thread>();
 
-            for (int i = 0; i < Environment.ProcessorCount; i++)
-            {
-                threads.Add(new Thread(() => ProcessCases(casesToProcess, configuration)));
-            }
+			for (int i = 0; i < Environment.ProcessorCount; i++)
+			{
+				threads.Add(new Thread(() => ProcessCases(casesToProcess, configuration)));
+			}
 
-            threads.ForEach(t => t.Start());
+			threads.ForEach(t => t.Start());
             threads.ForEach(t => t.Join());
 
             Console.WriteLine("Processed " + nCasesToProcess + " in " + ASETools.ElapsedTimeInSeconds(timer));
