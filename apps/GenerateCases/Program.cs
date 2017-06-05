@@ -336,52 +336,57 @@ namespace GenerateCases
 
                                 bool tumor = type_id < 10;
 
-
-                                if (file.experimental_strategy == "RNA-Seq")
+                                if (file.data_format == "BAM" && file.data_type == "Aligned Reads")
                                 {
-                                    if (tumor)
+                                    if (file.experimental_strategy == "RNA-Seq")
                                     {
-                                        tumorRNA = ASETools.GDCFile.selectNewestUpdated(tumorRNA, file);
+                                        if (tumor)
+                                        {
+                                            tumorRNA = ASETools.GDCFile.selectNewestUpdated(tumorRNA, file);
+                                        }
+                                        else
+                                        {
+                                            normalRNA = ASETools.GDCFile.selectNewestUpdated(normalRNA, file);
+                                        }
                                     }
-                                    else
+                                    else if (file.experimental_strategy == "WXS" || file.experimental_strategy == "WGS")
                                     {
-                                        normalRNA = ASETools.GDCFile.selectNewestUpdated(normalRNA, file);
+                                        if (tumor)
+                                        {
+                                            tumorDNA.Add(file);
+                                        }
+                                        else
+                                        {
+                                            normalDNA.Add(file);
+                                        }
                                     }
-                                }
-                                else if (file.experimental_strategy == "WXS" || file.experimental_strategy == "WGS")
-                                {
-                                    if (tumor)
+                                } // It's a BAM file
+                                else
+                                { 
+                                    if (file.data_type == "Methylation Beta Value")
                                     {
-                                        tumorDNA.Add(file);
+                                        if (tumor)
+                                        {
+                                            tumorMethylation = ASETools.GDCFile.selectNewestUpdated(tumorMethylation, file);
+                                        }
+                                        else
+                                        {
+                                            normalMethylation = ASETools.GDCFile.selectNewestUpdated(normalMethylation, file);
+                                        }
                                     }
-                                    else
+                                    else if (file.data_type == "Copy Number Segment")
                                     {
-                                        normalDNA.Add(file);
+                                        if (tumor)
+                                        {
+                                            tumorCopyNumber = ASETools.GDCFile.selectNewestUpdated(tumorCopyNumber, file);
+                                        }
+                                        else
+                                        {
+                                            normalCopyNumber = ASETools.GDCFile.selectNewestUpdated(normalCopyNumber, file);
+                                        }
                                     }
-                                }
-								else if (file.data_type == "Methylation Beta Value")
-								{
-									if (tumor)
-									{
-										tumorMethylation = ASETools.GDCFile.selectNewestUpdated(tumorMethylation, file);
-									}
-									else
-									{
-										normalMethylation = ASETools.GDCFile.selectNewestUpdated(normalMethylation, file);
-									}
-								}
-								else if (file.data_type == "Copy Number Segment")
-								{
-									if (tumor)
-									{
-										tumorCopyNumber = ASETools.GDCFile.selectNewestUpdated(tumorCopyNumber, file);
-									}
-									else
-									{
-										normalCopyNumber = ASETools.GDCFile.selectNewestUpdated(normalCopyNumber, file);
-									}
-								}
-							}
+                                } // It's a TXT file
+							} // It's a BAM or TXT file
                             else if (file.data_format == "MAF")
                             {
                                 maf.Add(file);

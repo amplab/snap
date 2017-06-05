@@ -3893,9 +3893,11 @@ namespace ASELib
 
         public static string GetDataDirectoryFromFilename(string filename, ASEConfirguation configuration)
         {
+            bool isDerivedFilesDirectory = filename.Contains(configuration.derivedFilesDirectory);  // Derived files are stored in dataDirectory\..\derivedFiles
             foreach (var dataDirectory in configuration.dataDirectories)
             {
-                if (filename.ToLower().StartsWith(dataDirectory.ToLower())) {
+                if (filename.ToLower().StartsWith(dataDirectory.ToLower()) || isDerivedFilesDirectory && filename.ToLower().StartsWith((GoUpFilesystemLevels(dataDirectory, 1) + configuration.derivedFilesDirectory).ToLower()))
+                {
                     return dataDirectory;
                 }
             }

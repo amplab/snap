@@ -96,7 +96,7 @@ namespace CheckDone
 
                     if (isIndex)
                     {
-                        if (lastBitOfFile[0] != '*' ||
+                        if (buffer[0] != '*' ||
                                                 buffer[1] != '*' ||
                                                 buffer[2] != 'd' ||
                                                 buffer[3] != 'o' ||
@@ -169,7 +169,7 @@ namespace CheckDone
                 HandleFilename(case_.extracted_maf_lines_filename);
             }
 
-            Console.Write("Processing " + totalFiles + " files in + " + FilenamesByDataDirectory.Count() + " data directories (one dot/hundred): ");
+            Console.Write("Processing " + totalFiles + " files in " + FilenamesByDataDirectory.Count() + " data directories (one dot/hundred): ");
 
             //
             // Run one thread per data directory, since this is likely IO bound by the server disks rather than
