@@ -303,94 +303,123 @@ namespace GenerateCases
                                 continue;
                             }                         
 
-                            if (file.data_format == "BAM" && file.data_type == "Aligned Reads" || file.data_format == "TXT")
-                            {
-                                if (0 == file.cases.Count() || 0 == file.cases[0].samples.Count())
-                                {
-                                    continue;
-                                }
+							if (file.data_format == "BAM" && file.data_type == "Aligned Reads")
+							{
+								if (0 == file.cases.Count() || 0 == file.cases[0].samples.Count())
+								{
+									continue;
+								}
 
-                                int type_id = -1;
-                                try
-                                {
-                                    type_id = Convert.ToInt32(file.cases[0].samples[0].sample_type_id);
-                                }
-                                catch (FormatException)
-                                { 
-                                    //
-                                    // If it doesn't parse, leave the default -1 value in type_id, which will cause us to ignore this.
-                                    //
-                                }
+								int type_id = -1;
+								try
+								{
+									type_id = Convert.ToInt32(file.cases[0].samples[0].sample_type_id);
+								}
+								catch (FormatException)
+								{
+									//
+									// If it doesn't parse, leave the default -1 value in type_id, which will cause us to ignore this.
+									//
+								}
 
-                                //
-                                // Type IDs from 1 to 9 are tumor samples and 10 to 19 are matched normal.
-                                //
-                                if (type_id < 1 || type_id >= 20)
-                                {
-                                    //
-                                    // Either a format error, or else a non-tumor, non-normal sample (like a cell line or control sample or something).
-                                    // Ignore it.
-                                    //
-                                    continue;
-                                }
+								//
+								// Type IDs from 1 to 9 are tumor samples and 10 to 19 are matched normal.
+								//
+								if (type_id < 1 || type_id >= 20)
+								{
+									//
+									// Either a format error, or else a non-tumor, non-normal sample (like a cell line or control sample or something).
+									// Ignore it.
+									//
+									continue;
+								}
 
-                                bool tumor = type_id < 10;
+								bool tumor = type_id < 10;
 
-                                if (file.data_format == "BAM" && file.data_type == "Aligned Reads")
-                                {
-                                    if (file.experimental_strategy == "RNA-Seq")
-                                    {
-                                        if (tumor)
-                                        {
-                                            tumorRNA = ASETools.GDCFile.selectNewestUpdated(tumorRNA, file);
-                                        }
-                                        else
-                                        {
-                                            normalRNA = ASETools.GDCFile.selectNewestUpdated(normalRNA, file);
-                                        }
-                                    }
-                                    else if (file.experimental_strategy == "WXS" || file.experimental_strategy == "WGS")
-                                    {
-                                        if (tumor)
-                                        {
-                                            tumorDNA.Add(file);
-                                        }
-                                        else
-                                        {
-                                            normalDNA.Add(file);
-                                        }
-                                    }
-                                } // It's a BAM file
-                                else
-                                { 
-                                    if (file.data_type == "Methylation Beta Value")
-                                    {
-                                        if (tumor)
-                                        {
-                                            tumorMethylation = ASETools.GDCFile.selectNewestUpdated(tumorMethylation, file);
-                                        }
-                                        else
-                                        {
-                                            normalMethylation = ASETools.GDCFile.selectNewestUpdated(normalMethylation, file);
-                                        }
-                                    }
-                                    else if (file.data_type == "Copy Number Segment")
-                                    {
-                                        if (tumor)
-                                        {
-                                            tumorCopyNumber = ASETools.GDCFile.selectNewestUpdated(tumorCopyNumber, file);
-                                        }
-                                        else
-                                        {
-                                            normalCopyNumber = ASETools.GDCFile.selectNewestUpdated(normalCopyNumber, file);
-                                        }
-                                    }
-                                } // It's a TXT file
-							} // It's a BAM or TXT file
-                            else if (file.data_format == "MAF")
-                            {
-                                maf.Add(file);
-                            }
+
+								if (file.experimental_strategy == "RNA-Seq")
+								{
+									if (tumor)
+									{
+										tumorRNA = ASETools.GDCFile.selectNewestUpdated(tumorRNA, file);
+									}
+									else
+									{
+										normalRNA = ASETools.GDCFile.selectNewestUpdated(normalRNA, file);
+									}
+								}
+								else if (file.experimental_strategy == "WXS" || file.experimental_strategy == "WGS")
+								{
+									if (tumor)
+									{
+										tumorDNA.Add(file);
+									}
+									else
+									{
+										normalDNA.Add(file);
+									}
+								}
+							}
+							else if (file.data_format == "MAF")
+							{
+								maf.Add(file);
+							}
+							else if (file.data_format == "TXT")
+							{
+								if (0 == file.cases.Count() || 0 == file.cases[0].samples.Count())
+								{
+									continue;
+								}
+
+								int type_id = -1;
+								try
+								{
+									type_id = Convert.ToInt32(file.cases[0].samples[0].sample_type_id);
+								}
+								catch (FormatException)
+								{
+									//
+									// If it doesn't parse, leave the default -1 value in type_id, which will cause us to ignore this.
+									//
+								}
+
+								//
+								// Type IDs from 1 to 9 are tumor samples and 10 to 19 are matched normal.
+								//
+								if (type_id < 1 || type_id >= 20)
+								{
+									//
+									// Either a format error, or else a non-tumor, non-normal sample (like a cell line or control sample or something).
+									// Ignore it.
+									//
+									continue;
+								}
+
+								bool tumor = type_id < 10;
+
+								if (file.data_type == "Methylation Beta Value")
+								{
+									if (tumor)
+									{
+										tumorMethylation = ASETools.GDCFile.selectNewestUpdated(tumorMethylation, file);
+									}
+									else
+									{
+										normalMethylation = ASETools.GDCFile.selectNewestUpdated(normalMethylation, file);
+									}
+								}
+								else if (file.data_type == "Copy Number Segment")
+								{
+									if (tumor)
+									{
+										tumorCopyNumber = ASETools.GDCFile.selectNewestUpdated(tumorCopyNumber, file);
+									}
+									else
+									{
+										normalCopyNumber = ASETools.GDCFile.selectNewestUpdated(normalCopyNumber, file);
+									}
+								}
+							}
                         } // Foreach file in this batch
                     } // If file data parsed
 
