@@ -14,7 +14,7 @@ namespace AnnotateVariants
     {
         static ASETools.Genome genome = new ASETools.Genome();
 
-        static void ProcessCases(List<ASETools.Case> casesToProcess, ASETools.ASEConfirguation configuration)
+        static void ProcessCases(List<ASETools.Case> casesToProcess, ASETools.ASEConfirguation configuration, bool somatic)
         {
             while (true)
             {
@@ -40,35 +40,45 @@ namespace AnnotateVariants
 
                 var annotatedVariants = new List<ASETools.AnnotatedVariant>();
 
-                var mafLines = ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, case_.maf_file_id, false);
+				if (somatic)
+				{
+					var mafLines = ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, case_.maf_file_id, false);
 
-                if (null == mafLines)
-                {
-                    Console.WriteLine("Case " + case_.case_id + " failed to load extracted MAF lines.  Ignoring.");
-                    continue;
-                }
+					if (null == mafLines)
+					{
+						Console.WriteLine("Case " + case_.case_id + " failed to load extracted MAF lines.  Ignoring.");
+						continue;
+					}
 
-                foreach (var mafLine in mafLines)
-                {
-                    annotatedVariants.Add(AnnotateVariant(true, case_, mafLine.Chromosome, mafLine.Start_Position, mafLine.Match_Norm_Seq_Allele1, mafLine.Tumor_Seq_Allele2, mafLine.Variant_Type, mafLine.getExtractedReadsExtension()));
-                }
+					foreach (var mafLine in mafLines)
+					{
+						annotatedVariants.Add(AnnotateVariant(true, case_, mafLine.Chromosome, mafLine.Start_Position, mafLine.Match_Norm_Seq_Allele1, mafLine.Tumor_Seq_Allele2, mafLine.Variant_Type, mafLine.getExtractedReadsExtension()));
+					}
 
-                var selectedVariants = ASETools.SelectedVariant.LoadFromFile(case_.selected_variants_filename);
-                if (null == selectedVariants)
-                {
-                    Console.WriteLine("Case " + case_.case_id + " failed to load selected variants.  Ignoring.");
-                    continue;
-                }
+				}
+				else
+				{
+					var selectedVariants = ASETools.SelectedVariant.LoadFromFile(case_.selected_variants_filename);
+					if (null == selectedVariants)
+					{
+						Console.WriteLine("Case " + case_.case_id + " failed to load selected variants.  Ignoring.");
+						continue;
+					}
 
-                foreach (var selectedVariant in selectedVariants)
-                {
-                    annotatedVariants.Add(AnnotateVariant(false, case_, selectedVariant.contig, selectedVariant.locus, Convert.ToString(selectedVariant.referenceBase), Convert.ToString(selectedVariant.altBase), "SNP",
-                        selectedVariant.getExtractedReadsExtension()));   // All of the variants we selected are SNPs, so it's just a constant
-                }
+					foreach (var selectedVariant in selectedVariants)
+					{
+						annotatedVariants.Add(AnnotateVariant(false, case_, selectedVariant.contig, selectedVariant.locus, Convert.ToString(selectedVariant.referenceBase), Convert.ToString(selectedVariant.altBase), "SNP",
+							selectedVariant.getExtractedReadsExtension()));   // All of the variants we selected are SNPs, so it's just a constant
+					}
+				}
 
+				// write out annotated selected variants
                 string outputFilename = ASETools.GetDirectoryFromPathname(case_.selected_variants_filename) + @"\" + case_.case_id + ASETools.annotatedSelectedVariantsExtension;
 
-            }
+				Console.WriteLine("writing to file " + outputFilename);
+				ASETools.AnnotatedVariant.writeFile(outputFilename, annotatedVariants);
+
+			}
 
         }
 
@@ -144,21 +154,140 @@ namespace AnnotateVariants
                     //
                     continue;
                 }
+				if (samLine.mappedBases.Keys.Max() < start_position)
+				{
+					//
+					// This read is mapped after or before mutation.  Ignore it.
+					// The 'before' case differs between variant types, and must be dealt with on a casewise basis
+					// below in the switch statement.
+					//
+					continue;
+				}
+				if (contig != samLine.rname)
+				{
+					// Wrong contig. Ignore it.
+					continue;
+				}
 
-                switch (variantType)
-                {
-                    case "SNP":
+				bool matchesRef = false;
+				bool matchesAlt = false;
+
+				switch (variantType)
+				{
+					case "DEL":
+					case "SNP":
+					case "DNP":
+					case "TNP":
+						if (samLine.pos >= start_position + reference_allele.Length  || samLine.mappedBases.Keys.Max() < start_position)
+						{
+							// out of bounds NP. Skip it.
+							break;
+						}
+
+						string bases = String.Empty;
+						string clipped_alt_allele = String.Empty;
+						string clipped_reference_allele = String.Empty;
+						var i = 0;
+						while (i < reference_allele.Length) {
+							string base_ = String.Empty;
+
+							// if base is found, add it. Otherwise, we are at the end of the samline
+							// so we will clip the sequences for comparison
+							if (samLine.mappedBases.TryGetValue(start_position + i, out base_))
+							{
+								clipped_reference_allele += reference_allele.Substring(i, base_.Length);
+								// For deletions, the only difference in comparison is that the alt allele should
+								// be emtpy (have N's)
+								if (variantType == "DEL")
+								{
+									clipped_alt_allele += new string('N', base_.Length);
+								}
+								else
+								{
+									clipped_alt_allele += alt_allele.Substring(i, base_.Length);
+								}
+							}
+							else {
+								base_ = String.Empty;
+							}
+							bases += base_;
+
+							// go to next available base
+							i += Math.Max(1,base_.Length);
+						}
+						
+						matchesRef = bases == clipped_reference_allele;
+						matchesAlt = bases == clipped_alt_allele;
+						if ((matchesRef && matchesAlt))
+						{
+							Console.WriteLine(matchesAlt);
+						}
+						break;
+					case "INS":
+						var insMin = samLine.mappedBases.Keys.Min();
+						var insMax = samLine.mappedBases.Keys.Max();
+						if (samLine.insertedBases.Count > 0)
+						{
+							insMin = Math.Min(samLine.insertedBases.Keys.Min(), insMin);
+							insMax = Math.Max(samLine.insertedBases.Keys.Max(), insMax);
+						}
+
+						if (insMin >= start_position + alt_allele.Length || insMax < start_position)
+						{
+							// out of bounds for insertion. Skip.
+							break;
+						}
+
+						bases = String.Empty;
+						clipped_alt_allele = String.Empty;
+						i = 0;
+						while (i < alt_allele.Length)
+						{
+							string base_ = "";
+							if (samLine.insertedBases.TryGetValue(start_position + i, out base_))
+							{
+								clipped_alt_allele += alt_allele.Substring(i, base_.Length);
+							}
+							else
+							{
+								base_ = String.Empty;
+							}
+							bases += base_;
+							i += Math.Max(1, base_.Length);
+						}
+
+						matchesRef = bases.Length == 0; // insertion has no length, does not exist
+						matchesAlt = bases == alt_allele; // insertion at this point does exist and matches alt
+						break;
+					default:
+						Console.WriteLine("Unknown variant type: " + variantType);
+						subfileReader.Close();
+						return null;
+				}
 
 
-                        break;
+				// increment matches
+				if (matchesRef)
+				{
+					if (matchesAlt)
+					{
+						nMatchingBoth++;
+					}
+					else
+					{
+						nMatchingRef++;
+					}
+				}
+				else if (matchesAlt)
+				{
+					nMatchingAlt++;
+				}
+				else
+				{
+					nMatchingNeither++;
+				}
 
-
-                    default:
-                        Console.WriteLine("Unknown variant type: " + variantType);
-                        subfileReader.Close();
-                        return null;
-                }
-            }
+			} // foreach SAMLine
 
             subfileReader.Close();
             return new ASETools.ReadCounts(nMatchingRef, nMatchingAlt, nMatchingNeither, nMatchingBoth);
@@ -169,7 +298,7 @@ namespace AnnotateVariants
             var timer = new Stopwatch();
             timer.Start();
 
-            var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
 
             if (null == configuration)
             {
@@ -177,15 +306,14 @@ namespace AnnotateVariants
                 return;
             }
 
-			if (configuration.commandLineArgs.Count() < 1) // || configuration.commandLineArgs[0] != "-s" && configuration.commandLineArgs[0] != "-g")
+			if (configuration.commandLineArgs.Count() < 2 || configuration.commandLineArgs[0] != "-s" && configuration.commandLineArgs[0] != "-g")
             {
-                Console.WriteLine("usage: AnnotateVariants <case_ids>");
-                //Console.WriteLine("-s means somatic and -g means germline");
+                Console.WriteLine("usage: AnnotateVariants <-g|-s> <case_ids>");
+                Console.WriteLine("-s means somatic and -g means germline");
                 return;
             }
 
-			// we arent using this
-            // bool sematicVariants = configuration.commandLineArgs[0] == "-s";
+            bool somaticVariants = configuration.commandLineArgs[0] == "-s";
 
             var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
@@ -195,9 +323,9 @@ namespace AnnotateVariants
             }
 
             var casesToProcess = new List<ASETools.Case>();
-            int nCasesToProcess = casesToProcess.Count();
 
-            for (int i = 0; i < configuration.commandLineArgs.Count(); i++)
+
+            for (int i = 1; i < configuration.commandLineArgs.Count(); i++)
             {
                 if (!cases.ContainsKey(configuration.commandLineArgs[i]))
                 {
@@ -208,19 +336,21 @@ namespace AnnotateVariants
                 }
             }
 
-            genome.load(configuration.indexDirectory);
+			int nCasesToProcess = casesToProcess.Count();
+			//  genome.load(configuration.indexDirectory);
 
-            var threads = new List<Thread>();
+			var threads = new List<Thread>();
 
 			for (int i = 0; i < Environment.ProcessorCount; i++)
 			{
-				threads.Add(new Thread(() => ProcessCases(casesToProcess, configuration)));
+				threads.Add(new Thread(() => ProcessCases(casesToProcess, configuration, somaticVariants)));
 			}
 
 			threads.ForEach(t => t.Start());
-            threads.ForEach(t => t.Join());
+			threads.ForEach(t => t.Join());
 
-            Console.WriteLine("Processed " + nCasesToProcess + " in " + ASETools.ElapsedTimeInSeconds(timer));
+
+			Console.WriteLine("Processed " + nCasesToProcess + " in " + ASETools.ElapsedTimeInSeconds(timer));
         } // Main
     }
 }

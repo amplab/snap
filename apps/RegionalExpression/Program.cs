@@ -220,7 +220,7 @@ namespace RegionalExpression
                 }
 
                 string directory = ASETools.GetDirectoryFromPathname(allcountFilename);
-                var outputFilename = directory + @"\" + tumor_rna_file_id + ".regional_expression.txt";
+                var outputFilename = directory + @"\" + tumor_rna_file_id + ASETools.regionalExpressionExtension;
                 var outputFile = new StreamWriter(outputFilename);
 
                 outputFile.WriteLine("RegionalExpression v3.0\t" + tumor_rna_file_id + "\t" + allcountFilename + "\t" + regionSize);

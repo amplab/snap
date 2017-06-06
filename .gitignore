@@ -62,6 +62,8 @@ obj
 /apps/AnnotateVariants/bin
 /apps/CheckDone/bin
 /apps/CountMappedBases/bin
+/apps/ExpressionNearMutations/bin
+/apps/MethylationAnalysis/bin
 
 
 

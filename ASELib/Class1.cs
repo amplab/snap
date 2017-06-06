@@ -566,122 +566,6 @@ namespace ASELib
 			public Dictionary<string, List<GeneLocationInfo>> genesByChromosome = new Dictionary<string, List<GeneLocationInfo>>();    // chromosome is in non-chr form.
 		}
 
-
-		public class AnnotatedSelectedVariantLine
-		{
-			public static AnnotatedSelectedVariantLine fromText(string inputLine)
-			{
-				var retVal = new AnnotatedSelectedVariantLine();
-
-				var fields = inputLine.Split('\t');
-
-				if (fields.Count() != 20)
-				{
-					Console.WriteLine("AnnotatedSelectedVariantLine.fromText: wrong field count (" + fields.Count() + " != 14) in line: " + inputLine);
-					return null;
-				}
-
-				try
-				{
-					retVal.contig = fields[0];
-					retVal.loc = Convert.ToInt32(fields[1]);
-					retVal.id = fields[4];
-					retVal.Ref = fields[5];
-					retVal.alt = fields[6];
-					retVal.qual = fields[7];
-					retVal.filter = fields[8];
-					retVal.info = fields[9];
-					retVal.format = fields[10];
-					retVal.nMatchingReferenceDNA = Convert.ToInt32(fields[12]);
-					retVal.nMatchingVariantDNA = Convert.ToInt32(fields[13]);
-					retVal.nMatchingNeitherDNA = Convert.ToInt32(fields[14]);
-					retVal.nMatchingBothDNA = Convert.ToInt32(fields[15]);
-					retVal.nMatchingReferenceRNA = Convert.ToInt32(fields[16]);
-					retVal.nMatchingVariantRNA = Convert.ToInt32(fields[17]);
-					retVal.nMatchingNeitherRNA = Convert.ToInt32(fields[18]);
-					retVal.nMatchingBothRNA = Convert.ToInt32(fields[19]);
-				}
-				catch (FormatException)
-				{
-					Console.WriteLine("Format exception parsing annotated selected variant line " + inputLine);
-					return null;
-				}
-
-				return retVal;
-			}
-
-			public static List<AnnotatedSelectedVariantLine> readFile(string filename)
-			{
-				var file = CreateStreamReaderWithRetry(filename);
-
-				if (null == file)
-				{
-					Console.WriteLine("AnnotatedSelectedVariantLine.readFile: unable to open file " + filename);
-					return null;
-				}
-
-				file.ReadLine();    // Skip the header.
-
-				var retVal = new List<AnnotatedSelectedVariantLine>();
-
-				string line;
-				bool seenDone = false;
-				while (null != (line = file.ReadLine()))
-				{
-					if (seenDone)
-					{
-						Console.WriteLine("AnnotatedSelectedVariantLine.readFile: file continues after **done**: " + filename);
-						return null;
-					}
-
-					if (line == "**done**")
-					{
-						seenDone = true;
-						continue;
-					}
-
-					var variantLine = fromText(line);
-					if (null == variantLine)
-					{
-						Console.WriteLine("AnnotatedSelectedVariantLine.readFile: giving up due to parsing error in file " + filename);
-						return null;
-					}
-
-					retVal.Add(variantLine);
-				}
-
-				if (!seenDone)
-				{
-					Console.WriteLine("AnnotatedSelectedVariantLine.readFile: file is truncated " + filename);
-					return null;
-				}
-
-				return retVal;
-			}
-
-			public string contig;               // 0
-			public int loc;                     // 1
-												// second copy of contig in column 2
-												// second copy of loc in column 3
-			public string id;                   // 4
-			public string Ref;                  // 5 (capitalized to avoid conflict with C# ref keyword)
-			public string alt;                  // 6
-			public string qual;                 // 7
-			public string filter;               // 8
-			public string info;                 // 9
-			public string format;               // 10
-												// ?? for column 11
-			public int nMatchingReferenceDNA;   // 12
-			public int nMatchingVariantDNA;     // 13
-			public int nMatchingNeitherDNA;     // 14
-			public int nMatchingBothDNA;        // 15
-			public int nMatchingReferenceRNA;   // 16
-			public int nMatchingVariantRNA;     // 17
-			public int nMatchingNeitherRNA;     // 18
-			public int nMatchingBothRNA;        // 19
-		}
-
-
 		//
 		// A Case is a person with TCGA data.
 		//
@@ -1278,7 +1162,7 @@ namespace ASELib
             public string binariesDirectory = defaultBaseDirectory + @"bin\";
             public string configuationFilePathname = defaultConfigurationFilePathame;
             public string casesFilePathname = defaultBaseDirectory + "cases.txt";
-            public string indexDirectory = @"d:\gdc\indices\hg38-20";
+            public string indexDirectory = defaultBaseDirectory + @"indices\hg38-20";
             public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
             public string hpcScriptFilename = "outputScript";    // The empty string says to black hole this script
             public string hpcScheduler = "gcr";
@@ -3832,7 +3716,7 @@ namespace ASELib
                         Console.WriteLine("ASETools.ConsolodatedFileReader: index file continues after **done**: " + filename);
                         return false;                        
                     }
-                    if (line == "**done**")
+                    if (line.Trim() == "**done**")
                     {
                         sawDone = true;
 						continue;
@@ -4225,12 +4109,31 @@ namespace ASELib
             public readonly int nMatchingNeither;
             public readonly int nMatchingBoth;
 
+			public override string ToString()
+			{
+				return (nMatchingReference.ToString() + '\t' + nMatchingAlt.ToString() + '\t' + nMatchingNeither.ToString() + '\t' + nMatchingBoth.ToString());
+			}
 
-        }
+		}
 
         public class AnnotatedVariant
         {
-            public AnnotatedVariant(bool somaticMutation_, string contig_, int locus_, string reference_allele_, string alt_allele_, string variantType_, ReadCounts tumorDNAReadCounts_, ReadCounts tumorRNAReadCounts_, ReadCounts normalDNAReadCounts_, ReadCounts normalRNAReadCounts_)
+
+			public AnnotatedVariant(){}
+
+			public string toString()
+			{
+				var str = contig + '\t' + locus + '\t' + reference_allele + '\t' + alt_allele + '\t' + variantType + '\t' + somaticMutation + '\t' + tumorDNAReadCounts.ToString() + '\t' + normalDNAReadCounts.ToString() + '\t' + tumorRNAReadCounts.ToString();
+
+				if (normalRNAReadCounts != null)
+				{
+					str += '\t' + normalRNAReadCounts.ToString();
+				}
+
+				return str;
+			}
+
+			public AnnotatedVariant(bool somaticMutation_, string contig_, int locus_, string reference_allele_, string alt_allele_, string variantType_, ReadCounts tumorDNAReadCounts_, ReadCounts tumorRNAReadCounts_, ReadCounts normalDNAReadCounts_, ReadCounts normalRNAReadCounts_)
             {
                 somaticMutation = somaticMutation_;
                 contig = contig_;
@@ -4245,7 +4148,150 @@ namespace ASELib
                 normalRNAReadCounts = normalRNAReadCounts_;
             }
 
-            public readonly bool somaticMutation;
+
+			public static List<AnnotatedVariant> readFile(string filename)
+			{
+				var file = CreateStreamReaderWithRetry(filename);
+
+				if (null == file)
+				{
+					Console.WriteLine("AnnotatedVariant.readFile: unable to open file " + filename);
+					return null;
+				}
+
+				var retVal = new List<AnnotatedVariant>();
+
+				string line;
+				bool seenDone = false;
+				while (null != (line = file.ReadLine()))
+				{
+					if (seenDone)
+					{
+						Console.WriteLine("AnnotatedVariant.readFile: file continues after **done**: " + filename);
+						return null;
+					}
+
+					if (line == "**done**")
+					{
+						seenDone = true;
+						continue;
+					}
+
+					var variantLine = fromText(line);
+					if (null == variantLine)
+					{
+						Console.WriteLine("AnnotatedVariant.readFile: giving up due to parsing error in file " + filename);
+						return null;
+					}
+
+					retVal.Add(variantLine);
+				}
+
+				if (!seenDone)
+				{
+					Console.WriteLine("AnnotatedSelectedVariantLine.readFile: file is truncated " + filename);
+					return null;
+				}
+
+				return retVal;
+			}
+
+			
+			public static void writeFile(string filename, List<AnnotatedVariant> annotatedVariants)
+			{
+				var file = CreateStreamWriterWithRetry(filename);
+
+				if (null == file)
+				{
+					Console.WriteLine("AnnotatedVariant.writeFile: unable to create file " + filename);
+					return;
+				}
+
+				// Write header
+				file.WriteLine("Chromosome\tPosition\tRef_allele\tAlt_allele\tVariant_type\tSomatic\t" +
+					"tumorDNAmatchingRef\ttumorDNAmatchingAlt\ttumorDNAmatchingNeither\ttumorDNAmatchingBoth\t" +
+					"normalDNAmatchingRef\tnormalDNAmatchingAlt\tnormalDNAmatchingNeither\tnormalDNAmatchingBoth\t" +
+					"tumorRNAmatchingRef\ttumorRNAmatchingAlt\ttumorRNAmatchingNeither\ttumorRNAmatchingBoth\t" +
+					"normalRNAmatchingRef\tnormalRNAmatchingAlt\tnormalRNAmatchingNeither\tnormalRNAmatchingBoth");
+
+				foreach (var annotatedVariant in annotatedVariants)
+				{
+					file.WriteLine(annotatedVariant.toString());
+				}
+				file.WriteLine("**done**");
+				file.Close();
+
+			}
+
+			public static AnnotatedVariant fromText(string inputLine)
+			{
+				var retVal = new AnnotatedVariant();
+
+				var fields = inputLine.Split('\t');
+
+				if (fields.Count() != 22 && fields.Count() != 18)
+				{
+					Console.WriteLine("AnnotatedVariant.fromText: wrong field count (" + fields.Count() + " != 22 or 18) in line: " + inputLine);
+					return null;
+				}
+
+				try
+				{
+					var contig = fields[0];
+					var loc = Convert.ToInt32(fields[1]);
+					var Ref = fields[2];
+					var alt = fields[3];
+					var variantType = fields[4];
+					var isSomatic = Convert.ToBoolean(fields[5]);
+
+					var nMatchingTumorReferenceDNA = Convert.ToInt32(fields[6]);
+					var nMatchingTumorAltDNA = Convert.ToInt32(fields[7]);
+					var nMatchingTumorNeitherDNA = Convert.ToInt32(fields[8]);
+					var nMatchingTumorBothDNA = Convert.ToInt32(fields[9]);
+
+					var nMatchingNormalReferenceDNA = Convert.ToInt32(fields[10]);
+					var nMatchingNormalAltDNA = Convert.ToInt32(fields[11]);
+					var nMatchingNormalNeitherDNA = Convert.ToInt32(fields[12]);
+					var nMatchingNormalBothDNA = Convert.ToInt32(fields[13]);
+
+					var nMatchingTumorReferenceRNA = Convert.ToInt32(fields[14]);
+					var nMatchingTumorAltRNA = Convert.ToInt32(fields[15]);
+					var nMatchingTumorNeitherRNA = Convert.ToInt32(fields[16]);
+					var nMatchingTumorBothRNA = Convert.ToInt32(fields[17]);
+
+
+					var normalDNAReadCounts = new ReadCounts(nMatchingNormalReferenceDNA, nMatchingNormalAltDNA, nMatchingNormalNeitherDNA, nMatchingNormalBothDNA);
+					var tumorDNAReadCounts = new ReadCounts(nMatchingTumorReferenceDNA, nMatchingTumorAltDNA, nMatchingTumorNeitherDNA, nMatchingTumorBothDNA);
+					var tumorRNAReadCounts = new ReadCounts(nMatchingTumorReferenceRNA, nMatchingTumorAltRNA, nMatchingTumorNeitherRNA, nMatchingTumorBothRNA);
+
+					ReadCounts normalRNAReadCounts = null;
+					// check if normal RNA is present
+					try
+					{
+						var nMatchingNormalReferenceRNA = Convert.ToInt32(fields[18]);
+						var nMatchingNormalAltRNA = Convert.ToInt32(fields[29]);
+						var nMatchingNormalNeitherRNA = Convert.ToInt32(fields[20]);
+						var nMatchingNormalBothRNA = Convert.ToInt32(fields[21]);
+
+						normalRNAReadCounts = new ReadCounts(nMatchingNormalReferenceRNA, nMatchingNormalAltRNA, nMatchingNormalNeitherRNA, nMatchingNormalBothRNA);
+					}
+					catch (Exception)
+					{
+						// no op. No normal RNA
+					}
+
+					retVal = new AnnotatedVariant(isSomatic, contig, loc, Ref, alt, variantType, tumorDNAReadCounts, tumorRNAReadCounts, normalDNAReadCounts, normalRNAReadCounts);
+				}
+				catch (FormatException)
+				{
+					Console.WriteLine("Format exception parsing annotated selected variant line " + inputLine);
+					return null;
+				}
+
+				return retVal;
+			}
+
+			public readonly bool somaticMutation;
             public readonly string contig;
             public readonly int locus;
             public readonly string reference_allele;
@@ -4290,6 +4336,10 @@ namespace ASELib
                 int offsetInCigarString = 0;
                 int offsetInSeq = 0;
 
+				// keep track of cigar elements
+				int cigarElementStart = 0;
+				int cigarElementLength = 0;
+
                 while (offsetInCigarString < cigar.Count())
                 {
                     switch (cigar[offsetInCigarString])
@@ -4298,7 +4348,7 @@ namespace ASELib
                         case '=':
                         case 'X':
                             offsetInCigarString++;  // Consume the M, = or X
-                            int count = GetNextNumberFromString(cigar.Substring(offsetInCigarString));
+                            int count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
 
                             if (0 == count)
                             {
@@ -4313,9 +4363,68 @@ namespace ASELib
                                 offsetInSeq++;
                             }
 
-                            break;
+							// reset cigar element information
+							cigarElementLength = 0;
+							cigarElementStart = offsetInCigarString;
 
-                    }
+                            break;
+						case 'D':
+							offsetInCigarString++;  // Consume the M, = or X
+							count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
+
+							if (0 == count)
+							{
+								throw new FormatException();
+							}
+
+							for (int i = 0; i < count; i++)
+							{
+								mappedBases.Add(currentPos, "N"); // Add placeholder for DEL
+								currentPos++;
+							}
+
+							// reset cigar element information
+							cigarElementLength = 0;
+							cigarElementStart = offsetInCigarString;
+
+							break;
+						case 'I':
+							offsetInCigarString++;  // Consume the I
+							count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
+
+							if (0 == count)
+							{
+								throw new FormatException();
+							}
+
+							var insertionPos = currentPos;
+
+							for (int i = 0; i < count; i++)
+							{
+								insertedBases.Add(insertionPos - 1, Convert.ToString(seq[offsetInSeq])); 
+
+								insertionPos++;
+								offsetInSeq++;
+							}
+
+							// reset cigar element information
+							cigarElementLength = 0;
+							cigarElementStart = offsetInCigarString;
+
+							break;
+						case 'N':
+						case 'H':
+						case 'S':
+							// skip region. Reset
+							cigarElementLength = 0;
+							offsetInCigarString++;
+							cigarElementStart = offsetInCigarString;
+							break;
+						default:
+							offsetInCigarString++;
+							cigarElementLength++;
+							break;
+					}
                 }
 
 
@@ -4342,8 +4451,12 @@ namespace ASELib
 
             public const int Unmapped = 0x4;
 
-            Dictionary<int, string> mappedBases = new Dictionary<int, string>();
-        } // SAMLine
+			// Dictionary of position and bases at position
+            public Dictionary<int, string> mappedBases = new Dictionary<int, string>();
+
+			// Dictionary of insertions
+			public Dictionary<int, string> insertedBases = new Dictionary<int, string>();
+		} // SAMLine
 
         //
         // Take a string of form ###<otherstuff> and return ### as an int.
@@ -4351,7 +4464,7 @@ namespace ASELib
         public static int GetNextNumberFromString(string input)
         {
             int nDigits = 0;
-            while (input.Count() < nDigits && input[nDigits] >= '0' && input[nDigits] <= '9')
+            while (nDigits < input.Count() && input[nDigits] >= '0' && input[nDigits] <= '9')
             {
                 nDigits++;
             }
