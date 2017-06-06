@@ -1164,9 +1164,9 @@ namespace ASELib
             public string casesFilePathname = defaultBaseDirectory + "cases.txt";
             public string indexDirectory = defaultBaseDirectory + @"indices\hg38-20";
             public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
-            public string hpcScriptFilename = "outputScript";    // The empty string says to black hole this script
+            public string hpcScriptFilename = "";    // The empty string says to black hole this script
             public string hpcScheduler = "gcr";
-            public string hpcBinariesDirectory = @"\\gcr\scratch\b99\almorr\";
+            public string hpcBinariesDirectory = @"\\gcr\scratch\b99\bolosky\";
             public string hpcIndexDirectory = @"\\msr-genomics-0\d$\gdc\indices\hg38-20";
             public string azureScriptFilename = ""; // The empty string says to black hole this script
             public string expressionFilesDirectory = @"\\msr-genomics-0\d$\gdc\expression\";
@@ -1175,7 +1175,7 @@ namespace ASELib
             public int regionalExpressionRegionSize = 1000;
             public int nTumorsToIncludeGene = 30;   // How many tumors must have at least one mutation in a gene in order to include it.
             public string selectedGenesFilename = @"\\msr-genomics-0\d$\gdc\seleted_genes.txt";
-            public string scriptOutputDirectory = @"C:\Users\t-almorr\temp\";
+            public string scriptOutputDirectory = @"\temp\";
 
 			public const string geneScatterGraphsDirectory = defaultBaseDirectory + @"\gene_scatter_graphs\";
 
