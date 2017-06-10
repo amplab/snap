@@ -4345,7 +4345,8 @@ namespace ASELib
                     switch (cigar[offsetInCigarString])
                     {
                         case 'M':
-                        case '=':
+						case 'I':
+						case '=':
                         case 'X':
                             offsetInCigarString++;  // Consume the M, = or X
                             int count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
@@ -4357,7 +4358,7 @@ namespace ASELib
 
                             for (int i = 0; i < count; i++)
                             {
-                                mappedBases.Add(currentPos, Convert.ToString(seq[offsetInSeq]));
+                                mappedBases.Add(currentPos, seq[offsetInSeq]);
 
                                 currentPos++;
                                 offsetInSeq++;
@@ -4379,32 +4380,8 @@ namespace ASELib
 
 							for (int i = 0; i < count; i++)
 							{
-								mappedBases.Add(currentPos, "N"); // Add placeholder for DEL
+								mappedBases.Add(currentPos, 'N'); // Add placeholder for DEL
 								currentPos++;
-							}
-
-							// reset cigar element information
-							cigarElementLength = 0;
-							cigarElementStart = offsetInCigarString;
-
-							break;
-						case 'I':
-							offsetInCigarString++;  // Consume the I
-							count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
-
-							if (0 == count)
-							{
-								throw new FormatException();
-							}
-
-							var insertionPos = currentPos;
-
-							for (int i = 0; i < count; i++)
-							{
-								insertedBases.Add(insertionPos - 1, Convert.ToString(seq[offsetInSeq])); 
-
-								insertionPos++;
-								offsetInSeq++;
 							}
 
 							// reset cigar element information
@@ -4414,10 +4391,23 @@ namespace ASELib
 							break;
 						case 'N':
 						case 'H':
-						case 'S':
+							offsetInCigarString++;  // Consume the M, = or X
+							count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
+
 							// skip region. Reset
+							currentPos += count;
+
 							cigarElementLength = 0;
-							offsetInCigarString++;
+							cigarElementStart = offsetInCigarString;
+							break;
+						case 'S':
+							offsetInCigarString++;  // Consume the M, = or X
+							count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
+
+							// skip region. Reset
+							offsetInSeq += count;
+
+							cigarElementLength = 0;
 							cigarElementStart = offsetInCigarString;
 							break;
 						default:
@@ -4452,10 +4442,8 @@ namespace ASELib
             public const int Unmapped = 0x4;
 
 			// Dictionary of position and bases at position
-            public Dictionary<int, string> mappedBases = new Dictionary<int, string>();
+            public Dictionary<int, char> mappedBases = new Dictionary<int, char>();
 
-			// Dictionary of insertions
-			public Dictionary<int, string> insertedBases = new Dictionary<int, string>();
 		} // SAMLine
 
         //
