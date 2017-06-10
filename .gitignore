@@ -61,6 +61,7 @@ obj
 /apps/SelectGenes/bin
 /apps/AnnotateVariants/bin
 /apps/CheckDone/bin
+/apps/CountMappedBases/bin
 
 
 

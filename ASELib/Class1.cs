@@ -359,7 +359,7 @@ namespace ASELib
             public string tumor_dna_filename = "";
             public string normal_rna_filename = "";
             public string tumor_rna_filename = "";
-	    public string maf_filename = "";
+	        public string maf_filename = "";
             public string tumor_methylation_filename = "";
 			public string normal_methylation_filename = "";
 			public string tumor_copy_number_filename = "";
@@ -401,6 +401,10 @@ namespace ASELib
             public string tumor_dna_gene_coverage_filname = "";
             public string vcf_filename = "";
             public string extracted_maf_lines_filename = "";
+            public string normal_dna_mapped_base_count_filename = "";
+            public string tumor_dna_mapped_base_count_filename = "";
+            public string normal_rna_mapped_base_count_filename = "";
+            public string tumor_rna_mapped_base_count_filename = "";
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
 
             //
@@ -426,6 +430,7 @@ namespace ASELib
 			//
 			static public int ProjectColumn = -1;
             static public int TumorRNAAllcountFilenameColumn = -1;
+            static public int TumorRNAMappedBaseCountColumn = -1;
 
             public string disease()
             {
@@ -473,6 +478,7 @@ namespace ASELib
 
                 ProjectColumn = fieldMappings["Project ID"];
                 TumorRNAAllcountFilenameColumn = fieldMappings["Tumor RNA Allcount Filename"];
+                TumorRNAMappedBaseCountColumn = fieldMappings["Tumor RNA Mapped Base Count Filename"];
 
                 inputFile.Close();
 
@@ -587,6 +593,10 @@ namespace ASELib
                 new FieldInformation("Tumor DNA Gene Coverage Filename",                    c => c.tumor_dna_gene_coverage_filname, (c,v) => c.tumor_dna_gene_coverage_filname = v, DerivedFile.Type.TumorDNAGeneCoverage, tumorDNAGeneCoverageExtension, c => c.tumor_dna_file_id),
                 new FieldInformation("VCF Filename",                                        c => c.vcf_filename, (c,v) => c.vcf_filename = v, DerivedFile.Type.VCF, vcfExtension, c => c.normal_dna_file_id),
                 new FieldInformation("Extracted MAF Lines Filename",                        c => c.extracted_maf_lines_filename, (c,v) => c.extracted_maf_lines_filename = v, DerivedFile.Type.ExtractedMAFLines, extractedMAFLinesExtension, c => c.case_id),
+                new FieldInformation("Normal DNA Mapped Base Count Filename",               c => c.normal_dna_mapped_base_count_filename, (c, v) => c.normal_dna_mapped_base_count_filename = v, DerivedFile.Type.NormalDNAMappedBaseCount, normalDNAMappedBaseCountExtension, c => c.normal_dna_file_id),
+                new FieldInformation("Tumor DNA Mapped Base Count Filename",                c => c.tumor_dna_mapped_base_count_filename, (c, v) => c.tumor_dna_mapped_base_count_filename = v, DerivedFile.Type.TumorDNAMappedBaseCount, tumorDNAMappedBaseCountExtension, c => c.tumor_dna_file_id),
+                new FieldInformation("Normal RNA Mapped Base Count Filename",               c => c.normal_rna_mapped_base_count_filename, (c, v) => c.normal_rna_mapped_base_count_filename = v, DerivedFile.Type.NormalRNAMappedBaseCount, normalRNAMappedBaseCountExtension, c => c.normal_dna_file_id),
+                new FieldInformation("Tumor RNA Mapped Base Count Filename",                c => c.tumor_rna_mapped_base_count_filename, (c, v) => c.tumor_rna_mapped_base_count_filename = v, DerivedFile.Type.TumorRNAMappedBaseCount, tumorRNAMappedBaseCountExtension, c => c.tumor_rna_file_id),
 
                 new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
                 new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
@@ -1669,6 +1679,10 @@ namespace ASELib
         public const string vcfExtension = ".vcf";
         public const string extractedMAFLinesExtension = ".extracted_maf_lines.txt";
         public const string tumorDNAGeneCoverageExtension = ".tumor_dna_gene_coverage.txt";
+        public const string normalDNAMappedBaseCountExtension = ".normal_dna_mapped_base_count.txt";
+        public const string tumorDNAMappedBaseCountExtension = ".tumor_dna_mapped_base_count.txt";
+        public const string normalRNAMappedBaseCountExtension = ".normal_rna_mapped_base_count.txt";
+        public const string tumorRNAMappedBaseCountExtension = ".tumor_rna_mapped_base_count.txt";
 
         public class DerivedFile
         {
@@ -1713,6 +1727,7 @@ namespace ASELib
             public enum Type { Unknown, NormalRNAAllcount, TumorRNAAllcount, NormalDNAAllcount, TumorDNAAllcount, RegionalExpression, GeneExpression, TumorDNAGeneCoverage,
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, AlleleSpecificGeneExpression, VCF, ExtractedMAFLines,
+                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount,
             };
         } // DerivedFile
 
@@ -2653,6 +2668,13 @@ namespace ASELib
                 filename = filename_;
             }
 
+            public bool openFile()
+            {
+                long mappedHQNuclearReads;
+                int numContigs;
+
+                return openFile(out mappedHQNuclearReads, out numContigs);
+            }
 
             public bool openFile(out long mappedHQNuclearReads, out int out_numContigs)
             {

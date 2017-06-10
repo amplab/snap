@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.26430.6
+VisualStudioVersion = 15.0.26403.7
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "snap", "apps\snap\snap.vcxproj", "{76E127A5-2247-4A10-9DC8-59518C7C6636}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -85,6 +85,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MethylationAnalysis", "apps\MethylationAnalysis\MethylationAnalysis.csproj", "{6D95A49B-6B26-44D8-85A2-538804FBF02A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressionNearMutations", "apps\ExpressionNearMutations\ExpressionNearMutations.csproj", "{49FF4094-4B75-480A-9B53-E5C66B79A98B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CountMappedBases", "apps\CountMappedBases\CountMappedBases.csproj", "{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -459,6 +461,22 @@ Global
 		{49FF4094-4B75-480A-9B53-E5C66B79A98B}.Release|Win32.Build.0 = Release|Any CPU
 		{49FF4094-4B75-480A-9B53-E5C66B79A98B}.Release|x64.ActiveCfg = Release|x64
 		{49FF4094-4B75-480A-9B53-E5C66B79A98B}.Release|x64.Build.0 = Release|x64
+		{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}.Debug|Win32.Build.0 = Debug|Any CPU
+		{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}.Debug|x64.ActiveCfg = Debug|x64
+		{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}.Debug|x64.Build.0 = Debug|x64
+		{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}.Release|Win32.ActiveCfg = Release|Any CPU
+		{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}.Release|Win32.Build.0 = Release|Any CPU
+		{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}.Release|x64.ActiveCfg = Release|x64
+		{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

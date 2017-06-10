@@ -334,30 +334,23 @@ namespace ASEProcessManager
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_dna_file_id, case_.normal_dna_file_bam_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_dna_file_id, case_.tumor_dna_file_bam_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_rna_file_id, case_.normal_rna_file_bam_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-                    if (case_.tumor_methylation_file_id != null && case_.tumor_methylation_file_id != "")
-                    {
-                        HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_methylation_file_id, case_.tumor_methylation_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-                    }
-
-					if (case_.normal_methylation_file_id != null && case_.normal_methylation_file_id != "")
-					{
-						HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_methylation_file_id, case_.normal_methylation_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-					}
-
-					if (case_.tumor_copy_number_file_id != null && case_.tumor_copy_number_file_id != "")
-                    {
-                        HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_copy_number_file_id, case_.tumor_copy_number_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-                    }
-
-					if (case_.normal_copy_number_file_id != null && case_.normal_copy_number_file_id != "")
-					{
-						HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_copy_number_file_id, case_.normal_copy_number_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-					}
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_methylation_file_id, case_.tumor_methylation_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+        			HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_methylation_file_id, case_.normal_methylation_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_copy_number_file_id, case_.tumor_copy_number_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+					HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_copy_number_file_id, case_.normal_copy_number_file_md5, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
 				}
             } // EvaluateStage
 
             void HandleFile(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, string fileId, string expectedMD5, ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites)
             {
+                if (fileId == null || fileId == "")
+                {
+                    //
+                    // There is no file at all (not just not downloaded), so it doesn't count in any of the counts.
+                    //
+                    return;
+                }
+
                 if (!stateOfTheWorld.downloadedFiles.ContainsKey(fileId) || null == expectedMD5 || "" == expectedMD5)
                 {
                     nWaitingForPrerequisites++;
@@ -635,7 +628,8 @@ namespace ASEProcessManager
                         {
                             var case_ = caseEntry.Value;
 
-                            if (!stateOfTheWorld.containsDerivedFile(case_.case_id, case_.tumor_rna_file_id, ASETools.DerivedFile.Type.TumorRNAAllcount))
+                            if (!stateOfTheWorld.containsDerivedFile(case_.case_id, case_.tumor_rna_file_id, ASETools.DerivedFile.Type.TumorRNAAllcount) || 
+                                !stateOfTheWorld.containsDerivedFile(case_.case_id, case_.tumor_rna_file_id, ASETools.DerivedFile.Type.TumorRNAMappedBaseCount))
                             {
                                 nWaitingForPrerequisites++;
                                 missingAny = true;
@@ -648,11 +642,12 @@ namespace ASEProcessManager
                             continue;
                         }
 
-                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ExpressionDistribution.exe " + stateOfTheWorld.configuration.casesFilePathname + " " +
-                            stateOfTheWorld.configuration.expressionFilesDirectory + " " + ASETools.Case.ProjectColumn + " " + ASETools.Case.TumorRNAAllcountFilenameColumn + " " + disease);
+                        string command = "ExpressionDistribution.exe " + stateOfTheWorld.configuration.casesFilePathname + " " +
+                            stateOfTheWorld.configuration.expressionFilesDirectory + " " + ASETools.Case.ProjectColumn + " " + ASETools.Case.TumorRNAAllcountFilenameColumn + " " + ASETools.Case.TumorRNAMappedBaseCountColumn + " " + disease;
 
-                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "ExpressionDistribution.exe " + stateOfTheWorld.configuration.casesFilePathname + " " +
-                            stateOfTheWorld.configuration.expressionFilesDirectory + " " + ASETools.Case.ProjectColumn + " " + ASETools.Case.TumorRNAAllcountFilenameColumn + " " + disease);
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + command);
+
+                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + command);
                         nAddedToScript++;
                     }
                 } // foreach disease
@@ -660,12 +655,49 @@ namespace ASEProcessManager
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
             {
-                //
-                // Placeholder.
-                //
-                return true;
-            } // EvaluateDependencies
+                bool worked = true;
 
+                foreach (var disease in stateOfTheWorld.diseases)
+                {
+                    if (!stateOfTheWorld.expressionFiles.ContainsKey(disease))
+                    {
+                        continue;
+                    }
+
+                    var expressionFileLastWriteTime = stateOfTheWorld.expressionFiles[disease].LastWriteTime;
+
+                    foreach (var caseEntry in stateOfTheWorld.cases.Where(x => x.Value.disease() == disease))
+                    {
+                        var case_ = caseEntry.Value;
+
+                        if (!stateOfTheWorld.containsDerivedFile(case_.case_id, case_.tumor_rna_file_id, ASETools.DerivedFile.Type.TumorRNAAllcount) ||
+                            !stateOfTheWorld.containsDerivedFile(case_.case_id, case_.tumor_rna_file_id, ASETools.DerivedFile.Type.TumorRNAMappedBaseCount))
+                        {
+                            Console.WriteLine("Expression file " + stateOfTheWorld.expressionFiles[disease].FullName + " exists, but a prerequisite from case " + case_.case_id + " does not.");
+                            worked = false;
+                            break;   // Out of cases for this disease; keep checking other diseases
+                        }
+
+                        if (stateOfTheWorld.getDrivedFile(case_.case_id, case_.tumor_rna_file_id, ASETools.DerivedFile.Type.TumorRNAMappedBaseCount).fileinfo.LastWriteTime > expressionFileLastWriteTime)
+                        {
+                            Console.WriteLine("Expression file " + stateOfTheWorld.expressionFiles[disease].FullName + " is older than " +
+                                stateOfTheWorld.getDrivedFile(case_.case_id, case_.tumor_rna_file_id, ASETools.DerivedFile.Type.TumorRNAMappedBaseCount).fileinfo.FullName + ", upon which it depends.");
+                            worked = false;
+                            break;  // Out of cases for this disease; keep checking other diseases
+                        }
+
+                        if (stateOfTheWorld.getDrivedFile(case_.case_id, case_.tumor_rna_file_id, ASETools.DerivedFile.Type.TumorRNAAllcount).fileinfo.LastWriteTime > expressionFileLastWriteTime)
+                        {
+                            Console.WriteLine("Expression file " + stateOfTheWorld.expressionFiles[disease].FullName + " is older than " +
+                                stateOfTheWorld.getDrivedFile(case_.case_id, case_.tumor_rna_file_id, ASETools.DerivedFile.Type.TumorRNAAllcount).fileinfo.FullName + ", upon which it depends.");
+                            worked = false;
+                            break;  // Out of cases for this disease; keep checking other diseases
+                        }
+                    } // Foreach case
+                } // foreach disease
+
+                return worked;
+            } // EvaluateDependencies
         } // ExpressionDistributionProcessingStage
 
         class ExtractMAFLinesProcessingStage : ProcessingStage
@@ -1011,7 +1043,7 @@ namespace ASEProcessManager
 
             public bool NeedsCases() { return true; }
 
-            void HandleFileAndType(StateOfTheWorld stateOfTheWorld, ASETools.Case case_, string flagsString, string readsAtSelectedVariantsFilename, string fileId, string md5Checksum, string inputFilename, string outputExtension,
+            void HandleFileAndType(StateOfTheWorld stateOfTheWorld, ASETools.Case case_, string flagsString, string readsAtSelectedVariantsFilename, string readsAtSelectedVariantsIndexFilename, string fileId, string md5Checksum, string inputFilename, string outputExtension,
                 ref string outputSoFar, ref string outputSoFarHpc, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites)
             {
                 if (fileId == "")
@@ -1022,8 +1054,25 @@ namespace ASEProcessManager
                     return;
                 }
 
+                if ((readsAtSelectedVariantsFilename == "") != (readsAtSelectedVariantsIndexFilename == ""))
+                {
+                    Console.WriteLine("Exactly one of reads at selected variants and reads at selected variants index files exists: " + readsAtSelectedVariantsFilename + " " + readsAtSelectedVariantsIndexFilename);
+                    return;
+                }
+
                 if (readsAtSelectedVariantsFilename != "")
                 {
+                    if (false)  // This is off because it's slow
+                    {
+                        var writeTime1 = new FileInfo(readsAtSelectedVariantsFilename).LastWriteTime;
+                        var writeTime2 = new FileInfo(readsAtSelectedVariantsIndexFilename).LastWriteTime;
+
+                        if (writeTime1 > writeTime2.AddDays(1) || writeTime2 > writeTime1.AddDays(1))
+                        {
+                            Console.WriteLine("Extracted reads and index files differ by more than one day: " + readsAtSelectedVariantsFilename + " " + readsAtSelectedVariantsIndexFilename);
+                        }
+                    }
+
                     nDone++;
                     return;
                 }
@@ -1080,10 +1129,10 @@ namespace ASEProcessManager
                 {
                     var case_ = caseEntry.Value;
 
-                    HandleFileAndType(stateOfTheWorld, case_, "-d -t", case_.tumor_dna_reads_at_selected_variants_filename,  case_.tumor_dna_file_id,  case_.tumor_dna_file_bam_md5,  case_.tumor_dna_filename,  ASETools.tumorDNAReadsAtSelectedVariantsExtension,  ref tumorDNAOutput,  ref tumorDNAHpcOutput,  script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-                    HandleFileAndType(stateOfTheWorld, case_, "-d -n", case_.normal_dna_reads_at_selected_variants_filename, case_.normal_dna_file_id, case_.normal_dna_file_bam_md5, case_.normal_dna_filename, ASETools.normalDNAReadsAtSelectedVariantsExtension, ref normalDNAOutput, ref normalDNAHpcOutput, script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-                    HandleFileAndType(stateOfTheWorld, case_, "-r -t", case_.tumor_rna_reads_at_selected_variants_filename,  case_.tumor_rna_file_id,  case_.tumor_rna_file_bam_md5,  case_.tumor_rna_filename,  ASETools.tumorRNAReadsAtSelectedVariantsExtension,  ref tumorRNAOutput,  ref tumorRNAHpcOutput,  script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-                    HandleFileAndType(stateOfTheWorld, case_, "-r -n", case_.normal_rna_reads_at_selected_variants_filename, case_.normal_rna_file_id, case_.normal_rna_file_bam_md5, case_.normal_rna_filename, ASETools.normalRNAReadsAtSelectedVariantsExtension, ref normalRNAOutput, ref normalRNAHpcOutput, script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFileAndType(stateOfTheWorld, case_, "-d -t", case_.tumor_dna_reads_at_selected_variants_filename, case_.tumor_dna_reads_at_selected_variants_index_filename, case_.tumor_dna_file_id,  case_.tumor_dna_file_bam_md5,  case_.tumor_dna_filename,  ASETools.tumorDNAReadsAtSelectedVariantsExtension,  ref tumorDNAOutput,  ref tumorDNAHpcOutput,  script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFileAndType(stateOfTheWorld, case_, "-d -n", case_.normal_dna_reads_at_selected_variants_filename, case_.normal_dna_reads_at_selected_variants_index_filename, case_.normal_dna_file_id, case_.normal_dna_file_bam_md5, case_.normal_dna_filename, ASETools.normalDNAReadsAtSelectedVariantsExtension, ref normalDNAOutput, ref normalDNAHpcOutput, script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFileAndType(stateOfTheWorld, case_, "-r -t", case_.tumor_rna_reads_at_selected_variants_filename, case_.tumor_rna_reads_at_selected_variants_index_filename, case_.tumor_rna_file_id,  case_.tumor_rna_file_bam_md5,  case_.tumor_rna_filename,  ASETools.tumorRNAReadsAtSelectedVariantsExtension,  ref tumorRNAOutput,  ref tumorRNAHpcOutput,  script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFileAndType(stateOfTheWorld, case_, "-r -n", case_.normal_rna_reads_at_selected_variants_filename, case_.normal_rna_reads_at_selected_variants_index_filename, case_.normal_rna_file_id, case_.normal_rna_file_bam_md5, case_.normal_rna_filename, ASETools.normalRNAReadsAtSelectedVariantsExtension, ref normalRNAOutput, ref normalRNAHpcOutput, script, hpcScript, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                 }
 
                 string[] outputs = { tumorDNAOutput, normalDNAOutput, tumorRNAOutput, normalRNAOutput };
@@ -1158,12 +1207,6 @@ namespace ASEProcessManager
                     return true;    // No output means no violated dependencies
                 }
 
-                if (stateOfTheWorld.cases == null)
-                {
-                    Console.WriteLine("Dependency violation: Have a selected genes file without having cases.");
-                    return false;
-                }
-
                 var selectedGenesWriteTime = new FileInfo(stateOfTheWorld.configuration.selectedGenesFilename).LastWriteTime;
 
                 foreach (var caseEntry in stateOfTheWorld.cases)
@@ -1185,10 +1228,95 @@ namespace ASEProcessManager
 
                 return true;
             } // EvaluateDependencies
-
-
-
         } // SelectGenesProcessingStage
+
+        class CountMappedBasesProcessingStage : ProcessingStage
+        {
+            public CountMappedBasesProcessingStage() { }
+
+            public string GetStageName() { return "Count Mapped Bases"; }
+
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+                filesToDownload = null;
+
+                foreach (var caseEntry in stateOfTheWorld.cases)
+                {
+                    var case_ = caseEntry.Value;
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_dna_allcount_filename, case_.normal_dna_mapped_base_count_filename, ASETools.normalDNAMappedBaseCountExtension, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_dna_allcount_filename, case_.tumor_dna_mapped_base_count_filename, ASETools.tumorDNAMappedBaseCountExtension, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    if (case_.normal_rna_file_id != "")
+                    {
+                        HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_rna_allcount_filename, case_.normal_rna_mapped_base_count_filename, ASETools.normalRNAMappedBaseCountExtension, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    }
+                    HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_rna_allcount_filename, case_.tumor_rna_mapped_base_count_filename, ASETools.tumorRNAMappedBaseCountExtension, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                } // foreach case
+            } // EvaluateStage
+
+            void HandleFile(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, string inputFilename, string existingOutputFilename, string outputExtension, ref int nDone, ref int nAddedToScript, ref int nWaitingForPrerequisites)
+            {
+                if (existingOutputFilename != "")
+                {
+                    nDone++;
+                    return;
+                }
+
+                if (inputFilename == "")
+                {
+                    nWaitingForPrerequisites++;
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "CountMappedBases.exe " + inputFilename + " " + ASETools.GetDirectoryFromPathname(inputFilename) + @"\" + ASETools.GetFileIdFromPathname(inputFilename) + outputExtension);
+                hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "CountMappedBases.exe " + inputFilename + " " + ASETools.GetDirectoryFromPathname(inputFilename) + @"\" + ASETools.GetFileIdFromPathname(inputFilename) + outputExtension);
+
+                nAddedToScript++;
+            } // HandleFile
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
+            {
+                bool worked = true;
+                foreach (var caseEntry in stateOfTheWorld.cases)
+                {
+                    var case_ = caseEntry.Value;
+
+                    worked &= HandleDependency(case_.normal_dna_mapped_base_count_filename, case_.normal_dna_allcount_filename);
+                    worked &= HandleDependency(case_.tumor_dna_mapped_base_count_filename, case_.tumor_dna_allcount_filename);
+                    worked &= HandleDependency(case_.normal_rna_mapped_base_count_filename, case_.normal_rna_allcount_filename);
+                    worked &= HandleDependency(case_.tumor_rna_mapped_base_count_filename, case_.tumor_rna_allcount_filename);
+                }
+
+                return worked;
+            } // EvaluateDependencies
+
+            bool HandleDependency(string baseCountFilename, string allcountFilename)
+            {
+                if (baseCountFilename == "")
+                {
+                    return true;
+                }
+
+                if (allcountFilename == "")
+                {
+                    Console.WriteLine("Base count file " + baseCountFilename + " exists, but its prerequisite allcount file does not.");
+                    return false;
+                }
+
+                if (new FileInfo(baseCountFilename).LastWriteTime < new FileInfo(allcountFilename).LastWriteTime)
+                {
+                    Console.WriteLine("Base count file " + baseCountFilename + " is older than its predecessor " + allcountFilename);
+                    return false;
+                }
+
+                return true;
+            } // HandleDependency
+
+        }
 
         //
         // This represents the state of the world.  Processing stages look at this state and generate actions to move us along.
@@ -1594,9 +1722,10 @@ namespace ASEProcessManager
             processingStages.Add(new ExpressionDistributionProcessingStage());
             processingStages.Add(new ExtractMAFLinesProcessingStage());
             processingStages.Add(new RegionalExpressionProcessingStage());
-            processingStages.Add(new ExpressionNearMutationsProcessingStage(forAlleleSpecificExpression));
+            // off for now processingStages.Add(new ExpressionNearMutationsProcessingStage(forAlleleSpecificExpression));
             processingStages.Add(new ExtractReadsProcessingStage());
             processingStages.Add(new SelectGenesProcessingStage());
+            processingStages.Add(new CountMappedBasesProcessingStage());
 
             if (checkDependencies)
             {

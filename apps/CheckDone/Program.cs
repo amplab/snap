@@ -167,6 +167,10 @@ namespace CheckDone
                 HandleFilename(case_.annotated_selected_variants_filename);
                 HandleFilename(case_.tumor_dna_gene_coverage_filname);
                 HandleFilename(case_.extracted_maf_lines_filename);
+                HandleFilename(case_.normal_dna_mapped_base_count_filename);
+                HandleFilename(case_.tumor_dna_mapped_base_count_filename);
+                HandleFilename(case_.normal_rna_mapped_base_count_filename);
+                HandleFilename(case_.tumor_rna_mapped_base_count_filename);
             }
 
             Console.Write("Processing " + totalFiles + " files in " + FilenamesByDataDirectory.Count() + " data directories (one dot/hundred): ");

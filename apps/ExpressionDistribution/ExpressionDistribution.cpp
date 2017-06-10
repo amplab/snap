@@ -6,6 +6,7 @@
 
 struct ListOfFilenames {
     char *filename;
+	char *mappedBaseCountFilename;
     ListOfFilenames *next;
 };
 
@@ -173,12 +174,36 @@ CompressedLineReader::getNextLine(char *lineBuffer, size_t lineBufferSize)
     return true;
 }
 
-void ProcessAllcountFile(char *filename, Disease *disease)
+void ProcessAllcountFile(char *filename, char *mappedBaseCountFilename, Disease *disease)
 {
     static _int64 nAllocated = 0;
     static _int64 nHit = 0;
 
     int lineNumber = 0;
+
+	_int64 mappedBaseCount;
+
+	FILE *mappedBaseCountFile = fopen(mappedBaseCountFilename, "r");
+	if (NULL == mappedBaseCountFile) {
+		fprintf(stderr, "Unable to open mapped base count file %s\n", mappedBaseCountFilename);
+		disease->nCorruptFiles++;
+		return;	// Don't goto done, because we haven't yet created reader
+	}
+
+	if (1 != fscanf(mappedBaseCountFile, "%lld\t%*s", &mappedBaseCount)) {
+		fprintf(stderr, "Unable to parse mapped base count file %s\n", mappedBaseCountFilename);
+		disease->nCorruptFiles++;
+		fclose(mappedBaseCountFile);
+		return;
+	}
+
+	fclose(mappedBaseCountFile);
+
+	if (mappedBaseCount < 1000000) {
+		fprintf(stderr, "Mapped base count from file %s does not pass sanity check: %lld\n", mappedBaseCountFilename, mappedBaseCount);
+		disease->nCorruptFiles++;
+		return;
+	}
 
     HANDLE hFile = CreateFile(filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (INVALID_HANDLE_VALUE == hFile) {
@@ -420,11 +445,9 @@ void ProcessAllcountFile(char *filename, Disease *disease)
                    //printf("%lldM hit\n", nHit / 1000000);
                }
            }
-           chromosome->stdDevState[nextOffset]->recordObservation((double)currentMappedCount / (double)nMappedReads);
+           chromosome->stdDevState[nextOffset]->recordObservation((double)currentMappedCount / (double)mappedBaseCount);
            nextOffset++;
-       }
-
-
+       } // for each repeat count
     } // While we have an input line.
 
     //
@@ -436,8 +459,6 @@ void ProcessAllcountFile(char *filename, Disease *disease)
 
 
 done:
-
-
     delete reader;
 }
 
@@ -452,14 +473,14 @@ void ProcessDisease(Disease *disease)
     for (ListOfFilenames *allcountFile = disease->allCountFiles; NULL != allcountFile; allcountFile = allcountFile->next) {
         nFiles++;
         //printf("%d: %s\t(%llds)\n", nFiles, allcountFile->filename, (timeInMillis() - start) / 1000); fflush(stdout);
-        ProcessAllcountFile(allcountFile->filename, disease);
+        ProcessAllcountFile(allcountFile->filename, allcountFile->mappedBaseCountFilename, disease);
     }
 }
 
 
 void usage()
 {
-    fprintf(stderr, "usage: ExpressionDistribution casesFilename expressionFilesDirectory projectColumn tumorRNAAllcountColumn <diseaseName>\n");
+    fprintf(stderr, "usage: ExpressionDistribution casesFilename expressionFilesDirectory projectColumn tumorRNAAllcountColumn tumorRNAMappedBaseCountColumn <diseaseName>\n");
     exit(1);
 }
 
@@ -470,24 +491,26 @@ int main(int argc, char* argv[])
     
     int retryCount = 0;
     
-    if (argc != 5 && argc != 6) {
+    if (argc != 6 && argc != 7) {
         usage();
     }
 
     int projectColumn;
     int tumorRNAAllcountColumn;
+	int tumorRNAMappedBaseCountColumn;
 
     projectColumn = atoi(argv[3]);
     tumorRNAAllcountColumn = atoi(argv[4]);
+	tumorRNAMappedBaseCountColumn = atoi(argv[5]);
 
-    if (projectColumn < 0|| tumorRNAAllcountColumn < 0) {
-        fprintf(stderr, "Invalid project or allcount columns.\n");
+    if (projectColumn < 0|| tumorRNAAllcountColumn < 0 || tumorRNAMappedBaseCountColumn < 0) {
+        fprintf(stderr, "Invalid project, allcount or mapped base count columns.\n");
         return -1;
     }
 
     const size_t maxColumn = 100;
 
-    int highestInterestingColumnNumber = __max(projectColumn, tumorRNAAllcountColumn);
+    int highestInterestingColumnNumber = __max(projectColumn, __max(tumorRNAAllcountColumn, tumorRNAMappedBaseCountColumn));
 
     if (highestInterestingColumnNumber >= maxColumn) {
         fprintf(stderr, "One or both of the column numbers are bigger than permitted.\n");
@@ -596,14 +619,18 @@ int main(int argc, char* argv[])
 
 
         char *tumorAllcountsFileField = fields[tumorRNAAllcountColumn];
+		char *tumorRNAMappedBaseCountFileField = fields[tumorRNAMappedBaseCountColumn];
 
-        if (strcmp(tumorAllcountsFileField, "")) {
+        if (strcmp(tumorAllcountsFileField, "") && strcmp(tumorRNAMappedBaseCountFileField, "")) {
             //
             // It's not null, add it to the disease.
             //
             ListOfFilenames *entry = new ListOfFilenames;
             entry->filename = new char[strlen(tumorAllcountsFileField) + 1];
             strcpy(entry->filename, tumorAllcountsFileField);
+			entry->mappedBaseCountFilename = new char[strlen(tumorRNAMappedBaseCountFileField) + 1];
+			strcpy(entry->mappedBaseCountFilename, tumorRNAMappedBaseCountFileField);
+
             entry->next = disease->allCountFiles;
             disease->allCountFiles = entry;
             disease->nTotalFiles++;
@@ -621,7 +648,7 @@ int main(int argc, char* argv[])
     _int64 start = timeInMillis();
     for (int i = 0; i < nDiseases; i++) {
         Disease *disease = &diseases[i];
-        if (argc == 6 && strcmp(argv[5], disease->diseaseName)) {
+        if (argc == 7 && strcmp(argv[6], disease->diseaseName)) {
             continue;
         }
         ProcessDisease(disease);
