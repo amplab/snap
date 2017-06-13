@@ -26,7 +26,6 @@ namespace GenerateScriptFromVariants
 
         static int Main(string[] args)
         {
-            var generatedScript = new List<string>();
 
             var configuration = ASETools.ASEConfirguation.loadFromFile(args);
 
@@ -95,6 +94,8 @@ namespace GenerateScriptFromVariants
 
             foreach (var caseToProcess in casesToProcess)
             {
+                var generatedScript = new List<string>();
+
                 var case_ = caseToProcess.case_;
 
                 string bamFileId;

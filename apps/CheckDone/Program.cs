@@ -135,11 +135,14 @@ namespace CheckDone
 
             configuration = ASETools.ASEConfirguation.loadFromFile(args);
 
-            if (configuration.commandLineArgs.Count() != 0)
+            if (configuration.commandLineArgs.Count() != 0 && (configuration.commandLineArgs.Count() != 1 || configuration.commandLineArgs[0] != "-a"))
             {
-                Console.WriteLine("usage: CheckDone {-configuration configurationFileName}");
+                Console.WriteLine("usage: CheckDone {-configuration configurationFileName} {-a}");
+                Console.WriteLine("-a means to skip allcount files (which is where most of the time goes).");
                 return;
             }
+
+            bool skipAllcount = configuration.commandLineArgs.Contains("-a");
 
             var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
@@ -153,10 +156,13 @@ namespace CheckDone
             {
                 var case_ = caseEntry.Value;
 
-                HandleFilename(case_.normal_dna_allcount_filename);
-                HandleFilename(case_.normal_rna_allcount_filename);
-                HandleFilename(case_.tumor_dna_allcount_filename);
-                HandleFilename(case_.tumor_rna_allcount_filename);
+                if (!skipAllcount)
+                {
+                    HandleFilename(case_.normal_dna_allcount_filename);
+                    HandleFilename(case_.normal_rna_allcount_filename);
+                    HandleFilename(case_.tumor_dna_allcount_filename);
+                    HandleFilename(case_.tumor_rna_allcount_filename);
+                }
                 HandleFilename(case_.regional_expression_filename);
                 HandleFilename(case_.gene_expression_filename);
                 HandleFilename(case_.selected_variants_filename);

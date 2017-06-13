@@ -183,6 +183,12 @@ namespace ASEProcessManager
                     HandleFile(stateOfTheWorld, case_.tumor_dna_file_id, case_.tumor_dna_file_bam_md5, case_.case_id, ASETools.DerivedFile.Type.TumorDNAAllcount,
                         ASETools.tumorDNAAllcountExtension, script, hpcScript, ref filesToDownload, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
 
+                    if (case_.normal_rna_file_id != "")
+                    {
+                        HandleFile(stateOfTheWorld, case_.normal_rna_file_id, case_.normal_rna_file_bam_md5, case_.case_id, ASETools.DerivedFile.Type.NormalRNAAllcount,
+                            ASETools.normalRNAAllcountExtension, script, hpcScript, ref filesToDownload, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
+                    }
+
                 } // Foreach case
             }// EvaluateStage
 
