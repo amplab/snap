@@ -837,215 +837,6 @@ namespace ExpressionNearMutations
 						perChromosomeRegionalExpressionState,
 						forAlleleSpecificExpression,
 						minExamplesPerRegion);
-					//for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
-					//{
-					//	if (allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
-					//	{
-					//		outputFile.Write("\t" + allExpressions[i].regionalExpressionState[sizeIndex].totalTumorExpression / allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncludedTumor);
-
-					//		// Write out normal RNA results, if present
-					//		if (allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
-					//		{
-					//			outputFile.Write("\t" + allExpressions[i].regionalExpressionState[sizeIndex].totalNormalExpression / allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncludedNormal);
-					//		}
-					//		else
-					//		{
-					//			outputFile.Write("\t*");
-					//		}
-					//	}
-					//	else
-					//	{
-					//		outputFile.Write("\t*\t*");
-					//	}
-					//}
-
-					//if (wholeAutosomeRegionalExpression.nRegionsIncludedTumor >= minExamplesPerRegion)
-					//{
-					//	outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalTumorExpression / wholeAutosomeRegionalExpression.nRegionsIncludedTumor);
-
-					//	if (wholeAutosomeRegionalExpression.nRegionsIncludedNormal >= minExamplesPerRegion)
-					//	{
-					//		outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalNormalExpression / wholeAutosomeRegionalExpression.nRegionsIncludedNormal);
-					//	}
-					//	else
-					//	{
-					//		outputFile.Write("\t*");
-					//	}
-					//}
-					//else
-					//{
-					//	outputFile.Write("\t*\t*");
-					//}
-
-					//if (!forAlleleSpecificExpression)
-					//{
-					//	for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
-					//	{
-					//		if (allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
-					//		{
-					//			outputFile.Write("\t" + allExpressions[i].regionalExpressionState[sizeIndex].totalMeanTumorExpression / allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncludedTumor);
-
-					//			if (allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
-					//			{
-					//				outputFile.Write("\t" + allExpressions[i].regionalExpressionState[sizeIndex].totalMeanNormalExpression / allExpressions[i].regionalExpressionState[sizeIndex].nRegionsIncludedNormal);
-					//			}
-					//			else
-					//			{
-					//				outputFile.Write("\t*");
-					//			}
-					//		}
-					//		else
-					//		{
-					//			outputFile.Write("\t*\t*");
-					//		}
-					//	}
-
-					//	if (wholeAutosomeRegionalExpression.nRegionsIncludedTumor >= minExamplesPerRegion)
-					//	{
-					//		outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalMeanTumorExpression / wholeAutosomeRegionalExpression.nRegionsIncludedTumor);
-
-					//		if (wholeAutosomeRegionalExpression.nRegionsIncludedNormal >= minExamplesPerRegion)
-					//		{
-					//			outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalMeanNormalExpression / wholeAutosomeRegionalExpression.nRegionsIncludedNormal);
-					//		}
-					//		else
-					//		{
-					//			outputFile.Write("\t*");
-					//		}
-					//	}
-					//	else
-					//	{
-					//		outputFile.Write("\t*\t*");
-					//	}
-					//}
-
-					//for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
-					//{
-					//	if (allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
-					//	{
-					//		outputFile.Write("\t" + allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].totalTumorExpression / allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor);
-
-					//		if (allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
-					//		{
-					//			outputFile.Write("\t" + allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].totalNormalExpression / allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal);
-					//		}
-					//		else
-					//		{
-					//			outputFile.Write("\t*");
-					//		}
-					//	}
-					//	else
-					//	{
-					//		outputFile.Write("\t*\t*");
-					//	}
-					//}
-
-					//if (allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
-					//{
-					//	outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].totalTumorExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].nRegionsIncludedTumor);
-
-					//	if (allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
-					//	{
-					//		outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].totalNormalExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].nRegionsIncludedNormal);
-					//	}
-					//	else
-					//	{
-					//		outputFile.Write("\t*");
-					//	}
-
-					//}
-					//else
-					//{
-					//	outputFile.Write("\t*\t*");
-					//}
-
-					//if (!forAlleleSpecificExpression)
-					//{
-					//	for (int sizeIndex = 0; sizeIndex < GeneExpression.nRegionSizes; sizeIndex++)
-					//	{
-					//		if (allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
-					//		{
-					//			outputFile.Write("\t" + allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].totalMeanTumorExpression / allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor);
-
-					//			if (allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
-					//			{
-					//				outputFile.Write("\t" + allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].totalMeanNormalExpression / allExpressions[i].exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal);
-					//			}
-					//			else
-					//			{
-					//				outputFile.Write("\t*");
-					//			}
-					//		}
-					//		else
-					//		{
-					//			outputFile.Write("\t*\t*");
-					//		}
-					//	}
-
-					//	if (allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
-					//	{
-					//		outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].totalMeanTumorExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].nRegionsIncludedTumor);
-
-					//		if (allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
-					//		{
-					//			outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].totalMeanNormalExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpressions[i].geneLocationInfo.chromosome].nRegionsIncludedNormal);
-					//		}
-					//		else
-					//		{
-					//			outputFile.Write("\t*");
-					//		}
-					//	}
-					//	else
-					//	{
-					//		outputFile.Write("\t*\t*");
-					//	}
-					//}
-
-					//for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
-					//{
-					//	if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
-					//	{
-					//		outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalTumorExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor);
-
-					//		if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
-					//		{
-					//			outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalNormalExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal);
-					//		}
-					//		else
-					//		{
-					//			outputFile.Write("\t*");
-					//		}
-					//	}
-					//	else
-					//	{
-					//		outputFile.Write("\t*\t*");
-					//	}
-					//}
-
-					//if (!forAlleleSpecificExpression)
-					//{
-					//	for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
-					//	{
-					//		if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
-					//		{
-					//			outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalMeanTumorExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor);
-
-					//			if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
-					//			{
-					//				outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalMeanNormalExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal);
-					//			}
-					//			else
-					//			{
-					//				outputFile.Write("\t*");
-					//			}
-
-					//		}
-					//		else
-					//		{
-					//			outputFile.Write("\t*\t*");
-					//		}
-					//	}
-					//}
 
 					outputFile.WriteLine();
 				} // for each gene
@@ -1139,20 +930,19 @@ namespace ExpressionNearMutations
 			//
 			// Process the runs in parallel
 			//
-			//timer.Reset();
-			//timer.Start();
+			timer.Reset();
+			timer.Start();
 
-			//var threads = new List<Thread>();
-			//for (int i = 0; i < Environment.ProcessorCount; i++)
-			//{
-			//	threads.Add(new Thread(() => ProcessCases(casesToProcess, forAlleleSpecificExpression, minExamplesPerRegion)));
-			//}
-			ProcessCases(casesToProcess, forAlleleSpecificExpression, minExamplesPerRegion);
+			var threads = new List<Thread>();
+			for (int i = 0; i < Environment.ProcessorCount; i++)
+			{
+				threads.Add(new Thread(() => ProcessCases(casesToProcess, forAlleleSpecificExpression, minExamplesPerRegion)));
+			}
 
-			//threads.ForEach(t => t.Start());
-   //         threads.ForEach(t => t.Join());
+			threads.ForEach(t => t.Start());
+			threads.ForEach(t => t.Join());
 
-            timer.Stop();
+			timer.Stop();
             Console.WriteLine("Processed " + (configuration.commandLineArgs.Count() - (forAlleleSpecificExpression ? 1 : 0)) + " experiments in " + (timer.ElapsedMilliseconds + 500) / 1000 + " seconds");
         }
     }
