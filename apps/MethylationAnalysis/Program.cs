@@ -299,22 +299,11 @@ namespace MethylationAnalysis
 			// total number of REFs for Bonferroni correction
 			int compositeREFCount = compositeREFs.Keys.Count();
 
-			// TODO: this doesnt work
-			//var threads = new List<Thread>();
-			//for (int i = 0; i < Environment.ProcessorCount; i++)
-			//{
-			//	threads.Add(new Thread(() => MethylationMannWhitney(compositeREFs.ToList())));
-			//}
-
-			//threads.ForEach(th => th.Start());
-			//threads.ForEach(th => th.Join());
-
 			MethylationMannWhitney(compositeREFs.ToList());
 
 
 			// open file
-			// TODO remove hard coded
-			var output = new StreamWriter(@"C:\Users\t-almorr\temp\MannWhitney_with450.txt");
+			var output = new StreamWriter(@"\\msr-genomics-0\d$\gdc\methyl_temp\MannWhitney_with450.txt");
 
 			// write header
 			output.WriteLine("Gene\tCompositeREF\tnSingle\tnMultiple\tU\tz\tp\tp_Bonferroni\t");
@@ -345,7 +334,7 @@ namespace MethylationAnalysis
 
 			var selectedCases = cases.Select(kv => kv.Value).ToList();
 
-			var methyl_dir = @"\\msr-genomics-0\d$\gdc\methyl_temp/";
+			var methyl_dir = @"\\msr-genomics-0\d$\gdc\methyl_temp\";
 
 			// Compute file for all overlapping REFs
 			// TODO move this to process manager
