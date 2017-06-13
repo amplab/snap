@@ -1250,7 +1250,7 @@ namespace ASEProcessManager
                     var case_ = caseEntry.Value;
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_dna_allcount_filename, case_.normal_dna_mapped_base_count_filename, ASETools.normalDNAMappedBaseCountExtension, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     HandleFile(stateOfTheWorld, script, hpcScript, case_.tumor_dna_allcount_filename, case_.tumor_dna_mapped_base_count_filename, ASETools.tumorDNAMappedBaseCountExtension, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
-                    if (case_.normal_rna_file_id != "")
+                    if (case_.normal_rna_file_id != "" && case_.normal_rna_file_id != null)
                     {
                         HandleFile(stateOfTheWorld, script, hpcScript, case_.normal_rna_allcount_filename, case_.normal_rna_mapped_base_count_filename, ASETools.normalRNAMappedBaseCountExtension, ref nDone, ref nAddedToScript, ref nWaitingForPrerequisites);
                     }
