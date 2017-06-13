@@ -3266,50 +3266,107 @@ namespace ASELib
 
         public struct MeanAndStdDev
         {
-            public double mean;
-            public double stddev;
+            public MeanAndStdDev(double mean_, double stdDev_)
+            {
+                mean = mean_;
+                stddev = stdDev_;
+            }
+
+            public readonly double mean;
+            public readonly double stddev;
         }
 
         //
         // Maps chromosomeName -> (offset -> MeanAndStdDev)
         //
-        public static Dictionary<string, Dictionary<int, MeanAndStdDev>> LoadExpressionFile(string filename)
+        struct ChromosomeSize : IComparable<ChromosomeSize>
         {
-            var expression = new Dictionary<string, Dictionary<int, MeanAndStdDev>>();
-
-            StreamReader reader = new StreamReader(filename);
-
-            string currentChromosome = null;
-            Dictionary<int, MeanAndStdDev> currentMapping = null;
-
-            string statLine;
-            while (null != (statLine = reader.ReadLine()))
+            public ChromosomeSize(string name_, int size_)
             {
-                string[] statLineFields = statLine.Split('\t');
-                if (statLineFields.Count() == 1)
-                {
-                    //
-                    // It's a chromosome header.
-                    //
-                    currentChromosome = statLine.ToLower();
-                    currentMapping = new Dictionary<int, MeanAndStdDev>();
-                    expression.Add(currentChromosome, currentMapping);
-                    continue;
-                }
+                name = name_;
+                size = size_;
+            }
 
-                MeanAndStdDev stats = new MeanAndStdDev();
-                int chromosomeOffset = Convert.ToInt32(statLineFields[0]);
-                stats.mean = Convert.ToDouble(statLineFields[2]);
-                stats.stddev = Convert.ToDouble(statLineFields[3]);
+            public int CompareTo(ChromosomeSize other)
+            {
+                //
+                // This is backwards from what you'd ordinarily think because we want them ordered largest to smallest in hopes that that helps out the
+                // memory allocator.
+                //
+                if (size > other.size) return -1;
+                if (size == other.size) return 0;
+                return 1;
+            }
 
-                if (stats.mean > 0 && stats.stddev > 0)
+            public string name;
+            public int size;
+        }
+
+        //
+        // The content of an expression file.  We used to just return the more obvious Dictionary<string, Dictionary<int, MeanAndStdDev>>, but the inside dictionaries got big enough to make
+        // something bad happen in the CLR runtime, even on 64 bit with gcAllowVeryLargeObjects set.  So, instead we add one more level of indirection to get around dictionaries with
+        // tens of millions of entries.
+        //
+        public class ExpressionFile
+        {
+            public ExpressionFile() { }
+
+            public void LoadFromFile(string filename)
+            {
+                string currentContig = null;
+
+                var reader = CreateStreamReaderWithRetry(filename);
+
+                string statLine;
+
+                while (null != (statLine = reader.ReadLine()))
                 {
-                    currentMapping.Add(chromosomeOffset, stats);
+                    string[] statLineFields = statLine.Split('\t');
+                    if (statLineFields.Count() == 1)
+                    {
+                        //
+                        // It's a chromosome header.
+                        //
+
+                        currentContig = statLineFields[0].ToLower();
+                        expression.Add(currentContig, new Dictionary<int, Dictionary<int, MeanAndStdDev>>());
+                        higestOffsetForEachContig.Add(currentContig, 0);
+                    } else
+                    {
+                        int chromosomeOffset = Convert.ToInt32(statLineFields[0]);
+                        if (!expression[currentContig].ContainsKey(chromosomeOffset / subchunkSize))
+                        {
+                            expression[currentContig].Add(chromosomeOffset / subchunkSize, new Dictionary<int, MeanAndStdDev>());
+                        }
+
+                        expression[currentContig][chromosomeOffset / subchunkSize].Add(chromosomeOffset, new MeanAndStdDev(Convert.ToDouble(statLineFields[2]), Convert.ToDouble(statLineFields[3])));
+                        higestOffsetForEachContig[currentContig] = Math.Max(higestOffsetForEachContig[currentContig], chromosomeOffset);
+                    }
                 }
             }
 
-            return expression;
-        } // LoadExpressionFile
+            public bool getValue(string contigName, int chromosomeOffset, out MeanAndStdDev meanAndStdDev)
+            {
+                contigName = contigName.ToLower();
+                if (!expression.ContainsKey(contigName) || !expression[contigName].ContainsKey(chromosomeOffset / subchunkSize) || !expression[contigName][chromosomeOffset/subchunkSize].ContainsKey(chromosomeOffset))
+                {
+                    meanAndStdDev = new MeanAndStdDev(-1, -1);
+                    return false;
+                }
+
+                meanAndStdDev =  expression[contigName][chromosomeOffset / subchunkSize][chromosomeOffset];
+                return true;
+            }
+
+            public int getHigestOffsetForContig(string contigName)
+            {
+                return higestOffsetForEachContig[contigName];
+            }
+
+            Dictionary<string, Dictionary<int, Dictionary<int, MeanAndStdDev>>> expression = new Dictionary<string, Dictionary<int, Dictionary<int, MeanAndStdDev>>>();
+            public Dictionary<string, int> higestOffsetForEachContig = new Dictionary<string, int>();
+            const int subchunkSize = 100000;
+        }
 
         //
         // Excel has the bad habit of taking strings that looks like dates and converting them into actual dates.  This is a problem for some gene names ("MARCH1"), which is

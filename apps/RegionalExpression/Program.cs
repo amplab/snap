@@ -16,7 +16,7 @@ namespace RegionalExpression
     {
         class Region
         {
-            public Region(int regionSize_, Dictionary<string, Dictionary<int, ASETools.MeanAndStdDev>> expression_, Dictionary<string, int> highestOffsetForEachContig_, long nHighQualityMappedNuclearReads_, StreamWriter outputFile_) {
+            public Region(int regionSize_, ASETools.ExpressionFile expression_, Dictionary<string, int> highestOffsetForEachContig_, long nHighQualityMappedNuclearReads_, StreamWriter outputFile_) {
                 regionSize = regionSize_;
                 expression = expression_;
                 highestOffsetForEachContig = highestOffsetForEachContig_;
@@ -24,7 +24,7 @@ namespace RegionalExpression
                 outputFile = outputFile_;
             }
 
-            Dictionary<string, Dictionary<int, ASETools.MeanAndStdDev>> expression;
+            ASETools.ExpressionFile expression;
             Dictionary<string, int> highestOffsetForEachContig;
             int regionSize;
             long nHighQualityMappedNuclearReads;
@@ -51,7 +51,6 @@ namespace RegionalExpression
 
                 closeRegion();
             }
-
 
             public void processBase(string contig, int offset, long mappedReadCount)
             {
@@ -94,17 +93,18 @@ namespace RegionalExpression
                 }
 
                 nBasesExpressed++;
-                if (expression.ContainsKey(contig) && expression[contig].ContainsKey(offset))
-                {
+                ASETools.MeanAndStdDev meanAndStdDev;
+                if (expression.getValue(contig, offset, out meanAndStdDev))
+               {
                     nBasesExpressedWithBaselineExpression++;
-                    double z = (((double)mappedReadCount / (double)nHighQualityMappedNuclearReads) - expression[contig][offset].mean) / expression[contig][offset].stddev;
+                    double z = (((double)mappedReadCount / (double)nHighQualityMappedNuclearReads) - meanAndStdDev.mean) / meanAndStdDev.stddev;
 
                     totalZForBasesWithBaselineExpression += z;
                     minZForBasesWithBaselineExpression = Math.Min(z, minZForBasesWithBaselineExpression);
                     maxZForBasesWithBaselineExpression = Math.Max(z, maxZForBasesWithBaselineExpression);
                     totalReadsMappedToBasesWithBaselineExpression += mappedReadCount;
 
-                    totalMuForBasesWithBaselineExpression += ((double)mappedReadCount / (double)nHighQualityMappedNuclearReads) / (double)expression[contig][offset].mean;
+                    totalMuForBasesWithBaselineExpression += ((double)mappedReadCount / (double)nHighQualityMappedNuclearReads) / meanAndStdDev.mean;
                 }
                 else
                 {
@@ -140,10 +140,11 @@ namespace RegionalExpression
 
             void processSkippedBase(int offset)
             {
-                if (expression[currentContig].ContainsKey(offset))
+                ASETools.MeanAndStdDev meanAndStdDev;
+                if (expression.getValue(currentContig, offset, out meanAndStdDev))
                 {
                     nBasesWithBaselineButNoLocalExpression++;
-                    totalZForBasesWithBaselineExpression -= expression[currentContig][offset].mean / expression[currentContig][offset].stddev; // It's one mean below the mean: ie. 0 expression
+                    totalZForBasesWithBaselineExpression -= meanAndStdDev.mean / meanAndStdDev.stddev; // It's one mean below the mean: ie. 0 expression
                     // No need to update totalMu, since 0 expression adds 0 there.
                 }
             }
@@ -156,9 +157,6 @@ namespace RegionalExpression
             }
         }
 
-        static Dictionary<string, Dictionary<int, ASETools.MeanAndStdDev>> expression = null;
-        static Dictionary<string, int> highestOffsetForEachContig = new Dictionary<string, int>();
-
         static int regionSize;
 
         class OneRun
@@ -168,7 +166,7 @@ namespace RegionalExpression
             public string case_id;
         }
 
-        static void ProcessRuns(List<OneRun> runs)
+        static void ProcessRuns(List<OneRun> runs, ASETools.ExpressionFile expression)
         {
             while (true) {
 
@@ -229,7 +227,7 @@ namespace RegionalExpression
                 outputFile.WriteLine("NumContigs: " + numContigs);
                 Region.printHeader(outputFile);
 
-                Region region = new Region(regionSize, expression, highestOffsetForEachContig, mappedHQNuclearReads, outputFile);
+                Region region = new Region(regionSize, expression, expression.higestOffsetForEachContig, mappedHQNuclearReads, outputFile);
 
                 ASETools.AllcountReader.ProcessBase processBase = (x, y, z) => region.processBase(x, y, z);
 
@@ -284,6 +282,9 @@ namespace RegionalExpression
 
             var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
+            ASETools.ExpressionFile expression;
+            
+
             Stopwatch timer;
             try
             {
@@ -291,23 +292,9 @@ namespace RegionalExpression
                 timer = new Stopwatch();
                 timer.Start();
 
-                expression = null;  // Let the garbage collector get rid of the previous one while we're loading the next
+                expression = new ASETools.ExpressionFile();
 
-                expression = ASETools.LoadExpressionFile(configuration.commandLineArgs[0]);   // This can take forever!
-
-                //
-                // Now build the list of highest offsets for each contig.
-                //
-                foreach (var expressionEntry in expression)
-                {
-                    int highestSoFar = 0;
-                    foreach (var regionEntry in expressionEntry.Value)
-                    {
-                        highestSoFar = Math.Max(highestSoFar, regionEntry.Key);
-                    }
-
-                    highestOffsetForEachContig.Add(expressionEntry.Key, highestSoFar);
-                }
+                expression.LoadFromFile(configuration.commandLineArgs[0]);   // This can take forever!
 
                 timer.Stop();
                 Console.WriteLine((timer.ElapsedMilliseconds + 500) / 1000 + "s");
@@ -368,7 +355,7 @@ namespace RegionalExpression
 
             var threads = new List<Thread>();
             for (int i = 0; i < Environment.ProcessorCount; i++) {
-                threads.Add(new Thread(() => ProcessRuns(runs)));
+                threads.Add(new Thread(() => ProcessRuns(runs, expression)));
             }
 
             threads.ForEach(t => t.Start());
