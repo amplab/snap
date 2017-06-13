@@ -124,12 +124,7 @@ namespace AnnotateVariants
             int nMatchingNeither = 0;
             int nMatchingBoth = 0;
 
-			// reformat contig. Sex chromosomes cause issues for fetching reference bases
-			var contigIndex = ASETools.ChromosomeNameToIndex(contig);
-			contig = ASETools.ChromosomeIndexToName(contigIndex, true);
-
-
-            var consolodatedFile = new ASETools.ConsolodatedFileReader();
+			var consolodatedFile = new ASETools.ConsolodatedFileReader();
 
             if (!consolodatedFile.open(selectedReadsFilename))
             {
@@ -372,6 +367,7 @@ namespace AnnotateVariants
                 if (!cases.ContainsKey(configuration.commandLineArgs[i]))
                 {
                     Console.WriteLine(configuration.commandLineArgs[i] + " does not appear to be a case ID.  Ignoring.");
+                    Console.WriteLine(configuration.commandLineArgs[i] + " does not appear to be a caseID.  Ignoring.");
                 } else
                 {
                     casesToProcess.Add(cases[configuration.commandLineArgs[i]]);

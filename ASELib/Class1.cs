@@ -2534,9 +2534,6 @@ namespace ASELib
 
 			static KeyValuePair<string, GeneLocationInfo> ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
 			{
-				// delimiter separating columns
-				var delim = '\t';
-
 				var composite = fields[fieldMappings["CompositeREF"]];
 				var geneInfo = new GeneLocationInfo();
 				geneInfo.chromosome = fields[fieldMappings["Chromosome"]];
@@ -3800,6 +3797,19 @@ namespace ASELib
             {
             }
 
+			private string formatContig(string contig)
+			{
+				//
+				// Try adding "chr" to the contig.
+				//
+				if (!(contig.Count() > 3 && contig.Substring(0, 3) == "chr"))
+				{
+					contig = "chr" + contig;
+				}
+				// use lower case to avoid issues with _random contigs
+				return contig.ToLower();
+			}
+
             public bool load(string snapIndexDirectory)
             {
                 var metadataFilename = snapIndexDirectory + @"\GenomeIndex";
@@ -3881,14 +3891,16 @@ namespace ASELib
                             return false;
                         }
 
-                        if (contigsByName.ContainsKey(fields[1]))
+						var contig = formatContig(fields[1]);
+
+                        if (contigsByName.ContainsKey(contig))
                         {
-                            Console.WriteLine("Genome.load: duplicate contig (" + fields[1] + " in header of " + genomeFilename);
+                            Console.WriteLine("Genome.load: duplicate contig (" + contig + " in header of " + genomeFilename);
                             return false;
                         }
 
-                        contigsByName.Add(fields[1], new Contig(fields[1], Convert.ToInt64(fields[0])));
-                        contigsInOrder.Add(contigsByName[fields[1]]);
+                        contigsByName.Add(contig, new Contig(contig, Convert.ToInt64(fields[0])));
+                        contigsInOrder.Add(contigsByName[contig]);
                     }
                 } catch (FormatException)
                 {
@@ -3939,6 +3951,7 @@ namespace ASELib
 
             public char getBase(string contigName, int offset)
             {
+				contigName = formatContig(contigName);
                 return contigsByName[contigName].data[offset - 1];   // Offset - 1 because genome coordinates are 1 based, while C# is 0 based.
             }
 
