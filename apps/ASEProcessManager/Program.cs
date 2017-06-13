@@ -499,8 +499,92 @@ namespace ASEProcessManager
         }  // GermlineVariantCallingProcessingStage
 
 
+		class AnnotateVariantsProcessingStage : ProcessingStage
+		{
 
-        class SelectVariantsProcessingStage : ProcessingStage
+			public AnnotateVariantsProcessingStage() {}
+
+			public string GetStageName() { return "Annotate Variants"; }
+
+			public bool NeedsCases() { return true; }
+
+			public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+			{
+				nDone = 0;
+				nAddedToScript = 0;
+				nWaitingForPrerequisites = 0;
+				filesToDownload = null;
+
+				foreach (var caseEntry in stateOfTheWorld.cases)
+				{
+					var case_ = caseEntry.Value;
+					if (case_.annotated_selected_variants_filename != "")
+					{
+						nDone++;
+						continue;
+					}
+					else if (case_.extracted_maf_lines_filename == "" || case_.selected_variants_filename == "" || case_.tumor_dna_reads_at_selected_variants_filename == "" || case_.tumor_dna_reads_at_selected_variants_index_filename == "" ||
+					case_.tumor_rna_reads_at_selected_variants_filename == "" || case_.tumor_rna_reads_at_selected_variants_index_filename == "" || case_.normal_dna_reads_at_selected_variants_filename == "" || case_.normal_dna_reads_at_selected_variants_index_filename == "")
+					{
+						nWaitingForPrerequisites++;
+						continue;
+					}
+					else
+					{
+						nAddedToScript++;
+					}
+
+					// write a command for each case id
+					script.Write(stateOfTheWorld.configuration.binariesDirectory + "AnnotateVariants.exe");
+					hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "AnnotateVariants.exe");
+
+					script.Write(" " + case_.case_id);
+					hpcScript.Write(" " + case_.case_id);
+
+					script.WriteLine();
+					hpcScript.WriteLine();
+
+				}
+
+
+			} // EvaluateStage
+
+			public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
+			{
+				bool allOK = true;
+
+				foreach (var caseEntry in stateOfTheWorld.cases)
+				{
+					var case_ = caseEntry.Value;
+
+					if (case_.extracted_maf_lines_filename == "" || case_.selected_variants_filename == "" || case_.tumor_dna_reads_at_selected_variants_filename == "" || case_.tumor_dna_reads_at_selected_variants_index_filename == "" ||
+					case_.tumor_rna_reads_at_selected_variants_filename == "" || case_.tumor_rna_reads_at_selected_variants_index_filename == "" || case_.normal_dna_reads_at_selected_variants_filename == "" || case_.normal_dna_reads_at_selected_variants_index_filename == "")
+					{
+						Console.WriteLine("Annotated variants file " + case_.annotated_selected_variants_filename + " exists, but dependencies do not.");
+						allOK = false;
+						continue;
+					}
+
+					if (case_.annotated_selected_variants_filename == "")
+					{
+						continue;
+					}
+
+					var annotatedVariantsWriteTime = new FileInfo(case_.annotated_selected_variants_filename).LastWriteTime;
+					if (case_.annotated_selected_variants_filename == "")
+					{
+						Console.WriteLine("Annotated variants file " + case_.annotated_selected_variants_filename + " exists, but the precursor annotated selected variants file does not.");
+						allOK = false;
+						continue;
+					}
+				}
+				return allOK;
+			} // EvaluateDependencies
+
+		} // AnnotateVariantsProcessingStage
+
+
+		class SelectVariantsProcessingStage : ProcessingStage
         {
             public SelectVariantsProcessingStage() { }
 
@@ -606,7 +690,8 @@ namespace ASEProcessManager
             } // checkOneDependency
         } // SelectVariantsProcessingStage
 
-        class ExpressionDistributionProcessingStage : ProcessingStage
+
+		class ExpressionDistributionProcessingStage : ProcessingStage
         {
             public ExpressionDistributionProcessingStage() { }
 
@@ -1716,7 +1801,7 @@ namespace ASEProcessManager
 
             List<ProcessingStage> processingStages = new List<ProcessingStage>();
 
-			var forAlleleSpecificExpression = false;
+			var forAlleleSpecificExpression = true;
 
             processingStages.Add(new MAFConfigurationProcessingStage());
             processingStages.Add(new GenerateCasesProcessingStage());
@@ -1725,7 +1810,8 @@ namespace ASEProcessManager
             processingStages.Add(new MD5ComputationProcessingStage());
             processingStages.Add(new GermlineVariantCallingProcessingStage());
             processingStages.Add(new SelectVariantsProcessingStage());
-            processingStages.Add(new ExpressionDistributionProcessingStage());
+			processingStages.Add(new AnnotateVariantsProcessingStage());
+			processingStages.Add(new ExpressionDistributionProcessingStage());
             processingStages.Add(new ExtractMAFLinesProcessingStage());
             processingStages.Add(new RegionalExpressionProcessingStage());
             // off for now processingStages.Add(new ExpressionNearMutationsProcessingStage(forAlleleSpecificExpression));
