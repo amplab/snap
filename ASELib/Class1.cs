@@ -3431,7 +3431,15 @@ namespace ASELib
 
                     if (subfiles.ContainsKey(fields[0]))
                     {
-                        Console.WriteLine("ASETools.ConsolodatedFileReader: index file has more than one instance of subfile " + fields[0]);
+                        //
+                        // We sometimes get more than one instance of the same subfile if, for instance, there are two MAF entries for the
+                        // same mutation locus.  It's OK as long as they have the same subfile size.
+                        //
+                        if (subfiles[fields[0]].size == Convert.ToInt32(fields[2]))
+                        {
+                            continue;
+                        }
+                        Console.WriteLine("ASETools.ConsolodatedFileReader: index file has more than one instance of subfile " + fields[0] + " with different sizes " + subfiles[fields[0]].size + " and " + Convert.ToInt32(fields[2]));
                         return false;
                     }
 
