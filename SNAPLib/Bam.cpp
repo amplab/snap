@@ -279,7 +279,8 @@ char* o_sequence,
 const _uint8* nibbles,
 int bases)
 {
-    _uint16 *o_sequence_pairs = (_uint16 *)o_sequence;
+    size_t offset = bases % 2 == 1 ? 1 : 0;
+    _uint16 *o_sequence_pairs = (_uint16 *)(o_sequence+offset);
     int pairs = bases / 2;
     for (int i = 0; i < pairs; i++) {
         o_sequence_pairs[pairs-i-1] = CodeToSeqPairRC[nibbles[i]];
