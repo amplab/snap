@@ -72,7 +72,9 @@ obj
 /apps/CountVariantsInGenes/bin
 /apps/MannWhitney/bin
 /apps/SummarizeSelectedVariantCountsByGene/bin
-
+/apps/BisulfiteMethylation/bin
+ChangeGenomeBuild/bin
+ExtractBisulfiteReads/bin
 
 
 

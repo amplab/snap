@@ -1274,7 +1274,9 @@ namespace ASELib
 			public const string defaultGenomeBuild = "hg38";
 			public const string defaultGeneLocationInformation = defaultBaseDirectory + "knownGene-" + defaultGenomeBuild + ".txt";
 
-            public List<string> dataDirectories = new List<string>();
+			public const string hg19GeneLocationInformation = defaultBaseDirectory + "knownGene-hg19.txt";
+
+			public List<string> dataDirectories = new List<string>();
             public string mafManifestPathname = defaultBaseDirectory + "mafManifest.txt";
             public string mutationCaller = "mutect";
             public List<string> programNames = new List<string>();
@@ -1296,11 +1298,14 @@ namespace ASELib
             public int nTumorsToIncludeGene = 30;   // How many tumors must have at least one mutation in a gene in order to include it.
             public int nReadsToIncludeVariant = 30; // How much coverage do we need of a mutation or somatic variant to consider it?
             public string selectedGenesFilename = @"\\msr-genomics-0\d$\gdc\seleted_genes.txt";
-			public const string cpgIslandsHg38 = defaultBaseDirectory + "cpgIslandhg38.bed";
             public string scriptOutputDirectory = @"\temp\";
             public string finalResultsDirectory = @"\\msr-genomics-0\d$\gdc\final_results\";
 
 			public string geneScatterGraphsDirectory = defaultBaseDirectory + @"gene_scatter_graphs\";
+			// items used in bisulfite analysis
+			public const string bisulfiteDirectory = defaultBaseDirectory  + @"bisulfate\";
+			public const string hg38Tohg19ChainFile = defaultBaseDirectory + "hg38ToHg19.over.chain";
+			public const string bisulfiteCasesFilePathname = bisulfiteDirectory + "cases_bisulfite.txt";
 
 			public const string unfilteredCountsDirectory = defaultBaseDirectory + @"gene_mutations_with_counts\";
 			public const string unfilteredCountsExtention = @"_unfiltered_counts.txt";
@@ -5342,7 +5347,6 @@ namespace ASELib
 		public class ReadCounts
 		{
 
-
 			public double AlleleSpecificValue() // I'm not calling this "allele specific expression" because DNA doesn't have expression.
 			{
 				if (nMatchingAlt + nMatchingReference == 0)
@@ -5353,11 +5357,11 @@ namespace ASELib
 				return ((double)Math.Abs(nMatchingReference - nMatchingAlt)) / (nMatchingReference + nMatchingAlt);
 			}
 
-			public static ReadCounts ComputeReadCounts(string selectedReadsFilename, string contig,
-				int start_position,
-				string reference_allele,
-				string alt_allele,
-				string variantType,
+			public static ReadCounts ComputeReadCounts(string selectedReadsFilename, string contig, 
+				int start_position, 
+				string reference_allele, 
+				string alt_allele, 
+				string variantType, 
 				string subfileName,
 				Genome genome)
 			{
@@ -5762,6 +5766,7 @@ namespace ASELib
 
 				}
 				else if (baseOffset + regionSize < offset)
+
 				{
 					//
 					// Finish this region, and zero any with no expression.
