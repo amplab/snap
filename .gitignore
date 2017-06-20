@@ -64,7 +64,9 @@ obj
 /apps/CountMappedBases/bin
 /apps/ExpressionNearMutations/bin
 /apps/MethylationAnalysis/bin
-
+/apps/BisulfiteMethylation/bin
+ChangeGenomeBuild/bin
+ExtractBisulfiteReads/bin
 
 
 

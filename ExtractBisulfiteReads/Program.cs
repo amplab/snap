@@ -27,7 +27,6 @@ namespace GenerateBisulfiteReadExtractionScript
 
 		static int Main(string[] args)
 		{
-			var generatedScript = new List<string>();
 
 			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
 
@@ -48,18 +47,21 @@ namespace GenerateBisulfiteReadExtractionScript
 			string samtoolsPathname = configuration.commandLineArgs[2];
 
 			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
+			var bisulfiteCases = BisulfiteMethylation.BisulfateCase.loadCases(ASETools.ASEConfirguation.bisulfiteCasesFilePathname);
 
 			var casesToProcess = new List<CaseOutputFilenamePair>();
 
 			for (int i = 3; i< configuration.commandLineArgs.Count(); i ++)
 			{
-				if (!cases.ContainsKey(args[i]))
+				if (!cases.ContainsKey(configuration.commandLineArgs[i]))
 				{
 					Console.WriteLine(configuration.commandLineArgs[i] + " does not appear to be a case id.  Ignoring.");
 				}
 				else
 				{
-					var filename = @"\\msr-genomics-0\d$\gdc\bisulfate\" + configuration.commandLineArgs[i] + @"\tumorSubFiles";
+					// filename path is based on bam id
+					var filename = ASETools.ASEConfirguation.bisulfiteDirectory + configuration.commandLineArgs[i] + @"\" 
+						+ bisulfiteCases[configuration.commandLineArgs[i]].bam_tumor_file_id;
 					casesToProcess.Add(new CaseOutputFilenamePair(cases[configuration.commandLineArgs[i]], filename));
 				}
 			}
@@ -95,13 +97,11 @@ namespace GenerateBisulfiteReadExtractionScript
 				return 1;
 			}
 
-			var bisulfiteCases = BisulfiteMethylation.BisulfateCase.loadCases(@"C:\Users\t-almorr\Documents\Bisulfate_info\cases_bisulfite.txt");
-
-			var scriptFilename = @"C:\Users\t-almorr\Documents\samrun.cmd";
-			StreamWriter script = ASETools.CreateStreamWriterWithRetry(scriptFilename);
 
 			foreach (var caseToProcess in casesToProcess)
 			{
+				var generatedScript = new List<string>();
+
 				var case_ = caseToProcess.case_;
 				var bisulfite_ = bisulfiteCases[case_.case_id];
 
@@ -126,7 +126,7 @@ namespace GenerateBisulfiteReadExtractionScript
 				var mafLines = ASETools.MAFLine.ReadFile(extractedMAFLinesFilename, case_.maf_file_id, false);
 
 				var build = new GenomeBuild.LiftOver();
-				build.readChainFile(@"C:\Users\t-almorr\Downloads\hg38ToHg19.over.chain\hg38ToHg19.over.chain"); // TODO path
+				build.readChainFile(ASETools.ASEConfirguation.hg38Tohg19ChainFile); 
 
 				// convert MAF file to hg19 build
 				var MAFsHg19 = mafLines.Select(r =>
@@ -141,7 +141,7 @@ namespace GenerateBisulfiteReadExtractionScript
 				}).ToList();
 
 				// save converted MAFLines
-				var hg19FilenameMAF = @"\\msr-genomics-0\d$\gdc\bisulfate\" + case_.case_id + @"\hg19" + case_.maf_filename.Split('\\').Last();
+				var hg19FilenameMAF = ASETools.ASEConfirguation.bisulfiteDirectory + case_.case_id + @"\hg19" + case_.maf_filename.Split('\\').Last();
 				hg19FilenameMAF = hg19FilenameMAF.Remove(hg19FilenameMAF.Length - ".gz".Length); // remove .gz extension
 				ASETools.MAFLine.WriteToFile(hg19FilenameMAF, mafLines);
 
@@ -159,13 +159,13 @@ namespace GenerateBisulfiteReadExtractionScript
 				}).ToList();
 
 				//  save file for new variants converted to hg19
-				var hg19VariantsFilename = @"\\msr-genomics-0\d$\gdc\bisulfate\" + case_.case_id + @"\hg19" + case_.selected_variants_filename.Split('\\').Last();
+				var hg19VariantsFilename = ASETools.ASEConfirguation.bisulfiteDirectory + case_.case_id + @"\hg19" + case_.selected_variants_filename.Split('\\').Last();
 				var hg19VariantsFile = new StreamWriter(hg19VariantsFilename);
 				hg19VariantsFile.WriteLine("SelectGermlineVariants v1.1 for input file " + case_.vcf_filename);      
 
-				foreach (var v in selectedVariants)
+				foreach (var selectedVariant in selectedVariants)
 				{
-					hg19VariantsFile.WriteLine(v.contig + "\t" + v.locus + "\t" + v.contig + "\t" + v.locus + "\t.\t" + v.referenceBase + "\t" + v.altBase);
+					hg19VariantsFile.WriteLine(selectedVariant.contig + "\t" + selectedVariant.locus + "\t" + selectedVariant.contig + "\t" + selectedVariant.locus + "\t.\t" + selectedVariant.referenceBase + "\t" + selectedVariant.altBase);
 				}
 
 				hg19VariantsFile.WriteLine("**done**");
@@ -217,39 +217,36 @@ namespace GenerateBisulfiteReadExtractionScript
 				// And run GeneateConsolodatedExtractedReads on the file we created.
 				//
 
-				//var startInfo = new ProcessStartInfo(localGCERPathname, " - " + caseToProcess.outputFilename + " 0 " + localSamtoolsPathname);
-				//startInfo.RedirectStandardInput = true;
-				//startInfo.UseShellExecute = false;
-				//var process = Process.Start(startInfo);
+				var startInfo = new ProcessStartInfo(localGCERPathname, " - " + caseToProcess.outputFilename + " 0 " + localSamtoolsPathname);
+				startInfo.RedirectStandardInput = true;
+				startInfo.UseShellExecute = false;
+				var process = Process.Start(startInfo);
 
 				foreach (var scriptLine in generatedScript)
 				{
-					//process.StandardInput.WriteLine(scriptLine);
-					script.WriteLine(scriptLine);
+					process.StandardInput.WriteLine(scriptLine);
 				}
 
-				//process.StandardInput.Close();
+				process.StandardInput.Close();
 
-				//process.WaitForExit();
+				process.WaitForExit();
 
-				//Console.WriteLine("Generate consolodated extracted reads for case id " + case_.case_id + " exited with code " + process.ExitCode);
+				Console.WriteLine("Generate consolodated extracted reads for case id " + case_.case_id + " exited with code " + process.ExitCode);
 
 
-				//if (process.ExitCode != 0)
-				//{
-				//	File.Delete(localSamtoolsPathname);
-				//	File.Delete(localGCERPathname);
+				if (process.ExitCode != 0)
+				{
+					File.Delete(localSamtoolsPathname);
+					File.Delete(localGCERPathname);
 
-				//	File.Delete(caseToProcess.outputFilename);
-				//	File.Delete(caseToProcess.outputFilename + ".index");
-				//	return process.ExitCode;
-				//}
+					File.Delete(caseToProcess.outputFilename);
+					File.Delete(caseToProcess.outputFilename + ".index");
+					return process.ExitCode;
+				}
 			} // Foreach case we're processing
 
 			File.Delete(localSamtoolsPathname);
 			File.Delete(localGCERPathname);
-
-			script.Close();
 
 			return 0;
 		}

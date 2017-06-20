@@ -9,9 +9,6 @@ using ExpressionNearMutations;
 
 namespace BisulfiteMethylation
 {
-
-
-
 	class AnnotatedCpG
 	{
 		public AnnotatedCpG(string contig_, int locus_, ASETools.ReadCounts tumorDNAReadCounts_, ASETools.ReadCounts normalDNAReadCounts_)
@@ -47,7 +44,6 @@ namespace BisulfiteMethylation
 
 		public string realigned_maf_filename;
 		public string realigned_selected_variants_filename;
-
 
 		public BisulfateCase() {
 		}
@@ -102,39 +98,6 @@ namespace BisulfiteMethylation
 	{
 		static ASETools.Genome genome = new ASETools.Genome();
 
-		static AnnotatedCpG AnnotateCpG(ASETools.Case case_, 
-			string contig, 
-			int start_position, 
-			string reference_allele, 
-			string alt_allele, 
-			string variantType, 
-			string tumor_bisulfite_dna_file_id,
-			string normal_bisulfite_dna_file_id,
-			string subfileExtension)
-		{
-			// TODO change file names
-			ASETools.ReadCounts tumorDNAReadCounts = ASETools.ReadCounts.ComputeReadCounts(case_.tumor_dna_reads_at_selected_variants_filename, 
-				contig, 
-				start_position, 
-				reference_allele, 
-				alt_allele,
-				variantType,
-				tumor_bisulfite_dna_file_id + subfileExtension,
-				genome);
-
-			ASETools.ReadCounts normalDNAReadCounts = ASETools.ReadCounts.ComputeReadCounts(case_.normal_dna_reads_at_selected_variants_filename, 
-				contig, 
-				start_position, 
-				reference_allele, 
-				alt_allele, 
-				variantType, 
-				normal_bisulfite_dna_file_id + subfileExtension,
-				genome);
-
-			// Compute the fractions of variant and normal DNA at the CpG locations
-			return new AnnotatedCpG(contig, start_position, tumorDNAReadCounts, normalDNAReadCounts);
-		}
-
 		static void ProcessCpGs(string filename, 
 			string file_id, 
 			string contig, 
@@ -155,7 +118,7 @@ namespace BisulfiteMethylation
 			{
 				
 				// count reads at CpG
-				var readCounts = ASETools.ReadCounts.ComputeMethylationReadCounts(filename, cpg.Chromosome,
+				var methylationCounts = ASETools.MethylationCounts.ComputeMethylationReadCounts(filename, cpg.Chromosome,
 					locus,
 					reference_allele,
 					alt_allele,
@@ -164,40 +127,66 @@ namespace BisulfiteMethylation
 					file_id,
 					genome);
 
-				// TODO: filter by numbers of neither or both
 				// TODO: possibly normalize by skew of normal dna in the first place?
+
+				// Make sure there are enough total reads
+				if (methylationCounts.Item1.nMethylated + methylationCounts.Item1.nUnmethylated < 2 ||
+					methylationCounts.Item2.nMethylated + methylationCounts.Item2.nUnmethylated < 2 ||
+					methylationCounts.Item1.nNeither > 0 ||
+					methylationCounts.Item2.nNeither > 0)
+				{
+					continue;
+				}
+
 
 				// ase1 (allelel1) = Cs with mutated read/cs with mutated + Ts with mutated
 				// ase2 (allelel2) = Cs with ref read/cs with ref + Ts with ref
 				// ase = ase1 / ase1 + ase2 (0 and 1 is high ASM, middle is equal amounts of methylation
-				var methylationFraction_allele1 = readCounts.Item1.nMatchingReference / (readCounts.Item1.nMatchingAlt + readCounts.Item1.nMatchingReference);
-				var methylationFraction_allele2 = readCounts.Item2.nMatchingReference / (readCounts.Item2.nMatchingAlt + readCounts.Item2.nMatchingReference);
-				var asm = methylationFraction_allele2 / (methylationFraction_allele1 + methylationFraction_allele2);
+				double methylationFraction_allele1 = methylationCounts.Item1.nMethylated / Convert.ToDouble(methylationCounts.Item1.nMethylated + methylationCounts.Item1.nUnmethylated);
+				double methylationFraction_allele2 = methylationCounts.Item2.nMethylated / Convert.ToDouble(methylationCounts.Item2.nMethylated + methylationCounts.Item2.nUnmethylated);
 
-				//
-				// Now convert to the amount of allele-specific expression.  50% is no ASE, while 0 or 100% is 100% ASE.
-				//
-				var asm_tumor = Math.Abs(asm * 2.0 - 1.0);
+				double asm_tumor = 0.5; // by default, no ASM
+				if (methylationFraction_allele1 + methylationFraction_allele2 > 0) // avoid div by 0 error
+				{
+					asm_tumor = methylationFraction_allele2 / Convert.ToDouble(methylationFraction_allele1 + methylationFraction_allele2);
+				}
+
+
 				var asm_tumor_mu = 0;
+
+				int chromosomeId = ASETools.ChromosomeNameToIndex(cpg.Chromosome);
+
 
 				// add ASM value to autosome values
 				if (ASETools.isChromosomeAutosomal(cpg.Chromosome))
 				{
 					wholeAutosomeRegionalExpression.AddTumorExpression(asm_tumor, asm_tumor_mu);
 
+					foreach (var entry in allButThisChromosomeAutosomalRegionalExpressionState)
+					{
+						if (entry.Key != chromosomeId.ToString())
+						{
+							entry.Value.AddTumorExpression(asm_tumor, asm_tumor_mu);
+						}
+					}
+
 					// TODO possibly add in normal expression
 				}
 
 				// add ASM value to per chromosome
-				int chromosomeId = ASETools.ChromosomeNameToIndex(cpg.Chromosome);
 				if (chromosomeId != -1)
 				{
+					if (perChromosomeRegionalExpressionState[chromosomeId] == null)
+					{
+						perChromosomeRegionalExpressionState[chromosomeId] = new ASETools.RegionalExpressionState();
+					}
+
 					perChromosomeRegionalExpressionState[chromosomeId].AddTumorExpression(asm_tumor, asm_tumor_mu);
 					// TODO possibly add in normal expression
 				}
 
 				// add ASM value for genes
-				foreach (var geneLocation in geneLocationInformation.genesByChromosome[cpg.Chromosome])
+				foreach (var geneLocation in geneLocationInformation.genesByChromosome[ASETools.chromosomeNameToNonChrForm(cpg.Chromosome)])
 				{
 					if (!geneExpressions.ContainsKey(geneLocation.hugoSymbol))
 					{
@@ -229,14 +218,14 @@ namespace BisulfiteMethylation
 		{
 
 			// Add cases with bisulfate data. We will use the bam and bisulfate files
-			var bisulfiteCases = BisulfateCase.loadCases(@"C:\Users\t-almorr\Documents\Bisulfate_info\cases_bisulfite.txt");
+			var bisulfiteCases = BisulfateCase.loadCases(ASETools.ASEConfirguation.bisulfiteCasesFilePathname);
 
 			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
 
 			genome.load(configuration.indexDirectoryHg19);
 
 			// load in gene information
-			geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(ASETools.ASEConfirguation.defaultGeneLocationInformation));
+			geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(ASETools.ASEConfirguation.hg19GeneLocationInformation));
 
 			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 			// filter out only bisulfite cases
@@ -244,9 +233,26 @@ namespace BisulfiteMethylation
 
 			foreach (var bCase in bisulfiteCases)
 			{
+				Console.WriteLine("Processing case " + bCase.Key);
+
 				var bisulfate = bisulfiteCases[bCase.Key];
 
 				var case_ = cases[bCase.Key];
+
+				// reset allButThisChromosomeAutosomalRegionalExpressionState
+				foreach (var geneEntry in geneLocationInformation.genesByName)
+				{
+					var chromosome = geneEntry.Value.chromosome;
+					if (!allButThisChromosomeAutosomalRegionalExpressionState.ContainsKey(chromosome))
+					{
+						allButThisChromosomeAutosomalRegionalExpressionState.Add(chromosome, new ASETools.RegionalExpressionState());
+					}
+				}
+				// reset perChromosomeRegionalExpressionState
+				for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
+				{
+					perChromosomeRegionalExpressionState[whichChromosome] = new ASETools.RegionalExpressionState();
+				}
 
 				// read in annotated variants
 				if (bisulfate.realigned_selected_variants_filename == "" || bisulfate.realigned_maf_filename == "")
@@ -261,38 +267,65 @@ namespace BisulfiteMethylation
 				// read in cpgs
 				var cpgs = ASETools.BedLine.ReadFile(bisulfate.bed_tumor_filename);
 
+				var indexedReadsFilename = ASETools.ASEConfirguation.bisulfiteDirectory + bisulfate.case_id + @"\" + bisulfate.bam_tumor_file_id;
+
+				var variantsCount = 0;
 				foreach (var selectedVariant in selectedVariants)
 				{
+					if (variantsCount % 500 == 0)
+					{
+						Console.WriteLine("Completed " + variantsCount + " variants.");
+					}
+					variantsCount++;
+
 					// make sure the variant is not C
-					if (selectedVariant.altBase == 'C' || selectedVariant.referenceBase == 'C') {
+					if (selectedVariant.altBase == 'C' || selectedVariant.referenceBase == 'C')
+					{
 						continue;
 					}
 
 					// take all cpgs from bed file within 50 bp of this variant, but we also don't want CpG islands overlapping this variant
 					var overlappingCpgs = cpgs.Where(r => r.Chromosome == selectedVariant.contig && Math.Abs(selectedVariant.locus - r.Start_Position) <= 50 && Math.Abs(selectedVariant.locus - r.Start_Position) > 5);
 
-					ProcessCpGs(bisulfate.bam_tumor_filename, bisulfate.bam_tumor_file_id + selectedVariant.getExtractedReadsExtension(), selectedVariant.contig, selectedVariant.locus, 
+					ProcessCpGs(indexedReadsFilename, bisulfate.bam_tumor_filename + selectedVariant.getExtractedReadsExtension(), selectedVariant.contig, selectedVariant.locus,
 						selectedVariant.referenceBase.ToString(),
-						selectedVariant.altBase.ToString(), 
+						selectedVariant.altBase.ToString(),
 						"SNP", // all of them are SNPs 
 						overlappingCpgs);
 
 				} // foreach variant
 
+				var mafLineCount = 0;
 				foreach (var mafLine in mafLines)
 				{
+					if (mafLineCount % 100 == 0)
+					{
+						Console.WriteLine("Completed " + mafLineCount + " mafLines.");
+					}
+					mafLineCount++;
+
 					// make sure the variant is not C
 					if (mafLine.Match_Norm_Seq_Allele1.Contains('C') || mafLine.Match_Norm_Seq_Allele2.Contains('C'))
 					{
 						continue;
 					}
 
+					// if Gene Symbol not yet in dictionary, add it
+					if (!geneExpressions.ContainsKey(mafLine.Hugo_Symbol))
+					{
+						geneExpressions.Add(mafLine.Hugo_Symbol, new ASETools.GeneExpression(geneLocationInformation.genesByName[mafLine.Hugo_Symbol]));
+					}
+
+					// Increment the muation count by 1
+					geneExpressions[mafLine.Hugo_Symbol].mutationCount++;
+
 					// take all cpgs from bed file within 50 bp of this variant, but we also don't want CpG islands overlapping this variant
 					var overlappingCpgs = cpgs.Where(r => r.Chromosome == mafLine.Chromosome && Math.Abs(mafLine.Start_Position - r.Start_Position) <= 50 && Math.Abs(mafLine.Start_Position - r.Start_Position) > 5);
 
-					ProcessCpGs(bisulfate.bam_tumor_filename, bisulfate.bam_tumor_file_id + mafLine.getExtractedReadsExtension(), mafLine.Chromosome, mafLine.Start_Position, mafLine.Match_Norm_Seq_Allele1,
-						mafLine.Match_Norm_Seq_Allele2, mafLine.Variant_Type, overlappingCpgs);
+					ProcessCpGs(indexedReadsFilename, bisulfate.bam_tumor_filename + mafLine.getExtractedReadsExtension(), mafLine.Chromosome, mafLine.Start_Position, mafLine.Match_Norm_Seq_Allele1,
+						mafLine.Tumor_Seq_Allele2, mafLine.Variant_Type, overlappingCpgs);
 
+					
 				} // foreach MAFLine
 
 				//
@@ -307,7 +340,7 @@ namespace BisulfiteMethylation
 				}
 
 				var outputFilename = directory + analysisId + (ASETools.bisulfiteAlleleSpecificMethylationExtension);
-				Console.WriteLine("saving ASM to file " + outputFilename);
+				Console.WriteLine("Saving ASM to file " + outputFilename);
 
 				var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
 
@@ -339,6 +372,8 @@ namespace BisulfiteMethylation
 
 					outputFile.WriteLine();
 				} // for each gene
+
+				outputFile.Close();
 
 				//////////////////
 				// clear expression for next case

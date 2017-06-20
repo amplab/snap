@@ -1284,7 +1284,9 @@ namespace ASELib
 			public const string defaultGenomeBuild = "hg38";
 			public const string defaultGeneLocationInformation = defaultBaseDirectory + "knownGene-" + defaultGenomeBuild + ".txt";
 
-            public List<string> dataDirectories = new List<string>();
+			public const string hg19GeneLocationInformation = defaultBaseDirectory + "knownGene-hg19.txt";
+
+			public List<string> dataDirectories = new List<string>();
             public string mafManifestPathname = defaultBaseDirectory + "mafManifest.txt";
             public string mutationCaller = "mutect";
             public List<string> programNames = new List<string>();
@@ -1305,8 +1307,12 @@ namespace ASELib
             public int regionalExpressionRegionSize = 1000;
             public int nTumorsToIncludeGene = 30;   // How many tumors must have at least one mutation in a gene in order to include it.
             public string selectedGenesFilename = @"\\msr-genomics-0\d$\gdc\seleted_genes.txt";
-			public const string cpgIslandsHg38 = defaultBaseDirectory + "cpgIslandhg38.bed";
             public string scriptOutputDirectory = @"\temp\";
+
+			// items used in bisulfite analysis
+			public const string bisulfiteDirectory = defaultBaseDirectory  + @"bisulfate\";
+			public const string hg38Tohg19ChainFile = defaultBaseDirectory + "hg38ToHg19.over.chain";
+			public const string bisulfiteCasesFilePathname = bisulfiteDirectory + "cases_bisulfite.txt";
 
 			public const string geneScatterGraphsDirectory = defaultBaseDirectory + @"\gene_scatter_graphs\";
 
@@ -4464,11 +4470,27 @@ namespace ASELib
             public readonly char altBase;
         } // SelectedVariant
 
-        public class ReadCounts
-        {
+		public class MethylationCounts
+		{
+			public MethylationCounts(int nMethylated_, int nUnmethylated_, int nNeither_)
+			{
+				nMethylated = nMethylated_;
+				nUnmethylated = nUnmethylated_;
+				nNeither = nNeither_;
+			}
+
+			public readonly int nMethylated;
+			public readonly int nUnmethylated;
+			public readonly int nNeither;
+
+			public override string ToString()
+			{
+				return (nMethylated.ToString() + '\t' + nUnmethylated.ToString() + '\t' + nNeither.ToString());
+			}
+
 
 			// Returns ReadCounts for methylation counts of each allele. First allele is ref, second allele is alt
-			public static Tuple<ReadCounts, ReadCounts> ComputeMethylationReadCounts(string selectedReadsFilename,
+			public static Tuple<MethylationCounts, MethylationCounts> ComputeMethylationReadCounts(string selectedReadsFilename,
 				string contig,
 				int variant_start_position,
 				string variant_reference_allele,
@@ -4478,8 +4500,6 @@ namespace ASELib
 				string subfileName,
 				Genome genome)
 			{
-				string cpg_reference_allele = "C";
-				string cpg_alt_allele = "T";
 
 				// holds all the sequences matching ref
 				List<Dictionary<int, char>> matchingRef = new List<Dictionary<int, char>>();
@@ -4590,8 +4610,8 @@ namespace ASELib
 						continue;
 					}
 
-					// make sure variant can be found on this SamLine
-					if (!samLine.mappedBases.ContainsKey(start))
+					// make sure variant and cpg can be found on this SamLine
+					if (!samLine.mappedBases.ContainsKey(start) || !samLine.mappedBases.ContainsKey(cpg_start_position))
 					{
 						//
 						// This read does not overlap the variant.  Ignore it.
@@ -4620,12 +4640,12 @@ namespace ASELib
 						case "TNP":
 
 							// match to ref on both sides of variant
-							var refMatchesLeft = matchSequence(reference_bases, samLine.mappedBases, start, false);
-							var refMatchesRight = matchSequence(reference_bases, samLine.mappedBases, start, true);
+							var refMatchesLeft = ReadCounts.matchSequence(reference_bases, samLine.mappedBases, start, false);
+							var refMatchesRight = ReadCounts.matchSequence(reference_bases, samLine.mappedBases, start, true);
 
 							// match to alt on both sides of variant
-							var altMatchesLeft = matchSequence(alt_bases, samLine.mappedBases, start, false);
-							var altMatchesRight = matchSequence(alt_bases, samLine.mappedBases, start, true);
+							var altMatchesLeft = ReadCounts.matchSequence(alt_bases, samLine.mappedBases, start, false);
+							var altMatchesRight = ReadCounts.matchSequence(alt_bases, samLine.mappedBases, start, true);
 
 							// match criteria: there are some matching bases on both sides, with a total >= 10
 							matchesRef = refMatchesLeft > 0 && refMatchesRight > 0 && refMatchesLeft + refMatchesRight >= 10;
@@ -4684,7 +4704,8 @@ namespace ASELib
 					{
 						nUnmethylatedRef++;
 					}
-					else {
+					else
+					{
 						nNeitherRef++;
 					}
 				}
@@ -4693,11 +4714,11 @@ namespace ASELib
 				{
 					if (read[cpg_start_position] == 'C')
 					{
-						nMethylatedRef++;
+						nMethylatedAlt++;
 					}
 					else if (read[cpg_start_position] == 'T')
 					{
-						nUnmethylatedRef++;
+						nUnmethylatedAlt++;
 					}
 					else
 					{
@@ -4705,13 +4726,15 @@ namespace ASELib
 					}
 				}
 
-				return new Tuple<ReadCounts, ReadCounts>(new ReadCounts(nMethylatedRef, nUnmethylatedRef, nNeitherRef, 0),
-					new ReadCounts(nMethylatedAlt, nUnmethylatedAlt, nNeitherAlt, 0));
-
-
+				// return methylated (C) -> reference and unmethylated (T) -> alt
+				return new Tuple<MethylationCounts, MethylationCounts>(new MethylationCounts(nMethylatedRef, nUnmethylatedRef, nNeitherRef),
+					new MethylationCounts(nMethylatedAlt, nUnmethylatedAlt, nNeitherAlt));
 
 			}
+		}
 
+        public class ReadCounts
+        {
 			public static ReadCounts ComputeReadCounts(string selectedReadsFilename, string contig, 
 				int start_position, 
 				string reference_allele, 
@@ -4896,7 +4919,7 @@ namespace ASELib
 			}
 
 			// recursively matches a sequence and counts number of matches until the sequence ends or a mismatch is found
-			static int matchSequence(Dictionary<int, char> reference, Dictionary<int, char> sequence, int position, bool goRight, int matchCount = 0, int threshold = 10)
+			public static int matchSequence(Dictionary<int, char> reference, Dictionary<int, char> sequence, int position, bool goRight, int matchCount = 0, int threshold = 10)
 			{
 				if (matchCount >= threshold)
 				{
