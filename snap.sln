@@ -88,6 +88,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressionNearMutations", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CountMappedBases", "apps\CountMappedBases\CountMappedBases.csproj", "{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BisulfiteMethylation", "BisulfiteMethylation\BisulfiteMethylation.csproj", "{4A8CBB8D-976D-4FBA-B9A2-2F368DEB31A0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateBisulfiteReadExtractionScript", "ExtractBisulfiteReads\GenerateBisulfiteReadExtractionScript.csproj", "{3F1A75B9-2B2B-47B6-B81A-F67A4B468460}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenomeBuild", "ChangeGenomeBuild\GenomeBuild.csproj", "{892B82DD-AF9B-45E9-B2B0-0569ED227DAF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
