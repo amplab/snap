@@ -13,6 +13,7 @@ using System.Runtime.Serialization.Json;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using MathNet.Numerics;
+using System.Globalization;
 
 namespace ASELib
 {
@@ -551,6 +552,134 @@ namespace ASELib
 			public Dictionary<string, List<GeneLocationInfo>> genesByChromosome = new Dictionary<string, List<GeneLocationInfo>>();    // chromosome is in non-chr form.
 		}
 
+		public class Bisulfite
+		{
+			public string case_id;
+			public string project_id;
+			public decimal file_size;
+			public string data_category;
+			public string data_format;
+			public string file_name;
+			public string access;
+			public string annotation_id;
+
+
+			public delegate string ColumnGetter(Bisulfite case_);
+			public delegate void ColumnSetter(Bisulfite case_, string value);
+			public delegate string ExpectedIdGetter(Bisulfite case_);
+			public class FieldInformation
+			{
+				public FieldInformation(string columnName_, ColumnGetter getter_, ColumnSetter setter_, DerivedFile.Type type_, string extension_, ExpectedIdGetter idGetter_)
+				{
+					columnName = columnName_;
+					getter = getter_;
+					setter = setter_;
+
+					//
+					// type, extension and id getter apply only to derived files.  For other fields, use the other constructor.
+					//
+					type = type_;
+					extension = extension_;
+					idGetter = idGetter_;
+				}
+
+				public FieldInformation(string columnName_, ColumnGetter getter_, ColumnSetter setter_)
+				{
+					columnName = columnName_;
+					getter = getter_;
+					setter = setter_;
+				}
+
+				public string getValue(Bisulfite case_)
+				{
+					return getter(case_);
+				}
+
+				public void setValue(Bisulfite case_, string value)
+				{
+					setter(case_, value);
+				}
+
+				public string getExpectedId(Bisulfite case_)
+				{
+					return idGetter(case_);
+				}
+
+				public readonly string columnName;
+				ColumnGetter getter;
+				ColumnSetter setter;
+				ExpectedIdGetter idGetter = c => "";
+				public readonly DerivedFile.Type type = DerivedFile.Type.Unknown;
+				public readonly string extension = "";
+			} // FieldInformation 
+
+			public static FieldInformation[] BisulfiteFields =
+			{
+				new FieldInformation("case_id",                                             c => c.case_id, (c, v) => c.case_id = v),
+				new FieldInformation("project_id",                                             c => c.project_id, (c, v) => c.project_id = v),
+				new FieldInformation("file_size",                                             c => Convert.ToString(c.file_size), (c, v) => c.file_size = decimal.Parse(v, NumberStyles.Float)),
+				new FieldInformation("data_category",                                             c => c.data_category, (c, v) => c.data_category = v),
+				new FieldInformation("data_format",                                             c => c.data_format, (c, v) => c.data_format = v),
+				new FieldInformation("file_name",                                             c => c.file_name, (c, v) => c.file_name = v),
+				new FieldInformation("access",                                             c => c.access, (c, v) => c.access = v),
+				new FieldInformation("annotations_id",                                             c => c.annotation_id, (c, v) => c.annotation_id = v),
+
+			};
+
+
+			public static List<Bisulfite> LoadMetadata(string inputFilename)
+			{
+				if (!File.Exists(inputFilename))
+				{
+					return null;   // Nothing to load because we haven't generated a cases file yet.
+				}
+
+				var wantedFields = new List<string>();
+
+				foreach (var info in BisulfiteFields)
+				{
+					wantedFields.Add(info.columnName);
+				}
+
+				var inputFile = CreateStreamReaderWithRetry(inputFilename);
+				if (null == inputFile)
+				{
+					return null;
+				}
+
+				var headerizedFile = new HeaderizedFile<Bisulfite>(inputFile, false, false, "", wantedFields);
+
+				List<Bisulfite> listOfBisulfite;
+				Dictionary<string, int> fieldMappings;
+				if (!headerizedFile.ParseFile(fromSaveFileLine, out listOfBisulfite, out fieldMappings))
+				{
+					inputFile.Close();
+					return null;
+				}
+
+				inputFile.Close();
+
+				return listOfBisulfite;
+			} // LoadBisulfite
+
+			static public Bisulfite fromSaveFileLine(Dictionary<string, int> fieldMappings, string[] fields)
+			{
+				var case_ = new Bisulfite();
+
+				foreach (var info in BisulfiteFields)
+				{
+					info.setValue(case_, fields[fieldMappings[info.columnName]]);
+				}
+
+				return case_;
+			} // fromSaveFile
+
+
+		}
+
+
+
+
 		//
 		// A Case is a person with TCGA data.
 		//
@@ -761,7 +890,7 @@ namespace ASELib
                 public readonly string extension = "";
             } // FieldInformation 
 
-            public static FieldInformation[] AllFields = 
+			public static FieldInformation[] AllFields = 
             {
                 new FieldInformation("Case ID",                                             c => c.case_id, (c, v) => c.case_id = v),
                 new FieldInformation("Normal DNA File ID",                                  c => c.normal_dna_file_id, (c, v) => c.normal_dna_file_id = v),
@@ -1153,7 +1282,8 @@ namespace ASELib
             public string configuationFilePathname = defaultConfigurationFilePathame;
             public string casesFilePathname = defaultBaseDirectory + "cases.txt";
             public string indexDirectory = defaultBaseDirectory + @"indices\hg38-20";
-            public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
+			public string indexDirectoryHg19 = defaultBaseDirectory + @"indices\hg19";
+			public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
             public string hpcScriptFilename = "";    // The empty string says to black hole this script
             public string hpcScheduler = "gcr";
             public string hpcBinariesDirectory = @"\\gcr\scratch\b99\bolosky\";
@@ -1166,6 +1296,7 @@ namespace ASELib
             public int nTumorsToIncludeGene = 30;   // How many tumors must have at least one mutation in a gene in order to include it.
             public int nReadsToIncludeVariant = 30; // How much coverage do we need of a mutation or somatic variant to consider it?
             public string selectedGenesFilename = @"\\msr-genomics-0\d$\gdc\seleted_genes.txt";
+			public const string cpgIslandsHg38 = defaultBaseDirectory + "cpgIslandhg38.bed";
             public string scriptOutputDirectory = @"\temp\";
             public string finalResultsDirectory = @"\\msr-genomics-0\d$\gdc\final_results\";
 
@@ -1929,6 +2060,7 @@ namespace ASELib
         public const string mannWhitneyFilename = "_MannWhitney.txt";
         public const string genesWithSelectedVariantsFilename = "GenesWithSelectedVariantCounts.txt";
         public const string heatMapFilename = "AlleleSpecificExpressionHeatMap.txt";
+		public const string bisulfiteAlleleSpecificMethylationExtension = ".bisulfite_asm.txt";
 
         public class DerivedFile
         {
@@ -2634,9 +2766,7 @@ namespace ASELib
 
 			static public List<KeyValuePair<string, GeneLocationInfo>> ReadFile(string filename)
 			{
-				StreamReader inputFile;
-
-				inputFile = CreateStreamReaderWithRetry(filename);
+				StreamReader inputFile = CreateStreamReaderWithRetry(filename);
 
 				var neededFields = new List<string>();
 				neededFields.Add("CompositeREF");
@@ -2815,13 +2945,91 @@ namespace ASELib
 
 		}
 
+		public class BedLine
+		{
+			public readonly string Chromosome;
+			public readonly int Start_Position;
+			public readonly int End_Position;
+			public readonly string name;
+			public readonly int score; // value 0-1000. for methylation score/1000 gives you methylation percentage
+			public readonly char strand; // can be '.', '+' or '-'
+			public readonly double thickStart;
+			public readonly double thickEnd;
+
+			public BedLine(string Chromosome_,
+				int Start_Position_,
+				int End_Position_,
+				string name_,
+				int score_,
+				char strand_,
+				double thickStart_ = 0,
+				double thickEnd_ = 1)
+			{
+				Chromosome = Chromosome_;
+				Start_Position = Start_Position_;
+				End_Position = End_Position_;
+				name = name_;
+				score = score_;
+				strand = strand_;
+				thickStart = thickStart_;
+				thickEnd = thickEnd_;
+			}
+
+			public string toString() {
+				return this.Chromosome + "\t" + this.Start_Position + "\t" + this.End_Position + "\t" + this.name + "\t" + this.score + 
+					"\t" + this.strand + "\t" + this.thickStart + "\t" + this.thickEnd;
+			}
+
+			public static void writeFile(string filename, List<BedLine> bedLines, string header = "")
+			{
+				var file = CreateStreamWriterWithRetry(filename);
+
+				if (null == file)
+				{
+					Console.WriteLine("BedLine.writeFile: unable to create file " + filename);
+					return;
+				}
+
+				// Write header
+				file.WriteLine(header);
+
+				foreach (var line in bedLines)
+				{
+					file.WriteLine(line.toString());
+				}
+				file.Close();
+			}
+
+			static public List<BedLine> ReadFile(string filename, bool hasHeader = true)
+			{
+				StreamReader inputFile = CreateStreamReaderWithRetry(filename);
+
+				if (hasHeader)
+				{
+					var header = inputFile.ReadLine();
+				}
+
+				List<BedLine> result = new List<BedLine>();
+				string line;
+				while ((line = inputFile.ReadLine()) != null)
+				{
+					var split = line.Split('\t');
+					result.Add(new BedLine(split[0], Convert.ToInt32(split[1]), Convert.ToInt32(split[2]), split[3], Convert.ToInt32(split[4]), split[5].ToCharArray()[0], Convert.ToDouble(split[6]), Convert.ToDouble(split[6])));
+				}
+
+				inputFile.Close();
+
+				return result;
+			}
+		}
+
 		public class MAFLine
         {
             public readonly string Hugo_Symbol;
             public readonly string NCBI_Build;
             public readonly string Chromosome;
-            public readonly int Start_Position;
-            public readonly int End_Positon;
+            public int Start_Position;	// these are sometimes reset when switching builds
+            public int End_Positon;
             public readonly string Variant_Classification;
             public readonly string Variant_Type;
             public readonly string Reference_Allele;
@@ -3710,53 +3918,6 @@ namespace ASELib
             public int size;
         }
 
-		public class RegionalExpressionState
-		{
-			// Tumor expression data
-			public int nRegionsIncludedTumor = 0;
-			public double minTumorExpression = 100000;
-			public double maxTumorExpression = -100000;
-			public double totalTumorExpression = 0;
-
-			public double minMeanTumorExpression = 100000;
-			public double maxMeanTumorExpression = -1;
-			public double totalMeanTumorExpression = 0;
-
-			// Normal expression data
-			public int nRegionsIncludedNormal = 0;
-			public double minNormalExpression = 100000;
-			public double maxNormalExpression = -100000;
-			public double totalNormalExpression = 0;
-
-			public double minMeanNormalExpression = 100000;
-			public double maxMeanNormalExpression = -1;
-			public double totalMeanNormalExpression = 0;
-
-			public void AddTumorExpression(double z, double mu)
-			{
-				nRegionsIncludedTumor++;
-				totalTumorExpression += z;
-				minTumorExpression = Math.Min(minTumorExpression, z);
-				maxTumorExpression = Math.Max(maxTumorExpression, z);
-
-				totalMeanTumorExpression += mu;
-				minMeanTumorExpression = Math.Min(minMeanTumorExpression, mu);
-				maxMeanTumorExpression = Math.Max(maxMeanTumorExpression, mu);
-			}
-
-			public void AddNormalExpression(double z, double mu)
-			{
-				nRegionsIncludedNormal++;
-				totalNormalExpression += z;
-				minNormalExpression = Math.Min(minNormalExpression, z);
-				maxNormalExpression = Math.Max(maxNormalExpression, z);
-
-				totalMeanNormalExpression += mu;
-				minMeanNormalExpression = Math.Min(minMeanNormalExpression, mu);
-				maxMeanNormalExpression = Math.Max(maxMeanNormalExpression, mu);
-			}
-
-		}
 		public class GeneExpression
 		{
 			static GeneExpression() // This is a static initializer that runs once at program start time, it's not a constructor.
@@ -3777,8 +3938,8 @@ namespace ASELib
 
 				for (int sizeIndex = 0; sizeIndex < nRegionSizes; sizeIndex++)
 				{
-					regionalExpressionState[sizeIndex] = new RegionalExpressionState();
-					exclusiveRegionalExpressionState[sizeIndex] = new RegionalExpressionState();
+					regionalExpressionState[sizeIndex] = new ASETools.RegionalExpressionState();
+					exclusiveRegionalExpressionState[sizeIndex] = new ASETools.RegionalExpressionState();
 				}
 			}
 
@@ -3850,14 +4011,61 @@ namespace ASELib
 			public const int nRegionSizes = 20;    // Because we have 0 (in the gene), this range is 2^(20 - 2) * 1000 = 262 Mbases on either side, i.e., the entire chromosome
 			public static readonly int[] regionSizeByRegionSizeIndex = new int[nRegionSizes];
 
-			public RegionalExpressionState[] regionalExpressionState = new RegionalExpressionState[nRegionSizes]; // Dimension is log2(regionSize) - 1
-			public RegionalExpressionState[] exclusiveRegionalExpressionState = new RegionalExpressionState[nRegionSizes];  // Expression in this region but not closer, so from log2(regionSize - 1) to log2(regionSize) - 1.  The zero element is the same as regionalExpressionState
+			public ASETools.RegionalExpressionState[] regionalExpressionState = new ASETools.RegionalExpressionState[nRegionSizes]; // Dimension is log2(regionSize) - 1
+			public ASETools.RegionalExpressionState[] exclusiveRegionalExpressionState = new ASETools.RegionalExpressionState[nRegionSizes];  // Expression in this region but not closer, so from log2(regionSize - 1) to log2(regionSize) - 1.  The zero element is the same as regionalExpressionState
 
 			public ASETools.GeneLocationInfo geneLocationInfo;
 			public int mutationCount = 0;
 			public static StringComparer comparer;
 		}
 
+		public class RegionalExpressionState
+		{
+			// Tumor expression data
+			public int nRegionsIncludedTumor = 0;
+			public double minTumorExpression = 100000;
+			public double maxTumorExpression = -100000;
+			public double totalTumorExpression = 0;
+
+			public double minMeanTumorExpression = 100000;
+			public double maxMeanTumorExpression = -1;
+			public double totalMeanTumorExpression = 0;
+
+			// Normal expression data
+			public int nRegionsIncludedNormal = 0;
+			public double minNormalExpression = 100000;
+			public double maxNormalExpression = -100000;
+			public double totalNormalExpression = 0;
+
+			public double minMeanNormalExpression = 100000;
+			public double maxMeanNormalExpression = -1;
+			public double totalMeanNormalExpression = 0;
+
+			public void AddTumorExpression(double z, double mu)
+			{
+				nRegionsIncludedTumor++;
+				totalTumorExpression += z;
+				minTumorExpression = Math.Min(minTumorExpression, z);
+				maxTumorExpression = Math.Max(maxTumorExpression, z);
+
+				totalMeanTumorExpression += mu;
+				minMeanTumorExpression = Math.Min(minMeanTumorExpression, mu);
+				maxMeanTumorExpression = Math.Max(maxMeanTumorExpression, mu);
+			}
+
+			public void AddNormalExpression(double z, double mu)
+			{
+				nRegionsIncludedNormal++;
+				totalNormalExpression += z;
+				minNormalExpression = Math.Min(minNormalExpression, z);
+				maxNormalExpression = Math.Max(maxNormalExpression, z);
+
+				totalMeanNormalExpression += mu;
+				minMeanNormalExpression = Math.Min(minMeanNormalExpression, mu);
+				maxMeanNormalExpression = Math.Max(maxMeanNormalExpression, mu);
+			}
+
+		}
 
 		// file that contains distance over gene names. Files created from ExpressionNearMutations
 		public class RegionalSignalFile
@@ -4867,37 +5075,521 @@ namespace ASELib
             public readonly char altBase;
         } // SelectedVariant
 
-        public class ReadCounts
-        {
-            public ReadCounts(int nMatchingReference_, int nMatchingAlt_, int nMatchingNeither_, int nMatchingBoth_)
-            {
-                nMatchingReference = nMatchingReference_;
-                nMatchingAlt = nMatchingAlt_;
-                nMatchingNeither = nMatchingNeither_;
-                nMatchingBoth = nMatchingBoth_;
-            }
+		public class MethylationCounts
+		{
+			public MethylationCounts(int nMethylated_, int nUnmethylated_, int nNeither_)
+			{
+				nMethylated = nMethylated_;
+				nUnmethylated = nUnmethylated_;
+				nNeither = nNeither_;
+			}
 
-            public readonly int nMatchingReference;
-            public readonly int nMatchingAlt;
-            public readonly int nMatchingNeither;
-            public readonly int nMatchingBoth;
+			public readonly int nMethylated;
+			public readonly int nUnmethylated;
+			public readonly int nNeither;
+
+			public override string ToString()
+			{
+				return (nMethylated.ToString() + '\t' + nUnmethylated.ToString() + '\t' + nNeither.ToString());
+			}
+
+
+			// Returns ReadCounts for methylation counts of each allele. First allele is ref, second allele is alt
+			public static Tuple<MethylationCounts, MethylationCounts> ComputeMethylationReadCounts(string selectedReadsFilename,
+				string contig,
+				int variant_start_position,
+				string variant_reference_allele,
+				string variant_alt_allele,
+				string variantType,
+				int cpg_start_position,
+				string subfileName,
+				Genome genome)
+			{
+
+				// holds all the sequences matching ref
+				List<Dictionary<int, char>> matchingRef = new List<Dictionary<int, char>>();
+
+				// holds all the sequences matching alt
+				List<Dictionary<int, char>> matchingAlt = new List<Dictionary<int, char>>();
+
+
+				var consolodatedFile = new ASETools.ConsolodatedFileReader();
+
+				if (!consolodatedFile.open(selectedReadsFilename))
+				{
+					Console.WriteLine("Unable to open reads at selected variants file " + selectedReadsFilename);
+					return null;
+				}
+
+				var subfileReader = consolodatedFile.getSubfile(subfileName);
+				if (null == subfileReader)
+				{
+					Console.WriteLine("ComputeReadCounts: no subfile named " + subfileName);
+					return null;
+				}
+
+				// Divide reads up into alt and ref
+				var padding = 60;
+				int[] posArray = new int[padding];
+				for (int i = 0; i < padding; i++)
+				{
+					posArray[i] = variant_start_position - padding / 2 + i;
+				}
+
+				// get reference and alt sequences
+				var reference_bases = posArray
+					.Select(r => new Tuple<int, char>(r, genome.getBase(contig, r))).ToDictionary(x => x.Item1, x => x.Item2);
+				var alt_bases = posArray
+					.Select(r => new Tuple<int, char>(r, genome.getBase(contig, r))).ToDictionary(x => x.Item1, x => x.Item2);
+
+				// If the variant we are looking at is an INS, we have to shift the variant position 
+				// by one to match the SamLine insertion location
+				int start = variantType == "INS" ? variant_start_position + 1 : variant_start_position;
+
+				// modify alt_bases based on VariantType
+				if (variantType == "DEL")
+				{
+					// replace missing bases with "N" so we can do a direct comparison
+					for (var i = 0; i < variant_reference_allele.Length; i++)
+					{
+						alt_bases[start + i] = 'N';
+					}
+				}
+				else if (variantType != "INS")
+				{
+					// for NP: replace bases for alt
+					for (var i = 0; i < variant_alt_allele.Length; i++)
+					{
+						alt_bases[start + i] = variant_alt_allele[i];
+					}
+				}
+				else
+				{
+					// insert INS into dictionary
+					KeyValuePair<int, char>[] ins = new KeyValuePair<int, char>[variant_alt_allele.Length];
+
+					var chArr = variant_alt_allele.ToCharArray();
+					for (int i = 0; i < chArr.Length; i++)
+					{
+						ins[i] = new KeyValuePair<int, char>(i + start, chArr[i]);
+					}
+
+					alt_bases =
+						alt_bases.Where(r => r.Key < start).ToArray().Concat(ins.ToArray())
+						.Concat(alt_bases.Where(r => r.Key >= start).Select(r => new KeyValuePair<int, char>(r.Key + variant_alt_allele.Length, r.Value)).ToArray())
+						.ToDictionary(x => x.Key, x => x.Value);
+				}
+
+				string line;
+				while (null != (line = subfileReader.ReadLine()))
+				{
+					ASETools.SAMLine samLine;
+
+					int nMatchingRef = 0;
+					int nMatchingAlt = 0;
+					int nMatchingNeither = 0;
+					int nMatchingBoth = 0;
+
+					try
+					{
+						samLine = new ASETools.SAMLine(line);
+					}
+					catch (FormatException)
+					{
+						Console.WriteLine("Unable to parse sam line in extracted reads subfile " + subfileName + ": " + line);
+						subfileReader.Close();
+						return null;
+					}
+
+					if (samLine.isUnmapped() || samLine.mapq < 10)
+					{
+						//
+						// Probably half of a paired-end read with the other end mapped.  Ignore it.
+						//
+						continue;
+					}
+
+					if (contig != samLine.rname)
+					{
+						// Wrong contig. Ignore it.
+						continue;
+					}
+
+					// make sure variant and cpg can be found on this SamLine
+					if (!samLine.mappedBases.ContainsKey(start) || !samLine.mappedBases.ContainsKey(cpg_start_position))
+					{
+						//
+						// This read does not overlap the variant.  Ignore it.
+						// The 'before' case differs between variant types, and must be dealt with on a casewise basis
+						// below in the switch statement.
+						//
+						continue;
+					}
+					if (!(start > 1 + samLine.mappedBases.Keys.Min()) || !(start < samLine.mappedBases.Keys.Max() - 1))
+					{
+						//
+						// There is no padding on the variant. Without it, its hard to make a match call. Ignore.
+						//
+						continue;
+					}
+
+					bool matchesRef = false;
+					bool matchesAlt = false;
+
+					switch (variantType)
+					{
+						case "INS":
+						case "DEL":
+						case "SNP":
+						case "DNP":
+						case "TNP":
+
+							// match to ref on both sides of variant
+							var refMatchesLeft = ReadCounts.matchSequence(reference_bases, samLine.mappedBases, start, false);
+							var refMatchesRight = ReadCounts.matchSequence(reference_bases, samLine.mappedBases, start, true);
+
+							// match to alt on both sides of variant
+							var altMatchesLeft = ReadCounts.matchSequence(alt_bases, samLine.mappedBases, start, false);
+							var altMatchesRight = ReadCounts.matchSequence(alt_bases, samLine.mappedBases, start, true);
+
+							// match criteria: there are some matching bases on both sides, with a total >= 10
+							matchesRef = refMatchesLeft > 0 && refMatchesRight > 0 && refMatchesLeft + refMatchesRight >= 10;
+							matchesAlt = altMatchesLeft > 0 && altMatchesRight > 0 && altMatchesLeft + altMatchesRight >= 10;
+
+							break;
+						default:
+							Console.WriteLine("Unknown variant type: " + variantType);
+							subfileReader.Close();
+							return null;
+					}
+
+					// increment matches
+					if (matchesRef)
+					{
+						if (matchesAlt)
+						{
+							nMatchingBoth++;
+						}
+						else
+						{
+							matchingRef.Add(samLine.mappedBases);
+							nMatchingRef++;
+						}
+					}
+					else if (matchesAlt)
+					{
+						matchingAlt.Add(samLine.mappedBases);
+						nMatchingAlt++;
+					}
+					else
+					{
+						nMatchingNeither++;
+					}
+				} // foreach SAMLine
+
+				subfileReader.Close();
+
+				// Part 2: take the sequences matching ref and alt and calculate ASM at the cpg
+				var nMethylatedRef = 0;
+				var nMethylatedAlt = 0;
+
+				var nUnmethylatedRef = 0;
+				var nUnmethylatedAlt = 0;
+
+				var nNeitherRef = 0;
+				var nNeitherAlt = 0;
+
+				foreach (var read in matchingRef)
+				{
+					if (read[cpg_start_position] == 'C')
+					{
+						nMethylatedRef++;
+					}
+					else if (read[cpg_start_position] == 'T')
+					{
+						nUnmethylatedRef++;
+					}
+					else
+					{
+						nNeitherRef++;
+					}
+				}
+
+				foreach (var read in matchingAlt)
+				{
+					if (read[cpg_start_position] == 'C')
+					{
+						nMethylatedAlt++;
+					}
+					else if (read[cpg_start_position] == 'T')
+					{
+						nUnmethylatedAlt++;
+					}
+					else
+					{
+						nNeitherAlt++;
+					}
+				}
+
+				// return methylated (C) and  unmethylated (T)
+				return new Tuple<MethylationCounts, MethylationCounts>(new MethylationCounts(nMethylatedRef, nUnmethylatedRef, nNeitherRef),
+					new MethylationCounts(nMethylatedAlt, nUnmethylatedAlt, nNeitherAlt));
+
+			}
+		}
+
+
+		public class ReadCounts
+		{
+
+
+			public double AlleleSpecificValue() // I'm not calling this "allele specific expression" because DNA doesn't have expression.
+			{
+				if (nMatchingAlt + nMatchingReference == 0)
+				{
+					return 0;
+				}
+
+				return ((double)Math.Abs(nMatchingReference - nMatchingAlt)) / (nMatchingReference + nMatchingAlt);
+			}
+
+			public static ReadCounts ComputeReadCounts(string selectedReadsFilename, string contig,
+				int start_position,
+				string reference_allele,
+				string alt_allele,
+				string variantType,
+				string subfileName,
+				Genome genome)
+			{
+				int nMatchingRef = 0;
+				int nMatchingAlt = 0;
+				int nMatchingNeither = 0;
+				int nMatchingBoth = 0;
+
+				var consolodatedFile = new ASETools.ConsolodatedFileReader();
+
+				if (!consolodatedFile.open(selectedReadsFilename))
+				{
+					Console.WriteLine("Unable to open reads at selected variants file " + selectedReadsFilename);
+					return null;
+				}
+
+				var subfileReader = consolodatedFile.getSubfile(subfileName);
+				if (null == subfileReader)
+				{
+					Console.WriteLine("ComputeReadCounts: no subfile named " + subfileName);
+					return null;
+				}
+
+				var padding = 20;
+				int[] posArray = new int[padding];
+				for (int i = 0; i < padding; i++)
+				{
+					posArray[i] = start_position - padding / 2 + i;
+				}
+
+				// get reference and alt sequences
+				var reference_bases = posArray
+					.Select(r => new Tuple<int, char>(r, genome.getBase(contig, r))).ToDictionary(x => x.Item1, x => x.Item2);
+				var alt_bases = posArray
+					.Select(r => new Tuple<int, char>(r, genome.getBase(contig, r))).ToDictionary(x => x.Item1, x => x.Item2);
+
+				// If the variant we are looking at is an INS, we have to shift the variant position 
+				// by one to match the SamLine insertion location
+				int start = variantType == "INS" ? start_position + 1 : start_position;
+
+				// modify alt_bases based on VariantType
+				if (variantType == "DEL")
+				{
+					// replace missing bases with "N" so we can do a direct comparison
+					for (var i = 0; i < reference_allele.Length; i++)
+					{
+						alt_bases[start + i] = 'N';
+					}
+				}
+				else if (variantType != "INS")
+				{
+					// for NP: replace bases for alt
+					for (var i = 0; i < alt_allele.Length; i++)
+					{
+						alt_bases[start + i] = alt_allele[i];
+					}
+				}
+				else
+				{
+					// insert INS into dictionary
+					KeyValuePair<int, char>[] ins = new KeyValuePair<int, char>[alt_allele.Length];
+
+					var chArr = alt_allele.ToCharArray();
+					for (int i = 0; i < chArr.Length; i++)
+					{
+						ins[i] = new KeyValuePair<int, char>(i + start, chArr[i]);
+					}
+
+					alt_bases =
+						alt_bases.Where(r => r.Key < start).ToArray().Concat(ins.ToArray())
+						.Concat(alt_bases.Where(r => r.Key >= start).Select(r => new KeyValuePair<int, char>(r.Key + alt_allele.Length, r.Value)).ToArray())
+						.ToDictionary(x => x.Key, x => x.Value);
+				}
+
+				string line;
+				while (null != (line = subfileReader.ReadLine()))
+				{
+					ASETools.SAMLine samLine;
+
+					try
+					{
+						samLine = new ASETools.SAMLine(line);
+					}
+					catch (FormatException)
+					{
+						Console.WriteLine("Unable to parse sam line in extracted reads subfile " + subfileName + ": " + line);
+						subfileReader.Close();
+						return null;
+					}
+
+					if (samLine.isUnmapped() || samLine.mapq < 10)
+					{
+						//
+						// Probably half of a paired-end read with the other end mapped.  Ignore it.
+						//
+						continue;
+					}
+
+					if (contig != samLine.rname)
+					{
+						// Wrong contig. Ignore it.
+						continue;
+					}
+
+					// make sure variant can be found on this SamLine
+					if (!samLine.mappedBases.ContainsKey(start))
+					{
+						//
+						// This read does not overlap the variant.  Ignore it.
+						// The 'before' case differs between variant types, and must be dealt with on a casewise basis
+						// below in the switch statement.
+						//
+						continue;
+					}
+					if (!(start > 1 + samLine.mappedBases.Keys.Min()) || !(start < samLine.mappedBases.Keys.Max() - 1))
+					{
+						//
+						// There is no padding on the variant. Without it, its hard to make a match call. Ignore.
+						//
+						continue;
+					}
+
+					bool matchesRef = false;
+					bool matchesAlt = false;
+
+					switch (variantType)
+					{
+						case "INS":
+						case "DEL":
+						case "SNP":
+						case "DNP":
+						case "TNP":
+
+							// match to ref on both sides of variant
+							var refMatchesLeft = matchSequence(reference_bases, samLine.mappedBases, start, false);
+							var refMatchesRight = matchSequence(reference_bases, samLine.mappedBases, start, true);
+
+							// match to alt on both sides of variant
+							var altMatchesLeft = matchSequence(alt_bases, samLine.mappedBases, start, false);
+							var altMatchesRight = matchSequence(alt_bases, samLine.mappedBases, start, true);
+
+							// match criteria: there are some matching bases on both sides, with a total >= 10
+							matchesRef = refMatchesLeft > 0 && refMatchesRight > 0 && refMatchesLeft + refMatchesRight >= 10;
+							matchesAlt = altMatchesLeft > 0 && altMatchesRight > 0 && altMatchesLeft + altMatchesRight >= 10;
+
+							break;
+						default:
+							Console.WriteLine("Unknown variant type: " + variantType);
+							subfileReader.Close();
+							return null;
+					}
+
+					// increment matches
+					if (matchesRef)
+					{
+						if (matchesAlt)
+						{
+							nMatchingBoth++;
+						}
+						else
+						{
+							nMatchingRef++;
+						}
+					}
+					else if (matchesAlt)
+					{
+						nMatchingAlt++;
+					}
+					else
+					{
+						nMatchingNeither++;
+					}
+				} // foreach SAMLine
+
+				subfileReader.Close();
+				return new ASETools.ReadCounts(nMatchingRef, nMatchingAlt, nMatchingNeither, nMatchingBoth);
+			}
+
+			// recursively matches a sequence and counts number of matches until the sequence ends or a mismatch is found
+			public static int matchSequence(Dictionary<int, char> reference, Dictionary<int, char> sequence, int position, bool goRight, int matchCount = 0, int threshold = 10)
+			{
+				if (matchCount >= threshold)
+				{
+					// We have already seen enough bases that match. Return.
+					return matchCount;
+				}
+				// base case 1: strings have been consumed
+				if (!reference.ContainsKey(position) || !sequence.ContainsKey(position))
+				{
+					// Reached end of sequence. Return. 
+					return matchCount;
+				}
+
+				bool match = reference[position] == sequence[position];
+				if (match)
+				{
+					if (goRight)
+						position += 1;
+					else
+						position -= 1;
+
+					matchCount += 1;
+					return matchSequence(reference, sequence, position, goRight, matchCount);
+				}
+				else
+				{
+					// base case 2: hit a mismatch
+					return matchCount;
+				}
+			}
+
+
+			public ReadCounts(int nMatchingReference_, int nMatchingAlt_, int nMatchingNeither_, int nMatchingBoth_)
+			{
+				nMatchingReference = nMatchingReference_;
+				nMatchingAlt = nMatchingAlt_;
+				nMatchingNeither = nMatchingNeither_;
+				nMatchingBoth = nMatchingBoth_;
+			}
+
+			public readonly int nMatchingReference;
+			public readonly int nMatchingAlt;
+			public readonly int nMatchingNeither;
+			public readonly int nMatchingBoth;
 
 			public override string ToString()
 			{
 				return (nMatchingReference.ToString() + '\t' + nMatchingAlt.ToString() + '\t' + nMatchingNeither.ToString() + '\t' + nMatchingBoth.ToString());
 			}
 
-            public double AlleleSpecificValue() // I'm not calling this "allele specific expression" because DNA doesn't have expression.
-            {
-                if (nMatchingAlt + nMatchingReference == 0)
-                {
-                    return 0;
-                }
-
-                return ((double)Math.Abs(nMatchingReference - nMatchingAlt)) / (nMatchingReference + nMatchingAlt);
-            }
-
 		}
+
 
 		public class RegionalExpressionLine
 		{

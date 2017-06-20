@@ -10,7 +10,7 @@ using System.Threading;
 
 namespace ExpressionNearMutations
 {
-    class Program
+    public class Program
     {
 
 		static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
@@ -82,6 +82,7 @@ namespace ExpressionNearMutations
 				foreach (var geneLocation in geneLocationInformation.genesByChromosome[chromosome])
 				{
 					if (!geneExpressions.ContainsKey(geneLocation.hugoSymbol))
+
 					{
 						geneExpressions.Add(geneLocation.hugoSymbol, new ASETools.GeneExpression(geneLocation));
 					}
@@ -102,6 +103,7 @@ namespace ExpressionNearMutations
 				ASETools.Case case_ = null;
 
 				lock (casesToProcess)
+
 				{
 					if (casesToProcess.Count() == 0)
 					{

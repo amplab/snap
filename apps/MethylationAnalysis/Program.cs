@@ -324,26 +324,38 @@ namespace MethylationAnalysis
 			timer.Start();
 
 			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
-			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
-			if (null == cases)
-			{
-				Console.WriteLine("You must have selected cases before you can analyze methylation data.");
-				return 1;
+
+			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
+			var bisulfiteCases = new List<string>();
+
+			bisulfiteCases.Add("6fd72426-f6c8-47ca-a500-d5d3600b9b15");
+			bisulfiteCases.Add("9d95a65b-e41d-4f93-92d4-99dce29ff40d");
+			bisulfiteCases.Add("fba80122-d8b2-4d8d-a032-9767e8160f9f");
+			bisulfiteCases.Add("c5c4a0a5-900d-483d-9282-475654d63265");
+
+			// read in maf file for counting mutations
+			foreach (var case_ in cases) {
+
+				if (bisulfiteCases.Contains(case_.Value.case_id)) {
+					var mafLines = ASETools.MAFLine.ReadFile(case_.Value. extracted_maf_lines_filename, case_.Value.maf_file_id, false);
+
+					var mut = mafLines.Where(r => r.Hugo_Symbol == "TP53").ToList();
+
+					Console.WriteLine("case " + case_.Value.case_id + " found tp53" + mafLines.Where(r => r.Hugo_Symbol == "TP53").Count() + "times");
+				}
+
 			}
+
+
 
 			var selectedCases = cases.Select(kv => kv.Value).ToList();
 
 			var methyl_dir = @"\\msr-genomics-0\d$\gdc\methyl_temp\";
 
-			// Compute file for all overlapping REFs
-			// TODO move this to process manager
-			// var case_27 = cases.Where(r => r.Value.tumor_methylation_filename.Contains("HumanMethylation27")).First().Value;
-			// var case_450 = cases.Where(r => r.Value.tumor_methylation_filename.Contains("HumanMethylation450")).First().Value;
-			// processCompositeREFs(case_27, case_450);
-
 			// read in file of valid Composite REFs for methylation data
-			compositeREFs = ASETools.CompositeREFInfoLine.ReadFile(ASETools.ASEConfirguation.methylationREFsFilename).ToDictionary(x => x.Key, x => x.Value);
+			// This was for when we were using 27k and 450k data. for now, we will just use 450k data
+			//compositeREFs = ASETools.CompositeREFInfoLine.ReadFile(ASETools.ASEConfirguation.methylationREFsFilename).ToDictionary(x => x.Key, x => x.Value);
 
 			var threads = new List<Thread>();
 			for (int i = 0; i < Environment.ProcessorCount; i++)
