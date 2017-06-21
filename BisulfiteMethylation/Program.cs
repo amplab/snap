@@ -150,7 +150,7 @@ namespace BisulfiteMethylation
 				{
 					asm_tumor = methylationFraction_allele2 / Convert.ToDouble(methylationFraction_allele1 + methylationFraction_allele2);
 				}
-
+				asm_tumor = Math.Abs(asm_tumor * 2.0 - 1.0);
 
 				var asm_tumor_mu = 0;
 
@@ -216,7 +216,6 @@ namespace BisulfiteMethylation
 
 		static void Main(string[] args)
 		{
-
 			// Add cases with bisulfate data. We will use the bam and bisulfate files
 			var bisulfiteCases = BisulfateCase.loadCases(ASETools.ASEConfirguation.bisulfiteCasesFilePathname);
 
@@ -265,7 +264,7 @@ namespace BisulfiteMethylation
 				var mafLines = ASETools.MAFLine.ReadFile(bisulfate.realigned_maf_filename, case_.maf_file_id, false);
 
 				// read in cpgs
-				var cpgs = ASETools.BedLine.ReadFile(bisulfate.bed_tumor_filename);
+				List<ASETools.BedLine> cpgs = ASETools.BedLine.ReadFile(bisulfate.bed_tumor_filename);
 
 				var indexedReadsFilename = ASETools.ASEConfirguation.bisulfiteDirectory + bisulfate.case_id + @"\" + bisulfate.bam_tumor_file_id;
 
@@ -298,6 +297,14 @@ namespace BisulfiteMethylation
 				var mafLineCount = 0;
 				foreach (var mafLine in mafLines)
 				{
+					// If we do not have gene location information, ignore it
+					if (!geneLocationInformation.genesByName.ContainsKey(mafLine.Hugo_Symbol))
+					{
+						Console.WriteLine("Could not find information for " + mafLine.Hugo_Symbol + " in list of known genes. Skipping.");
+						continue;
+					}
+
+					// For debugging
 					if (mafLineCount % 100 == 0)
 					{
 						Console.WriteLine("Completed " + mafLineCount + " mafLines.");
@@ -319,13 +326,13 @@ namespace BisulfiteMethylation
 					// Increment the muation count by 1
 					geneExpressions[mafLine.Hugo_Symbol].mutationCount++;
 
-					// take all cpgs from bed file within 50 bp of this variant, but we also don't want CpG islands overlapping this variant
+					// Take all cpgs from bed file within 50 bp of this variant, but we also don't want CpG islands overlapping this variant
 					var overlappingCpgs = cpgs.Where(r => r.Chromosome == mafLine.Chromosome && Math.Abs(mafLine.Start_Position - r.Start_Position) <= 50 && Math.Abs(mafLine.Start_Position - r.Start_Position) > 5);
 
 					ProcessCpGs(indexedReadsFilename, bisulfate.bam_tumor_filename + mafLine.getExtractedReadsExtension(), mafLine.Chromosome, mafLine.Start_Position, mafLine.Match_Norm_Seq_Allele1,
 						mafLine.Tumor_Seq_Allele2, mafLine.Variant_Type, overlappingCpgs);
 
-					
+
 				} // foreach MAFLine
 
 				//
@@ -378,6 +385,7 @@ namespace BisulfiteMethylation
 				//////////////////
 				// clear expression for next case
 				//////////////////
+
 				// One expression state for whole autosome
 				wholeAutosomeRegionalExpression = new ASETools.RegionalExpressionState();
 				// Expression state for each chromosome, which will exclude the chromosome that the gene resides on
