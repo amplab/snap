@@ -21,6 +21,8 @@ namespace AnnotateVariants
     {
         static ASETools.Genome genome = new ASETools.Genome();
 
+        static int failedCases = 0;
+
         static void ProcessCases(List<ASETools.Case> casesToProcess, ASETools.ASEConfirguation configuration, VariantType variantType)
         {
             while (true)
@@ -45,51 +47,60 @@ namespace AnnotateVariants
                     continue;
                 }
 
+                var timer = new Stopwatch();
+                timer.Start();
+
                 var annotatedVariants = new List<ASETools.AnnotatedVariant>();
 
-				if (!variantType.Equals(VariantType.germline))
-				{
-					var mafLines = ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, case_.maf_file_id, false);
+                try
+                {
+                    if (!variantType.Equals(VariantType.germline))
+                    {
+                        var mafLines = ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, case_.maf_file_id, false);
 
-					if (null == mafLines)
-					{
-						Console.WriteLine("Case " + case_.case_id + " failed to load extracted MAF lines.  Ignoring.");
-						continue;
-					}
+                        if (null == mafLines)
+                        {
+                            Console.WriteLine("Case " + case_.case_id + " failed to load extracted MAF lines.  Ignoring.");
+                            continue;
+                        }
 
-					foreach (var mafLine in mafLines)
-					{
-						annotatedVariants.Add(AnnotateVariant(true, case_, mafLine.Chromosome, mafLine.Start_Position, mafLine.Match_Norm_Seq_Allele1, mafLine.Tumor_Seq_Allele2, mafLine.Variant_Type, mafLine.getExtractedReadsExtension()));
-					}
+                        foreach (var mafLine in mafLines)
+                        {
+                            annotatedVariants.Add(AnnotateVariant(mafLine.Hugo_Symbol, true, case_, mafLine.Chromosome, mafLine.Start_Position, mafLine.Match_Norm_Seq_Allele1, mafLine.Tumor_Seq_Allele2, mafLine.Variant_Type, mafLine.Variant_Classification, mafLine.getExtractedReadsExtension()));
+                        }
+                    } // somatic variants
 
-				}
-				if (!variantType.Equals(VariantType.somatic))
-				{
-					var selectedVariants = ASETools.SelectedVariant.LoadFromFile(case_.selected_variants_filename);
-					if (null == selectedVariants)
-					{
-						Console.WriteLine("Case " + case_.case_id + " failed to load selected variants.  Ignoring.");
-						continue;
-					}
+                    if (!variantType.Equals(VariantType.somatic))
+                    {
+                        var selectedVariants = ASETools.SelectedVariant.LoadFromFile(case_.selected_variants_filename);
+                        if (null == selectedVariants)
+                        {
+                            Console.WriteLine("Case " + case_.case_id + " failed to load selected variants.  Ignoring.");
+                            continue;
+                        }
 
-					foreach (var selectedVariant in selectedVariants)
-					{
-						annotatedVariants.Add(AnnotateVariant(false, case_, selectedVariant.contig, selectedVariant.locus, Convert.ToString(selectedVariant.referenceBase), Convert.ToString(selectedVariant.altBase), "SNP",
-							selectedVariant.getExtractedReadsExtension()));   // All of the variants we selected are SNPs, so it's just a constant
-					}
-				}
+                        foreach (var selectedVariant in selectedVariants)
+                        {
+                            annotatedVariants.Add(AnnotateVariant("", false, case_, selectedVariant.contig, selectedVariant.locus, Convert.ToString(selectedVariant.referenceBase), Convert.ToString(selectedVariant.altBase), "SNP", "",
+                                selectedVariant.getExtractedReadsExtension()));   // All of the variants we selected are SNPs, so it's just a constant
+                        }
+                    } // germline variants
+                } catch (FileNotFoundException) {
+                    Console.WriteLine("Error handling case " + case_.case_id + ".  Skipping it.");
+                    Interlocked.Increment(ref failedCases);
+                    continue;
+                }
 
 				// write out annotated selected variants
                 string outputFilename = ASETools.GetDirectoryFromPathname(case_.selected_variants_filename) + @"\" + case_.case_id + ASETools.annotatedSelectedVariantsExtension;
 
-				Console.WriteLine("Writing to file " + outputFilename);
+				Console.WriteLine("Writing " + annotatedVariants.Count() + " annotated variants to file " + outputFilename + ", it took " + ASETools.ElapsedTimeInSeconds(timer) + " to compute.");
 				ASETools.AnnotatedVariant.writeFile(outputFilename, annotatedVariants);
 
-			}
+			} // while true (grabbing cases from the work queue)
+        } // ProcessCases
 
-        }
-
-        static ASETools.AnnotatedVariant AnnotateVariant(bool somatic, ASETools.Case case_, string contig, int start_position, string reference_allele, string alt_allele, string variantType, string subfileExtension)
+        static ASETools.AnnotatedVariant AnnotateVariant(string Hugo_symbol, bool somatic, ASETools.Case case_, string contig, int start_position, string reference_allele, string alt_allele, string variantType, string variantClassification, string subfileExtension)
         {
             ASETools.ReadCounts tumorDNAReadCounts = ComputeReadCounts(case_.tumor_dna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType, case_.tumor_dna_file_id + subfileExtension);
             ASETools.ReadCounts tumorRNAReadCounts = ComputeReadCounts(case_.tumor_rna_reads_at_selected_variants_filename, contig, start_position, reference_allele, alt_allele, variantType, case_.tumor_rna_file_id + subfileExtension);
@@ -114,7 +125,7 @@ namespace AnnotateVariants
                 normalRNAReadCounts = null;
             }
 
-            return new ASETools.AnnotatedVariant(somatic, contig, start_position, reference_allele, alt_allele, variantType, tumorDNAReadCounts, tumorRNAReadCounts, normalDNAReadCounts, normalRNAReadCounts);
+            return new ASETools.AnnotatedVariant(Hugo_symbol, somatic, contig, start_position, reference_allele, alt_allele, variantType, variantClassification, tumorDNAReadCounts, tumorRNAReadCounts, normalDNAReadCounts, normalRNAReadCounts);
         }
 
         static ASETools.ReadCounts ComputeReadCounts(string selectedReadsFilename, string contig, int start_position, string reference_allele, string alt_allele, string variantType, string subfileName)
@@ -328,7 +339,7 @@ namespace AnnotateVariants
 
 		}
 
-        static void Main(string[] args)
+        static int Main(string[] args)
         {
             var timer = new Stopwatch();
             timer.Start();
@@ -338,14 +349,14 @@ namespace AnnotateVariants
             if (null == configuration)
             {
                 Console.WriteLine("Giving up because we were unable to load configuration.");
-                return;
+                return -1;
             }
 
 			if (configuration.commandLineArgs.Count() < 1)
             {
                 Console.WriteLine("usage: AnnotateVariants <-s|-g> <case_ids>");
                 Console.WriteLine("-s means somatic, -g means germline. Absense of flag means both will be included.");
-                return;
+                return -1;
             }
 
             bool somaticVariants = configuration.commandLineArgs[0] == "-s";
@@ -396,8 +407,13 @@ namespace AnnotateVariants
 			threads.ForEach(t => t.Start());
 			threads.ForEach(t => t.Join());
 
-
 			Console.WriteLine("Processed " + nCasesToProcess + " in " + ASETools.ElapsedTimeInSeconds(timer));
+            if (failedCases > 0)
+            {
+                Console.WriteLine("" + failedCases + " of them failed.");
+            }
+
+            return failedCases;
         } // Main
     }
 }

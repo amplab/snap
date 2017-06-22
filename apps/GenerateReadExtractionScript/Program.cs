@@ -26,7 +26,6 @@ namespace GenerateScriptFromVariants
 
         static int Main(string[] args)
         {
-
             var configuration = ASETools.ASEConfirguation.loadFromFile(args);
 
             if (configuration == null)

@@ -76,15 +76,16 @@ namespace CheckDone
                         continue;
                     }
 
-                    bool isIndex = filename.EndsWith(".index");
-
-                    int bytesToCheckThisFile = isIndex ? nBytesToCheckIndex : nBytesToCheck;
-                    byte[] buffer = isIndex ? lastBitOfFileIndex : lastBitOfFile;
+                    int bytesToCheckThisFile = nBytesToCheck;
+                    byte[] buffer = lastBitOfFile;
 
                     if (filestream.Length < bytesToCheckThisFile)
                     {
                         Console.WriteLine(filename + " is truncated.");
                         continue;
+                    } else if (filestream.Length == bytesToCheckThisFile)
+                    {
+                        Console.WriteLine(filename + " appears to be nothing but the **done** line.");
                     }
 
                     filestream.Position = filestream.Length - bytesToCheckThisFile;
@@ -94,24 +95,7 @@ namespace CheckDone
                         continue;
                     }
 
-                    if (isIndex)
-                    {
-                        if (buffer[0] != '*' ||
-                                                buffer[1] != '*' ||
-                                                buffer[2] != 'd' ||
-                                                buffer[3] != 'o' ||
-                                                buffer[4] != 'n' ||
-                                                buffer[5] != 'e' ||
-                                                buffer[6] != '*' ||
-                                                buffer[7] != '*' ||
-                                                buffer[8] != '\t' ||
-                                                buffer[9] != '\t' ||
-                                                buffer[10] != '\r' ||
-                                                buffer[11] != '\n')
-                        {
-                            Console.WriteLine(filename + " is truncated.");
-                        }
-                    } else if (buffer[0] != '*' ||
+                    if (buffer[0] != '*' ||
                         buffer[1] != '*' ||
                         buffer[2] != 'd' ||
                         buffer[3] != 'o' ||

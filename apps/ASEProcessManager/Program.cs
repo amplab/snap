@@ -515,6 +515,8 @@ namespace ASEProcessManager
 				nWaitingForPrerequisites = 0;
 				filesToDownload = null;
 
+                string casesToProcess = "";
+
 				foreach (var caseEntry in stateOfTheWorld.cases)
 				{
 					var case_ = caseEntry.Value;
@@ -524,7 +526,8 @@ namespace ASEProcessManager
 						continue;
 					}
 					else if (case_.extracted_maf_lines_filename == "" || case_.selected_variants_filename == "" || case_.tumor_dna_reads_at_selected_variants_filename == "" || case_.tumor_dna_reads_at_selected_variants_index_filename == "" ||
-					case_.tumor_rna_reads_at_selected_variants_filename == "" || case_.tumor_rna_reads_at_selected_variants_index_filename == "" || case_.normal_dna_reads_at_selected_variants_filename == "" || case_.normal_dna_reads_at_selected_variants_index_filename == "")
+					case_.tumor_rna_reads_at_selected_variants_filename == "" || case_.tumor_rna_reads_at_selected_variants_index_filename == "" || case_.normal_dna_reads_at_selected_variants_filename == "" || case_.normal_dna_reads_at_selected_variants_index_filename == "" ||
+                    (case_.normal_rna_file_id != "" && (case_.normal_rna_reads_at_selected_variants_filename == "" || case_.normal_rna_reads_at_selected_variants_index_filename == "")))
 					{
 						nWaitingForPrerequisites++;
 						continue;
@@ -534,20 +537,27 @@ namespace ASEProcessManager
 						nAddedToScript++;
 					}
 
-					// write a command for each case id
-					script.Write(stateOfTheWorld.configuration.binariesDirectory + "AnnotateVariants.exe");
-					hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "AnnotateVariants.exe");
+                    casesToProcess += case_.case_id + " ";  // Batch them both to allow for thread parallism within the program and also to reduce the number of (slow) job add commands to set up the script.
 
-					script.Write(" " + case_.case_id);
-					hpcScript.Write(" " + case_.case_id);
+                    if (casesToProcess.Count() > 1000)
+                    {
+                        AddCasesToScripts(stateOfTheWorld, casesToProcess, script, hpcScript);
+                        casesToProcess = "";
+                    }
+				} // foreach case
 
-					script.WriteLine();
-					hpcScript.WriteLine();
-
-				}
-
-
+                if (casesToProcess != "")
+                {
+                    AddCasesToScripts(stateOfTheWorld, casesToProcess, script, hpcScript);
+                }
 			} // EvaluateStage
+
+            void AddCasesToScripts(StateOfTheWorld stateOfTheWorld, string casesToProcess, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript)
+            {
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "AnnotateVariants.exe " + casesToProcess);
+                hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "AnnotateVariants.exe " + casesToProcess);
+
+            }
 
 			public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
 			{
@@ -1407,7 +1417,110 @@ namespace ASEProcessManager
                 return true;
             } // HandleDependency
 
-        }
+        } // CountMappedBasesProcessingStage
+
+        class GenerateScatterGraphsProcessingStage : ProcessingStage
+        {
+            public GenerateScatterGraphsProcessingStage() { }
+
+            public string GetStageName() { return "Generate Scatter Graphs"; }
+
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = null;
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                bool missingAnything = false;
+
+                if (stateOfTheWorld.scatterGraphsSummaryFile == "")
+                {
+                    missingAnything = true;
+                } else
+                {
+                    foreach (var selectedGene in stateOfTheWorld.selectedGenes)
+                    {
+                        if (!stateOfTheWorld.scatterGraphsByHugoSymbol.ContainsKey(selectedGene.Hugo_Symbol))
+                        {
+                            missingAnything = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!missingAnything)
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                foreach (var caseEntry in stateOfTheWorld.cases)
+                {
+                    var case_ = caseEntry.Value;
+
+                    if (case_.annotated_selected_variants_filename == "" || case_.tumor_dna_mapped_base_count_filename == "" || case_.tumor_rna_mapped_base_count_filename == "")
+                    {
+                        nWaitingForPrerequisites = 1;
+                        return;
+                    }
+                }
+
+                nAddedToScript = 1;
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateScatterGraphs.exe");
+                hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "GenerateScatterGraphs.exe");
+            } // EvaluateStage
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
+            {
+                DateTime oldestFile;
+                if (stateOfTheWorld.scatterGraphsSummaryFile == "")
+                {
+                    return true;
+                }
+ 
+                oldestFile = new FileInfo(stateOfTheWorld.scatterGraphsSummaryFile).LastWriteTime;
+                foreach (var selectedGene in stateOfTheWorld.selectedGenes)
+                {
+                    if (!stateOfTheWorld.scatterGraphsByHugoSymbol.ContainsKey(selectedGene.Hugo_Symbol))
+                    {
+                        return true;
+                    }
+
+                    var date = new FileInfo(stateOfTheWorld.scatterGraphsByHugoSymbol[selectedGene.Hugo_Symbol]).LastWriteTime;
+                    if (date < oldestFile) {
+                        oldestFile = date;
+                    }
+                }
+
+                //
+                // Now look at the dependencies.
+                //
+                foreach (var caseEntry in stateOfTheWorld.cases)
+                {
+                    var case_ = caseEntry.Value;
+
+                    if (case_.annotated_selected_variants_filename == "" || new FileInfo(case_.annotated_selected_variants_filename).LastWriteTime > oldestFile)
+                    {
+                        Console.WriteLine("Case " + case_.case_id + " either doesn't have an annotated selected variants file, or it is newer than a gene scatter graph file that depends on it.");
+                        return false;
+                    }
+
+                    if (case_.tumor_dna_mapped_base_count_filename == "" || new FileInfo(case_.tumor_dna_mapped_base_count_filename).LastWriteTime > oldestFile ||
+                        case_.tumor_rna_mapped_base_count_filename == "" || new FileInfo(case_.tumor_rna_mapped_base_count_filename).LastWriteTime > oldestFile)
+                    {
+                        Console.WriteLine("Case " + case_.case_id + " either doesn't have a tumor mapped base count file, or it is newer than a gene scatter graph file that depends on it.");
+                        return false;
+                    }
+                }
+
+                return true;
+            } // EvaluateDependencies
+
+        } // GenerateScatterGraphsProcessingStage
 
         //
         // This represents the state of the world.  Processing stages look at this state and generate actions to move us along.
@@ -1429,6 +1542,8 @@ namespace ASEProcessManager
             public Dictionary<string, string> fileIdToCaseId = null;
             public Dictionary<string, long> fileSizesFromGDC = null;
             public List<ASETools.SeletedGene> selectedGenes = null;
+            public string scatterGraphsSummaryFile = "";
+            public Dictionary<string, string> scatterGraphsByHugoSymbol = new Dictionary<string, string>();
 
             public void DetermineTheStateOfTheWorld()
             {
@@ -1437,6 +1552,19 @@ namespace ASEProcessManager
                 if (File.Exists(configuration.selectedGenesFilename))
                 {
                     selectedGenes = ASETools.SeletedGene.LoadFromFile(configuration.selectedGenesFilename);
+
+                    foreach (var selectedGene in selectedGenes)
+                    {
+                        if (File.Exists(configuration.geneScatterGraphsDirectory + selectedGene.Hugo_Symbol + ".txt"))
+                        {
+                            scatterGraphsByHugoSymbol.Add(selectedGene.Hugo_Symbol, configuration.geneScatterGraphsDirectory + selectedGene.Hugo_Symbol + ".txt");
+                        }
+                    }
+                }
+
+                if (File.Exists(configuration.geneScatterGraphsDirectory + ASETools.scatterGraphsSummaryFilename))
+                {
+                    scatterGraphsSummaryFile = configuration.geneScatterGraphsDirectory + ASETools.scatterGraphsSummaryFilename;
                 }
 
                 mafInfo = ASETools.MAFInfo.LoadMAFManifest(configuration.mafManifestPathname);
@@ -1563,6 +1691,7 @@ namespace ASEProcessManager
 							bytesCopyNumber += (ulong)downloadedFiles[case_.tumor_copy_number_file_id].fileInfo.Length;
 						}
 					} // foreach case
+
 
                     Console.WriteLine(nNormalDNA + "(" + ASETools.SizeToUnits(bytesNormalDNA) + "B) normal DNA, " + nTumorDNA + "(" + ASETools.SizeToUnits(bytesTumorDNA) + "B) tumor DNA, " +
                                       nNormalRNA + "(" + ASETools.SizeToUnits(bytesNormalRNA) + "B) normal RNA, " + nTumorRNA + "(" + ASETools.SizeToUnits(bytesTumorRNA) + "B) tumor RNA, " +
@@ -1705,7 +1834,7 @@ namespace ASEProcessManager
                 ASETools.Case.SaveToFile(stateOfTheWorld.cases, configuration.casesFilePathname);
             }
 
-            var script = ASETools.CreateStreamWriterWithRetry(scriptFilename);
+            var script = ASETools.CreateStreamWriterWithRetry(configuration.scriptOutputDirectory + scriptFilename);
 
             if (configuration.completedVCFsDirectory != "")
             {
@@ -1818,6 +1947,7 @@ namespace ASEProcessManager
             processingStages.Add(new ExtractReadsProcessingStage());
             processingStages.Add(new SelectGenesProcessingStage());
             processingStages.Add(new CountMappedBasesProcessingStage());
+            processingStages.Add(new GenerateScatterGraphsProcessingStage());
 
             if (checkDependencies)
             {

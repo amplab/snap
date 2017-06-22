@@ -128,6 +128,7 @@ DWORD __stdcall
             }
 
             size_t sizeLeftToWrite = sizeOfRunsToWrite;
+			size_t amountOfConsolodatedOutputBufferUsed = 0;
 
             while (0 != sizeLeftToWrite) {
                 DWORD bytesWritten;
@@ -138,7 +139,7 @@ DWORD __stdcall
                     bytesToWrite = 1024 * 1024 * 1024;
                 }
 
-                if (!WriteFile(hOutputFile, consolodatedOutputBuffer, bytesToWrite, &bytesWritten, NULL)) {
+                if (!WriteFile(hOutputFile, consolodatedOutputBuffer + amountOfConsolodatedOutputBufferUsed, bytesToWrite, &bytesWritten, NULL)) {
                     fprintf(stderr, "Write to output file failed, %d\n", GetLastError());
                     exit(1);
                 }
@@ -149,6 +150,7 @@ DWORD __stdcall
                 }
 
                 sizeLeftToWrite -= bytesWritten;
+				amountOfConsolodatedOutputBufferUsed += bytesWritten;
             }
 
             nBytesWritten += sizeOfRunsToWrite;
@@ -342,8 +344,7 @@ ProcessorThreadMain(void *param)
                 if (!ReadFile(hStdOutRead, readsBuffer->buffer + readsBuffer->size, readsBufferSize - readsBuffer->size, &bytesRead, NULL)) {
                     if (GetLastError() == ERROR_BROKEN_PIPE) {
                         break;
-                    }
-                    else {
+                    } else {
                         fprintf(stderr, "Read from stdout pipe to samtools failed, %d\n", GetLastError());
                         exit(1);
                     }
@@ -683,7 +684,7 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    fprintf(indexFile, "**done**\t\t\n");
+    fprintf(indexFile, "**done**\n");
     fclose(indexFile);
 
 	return 0;

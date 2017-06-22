@@ -64,6 +64,10 @@ obj
 /apps/CountMappedBases/bin
 /apps/ExpressionNearMutations/bin
 /apps/MethylationAnalysis/bin
+/apps/DumpSubfile/bin
+/apps/ExpressionByMutationCount/bin
+/apps/FixASV/bin
+/apps/GenerateScatterGraphs/bin
 
 
 
