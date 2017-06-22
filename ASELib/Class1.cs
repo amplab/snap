@@ -4313,7 +4313,7 @@ namespace ASELib
                 var headerizedFile = new HeaderizedFile<AnnotatedVariant>(file, false, true, "", wantedFields);
 
                 List<AnnotatedVariant> retVal;
-                if (!headerizedFile.ParseFile(null, out retVal))
+                if (!headerizedFile.ParseFile(parse, out retVal))
                 {
                     return null;
                 }

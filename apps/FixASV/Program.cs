@@ -42,7 +42,7 @@ namespace FixASV
             Console.Write("Processing " + casesToProcess.Count() + " cases (1 dot/100 cases): ");
 
             var threads = new List<Thread>();
-            for (int i = 0; i < Environment.ProcessorCount; i++)
+            for (int i = 0; i < /*Environment.ProcessorCount*/ 1; i++)
             {
                 threads.Add(new Thread(() => WorkerThread()));
             }
@@ -57,50 +57,55 @@ namespace FixASV
 
         static void WorkerThread()
         {
-            ASETools.Case case_;
-
-            lock (casesToProcess)
+            while (true)
             {
-                if (casesToProcess.Count() == 0)
+                ASETools.Case case_;
+
+                lock (casesToProcess)
                 {
-                    return;
+                    if (casesToProcess.Count() == 0)
+                    {
+                        return;
+                    }
+
+                    case_ = casesToProcess[0];
+                    casesToProcess.RemoveAt(0);
+                } // lock
+
+                var inputLines = ASETools.ReadAllLinesWithRetry(case_.annotated_selected_variants_filename);
+
+                var outputFile = ASETools.CreateStreamWriterWithRetry(case_.annotated_selected_variants_filename);
+
+                for (int i = 0; i < inputLines.Count(); i++)
+                {
+                    if (inputLines[i] == "**done**")
+                    {
+                        outputFile.WriteLine("**done**");
+                        continue;
+                    }
+
+                    var fields = inputLines[i].Split('\t');
+                    if (fields.Count() == 24)
+                    {
+                        outputFile.WriteLine(inputLines[i]);
+                    }
+                    else if (fields.Count() == 20)
+                    {
+                        outputFile.WriteLine(inputLines[i] + "\t\t\t\t");
+                    }
+                    else
+                    {
+                        Console.WriteLine("Strange input line in file " + case_.annotated_selected_variants_filename + ": " + inputLines[i] + ".  Field count " + fields.Count());
+                        outputFile.WriteLine(inputLines[i]);
+                    }
+                } // for all input lines
+                outputFile.Close();
+
+                if (Interlocked.Increment(ref TotalProcessed) % 100 == 0)
+                {
+                    Console.Write(".");
                 }
-
-                case_ = casesToProcess[0];
-                casesToProcess.RemoveAt(0);
-            } // lock
-
-            var inputLines = ASETools.ReadAllLinesWithRetry(case_.annotated_selected_variants_filename);
-
-            var outputFile = ASETools.CreateStreamWriterWithRetry(case_.annotated_selected_variants_filename);
-
-            for (int i = 0; i < inputLines.Count(); i++)
-            {
-                if (inputLines[i] == "**done**")
-                {
-                    outputFile.WriteLine("**done**");
-                    continue;
-                }
-
-                var fields = inputLines[i].Split('\t');
-                if (fields.Count() == 24)
-                {
-                    outputFile.WriteLine(inputLines[i]);
-                } else if (fields.Count() == 20)
-                {
-                    outputFile.WriteLine(inputLines[i] + "\t\t\t\t");
-                } else
-                {
-                    Console.WriteLine("Strange input line in file " + case_.annotated_selected_variants_filename + ": " + inputLines[i] + ".  Field count " + fields.Count());
-                    outputFile.WriteLine(inputLines[i]);
-                }
-            } // for all input lines
-            outputFile.Close();
-
-            if (Interlocked.Increment(ref TotalProcessed) % 100 == 0)
-            {
-                Console.Write(".");
-            }
+            } // while true
         }
     } // Program
 } // FixASV
