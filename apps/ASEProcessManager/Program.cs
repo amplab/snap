@@ -578,6 +578,89 @@ namespace ASEProcessManager
 		} // AnnotateVariantsProcessingStage
 
 
+		class MethylationProcessingStage : ProcessingStage
+		{
+
+			public MethylationProcessingStage() { }
+
+			public string GetStageName() { return "Methylation"; }
+
+			public bool NeedsCases() { return true; }
+
+			public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+			{
+				nDone = 0;
+				nAddedToScript = 0;
+				nWaitingForPrerequisites = 0;
+				filesToDownload = null;
+
+				foreach (var caseEntry in stateOfTheWorld.cases)
+				{
+					var case_ = caseEntry.Value;
+					if (case_.tumor_regional_methylation_filename != "")
+					{
+						nDone++;
+						continue;
+					}
+					else if (case_.extracted_maf_lines_filename == "" || case_.tumor_methylation_filename == "")
+					{
+						nWaitingForPrerequisites++;
+						continue;
+					}
+					else
+					{
+						nAddedToScript++;
+					}
+
+					// write a command for each case id
+					script.Write(stateOfTheWorld.configuration.binariesDirectory + "MethylationAnalysis.exe");
+					hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "MethylationAnalysis.exe");
+
+					script.Write(" " + case_.case_id);
+					hpcScript.Write(" " + case_.case_id);
+
+					script.WriteLine();
+					hpcScript.WriteLine();
+
+				}
+
+
+			} // EvaluateStage
+
+			public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
+			{
+				bool allOK = true;
+
+				foreach (var caseEntry in stateOfTheWorld.cases)
+				{
+					var case_ = caseEntry.Value;
+
+					if (case_.extracted_maf_lines_filename == "" || case_.tumor_methylation_filename == "")
+					{
+						Console.WriteLine("Regional methylation file " + case_.annotated_selected_variants_filename + " exists, but dependencies do not.");
+						allOK = false;
+						continue;
+					}
+
+					if (case_.tumor_regional_methylation_filename == "")
+					{
+						continue;
+					}
+
+					var methylationWriteTime = new FileInfo(case_.tumor_regional_methylation_filename).LastWriteTime;
+					if (case_.tumor_regional_methylation_filename == "")
+					{
+						Console.WriteLine("Regional methylation file " + case_.tumor_regional_methylation_filename + " exists, but the precursor file does not.");
+						allOK = false;
+						continue;
+					}
+				}
+				return allOK;
+			} // EvaluateDependencies
+
+		} // AnnotateVariantsProcessingStage
+
+
 		class SelectVariantsProcessingStage : ProcessingStage
         {
             public SelectVariantsProcessingStage() { }
@@ -1808,10 +1891,11 @@ namespace ASEProcessManager
 			processingStages.Add(new ExpressionDistributionProcessingStage());
             processingStages.Add(new ExtractMAFLinesProcessingStage());
             processingStages.Add(new RegionalExpressionProcessingStage());
-            // off for now processingStages.Add(new ExpressionNearMutationsProcessingStage(forAlleleSpecificExpression));
+            processingStages.Add(new ExpressionNearMutationsProcessingStage(forAlleleSpecificExpression));
             processingStages.Add(new ExtractReadsProcessingStage());
             processingStages.Add(new SelectGenesProcessingStage());
             processingStages.Add(new CountMappedBasesProcessingStage());
+			processingStages.Add(new MethylationProcessingStage());
 
             if (checkDependencies)
             {

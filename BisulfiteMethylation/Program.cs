@@ -207,7 +207,7 @@ namespace BisulfiteMethylation
 		// One expression state for whole autosome
 		static ASETools.RegionalExpressionState wholeAutosomeRegionalExpression = new ASETools.RegionalExpressionState();
 		// Expression state for each chromosome, which will exclude the chromosome that the gene resides on
-		static new Dictionary<string, ASETools.RegionalExpressionState> allButThisChromosomeAutosomalRegionalExpressionState = new Dictionary<string, ASETools.RegionalExpressionState>();   // "This chromosome" is the dictionary key
+		static Dictionary<string, ASETools.RegionalExpressionState> allButThisChromosomeAutosomalRegionalExpressionState = new Dictionary<string, ASETools.RegionalExpressionState>();   // "This chromosome" is the dictionary key
 																																 // Expression state for each chromosome, which will include the chromsome that the gene resides on
 		static ASETools.RegionalExpressionState[] perChromosomeRegionalExpressionState = new ASETools.RegionalExpressionState[ASETools.nHumanNuclearChromosomes];
 		// per gene ASM
@@ -354,7 +354,8 @@ namespace BisulfiteMethylation
 				outputFile.WriteLine("BisulfiteASM " + case_.case_id); 
 				outputFile.Write("Gene name\tnon-silent mutation count");
 
-				ExpressionNearMutations.Program.writeColumnNames(outputFile, true, case_, true);
+				var columnSuffix = "tumor ASM";
+				ExpressionNearMutations.Program.writeColumnNames(outputFile, true, case_, columnSuffix);
 
 				outputFile.WriteLine();
 

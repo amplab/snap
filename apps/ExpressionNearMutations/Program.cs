@@ -16,17 +16,11 @@ namespace ExpressionNearMutations
 
 		static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
 
-		public static void writeColumnNames(StreamWriter outputFile, bool forAlleleSpecificExpression, ASETools.Case case_, bool isTumor)
+		public static void writeColumnNames(StreamWriter outputFile, bool forAlleleSpecificExpression, ASETools.Case case_, string columnSuffix)
 		{
-			string columnSuffix = forAlleleSpecificExpression ? "(Tumor ase)" : "(Tumor z)";
 
-			if (!isTumor)
-			{
-				columnSuffix = forAlleleSpecificExpression ? "(Normal ase)" : "(Normal z)";
-
-			}
-
-			string columnSuffix_mu = isTumor ? "(Tumor mu)" : "(Normal mu)";
+			string columnSuffix_mu = "(" + columnSuffix + " mu)";
+			columnSuffix = "(" + columnSuffix + ")";
 
 			for (int sizeIndex = 0; sizeIndex < ASETools.GeneExpression.nRegionSizes; sizeIndex++)
 			{
@@ -666,8 +660,10 @@ namespace ExpressionNearMutations
 				outputFile.WriteLine("ExpressionNearMutations v3.1 " + case_.case_id + (forAlleleSpecificExpression ? " -a" : "")); // v3.1 uses ucsc gene locations
 				outputFile.Write("Gene name\tnon-silent mutation count");
 
-				writeColumnNames(outputFile, forAlleleSpecificExpression, case_, true);
-				writeColumnNames(outputFile, forAlleleSpecificExpression, case_, false);
+
+				var columnSuffix = forAlleleSpecificExpression ? "ase" : "z";
+				writeColumnNames(outputFile, forAlleleSpecificExpression, case_, "tumor " + columnSuffix);
+				writeColumnNames(outputFile, forAlleleSpecificExpression, case_, "normal " + columnSuffix);
 
                 outputFile.WriteLine();
 
@@ -782,17 +778,19 @@ namespace ExpressionNearMutations
 			//
 			// Process the runs in parallel
 			//
-			timer.Reset();
-			timer.Start();
+			//timer.Reset();
+			//timer.Start();
 
-			var threads = new List<Thread>();
-			for (int i = 0; i < Environment.ProcessorCount; i++)
-			{
-				threads.Add(new Thread(() => ProcessCases(casesToProcess, forAlleleSpecificExpression, minExamplesPerRegion)));
-			}
+			//var threads = new List<Thread>();
+			//for (int i = 0; i < Environment.ProcessorCount; i++)
+			//{
+			//	threads.Add(new Thread(() => ProcessCases(casesToProcess, forAlleleSpecificExpression, minExamplesPerRegion)));
+			//}
 
-			threads.ForEach(t => t.Start());
-			threads.ForEach(t => t.Join());
+			//threads.ForEach(t => t.Start());
+			//threads.ForEach(t => t.Join());
+
+			ProcessCases(casesToProcess, forAlleleSpecificExpression, minExamplesPerRegion);
 
 			timer.Stop();
             Console.WriteLine("Processed " + (configuration.commandLineArgs.Count() - (forAlleleSpecificExpression ? 1 : 0)) + " experiments in " + (timer.ElapsedMilliseconds + 500) / 1000 + " seconds");
