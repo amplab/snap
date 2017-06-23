@@ -378,17 +378,19 @@ namespace ExpressionNearMutations
 			//
 			// Process the runs in parallel
 			//
-			timer.Reset();
-			timer.Start();
+			//timer.Reset();
+			//timer.Start();
 
-			var threads = new List<Thread>();
-			for (int i = 0; i < Environment.ProcessorCount; i++)
-			{
-				threads.Add(new Thread(() => ProcessCases(casesToProcess, forAlleleSpecificExpression, minExamplesPerRegion)));
-			}
+			//var threads = new List<Thread>();
+			//for (int i = 0; i < Environment.ProcessorCount; i++)
+			//{
+			//	threads.Add(new Thread(() => ProcessCases(casesToProcess, forAlleleSpecificExpression, minExamplesPerRegion)));
+			//}
 
-			threads.ForEach(t => t.Start());
-			threads.ForEach(t => t.Join());
+			//threads.ForEach(t => t.Start());
+			//threads.ForEach(t => t.Join());
+
+			ProcessCases(casesToProcess, forAlleleSpecificExpression, minExamplesPerRegion);
 
 			timer.Stop();
             Console.WriteLine("Processed " + (configuration.commandLineArgs.Count() - (forAlleleSpecificExpression ? 1 : 0)) + " experiments in " + (timer.ElapsedMilliseconds + 500) / 1000 + " seconds");

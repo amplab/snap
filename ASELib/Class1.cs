@@ -756,6 +756,7 @@ namespace ASELib
             public string normal_rna_mapped_base_count_filename = "";
             public string tumor_rna_mapped_base_count_filename = "";
             public string selected_variant_counts_by_gene_filename = "";
+			public string tumor_regional_methylation_filename = ""; // TODO add to CheckDone
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
 
             //
@@ -1282,7 +1283,7 @@ namespace ASELib
             public List<string> programNames = new List<string>();
             public string binariesDirectory = defaultBaseDirectory + @"bin\";
             public string configuationFilePathname = defaultConfigurationFilePathame;
-            public string casesFilePathname = defaultBaseDirectory + "cases.txt";
+			public string casesFilePathname = @"C:\Users\t-almorr\temp\cases_withTNMethylation.txt";  //defaultBaseDirectory + "cases.txt";
             public string indexDirectory = defaultBaseDirectory + @"indices\hg38-20";
 			public string indexDirectoryHg19 = defaultBaseDirectory + @"indices\hg19";
 			public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
@@ -2066,6 +2067,7 @@ namespace ASELib
         public const string genesWithSelectedVariantsFilename = "GenesWithSelectedVariantCounts.txt";
         public const string heatMapFilename = "AlleleSpecificExpressionHeatMap.txt";
 		public const string bisulfiteAlleleSpecificMethylationExtension = ".bisulfite_asm.txt";
+		public const string regionalMethylationExtension = ".regional_methylation.txt";
 
         public class DerivedFile
         {
@@ -2752,7 +2754,7 @@ namespace ASELib
 		public class CompositeREFInfoLine
 		{
 			public string Composite_Element_REF;
-			public string Chromsome;
+			public string Chromosome;
 			public int Position;
 			public string Hugo_Symbol;
 
@@ -2796,16 +2798,23 @@ namespace ASELib
 
 		} // CompositeREFInfoFile
 
-		// contains annotation data from one line in a methylation file
-		public class AnnotationLine
+
+		public class CompositeREF
 		{
-			public static double betaToM(double beta) {
-				// M_value calculated as shown in Du et. al. 2010
-				return Math.Log(beta / (1 - beta));
-			}
+			public string Composite_Element_REF;
+			public string Chromosome;
+			public int Start;
+			public int End;
+			public string[] Gene_Symbol;
+			public string[] Gene_Type;
+			public string[] Transcript_ID;
+			public int[] Position_to_TSS;
+			public string CGI_Coordinate;
+			public FeatureType Feature_Type;
 
 			// Methylation types
-			public enum FeatureType {
+			public enum FeatureType
+			{
 				// Feature type not specified
 				Other,
 				// methylation found in 2kb region upstream from island
@@ -2816,33 +2825,18 @@ namespace ASELib
 				Island,
 			}
 
-			public string Composite_Element_REF;
-			public double Beta_Value;
-			public string Chromsome;
-			public int Start;
-			public int End;
-			public string[] Gene_Symbol;
-			public string[] Gene_Type;
-			public string[] Transcript_ID;
-			public int[] Position_to_TSS;
-			public string CGI_Coordinate;
-			public FeatureType Feature_Type;
-
-			// this is not in the original file, but calculated from beta_value
-			public readonly double M_Value;
-
-			AnnotationLine(string Composite_Element_REF_,
-			double Beta_Value_,
-			string Chromosome_,
-			int Start_,
-			int End_,
-			string[] Gene_Symbol_,
-			string[] Gene_Type_,
-			string[] Transcript_ID_,
-			int[] Position_to_TSS_,
-			string CGI_Coordinate_,
-			FeatureType Feature_Type_)
+			public CompositeREF(string Composite_Element_REF_,
+				string Chromosome_,
+				int Start_,
+				int End_,
+				string[] Gene_Symbol_,
+				string[] Gene_Type_,
+				string[] Transcript_ID_,
+				int[] Position_to_TSS_,
+				string CGI_Coordinate_,
+				FeatureType Feature_Type_)
 			{
+
 				var geneCount = Gene_Symbol_.Length;
 
 				if (Gene_Type_.Length != geneCount || Transcript_ID_.Length != geneCount || Position_to_TSS_.Length != geneCount)
@@ -2851,8 +2845,7 @@ namespace ASELib
 				}
 
 				Composite_Element_REF = Composite_Element_REF_;
-				Beta_Value = Beta_Value_;
-				Chromsome = Chromosome_;
+				Chromosome = Chromosome_;
 				Start = Start_;
 				End = End_;
 				Gene_Symbol = Gene_Symbol_;
@@ -2861,6 +2854,36 @@ namespace ASELib
 				Position_to_TSS = Position_to_TSS_;
 				CGI_Coordinate = CGI_Coordinate_;
 				Feature_Type = Feature_Type_;
+
+			}
+		}
+
+		// contains annotation data from one line in a methylation file
+		public class AnnotationLine
+		{
+			public static double betaToM(double beta) {
+				// M_value calculated as shown in Du et. al. 2010
+				return Math.Log(beta / (1 - beta));
+			}
+
+			public double Beta_Value;
+			public CompositeREF compositeREF;
+
+
+			// this is not in the original file, but calculated from beta_value
+			public readonly double M_Value;
+
+			AnnotationLine(CompositeREF compositeREF_, double Beta_Value_)
+			{
+				//var geneCount = Gene_Symbol_.Length;
+
+				//if (Gene_Type_.Length != geneCount || Transcript_ID_.Length != geneCount || Position_to_TSS_.Length != geneCount)
+				//{
+				//	Console.WriteLine("Error: Gene Count does not match supporting gene data");
+				//}
+
+				compositeREF = compositeREF_;
+				Beta_Value = Beta_Value_;
 
 				// M_value calculated as shown in Du et. al. 2010
 				M_Value = betaToM(Beta_Value);
@@ -2891,11 +2914,10 @@ namespace ASELib
 				// delimiter separating columns
 				var delim = ';';
 
-				Enum.TryParse(fields[fieldMappings["Feature_Type"]], out FeatureType Feature_Type);
+				Enum.TryParse(fields[fieldMappings["Feature_Type"]], out CompositeREF.FeatureType Feature_Type);
 
-				 return new AnnotationLine(
+				var compositeREF = new CompositeREF(
 				fields[fieldMappings["Composite Element REF"]],
-				ConvertToDoubleTreatingNullStringAsOne(fields[fieldMappings["Beta_value"]]),
 				fields[fieldMappings["Chromosome"]],
 				Convert.ToInt32(fields[fieldMappings["Start"]]),
 				Convert.ToInt32(fields[fieldMappings["End"]]),
@@ -2904,9 +2926,10 @@ namespace ASELib
 				splitPotentialString(fields[fieldMappings["Transcript_ID"]], delim),
 				splitPotentialString(fields[fieldMappings["Position_to_TSS"]], delim).Select(s => Convert.ToInt32(s)).ToArray(),
 				fields[fieldMappings["CGI_Coordinate"]],
-				Feature_Type
-				);
+				Feature_Type);
 
+				return new AnnotationLine(compositeREF,
+				ConvertToDoubleTreatingNullStringAsOne(fields[fieldMappings["Beta_value"]]));
 			}
 
 			static public List<AnnotationLine> ReadFile(string filename, string file_id, bool fileHasVersion)
@@ -2942,7 +2965,7 @@ namespace ASELib
 				inputFile.Close();
 
 				// filter out invalid results. Invalid results include records without valid M values and records without gene symbols.
-				result = result.Where(c => (c.M_Value != double.PositiveInfinity) && (c.Gene_Symbol.Length > 0)).ToList();
+				result = result.Where(c => (c.M_Value != double.PositiveInfinity) && (c.compositeREF.Gene_Symbol.Length > 0)).ToList();
 
 				return result;
 			} // ReadFile
@@ -6015,7 +6038,76 @@ namespace ASELib
 
 			}
 
-            public readonly string Hugo_symbol;                 // Only present for somatic mutations, otherwise ""
+			public static AnnotatedVariant fromText(string inputLine)
+			{
+				var retVal = new AnnotatedVariant();
+
+				var fields = inputLine.Split('\t');
+
+				if (fields.Count() != 20 && fields.Count() != 24)
+				{
+					Console.WriteLine("AnnotatedVariant.fromText: wrong field count (" + fields.Count() + " != 22 or 18) in line: " + inputLine);
+					return null;
+				}
+
+				try
+				{
+					var contig = fields[0];
+					var loc = Convert.ToInt32(fields[1]);
+					var Ref = fields[2];
+					var alt = fields[3];
+					var variantType = fields[4];
+					var isSomatic = Convert.ToBoolean(fields[5]);
+
+					var nMatchingTumorReferenceDNA = Convert.ToInt32(fields[6]);
+					var nMatchingTumorAltDNA = Convert.ToInt32(fields[7]);
+					var nMatchingTumorNeitherDNA = Convert.ToInt32(fields[8]);
+					var nMatchingTumorBothDNA = Convert.ToInt32(fields[9]);
+
+					var nMatchingNormalReferenceDNA = Convert.ToInt32(fields[10]);
+					var nMatchingNormalAltDNA = Convert.ToInt32(fields[11]);
+					var nMatchingNormalNeitherDNA = Convert.ToInt32(fields[12]);
+					var nMatchingNormalBothDNA = Convert.ToInt32(fields[13]);
+
+					var nMatchingTumorReferenceRNA = Convert.ToInt32(fields[14]);
+					var nMatchingTumorAltRNA = Convert.ToInt32(fields[15]);
+					var nMatchingTumorNeitherRNA = Convert.ToInt32(fields[16]);
+					var nMatchingTumorBothRNA = Convert.ToInt32(fields[17]);
+
+
+					var normalDNAReadCounts = new ReadCounts(nMatchingNormalReferenceDNA, nMatchingNormalAltDNA, nMatchingNormalNeitherDNA, nMatchingNormalBothDNA);
+					var tumorDNAReadCounts = new ReadCounts(nMatchingTumorReferenceDNA, nMatchingTumorAltDNA, nMatchingTumorNeitherDNA, nMatchingTumorBothDNA);
+					var tumorRNAReadCounts = new ReadCounts(nMatchingTumorReferenceRNA, nMatchingTumorAltRNA, nMatchingTumorNeitherRNA, nMatchingTumorBothRNA);
+
+					ReadCounts normalRNAReadCounts = null;
+					// check if normal RNA is present
+					try
+					{
+						var nMatchingNormalReferenceRNA = Convert.ToInt32(fields[18]);
+						var nMatchingNormalAltRNA = Convert.ToInt32(fields[29]);
+						var nMatchingNormalNeitherRNA = Convert.ToInt32(fields[20]);
+						var nMatchingNormalBothRNA = Convert.ToInt32(fields[21]);
+
+						normalRNAReadCounts = new ReadCounts(nMatchingNormalReferenceRNA, nMatchingNormalAltRNA, nMatchingNormalNeitherRNA, nMatchingNormalBothRNA);
+					}
+					catch (Exception)
+					{
+						// no op. No normal RNA
+					}
+					retVal = new AnnotatedVariant(isSomatic, contig, loc, Ref, alt, variantType, tumorDNAReadCounts, tumorRNAReadCounts, normalDNAReadCounts, normalRNAReadCounts);
+
+				}
+				catch (FormatException)
+				{
+					Console.WriteLine("Format exception parsing annotated selected variant line " + inputLine);
+					return null;
+				}
+
+				return retVal;
+			}
+
+
+			public readonly string Hugo_symbol;                 // Only present for somatic mutations, otherwise ""
 			public readonly bool somaticMutation;
             public readonly string contig;
             public readonly int locus;

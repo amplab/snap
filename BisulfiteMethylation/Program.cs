@@ -208,7 +208,7 @@ namespace BisulfiteMethylation
 		// One expression state for whole autosome
 		static ASETools.RegionalExpressionState wholeAutosomeRegionalExpression = new ASETools.RegionalExpressionState();
 		// Expression state for each chromosome, which will exclude the chromosome that the gene resides on
-		static new Dictionary<string, ASETools.RegionalExpressionState> allButThisChromosomeAutosomalRegionalExpressionState = new Dictionary<string, ASETools.RegionalExpressionState>();   // "This chromosome" is the dictionary key
+		static Dictionary<string, ASETools.RegionalExpressionState> allButThisChromosomeAutosomalRegionalExpressionState = new Dictionary<string, ASETools.RegionalExpressionState>();   // "This chromosome" is the dictionary key
 																																 // Expression state for each chromosome, which will include the chromsome that the gene resides on
 		static ASETools.RegionalExpressionState[] perChromosomeRegionalExpressionState = new ASETools.RegionalExpressionState[ASETools.nHumanNuclearChromosomes];
 		// per gene ASM
@@ -351,7 +351,6 @@ namespace BisulfiteMethylation
 				Console.WriteLine("Saving ASM to file " + outputFilename);
 
 				var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
-
 
 
 				var allExpressions = new List<ASETools.GeneExpression>();
