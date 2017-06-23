@@ -76,15 +76,16 @@ namespace CheckDone
                         continue;
                     }
 
-                    bool isIndex = filename.EndsWith(".index");
-
-                    int bytesToCheckThisFile = isIndex ? nBytesToCheckIndex : nBytesToCheck;
-                    byte[] buffer = isIndex ? lastBitOfFileIndex : lastBitOfFile;
+                    int bytesToCheckThisFile = nBytesToCheck;
+                    byte[] buffer = lastBitOfFile;
 
                     if (filestream.Length < bytesToCheckThisFile)
                     {
                         Console.WriteLine(filename + " is truncated.");
                         continue;
+                    } else if (filestream.Length == bytesToCheckThisFile)
+                    {
+                        Console.WriteLine(filename + " appears to be nothing but the **done** line.");
                     }
 
                     filestream.Position = filestream.Length - bytesToCheckThisFile;
@@ -94,24 +95,7 @@ namespace CheckDone
                         continue;
                     }
 
-                    if (isIndex)
-                    {
-                        if (buffer[0] != '*' ||
-                                                buffer[1] != '*' ||
-                                                buffer[2] != 'd' ||
-                                                buffer[3] != 'o' ||
-                                                buffer[4] != 'n' ||
-                                                buffer[5] != 'e' ||
-                                                buffer[6] != '*' ||
-                                                buffer[7] != '*' ||
-                                                buffer[8] != '\t' ||
-                                                buffer[9] != '\t' ||
-                                                buffer[10] != '\r' ||
-                                                buffer[11] != '\n')
-                        {
-                            Console.WriteLine(filename + " is truncated.");
-                        }
-                    } else if (buffer[0] != '*' ||
+                    if (buffer[0] != '*' ||
                         buffer[1] != '*' ||
                         buffer[2] != 'd' ||
                         buffer[3] != 'o' ||
@@ -135,11 +119,14 @@ namespace CheckDone
 
             configuration = ASETools.ASEConfirguation.loadFromFile(args);
 
-            if (configuration.commandLineArgs.Count() != 0)
+            if (configuration.commandLineArgs.Count() != 0 && (configuration.commandLineArgs.Count() != 1 || configuration.commandLineArgs[0] != "-a"))
             {
-                Console.WriteLine("usage: CheckDone {-configuration configurationFileName}");
+                Console.WriteLine("usage: CheckDone {-configuration configurationFileName} {-a}");
+                Console.WriteLine("-a means to skip allcount files (which is where most of the time goes).");
                 return;
             }
+
+            bool skipAllcount = configuration.commandLineArgs.Contains("-a");
 
             var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
@@ -153,10 +140,13 @@ namespace CheckDone
             {
                 var case_ = caseEntry.Value;
 
-                HandleFilename(case_.normal_dna_allcount_filename);
-                HandleFilename(case_.normal_rna_allcount_filename);
-                HandleFilename(case_.tumor_dna_allcount_filename);
-                HandleFilename(case_.tumor_rna_allcount_filename);
+                if (!skipAllcount)
+                {
+                    HandleFilename(case_.normal_dna_allcount_filename);
+                    HandleFilename(case_.normal_rna_allcount_filename);
+                    HandleFilename(case_.tumor_dna_allcount_filename);
+                    HandleFilename(case_.tumor_rna_allcount_filename);
+                }
                 HandleFilename(case_.regional_expression_filename);
                 HandleFilename(case_.gene_expression_filename);
                 HandleFilename(case_.selected_variants_filename);

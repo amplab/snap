@@ -67,6 +67,11 @@ obj
 /apps/BisulfiteMethylation/bin
 ChangeGenomeBuild/bin
 ExtractBisulfiteReads/bin
+/apps/DumpSubfile/bin
+/apps/ExpressionByMutationCount/bin
+/apps/FixASV/bin
+/apps/GenerateScatterGraphs/bin
+
 
 
 

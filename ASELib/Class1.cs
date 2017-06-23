@@ -179,220 +179,151 @@ namespace ASELib
 			}
 		}
 
-
 		public class GeneScatterGraphLine
 		{
-			public string RNAFile;
-			public string DNAFile;
-			public string Hugo_Symbol;
-			public string Entrez_Gene_Id;
-			public string Center;
-			public string NCBI_Build;
-			public string Chromosome;
-			public int Start_Position;
-			public int End_Position;
-			public string Strand;
-			public string Variant_Classification;
-			public string Variant_Type;
-			public string Reference_Allele;
-			public string Tumor_Seq_Allele_1;
-			public string Tumor_Seq_Allele_2;
-			public string dbSNP_RS;
-			public string dbSNP_Val_Status;
-			public string Tumor_Sample_Barcode;
-			public string Matched_Norm_Sample_Barcode;
-			public string Match_Norm_Seq_Allele1;
-			public string Match_Norm_Seq_Allele2;
-			public string Tumor_Validation_Allele1;
-			public string Tumor_Validation_Allele2;
-			public string Match_Norm_Validation_Allele1;
-			public string Match_Norm_Validation_Allele2;
-			public string Verification_Status;
-			public string Validation_Status;
-			public string Mutation_Status;
-			public string Sequencing_Phase;
-			public string Sequence_Source;
-			public string Validation_Method;
-			public string Score;
-			public string BAM_File;
-			public string Sequencer;
-			public string Tumor_Sample_UUID;
-			public string Matched_Norm_Sample_UUID;
-			public string File_Name;
-			public string Archive_Name;
-			public int Line_Number;
-			public int n_DNA_Matching_Reference;
-			public int n_DNA_Matching_Tumor;
-			public int n_DNA_Matching_Neither;
-			public int n_DNA_Matching_Both;
-			public int n_RNA_Matching_Reference;
-			public int n_RNA_Matching_Tumor;
-			public int n_RNA_Matching_Neither;
-			public int n_RNA_Matching_Both;
-			public double tumorDNAFraction;
-			public double tumorRNAFraction;
-			public double tumorDNAMultiple;
-			public double tumorRNAMultiple;
-			public double tumorDNARatio;
-			public double tumorRNARatio;
-			public string FractionOfMeanExpression; // This doesn't seem to be filled in, hence string
-			public string zOfmeanExpression;
-			public double ratioOfRatios;
-			public bool IsSingle;
-			public string CancerType;
-			public string gender;
+			public readonly string Hugo_Symbol;
+			public readonly string Chromosome;
+			public readonly int Start_Position;
+			public readonly string Variant_Classification;
+			public readonly string Variant_Type;
+			public readonly string Reference_Allele;
+			public readonly string Alt_Allele;
+            public readonly string disease;
+            public readonly string case_id;
+            public readonly string tumor_dna_file_id;
+            public readonly string normal_dna_file_id;
+            public readonly string tumor_rna_file_id;
+            public readonly string normal_rna_file_id;
+            public readonly ReadCounts normalDNAReadCounts;
+            public readonly ReadCounts tumorDNAReadCounts;
+            public readonly ReadCounts normalRNAReadCounts;
+            public readonly ReadCounts tumorRNAReadCounts;
+            public readonly bool IsSingle;
+            public readonly int nMutationsThisGene; // In this tumor, of course
+            public readonly double tumorDNAFraction;
+			public readonly double tumorRNAFraction;
+			public readonly double tumorDNAMultiple;
+			public readonly double tumorRNAMultiple;
+			public readonly double tumorDNARatio;
+			public readonly double tumorRNARatio;
+			public readonly string FractionOfMeanExpression; // This doesn't seem to be filled in, hence string
+			public readonly string zOfmeanExpression;// This doesn't seem to be filled in, hence string
+            public readonly double ratioOfRatios;
 
-			public bool zKnown; // The next 6 fields are valid iff zKnown.
+			public readonly bool zKnown; // The next 6 fields are valid iff zKnown.
 
-			public double zTumor;
-			public double zNormal;
-			public double z2Tumor;
-			public double z2Normal;
-			public double percentMeanTumor; // Expressed as a fraction (i.e., 100% -> 1.0)
-			public double percentMeanNormal;// Expressed as a fraction (i.e., 100% -> 1.0)
+			public readonly double zTumor;
+			public readonly double zNormal;
+			public readonly double z2Tumor;
+			public readonly double z2Normal;
+			public readonly double percentMeanTumor; // Expressed as a fraction (i.e., 100% -> 1.0)
+			public readonly double percentMeanNormal;// Expressed as a fraction (i.e., 100% -> 1.0)
 
-			public bool fromUnfilteredFile; // If this is true, then the fields after n_RNA_Matching_Both are uninitialized and invalid.
+			public readonly bool fromUnfilteredFile; // If this is true, then the fields after the read counts are uninitialized and invalid.
 
-			public string caseId; // Gotten by parsing the RNA analysis ID and then looking it up in the rna analysis id->participant id map, since it's not in the raw file.
+            GeneScatterGraphLine(string Hugo_Symbol_, string Chromosome_, int Start_Position_, string Variant_Classification_, string Variant_Type_, string Reference_Allele_, string Alt_Allele_, string disease_,
+                string case_id_, string normal_dna_file_id_, string tumor_dna_file_id_, string normal_rna_file_id_, string tumor_rna_file_id_, ReadCounts normalDNAReadCounts_, ReadCounts tumorDNAReadCounts_,
+                ReadCounts normalRNAReadCounts_, ReadCounts tumorRNAReadCounts_, bool IsSingle_, int nMutationsThisGene_, double tumorDNAFraction_, double tumorRNAFraction_, double tumorDNAMultiple_, double tumorRNAMultiple_, double tumorDNARatio_,
+                double tumorRNARatio_, string FractionOfMeanExpression_, string zOfMeanExpression_, double ratioOfRatios_,  bool zKnown_, double zTumor_, double zNormal_, double z2Tumor_, double z2Normal_, double percentMeanTumor_,
+                double percentMeanNormal_, bool fromUnfilteredFile_)
+            {
+                Hugo_Symbol = Hugo_Symbol_;
+                Chromosome = Chromosome_;
+                Start_Position = Start_Position_;
+                Variant_Classification = Variant_Classification_;
+                Variant_Type = Variant_Type_;
+                Reference_Allele = Reference_Allele_;
+                Alt_Allele = Alt_Allele_;
+                disease = disease_;
+                case_id = case_id_;
+                normal_dna_file_id = normal_dna_file_id_;
+                tumor_dna_file_id = tumor_dna_file_id_;
+                normal_rna_file_id = normal_rna_file_id_;
+                tumor_rna_file_id = tumor_rna_file_id_;
+                normalDNAReadCounts = normalDNAReadCounts_;
+                tumorDNAReadCounts = tumorDNAReadCounts_;
+                normalRNAReadCounts = normalRNAReadCounts_;
+                tumorRNAReadCounts = tumorRNAReadCounts_;
+                IsSingle = IsSingle_;
+                nMutationsThisGene = nMutationsThisGene_;
+                tumorDNAFraction = tumorDNAFraction_;
+                tumorRNAFraction = tumorRNAFraction_;
+                tumorDNAMultiple = tumorDNAMultiple_;
+                tumorRNAMultiple = tumorRNAMultiple_;
+                tumorDNARatio = tumorDNARatio_;
+                tumorRNARatio = tumorRNARatio_;
+                FractionOfMeanExpression = FractionOfMeanExpression_;
+                zOfmeanExpression = zOfMeanExpression_;
+                ratioOfRatios = ratioOfRatios_;
+                zKnown = zKnown_;
+                zTumor = zTumor_;
+                zNormal = zNormal_;
+                z2Tumor = z2Tumor_;
+                z2Normal = z2Normal_;
+                percentMeanTumor = percentMeanTumor_;
+                percentMeanNormal = percentMeanNormal_;
+                fromUnfilteredFile = fromUnfilteredFile_;
+            }
 
-			public bool insufficientDNA;    // Do we have fewer than 30 DNA reads that don't match both alleles
 
-			public static GeneScatterGraphLine fromLine(string inputLine, bool fromUnfilteredFile, Dictionary<string, Case> experimentsByRNAAnalysisID)
-			{
-				var newLine = new GeneScatterGraphLine();
-				newLine.fromUnfilteredFile = fromUnfilteredFile;
-
-				var fields = inputLine.Split('\t');
-
-				if (fields.Count() < (fromUnfilteredFile ? 47 : 65))
-				{
-					Console.WriteLine("GeneScatterGraphEntry.fromLine: too few fields " + fields.Count() + " in input line " + inputLine);
-					return null;
-				}
-
-				try
-				{
-					newLine.RNAFile = fields[0];
-					newLine.DNAFile = fields[1];
-					newLine.Hugo_Symbol = ConvertToNonExcelString(fields[2]);
-					newLine.Entrez_Gene_Id = fields[3];
-					newLine.Center = fields[4];
-					newLine.NCBI_Build = fields[5];
-					newLine.Chromosome = fields[6];
-					newLine.Start_Position = Convert.ToInt32(fields[7]);
-					newLine.End_Position = Convert.ToInt32(fields[8]);
-					newLine.Strand = fields[9];
-					newLine.Variant_Classification = fields[10];
-					newLine.Variant_Type = fields[11];
-					newLine.Reference_Allele = fields[12];
-					newLine.Tumor_Seq_Allele_1 = fields[13];
-					newLine.Tumor_Seq_Allele_2 = fields[14];
-					newLine.dbSNP_RS = fields[15];
-					newLine.dbSNP_Val_Status = fields[16];
-					newLine.Tumor_Sample_Barcode = fields[17];
-					newLine.Matched_Norm_Sample_Barcode = fields[18];
-					newLine.Match_Norm_Seq_Allele1 = fields[19];
-					newLine.Match_Norm_Seq_Allele2 = fields[20];
-					newLine.Tumor_Validation_Allele1 = fields[21];
-					newLine.Tumor_Validation_Allele2 = fields[22];
-					newLine.Match_Norm_Validation_Allele1 = fields[23];
-					newLine.Match_Norm_Validation_Allele2 = fields[24];
-					newLine.Verification_Status = fields[25];
-					newLine.Validation_Status = fields[26];
-					newLine.Mutation_Status = fields[27];
-					newLine.Sequencing_Phase = fields[28];
-					newLine.Sequence_Source = fields[29];
-					newLine.Validation_Method = fields[30];
-					newLine.Score = fields[31];
-					newLine.BAM_File = fields[32];
-					newLine.Sequencer = fields[33];
-					newLine.Tumor_Sample_UUID = fields[34];
-					newLine.Matched_Norm_Sample_UUID = fields[35];
-					newLine.File_Name = fields[36];
-					newLine.Archive_Name = fields[37];
-					if (fields[38] == "") // sometimes this is not filled in.
-					{
-						newLine.Line_Number = -1;
-					}
-					else
-					{
-						newLine.Line_Number = Convert.ToInt32(fields[38]);
-					}
-					newLine.n_DNA_Matching_Reference = Convert.ToInt32(fields[39]);
-					newLine.n_DNA_Matching_Tumor = Convert.ToInt32(fields[40]);
-					newLine.n_DNA_Matching_Neither = Convert.ToInt32(fields[41]);
-					newLine.n_DNA_Matching_Both = Convert.ToInt32(fields[42]);
-					newLine.n_RNA_Matching_Reference = Convert.ToInt32(fields[43]);
-					newLine.n_RNA_Matching_Tumor = Convert.ToInt32(fields[44]);
-					newLine.n_RNA_Matching_Neither = Convert.ToInt32(fields[45]);
-					newLine.n_RNA_Matching_Both = Convert.ToInt32(fields[46]);
-
-					if (!fromUnfilteredFile)
-					{
-						newLine.tumorDNAFraction = Convert.ToDouble(fields[47]);
-						newLine.tumorRNAFraction = Convert.ToDouble(fields[48]);
-						newLine.tumorDNAMultiple = Convert.ToDouble(fields[49]);
-						newLine.tumorRNAMultiple = Convert.ToDouble(fields[50]);
-						newLine.tumorDNARatio = Convert.ToDouble(fields[51]);
-						newLine.tumorRNARatio = Convert.ToDouble(fields[52]);
-						newLine.FractionOfMeanExpression = fields[53];
-						newLine.zOfmeanExpression = fields[54];
-						newLine.ratioOfRatios = Convert.ToDouble(fields[55]);
-						newLine.IsSingle = Convert.ToBoolean(fields[56]);
-						newLine.CancerType = fields[57];
-						newLine.gender = fields[58];
-
-						if (fields[59] == "")
-						{
-							newLine.zKnown = false;
-						}
-						else
-						{
-							newLine.zKnown = true;
-							newLine.zTumor = Convert.ToDouble(fields[59]);
-							newLine.zNormal = Convert.ToDouble(fields[60]);
-							newLine.z2Tumor = Convert.ToDouble(fields[61]);
-							newLine.z2Normal = Convert.ToDouble(fields[62]);
-							newLine.percentMeanTumor = Convert.ToDouble(fields[63]); // Expressed as a fraction (i.e., 100% -> 1.0 = fields[];
-							newLine.percentMeanNormal = Convert.ToDouble(fields[64]);// Expressed as a fraction (i.e., 100% -> 1.0 = fields[];
-						}
-					}
-					else
-					{
-						newLine.zKnown = false;
-					}
-
-					//
-					// Because I cleverly didn't put the participant ID in scatter graph file, we just parse the tumor RNA analysis ID out of the
-					// filename, which is of format <disease_abbr>\<analysis_id>-<gene>-<chromosome>-<begin-offset>-<end-offset>-RNA
-					//
-					string tumorRNAAnalysisID = fields[0].Substring(fields[0].IndexOf('\\') + 1, 36);
-					if (!experimentsByRNAAnalysisID.ContainsKey(tumorRNAAnalysisID))
-					{
-						Console.WriteLine("Can't find experiment for line " + inputLine);
-						return null;
-					}
-
-					newLine.caseId = experimentsByRNAAnalysisID[tumorRNAAnalysisID].case_id;
-					newLine.insufficientDNA = newLine.n_DNA_Matching_Neither + newLine.n_DNA_Matching_Reference + newLine.n_DNA_Matching_Tumor < 30;
-				}
-				catch (FormatException)
-				{
-					Console.WriteLine("GeneScatterGraphEntry.fromLine: error parsing line " + inputLine);
-					return null;
-				}
-
-				return newLine;
-			} // fromLine
 
 			public static List<GeneScatterGraphLine> LoadAllGeneScatterGraphEntries(string directoryName, bool fromUnfiltered, Dictionary<string, Case> experimentsByRNAAnalysisID, string hugoSymbol /* this may be * to load all*/)
 			{
 				var geneScatterGraphEntries = new List<GeneScatterGraphLine>();
 
-				if (hugoSymbol.Contains('/') || hugoSymbol.Contains(':'))
-				{    // Some funky gene names have a slash or colon.  We're just ignoring them.  They cause EnumerateFiles to throw an exception if you let them through.
-					return null;
-				}
+                string[] wantedFieldsArray =
+                {
+                    "Hugo_Symbol",
+                    "Chromosome",
+                    "Start_Position",
+                    "Variant_Classification",
+                    "Variant_Type",
+                    "Reference_Allele",
+                    "Alt_Allele",
+                    "disease",
+                    "Case Id",
+                    "Tumor DNA File ID",
+                    "Tumor RNA File ID",
+                    "Normal DNA File ID",
+                    "Normal RNA File ID",
+                    "n_normal_DNA_Matching_Reference",
+                    "n_normal_DNA_Matching_Alt",
+                    "n_normal_DNA_Matching_Neither",
+                    "n_normal_DNA_Matching_Both",
+                    "n_tumor_DNA_Matching_Reference",
+                    "n_tumor_DNA_Matching_Alt",
+                    "n_tumor_DNA_Matching_Neither",
+                    "n_tumor_DNA_Matching_Both",
+                    "n_normal_RNA_Matching_Reference",
+                    "n_normal_RNA_Matching_Alt",
+                    "n_normal_RNA_Matching_Neither",
+                    "n_normal_RNA_Matching_Both",
+                    "n_tumor_RNA_Matching_Reference",
+                    "n_tumor_RNA_Matching_Alt",
+                    "n_tumor_RNA_Matching_Neither",
+                    "n_tumor_RNA_Matching_Both",
+                    "Multiple Mutations in this Gene",
+                    "n Mutations in this gene",
+                    "tumorDNAFraction",
+                    "tumorRNAFraction",
+                    "tumorDNAMultiple",
+                    "tumorRNAMultiple",
+                    "tumorDNARatio",
+                    "tumorRNARatio",
+                    "FractionOfMeanExpression",
+                    "zOfmeanExpression",
+                    "ratioOfRatios",
+                    "IsSingle",
+                    "CancerType",
+                    "zTumor",
+                    "zNormal",
+                    "z2Tumor",
+                    "z2Normal",
+                    "%MeanTumor",
+                    "%MeanNormal"
+                };
+
+                var wantedFields = wantedFieldsArray.ToList();
 
 				foreach (var filename in Directory.EnumerateFiles(directoryName, hugoSymbol + (fromUnfiltered ? ASEConfirguation.unfilteredCountsExtention : ".txt")))
 				{
@@ -401,23 +332,81 @@ namespace ASELib
 						continue;   // Summary file like _MannWhitney rather than a gene file
 					}
 
-					var lines = ReadAllLinesWithRetry(filename);
-					for (int i = 1 /* starting at 1 skips the header */; i < lines.Count(); i++)
-					{
-						var line = GeneScatterGraphLine.fromLine(lines[i], fromUnfiltered, experimentsByRNAAnalysisID);
-						if (null == line)
-						{
-							Console.WriteLine("GeneScatterGraphLine.LoadAllGeneScatteGraphEntries: bad line in input file " + filename + ".  Punting.");
-							return null;
-						}
-						geneScatterGraphEntries.Add(line);
-					}
+                    var inputFile = CreateStreamReaderWithRetry(filename);
+                    if (null == inputFile)
+                    {
+                        Console.WriteLine("Unable to open " + filename);
+                        throw new FileNotFoundException();
+                    }
+                    var headerizedFile = new HeaderizedFile<GeneScatterGraphLine>(inputFile, false, true, "", wantedFields);
+
+                    List<GeneScatterGraphLine> linesFromThisFile;
+
+                    headerizedFile.ParseFile(ParseLine, out linesFromThisFile);
+
+                    geneScatterGraphEntries.AddRange(linesFromThisFile);
 				}
 
 				return geneScatterGraphEntries;
 			}
 
-		} // GeneScatterGraphLine
+            static GeneScatterGraphLine ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
+            {
+                ReadCounts normalRNAReadCounts;
+
+                if (fields[fieldMappings["n_normal_RNA_Matching_Reference"]] == "")
+                {
+                    normalRNAReadCounts = new ReadCounts(Convert.ToInt32(fields[fieldMappings["n_normal_RNA_Matching_Reference"]]), Convert.ToInt32(fields[fieldMappings["n_normal_RNA_Matching_Alt"]]), Convert.ToInt32(fields[fieldMappings["n_normal_RNA_Matching_Neither"]]),
+                        Convert.ToInt32(fields[fieldMappings["n_normal_RNA_Matching_Both"]]));
+                }
+                else
+                {
+                    normalRNAReadCounts = null;
+                }
+
+                double tumorDNAFraction = -1, tumorRNAFraction = -1, tumorDNAMultiple = -1, tumorRNAMultiple = -1, tumorDNARatio = -1, tumorRNARatio = -1, ratioOfRatios = -1, zTumor = -1, zNormal = -1, z2Tumor = -1, z2Normal = -1, percentMeanTumor = -1, percentMeanNormal = -1;
+                bool fromUnfilteredFile = true;
+                bool zKnown = false;
+                if (fields[fieldMappings["tumorDNAFraction"]] != "") {
+                    tumorDNAFraction = Convert.ToDouble(fields[fieldMappings["tumorDNAFraction"]]);
+                    tumorRNAFraction = Convert.ToDouble(fields[fieldMappings["tumorRNAFraction"]]);
+                    tumorDNAMultiple = Convert.ToDouble(fields[fieldMappings["tumorDNAMultiple"]]);
+                    tumorRNAMultiple = Convert.ToDouble(fields[fieldMappings["tumorRNAMultiple"]]);
+                    tumorDNARatio = Convert.ToDouble(fields[fieldMappings["tumorDNARatio"]]);
+                    tumorRNARatio = Convert.ToDouble(fields[fieldMappings["tumorRNARatio"]]);
+                    ratioOfRatios = Convert.ToDouble(fields[fieldMappings["ratioOfRatios"]]);
+                    if (fields[fieldMappings["zTumor"]] != "")
+                    {
+                        zKnown = true;
+                        zTumor = Convert.ToDouble(fields[fieldMappings["zTumor"]]);
+                        zNormal = Convert.ToDouble(fields[fieldMappings["zNormal"]]);
+                        z2Tumor = Convert.ToDouble(fields[fieldMappings["z2Tumor"]]);
+                        z2Normal = Convert.ToDouble(fields[fieldMappings["z2Normal"]]);
+                        percentMeanTumor = Convert.ToDouble(fields[fieldMappings["%MeanTumor"]]);
+                        percentMeanNormal = Convert.ToDouble(fields[fieldMappings["%MeanNormal"]]);
+                    }
+
+                    fromUnfilteredFile = false;
+                }
+
+
+                return new GeneScatterGraphLine(
+                  fields[fieldMappings["Hugo_Symbol"]], fields[fieldMappings["Chromosome"]], Convert.ToInt32(fields[fieldMappings["Start_Position"]]), fields[fieldMappings["Variant_Classification"]], fields[fieldMappings["Variant_Type"]],
+                    fields[fieldMappings["Reference_Allele"]], fields[fieldMappings["Reference_Allele"]], fields[fieldMappings["disease"]], fields[fieldMappings["Case Id"]], fields[fieldMappings["Normal DNA File ID"]], fields[fieldMappings["Tumor DNA File ID"]],
+                    fields[fieldMappings["Normal RNA File ID"]], fields[fieldMappings["Tumor RNA File ID"]],
+                    new ReadCounts(Convert.ToInt32(fields[fieldMappings["n_normal_DNA_Matching_Reference"]]), Convert.ToInt32(fields[fieldMappings["n_normal_DNA_Matching_Alt"]]), Convert.ToInt32(fields[fieldMappings["n_normal_DNA_Matching_Neither"]]),
+                        Convert.ToInt32(fields[fieldMappings["n_normal_DNA_Matching_Both"]])),
+                    new ReadCounts(Convert.ToInt32(fields[fieldMappings["n_tumor_DNA_Matching_Reference"]]), Convert.ToInt32(fields[fieldMappings["n_tumor_DNA_Matching_Alt"]]), Convert.ToInt32(fields[fieldMappings["n_tumor_DNA_Matching_Neither"]]),
+                        Convert.ToInt32(fields[fieldMappings["n_tumor_DNA_Matching_Both"]])),
+                    normalRNAReadCounts,
+                    new ReadCounts(Convert.ToInt32(fields[fieldMappings["n_tumor_RNA_Matching_Reference"]]), Convert.ToInt32(fields[fieldMappings["n_tumor_RNA_Matching_Alt"]]), Convert.ToInt32(fields[fieldMappings["n_tumor_RNA_Matching_Neither"]]),
+                        Convert.ToInt32(fields[fieldMappings["n_tumor_RNA_Matching_Both"]])),
+                    Convert.ToBoolean(fields[fieldMappings["IsSingle"]]), Convert.ToInt32(fields[fieldMappings["n Mutations in this gene"]]), tumorDNAFraction, tumorRNAFraction, tumorDNAMultiple, tumorRNAMultiple, tumorDNARatio, tumorRNARatio,
+                    fields[fieldMappings["FractionOfMeanExpression"]], fields[fieldMappings["zOfmeanExpression"]], ratioOfRatios, zKnown, zTumor, zNormal, z2Tumor, z2Normal, percentMeanTumor, percentMeanNormal, fromUnfilteredFile);
+            }
+
+
+        } // GeneScatterGraphLine
 
 
 		public static double MeanOfList(List<double> values)
@@ -960,7 +949,7 @@ namespace ASELib
                 new FieldInformation("Extracted MAF Lines Filename",                        c => c.extracted_maf_lines_filename, (c,v) => c.extracted_maf_lines_filename = v, DerivedFile.Type.ExtractedMAFLines, extractedMAFLinesExtension, c => c.case_id),
                 new FieldInformation("Normal DNA Mapped Base Count Filename",               c => c.normal_dna_mapped_base_count_filename, (c, v) => c.normal_dna_mapped_base_count_filename = v, DerivedFile.Type.NormalDNAMappedBaseCount, normalDNAMappedBaseCountExtension, c => c.normal_dna_file_id),
                 new FieldInformation("Tumor DNA Mapped Base Count Filename",                c => c.tumor_dna_mapped_base_count_filename, (c, v) => c.tumor_dna_mapped_base_count_filename = v, DerivedFile.Type.TumorDNAMappedBaseCount, tumorDNAMappedBaseCountExtension, c => c.tumor_dna_file_id),
-                new FieldInformation("Normal RNA Mapped Base Count Filename",               c => c.normal_rna_mapped_base_count_filename, (c, v) => c.normal_rna_mapped_base_count_filename = v, DerivedFile.Type.NormalRNAMappedBaseCount, normalRNAMappedBaseCountExtension, c => c.normal_dna_file_id),
+                new FieldInformation("Normal RNA Mapped Base Count Filename",               c => c.normal_rna_mapped_base_count_filename, (c, v) => c.normal_rna_mapped_base_count_filename = v, DerivedFile.Type.NormalRNAMappedBaseCount, normalRNAMappedBaseCountExtension, c => c.normal_rna_file_id),
                 new FieldInformation("Tumor RNA Mapped Base Count Filename",                c => c.tumor_rna_mapped_base_count_filename, (c, v) => c.tumor_rna_mapped_base_count_filename = v, DerivedFile.Type.TumorRNAMappedBaseCount, tumorRNAMappedBaseCountExtension, c => c.tumor_rna_file_id),
 
                 new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
@@ -1307,17 +1296,19 @@ namespace ASELib
             public List<string> excludedFileIDs = new List<string>();
             public int regionalExpressionRegionSize = 1000;
             public int nTumorsToIncludeGene = 30;   // How many tumors must have at least one mutation in a gene in order to include it.
+            public int nReadsToIncludeVariant = 30; // How much coverage do we need of a mutation or somatic variant to consider it?
             public string selectedGenesFilename = @"\\msr-genomics-0\d$\gdc\seleted_genes.txt";
             public string scriptOutputDirectory = @"\temp\";
+            public string finalResultsDirectory = @"\\msr-genomics-0\d$\gdc\final_results\";
 
 			// items used in bisulfite analysis
 			public const string bisulfiteDirectory = defaultBaseDirectory  + @"bisulfate\";
 			public const string hg38Tohg19ChainFile = defaultBaseDirectory + "hg38ToHg19.over.chain";
 			public const string bisulfiteCasesFilePathname = bisulfiteDirectory + "cases_bisulfite.txt";
 
-			public const string geneScatterGraphsDirectory = defaultBaseDirectory + @"\gene_scatter_graphs\";
+			public string geneScatterGraphsDirectory = defaultBaseDirectory + @"gene_scatter_graphs\";
 
-			public const string unfilteredCountsDirectory = defaultBaseDirectory + @"\gene_mutations_with_counts\";
+			public const string unfilteredCountsDirectory = defaultBaseDirectory + @"gene_mutations_with_counts\";
 			public const string unfilteredCountsExtention = @"_unfiltered_counts.txt";
 			public const string methylationREFsFilename = defaultBaseDirectory + "compositeREFs.txt";
 
@@ -1442,6 +1433,12 @@ namespace ASELib
                         retVal.nTumorsToIncludeGene = Convert.ToInt32(fields[1]);
                     } else if (type == "script output directory") {
                         retVal.scriptOutputDirectory = fields[1];
+                    } else if (type == "final results directory") {
+                        retVal.finalResultsDirectory = fields[1];
+                    } else if (type == "gene scatter graphs directory") {
+                        retVal.geneScatterGraphsDirectory = fields[1];
+                    } else if (type == "read count to include variant") {
+                        retVal.nReadsToIncludeVariant = Convert.ToInt32(fields[1]);
                     } else {
                         Console.WriteLine("ASEConfiguration.loadFromFile: configuration file " + pathname + " contains a line with an unknown configuration parameter type: " + line + ".  Ignoring.");
                         continue;
@@ -1564,7 +1561,7 @@ namespace ASELib
             public readonly int nFlankingMutations;
             public readonly int nRNAMutations;
             public readonly int []tumorsByCountOfNonSilentMutations;
-        }
+        } // SelectedGene
 
         public static System.Net.WebClient getWebClient()
         {
@@ -2065,6 +2062,8 @@ namespace ASELib
 		public const string bisulfiteAlleleSpecificMethylationExtension = ".bisulfite_asm.txt";
 		public const string regionalMethylationExtension = ".regional_methylation.txt";
 
+        public const string scatterGraphsSummaryFilename = "_summary.txt";
+
         public class DerivedFile
         {
             public readonly string derived_from_file_id;
@@ -2115,6 +2114,7 @@ namespace ASELib
         class ScanFilesystemState
         {
             public ulong totalFreeBytes = 0;
+            public ulong totalStorageBytes = 0;
             public ulong totalBytesInDownloadedFiles = 0;
             public ulong totalBytesInDerivedFiles = 0;
             public int nDownloadedFiles = 0;
@@ -2158,6 +2158,8 @@ namespace ASELib
                 //
                 string candidatePathname = null;
                 string md5Pathname = null;
+                bool sawBAI = false;
+                bool sawBAM = false;
                 foreach (var pathname in Directory.EnumerateFiles(subdir))
                 {
                     var filename = GetFileNameFromPathname(pathname).ToLower();
@@ -2166,13 +2168,14 @@ namespace ASELib
                         continue;
                     }
 
-                    if (filename.Count() > 4 && filename.Substring(filename.Count() - 4) == ".bai")
+                    if (filename.EndsWith(".bai"))
                     {
+                        sawBAI = true;
                         continue;
                     }
 
 
-                    if (filename.Count() > 4 && filename.Substring(filename.Count() - 4) == ".md5")
+                    if (filename.EndsWith(".md5"))
                     {
                         if (null != md5Pathname)
                         {
@@ -2190,11 +2193,22 @@ namespace ASELib
                     }
 
                     candidatePathname = pathname;
+
+                    if (filename.EndsWith(".bam"))
+                    {
+                        sawBAM = true;
+                    }
                 }
 
                 if (candidatePathname == null && md5Pathname != null)
                 {
                     Console.WriteLine("Found md5 file in directory without accompanying downloaded file (?): " + md5Pathname);
+                    continue;
+                }
+
+                if (sawBAM != sawBAI)
+                {
+                    Console.WriteLine("Downloaded file directory " + subdir + " has exactly one BAM and BAI file.");
                     continue;
                 }
 
@@ -2278,6 +2292,7 @@ namespace ASELib
                 state.totalBytesInDownloadedFiles += totalBytesInDownloadedFiles;
                 state.totalBytesInDerivedFiles += totalBytesInDerivedFiles;
                 state.totalFreeBytes += freeBytesAvailable;
+                state.totalStorageBytes += totalBytes;
                 state.downloadedFiles.AddRange(downloadedFiles);
                 state.derivedFiles.AddRange(derivedFiles);
             }
@@ -2349,7 +2364,7 @@ namespace ASELib
             }
 
             Console.WriteLine("Scanned " + configuration.dataDirectories.Count() + " data directories in " + ElapsedTimeInSeconds(stopwatch) + ", containing " + state.nDownloadedFiles + " (" + SizeToUnits(state.totalBytesInDownloadedFiles) +
-                "B) downloaded and " + state.nDerivedFiles + " (" + SizeToUnits(state.totalBytesInDerivedFiles) + "B) derived files.  " + SizeToUnits(state.totalFreeBytes) + "B remain free.");
+                "B) downloaded and " + state.nDerivedFiles + " (" + SizeToUnits(state.totalBytesInDerivedFiles) + "B) derived files.  " + SizeToUnits(state.totalFreeBytes) + "B remain free of " + SizeToUnits(state.totalStorageBytes) + "B total.");
 
 
         } // ScanFilesystems
@@ -2492,7 +2507,8 @@ namespace ASELib
         public class HeaderizedFile<outputType>
         {
             public delegate outputType Parse(Dictionary<string, int> fieldMappings, string[] fields);
-            public HeaderizedFile(StreamReader inputFile_, bool hasVersion_, bool hasDone_, string expectedVersion_, List<string> wantedFields_, bool skipHash_ = false)
+
+            public HeaderizedFile(StreamReader inputFile_, bool hasVersion_, bool hasDone_, string expectedVersion_, List<string> wantedFields_, bool skipHash_ = false, bool allowMissingColumnsInData_ = false)
             {
                 inputFile = inputFile_;
                 hasVersion = hasVersion_;
@@ -2500,6 +2516,7 @@ namespace ASELib
                 expectedVersion = expectedVersion_;
                 wantedFields = wantedFields_;
                 skipHash = skipHash_;
+                allowMissingColumnsInData = allowMissingColumnsInData_;
             }
 
             //
@@ -2588,7 +2605,6 @@ namespace ASELib
                     }
                     Console.WriteLine(".  Filling in with the empty string.");
                     hasMissingFields = true;
-
                 }
 
                 string inputLine;
@@ -2607,13 +2623,13 @@ namespace ASELib
                     }
 
                     var fields = inputLine.Split('\t');
-                    if (fields.Count() <= maxNeededField)
+                    if (fields.Count() <= maxNeededField && !allowMissingColumnsInData)
                     {
                         Console.WriteLine("HeaderizedFile.Parse: input line didn't include a needed field " + inputLine);
                         result = null;
                         return false;
                     }
-                    else if (hasMissingFields && fields.Count() <= maxNeededField + 1)
+                    else if ((hasMissingFields || allowMissingColumnsInData) && fields.Count() <= maxNeededField + 1)
                     {
                         var extendedFields = new string[maxNeededField + 2];
                         for (int i = 0; i <= maxNeededField; i++)
@@ -2623,7 +2639,7 @@ namespace ASELib
                         fields = extendedFields;
                     }
 
-                    if (hasMissingFields)
+                    if (hasMissingFields || allowMissingColumnsInData && fields.Count() <= maxNeededField + 1)
                     {
                         fields[maxNeededField + 1] = "";    // This is for all missing fields
                     }
@@ -2656,6 +2672,7 @@ namespace ASELib
             List<string> wantedFields;
             bool hasMissingFields = false;
             bool skipHash;
+            bool allowMissingColumnsInData;
         } // HeaderizedFile
 
         public static int ConvertToInt32TreatingNullStringAsZero(string value)
@@ -3609,8 +3626,6 @@ namespace ASELib
 
 			var refFile = CreateStreamReaderWithRetry(knownGenesFilename);
 
-
-
 			refFile.ReadLine();    // Skip the header
 
 			string line;
@@ -4153,8 +4168,49 @@ namespace ASELib
 
                 filestream.Seek(subfiles[subfileName].offset, SeekOrigin.Begin);
 
-                var buffer = new byte[subfiles[subfileName].size];
-                filestream.Read(buffer, 0, subfiles[subfileName].size);
+                long totalToRead = subfiles[subfileName].size;
+                var buffer = new byte[totalToRead];
+                long amountRead = 0;
+                int maxReadSize = 2146435072;   // 2 GiB - 1MiB
+
+                if (totalToRead < maxReadSize)
+                {
+                    int amountActuallyRead = filestream.Read(buffer, 0, (int)totalToRead);
+                    if (amountActuallyRead != totalToRead)
+                    {
+                        Console.WriteLine("getSubfile: Filestream.Read didn't read the whole requested size, " + amountActuallyRead + " != " + amountRead); // If this happens, you can always fix the code to loop.
+                        return null;
+                    }
+                }
+                else
+                {
+                    //
+                    // Because Filestream.Read will only read an int's worth at a time, we have to break it into
+                    // chunks and read it into a temp buffer and then copy.
+                    //
+                    while (amountRead < totalToRead)
+                    {
+                        int amountToRead;
+                        if (totalToRead - amountRead < maxReadSize)
+                        {
+                            amountToRead = (int)(totalToRead - amountRead);
+                        }
+                        else
+                        {
+                            amountToRead = maxReadSize;
+                        }
+
+                        var tempBuffer = new byte[amountToRead];
+                        int amountActuallyRead = filestream.Read(tempBuffer, 0, amountToRead);
+                        if (0 == amountActuallyRead)
+                        {
+                            Console.WriteLine("GetSubfile: error reading from subfile, got 0 back from Filestream.Read()");
+                            return null;
+                        }
+                        Array.Copy(tempBuffer, 0, buffer, amountRead, amountActuallyRead);
+                        amountRead += amountActuallyRead;
+                    } // While we have more to read
+                } // if we can do it in one read or not
 
                 return new StreamReader(new MemoryStream(buffer));
             }
@@ -4170,7 +4226,7 @@ namespace ASELib
 
                 public string name;
                 public long offset;
-                public int size;
+                public long size;
             }
 
             FileStream filestream;
@@ -5003,24 +5059,30 @@ namespace ASELib
 
 			public string toString()
 			{
-				var str = contig + '\t' + locus + '\t' + reference_allele + '\t' + alt_allele + '\t' + variantType + '\t' + somaticMutation + '\t' + tumorDNAReadCounts.ToString() + '\t' + normalDNAReadCounts.ToString() + '\t' + tumorRNAReadCounts.ToString();
+				var str = ConvertToExcelString(Hugo_symbol) + "\t" + contig + '\t' + locus + '\t' + reference_allele + '\t' + alt_allele + '\t' + variantType + '\t' + variantClassification + '\t' + somaticMutation + '\t' + tumorDNAReadCounts.ToString() + '\t' + normalDNAReadCounts.ToString() + '\t' + tumorRNAReadCounts.ToString();
 
 				if (normalRNAReadCounts != null)
 				{
 					str += '\t' + normalRNAReadCounts.ToString();
 				}
+                else
+                {
+                    str += "\t\t\t\t";
+                }
 
 				return str;
 			}
 
-			public AnnotatedVariant(bool somaticMutation_, string contig_, int locus_, string reference_allele_, string alt_allele_, string variantType_, ReadCounts tumorDNAReadCounts_, ReadCounts tumorRNAReadCounts_, ReadCounts normalDNAReadCounts_, ReadCounts normalRNAReadCounts_)
+			public AnnotatedVariant(string Hugo_symbol_, bool somaticMutation_, string contig_, int locus_, string reference_allele_, string alt_allele_, string variantType_, string variantClassification_, ReadCounts tumorDNAReadCounts_, ReadCounts tumorRNAReadCounts_, ReadCounts normalDNAReadCounts_, ReadCounts normalRNAReadCounts_)
             {
+                Hugo_symbol = Hugo_symbol_;
                 somaticMutation = somaticMutation_;
                 contig = contig_;
                 locus = locus_;
                 reference_allele = reference_allele_;
                 alt_allele = alt_allele_;
                 variantType = variantType_;
+                variantClassification = variantClassification_;
 
                 tumorDNAReadCounts = tumorDNAReadCounts_;
                 tumorRNAReadCounts = tumorRNAReadCounts_;
@@ -5028,6 +5090,55 @@ namespace ASELib
                 normalRNAReadCounts = normalRNAReadCounts_;
             }
 
+            static AnnotatedVariant parse(Dictionary<string, int> fieldMappings, string[] fields)
+            {
+                var Hugo_symbol = ConvertToNonExcelString(fields[fieldMappings["Hugo_symbol"]]);
+                var contig = fields[fieldMappings["Chromosome"]];
+                var loc = Convert.ToInt32(fields[fieldMappings["Position"]]);
+                var Ref = fields[fieldMappings["Ref_allele"]];
+                var alt = fields[fieldMappings["Alt_allele"]];
+                var variantType = fields[fieldMappings["Variant_type"]];
+                var variantClassification = fields[fieldMappings["Variant_classification"]];
+                var isSomatic = Convert.ToBoolean(fields[fieldMappings["Somatic"]]);
+
+                var nMatchingTumorReferenceDNA = Convert.ToInt32(fields[fieldMappings["tumorDNAmatchingRef"]]);
+                var nMatchingTumorAltDNA = Convert.ToInt32(fields[fieldMappings["tumorDNAmatchingAlt"]]);
+                var nMatchingTumorNeitherDNA = Convert.ToInt32(fields[fieldMappings["tumorDNAmatchingNeither"]]);
+                var nMatchingTumorBothDNA = Convert.ToInt32(fields[fieldMappings["tumorDNAmatchingBoth"]]);
+
+                var nMatchingNormalReferenceDNA = Convert.ToInt32(fields[fieldMappings["normalDNAmatchingRef"]]);
+                var nMatchingNormalAltDNA = Convert.ToInt32(fields[fieldMappings["normalDNAmatchingAlt"]]);
+                var nMatchingNormalNeitherDNA = Convert.ToInt32(fields[fieldMappings["normalDNAmatchingNeither"]]);
+                var nMatchingNormalBothDNA = Convert.ToInt32(fields[fieldMappings["normalDNAmatchingBoth"]]);
+
+                var nMatchingTumorReferenceRNA = Convert.ToInt32(fields[fieldMappings["tumorRNAmatchingRef"]]);
+                var nMatchingTumorAltRNA = Convert.ToInt32(fields[fieldMappings["tumorRNAmatchingAlt"]]);
+                var nMatchingTumorNeitherRNA = Convert.ToInt32(fields[fieldMappings["tumorRNAmatchingNeither"]]);
+                var nMatchingTumorBothRNA = Convert.ToInt32(fields[fieldMappings["tumorRNAmatchingBoth"]]);
+
+
+                var normalDNAReadCounts = new ReadCounts(nMatchingNormalReferenceDNA, nMatchingNormalAltDNA, nMatchingNormalNeitherDNA, nMatchingNormalBothDNA);
+                var tumorDNAReadCounts = new ReadCounts(nMatchingTumorReferenceDNA, nMatchingTumorAltDNA, nMatchingTumorNeitherDNA, nMatchingTumorBothDNA);
+                var tumorRNAReadCounts = new ReadCounts(nMatchingTumorReferenceRNA, nMatchingTumorAltRNA, nMatchingTumorNeitherRNA, nMatchingTumorBothRNA);
+
+                ReadCounts normalRNAReadCounts = null;
+                // check if normal RNA is present
+                try
+                {
+                    var nMatchingNormalReferenceRNA = Convert.ToInt32(fields[fieldMappings["normalRNAmatchingRef"]]);
+                    var nMatchingNormalAltRNA = Convert.ToInt32(fields[fieldMappings["normalRNAmatchingAlt"]]);
+                    var nMatchingNormalNeitherRNA = Convert.ToInt32(fields[fieldMappings["normalRNAmatchingNeither"]]);
+                    var nMatchingNormalBothRNA = Convert.ToInt32(fields[fieldMappings["normalRNAmatchingBoth"]]);
+
+                    normalRNAReadCounts = new ReadCounts(nMatchingNormalReferenceRNA, nMatchingNormalAltRNA, nMatchingNormalNeitherRNA, nMatchingNormalBothRNA);
+                }
+                catch (Exception)
+                {
+                    // no op. No normal RNA
+                }
+
+                return new AnnotatedVariant(Hugo_symbol, isSomatic, contig, loc, Ref, alt, variantType, variantClassification, tumorDNAReadCounts, tumorRNAReadCounts, normalDNAReadCounts, normalRNAReadCounts);
+            }
 
 			public static List<AnnotatedVariant> readFile(string filename)
 			{
@@ -5039,44 +5150,41 @@ namespace ASELib
 					return null;
 				}
 
-				var retVal = new List<AnnotatedVariant>();
+                var wantedFields = new List<string>();
+                wantedFields.Add("Hugo_symbol");
+                wantedFields.Add("Chromosome");
+                wantedFields.Add("Position");
+                wantedFields.Add("Ref_allele");
+                wantedFields.Add("Alt_allele");
+                wantedFields.Add("Variant_type");
+                wantedFields.Add("Variant_classification");
+                wantedFields.Add("Somatic");
+                wantedFields.Add("tumorDNAmatchingRef");
+                wantedFields.Add("tumorDNAmatchingAlt");
+                wantedFields.Add("tumorDNAmatchingNeither");
+                wantedFields.Add("tumorDNAmatchingBoth");
+                wantedFields.Add("normalDNAmatchingRef");
+                wantedFields.Add("normalDNAmatchingAlt");
+                wantedFields.Add("normalDNAmatchingNeither");
+                wantedFields.Add("normalDNAmatchingBoth");
+                wantedFields.Add("tumorRNAmatchingRef");
+                wantedFields.Add("tumorRNAmatchingAlt");
+                wantedFields.Add("tumorRNAmatchingNeither");
+                wantedFields.Add("tumorRNAmatchingBoth");
+                wantedFields.Add("normalRNAmatchingRef");
+                wantedFields.Add("normalRNAmatchingAlt");
+                wantedFields.Add("normalRNAmatchingNeither");
+                wantedFields.Add("normalRNAmatchingBoth");
 
-				// read out header
-				var header = file.ReadLine();
+                var headerizedFile = new HeaderizedFile<AnnotatedVariant>(file, false, true, "", wantedFields);
 
-				string line;
-				bool seenDone = false;
-				while (null != (line = file.ReadLine()))
-				{
-					if (seenDone)
-					{
-						Console.WriteLine("AnnotatedVariant.readFile: file continues after **done**: " + filename);
-						return null;
-					}
+                List<AnnotatedVariant> retVal;
+                if (!headerizedFile.ParseFile(parse, out retVal))
+                {
+                    return null;
+                }
 
-					if (line == "**done**")
-					{
-						seenDone = true;
-						continue;
-					}
-
-					var variantLine = fromText(line);
-					if (null == variantLine)
-					{
-						Console.WriteLine("AnnotatedVariant.readFile: giving up due to parsing error in file " + filename);
-						return null;
-					}
-
-					retVal.Add(variantLine);
-				}
-
-				if (!seenDone)
-				{
-					Console.WriteLine("AnnotatedSelectedVariantLine.readFile: file is truncated " + filename);
-					return null;
-				}
-
-				return retVal;
+                return retVal;
 			}
 
 			
@@ -5091,7 +5199,7 @@ namespace ASELib
 				}
 
 				// Write header
-				file.WriteLine("Chromosome\tPosition\tRef_allele\tAlt_allele\tVariant_type\tSomatic\t" +
+				file.WriteLine("Hugo_symbol\tChromosome\tPosition\tRef_allele\tAlt_allele\tVariant_type\tVariant_classification\tSomatic\t" +
 					"tumorDNAmatchingRef\ttumorDNAmatchingAlt\ttumorDNAmatchingNeither\ttumorDNAmatchingBoth\t" +
 					"normalDNAmatchingRef\tnormalDNAmatchingAlt\tnormalDNAmatchingNeither\tnormalDNAmatchingBoth\t" +
 					"tumorRNAmatchingRef\ttumorRNAmatchingAlt\ttumorRNAmatchingNeither\ttumorRNAmatchingBoth\t" +
@@ -5106,80 +5214,14 @@ namespace ASELib
 
 			}
 
-			public static AnnotatedVariant fromText(string inputLine)
-			{
-				var retVal = new AnnotatedVariant();
-
-				var fields = inputLine.Split('\t');
-
-				if (fields.Count() != 20 && fields.Count() != 24)
-				{
-					Console.WriteLine("AnnotatedVariant.fromText: wrong field count (" + fields.Count() + " != 22 or 18) in line: " + inputLine);
-					return null;
-				}
-
-				try
-				{
-					var contig = fields[0];
-					var loc = Convert.ToInt32(fields[1]);
-					var Ref = fields[2];
-					var alt = fields[3];
-					var variantType = fields[4];
-					var isSomatic = Convert.ToBoolean(fields[5]);
-
-					var nMatchingTumorReferenceDNA = Convert.ToInt32(fields[6]);
-					var nMatchingTumorAltDNA = Convert.ToInt32(fields[7]);
-					var nMatchingTumorNeitherDNA = Convert.ToInt32(fields[8]);
-					var nMatchingTumorBothDNA = Convert.ToInt32(fields[9]);
-
-					var nMatchingNormalReferenceDNA = Convert.ToInt32(fields[10]);
-					var nMatchingNormalAltDNA = Convert.ToInt32(fields[11]);
-					var nMatchingNormalNeitherDNA = Convert.ToInt32(fields[12]);
-					var nMatchingNormalBothDNA = Convert.ToInt32(fields[13]);
-
-					var nMatchingTumorReferenceRNA = Convert.ToInt32(fields[14]);
-					var nMatchingTumorAltRNA = Convert.ToInt32(fields[15]);
-					var nMatchingTumorNeitherRNA = Convert.ToInt32(fields[16]);
-					var nMatchingTumorBothRNA = Convert.ToInt32(fields[17]);
-
-
-					var normalDNAReadCounts = new ReadCounts(nMatchingNormalReferenceDNA, nMatchingNormalAltDNA, nMatchingNormalNeitherDNA, nMatchingNormalBothDNA);
-					var tumorDNAReadCounts = new ReadCounts(nMatchingTumorReferenceDNA, nMatchingTumorAltDNA, nMatchingTumorNeitherDNA, nMatchingTumorBothDNA);
-					var tumorRNAReadCounts = new ReadCounts(nMatchingTumorReferenceRNA, nMatchingTumorAltRNA, nMatchingTumorNeitherRNA, nMatchingTumorBothRNA);
-
-					ReadCounts normalRNAReadCounts = null;
-					// check if normal RNA is present
-					try
-					{
-						var nMatchingNormalReferenceRNA = Convert.ToInt32(fields[18]);
-						var nMatchingNormalAltRNA = Convert.ToInt32(fields[29]);
-						var nMatchingNormalNeitherRNA = Convert.ToInt32(fields[20]);
-						var nMatchingNormalBothRNA = Convert.ToInt32(fields[21]);
-
-						normalRNAReadCounts = new ReadCounts(nMatchingNormalReferenceRNA, nMatchingNormalAltRNA, nMatchingNormalNeitherRNA, nMatchingNormalBothRNA);
-					}
-					catch (Exception)
-					{
-						// no op. No normal RNA
-					}
-
-					retVal = new AnnotatedVariant(isSomatic, contig, loc, Ref, alt, variantType, tumorDNAReadCounts, tumorRNAReadCounts, normalDNAReadCounts, normalRNAReadCounts);
-				}
-				catch (FormatException)
-				{
-					Console.WriteLine("Format exception parsing annotated selected variant line " + inputLine);
-					return null;
-				}
-
-				return retVal;
-			}
-
+            public readonly string Hugo_symbol;                 // Only present for somatic mutations, otherwise ""
 			public readonly bool somaticMutation;
             public readonly string contig;
             public readonly int locus;
             public readonly string reference_allele;
             public readonly string alt_allele;
             public readonly string variantType;
+            public readonly string variantClassification;       // Only present for somatic mutations, otherwise ""
 
             public readonly ReadCounts tumorDNAReadCounts;
             public readonly ReadCounts tumorRNAReadCounts;
@@ -5389,6 +5431,90 @@ namespace ASELib
             }
 
             return "none";
+        }
+
+        public static List<string> GetListOfDiseases(Dictionary<string, Case> cases)
+        {
+            var diseases = new List<string>();
+
+            foreach (var caseEntry in cases)
+            {
+                var case_ = caseEntry.Value;
+
+                if (!diseases.Contains(case_.disease()))
+                {
+                    diseases.Add(case_.disease());
+                }
+            }
+
+            return diseases;
+        }
+
+        public class MappedBaseCount
+        {
+            public static MappedBaseCount readFromFile(string filename)
+            {
+                var reader = CreateStreamReaderWithRetry(filename);
+                if (null == reader)
+                {
+                    Console.WriteLine("Unable to read mapped base count file " + filename);
+                    return null;
+                }
+
+                var line = reader.ReadLine();
+                if (null == line)
+                {
+                    Console.WriteLine("Mapped base count file " + filename + " is empty.");
+                    reader.Close();
+                    return null;
+                }
+
+                long mappedBaseCount;
+
+                var fields = line.Split('\t');
+                if (fields.Count() != 2)
+                {
+                    Console.WriteLine("Format error in mapped base count file " + filename);
+                    reader.Close();
+                    return null;
+                }
+
+                try
+                {
+                    mappedBaseCount = Convert.ToInt64(fields[0]);
+                } catch (FormatException)
+                {
+                    Console.WriteLine("Mapped base count file " + filename + " contains an unparsable count: " + fields[0]);
+                    reader.Close();
+                    return null;
+                }
+
+                line = reader.ReadLine();
+                if (line != "**done**")
+                {
+                    Console.WriteLine("Mapped base count file " + filename + " doens't have **done** where it should.");
+                    reader.Close();
+                    return null;
+                }
+
+                if (null != reader.ReadLine())
+                {
+                    Console.WriteLine("Mapped base count file " + filename + " continues after **done**");
+                    reader.Close();
+                    return null;
+                }
+
+                reader.Close();
+                return new MappedBaseCount(mappedBaseCount);
+            }
+
+
+            MappedBaseCount(long mappedBaseCount_)
+            {
+                mappedBaseCount = mappedBaseCount_;
+            }
+
+            public readonly long mappedBaseCount;
         }
 
     } // ASETools
