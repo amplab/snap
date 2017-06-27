@@ -71,8 +71,9 @@ ExtractBisulfiteReads/bin
 /apps/ExpressionByMutationCount/bin
 /apps/FixASV/bin
 /apps/GenerateScatterGraphs/bin
-
-
+/apps/MethylationHeatmaps/bin
+/apps/ChangeGenomeBuild/bin
+/apps/ExtractBisulfiteReads/bin
 
 
 

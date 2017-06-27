@@ -610,6 +610,10 @@ namespace ASEProcessManager
 				nWaitingForPrerequisites = 0;
 				filesToDownload = null;
 
+				// batch by 20
+				var batchSize = 20;
+				var newCall = true;
+				var caseCount = 0;
 				foreach (var caseEntry in stateOfTheWorld.cases)
 				{
 					var case_ = caseEntry.Value;
@@ -628,15 +632,26 @@ namespace ASEProcessManager
 						nAddedToScript++;
 					}
 
-					// write a command for each case id
-					script.Write(stateOfTheWorld.configuration.binariesDirectory + "MethylationAnalysis.exe");
-					hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "MethylationAnalysis.exe");
+					if (newCall)
+					{
+						// write a command for each case id
+						script.Write(stateOfTheWorld.configuration.binariesDirectory + "MethylationAnalysis.exe -450");
+						hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "MethylationAnalysis.exe -450");
+						newCall = false;
+					}
 
 					script.Write(" " + case_.case_id);
 					hpcScript.Write(" " + case_.case_id);
+					caseCount += 1;
 
-					script.WriteLine();
-					hpcScript.WriteLine();
+					// If 20 cases have been placed on line, reset the call 
+					if (caseCount % batchSize == 0)
+					{
+						newCall = true;
+						caseCount = 0;
+						script.WriteLine();
+						hpcScript.WriteLine();
+					}
 
 				}
 
@@ -674,7 +689,7 @@ namespace ASEProcessManager
 				return allOK;
 			} // EvaluateDependencies
 
-		} // AnnotateVariantsProcessingStage
+		} // MethylationProcessingStage
 
 
 		class SelectVariantsProcessingStage : ProcessingStage
@@ -1099,10 +1114,21 @@ namespace ASEProcessManager
                     var case_ = caseEntry.Value;
 					if (forAlleleSpecificExpression)
 					{
-						if (case_.allele_specific_gene_expression_filename != "")
+						if (case_.tumor_allele_specific_gene_expression_filename != "")
 						{
-							nDone++;
-							continue;
+							if (case_.normal_rna_filename == "")
+							{
+								nDone++;
+								continue;
+							}
+							else // if normal rna exists and normal ASE was calculated
+							{
+								if (case_.normal_allele_specific_gene_expression_filename != "")
+								{
+									nDone++;
+									continue;
+								}
+							}
 						}
 						else if (case_.maf_filename == "" || case_.annotated_selected_variants_filename == "")
 						{
@@ -1170,24 +1196,34 @@ namespace ASEProcessManager
 
 					if (forAlleleSpecificExpression)
 					{
-						if (case_.allele_specific_gene_expression_filename == "")
+						if (case_.tumor_allele_specific_gene_expression_filename == "" && case_.normal_allele_specific_gene_expression_filename == "")
 						{
 							continue;
 						}
 
-						var asGeneExpressionWriteTime = new FileInfo(case_.allele_specific_gene_expression_filename).LastWriteTime;
 						if (case_.annotated_selected_variants_filename == "")
 						{
-							Console.WriteLine("AS gene expression file " + case_.allele_specific_gene_expression_filename + " exists, but the precursor annotated selected variants file does not.");
+							Console.WriteLine("AS gene expression file " + case_.tumor_allele_specific_gene_expression_filename + " exists, but the precursor annotated selected variants file does not.");
 							allOK = false;
 							continue;
 						}
 
+						var asGeneExpressionWriteTime = new FileInfo(case_.tumor_allele_specific_gene_expression_filename).LastWriteTime;
 						if (new FileInfo(case_.annotated_selected_variants_filename).LastWriteTime > asGeneExpressionWriteTime)
 						{
-							Console.WriteLine("AS gene expression file " + case_.allele_specific_gene_expression_filename + " is older than its regional file " + case_.regional_expression_filename);
+							Console.WriteLine("AS gene expression tumor file " + case_.tumor_allele_specific_gene_expression_filename + " is older than its regional file " + case_.regional_expression_filename);
 							allOK = false;
 							continue;
+						}
+						if (case_.normal_allele_specific_gene_expression_filename != "")
+						{
+							asGeneExpressionWriteTime = new FileInfo(case_.normal_allele_specific_gene_expression_filename).LastWriteTime;
+							if (new FileInfo(case_.annotated_selected_variants_filename).LastWriteTime > asGeneExpressionWriteTime)
+							{
+								Console.WriteLine("AS gene expression normal file " + case_.normal_allele_specific_gene_expression_filename + " is older than its regional file " + case_.regional_expression_filename);
+								allOK = false;
+								continue;
+							}
 						}
 					}
 					else

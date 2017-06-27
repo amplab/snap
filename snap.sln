@@ -88,13 +88,19 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressionNearMutations", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CountMappedBases", "apps\CountMappedBases\CountMappedBases.csproj", "{B6DF7273-FEEE-4DB2-BBC9-A519FA7C8EC2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressionByMutationCount", "apps\ExpressionByMutationCount\ExpressionByMutationCount.csproj", "{B4B43CBE-D390-46D7-9D2D-7503F1A02B90}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateBisulfiteReadExtractionScript", "ExtractBisulfiteReads\GenerateBisulfiteReadExtractionScript.csproj", "{3F1A75B9-2B2B-47B6-B81A-F67A4B468460}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateScatterGraphs", "apps\GenerateScatterGraphs\GenerateScatterGraphs.csproj", "{BF4B5440-1F73-4D30-9868-7C92489020FF}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DumpSubfile", "apps\DumpSubfile\DumpSubfile.csproj", "{1A87AD40-F9BD-48AD-8B55-B4A4996252E3}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FixASV", "apps\FixASV\FixASV.csproj", "{DF7A2CEE-927B-4556-AE1E-601E8A6E6D7A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BisulfiteMethylation", "apps\BisulfiteMethylation\BisulfiteMethylation.csproj", "{4A8CBB8D-976D-4FBA-B9A2-2F368DEB31A0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenomeBuild", "apps\ChangeGenomeBuild\GenomeBuild.csproj", "{892B82DD-AF9B-45E9-B2B0-0569ED227DAF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MethylationHeatmaps", "apps\MethylationHeatmaps\MethylationHeatmaps.csproj", "{B14B70C4-9523-46F5-AD4F-547058B0B75C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

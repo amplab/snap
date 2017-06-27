@@ -52,10 +52,10 @@ namespace ExpressionByMutationCount
             public bool[] currentZExclusiveValid = new bool[nWidths];
             public double[] currentMuExclusive = new double[nWidths];
             public bool[] currentMuExclusiveValid = new bool[nWidths];
-            public double[] perChromosomeZ = new double[ExpressionTools.nHumanNuclearChromosomes];
-            public bool[] perChromosomeZValid = new bool[ExpressionTools.nHumanNuclearChromosomes];
-            public double[] perChromosomeMu = new double[ExpressionTools.nHumanNuclearChromosomes];
-            public bool[] perChromosomeMuValid = new bool[ExpressionTools.nHumanNuclearChromosomes];
+            public double[] perChromosomeZ = new double[ASETools.nHumanNuclearChromosomes];
+            public bool[] perChromosomeZValid = new bool[ASETools.nHumanNuclearChromosomes];
+            public double[] perChromosomeMu = new double[ASETools.nHumanNuclearChromosomes];
+            public bool[] perChromosomeMuValid = new bool[ASETools.nHumanNuclearChromosomes];
             public double wholeAutosomeZ = 0;
             public bool wholeAutosomeZValid = false;
             public double wholeAutosomeZExclusive = 0;
@@ -124,13 +124,13 @@ namespace ExpressionByMutationCount
 
                 var fields = line.Split('\t');
                 if (fields.Count() != 2 * (forAlleleSpecificExpression ? 1 : 2) * (nWidths + 1) + 2 + 
-                    (forAlleleSpecificExpression ? 1 : 2) * ExpressionTools.nHumanNuclearChromosomes)
+                    (forAlleleSpecificExpression ? 1 : 2) * ASETools.nHumanNuclearChromosomes)
                 {
                     Console.WriteLine("File " + filename + " has unparsable line " + line);
                     return false;
                 }
 
-                currentHugoSymbol = ExpressionTools.ConvertToNonExcelString(fields[0]).ToUpper();
+                currentHugoSymbol = ASETools.ConvertToNonExcelString(fields[0]).ToUpper();
 
                 try
                 {
@@ -223,8 +223,8 @@ namespace ExpressionByMutationCount
                     // Now do the per-chromosome ones.  There is no exclusive, but there is a mu iff !forAlleleSpecificExpression.
                     //
                     int perChromosomeOffset = forAlleleSpecificExpression ? nWidths + 2 + exclusiveOffset + 1 : 2 * nWidths + exclusiveOffset + 4;
-                    int perChromosomeMuOffset = perChromosomeOffset + ExpressionTools.nHumanNuclearChromosomes;
-                    for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                    int perChromosomeMuOffset = perChromosomeOffset + ASETools.nHumanNuclearChromosomes;
+                    for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
                     {
                         if (fields[whichChromosome + perChromosomeOffset] == "*")
                         {
@@ -316,7 +316,7 @@ namespace ExpressionByMutationCount
             {
                 hugo_symbol = hugo_symbol_;
 
-                for (int i = 0; i < ExpressionTools.nHumanNuclearChromosomes; i++)
+                for (int i = 0; i < ASETools.nHumanNuclearChromosomes; i++)
                 {
                     perChromosomeExpression[i] = new List<ExpressionInstance>();
                     perChromosomeMeanExpression[i] = new List<ExpressionInstance>();
@@ -396,7 +396,7 @@ namespace ExpressionByMutationCount
             public bool loadPerCaseState(Dictionary<string, string> sampleToParticipantIDMap, Dictionary<string, ASETools.Case> experimentsByRNAAnalysisID)
             {
 
-                var geneScatterPlotLines = ASETools.GeneScatterGraphLine.LoadAllGeneScatterGraphEntries(ExpressionTools.unfilteredCountsDirectory, true, experimentsByRNAAnalysisID, hugo_symbol);
+                var geneScatterPlotLines = ASETools.GeneScatterGraphLine.LoadAllGeneScatterGraphEntries(ASETools.unfilteredCountsDirectory, true, experimentsByRNAAnalysisID, hugo_symbol);
                 if (null == geneScatterPlotLines || geneScatterPlotLines.Count() == 0)
                 {
                     return false;
@@ -421,7 +421,7 @@ namespace ExpressionByMutationCount
 
                 if (false)  // The old way
                 {
-                    string scatterPlotFilename = ExpressionTools.unfilteredCountsDirectory + hugo_symbol + ExpressionTools.unfilteredCountsExtention;
+                    string scatterPlotFilename = ASETools.unfilteredCountsDirectory + hugo_symbol + ASETools.unfilteredCountsExtention;
                     if (!File.Exists(scatterPlotFilename))
                     {
                         return false;
@@ -429,7 +429,7 @@ namespace ExpressionByMutationCount
 
                     StreamReader reader = null;
 
-                    reader = ExpressionTools.CreateStreamReaderWithRetry(scatterPlotFilename);
+                    reader = ASETools.CreateStreamReaderWithRetry(scatterPlotFilename);
 
                     reader.ReadLine(); // Skip the header
 
@@ -491,8 +491,8 @@ namespace ExpressionByMutationCount
             public List<ExpressionInstance> wholeAutosomeExpressionExclusive = new List<ExpressionInstance>();
             public List<ExpressionInstance> wholeAutosomeMeanExpression = new List<ExpressionInstance>();
             public List<ExpressionInstance> wholeAutosomeMeanExpressionExclusive = new List<ExpressionInstance>();
-            public List<ExpressionInstance>[] perChromosomeExpression = new List<ExpressionInstance>[ExpressionTools.nHumanNuclearChromosomes];
-            public List<ExpressionInstance>[] perChromosomeMeanExpression = new List<ExpressionInstance>[ExpressionTools.nHumanNuclearChromosomes];
+            public List<ExpressionInstance>[] perChromosomeExpression = new List<ExpressionInstance>[ASETools.nHumanNuclearChromosomes];
+            public List<ExpressionInstance>[] perChromosomeMeanExpression = new List<ExpressionInstance>[ASETools.nHumanNuclearChromosomes];
             public Dictionary<string, Mutation> perExperimentState = new Dictionary<string, Mutation>();
 
             public int nInputFilesPastThisGene = 0;
@@ -527,7 +527,7 @@ namespace ExpressionByMutationCount
             
         }
 
-        static void ComputeMannWhitneyAndPrint(StreamWriter outputFile, List<ExpressionInstance> instances, ExpressionTools.MannWhitney<ExpressionInstance>.WhichGroup selector, bool twoTailed, GeneState geneState, bool excludeUnusualMutants)
+        static void ComputeMannWhitneyAndPrint(StreamWriter outputFile, List<ExpressionInstance> instances, ASETools.MannWhitney<ExpressionInstance>.WhichGroup selector, bool twoTailed, GeneState geneState, bool excludeUnusualMutants)
         {
             bool enoughData;
             double p = -1;
@@ -542,7 +542,7 @@ namespace ExpressionByMutationCount
 
                 var instancesToUse = FilterUnusualMutantsIfRequested(instances, geneState, excludeUnusualMutants);
 
-                p = ExpressionTools.MannWhitney<ExpressionInstance>.ComputeMannWhitney(
+                p = ASETools.MannWhitney<ExpressionInstance>.ComputeMannWhitney(
                         instancesToUse,
                         instances[0], selector, getValue, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z, twoTailed, 10);
             }
@@ -572,10 +572,10 @@ namespace ExpressionByMutationCount
                 return;
             }
 
-            outputFile.Write("\t" + ExpressionTools.MeanOfList(values) + "\t" + ExpressionTools.StandardDeviationOfList(values));
+            outputFile.Write("\t" + ASETools.MeanOfList(values) + "\t" + ASETools.StandardDeviationOfList(values));
         }
 
-        static ExpressionTools.MannWhitney<ExpressionInstance>.GetValue getValue = new ExpressionTools.MannWhitney<ExpressionInstance>.GetValue(x => x.z);
+        static ASETools.MannWhitney<ExpressionInstance>.GetValue getValue = new ASETools.MannWhitney<ExpressionInstance>.GetValue(x => x.z);
 
         static void WriteHeaderGroup(string regionName, StreamWriter outputFile, string muString) // Writes out the header for the complete set of measurements for one region
         {
@@ -621,11 +621,11 @@ namespace ExpressionByMutationCount
                 {
                     string muString = (mu == 0) ? "" : " mu";
 
-                    for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                    for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
                     {
-                        var name = ExpressionTools.ChromosomeIndexToName(whichChromosome, true);
+                        var name = ASETools.ChromosomeIndexToName(whichChromosome, true);
 
-                        WriteHeaderGroup(ExpressionTools.ChromosomeIndexToName(whichChromosome, true), outputFile, muString);
+                        WriteHeaderGroup(ASETools.ChromosomeIndexToName(whichChromosome, true), outputFile, muString);
                     }
                 }
             }
@@ -633,7 +633,7 @@ namespace ExpressionByMutationCount
             outputFile.WriteLine("\tnTumorsExcluded\tnZero\tnOne\tnMore");
         }
 
-        static void WriteCounts(StreamWriter outputFile, GeneState geneToProcess, string disease, Dictionary<string, ExpressionTools.Experiment> experimentsByParticipantID)
+        static void WriteCounts(StreamWriter outputFile, GeneState geneToProcess, string disease, Dictionary<string, ASETools.Experiment> experimentsByParticipantID)
         {
             int nExcluded = 0;
             int nZero = 0;
@@ -681,10 +681,10 @@ namespace ExpressionByMutationCount
             outputFile.WriteLine("\t" + nExcluded + "\t" + nZero + "\t" + nOne + "\t" + nMore);
         }
 
-        static ExpressionTools.MannWhitney<ExpressionInstance>.WhichGroup isZero = new ExpressionTools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nMutations == 0);
-        static ExpressionTools.MannWhitney<ExpressionInstance>.WhichGroup isOne = new ExpressionTools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nMutations == 1);
-        static ExpressionTools.MannWhitney<ExpressionInstance>.WhichGroup isNotOne = new ExpressionTools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nMutations != 1);
-        static ExpressionTools.MannWhitney<ExpressionInstance>.WhichGroup isMoreThanOne = new ExpressionTools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nMutations > 1);
+        static ASETools.MannWhitney<ExpressionInstance>.WhichGroup isZero = new ASETools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nMutations == 0);
+        static ASETools.MannWhitney<ExpressionInstance>.WhichGroup isOne = new ASETools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nMutations == 1);
+        static ASETools.MannWhitney<ExpressionInstance>.WhichGroup isNotOne = new ASETools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nMutations != 1);
+        static ASETools.MannWhitney<ExpressionInstance>.WhichGroup isMoreThanOne = new ASETools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nMutations > 1);
 
         static double ExtractZFromExpressionInstance(ExpressionInstance expressionInstance)
         {
@@ -948,7 +948,7 @@ namespace ExpressionByMutationCount
 
                         if (perChromosome)
                         {
-                            for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                            for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
                             {
                                 if (inputFile.perChromosomeZValid[whichChromosome])
                                 {
@@ -968,7 +968,7 @@ namespace ExpressionByMutationCount
                         }
                     }
 
-                    var perGeneLinesFile = ExpressionTools.CreateStreamWriterWithRetry(@"f:\temp\expression\RegionalExpressionByGene\" + nextHugoSymbol.ToLower() + (forAlleleSpecificExpression ? "_allele_specific" : "") + "_lines.txt");
+                    var perGeneLinesFile = ASETools.CreateStreamWriterWithRetry(@"f:\temp\expression\RegionalExpressionByGene\" + nextHugoSymbol.ToLower() + (forAlleleSpecificExpression ? "_allele_specific" : "") + "_lines.txt");
                     perGeneLinesFile.Write("ParticipantID\tdisease abbr.\tHugo Symbol\tMutation Count");
                     for (int exclusive = 0; exclusive < 2; exclusive++)
                     {
@@ -977,7 +977,7 @@ namespace ExpressionByMutationCount
 
                         for (int i = 1; i < GeneExpressionFile.nWidths; i++)
                         {
-                            perGeneLinesFile.Write("\t" + ExpressionTools.SizeToUnits(width) + "b" + ((exclusive == 1) ? " exclusive" : ""));
+                            perGeneLinesFile.Write("\t" + ASETools.SizeToUnits(width) + "b" + ((exclusive == 1) ? " exclusive" : ""));
                             width *= 2;
                         }
 
@@ -991,7 +991,7 @@ namespace ExpressionByMutationCount
                             width = 1000;
                             for (int i = 1; i < GeneExpressionFile.nWidths; i++)
                             {
-                                perGeneLinesFile.Write("\t" + ExpressionTools.SizeToUnits(width) + "b mean" + ((exclusive == 1) ? " exclusive" : ""));
+                                perGeneLinesFile.Write("\t" + ASETools.SizeToUnits(width) + "b mean" + ((exclusive == 1) ? " exclusive" : ""));
                                 width *= 2;
                             }
 
@@ -1003,16 +1003,16 @@ namespace ExpressionByMutationCount
                     //
                     // Even if we're not doing per-chromosome, write the headers, since they're in the input file that's being copied here.
                     //
-                    for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                    for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
                     {
-                        perGeneLinesFile.Write("\t" + ExpressionTools.ChromosomeIndexToName(whichChromosome, true));
+                        perGeneLinesFile.Write("\t" + ASETools.ChromosomeIndexToName(whichChromosome, true));
                     }
 
                     if (!forAlleleSpecificExpression)
                     {
-                        for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                        for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
                         {
-                            perGeneLinesFile.Write("\t" + ExpressionTools.ChromosomeIndexToName(whichChromosome, true) + " mean");
+                            perGeneLinesFile.Write("\t" + ASETools.ChromosomeIndexToName(whichChromosome, true) + " mean");
                         }
                     }
  
@@ -1029,10 +1029,10 @@ namespace ExpressionByMutationCount
                     // Compute and write out the results.
                     //
 
-                    panCancerOutputFile.Write(ExpressionTools.ConvertToExcelString(nextHugoSymbol));
+                    panCancerOutputFile.Write(ASETools.ConvertToExcelString(nextHugoSymbol));
                     foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
                     {
-                        perDiseaseOutputFileEntry.Value.Write(ExpressionTools.ConvertToExcelString(nextHugoSymbol));
+                        perDiseaseOutputFileEntry.Value.Write(ASETools.ConvertToExcelString(nextHugoSymbol));
                     }
 
                     for (var exclusive = 0; exclusive < 2; exclusive++)
@@ -1089,7 +1089,7 @@ namespace ExpressionByMutationCount
 
                     if (perChromosome)
                     {
-                        for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                        for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
                         {
                             WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, geneToProcess.perChromosomeExpression[whichChromosome],
                                 geneToProcess, geneToProcess.perChromosomeExpression[whichChromosome].Count() > 0);
@@ -1097,7 +1097,7 @@ namespace ExpressionByMutationCount
 
                         if (!forAlleleSpecificExpression)
                         {
-                            for (int whichChromosome = 0; whichChromosome < ExpressionTools.nHumanNuclearChromosomes; whichChromosome++)
+                            for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
                             {
                                 WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, geneToProcess.perChromosomeMeanExpression[whichChromosome],
                                     geneToProcess, geneToProcess.perChromosomeExpression[whichChromosome].Count() > 0);

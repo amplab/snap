@@ -750,8 +750,9 @@ namespace ASELib
             public string normal_dna_reads_at_selected_variants_filename = "";
             public string normal_dna_reads_at_selected_variants_index_filename = "";
             public string annotated_selected_variants_filename = "";
-            public string allele_specific_gene_expression_filename = "";
-            public string tumor_dna_gene_coverage_filname = "";
+            public string tumor_allele_specific_gene_expression_filename = "";
+			public string normal_allele_specific_gene_expression_filename = "";
+			public string tumor_dna_gene_coverage_filname = "";
             public string vcf_filename = "";
             public string extracted_maf_lines_filename = "";
             public string normal_dna_mapped_base_count_filename = "";
@@ -943,16 +944,17 @@ namespace ASELib
                 new FieldInformation("Tumor RNA Reads At Selected Variants Filename",       c => c.tumor_rna_reads_at_selected_variants_filename, (c,v) => c.tumor_rna_reads_at_selected_variants_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariants, tumorRNAReadsAtSelectedVariantsExtension, c => c.tumor_rna_file_id),
                 new FieldInformation("Tumor RNA Reads At Selected Variants Index Filename", c => c.tumor_rna_reads_at_selected_variants_index_filename, (c,v) => c.tumor_rna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariantsIndex, tumorRNAReadsAtSelectedVariantsIndexExtension, c => c.tumor_rna_file_id),
                 new FieldInformation("Annotated Selected Variants Filename",                c => c.annotated_selected_variants_filename, (c,v) => c.annotated_selected_variants_filename = v, DerivedFile.Type.AnnotatedSelectedVariants, annotatedSelectedVariantsExtension, c => c.case_id),
-                new FieldInformation("Allele Specific Gene Expression Filename",            c => c.allele_specific_gene_expression_filename, (c,v) => c.allele_specific_gene_expression_filename = v, DerivedFile.Type.AlleleSpecificGeneExpression, alleleSpecificGeneExpressionExtension, c => c.case_id),
-                new FieldInformation("Tumor DNA Gene Coverage Filename",                    c => c.tumor_dna_gene_coverage_filname, (c,v) => c.tumor_dna_gene_coverage_filname = v, DerivedFile.Type.TumorDNAGeneCoverage, tumorDNAGeneCoverageExtension, c => c.tumor_dna_file_id),
+                new FieldInformation("Tumor Allele Specific Gene Expression Filename",      c => c.tumor_allele_specific_gene_expression_filename, (c,v) => c.tumor_allele_specific_gene_expression_filename = v, DerivedFile.Type.TumorAlleleSpecificGeneExpression, tumorAlleleSpecificGeneExpressionExtension, c => c.case_id),
+				new FieldInformation("Normal Allele Specific Gene Expression Filename",     c => c.normal_allele_specific_gene_expression_filename, (c,v) => c.normal_allele_specific_gene_expression_filename = v, DerivedFile.Type.NormalAlleleSpecificGeneExpression, normalAlleleSpecificGeneExpressionExtension, c => c.case_id),
+				new FieldInformation("Tumor DNA Gene Coverage Filename",                    c => c.tumor_dna_gene_coverage_filname, (c,v) => c.tumor_dna_gene_coverage_filname = v, DerivedFile.Type.TumorDNAGeneCoverage, tumorDNAGeneCoverageExtension, c => c.tumor_dna_file_id),
                 new FieldInformation("VCF Filename",                                        c => c.vcf_filename, (c,v) => c.vcf_filename = v, DerivedFile.Type.VCF, vcfExtension, c => c.normal_dna_file_id),
                 new FieldInformation("Extracted MAF Lines Filename",                        c => c.extracted_maf_lines_filename, (c,v) => c.extracted_maf_lines_filename = v, DerivedFile.Type.ExtractedMAFLines, extractedMAFLinesExtension, c => c.case_id),
                 new FieldInformation("Normal DNA Mapped Base Count Filename",               c => c.normal_dna_mapped_base_count_filename, (c, v) => c.normal_dna_mapped_base_count_filename = v, DerivedFile.Type.NormalDNAMappedBaseCount, normalDNAMappedBaseCountExtension, c => c.normal_dna_file_id),
                 new FieldInformation("Tumor DNA Mapped Base Count Filename",                c => c.tumor_dna_mapped_base_count_filename, (c, v) => c.tumor_dna_mapped_base_count_filename = v, DerivedFile.Type.TumorDNAMappedBaseCount, tumorDNAMappedBaseCountExtension, c => c.tumor_dna_file_id),
                 new FieldInformation("Normal RNA Mapped Base Count Filename",               c => c.normal_rna_mapped_base_count_filename, (c, v) => c.normal_rna_mapped_base_count_filename = v, DerivedFile.Type.NormalRNAMappedBaseCount, normalRNAMappedBaseCountExtension, c => c.normal_rna_file_id),
                 new FieldInformation("Tumor RNA Mapped Base Count Filename",                c => c.tumor_rna_mapped_base_count_filename, (c, v) => c.tumor_rna_mapped_base_count_filename = v, DerivedFile.Type.TumorRNAMappedBaseCount, tumorRNAMappedBaseCountExtension, c => c.tumor_rna_file_id),
-
-                new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
+				new FieldInformation("Tumor Regional Methylation Filename",                  c => c.tumor_regional_methylation_filename, (c, v) => c.tumor_regional_methylation_filename = v, DerivedFile.Type.TumorRegionalMethylation, tumorRegionalMethylationExtension, c => c.case_id),
+				new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
                 new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
                 new FieldInformation("Tumor RNA BAM MD5",                                   c => c.tumor_rna_file_bam_md5, (c,v) => c.tumor_rna_file_bam_md5 = v),
                 new FieldInformation("Tumor RNA BAI MD5",                                   c => c.tumor_rna_file_bai_md5, (c,v) => c.tumor_rna_file_bai_md5 = v),
@@ -1133,8 +1135,9 @@ namespace ASELib
 				if (!derivedFiles.ContainsKey(case_id))
                 {
                     tumor_rna_allcount_filename = "";
-                    allele_specific_gene_expression_filename = "";
-                    annotated_selected_variants_filename = "";
+                    tumor_allele_specific_gene_expression_filename = "";
+					normal_allele_specific_gene_expression_filename = "";
+					annotated_selected_variants_filename = "";
                     tumor_dna_reads_at_selected_variants_filename = "";
                     tumor_dna_reads_at_selected_variants_index_filename = "";
                     gene_expression_filename = "";
@@ -1282,7 +1285,7 @@ namespace ASELib
             public List<string> programNames = new List<string>();
             public string binariesDirectory = defaultBaseDirectory + @"bin\";
             public string configuationFilePathname = defaultConfigurationFilePathame;
-			public string casesFilePathname = @"C:\Users\t-almorr\temp\cases_withTNMethylation.txt";  //defaultBaseDirectory + "cases.txt";
+			public string casesFilePathname = bisulfiteDirectory + @"cases_withTNMethylation_temp.txt";  //defaultBaseDirectory + "cases.txt";
             public string indexDirectory = defaultBaseDirectory + @"indices\hg38-20";
 			public string indexDirectoryHg19 = defaultBaseDirectory + @"indices\hg19";
 			public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
@@ -2043,8 +2046,9 @@ namespace ASELib
         public const string annotatedSelectedVariantsExtension = ".annotatedSeletedVariants";
         public const string regionalExpressionExtension = ".regional_expression.txt";
         public const string geneExpressionExtension = ".gene_expression.txt";
-        public const string alleleSpecificGeneExpressionExtension = ".allele-specific_gene_expression.txt";
-        public const string tumorRNAReadsAtSelectedVariantsExtension = ".tumor-rna-reads-at-selected-variants.txt";
+		public const string tumorAlleleSpecificGeneExpressionExtension = ".tumor-allele-specific_gene_expression.txt";
+		public const string normalAlleleSpecificGeneExpressionExtension = ".normal-allele-specific_gene_expression.txt";
+		public const string tumorRNAReadsAtSelectedVariantsExtension = ".tumor-rna-reads-at-selected-variants.txt";
         public const string tumorRNAReadsAtSelectedVariantsIndexExtension = ".tumor-rna-reads-at-selected-variants.txt.index";
         public const string normalRNAReadsAtSelectedVariantsExtension = ".normal-rna-reads-at-selected-variants.txt";
         public const string normalRNAReadsAtSelectedVariantsIndexExtension = ".normal-rna-reads-at-selected-variants.txt.index";
@@ -2060,7 +2064,7 @@ namespace ASELib
         public const string normalRNAMappedBaseCountExtension = ".normal_rna_mapped_base_count.txt";
         public const string tumorRNAMappedBaseCountExtension = ".tumor_rna_mapped_base_count.txt";
 		public const string bisulfiteAlleleSpecificMethylationExtension = ".bisulfite_asm.txt";
-		public const string regionalMethylationExtension = ".regional_methylation.txt";
+		public const string tumorRegionalMethylationExtension = ".tumor_regional_methylation.txt";
 
         public const string scatterGraphsSummaryFilename = "_summary.txt";
 
@@ -2106,8 +2110,8 @@ namespace ASELib
 
             public enum Type { Unknown, NormalRNAAllcount, TumorRNAAllcount, NormalDNAAllcount, TumorDNAAllcount, RegionalExpression, GeneExpression, TumorDNAGeneCoverage,
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
-                TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, AlleleSpecificGeneExpression, VCF, ExtractedMAFLines,
-                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount,
+                TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines,
+                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, TumorRegionalMethylation
             };
         } // DerivedFile
 
@@ -2617,7 +2621,7 @@ namespace ASELib
                         return false;
                     }
 
-                    if ("**done**" == inputLine) {
+                    if ("**done**" == inputLine.Trim()) {
                         sawDone = true;
                         continue;
                     }
@@ -3998,6 +4002,466 @@ namespace ASELib
 
 		}
 
+		// file that contains distance over gene names. Files created from ExpressionNearMutations
+		public class ASEExpressionFile
+		{
+
+			// keeps track of index of distances
+			public List<string> index = new List<string>();
+
+			// for each gene, maintain a list of distance, expression tuples
+			public Dictionary<string, double[]> expressionMap = new Dictionary<string, double[]>();
+
+			public ASEExpressionFile() { }
+
+			public static void WriteFile(string outputFilename,
+				List<ASETools.GeneExpression> allExpressions,                                                               // regional expression
+				ASETools.RegionalExpressionState wholeAutosomeRegionalExpression,                                           // whole autosome
+				Dictionary<string, ASETools.RegionalExpressionState> allButThisChromosomeAutosomalRegionalExpressionState,  // dictionary of chromosome, expression information
+				ASETools.RegionalExpressionState[] perChromosomeRegionalExpressionState,                                    // information for each whole chromosome
+				bool hasMeanValues,
+				int minExamplesPerRegion,
+				ASETools.Case case_, string columnSuffix, bool isTumor)
+			{
+
+				var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
+
+				outputFile.WriteLine(case_.case_id);
+				outputFile.Write("Gene name\tnon-silent mutation count");
+
+				writeRow(outputFile, allExpressions[0],
+						wholeAutosomeRegionalExpression,
+						allButThisChromosomeAutosomalRegionalExpressionState,
+						perChromosomeRegionalExpressionState,
+						hasMeanValues,
+						minExamplesPerRegion,
+						true,
+						columnSuffix, isTumor);
+
+				outputFile.WriteLine();
+
+				for (int i = 0; i < allExpressions.Count(); i++)
+				{
+					outputFile.Write(ASETools.ConvertToExcelString(allExpressions[i].geneLocationInfo.hugoSymbol) + "\t" + allExpressions[i].mutationCount);
+
+					writeRow(outputFile, allExpressions[i],
+						wholeAutosomeRegionalExpression,
+						allButThisChromosomeAutosomalRegionalExpressionState,
+						perChromosomeRegionalExpressionState,
+						hasMeanValues,
+						minExamplesPerRegion, false, "", isTumor);
+
+					outputFile.WriteLine();
+				} // for each gene
+
+				outputFile.WriteLine("**done**");
+				outputFile.Close();
+			}
+
+			// Write order:
+			//	1. Regional values (20)
+			//  2. Autosome value (1)
+			//  3. If not ASE, regional mean values (20)
+			//  4. If not ASE, autosome value (1)
+			//  5. Exclusive regional values (20)
+			//  6. Per chromosome values (
+			static void writeRow(
+				StreamWriter outputFile,
+				ASETools.GeneExpression allExpression,                                                                      // regional expression
+				ASETools.RegionalExpressionState wholeAutosomeRegionalExpression,                                           // whole autosome
+				Dictionary<string, ASETools.RegionalExpressionState> allButThisChromosomeAutosomalRegionalExpressionState,  // dictionary of chromosome, expression information
+				ASETools.RegionalExpressionState[] perChromosomeRegionalExpressionState,                                    // information for each whole chromosome
+				bool hasMeanValues,
+				int minExamplesPerRegion,
+				Boolean header,
+				string columnSuffix,
+				bool isTumor)
+			{
+				// format suffix for header names
+				string columnSuffix_mu = "(" + columnSuffix + " mu)";
+				columnSuffix = "(" + columnSuffix + ")";
+
+				// 1. Chromosome specific regional values
+				for (int sizeIndex = 0; sizeIndex < ASETools.GeneExpression.nRegionSizes; sizeIndex++)
+				{
+					if (header)
+					{
+						outputFile.Write("\t" + ASETools.GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + columnSuffix);
+						continue;
+					}
+
+					if (isTumor)
+					{
+						if (allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + allExpression.regionalExpressionState[sizeIndex].totalTumorExpression / allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedTumor);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+					else if (!isTumor)
+					{
+						if (allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + allExpression.regionalExpressionState[sizeIndex].totalNormalExpression / allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedNormal);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+
+
+				}
+
+				// 2. Whole autosome
+				if (header)
+				{
+					outputFile.Write("\tWhole Autosome " + columnSuffix);
+				}
+				else if (isTumor)
+				{
+					if (wholeAutosomeRegionalExpression.nRegionsIncludedTumor >= minExamplesPerRegion)
+					{
+						outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalTumorExpression / wholeAutosomeRegionalExpression.nRegionsIncludedTumor);
+					}
+					else
+					{
+						outputFile.Write("\t*");
+					}
+				}
+				else if (!isTumor)
+				{
+					if (wholeAutosomeRegionalExpression.nRegionsIncludedNormal >= minExamplesPerRegion)
+					{
+						outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalNormalExpression / wholeAutosomeRegionalExpression.nRegionsIncludedNormal);
+					}
+					else
+					{
+						outputFile.Write("\t*");
+					}
+				}
+
+
+
+				// 3. Write regional mean values
+				if (hasMeanValues)
+				{
+
+					for (int sizeIndex = 0; sizeIndex < ASETools.GeneExpression.nRegionSizes; sizeIndex++)
+					{
+						if (header)
+						{
+							outputFile.Write("\t" + ASETools.GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + columnSuffix_mu);
+							continue;
+						}
+
+						if (isTumor)
+						{
+							if (allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
+							{
+								outputFile.Write("\t" + allExpression.regionalExpressionState[sizeIndex].totalMeanTumorExpression / allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedTumor);
+							}
+							else
+							{
+								outputFile.Write("\t*");
+							}
+
+						}
+						else {
+							if (allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
+							{
+								outputFile.Write("\t" + allExpression.regionalExpressionState[sizeIndex].totalMeanNormalExpression / allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedNormal);
+							}
+							else
+							{
+								outputFile.Write("\t*");
+							}
+						}
+					}
+
+					// 4. Write mean autosome value
+					if (header)
+					{
+						outputFile.Write("\tWhole Autosome " + columnSuffix_mu);
+					}
+					else if (isTumor)
+					{
+						if (wholeAutosomeRegionalExpression.nRegionsIncludedTumor >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalMeanTumorExpression / wholeAutosomeRegionalExpression.nRegionsIncludedTumor);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+					else if (!isTumor)
+					{
+						if (wholeAutosomeRegionalExpression.nRegionsIncludedNormal >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalNormalExpression / wholeAutosomeRegionalExpression.nRegionsIncludedNormal);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+				}
+
+				// 5. Write exclusive regional values
+				for (int sizeIndex = 0; sizeIndex < ASETools.GeneExpression.nRegionSizes; sizeIndex++)
+				{
+					if (header)
+					{
+						outputFile.Write("\t" + ASETools.GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + " exclusive " + columnSuffix);
+						continue;
+					}
+					if (isTumor)
+					{
+						if (allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + allExpression.exclusiveRegionalExpressionState[sizeIndex].totalTumorExpression / allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor);
+
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+					else if (!isTumor)
+					{
+						if (allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + allExpression.exclusiveRegionalExpressionState[sizeIndex].totalNormalExpression / allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+				}
+
+				// 6. Whole autosome exclusive values
+				if (header)
+				{
+					outputFile.Write("\tWhole Autosome exclusive " + columnSuffix);
+				}
+				else if (isTumor)
+				{
+					if (allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
+					{
+						outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].totalTumorExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedTumor);
+					}
+					else
+					{
+						outputFile.Write("\t*");
+					}
+				}
+				else if (!isTumor)
+				{
+					if (allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
+					{
+						outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].totalNormalExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedNormal);
+					}
+					else
+					{
+						outputFile.Write("\t*");
+					}
+				}
+
+				if (hasMeanValues)
+				{
+					// 7. Exlusive regional means
+					for (int sizeIndex = 0; sizeIndex < ASETools.GeneExpression.nRegionSizes; sizeIndex++)
+					{
+						if (header)
+						{
+							outputFile.Write("\t" + ASETools.GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + " exclusive " + columnSuffix_mu);
+							continue;
+						}
+						if (isTumor)
+						{
+							if (allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
+							{
+								outputFile.Write("\t" + allExpression.exclusiveRegionalExpressionState[sizeIndex].totalMeanTumorExpression / allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor);
+							}
+							else
+							{
+								outputFile.Write("\t*");
+							}
+						}
+						else if (!isTumor)
+						{
+							if (allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
+							{
+								outputFile.Write("\t" + allExpression.exclusiveRegionalExpressionState[sizeIndex].totalMeanNormalExpression / allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal);
+							}
+							else
+							{
+								outputFile.Write("\t*");
+							}
+						}
+					}
+
+					// 8. Write out chromosome exclusive autosome means
+					if (header)
+					{
+						outputFile.Write("\tWhole Autosome exclusive " + columnSuffix_mu);
+					}
+					else if (isTumor)
+					{
+						if (allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].totalMeanTumorExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedTumor);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+					else if (!isTumor)
+					{
+						if (allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].totalMeanNormalExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedNormal);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+				}
+
+				// 9. Write out per chromosome
+				for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
+				{
+					if (header)
+					{
+						outputFile.Write("\t" + ASETools.ChromosomeIndexToName(whichChromosome, true) + columnSuffix);
+						continue;
+					}
+					if (isTumor)
+					{
+						if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalTumorExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+					else if (!isTumor)
+					{
+						if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalNormalExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+				}
+
+				// 10. Write out per chromosome mean
+				if (hasMeanValues)
+				{
+					for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
+					{
+						if (header)
+						{
+							outputFile.Write("\t" + ASETools.ChromosomeIndexToName(whichChromosome, true) + columnSuffix_mu);
+							continue;
+						}
+						if (isTumor)
+						{
+							if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
+							{
+								outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalMeanTumorExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor);
+							}
+							else
+							{
+								outputFile.Write("\t*");
+							}
+						}
+						else if (!isTumor)
+						{
+							if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
+							{
+								outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalMeanNormalExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal);
+							}
+							else
+							{
+								outputFile.Write("\t*");
+							}
+						}
+					}
+				}
+			}
+
+			public void ReadFile(string filename, bool skipFirstLine = true)
+			{
+				var reader = CreateStreamReaderWithRetry(filename);
+
+				string line;
+
+				// skip first line if version or other info resides there
+				if (skipFirstLine)
+					reader.ReadLine();
+
+				// read in header
+				var header = reader.ReadLine().Split('\t');
+
+				// skip gene name and mutation count. Get all distance labels and keep them in the index.
+				for (var i = 2; i < header.Count(); i++)
+				{
+					index.Add(header[i]);
+				}
+
+				while (null != (line = reader.ReadLine()))
+				{
+					if (line.Trim() == "**done**")
+					{
+						break;
+					}
+
+					string[] fields = line.Split('\t');
+
+					var hugoSymbol = fields[0];
+
+					var mutationCount = Convert.ToInt32(fields[1]);
+
+					// get rid of gene name and mutation count
+					fields = fields.Skip(2).ToArray();
+
+					// the rest of the fields match the index fields
+
+					if (fields.Length != index.Count())
+					{
+						throw new Exception("header does not match field length for file " + filename);
+					}
+
+					double[] numericFields = fields.Select(r => {
+						// Set default value
+						double value = double.NegativeInfinity;
+
+						if (r != "*")
+						{
+							value = Convert.ToDouble(r);
+						}
+						return value;
+					}).ToArray();
+
+					// add gene to dictionary
+					expressionMap.Add(hugoSymbol, numericFields);
+				}
+			}
+		}
+
 		//
 		// The content of an expression file.  We used to just return the more obvious Dictionary<string, Dictionary<int, MeanAndStdDev>>, but the inside dictionaries got big enough to make
 		// something bad happen in the CLR runtime, even on 64 bit with gcAllowVeryLargeObjects set.  So, instead we add one more level of indirection to get around dictionaries with
@@ -4805,7 +5269,7 @@ namespace ASELib
 					}
 				}
 
-				// return methylated (C) -> reference and unmethylated (T) -> alt
+				// return methylated (C) and  unmethylated (T)
 				return new Tuple<MethylationCounts, MethylationCounts>(new MethylationCounts(nMethylatedRef, nUnmethylatedRef, nNeitherRef),
 					new MethylationCounts(nMethylatedAlt, nUnmethylatedAlt, nNeitherAlt));
 
@@ -5517,5 +5981,75 @@ namespace ASELib
             public readonly long mappedBaseCount;
         }
 
-    } // ASETools
+
+		public class BisulfateCase
+		{
+			public string case_id;
+
+
+			public string bam_tumor_filename;
+			public string bed_tumor_filename;
+			public string bed_normal_filename;
+			public string bam_normal_filename;
+
+			public string bam_tumor_file_id;
+			public string bed_tumor_file_id;
+			public string bed_normal_file_id;
+			public string bam_normal_file_id;
+
+			public string realigned_maf_filename;
+			public string realigned_selected_variants_filename;
+
+			public BisulfateCase()
+			{
+			}
+
+			public static Dictionary<string, BisulfateCase> loadCases(string filename)
+			{
+
+				StreamReader inputFile = ASETools.CreateStreamReaderWithRetry(filename);
+
+				// format filename, location, file id, data format, access, data category, file size, project id, case id
+				var header = inputFile.ReadLine();
+
+				string line;
+
+				Dictionary<string, BisulfateCase> cases = new Dictionary<string, BisulfateCase>();
+
+				while ((line = inputFile.ReadLine()) != null)
+				{
+					var split = line.Split('\t');
+
+					// build bisulfate case
+					var case_id = split[0];
+
+
+					if (!cases.ContainsKey(case_id))
+					{
+						cases.Add(case_id, new BisulfateCase());
+					}
+					else
+					{
+						throw new Exception("Case " + case_id + " already in file");
+					}
+
+					cases[case_id].case_id = case_id;
+					cases[case_id].realigned_maf_filename = split[1];
+					cases[case_id].realigned_selected_variants_filename = split[2];
+					cases[case_id].bam_tumor_filename = split[3];
+					cases[case_id].bam_tumor_file_id = split[4];
+					cases[case_id].bam_normal_filename = split[5];
+					cases[case_id].bam_normal_file_id = split[6];
+
+					cases[case_id].bed_tumor_filename = split[7];
+					cases[case_id].bed_tumor_file_id = split[8];
+					cases[case_id].bed_normal_file_id = split[9];
+					cases[case_id].bed_normal_file_id = split[10];
+				}
+
+				return cases;
+			}
+		}
+
+	} // ASETools
 }
