@@ -47,7 +47,7 @@ namespace GenerateBisulfiteReadExtractionScript
 			string samtoolsPathname = configuration.commandLineArgs[2];
 
 			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
-			var bisulfiteCases = BisulfiteMethylation.BisulfateCase.loadCases(ASETools.ASEConfirguation.bisulfiteCasesFilePathname);
+			var bisulfiteCases = ASETools.BisulfateCase.loadCases(ASETools.ASEConfirguation.bisulfiteCasesFilePathname);
 
 			var casesToProcess = new List<CaseOutputFilenamePair>();
 

@@ -746,8 +746,8 @@ namespace ASELib
             public string normal_dna_reads_at_selected_variants_filename = "";
             public string normal_dna_reads_at_selected_variants_index_filename = "";
             public string annotated_selected_variants_filename = "";
-            public string normal_allele_specific_gene_expression_filename = "";
-			public string tumor_allele_specific_gene_expression_filename = "";
+            public string tumor_allele_specific_gene_expression_filename = "";
+			public string normal_allele_specific_gene_expression_filename = "";
 			public string tumor_dna_gene_coverage_filname = "";
             public string vcf_filename = "";
             public string extracted_maf_lines_filename = "";
@@ -941,8 +941,8 @@ namespace ASELib
                 new FieldInformation("Tumor RNA Reads At Selected Variants Filename",       c => c.tumor_rna_reads_at_selected_variants_filename, (c,v) => c.tumor_rna_reads_at_selected_variants_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariants, tumorRNAReadsAtSelectedVariantsExtension, c => c.tumor_rna_file_id),
                 new FieldInformation("Tumor RNA Reads At Selected Variants Index Filename", c => c.tumor_rna_reads_at_selected_variants_index_filename, (c,v) => c.tumor_rna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariantsIndex, tumorRNAReadsAtSelectedVariantsIndexExtension, c => c.tumor_rna_file_id),
                 new FieldInformation("Annotated Selected Variants Filename",                c => c.annotated_selected_variants_filename, (c,v) => c.annotated_selected_variants_filename = v, DerivedFile.Type.AnnotatedSelectedVariants, annotatedSelectedVariantsExtension, c => c.case_id),
-                new FieldInformation("Normal Allele Specific Gene Expression Filename",     c => c.normal_allele_specific_gene_expression_filename, (c,v) => c.normal_allele_specific_gene_expression_filename = v, DerivedFile.Type.NormalAlleleSpecificGeneExpression, normalAlleleSpecificGeneExpressionExtension, c => c.case_id),
-				new FieldInformation("Tumor Allele Specific Gene Expression Filename",      c => c.tumor_allele_specific_gene_expression_filename, (c,v) => c.tumor_allele_specific_gene_expression_filename = v, DerivedFile.Type.TumorAlleleSpecificGeneExpression, tumorAlleleSpecificGeneExpressionExtension, c => c.case_id),
+                new FieldInformation("Tumor Allele Specific Gene Expression Filename",      c => c.tumor_allele_specific_gene_expression_filename, (c,v) => c.tumor_allele_specific_gene_expression_filename = v, DerivedFile.Type.TumorAlleleSpecificGeneExpression, tumorAlleleSpecificGeneExpressionExtension, c => c.case_id),
+				new FieldInformation("Normal Allele Specific Gene Expression Filename",     c => c.normal_allele_specific_gene_expression_filename, (c,v) => c.normal_allele_specific_gene_expression_filename = v, DerivedFile.Type.NormalAlleleSpecificGeneExpression, normalAlleleSpecificGeneExpressionExtension, c => c.case_id),
 				new FieldInformation("Tumor DNA Gene Coverage Filename",                    c => c.tumor_dna_gene_coverage_filname, (c,v) => c.tumor_dna_gene_coverage_filname = v, DerivedFile.Type.TumorDNAGeneCoverage, tumorDNAGeneCoverageExtension, c => c.tumor_dna_file_id),
                 new FieldInformation("VCF Filename",                                        c => c.vcf_filename, (c,v) => c.vcf_filename = v, DerivedFile.Type.VCF, vcfExtension, c => c.normal_dna_file_id),
                 new FieldInformation("Extracted MAF Lines Filename",                        c => c.extracted_maf_lines_filename, (c,v) => c.extracted_maf_lines_filename = v, DerivedFile.Type.ExtractedMAFLines, extractedMAFLinesExtension, c => c.case_id),
@@ -953,6 +953,7 @@ namespace ASELib
                 new FieldInformation("Selected Variant Counts By Gene Filename",            c => c.selected_variant_counts_by_gene_filename, (c, v) => c.selected_variant_counts_by_gene_filename = v, DerivedFile.Type.SelectedVariantCountByGene, selectedVariantCountByGeneExtension, c => c.case_id),
 
                 new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
+				new FieldInformation("Tumor Regional Methylation Filename",                  c => c.tumor_regional_methylation_filename, (c, v) => c.tumor_regional_methylation_filename = v, DerivedFile.Type.TumorRegionalMethylation, tumorRegionalMethylationExtension, c => c.case_id),
                 new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
                 new FieldInformation("Tumor RNA BAM MD5",                                   c => c.tumor_rna_file_bam_md5, (c,v) => c.tumor_rna_file_bam_md5 = v),
                 new FieldInformation("Tumor RNA BAI MD5",                                   c => c.tumor_rna_file_bai_md5, (c,v) => c.tumor_rna_file_bai_md5 = v),
@@ -1133,8 +1134,8 @@ namespace ASELib
 				if (!derivedFiles.ContainsKey(case_id))
                 {
                     tumor_rna_allcount_filename = "";
-                    normal_allele_specific_gene_expression_filename = "";
-					tumor_allele_specific_gene_expression_filename = "";
+                    tumor_allele_specific_gene_expression_filename = "";
+					normal_allele_specific_gene_expression_filename = "";
 					annotated_selected_variants_filename = "";
                     tumor_dna_reads_at_selected_variants_filename = "";
                     tumor_dna_reads_at_selected_variants_index_filename = "";
@@ -1283,7 +1284,7 @@ namespace ASELib
             public List<string> programNames = new List<string>();
             public string binariesDirectory = defaultBaseDirectory + @"bin\";
             public string configuationFilePathname = defaultConfigurationFilePathame;
-			public string casesFilePathname = @"C:\Users\t-almorr\temp\cases_withTNMethylation.txt";  //defaultBaseDirectory + "cases.txt";
+			public string casesFilePathname = bisulfiteDirectory + @"cases_withTNMethylation_temp.txt";  //defaultBaseDirectory + "cases.txt";
             public string indexDirectory = defaultBaseDirectory + @"indices\hg38-20";
 			public string indexDirectoryHg19 = defaultBaseDirectory + @"indices\hg19";
 			public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
@@ -2043,9 +2044,9 @@ namespace ASELib
         public const string annotatedSelectedVariantsExtension = ".annotatedSeletedVariants";
         public const string regionalExpressionExtension = ".regional_expression.txt";
         public const string geneExpressionExtension = ".gene_expression.txt";
-		public const string normalAlleleSpecificGeneExpressionExtension = ".normal-allele-specific_gene_expression.txt";
 		public const string tumorAlleleSpecificGeneExpressionExtension = ".tumor-allele-specific_gene_expression.txt";
-        public const string tumorRNAReadsAtSelectedVariantsExtension = ".tumor-rna-reads-at-selected-variants.txt";
+		public const string normalAlleleSpecificGeneExpressionExtension = ".normal-allele-specific_gene_expression.txt";
+		public const string tumorRNAReadsAtSelectedVariantsExtension = ".tumor-rna-reads-at-selected-variants.txt";
         public const string tumorRNAReadsAtSelectedVariantsIndexExtension = ".tumor-rna-reads-at-selected-variants.txt.index";
         public const string normalRNAReadsAtSelectedVariantsExtension = ".normal-rna-reads-at-selected-variants.txt";
         public const string normalRNAReadsAtSelectedVariantsIndexExtension = ".normal-rna-reads-at-selected-variants.txt.index";
@@ -2061,12 +2062,13 @@ namespace ASELib
         public const string normalRNAMappedBaseCountExtension = ".normal_rna_mapped_base_count.txt";
         public const string tumorRNAMappedBaseCountExtension = ".tumor_rna_mapped_base_count.txt";
         public const string selectedVariantCountByGeneExtension = ".selected_variant_count_by_gene.txt";
+		public const string bisulfiteAlleleSpecificMethylationExtension = ".bisulfite_asm.txt";
+		public const string tumorRegionalMethylationExtension = ".tumor_regional_methylation.txt";
 
         public const string scatterGraphsSummaryFilename = "_summary.txt";
         public const string mannWhitneyFilename = "_MannWhitney.txt";
         public const string genesWithSelectedVariantsFilename = "GenesWithSelectedVariantCounts.txt";
         public const string heatMapFilename = "AlleleSpecificExpressionHeatMap.txt";
-		public const string bisulfiteAlleleSpecificMethylationExtension = ".bisulfite_asm.txt";
 		public const string regionalMethylationExtension = ".regional_methylation.txt";
 
         public class DerivedFile
@@ -2112,7 +2114,7 @@ namespace ASELib
             public enum Type { Unknown, NormalRNAAllcount, TumorRNAAllcount, NormalDNAAllcount, TumorDNAAllcount, RegionalExpression, GeneExpression, TumorDNAGeneCoverage,
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines,
-                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene,
+                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, TumorRegionalMethylation, SelectedVariantCountByGene,
             };
         } // DerivedFile
 
@@ -2647,7 +2649,7 @@ namespace ASELib
                         return false;
                     }
 
-                    if ("**done**" == inputLine) {
+                    if ("**done**" == inputLine.Trim()) {
                         sawDone = true;
                         continue;
                     }
@@ -6543,5 +6545,75 @@ namespace ASELib
             return 2;
         }
 
-    } // ASETools
+
+		public class BisulfateCase
+		{
+			public string case_id;
+
+
+			public string bam_tumor_filename;
+			public string bed_tumor_filename;
+			public string bed_normal_filename;
+			public string bam_normal_filename;
+
+			public string bam_tumor_file_id;
+			public string bed_tumor_file_id;
+			public string bed_normal_file_id;
+			public string bam_normal_file_id;
+
+			public string realigned_maf_filename;
+			public string realigned_selected_variants_filename;
+
+			public BisulfateCase()
+			{
+			}
+
+			public static Dictionary<string, BisulfateCase> loadCases(string filename)
+			{
+
+				StreamReader inputFile = ASETools.CreateStreamReaderWithRetry(filename);
+
+				// format filename, location, file id, data format, access, data category, file size, project id, case id
+				var header = inputFile.ReadLine();
+
+				string line;
+
+				Dictionary<string, BisulfateCase> cases = new Dictionary<string, BisulfateCase>();
+
+				while ((line = inputFile.ReadLine()) != null)
+				{
+					var split = line.Split('\t');
+
+					// build bisulfate case
+					var case_id = split[0];
+
+
+					if (!cases.ContainsKey(case_id))
+					{
+						cases.Add(case_id, new BisulfateCase());
+					}
+					else
+					{
+						throw new Exception("Case " + case_id + " already in file");
+					}
+
+					cases[case_id].case_id = case_id;
+					cases[case_id].realigned_maf_filename = split[1];
+					cases[case_id].realigned_selected_variants_filename = split[2];
+					cases[case_id].bam_tumor_filename = split[3];
+					cases[case_id].bam_tumor_file_id = split[4];
+					cases[case_id].bam_normal_filename = split[5];
+					cases[case_id].bam_normal_file_id = split[6];
+
+					cases[case_id].bed_tumor_filename = split[7];
+					cases[case_id].bed_tumor_file_id = split[8];
+					cases[case_id].bed_normal_file_id = split[9];
+					cases[case_id].bed_normal_file_id = split[10];
+				}
+
+				return cases;
+			}
+		}
+
+	} // ASETools
 }

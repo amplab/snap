@@ -4,28 +4,13 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{4A8CBB8D-976D-4FBA-B9A2-2F368DEB31A0}</ProjectGuid>
+    <ProjectGuid>{3F1A75B9-2B2B-47B6-B81A-F67A4B468460}</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <RootNamespace>BisulfiteMethylation</RootNamespace>
-    <AssemblyName>BisulfiteMethylation</AssemblyName>
+    <RootNamespace>ExtractBisulfiteReads</RootNamespace>
+    <AssemblyName>ExtractBisulfiteReads</AssemblyName>
     <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-    <PublishUrl>publish\</PublishUrl>
-    <Install>true</Install>
-    <InstallFrom>Disk</InstallFrom>
-    <UpdateEnabled>false</UpdateEnabled>
-    <UpdateMode>Foreground</UpdateMode>
-    <UpdateInterval>7</UpdateInterval>
-    <UpdateIntervalUnits>Days</UpdateIntervalUnits>
-    <UpdatePeriodically>false</UpdatePeriodically>
-    <UpdateRequired>false</UpdateRequired>
-    <MapFileExtensions>true</MapFileExtensions>
-    <ApplicationRevision>0</ApplicationRevision>
-    <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
-    <IsWebBootstrapper>false</IsWebBootstrapper>
-    <UseApplicationTrust>false</UseApplicationTrust>
-    <BootstrapperEnabled>true</BootstrapperEnabled>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>x64</PlatformTarget>
@@ -64,30 +49,18 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\apps\ExpressionNearMutations\ExpressionNearMutations.csproj">
-      <Project>{49ff4094-4b75-480a-9b53-e5c66b79a98b}</Project>
-      <Name>ExpressionNearMutations</Name>
-    </ProjectReference>
     <ProjectReference Include="..\ASELib\ASELib.csproj">
-      <Project>{FEF6DEF5-CA17-4FB1-AD7D-30FB579A7CF2}</Project>
+      <Project>{fef6def5-ca17-4fb1-ad7d-30fb579a7cf2}</Project>
       <Name>ASELib</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\apps\BisulfiteMethylation\BisulfiteMethylation.csproj">
+      <Project>{4a8cbb8d-976d-4fba-b9a2-2f368deb31a0}</Project>
+      <Name>BisulfiteMethylation</Name>
     </ProjectReference>
     <ProjectReference Include="..\ChangeGenomeBuild\GenomeBuild.csproj">
       <Project>{892b82dd-af9b-45e9-b2b0-0569ed227daf}</Project>
       <Name>GenomeBuild</Name>
     </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <BootstrapperPackage Include=".NETFramework,Version=v4.5.2">
-      <Visible>False</Visible>
-      <ProductName>Microsoft .NET Framework 4.5.2 %28x86 and x64%29</ProductName>
-      <Install>true</Install>
-    </BootstrapperPackage>
-    <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
-      <Visible>False</Visible>
-      <ProductName>.NET Framework 3.5 SP1</ProductName>
-      <Install>false</Install>
-    </BootstrapperPackage>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

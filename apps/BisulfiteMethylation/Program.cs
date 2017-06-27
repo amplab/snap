@@ -5,7 +5,6 @@ using System.Text;
 using System.IO;
 using System.Threading.Tasks;
 using ASELib;
-using ExpressionNearMutations;
 
 namespace BisulfiteMethylation
 {
@@ -28,75 +27,13 @@ namespace BisulfiteMethylation
 
 	}
 
-	public class BisulfateCase {
-		public string case_id;
-
-
-		public string bam_tumor_filename;
-		public string bed_tumor_filename;
-		public string bed_normal_filename;
-		public string bam_normal_filename;
-
-		public string bam_tumor_file_id;
-		public string bed_tumor_file_id;
-		public string bed_normal_file_id;
-		public string bam_normal_file_id;
-
-		public string realigned_maf_filename;
-		public string realigned_selected_variants_filename;
-
-		public BisulfateCase() {
-		}
-
-		public static Dictionary<string, BisulfateCase> loadCases(string filename) {
-
-			StreamReader inputFile = ASETools.CreateStreamReaderWithRetry(filename);
-
-			// format filename, location, file id, data format, access, data category, file size, project id, case id
-			var header = inputFile.ReadLine();
-
-			string line;
-
-			Dictionary<string, BisulfateCase> cases = new Dictionary<string, BisulfateCase>();
-
-			while ((line = inputFile.ReadLine()) != null)
-			{
-				var split = line.Split('\t');
-
-				// build bisulfate case
-				var case_id = split[0];
-
-
-				if (!cases.ContainsKey(case_id))
-				{
-					cases.Add(case_id, new BisulfateCase());
-				}
-				else {
-					throw new Exception("Case " + case_id + " already in file");
-				}
-
-				cases[case_id].case_id = case_id;
-				cases[case_id].realigned_maf_filename = split[1];
-				cases[case_id].realigned_selected_variants_filename = split[2];
-				cases[case_id].bam_tumor_filename = split[3];
-				cases[case_id].bam_tumor_file_id = split[4];
-				cases[case_id].bam_normal_filename = split[5];
-				cases[case_id].bam_normal_file_id = split[6];
-
-				cases[case_id].bed_tumor_filename = split[7];
-				cases[case_id].bed_tumor_file_id = split[8];
-				cases[case_id].bed_normal_file_id = split[9];
-				cases[case_id].bed_normal_file_id = split[10];
-			}
-
-			return cases;
-		}
-	}
-
 
 	class Program
 	{
 		static ASETools.Genome genome = new ASETools.Genome();
+
+		static int nTotal = 0;
+		static int nProcessed = 0;
 
 		static void ProcessCpGs(string filename, 
 			string file_id, 
@@ -116,6 +53,7 @@ namespace BisulfiteMethylation
 			// calculate the ASM for each CPG (it will be the same for all CpGs overlapping this site)\
 			foreach (var cpg in cpgs)
 			{
+				nTotal += 1;
 				
 				// count reads at CpG
 				var methylationCounts = ASETools.MethylationCounts.ComputeMethylationReadCounts(filename, cpg.Chromosome,
@@ -141,6 +79,8 @@ namespace BisulfiteMethylation
 				{
 					continue;
 				}
+
+				nProcessed += 1;
 
 				// ase1 (allelel1) = Cs with mutated read/cs with mutated + Ts with mutated
 				// ase2 (allelel2) = Cs with ref read/cs with ref + Ts with ref
@@ -201,6 +141,7 @@ namespace BisulfiteMethylation
 
 			} // foreach CpG
 
+
 		}
 
 		static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
@@ -218,7 +159,7 @@ namespace BisulfiteMethylation
 		static void Main(string[] args)
 		{
 			// Add cases with bisulfate data. We will use the bam and bisulfate files
-			var bisulfiteCases = BisulfateCase.loadCases(ASETools.ASEConfirguation.bisulfiteCasesFilePathname);
+			var bisulfiteCases = ASETools.BisulfateCase.loadCases(ASETools.ASEConfirguation.bisulfiteCasesFilePathname);
 
 			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
 
@@ -234,7 +175,6 @@ namespace BisulfiteMethylation
 			foreach (var bCase in bisulfiteCases)
 			{
 				Console.WriteLine("Processing case " + bCase.Key);
-
 				var bisulfate = bisulfiteCases[bCase.Key];
 
 				var case_ = cases[bCase.Key];
@@ -261,8 +201,18 @@ namespace BisulfiteMethylation
 				}
 
 				// variants and maflines realigned to hg19 genome
+				var dir = ASETools.GetDirectoryFromPathname(bisulfate.realigned_maf_filename);
 				var selectedVariants = ASETools.SelectedVariant.LoadFromFile(bisulfate.realigned_selected_variants_filename);
 				var mafLines = ASETools.MAFLine.ReadFile(bisulfate.realigned_maf_filename, case_.maf_file_id, false);
+
+				// save variants and mafs as bed to read in IGV
+				var bedVariantsFilename = dir + @"\" + bisulfate.case_id + "_bedVariants.bed";
+				var bedVariants = selectedVariants.Select(r => new ASETools.BedLine(r.contig, r.locus - 1, r.locus, r.referenceBase+"_"+r.altBase, 1000, '.', r.locus, r.locus + 1));
+				ASETools.BedLine.writeFile(bedVariantsFilename, bedVariants.ToList());
+
+				var bedMAFFilename = dir + @"\" + bisulfate.case_id + "_bedMAFs.bed";
+				var bedMafs = mafLines.Select(r => new ASETools.BedLine(r.Chromosome, r.Start_Position -1, r.Start_Position, r.Hugo_Symbol + "_" + r.Reference_Allele + "_" + r.Tumor_Seq_Allele2, 1000, '.', r.Start_Position, r.End_Positon));
+				ASETools.BedLine.writeFile(bedMAFFilename, bedMafs.ToList());
 
 				// read in cpgs
 				List<ASETools.BedLine> cpgs = ASETools.BedLine.ReadFile(bisulfate.bed_tumor_filename);
@@ -294,6 +244,8 @@ namespace BisulfiteMethylation
 						overlappingCpgs);
 
 				} // foreach variant
+				
+				// Print out stats about number of processed CpGs
 
 				var mafLineCount = 0;
 				foreach (var mafLine in mafLines)
@@ -333,8 +285,11 @@ namespace BisulfiteMethylation
 					ProcessCpGs(indexedReadsFilename, bisulfate.bam_tumor_filename + mafLine.getExtractedReadsExtension(), mafLine.Chromosome, mafLine.Start_Position, mafLine.Match_Norm_Seq_Allele1,
 						mafLine.Tumor_Seq_Allele2, mafLine.Variant_Type, overlappingCpgs);
 
-
 				} // foreach MAFLine
+
+				Console.WriteLine("Processed " + nProcessed + " CpGs out of " + nTotal);
+				nTotal = 0;
+				nProcessed = 0;
 
 				//
 				// Write the output file for ASM.
@@ -349,9 +304,6 @@ namespace BisulfiteMethylation
 
 				var outputFilename = directory + analysisId + (ASETools.bisulfiteAlleleSpecificMethylationExtension);
 				Console.WriteLine("Saving ASM to file " + outputFilename);
-
-				var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
-
 
 				var allExpressions = new List<ASETools.GeneExpression>();
 				foreach (var expressionEntry in geneExpressions)
@@ -368,8 +320,9 @@ namespace BisulfiteMethylation
 					wholeAutosomeRegionalExpression, allButThisChromosomeAutosomalRegionalExpressionState,
 					perChromosomeRegionalExpressionState);
 
-
-				outputFile.Close();
+				var columnSuffix = "tumor ASM";
+				var printMu = false;
+				output.WriteFile(outputFilename, printMu, 1, columnSuffix, true);
 
 				//////////////////
 				// clear expression for next case

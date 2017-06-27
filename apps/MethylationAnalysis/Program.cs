@@ -28,8 +28,6 @@ namespace MethylationAnalysis
 		}
 	}
 
-
-
 	class Program
 	{
 
@@ -84,9 +82,19 @@ namespace MethylationAnalysis
 
 			// read in tumor methylation file 
 			var annotations = ASELib.ASETools.AnnotationLine.ReadFile(methylation_filename, methylation_file_id, false);
-
+			var count = 0;
 			foreach (var annotation in annotations)
 			{
+				count++;
+
+				if (count % 100000 == 0)
+				{
+					Console.WriteLine("processed " + count + "annotations out of " + annotations.Count());
+				}
+
+				// get non chr form
+				var chromosome = ASETools.chromosomeNameToNonChrForm(annotation.compositeREF.Chromosome);
+
 				if (ASETools.isChromosomeAutosomal(annotation.compositeREF.Chromosome))
 				{
 					wholeAutosomeRegionalExpression.AddTumorExpression(annotation.M_Value, 0);
@@ -107,7 +115,7 @@ namespace MethylationAnalysis
 					perChromosomeRegionalExpressionState[chromosomeId].AddTumorExpression(annotation.M_Value, 0);
 				}
 				
-				foreach (var geneLocation in geneLocationInformation.genesByChromosome[ASETools.chromosomeNameToNonChrForm(annotation.compositeREF.Chromosome)])
+				foreach (var geneLocation in geneLocationInformation.genesByChromosome[chromosome])
 				{
 					geneExpressions[geneLocation.hugoSymbol].AddRegionalExpression(annotation.compositeREF.Start, annotation.M_Value, 0, true);
 				}
@@ -125,31 +133,17 @@ namespace MethylationAnalysis
 
 			allExpressions.Sort(ASETools.GeneExpression.CompareByGeneName);
 
-			string directory = ASETools.GetDirectoryPathFromFullyQualifiedFilename(case_.tumor_methylation_filename);
-			string analysisId = ASETools.GetAnalysisIdFromPathname(case_.tumor_methylation_filename);
+			string directory = ASETools.GetDirectoryPathFromFullyQualifiedFilename(case_.extracted_maf_lines_filename);
 
-			var outputFilename = directory + analysisId + (ASETools.regionalMethylationExtension);
-			var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
-
-			Console.WriteLine("saving to file " + outputFilename);
+			var outputFilename = directory + case_.case_id + (ASETools.tumorRegionalMethylationExtension);
+			Console.WriteLine("Saving to file " + outputFilename);
 
 			var columnSuffix = "tumor M-val";
-			//ExpressionNearMutations.Program.writeColumnNames(outputFile, true, case_, columnSuffix);
-
-			for (int i = 0; i < allExpressions.Count(); i++)
-			{
-				outputFile.Write(ASETools.ConvertToExcelString(allExpressions[i].geneLocationInfo.hugoSymbol) + "\t" + allExpressions[i].mutationCount);
-
-				//ExpressionNearMutations.Program.writeRow(outputFile, allExpressions[i],
-				//	wholeAutosomeRegionalExpression,
-				//	allButThisChromosomeAutosomalRegionalExpressionState,
-				//	perChromosomeRegionalExpressionState,
-				//	false,
-				//	1);
-
-				outputFile.WriteLine();
-			} // for each gene
-
+			var hasMeanValues = false;
+			var isTumor = true;
+			ASETools.ASEExpressionFile.WriteFile(outputFilename, allExpressions, wholeAutosomeRegionalExpression, allButThisChromosomeAutosomalRegionalExpressionState,
+				perChromosomeRegionalExpressionState, hasMeanValues, 1, case_, columnSuffix, isTumor);
+			
 			// Next analysis (loading in these numbers). Get the expression values in this part of the pipeline.
 			// run mann whitney for methylation scores for some vs no mutation for genes that we know are important in that cancer cell type
 
@@ -306,12 +300,12 @@ namespace MethylationAnalysis
 
 		static void PrintUsageMessage()
 		{
-			Console.WriteLine("usage: ExpressionNearMutations -a casesToProcess");
-			Console.WriteLine("-a means to use allele-specific expression, as opposed to total expression.");
+			Console.WriteLine("usage: MethylationAnalysis -450 casesToProcess");
 		}
 
 		static void Main(string[] args)
 		{
+			Console.WriteLine("Starting methylation");
 			var timer = new Stopwatch();
 			timer.Start();
 
@@ -323,98 +317,18 @@ namespace MethylationAnalysis
 				return;
 			}
 
+			int argsConsumed = 0;
+			bool onlyProcess450 = false;
+
+			if (configuration.commandLineArgs[0] == "-450") {
+				onlyProcess450 = true;
+				argsConsumed += 1;
+			}
+
 			// lines to print out
 			var lines = new List<string>();
 
-			// dictionary by case ids, then dictionary of composite ref and ratio score for that ref
-			var ratios = new Dictionary<string, Dictionary<string, double>>();
-			var composites = new Dictionary<string, ASETools.CompositeREF>();
-
 			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
-
-			var s = cases.Where(r => r.Value.tumor_methylation_filename.Contains("450") && r.Value.normal_methylation_filename != "" && r.Value.disease() == "brca").Select(r => r.Value);
-			var count = 0;
-			Console.WriteLine("Processing " + s.Count() + " cases...");
-			
-			foreach (var case_ in s)
-			{
-				ratios.Add(case_.case_id, new Dictionary<string, double>());
-
-				var tumorMethyls = ASETools.AnnotationLine.ReadFile(case_.tumor_methylation_filename, case_.tumor_methylation_file_id, false).Where(r => r.compositeREF.Chromosome == "chr13");
-				var normalMethyls = ASETools.AnnotationLine.ReadFile(case_.normal_methylation_filename, case_.normal_methylation_file_id, false).Where(r => r.compositeREF.Chromosome == "chr13")
-					.ToDictionary(x => x.compositeREF.Composite_Element_REF, x => x);
-
-				foreach (var tumorM in tumorMethyls)
-				{
-					// If composite REF not yet in dictionary, add it
-					if (!composites.ContainsKey(tumorM.compositeREF.Composite_Element_REF))
-					{
-						composites.Add(tumorM.compositeREF.Composite_Element_REF, tumorM.compositeREF);
-					}
-
-					if (!normalMethyls.ContainsKey(tumorM.compositeREF.Composite_Element_REF))
-					{
-						Console.WriteLine("normal composite REF for " + tumorM.compositeREF.Composite_Element_REF + " does not exist. Skipping...");
-						continue;
-					}
-
-					var ratio = tumorM.Beta_Value / normalMethyls[tumorM.compositeREF.Composite_Element_REF].Beta_Value;
-					ratios[case_.case_id].Add(tumorM.compositeREF.Composite_Element_REF, ratio);
-				}
-				count += 1;
-				Console.WriteLine(count + " cases done...");
-			} // foreach case
-
-			// Print final output
-			List<ASETools.CompositeREF> sortedREFs = new List<ASETools.CompositeREF>();
-
-			var grouped = composites.GroupBy(r => r.Value.Chromosome);
-
-			foreach (var group in grouped)
-			{
-				var ordered = group.Select(r => r.Value).ToList().OrderBy(r => r.Start);
-
-				foreach (var item in ordered)
-				{
-					sortedREFs.Add(item);
-				}
-			}
-
-
-			var outputFilename = @"C:\Users\t-almorr\temp\DNMT1brcatest.txt";
-			var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
-
-			// write header
-
-			foreach (var composite in sortedREFs)
-			{
-				//outputFile.Write("\t" + String.Join(",",composite.Gene_Symbol.Distinct()) + "-" + composite.Chromosome + ":" + 
-				//	composite.Start + "-" + composite.End);
-				outputFile.Write("\t" + composite.Start);
-			}
-			outputFile.WriteLine();
-
-			foreach (var ratio in ratios)
-			{
-				outputFile.Write(ratio.Key);
-				foreach (var composite in sortedREFs)
-				{
-					if (!ratio.Value.ContainsKey(composite.Composite_Element_REF))
-					{
-						outputFile.Write("\tNaN");
-					} else
-					{
-						outputFile.Write("\t" + ratio.Value[composite.Composite_Element_REF]);
-					}
-				}
-
-				outputFile.WriteLine();
-			}
-
-			outputFile.Close();
-
-			return;
-
 
 			if (null == cases)
 			{
@@ -423,18 +337,18 @@ namespace MethylationAnalysis
 			}
 
 			var selectedCases = new List<ASETools.Case>();
-			foreach (var arg in configuration.commandLineArgs)
+			for (int i = argsConsumed; i < configuration.commandLineArgs.Count(); i++)
 			{
-				if (!cases.ContainsKey(arg))
+				if (!cases.ContainsKey(configuration.commandLineArgs[i]))
 				{
-					Console.WriteLine(arg + " is not a valid case ID. Skipping...");
+					Console.WriteLine(configuration.commandLineArgs[i] + " is not a valid case ID. Skipping...");
 					continue;
-				} else if (!cases[arg].tumor_methylation_filename.Contains("450"))
+				} else if (!cases[configuration.commandLineArgs[i]].tumor_methylation_filename.Contains("HumanMethylation450") && onlyProcess450)
 				{
-					Console.WriteLine(arg + " does not have 450k methylation data. Skipping...");
+					Console.WriteLine(configuration.commandLineArgs[i] + " does not have 450k methylation data. Skipping...");
 					continue;
 				}
-				selectedCases.Add(cases[arg]);
+				selectedCases.Add(cases[configuration.commandLineArgs[i]]);
 			}
 
 			// Get information for current genome build

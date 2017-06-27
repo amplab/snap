@@ -75,9 +75,7 @@ obj
 /apps/BisulfiteMethylation/bin
 ChangeGenomeBuild/bin
 ExtractBisulfiteReads/bin
-
-
-
+/apps/MethylationHeatmaps/bin
 
 
 
