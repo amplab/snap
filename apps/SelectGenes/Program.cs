@@ -135,7 +135,7 @@ namespace SelectGenes
             } // foreach case
             Console.WriteLine();
 
-            var selectedGenes = new List<ASETools.SeletedGene>();
+            var selectedGenes = new List<ASETools.SelectedGene>();
             
             foreach (var geneEntry in genesByHugoSymbol)
             {
@@ -146,10 +146,10 @@ namespace SelectGenes
                     continue;
                 }
 
-                selectedGenes.Add(new ASETools.SeletedGene(gene.Hugo_Symbol, gene.nFlankingMutations, gene.nRNAMutations, gene.tumorsByMutationCount));
+                selectedGenes.Add(new ASETools.SelectedGene(gene.Hugo_Symbol, gene.nFlankingMutations, gene.nRNAMutations, gene.tumorsByMutationCount));
             } // foreach gene
 
-            ASETools.SeletedGene.SaveAllToFile(selectedGenes, configuration.selectedGenesFilename);
+            ASETools.SelectedGene.SaveAllToFile(selectedGenes, configuration.selectedGenesFilename);
 
             Console.WriteLine("Selected " + selectedGenes.Count() + " genes from a pool of " + genesByHugoSymbol.Count() + " possible genes in " + ASETools.ElapsedTimeInSeconds(timer));
 

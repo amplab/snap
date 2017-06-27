@@ -1541,7 +1541,7 @@ namespace ASEProcessManager
             public List<string> diseases = null;
             public Dictionary<string, string> fileIdToCaseId = null;
             public Dictionary<string, long> fileSizesFromGDC = null;
-            public List<ASETools.SeletedGene> selectedGenes = null;
+            public List<ASETools.SelectedGene> selectedGenes = null;
             public string scatterGraphsSummaryFile = "";
             public Dictionary<string, string> scatterGraphsByHugoSymbol = new Dictionary<string, string>();
 
@@ -1551,7 +1551,7 @@ namespace ASEProcessManager
 
                 if (File.Exists(configuration.selectedGenesFilename))
                 {
-                    selectedGenes = ASETools.SeletedGene.LoadFromFile(configuration.selectedGenesFilename);
+                    selectedGenes = ASETools.SelectedGene.LoadFromFile(configuration.selectedGenesFilename);
 
                     foreach (var selectedGene in selectedGenes)
                     {

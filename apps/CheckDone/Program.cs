@@ -161,6 +161,7 @@ namespace CheckDone
                 HandleFilename(case_.tumor_dna_mapped_base_count_filename);
                 HandleFilename(case_.normal_rna_mapped_base_count_filename);
                 HandleFilename(case_.tumor_rna_mapped_base_count_filename);
+                HandleFilename(case_.selected_variant_counts_by_gene_filename);
             }
 
             Console.Write("Processing " + totalFiles + " files in " + FilenamesByDataDirectory.Count() + " data directories (one dot/hundred): ");

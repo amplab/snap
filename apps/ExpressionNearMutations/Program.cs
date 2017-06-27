@@ -542,42 +542,24 @@ namespace ExpressionNearMutations
                     geneExpressions[mafLine.Hugo_Symbol].mutationCount++;
                 }
 
+                List<ASETools.AnnotatedVariant> annotatedVariants = null;
+                List<int> regionalExpressionLines = null;
 
-                var reader = ASETools.CreateStreamReaderWithRetry(inputFilename);
-
-                var headerLine = reader.ReadLine();
-                if (null == headerLine)
+                if (forAlleleSpecificExpression)
                 {
-                    Console.WriteLine("Empty input file " + inputFilename);
-                    continue;
+                    annotatedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
+                    if (annotatedVariants == null)
+                    {
+                        Console.WriteLine("Failed to read " + case_.annotated_selected_variants_filename + ".  Giving up on case " + case_.case_id);
+                        continue;
+                    }
+                } else
+                {
+                    //
+                    // Fill in something here when we have code for overall expression.
+                    //
                 }
 
-                string line;
-                int lineNumber = 1;
-                if (!forAlleleSpecificExpression)
-                {
-                    if (headerLine.Substring(0, 20) != "RegionalExpression v")
-                    {
-                        Console.WriteLine("Corrupt header line in file '" + inputFilename + "', line: " + headerLine);
-                        continue;
-                    }
-
-                    if (headerLine.Substring(20, 2) != "3.")
-                    {
-                        Console.WriteLine("Unsupported version in file '" + inputFilename + "', header line: " + headerLine);
-                        continue;
-                    }
-                    line = reader.ReadLine();   // The NumContigs line, which we just ignore
-                    line = reader.ReadLine();   // The column header line, which we just ignore
-
-                    if (null == line)
-                    {
-                        Console.WriteLine("Truncated file '" + inputFilename + "' ends after header line.");
-                        continue;
-                    }
-
-                    lineNumber = 3;
-                }
 				// Variables storing expression state other than same-chromosome regional.
 
 				// One expression state for whole autosome
@@ -598,6 +580,39 @@ namespace ExpressionNearMutations
                     if (!allButThisChromosomeAutosomalRegionalExpressionState.ContainsKey(chromosome))
                     {
                         allButThisChromosomeAutosomalRegionalExpressionState.Add(chromosome, new RegionalExpressionState());
+                    }
+                }
+
+                if (forAlleleSpecificExpression)
+                {
+                    foreach (var annotatedVariant in annotatedVariants)
+                    {
+                        double alleleSpecificExpression;
+                        double alleleSpecificExpressionNormal;
+
+                        if (geneLocationInformation.genesByChromosome.ContainsKey(annotatedVariant.contig) && 
+                            annotatedVariant.tumorDNAReadCounts.nMatchingReference + annotatedVariant.tumorDNAReadCounts.nMatchingAlt >= 10 &&
+                            annotatedVariant.tumorRNAReadCounts.nMatchingReference + annotatedVariant.tumorRNAReadCounts.nMatchingAlt >= 10 &&
+                            annotatedVariant.tumorDNAReadCounts.nMatchingReference * 3 >= annotatedVariant.tumorDNAReadCounts.nMatchingAlt * 2 &&
+                            annotatedVariant.tumorDNAReadCounts.nMatchingAlt * 3 >= annotatedVariant.tumorDNAReadCounts.nMatchingReference * 2)
+                        {
+                            double rnaFractionTumor = (double)annotatedVariant.tumorRNAReadCounts.nMatchingAlt / (annotatedVariant.tumorRNAReadCounts.nMatchingReference + annotatedVariant.tumorRNAReadCounts.nMatchingAlt);
+
+                            //
+                            // Now convert to the amount of allele-specific expression.  50% is no ASE, while 0 or 100% is 100% ASE.
+                            //
+                            alleleSpecificExpression = Math.Abs(rnaFractionTumor * 2.0 - 1.0); 
+
+                            // If we have the normal DNA and RNA for this sample, compute the normal ASE
+                            if (annotatedVariant.normalRNAReadCounts != null && annotatedVariant.normalDNAReadCounts.nMatchingReference + annotatedVariant.normalDNAReadCounts.nMatchingAlt >= 10 &&   // We have at least 10 DNA reads
+                                annotatedVariant.normalRNAReadCounts.nMatchingReference + annotatedVariant.normalRNAReadCounts.nMatchingAlt >= 10 &&            // We have at least 10 RNA reads
+                                annotatedVariant.normalDNAReadCounts.nMatchingReference * 3 >= annotatedVariant.normalDNAReadCounts.nMatchingAlt * 2 &&         // It's not more than 2/3 variant DNA
+                                annotatedVariant.normalDNAReadCounts.nMatchingAlt * 3 >= annotatedVariant.normalDNAReadCounts.nMatchingReference * 2)
+                            {
+                                alleleSpecificExpressionNormal = Math.Abs(((double)annotatedVariant.normalRNAReadCounts.nMatchingAlt / (annotatedVariant.normalRNAReadCounts.nMatchingReference + annotatedVariant.normalRNAReadCounts.nMatchingAlt)) * 2.0 - 1.0);
+                            }
+                        }
+                    }
                     }
                 }
 
@@ -859,12 +874,14 @@ namespace ExpressionNearMutations
             Console.WriteLine("-a means to use allele-specific expression, as opposed to total expression.");
         }
 
+        static ASETools.ASEConfirguation configuration;
+
         static void Main(string[] args)
         {
 			var timer = new Stopwatch();
 			timer.Start();
 
-			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+			configuration = ASETools.ASEConfirguation.loadFromFile(args);
 
 			if (null == configuration)
 			{

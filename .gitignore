@@ -68,6 +68,11 @@ obj
 /apps/ExpressionByMutationCount/bin
 /apps/FixASV/bin
 /apps/GenerateScatterGraphs/bin
+/apps/ASEHeatMap/bin
+/apps/CountVariantsInGenes/bin
+/apps/MannWhitney/bin
+/apps/SummarizeSelectedVariantCountsByGene/bin
+
 
 
 

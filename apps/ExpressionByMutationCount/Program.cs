@@ -396,7 +396,7 @@ namespace ExpressionByMutationCount
             public bool loadPerCaseState(Dictionary<string, string> sampleToParticipantIDMap, Dictionary<string, ASETools.Case> experimentsByRNAAnalysisID)
             {
 
-                var geneScatterPlotLines = ASETools.GeneScatterGraphLine.LoadAllGeneScatterGraphEntries(ExpressionTools.unfilteredCountsDirectory, true, experimentsByRNAAnalysisID, hugo_symbol);
+                var geneScatterPlotLines = ASETools.GeneScatterGraphLine.LoadAllGeneScatterGraphEntries(ExpressionTools.unfilteredCountsDirectory, true, hugo_symbol);
                 if (null == geneScatterPlotLines || geneScatterPlotLines.Count() == 0)
                 {
                     return false;
@@ -784,6 +784,7 @@ namespace ExpressionByMutationCount
             var timer = new Stopwatch();
 
             timer.Start();
+
             foreach (var caseEntry in cases)
             {
                 var case_ = caseEntry.Value;

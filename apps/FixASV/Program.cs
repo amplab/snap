@@ -42,7 +42,7 @@ namespace FixASV
             Console.Write("Processing " + casesToProcess.Count() + " cases (1 dot/100 cases): ");
 
             var threads = new List<Thread>();
-            for (int i = 0; i < /*Environment.ProcessorCount*/ 1; i++)
+            for (int i = 0; i < Environment.ProcessorCount; i++)
             {
                 threads.Add(new Thread(() => WorkerThread()));
             }

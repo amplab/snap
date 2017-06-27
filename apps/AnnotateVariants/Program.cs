@@ -146,7 +146,7 @@ namespace AnnotateVariants
             var subfileReader = consolodatedFile.getSubfile(subfileName);
             if (null == subfileReader)
             {
-                Console.WriteLine("ComputeReadCounts: no subfile named " + subfileName);
+                Console.WriteLine("ComputeReadCounts: no subfile named " + subfileName + " in " + selectedReadsFilename);
                 return null;
             }
 

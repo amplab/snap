@@ -320,6 +320,9 @@ namespace GenerateScatterGraphs
 
         static void Main(string[] args)
         {
+            var endToEndTimer = new Stopwatch();
+            endToEndTimer.Start();
+
             var configuration = ASETools.ASEConfirguation.loadFromFile(args);
             if (null == configuration)
             {
@@ -344,7 +347,7 @@ namespace GenerateScatterGraphs
                 return;
             }
 
-            var selectedGenes = ASETools.SeletedGene.LoadFromFile(configuration.selectedGenesFilename);
+            var selectedGenes = ASETools.SelectedGene.LoadFromFile(configuration.selectedGenesFilename);
             if (null == selectedGenes)
             {
                 Console.WriteLine("Unable to load Selected Genes file.");
@@ -359,6 +362,12 @@ namespace GenerateScatterGraphs
 
             int nMissingInputs = 0;
             var geneStates = new Dictionary<string, GeneState>();
+            int casesProcessed = 0;
+
+            if (!useExpression)
+            {
+                Console.Write("Processing " + cases.Count() + " cases.  One dot/hundred cases: ");
+            }
 
             foreach (var disease in ASETools.GetListOfDiseases(cases))
             {
@@ -376,13 +385,19 @@ namespace GenerateScatterGraphs
                     expression = new ASETools.ExpressionFile();
                     var timer = new Stopwatch();
                     timer.Start();
-                    Console.Write("Loading expression file for " + disease);
+                    Console.Write("Loading expression file for " + disease + ": ");
                     expression.LoadFromFile(expressionFilename);
                     Console.WriteLine(ASETools.ElapsedTimeInSeconds(timer));
                 }
 
                 foreach (var caseEntry in cases.Where(c => c.Value.disease() == disease))
                 {
+                    casesProcessed++;
+                    if (!useExpression && casesProcessed % 100 == 0)
+                    {
+                        Console.Write(".");
+                    }
+
                     var case_ = caseEntry.Value;
 
                     if (case_.annotated_selected_variants_filename == "" || case_.tumor_rna_mapped_base_count_filename == "")
@@ -412,6 +427,14 @@ namespace GenerateScatterGraphs
                         {
                             Console.WriteLine("Found empty hugo symbol in annotated variant for somatic mutation on case " + case_.case_id);
                             break;
+                        }
+
+                        if (Hugo_symbol == "Y_RNA")
+                        {
+                            //
+                            // This isn't a gene, but rather a type of small noncoding RNAs.  As a result, they are in more than one place in the genome.  Just skip them.
+                            //
+                            continue;
                         }
 
                         if (!selectedGeneNames.Contains(Hugo_symbol.ToLower()))
@@ -487,7 +510,7 @@ namespace GenerateScatterGraphs
 
                         outputLine += "\t" +
                             annotatedVariant.tumorRNAReadCounts.nMatchingReference + "\t" + annotatedVariant.tumorRNAReadCounts.nMatchingAlt + "\t" + annotatedVariant.tumorRNAReadCounts.nMatchingNeither + "\t" + annotatedVariant.tumorRNAReadCounts.nMatchingBoth + "\t" +
-                            (nMutationsThisGene > 1) + "\t" + nMutationsThisGene + "\t";
+                            (nMutationsThisGene > 1) + "\t" + nMutationsThisGene;
 
                         geneState.outputUnfiltered.Add(outputLine);
 
@@ -496,24 +519,24 @@ namespace GenerateScatterGraphs
                             continue;
                         }
 
-                        double tumorDNAFraction = nDNATumor / (nDNATumor + nDNAReference + nDNANeither);
-                        double tumorRNAFraction = nRNATumor / (nRNATumor + nRNAReference + nRNANeither);
+                        double tumorDNAFraction = (double)nDNATumor / (nDNATumor + nDNAReference + nDNANeither);
+                        double tumorRNAFraction = (double)nRNATumor / (nRNATumor + nRNAReference + nRNANeither);
                         double tumorDNAMultiple = ComputeMultiple(nDNATumor, nDNAReference + nDNANeither);
                         double tumorRNAMultiple = ComputeMultiple(nRNATumor, nRNAReference + nRNANeither);
-                        double tumorDNALog = ComputeRatio(nDNATumor, nDNAReference + nDNANeither);
-                        double tumorRNALog = ComputeRatio(nRNATumor, nRNAReference + nRNANeither);
+                        double tumorDNARatio = ComputeRatio(nDNATumor, nDNAReference + nDNANeither);
+                        double tumorRNARatio = ComputeRatio(nRNATumor, nRNAReference + nRNANeither);
 
                         string ratioOfRatiosString;
-                        if (tumorDNALog == 0)
+                        if (tumorDNARatio == 0)
                         {
                             ratioOfRatiosString = "1000";
                         }
                         else
                         {
-                            ratioOfRatiosString = Convert.ToString(tumorRNALog / tumorDNALog);
+                            ratioOfRatiosString = Convert.ToString(tumorRNARatio / tumorDNARatio);
                         }
 
-                        outputLine += "\t" + tumorDNAFraction + "\t" + tumorRNAFraction + "\t" + tumorDNAMultiple + "\t" + tumorRNAMultiple + "\t" + tumorDNALog + "\t" + tumorRNALog + "\t" + ratioOfRatiosString + "\t";
+                        outputLine += "\t" + tumorDNAFraction + "\t" + tumorRNAFraction + "\t" + tumorDNAMultiple + "\t" + tumorRNAMultiple + "\t" + tumorDNARatio + "\t" + tumorRNARatio + "\t" + ratioOfRatiosString + "\t";
 
                         //
                         // See if we have the mean & std deviation for this locus, and if so write the z values for normal and mutant expression.  Recall that the mean and std. dev differ by
@@ -523,10 +546,12 @@ namespace GenerateScatterGraphs
 
                         if (expression != null && mappedBaseCount.mappedBaseCount != 0 && expression.getValue(annotatedVariant.contig, annotatedVariant.locus, out meanAndStdDev))
                         { 
-                            outputLine += ((((double)nRNATumor / (double)mappedBaseCount.mappedBaseCount) - meanAndStdDev.mean) / meanAndStdDev.stddev) + "\t" +
-                                ((((double)(nRNAReference + nRNANeither) / (double)mappedBaseCount.mappedBaseCount) - meanAndStdDev.mean) / meanAndStdDev.stddev) + "\t" +
-                                ((((double)nRNATumor * 2.0 / (double)mappedBaseCount.mappedBaseCount) - meanAndStdDev.mean) / meanAndStdDev.stddev) + "\t" +
-                                ((((double)(nRNAReference + nRNANeither) * 2.0 / (double)mappedBaseCount.mappedBaseCount) - meanAndStdDev.mean) / meanAndStdDev.stddev) + "\t";
+                            outputLine += 
+                                ((((double)(nRNATumor + nRNAReference + nRNANeither) / (double)mappedBaseCount.mappedBaseCount) - meanAndStdDev.mean) - meanAndStdDev.stddev) + "\t" +  // z of total expression 
+                                ((((double)nRNATumor / (double)mappedBaseCount.mappedBaseCount) - meanAndStdDev.mean) / meanAndStdDev.stddev) + "\t" +                                  // z Of tumor Expression
+                                ((((double)(nRNAReference + nRNANeither) / (double)mappedBaseCount.mappedBaseCount) - meanAndStdDev.mean) / meanAndStdDev.stddev) + "\t" +              // z of normal (and neither)
+                                ((((double)nRNATumor * 2.0 / (double)mappedBaseCount.mappedBaseCount) - meanAndStdDev.mean) / meanAndStdDev.stddev) + "\t" +                            // 2 z tumor
+                                ((((double)(nRNAReference + nRNANeither) * 2.0 / (double)mappedBaseCount.mappedBaseCount) - meanAndStdDev.mean) / meanAndStdDev.stddev) + "\t";         // 2 z normal
 
                             if (meanAndStdDev.mean != 0)
                             {
@@ -540,7 +565,7 @@ namespace GenerateScatterGraphs
                         }
                         else
                         {
-                            outputLine += "\t\t\t\t\t";
+                            outputLine += "\t\t\t\t\t\t";
                         }
 
                         geneState.output.Add(outputLine);
@@ -552,16 +577,16 @@ namespace GenerateScatterGraphs
 
                         if (nMutationsThisGene == 1)
                         {
-                            geneState.singleRatioRatios.Add(tumorRNALog / tumorDNALog);
+                            geneState.singleRatioRatios.Add(tumorRNARatio / tumorDNARatio);
                         }
                         else
                         {
-                            geneState.multipleRatioRatios.Add(tumorRNALog / tumorDNALog);
+                            geneState.multipleRatioRatios.Add(tumorRNARatio / tumorDNARatio);
                         }
-                        geneState.ratioRatios.Add(tumorRNALog / tumorDNALog);
-                        if (tumorDNALog >= 0.5 && tumorDNALog <= 2)
+                        geneState.ratioRatios.Add(tumorRNARatio / tumorDNARatio);
+                        if (tumorDNARatio >= 0.5 && tumorDNARatio <= 2)
                         {
-                            geneState.ratioRatiosMidDNA.Add(tumorRNALog / tumorDNALog);
+                            geneState.ratioRatiosMidDNA.Add(tumorRNARatio / tumorDNARatio);
                         }
                     }
                 } // foreach case in a given disease
@@ -585,7 +610,7 @@ namespace GenerateScatterGraphs
                     continue;   // Not enough patients to be interesting
                 }
 
-                summaryFile.WriteLine(geneState.gene + "\t" + geneState.nSingle + "\t" + geneState.nMultiple + "\t" + geneState.nInteresting + "\t" + ((geneState.nInteresting * 100) / (geneState.nSingle + geneState.nMultiple)) + "\t" + geneState.sex + "\t" +
+                summaryFile.WriteLine(geneState.gene + "\t" + geneState.nSingle + "\t" + geneState.nMultiple + "\t" + geneState.nInteresting + "\t" + ((double)(geneState.nInteresting * 100) / (geneState.nSingle + geneState.nMultiple)) + "\t" + geneState.sex + "\t" +
                     Median(geneState.singleRatioRatios) + "\t" + Median(geneState.multipleRatioRatios) + "\t" + Median(geneState.singleRatioRatios, geneState.multipleRatioRatios) + "\t" +  Median(geneState.ratioRatiosMidDNA));
 
                 string[] histogramLines = BuildHistogram(geneState.ratioRatios, histogramBucketMaxima);
@@ -593,15 +618,15 @@ namespace GenerateScatterGraphs
 
                 StreamWriter file = new StreamWriter(configuration.geneScatterGraphsDirectory + geneState.gene + ".txt");
                 string unfilteredHeaderLine =
-                    "Hugo_Symbol\tChromosome\tStart_Position\tVariant_Classification\tVariant_Type\tReference_Allele\tAlt_Allele\tdisease" +
+                    "Hugo_Symbol\tChromosome\tStart_Position\tVariant_Classification\tVariant_Type\tReference_Allele\tAlt_Allele\tdisease\t" +
                     "Case Id\tTumor DNA File ID\tTumor RNA File ID\tNormal DNA File ID\tNormal RNA File ID\t" +
                     "n_normal_DNA_Matching_Reference\tn_normal_DNA_Matching_Alt\tn_normal_DNA_Matching_Neither\tn_normal_DNA_Matching_Both\t" +
                     "n_tumor_DNA_Matching_Reference\tn_tumor_DNA_Matching_Alt\tn_tumor_DNA_Matching_Neither\tn_tumor_DNA_Matching_Both\t" +
                     "n_normal_RNA_Matching_Reference\tn_normal_RNA_Matching_Alt\tn_normal_RNA_Matching_Neither\tn_normal_RNA_Matching_Both\t" +
                     "n_tumor_RNA_Matching_Reference\tn_tumor_RNA_Matching_Alt\tn_tumor_RNA_Matching_Neither\tn_tumor_RNA_Matching_Both\t" +
-                    "Multiple Mutations in this Gene\tn Mutations in this gene\t";
+                    "Multiple Mutations in this Gene\tn Mutations in this gene";
                 string headerLine = unfilteredHeaderLine + 
-                    "\ttumorDNAFraction\ttumorRNAFraction\ttumorDNAMultiple\ttumorRNAMultiple\ttumorDNARatio\ttumorRNARatio\tFractionOfMeanExpression\tzOfmeanExpression\tratioOfRatios\tIsSingle\tCancerType\tzTumor\tzNormal\tz2Tumor\tz2Normal\t%MeanTumor\t%MeanNormal\t";
+                    "\ttumorDNAFraction\ttumorRNAFraction\ttumorDNAMultiple\ttumorRNAMultiple\ttumorDNARatio\ttumorRNARatio\tRatioOfRatios\tzOftotalExpression\tzTumor\tzNormal\tz2Tumor\tz2Normal\t%MeanTumor\t%MeanNormal\t";
 
                 file.WriteLine(headerLine + histogramLines[0] + "\t" + histogram2Lines[0]);
                 for (int i = 0; i < geneState.output.Count(); i++)
@@ -616,7 +641,7 @@ namespace GenerateScatterGraphs
                     }
                 }
 
-                file.WriteLine("*done**");
+                file.WriteLine("**done**");
                 file.Close();
 
                 var unfilteredFile = new StreamWriter(configuration.geneScatterGraphsDirectory + geneState.gene + ASETools.ASEConfirguation.unfilteredCountsExtention);
@@ -632,7 +657,12 @@ namespace GenerateScatterGraphs
             summaryFile.WriteLine("**done**");
             summaryFile.Close();
 
-            Console.WriteLine("" + nMissingInputs + " cases are missing input files.");
+            if (!useExpression)
+            {
+                Console.WriteLine();    // We'd been printing progress dots.
+            }
+
+            Console.WriteLine("Generated results for " + geneStates.Where(g => g.Value.output.Count() >= 30).Count() + " genes in " + ASETools.ElapsedTimeInSeconds(endToEndTimer) + ".  " + nMissingInputs + " cases are missing input files.");
 
         } // Main
     }
