@@ -1016,10 +1016,21 @@ namespace ASEProcessManager
                     var case_ = caseEntry.Value;
 					if (forAlleleSpecificExpression)
 					{
-						if (case_.allele_specific_gene_expression_filename != "")
+						if (case_.tumor_allele_specific_gene_expression_filename != "")
 						{
-							nDone++;
-							continue;
+							if (case_.normal_rna_filename == "")
+							{
+								nDone++;
+								continue;
+							}
+							else // if normal rna exists and normal ASE was calculated
+							{
+								if (case_.normal_allele_specific_gene_expression_filename != "")
+								{
+									nDone++;
+									continue;
+								}
+							}
 						}
 						else if (case_.maf_filename == "" || case_.annotated_selected_variants_filename == "")
 						{
@@ -1087,24 +1098,34 @@ namespace ASEProcessManager
 
 					if (forAlleleSpecificExpression)
 					{
-						if (case_.allele_specific_gene_expression_filename == "")
+						if (case_.tumor_allele_specific_gene_expression_filename == "" && case_.normal_allele_specific_gene_expression_filename == "")
 						{
 							continue;
 						}
 
-						var asGeneExpressionWriteTime = new FileInfo(case_.allele_specific_gene_expression_filename).LastWriteTime;
 						if (case_.annotated_selected_variants_filename == "")
 						{
-							Console.WriteLine("AS gene expression file " + case_.allele_specific_gene_expression_filename + " exists, but the precursor annotated selected variants file does not.");
+							Console.WriteLine("AS gene expression file " + case_.tumor_allele_specific_gene_expression_filename + " exists, but the precursor annotated selected variants file does not.");
 							allOK = false;
 							continue;
 						}
 
+						var asGeneExpressionWriteTime = new FileInfo(case_.tumor_allele_specific_gene_expression_filename).LastWriteTime;
 						if (new FileInfo(case_.annotated_selected_variants_filename).LastWriteTime > asGeneExpressionWriteTime)
 						{
-							Console.WriteLine("AS gene expression file " + case_.allele_specific_gene_expression_filename + " is older than its regional file " + case_.regional_expression_filename);
+							Console.WriteLine("AS gene expression tumor file " + case_.tumor_allele_specific_gene_expression_filename + " is older than its regional file " + case_.regional_expression_filename);
 							allOK = false;
 							continue;
+						}
+						if (case_.normal_allele_specific_gene_expression_filename != "")
+						{
+							asGeneExpressionWriteTime = new FileInfo(case_.normal_allele_specific_gene_expression_filename).LastWriteTime;
+							if (new FileInfo(case_.annotated_selected_variants_filename).LastWriteTime > asGeneExpressionWriteTime)
+							{
+								Console.WriteLine("AS gene expression normal file " + case_.normal_allele_specific_gene_expression_filename + " is older than its regional file " + case_.regional_expression_filename);
+								allOK = false;
+								continue;
+							}
 						}
 					}
 					else
@@ -1932,24 +1953,24 @@ namespace ASEProcessManager
 
 			var forAlleleSpecificExpression = true;
 
-            processingStages.Add(new MAFConfigurationProcessingStage());
-            processingStages.Add(new GenerateCasesProcessingStage());
-            processingStages.Add(new AllcountProcesingStage());
-            processingStages.Add(new DownloadProcessingStage());
-            processingStages.Add(new MD5ComputationProcessingStage());
-            processingStages.Add(new GermlineVariantCallingProcessingStage());
-            processingStages.Add(new SelectVariantsProcessingStage());
+			processingStages.Add(new MAFConfigurationProcessingStage());
+			processingStages.Add(new GenerateCasesProcessingStage());
+			processingStages.Add(new AllcountProcesingStage());
+			processingStages.Add(new DownloadProcessingStage());
+			processingStages.Add(new MD5ComputationProcessingStage());
+			processingStages.Add(new GermlineVariantCallingProcessingStage());
+			processingStages.Add(new SelectVariantsProcessingStage());
 			processingStages.Add(new AnnotateVariantsProcessingStage());
 			processingStages.Add(new ExpressionDistributionProcessingStage());
-            processingStages.Add(new ExtractMAFLinesProcessingStage());
-            processingStages.Add(new RegionalExpressionProcessingStage());
-            // off for now processingStages.Add(new ExpressionNearMutationsProcessingStage(forAlleleSpecificExpression));
-            processingStages.Add(new ExtractReadsProcessingStage());
-            processingStages.Add(new SelectGenesProcessingStage());
-            processingStages.Add(new CountMappedBasesProcessingStage());
-            processingStages.Add(new GenerateScatterGraphsProcessingStage());
+			processingStages.Add(new ExtractMAFLinesProcessingStage());
+			processingStages.Add(new RegionalExpressionProcessingStage());
+			processingStages.Add(new ExpressionNearMutationsProcessingStage(forAlleleSpecificExpression));
+			processingStages.Add(new ExtractReadsProcessingStage());
+			processingStages.Add(new SelectGenesProcessingStage());
+			processingStages.Add(new CountMappedBasesProcessingStage());
+			processingStages.Add(new GenerateScatterGraphsProcessingStage());
 
-            if (checkDependencies)
+			if (checkDependencies)
             {
                 bool allDependenciesOK = true;
                 foreach (var processingStage in processingStages)
