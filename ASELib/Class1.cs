@@ -1925,7 +1925,8 @@ namespace ASELib
         public const string scatterGraphsSummaryFilename = "_summary.txt";
         public const string mannWhitneyFilename = "_MannWhitney.txt";
         public const string genesWithSelectedVariantsFilename = "GenesWithSelectedVariantCounts.txt";
-        public const string heatMapFilename = "AlleleSpecificExpressionHeatMap.txt";
+        public const string tumorHeatMapFilename = "TumorAlleleSpecificExpressionHeatMap.txt";
+        public const string normalHeatMapFilename = "NormalAlleleSpecificExpressionHeatMap.txt";
 
         public class DerivedFile
         {
