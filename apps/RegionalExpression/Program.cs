@@ -12,150 +12,10 @@ using ASELib;
 
 namespace RegionalExpression
 {
-    class Program
-    {
-        class Region
-        {
-            public Region(int regionSize_, ASETools.ExpressionFile expression_, Dictionary<string, int> highestOffsetForEachContig_, long nHighQualityMappedNuclearReads_, StreamWriter outputFile_) {
-                regionSize = regionSize_;
-                expression = expression_;
-                highestOffsetForEachContig = highestOffsetForEachContig_;
-                nHighQualityMappedNuclearReads = nHighQualityMappedNuclearReads_;
-                outputFile = outputFile_;
-            }
+	class Program
+	{
 
-            ASETools.ExpressionFile expression;
-            Dictionary<string, int> highestOffsetForEachContig;
-            int regionSize;
-            long nHighQualityMappedNuclearReads;
-            StreamWriter outputFile;
-            string currentContig = "";
-
-            int baseOffset = 0;
-            int lastBaseSeen = 0;
-            long nBasesExpressed = 0;
-            long nBasesExpressedWithBaselineExpression = 0;
-            long nBasesExpressedWithoutBaselineExpression = 0;
-            long totalReadsMappedToBasesWithoutBaselineExpression = 0;
-            long totalReadsMappedToBasesWithBaselineExpression = 0;
-            long nBasesWithBaselineButNoLocalExpression = 0;
-            double totalZForBasesWithBaselineExpression = 0;
-            double totalMuForBasesWithBaselineExpression = 0;   // Instead of standard deviations above/below the mean, just means.  This is 0-based (0 expression => 0 mu)
-            double minZForBasesWithBaselineExpression = 1000000000;
-            double maxZForBasesWithBaselineExpression = -10000000000;
-
-            void ZeroRegion(int regionBaseOffset)
-            {
-                baseOffset = regionBaseOffset;
-                lastBaseSeen = baseOffset - 1;
-
-                closeRegion();
-            }
-
-            public void processBase(string contig, int offset, long mappedReadCount)
-            {
-                if (contig != currentContig) {
-                    //
-                    // Zero out the rest of the contig.
-                    //
-                    if (currentContig != "")
-                    {
-                        closeRegion();
-
-                        for (int i = baseOffset + regionSize; i <= highestOffsetForEachContig[currentContig]; i+= regionSize) {
-                            ZeroRegion(i);
-                        }
-                    }
-
-                    baseOffset = offset - offset % regionSize;
-                    lastBaseSeen = baseOffset - 1;
-                    currentContig = contig;
-
-                } else if (baseOffset + regionSize < offset) {
-                    //
-                    // Finish this region, and zero any with no expression.
-                    //
-                    closeRegion();
-
-                    int baseOffsetForNextRegionWithExpression = offset - offset % regionSize;
-                    for (int i = baseOffset + regionSize; i < baseOffsetForNextRegionWithExpression; i += regionSize) {
-                        ZeroRegion(i);
-                    }
-
-                    baseOffset = offset - offset % regionSize;
-                    lastBaseSeen = baseOffset - 1;
-                }
- 
- 
-                for (int i = lastBaseSeen + 1; i < offset; i++)
-                {
-                    processSkippedBase(i);
-                }
-
-                nBasesExpressed++;
-                ASETools.MeanAndStdDev meanAndStdDev;
-                if (expression.getValue(contig, offset, out meanAndStdDev))
-               {
-                    nBasesExpressedWithBaselineExpression++;
-                    double z = (((double)mappedReadCount / (double)nHighQualityMappedNuclearReads) - meanAndStdDev.mean) / meanAndStdDev.stddev;
-
-                    totalZForBasesWithBaselineExpression += z;
-                    minZForBasesWithBaselineExpression = Math.Min(z, minZForBasesWithBaselineExpression);
-                    maxZForBasesWithBaselineExpression = Math.Max(z, maxZForBasesWithBaselineExpression);
-                    totalReadsMappedToBasesWithBaselineExpression += mappedReadCount;
-
-                    totalMuForBasesWithBaselineExpression += ((double)mappedReadCount / (double)nHighQualityMappedNuclearReads) / meanAndStdDev.mean;
-                }
-                else
-                {
-                    nBasesExpressedWithoutBaselineExpression++;
-                    totalReadsMappedToBasesWithoutBaselineExpression += mappedReadCount;
-                }
-
-                lastBaseSeen = offset;
-            }
-
-            public void closeRegion()
-            {
-                for (int i = lastBaseSeen + 1; i < baseOffset + regionSize; i++)
-                {
-                    processSkippedBase(i);
-                }
-
-                outputFile.WriteLine(currentContig + "\t" + baseOffset + "\t" + nBasesExpressed + "\t" + nBasesExpressedWithBaselineExpression + "\t" + nBasesExpressedWithoutBaselineExpression + "\t" + totalReadsMappedToBasesWithBaselineExpression + "\t" +
-                    totalReadsMappedToBasesWithoutBaselineExpression + "\t" + nBasesWithBaselineButNoLocalExpression + "\t" + totalZForBasesWithBaselineExpression + "\t" + minZForBasesWithBaselineExpression + "\t" + maxZForBasesWithBaselineExpression + "\t" +
-                    totalZForBasesWithBaselineExpression / (double)regionSize + "\t" + totalMuForBasesWithBaselineExpression / regionSize);
-
-                nBasesExpressed = 0;
-                nBasesExpressedWithBaselineExpression = 0;
-                nBasesExpressedWithoutBaselineExpression = 0;
-                totalReadsMappedToBasesWithoutBaselineExpression = 0;
-                totalReadsMappedToBasesWithBaselineExpression = 0;
-                totalZForBasesWithBaselineExpression = 0;
-                totalMuForBasesWithBaselineExpression = 0;
-                nBasesWithBaselineButNoLocalExpression = 0;
-                minZForBasesWithBaselineExpression = 1000000000;
-                maxZForBasesWithBaselineExpression = -10000000000;
-            }
-
-            void processSkippedBase(int offset)
-            {
-                ASETools.MeanAndStdDev meanAndStdDev;
-                if (expression.getValue(currentContig, offset, out meanAndStdDev))
-                {
-                    nBasesWithBaselineButNoLocalExpression++;
-                    totalZForBasesWithBaselineExpression -= meanAndStdDev.mean / meanAndStdDev.stddev; // It's one mean below the mean: ie. 0 expression
-                    // No need to update totalMu, since 0 expression adds 0 there.
-                }
-            }
-
-            static public void printHeader(StreamWriter outputFile)
-            {
-                outputFile.WriteLine("Contig\tContig Offset\tn Bases Expressed\tn Bases Expressed With Baseline Expression\tn Bases Expressed Without Baseline Expression\tTotal Reads Mapped To Bases With Baseline Expression\t" +
-                    "Total Reads Mapped To Bases Without Baseline Expression\tCount of bases with baseline expression but not in this sample\tTotal z For Bases With Baseline Expression\tMin z For Bases With Baseline Expression\tMax z For Bases With BaselineExpression\t" +
-                    "Mean z for Bases With Baseline Expression\tMean mu for Bases with Baseline Expression");
-            }
-        }
+	
 
         static int regionSize;
 
@@ -225,9 +85,9 @@ namespace RegionalExpression
 
                 outputFile.WriteLine("RegionalExpression v3.0\t" + tumor_rna_file_id + "\t" + allcountFilename + "\t" + regionSize);
                 outputFile.WriteLine("NumContigs: " + numContigs);
-                Region.printHeader(outputFile);
+                ASETools.Region.printHeader(outputFile);
 
-                Region region = new Region(regionSize, expression, expression.higestOffsetForEachContig, mappedHQNuclearReads, outputFile);
+				ASETools.Region region = new ASETools.Region(regionSize, expression, expression.higestOffsetForEachContig, mappedHQNuclearReads, outputFile);
 
                 ASETools.AllcountReader.ProcessBase processBase = (x, y, z) => region.processBase(x, y, z);
 
