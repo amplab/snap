@@ -159,10 +159,15 @@ namespace MethylationHeatmaps
 
 			foreach (var caseEntry in cases)
 			{
-				Console.WriteLine("Processing case " + caseEntry.Key);
 				var case_ = caseEntry.Value;
 
-				regionalFiles.Add(new Tuple<string, string>(case_.tumor_allele_specific_gene_expression_filename, case_.tumor_regional_methylation_filename));
+				if (case_.tumor_allele_specific_gene_expression_filename != "" && case_.tumor_regional_methylation_filename != "")
+				{
+					regionalFiles.Add(new Tuple<string, string>(case_.tumor_allele_specific_gene_expression_filename, case_.tumor_regional_methylation_filename));
+				}
+				else {
+					Console.WriteLine("Case " + caseEntry.Key + " does not have required files. Skipping...");
+				}
 
 			}
 			ProcessMethylation(regionalFiles, binCount);
