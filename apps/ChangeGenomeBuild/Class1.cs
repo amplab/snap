@@ -9,7 +9,7 @@ using System.IO;
 namespace GenomeBuild
 {
 
-	public class Interval
+	public class Interval : IComparable
 	{
 		public readonly string name;
 		public readonly long start;
@@ -20,7 +20,7 @@ namespace GenomeBuild
 		public readonly long targetStart;
 		public readonly long targetEnd;
 
-		public Interval(string name_, long start_, long end_, char strand_ = '+', string targetName_ = "", long targetStart_ = 0, long targetEnd_ = 0)
+		public Interval(string name_, long start_, long end_, char strand_ = '+', string targetName_ = "", long targetStart_ = 0, long targetEnd_ = 0) 
 		{
 			if (start_ > end_)
 			{
@@ -37,6 +37,28 @@ namespace GenomeBuild
 			strand = strand_;
 		}
 
+		override public string ToString()
+		{
+			return name + ":" + start + "-" + end;
+		}
+
+		public bool overlaps(Interval other)
+		{
+			return Intersection(other) != null;
+		}
+
+		public Interval merge(Interval other)
+		{
+			if (this.name != other.name || this.strand != other.strand)
+			{
+				return null;
+			}
+
+			var start = Math.Min(this.start, other.start);
+			var end = Math.Max(this.end, other.end);
+			return new Interval(this.name, start, end, this.strand);
+		}
+
 		// Gets intersection of intervals
 		public Interval Intersection(Interval other)
 		{
@@ -50,6 +72,62 @@ namespace GenomeBuild
 
 			return new Interval(this.name, Math.Max(this.start, other.start), Math.Min(this.end, other.end), strand, targetName, targetStart, targetEnd);
 
+		}
+
+		static public List<Interval> collapse(List<Interval> intervals)
+		{
+			var first = intervals.First();
+			intervals.Remove(first);
+			return collapse(intervals, first, new List<Interval>());
+		}
+
+		// collapses adjacent intervals
+		static List<Interval> collapse(List<Interval> intervals, Interval lastInterval, List<Interval> condensed)
+		{
+			while (intervals.Count() > 0)
+			{
+				var current = intervals.First();
+				intervals.Remove(current);
+				if (current.overlaps(lastInterval))
+				{
+					lastInterval = current.merge(lastInterval);
+				}
+				else
+				{
+					condensed.Add(lastInterval);
+					lastInterval = current;
+				}
+			}
+
+			// no more intervals left
+			// if last interval not inserted, insert it
+			if (condensed.Where(r => r.overlaps(lastInterval)).Count() == 0)
+			{
+				condensed.Add(lastInterval); 
+			}
+			return condensed;
+		}
+
+		// implement IComparable interface
+		public int CompareTo(object other)
+		{
+			if (other is Interval)
+			{
+				var otherInterval = other as Interval;
+				if (this.name != otherInterval.name)
+				{
+					return this.name.CompareTo(otherInterval.name);
+				}
+				else if (this.start != otherInterval.start)
+				{
+					return this.start.CompareTo((other as Interval).start);
+				}
+				else
+				{
+					return this.end.CompareTo((other as Interval).end);
+				}
+			}
+			throw new ArgumentException("object is not an Interval");
 		}
 	}
     public class LiftOver
@@ -209,7 +287,6 @@ namespace GenomeBuild
 				return matches;
 			}
 
-			// overlaps query TODO is this correct
 			List<Interval> overlappingIntervals = genomeMap[interval.name].Where(r => interval.start < r.end && interval.end > r.start).ToList();
 
 			foreach (var overlap in overlappingIntervals)

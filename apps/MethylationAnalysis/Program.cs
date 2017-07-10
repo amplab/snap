@@ -6,8 +6,10 @@ using System.Threading.Tasks;
 using System.Threading;
 using System.IO;
 using ASELib;
+using ExpressionNearMutations;
 
 namespace MethylationAnalysis
+
 {
 	class MethylationPoint : IComparer<MethylationPoint>
 	{
@@ -30,43 +32,25 @@ namespace MethylationAnalysis
 
 	class Program
 	{
-
 		static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
 
-		static void ProcessFile(ASETools.Case case_)
+		static Dictionary<string, List<GenomeBuild.Interval>> enhancers = new Dictionary<string, List<GenomeBuild.Interval>>();
+
+		static void ProcessFile(ASETools.Case case_, bool forTumor)
 		{
 			// select metadata whether processing normal or tumor methylation data
-			var methylation_filename = case_.tumor_methylation_filename;
-			var methylation_file_id = case_.tumor_methylation_file_id;
+
+			var methylation_filename = forTumor ? case_.tumor_methylation_filename : case_.normal_methylation_filename;
+			var methylation_file_id = forTumor ? case_.tumor_methylation_file_id : case_.normal_methylation_file_id;
 
 			// Load MAF file for this case
 			var mafLines = ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, case_.maf_file_id, false);
 
-			// Initialize objects to hold methylation values for regions, chr and autosome
-			var wholeAutosomeRegionalExpression = new ASETools.RegionalExpressionState();
-			var perChromosomeRegionalExpressionState = new ASETools.RegionalExpressionState[ASETools.nHumanNuclearChromosomes];
-			var allButThisChromosomeAutosomalRegionalExpressionState = new Dictionary<string, ASETools.RegionalExpressionState>();   
-		   // per gene methylation values over incremental regions
-		   Dictionary <string, ASETools.GeneExpression> geneExpressions = new Dictionary<string, ASETools.GeneExpression>();
-
-			// Initialization of per chromosome methylation values
-			for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
-			{
-				perChromosomeRegionalExpressionState[whichChromosome] = new ASETools.RegionalExpressionState();
-			}
-
-			foreach (var geneEntry in geneLocationInformation.genesByName)
-			{
-				var chromosome = geneEntry.Value.chromosome;
-				if (!allButThisChromosomeAutosomalRegionalExpressionState.ContainsKey(chromosome))
-				{
-					allButThisChromosomeAutosomalRegionalExpressionState.Add(chromosome, new ASETools.RegionalExpressionState());
-				}
-			}
+		    Dictionary <string, ASETools.GeneExpression> geneExpressions = new Dictionary<string, ASETools.GeneExpression>();
 
 			// 2. for each gene in the genelocations, count the number of mutations and get the methylation values for this gene. These will be 
 			// used later.
-			// // for each gene, count the methylation averages as you get farther and farther away from the gene (inc, chr, autosome)
+			// for each gene, count the methylation averages as you get farther and farther away from the gene (inc, chr, autosome)
 			foreach (var geneLocation in geneLocationInformation.genesByName.Values)
 			{
 				if (!geneExpressions.ContainsKey(geneLocation.hugoSymbol))
@@ -77,56 +61,67 @@ namespace MethylationAnalysis
 				// get mutation counts from MAFLines
 				var mutationCount = mafLines.Where(r => r.Hugo_Symbol == geneLocation.hugoSymbol).Count();
 				geneExpressions[geneLocation.hugoSymbol].mutationCount += mutationCount;
-				
+			}
+			var expressionValues = new ExpressionNearMutations.Program.RegionalSignal(geneExpressions, geneLocationInformation, false);
+
+			// read in methylation file 
+			var annotations = ASETools.AnnotationLine.ReadFile(methylation_filename, methylation_file_id, false);
+			var initialCount = annotations.Count();
+			var count = 0;
+
+			var timer = new Stopwatch();
+			timer.Start();
+
+			// filter out annotations that are not by an enhancer or promotor
+			var filteredAnnotations = new List<ASETools.AnnotationLine>();
+			var filteredCount = 0;
+			foreach (var r in annotations)
+			{
+				filteredCount++;
+				List<GenomeBuild.Interval> chrEnhancers;
+				enhancers.TryGetValue(ASETools.chromosomeNameToNonChrForm(r.compositeREF.Chromosome), out chrEnhancers);
+				if (chrEnhancers != null)
+				{
+					if (r.compositeREF.Position_to_TSS.Average() <= 2000 ||
+					chrEnhancers.Where(x => x.overlaps(new GenomeBuild.Interval(ASETools.chromosomeNameToNonChrForm(r.compositeREF.Chromosome), r.compositeREF.Start, r.compositeREF.End))).Count() > 0
+					)
+					{
+						filteredAnnotations.Add(r);
+					}
+
+				}
+				else if (r.compositeREF.Position_to_TSS.Average() <= 2000)
+				{
+					filteredAnnotations.Add(r);
+				}
 			}
 
-			// read in tumor methylation file 
-			var annotations = ASELib.ASETools.AnnotationLine.ReadFile(methylation_filename, methylation_file_id, false);
-			var count = 0;
-			foreach (var annotation in annotations)
+
+			timer.Stop();
+
+			Console.WriteLine("Lost " + (initialCount - filteredAnnotations.Count()) + " annotations for case" + case_.case_id);
+
+			foreach (var annotation in filteredAnnotations)
 			{
 				count++;
 
-				if (count % 100000 == 0)
+				if (count % 100000 == 0 && false)
 				{
-					Console.WriteLine("processed " + count + "annotations out of " + annotations.Count());
+					Console.WriteLine("processed " + count + "annotations out of " + filteredAnnotations.Count());
 				}
 
 				// get non chr form
 				var chromosome = ASETools.chromosomeNameToNonChrForm(annotation.compositeREF.Chromosome);
 
-				if (ASETools.isChromosomeAutosomal(annotation.compositeREF.Chromosome))
-				{
-					wholeAutosomeRegionalExpression.AddTumorExpression(annotation.M_Value, 0);
-
-					foreach (var entry in allButThisChromosomeAutosomalRegionalExpressionState)
-					{
-						if (entry.Key != annotation.compositeREF.Chromosome)
-						{
-							entry.Value.AddTumorExpression(annotation.M_Value, 0);
-
-						}
-					}
-				}
-
-				int chromosomeId = ASETools.ChromosomeNameToIndex(annotation.compositeREF.Chromosome);
-				if (chromosomeId != -1)
-				{
-					perChromosomeRegionalExpressionState[chromosomeId].AddTumorExpression(annotation.M_Value, 0);
-				}
-				
-				foreach (var geneLocation in geneLocationInformation.genesByChromosome[chromosome])
-				{
-					geneExpressions[geneLocation.hugoSymbol].AddRegionalExpression(annotation.compositeREF.Start, annotation.M_Value, 0, true);
-				}
-				// TODO what about max, min, ave just for some idea of where we are?
+				// filter out regions in promotor and enhancer regions
+				expressionValues.Add(annotation.compositeREF.Chromosome, annotation.compositeREF.Start, annotation.M_Value, 0, false);
 
 			}
 
 			// Save values
 
 			var allExpressions = new List<ASETools.GeneExpression>();
-			foreach (var expressionEntry in geneExpressions)
+			foreach (var expressionEntry in expressionValues.geneExpressions)
 			{
 				allExpressions.Add(expressionEntry.Value);
 			}
@@ -135,22 +130,25 @@ namespace MethylationAnalysis
 
 			string directory = ASETools.GetDirectoryPathFromFullyQualifiedFilename(case_.extracted_maf_lines_filename);
 
-			var outputFilename = directory + case_.case_id + (ASETools.tumorRegionalMethylationExtension);
+			var extension = forTumor ? ASETools.tumorRegionalMethylationExtension : ASETools.normalRegionalMethylationExtension;
+			var outputFilename = directory + case_.case_id + extension;
 			Console.WriteLine("Saving to file " + outputFilename);
 
-			var columnSuffix = "tumor M-val";
-			var hasMeanValues = false;
-			var isTumor = true;
-			ASETools.ASEExpressionFile.WriteFile(outputFilename, allExpressions, wholeAutosomeRegionalExpression, allButThisChromosomeAutosomalRegionalExpressionState,
-				perChromosomeRegionalExpressionState, hasMeanValues, 1, case_, columnSuffix, isTumor);
-			
-			// Next analysis (loading in these numbers). Get the expression values in this part of the pipeline.
-			// run mann whitney for methylation scores for some vs no mutation for genes that we know are important in that cancer cell type
+			var fileHeader = "Methylation Analysis " + case_.case_id;
+			var output = new ASETools.RegionalSignalFile(fileHeader,
+					allExpressions,
+					expressionValues.wholeAutosomeRegionalExpression,
+					expressionValues.allButThisChromosomeAutosomalRegionalExpressionState,
+					expressionValues.perChromosomeRegionalExpressionState);
 
+			var columnSuffix = forTumor ? "tumor M-val" : "normal M-val";
+			var printMu = false;
+			var isTumor = true;
+			output.WriteFile(outputFilename, printMu, 1, columnSuffix, isTumor);
 		}
 
 
-		static void ProcessCases(List<ASETools.Case> cases, string gene = null)
+		static void ProcessCases(List<ASETools.Case> cases)
 		{
 			while (true)
 			{
@@ -173,16 +171,26 @@ namespace MethylationAnalysis
 				}
 
 
-				// verify methylation file exists
-				if (case_.tumor_methylation_filename == "" || case_.extracted_maf_lines_filename == "" || case_.tumor_rna_filename == "")
+				// verify methylation file exists for tumor data
+				if (!case_.tumor_methylation_filename.Contains("HumanMethylation450") || case_.extracted_maf_lines_filename == "" || case_.tumor_rna_filename == "")
 				{
 					Console.WriteLine("No tumor methylation data for case " + case_.case_id + ". Skipping...");
 				}
 				else
 				{
-					// process only tumor files
-					ProcessFile(case_);
+					ProcessFile(case_, true);
 				}
+
+				// verify methylation file exists for normal data
+				if (!case_.normal_methylation_filename.Contains("HumanMethylation450") || case_.extracted_maf_lines_filename == "" || case_.normal_rna_filename == "")
+				{
+					Console.WriteLine("No normal methylation data for case " + case_.case_id + ". Skipping...");
+				}
+				else
+				{
+					ProcessFile(case_, false);
+				}
+
 			}
 		}
 
@@ -298,6 +306,40 @@ namespace MethylationAnalysis
 		//	output.Close();
 		//}
 
+		static void saveEnhancers()
+		{
+			Console.WriteLine("saving enhancers");
+
+			// hg19 to hg38 build
+			var build = new GenomeBuild.LiftOver();
+			build.readChainFile(ASETools.ASEConfirguation.hg19Tohg38ChainFile);
+
+			// read in enhancers
+			string[] fileEntries = Directory.GetFiles(ASETools.ASEConfirguation.defaultBaseDirectory + "enhancers");
+			List<GenomeBuild.Interval> enhancers = new List<GenomeBuild.Interval>();
+
+			foreach (string fileName in fileEntries)
+			{
+				var bedLines = ASETools.BedLine.ReadFile(fileName)
+					.Select(r => new GenomeBuild.Interval(r.Chromosome, r.Start_Position, r.End_Position)).ToList();
+				bedLines.Sort();
+				enhancers.AddRange(GenomeBuild.Interval.collapse(bedLines));
+				Console.WriteLine("Finished file " + fileName);
+			}
+			Console.WriteLine(enhancers.Count() + " enhancers");
+
+			enhancers = enhancers.SelectMany(r => build.mapCoordinates(r))
+				.Select(r => new GenomeBuild.Interval(ASETools.chromosomeNameToNonChrForm(r.name), r.start, r.end)).ToList();
+			Console.WriteLine(enhancers.Count() + "enhancers after running genome build");
+
+			var collapsed = GenomeBuild.Interval.collapse(enhancers);
+			Console.WriteLine(enhancers.Count() + "enhancers after running final collapse");
+
+			var enhancerLines = collapsed.Select(r => new ASETools.BedLine(r.name, Convert.ToInt32(r.start), Convert.ToInt32(r.end), "enhancer", 1000, r.strand, r.start, r.end)).ToList();
+			var enhancerFile = ASETools.ASEConfirguation.defaultBaseDirectory + @"enhancers\allEnhancers.bed";
+			ASETools.BedLine.writeFile(enhancerFile, enhancerLines);
+		}
+
 		static void PrintUsageMessage()
 		{
 			Console.WriteLine("usage: MethylationAnalysis -450 casesToProcess");
@@ -305,13 +347,16 @@ namespace MethylationAnalysis
 
 		static void Main(string[] args)
 		{
-			Console.WriteLine("Starting methylation");
+
 			var timer = new Stopwatch();
 			timer.Start();
 
 			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+			enhancers = ASETools.BedLine.ReadFile(ASETools.ASEConfirguation.defaultBaseDirectory + @"enhancers\allEnhancers.bed")
+					.Select(r => new GenomeBuild.Interval(r.Chromosome, r.Start_Position, r.End_Position, r.strand)).GroupBy(r => r.name)
+					.ToDictionary(x => x.Key, x => x.Select(r => r).ToList());
 
-			if (configuration.commandLineArgs.Count() == 0)
+			if (configuration.commandLineArgs.Count() < 1)
 			{
 				PrintUsageMessage();
 				return;
@@ -329,7 +374,7 @@ namespace MethylationAnalysis
 			var lines = new List<string>();
 
 			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
-
+			
 			if (null == cases)
 			{
 				Console.WriteLine("You must have selected cases before you can analyze methylation data.");
@@ -343,15 +388,11 @@ namespace MethylationAnalysis
 				{
 					Console.WriteLine(configuration.commandLineArgs[i] + " is not a valid case ID. Skipping...");
 					continue;
-				} else if (!cases[configuration.commandLineArgs[i]].tumor_methylation_filename.Contains("HumanMethylation450") && onlyProcess450)
-				{
-					Console.WriteLine(configuration.commandLineArgs[i] + " does not have 450k methylation data. Skipping...");
-					continue;
 				}
 				selectedCases.Add(cases[configuration.commandLineArgs[i]]);
 			}
 
-			// Get information for current genome build
+			// Get information for current genome build in chr form
 			geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(ASETools.ASEConfirguation.defaultGeneLocationInformation));
 
 			var threads = new List<Thread>();

@@ -4,7 +4,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{892B82DD-AF9B-45E9-B2B0-0569ED227DAF}</ProjectGuid>
+    <ProjectGuid>{BE6E7BC7-7F29-48A9-80DA-8B642ECAF795}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>ChangeGenomeBuild</RootNamespace>

@@ -4,10 +4,10 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{B14B70C4-9523-46F5-AD4F-547058B0B75C}</ProjectGuid>
+    <ProjectGuid>{179037EC-1350-4355-8BE0-E7DD88AA5344}</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <RootNamespace>MethylationHeatmaps</RootNamespace>
-    <AssemblyName>MethylationHeatmaps</AssemblyName>
+    <RootNamespace>MethylationDistribution</RootNamespace>
+    <AssemblyName>MethylationDistribution</AssemblyName>
     <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>

@@ -610,8 +610,7 @@ namespace ASEProcessManager
 				nWaitingForPrerequisites = 0;
 				filesToDownload = null;
 
-				// batch by 20
-				var batchSize = 20;
+				var batchSize = 10;
 				var newCall = true;
 				var caseCount = 0;
 				foreach (var caseEntry in stateOfTheWorld.cases)
@@ -644,7 +643,7 @@ namespace ASEProcessManager
 					hpcScript.Write(" " + case_.case_id);
 					caseCount += 1;
 
-					// If 20 cases have been placed on line, reset the call 
+					// If 10 cases have been placed on line, reset the call 
 					if (caseCount % batchSize == 0)
 					{
 						newCall = true;

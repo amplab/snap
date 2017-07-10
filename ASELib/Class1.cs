@@ -757,13 +757,14 @@ namespace ASELib
             public string tumor_rna_mapped_base_count_filename = "";
             public string selected_variant_counts_by_gene_filename = "";
 			public string tumor_regional_methylation_filename = ""; // TODO add to CheckDone
-            // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
+			public string normal_regional_methylation_filename = ""; // TODO add to CheckDone
+			// If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
 
-            //
-            // Checksums for downloaded files. The tumor DNA BAMs aren't included here
-            // because they're BAM sliced and so don't have server-side md5s.
-            //
-            public string normal_rna_file_bam_md5 = "";
+			//
+			// Checksums for downloaded files. The tumor DNA BAMs aren't included here
+			// because they're BAM sliced and so don't have server-side md5s.
+			//
+			public string normal_rna_file_bam_md5 = "";
             public string normal_rna_file_bai_md5 = "";
             public string tumor_rna_file_bam_md5 = "";
             public string tumor_rna_file_bai_md5 = "";
@@ -953,8 +954,9 @@ namespace ASELib
                 new FieldInformation("Selected Variant Counts By Gene Filename",            c => c.selected_variant_counts_by_gene_filename, (c, v) => c.selected_variant_counts_by_gene_filename = v, DerivedFile.Type.SelectedVariantCountByGene, selectedVariantCountByGeneExtension, c => c.case_id),
 
                 new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
-				new FieldInformation("Tumor Regional Methylation Filename",                  c => c.tumor_regional_methylation_filename, (c, v) => c.tumor_regional_methylation_filename = v, DerivedFile.Type.TumorRegionalMethylation, tumorRegionalMethylationExtension, c => c.case_id),
-                new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
+				new FieldInformation("Tumor Regional Methylation Filename",                 c => c.tumor_regional_methylation_filename, (c, v) => c.tumor_regional_methylation_filename = v, DerivedFile.Type.TumorRegionalMethylation, tumorRegionalMethylationExtension, c => c.case_id),
+				new FieldInformation("Normal Regional Methylation Filename",                c => c.normal_regional_methylation_filename, (c, v) => c.normal_regional_methylation_filename = v, DerivedFile.Type.NormalRegionalMethylation, normalRegionalMethylationExtension, c => c.case_id),
+				new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
                 new FieldInformation("Tumor RNA BAM MD5",                                   c => c.tumor_rna_file_bam_md5, (c,v) => c.tumor_rna_file_bam_md5 = v),
                 new FieldInformation("Tumor RNA BAI MD5",                                   c => c.tumor_rna_file_bai_md5, (c,v) => c.tumor_rna_file_bai_md5 = v),
                 new FieldInformation("Normal DNA BAM MD5",                                  c => c.normal_dna_file_bam_md5, (c,v) => c.normal_dna_file_bam_md5 = v),
@@ -1306,8 +1308,11 @@ namespace ASELib
 			public string geneScatterGraphsDirectory = defaultBaseDirectory + @"gene_scatter_graphs\";
 			// items used in bisulfite analysis
 			public const string bisulfiteDirectory = defaultBaseDirectory  + @"bisulfate\";
-			public const string hg38Tohg19ChainFile = defaultBaseDirectory + "hg38ToHg19.over.chain";
 			public const string bisulfiteCasesFilePathname = bisulfiteDirectory + "cases_bisulfite.txt";
+
+			// chain files
+			public const string hg38Tohg19ChainFile = defaultBaseDirectory + @"chain\hg38ToHg19.over.chain";
+			public const string hg19Tohg38ChainFile = defaultBaseDirectory + @"chain\hg19ToHg38.over.chain";
 
 			public const string unfilteredCountsDirectory = defaultBaseDirectory + @"gene_mutations_with_counts\";
 			public const string unfilteredCountsExtention = @"_unfiltered_counts.txt";
@@ -2062,10 +2067,12 @@ namespace ASELib
         public const string normalRNAMappedBaseCountExtension = ".normal_rna_mapped_base_count.txt";
         public const string tumorRNAMappedBaseCountExtension = ".tumor_rna_mapped_base_count.txt";
         public const string selectedVariantCountByGeneExtension = ".selected_variant_count_by_gene.txt";
-		public const string bisulfiteAlleleSpecificMethylationExtension = ".bisulfite_asm.txt";
+		public const string tumorBisulfiteAlleleSpecificMethylationExtension = ".tumor_bisulfite_asm.txt";
+		public const string normalBisulfiteAlleleSpecificMethylationExtension = ".normal_bisulfite_asm.txt";
 		public const string tumorRegionalMethylationExtension = ".tumor_regional_methylation.txt";
+		public const string normalRegionalMethylationExtension = ".normal_regional_methylation.txt";
 
-        public const string scatterGraphsSummaryFilename = "_summary.txt";
+		public const string scatterGraphsSummaryFilename = "_summary.txt";
         public const string mannWhitneyFilename = "_MannWhitney.txt";
         public const string genesWithSelectedVariantsFilename = "GenesWithSelectedVariantCounts.txt";
         public const string heatMapFilename = "AlleleSpecificExpressionHeatMap.txt";
@@ -2114,7 +2121,7 @@ namespace ASELib
             public enum Type { Unknown, NormalRNAAllcount, TumorRNAAllcount, NormalDNAAllcount, TumorDNAAllcount, RegionalExpression, GeneExpression, TumorDNAGeneCoverage,
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines,
-                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, TumorRegionalMethylation, SelectedVariantCountByGene,
+                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, TumorRegionalMethylation, NormalRegionalMethylation, SelectedVariantCountByGene, 
             };
         } // DerivedFile
 
@@ -2864,6 +2871,14 @@ namespace ASELib
 		public class AnnotationLine
 		{
 			public static double betaToM(double beta) {
+
+				// correct from 15 digit precision NaNs
+				var epsilon = 0.000000000000001;
+				if (beta == 1)
+					beta -= epsilon;
+				if (beta == 0)
+					beta += epsilon;
+
 				// M_value calculated as shown in Du et. al. 2010
 				return Math.Log(beta / (1 - beta));
 			}
@@ -3005,6 +3020,18 @@ namespace ASELib
 				thickEnd = thickEnd_;
 			}
 
+			public bool overlaps(string otherChromosome, int otherStart, int otherEnd)
+			{
+				if (ASETools.chromosomeNameToNonChrForm(otherChromosome) == ASETools.chromosomeNameToNonChrForm(Chromosome))
+				{
+					if (otherStart < End_Position && otherEnd > Start_Position)
+					{
+						return true;
+					}
+				}
+				return false;
+			}
+
 			public string toString() {
 				return this.Chromosome + "\t" + this.Start_Position + "\t" + this.End_Position + "\t" + this.name + "\t" + this.score + 
 					"\t" + this.strand + "\t" + this.thickStart + "\t" + this.thickEnd;
@@ -3044,7 +3071,7 @@ namespace ASELib
 				while ((line = inputFile.ReadLine()) != null)
 				{
 					var split = line.Split('\t');
-					result.Add(new BedLine(split[0], Convert.ToInt32(split[1]), Convert.ToInt32(split[2]), split[3], Convert.ToInt32(split[4]), split[5].ToCharArray()[0], Convert.ToDouble(split[6]), Convert.ToDouble(split[6])));
+					result.Add(new BedLine(split[0], Convert.ToInt32(split[1]), Convert.ToInt32(split[2]), split[3], Convert.ToInt32(split[4]), split[5].ToCharArray()[0], Convert.ToDouble(split[6]), Convert.ToDouble(split[7])));
 				}
 
 				inputFile.Close();
@@ -4075,6 +4102,10 @@ namespace ASELib
 			{
 				nRegionsIncludedTumor++;
 				totalTumorExpression += z;
+				if (totalTumorExpression == Double.NegativeInfinity)
+				{
+					Console.WriteLine("stop ere");
+				}
 				minTumorExpression = Math.Min(minTumorExpression, z);
 				maxTumorExpression = Math.Max(maxTumorExpression, z);
 
@@ -4487,7 +4518,8 @@ namespace ASELib
 				}
 			}
 
-			public static Dictionary<string, double[]> ReadFile(string filename, bool skipFirstLine = true)
+			// Returns a tuple of ExpressionMap, and list of labels corresponding to the expression values in the dictionary
+			public static Tuple<Dictionary<string, double[]>, List<string>> ReadFile(string filename, bool skipFirstLine = true)
 			{
 
 				// keeps track of index of distances
@@ -4540,7 +4572,7 @@ namespace ASELib
 						// Set default value
 						double value = double.NegativeInfinity;
 
-						if (r != "*")
+						if (r != "*" && r != "-Infinity")  
 						{
 							value = Convert.ToDouble(r);
 						}
@@ -4550,7 +4582,7 @@ namespace ASELib
 					// add gene to dictionary
 					expressionMap.Add(hugoSymbol, numericFields);
 				}
-				return expressionMap;
+				return new Tuple<Dictionary<string, double[]>, List<string>>(expressionMap, index);
 			}
 		}
 
@@ -5100,7 +5132,7 @@ namespace ASELib
             }
 
             public readonly string contig;
-            public readonly int locus;
+            public int locus;
             public readonly char referenceBase;
             public readonly char altBase;
         } // SelectedVariant
@@ -6039,75 +6071,6 @@ namespace ASELib
 				file.Close();
 
 			}
-
-			public static AnnotatedVariant fromText(string inputLine)
-			{
-				var retVal = new AnnotatedVariant();
-
-				var fields = inputLine.Split('\t');
-
-				if (fields.Count() != 20 && fields.Count() != 24)
-				{
-					Console.WriteLine("AnnotatedVariant.fromText: wrong field count (" + fields.Count() + " != 22 or 18) in line: " + inputLine);
-					return null;
-				}
-
-				try
-				{
-					var contig = fields[0];
-					var loc = Convert.ToInt32(fields[1]);
-					var Ref = fields[2];
-					var alt = fields[3];
-					var variantType = fields[4];
-					var isSomatic = Convert.ToBoolean(fields[5]);
-
-					var nMatchingTumorReferenceDNA = Convert.ToInt32(fields[6]);
-					var nMatchingTumorAltDNA = Convert.ToInt32(fields[7]);
-					var nMatchingTumorNeitherDNA = Convert.ToInt32(fields[8]);
-					var nMatchingTumorBothDNA = Convert.ToInt32(fields[9]);
-
-					var nMatchingNormalReferenceDNA = Convert.ToInt32(fields[10]);
-					var nMatchingNormalAltDNA = Convert.ToInt32(fields[11]);
-					var nMatchingNormalNeitherDNA = Convert.ToInt32(fields[12]);
-					var nMatchingNormalBothDNA = Convert.ToInt32(fields[13]);
-
-					var nMatchingTumorReferenceRNA = Convert.ToInt32(fields[14]);
-					var nMatchingTumorAltRNA = Convert.ToInt32(fields[15]);
-					var nMatchingTumorNeitherRNA = Convert.ToInt32(fields[16]);
-					var nMatchingTumorBothRNA = Convert.ToInt32(fields[17]);
-
-
-					var normalDNAReadCounts = new ReadCounts(nMatchingNormalReferenceDNA, nMatchingNormalAltDNA, nMatchingNormalNeitherDNA, nMatchingNormalBothDNA);
-					var tumorDNAReadCounts = new ReadCounts(nMatchingTumorReferenceDNA, nMatchingTumorAltDNA, nMatchingTumorNeitherDNA, nMatchingTumorBothDNA);
-					var tumorRNAReadCounts = new ReadCounts(nMatchingTumorReferenceRNA, nMatchingTumorAltRNA, nMatchingTumorNeitherRNA, nMatchingTumorBothRNA);
-
-					ReadCounts normalRNAReadCounts = null;
-					// check if normal RNA is present
-					try
-					{
-						var nMatchingNormalReferenceRNA = Convert.ToInt32(fields[18]);
-						var nMatchingNormalAltRNA = Convert.ToInt32(fields[29]);
-						var nMatchingNormalNeitherRNA = Convert.ToInt32(fields[20]);
-						var nMatchingNormalBothRNA = Convert.ToInt32(fields[21]);
-
-						normalRNAReadCounts = new ReadCounts(nMatchingNormalReferenceRNA, nMatchingNormalAltRNA, nMatchingNormalNeitherRNA, nMatchingNormalBothRNA);
-					}
-					catch (Exception)
-					{
-						// no op. No normal RNA
-					}
-					retVal = new AnnotatedVariant(isSomatic, contig, loc, Ref, alt, variantType, tumorDNAReadCounts, tumorRNAReadCounts, normalDNAReadCounts, normalRNAReadCounts);
-
-				}
-				catch (FormatException)
-				{
-					Console.WriteLine("Format exception parsing annotated selected variant line " + inputLine);
-					return null;
-				}
-
-				return retVal;
-			}
-
 
 			public readonly string Hugo_symbol;                 // Only present for somatic mutations, otherwise ""
 			public readonly bool somaticMutation;

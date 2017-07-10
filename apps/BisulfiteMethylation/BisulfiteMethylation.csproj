@@ -4,7 +4,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{4A8CBB8D-976D-4FBA-B9A2-2F368DEB31A0}</ProjectGuid>
+    <ProjectGuid>{EA45451D-29DB-4F73-B9C2-5454FDF240C0}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <RootNamespace>BisulfiteMethylation</RootNamespace>
     <AssemblyName>BisulfiteMethylation</AssemblyName>
@@ -67,6 +67,10 @@
     <ProjectReference Include="..\..\ASELib\ASELib.csproj">
       <Project>{fef6def5-ca17-4fb1-ad7d-30fb579a7cf2}</Project>
       <Name>ASELib</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ChangeGenomeBuild\GenomeBuild.csproj">
+      <Project>{be6e7bc7-7f29-48a9-80da-8b642ecaf795}</Project>
+      <Name>GenomeBuild</Name>
     </ProjectReference>
     <ProjectReference Include="..\ExpressionNearMutations\ExpressionNearMutations.csproj">
       <Project>{49ff4094-4b75-480a-9b53-e5c66b79a98b}</Project>

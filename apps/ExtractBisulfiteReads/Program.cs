@@ -60,8 +60,18 @@ namespace GenerateBisulfiteReadExtractionScript
 				else
 				{
 					// filename path is based on bam id
-					var filename = ASETools.ASEConfirguation.bisulfiteDirectory + configuration.commandLineArgs[i] + @"\" 
-						+ bisulfiteCases[configuration.commandLineArgs[i]].bam_tumor_file_id;
+					string filename;
+					if (forTumor)
+					{
+						filename = ASETools.ASEConfirguation.bisulfiteDirectory + configuration.commandLineArgs[i] + @"\"
++ bisulfiteCases[configuration.commandLineArgs[i]].bam_tumor_file_id;
+					}
+					else
+					{
+						filename = ASETools.ASEConfirguation.bisulfiteDirectory + configuration.commandLineArgs[i] + @"\"
++ bisulfiteCases[configuration.commandLineArgs[i]].bam_normal_file_id;
+					}
+
 					casesToProcess.Add(new CaseOutputFilenamePair(cases[configuration.commandLineArgs[i]], filename));
 				}
 			}
@@ -175,10 +185,8 @@ namespace GenerateBisulfiteReadExtractionScript
 
 				if (inputBamFilename == "")
 				{
-					Console.WriteLine("GenerateScriptsFromVariants: at least one input is missing for case " + case_.case_id);
-					File.Delete(localSamtoolsPathname);
-					File.Delete(localGCERPathname);
-					return 1;
+					Console.WriteLine(case_.case_id + " does not have bam file for input. Skipping...");
+					continue;
 				}
 
 				int nVariants = 0;
