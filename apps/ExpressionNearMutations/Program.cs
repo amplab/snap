@@ -17,7 +17,7 @@ namespace ExpressionNearMutations
 		static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
 
 		// Generic class to hold tumor/normal signal at a locus. Use for ASE, expression and ASM values.
-		class RegionalSignal
+		public class RegionalSignal
 		{
 			// One expression state for whole autosome
 			public ASETools.RegionalExpressionState wholeAutosomeRegionalExpression = new ASETools.RegionalExpressionState();
@@ -29,7 +29,7 @@ namespace ExpressionNearMutations
 			public Dictionary<string, ASETools.GeneExpression> geneExpressions;
 
 			public bool hasNormal;
-			public RegionalSignal(Dictionary<string, ASETools.GeneExpression> geneExpressions_, bool hasNormal_)
+			public RegionalSignal(Dictionary<string, ASETools.GeneExpression> geneExpressions_, ASETools.GeneLocationsByNameAndChromosome geneLocationInformation, bool hasNormal_)
 		{
 			geneExpressions = geneExpressions_;
 			hasNormal = hasNormal_;
@@ -188,7 +188,7 @@ namespace ExpressionNearMutations
 
 				// Stores all regional information for expression values
 				var hasNormal = forAlleleSpecificExpression ? annotatedVariants.Where(r => r.normalRNAReadCounts != null).Count() > 0: false;
-				var expressionValues = new RegionalSignal(geneExpressions, hasNormal);
+				var expressionValues = new RegionalSignal(geneExpressions, geneLocationInformation, hasNormal);
 
 				if (forAlleleSpecificExpression)
 				{

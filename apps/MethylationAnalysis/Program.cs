@@ -7,6 +7,7 @@ using System.Threading;
 using System.IO;
 using ASELib;
 using ExpressionNearMutations;
+using GenomeBuild;
 
 namespace MethylationAnalysis
 

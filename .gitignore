@@ -64,6 +64,7 @@ obj
 /apps/CountMappedBases/bin
 /apps/ExpressionNearMutations/bin
 /apps/MethylationAnalysis/bin
+/apps/BisulfiteMethylation/bin
 /apps/DumpSubfile/bin
 /apps/ExpressionByMutationCount/bin
 /apps/FixASV/bin
@@ -78,6 +79,11 @@ obj
 /apps/MethylationHeatmaps/bin
 /apps/MethylationDistribution/bin
 /apps/ExtractBisulfiteReads/bin
+/apps/MethylationHeatmaps/bin
+/apps/ChangeGenomeBuild/bin
+/apps/ExtractBisulfiteReads/bin
+
+
 
 
 
