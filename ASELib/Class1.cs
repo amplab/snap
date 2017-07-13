@@ -2870,6 +2870,13 @@ namespace ASELib
 		// contains annotation data from one line in a methylation file
 		public class AnnotationLine
 		{
+
+			public static double M2Beta(double M_Value)
+			{
+				var expM = Math.Pow(2, M_Value);
+				return expM / (expM + 1);
+			}
+
 			public static double betaToM(double beta) {
 
 				// correct from 15 digit precision NaNs
@@ -4519,14 +4526,17 @@ namespace ASELib
 			}
 
 			// Returns a tuple of ExpressionMap, and list of labels corresponding to the expression values in the dictionary
-			public static Tuple<Dictionary<string, double[]>, List<string>> ReadFile(string filename, bool skipFirstLine = true)
+			public static Tuple<Dictionary<string, double[]>, List<string>, Dictionary<string, int>> ReadFile(string filename, bool skipFirstLine = true)
 			{
-
 				// keeps track of index of distances
 				List<string> index = new List<string>();
 
 				// for each gene, maintain a list of distance, expression tuples
 				Dictionary<string, double[]> expressionMap = new Dictionary<string, double[]>();
+
+
+				// for each gene, keep track of mutation counts
+				Dictionary<string, int> mutationMap = new Dictionary<string, int>();
 
 				var reader = CreateStreamReaderWithRetry(filename);
 
@@ -4558,6 +4568,8 @@ namespace ASELib
 
 					var mutationCount = Convert.ToInt32(fields[1]);
 
+					mutationMap.Add(hugoSymbol, mutationCount);
+
 					// get rid of gene name and mutation count
 					fields = fields.Skip(2).ToArray();
 
@@ -4582,7 +4594,7 @@ namespace ASELib
 					// add gene to dictionary
 					expressionMap.Add(hugoSymbol, numericFields);
 				}
-				return new Tuple<Dictionary<string, double[]>, List<string>>(expressionMap, index);
+				return new Tuple<Dictionary<string, double[]>, List<string>, Dictionary<string, int>>(expressionMap, index, mutationMap);
 			}
 		}
 

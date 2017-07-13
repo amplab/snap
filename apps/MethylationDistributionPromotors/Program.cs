@@ -1,23 +1,50 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using ASELib;
 using System.IO;
 
-namespace MethylationDistribution
+namespace MethylationDistributionPromotors
 {
 	class Program
 	{
 
-		// keeps track of the tumor and normal methylation distributions
-		static Dictionary<double, int> tumorMethylationDistribution = new Dictionary<double, int>();
-		static Dictionary<double, int> normalMethylationDistribution = new Dictionary<double, int>();
+		public class MethylationPoint : IComparer<MethylationPoint>
+		{
+			public string identifier;
+			public double adjustedBValue;
+			public double bValue;
+			public bool hasOneMutation;
 
-		static Dictionary<string, List<MethylationPoint[]>> elements = new Dictionary<string, List<MethylationPoint[]>>();
+			public MethylationPoint(string identifier_, double bValue_, bool hasOneMutation_)
+			{
+				bValue = bValue_;
+				identifier = identifier_;
+				hasOneMutation = hasOneMutation_;
 
-		static void ProcessCases(List<ASETools.Case> cases, List<string> selectedHugoSymbols)
+				// Values of 1 have no/full methylation. values of partial methylation have 0 score
+				adjustedBValue = Math.Abs(2 * bValue - 1); 
+			}
+
+			public int Compare(MethylationPoint a, MethylationPoint b)
+			{
+				return xCompare(a, b);
+			}
+
+			static public int xCompare(MethylationPoint a, MethylationPoint b)
+			{
+				if (a.adjustedBValue > b.adjustedBValue) return 1;
+				if (a.adjustedBValue < b.adjustedBValue) return -1;
+				return 0;
+			}
+		}
+
+
+		// Dictionary of hugoSymbol, and list of methylation points
+		static Dictionary<string, List<MethylationPoint>> elements = new Dictionary<string, List<MethylationPoint>>();
+
+		static void ProcessCasesOnlyPromotors(List<ASETools.Case> cases, List<string> selectedHugoSymbols)
 		{
 			while (true)
 			{
@@ -38,16 +65,14 @@ namespace MethylationDistribution
 				}
 
 				// Read in methylation values and ASE values
-				if (case_.tumor_allele_specific_gene_expression_filename == "" || case_.tumor_regional_methylation_filename == "")
+				if (case_.tumor_allele_specific_gene_expression_filename == "" || case_.tumor_methylation_filename == "")
 				{
 					// no data. continue
 					continue;
 				}
 
-				var regionalMethylationData = ASETools.RegionalSignalFile.ReadFile(case_.tumor_regional_methylation_filename);
 
-				// TODO write file header
-
+				var methylationData = ASETools.AnnotationLine.ReadFile(case_.tumor_methylation_filename, case_.tumor_methylation_file_id, false);
 
 				foreach (var hugoSymbol in selectedHugoSymbols)
 				{
@@ -67,65 +92,48 @@ namespace MethylationDistribution
 						continue;
 					}
 
-					// TODO check for value
-					var methylationForGene = regionalMethylationData.Item1[hugoSymbol];
+					var methylationForGene = methylationData.Where(r => 
+						r.compositeREF.Gene_Symbol.Contains(ASETools.ConvertToNonExcelString(hugoSymbol)));
+
+					// filter by promotors for this gene
+					if (!allSites)
+					{
+						methylationForGene = methylationForGene.Where(r =>
+						{
+							var merged = r.compositeREF.Gene_Symbol.Zip(r.compositeREF.Position_to_TSS, (first, second) =>
+								new Tuple<string, int>(first, second))
+									.Where(t => t.Item1 == ASETools.ConvertToNonExcelString(hugoSymbol)).Select(f => f.Item2);
+							return Math.Abs(merged.Average()) <= 2000;
+						});
+					}
 
 					if (methylationForGene.Count() == 0)
 					{
 						continue;
 					}
 
+					var combinedScore = methylationForGene.Select(r => r.Beta_Value).Average();
+
 					// Add to elements
-					MethylationPoint[] array = methylationForGene.Select(r => new MethylationPoint(hugoSymbol, r, mutationCount == 1))
-						.ToArray();
+					MethylationPoint x = new MethylationPoint(hugoSymbol, combinedScore, mutationCount == 1);
 
 					lock (elements)
 					{
 						// If gene does not exist 
-						List<MethylationPoint[]> element;
+						List<MethylationPoint> element;
 						if (!elements.TryGetValue(hugoSymbol, out element))
 						{
-							elements.Add(hugoSymbol, new List<MethylationPoint[]>());
+							elements.Add(hugoSymbol, new List<MethylationPoint>());
 						}
-						elements[hugoSymbol].Add(array);
+						elements[hugoSymbol].Add(x);
 					}
+
+
 				}
 
 			}
 		}
 
-		// TODO consolidate all these duplicated functions
-		public class MethylationPoint : IComparer<MethylationPoint>
-		{
-			public string identifier;
-			public double adjustedBValue;
-			public double mValue;
-			public bool hasOneMutation;
-
-		public MethylationPoint(string identifier_, double mValue_, bool hasOneMutation_)
-			{
-				mValue = mValue_;
-				identifier = identifier_;
-				hasOneMutation = hasOneMutation_;
-
-				var bValue = ASETools.AnnotationLine.M2Beta(mValue_);
-				adjustedBValue = Math.Abs(2 * bValue - 1); // hemimethylated are 0, full and none are 1 TODO reverse this
-			}
-
-			public int Compare(MethylationPoint a, MethylationPoint b)
-			{
-				return xCompare(a, b);
-			}
-
-			static public int xCompare(MethylationPoint a, MethylationPoint b)
-			{
-				if (a.adjustedBValue > b.adjustedBValue) return 1;
-				if (a.adjustedBValue < b.adjustedBValue) return -1;
-				return 0;
-			}
-		}
-
-		static bool headerWritten = false; // TODO SO LAZY...
 		static StreamWriter panCancerOutputFile;
 
 		// stores distance for lowest pvalue
@@ -176,6 +184,11 @@ namespace MethylationDistribution
 		{
 			foreach (var case_ in cases)
 			{
+				if (case_.tumor_allele_specific_gene_expression_filename == "")
+				{
+					continue;
+				}
+
 				var aseFile = ASETools.RegionalSignalFile.ReadFile(case_.tumor_allele_specific_gene_expression_filename);
 
 				foreach (var hugoSymbol in bestPValues.Keys)
@@ -199,22 +212,20 @@ namespace MethylationDistribution
 			}
 		}
 
+		static bool allSites = true;
+
 		static void Main(string[] args)
 		{
 			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
-			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname).Take(20);
+			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
-			// Case 1: for any group of cases, compute the pvalues for adjusted beta value.
-			// Run Mann Whitney for test for ASM values from adjusted beta value where the groups are 
-			// ase vs no ase. (per gene) The purpose of this is to see if ASM significantly explains ASE for any locations.
+			if (configuration.commandLineArgs.Count() > 0 && configuration.commandLineArgs[0] == "-p")
+			{
+				allSites = false;
+			}
 
-			var regionsToProcess = 66;
-
-
-			// load in known genes
-			var knownGenes = ASETools.readKnownGeneFile(ASETools.ASEConfirguation.defaultGeneLocationInformation);
-
-			string baseFileName = configuration.finalResultsDirectory + "methylationResults.allSites.txt";
+			string baseFileName = configuration.finalResultsDirectory +
+				(allSites ? "methylationResults.all.txt" : "methylationResults.promotors.txt");
 
 			panCancerOutputFile = ASETools.CreateStreamWriterWithRetry(baseFileName);
 
@@ -222,7 +233,7 @@ namespace MethylationDistribution
 			readFinalValues(pValueFile);
 
 			// Select only hugo symbols with low pvalues
-			var selectedHugoSymbols = bestPValues.Where(r => r.Value.Item2 < 1.0E-6).Select(r => r.Key);
+			List<string> selectedHugoSymbols = bestPValues.Where(r => r.Value.Item2 < 1.0E-6).Select(r => r.Key).ToList();
 
 			// load the mutations for each file
 			loadMutationCounts(cases.Select(r => r.Value).ToList());
@@ -231,76 +242,69 @@ namespace MethylationDistribution
 			ASETools.MannWhitney<MethylationPoint>.GetValue getValue = new ASETools.MannWhitney<MethylationPoint>.GetValue(x => x.adjustedBValue);
 			bool twoTailed = true;
 
-			// Preprocess cases by putting all required values in methylationValues
 			var threads = new List<Thread>();
 			var selectedCases = cases.Select(r => r.Value).ToList();
 
 			for (int i = 0; i < Environment.ProcessorCount; i++)
 			{
-				threads.Add(new Thread(() => ProcessCases(selectedCases, selectedHugoSymbols.ToList())));
+				threads.Add(new Thread(() => ProcessCasesOnlyPromotors(selectedCases, selectedHugoSymbols)));
 			}
 
 			threads.ForEach(th => th.Start());
 			threads.ForEach(th => th.Join());
 
+			// write header
+			panCancerOutputFile.WriteLine("Gene Symbol\tbest pval\tbest location\t0 kb");
 
 			foreach (var hugoSymbol in selectedHugoSymbols)
 			{
+				// dictionary of (case, mutationcount)
 				Dictionary<string, int> mutationCountsForThisGene;
-				if (mutationCounts.TryGetValue(hugoSymbol, out mutationCountsForThisGene))
+				if (!mutationCounts.TryGetValue(ASETools.ConvertToExcelString(hugoSymbol), out mutationCountsForThisGene))
 				{
 					continue;
 				}
 
 				var bestPValue = bestPValues[hugoSymbol];
 
-				ASETools.GeneLocationInfo knownGene;
-
-				if (!knownGenes.TryGetValue(ASETools.ConvertToNonExcelString(hugoSymbol), out knownGene))
-				{
-					continue;
-				}
 
 				var hugoLine = hugoSymbol + "\t" + bestPValue.Item2 + "\t" + bestPValue.Item1;
 
 				// If elements has no items, skip this hugo symbol
-				if (elements.Count() == 0)
+				List<MethylationPoint> element;
+				if (!elements.TryGetValue(hugoSymbol, out element))
 				{
-					hugoLine += string.Concat(Enumerable.Repeat("\t*", regionsToProcess));
+					hugoLine += "\t*";
 					panCancerOutputFile.WriteLine(hugoLine);
 					continue;
 				}
 
-				// Iterate through all regions
-				for (var i = 0; i < regionsToProcess; i++)
-				{
-					bool reversed;
-					bool enoughData;
-					double nFirstGroup;
-					double nSecondGroup;
-					double U;
-					double z;
+				bool reversed;
+				bool enoughData;
+				double nFirstGroup;
+				double nSecondGroup;
+				double U;
+				double z;
 
-					var forRegion = elements[hugoSymbol].Select(r => r[i]).Where(r => r.mValue > Double.NegativeInfinity).ToList(); // Filter by neg infinity
-					if (forRegion.Count() > 0)
+				if (element.Count() > 0)
+				{
+					var p = ASETools.MannWhitney<MethylationPoint>.ComputeMannWhitney(element,
+						element[0], whichGroup, getValue, out enoughData, out reversed,
+						out nFirstGroup, out nSecondGroup, out U, out z, twoTailed, 20);
+					if (!enoughData)
 					{
-						var p = ASETools.MannWhitney<MethylationPoint>.ComputeMannWhitney(forRegion, 
-							forRegion[0], whichGroup, getValue, out enoughData, out reversed, 
-							out nFirstGroup, out nSecondGroup, out U, out z, twoTailed, 20);
-						if (!enoughData)
-						{
-							hugoLine += "\t*";
-						}
-						else
-						{
-							hugoLine += "\t" + p;
-						}
-					}
-					else {
 						hugoLine += "\t*";
 					}
+					else
+					{
+						hugoLine += "\t" + p;
+					}
+				}
+				else
+				{
+					hugoLine += "\t*";
+				}
 
-				} // foreach region
 
 				panCancerOutputFile.WriteLine(hugoLine);
 				panCancerOutputFile.Flush();
@@ -308,13 +312,6 @@ namespace MethylationDistribution
 			} // foreach hugo symbol 
 
 			panCancerOutputFile.Close();
-
-
-			// Case 2: Run t test, trying to assign distributions for methylation points. This is to only
-			// look at 1 group (ie. ase) Thie purpose of this is to see what percentage of ASE significant
-			// results can be explained by ASE. This should be written generically enough so it can
-			// also be used to test no ASE for 0 mutations, testing what percentage of these cases fall into the
-			// 'full methylation' category
 
 		}
 	}

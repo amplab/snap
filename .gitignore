@@ -82,7 +82,7 @@ obj
 /apps/MethylationHeatmaps/bin
 /apps/ChangeGenomeBuild/bin
 /apps/ExtractBisulfiteReads/bin
-
+/apps/MethylationDistributionPromotors/bin
 
 
 

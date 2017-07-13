@@ -12,24 +12,6 @@ using GenomeBuild;
 namespace MethylationAnalysis
 
 {
-	class MethylationPoint : IComparer<MethylationPoint>
-	{
-		public string compositeREF;
-		public double mValue;
-		public bool isSingle;
-
-		public int Compare(MethylationPoint a, MethylationPoint b)
-		{
-			return xCompare(a, b);
-		}
-
-		static public int xCompare(MethylationPoint a, MethylationPoint b)
-		{
-			if (a.mValue > b.mValue) return 1;
-			if (a.mValue < b.mValue) return -1;
-			return 0;
-		}
-	}
 
 	class Program
 	{
@@ -195,118 +177,6 @@ namespace MethylationAnalysis
 			}
 		}
 
-
-		//private static void MethylationMannWhitney(List<KeyValuePair<string, ASETools.GeneLocationInfo>> compositeREFs_)
-		//{
-
-		//	outputLines = new List<ASETools.OutputLine>();
-
-		//	while (true)
-		//	{
-		//		KeyValuePair<string, ASETools.GeneLocationInfo> compositeREF;
-
-		//		lock (compositeREFs_)
-		//		{
-		//			if (compositeREFs_.Count() == 0)
-		//			{
-		//				//
-		//				// No more work, we're done.
-		//				//
-		//				return;
-		//			}
-
-		//			Console.WriteLine(compositeREFs_.Count() + " remaining...");
-		//			compositeREF = compositeREFs_[0];
-
-		//			compositeREFs_.RemoveAt(0);
-		//		}
-		//		Console.WriteLine(Thread.CurrentThread.ToString() + ": " + compositeREF.Key);
-		//		Dictionary<string, int> geneCounts = new Dictionary<string, int>();
-
-		//		try
-		//		{
-		//			// get per gene information (tuples of file id, mutation count)
-		//			geneCounts = mutationCounts[compositeREF.Value.hugoSymbol].ToDictionary(x => x.Item1, x => x.Item2);
-		//		}
-		//		catch (Exception)
-		//		{
-		//			// Gene does not have any mutations, and should not be included in analysis
-		//			continue;
-
-		//		}
-
-		//		var methylationPoints = casesMethylation[compositeREF.Key].Select(r =>
-		//		{
-		//			var mutations = 0;
-		//			try
-		//			{
-		//				mutations = geneCounts[r.Item1];
-		//			}
-		//			catch (Exception)
-		//			{
-		//				// no op
-		//			}
-		//			// Tuple of M-value, mutations
-		//			return new Tuple<double, int>(r.Item2, mutations);
-		//		}).Where(r => r.Item2 < 2).Select(r => {    // filter out more than 1 mutation and format to comparative MethylationPoints
-		//			var m = new MethylationPoint();
-		//			m.mValue = ASETools.AnnotationLine.betaToM(r.Item1);
-		//			m.isSingle = r.Item2 == 0;
-		//			m.compositeREF = compositeREF.Key;
-		//			return m;
-		//		}).ToList();
-
-		//		// run MannWhitney test for this methylation point
-		//		ASETools.MannWhitney<MethylationPoint>.GetValue getValue = new ASETools.MannWhitney<MethylationPoint>.GetValue(m => m.mValue);
-		//		ASETools.MannWhitney<MethylationPoint>.WhichGroup whichGroup = new ASETools.MannWhitney<MethylationPoint>.WhichGroup(m => m.isSingle);
-
-		//		double nSingle = 0;
-		//		double nMultiple = 0;
-		//		double p;
-		//		bool reversed;
-		//		double U;
-		//		double z;
-
-		//		bool enoughData;
-
-		//		p = ASETools.MannWhitney<MethylationPoint>.ComputeMannWhitney(methylationPoints, methylationPoints[0], whichGroup, getValue, out enoughData, out reversed, out nSingle, out nMultiple, out U, out z);
-		//		if (!enoughData)
-		//		{
-		//			continue;
-		//		}
-
-		//		var outputLine = new ASETools.OutputLine();
-		//		outputLine.line = compositeREF.Value.hugoSymbol + "\t" + compositeREF.Key + "\t" + nSingle + "\t" + nMultiple + "\t" + U + "\t" + z;
-		//		outputLine.p = p;
-		//		outputLines.Add(outputLine);
-
-		//	}
-		//}
-
-		//static void MethylationMannWhitney()
-		//{
-		//	// total number of REFs for Bonferroni correction
-		//	int compositeREFCount = compositeREFs.Keys.Count();
-
-		//	MethylationMannWhitney(compositeREFs.ToList());
-
-
-		//	// open file
-		//	var output = new StreamWriter(@"\\msr-genomics-0\d$\gdc\methyl_temp\MannWhitney_with450.txt");
-
-		//	// write header
-		//	output.WriteLine("Gene\tCompositeREF\tnSingle\tnMultiple\tU\tz\tp\tp_Bonferroni\t");
-
-		//	var compositeCount = outputLines.Count();
-
-		//	foreach (var outputLine in outputLines)
-		//	{
-		//		output.WriteLine(outputLine.line + "\t" + outputLine.p + "\t" + outputLine.p * compositeCount);
-		//	}
-
-		//	output.Close();
-		//}
-
 		static void saveEnhancers()
 		{
 			Console.WriteLine("saving enhancers");
@@ -405,7 +275,6 @@ namespace MethylationAnalysis
 			threads.ForEach(th => th.Start());
 			threads.ForEach(th => th.Join());
 
-			//MethylationMannWhitney();
 
 			return;
 
