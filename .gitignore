@@ -83,6 +83,7 @@ obj
 /apps/ChangeGenomeBuild/bin
 /apps/ExtractBisulfiteReads/bin
 /apps/MethylationDistributionPromotors/bin
+/apps/MethylationByMutationCount/bin
 
 
 

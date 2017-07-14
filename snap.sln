@@ -114,7 +114,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenomeBuild", "apps\ChangeG
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MethylationHeatmaps", "apps\MethylationHeatmaps\MethylationHeatmaps.csproj", "{B14B70C4-9523-46F5-AD4F-547058B0B75C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MethylationDistributionPromotors", "MethylationDistributionPromotors\MethylationDistributionPromotors.csproj", "{DEDA2A4B-818D-4BF4-8B7E-12664EC6B5BE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MethylationDistributionPromotors", "apps\MethylationDistributionPromotors\MethylationDistributionPromotors.csproj", "{DEDA2A4B-818D-4BF4-8B7E-12664EC6B5BE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MethylationByMutationCount", "apps\MethylationByMutationCount\MethylationByMutationCount.csproj", "{CEF4E705-1A07-459D-8F3A-1256CF45346F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

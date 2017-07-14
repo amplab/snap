@@ -20,9 +20,8 @@ namespace MethylationHeatmaps
 		static List<string> labels = new List<string>();
 
 		// bins a value between 0 and 1
-		static int binValue(double value, int binCount)
+		static int binValue(double value, double binCount)
 		{
-
 			var x = value / (1.0 / binCount);
 			var bin =  Convert.ToInt32(Math.Floor(x));
 
@@ -40,7 +39,162 @@ namespace MethylationHeatmaps
 			Console.WriteLine("-a means allele specific expression. Absent means raw expression");
 		}
 
-		static void ProcessMethylation(List<Tuple<string, string>> regionalFiles, int binCount)
+		static Dictionary<string, ASETools.GeneLocationInfo> knownGenes = 
+			ASETools.readKnownGeneFile(ASETools.ASEConfirguation.defaultGeneLocationInformation);
+
+
+
+		static void ProcessRawMethylation(List<Tuple<string, string>> regionalFiles, double binCount)
+		{
+
+			while (true)
+			{
+				string expressionFilename;
+				string methylationFilename;
+
+				lock (regionalFiles)
+				{
+					if (regionalFiles.Count() == 0)
+					{
+						return;
+					}
+
+					if (regionalFiles.Count() % 500 == 0)
+					{
+						Console.WriteLine(regionalFiles.Count() + " cases left");
+					}
+
+					expressionFilename = regionalFiles[0].Item1;
+					methylationFilename = regionalFiles[0].Item2;
+					regionalFiles.RemoveAt(0);
+				}
+
+				if (!methylationFilename.Contains("HumanMethylation450"))
+				{
+					continue;
+				}
+
+				// Read in expression files
+				var aseSignal = ASETools.RegionalSignalFile.ReadFile(expressionFilename);
+
+				// get dictionary for methylation values by chromosome
+				Dictionary<string, List<ASETools.AnnotationLine>> methylationValues = 
+					ASETools.AnnotationLine.ReadFile(methylationFilename, methylationFilename, false)
+						.GroupBy(r => r.compositeREF.Chromosome)
+						.ToDictionary(r => r.Key, t => t.Select(k => k).ToList());
+
+				// For all genes with ASE for this sample, get the methylation values for all regions
+				foreach (var gene in aseSignal.Item1)
+				{
+					var geneSymbol = gene.Key;
+					var ASEValues = gene.Value;
+
+					// make sure gene is verified and get location
+					ASETools.GeneLocationInfo geneLocation;
+					if (!knownGenes.TryGetValue(ASETools.ConvertToNonExcelString(geneSymbol), out geneLocation))
+					{
+						continue;
+					}
+
+					var aseValue = ASEValues[0]; // get ASE Value at 0 kb
+
+					if (aseValue >= 0)
+					{
+
+						// initialize bin in heatmap, if necessary
+						var bin = binValue(aseValue, binCount);
+						lock (heatmap)
+						{
+							if (!heatmap.ContainsKey(bin))
+							{
+								heatmap.Add(bin, new List<Tuple<int, double>>());
+								// Initialize areas for each distance from gene
+								for (var k = 0; k < 20; k++) // TODO rm hardcoded 20
+								{
+									heatmap[bin].Add(new Tuple<int, double>(0, 0.0));
+								}
+							}
+						}
+
+						var start = geneLocation.isoforms[0].txStart;
+						var end = geneLocation.isoforms[0].txEnd;
+
+						double minDistance = start;
+						double maxDistance = end;
+						double lastMinDistance = start;
+						double lastMaxDistance = end;
+
+						// Foreach range
+						// Because we have 0 (in the gene), this range is 2^(20 - 2) * 1000
+						// here exclude the previous region size
+						for (int i = 0; i < ASETools.GeneExpression.nRegionSizes; i++)
+						{
+
+
+							if (i == 0)
+							{
+								// special case: only look at gene
+								minDistance = start;
+								maxDistance = end;
+								lastMinDistance = start;
+								lastMaxDistance = end;
+							}
+							else
+							{
+								lastMinDistance = minDistance;
+								lastMaxDistance = maxDistance;
+
+								minDistance = Math.Max(0, start - Math.Pow(2, i - 1) * 1000);
+								maxDistance = end + Math.Pow(2, i - 1) * 1000;
+							}
+
+							// find all methylation values that are < distance and > lastDistance. Take the mean.
+							List<ASETools.AnnotationLine> methylationValuesForChromsome;
+							if (!methylationValues.TryGetValue(geneLocation.chromosome, out methylationValuesForChromsome))
+							{
+								// chromosome could not be found
+								continue;
+							}
+
+							List<ASETools.AnnotationLine> filteredMethylationValues;
+							if (i == 0)
+							{
+								filteredMethylationValues = methylationValuesForChromsome.Where(r =>
+								{
+								// case if methylation point is "higher" than current gene
+								return (r.compositeREF.Start > minDistance && r.compositeREF.Start < maxDistance);
+								}).ToList();
+							}
+							else
+							{
+								filteredMethylationValues = methylationValuesForChromsome.Where(r =>
+								{
+									// case if methylation point is "higher" than current gene
+									return ((r.compositeREF.Start > lastMaxDistance && r.compositeREF.Start < maxDistance) ||
+									// ase if methylation point is "lower" than current gene
+									(r.compositeREF.Start > minDistance && r.compositeREF.Start < lastMinDistance));
+								}).ToList();
+							}
+						
+							var totalMValues = filteredMethylationValues.Select(r => r.M_Value).ToList().Sum();
+
+							lock (heatmap[bin])
+							{
+								// Update heatmap values for this bin and ASM distance
+								heatmap[bin][i] = new Tuple<int, double>(heatmap[bin][i].Item1 + filteredMethylationValues.Count(),
+									heatmap[bin][i].Item2 + totalMValues);
+							}
+
+						} // foreach distance from gene
+
+					} // if ASM Value is valid
+
+				} // foreach gene from the ASE results
+
+			} // while true
+		}
+
+		static void ProcessMethylation(List<Tuple<string, string>> regionalFiles, double binCount)
 		{
 
 			while (true)
@@ -89,6 +243,19 @@ namespace MethylationHeatmaps
 
 						var bin = binValue(aseValue, binCount);
 
+						lock (heatmap)
+						{
+							if (!heatmap.ContainsKey(bin))
+							{
+								heatmap.Add(bin, new List<Tuple<int, double>>());
+								// Initialize areas for each distance from gene
+								for (var k = 0; k < 20; k++) // TODO rm hardcoded 20
+								{
+									heatmap[bin].Add(new Tuple<int, double>(0, 0.0));
+								}
+							}
+						}
+
 						// Get data for ASM for all distances
 						var asmData = comparisonSignal.Item1[geneSymbol];
 
@@ -99,7 +266,9 @@ namespace MethylationHeatmaps
 
 						for (var i = 0; i < asmData.Count(); i++)
 						{
-							var asm = asmData[i];
+
+							double asm = asmData[i];
+
 							if (asm >= 0)
 							{
 								lock (heatmap[bin])
@@ -116,7 +285,7 @@ namespace MethylationHeatmaps
 			} // while true
 		}
 
-		static void ProcessBisulfite(Dictionary<string, ASETools.BisulfateCase> bisulfiteCases, Dictionary<string, ASETools.Case> cases, bool forTumor, int binCount)
+		static void ProcessBisulfite(Dictionary<string, ASETools.BisulfateCase> bisulfiteCases, Dictionary<string, ASETools.Case> cases, bool forTumor, double binCount)
 		{
 			var regionalFiles = new List<Tuple<string, string>>();
 
@@ -170,7 +339,7 @@ namespace MethylationHeatmaps
 
 		}
 
-		static void ProcessIlluminaArray(Dictionary<string, ASETools.Case> cases, bool forTumor, int binCount, bool forAlleleSpecificExpression)
+		static void ProcessIlluminaArray(Dictionary<string, ASETools.Case> cases, bool forTumor, double binCount, bool forAlleleSpecificExpression)
 		{
 			var regionalFiles = new List<Tuple<string, string>>();
 
@@ -182,9 +351,10 @@ namespace MethylationHeatmaps
 				{
 					if (forAlleleSpecificExpression)
 					{
-						if (case_.tumor_allele_specific_gene_expression_filename != "" && case_.tumor_regional_methylation_filename != "")
+						if (case_.tumor_allele_specific_gene_expression_filename != "" && case_.tumor_methylation_filename != "")
 						{
-							regionalFiles.Add(new Tuple<string, string>(case_.tumor_allele_specific_gene_expression_filename, case_.tumor_regional_methylation_filename));
+							regionalFiles.Add(new Tuple<string, string>(case_.tumor_allele_specific_gene_expression_filename, 
+								case_.tumor_methylation_filename));
 						}
 						else
 						{
@@ -193,9 +363,10 @@ namespace MethylationHeatmaps
 					}
 					else
 					{
-						if (case_.gene_expression_filename != "" && case_.tumor_regional_methylation_filename != "")
+						if (case_.gene_expression_filename != "" && case_.tumor_methylation_filename != "")
 						{
-							regionalFiles.Add(new Tuple<string, string>(case_.gene_expression_filename, case_.tumor_regional_methylation_filename));
+							regionalFiles.Add(new Tuple<string, string>(case_.gene_expression_filename, 
+								case_.tumor_methylation_filename));
 						}
 						else
 						{
@@ -208,9 +379,10 @@ namespace MethylationHeatmaps
 				{
 					if (forAlleleSpecificExpression)
 					{
-						if (case_.normal_allele_specific_gene_expression_filename != "" && case_.normal_regional_methylation_filename != "")
+						if (case_.normal_allele_specific_gene_expression_filename != "" && case_.normal_methylation_filename != "")
 						{
-							regionalFiles.Add(new Tuple<string, string>(case_.normal_allele_specific_gene_expression_filename, case_.normal_regional_methylation_filename));
+							regionalFiles.Add(new Tuple<string, string>(case_.normal_allele_specific_gene_expression_filename, 
+								case_.normal_methylation_filename));
 						}
 						else
 						{
@@ -225,21 +397,25 @@ namespace MethylationHeatmaps
 
 			}
 
-			//var threads = new List<Thread>();
-			//for (int i = 0; i < Environment.ProcessorCount; i++)
-			//{
-			//	threads.Add(new Thread(() => ProcessMethylation(regionalFiles, binCount)));
-			//}
+			var threads = new List<Thread>();
+			for (int i = 0; i < Environment.ProcessorCount; i++)
+			{
+				threads.Add(new Thread(() => ProcessRawMethylation(regionalFiles, binCount)));
+			}
 
-			//threads.ForEach(t => t.Start());
-			//threads.ForEach(t => t.Join());
-			ProcessMethylation(regionalFiles, binCount);
+			threads.ForEach(t => t.Start());
+			threads.ForEach(t => t.Join());
 		}
 
 		static void Main(string[] args)
 		{
+			// filter out chr x and y
+			knownGenes = knownGenes.Where(r => r.Value.chromosome != "chrX" && r.Value.chromosome != "chrY")
+				.ToDictionary(x => x.Key, x => x.Value);
+
+
 			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
-			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
+			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname).ToDictionary(x => x.Key, x => x.Value);
 
 			// only allow flag for allele-specific expression or case ids
 			if (configuration.commandLineArgs.Count() < 3 || configuration.commandLineArgs.Count() > 4 || (configuration.commandLineArgs[0] != "-bisulfite" && configuration.commandLineArgs[0] != "-array")
@@ -258,29 +434,13 @@ namespace MethylationHeatmaps
 				forAlleleSpecificExpression = true;
 			}
 
-			int binCount;
+			double binCount;
 			try {
-				binCount = Convert.ToInt32(configuration.commandLineArgs[2]);
+				binCount = Convert.ToDouble(configuration.commandLineArgs[2]);
 			} catch (Exception)
 			{
 				Console.WriteLine("MethylationHeatmaps: invalid bin count");
 				return;
-			}
-
-			var regionCount = 66; // TODO don't hardcode this
-
-			// initialize heatmap
-			for (var bin = 0; bin < binCount; bin++)
-			{
-				// add key for this bin size
-				heatmap.Add(bin, new List<Tuple<int, double>>());
-
-				// Initialize areas for each distance from gene
-				for (var i = 0; i < regionCount; i++)
-				{
-					heatmap[bin].Add(new Tuple<int, double>(0, 0.0));
-				}
-
 			}
 
 			if (bisulfite)
@@ -298,45 +458,44 @@ namespace MethylationHeatmaps
 					cases = cases.Where(r => r.Value.tumor_methylation_filename.Contains("HumanMethylation450")).ToDictionary(x => x.Key, x => x.Value);
 				else
 					cases = cases.Where(r => r.Value.normal_methylation_filename.Contains("HumanMethylation450")).ToDictionary(x => x.Key, x => x.Value);
-				var diseaseCounts = cases.Select(r => r.Value.disease()).GroupBy(r => r).Select(r => new Tuple<string, int>(r.Key, r.Count()));
-				foreach (var dc in diseaseCounts)
-				{
-					Console.WriteLine(dc.Item1 + ": " + dc.Item2);
-				}
 
 				ProcessIlluminaArray(cases, forTumor, binCount, forAlleleSpecificExpression);
 			}
 
 
 			// get filename for heatmap
+			var expExt = forAlleleSpecificExpression ? "_ase" : "_expression";
 			var ext = bisulfite ? "_bisulfite.txt" : "_array.txt";
 			var heatmapName = "heatmap" + (forTumor ? "_tumor" : "_normal");
 
-			var heatmapFilename = ASETools.ASEConfirguation.bisulfiteDirectory  + heatmapName + ext;
+			var heatmapFilename = ASETools.ASEConfirguation.bisulfiteDirectory + heatmapName + expExt + ext + ".test";
 			Console.WriteLine("Saving to " + heatmapFilename);
 
 			var writer = ASETools.CreateStreamWriterWithRetry(heatmapFilename);
 
 			// write header
-			foreach (string label in labels)
+			for (int i = 0; i < ASETools.GeneExpression.nRegionSizes; i++)
 			{
-				var finalLabel = label;
-				int index = label.LastIndexOf("(");
-				if (index > 0)
-					finalLabel = label.Substring(0, index);
+				
+				var label = (i==0) ? 0 : Math.Pow(2, i - 1) * 1000;
 
-				writer.Write('\t' + finalLabel);
+				writer.Write("\t" + label + " kb");
 			}
 			writer.WriteLine();
 
 			// write heatmap
-			foreach (var bin in heatmap)
+			var sortedKeys = heatmap.Keys.ToList();
+			sortedKeys.Sort();
+
+			foreach (var key in sortedKeys)
 			{
+				var bin = heatmap[key];
+
 				// write bin count
-				writer.Write(bin.Key);
+				writer.Write(key);
 
 				// foreach distance, write distance count
-				foreach (var value in bin.Value)
+				foreach (var value in bin)
 				{
 					writer.Write("\t" + value.Item2 / value.Item1);
 				}

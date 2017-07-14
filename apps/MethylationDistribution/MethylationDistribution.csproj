@@ -53,6 +53,10 @@
       <Project>{fef6def5-ca17-4fb1-ad7d-30fb579a7cf2}</Project>
       <Name>ASELib</Name>
     </ProjectReference>
+    <ProjectReference Include="..\MethylationDistributionPromotors\MethylationDistributionPromotors.csproj">
+      <Project>{deda2a4b-818d-4bf4-8b7e-12664ec6b5be}</Project>
+      <Name>MethylationDistributionPromotors</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

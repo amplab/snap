@@ -2871,6 +2871,11 @@ namespace ASELib
 		public class AnnotationLine
 		{
 
+			public static double hemimethylation(double value)
+			{
+				return Math.Abs(2 * value - 1);
+			}
+
 			public static double M2Beta(double M_Value)
 			{
 				var expM = Math.Pow(2, M_Value);
@@ -6587,6 +6592,38 @@ namespace ASELib
 				}
 
 				return cases;
+			}
+		}
+
+
+		public class MethylationPoint : IComparer<MethylationPoint>
+		{
+			public string identifier;
+			public double adjustedBValue;
+			public double mValue;
+			public bool hasOneMutation;
+
+			public MethylationPoint(string identifier_, double mValue_, bool hasOneMutation_)
+			{
+				mValue = mValue_;
+				identifier = identifier_;
+				hasOneMutation = hasOneMutation_;
+
+				var bValue = AnnotationLine.M2Beta(mValue);
+				// Values of 1 have no/full methylation. values of partial methylation have 0 score
+				adjustedBValue = Math.Abs(2 * bValue - 1);
+			}
+
+			public int Compare(MethylationPoint a, MethylationPoint b)
+			{
+				return xCompare(a, b);
+			}
+
+			static public int xCompare(MethylationPoint a, MethylationPoint b)
+			{
+				if (a.adjustedBValue > b.adjustedBValue) return 1;
+				if (a.adjustedBValue < b.adjustedBValue) return -1;
+				return 0;
 			}
 		}
 

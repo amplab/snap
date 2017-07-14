@@ -15,7 +15,7 @@ namespace MethylationDistribution
 		static Dictionary<double, int> tumorMethylationDistribution = new Dictionary<double, int>();
 		static Dictionary<double, int> normalMethylationDistribution = new Dictionary<double, int>();
 
-		static Dictionary<string, List<MethylationPoint[]>> elements = new Dictionary<string, List<MethylationPoint[]>>();
+		static Dictionary<string, List<ASETools.MethylationPoint[]>> elements = new Dictionary<string, List<ASETools.MethylationPoint[]>>();
 
 		static void ProcessCases(List<ASETools.Case> cases, List<string> selectedHugoSymbols)
 		{
@@ -46,8 +46,6 @@ namespace MethylationDistribution
 
 				var regionalMethylationData = ASETools.RegionalSignalFile.ReadFile(case_.tumor_regional_methylation_filename);
 
-				// TODO write file header
-
 
 				foreach (var hugoSymbol in selectedHugoSymbols)
 				{
@@ -68,24 +66,23 @@ namespace MethylationDistribution
 					}
 
 					// TODO check for value
-					var methylationForGene = regionalMethylationData.Item1[hugoSymbol];
-
-					if (methylationForGene.Count() == 0)
+					double[] methylationForGene;
+					if (!regionalMethylationData.Item1.TryGetValue(hugoSymbol, out methylationForGene))
 					{
 						continue;
 					}
 
 					// Add to elements
-					MethylationPoint[] array = methylationForGene.Select(r => new MethylationPoint(hugoSymbol, r, mutationCount == 1))
+					ASETools.MethylationPoint[] array = methylationForGene.Select(r => new ASETools.MethylationPoint(hugoSymbol, r, mutationCount == 1))
 						.ToArray();
 
 					lock (elements)
 					{
 						// If gene does not exist 
-						List<MethylationPoint[]> element;
+						List<ASETools.MethylationPoint[]> element;
 						if (!elements.TryGetValue(hugoSymbol, out element))
 						{
-							elements.Add(hugoSymbol, new List<MethylationPoint[]>());
+							elements.Add(hugoSymbol, new List<ASETools.MethylationPoint[]>());
 						}
 						elements[hugoSymbol].Add(array);
 					}
@@ -94,42 +91,11 @@ namespace MethylationDistribution
 			}
 		}
 
-		// TODO consolidate all these duplicated functions
-		public class MethylationPoint : IComparer<MethylationPoint>
-		{
-			public string identifier;
-			public double adjustedBValue;
-			public double mValue;
-			public bool hasOneMutation;
 
-		public MethylationPoint(string identifier_, double mValue_, bool hasOneMutation_)
-			{
-				mValue = mValue_;
-				identifier = identifier_;
-				hasOneMutation = hasOneMutation_;
-
-				var bValue = ASETools.AnnotationLine.M2Beta(mValue_);
-				adjustedBValue = Math.Abs(2 * bValue - 1); // hemimethylated are 0, full and none are 1 TODO reverse this
-			}
-
-			public int Compare(MethylationPoint a, MethylationPoint b)
-			{
-				return xCompare(a, b);
-			}
-
-			static public int xCompare(MethylationPoint a, MethylationPoint b)
-			{
-				if (a.adjustedBValue > b.adjustedBValue) return 1;
-				if (a.adjustedBValue < b.adjustedBValue) return -1;
-				return 0;
-			}
-		}
-
-		static bool headerWritten = false; // TODO SO LAZY...
 		static StreamWriter panCancerOutputFile;
 
-		// stores distance for lowest pvalue
-		static Dictionary<string, Tuple<string, double>> bestPValues = new Dictionary<string, Tuple<string, double>>();
+		// stores distance for lowest pvalue and first available ASE Value
+		static Dictionary<string, Tuple<string, double, double>> bestPValues = new Dictionary<string, Tuple<string, double, double>>();
 
 		// Dictionary of hugoSymbol, then dictionary of (case_id, mutationCount)
 		static Dictionary<string, Dictionary<string, int>> mutationCounts = new Dictionary<string, Dictionary<string, int>>();
@@ -140,22 +106,29 @@ namespace MethylationDistribution
 		static void readFinalValues(string filename)
 		{
 
-			var modValue = 11;
+			var pModValue = 11;
+			var aseModValue = 7; // TODO
 
 			// TODO move to bonferroni corrected values once available
 			List<string[]> lines = ASETools.ReadAllLinesWithRetry(filename).Select(r => r.Split('\t')).ToList();
 
 			var headers = lines[0];
 
+			// Iterate through each line for a gene
 			for (var i = 1; i < lines.Count(); i++)
 			{
 				var hugoSymbol = lines[i][0];
 
 				// get p-values for 1 vs not 1
-
 				var pvalues = lines[i].Select((value, index) => new Tuple<string, int>(value, index))
-					.Where(r => (r.Item2 - 2) % modValue == 0)
+					.Where(r => (r.Item2 - 2) % pModValue == 0)
 					.Where(r => r.Item1 != "*").Select(r => new Tuple<double, int>(Convert.ToDouble(r.Item1), r.Item2));
+
+				// get first ASE value
+				var firstAseValue = lines[i].Select((value, index) => new Tuple<string, int>(value, index))
+					.Where(r => (r.Item2) % aseModValue == 0)
+					.Where(r => r.Item1 != "*" || r.Item1.Trim() != "")
+					.Select(r =>Convert.ToDouble(r.Item1)).First();
 
 				if (pvalues.Count() == 0)
 				{
@@ -168,15 +141,26 @@ namespace MethylationDistribution
 
 				var label = headers[bestPValue.Item2];
 				var distance = label.Substring(0, label.IndexOf(" 1 vs. not 1"));
-				bestPValues.Add(hugoSymbol, new Tuple<string, double>(distance, min));
+				bestPValues.Add(hugoSymbol, new Tuple<string, double, double>(distance, min, firstAseValue));
 			}
 		}
 
-		static void loadMutationCounts(List<ASETools.Case> cases)
+		static string loadMutationCounts(List<ASETools.Case> cases)
 		{
+			var header = "";
 			foreach (var case_ in cases)
 			{
+				if (case_.tumor_allele_specific_gene_expression_filename == "")
+				{
+					continue;
+				}
+
 				var aseFile = ASETools.RegionalSignalFile.ReadFile(case_.tumor_allele_specific_gene_expression_filename);
+
+				if (header.Length == 0)
+				{
+					header = String.Join("\t", aseFile.Item2);
+				}
 
 				foreach (var hugoSymbol in bestPValues.Keys)
 				{
@@ -197,12 +181,13 @@ namespace MethylationDistribution
 					mutationCounts[hugoSymbol].Add(case_.case_id, mutationCount);
 				}
 			}
+			return header;
 		}
 
 		static void Main(string[] args)
 		{
 			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
-			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname).Take(20);
+			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
 			// Case 1: for any group of cases, compute the pvalues for adjusted beta value.
 			// Run Mann Whitney for test for ASM values from adjusted beta value where the groups are 
@@ -210,9 +195,6 @@ namespace MethylationDistribution
 
 			var regionsToProcess = 66;
 
-
-			// load in known genes
-			var knownGenes = ASETools.readKnownGeneFile(ASETools.ASEConfirguation.defaultGeneLocationInformation);
 
 			string baseFileName = configuration.finalResultsDirectory + "methylationResults.allSites.txt";
 
@@ -225,10 +207,10 @@ namespace MethylationDistribution
 			var selectedHugoSymbols = bestPValues.Where(r => r.Value.Item2 < 1.0E-6).Select(r => r.Key);
 
 			// load the mutations for each file
-			loadMutationCounts(cases.Select(r => r.Value).ToList());
+			var header = loadMutationCounts(cases.Select(r => r.Value).ToList());
 
-			ASETools.MannWhitney<MethylationPoint>.WhichGroup whichGroup = new ASETools.MannWhitney<MethylationPoint>.WhichGroup(m => m.hasOneMutation);
-			ASETools.MannWhitney<MethylationPoint>.GetValue getValue = new ASETools.MannWhitney<MethylationPoint>.GetValue(x => x.adjustedBValue);
+			ASETools.MannWhitney<ASETools.MethylationPoint>.WhichGroup whichGroup = new ASETools.MannWhitney<ASETools.MethylationPoint>.WhichGroup(m => m.hasOneMutation);
+			ASETools.MannWhitney<ASETools.MethylationPoint>.GetValue getValue = new ASETools.MannWhitney<ASETools.MethylationPoint>.GetValue(x => x.adjustedBValue);
 			bool twoTailed = true;
 
 			// Preprocess cases by putting all required values in methylationValues
@@ -243,28 +225,25 @@ namespace MethylationDistribution
 			threads.ForEach(th => th.Start());
 			threads.ForEach(th => th.Join());
 
+			// write file header
+			panCancerOutputFile.WriteLine("Gene Symbol\tbest pval\tbest location\tFirst ASE\t" + header);
 
 			foreach (var hugoSymbol in selectedHugoSymbols)
 			{
 				Dictionary<string, int> mutationCountsForThisGene;
-				if (mutationCounts.TryGetValue(hugoSymbol, out mutationCountsForThisGene))
+				if (!mutationCounts.TryGetValue(hugoSymbol, out mutationCountsForThisGene))
 				{
 					continue;
 				}
 
 				var bestPValue = bestPValues[hugoSymbol];
 
-				ASETools.GeneLocationInfo knownGene;
-
-				if (!knownGenes.TryGetValue(ASETools.ConvertToNonExcelString(hugoSymbol), out knownGene))
-				{
-					continue;
-				}
-
-				var hugoLine = hugoSymbol + "\t" + bestPValue.Item2 + "\t" + bestPValue.Item1;
+				// Write: best pvalue, location of best pvalue, ASE location at first spot
+				var hugoLine = hugoSymbol + "\t" + bestPValue.Item2 + "\t" + bestPValue.Item1 + "\t" + bestPValue.Item3;
 
 				// If elements has no items, skip this hugo symbol
-				if (elements.Count() == 0)
+				List<ASETools.MethylationPoint[]> element;
+				if (!elements.TryGetValue(hugoSymbol, out element))
 				{
 					hugoLine += string.Concat(Enumerable.Repeat("\t*", regionsToProcess));
 					panCancerOutputFile.WriteLine(hugoLine);
@@ -281,12 +260,12 @@ namespace MethylationDistribution
 					double U;
 					double z;
 
-					var forRegion = elements[hugoSymbol].Select(r => r[i]).Where(r => r.mValue > Double.NegativeInfinity).ToList(); // Filter by neg infinity
+					var forRegion = element.Select(r => r[i]).Where(r => r.mValue > Double.NegativeInfinity).ToList(); // Filter by neg infinity
 					if (forRegion.Count() > 0)
 					{
-						var p = ASETools.MannWhitney<MethylationPoint>.ComputeMannWhitney(forRegion, 
+						var p = ASETools.MannWhitney<ASETools.MethylationPoint>.ComputeMannWhitney(forRegion, 
 							forRegion[0], whichGroup, getValue, out enoughData, out reversed, 
-							out nFirstGroup, out nSecondGroup, out U, out z, twoTailed, 20);
+							out nFirstGroup, out nSecondGroup, out U, out z, twoTailed, 1);
 						if (!enoughData)
 						{
 							hugoLine += "\t*";

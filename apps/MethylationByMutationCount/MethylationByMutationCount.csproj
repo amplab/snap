@@ -4,10 +4,10 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{DEDA2A4B-818D-4BF4-8B7E-12664EC6B5BE}</ProjectGuid>
+    <ProjectGuid>{CEF4E705-1A07-459D-8F3A-1256CF45346F}</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <RootNamespace>MethylationDistributionPromotors</RootNamespace>
-    <AssemblyName>MethylationDistributionPromotors</AssemblyName>
+    <RootNamespace>MethylationByMutationCount</RootNamespace>
+    <AssemblyName>MethylationByMutationCount</AssemblyName>
     <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -52,6 +52,10 @@
     <ProjectReference Include="..\..\ASELib\ASELib.csproj">
       <Project>{fef6def5-ca17-4fb1-ad7d-30fb579a7cf2}</Project>
       <Name>ASELib</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\MethylationDistributionPromotors\MethylationDistributionPromotors.csproj">
+      <Project>{deda2a4b-818d-4bf4-8b7e-12664ec6b5be}</Project>
+      <Name>MethylationDistributionPromotors</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

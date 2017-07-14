@@ -7,42 +7,11 @@ using System.IO;
 
 namespace MethylationDistributionPromotors
 {
-	class Program
+	public class Program
 	{
 
-		public class MethylationPoint : IComparer<MethylationPoint>
-		{
-			public string identifier;
-			public double adjustedBValue;
-			public double bValue;
-			public bool hasOneMutation;
-
-			public MethylationPoint(string identifier_, double bValue_, bool hasOneMutation_)
-			{
-				bValue = bValue_;
-				identifier = identifier_;
-				hasOneMutation = hasOneMutation_;
-
-				// Values of 1 have no/full methylation. values of partial methylation have 0 score
-				adjustedBValue = Math.Abs(2 * bValue - 1); 
-			}
-
-			public int Compare(MethylationPoint a, MethylationPoint b)
-			{
-				return xCompare(a, b);
-			}
-
-			static public int xCompare(MethylationPoint a, MethylationPoint b)
-			{
-				if (a.adjustedBValue > b.adjustedBValue) return 1;
-				if (a.adjustedBValue < b.adjustedBValue) return -1;
-				return 0;
-			}
-		}
-
-
 		// Dictionary of hugoSymbol, and list of methylation points
-		static Dictionary<string, List<MethylationPoint>> elements = new Dictionary<string, List<MethylationPoint>>();
+		static Dictionary<string, List<ASETools.MethylationPoint>> elements = new Dictionary<string, List<ASETools.MethylationPoint>>();
 
 		static void ProcessCasesOnlyPromotors(List<ASETools.Case> cases, List<string> selectedHugoSymbols)
 		{
@@ -112,18 +81,18 @@ namespace MethylationDistributionPromotors
 						continue;
 					}
 
-					var combinedScore = methylationForGene.Select(r => r.Beta_Value).Average();
+					var combinedScore = methylationForGene.Select(r => r.M_Value).Average();
 
 					// Add to elements
-					MethylationPoint x = new MethylationPoint(hugoSymbol, combinedScore, mutationCount == 1);
+					ASETools.MethylationPoint x = new ASETools.MethylationPoint(hugoSymbol, combinedScore, mutationCount == 1);
 
 					lock (elements)
 					{
 						// If gene does not exist 
-						List<MethylationPoint> element;
+						List<ASETools.MethylationPoint> element;
 						if (!elements.TryGetValue(hugoSymbol, out element))
 						{
-							elements.Add(hugoSymbol, new List<MethylationPoint>());
+							elements.Add(hugoSymbol, new List<ASETools.MethylationPoint>());
 						}
 						elements[hugoSymbol].Add(x);
 					}
@@ -133,20 +102,24 @@ namespace MethylationDistributionPromotors
 
 			}
 		}
+		
+		// Whether or not to process all sites, or just promotors
+		static bool allSites = true;
 
 		static StreamWriter panCancerOutputFile;
 
 		// stores distance for lowest pvalue
-		static Dictionary<string, Tuple<string, double>> bestPValues = new Dictionary<string, Tuple<string, double>>();
+		static Dictionary<string, Tuple<string, double>> bestPValues;
 
 		// Dictionary of hugoSymbol, then dictionary of (case_id, mutationCount)
-		static Dictionary<string, Dictionary<string, int>> mutationCounts = new Dictionary<string, Dictionary<string, int>>();
+		static Dictionary<string, Dictionary<string, int>> mutationCounts;
 
 		// Dictionary of hugoSymbol, then dictionare of (case_id, mutationCount)
 		static Dictionary<string, Dictionary<string, double[]>> methylationValues = new Dictionary<string, Dictionary<string, double[]>>();
 
-		static void readFinalValues(string filename)
+		static Dictionary<string, Tuple<string, double>> readFinalValues(string filename)
 		{
+			Dictionary<string, Tuple<string, double>> bestPValues = new Dictionary<string, Tuple<string, double>>();
 
 			var modValue = 11;
 
@@ -178,10 +151,14 @@ namespace MethylationDistributionPromotors
 				var distance = label.Substring(0, label.IndexOf(" 1 vs. not 1"));
 				bestPValues.Add(hugoSymbol, new Tuple<string, double>(distance, min));
 			}
+
+			return bestPValues;
 		}
 
-		static void loadMutationCounts(List<ASETools.Case> cases)
+		public static Dictionary<string, Dictionary<string, int>> loadMutationCounts(List<ASETools.Case> cases)
 		{
+			Dictionary<string, Dictionary<string, int>> mutationCounts = new Dictionary<string, Dictionary<string, int>>();
+
 			foreach (var case_ in cases)
 			{
 				if (case_.tumor_allele_specific_gene_expression_filename == "")
@@ -210,9 +187,9 @@ namespace MethylationDistributionPromotors
 					mutationCounts[hugoSymbol].Add(case_.case_id, mutationCount);
 				}
 			}
+			return mutationCounts;
 		}
 
-		static bool allSites = true;
 
 		static void Main(string[] args)
 		{
@@ -230,7 +207,7 @@ namespace MethylationDistributionPromotors
 			panCancerOutputFile = ASETools.CreateStreamWriterWithRetry(baseFileName);
 
 			var pValueFile = configuration.finalResultsDirectory + "AlleleSpecificExpressionDistributionByMutationCount.txt";
-			readFinalValues(pValueFile);
+			bestPValues = readFinalValues(pValueFile);
 
 			// Select only hugo symbols with low pvalues
 			List<string> selectedHugoSymbols = bestPValues.Where(r => r.Value.Item2 < 1.0E-6).Select(r => r.Key).ToList();
@@ -238,8 +215,8 @@ namespace MethylationDistributionPromotors
 			// load the mutations for each file
 			loadMutationCounts(cases.Select(r => r.Value).ToList());
 
-			ASETools.MannWhitney<MethylationPoint>.WhichGroup whichGroup = new ASETools.MannWhitney<MethylationPoint>.WhichGroup(m => m.hasOneMutation);
-			ASETools.MannWhitney<MethylationPoint>.GetValue getValue = new ASETools.MannWhitney<MethylationPoint>.GetValue(x => x.adjustedBValue);
+			ASETools.MannWhitney<ASETools.MethylationPoint>.WhichGroup whichGroup = new ASETools.MannWhitney<ASETools.MethylationPoint>.WhichGroup(m => m.hasOneMutation);
+			ASETools.MannWhitney<ASETools.MethylationPoint>.GetValue getValue = new ASETools.MannWhitney<ASETools.MethylationPoint>.GetValue(x => x.adjustedBValue);
 			bool twoTailed = true;
 
 			var threads = new List<Thread>();
@@ -271,7 +248,7 @@ namespace MethylationDistributionPromotors
 				var hugoLine = hugoSymbol + "\t" + bestPValue.Item2 + "\t" + bestPValue.Item1;
 
 				// If elements has no items, skip this hugo symbol
-				List<MethylationPoint> element;
+				List<ASETools.MethylationPoint> element;
 				if (!elements.TryGetValue(hugoSymbol, out element))
 				{
 					hugoLine += "\t*";
@@ -288,7 +265,7 @@ namespace MethylationDistributionPromotors
 
 				if (element.Count() > 0)
 				{
-					var p = ASETools.MannWhitney<MethylationPoint>.ComputeMannWhitney(element,
+					var p = ASETools.MannWhitney<ASETools.MethylationPoint>.ComputeMannWhitney(element,
 						element[0], whichGroup, getValue, out enoughData, out reversed,
 						out nFirstGroup, out nSecondGroup, out U, out z, twoTailed, 20);
 					if (!enoughData)
