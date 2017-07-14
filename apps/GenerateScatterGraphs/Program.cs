@@ -323,7 +323,7 @@ namespace GenerateScatterGraphs
             var endToEndTimer = new Stopwatch();
             endToEndTimer.Start();
 
-            var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+            var configuration = ASETools.Configuration.loadFromFile(args);
             if (null == configuration)
             {
                 Console.WriteLine("Unable to load configuration.");
@@ -644,7 +644,7 @@ namespace GenerateScatterGraphs
                 file.WriteLine("**done**");
                 file.Close();
 
-                var unfilteredFile = new StreamWriter(configuration.geneScatterGraphsDirectory + geneState.gene + ASETools.ASEConfirguation.unfilteredCountsExtention);
+                var unfilteredFile = new StreamWriter(configuration.geneScatterGraphsDirectory + geneState.gene + ASETools.Configuration.unfilteredCountsExtention);
                 unfilteredFile.WriteLine(unfilteredHeaderLine);
                 foreach (var line in geneState.outputUnfiltered)
                 {

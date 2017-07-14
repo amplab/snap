@@ -14,7 +14,7 @@ namespace CountVariantsInGenes
 
         static void Main(string[] args)
         {
-            var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+            var configuration = ASETools.Configuration.loadFromFile(args);
 
             if (null == configuration)
             {
@@ -56,7 +56,7 @@ namespace CountVariantsInGenes
                 return;
             }
 
-            var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(ASETools.ASEConfirguation.defaultGeneLocationInformation));
+            var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
             var selectedGenesWithLocationInformation = selectedGenes.Where(x => geneLocationInformation.genesByName.ContainsKey(x.Hugo_Symbol)).ToList();
 
             var threads = new List<Thread>();

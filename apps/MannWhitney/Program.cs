@@ -41,7 +41,7 @@ namespace MannWhitney
             var endToEndTimer = new Stopwatch();
             endToEndTimer.Start();
 
-            var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+            var configuration = ASETools.Configuration.loadFromFile(args);
             if (null == configuration)
             {
                 Console.WriteLine("Unable to load configuration.");

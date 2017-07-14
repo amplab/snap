@@ -310,7 +310,7 @@ namespace ExpressionNearMutations
 			var timer = new Stopwatch();
 			timer.Start();
 
-			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+			var configuration = ASETools.Configuration.loadFromFile(args);
 
 			if (null == configuration)
 			{
@@ -351,7 +351,7 @@ namespace ExpressionNearMutations
             timer.Start();
 
 			// Get information for current genome build
-			geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(ASETools.ASEConfirguation.defaultGeneLocationInformation));
+			geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
 
             timer.Stop();
             Console.WriteLine("Loaded mutations in " + geneLocationInformation.genesByName.Count() + " genes in " + (timer.ElapsedMilliseconds + 500) / 1000 + "s.");

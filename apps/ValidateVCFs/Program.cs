@@ -133,7 +133,7 @@ namespace ValidateVCFs
         {
             timer.Start();
 
-            var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+            var configuration = ASETools.Configuration.loadFromFile(args);
 
             if (configuration.commandLineArgs.Count() == 0)
             {
