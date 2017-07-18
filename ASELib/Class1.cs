@@ -532,6 +532,11 @@ namespace ASELib
 
 			public bool inconsistent = false;
 
+            public bool containsLocus(string locusChromosome, int locus)
+            {
+                return chromosome == locusChromosome && minLocus <= locus && maxLocus >= locus;
+            }
+
 			public List<Isoform> isoforms = new List<Isoform>();
 		}
 
@@ -2140,8 +2145,7 @@ namespace ASELib
         public const string scatterGraphsSummaryFilename = "_summary.txt";
         public const string mannWhitneyFilename = "_MannWhitney.txt";
         public const string genesWithSelectedVariantsFilename = "GenesWithSelectedVariantCounts.txt";
-        public const string tumorHeatMapFilename = "TumorAlleleSpecificExpressionHeatMap.txt";
-        public const string normalHeatMapFilename = "NormalAlleleSpecificExpressionHeatMap.txt";
+        public const string heatMapFilename = "AlleleSpecificExpressionHeatMap.txt";
         public const string tumorHeatMapHistogramFilename = "TumorAlleleSpecificExpressionHeatMapHistograms.txt";
         public const string normalHeatMapHistogramFilename = "NormalAlleleSpecificExpressionHeatMapHistograms.txt";
 

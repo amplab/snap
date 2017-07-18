@@ -49,6 +49,7 @@ namespace ASEHeatMap
                         heatMap[aseIndex, i] = new HeatMapEntry();
                         exclusiveHeatMap[aseIndex, i] = new HeatMapEntry();
                         exclusiveAndExclusiveOfGeneHeatMap[aseIndex, i] = new HeatMapEntry();
+                        selectedGenes[aseIndex, i] = new HeatMapEntry();
                     }
                 }
             }
@@ -64,30 +65,31 @@ namespace ASEHeatMap
                         heatMap[aseIndex, i].merge(peer.heatMap[aseIndex, i]);
                         exclusiveHeatMap[aseIndex, i].merge(peer.exclusiveHeatMap[aseIndex, i]);
                         exclusiveAndExclusiveOfGeneHeatMap[aseIndex, i].merge(peer.exclusiveAndExclusiveOfGeneHeatMap[aseIndex, i]);
+                        selectedGenes[aseIndex, i].merge(peer.selectedGenes[aseIndex, i]);
                     }
                 }
             }
 
-            void writeColumnHeaders(StreamWriter outputFile, string exclusivelyString)
+            void writeColumnHeaders(StreamWriter outputFile, string exclusivelyString, bool exclusive)
             {
                 for (int i = 0; i < nRegions; i++)
                 {
-                    outputFile.Write("\tMean ASE " + exclusivelyString + "Within " + distanceIndexToString(i));
+                    outputFile.Write("\tMean ASE " + exclusivelyString + "Within " + distanceIndexToString(i, exclusive));
                 }
 
                 for (int i = 0; i < nRegions; i++)
                 {
-                    outputFile.Write("\tNumber of ASE samples that have anything " + exclusivelyString + "within " + distanceIndexToString(i));
+                    outputFile.Write("\tNumber of ASE samples that have anything " + exclusivelyString + "within " + distanceIndexToString(i, exclusive));
                 }
 
                 for (int i = 0; i < nRegions; i++)
                 {
-                    outputFile.Write("\tMean number of ASE samples " + exclusivelyString + "within " + distanceIndexToString(i));
+                    outputFile.Write("\tMean number of ASE samples " + exclusivelyString + "within " + distanceIndexToString(i, exclusive));
                 }
 
                 for (int i = 0; i < nRegions; i++)
                 {
-                    outputFile.Write("\t Standard Deviation of ASE " + exclusivelyString + "within " + distanceIndexToString(i));
+                    outputFile.Write("\t Standard Deviation of ASE " + exclusivelyString + "within " + distanceIndexToString(i, exclusive));
                 }
             }
 
@@ -135,22 +137,20 @@ namespace ASEHeatMap
                 }
             }
 
-            public void writeToFile(string filename)
+            public void writeToFile(StreamWriter outputFile, bool writeHeader)
             {
-                var outputFile = ASETools.CreateStreamWriterWithRetry(filename);
 
-                if (null == outputFile)
+                if (writeHeader)
                 {
-                    Console.WriteLine("Error opening output file.");
-                    return;
+                    outputFile.Write("Allele Specific Expression\tCount of samples at this ASE\tpdf of ASE count");
+                    writeColumnHeaders(outputFile, "Near selected genes ", true);
+                    writeColumnHeaders(outputFile, "exclusive and exlcusive of gene ", true);
+                    writeColumnHeaders(outputFile, "exclusive ", true);
+                    writeColumnHeaders(outputFile, "", false);
                 }
-
-                outputFile.Write("Allele Specific Expression\tCount of samples at this ASE\tpdf of ASE count");
-                writeColumnHeaders(outputFile, "exclusive and exlcusive of gene ");
-                writeColumnHeaders(outputFile, "exclusive ");
-                writeColumnHeaders(outputFile, "");
  
                 outputFile.WriteLine();
+
 
                 int totalSamples = aseCount.Sum();
 
@@ -158,15 +158,13 @@ namespace ASEHeatMap
                 {
                     outputFile.Write((double)aseIndex * 1 / (nASEs - 1) + "\t" + aseCount[aseIndex] + "\t" + (double)aseCount[aseIndex] / totalSamples);
 
+                    writeColumns(outputFile, aseIndex, selectedGenes);
                     writeColumns(outputFile, aseIndex, exclusiveAndExclusiveOfGeneHeatMap);
                     writeColumns(outputFile, aseIndex, exclusiveHeatMap);
                     writeColumns(outputFile, aseIndex, heatMap);
 
                     outputFile.WriteLine();
                 } // foreach ASE index
-
-                outputFile.WriteLine("**done**");
-                outputFile.Close();
             }
 
             public void writeHistogramsToFile(string filename)
@@ -181,12 +179,13 @@ namespace ASEHeatMap
 
                 outputFile.WriteLine("Class\tASE of variant site\tRange\tASE of histogram bucket\tcount\ttotal\tpdf\tcdf");
 
-                dumpClassHistogramToFile(outputFile, exclusiveAndExclusiveOfGeneHeatMap, "Exclusive and exclusive of gene");
-                dumpClassHistogramToFile(outputFile, exclusiveAndExclusiveOfGeneHeatMap, "Exclusive");
-                dumpClassHistogramToFile(outputFile, exclusiveAndExclusiveOfGeneHeatMap, "Inclusive");
+                dumpClassHistogramToFile(outputFile, selectedGenes, "Selected genes exclusive of gene", true);
+                dumpClassHistogramToFile(outputFile, exclusiveAndExclusiveOfGeneHeatMap, "Exclusive and exclusive of gene", true);
+                dumpClassHistogramToFile(outputFile, exclusiveAndExclusiveOfGeneHeatMap, "Exclusive", true);
+                dumpClassHistogramToFile(outputFile, exclusiveAndExclusiveOfGeneHeatMap, "Inclusive", false);
             }
 
-            void dumpClassHistogramToFile(StreamWriter outputFile, HeatMapEntry[,] heatMap, string className) 
+            void dumpClassHistogramToFile(StreamWriter outputFile, HeatMapEntry[,] heatMap, string className, bool exclusive) 
             {
                 for (int aseIndex = 0; aseIndex < nASEs; aseIndex++)
                 {
@@ -195,7 +194,7 @@ namespace ASEHeatMap
                         var histogramLines = heatMap[aseIndex, regionIndex].histogram.ComputeHistogram(0, 1, (double)1 / (nASEs-1));
                         foreach (var line in histogramLines)
                         {
-                            outputFile.WriteLine(className + "\t" + aseIndex * (double)1 / (nASEs - 1) + "\t" + distanceIndexToString(regionIndex) + "\t" + line.minValue + "\t" + line.count + "\t" + line.total + "\t" + line.pdfValue + "\t" + line.cdfValue);
+                            outputFile.WriteLine(className + "\t" + aseIndex * (double)1 / (nASEs - 1) + "\t" + distanceIndexToString(regionIndex, exclusive) + "\t" + line.minValue + "\t" + line.count + "\t" + line.total + "\t" + line.pdfValue + "\t" + line.cdfValue);
                         } // foreach histogram line
                     } // foreach region
                 } // foreach ase
@@ -205,6 +204,7 @@ namespace ASEHeatMap
             public HeatMapEntry[,] heatMap = new HeatMapEntry[nASEs, nRegions];
             public HeatMapEntry[,] exclusiveHeatMap = new HeatMapEntry[nASEs, nRegions];
             public HeatMapEntry[,] exclusiveAndExclusiveOfGeneHeatMap = new HeatMapEntry[nASEs, nRegions];
+            public HeatMapEntry[,] selectedGenes = new HeatMapEntry[nASEs, nRegions];
             public int[] aseCount = new int[nASEs];
         }
 
@@ -250,9 +250,12 @@ namespace ASEHeatMap
             var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
             geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
 
-            Console.WriteLine("CROCC: " + geneLocationInformation.genesByName["CROCC"].chromosome + ":" + geneLocationInformation.genesByName["CROCC"].minLocus + "-" + geneLocationInformation.genesByName["CROCC"].maxLocus); // BJB
-            geneMap.getGenesMappedTo("chr1", 16939065);
-
+            string[] selectedGeneNames = { "TP53", "VHL", "CDKN2A", "KEAP1", "STK11", "CDH1", "BAP1", "PBRM1", "RB1", "FAT1", "NF1", "ARID1A" };
+            var selectedGenes = new List<ASETools.GeneLocationInfo>();
+            foreach (var geneName in selectedGeneNames)
+            {
+                selectedGenes.Add(geneLocationInformation.genesByName[geneName]);
+            }
 
 
             Console.Write("Progress (1 dot/100 cases): ");
@@ -260,7 +263,7 @@ namespace ASEHeatMap
             var threads = new List<Thread>();
             for (int i = 0; i < Environment.ProcessorCount ; i++)
             {
-                threads.Add(new Thread(() => WorkerThread(caseIdsToProcess, cases)));
+                threads.Add(new Thread(() => WorkerThread(caseIdsToProcess, cases, selectedGenes)));
             }
 
             threads.ForEach(t => t.Start());
@@ -268,8 +271,23 @@ namespace ASEHeatMap
 
             Console.WriteLine();    // Newline after progress dots
 
-            globalTumorHeatMapAndCount.writeToFile(configuration.finalResultsDirectory + ASETools.tumorHeatMapFilename);
-            globalNormalHeatMapAndCount.writeToFile(configuration.finalResultsDirectory + ASETools.normalHeatMapFilename);
+            var outputFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.heatMapFilename);
+
+            if (null == outputFile)
+            {
+                Console.WriteLine("Error opening output file.");
+                return;
+            }
+
+            globalTumorHeatMapAndCount.writeToFile(outputFile, true);
+
+            outputFile.WriteLine();
+            outputFile.WriteLine("Matched normal");
+
+            globalNormalHeatMapAndCount.writeToFile(outputFile, false);
+
+            outputFile.WriteLine("**done**");
+            outputFile.Close();
 
             globalTumorHeatMapAndCount.writeHistogramsToFile(configuration.finalResultsDirectory + ASETools.tumorHeatMapHistogramFilename);
             globalNormalHeatMapAndCount.writeHistogramsToFile(configuration.finalResultsDirectory + ASETools.normalHeatMapHistogramFilename);
@@ -277,30 +295,57 @@ namespace ASEHeatMap
             Console.WriteLine("Processed " + cases.Count() + " cases in " + ASETools.ElapsedTimeInSeconds(timer));
         } // Main
 
-        static string distanceIndexToString(int distanceIndex)
+        static string distanceIndexToString(int distanceIndex, bool exclusive)
         {
+            if (exclusive)
+            {
+                switch (distanceIndex)
+                {
+                    case 0: return "<=1KB";
+                    case 1: return "1KB-2KB";
+                    case 2: return "2KB-4KB";
+                    case 3: return "4KB-8KB";
+                    case 4: return "8KB-16KB";
+                    case 5: return "16KB-32KB";
+                    case 6: return "32KB-64KB";
+                    case 7: return "64KB-128KB";
+                    case 8: return "128KB-256KB";
+                    case 9: return "256KB-512KB";
+                    case 10: return "512KB-1MB";
+                    case 11: return "1MB-2MB";
+                    case 12: return "2MB-4MB";
+                    case 13: return "4MB-8MB";
+                    case 14: return "8MB-16MB";
+                    case 15: return "16MB-32MB";
+                    case 16: return "32MB-64MB";
+                    case 17: return "64MB-128MB";
+                    case 18: return "chromosome";
+                    case 19: return "autosome";
+                }
+            }
+
             switch (distanceIndex)
             {
-                case 0: return "1KB";
-                case 1: return "2KB";
-                case 2: return "4KB";
-                case 3: return "8KB";
-                case 4: return "16KB";
-                case 5: return "32KB";
-                case 6: return "64KB";
-                case 7: return "128KB";
-                case 8: return "256KB";
-                case 9: return "512KB";
-                case 10: return "1MB";
-                case 11: return "2MB";
-                case 12: return "4MB";
-                case 13: return "8MB";
-                case 14: return "16MB";
-                case 15: return "32MB";
-                case 16: return "64MB";
-                case 17: return "128MB";
-                case 18: return "256MB";
-                case 19: return "whole autosome";
+                case 0: return "<=1KB";
+                case 1: return "<=2KB";
+                case 2: return "<=4KB";
+                case 3: return "<=8KB";
+                case 4: return "<=16KB";
+                case 5: return "<=32KB";
+                case 6: return "<=64KB";
+                case 7: return "<=128KB";
+                case 8: return "<=256KB";
+                case 9: return "<=512KB";
+                case 10: return "<=1MB";
+                case 11: return "<=2MB";
+                case 12: return "<=4MB";
+                case 13: return "<=8MB";
+                case 14: return "<=16MB";
+                case 15: return "<=32MB";
+                case 16: return "<=64MB";
+                case 17: return "<=128MB";
+                case 18: return "chromosome";
+                case 19: return "autosome";
             }
 
             return "Illegal index??";
@@ -310,7 +355,7 @@ namespace ASEHeatMap
 
         delegate ASETools.ReadCounts GetReadCounts(ASETools.AnnotatedVariant variant);
 
-        static void ProcessAnnotatedSelectedVariants(List<ASETools.AnnotatedVariant> annotatedSelectedVariants, HeatMapsAndCount heatMapAndCount, GetReadCounts getReadCounts)
+        static void ProcessAnnotatedSelectedVariants(List<ASETools.AnnotatedVariant> annotatedSelectedVariants, HeatMapsAndCount heatMapAndCount, GetReadCounts getReadCounts, List<ASETools.GeneLocationInfo> selectedGenes)
         {
             if (annotatedSelectedVariants.Count() == 0 || getReadCounts(annotatedSelectedVariants[0]) == null)
             {
@@ -324,7 +369,10 @@ namespace ASEHeatMap
                 heatMapAndCount.aseCount[aseIndex]++;
 
                 int minEncompassingLocus, maxEncompassingLocus;
-                geneMap.encompassingGeneRange(variant.contig, variant.locus, out minEncompassingLocus, out maxEncompassingLocus);   // min and max get filled in as -1 if the variant isn't in a gene
+                bool inAGene = geneMap.encompassingGeneRange(variant.contig, variant.locus, out minEncompassingLocus, out maxEncompassingLocus);   // min and max get filled in as -1 if the variant isn't in a gene
+
+                bool inACoveredGene = false;
+                selectedGenes.ForEach(x => inACoveredGene |= x.containsLocus(variant.contig, variant.locus));
 
                 for (int index = 0; index < nRegions; index++)
                 {
@@ -342,15 +390,15 @@ namespace ASEHeatMap
 
                     foreach (var peerVariant in annotatedSelectedVariants)
                     {
-                        if (peerVariant.contig == variant.contig && Math.Abs(peerVariant.locus - variant.locus) <= distance && peerVariant != variant ||
-                            index == nRegions - 1)                            // The last region is "whole autosome" and we excluded non-autosomal variants above
+                        if (peerVariant.contig == variant.contig && (Math.Abs(peerVariant.locus - variant.locus) <= distance && peerVariant != variant || index == nRegions - 2) || // nRegions-2 is whole chromosome
+                            index == nRegions - 1)                            // The last two regions are "whole chromosome" and "whole autosome" and we excluded non-autosomal variants above
                         {
                             double ase = getReadCounts(peerVariant).AlleleSpecificValue();
 
                             n++;
                             totalASE += ase;
 
-                            if (Math.Abs(peerVariant.locus - variant.locus) >= exclusiveMinimumDistance)
+                            if (Math.Abs(peerVariant.locus - variant.locus) >= exclusiveMinimumDistance || index >= nRegions - 2)
                             {
                                 nExclusive++;
                                 totalASEExclusive += ase;
@@ -388,7 +436,7 @@ namespace ASEHeatMap
                             heatMapAndCount.exclusiveHeatMap[aseIndex, index].minASE = Math.Min(heatMapAndCount.exclusiveHeatMap[aseIndex, index].minASE, meanExclusiveASE);
                             heatMapAndCount.exclusiveHeatMap[aseIndex, index].histogram.addValue(meanExclusiveASE);
 
-                            if (nExclusiveAndExclusiveOfGene > 0)
+                            if (nExclusiveAndExclusiveOfGene > 0 && inAGene)
                             {
                                 double meanExclusiveAndExclusiveOfGeneASE = totalASEExclusiveAndExclusiveOfGene / nExclusiveAndExclusiveOfGene;
 
@@ -400,14 +448,15 @@ namespace ASEHeatMap
                                 heatMapAndCount.exclusiveAndExclusiveOfGeneHeatMap[aseIndex, index].minASE = Math.Min(heatMapAndCount.exclusiveHeatMap[aseIndex, index].minASE, meanExclusiveAndExclusiveOfGeneASE);
                                 heatMapAndCount.exclusiveAndExclusiveOfGeneHeatMap[aseIndex, index].histogram.addValue(meanExclusiveAndExclusiveOfGeneASE);
 
-                                //
-                                // Just to see what goes in the exlcusive/exclusive ASE 1.0 1K region bucket, dump the gene names if we're there.
-                                //
-                                if (aseIndex == nASEs - 1 && index == 0)
+                                if (inACoveredGene)
                                 {
-                                    Console.Write(variant.contig + " " + variant.locus + ": ");
-                                    geneMap.getGenesMappedTo(variant.contig, variant.locus).ForEach(x => Console.Write(x.hugoSymbol + " "));
-                                    Console.WriteLine();
+                                    heatMapAndCount.selectedGenes[aseIndex, index].n++;
+                                    heatMapAndCount.selectedGenes[aseIndex, index].totalSamples += nExclusiveAndExclusiveOfGene;
+                                    heatMapAndCount.selectedGenes[aseIndex, index].totalASE += meanExclusiveAndExclusiveOfGeneASE;
+                                    heatMapAndCount.selectedGenes[aseIndex, index].totalASESquared += meanExclusiveAndExclusiveOfGeneASE * meanExclusiveAndExclusiveOfGeneASE;
+                                    heatMapAndCount.selectedGenes[aseIndex, index].maxASE = Math.Max(heatMapAndCount.exclusiveHeatMap[aseIndex, index].maxASE, meanExclusiveAndExclusiveOfGeneASE);
+                                    heatMapAndCount.selectedGenes[aseIndex, index].minASE = Math.Min(heatMapAndCount.exclusiveHeatMap[aseIndex, index].minASE, meanExclusiveAndExclusiveOfGeneASE);
+                                    heatMapAndCount.selectedGenes[aseIndex, index].histogram.addValue(meanExclusiveAndExclusiveOfGeneASE);
                                 }
                             }
                         }
@@ -416,7 +465,7 @@ namespace ASEHeatMap
             } // foreach variant
         }
 
-        static void WorkerThread(List<string> caseIdsToProcess, Dictionary<string, ASETools.Case> cases)
+        static void WorkerThread(List<string> caseIdsToProcess, Dictionary<string, ASETools.Case> cases, List<ASETools.GeneLocationInfo> selectedGenes)
         {
             var localTumorHeatMapAndASECount = new HeatMapsAndCount();
             var localNormalHeatMapAndASECount = new HeatMapsAndCount();
@@ -436,7 +485,7 @@ namespace ASEHeatMap
                         //
                         globalTumorHeatMapAndCount.merge(localTumorHeatMapAndASECount);
                         globalNormalHeatMapAndCount.merge(localNormalHeatMapAndASECount);
- 
+
                         return;
                     }
 
@@ -461,8 +510,8 @@ namespace ASEHeatMap
 
                 //Console.WriteLine("Left with " + annotatedSelectedVariants.Count() + " of " + nUnfiltered);
 
-                ProcessAnnotatedSelectedVariants(annotatedSelectedVariants, localTumorHeatMapAndASECount, x => x.tumorRNAReadCounts);
-                ProcessAnnotatedSelectedVariants(annotatedSelectedVariants, localNormalHeatMapAndASECount, x => x.normalRNAReadCounts);
+                ProcessAnnotatedSelectedVariants(annotatedSelectedVariants, localTumorHeatMapAndASECount, x => x.tumorRNAReadCounts, selectedGenes);
+                ProcessAnnotatedSelectedVariants(annotatedSelectedVariants, localNormalHeatMapAndASECount, x => x.normalRNAReadCounts, selectedGenes);
 
                 if (Interlocked.Increment(ref nCasesProcessed) % 100 == 0)
                 {
