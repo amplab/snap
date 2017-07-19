@@ -72,8 +72,8 @@ obj
 /apps/CountVariantsInGenes/bin
 /apps/MannWhitney/bin
 /apps/SummarizeSelectedVariantCountsByGene/bin
-
-
+/apps/FindSignificantGenes/bin
+/tests/MannWhitneyTest/bin
 
 
 
