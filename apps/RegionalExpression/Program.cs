@@ -116,7 +116,7 @@ namespace RegionalExpression
 
         static void Main(string[] args)
         {
-            var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+            var configuration = ASETools.Configuration.loadFromFile(args);
 
             if (configuration.commandLineArgs.Count() < 3 || configuration.commandLineArgs[2] == "-f" && configuration.commandLineArgs.Count() != 4)
             {

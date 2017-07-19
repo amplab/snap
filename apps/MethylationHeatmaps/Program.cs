@@ -34,13 +34,13 @@ namespace MethylationHeatmaps
 		static void PrintUsageMessage()
 		{
 			Console.WriteLine("usage: MethylationHeatmaps {-array|-bilsulfite} {-t|-n} binCount {-a}");
-			Console.WriteLine("-a means 450k array data, -b means bisulfite data.");
+			Console.WriteLine("-array means 450k array data, -bisulfite means bisulfite data.");
 			Console.WriteLine("-t means tumor, -n means normal");
 			Console.WriteLine("-a means allele specific expression. Absent means raw expression");
 		}
 
 		static Dictionary<string, ASETools.GeneLocationInfo> knownGenes = 
-			ASETools.readKnownGeneFile(ASETools.ASEConfirguation.defaultGeneLocationInformation);
+			ASETools.readKnownGeneFile(ASETools.Configuration.defaultGeneLocationInformationFilename);
 
 
 
@@ -59,11 +59,6 @@ namespace MethylationHeatmaps
 						return;
 					}
 
-					if (regionalFiles.Count() % 500 == 0)
-					{
-						Console.WriteLine(regionalFiles.Count() + " cases left");
-					}
-
 					expressionFilename = regionalFiles[0].Item1;
 					methylationFilename = regionalFiles[0].Item2;
 					regionalFiles.RemoveAt(0);
@@ -78,8 +73,15 @@ namespace MethylationHeatmaps
 				var aseSignal = ASETools.RegionalSignalFile.ReadFile(expressionFilename);
 
 				// get dictionary for methylation values by chromosome
-				Dictionary<string, List<ASETools.AnnotationLine>> methylationValues = 
-					ASETools.AnnotationLine.ReadFile(methylationFilename, methylationFilename, false)
+				List<ASETools.AnnotationLine> m =
+					ASETools.AnnotationLine.ReadFile(methylationFilename, methylationFilename, false);
+
+
+				var x = ASETools.AnnotationLine.filterByTSS(m);
+
+
+
+				Dictionary<string, List<ASETools.AnnotationLine>> methylationValues = x
 						.GroupBy(r => r.compositeREF.Chromosome)
 						.ToDictionary(r => r.Key, t => t.Select(k => k).ToList());
 
@@ -100,7 +102,6 @@ namespace MethylationHeatmaps
 
 					if (aseValue >= 0)
 					{
-
 						// initialize bin in heatmap, if necessary
 						var bin = binValue(aseValue, binCount);
 						lock (heatmap)
@@ -109,7 +110,7 @@ namespace MethylationHeatmaps
 							{
 								heatmap.Add(bin, new List<Tuple<int, double>>());
 								// Initialize areas for each distance from gene
-								for (var k = 0; k < 20; k++) // TODO rm hardcoded 20
+								for (var k = 0; k < 20 - 1; k++) // TODO rm hardcoded 20
 								{
 									heatmap[bin].Add(new Tuple<int, double>(0, 0.0));
 								}
@@ -127,26 +128,13 @@ namespace MethylationHeatmaps
 						// Foreach range
 						// Because we have 0 (in the gene), this range is 2^(20 - 2) * 1000
 						// here exclude the previous region size
-						for (int i = 0; i < ASETools.GeneExpression.nRegionSizes; i++)
+						for (int i = 0; i < ASETools.GeneExpression.nRegionSizes - 1 ; i++)
 						{
+							lastMinDistance = minDistance;
+							lastMaxDistance = maxDistance;
 
-
-							if (i == 0)
-							{
-								// special case: only look at gene
-								minDistance = start;
-								maxDistance = end;
-								lastMinDistance = start;
-								lastMaxDistance = end;
-							}
-							else
-							{
-								lastMinDistance = minDistance;
-								lastMaxDistance = maxDistance;
-
-								minDistance = Math.Max(0, start - Math.Pow(2, i - 1) * 1000);
-								maxDistance = end + Math.Pow(2, i - 1) * 1000;
-							}
+							minDistance = Math.Max(0, start - Math.Pow(2, i) * 1000);
+							maxDistance = end + Math.Pow(2, i) * 1000;
 
 							// find all methylation values that are < distance and > lastDistance. Take the mean.
 							List<ASETools.AnnotationLine> methylationValuesForChromsome;
@@ -157,24 +145,13 @@ namespace MethylationHeatmaps
 							}
 
 							List<ASETools.AnnotationLine> filteredMethylationValues;
-							if (i == 0)
+							filteredMethylationValues = methylationValuesForChromsome.Where(r =>
 							{
-								filteredMethylationValues = methylationValuesForChromsome.Where(r =>
-								{
 								// case if methylation point is "higher" than current gene
-								return (r.compositeREF.Start > minDistance && r.compositeREF.Start < maxDistance);
-								}).ToList();
-							}
-							else
-							{
-								filteredMethylationValues = methylationValuesForChromsome.Where(r =>
-								{
-									// case if methylation point is "higher" than current gene
-									return ((r.compositeREF.Start > lastMaxDistance && r.compositeREF.Start < maxDistance) ||
-									// ase if methylation point is "lower" than current gene
-									(r.compositeREF.Start > minDistance && r.compositeREF.Start < lastMinDistance));
-								}).ToList();
-							}
+								return ((r.compositeREF.Start > lastMaxDistance && r.compositeREF.Start < maxDistance) ||
+								// ase if methylation point is "lower" than current gene
+								(r.compositeREF.Start > minDistance && r.compositeREF.Start < lastMinDistance));
+							}).ToList();
 						
 							var totalMValues = filteredMethylationValues.Select(r => r.M_Value).ToList().Sum();
 
@@ -409,12 +386,11 @@ namespace MethylationHeatmaps
 
 		static void Main(string[] args)
 		{
-			// filter out chr x and y
-			knownGenes = knownGenes.Where(r => r.Value.chromosome != "chrX" && r.Value.chromosome != "chrY")
+			// filter out chr x, y and inconsistent genes
+			knownGenes = knownGenes.Where(r => r.Value.chromosome != "chrX" && r.Value.chromosome != "chrY" && !r.Value.inconsistent)
 				.ToDictionary(x => x.Key, x => x.Value);
 
-
-			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+			var configuration = ASETools.Configuration.loadFromFile(args);
 			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname).ToDictionary(x => x.Key, x => x.Value);
 
 			// only allow flag for allele-specific expression or case ids
@@ -445,7 +421,7 @@ namespace MethylationHeatmaps
 
 			if (bisulfite)
 			{
-				var bisulfiteCases = ASETools.BisulfateCase.loadCases(ASETools.ASEConfirguation.bisulfiteCasesFilePathname);
+				var bisulfiteCases = ASETools.BisulfateCase.loadCases(ASETools.Configuration.bisulfiteCasesFilePathname);
 				// Add cases with bisulfate data. We will use the bam and bisulfate files
 
 				// filter out only bisulfite cases
@@ -468,20 +444,23 @@ namespace MethylationHeatmaps
 			var ext = bisulfite ? "_bisulfite.txt" : "_array.txt";
 			var heatmapName = "heatmap" + (forTumor ? "_tumor" : "_normal");
 
-			var heatmapFilename = ASETools.ASEConfirguation.bisulfiteDirectory + heatmapName + expExt + ext + ".test";
-			Console.WriteLine("Saving to " + heatmapFilename);
+			var heatmapFilename = ASETools.Configuration.bisulfiteDirectory + heatmapName + expExt;
+			Console.WriteLine("Saving to " + heatmapFilename + ext);
 
-			var writer = ASETools.CreateStreamWriterWithRetry(heatmapFilename);
+			var writer = ASETools.CreateStreamWriterWithRetry(heatmapFilename + ext);
+			var countWriter = ASETools.CreateStreamWriterWithRetry(heatmapFilename + "_counts" + ext);
 
 			// write header
-			for (int i = 0; i < ASETools.GeneExpression.nRegionSizes; i++)
+			for (int i = 0; i < ASETools.GeneExpression.nRegionSizes - 1; i++)
 			{
 				
-				var label = (i==0) ? 0 : Math.Pow(2, i - 1) * 1000;
+				var label = Math.Pow(2, i) * 1000;
 
 				writer.Write("\t" + label + " kb");
+				countWriter.Write("\t" + label + " kb");
 			}
 			writer.WriteLine();
+			countWriter.WriteLine();
 
 			// write heatmap
 			var sortedKeys = heatmap.Keys.ToList();
@@ -493,15 +472,19 @@ namespace MethylationHeatmaps
 
 				// write bin count
 				writer.Write(key);
+				countWriter.Write(key);
 
 				// foreach distance, write distance count
 				foreach (var value in bin)
 				{
 					writer.Write("\t" + value.Item2 / value.Item1);
+					countWriter.Write("\t" + value.Item1);
 				}
 				writer.WriteLine();
+				countWriter.WriteLine();
 			}
 			writer.Close();
+			countWriter.Close();
 		} // Main
 
 	} // Process

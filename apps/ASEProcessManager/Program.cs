@@ -1645,12 +1645,12 @@ namespace ASEProcessManager
         //
         class StateOfTheWorld
         {
-            public StateOfTheWorld(ASETools.ASEConfirguation configuration_) 
+            public StateOfTheWorld(ASETools.Configuration configuration_) 
             {
                 configuration = configuration_;
             }
 
-            public ASETools.ASEConfirguation configuration;
+            public ASETools.Configuration configuration;
             public Dictionary<string, ASETools.DownloadedFile> downloadedFiles = null;
             public Dictionary<string, List<ASETools.DerivedFile>> derivedFiles = null;
             public Dictionary<string, FileInfo> expressionFiles = null;            
@@ -1906,7 +1906,7 @@ namespace ASEProcessManager
             var stopwatch = new Stopwatch();
             stopwatch.Start();
 
-            var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+            var configuration = ASETools.Configuration.loadFromFile(args);
 
             if (null == configuration)
             {

@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Diagnostics;
 using ASELib;
-using MethylationDistributionPromotors;
+using System.Threading;
 
 // Case 2: Run t test, trying to assign distributions for methylation points. This is to only
 // look at 1 group (ie. ase) Thie purpose of this is to see what percentage of ASE significant
@@ -18,25 +16,97 @@ namespace MethylationByMutationCount
 	class Program
 	{
 
-		class MutationGroup
-		{
-			public double averageMethylation;
-			public double averageASE;
-			public double averageExpression;
-		}
-
-
 		static void PrintUsageMessage()
 		{
 			Console.WriteLine("usage: MethylationByMutationCount hugoSymbols");
 			Console.WriteLine("hugo symbols are separated by space");
 		}
 
-		static Tuple<Dictionary<string, int>, Dictionary<string, double>> loadRegionalSignal(List<Tuple<string, string>> idsAndFilenames, string hugoSymbol)
-		{
-			var mutations = new Dictionary<string, int>();
-			var values = new Dictionary<string, double>();
+		// for each case id, map of composite refs and values
+		static Dictionary<string, Dictionary<string, Dictionary<string, double>>> methylationValues = 
+			new Dictionary<string, Dictionary<string, Dictionary<string, double>>>();
 
+		static Tuple<Dictionary<string, Dictionary<string, int>>, Dictionary<string, Dictionary<string, double>>> aseValues =
+			new Tuple<Dictionary<string, Dictionary<string, int>>, Dictionary<string, Dictionary<string, double>>>(new Dictionary<string, Dictionary<string, int>>(), new Dictionary<string, Dictionary<string, double>>());
+
+
+		// first is mutations, second is values
+		static Tuple<Dictionary<string, Dictionary<string, int>>, Dictionary<string, Dictionary<string, double>>> expressionValues =
+			new Tuple<Dictionary<string, Dictionary<string, int>>, Dictionary<string, Dictionary<string, double>>>(new Dictionary<string, Dictionary<string, int>>(), new Dictionary<string, Dictionary<string, double>>());
+
+
+		static void loadMethylation(List<ASETools.Case> cases, List<string> hugoSymbols)
+		{
+			while (true)
+			{
+				ASETools.Case case_;
+				lock (cases)
+				{
+					if (cases.Count() == 0)
+					{
+						//
+						// No more work, we're done.
+						//
+						return;
+					}
+					case_ = cases[0];
+
+					cases.RemoveAt(0);
+				}
+
+				if (!case_.tumor_methylation_filename.Contains("HumanMethylation450") || case_.annotated_selected_variants_filename == "")
+				{
+					// no data. continue. We use the annotated selected variants to evaluate loss of heterozygosity at each gene
+					continue;
+				}
+
+				var methylationData = ASETools.AnnotationLine.ReadFile(case_.tumor_methylation_filename, case_.tumor_methylation_file_id, false);
+				var annotatedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
+
+				foreach (var hugoSymbol in hugoSymbols)
+				{
+					// filter for loss of heterozygosity
+					var variantsForHugo = annotatedVariants.Where(r => r.Hugo_symbol == hugoSymbol)
+							.Where(r => r.tumorDNAReadCounts.nMatchingReference * 3 >= r.tumorDNAReadCounts.nMatchingAlt * 2
+										&& r.tumorDNAReadCounts.nMatchingAlt * 3 >= r.tumorDNAReadCounts.nMatchingReference * 2);
+
+					if (variantsForHugo.Count() == 0)
+					{
+						continue;
+					}
+
+					lock (methylationValues)
+					{
+						Dictionary<string, Dictionary<string, double>> values;
+						if (!methylationValues.TryGetValue(hugoSymbol, out values))
+						{
+							methylationValues.Add(hugoSymbol, new Dictionary<string, Dictionary<string, double>>());
+						}
+						methylationValues[hugoSymbol].Add(case_.case_id, new Dictionary<string, double>());
+					}
+
+					var methylationGenePoints = methylationData.Where(r => r.compositeREF.Gene_Symbol.Contains(ASETools.ConvertToNonExcelString(hugoSymbol)))
+					.Where(r =>
+					{
+						var merged = r.compositeREF.Gene_Symbol.Zip(r.compositeREF.Position_to_TSS, (first, second) =>
+							new Tuple<string, int>(first, second))
+								.Where(t => t.Item1 == ASETools.ConvertToNonExcelString(hugoSymbol)).Select(f => f.Item2);
+						return Math.Abs(merged.Average()) <= 2000;
+					});
+
+					foreach (var m in methylationGenePoints)
+					{
+						methylationValues[hugoSymbol][case_.case_id].Add(m.compositeREF.Composite_Element_REF, m.M_Value);
+					}
+				}
+
+			}
+		}
+
+
+		static void loadRegionalSignal(List<Tuple<string, string>> idsAndFilenames, List<string> hugoSymbols,
+			Tuple<Dictionary<string, Dictionary<string, int>>, Dictionary<string, Dictionary<string, double>>> values)
+		{
 			while (true)
 			{
 				string id;
@@ -48,7 +118,7 @@ namespace MethylationByMutationCount
 						//
 						// No more work, we're done.
 						//
-						return new Tuple<Dictionary<string, int>, Dictionary<string, double>>(mutations, values);
+						return;
 					}
 					id = idsAndFilenames[0].Item1;
 					filename = idsAndFilenames[0].Item2;
@@ -62,14 +132,55 @@ namespace MethylationByMutationCount
 					continue;
 				}
 
-				var regionalSignals = ASETools.RegionalSignalFile.ReadFile(filename);
+				var regionalSignals = ASETools.RegionalSignalFile.ReadFile(filename, true, true);
 
-				double[] hugoData;
-				if (regionalSignals.Item1.TryGetValue(ASETools.ConvertToExcelString(hugoSymbol), out hugoData))
+				foreach (var hugoSymbol in hugoSymbols)
 				{
-					values.Add(id, hugoData[0]);
-					mutations.Add(id, regionalSignals.Item3[ASETools.ConvertToExcelString(hugoSymbol)]);
+
+					lock (values)
+					{
+						Dictionary<string, int> mutationValue;
+						if (!values.Item1.TryGetValue(hugoSymbol, out mutationValue))
+						{
+							values.Item1.Add(hugoSymbol, new Dictionary<string, int>());
+						}
+
+						Dictionary<string, double> signalValue;
+						if (!values.Item2.TryGetValue(hugoSymbol, out signalValue))
+						{
+							values.Item2.Add(hugoSymbol, new Dictionary<string, double>());
+						}
+					}
+					double[] hugoData;
+					if (regionalSignals.Item1.TryGetValue(ASETools.ConvertToNonExcelString(hugoSymbol), out hugoData))
+					{
+						lock (values.Item2)
+						{
+
+							values.Item2[hugoSymbol].Add(id, hugoData[1]);
+						}
+						lock (values.Item1)
+						{
+							values.Item1[hugoSymbol].Add(id, Convert.ToInt32(hugoData[0]));
+						}
+					}
 				}
+			}
+		}
+
+
+		static void Shuffle<T>(IList<T> list)
+		{
+			Random rng = new Random();
+
+			int n = list.Count;
+			while (n > 1)
+			{
+				n--;
+				int k = rng.Next(n + 1);
+				T value = list[k];
+				list[k] = list[n];
+				list[n] = value;
 			}
 		}
 
@@ -78,7 +189,7 @@ namespace MethylationByMutationCount
 			var timer = new Stopwatch();
 			timer.Start();
 
-			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+			var configuration = ASETools.Configuration.loadFromFile(args);
 
 			if (null == configuration)
 			{
@@ -93,87 +204,135 @@ namespace MethylationByMutationCount
 				return;
 			}
 
-			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
+			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname).Select(r => r.Value).ToList();
+			
+			// shuffle cases to avoid contention among other tasks
+			Shuffle<ASETools.Case>(cases);
 
 			if (null == cases)
 			{
 				Console.WriteLine("Unable to load cases file " + configuration.casesFilePathname + ".  You must generate cases before running ExpressionNearMutations.");
 			}
 
-			var hugoSymbol = configuration.commandLineArgs[0];
-
-			// load ase values for all
-			var idsAndFilenames = cases.Select(r => 
-				new Tuple<string, string>(r.Value.case_id, r.Value.tumor_allele_specific_gene_expression_filename)).ToList();
-			var mutationsAndASE = loadRegionalSignal(idsAndFilenames, hugoSymbol);
-
-			var mutationCounts = mutationsAndASE.Item1;
-			var aseValues = mutationsAndASE.Item2;
-
-			// load methylation
-			idsAndFilenames = cases.Select(r => 
-				new Tuple<string, string>(r.Value.case_id, r.Value.tumor_regional_methylation_filename)).ToList();
-			Dictionary<string, double> methylationValues = loadRegionalSignal(idsAndFilenames, hugoSymbol).Item2;
-
-			// load expression
-			idsAndFilenames = cases.Select(r => 
-				new Tuple<string, string>(r.Value.case_id, r.Value.gene_expression_filename)).ToList();
-			Dictionary<string, double> expressionValues = loadRegionalSignal(idsAndFilenames, hugoSymbol).Item2;
-
-			var outputFilename = configuration.finalResultsDirectory + hugoSymbol + ".txt";
-
-			var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
-
-			// write header
-			outputFile.WriteLine("Mutation Count\tASE Value\tMethylation Value\tExpression Value");
-
-			foreach (var case_ in cases)
+			List<string> hugoSymbols = new List<string>();
+			foreach (var arg in configuration.commandLineArgs)
 			{
-				// write mutation count
-				int mutationCount;
-				if (!mutationCounts.TryGetValue(case_.Value.case_id, out mutationCount))
-				{
-					continue;
-				}
-
-				outputFile.Write(mutationCounts[case_.Value.case_id] + "\t");
-
-				// write ASE
-				double value;
-				if (aseValues.TryGetValue(case_.Value.case_id, out value) && value > Double.NegativeInfinity)
-				{
-					outputFile.Write(value + "\t");
-
-				}
-				else
-				{
-					outputFile.Write("*\t");
-				}
-
-				// write methylation
-				if (methylationValues.TryGetValue(case_.Value.case_id, out value) && value > Double.NegativeInfinity)
-				{
-					outputFile.Write(value + "\t");
-				}
-				else
-				{
-					outputFile.Write("*\t");
-				}
-
-
-				if (expressionValues.TryGetValue(case_.Value.case_id, out value) && value > Double.NegativeInfinity)
-				{
-					outputFile.Write(value + "\t");
-				}
-				else
-				{
-					outputFile.Write("*\t");
-				}
-
-				outputFile.WriteLine();
+				hugoSymbols.Add(arg);
 			}
 
-			outputFile.Close();
+			// load ase values for all
+			var aseIdsAndFilenames = cases.Select(r => 
+				new Tuple<string, string>(r.case_id, r.tumor_allele_specific_gene_expression_filename)).ToList();
+
+			var threads = new List<Thread>();
+			for (int i = 0; i < Environment.ProcessorCount / 3; i++)
+			{
+				threads.Add(new Thread(() => loadRegionalSignal(aseIdsAndFilenames, hugoSymbols, aseValues)));
+			}
+
+			var mutationCounts = aseValues.Item1;
+
+			// load methylation
+			var methylationCases = cases.ToList();
+
+			for (int i = 0; i < Environment.ProcessorCount / 3; i++)
+			{
+				threads.Add(new Thread(() => loadMethylation(methylationCases, hugoSymbols)));
+			}
+
+			// load expression
+			var expIdsAndFilenames = cases.Select(r => 
+				new Tuple<string, string>(r.case_id, r.gene_expression_filename)).ToList();
+
+			for (int i = 0; i < Environment.ProcessorCount / 3; i++)
+			{
+				threads.Add(new Thread(() => loadRegionalSignal(expIdsAndFilenames, hugoSymbols, expressionValues)));
+			}
+
+
+			threads.ForEach(t => t.Start());
+			threads.ForEach(t => t.Join());
+
+			foreach (var hugoSymbol in hugoSymbols)
+			{
+				var outputFilename = configuration.finalResultsDirectory + hugoSymbol + "test.txt";
+
+				var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
+
+				// Get all composite ref names for this gene
+				var compositeREFs = methylationValues[hugoSymbol].Values.SelectMany(r => r.Keys).Distinct();
+
+				// write header
+				outputFile.WriteLine("Disease\tMutationCount\tASEValue\tExpressionValue\t" + String.Join("\t", compositeREFs));
+
+				foreach (var case_ in cases)
+				{
+
+					// write mutation count
+					int mutationCount;
+					if (!mutationCounts[hugoSymbol].TryGetValue(case_.case_id, out mutationCount))
+					{
+						continue;
+					}
+					// write disease
+					outputFile.Write(case_.disease() + "\t");
+
+					outputFile.Write(mutationCount + "\t");
+
+					// write ASE
+					double value;
+					if (aseValues.Item2[hugoSymbol].TryGetValue(case_.case_id, out value) && value > Double.NegativeInfinity)
+					{
+						outputFile.Write(value + "\t");
+
+					}
+					else
+					{
+						outputFile.Write("*\t");
+					}
+
+					// write expression
+					if (expressionValues.Item2[hugoSymbol].TryGetValue(case_.case_id, out value) && value > Double.NegativeInfinity)
+					{
+						outputFile.Write(value + "\t");
+					}
+					else
+					{
+						outputFile.Write("*\t");
+					}
+
+
+					// write methylation
+					Dictionary<string, double> methylationValue;
+					if (methylationValues[hugoSymbol].TryGetValue(case_.case_id, out methylationValue))
+					{
+
+						foreach (var cREF in compositeREFs)
+						{
+							double M_Value;
+							if (methylationValue.TryGetValue(cREF, out M_Value))
+							{
+								outputFile.Write(M_Value + "\t");
+							}
+							else
+							{
+								outputFile.Write("*\t");
+							}
+						}
+
+					}
+					else
+					{
+						// Case no methylation data. write *'s. This can occur if there was no info for loss of heterozygousity
+						outputFile.Write(String.Join("\t", compositeREFs.Select(r => "*")) + "\t");
+					}
+
+					outputFile.WriteLine();
+				}
+
+				outputFile.Close();
+
+			} // foreach hugo symbol
 
 		}
 	}

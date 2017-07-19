@@ -23,7 +23,7 @@ namespace AnnotateVariants
 
         static int failedCases = 0;
 
-        static void ProcessCases(List<ASETools.Case> casesToProcess, ASETools.ASEConfirguation configuration, VariantType variantType)
+        static void ProcessCases(List<ASETools.Case> casesToProcess, ASETools.Configuration configuration, VariantType variantType)
         {
             while (true)
             {
@@ -133,7 +133,7 @@ namespace AnnotateVariants
             var timer = new Stopwatch();
             timer.Start();
 
-			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+			var configuration = ASETools.Configuration.loadFromFile(args);
 
             if (null == configuration)
             {

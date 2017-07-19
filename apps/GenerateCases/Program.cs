@@ -59,7 +59,7 @@ namespace GenerateCases
             var stopwatch = new Stopwatch();
             stopwatch.Start();
 
-            var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+            var configuration = ASETools.Configuration.loadFromFile(args);
 
             if (null == configuration)
             {
@@ -183,7 +183,7 @@ namespace GenerateCases
 
                 from += pagination.count;
 
-                if (from > pagination.total)
+                if (from >= pagination.total)
                 {
                     break;
                 }
@@ -245,7 +245,6 @@ namespace GenerateCases
 				from = 1;
 
 
-
                 for (; ; )
                 {
                     if (periodicStopwatch.ElapsedMilliseconds > 60000)
@@ -255,8 +254,6 @@ namespace GenerateCases
                         periodicStopwatch.Reset();
                         periodicStopwatch.Start();
                     }
-
-                    nCasesProcessed++;
 
                     string fileCondition = "{\"op\":\"in\",\"content\":{\"field\":\"cases.case_id\",\"value\":[\"" + gdcCase.case_id + "\"]}}";
                     string notMAFFilter = "{\"op\":,\"and\",\"content\":[" + fileCondition + "," + bamOrTxtCondition + "]}";
@@ -268,9 +265,20 @@ namespace GenerateCases
                         "&fields=data_type,updated_datetime,created_datetime,file_name,md5sum,data_format,access,platform,state,file_id,data_category,file_size,type,experimental_strategy,submitter_id," + 
                         "cases.samples.sample_type_id,cases.samples.sample_type,platform,cases.samples.sample_id,analysis.workflow_link&sort=file_id:asc");
 
-                    ASETools.GDCData<ASETools.GDCFile> fileData = (ASETools.GDCData<ASETools.GDCFile>)filesSerializer.ReadObject(new MemoryStream(Encoding.ASCII.GetBytes(response)));
+                    ASETools.GDCPagination pagination;
+                    ASETools.GDCData<ASETools.GDCFile> fileData;
 
-                    var pagination = ASETools.GDCPagination.extractFromString(response);
+                    try
+                    {
+                       fileData  = (ASETools.GDCData<ASETools.GDCFile>)filesSerializer.ReadObject(new MemoryStream(Encoding.ASCII.GetBytes(response)));
+
+                        pagination = ASETools.GDCPagination.extractFromString(response);
+                    } catch (SerializationException)
+                    {
+                        Console.WriteLine("Got SerializationException handling server response, it was probably truncated.  Sleeping 10s and retrying.");
+                        Thread.Sleep(10000);
+                        continue;   // Since we didn't increase from, we'll just reread the same thing again.
+                    }
 
                     if (null == pagination)
                     {
@@ -425,7 +433,7 @@ namespace GenerateCases
 
                     from += pagination.count;
 
-                    if (from > pagination.total)
+                    if (from >= pagination.total)
                     {
                         break;
                     }
@@ -602,7 +610,10 @@ namespace GenerateCases
                     }
                 }
 
+                nCasesProcessed++;
+
             } // foreach case
+
 
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(periodicStopwatch));
 

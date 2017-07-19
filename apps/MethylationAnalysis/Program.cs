@@ -183,10 +183,10 @@ namespace MethylationAnalysis
 
 			// hg19 to hg38 build
 			var build = new GenomeBuild.LiftOver();
-			build.readChainFile(ASETools.ASEConfirguation.hg19Tohg38ChainFile);
+			build.readChainFile(ASETools.Configuration.hg19Tohg38ChainFile);
 
 			// read in enhancers
-			string[] fileEntries = Directory.GetFiles(ASETools.ASEConfirguation.defaultBaseDirectory + "enhancers");
+			string[] fileEntries = Directory.GetFiles(ASETools.Configuration.defaultBaseDirectory + "enhancers");
 			List<GenomeBuild.Interval> enhancers = new List<GenomeBuild.Interval>();
 
 			foreach (string fileName in fileEntries)
@@ -207,7 +207,7 @@ namespace MethylationAnalysis
 			Console.WriteLine(enhancers.Count() + "enhancers after running final collapse");
 
 			var enhancerLines = collapsed.Select(r => new ASETools.BedLine(r.name, Convert.ToInt32(r.start), Convert.ToInt32(r.end), "enhancer", 1000, r.strand, r.start, r.end)).ToList();
-			var enhancerFile = ASETools.ASEConfirguation.defaultBaseDirectory + @"enhancers\allEnhancers.bed";
+			var enhancerFile = ASETools.Configuration.defaultBaseDirectory + @"enhancers\allEnhancers.bed";
 			ASETools.BedLine.writeFile(enhancerFile, enhancerLines);
 		}
 
@@ -222,8 +222,8 @@ namespace MethylationAnalysis
 			var timer = new Stopwatch();
 			timer.Start();
 
-			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
-			enhancers = ASETools.BedLine.ReadFile(ASETools.ASEConfirguation.defaultBaseDirectory + @"enhancers\allEnhancers.bed")
+			var configuration = ASETools.Configuration.loadFromFile(args);
+			enhancers = ASETools.BedLine.ReadFile(ASETools.Configuration.defaultBaseDirectory + @"enhancers\allEnhancers.bed")
 					.Select(r => new GenomeBuild.Interval(r.Chromosome, r.Start_Position, r.End_Position, r.strand)).GroupBy(r => r.name)
 					.ToDictionary(x => x.Key, x => x.Select(r => r).ToList());
 
@@ -264,7 +264,7 @@ namespace MethylationAnalysis
 			}
 
 			// Get information for current genome build in chr form
-			geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(ASETools.ASEConfirguation.defaultGeneLocationInformation));
+			geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(ASETools.Configuration.defaultGeneLocationInformationFilename));
 
 			var threads = new List<Thread>();
 			for (int i = 0; i < Environment.ProcessorCount; i++)

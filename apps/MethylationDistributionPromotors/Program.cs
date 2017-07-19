@@ -166,7 +166,7 @@ namespace MethylationDistributionPromotors
 					continue;
 				}
 
-				var aseFile = ASETools.RegionalSignalFile.ReadFile(case_.tumor_allele_specific_gene_expression_filename);
+				var aseFile = ASETools.RegionalSignalFile.ReadFile(case_.tumor_allele_specific_gene_expression_filename, true, true);
 
 				foreach (var hugoSymbol in bestPValues.Keys)
 				{
@@ -178,13 +178,13 @@ namespace MethylationDistributionPromotors
 					}
 
 					// get number of non-silent mutations
-					var mutationCount = aseFile.Item3[ASETools.ConvertToExcelString(hugoSymbol)];
+					var mutationCount = hugoData[0];
 					if (!mutationCounts.ContainsKey(hugoSymbol))
 					{
 						mutationCounts.Add(hugoSymbol, new Dictionary<string, int>());
 					}
 
-					mutationCounts[hugoSymbol].Add(case_.case_id, mutationCount);
+					mutationCounts[hugoSymbol].Add(case_.case_id, Convert.ToInt32(mutationCount));
 				}
 			}
 			return mutationCounts;
@@ -193,7 +193,7 @@ namespace MethylationDistributionPromotors
 
 		static void Main(string[] args)
 		{
-			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+			var configuration = ASETools.Configuration.loadFromFile(args);
 			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
 			if (configuration.commandLineArgs.Count() > 0 && configuration.commandLineArgs[0] == "-p")

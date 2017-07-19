@@ -186,7 +186,7 @@ namespace MethylationDistribution
 
 		static void Main(string[] args)
 		{
-			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+			var configuration = ASETools.Configuration.loadFromFile(args);
 			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
 			// Case 1: for any group of cases, compute the pvalues for adjusted beta value.
