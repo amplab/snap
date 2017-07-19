@@ -67,7 +67,7 @@ namespace MethylationAnalysis
 			Console.WriteLine(intersectingREFs.First());
 
 			// write intersecting refs to file
-			var outputFile = ASETools.CreateStreamWriterWithRetry(ASETools.ASEConfirguation.methylationREFsFilename);
+			var outputFile = ASETools.CreateStreamWriterWithRetry(ASETools.Configuration.methylationREFsFilename);
 
 			// Write header
 			outputFile.WriteLine("CompositeREF\tChromosome\tPosition\tHugo Symbol\tPositionToTSS");
@@ -323,7 +323,7 @@ namespace MethylationAnalysis
 			var timer = new Stopwatch();
 			timer.Start();
 
-			var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+			var configuration = ASETools.Configuration.loadFromFile(args);
 			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
 			if (null == cases)
@@ -343,7 +343,7 @@ namespace MethylationAnalysis
 			// processCompositeREFs(case_27, case_450);
 
 			// read in file of valid Composite REFs for methylation data
-			compositeREFs = ASETools.CompositeREFInfoLine.ReadFile(ASETools.ASEConfirguation.methylationREFsFilename).ToDictionary(x => x.Key, x => x.Value);
+			compositeREFs = ASETools.CompositeREFInfoLine.ReadFile(ASETools.Configuration.methylationREFsFilename).ToDictionary(x => x.Key, x => x.Value);
 
 			var threads = new List<Thread>();
 			for (int i = 0; i < Environment.ProcessorCount; i++)

@@ -12,7 +12,7 @@ namespace ExtractMAFLines
 {
     class Program { 
 
-        static void WorkerThread(List<List<ASETools.Case>> workQueue, ASETools.ASEConfirguation configuration)
+        static void WorkerThread(List<List<ASETools.Case>> workQueue, ASETools.Configuration configuration)
         {
             while (true)
             {
@@ -78,7 +78,7 @@ namespace ExtractMAFLines
             var stopwatch = new Stopwatch();
             stopwatch.Start();
 
-            var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+            var configuration = ASETools.Configuration.loadFromFile(args);
             
             if (configuration.commandLineArgs.Count() != 0) {
                 Console.WriteLine("usage: ExtractMAFLines {-configuration configurationFileName}");

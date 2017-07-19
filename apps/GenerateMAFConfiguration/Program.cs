@@ -20,7 +20,7 @@ namespace GenerateMAFConfiguration
             var stopwatch = new Stopwatch();
             stopwatch.Start();
 
-            var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+            var configuration = ASETools.Configuration.loadFromFile(args);
 
             if (configuration == null)
             {

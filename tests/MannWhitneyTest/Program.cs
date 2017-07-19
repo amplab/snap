@@ -38,11 +38,11 @@ namespace MannWhitneyTest
 			int[] groups =
 			{ 1,0,0,0,0,1,1 };
 
-			List<ComparableElement> ComparableElements = new List<ComparableElement>();
+			List<ComparableElement> test1 = new List<ComparableElement>();
 
 			for (var i = 0; i < values.Count(); i++)
 			{
-				ComparableElements.Add(new ComparableElement(values[i], groups[i] == 1));
+				test1.Add(new ComparableElement(values[i], groups[i] == 1));
 			}
 
 			ASETools.MannWhitney<ComparableElement>.GetValue getValue = new ASETools.MannWhitney<ComparableElement>.GetValue(m => m.value);
@@ -55,7 +55,7 @@ namespace MannWhitneyTest
 			double U;
 			double z;
 
-			var result = ASETools.MannWhitney<ComparableElement>.ComputeMannWhitney(ComparableElements, ComparableElements[0], whichGroup, getValue,
+			var result = ASETools.MannWhitney<ComparableElement>.ComputeMannWhitney(test1, test1[0], whichGroup, getValue,
 				out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z);
 
 			if (U != 2)
@@ -72,11 +72,11 @@ namespace MannWhitneyTest
 				v2.Add(new ComparableElement(MathNet.Numerics.Distributions.Normal.Sample(2, 4.0), false));
 			}
 
-			List<ComparableElement> cars_est = new List<ComparableElement>();
-			cars_est.AddRange(v1);
-			cars_est.AddRange(v2);
+			List<ComparableElement> test2 = new List<ComparableElement>();
+			test2.AddRange(v1);
+			test2.AddRange(v2);
 
-			result = ASETools.MannWhitney<ComparableElement>.ComputeMannWhitney(cars_est, cars_est[0], whichGroup, getValue,
+			result = ASETools.MannWhitney<ComparableElement>.ComputeMannWhitney(test2, test2[0], whichGroup, getValue,
 				out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z);
 
 			// This result should not be significant

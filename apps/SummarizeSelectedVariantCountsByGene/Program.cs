@@ -33,7 +33,7 @@ namespace SummarizeSelectedVariantCountsByGene
             var timer = new Stopwatch();
             timer.Start();
 
-            var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+            var configuration = ASETools.Configuration.loadFromFile(args);
 
             if (null == configuration)
             {
@@ -98,7 +98,7 @@ namespace SummarizeSelectedVariantCountsByGene
                 return;
             }
 
-            var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(ASETools.ASEConfirguation.defaultGeneLocationInformation));
+            var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
 
             output.WriteLine("Hugo Symbol\tSize of gene in bases (max tx end - min tx start)\tn Selected Variants in the gene\tn in tumors with no somatic mutations in this gene\tn in tumors with exactly 1 somatic mutation in this gene\tn in tumors with more than one somatic ");
 

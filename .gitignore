@@ -73,6 +73,8 @@ obj
 /apps/MannWhitney/bin
 /apps/SummarizeSelectedVariantCountsByGene/bin
 /apps/FindSignificantGenes/bin
+/apps/ApplyBonferonniCorrection/bin
+/tests/AVLTest/bin
 /tests/MannWhitneyTest/bin
 
 

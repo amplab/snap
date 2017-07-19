@@ -14,7 +14,7 @@ namespace CheckDone
     {
 
         static Dictionary<string, List<string>> FilenamesByDataDirectory = new Dictionary<string, List<string>>();
-        static ASETools.ASEConfirguation configuration;
+        static ASETools.Configuration configuration;
         static int totalFiles = 0;
         static int nFilesProcessed = 0;
 
@@ -117,7 +117,7 @@ namespace CheckDone
             var timer = new Stopwatch();
             timer.Start();
 
-            configuration = ASETools.ASEConfirguation.loadFromFile(args);
+            configuration = ASETools.Configuration.loadFromFile(args);
 
             if (configuration.commandLineArgs.Count() != 0 && (configuration.commandLineArgs.Count() != 1 || configuration.commandLineArgs[0] != "-a"))
             {
@@ -162,6 +162,7 @@ namespace CheckDone
                 HandleFilename(case_.normal_rna_mapped_base_count_filename);
                 HandleFilename(case_.tumor_rna_mapped_base_count_filename);
                 HandleFilename(case_.selected_variant_counts_by_gene_filename);
+                HandleFilename(case_.tumor_regional_methylation_filename);
             }
 
             Console.Write("Processing " + totalFiles + " files in " + FilenamesByDataDirectory.Count() + " data directories (one dot/hundred): ");

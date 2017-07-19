@@ -374,7 +374,7 @@ namespace SelectGermlineVariants
 
         static void Main(string[] args)
         {
-            var configuration = ASETools.ASEConfirguation.loadFromFile(args);
+            var configuration = ASETools.Configuration.loadFromFile(args);
 
             if (null == configuration)
             {

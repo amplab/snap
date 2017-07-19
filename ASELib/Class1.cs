@@ -266,7 +266,9 @@ namespace ASELib
 			{
 				var geneScatterGraphEntries = new List<GeneScatterGraphLine>();
 
-                string[] wantedFieldsArray =
+
+
+                string[] wantedFieldsArrayUnfilteredVersion =
                 {
                     "Hugo_Symbol",
                     "Chromosome",
@@ -299,6 +301,10 @@ namespace ASELib
                     "n_tumor_RNA_Matching_Both",
                     "Multiple Mutations in this Gene",
                     "n Mutations in this gene",
+                };
+
+                string[] wantedFieldsArrayAdditionalFields =
+                {
                     "tumorDNAFraction",
                     "tumorRNAFraction",
                     "tumorDNAMultiple",
@@ -314,16 +320,20 @@ namespace ASELib
                     "%MeanNormal",
                 };
 
-                var wantedFields = wantedFieldsArray.ToList();
+                var wantedFieldsFullVersion = wantedFieldsArrayUnfilteredVersion.ToList();
+                wantedFieldsFullVersion.AddRange(wantedFieldsArrayAdditionalFields.ToList());
 
-				foreach (var filename in Directory.EnumerateFiles(directoryName, hugoSymbol + (fromUnfiltered ? ASEConfirguation.unfilteredCountsExtention : ".txt")))
+
+                var wantedFields = fromUnfiltered ? wantedFieldsArrayUnfilteredVersion.ToList() : wantedFieldsFullVersion;
+
+				foreach (var filename in Directory.EnumerateFiles(directoryName, hugoSymbol + (fromUnfiltered ? Configuration.unfilteredCountsExtention : ".txt")))
 				{
 					if (filename.Count() == 0 || GetFileNameFromPathname(filename)[0] == '_')
 					{
 						continue;   // Summary file like _MannWhitney rather than a gene file
 					}
 
-                    if (!fromUnfiltered && filename.Contains(ASEConfirguation.unfilteredCountsExtention))
+                    if (!fromUnfiltered && filename.Contains(Configuration.unfilteredCountsExtention))
                     {
                         continue;   // This happens when hugo_symbol is *
                     }
@@ -361,9 +371,9 @@ namespace ASELib
                 }
 
                 double tumorDNAFraction = -1, tumorRNAFraction = -1, tumorDNAMultiple = -1, tumorRNAMultiple = -1, tumorDNARatio = -1, tumorRNARatio = -1, ratioOfRatios = -1, zTumor = -1, zNormal = -1, z2Tumor = -1, z2Normal = -1, percentMeanTumor = -1, percentMeanNormal = -1;
-                bool fromUnfilteredFile = true;
+                bool fromUnfilteredFile = !fieldMappings.ContainsKey("tumorDNAFraction");
                 bool zKnown = false;
-                if (fields[fieldMappings["tumorDNAFraction"]] != "") {
+                if (!fromUnfilteredFile) {
                     tumorDNAFraction = Convert.ToDouble(fields[fieldMappings["tumorDNAFraction"]]);
                     tumorRNAFraction = Convert.ToDouble(fields[fieldMappings["tumorRNAFraction"]]);
                     tumorDNAMultiple = Convert.ToDouble(fields[fieldMappings["tumorDNAMultiple"]]);
@@ -381,13 +391,10 @@ namespace ASELib
                         percentMeanTumor = Convert.ToDouble(fields[fieldMappings["%MeanTumor"]]);
                         percentMeanNormal = Convert.ToDouble(fields[fieldMappings["%MeanNormal"]]);
                     }
-
-                    fromUnfilteredFile = false;
                 }
 
-
                 return new GeneScatterGraphLine(
-                  fields[fieldMappings["Hugo_Symbol"]], fields[fieldMappings["Chromosome"]], Convert.ToInt32(fields[fieldMappings["Start_Position"]]), fields[fieldMappings["Variant_Classification"]], fields[fieldMappings["Variant_Type"]],
+                  ConvertToNonExcelString(fields[fieldMappings["Hugo_Symbol"]]), fields[fieldMappings["Chromosome"]], Convert.ToInt32(fields[fieldMappings["Start_Position"]]), fields[fieldMappings["Variant_Classification"]], fields[fieldMappings["Variant_Type"]],
                     fields[fieldMappings["Reference_Allele"]], fields[fieldMappings["Reference_Allele"]], fields[fieldMappings["disease"]], fields[fieldMappings["Case Id"]], fields[fieldMappings["Normal DNA File ID"]], fields[fieldMappings["Tumor DNA File ID"]],
                     fields[fieldMappings["Normal RNA File ID"]], fields[fieldMappings["Tumor RNA File ID"]],
                     new ReadCounts(Convert.ToInt32(fields[fieldMappings["n_normal_DNA_Matching_Reference"]]), Convert.ToInt32(fields[fieldMappings["n_normal_DNA_Matching_Alt"]]), Convert.ToInt32(fields[fieldMappings["n_normal_DNA_Matching_Neither"]]),
@@ -515,7 +522,6 @@ namespace ASELib
 		}
 
 
-		// TODO: why do you have to map by chromosome?
 		// Holds Gene location and isoform information
 		public class GeneLocationInfo
 		{
@@ -525,6 +531,11 @@ namespace ASELib
 			public int maxLocus;
 
 			public bool inconsistent = false;
+
+            public bool containsLocus(string locusChromosome, int locus)
+            {
+                return chromosome == locusChromosome && minLocus <= locus && maxLocus >= locus;
+            }
 
 			public List<Isoform> isoforms = new List<Isoform>();
 		}
@@ -552,10 +563,198 @@ namespace ASELib
 			public Dictionary<string, List<GeneLocationInfo>> genesByChromosome = new Dictionary<string, List<GeneLocationInfo>>();    // chromosome is in non-chr form.
 		}
 
-		//
-		// A Case is a person with TCGA data.
-		//
-		public class Case
+        public class GeneMap
+        {
+            public GeneMap(Dictionary<string, GeneLocationInfo> genesByName)
+            {
+                var key = new Range();
+
+                foreach (var geneEntry in genesByName)
+                {
+                    var gene = geneEntry.Value;
+
+                    if (gene.inconsistent)
+                    {
+                        continue;
+                    }
+
+                    key.chromosome = gene.chromosome;
+                    key.minLocus = gene.minLocus;
+
+                    //
+                    // We need to split any regions that cross the beginnig and end of the gene, and add the gene to any regions entirely
+                    // contained within it.
+                    //
+
+                    int handledUpTo = gene.minLocus;
+
+                    Range overlapRange;
+                    if (map.FindFirstLessThanOrEqualTo(key, out overlapRange) &&  overlapRange.chromosome == gene.chromosome && overlapRange.minLocus < gene.minLocus && overlapRange.maxLocus >= gene.minLocus)
+                    {
+                        //
+                        // We overlap at the beginning.  Delete the existing range and split it in two, with the first half not containing us and the second half containing us.
+                        //
+                        map.Delete(overlapRange);
+                        Range firstHalf = new Range();
+                        firstHalf.chromosome = gene.chromosome;
+                        firstHalf.minLocus = overlapRange.minLocus;
+                        firstHalf.maxLocus = gene.minLocus - 1;
+                        firstHalf.genes = overlapRange.genes;
+
+                        map.Insert(firstHalf);
+
+                        Range secondHalf = new Range();
+                        secondHalf.chromosome = gene.chromosome;
+                        secondHalf.minLocus = gene.minLocus;
+                        secondHalf.maxLocus = Math.Min(overlapRange.maxLocus, gene.maxLocus);
+                        overlapRange.genes.ForEach(x => secondHalf.genes.Add(x));
+                        secondHalf.genes.Add(gene);
+
+                        map.Insert(secondHalf);
+                        handledUpTo = secondHalf.maxLocus + 1;
+
+                        if (handledUpTo < overlapRange.maxLocus)
+                        {
+                            //
+                            // The new gene fit entirely within an old one.  We need to add the end of the overlap range.
+                            //
+                            Range thirdHalf = new Range();
+                            thirdHalf.chromosome = gene.chromosome;
+                            thirdHalf.minLocus = handledUpTo;
+                            thirdHalf.maxLocus = overlapRange.maxLocus;
+                            overlapRange.genes.ForEach(x => thirdHalf.genes.Add(x));
+
+                            map.Insert(thirdHalf);
+                            handledUpTo = thirdHalf.maxLocus + 1;
+                        }
+                    }
+
+                    //
+                    // Now cruise along looking at ranges that are entirely within the gene.
+                    //
+
+                    while (handledUpTo < gene.maxLocus)
+                    {
+                        key.minLocus = handledUpTo;
+
+                        Range containedRange;
+                        bool foundContainedRange;
+                        if ((foundContainedRange = map.FindFirstGreaterThanOrEqualTo(key, out containedRange)) && containedRange.minLocus == handledUpTo && containedRange.chromosome == gene.chromosome)
+                        {
+                            //
+                            // Two cases: the contained range is entirely within gene, and the contained range hangs off the end of gene.
+                            // In the first case, we just add ourself to the list.  In the second, we need to split.
+                            //
+                            if (containedRange.maxLocus <= gene.maxLocus)
+                            {
+                                containedRange.genes.Add(gene);
+                            } else
+                            {
+                                //
+                                // Split.  This is the symmetric case for the split at the beginning of the gene above this loop.
+                                //
+                                var newRange = new Range();
+                                newRange.minLocus = containedRange.minLocus;
+                                newRange.chromosome = containedRange.chromosome;
+                                newRange.maxLocus = gene.maxLocus;
+                                containedRange.genes.ForEach(x => newRange.genes.Add(x));
+                                newRange.genes.Add(gene);
+
+                                map.Delete(containedRange);
+                                map.Insert(newRange);
+
+                                containedRange.minLocus = gene.maxLocus + 1;
+                                map.Insert(containedRange);
+                            }
+                            handledUpTo = containedRange.maxLocus + 1;
+                        } else
+                        {
+                            //
+                            // This is an empty range.  Create a new one that goes up to either the end of gene or the beginnig of the range we found.
+                            //
+                            var newRange = new Range();
+                            newRange.chromosome = gene.chromosome;
+                            newRange.minLocus = handledUpTo;
+                            if (foundContainedRange && containedRange.minLocus <= gene.maxLocus && containedRange.chromosome == gene.chromosome)
+                            {
+                                newRange.maxLocus = containedRange.minLocus - 1;
+                            } else
+                            {
+                                newRange.maxLocus = gene.maxLocus;
+                            }
+                            newRange.genes.Add(gene);
+
+                            handledUpTo = newRange.maxLocus + 1;
+
+                            map.Insert(newRange);
+                        }
+                    } // While we have genome to cover.
+                } // foreach gene
+
+            }
+
+            class Range : IComparable
+            {
+                public string chromosome;
+                public int minLocus;
+                public int maxLocus;
+
+                public int CompareTo(object peerObject)
+                {
+                    var peer = (Range)peerObject;
+
+                    var chromosomesComparison = chromosome.CompareTo(peer.chromosome);
+                    if (chromosomesComparison != 0) return chromosomesComparison;
+
+                    return minLocus.CompareTo(peer.minLocus);
+                }
+
+                public List<GeneLocationInfo> genes = new List<GeneLocationInfo>();
+            } // Range
+
+            public List<GeneLocationInfo> getGenesMappedTo(string chromosome, int locus)
+            {
+                var key = new Range();
+                key.chromosome = chromosome;
+                key.minLocus = locus;
+
+                Range mapRange;
+                if (!map.FindFirstLessThanOrEqualTo(key, out mapRange) || mapRange.chromosome != chromosome || mapRange.maxLocus < locus)
+                {
+                    return new List<GeneLocationInfo>();
+                }
+
+                return mapRange.genes;
+            } // getGenesMappedTo
+
+            //
+            // Figure out the maximum range around locus that is in any gene that includes locus.  Return false iff locus isn't
+            // in any gene.
+            //
+            public bool encompassingGeneRange(string chromosome, int locus, out int minEncompassingLocus, out int maxEncompassingLocus)
+            {
+                var mappedGenes = getGenesMappedTo(chromosome, locus);
+
+                if (mappedGenes.Count() == 0)
+                {
+                    minEncompassingLocus = maxEncompassingLocus = -1;
+                    return false;
+                }
+
+                minEncompassingLocus = mappedGenes.Select(x => x.minLocus).Min();
+                maxEncompassingLocus = mappedGenes.Select(x => x.maxLocus).Max();
+
+                return true;
+            }
+
+            AVLTree<Range> map = new AVLTree<Range>();
+        } // GeneMap
+
+
+        //
+        // A Case is a person with TCGA data.
+        //
+        public class Case
         {
             //
             // Mandatory metadata that's created by GenerateCases.
@@ -618,8 +817,9 @@ namespace ASELib
             public string normal_dna_reads_at_selected_variants_filename = "";
             public string normal_dna_reads_at_selected_variants_index_filename = "";
             public string annotated_selected_variants_filename = "";
-            public string allele_specific_gene_expression_filename = "";
-            public string tumor_dna_gene_coverage_filname = "";
+            public string normal_allele_specific_gene_expression_filename = "";
+			public string tumor_allele_specific_gene_expression_filename = "";
+			public string tumor_dna_gene_coverage_filname = "";
             public string vcf_filename = "";
             public string extracted_maf_lines_filename = "";
             public string normal_dna_mapped_base_count_filename = "";
@@ -627,6 +827,7 @@ namespace ASELib
             public string normal_rna_mapped_base_count_filename = "";
             public string tumor_rna_mapped_base_count_filename = "";
             public string selected_variant_counts_by_gene_filename = "";
+            public string tumor_regional_methylation_filename = "";
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
 
             //
@@ -811,8 +1012,9 @@ namespace ASELib
                 new FieldInformation("Tumor RNA Reads At Selected Variants Filename",       c => c.tumor_rna_reads_at_selected_variants_filename, (c,v) => c.tumor_rna_reads_at_selected_variants_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariants, tumorRNAReadsAtSelectedVariantsExtension, c => c.tumor_rna_file_id),
                 new FieldInformation("Tumor RNA Reads At Selected Variants Index Filename", c => c.tumor_rna_reads_at_selected_variants_index_filename, (c,v) => c.tumor_rna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariantsIndex, tumorRNAReadsAtSelectedVariantsIndexExtension, c => c.tumor_rna_file_id),
                 new FieldInformation("Annotated Selected Variants Filename",                c => c.annotated_selected_variants_filename, (c,v) => c.annotated_selected_variants_filename = v, DerivedFile.Type.AnnotatedSelectedVariants, annotatedSelectedVariantsExtension, c => c.case_id),
-                new FieldInformation("Allele Specific Gene Expression Filename",            c => c.allele_specific_gene_expression_filename, (c,v) => c.allele_specific_gene_expression_filename = v, DerivedFile.Type.AlleleSpecificGeneExpression, alleleSpecificGeneExpressionExtension, c => c.case_id),
-                new FieldInformation("Tumor DNA Gene Coverage Filename",                    c => c.tumor_dna_gene_coverage_filname, (c,v) => c.tumor_dna_gene_coverage_filname = v, DerivedFile.Type.TumorDNAGeneCoverage, tumorDNAGeneCoverageExtension, c => c.tumor_dna_file_id),
+                new FieldInformation("Normal Allele Specific Gene Expression Filename",     c => c.normal_allele_specific_gene_expression_filename, (c,v) => c.normal_allele_specific_gene_expression_filename = v, DerivedFile.Type.NormalAlleleSpecificGeneExpression, normalAlleleSpecificGeneExpressionExtension, c => c.case_id),
+				new FieldInformation("Tumor Allele Specific Gene Expression Filename",      c => c.tumor_allele_specific_gene_expression_filename, (c,v) => c.tumor_allele_specific_gene_expression_filename = v, DerivedFile.Type.TumorAlleleSpecificGeneExpression, tumorAlleleSpecificGeneExpressionExtension, c => c.case_id),
+				new FieldInformation("Tumor DNA Gene Coverage Filename",                    c => c.tumor_dna_gene_coverage_filname, (c,v) => c.tumor_dna_gene_coverage_filname = v, DerivedFile.Type.TumorDNAGeneCoverage, tumorDNAGeneCoverageExtension, c => c.tumor_dna_file_id),
                 new FieldInformation("VCF Filename",                                        c => c.vcf_filename, (c,v) => c.vcf_filename = v, DerivedFile.Type.VCF, vcfExtension, c => c.normal_dna_file_id),
                 new FieldInformation("Extracted MAF Lines Filename",                        c => c.extracted_maf_lines_filename, (c,v) => c.extracted_maf_lines_filename = v, DerivedFile.Type.ExtractedMAFLines, extractedMAFLinesExtension, c => c.case_id),
                 new FieldInformation("Normal DNA Mapped Base Count Filename",               c => c.normal_dna_mapped_base_count_filename, (c, v) => c.normal_dna_mapped_base_count_filename = v, DerivedFile.Type.NormalDNAMappedBaseCount, normalDNAMappedBaseCountExtension, c => c.normal_dna_file_id),
@@ -820,6 +1022,7 @@ namespace ASELib
                 new FieldInformation("Normal RNA Mapped Base Count Filename",               c => c.normal_rna_mapped_base_count_filename, (c, v) => c.normal_rna_mapped_base_count_filename = v, DerivedFile.Type.NormalRNAMappedBaseCount, normalRNAMappedBaseCountExtension, c => c.normal_rna_file_id),
                 new FieldInformation("Tumor RNA Mapped Base Count Filename",                c => c.tumor_rna_mapped_base_count_filename, (c, v) => c.tumor_rna_mapped_base_count_filename = v, DerivedFile.Type.TumorRNAMappedBaseCount, tumorRNAMappedBaseCountExtension, c => c.tumor_rna_file_id),
                 new FieldInformation("Selected Variant Counts By Gene Filename",            c => c.selected_variant_counts_by_gene_filename, (c, v) => c.selected_variant_counts_by_gene_filename = v, DerivedFile.Type.SelectedVariantCountByGene, selectedVariantCountByGeneExtension, c => c.case_id),
+                new FieldInformation("Tumor Regional Methylation",                          c => c.tumor_regional_methylation_filename, (c, v) => c.tumor_regional_methylation_filename = v, DerivedFile.Type.TumorRegionalMethylation, tumorRegionalMethylationExtension, c => c.case_id),
 
                 new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
                 new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
@@ -1002,8 +1205,9 @@ namespace ASELib
 				if (!derivedFiles.ContainsKey(case_id))
                 {
                     tumor_rna_allcount_filename = "";
-                    allele_specific_gene_expression_filename = "";
-                    annotated_selected_variants_filename = "";
+                    normal_allele_specific_gene_expression_filename = "";
+					tumor_allele_specific_gene_expression_filename = "";
+					annotated_selected_variants_filename = "";
                     tumor_dna_reads_at_selected_variants_filename = "";
                     tumor_dna_reads_at_selected_variants_index_filename = "";
                     gene_expression_filename = "";
@@ -1133,7 +1337,7 @@ namespace ASELib
             }
         }
 
-		public class ASEConfirguation
+		public class Configuration
         {
             public const string defaultBaseDirectory = @"\\msr-genomics-0\d$\gdc\";
             public const string defaultConfigurationFilePathame = defaultBaseDirectory + "configuration.txt";
@@ -1141,7 +1345,7 @@ namespace ASELib
             public string accessTokenPathname = defaultBaseDirectory +  @"access_token.txt";
 
 			public const string defaultGenomeBuild = "hg38";
-			public const string defaultGeneLocationInformation = defaultBaseDirectory + "knownGene-" + defaultGenomeBuild + ".txt";
+			public const string defaultGeneLocationInformationFilename = defaultBaseDirectory + "knownGene-" + defaultGenomeBuild + ".txt";
 
             public List<string> dataDirectories = new List<string>();
             public string mafManifestPathname = defaultBaseDirectory + "mafManifest.txt";
@@ -1166,16 +1370,21 @@ namespace ASELib
             public string selectedGenesFilename = @"\\msr-genomics-0\d$\gdc\seleted_genes.txt";
             public string scriptOutputDirectory = @"\temp\";
             public string finalResultsDirectory = @"\\msr-genomics-0\d$\gdc\final_results\";
+            public double significanceLevel = 0.01;
+            public string geneLocationInformationFilename = defaultGeneLocationInformationFilename;
+            public int minSampleCountForHeatMap = 100;
 
-			public string geneScatterGraphsDirectory = defaultBaseDirectory + @"gene_scatter_graphs\";
+            public string geneScatterGraphsDirectory = defaultBaseDirectory + @"gene_scatter_graphs\";
+            public string regionalExpressionDirectory = defaultBaseDirectory + @"regional_expression\";
 
 			public const string unfilteredCountsDirectory = defaultBaseDirectory + @"gene_mutations_with_counts\";
 			public const string unfilteredCountsExtention = @"_unfiltered_counts.txt";
 			public const string methylationREFsFilename = defaultBaseDirectory + "compositeREFs.txt";
 
+
 			public string[] commandLineArgs = null;    // The args excluding -configuration <filename>
 
-            ASEConfirguation()
+            Configuration()
             {
                 programNames.Add("TCGA");   // The default value
                 dataDirectories.Add(defaultBaseDirectory + @"downloaded_files\");
@@ -1184,7 +1393,7 @@ namespace ASELib
             //
             // Parse the args to find the configuration file pathname, and then load from that path (or the default if it's not present).
             //
-            public static ASEConfirguation loadFromFile(string [] args) 
+            public static Configuration loadFromFile(string [] args) 
             {
                 string pathname = @"\\msr-genomics-0\d$\gdc\configuration.txt";
 
@@ -1206,7 +1415,7 @@ namespace ASELib
                     }
                 }
 
-                var retVal = new ASEConfirguation();
+                var retVal = new Configuration();
                 retVal.commandLineArgs = nonConsumedArgs.ToArray();
 
                 if (!File.Exists(pathname))
@@ -1300,6 +1509,14 @@ namespace ASELib
                         retVal.geneScatterGraphsDirectory = fields[1];
                     } else if (type == "read count to include variant") {
                         retVal.nReadsToIncludeVariant = Convert.ToInt32(fields[1]);
+                    } else if (type == "regional expression directory") {
+                        retVal.regionalExpressionDirectory = fields[1];
+                    } else if (type == "significance level") {
+                        retVal.significanceLevel = Convert.ToDouble(fields[1]);
+                    } else if (type == "gene location information filename") {
+                        retVal.geneLocationInformationFilename = fields[1];
+                    } else if (type == "min sample count for heatmap") {
+                        retVal.minSampleCountForHeatMap = Convert.ToInt32(fields[1]);
                     } else {
                         Console.WriteLine("ASEConfiguration.loadFromFile: configuration file " + pathname + " contains a line with an unknown configuration parameter type: " + line + ".  Ignoring.");
                         continue;
@@ -1904,7 +2121,8 @@ namespace ASELib
         public const string annotatedSelectedVariantsExtension = ".annotatedSeletedVariants";
         public const string regionalExpressionExtension = ".regional_expression.txt";
         public const string geneExpressionExtension = ".gene_expression.txt";
-        public const string alleleSpecificGeneExpressionExtension = ".allele-specific_gene_expression.txt";
+		public const string normalAlleleSpecificGeneExpressionExtension = ".normal-allele-specific_gene_expression.txt";
+		public const string tumorAlleleSpecificGeneExpressionExtension = ".tumor-allele-specific_gene_expression.txt";
         public const string tumorRNAReadsAtSelectedVariantsExtension = ".tumor-rna-reads-at-selected-variants.txt";
         public const string tumorRNAReadsAtSelectedVariantsIndexExtension = ".tumor-rna-reads-at-selected-variants.txt.index";
         public const string normalRNAReadsAtSelectedVariantsExtension = ".normal-rna-reads-at-selected-variants.txt";
@@ -1921,11 +2139,15 @@ namespace ASELib
         public const string normalRNAMappedBaseCountExtension = ".normal_rna_mapped_base_count.txt";
         public const string tumorRNAMappedBaseCountExtension = ".tumor_rna_mapped_base_count.txt";
         public const string selectedVariantCountByGeneExtension = ".selected_variant_count_by_gene.txt";
+        public const string tumorRegionalMethylationExtension = ".tumor_regional_methylation.txt";
+        public const string bonferroniExtension = "_bonferroni.txt";
 
         public const string scatterGraphsSummaryFilename = "_summary.txt";
         public const string mannWhitneyFilename = "_MannWhitney.txt";
         public const string genesWithSelectedVariantsFilename = "GenesWithSelectedVariantCounts.txt";
         public const string heatMapFilename = "AlleleSpecificExpressionHeatMap.txt";
+        public const string tumorHeatMapHistogramFilename = "TumorAlleleSpecificExpressionHeatMapHistograms.txt";
+        public const string normalHeatMapHistogramFilename = "NormalAlleleSpecificExpressionHeatMapHistograms.txt";
 
         public class DerivedFile
         {
@@ -1969,8 +2191,8 @@ namespace ASELib
 
             public enum Type { Unknown, NormalRNAAllcount, TumorRNAAllcount, NormalDNAAllcount, TumorDNAAllcount, RegionalExpression, GeneExpression, TumorDNAGeneCoverage,
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
-                TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, AlleleSpecificGeneExpression, VCF, ExtractedMAFLines,
-                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene,
+                TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines,
+                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, TumorRegionalMethylation,
             };
         } // DerivedFile
 
@@ -1987,7 +2209,7 @@ namespace ASELib
             public List<DerivedFile> derivedFiles = new List<DerivedFile>();
         }
 
-        static void ScanOneFilesystem(ASEConfirguation configuration, string downloadedFilesDirectory, ScanFilesystemState state, Stopwatch stopwatch, int directoryFieldLength) 
+        static void ScanOneFilesystem(Configuration configuration, string downloadedFilesDirectory, ScanFilesystemState state, Stopwatch stopwatch, int directoryFieldLength) 
         {
             if (!Directory.Exists(downloadedFilesDirectory))
             {
@@ -2164,7 +2386,7 @@ namespace ASELib
         //
         // Grovel the file system(s) to look for downloaded and derived files.  Returns a dictionary that maps from file_id -> DownloadedFile object.
         //
-        public static void ScanFilesystems(ASEConfirguation configuration, out Dictionary<string, DownloadedFile> downloadedFiles, out Dictionary<string, List<DerivedFile>> derivedFiles)
+        public static void ScanFilesystems(Configuration configuration, out Dictionary<string, DownloadedFile> downloadedFiles, out Dictionary<string, List<DerivedFile>> derivedFiles)
         {
             var stopwatch = new Stopwatch();
             stopwatch.Start();
@@ -2372,7 +2594,7 @@ namespace ASELib
             public delegate outputType Parse(Dictionary<string, int> fieldMappings, string[] fields);
             public delegate outputType FieldGrabberParser(FieldGrabber fieldGrabber);
 
-            public HeaderizedFile(StreamReader inputFile_, bool hasVersion_, bool hasDone_, string expectedVersion_, List<string> wantedFields_, bool skipHash_ = false, bool allowMissingColumnsInData_ = false)
+            public HeaderizedFile(StreamReader inputFile_, bool hasVersion_, bool hasDone_, string expectedVersion_, List<string> wantedFields_, bool skipHash_ = false, bool allowMissingColumnsInData_ = false, int skippedRows_ = 0)
             {
                 inputFile = inputFile_;
                 hasVersion = hasVersion_;
@@ -2381,6 +2603,7 @@ namespace ASELib
                 wantedFields = wantedFields_;
                 skipHash = skipHash_;
                 allowMissingColumnsInData = allowMissingColumnsInData_;
+				skippedRows = skippedRows_;
             }
 
             //
@@ -2425,8 +2648,14 @@ namespace ASELib
                     }
                 }
 
-                var header = inputFile.ReadLine();
-                if (skipHash)
+				for (var i = 0; i < skippedRows; i++)
+				{
+					inputFile.ReadLine();
+				}
+
+				var header = inputFile.ReadLine();
+
+				if (skipHash)
                 {
                     while (header != null && header.StartsWith("#"))
                     {
@@ -2569,9 +2798,29 @@ namespace ASELib
                     return Convert.ToInt32(AsString(fieldName));
                 }
 
+                public int AsIntMinusOneIfStar(string fieldname)
+                {
+                    if (fields[fieldMappings[fieldname]] == "*")
+                    {
+                        return -1;
+                    }
+
+                    return AsInt(fieldname);
+                }
+
                 public double AsDouble(string fieldName)
                 {
                     return Convert.ToDouble(AsString(fieldName));
+                }
+
+                public double AsDoubleNegativeInfinityIfStar(string fieldName)
+                {
+                    if (fields[fieldMappings[fieldName]] == "*")
+                    {
+                        return double.NegativeInfinity;
+                    }
+
+                    return AsDouble(fieldName);
                 }
 
                 public bool AsBool(string fieldName)
@@ -2592,6 +2841,7 @@ namespace ASELib
             bool hasMissingFields = false;
             bool skipHash;
             bool allowMissingColumnsInData;
+			int skippedRows;
         } // HeaderizedFile
 
         public static int ConvertToInt32TreatingNullStringAsZero(string value)
@@ -3431,7 +3681,15 @@ namespace ASELib
             {
                 try
                 {
-                    return webclient.DownloadString(address);
+                    var reply = webclient.DownloadString(address);
+                    if (reply == "")
+                    {
+                        Console.WriteLine("Server returned the empty string.  Pausing 10 seconds and retrying.");
+                        Thread.Sleep(10000);
+                    } else
+                    {
+                        return reply;
+                    }
                 }
                 catch (WebException e)
                 {
@@ -3587,7 +3845,7 @@ namespace ASELib
             }
         } // ReadMafFileAndAppendToList
 
-        public static List<MAFLine> LoadMAFs(ASEConfirguation configuration, Dictionary<string, DownloadedFile> downloadedFiles, out Dictionary<string, List<MAFLine>> byTumorSampleId)
+        public static List<MAFLine> LoadMAFs(Configuration configuration, Dictionary<string, DownloadedFile> downloadedFiles, out Dictionary<string, List<MAFLine>> byTumorSampleId)
         {
             var stopwatch = new Stopwatch();
             stopwatch.Start();
@@ -3699,12 +3957,700 @@ namespace ASELib
             public int size;
         }
 
+		public class RegionalExpressionState
+		{
+			// Tumor expression data
+			public int nRegionsIncludedTumor = 0;
+			public double minTumorExpression = 100000;
+			public double maxTumorExpression = -100000;
+			public double totalTumorExpression = 0;
+
+			public double minMeanTumorExpression = 100000;
+			public double maxMeanTumorExpression = -1;
+			public double totalMeanTumorExpression = 0;
+
+			// Normal expression data
+			public int nRegionsIncludedNormal = 0;
+			public double minNormalExpression = 100000;
+			public double maxNormalExpression = -100000;
+			public double totalNormalExpression = 0;
+
+			public double minMeanNormalExpression = 100000;
+			public double maxMeanNormalExpression = -1;
+			public double totalMeanNormalExpression = 0;
+
+			public void AddTumorExpression(double z, double mu)
+			{
+				nRegionsIncludedTumor++;
+				totalTumorExpression += z;
+				minTumorExpression = Math.Min(minTumorExpression, z);
+				maxTumorExpression = Math.Max(maxTumorExpression, z);
+
+				totalMeanTumorExpression += mu;
+				minMeanTumorExpression = Math.Min(minMeanTumorExpression, mu);
+				maxMeanTumorExpression = Math.Max(maxMeanTumorExpression, mu);
+			}
+
+			public void AddNormalExpression(double z, double mu)
+			{
+				nRegionsIncludedNormal++;
+				totalNormalExpression += z;
+				minNormalExpression = Math.Min(minNormalExpression, z);
+				maxNormalExpression = Math.Max(maxNormalExpression, z);
+
+				totalMeanNormalExpression += mu;
+				minMeanNormalExpression = Math.Min(minMeanNormalExpression, mu);
+				maxMeanNormalExpression = Math.Max(maxMeanNormalExpression, mu);
+			}
+
+		}
+		public class GeneExpression
+		{
+			static GeneExpression() // This is a static initializer that runs once at program start time, it's not a constructor.
+			{
+				regionSizeByRegionSizeIndex[0] = 0;
+				regionSizeByRegionSizeIndex[1] = 1000;
+				for (int i = 2; i < nRegionSizes; i++)
+				{
+					regionSizeByRegionSizeIndex[i] = regionSizeByRegionSizeIndex[i - 1] * 2;
+				}
+
+				comparer = StringComparer.OrdinalIgnoreCase;
+			}
+
+			public GeneExpression(ASETools.GeneLocationInfo gene_)
+			{
+				geneLocationInfo = gene_;
+
+				for (int sizeIndex = 0; sizeIndex < nRegionSizes; sizeIndex++)
+				{
+					regionalExpressionState[sizeIndex] = new RegionalExpressionState();
+					exclusiveRegionalExpressionState[sizeIndex] = new RegionalExpressionState();
+				}
+			}
+
+			public void AddRegionalExpression(int chromosomeOffset, double z, double mu, bool isTumor)
+			{
+				int distance;
+				if (chromosomeOffset >= geneLocationInfo.minLocus && chromosomeOffset <= geneLocationInfo.maxLocus)
+				{
+					distance = 0;
+				}
+				else if (chromosomeOffset < geneLocationInfo.minLocus)
+				{
+					distance = geneLocationInfo.minLocus - chromosomeOffset;
+				}
+				else
+				{
+					distance = chromosomeOffset - geneLocationInfo.maxLocus;
+				}
+
+				for (int sizeIndex = nRegionSizes - 1; sizeIndex >= 0; sizeIndex--)
+				{
+					if (regionSizeByRegionSizeIndex[sizeIndex] < distance)
+					{
+						if (sizeIndex != nRegionSizes - 1)
+						{
+							if (isTumor)
+							{
+								exclusiveRegionalExpressionState[sizeIndex + 1].AddTumorExpression(z, mu);
+
+							}
+							else
+							{
+								exclusiveRegionalExpressionState[sizeIndex + 1].AddNormalExpression(z, mu);
+							}
+							break;
+						}
+					}
+					if (isTumor)
+					{
+						regionalExpressionState[sizeIndex].AddTumorExpression(z, mu);
+
+					}
+					else
+					{
+						regionalExpressionState[sizeIndex].AddNormalExpression(z, mu);
+					}
+				}
+
+				if (0 == distance)  // Have to special case this, since exclusive gets added when we're one smaller, and there is nothing smaller than sizeIndex 0.
+				{
+					if (isTumor)
+					{
+						exclusiveRegionalExpressionState[0].AddTumorExpression(z, mu);
+
+					}
+					else
+					{
+						exclusiveRegionalExpressionState[0].AddNormalExpression(z, mu);
+					}
+				}
+			}
+
+
+			public static int CompareByGeneName(GeneExpression a, GeneExpression b)
+			{
+				return comparer.Compare(a.geneLocationInfo.hugoSymbol, b.geneLocationInfo.hugoSymbol);
+			}
+
+			public const int nRegionSizes = 20;    // Because we have 0 (in the gene), this range is 2^(20 - 2) * 1000 = 262 Mbases on either side, i.e., the entire chromosome
+			public static readonly int[] regionSizeByRegionSizeIndex = new int[nRegionSizes];
+
+			public RegionalExpressionState[] regionalExpressionState = new RegionalExpressionState[nRegionSizes]; // Dimension is log2(regionSize) - 1
+			public RegionalExpressionState[] exclusiveRegionalExpressionState = new RegionalExpressionState[nRegionSizes];  // Expression in this region but not closer, so from log2(regionSize - 1) to log2(regionSize) - 1.  The zero element is the same as regionalExpressionState
+
+			public ASETools.GeneLocationInfo geneLocationInfo;
+			public int mutationCount = 0;
+			public static StringComparer comparer;
+		}
+
+
+		// file that contains distance over gene names. Files created from ExpressionNearMutations
+		public class RegionalSignalFile
+		{
+			string fileHeader;
+			List<ASETools.GeneExpression> allExpressions;
+			ASETools.RegionalExpressionState wholeAutosomeRegionalExpression;
+			Dictionary<string, ASETools.RegionalExpressionState> allButThisChromosomeAutosomalRegionalExpressionState;
+			ASETools.RegionalExpressionState[] perChromosomeRegionalExpressionState;
+
+			// fileHeader is label for first line in file. For many uses, we print the pipeline name as well as the case id.
+			public RegionalSignalFile(string fileHeader_,
+				List<ASETools.GeneExpression> allExpressions_,                                                               // regional expression
+				ASETools.RegionalExpressionState wholeAutosomeRegionalExpression_,                                           // whole autosome
+				Dictionary<string, ASETools.RegionalExpressionState> allButThisChromosomeAutosomalRegionalExpressionState_,  // dictionary of chromosome, expression information
+				ASETools.RegionalExpressionState[] perChromosomeRegionalExpressionState_)
+			{
+				fileHeader = fileHeader_;
+				allExpressions = allExpressions_;
+				wholeAutosomeRegionalExpression = wholeAutosomeRegionalExpression_;
+				allButThisChromosomeAutosomalRegionalExpressionState = allButThisChromosomeAutosomalRegionalExpressionState_;
+				perChromosomeRegionalExpressionState = perChromosomeRegionalExpressionState_;
+			}
+
+			public void WriteFile(string outputFilename, bool printMu, int minExamplesPerRegion, string columnSuffix, bool isTumor)
+			{
+				var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
+
+				outputFile.WriteLine(fileHeader);
+				outputFile.Write("Gene name\tnon-silent mutation count");
+
+				writeRow(outputFile, allExpressions[0], printMu, minExamplesPerRegion, true, columnSuffix, isTumor);
+
+				outputFile.WriteLine();
+
+				for (int i = 0; i < allExpressions.Count(); i++)
+				{
+					outputFile.Write(ASETools.ConvertToExcelString(allExpressions[i].geneLocationInfo.hugoSymbol) + "\t" + allExpressions[i].mutationCount);
+
+					writeRow(outputFile, allExpressions[i], printMu, minExamplesPerRegion, false, "", isTumor);
+
+					outputFile.WriteLine();
+				} // for each gene
+
+				outputFile.WriteLine("**done**");
+				outputFile.Close();
+			}
+
+			// Write order:
+			//	1. Regional values (20)
+			//  2. Autosome value (1)
+			//  3. If not ASE, regional mean values (20)
+			//  4. If not ASE, autosome value (1)
+			//  5. Exclusive regional values (20)
+			//  6. Per chromosome values (
+			void writeRow(
+				StreamWriter outputFile,
+				ASETools.GeneExpression allExpression,                                                                 
+				bool printMu,
+				int minExamplesPerRegion,
+				Boolean header,
+				string columnSuffix,
+				bool isTumor)
+			{
+				// format suffix for header names
+				string columnSuffix_mu = "(" + columnSuffix + " mu)";
+				columnSuffix = "(" + columnSuffix + ")";
+
+				// 1. Chromosome specific regional values
+				for (int sizeIndex = 0; sizeIndex < ASETools.GeneExpression.nRegionSizes; sizeIndex++)
+				{
+					if (header)
+					{
+						outputFile.Write("\t" + ASETools.GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + columnSuffix);
+						continue;
+					}
+
+					if (isTumor)
+					{
+						if (allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + allExpression.regionalExpressionState[sizeIndex].totalTumorExpression / allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedTumor);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+					else if (!isTumor)
+					{
+						if (allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + allExpression.regionalExpressionState[sizeIndex].totalNormalExpression / allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedNormal);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+
+
+				}
+
+				// 2. Whole autosome
+				if (header)
+				{
+					outputFile.Write("\tWhole Autosome " + columnSuffix);
+				}
+				else if (isTumor)
+				{
+					if (wholeAutosomeRegionalExpression.nRegionsIncludedTumor >= minExamplesPerRegion)
+					{
+						outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalTumorExpression / wholeAutosomeRegionalExpression.nRegionsIncludedTumor);
+					}
+					else
+					{
+						outputFile.Write("\t*");
+					}
+				}
+				else if (!isTumor)
+				{
+					if (wholeAutosomeRegionalExpression.nRegionsIncludedNormal >= minExamplesPerRegion)
+					{
+						outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalNormalExpression / wholeAutosomeRegionalExpression.nRegionsIncludedNormal);
+					}
+					else
+					{
+						outputFile.Write("\t*");
+					}
+				}
+				// 3. Write regional mean values
+				if (printMu)
+				{
+
+					for (int sizeIndex = 0; sizeIndex < ASETools.GeneExpression.nRegionSizes; sizeIndex++)
+					{
+						if (header)
+						{
+							outputFile.Write("\t" + ASETools.GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + columnSuffix_mu);
+							continue;
+						}
+
+						if (isTumor)
+						{
+							if (allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
+							{
+								outputFile.Write("\t" + allExpression.regionalExpressionState[sizeIndex].totalMeanTumorExpression / allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedTumor);
+							}
+							else
+							{
+								outputFile.Write("\t*");
+							}
+
+						}
+						else
+						{
+							if (allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
+							{
+								outputFile.Write("\t" + allExpression.regionalExpressionState[sizeIndex].totalMeanNormalExpression / allExpression.regionalExpressionState[sizeIndex].nRegionsIncludedNormal);
+							}
+							else
+							{
+								outputFile.Write("\t*");
+							}
+						}
+					}
+
+					// 4. Write mean autosome value
+					if (header)
+					{
+						outputFile.Write("\tWhole Autosome " + columnSuffix_mu);
+					}
+					else if (isTumor)
+					{
+						if (wholeAutosomeRegionalExpression.nRegionsIncludedTumor >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalMeanTumorExpression / wholeAutosomeRegionalExpression.nRegionsIncludedTumor);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+					else if (!isTumor)
+					{
+						if (wholeAutosomeRegionalExpression.nRegionsIncludedNormal >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + wholeAutosomeRegionalExpression.totalNormalExpression / wholeAutosomeRegionalExpression.nRegionsIncludedNormal);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+				}
+
+				// 5. Write exclusive regional values
+				for (int sizeIndex = 0; sizeIndex < ASETools.GeneExpression.nRegionSizes; sizeIndex++)
+				{
+					if (header)
+					{
+						outputFile.Write("\t" + ASETools.GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + " exclusive " + columnSuffix);
+						continue;
+					}
+					if (isTumor)
+					{
+						if (allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + allExpression.exclusiveRegionalExpressionState[sizeIndex].totalTumorExpression / allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor);
+
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+					else if (!isTumor)
+					{
+						if (allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + allExpression.exclusiveRegionalExpressionState[sizeIndex].totalNormalExpression / allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+				}
+
+				// 6. Whole autosome exclusive values
+				if (header)
+				{
+					outputFile.Write("\tWhole Autosome exclusive " + columnSuffix);
+				}
+				else if (isTumor)
+				{
+					if (allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
+					{
+						outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].totalTumorExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedTumor);
+					}
+					else
+					{
+						outputFile.Write("\t*");
+					}
+				}
+				else if (!isTumor)
+				{
+					if (allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
+					{
+						outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].totalNormalExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedNormal);
+					}
+					else
+					{
+						outputFile.Write("\t*");
+					}
+				}
+
+				if (printMu)
+				{
+					// 7. Exlusive regional means
+					for (int sizeIndex = 0; sizeIndex < ASETools.GeneExpression.nRegionSizes; sizeIndex++)
+					{
+						if (header)
+						{
+							outputFile.Write("\t" + ASETools.GeneExpression.regionSizeByRegionSizeIndex[sizeIndex] + " exclusive " + columnSuffix_mu);
+							continue;
+						}
+						if (isTumor)
+						{
+							if (allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor >= minExamplesPerRegion)
+							{
+								outputFile.Write("\t" + allExpression.exclusiveRegionalExpressionState[sizeIndex].totalMeanTumorExpression / allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedTumor);
+							}
+							else
+							{
+								outputFile.Write("\t*");
+							}
+						}
+						else if (!isTumor)
+						{
+							if (allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal >= minExamplesPerRegion)
+							{
+								outputFile.Write("\t" + allExpression.exclusiveRegionalExpressionState[sizeIndex].totalMeanNormalExpression / allExpression.exclusiveRegionalExpressionState[sizeIndex].nRegionsIncludedNormal);
+							}
+							else
+							{
+								outputFile.Write("\t*");
+							}
+						}
+					}
+
+					// 8. Write out chromosome exclusive autosome means
+					if (header)
+					{
+						outputFile.Write("\tWhole Autosome exclusive " + columnSuffix_mu);
+					}
+					else if (isTumor)
+					{
+						if (allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].totalMeanTumorExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedTumor);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+					else if (!isTumor)
+					{
+						if (allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].totalMeanNormalExpression / allButThisChromosomeAutosomalRegionalExpressionState[allExpression.geneLocationInfo.chromosome].nRegionsIncludedNormal);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+				}
+
+				// 9. Write out per chromosome
+				for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
+				{
+					if (header)
+					{
+						outputFile.Write("\t" + ASETools.ChromosomeIndexToName(whichChromosome, true) + columnSuffix);
+						continue;
+					}
+					if (isTumor)
+					{
+						if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalTumorExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+					else if (!isTumor)
+					{
+						if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
+						{
+							outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalNormalExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal);
+						}
+						else
+						{
+							outputFile.Write("\t*");
+						}
+					}
+				}
+
+				// 10. Write out per chromosome mean
+				if (printMu)
+				{
+					for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
+					{
+						if (header)
+						{
+							outputFile.Write("\t" + ASETools.ChromosomeIndexToName(whichChromosome, true) + columnSuffix_mu);
+							continue;
+						}
+						if (isTumor)
+						{
+							if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor >= minExamplesPerRegion)
+							{
+								outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalMeanTumorExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedTumor);
+							}
+							else
+							{
+								outputFile.Write("\t*");
+							}
+						}
+						else if (!isTumor)
+						{
+							if (perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal >= minExamplesPerRegion)
+							{
+								outputFile.Write("\t" + perChromosomeRegionalExpressionState[whichChromosome].totalMeanNormalExpression / perChromosomeRegionalExpressionState[whichChromosome].nRegionsIncludedNormal);
+							}
+							else
+							{
+								outputFile.Write("\t*");
+							}
+						}
+					}
+				}
+			}
+
+			public static Dictionary<string, double[]> ReadFile(string filename, bool skipFirstLine = true, bool includeMutationCount = false)
+			{
+
+				// keeps track of index of distances
+				List<string> index = new List<string>();
+
+				// for each gene, maintain a list of distance, expression tuples
+				Dictionary<string, double[]> expressionMap = new Dictionary<string, double[]>();
+
+				var reader = CreateStreamReaderWithRetry(filename);
+
+				string line;
+
+				// skip first line if version or other info resides there
+				if (skipFirstLine)
+					reader.ReadLine();
+
+				// read in header
+				var header = reader.ReadLine().Split('\t');
+
+				// skip gene name and mutation count. Get all distance labels and keep them in the index.
+				for (var i = 2; i < header.Count(); i++)
+				{
+					index.Add(header[i]);
+				}
+
+				while (null != (line = reader.ReadLine()))
+				{
+					if (line.Trim() == "**done**")
+					{
+						break;
+					}
+
+					string[] fields = line.Split('\t');
+
+					var hugoSymbol = ConvertToNonExcelString(fields[0]);
+
+					var mutationCount = Convert.ToInt32(fields[1]);
+
+					// get rid of gene name and optionally mutation count
+					fields = fields.Skip(includeMutationCount ? 1 : 2).ToArray();
+
+					// the rest of the fields match the index fields
+
+					if (fields.Length != index.Count() + (includeMutationCount ? 1 : 0))
+					{
+						throw new Exception("header does not match field length for file " + filename);
+					}
+
+					double[] numericFields = fields.Select(r => {
+						// Set default value
+						double value = double.NegativeInfinity;
+
+						if (r != "*")
+						{
+							value = Convert.ToDouble(r);
+						}
+						return value;
+					}).ToArray();
+
+					// add gene to dictionary
+					expressionMap.Add(hugoSymbol, numericFields);
+				}
+				return expressionMap;
+			}
+
+            //
+            // The other direction of our conversion of * to -Infinity
+            //
+            public static string stringForDouble(double value)
+            {
+                if (value == double.NegativeInfinity) return "*";
+                return value.ToString();
+            }
+		} // RegionalSignalFile
+
         //
-        // The content of an expression file.  We used to just return the more obvious Dictionary<string, Dictionary<int, MeanAndStdDev>>, but the inside dictionaries got big enough to make
-        // something bad happen in the CLR runtime, even on 64 bit with gcAllowVeryLargeObjects set.  So, instead we add one more level of indirection to get around dictionaries with
-        // tens of millions of entries.
+        // This breaks out the array of doubles from the entires in a RegionalSignalFile into a class that names them for the allele-specific expression case
         //
-        public class ExpressionFile
+        public class AlleleSpecificSignal
+        {
+            public readonly string Hugo_Symbol;
+            public readonly int mutationCount;
+            public readonly double[] nonExclusive = new double[nRegions];
+            public readonly double[] exclusive = new double[nRegions];
+            public readonly double[] chromosomes = new double[nHumanNuclearChromosomes];
+
+            public AlleleSpecificSignal(string Hugo_Symbol_, double[] numericValues)
+            {
+                Hugo_Symbol = Hugo_Symbol_;
+                if (numericValues.Count() != 2 * nRegions + nHumanNuclearChromosomes + 1)
+                {
+                    throw new FormatException();
+                }
+
+                int nextValueIndex = 0;
+                mutationCount = (int)numericValues[nextValueIndex];
+                nextValueIndex++;
+
+                for (int i = 0; i < nRegions; i++)
+                {
+                    nonExclusive[i] = numericValues[nextValueIndex];
+                    nextValueIndex++;
+                }
+
+                for (int i = 0; i < nRegions; i++)
+                {
+                    exclusive[i] = numericValues[nextValueIndex];
+                    nextValueIndex++;
+                }
+
+                for (int i = 0; i < nHumanNuclearChromosomes; i++)
+                {
+                    chromosomes[i] = numericValues[nextValueIndex];
+                    nextValueIndex++;
+                }
+            }
+
+            public static Dictionary<string, AlleleSpecificSignal> fromRegionalSignalFile(Dictionary<string, double[]> regionalSignalFile)
+            {
+                var retVal = new Dictionary<string, AlleleSpecificSignal>();
+                foreach (var entry in regionalSignalFile)
+                {
+                    retVal.Add(entry.Key, new AlleleSpecificSignal(entry.Key, entry.Value));
+                }
+
+                return retVal;
+            }
+
+            public string OutputString()
+            {
+                string retVal =  Hugo_Symbol + "\t" + mutationCount;
+                for (int i = 0; i < nRegions; i++)
+                {
+                    retVal += "\t" + RegionalSignalFile.stringForDouble(nonExclusive[i]);
+                }
+
+                for (int i = 0; i < nRegions; i++)
+                {
+                    retVal += "\t" + RegionalSignalFile.stringForDouble(exclusive[i]);
+                }
+
+                for (int i = 0; i < nHumanNuclearChromosomes; i++)
+                {
+                    retVal += "\t" + RegionalSignalFile.stringForDouble(chromosomes[i]);
+                }
+
+                return retVal;
+            }
+        }
+
+
+		//
+		// The content of an expression file.  We used to just return the more obvious Dictionary<string, Dictionary<int, MeanAndStdDev>>, but the inside dictionaries got big enough to make
+		// something bad happen in the CLR runtime, even on 64 bit with gcAllowVeryLargeObjects set.  So, instead we add one more level of indirection to get around dictionaries with
+		// tens of millions of entries.
+		//
+		public class ExpressionFile
         {
             public ExpressionFile() { }
 
@@ -4282,7 +5228,263 @@ namespace ASELib
 
 		}
 
-        public class AnnotatedVariant
+		public class RegionalExpressionLine
+		{
+			public string contig;
+			public int contig_offset;                                       
+			public int nbases_expressed;                                    // n Bases Expressed
+			public int nbases_expressed_baseline;                           // n Bases Expressed With Baseline Expression
+			public int nbases_expressed_no_baseline;                        // n Bases Expressed Without Baseline Expression
+			public int nreads_baseline;                                     // Total Reads Mapped To Bases With Baseline Expression
+			public int nreads_no_baseline;                                  // Total Reads Mapped To Bases Without Baseline Expression
+			public int nbases_baseline_other_samples;                       // Count of bases with baseline expression but not in this sample
+			public double z;                                                // Total z For Bases With Baseline Expression
+			public double min_z;                                            // Min z For Bases With Baseline Expression
+			public double max_z;											// Max z For Bases With Baseline Expression
+			public double mean_z;                                           // Mean z for Bases With Baseline Expression
+			public double mean_mu;                                          // Mean mu for Bases with Baseline Expression
+
+			public RegionalExpressionLine(string contig_, int contig_offset_,
+				int nbases_expressed_,
+				int nbases_expressed_baseline_,
+				int nbases_expressed_no_baseline_,
+				int nreads_baseline_,
+				int nreads_no_baseline_,
+				int nbases_baseline_other_samples_,
+				double z_,
+				double min_z_,
+				double max_z_,
+				double mean_z_,
+				double mean_mu_)
+			{
+				contig = contig_;
+				contig_offset = contig_offset_;
+				nbases_expressed = nbases_expressed_;
+				nbases_expressed_baseline = nbases_expressed_baseline_;
+				nbases_expressed_no_baseline = nbases_expressed_no_baseline_;
+				nreads_baseline = nreads_baseline_;
+				nreads_no_baseline = nreads_no_baseline_;
+				nbases_baseline_other_samples = nbases_baseline_other_samples_;
+				z = z_;
+				min_z = min_z_;
+				max_z = max_z_;
+				mean_z = mean_z_;
+				mean_mu = mean_mu_;
+			}
+		}
+
+		public class Region
+		{
+
+			static List<string> getHeaders()
+			{
+				List<string> headers = new List<string>();
+				// Add headers
+				headers.Add("Contig");
+				headers.Add("Contig Offset");
+				headers.Add("n Bases Expressed");
+				headers.Add("n Bases Expressed With Baseline Expression");
+				headers.Add("n Bases Expressed Without Baseline Expression");
+				headers.Add("Total Reads Mapped To Bases With Baseline Expression");
+				headers.Add("Total Reads Mapped To Bases Without Baseline Expression");
+				headers.Add("Count of bases with baseline expression but not in this sample");
+				headers.Add("Total z For Bases With Baseline Expression");
+				headers.Add("Min z For Bases With Baseline Expression");
+				headers.Add("Max z For Bases With BaselineExpression");
+				headers.Add("Mean z for Bases With Baseline Expression");
+				headers.Add("Mean mu for Bases with Baseline Expression");
+
+				return headers;
+			}
+
+			public Region(int regionSize_, ASETools.ExpressionFile expression_, Dictionary<string, int> highestOffsetForEachContig_, long nHighQualityMappedNuclearReads_, StreamWriter outputFile_)
+			{
+				regionSize = regionSize_;
+				expression = expression_;
+				highestOffsetForEachContig = highestOffsetForEachContig_;
+				nHighQualityMappedNuclearReads = nHighQualityMappedNuclearReads_;
+				outputFile = outputFile_;
+			}
+
+			ASETools.ExpressionFile expression;
+			Dictionary<string, int> highestOffsetForEachContig;
+			int regionSize;
+			long nHighQualityMappedNuclearReads;
+			StreamWriter outputFile;
+			string currentContig = "";
+
+			int baseOffset = 0;
+			int lastBaseSeen = 0;
+			long nBasesExpressed = 0;
+			long nBasesExpressedWithBaselineExpression = 0;
+			long nBasesExpressedWithoutBaselineExpression = 0;
+			long totalReadsMappedToBasesWithoutBaselineExpression = 0;
+			long totalReadsMappedToBasesWithBaselineExpression = 0;
+			long nBasesWithBaselineButNoLocalExpression = 0;
+			double totalZForBasesWithBaselineExpression = 0;
+			double totalMuForBasesWithBaselineExpression = 0;   // Instead of standard deviations above/below the mean, just means.  This is 0-based (0 expression => 0 mu)
+			double minZForBasesWithBaselineExpression = 1000000000;
+			double maxZForBasesWithBaselineExpression = -10000000000;
+
+			public static List<RegionalExpressionLine> readFile(string filename)
+			{
+				var file = ASETools.CreateStreamReaderWithRetry(filename);
+
+				if (null == file)
+				{
+					Console.WriteLine("Region.readFile: unable to open file " + filename);
+					return null;
+				}
+
+				// Skip first 2 rows
+				var headerizedFile = new ASETools.HeaderizedFile<RegionalExpressionLine>(file, false, true, "", getHeaders(), false, false, 2);
+
+				List<RegionalExpressionLine> retVal;
+				if (!headerizedFile.ParseFile(parse, out retVal))
+				{
+					return null;
+				}
+
+				return retVal;
+			}
+
+			static RegionalExpressionLine parse(Dictionary<string, int> fieldMappings, string[] fields)
+			{
+				var contig = fields[fieldMappings["Contig"]];
+				var contig_offset = Convert.ToInt32(fields[fieldMappings["Contig Offset"]]);
+				var nbases_expressed = Convert.ToInt32(fields[fieldMappings["n Bases Expressed"]]);
+				var nbases_expressed_baseline = Convert.ToInt32(fields[fieldMappings["n Bases Expressed With Baseline Expression"]]);
+				var nbases_expressed_no_baseline = Convert.ToInt32(fields[fieldMappings["n Bases Expressed Without Baseline Expression"]]);
+				var nreads_baseline = Convert.ToInt32(fields[fieldMappings["Total Reads Mapped To Bases With Baseline Expression"]]);
+				var nreads_no_baseline = Convert.ToInt32(fields[fieldMappings["Total Reads Mapped To Bases Without Baseline Expression"]]);
+				var nbases_baseline_other_samples = Convert.ToInt32(fields[fieldMappings["Count of bases with baseline expression but not in this sample"]]);
+				var z = Convert.ToDouble(fields[fieldMappings["Total z For Bases With Baseline Expression"]]);
+				var min_z = Convert.ToDouble(fields[fieldMappings["Min z For Bases With Baseline Expression"]]);
+				var max_z = Convert.ToDouble(fields[fieldMappings["Max z For Bases With BaselineExpression"]]);
+				var mean_z = Convert.ToDouble(fields[fieldMappings["Mean z for Bases With Baseline Expression"]]);
+				var mean_mu = Convert.ToDouble(fields[fieldMappings["Mean mu for Bases with Baseline Expression"]]);
+
+				return new RegionalExpressionLine(contig, contig_offset, nbases_expressed, nbases_expressed_baseline, nbases_expressed_no_baseline, nreads_baseline,
+					nreads_no_baseline, nbases_baseline_other_samples, z, min_z, max_z, mean_z, mean_mu);
+			}
+
+			void ZeroRegion(int regionBaseOffset)
+			{
+				baseOffset = regionBaseOffset;
+				lastBaseSeen = baseOffset - 1;
+
+				closeRegion();
+			}
+
+			public void processBase(string contig, int offset, long mappedReadCount)
+			{
+				if (contig != currentContig)
+				{
+					//
+					// Zero out the rest of the contig.
+					//
+					if (currentContig != "")
+					{
+						closeRegion();
+
+						for (int i = baseOffset + regionSize; i <= highestOffsetForEachContig[currentContig]; i += regionSize)
+						{
+							ZeroRegion(i);
+						}
+					}
+
+					baseOffset = offset - offset % regionSize;
+					lastBaseSeen = baseOffset - 1;
+					currentContig = contig;
+
+				}
+				else if (baseOffset + regionSize < offset)
+				{
+					//
+					// Finish this region, and zero any with no expression.
+					//
+					closeRegion();
+
+					int baseOffsetForNextRegionWithExpression = offset - offset % regionSize;
+					for (int i = baseOffset + regionSize; i < baseOffsetForNextRegionWithExpression; i += regionSize)
+					{
+						ZeroRegion(i);
+					}
+
+					baseOffset = offset - offset % regionSize;
+					lastBaseSeen = baseOffset - 1;
+				}
+
+
+				for (int i = lastBaseSeen + 1; i < offset; i++)
+				{
+					processSkippedBase(i);
+				}
+
+				nBasesExpressed++;
+				ASETools.MeanAndStdDev meanAndStdDev;
+				if (expression.getValue(contig, offset, out meanAndStdDev))
+				{
+					nBasesExpressedWithBaselineExpression++;
+					double z = (((double)mappedReadCount / (double)nHighQualityMappedNuclearReads) - meanAndStdDev.mean) / meanAndStdDev.stddev;
+
+					totalZForBasesWithBaselineExpression += z;
+					minZForBasesWithBaselineExpression = Math.Min(z, minZForBasesWithBaselineExpression);
+					maxZForBasesWithBaselineExpression = Math.Max(z, maxZForBasesWithBaselineExpression);
+					totalReadsMappedToBasesWithBaselineExpression += mappedReadCount;
+
+					totalMuForBasesWithBaselineExpression += ((double)mappedReadCount / (double)nHighQualityMappedNuclearReads) / meanAndStdDev.mean;
+				}
+				else
+				{
+					nBasesExpressedWithoutBaselineExpression++;
+					totalReadsMappedToBasesWithoutBaselineExpression += mappedReadCount;
+				}
+
+				lastBaseSeen = offset;
+			}
+
+			public void closeRegion()
+			{
+				for (int i = lastBaseSeen + 1; i < baseOffset + regionSize; i++)
+				{
+					processSkippedBase(i);
+				}
+
+				outputFile.WriteLine(currentContig + "\t" + baseOffset + "\t" + nBasesExpressed + "\t" + nBasesExpressedWithBaselineExpression + "\t" + nBasesExpressedWithoutBaselineExpression + "\t" + totalReadsMappedToBasesWithBaselineExpression + "\t" +
+					totalReadsMappedToBasesWithoutBaselineExpression + "\t" + nBasesWithBaselineButNoLocalExpression + "\t" + totalZForBasesWithBaselineExpression + "\t" + minZForBasesWithBaselineExpression + "\t" + maxZForBasesWithBaselineExpression + "\t" +
+					totalZForBasesWithBaselineExpression / (double)regionSize + "\t" + totalMuForBasesWithBaselineExpression / regionSize);
+
+				nBasesExpressed = 0;
+				nBasesExpressedWithBaselineExpression = 0;
+				nBasesExpressedWithoutBaselineExpression = 0;
+				totalReadsMappedToBasesWithoutBaselineExpression = 0;
+				totalReadsMappedToBasesWithBaselineExpression = 0;
+				totalZForBasesWithBaselineExpression = 0;
+				totalMuForBasesWithBaselineExpression = 0;
+				nBasesWithBaselineButNoLocalExpression = 0;
+				minZForBasesWithBaselineExpression = 1000000000;
+				maxZForBasesWithBaselineExpression = -10000000000;
+			}
+
+			void processSkippedBase(int offset)
+			{
+				ASETools.MeanAndStdDev meanAndStdDev;
+				if (expression.getValue(currentContig, offset, out meanAndStdDev))
+				{
+					nBasesWithBaselineButNoLocalExpression++;
+					totalZForBasesWithBaselineExpression -= meanAndStdDev.mean / meanAndStdDev.stddev; // It's one mean below the mean: ie. 0 expression
+																									   // No need to update totalMu, since 0 expression adds 0 there.
+				}
+			}
+
+			static public void printHeader(StreamWriter outputFile)
+			{
+				outputFile.WriteLine(String.Join("\t", getHeaders()));
+			}
+		}
+
+		public class AnnotatedVariant
         {
 
 			public AnnotatedVariant(){}
@@ -4646,7 +5848,7 @@ namespace ASELib
             return outputPathname + @"\";
         }
 
-        public static string GetDataDirectoryFromFilename(string filename, ASEConfirguation configuration)
+        public static string GetDataDirectoryFromFilename(string filename, Configuration configuration)
         {
             bool isDerivedFilesDirectory = filename.Contains(configuration.derivedFilesDirectory);  // Derived files are stored in dataDirectory\..\derivedFiles
             foreach (var dataDirectory in configuration.dataDirectories)
@@ -4880,6 +6082,1232 @@ namespace ASELib
             if (value == 1) return value;
             return 2;
         }
+
+        public static bool[] BothBools = { true, false };   // There's probably something like this in the runtime, but whatever.
+
+        public class HistogramResultLine
+        {
+            public string minValue;
+            public int count = 0;
+            public double total = 0;    // The sum of all of the values in this line
+            public double pdfValue = 0;
+            public double cdfValue = 0;
+        } // HistogramResultLine
+
+        public class Histogram
+        {
+            public Histogram() { }
+
+            public void addValue(double value)
+            {
+                values.Add(value);
+            }
+
+            public double min() // Throws ArgumentNullExcpetion if no data jas been added
+            {
+                return values.Min();
+            }
+
+            public double max()
+            {
+                return values.Max();
+            }
+
+            public void merge(Histogram peer)
+            {
+                values.AddRange(peer.values);
+            }
+            public int count()
+            {
+                return values.Count();
+            }
+            public HistogramResultLine[] ComputeHistogram(double min, double max, double increment, string format = "G")
+            {
+                int nBuckets = (int)((max - min) / increment) + 1;  // +1 is for "more"
+
+                var result = new HistogramResultLine[nBuckets];
+
+                double x = min;
+                for (int i = 0; i < nBuckets - 1; i++)
+                {
+                    result[i] = new HistogramResultLine();
+                    result[i].minValue = x.ToString(format);
+                    x += increment;
+                }
+                result[nBuckets - 1] = new HistogramResultLine();
+                result[nBuckets - 1].minValue = "More";
+
+                foreach (var value in values)
+                {
+                    int whichBucket;
+                    if (value > max)
+                    {
+                        whichBucket = nBuckets - 1;
+                    }
+                    else
+                    {
+                        whichBucket = (int)((value - min) / increment);
+                    }
+
+                    result[whichBucket].count++;
+                    result[whichBucket].total += value;
+                }
+
+                int overallCount = values.Count();
+                int runningCount = 0;
+                for (int whichBucket = 0; whichBucket < nBuckets; whichBucket++)
+                {
+                    runningCount += result[whichBucket].count;
+
+                    result[whichBucket].pdfValue = ((double)result[whichBucket].count) / overallCount;
+                    result[whichBucket].cdfValue = ((double)runningCount) / overallCount;
+                }
+
+                return result;
+            } // ComputeHistogram
+
+            List<double> values = new List<double>();
+        } // Histogram
+
+        public class NMeandAndStdDev
+        {
+            public NMeandAndStdDev(int n_, double mean_, double stdDev_)
+            {
+                n = n_;
+                mean = mean_;
+                stdDev = stdDev_;
+            }
+
+            public readonly int n;
+            public readonly double mean;
+            public readonly double stdDev;
+
+            public static List<string> getHeaders(string prefix)
+            {
+                string[] headers = { prefix + " N", prefix + " mean", prefix + " stDdev" };
+                return headers.ToList();
+            }
+
+            public static string getHeaderString(string prefix)
+            {
+                return prefix + "N\t" + prefix + " mean\t" + prefix + " stdDev";
+            }
+        }
+
+        public class SingleExpressionResult
+        {
+            public readonly int rangeIndex;     // i.e., 0 -> nRanges - 1
+            public readonly int rangeInBases;   // int.MaxValue for whole autosome
+
+            //
+            // p values.  double.NegativeInfinity means no value.
+            //
+            public double oneVsMany;
+            public double oneVsNotOne;
+
+            public readonly NMeandAndStdDev zeroMutationStats;
+            public readonly NMeandAndStdDev oneMutationStats;
+            public readonly NMeandAndStdDev moreThanOneMutationStats;
+
+            public static List<string> getHeaders(bool exclusive, string range)
+            {
+                string exclusiveString = exclusive ? " exclusive" : "";
+                string[] headersArray = {range + " 1 vs. many" + exclusiveString,
+                                    range + " 1 vs. not 1"  + exclusiveString,
+                range + " 0 mutation N" + exclusiveString,
+                range + " 0 mutation mean" + exclusiveString,
+                range + " "}; // here
+
+                return null;
+            }
+
+            public static string getHeaderString(bool exclusive, int rangeIndex)
+            {
+                var regionString = regionIndexToString(rangeIndex) + (exclusive ? " exclusive " : " ");
+                return regionString + "1 vs. many\t" +
+                       regionString + "1 vs. not 1\t" +
+                       NMeandAndStdDev.getHeaderString(regionString + "0 mutation ") + "\t" +
+                       NMeandAndStdDev.getHeaderString(regionString + "1 mutation ") + "\t" +
+                       NMeandAndStdDev.getHeaderString(regionString + ">1 mutation ");
+            }
+
+            public SingleExpressionResult(int rangeIndex_, double oneVsMany_, double oneVsNotOne_, NMeandAndStdDev zeroMutationStats_, NMeandAndStdDev oneMutationStats_, NMeandAndStdDev moreThanOneMutationStats_)
+            {
+                rangeIndex = rangeIndex_;
+                if (rangeIndex == 0)
+                {
+                    rangeInBases = 0;
+                } else if (rangeIndex == nRegions - 1)
+                {
+                    rangeInBases = int.MaxValue;
+                } else
+                {
+                    rangeInBases = (1 << rangeIndex) * 1000;
+                }
+
+                oneVsMany = oneVsMany_;
+                oneVsNotOne = oneVsNotOne_;
+                zeroMutationStats = zeroMutationStats_;
+                oneMutationStats = oneMutationStats_;
+                moreThanOneMutationStats = moreThanOneMutationStats_;
+            }
+
+            public static SingleExpressionResult Parse(int rangeIndex, HeaderizedFile<ExpressionResultsLine>.FieldGrabber fieldGrabber, bool exclusive)
+            {
+                string rangeString;
+                if (rangeIndex == 0)
+                {
+                    rangeString = "0Kbp ";
+                } else if (rangeIndex == nRegions - 1)
+                {
+                    rangeString = "whole autosome ";
+                } else
+                {
+                    rangeString = Convert.ToString(1 << rangeIndex) + "Kpb";
+                }
+
+                if (exclusive)
+                {
+                    rangeString += "exclusive ";
+                }
+
+                return new SingleExpressionResult(
+                    rangeIndex,
+                    fieldGrabber.AsDoubleNegativeInfinityIfStar(rangeString + "1 vs. many"),
+                    fieldGrabber.AsDoubleNegativeInfinityIfStar(rangeString + "1 vs. not 1"),
+                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStar(rangeString + "0 mutation N"), fieldGrabber.AsDoubleNegativeInfinityIfStar(rangeString + "0 mutation mean"), fieldGrabber.AsDoubleNegativeInfinityIfStar("0 mutation stdDev")),
+                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStar(rangeString + "1 mutation N"), fieldGrabber.AsDoubleNegativeInfinityIfStar(rangeString + "1 mutation mean"), fieldGrabber.AsDoubleNegativeInfinityIfStar("1 mutation stdDev")),
+                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStar(rangeString + ">1 mutation N"), fieldGrabber.AsDoubleNegativeInfinityIfStar(rangeString + ">1 mutation mean"), fieldGrabber.AsDoubleNegativeInfinityIfStar(">1 mutation stdDev"))
+                    );
+            }
+        } // SingleExpressionResult
+
+        public class ExpressionResultsLine
+        {
+            static public List<ExpressionResultsLine> readFile(string filename)
+            {
+                string[] wantedFieldsOtherThanExpression =
+                {
+                    "Hugo Symbol",
+                    "nTumorsExcluded",
+                    "nZero",
+                    "nOne",
+                    "nMore"
+                };
+
+                var wantedFields = wantedFieldsOtherThanExpression.ToList();
+                for (var i = 0; i < nRegions; i++)
+                {
+                    foreach (bool exclusive in BothBools) {
+                        wantedFields.AddRange(SingleExpressionResult.getHeaders(exclusive, regionIndexToString(i)));
+                    }
+                }
+
+                var inputFile = CreateStreamReaderWithRetry(filename);
+                if (null == inputFile)
+                {
+                    return null;
+                }
+                var headerizedFile = new HeaderizedFile<ExpressionResultsLine>(inputFile, false, true, "", wantedFields);
+
+                List<ExpressionResultsLine> retVal;
+                headerizedFile.ParseFile(Parse, out retVal);
+
+                return retVal;
+            }
+
+            public ExpressionResultsLine(string hugo_symbol_, SingleExpressionResult[] nonExclusiveResultsByRange_, SingleExpressionResult[] exclusiveResultsByRange_, int nZero_, int nOne_, int nMore_)
+            {
+                hugo_symbol = hugo_symbol_;
+                nonExclusiveResultsByRange = nonExclusiveResultsByRange_;
+                exclusiveResultsByRange = exclusiveResultsByRange_;
+                nZero = nZero_;
+                nOne = nOne_;
+                nMore = nMore_;
+
+                resultsByRange.Add(true, nonExclusiveResultsByRange);
+                resultsByRange.Add(false, exclusiveResultsByRange);
+            }
+
+            static ExpressionResultsLine Parse(HeaderizedFile<ExpressionResultsLine>.FieldGrabber fieldGrabber)
+            {
+                var nonExclusiveResults = new SingleExpressionResult[nRegions];
+                var exclusiveResults = new SingleExpressionResult[nRegions];
+
+                for (int i = 0; i < nRegions; i++)
+                {
+                    nonExclusiveResults[i] = SingleExpressionResult.Parse(i, fieldGrabber, false);
+                    exclusiveResults[i] = SingleExpressionResult.Parse(i, fieldGrabber, true);
+                }
+
+                return new ExpressionResultsLine(fieldGrabber.AsString("Hugo Symbol"), nonExclusiveResults, exclusiveResults, fieldGrabber.AsIntMinusOneIfStar("nZero"), fieldGrabber.AsIntMinusOneIfStar("nOne"), fieldGrabber.AsIntMinusOneIfStar("nMore"));
+            }
+
+            public static string getHeaderString()
+            {
+                var result = "Hugo Symbol";
+                foreach (var exclusive in BothBools)
+                {
+                    for (int i = 0; i < nRegions; i++)
+                    {
+                        result += "\t" + SingleExpressionResult.getHeaderString(exclusive, i);
+                    }
+                }
+
+                return result + "\tnZero\tnOne\tnMany";
+            }
+
+            public readonly string hugo_symbol;
+            public readonly SingleExpressionResult[] nonExclusiveResultsByRange = new SingleExpressionResult[nRegions];
+            public readonly SingleExpressionResult[] exclusiveResultsByRange = new SingleExpressionResult[nRegions];
+            public readonly Dictionary<bool, SingleExpressionResult[]> resultsByRange = new Dictionary<bool, SingleExpressionResult[]>();
+
+            //
+            // These are -1 if not filled in.
+            //
+            public readonly int nZero;
+            public readonly int nOne;
+            public readonly int nMore;
+        } // ExpressionResultsLine
+
+        //
+        // Handling power-of-two * 1Kb regions.
+        //
+        public const int nRegions = 21;    // 0, 1 Kb, 2Kb, 4Kb .. 256Kb, Whole Autosome
+        
+        public static string regionIndexToString(int regionIndex)
+        {
+            if (0 == regionIndex) return "0Kbp";
+            if (nRegions - 1 == regionIndex) return "whole autosome";
+            return "" + (1 << regionIndex) + "Kbp";
+        }
+
+        public static int regionIndexToSizeInBases(int regionIndex)
+        {
+            if (0 == regionIndex) return 0;
+            if (nRegions - 1 == regionIndex) return int.MaxValue;
+            return (1 << regionIndex) * 1000;
+        }
+
+        public class AVLTree<TValue>  where TValue : IComparable
+        {
+            class Node
+            {
+                public TValue value;
+
+                public Node left = null, right = null, parent = null;
+
+                public enum Balance { AVLLeft, AVLBalanced, AVLRight, AVLNew};
+                public Balance balance = Balance.AVLNew; 
+
+                public int checkAndReturnDepth()
+                {
+                    //
+                    // Links match up.
+                    //
+                    if (left != null && left.parent != this ||
+                        right != null && right.parent != this)
+                    {
+                        throw new InvalidDataException();   // More-or-less arbitrary exception.
+                    }
+
+                    //
+                    // The binary search tree ordering property applies.
+                    //
+                    if (left != null && value.CompareTo(left.value) <= 0 ||
+                        right != null && value.CompareTo(right.value) >= 0)
+                    {
+                        throw new InvalidDataException();   // More-or-less arbitrary exception.
+                    }
+
+                    int leftDepth;
+                    if (left != null)
+                    {
+                        leftDepth = left.checkAndReturnDepth();
+                    } else
+                    {
+                        leftDepth = 0;
+                    }
+
+                    int rightDepth;
+                    if (right != null) {
+                        rightDepth = right.checkAndReturnDepth();
+                    } else
+                    {
+                        rightDepth = 0;
+                    }
+
+                    if (leftDepth == rightDepth)
+                    {
+                        if (balance != Balance.AVLBalanced)
+                        {
+                            throw new InvalidDataException();
+                        }
+                        return leftDepth + 1;
+                    }
+
+                    if (leftDepth == rightDepth + 1)
+                    {
+                        if (balance != Balance.AVLLeft)
+                        {
+                            throw new InvalidDataException();
+                        }
+                        return leftDepth + 1;
+                    }
+
+                    if (leftDepth + 1 == rightDepth)
+                    {
+                        if (balance != Balance.AVLRight)
+                        {
+                            throw new InvalidDataException();
+                        }
+                        return rightDepth + 1;
+                    }
+
+                    //
+                    // We're out of balance.
+                    //
+                    throw new InvalidDataException();
+                }
+            } //Node
+
+
+            public void check()
+            {
+                if (root == null)
+                {
+                    return;
+                }
+
+                if (root.parent != null)
+                {
+                    throw new InvalidDataException();
+                }
+
+                root.checkAndReturnDepth();
+            }
+
+            //
+            // This is the way to allow tree[element] and tree[element] = newElement;  Note that the second one is the only way to update a value in the tree without first deleting it and re-inserting it.
+            // However, if it doesn't exist then it will insert it new.  So, tree[element] = element is the same as "update if existing, insert otherwise."
+            //
+            public TValue this[TValue key]
+            {
+                get
+                {
+                    TValue retVal;
+                    if (!Lookup(key, out retVal))
+                    {
+                        throw new ArgumentException("Indexed value not found in AVL tree");
+                    }
+
+                    return retVal;
+                }
+
+                set
+                {
+                    Node currentCandiate = root;
+                    while (currentCandiate != null)
+                    {
+                        int comparison = key.CompareTo(currentCandiate.value);
+                        if (comparison == 0)
+                        {
+                            currentCandiate.value = value;
+                            return;
+                        }
+
+                        if (comparison < 0)
+                        {
+                            currentCandiate = currentCandiate.left;
+                        } else
+                        {
+                            currentCandiate = currentCandiate.right;
+                        }
+                    }
+
+                    Insert(value);
+                }
+            }
+            
+            public bool findMin(out TValue returnValue)
+            {
+                if (root == null)
+                {
+                    returnValue = default(TValue);
+                    return false;
+                }
+
+                Node currentNode = root;
+                while (currentNode.left != null)
+                {
+                    currentNode = currentNode.left;
+                }
+
+                returnValue = currentNode.value;
+                return true;
+            }
+
+            public bool findMax(out TValue returnValue)
+            {
+                if (root == null)
+                {
+                    returnValue = default(TValue);
+                    return false;
+                }
+
+                Node currentNode = root;
+                while (currentNode.right != null)
+                {
+                    currentNode = currentNode.right;
+                }
+
+                returnValue = currentNode.value;
+                return true;
+            }
+
+            //
+            // min and max return the default value if the tree is empty.
+            //
+            public TValue min()
+            {
+                TValue retVal;
+                findMin(out retVal);
+                return retVal;
+            }
+
+            public TValue max()
+            {
+                TValue retVal;
+                findMax(out retVal);
+                return retVal;
+            }
+
+            public bool FindFirstGreaterThanOrEqualTo(TValue key, out TValue returnValue)
+            {
+                Node currentNode = root;
+                Node lastLeft = null;
+
+                while (currentNode != null)
+                {
+                    int comparison = key.CompareTo(currentNode.value);
+
+                    if (comparison == 0)
+                    {
+                        returnValue = currentNode.value;
+                        return true;
+                    }
+
+                    if (comparison > 0)
+                    {
+                        currentNode = currentNode.right;
+                    }
+                    else
+                    {
+                        lastLeft = currentNode;
+                        currentNode = currentNode.left;
+                    }
+                } // while (currentNode != null)
+
+                if (lastLeft == null)
+                {
+                    returnValue = default(TValue);
+                    return false;
+                }
+
+                returnValue = lastLeft.value;
+                return true;
+            } // FindFirstGreaterThanOrEqualTo
+
+
+            public bool FindFirstLessThanOrEqualTo(TValue key, out TValue returnValue)
+            {
+                Node currentNode = root;
+                Node lastRight = null;
+
+                while (currentNode != null)
+                {
+                    int comparison = key.CompareTo(currentNode.value);
+
+                    if (comparison == 0)
+                    {
+                        returnValue = currentNode.value;
+                        return true;
+                    }
+
+                    if (comparison < 0)
+                    {
+                        currentNode = currentNode.left;
+                    }
+                    else
+                    {
+                        lastRight = currentNode;
+                        currentNode = currentNode.right;
+                    }
+                } // while (currentNode != null)
+
+                if (lastRight == null)
+                {
+                    returnValue = default(TValue);
+                    return false;
+                }
+
+                returnValue = lastRight.value;
+                return true;
+            } // FindFirstLessThanOrEqualTo
+
+            public bool findFirstLessThan(TValue key, out TValue retVal)
+            { 
+                Node currentNode = root;
+                Node lastLessThan = null;
+
+                while (currentNode != null)
+                {
+                    int comparison = key.CompareTo(currentNode.value);
+                    if (comparison <= 0)
+                    {
+                        currentNode = currentNode.left;
+                    } else
+                    {
+                        lastLessThan = currentNode;
+                        currentNode = currentNode.right;
+                    }
+                }
+
+                if (lastLessThan != null)
+                {
+                    retVal = lastLessThan.value;
+                    return true;
+                }
+
+                retVal = default(TValue);
+                return false;
+            }
+
+            public bool findFirstGreaterThan(TValue key, out TValue retVal)
+            {
+                Node currentNode = root;
+                Node lastGreaterThan = null;
+
+                while (currentNode != null)
+                {
+                    int comparison = key.CompareTo(currentNode.value);
+                    if (comparison >= 0)
+                    {
+                        currentNode = currentNode.right;
+                    }
+                    else
+                    {
+                        lastGreaterThan = currentNode;
+                        currentNode = currentNode.left;
+                    }
+                }
+
+                if (lastGreaterThan != null)
+                {
+                    retVal = lastGreaterThan.value;
+                    return true;
+                }
+
+                retVal = default(TValue);
+                return false;
+            }
+            public bool Lookup(TValue key, out TValue returnValue)
+            {
+                if (!FindFirstLessThanOrEqualTo(key, out returnValue) || returnValue.CompareTo(key) != 0)
+                {
+                    returnValue = default(TValue);
+                    return false;
+                }
+
+                return true;
+            } // Lookup
+
+            public void Insert(TValue newValue)
+            {
+                inserts++;
+
+                var newNode = new Node();
+                newNode.value = newValue;
+                newNode.balance = Node.Balance.AVLBalanced;
+
+                if (root == null)
+                {
+                    root = newNode;
+                    return;
+                }
+
+                Node currentNode = root;
+                Node previousNode = null;
+
+                while (currentNode != null)
+                {
+                    previousNode = currentNode;
+                    int comparison = currentNode.value.CompareTo(newValue);
+                    if (comparison < 0)
+                    {
+                        currentNode = currentNode.right;
+                    } else if (comparison > 0)
+                    {
+                        currentNode = currentNode.left;
+                    } else
+                    {
+                        throw new ArgumentException("Trying to insert a duplicate element into an AVL tree.");
+                    }
+                } // while (currentNode != null)
+
+                newNode.parent = previousNode;
+                if (previousNode.value.CompareTo(newValue) < 0)
+                {
+                    previousNode.right = newNode;
+                    rightAdded(previousNode);
+                } else
+                {
+                    previousNode.left = newNode;
+                    leftAdded(previousNode);
+                }
+            }
+
+            void rightAdded(Node node)
+            {
+                if (node.balance == Node.Balance.AVLLeft)
+                {
+                    node.balance = Node.Balance.AVLBalanced;
+                    //
+                    // The depth of the subtree rooted here hasn't changed, we're done.
+                    //
+                    return;
+                }
+
+                if (node.balance == Node.Balance.AVLBalanced)
+                {
+                    //
+                    // We've just gotten one deeper, but are still balanced.  Update and recurse up the tree.
+                    //
+                    node.balance = Node.Balance.AVLRight;
+                    if (node == root)
+                    {
+                        return;
+                    }
+
+                    if (node.parent.right == node)
+                    {
+                        rightAdded(node.parent);
+                    }
+                    else
+                    {
+                        leftAdded(node.parent);
+                    }
+                    return;
+
+                } // If we went to right heavy
+
+                //
+                // We went to double right.  Rotate.
+                //
+                if (node.right.balance == Node.Balance.AVLRight)
+                {
+                    singleRotate(node, node.right, Node.Balance.AVLRight);
+                } else
+                {
+                    doubleRotate(node, node.right, node.right.left, Node.Balance.AVLRight);
+                }
+            } // rightAdded
+
+            void leftAdded(Node node)
+            {
+                if (node.balance == Node.Balance.AVLRight)
+                {
+                    node.balance = Node.Balance.AVLBalanced;
+                    //
+                    // The depth of the subtree rooted here hasn't changed, we're done.
+                    //
+                    return;
+                }
+
+                if (node.balance == Node.Balance.AVLBalanced)
+                {
+                    //
+                    // We've just gotten one deeper, but are still balanced.  Update and recurse up the tree.
+                    //
+                    node.balance = Node.Balance.AVLLeft;
+                    if (node == root)
+                    {
+                        return;
+                    }
+
+                    if (node.parent.right == node)
+                    {
+                        rightAdded(node.parent);
+                    }
+                    else
+                    {
+                        leftAdded(node.parent);
+                    }
+                    return;
+                } // if node was balanced
+
+                //
+                // We went to double left.  Rotate.
+                //
+                if (node.left.balance == Node.Balance.AVLLeft)
+                {
+                    singleRotate(node, node.left, Node.Balance.AVLLeft);
+                }
+                else
+                {
+                    doubleRotate(node, node.left, node.left.right, Node.Balance.AVLLeft);
+                }
+            }
+
+            void singleRotate(Node node, Node child, Node.Balance whichSide)
+            {
+                //
+                // Promote the child to our position in the tree.
+                //
+
+                if (node.parent != null)
+                {
+                    if (node.parent.left == node)
+                    {
+                        node.parent.left = child;
+                    } else
+                    {
+                        node.parent.right = child;
+                    }
+                    child.parent = node.parent;
+                }
+                else
+                {
+                    //
+                    // We're the root of the tree.
+                    //
+                    root = child;
+                    child.parent = null;
+                }
+
+                //
+                // Attach the child's light subtree to our heavy side (ie., where the child is attched now)
+                // Then, attach us to the child's light subtree.
+                //
+                if (whichSide == Node.Balance.AVLRight)
+                {
+                    node.right = child.left;
+                    if (node.right != null)
+                    {
+                        node.right.parent = node;
+                    }
+                    child.left = node;
+                }
+                else
+                {
+                    node.left = child.right;
+                    if (node.left != null)
+                    {
+                        node.left.parent = node;
+                    }
+                    child.right = node;
+                }
+
+                node.parent = child;
+
+                //
+                // Finally, now both our and our (former) child are balanced.
+                //
+                node.balance = Node.Balance.AVLBalanced;
+                child.balance = Node.Balance.AVLBalanced;
+                //
+                // NB: One of the cases in delete will result in the above balance settings being incorrect.
+                // That case fixes up the settings after we return.
+                //
+            }
+
+            void doubleRotate(Node node, Node child, Node grandchild, Node.Balance whichSide)
+            {
+                //
+                // Write down a copy of all of the subtrees; see Knuth v3 p454 for the picture.
+                // NOTE: The alpha and delta trees are never moved, so we don't store them.
+                //
+
+                Node beta, gamma;
+                if (whichSide == Node.Balance.AVLRight)
+                {
+                    beta = grandchild.left;
+                    gamma = grandchild.right;
+                } else
+                {
+                    beta = grandchild.right;
+                    gamma = grandchild.left;
+                }
+
+                //
+                // Promote grandchild to our position.
+                //
+                if (root != node)
+                {
+                    if (node.parent.left == node)
+                    {
+                        node.parent.left = grandchild;
+                    }
+                    else
+                    {
+                        node.parent.right = grandchild;
+                    }
+                } else
+                {
+                    root = grandchild;
+                }
+                grandchild.parent = node.parent;
+
+                //
+                // Attach appropriate children to grandchild.
+                //
+                if (whichSide == Node.Balance.AVLRight)
+                {
+                    grandchild.right = child;
+                    grandchild.left = node;
+                }
+                else
+                {
+                    grandchild.right = node;
+                    grandchild.left = child;
+                }
+                node.parent = grandchild;
+                child.parent = grandchild;
+
+                //
+                // Attach beta and gamma to node and child.
+                //
+                if (whichSide == Node.Balance.AVLRight)
+                {
+                    node.right = beta;
+                    if (beta != null)
+                    {
+                        beta.parent = node;
+                    }
+                    child.left = gamma;
+                    if (gamma != null)
+                    {
+                        gamma.parent = child;
+                    }
+                }
+                else
+                {
+                    node.left = beta;
+                    if (beta != null)
+                    {
+                        beta.parent = node;
+                    }
+                    child.right = gamma;
+                    if (gamma != null)
+                    {
+                        gamma.parent = child;
+                    }
+                }
+
+                //
+                // Now upate the balance fields.
+                //
+                switch (grandchild.balance)
+                {
+                    case Node.Balance.AVLLeft:
+                        if (whichSide == Node.Balance.AVLRight)
+                        {
+                            node.balance = Node.Balance.AVLBalanced;
+                            child.balance = Node.Balance.AVLRight;
+                        } else
+                        {
+                            node.balance = Node.Balance.AVLRight;
+                            child.balance = Node.Balance.AVLBalanced;
+                        }
+                        break;
+
+                    case Node.Balance.AVLBalanced:
+                        node.balance = Node.Balance.AVLBalanced;
+                        child.balance = Node.Balance.AVLBalanced;
+                        break;
+
+                    case Node.Balance.AVLRight:
+                        if (whichSide == Node.Balance.AVLRight)
+                        {
+                            node.balance = Node.Balance.AVLLeft;
+                            child.balance = Node.Balance.AVLBalanced;
+                        } else
+                        {
+                            node.balance = Node.Balance.AVLBalanced;
+                            child.balance = Node.Balance.AVLLeft;
+                        }
+                        break;
+                } // switch
+
+                grandchild.balance = Node.Balance.AVLBalanced;
+            } // doubleRotate
+
+            public void Delete(TValue key)
+            {
+                deletes++;
+
+                Node nodeToRemove = root;
+                while (nodeToRemove != null)
+                {
+                    int comparison = key.CompareTo(nodeToRemove.value);
+                    if (comparison == 0)
+                    {
+                        break;
+                    } else if (comparison > 0)
+                    {
+                        nodeToRemove = nodeToRemove.right;
+                    } else
+                    {
+                        nodeToRemove = nodeToRemove.left;
+                    }
+                } // while nodeToRemove != null
+
+                if (nodeToRemove == null)
+                {
+                    throw new ArgumentException("Tried to remove a value from an AVL tree that's not in the tree.");
+                }
+
+                if (nodeToRemove.left == null)
+                {
+                    //
+                    // The right child either doesn't exist or is a leaf (because of the AVL balance property).
+                    //
+                    if (nodeToRemove.right != null)
+                    {
+                        nodeToRemove.right.parent = nodeToRemove.parent;
+                    }
+
+                    if (nodeToRemove.parent != null)
+                    {
+                        if (nodeToRemove.parent.left == nodeToRemove)
+                        {
+                            nodeToRemove.parent.left = nodeToRemove.right;
+                            gotOneShorter(nodeToRemove.parent, Node.Balance.AVLLeft);
+                        } else
+                        {
+                            nodeToRemove.parent.right = nodeToRemove.right;
+                            gotOneShorter(nodeToRemove.parent, Node.Balance.AVLRight);
+                        }
+                    } else
+                    {
+                        root = nodeToRemove.right;
+                    }
+                } else if (nodeToRemove.right == null)
+                {
+                    //
+                    // The left child must be a leaf because of the AVL balance property
+                    //
+                    nodeToRemove.left.parent = nodeToRemove.parent;
+                    if (nodeToRemove.parent != null)
+                    {
+                        if (nodeToRemove.parent.left == nodeToRemove)
+                        {
+                            nodeToRemove.parent.left = nodeToRemove.left;
+                            gotOneShorter(nodeToRemove.parent, Node.Balance.AVLLeft);
+                        } else
+                        {
+                            nodeToRemove.parent.right = nodeToRemove.left;
+                            gotOneShorter(nodeToRemove.parent, Node.Balance.AVLRight);
+                        }
+                    } else
+                    {
+                        root = nodeToRemove.left;
+                    }
+                } else // Node has both children
+                {
+                    //
+                    // Find the symmetric successor and promote it.  The symmetric successor is the smallest element in the right
+                    // subtree; it's found by following all left links in the right subtree until we find a node with no left link.
+                    // That node may be promoted to the place of this without corrupting the binary tree ordering properties. (We could
+                    // just as easily use the symmetric predecessor by finding the largest element in the left subtree, but there's
+                    // no point.)
+                    //
+
+                    Node successorCandidate = nodeToRemove.right;
+                    while (successorCandidate.left != null)
+                    {
+                        successorCandidate = successorCandidate.left;
+                    }
+
+                    Node shorterRoot;
+                    Node.Balance shorterSide;
+
+                    if (successorCandidate.parent.left == successorCandidate)
+                    {
+                        shorterRoot = successorCandidate.parent;
+                        shorterSide = Node.Balance.AVLLeft;
+                        successorCandidate.parent.left = successorCandidate.right;
+                        if (successorCandidate.right != null)
+                        {
+                            successorCandidate.right.parent = successorCandidate.parent;
+                        }
+                        successorCandidate.right = nodeToRemove.right;
+                        successorCandidate.left = nodeToRemove.left;
+                        successorCandidate.balance = nodeToRemove.balance;
+                        successorCandidate.right.parent = successorCandidate;
+                        successorCandidate.left.parent = successorCandidate;
+                        if (nodeToRemove.parent != null)
+                        {
+                            if (nodeToRemove.parent.left == nodeToRemove)
+                            {
+                                nodeToRemove.parent.left = successorCandidate;
+                            } else
+                            {
+                                nodeToRemove.parent.right = successorCandidate;
+                            }
+                        } else
+                        {
+                            root = successorCandidate;
+                        }
+                        successorCandidate.parent = nodeToRemove.parent;
+                    } else
+                    {
+                        //
+                        // The successor was our child.  Just directly promote it.
+                        //
+                        if (nodeToRemove.parent != null)
+                        {
+                            if (nodeToRemove.parent.right == nodeToRemove)
+                            {
+                                nodeToRemove.parent.right = successorCandidate;
+                            } else
+                            {
+                                nodeToRemove.parent.left = successorCandidate;
+                            }
+                        } else
+                        {
+                            root = successorCandidate;
+                        }
+                        successorCandidate.parent = nodeToRemove.parent;
+                        successorCandidate.left = nodeToRemove.left;
+                        if (nodeToRemove.left != null)
+                        {
+                            nodeToRemove.left.parent = successorCandidate;
+                        }
+                        //
+                        // We just made our right subtree shorter.
+                        //
+                        successorCandidate.balance = nodeToRemove.balance;
+                        shorterRoot = successorCandidate;
+                        shorterSide = Node.Balance.AVLRight;
+                    }
+                    if (shorterRoot != null)
+                    {
+                        gotOneShorter(shorterRoot, shorterSide);
+                    }
+                } // Whether nodeToRemove has right only, left only or both children
+            } // Delete
+
+            void gotOneShorter(Node node, Node.Balance whichSide)
+            {
+                if (node.balance == Node.Balance.AVLBalanced)
+                {
+                    //
+                    // We've just shrunk one subttree, but our depth has stayed the same.
+                    // Reset our balance indicator and punt.
+                    //
+                    if (whichSide == Node.Balance.AVLRight)
+                    {
+                        node.balance = Node.Balance.AVLLeft;
+                    } else
+                    {
+                        node.balance = Node.Balance.AVLRight;
+                    }
+                    return;
+                } else if (node.balance == whichSide)
+                {
+                    //
+                    // We just shrunk our heavy side; set our balance to neutral and recurse up the tree
+                    //
+                    node.balance = Node.Balance.AVLBalanced;
+                    if (node.parent != null)
+                    {
+                        if (node.parent.right == node)
+                        {
+                            gotOneShorter(node.parent, Node.Balance.AVLRight);
+                        } else
+                        {
+                            gotOneShorter(node.parent, Node.Balance.AVLLeft);
+                        }
+                    } // else we were the root and we're done.
+                    return;
+                } else
+                {
+                    //
+                    // We've just gone out of balance.  Figure out a rotation to do.  This is almost like having added a
+                    // node to the opposide side, except that the opposite side might be balanced.
+                    //
+                    Node.Balance heavySide;
+                    Node heavyChild;
+                    Node replacement;
+
+                    if (whichSide == Node.Balance.AVLRight)
+                    {
+                        heavySide = Node.Balance.AVLLeft;
+                        heavyChild = node.left;
+                    } else
+                    {
+                        heavySide = Node.Balance.AVLRight;
+                        heavyChild = node.right;
+                    }
+
+                    if (heavyChild.balance == heavySide)
+                    {
+                        //
+                        // Typical single rotation case
+                        //
+                        singleRotate(node, heavyChild, heavySide);
+                        replacement = heavyChild;
+                    } else if (heavyChild.balance == whichSide)
+                    {
+                        //
+                        // Typical double rotation case.
+                        //
+                        Node grandchild;
+                        if (heavySide == Node.Balance.AVLRight)
+                        {
+                            grandchild = heavyChild.left;
+                        } else
+                        {
+                            grandchild = heavyChild.right;
+                        }
+
+                        doubleRotate(node, heavyChild, grandchild, heavySide);
+                        replacement = grandchild;
+                    } else
+                    {
+                        singleRotate(node, heavyChild, heavySide);
+                        //
+                        // singleRotate has incorrectly set the balances; reset them.
+                        //
+                        node.balance = heavySide;
+                        heavyChild.balance = whichSide;
+                        // Overall depth hasn't changed; we're done.
+                        return;
+                    }
+
+                    // NB: we have now changed position in the tree, so parent, right & left have changed!
+                    if (replacement.parent == null)
+                    {
+                        return;
+                    }
+
+                    if (replacement.parent.right == replacement)
+                    {
+                        gotOneShorter(replacement.parent, Node.Balance.AVLRight);
+                    } else
+                    {
+                        gotOneShorter(replacement.parent, Node.Balance.AVLLeft);
+                    }
+                }
+            } // gotOneShorter
+
+            Node root = null;
+            int inserts = 0;
+            int deletes = 0;
+
+        } // AVLTree
+
 
     } // ASETools
 }
