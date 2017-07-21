@@ -445,8 +445,6 @@ namespace ExpressionByMutationCount
 
             int missingCount = cases.Where(caseEntry => (forAlleleSpecificExpression ? caseEntry.Value.tumor_allele_specific_gene_expression_filename : caseEntry.Value.gene_expression_filename) == "").Count();
 
-
-
             var casesToProcess = new List<ASETools.Case>();
             foreach (var caseEntry in cases)
             {
@@ -529,7 +527,7 @@ Console.WriteLine("lock: " + lockMilliseconds + "ms; read: " + readMilliseconds 
             {
                 var geneToProcess = geneToProcessEntry.Value;
 
-                var perGeneLinesFile = StreamWriter.Null; /* ASETools.CreateStreamWriterWithRetry(configuration.regionalExpressionDirectory + geneToProcess.hugo_symbol.ToLower() + (forAlleleSpecificExpression ? "_allele_specific" : "") + "_lines.txt");*/
+                var perGeneLinesFile = ASETools.CreateStreamWriterWithRetry(configuration.regionalExpressionDirectory + geneToProcess.hugo_symbol.ToLower() + (forAlleleSpecificExpression ? "_allele_specific" : "") + "_lines.txt");
                 perGeneLinesFile.Write("Case ID\tdisease abbr.\tHugo Symbol\tMutation Count");
 
                 foreach (var exclusive in ASETools.BothBools)
