@@ -769,6 +769,8 @@ namespace ASELib
 			public string normal_methylation_file_id = "";
 			public string tumor_copy_number_file_id = "";
 			public string normal_copy_number_file_id = "";
+			public string tumor_fpkm_file_id = "";
+			public string normal_fpkm_file_id = "";
 			public string project_id;   // This is TCGA_<DiseaseType> for TCGA.
             public List<string> sample_ids = new List<string>();
 
@@ -784,6 +786,8 @@ namespace ASELib
 			public string normal_methylation_filename = "";
 			public string tumor_copy_number_filename = "";
 			public string normal_copy_number_filename = "";
+			public string tumor_fpkm_filename = "";
+			public string normal_fpkm_filename = "";
 
 			//
 			// Sizes for downloaded files.
@@ -796,7 +800,8 @@ namespace ASELib
 			public long normal_methylation_size = 0;
 			public long tumor_copy_number_size = 0;
 			public long normal_copy_number_size = 0;
-
+			public long tumor_fpkm_size = 0;
+			public long normal_fpkm_size = 0;
 
 			//
 			// Pathnames for derived files.
@@ -846,6 +851,8 @@ namespace ASELib
 			public string normal_methylation_file_md5 = "";
 			public string tumor_copy_number_file_md5 = "";
 			public string normal_copy_number_file_md5 = "";
+			public string tumor_fpkm_file_md5 = "";
+			public string normal_fpkm_file_md5 = "";
 
 			//
 			// The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
@@ -974,6 +981,8 @@ namespace ASELib
 				new FieldInformation("Normal Methylation File ID",                          c => c.normal_methylation_file_id, (c,v) => c.normal_methylation_file_id = v),
 				new FieldInformation("Tumor Copy Number File ID",                           c => c.tumor_copy_number_file_id, (c,v) => c.tumor_copy_number_file_id = v),
 				new FieldInformation("Normal Copy Number File ID",                          c => c.normal_copy_number_file_id, (c,v) => c.normal_copy_number_file_id = v),
+				new FieldInformation("Tumor FPKM File ID",									c => c.tumor_fpkm_file_id, (c,v) => c.tumor_fpkm_file_id = v),
+				new FieldInformation("Normal FPKM File ID",									c => c.normal_fpkm_file_id, (c,v) => c.normal_fpkm_file_id = v),
 				new FieldInformation("Project ID",                                          c => c.project_id, (c,v) => c.project_id = v),
                 new FieldInformation("Sample IDs",                                          c => c.sampleIdsInCommaSeparatedList(), (c,v) => c.sample_ids = v.Split(',').ToList()),
 
@@ -985,6 +994,8 @@ namespace ASELib
 				new FieldInformation("Normal Methylation Filename",                         c => c.normal_methylation_filename, (c,v) => c.normal_methylation_filename = v),
 				new FieldInformation("Tumor Copy Number Filename",                          c => c.tumor_copy_number_filename, (c,v) => c.tumor_copy_number_filename = v),
 				new FieldInformation("Normal Copy Number Filename",                         c => c.normal_copy_number_filename, (c,v) => c.normal_copy_number_filename = v),
+				new FieldInformation("Tumor FPKM Filename",									c => c.tumor_fpkm_filename, (c,v) => c.tumor_fpkm_filename = v),
+				new FieldInformation("Normal FPKM Filename",								c => c.normal_fpkm_filename, (c,v) => c.normal_fpkm_filename = v),
 				new FieldInformation("MAF Filename",                                        c => c.maf_filename, (c,v) => c.maf_filename = v),
 
                 new FieldInformation("Normal DNA Size",                                     c => Convert.ToString(c.normal_dna_size), (c,v) => c.normal_dna_size = LongFromString(v)),
@@ -995,6 +1006,8 @@ namespace ASELib
 				new FieldInformation("Normal Methylation Size",                             c => Convert.ToString(c.normal_methylation_size), (c,v) => c.normal_methylation_size = LongFromString(v)),
 				new FieldInformation("Tumor Copy Number Size",                              c => Convert.ToString(c.tumor_copy_number_size), (c,v) => c.tumor_copy_number_size = LongFromString(v)),
 				new FieldInformation("Normal Copy Number Size",                             c => Convert.ToString(c.normal_copy_number_size), (c,v) => c.normal_copy_number_size = LongFromString(v)),
+				new FieldInformation("Tumor FPKM Size",										c => Convert.ToString(c.tumor_fpkm_size), (c,v) => c.tumor_fpkm_size = LongFromString(v)),
+				new FieldInformation("Normal FPKM Size",									c => Convert.ToString(c.normal_fpkm_size), (c,v) => c.normal_fpkm_size = LongFromString(v)),
 
 				new FieldInformation("Normal DNA Allcount Filename",                        c => c.normal_dna_allcount_filename, (c,v) => c.normal_dna_allcount_filename = v, DerivedFile.Type.NormalDNAAllcount, normalDNAAllcountExtension, c => c.normal_dna_file_id),
                 new FieldInformation("Tumor DNA Allcount Filename",                         c => c.tumor_dna_allcount_filename, (c,v) => c.tumor_dna_allcount_filename = v, DerivedFile.Type.TumorDNAAllcount, tumorDNAAllcountExtension, c => c.tumor_dna_file_id),
@@ -1036,6 +1049,8 @@ namespace ASELib
 				new FieldInformation("Normal Methylation MD5",                              c => c.normal_methylation_file_md5, (c,v) => c.normal_methylation_file_md5 = v),
 				new FieldInformation("Tumor Copy Number MD5",                               c => c.tumor_copy_number_file_md5, (c,v) => c.tumor_copy_number_file_md5 = v),
 				new FieldInformation("Normal Copy Number MD5",                              c => c.normal_copy_number_file_md5, (c,v) => c.normal_copy_number_file_md5 = v),
+					new FieldInformation("Tumor FPKM MD5",                               c => c.tumor_fpkm_file_md5, (c,v) => c.tumor_fpkm_file_md5 = v),
+				new FieldInformation("Normal FPKM MD5",                              c => c.normal_fpkm_file_md5, (c,v) => c.normal_fpkm_file_md5 = v),
 
 			}; // fieldInformation
 
@@ -1202,6 +1217,24 @@ namespace ASELib
 					normal_copy_number_filename = "";
 				}
 
+				if (tumor_fpkm_file_id != "" && downloadedFiles.ContainsKey(tumor_fpkm_file_id))
+				{
+					tumor_fpkm_filename = downloadedFiles[tumor_fpkm_file_id].fileInfo.FullName;
+				}
+				else
+				{
+					tumor_fpkm_filename = "";
+				}
+
+				if (normal_fpkm_file_id != "" && downloadedFiles.ContainsKey(normal_fpkm_file_id))
+				{
+					normal_fpkm_filename = downloadedFiles[normal_fpkm_file_id].fileInfo.FullName;
+				}
+				else
+				{
+					normal_fpkm_filename = "";
+				}
+
 				if (!derivedFiles.ContainsKey(case_id))
                 {
                     tumor_rna_allcount_filename = "";
@@ -1353,7 +1386,7 @@ namespace ASELib
             public List<string> programNames = new List<string>();
             public string binariesDirectory = defaultBaseDirectory + @"bin\";
             public string configuationFilePathname = defaultConfigurationFilePathame;
-            public string casesFilePathname = defaultBaseDirectory + "cases.txt";
+            public string casesFilePathname = defaultBaseDirectory + "cases_fpkm.txt";
             public string indexDirectory = defaultBaseDirectory + @"indices\hg38-20";
             public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
             public string hpcScriptFilename = "";    // The empty string says to black hole this script
