@@ -195,8 +195,7 @@ namespace MethylationByMutationCount
 				return;
 			}
 
-			// TODO AM
-			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname).Select(r => r.Value).Take(4).ToList();
+			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname).Select(r => r.Value).ToList();
 			
 			// shuffle cases to avoid contention among other tasks
 			Shuffle<ASETools.Case>(cases);
