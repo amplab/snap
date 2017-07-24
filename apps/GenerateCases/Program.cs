@@ -224,8 +224,10 @@ namespace GenerateCases
 
             var cases = new Dictionary<string, ASETools.Case>();
 
+			// Load in old cases to get old maf lines
+			var pastCases = ASETools.Case.LoadCases(@"\\msr-genomics-0\d$\gdc\cases.txt");
 
-            const string mafCondition = "{\"op\":\"in\",\"content\":{\"field\":\"data_format\",\"value\":[\"MAF\"]}}";
+			const string mafCondition = "{\"op\":\"in\",\"content\":{\"field\":\"data_format\",\"value\":[\"MAF\"]}}";
             const string bamOrTxtCondition = "{\"op\":\"in\",\"content\":{\"field\":\"data_format\",\"value\":[\"BAM\",\"TXT\"]}}";
  
             foreach (var caseEntry in allCases)
@@ -456,7 +458,12 @@ namespace GenerateCases
 
                 } // forever (looping over file pagination)
 
-                var mafFileIds = maf.Select(x => x.file_id);
+				// This is commented out because the MAF files from the TCGA server
+				// are now 7.0, and we are running on 6.0
+				//var mafFileIds = maf.Select(x => x.file_id);
+
+				// get old maf file ids
+				var mafFileIds = pastCases.Where(r => r.Value.case_id == gdcCase.case_id).Select(r => r.Value.maf_file_id);
 
                 if (tumorDNA.Count() == 0)
                 {
