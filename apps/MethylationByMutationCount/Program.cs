@@ -61,20 +61,9 @@ namespace MethylationByMutationCount
 				}
 
 				var methylationData = ASETools.AnnotationLine.ReadFile(case_.tumor_methylation_filename, case_.tumor_methylation_file_id, false);
-				var annotatedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
 
 				foreach (var hugoSymbol in hugoSymbols)
 				{
-					// filter for loss of heterozygosity
-					var variantsForHugo = annotatedVariants.Where(r => r.Hugo_symbol == hugoSymbol)
-							.Where(r => r.tumorDNAReadCounts.nMatchingReference * 3 >= r.tumorDNAReadCounts.nMatchingAlt * 2
-										&& r.tumorDNAReadCounts.nMatchingAlt * 3 >= r.tumorDNAReadCounts.nMatchingReference * 2);
-
-					if (variantsForHugo.Count() == 0)
-					{
-						continue;
-					}
-
 					lock (methylationValues)
 					{
 						Dictionary<string, Dictionary<string, double>> values;
@@ -136,20 +125,9 @@ namespace MethylationByMutationCount
 				}
 
 				var regionalSignals = ASETools.RegionalSignalFile.ReadFile(filename, true, true);
-				var annotatedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
 
 				foreach (var hugoSymbol in hugoSymbols)
 				{
-					// filter for loss of heterozygosity
-					var variantsForHugo = annotatedVariants.Where(r => r.Hugo_symbol == hugoSymbol)
-							.Where(r => r.tumorDNAReadCounts.nMatchingReference * 3 >= r.tumorDNAReadCounts.nMatchingAlt * 2
-										&& r.tumorDNAReadCounts.nMatchingAlt * 3 >= r.tumorDNAReadCounts.nMatchingReference * 2);
-
-					if (variantsForHugo.Count() == 0)
-					{
-						continue;
-					}
-
 					lock (values)
 					{
 						Dictionary<string, int> mutationValue;
@@ -269,7 +247,7 @@ namespace MethylationByMutationCount
 
 			foreach (var hugoSymbol in hugoSymbols)
 			{
-				var outputFilename = configuration.finalResultsDirectory + hugoSymbol + "test.txt";
+				var outputFilename = configuration.finalResultsDirectory + hugoSymbol + ".txt";
 
 				var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
 
