@@ -104,27 +104,30 @@ namespace MethylationByMutationCount
 		}
 
 
-		static void loadRegionalSignal(List<Tuple<string, string>> idsAndFilenames, List<string> hugoSymbols,
-			Tuple<Dictionary<string, Dictionary<string, int>>, Dictionary<string, Dictionary<string, double>>> values)
+		static void loadRegionalSignal(List<ASETools.Case> cases, 
+			List<string> hugoSymbols,
+			Tuple<Dictionary<string, Dictionary<string, int>>, 
+				Dictionary<string, Dictionary<string, double>>> values,
+			Boolean forAlleleSpecificExpression)
 		{
 			while (true)
 			{
-				string id;
-				string filename;
-				lock (idsAndFilenames)
+				ASETools.Case case_;
+				lock (cases)
 				{
-					if (idsAndFilenames.Count() == 0)
+					if (cases.Count() == 0)
 					{
 						//
 						// No more work, we're done.
 						//
 						return;
 					}
-					id = idsAndFilenames[0].Item1;
-					filename = idsAndFilenames[0].Item2;
+					case_ = cases[0];
 
-					idsAndFilenames.RemoveAt(0);
+					cases.RemoveAt(0);
 				}
+
+				var filename = forAlleleSpecificExpression ? case_.tumor_allele_specific_gene_expression_filename : case_.gene_expression_filename;
 
 				if (filename == "")
 				{
@@ -133,9 +136,19 @@ namespace MethylationByMutationCount
 				}
 
 				var regionalSignals = ASETools.RegionalSignalFile.ReadFile(filename, true, true);
+				var annotatedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
 
 				foreach (var hugoSymbol in hugoSymbols)
 				{
+					// filter for loss of heterozygosity
+					var variantsForHugo = annotatedVariants.Where(r => r.Hugo_symbol == hugoSymbol)
+							.Where(r => r.tumorDNAReadCounts.nMatchingReference * 3 >= r.tumorDNAReadCounts.nMatchingAlt * 2
+										&& r.tumorDNAReadCounts.nMatchingAlt * 3 >= r.tumorDNAReadCounts.nMatchingReference * 2);
+
+					if (variantsForHugo.Count() == 0)
+					{
+						continue;
+					}
 
 					lock (values)
 					{
@@ -157,11 +170,11 @@ namespace MethylationByMutationCount
 						lock (values.Item2)
 						{
 
-							values.Item2[hugoSymbol].Add(id, hugoData[1]);
+							values.Item2[hugoSymbol].Add(case_.case_id, hugoData[1]);
 						}
 						lock (values.Item1)
 						{
-							values.Item1[hugoSymbol].Add(id, Convert.ToInt32(hugoData[0]));
+							values.Item1[hugoSymbol].Add(case_.case_id, Convert.ToInt32(hugoData[0]));
 						}
 					}
 				}
@@ -204,7 +217,8 @@ namespace MethylationByMutationCount
 				return;
 			}
 
-			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname).Select(r => r.Value).ToList();
+			// TODO AM
+			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname).Select(r => r.Value).Take(4).ToList();
 			
 			// shuffle cases to avoid contention among other tasks
 			Shuffle<ASETools.Case>(cases);
@@ -221,19 +235,20 @@ namespace MethylationByMutationCount
 			}
 
 			// load ase values for all
-			var aseIdsAndFilenames = cases.Select(r => 
-				new Tuple<string, string>(r.case_id, r.tumor_allele_specific_gene_expression_filename)).ToList();
+			var aseCases = cases.ToList();
+			Shuffle<ASETools.Case>(aseCases);
 
 			var threads = new List<Thread>();
 			for (int i = 0; i < Environment.ProcessorCount / 3; i++)
 			{
-				threads.Add(new Thread(() => loadRegionalSignal(aseIdsAndFilenames, hugoSymbols, aseValues)));
+				threads.Add(new Thread(() => loadRegionalSignal(aseCases, hugoSymbols, aseValues, true)));
 			}
 
 			var mutationCounts = aseValues.Item1;
 
 			// load methylation
 			var methylationCases = cases.ToList();
+			Shuffle<ASETools.Case>(methylationCases);
 
 			for (int i = 0; i < Environment.ProcessorCount / 3; i++)
 			{
@@ -241,14 +256,13 @@ namespace MethylationByMutationCount
 			}
 
 			// load expression
-			var expIdsAndFilenames = cases.Select(r => 
-				new Tuple<string, string>(r.case_id, r.gene_expression_filename)).ToList();
+			var expCases = cases.ToList();
+			Shuffle<ASETools.Case>(expCases);
 
 			for (int i = 0; i < Environment.ProcessorCount / 3; i++)
 			{
-				threads.Add(new Thread(() => loadRegionalSignal(expIdsAndFilenames, hugoSymbols, expressionValues)));
+				threads.Add(new Thread(() => loadRegionalSignal(expCases, hugoSymbols, expressionValues, false)));
 			}
-
 
 			threads.ForEach(t => t.Start());
 			threads.ForEach(t => t.Join());
