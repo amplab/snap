@@ -122,13 +122,20 @@ namespace RegionalSignalByDistance
 			var hugoSymbol = configuration.commandLineArgs[0];
 			binSize = Convert.ToInt32(configuration.commandLineArgs[1]);
 
-			var knownGenes = ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename);
-			var thisGene = knownGenes.Where(r => r.Value.hugoSymbol == hugoSymbol).ToList();
-			if (thisGene.Count() == 0)
+			var knownGenes = ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename)
+				.Where(r => !r.Value.inconsistent).ToList(); 
+
+			var matchingGenes = knownGenes.Where(r => r.Value.hugoSymbol == hugoSymbol);
+
+			if (matchingGenes.Count() == 0)
 			{
 				Console.WriteLine("Invalid Hugo Symbol " + hugoSymbol);
 				return;
 			}
+
+			var thisGene = matchingGenes.First();
+			// get other genes on this chromosome
+			var genesOnSameChr = knownGenes.Where(r => r.Value.chromosome == thisGene.Value.chromosome);
 
 			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
@@ -136,15 +143,12 @@ namespace RegionalSignalByDistance
 			var threads = new List<Thread>();
 			for (int i = 0; i < Environment.ProcessorCount; i++)
 			{
-				threads.Add(new Thread(() => ProcessCases(selectedCases, thisGene[0].Value)));
+				threads.Add(new Thread(() => ProcessCases(selectedCases, thisGene.Value)));
 			}
 
 			threads.ForEach(t => t.Start());
 			threads.ForEach(t => t.Join());
 
-
-			// End result: for each sample:
-			// mutationCount, disease: 0dist ASE, 1000dist ASE ....
 
 			// open file 
 			var outputFilename = configuration.finalResultsDirectory + hugoSymbol + @"_alleleSpecificExpressionByDistance.txt";
@@ -157,19 +161,30 @@ namespace RegionalSignalByDistance
 			// get max bin for this chromosome
 			int maxBin = aseValues.Select(r => r.Value).SelectMany(r => r.Keys).Max();
 
-			// get center bp of gene
-			var geneCenter = (thisGene[0].Value.maxLocus - thisGene[0].Value.minLocus) / 2 + thisGene[0].Value.minLocus;
 
+			// write out genes
+			for (var i = 0; i <= maxBin; i += binSize)
+			{
+				// if there are genes that overlap this bin, then print them out
+				var overlappingGenes = genesOnSameChr.Where(r => r.Value.overlapsRange(r.Value.chromosome, i, i + binSize))
+					.Select(r => r.Value.hugoSymbol);
+
+				if (matchingGenes.Count() > 0)
+				{
+					writer.Write("\t" + String.Join(",", overlappingGenes));
+				} else {
+					writer.Write("\t");
+				}
+
+			}
+			writer.WriteLine();
+
+			// write out location. Two empty spots for Mutation and Disease
+			writer.Write("\t");
 
 			for (var i = 0; i <= maxBin; i += binSize)
 			{
-				var binCenter = i + binSize / 2;
-
-
-				// get distance from center of gene to center of bin
-				var distance = Math.Abs(geneCenter - binCenter);
-
-				writer.Write("\t" + distance);
+				writer.Write("\t" + i);
 			}
 			writer.WriteLine();
 

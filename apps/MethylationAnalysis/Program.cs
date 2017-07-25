@@ -190,20 +190,14 @@ namespace MethylationAnalysis
 
 
 				// verify methylation file exists
-				if (case_.tumor_methylation_filename == "" || case_.extracted_maf_lines_filename == "")
+				if (!case_.tumor_methylation_filename.Contains("HumanMethylation450") || case_.extracted_maf_lines_filename == "")
 				{
 					Console.WriteLine("No tumor methylation data for case " + case_.case_id + ". Skipping...");
+					continue;
 				}
-				else
-				{
-					// process only tumor files
-					ProcessFile(case_, true, gene);
+				// process only tumor files
+				ProcessFile(case_, true, gene);
 
-					if (case_.normal_methylation_filename != "")
-					{
-						//ProcessFile(case_, false, gene);
-					}
-				}
 			}
 		}
 
@@ -334,13 +328,7 @@ namespace MethylationAnalysis
 
 			var selectedCases = cases.Select(kv => kv.Value).ToList();
 
-			var methyl_dir = @"\\msr-genomics-0\d$\gdc\methyl_temp\";
-
-			// Compute file for all overlapping REFs
-			// TODO move this to process manager
-			// var case_27 = cases.Where(r => r.Value.tumor_methylation_filename.Contains("HumanMethylation27")).First().Value;
-			// var case_450 = cases.Where(r => r.Value.tumor_methylation_filename.Contains("HumanMethylation450")).First().Value;
-			// processCompositeREFs(case_27, case_450);
+			var methyl_dir = @"\\msr-genomics-0\d$\gdc\bisulfate\methylationSites\";
 
 			// read in file of valid Composite REFs for methylation data
 			compositeREFs = ASETools.CompositeREFInfoLine.ReadFile(ASETools.Configuration.methylationREFsFilename).ToDictionary(x => x.Key, x => x.Value);
@@ -358,30 +346,25 @@ namespace MethylationAnalysis
 
 			var targetDisease = "all";
 
-			// Write file for B and M values and methylation counts
-			var bValueFilename =  methyl_dir + "BVALUEMATRIX_" + targetDisease + ".txt";
-			var mValueFilename = methyl_dir + "MVALUEMATRIX_" + targetDisease + ".txt";
+			var compositeRefsFilename =  methyl_dir + "CompositeMatrix_" + targetDisease + ".txt";
 
-			var countMutationFilename = methyl_dir + "COUNTMUTATIONMATRIX_" + targetDisease + ".txt";
+			var countMutationFilename = methyl_dir + "mutationCounts_" + targetDisease + ".txt";
 
-			var bOutputFile = ASETools.CreateStreamWriterWithRetry(bValueFilename);
-			var mOutputFile = ASETools.CreateStreamWriterWithRetry(mValueFilename);
+			var compositeRefsFile = ASETools.CreateStreamWriterWithRetry(compositeRefsFilename);
 
 			// Write header: all file ids
 			var caseIds = fileInfo.Keys.ToList();
 			caseIds.Sort();
 
 			var header = "Composite_REF\t" + String.Join("\t", caseIds);
-			bOutputFile.WriteLine(header);
-			mOutputFile.WriteLine(header);
+			compositeRefsFile.WriteLine(header);
 
 			// write out caseMethylation lines to file
 			foreach (KeyValuePair<string, List<Tuple<string, double>>> entry in casesMethylation)
 			{
 
 				// write all Beta-values for this composite REF
-				bOutputFile.Write(entry.Key);
-				mOutputFile.Write(entry.Key);
+				compositeRefsFile.Write(entry.Key);
 
 				// dictionary of (case id, beta values) for this REF
 				var casesForREF = entry.Value.ToDictionary(x => x.Item1, x => x.Item2);
@@ -390,21 +373,17 @@ namespace MethylationAnalysis
 				{
 					// if case was found for this ref, put in value. Otherwise, assign 'NA'.
 					if (casesForREF.ContainsKey(case_id)) {
-						bOutputFile.Write("\t" + casesForREF[case_id]);
-						mOutputFile.Write("\t" + ASETools.AnnotationLine.betaToM(casesForREF[case_id]));
+						compositeRefsFile.Write("\t" + casesForREF[case_id]);
 					} else {
-						bOutputFile.Write("\tna");
-						mOutputFile.Write("\tna");
+						compositeRefsFile.Write("\tna");
 					}
 				}
 
-				bOutputFile.WriteLine();
-				mOutputFile.WriteLine();
+				compositeRefsFile.WriteLine();
 
 			}
 
-			bOutputFile.Close();
-			mOutputFile.Close();
+			compositeRefsFile.Close();
 
 			// write out mutations
 			var countOutputFile = ASETools.CreateStreamWriterWithRetry(countMutationFilename);
