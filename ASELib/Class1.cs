@@ -1379,6 +1379,7 @@ namespace ASELib
 
 			public const string defaultGenomeBuild = "hg38";
 			public const string defaultGeneLocationInformationFilename = defaultBaseDirectory + "knownGene-" + defaultGenomeBuild + ".txt";
+			public const string defaultEnsemblToGeneFilename = @"\\msr-genomics-0\d$\gdc\ensemblGeneNames.txt"; 
 
             public List<string> dataDirectories = new List<string>();
             public string mafManifestPathname = defaultBaseDirectory + "mafManifest.txt";
@@ -7340,6 +7341,81 @@ namespace ASELib
             int deletes = 0;
 
         } // AVLTree
+
+
+		public class EnsembleGeneFile
+		{
+
+			static Tuple<string, string> ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
+			{
+				var ensemblId = fields[fieldMappings["Gene stable ID"]];
+				var geneName = fields[fieldMappings["Gene name"]];
+
+				return new Tuple<string, string>(ensemblId, geneName);
+			}
+
+			public static Dictionary<string, string> ReadFile(string filename)
+			{
+				StreamReader inputFile = CreateStreamReaderWithRetry(filename);
+
+				var wantedFields = new List<string>();
+				wantedFields.Add("Gene stable ID");
+				wantedFields.Add("Gene name");
+
+				var headerizedFile = new HeaderizedFile<Tuple<string, string>>(inputFile, false, false, "", wantedFields);
+
+				List<Tuple<string, string>> linesFromThisFile;
+
+				headerizedFile.ParseFile(ParseLine, out linesFromThisFile);
+
+				return linesFromThisFile.ToDictionary(r => r.Item1, r => r.Item2);
+			} 
+		}
+
+		public class FPKMFile
+		{
+
+			public static Dictionary<string, double> ReadFile(string filename)
+			{
+				// first, load in default ensembl id => gene names
+				var idMap = EnsembleGeneFile.ReadFile(ASETools.Configuration.defaultEnsemblToGeneFilename);
+
+				StreamReader inputFile;
+
+				if (filename.Count() > 2 && filename.Substring(filename.Count() - 3, 3) == ".gz")
+				{
+					inputFile = CreateCompressedStreamReaderWithRetry(filename);
+				}
+				else
+				{
+					inputFile = CreateStreamReaderWithRetry(filename);
+				}
+
+				var result = new Dictionary<string, double>();
+
+				string line;
+				while ((line = inputFile.ReadLine()) != null)
+				{
+					var split = line.Split('\t');
+					var ens_id = split[0].Split('.').First();
+					var fpkm = Convert.ToDouble(split[1]);
+
+					string geneName;
+					if (idMap.TryGetValue(ens_id, out geneName))
+					{
+						// there are some inconsistent genes appearing more than once
+						if (!result.ContainsKey(geneName))
+						{
+							result.Add(geneName, fpkm);
+						}
+					}
+				}
+
+				inputFile.Close();
+				return result;
+			}
+
+		}
 
 
     } // ASETools
