@@ -85,11 +85,10 @@ obj
 /apps/ExtractBisulfiteReads/bin
 /apps/MethylationDistributionPromotors/bin
 /apps/MethylationByMutationCount/bin
+/apps/FindSignificantGenes/bin
 /apps/ApplyBonferonniCorrection/bin
 /tests/AVLTest/bin
-
-
-
+/tests/MannWhitneyTest/bin
 
 
 

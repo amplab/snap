@@ -30,10 +30,12 @@ namespace MethylationByMutationCount
 			new Tuple<Dictionary<string, Dictionary<string, int>>, Dictionary<string, Dictionary<string, double>>>(new Dictionary<string, Dictionary<string, int>>(), new Dictionary<string, Dictionary<string, double>>());
 
 
-		// first is mutations, second is values
-		static Tuple<Dictionary<string, Dictionary<string, int>>, Dictionary<string, Dictionary<string, double>>> expressionValues =
-			new Tuple<Dictionary<string, Dictionary<string, int>>, Dictionary<string, Dictionary<string, double>>>(new Dictionary<string, Dictionary<string, int>>(), new Dictionary<string, Dictionary<string, double>>());
-
+		//// first is mutations, second is values
+		//static Tuple<Dictionary<string, Dictionary<string, int>>, Dictionary<string, Dictionary<string, double>>> expressionValues =
+		//	new Tuple<Dictionary<string, Dictionary<string, int>>, Dictionary<string, Dictionary<string, double>>>(new Dictionary<string, Dictionary<string, int>>(), new Dictionary<string, Dictionary<string, double>>());
+		// dictionary of hugosymbol, dictionary of case id, FPKM
+		static Dictionary<string, Dictionary<string, double>> expressionValues =
+			new Dictionary<string, Dictionary<string, double>>();
 
 		static void loadMethylation(List<ASETools.Case> cases, List<string> hugoSymbols)
 		{
@@ -130,12 +132,14 @@ namespace MethylationByMutationCount
 				{
 					lock (values)
 					{
+						// make a spot for this gene in the dictionary of mutation counts
 						Dictionary<string, int> mutationValue;
 						if (!values.Item1.TryGetValue(hugoSymbol, out mutationValue))
 						{
 							values.Item1.Add(hugoSymbol, new Dictionary<string, int>());
 						}
 
+						// make a spot for this gene in the signal dictionary
 						Dictionary<string, double> signalValue;
 						if (!values.Item2.TryGetValue(hugoSymbol, out signalValue))
 						{
@@ -147,11 +151,12 @@ namespace MethylationByMutationCount
 					{
 						lock (values.Item2)
 						{
-
+							// add regional signal at gene
 							values.Item2[hugoSymbol].Add(case_.case_id, hugoData[1]);
 						}
 						lock (values.Item1)
 						{
+							// add mutation count for gene
 							values.Item1[hugoSymbol].Add(case_.case_id, Convert.ToInt32(hugoData[0]));
 						}
 					}
@@ -159,6 +164,60 @@ namespace MethylationByMutationCount
 			}
 		}
 
+
+		static void loadFPKM(List<ASETools.Case> cases,
+				List<string> hugoSymbols, Dictionary<string, Dictionary<string, double>> values)
+		{
+			while (true)
+			{
+				ASETools.Case case_;
+				lock (cases)
+				{
+					if (cases.Count() == 0)
+					{
+						//
+						// No more work, we're done.
+						//
+						return;
+					}
+					case_ = cases[0];
+
+					cases.RemoveAt(0);
+				}
+
+				var filename = case_.tumor_fpkm_filename;
+
+				if (filename == "")
+				{
+					// no data. continue
+					continue;
+				}
+
+				var regionalSignals = ASETools.FPKMFile.ReadFile(filename);
+
+				foreach (var hugoSymbol in hugoSymbols)
+				{
+					lock (values)
+					{
+
+						Dictionary<string, double> fpkm;
+						if (!values.TryGetValue(hugoSymbol, out fpkm))
+						{
+							values.Add(hugoSymbol, new Dictionary<string, double>());
+						}
+					}
+					double hugoData;
+					if (regionalSignals.TryGetValue(ASETools.ConvertToNonExcelString(hugoSymbol), out hugoData))
+					{
+						lock (values)
+						{
+
+							values[hugoSymbol].Add(case_.case_id, hugoData);
+						}
+					}
+				}
+			}
+		}
 
 		static void Shuffle<T>(IList<T> list)
 		{
@@ -215,6 +274,7 @@ namespace MethylationByMutationCount
 			var aseCases = cases.ToList();
 			Shuffle<ASETools.Case>(aseCases);
 
+			// load ase
 			var threads = new List<Thread>();
 			for (int i = 0; i < Environment.ProcessorCount / 3; i++)
 			{
@@ -238,7 +298,7 @@ namespace MethylationByMutationCount
 
 			for (int i = 0; i < Environment.ProcessorCount / 3; i++)
 			{
-				threads.Add(new Thread(() => loadRegionalSignal(expCases, hugoSymbols, expressionValues, false)));
+				threads.Add(new Thread(() => loadFPKM(expCases, hugoSymbols, expressionValues)));
 			}
 
 			threads.ForEach(t => t.Start());
@@ -254,20 +314,23 @@ namespace MethylationByMutationCount
 				var compositeREFs = methylationValues[hugoSymbol].Values.SelectMany(r => r.Keys).Distinct();
 
 				// write header
-				outputFile.WriteLine("Disease\tMutationCount\tASEValue\tExpressionValue\t" + String.Join("\t", compositeREFs));
+				outputFile.WriteLine("Id\tDisease\tMutationCount\tASEValue\tExpressionValue\t" + String.Join("\t", compositeREFs));
 
 				foreach (var case_ in cases)
 				{
-
-					// write mutation count
 					int mutationCount;
 					if (!mutationCounts[hugoSymbol].TryGetValue(case_.case_id, out mutationCount))
 					{
 						continue;
 					}
+
+					// write case id
+					outputFile.Write(case_.case_id + "\t");
+
 					// write disease
 					outputFile.Write(case_.disease() + "\t");
 
+					// write mutation count
 					outputFile.Write(mutationCount + "\t");
 
 					// write ASE
@@ -283,7 +346,7 @@ namespace MethylationByMutationCount
 					}
 
 					// write expression
-					if (expressionValues.Item2[hugoSymbol].TryGetValue(case_.case_id, out value) && value > Double.NegativeInfinity)
+					if (expressionValues[hugoSymbol].TryGetValue(case_.case_id, out value) && value > Double.NegativeInfinity)
 					{
 						outputFile.Write(value + "\t");
 					}
@@ -293,7 +356,7 @@ namespace MethylationByMutationCount
 					}
 
 
-					// write methylation
+					//// write methylation
 					Dictionary<string, double> methylationValue;
 					if (methylationValues[hugoSymbol].TryGetValue(case_.case_id, out methylationValue))
 					{
