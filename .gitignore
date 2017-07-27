@@ -87,6 +87,7 @@ obj
 /apps/MethylationByMutationCount/bin
 /apps/FindSignificantGenes/bin
 /apps/ApplyBonferonniCorrection/bin
+/apps/RegionalSignalByDistance/bin
 /tests/AVLTest/bin
 /tests/MannWhitneyTest/bin
 

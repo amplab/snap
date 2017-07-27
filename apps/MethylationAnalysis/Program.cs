@@ -6,132 +6,167 @@ using System.Threading.Tasks;
 using System.Threading;
 using System.IO;
 using ASELib;
-using ExpressionNearMutations;
-using GenomeBuild;
 
 namespace MethylationAnalysis
-
 {
+	class MethylationPoint : IComparer<MethylationPoint>
+	{
+		public string compositeREF;
+		public double mValue;
+		public bool isSingle;
+
+		public int Compare(MethylationPoint a, MethylationPoint b)
+		{
+			return xCompare(a, b);
+		}
+
+		static public int xCompare(MethylationPoint a, MethylationPoint b)
+		{
+			if (a.mValue > b.mValue) return 1;
+			if (a.mValue < b.mValue) return -1;
+			return 0;
+		}
+	}
 
 	class Program
 	{
-		static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
 
-		static Dictionary<string, List<GenomeBuild.Interval>> enhancers = new Dictionary<string, List<GenomeBuild.Interval>>();
+		// Dictionary storing methylation REF, where key is Composite Ref and Value is (case_id, M value) tuple
+		static Dictionary<string, List<Tuple<string, Double>>> casesMethylation = new Dictionary<string, List<Tuple<string, Double>>>();
 
-		static void ProcessFile(ASETools.Case case_, bool forTumor)
+		// Dictionary storing Composite REF information. Key is Composite REF, for which we store GeneLocationInfo tuples
+		static Dictionary<string, ASETools.GeneLocationInfo> compositeREFs = new Dictionary<string, ASETools.GeneLocationInfo>();
+
+		// Dictionary storing case data. Keys are case ids and values are (disease, label, arrayType) tuples
+		static Dictionary<string, Tuple<string, string, int>> fileInfo = new Dictionary<string, Tuple<string, string, int>>();
+
+		// dictionary of hugo symbol, (case id, mutation counts) tuples
+		static Dictionary<string, List<Tuple<string, int>>> mutationCounts = new Dictionary<string, List<Tuple<string, int>>>();
+
+		// lines to write to file
+		static List<ASETools.OutputLine> outputLines = new List<ASETools.OutputLine>();
+
+		// saves a list of Composite REFs from methylation files that overlap both 27k and 450k
+		public static void processCompositeREFs(ASETools.Case case_27k, ASETools.Case case_450k)
 		{
-			// select metadata whether processing normal or tumor methylation data
+			ProcessFile(case_27k, true);
+			ProcessFile(case_450k, true);
 
-			var methylation_filename = forTumor ? case_.tumor_methylation_filename : case_.normal_methylation_filename;
-			var methylation_file_id = forTumor ? case_.tumor_methylation_file_id : case_.normal_methylation_file_id;
+			// get REFs that are found in both the 27k anbd 450k files
+			var overlap = casesMethylation.Where(r => r.Value.Count() > 1).Select(r => r.Key).ToList();
 
-			// Load MAF file for this case
-			var mafLines = ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, case_.maf_file_id, false);
+			var intersectingREFs = new List<KeyValuePair<string, ASETools.GeneLocationInfo>>();
 
-		    Dictionary <string, ASETools.GeneExpression> geneExpressions = new Dictionary<string, ASETools.GeneExpression>();
-
-			// 2. for each gene in the genelocations, count the number of mutations and get the methylation values for this gene. These will be 
-			// used later.
-			// for each gene, count the methylation averages as you get farther and farther away from the gene (inc, chr, autosome)
-			foreach (var geneLocation in geneLocationInformation.genesByName.Values)
+			// add remaining CompositeREFs to list of merged
+			foreach (var compositeREF in overlap)
 			{
-				if (!geneExpressions.ContainsKey(geneLocation.hugoSymbol))
-				{
-					geneExpressions.Add(geneLocation.hugoSymbol, new ASETools.GeneExpression(geneLocation));
-				}
-
-				// get mutation counts from MAFLines
-				var mutationCount = mafLines.Where(r => r.Hugo_Symbol == geneLocation.hugoSymbol).Count();
-				geneExpressions[geneLocation.hugoSymbol].mutationCount += mutationCount;
+				intersectingREFs.Add(new KeyValuePair<string, ASETools.GeneLocationInfo>(compositeREF, compositeREFs[compositeREF]));
 			}
-			var expressionValues = new ExpressionNearMutations.Program.RegionalSignal(geneExpressions, geneLocationInformation, false);
+				
+		
+			Console.WriteLine(intersectingREFs.First());
 
-			// read in methylation file 
-			var annotations = ASETools.AnnotationLine.ReadFile(methylation_filename, methylation_file_id, false);
-			var initialCount = annotations.Count();
-			var count = 0;
+			// write intersecting refs to file
+			var outputFile = ASETools.CreateStreamWriterWithRetry(ASETools.Configuration.methylationREFsFilename);
 
-			var timer = new Stopwatch();
-			timer.Start();
+			// Write header
+			outputFile.WriteLine("CompositeREF\tChromosome\tPosition\tHugo Symbol\tPositionToTSS");
 
-			// filter out annotations that are not by an enhancer or promotor
-			var filteredAnnotations = new List<ASETools.AnnotationLine>();
-			var filteredCount = 0;
-			foreach (var r in annotations)
+			foreach (KeyValuePair<string, ASETools.GeneLocationInfo> entry in intersectingREFs)
 			{
-				filteredCount++;
-				List<GenomeBuild.Interval> chrEnhancers;
-				enhancers.TryGetValue(ASETools.chromosomeNameToNonChrForm(r.compositeREF.Chromosome), out chrEnhancers);
-				if (chrEnhancers != null)
-				{
-					if (r.compositeREF.Position_to_TSS.Average() <= 2000 ||
-					chrEnhancers.Where(x => x.overlaps(new GenomeBuild.Interval(ASETools.chromosomeNameToNonChrForm(r.compositeREF.Chromosome), r.compositeREF.Start, r.compositeREF.End))).Count() > 0
-					)
-					{
-						filteredAnnotations.Add(r);
-					}
-
-				}
-				else if (r.compositeREF.Position_to_TSS.Average() <= 2000)
-				{
-					filteredAnnotations.Add(r);
-				}
+				outputFile.WriteLine(entry.Key + "\t" + entry.Value.chromosome + "\t" + entry.Value.minLocus + "\t" + entry.Value.hugoSymbol);
 			}
 
+			outputFile.Close();
 
-			timer.Stop();
-
-			Console.WriteLine("Lost " + (initialCount - filteredAnnotations.Count()) + " annotations for case" + case_.case_id);
-
-			foreach (var annotation in filteredAnnotations)
-			{
-				count++;
-
-				if (count % 100000 == 0 && false)
-				{
-					Console.WriteLine("processed " + count + "annotations out of " + filteredAnnotations.Count());
-				}
-
-				// get non chr form
-				var chromosome = ASETools.chromosomeNameToNonChrForm(annotation.compositeREF.Chromosome);
-
-				// filter out regions in promotor and enhancer regions
-				expressionValues.Add(annotation.compositeREF.Chromosome, annotation.compositeREF.Start, annotation.M_Value, 0, false);
-
-			}
-
-			// Save values
-
-			var allExpressions = new List<ASETools.GeneExpression>();
-			foreach (var expressionEntry in expressionValues.geneExpressions)
-			{
-				allExpressions.Add(expressionEntry.Value);
-			}
-
-			allExpressions.Sort(ASETools.GeneExpression.CompareByGeneName);
-
-			string directory = ASETools.GetDirectoryPathFromFullyQualifiedFilename(case_.extracted_maf_lines_filename);
-
-			var extension = forTumor ? ASETools.tumorRegionalMethylationExtension : ASETools.normalRegionalMethylationExtension;
-			var outputFilename = directory + case_.case_id + extension;
-			Console.WriteLine("Saving to file " + outputFilename);
-
-			var fileHeader = "Methylation Analysis " + case_.case_id;
-			var output = new ASETools.RegionalSignalFile(fileHeader,
-					allExpressions,
-					expressionValues.wholeAutosomeRegionalExpression,
-					expressionValues.allButThisChromosomeAutosomalRegionalExpressionState,
-					expressionValues.perChromosomeRegionalExpressionState);
-
-			var columnSuffix = forTumor ? "tumor M-val" : "normal M-val";
-			var printMu = false;
-			var isTumor = true;
-			output.WriteFile(outputFilename, printMu, 1, columnSuffix, isTumor);
 		}
 
 
-		static void ProcessCases(List<ASETools.Case> cases)
+		static void ProcessFile(ASETools.Case case_, bool isTumor, string gene = null)
+		{
+			// select metadata whether processing normal or tumor methylation data
+			var label = isTumor?"Tumor":"Normal";
+			var methylation_filename = isTumor ? case_.tumor_methylation_filename : case_.normal_methylation_filename;
+			var methylation_file_id = isTumor ? case_.tumor_methylation_file_id : case_.normal_methylation_file_id;
+
+			var arrayType = methylation_filename.Contains("HumanMethylation450") ? 1 : 0;
+
+			// read in tumor methylation file 
+			var annotations = ASELib.ASETools.AnnotationLine.ReadFile(methylation_filename, methylation_file_id, false);
+
+			// add case to caseInfo
+			if (fileInfo.ContainsKey(case_.case_id))
+			{
+				Console.WriteLine("Error: already processed methylation file " + methylation_file_id + " for case " + case_.case_id);
+				return;
+			}
+
+			fileInfo.Add(case_.case_id, new Tuple<string, string, int>(case_.disease(), label, arrayType));
+
+			foreach (var annotation in annotations)
+			{
+				if (gene != null && annotation.compositeREF.Gene_Symbol[0] != gene) {
+					continue;
+				}
+
+				if (!compositeREFs.ContainsKey(annotation.compositeREF.Composite_Element_REF))
+				{
+					// Composite REF does not overlap REF intersection. Throw it away
+					continue;
+				}
+
+				Tuple<String, Double> d = new Tuple<String, Double>(case_.case_id, annotation.Beta_Value);
+
+				lock (casesMethylation)
+				{
+					if (!casesMethylation.ContainsKey(annotation.compositeREF.Composite_Element_REF))
+					{
+						// initialize file id to methylation
+						casesMethylation.Add(annotation.compositeREF.Composite_Element_REF, new List<Tuple<string, double>>());
+					}
+
+					// append annotation to existing REF
+					casesMethylation[annotation.compositeREF.Composite_Element_REF].Add(d);
+				}
+
+			}
+
+			// read in maf file for counting mutations
+			var mafLines = ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, case_.maf_file_id, false);
+
+			// group MAFLines by hugo symbol to count mutations over symbol
+			// TODO: this can be a function in ASETools
+			var caseMutations = mafLines.GroupBy(r => r.Hugo_Symbol)
+				.Select(group => new
+				{
+					Hugo_Symbol = group.Key,
+					Count = group.Count()
+				});
+
+			// traverse through all mutations and save to corresponding hugo symbols
+			foreach (var i in caseMutations)
+			{
+				if (gene != null && i.Hugo_Symbol != gene) {
+					continue;
+				}
+				lock (mutationCounts)
+				{
+					if (!mutationCounts.ContainsKey(i.Hugo_Symbol))
+					{
+						mutationCounts.Add(i.Hugo_Symbol, new List<Tuple<string, int>>());
+					}
+
+					mutationCounts[i.Hugo_Symbol].Add(new Tuple<string, int>(case_.case_id, i.Count));
+				}
+
+			}
+		}
+
+		static Dictionary<string, int> arrayOverlap = new Dictionary<string, int>();
+
+
+
+		static void ProcessCases(List<ASETools.Case> cases, string gene = null)
 		{
 			while (true)
 			{
@@ -154,119 +189,167 @@ namespace MethylationAnalysis
 				}
 
 
-				// verify methylation file exists for tumor data
-				if (!case_.tumor_methylation_filename.Contains("HumanMethylation450") || case_.extracted_maf_lines_filename == "" || case_.tumor_rna_filename == "")
+				// verify methylation file exists
+				if (!case_.tumor_methylation_filename.Contains("HumanMethylation450") || case_.extracted_maf_lines_filename == "")
 				{
 					Console.WriteLine("No tumor methylation data for case " + case_.case_id + ". Skipping...");
+					continue;
 				}
-				else
-				{
-					ProcessFile(case_, true);
-				}
-
-				// verify methylation file exists for normal data
-				if (!case_.normal_methylation_filename.Contains("HumanMethylation450") || case_.extracted_maf_lines_filename == "" || case_.normal_rna_filename == "")
-				{
-					Console.WriteLine("No normal methylation data for case " + case_.case_id + ". Skipping...");
-				}
-				else
-				{
-					ProcessFile(case_, false);
-				}
+				// process only tumor files
+				ProcessFile(case_, true, gene);
 
 			}
 		}
 
-		static void saveEnhancers()
-		{
-			Console.WriteLine("saving enhancers");
 
-			// hg19 to hg38 build
-			var build = new GenomeBuild.LiftOver();
-			build.readChainFile(ASETools.Configuration.hg19Tohg38ChainFile);
+		private static void MethylationMannWhitney(List<KeyValuePair<string, ASETools.GeneLocationInfo>> compositeREFs_) {
 
-			// read in enhancers
-			string[] fileEntries = Directory.GetFiles(ASETools.Configuration.defaultBaseDirectory + "enhancers");
-			List<GenomeBuild.Interval> enhancers = new List<GenomeBuild.Interval>();
+			outputLines = new List<ASETools.OutputLine>();
 
-			foreach (string fileName in fileEntries)
+			while (true)
 			{
-				var bedLines = ASETools.BedLine.ReadFile(fileName)
-					.Select(r => new GenomeBuild.Interval(r.Chromosome, r.Start_Position, r.End_Position)).ToList();
-				bedLines.Sort();
-				enhancers.AddRange(GenomeBuild.Interval.collapse(bedLines));
-				Console.WriteLine("Finished file " + fileName);
+				KeyValuePair<string, ASETools.GeneLocationInfo> compositeREF;
+
+				lock (compositeREFs_)
+				{
+					if (compositeREFs_.Count() == 0)
+					{
+						//
+						// No more work, we're done.
+						//
+						return;
+					}
+
+					Console.WriteLine(compositeREFs_.Count() + " remaining...");
+					compositeREF = compositeREFs_[0];
+
+					compositeREFs_.RemoveAt(0);
+				}
+				Console.WriteLine(Thread.CurrentThread.ToString() + ": " + compositeREF.Key);
+				Dictionary<string, int> geneCounts = new Dictionary<string, int>();
+
+				try
+				{
+					// get per gene information (tuples of file id, mutation count)
+					geneCounts = mutationCounts[compositeREF.Value.hugoSymbol].ToDictionary(x => x.Item1, x => x.Item2);
+				}
+				catch (Exception)
+				{
+					// Gene does not have any mutations, and should not be included in analysis
+					continue;
+
+				}
+
+				var methylationPoints = casesMethylation[compositeREF.Key].Select(r =>
+				{
+					var mutations = 0;
+					try
+					{
+						mutations = geneCounts[r.Item1];
+					}
+					catch (Exception)
+					{
+						// no op
+					}
+					// Tuple of M-value, mutations
+					return new Tuple<double, int>(r.Item2, mutations);
+				}).Where(r => r.Item2 < 2).Select(r => {    // filter out more than 1 mutation and format to comparative MethylationPoints
+					var m = new MethylationPoint();
+					m.mValue = ASETools.AnnotationLine.betaToM(r.Item1);
+					m.isSingle = r.Item2 == 0;
+					m.compositeREF = compositeREF.Key;
+					return m;
+				}).ToList();
+
+				// run MannWhitney test for this methylation point
+				ASETools.MannWhitney<MethylationPoint>.GetValue getValue = new ASETools.MannWhitney<MethylationPoint>.GetValue(m => m.mValue);
+				ASETools.MannWhitney<MethylationPoint>.WhichGroup whichGroup = new ASETools.MannWhitney<MethylationPoint>.WhichGroup(m => m.isSingle);
+
+				double nSingle = 0;
+				double nMultiple = 0;
+				double p;
+				bool reversed;
+				double U;
+				double z;
+
+				bool enoughData;
+
+				p = ASETools.MannWhitney<MethylationPoint>.ComputeMannWhitney(methylationPoints, methylationPoints[0], whichGroup, getValue, out enoughData, out reversed, out nSingle, out nMultiple, out U, out z);
+				if (!enoughData)
+				{
+					continue;
+				}
+				
+				var outputLine = new ASETools.OutputLine();
+				outputLine.line = compositeREF.Value.hugoSymbol + "\t" + compositeREF.Key + "\t" + nSingle + "\t" + nMultiple + "\t" + U + "\t" + z;
+				outputLine.p = p;
+				outputLines.Add(outputLine);
+
 			}
-			Console.WriteLine(enhancers.Count() + " enhancers");
-
-			enhancers = enhancers.SelectMany(r => build.mapCoordinates(r))
-				.Select(r => new GenomeBuild.Interval(ASETools.chromosomeNameToNonChrForm(r.name), r.start, r.end)).ToList();
-			Console.WriteLine(enhancers.Count() + "enhancers after running genome build");
-
-			var collapsed = GenomeBuild.Interval.collapse(enhancers);
-			Console.WriteLine(enhancers.Count() + "enhancers after running final collapse");
-
-			var enhancerLines = collapsed.Select(r => new ASETools.BedLine(r.name, Convert.ToInt32(r.start), Convert.ToInt32(r.end), "enhancer", 1000, r.strand, r.start, r.end)).ToList();
-			var enhancerFile = ASETools.Configuration.defaultBaseDirectory + @"enhancers\allEnhancers.bed";
-			ASETools.BedLine.writeFile(enhancerFile, enhancerLines);
 		}
 
-		static void PrintUsageMessage()
+		static void MethylationMannWhitney()
 		{
-			Console.WriteLine("usage: MethylationAnalysis -450 casesToProcess");
+			// total number of REFs for Bonferroni correction
+			int compositeREFCount = compositeREFs.Keys.Count();
+
+			MethylationMannWhitney(compositeREFs.ToList());
+
+
+			// open file
+			var output = new StreamWriter(@"\\msr-genomics-0\d$\gdc\methyl_temp\MannWhitney_with450.txt");
+
+			// write header
+			output.WriteLine("Gene\tCompositeREF\tnSingle\tnMultiple\tU\tz\tp\tp_Bonferroni\t");
+
+			var compositeCount = outputLines.Count();
+
+			foreach (var outputLine in outputLines)
+			{
+				output.WriteLine(outputLine.line + "\t" + outputLine.p + "\t" + outputLine.p * compositeCount);
+			}
+
+			output.Close();
 		}
 
-		static void Main(string[] args)
+		static void printUsageMessage()
 		{
+			Console.WriteLine("MethylationAnalysis chr");
+		}
 
+		static int Main(string[] args)
+		{
 			var timer = new Stopwatch();
 			timer.Start();
 
 			var configuration = ASETools.Configuration.loadFromFile(args);
-			enhancers = ASETools.BedLine.ReadFile(ASETools.Configuration.defaultBaseDirectory + @"enhancers\allEnhancers.bed")
-					.Select(r => new GenomeBuild.Interval(r.Chromosome, r.Start_Position, r.End_Position, r.strand)).GroupBy(r => r.name)
-					.ToDictionary(x => x.Key, x => x.Select(r => r).ToList());
-
-			if (configuration.commandLineArgs.Count() < 1)
-			{
-				PrintUsageMessage();
-				return;
-			}
-
-			int argsConsumed = 0;
-			bool onlyProcess450 = false;
-
-			if (configuration.commandLineArgs[0] == "-450") {
-				onlyProcess450 = true;
-				argsConsumed += 1;
-			}
-
-			// lines to print out
-			var lines = new List<string>();
-
 			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
-			
+
+			if (configuration.commandLineArgs.Count() != 1)
+			{
+				printUsageMessage();
+				return 0;
+			}
+			var chromosome = configuration.commandLineArgs[0];
+			// make sure in chr form
+			chromosome = ASETools.ChromosomeIndexToName(ASETools.ChromosomeNameToIndex(chromosome), true);
+
 			if (null == cases)
 			{
 				Console.WriteLine("You must have selected cases before you can analyze methylation data.");
-				return;
+				return 1;
 			}
 
-			var selectedCases = new List<ASETools.Case>();
-			for (int i = argsConsumed; i < configuration.commandLineArgs.Count(); i++)
-			{
-				if (!cases.ContainsKey(configuration.commandLineArgs[i]))
-				{
-					Console.WriteLine(configuration.commandLineArgs[i] + " is not a valid case ID. Skipping...");
-					continue;
-				}
-				selectedCases.Add(cases[configuration.commandLineArgs[i]]);
-			}
+			var selectedCases = cases.Select(kv => kv.Value).ToList();
 
-			// Get information for current genome build in chr form
-			geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(ASETools.Configuration.defaultGeneLocationInformationFilename));
+			var methyl_dir = @"\\msr-genomics-0\d$\gdc\bisulfate\methylationSites\";
+
+			// read in file of valid Composite REFs for methylation data
+			compositeREFs = ASETools.CompositeREFInfoLine.ReadFile(ASETools.Configuration.methylationREFsFilename).ToDictionary(x => x.Key, x => x.Value)
+				.Where(r => r.Value.chromosome == chromosome).ToDictionary(x => x.Key, x => x.Value);
 
 			var threads = new List<Thread>();
+			ASETools.Shuffle<ASETools.Case>(selectedCases);
 			for (int i = 0; i < Environment.ProcessorCount; i++)
 			{
 				threads.Add(new Thread(() => ProcessCases(selectedCases)));
@@ -275,9 +358,91 @@ namespace MethylationAnalysis
 			threads.ForEach(th => th.Start());
 			threads.ForEach(th => th.Join());
 
+			//MethylationMannWhitney();
 
-			return;
+			var targetDisease = "all";
 
+			var compositeRefsFilename =  methyl_dir + "CompositeMatrix_" + targetDisease + ".txt";
+
+			var countMutationFilename = methyl_dir + "mutationCounts_" + targetDisease + ".txt";
+
+			var compositeRefsFile = ASETools.CreateStreamWriterWithRetry(compositeRefsFilename);
+
+			// Write header: all file ids
+			var caseIds = fileInfo.Keys.ToList();
+			caseIds.Sort();
+
+			var header = "Composite_REF\t" + String.Join("\t", caseIds);
+			compositeRefsFile.WriteLine(header);
+
+			// write out caseMethylation lines to file
+			foreach (KeyValuePair<string, List<Tuple<string, double>>> entry in casesMethylation)
+			{
+
+				// write all Beta-values for this composite REF
+				compositeRefsFile.Write(entry.Key);
+
+				// dictionary of (case id, beta values) for this REF
+				var casesForREF = entry.Value.ToDictionary(x => x.Item1, x => x.Item2);
+
+				foreach (var case_id in caseIds)
+				{
+					// if case was found for this ref, put in value. Otherwise, assign 'NA'.
+					if (casesForREF.ContainsKey(case_id)) {
+						compositeRefsFile.Write("\t" + casesForREF[case_id]);
+					} else {
+						compositeRefsFile.Write("\tna");
+					}
+				}
+
+				compositeRefsFile.WriteLine();
+
+			}
+
+			compositeRefsFile.Close();
+
+			// write out mutations
+			var countOutputFile = ASETools.CreateStreamWriterWithRetry(countMutationFilename);
+			var countHeader = "Hugo_Symbol\t" + String.Join("\t", fileInfo.Keys );
+			countOutputFile.WriteLine(header);
+
+			// for each hugo symbol, get mutation counts for all cases
+			foreach (KeyValuePair<string, List<Tuple<string, int>>> entry in mutationCounts)
+			{
+
+				// get case ids and set initial mutation counts to 0
+				var countByCase = fileInfo.Keys.ToDictionary(x => x, x => 0);
+
+				foreach (var v in entry.Value)
+				{
+					if (countByCase.ContainsKey(v.Item1))
+					{
+						countByCase[v.Item1] = v.Item2;
+					}
+				}
+				
+				// write all mutation counts for this Hugo Symbol
+				countOutputFile.WriteLine(entry.Key + "\t" + String.Join("\t", countByCase.Values.ToList()));
+
+			}
+
+			countOutputFile.Close();
+
+			// Write metadata for cases
+			var caseFilename = methyl_dir + "CASEMETADATA_" + targetDisease + ".txt";
+			var outputFile = ASETools.CreateStreamWriterWithRetry(caseFilename);
+
+			// Write header
+			outputFile.WriteLine("File_Id\tdisease\tType\tis450");
+
+			foreach (KeyValuePair<string, Tuple<string, string, int>> entry in fileInfo)
+			{
+				outputFile.WriteLine(entry.Key + "\t" + entry.Value.Item1 + "\t" + entry.Value.Item2 + "\t" + entry.Value.Item3);
+			}
+
+			outputFile.Close();
+
+			return 0;
 		}
 	}
 }

@@ -533,6 +533,14 @@ namespace ASELib
 
 			public bool inconsistent = false;
 
+			public bool overlapsRange(string locusChromosome, int start, int end)
+			{
+				if (start < maxLocus && end > minLocus)
+					return true;
+				else
+					return false;
+			}
+
             public bool containsLocus(string locusChromosome, int locus)
             {
                 return chromosome == locusChromosome && minLocus <= locus && maxLocus >= locus;
@@ -1553,7 +1561,7 @@ namespace ASELib
 
 			public const string unfilteredCountsDirectory = defaultBaseDirectory + @"gene_mutations_with_counts\";
 			public const string unfilteredCountsExtention = @"_unfiltered_counts.txt";
-			public const string methylationREFsFilename = defaultBaseDirectory + "compositeREFs.txt";
+			public const string methylationREFsFilename = defaultBaseDirectory + "compositeREFs450.txt";
 
 
 			public string[] commandLineArgs = null;    // The args excluding -configuration <filename>
@@ -3051,11 +3059,11 @@ namespace ASELib
 
 			static KeyValuePair<string, GeneLocationInfo> ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
 			{
-				var composite = fields[fieldMappings["CompositeREF"]];
+				var composite = fields[fieldMappings["compositeREF"]];
 				var geneInfo = new GeneLocationInfo();
-				geneInfo.chromosome = fields[fieldMappings["Chromosome"]];
-				geneInfo.minLocus = Convert.ToInt32(fields[fieldMappings["Position"]]);
-				geneInfo.hugoSymbol = fields[fieldMappings["Hugo Symbol"]];
+				geneInfo.chromosome = fields[fieldMappings["chr"]];
+				geneInfo.minLocus = Convert.ToInt32(fields[fieldMappings["start"]]);
+				geneInfo.maxLocus = Convert.ToInt32(fields[fieldMappings["end"]]);
 
 				return new KeyValuePair<string, GeneLocationInfo>(composite, geneInfo);
 
@@ -3067,10 +3075,10 @@ namespace ASELib
 				StreamReader inputFile = CreateStreamReaderWithRetry(filename);
 
 				var neededFields = new List<string>();
-				neededFields.Add("CompositeREF");
-				neededFields.Add("Chromosome");
-				neededFields.Add("Position");
-				neededFields.Add("Hugo Symbol");
+				neededFields.Add("compositeREF");
+				neededFields.Add("chr");
+				neededFields.Add("start");
+				neededFields.Add("end");
 
 				bool hasDone = false;
 				var headerizedFile = new HeaderizedFile<KeyValuePair<string, GeneLocationInfo>>(inputFile, false, hasDone, "#version gdc-1.0.0", neededFields);
@@ -8241,6 +8249,20 @@ namespace ASELib
 
         } // AVLTree
 
+		public static void Shuffle<T>(IList<T> list)
+		{
+			Random rng = new Random();
+
+			int n = list.Count;
+			while (n > 1)
+			{
+				n--;
+				int k = rng.Next(n + 1);
+				T value = list[k];
+				list[k] = list[n];
+				list[n] = value;
+			}
+		}
 
 		public class EnsembleGeneFile
 		{
@@ -8315,7 +8337,5 @@ namespace ASELib
 			}
 
 		}
-
-
     } // ASETools
 }
