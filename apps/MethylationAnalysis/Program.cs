@@ -312,6 +312,11 @@ namespace MethylationAnalysis
 			output.Close();
 		}
 
+		static void printUsageMessage()
+		{
+			Console.WriteLine("MethylationAnalysis chr");
+		}
+
 		static int Main(string[] args)
 		{
 			var timer = new Stopwatch();
@@ -319,6 +324,15 @@ namespace MethylationAnalysis
 
 			var configuration = ASETools.Configuration.loadFromFile(args);
 			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
+
+			if (configuration.commandLineArgs.Count() != 1)
+			{
+				printUsageMessage();
+				return 0;
+			}
+			var chromosome = configuration.commandLineArgs[0];
+			// make sure in chr form
+			chromosome = ASETools.ChromosomeIndexToName(ASETools.ChromosomeNameToIndex(chromosome), true);
 
 			if (null == cases)
 			{
@@ -331,9 +345,11 @@ namespace MethylationAnalysis
 			var methyl_dir = @"\\msr-genomics-0\d$\gdc\bisulfate\methylationSites\";
 
 			// read in file of valid Composite REFs for methylation data
-			compositeREFs = ASETools.CompositeREFInfoLine.ReadFile(ASETools.Configuration.methylationREFsFilename).ToDictionary(x => x.Key, x => x.Value);
+			compositeREFs = ASETools.CompositeREFInfoLine.ReadFile(ASETools.Configuration.methylationREFsFilename).ToDictionary(x => x.Key, x => x.Value)
+				.Where(r => r.Value.chromosome == chromosome).ToDictionary(x => x.Key, x => x.Value);
 
 			var threads = new List<Thread>();
+			ASETools.Shuffle<ASETools.Case>(selectedCases);
 			for (int i = 0; i < Environment.ProcessorCount; i++)
 			{
 				threads.Add(new Thread(() => ProcessCases(selectedCases)));
