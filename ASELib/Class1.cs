@@ -1282,9 +1282,34 @@ namespace ASELib
                     var writer = new StreamWriter(filename);
                     return writer;
                 }
-                catch (IOException)
+                catch (IOException e)
                 {
+                    if (e is FileNotFoundException || e is DirectoryNotFoundException)
+                    {
+                        return null;
+                    }
                     Console.WriteLine("IOException opening " + filename + " for write.  Sleeping and retrying.");
+                    Thread.Sleep(10 * 1000);
+                }
+            }
+        }
+
+        public static StreamWriter CreateAppendingStreamWriterWithRetry(string filename)
+        {
+            while (true)
+            {
+                try
+                {
+                    var writer = File.AppendText(filename);
+                    return writer;
+                }
+                catch (IOException e)
+                {
+                    if (e is FileNotFoundException || e is DirectoryNotFoundException)
+                    {
+                        return null;
+                    }
+                    Console.WriteLine("IOException opening " + filename + " for append.  Sleeping and retrying.");
                     Thread.Sleep(10 * 1000);
                 }
             }
@@ -2744,7 +2769,13 @@ namespace ASELib
                         var extendedFields = new string[maxNeededField + 2];
                         for (int i = 0; i <= maxNeededField; i++)
                         {
-                            extendedFields[i] = fields[i];
+                            if (i < fields.Count())
+                            {
+                                extendedFields[i] = fields[i];
+                            } else
+                            {
+                                extendedFields[i] = "";
+                            }
                         }
                         fields = extendedFields;
                     }
@@ -2798,14 +2829,14 @@ namespace ASELib
                     return Convert.ToInt32(AsString(fieldName));
                 }
 
-                public int AsIntMinusOneIfStar(string fieldname)
+                public int AsIntMinusOneIfStarOrEmptyString(string fieldName)
                 {
-                    if (fields[fieldMappings[fieldname]] == "*")
+                    if (fields[fieldMappings[fieldName]] == "*" || fields[fieldMappings[fieldName]] == "")
                     {
                         return -1;
                     }
 
-                    return AsInt(fieldname);
+                    return AsInt(fieldName);
                 }
 
                 public double AsDouble(string fieldName)
@@ -2813,9 +2844,9 @@ namespace ASELib
                     return Convert.ToDouble(AsString(fieldName));
                 }
 
-                public double AsDoubleNegativeInfinityIfStar(string fieldName)
+                public double AsDoubleNegativeInfinityIfStarOrEmptyString(string fieldName)
                 {
-                    if (fields[fieldMappings[fieldName]] == "*")
+                    if (fields[fieldMappings[fieldName]] == "*" || fields[fieldMappings[fieldName]] == "")
                     {
                         return double.NegativeInfinity;
                     }
@@ -2826,6 +2857,17 @@ namespace ASELib
                 public bool AsBool(string fieldName)
                 {
                     return Convert.ToBoolean(AsString(fieldName));
+                }
+
+                public string rawLine()
+                {
+                    var result = fields[0];
+                    for (int i = 1; i < fields.Count(); i++)
+                    {
+                        result += "\t" + fields[i];
+                    }
+
+                    return result;
                 }
 
                 Dictionary<string, int> fieldMappings;
@@ -6209,16 +6251,26 @@ namespace ASELib
             public readonly NMeandAndStdDev oneMutationStats;
             public readonly NMeandAndStdDev moreThanOneMutationStats;
 
-            public static List<string> getHeaders(bool exclusive, string range)
+        public static List<string> getHeaders(bool mu, bool exclusive, string range)
             {
-                string exclusiveString = exclusive ? " exclusive" : "";
-                string[] headersArray = {range + " 1 vs. many" + exclusiveString,
-                                    range + " 1 vs. not 1"  + exclusiveString,
-                range + " 0 mutation N" + exclusiveString,
-                range + " 0 mutation mean" + exclusiveString,
-                range + " "}; // here
+                //
+                // This is pretty much a match for the code that generates the headers in the first place, which results in strange double spaces in some places.
+                //
+                var result = new List<string>();
+                string muString = ((!mu) ? "" : " mu") + (!exclusive? "" : " exclusive");
+                result.Add(range + " 1 vs. many" + muString);
+                result.Add(range + " 1 vs. not 1" + muString);
 
-                return null;
+                string[] mutationSets = { "0", "1", ">1" };
+
+                for (int i = 0; i < mutationSets.Count(); i++)
+                {
+                    result.Add(range + " " + mutationSets[i] + " mutation" + muString + " N");
+                    result.Add(range + " " + mutationSets[i] + " mutation " + muString + " mean");
+                    result.Add(range + " " + mutationSets[i] + " mutation " + muString + " stdDev");
+                }
+
+                return result;
             }
 
             public static string getHeaderString(bool exclusive, int rangeIndex)
@@ -6242,7 +6294,7 @@ namespace ASELib
                     rangeInBases = int.MaxValue;
                 } else
                 {
-                    rangeInBases = (1 << rangeIndex) * 1000;
+                    rangeInBases = (1 << rangeIndex-1) * 1000;
                 }
 
                 oneVsMany = oneVsMany_;
@@ -6252,32 +6304,21 @@ namespace ASELib
                 moreThanOneMutationStats = moreThanOneMutationStats_;
             }
 
-            public static SingleExpressionResult Parse(int rangeIndex, HeaderizedFile<ExpressionResultsLine>.FieldGrabber fieldGrabber, bool exclusive)
+            public static SingleExpressionResult Parse(int rangeIndex, HeaderizedFile<ExpressionResultsLine>.FieldGrabber fieldGrabber, bool mu, bool exclusive)
             {
-                string rangeString;
-                if (rangeIndex == 0)
-                {
-                    rangeString = "0Kbp ";
-                } else if (rangeIndex == nRegions - 1)
-                {
-                    rangeString = "whole autosome ";
-                } else
-                {
-                    rangeString = Convert.ToString(1 << rangeIndex) + "Kpb";
-                }
-
-                if (exclusive)
-                {
-                    rangeString += "exclusive ";
-                }
+                //
+                // This is pretty much a match for the code that generates the headers in the first place, which results in strange double spaces in some places.
+                //
+                string rangeString = regionIndexToString(rangeIndex);
+                string muString = ((!mu) ? "" : " mu") + (!exclusive ? "" : " exclusive");
 
                 return new SingleExpressionResult(
                     rangeIndex,
-                    fieldGrabber.AsDoubleNegativeInfinityIfStar(rangeString + "1 vs. many"),
-                    fieldGrabber.AsDoubleNegativeInfinityIfStar(rangeString + "1 vs. not 1"),
-                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStar(rangeString + "0 mutation N"), fieldGrabber.AsDoubleNegativeInfinityIfStar(rangeString + "0 mutation mean"), fieldGrabber.AsDoubleNegativeInfinityIfStar("0 mutation stdDev")),
-                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStar(rangeString + "1 mutation N"), fieldGrabber.AsDoubleNegativeInfinityIfStar(rangeString + "1 mutation mean"), fieldGrabber.AsDoubleNegativeInfinityIfStar("1 mutation stdDev")),
-                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStar(rangeString + ">1 mutation N"), fieldGrabber.AsDoubleNegativeInfinityIfStar(rangeString + ">1 mutation mean"), fieldGrabber.AsDoubleNegativeInfinityIfStar(">1 mutation stdDev"))
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 vs. many" + muString),
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 vs. not 1" + muString),
+                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " 0 mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 0 mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 0 mutation " + muString + " stdDev")),
+                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " 1 mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 mutation " + muString + " stdDev")),
+                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " >1 mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " >1 mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " >1 mutation " + muString + " stdDev"))
                     );
             }
         } // SingleExpressionResult
@@ -6299,7 +6340,7 @@ namespace ASELib
                 for (var i = 0; i < nRegions; i++)
                 {
                     foreach (bool exclusive in BothBools) {
-                        wantedFields.AddRange(SingleExpressionResult.getHeaders(exclusive, regionIndexToString(i)));
+                        wantedFields.AddRange(SingleExpressionResult.getHeaders(false, exclusive, regionIndexToString(i)));
                     }
                 }
 
@@ -6308,7 +6349,7 @@ namespace ASELib
                 {
                     return null;
                 }
-                var headerizedFile = new HeaderizedFile<ExpressionResultsLine>(inputFile, false, true, "", wantedFields);
+                var headerizedFile = new HeaderizedFile<ExpressionResultsLine>(inputFile, false, false, "", wantedFields, false, true);  // We allow missing columns because genes with no data are truncated
 
                 List<ExpressionResultsLine> retVal;
                 headerizedFile.ParseFile(Parse, out retVal);
@@ -6316,14 +6357,16 @@ namespace ASELib
                 return retVal;
             }
 
-            public ExpressionResultsLine(string hugo_symbol_, SingleExpressionResult[] nonExclusiveResultsByRange_, SingleExpressionResult[] exclusiveResultsByRange_, int nZero_, int nOne_, int nMore_)
+            public ExpressionResultsLine(string hugo_symbol_, SingleExpressionResult[] nonExclusiveResultsByRange_, SingleExpressionResult[] exclusiveResultsByRange_, int nTumorsExcluded_, int nZero_, int nOne_, int nMore_, string rawLine_)
             {
                 hugo_symbol = hugo_symbol_;
                 nonExclusiveResultsByRange = nonExclusiveResultsByRange_;
                 exclusiveResultsByRange = exclusiveResultsByRange_;
+                nTumorsExcluded = nTumorsExcluded_;
                 nZero = nZero_;
                 nOne = nOne_;
                 nMore = nMore_;
+                rawLine = rawLine_;
 
                 resultsByRange.Add(true, nonExclusiveResultsByRange);
                 resultsByRange.Add(false, exclusiveResultsByRange);
@@ -6336,25 +6379,28 @@ namespace ASELib
 
                 for (int i = 0; i < nRegions; i++)
                 {
-                    nonExclusiveResults[i] = SingleExpressionResult.Parse(i, fieldGrabber, false);
-                    exclusiveResults[i] = SingleExpressionResult.Parse(i, fieldGrabber, true);
+                    nonExclusiveResults[i] = SingleExpressionResult.Parse(i, fieldGrabber, false, false);
+                    exclusiveResults[i] = SingleExpressionResult.Parse(i, fieldGrabber, false, true);
                 }
 
-                return new ExpressionResultsLine(fieldGrabber.AsString("Hugo Symbol"), nonExclusiveResults, exclusiveResults, fieldGrabber.AsIntMinusOneIfStar("nZero"), fieldGrabber.AsIntMinusOneIfStar("nOne"), fieldGrabber.AsIntMinusOneIfStar("nMore"));
+                return new ExpressionResultsLine(fieldGrabber.AsString("Hugo Symbol"), nonExclusiveResults, exclusiveResults, fieldGrabber.AsIntMinusOneIfStarOrEmptyString("nTumorsExcluded"),
+                    fieldGrabber.AsIntMinusOneIfStarOrEmptyString("nZero"), fieldGrabber.AsIntMinusOneIfStarOrEmptyString("nOne"), fieldGrabber.AsIntMinusOneIfStarOrEmptyString("nMore"),
+                    fieldGrabber.rawLine());
             }
 
             public static string getHeaderString()
             {
                 var result = "Hugo Symbol";
-                foreach (var exclusive in BothBools)
+                foreach (var inclusive in BothBools)
                 {
+                    bool exclusive = !inclusive;
                     for (int i = 0; i < nRegions; i++)
                     {
                         result += "\t" + SingleExpressionResult.getHeaderString(exclusive, i);
                     }
                 }
 
-                return result + "\tnZero\tnOne\tnMany";
+                return result + "\tnTumorsExcluded\tnZero\tnOne\tnMany";
             }
 
             public readonly string hugo_symbol;
@@ -6365,9 +6411,11 @@ namespace ASELib
             //
             // These are -1 if not filled in.
             //
+            public readonly int nTumorsExcluded;
             public readonly int nZero;
             public readonly int nOne;
             public readonly int nMore;
+            public readonly string rawLine;
         } // ExpressionResultsLine
 
         //
@@ -6379,7 +6427,7 @@ namespace ASELib
         {
             if (0 == regionIndex) return "0Kbp";
             if (nRegions - 1 == regionIndex) return "whole autosome";
-            return "" + (1 << regionIndex) + "Kbp";
+            return "" + (1 << (regionIndex-1)) + "Kbp";
         }
 
         public static int regionIndexToSizeInBases(int regionIndex)

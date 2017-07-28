@@ -72,7 +72,7 @@ obj
 /apps/CountVariantsInGenes/bin
 /apps/MannWhitney/bin
 /apps/SummarizeSelectedVariantCountsByGene/bin
-/apps/ApplyBonferonniCorrection/bin
+/apps/ApplyBonferroniCorrection/bin
 /tests/AVLTest/bin
 
 
