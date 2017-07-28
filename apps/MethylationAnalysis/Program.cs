@@ -360,11 +360,9 @@ namespace MethylationAnalysis
 
 			//MethylationMannWhitney();
 
-			var targetDisease = "all";
+			var compositeRefsFilename =  methyl_dir + "CompositeMatrix_" + chromosome + ".txt";
 
-			var compositeRefsFilename =  methyl_dir + "CompositeMatrix_" + targetDisease + ".txt";
-
-			var countMutationFilename = methyl_dir + "mutationCounts_" + targetDisease + ".txt";
+			var countMutationFilename = methyl_dir + "mutationCounts_" + chromosome + ".txt";
 
 			var compositeRefsFile = ASETools.CreateStreamWriterWithRetry(compositeRefsFilename);
 
@@ -383,13 +381,22 @@ namespace MethylationAnalysis
 				compositeRefsFile.Write(entry.Key);
 
 				// dictionary of (case id, beta values) for this REF
-				var casesForREF = entry.Value.ToDictionary(x => x.Item1, x => x.Item2);
+				Dictionary<string, Double> casesForREF = entry.Value.ToDictionary(x => x.Item1, x => x.Item2);
 
 				foreach (var case_id in caseIds)
 				{
 					// if case was found for this ref, put in value. Otherwise, assign 'NA'.
-					if (casesForREF.ContainsKey(case_id)) {
-						compositeRefsFile.Write("\t" + casesForREF[case_id]);
+					double beta;
+					if (casesForREF.TryGetValue(case_id, out beta)) {
+						if (beta == null)
+						{
+							Console.WriteLine(entry.Key + " for " + case_id + " is null?");
+							compositeRefsFile.Write("\tna");
+						}
+						else
+						{
+							compositeRefsFile.Write("\t" + beta);
+						}
 					} else {
 						compositeRefsFile.Write("\tna");
 					}
@@ -429,7 +436,7 @@ namespace MethylationAnalysis
 			countOutputFile.Close();
 
 			// Write metadata for cases
-			var caseFilename = methyl_dir + "CASEMETADATA_" + targetDisease + ".txt";
+			var caseFilename = methyl_dir + "CASEMETADATA_" + chromosome + ".txt";
 			var outputFile = ASETools.CreateStreamWriterWithRetry(caseFilename);
 
 			// Write header
