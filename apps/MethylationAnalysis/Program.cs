@@ -323,7 +323,7 @@ namespace MethylationAnalysis
 			timer.Start();
 
 			var configuration = ASETools.Configuration.loadFromFile(args);
-			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
+			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname).Take(1000).ToList();
 
 			if (configuration.commandLineArgs.Count() != 1)
 			{
@@ -381,22 +381,14 @@ namespace MethylationAnalysis
 				compositeRefsFile.Write(entry.Key);
 
 				// dictionary of (case id, beta values) for this REF
-				Dictionary<string, Double> casesForREF = entry.Value.ToDictionary(x => x.Item1, x => x.Item2);
+				Dictionary<string, double> casesForREF = entry.Value.ToDictionary(x => x.Item1, x => x.Item2);
 
 				foreach (var case_id in caseIds)
 				{
 					// if case was found for this ref, put in value. Otherwise, assign 'NA'.
 					double beta;
 					if (casesForREF.TryGetValue(case_id, out beta)) {
-						if (beta == null)
-						{
-							Console.WriteLine(entry.Key + " for " + case_id + " is null?");
-							compositeRefsFile.Write("\tna");
-						}
-						else
-						{
-							compositeRefsFile.Write("\t" + beta);
-						}
+						compositeRefsFile.Write("\t" + beta);
 					} else {
 						compositeRefsFile.Write("\tna");
 					}
