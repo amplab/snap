@@ -5497,12 +5497,35 @@ namespace ASELib
 				{
 					str += '\t' + normalRNAReadCounts.ToString();
 				}
-                else
-                {
-                    str += "\t\t\t\t";
-                }
+				else
+				{
+					str += "\t\t\t\t";
+				}
 
 				return str;
+			}
+
+			public double getTumorAlleleSpecificExpression(bool isAbsoluteValue = true)
+			{
+				return getAlleleSpecificExpression(tumorRNAReadCounts, isAbsoluteValue);
+			}
+
+			public double getNormalAlleleSpecificExpression(bool isAbsoluteValue = true)
+			{
+				return getAlleleSpecificExpression(normalRNAReadCounts, isAbsoluteValue);
+			}
+
+			private static double getAlleleSpecificExpression(ReadCounts readCounts, bool isAbsoluteValue)
+			{
+				double rnaFractionTumor = (double)readCounts.nMatchingAlt / (readCounts.nMatchingReference + readCounts.nMatchingAlt);
+
+				if (isAbsoluteValue)
+				{
+					return Math.Abs(rnaFractionTumor * 2.0 - 1.0);
+				}
+				else {
+					return rnaFractionTumor;
+				}
 			}
 
 			public AnnotatedVariant(string Hugo_symbol_, bool somaticMutation_, string contig_, int locus_, string reference_allele_, string alt_allele_, string variantType_, string variantClassification_, ReadCounts tumorDNAReadCounts_, ReadCounts tumorRNAReadCounts_, ReadCounts normalDNAReadCounts_, ReadCounts normalRNAReadCounts_)
@@ -5645,6 +5668,27 @@ namespace ASELib
 				file.WriteLine("**done**");
 				file.Close();
 
+			}
+
+
+			public bool hasSufficientReads(bool isTumor = true)
+			{
+				// get read counts for either tumor or normal
+				var DNAReadCounts = isTumor ? this.tumorDNAReadCounts : this.normalDNAReadCounts;
+				var RNAReadCounts = isTumor ? this.tumorRNAReadCounts : this.normalRNAReadCounts;
+
+				// normal readcounts are often not available. Throw exception if this is the case.
+				if (DNAReadCounts == null || RNAReadCounts == null)
+				{
+					throw new Exception(isTumor ? "tumor " : "normal " + "read counts are null");
+				}
+
+				// check there is sufficient coverage for DNA and RNA
+				// check annotated variant is not a possible minor subclone
+				return (DNAReadCounts.nMatchingReference + DNAReadCounts.nMatchingAlt >= 10 &&
+						RNAReadCounts.nMatchingReference + RNAReadCounts.nMatchingAlt >= 10 &&
+						DNAReadCounts.nMatchingReference * 3 >= DNAReadCounts.nMatchingAlt * 2 &&
+						DNAReadCounts.nMatchingAlt * 3 >= DNAReadCounts.nMatchingReference * 2);
 			}
 
             public readonly string Hugo_symbol;                 // Only present for somatic mutations, otherwise ""

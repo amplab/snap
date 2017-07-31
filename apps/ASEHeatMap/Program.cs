@@ -505,8 +505,8 @@ namespace ASEHeatMap
                 var annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
                 var nUnfiltered = annotatedSelectedVariants.Count();
 
-                annotatedSelectedVariants = annotatedSelectedVariants.Where(x => !x.somaticMutation && x.tumorRNAReadCounts.nMatchingAlt + x.tumorRNAReadCounts.nMatchingReference >= 10 && ASETools.isChromosomeAutosomal(x.contig) &&
-                x.tumorDNAReadCounts.nMatchingAlt + x.tumorDNAReadCounts.nMatchingReference >= 10 && x.tumorDNAReadCounts.nMatchingAlt * 3 > x.tumorDNAReadCounts.nMatchingReference * 2 && x.tumorDNAReadCounts.nMatchingReference * 3 > x.tumorDNAReadCounts.nMatchingAlt * 2).ToList();
+                annotatedSelectedVariants = annotatedSelectedVariants.Where(x => !x.somaticMutation && 
+				ASETools.isChromosomeAutosomal(x.contig) && x.hasSufficientReads()).ToList();
 
                 //Console.WriteLine("Left with " + annotatedSelectedVariants.Count() + " of " + nUnfiltered);
 

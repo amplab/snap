@@ -197,17 +197,12 @@ namespace ExpressionNearMutations
 						double alleleSpecificExpressionNormal;
 
 						if (geneLocationInformation.genesByChromosome.ContainsKey(annotatedVariant.contig) &&
-							annotatedVariant.tumorDNAReadCounts.nMatchingReference + annotatedVariant.tumorDNAReadCounts.nMatchingAlt >= 10 &&
-							annotatedVariant.tumorRNAReadCounts.nMatchingReference + annotatedVariant.tumorRNAReadCounts.nMatchingAlt >= 10 &&
-							annotatedVariant.tumorDNAReadCounts.nMatchingReference * 3 >= annotatedVariant.tumorDNAReadCounts.nMatchingAlt * 2 &&
-							annotatedVariant.tumorDNAReadCounts.nMatchingAlt * 3 >= annotatedVariant.tumorDNAReadCounts.nMatchingReference * 2)
+							annotatedVariant.hasSufficientReads())
 						{
-							double rnaFractionTumor = (double)annotatedVariant.tumorRNAReadCounts.nMatchingAlt / (annotatedVariant.tumorRNAReadCounts.nMatchingReference + annotatedVariant.tumorRNAReadCounts.nMatchingAlt);
-
 							//
 							// Now convert to the amount of allele-specific expression.  50% is no ASE, while 0 or 100% is 100% ASE.
 							//
-							alleleSpecificExpression = Math.Abs(rnaFractionTumor * 2.0 - 1.0);
+							alleleSpecificExpression = annotatedVariant.getTumorAlleleSpecificExpression();
 
 							// If we have the normal DNA and RNA for this sample, compute the normal ASE
 							if (annotatedVariant.normalRNAReadCounts != null && annotatedVariant.normalDNAReadCounts.nMatchingReference + annotatedVariant.normalDNAReadCounts.nMatchingAlt >= 10 &&   // We have at least 10 DNA reads
@@ -215,7 +210,7 @@ namespace ExpressionNearMutations
 								annotatedVariant.normalDNAReadCounts.nMatchingReference * 3 >= annotatedVariant.normalDNAReadCounts.nMatchingAlt * 2 &&         // It's not more than 2/3 variant DNA
 								annotatedVariant.normalDNAReadCounts.nMatchingAlt * 3 >= annotatedVariant.normalDNAReadCounts.nMatchingReference * 2)
 							{
-								alleleSpecificExpressionNormal = Math.Abs(((double)annotatedVariant.normalRNAReadCounts.nMatchingAlt / (annotatedVariant.normalRNAReadCounts.nMatchingReference + annotatedVariant.normalRNAReadCounts.nMatchingAlt)) * 2.0 - 1.0);
+								alleleSpecificExpressionNormal = annotatedVariant.getNormalAlleleSpecificExpression();
 								// add to data with normal
 								expressionValues.Add(annotatedVariant.contig, annotatedVariant.locus, alleleSpecificExpression, 0, true, alleleSpecificExpressionNormal, 0);
 							}
