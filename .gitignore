@@ -74,6 +74,8 @@ obj
 /apps/SummarizeSelectedVariantCountsByGene/bin
 /apps/ApplyBonferroniCorrection/bin
 /tests/AVLTest/bin
+/apps/CheckASEConsistency/bin
+
 
 
 

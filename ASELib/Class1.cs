@@ -831,8 +831,8 @@ namespace ASELib
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
 
             //
-            // Checksums for downloaded files. The tumor DNA BAMs aren't included here
-            // because they're BAM sliced and so don't have server-side md5s.
+            // Checksums for downloaded files. (NB: I'm not sure how to get the BAI md5s from the metadata, so they're left blank and the
+            // BAIs aren't checked.  You have to notice if they're corrupt by hand when samtools can't read them and delete & re-download them.)
             //
             public string normal_rna_file_bam_md5 = "";
             public string normal_rna_file_bai_md5 = "";
@@ -2173,6 +2173,7 @@ namespace ASELib
         public const string heatMapFilename = "AlleleSpecificExpressionHeatMap.txt";
         public const string tumorHeatMapHistogramFilename = "TumorAlleleSpecificExpressionHeatMapHistograms.txt";
         public const string normalHeatMapHistogramFilename = "NormalAlleleSpecificExpressionHeatMapHistograms.txt";
+        public const string ASEConsistencyFilename = "ASEConsistency.txt";
 
         public class DerivedFile
         {
@@ -5688,6 +5689,34 @@ namespace ASELib
 				file.Close();
 
 			}
+
+            public static int CompareByLocus(AnnotatedVariant one, AnnotatedVariant two)
+            {
+                if (one.contig != two.contig)
+                {
+                    return string.Compare(one.contig, two.contig);
+                }
+
+                if (one.locus < two.locus)
+                {
+                    return -1;
+                }
+
+                if (one.locus == two.locus)
+                {
+                    return 0;
+                }
+
+                return 1;
+            }
+
+            public bool IsASECandidate()    // Has at least 10 tumor DNA & RNA reads, and has variant allele frequency between .4 and .6 in tumor DNA
+            {
+                return tumorDNAReadCounts.nMatchingReference + tumorDNAReadCounts.nMatchingAlt >= 10 &&
+                            tumorRNAReadCounts.nMatchingReference + tumorRNAReadCounts.nMatchingAlt >= 10 &&
+                            tumorDNAReadCounts.nMatchingReference * 3 >= tumorDNAReadCounts.nMatchingAlt * 2 &&
+                            tumorDNAReadCounts.nMatchingAlt * 3 >= tumorDNAReadCounts.nMatchingReference * 2;
+            }
 
             public readonly string Hugo_symbol;                 // Only present for somatic mutations, otherwise ""
 			public readonly bool somaticMutation;
