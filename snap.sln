@@ -122,6 +122,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenomeBuild", "apps\ChangeG
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MutationDistributions", "apps\MutationDistributions\MutationDistributions.csproj", "{AB63A343-10BE-42B2-87CB-A74DBB29C929}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WriteIGVScript", "apps\WriteIGVScript\WriteIGVScript.csproj", "{DF994F10-6B0E-42CA-8A97-6FF9917B8AB6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

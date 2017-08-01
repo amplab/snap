@@ -7352,6 +7352,132 @@ namespace ASELib
 
         } // AVLTree
 
+		public class CopyNumberVariation
+		{
+			public string Sample;
+			public string Chromosome;
+			public int Start;
+			public int End;
+			public int Num_Probes;
+			public double Segment_Mean;
+
+			CopyNumberVariation(string Sample_,
+				string Chromosome_,
+				int Start_,
+				int End_,
+				int Num_Probes_,
+				double Segment_Mean_)
+			{
+				Sample = Sample_;
+				Chromosome = Chromosome_;
+				Start = Start_;
+				End = End_;
+				Num_Probes = Num_Probes_;
+				Segment_Mean = Segment_Mean_;
+			}
+			static CopyNumberVariation ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
+			{
+
+				return new CopyNumberVariation(
+				   fields[fieldMappings["Sample"]],
+				   fields[fieldMappings["Chromosome"]],
+				   Convert.ToInt32(fields[fieldMappings["Start"]]),
+				   Convert.ToInt32(fields[fieldMappings["End"]]),
+				   Convert.ToInt32(fields[fieldMappings["Num_Probes"]]),
+				   Convert.ToDouble(fields[fieldMappings["Segment_Mean"]])
+				   );
+
+			}
+
+			//static public List<CopyNumberVariation> diff(List<CopyNumberVariation> normal,
+			//	List<CopyNumberVariation> tumor)
+			//{
+			//	Dictionary<string, List<CopyNumberVariation>> normalDictionary =
+			//		normal.GroupBy(r => r.Chromosome)
+			//			.ToDictionary(x => x.Key, x => x.OrderBy(r => r.Start).ToList());
+
+			//	Dictionary<string, List<CopyNumberVariation>> tumorDictionary =
+			//		tumor.GroupBy(r => r.Chromosome)
+			//			.ToDictionary(x => x.Key, x => x.OrderBy(r => r.Start).ToList());
+
+			//	// foreach chromosome
+			//	foreach (var kv in tumorDictionary)
+			//	{
+			//		// Find all regions that don't intersect normal copy number variations
+
+			//	}
+
+
+			//}
+			static public List<CopyNumberVariation> ReadFile(string filename, string file_id)
+			{
+				StreamReader inputFile;
+
+				inputFile = CreateStreamReaderWithRetry(filename);
+
+				var neededFields = new List<string>();
+				neededFields.Add("Sample");
+				neededFields.Add("Chromosome");
+				neededFields.Add("Start");
+				neededFields.Add("End");
+				neededFields.Add("Num_Probes");
+				neededFields.Add("Segment_Mean");
+
+				bool hasDone = false;
+				var headerizedFile = new HeaderizedFile<CopyNumberVariation>(inputFile, false, false, "#version gdc-1.0.0", neededFields);
+
+				List<CopyNumberVariation> result;
+
+				if (!headerizedFile.ParseFile((a, b) => ParseLine(a, b), out result))
+				{
+					Console.WriteLine("Error reading Annotation File " + filename);
+					return null;
+				}
+
+				inputFile.Close();
+
+				return result;
+			} // ReadFile
+		}
+
+		public class IGV
+		{
+			// writes batch file that visualizes CNV, normal and tumor DNA, as well as tumor RNA
+			// specify case, output file and optional position, in the form of "Gene_name"
+			// or "chrX:start-end"
+			public static void writeBatchFile(ASETools.Case case_, string filename, string position = "")
+			{
+				var outFile = ASETools.CreateStreamWriterWithRetry(filename);
+
+				outFile.WriteLine("new");
+
+
+				// Write normal CNV data
+				if (case_.normal_copy_number_filename != "")
+				{
+					outFile.WriteLine("load " + case_.normal_copy_number_filename);
+				}
+
+				// Write normal CNV data
+				if (case_.tumor_copy_number_filename != "")
+				{
+					outFile.WriteLine("load " + case_.tumor_copy_number_filename);
+				}
+
+				outFile.WriteLine("load " + case_.normal_dna_filename);
+				outFile.WriteLine("load " + case_.tumor_dna_filename);
+				outFile.WriteLine("load " + case_.tumor_rna_filename);
+
+				if (position != "")
+				{
+					outFile.WriteLine("goto " + position);
+				}
+
+				outFile.Close();
+
+			}
+		}
+
 
     } // ASETools
 }
