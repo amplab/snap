@@ -323,7 +323,7 @@ namespace MethylationAnalysis
 			timer.Start();
 
 			var configuration = ASETools.Configuration.loadFromFile(args);
-			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname).Take(1000).ToList();
+			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname).ToList();
 
 			if (configuration.commandLineArgs.Count() != 1)
 			{
@@ -368,6 +368,8 @@ namespace MethylationAnalysis
 
 			// Write header: all file ids
 			var caseIds = fileInfo.Keys.ToList();
+			Console.WriteLine("processing " + caseIds.Count() + " cases");
+			caseIds = caseIds.Where(r => r != null).ToList();
 			caseIds.Sort();
 
 			var header = "Composite_REF\t" + String.Join("\t", caseIds);
