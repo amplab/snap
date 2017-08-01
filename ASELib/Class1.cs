@@ -1353,7 +1353,7 @@ namespace ASELib
             public List<string> programNames = new List<string>();
             public string binariesDirectory = defaultBaseDirectory + @"bin\";
             public string configuationFilePathname = defaultConfigurationFilePathame;
-            public string casesFilePathname = defaultBaseDirectory + "cases.txt";
+            public string casesFilePathname = defaultBaseDirectory + "cases_tmp.txt";
             public string indexDirectory = defaultBaseDirectory + @"indices\hg38-20";
             public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
             public string hpcScriptFilename = "";    // The empty string says to black hole this script
@@ -7389,26 +7389,89 @@ namespace ASELib
 
 			}
 
-			//static public List<CopyNumberVariation> diff(List<CopyNumberVariation> normal,
-			//	List<CopyNumberVariation> tumor)
-			//{
-			//	Dictionary<string, List<CopyNumberVariation>> normalDictionary =
-			//		normal.GroupBy(r => r.Chromosome)
-			//			.ToDictionary(x => x.Key, x => x.OrderBy(r => r.Start).ToList());
+			// take tumor cnvs
+			// foreach one, subtract normal ones that overlap
+			// merge final list generated from the subtraction
 
-			//	Dictionary<string, List<CopyNumberVariation>> tumorDictionary =
-			//		tumor.GroupBy(r => r.Chromosome)
-			//			.ToDictionary(x => x.Key, x => x.OrderBy(r => r.Start).ToList());
+			static public List<CopyNumberVariation> diff(List<CopyNumberVariation> normal,
+				List<CopyNumberVariation> tumor)
+			{
+				// Dictionary of chromosome, cnvs for normal
+				Dictionary<string, List<CopyNumberVariation>> normalDictionary =
+					normal.GroupBy(r => r.Chromosome)
+						.ToDictionary(x => x.Key, x => x.OrderBy(r => r.Start).ToList());
+				
+				// Dictionary of chromosome, cnvs for tumor
+				Dictionary<string, List<CopyNumberVariation>> tumorDictionary =
+					tumor.GroupBy(r => r.Chromosome)
+						.ToDictionary(x => x.Key, x => x.OrderBy(r => r.Start).ToList());
 
-			//	// foreach chromosome
-			//	foreach (var kv in tumorDictionary)
-			//	{
-			//		// Find all regions that don't intersect normal copy number variations
+				// foreach chromosome
+				foreach (var kv in tumorDictionary)
+				{
+					// Find all regions that don't intersect normal copy number variations
+					List<CopyNumberVariation> normalForChr;
+					if (!normalDictionary.TryGetValue(kv.Key, out normalForChr))
+					{
+						continue;
+					}
 
-			//	}
+					foreach (var tumorForChr in kv.Value)
+					{
+						// get all overlapping normals
+						var filteredNormals = normalForChr.Where(r => r.overlaps(tumorForChr));
+						foreach (var filteredNormal in filteredNormals)
+						{
+							tumorForChr.Subtract(filteredNormal);
+						}
+					}
 
+				}
 
-			//}
+			}
+
+			List<CopyNumberVariation> Subtract(CopyNumberVariation other)
+			{
+				var result = new List<CopyNumberVariation>();
+
+				// Nothing to subtract
+				if (!this.overlaps(other))
+				{
+					result.Add(this);
+					return result;
+				}
+
+				if (other.Start > this.Start)
+				{
+					result.Add(new CopyNumberVariation(this.Sample, this.Chromosome,
+						this.Start, other.Start, this.Num_Probes,
+						this.Segment_Mean));
+				}
+				else if (this.End > other.End)
+				{
+					result.Add(new CopyNumberVariation(this.Sample, this.Chromosome,
+						this.Start, other.End, this.Num_Probes,
+						this.Segment_Mean));
+				}
+
+				if (other.Start > this.Start && this.End > other.End)
+				{
+					result.Add(new CopyNumberVariation(this.Sample, this.Chromosome, other.End, End, 
+						this.Num_Probes, this.Segment_Mean));
+				}
+				return result;
+			}
+
+			bool overlaps(CopyNumberVariation other)
+			{
+				if (this.Chromosome != other.Chromosome)
+				{
+					return false;
+				}
+
+				return this.Start < other.End && this.End > other.Start;
+			}
+
 			static public List<CopyNumberVariation> ReadFile(string filename, string file_id)
 			{
 				StreamReader inputFile;

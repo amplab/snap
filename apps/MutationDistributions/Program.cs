@@ -9,8 +9,6 @@ namespace MutationDistributions
 	class Program
 	{
 
-		static Dictionary<string, ASETools.Case> oddcases = new Dictionary<string, ASETools.Case>();
-
 		// Dictionary of (disease, bin counts)
 		static Dictionary<string, int[]> mutationByDisease = new Dictionary<string, int[]>();
 
@@ -89,6 +87,7 @@ namespace MutationDistributions
 			// Dictionary of (hugoSymbol, bin counts)
 			// 0 -> 0 mutations
 			// 1 -> 1 mutation
+			// 2 -> >1 mutation
 			List<Dictionary<string, int[]>> germlineDictionary;
 			int binCount;
 
@@ -144,25 +143,25 @@ namespace MutationDistributions
 						mutationByDisease.Add(disease, new int[binCount]);
 					}
 				}
-	//			var cnv = new List<ASETools.CopyNumberVariation>();
-	//			if (case_.tumor_copy_number_filename != "")
-	//			{
-	//				try
-	//				{
-	//					cnv = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id)
-	//.Where(r => Math.Abs(r.Segment_Mean) > 0.2).ToList();
+				var cnv = new List<ASETools.CopyNumberVariation>();
+				if (case_.tumor_copy_number_filename != "")
+				{
+					try
+					{
+						cnv = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id)
+	.Where(r => Math.Abs(r.Segment_Mean) > 0.2).ToList();
 
-	//					var normalcnv = ASETools.CopyNumberVariation.ReadFile(case_.normal_copy_number_filename, case_.tumor_copy_number_file_id)
-	//						.Where(r => Math.Abs(r.Segment_Mean) > 0.2).ToList();
+						var normalcnv = ASETools.CopyNumberVariation.ReadFile(case_.normal_copy_number_filename, case_.tumor_copy_number_file_id)
+							.Where(r => Math.Abs(r.Segment_Mean) > 0.2).ToList();
 
-	//					// calculate the percent more covered in tumor than in normal
-	//				}
-	//				catch (Exception ex)
-	//				{
-	//					Console.WriteLine("couldnt open CNV for case file " + case_.case_id);
-	//				}
+						// calculate the percent more covered in tumor than in normal
+					}
+					catch (Exception ex)
+					{
+						Console.WriteLine("couldnt open CNV for case file " + case_.case_id);
+					}
 
-	//			}
+				}
 
 				var annotatedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
 				var somaticVariants = annotatedVariants.Where(r => r.somaticMutation);
@@ -174,12 +173,13 @@ namespace MutationDistributions
 						double rnaFractionTowardsRef = annotatedVariant.getTumorAlleleSpecificExpression(false);
 						double rnaFractionASE = annotatedVariant.getTumorAlleleSpecificExpression();
 
-						int bin = binValue(rnaFractionTowardsRef, binCount);
 
 						// bin value by disease and gene. 
 						// keep track of whether it is germline or somatic
 						if (annotatedVariant.somaticMutation)
 						{
+							int bin = binValue(rnaFractionTowardsRef, binCount);
+
 							var gene = annotatedVariant.Hugo_symbol;
 
 							lock (mutationByGene)
@@ -204,13 +204,14 @@ namespace MutationDistributions
 								knownGenes.genesByChromosome[annotatedVariant.contig].Where(r =>
 								r.containsLocus(annotatedVariant.contig, annotatedVariant.locus));
 
+							bool finishedDisease = false;
+
 							foreach (var gene in genesOverlappingGermline)
 							{
 								// how many mutations does this gene have?
 								var mutations = somaticVariants.Where(r => r.Hugo_symbol == gene.hugoSymbol);
 								var mutationCount = mutations.Count();
 
-								double mutationTowardsRef;
 								double mutationASE;
 								if (mutationCount > 0)
 								{
@@ -218,43 +219,30 @@ namespace MutationDistributions
 									{
 										continue;
 									}
-									mutationTowardsRef = mutations.First().getTumorAlleleSpecificExpression(false);
 									mutationASE =  mutations.First().getTumorAlleleSpecificExpression();
 								}
 								else
 								{
-									mutationTowardsRef = 0.0; // Doesnt matter, we won't use it
+									// we will not use it anyways
 									mutationASE = 0.0;
 								}
 
-								//if (mutationCount > 0 && Math.Abs(mutationASE - rnaFractionTumor) > 0.5)
-								//{
+								if (mutationCount > 0 && Math.Abs(mutationASE - rnaFractionASE) > 0.5)
+								{
+									Console.WriteLine(case_.case_id + ":" + gene.hugoSymbol);
 
-								//	var start = Math.Min(mutations.First().locus -1, annotatedVariant.locus-1);
-								//	var end = Math.Max(mutations.First().locus+1, annotatedVariant.locus+1);
+									// how many of these are covered by CNVs?
+									var overlappingCNVs = cnv.Where(r => r.Chromosome == ASETools.chromosomeNameToNonChrForm(annotatedVariant.contig) &&
+										r.Start < annotatedVariant.locus && r.End > annotatedVariant.locus);
+								}
 
-								//	var position = mutations.First().contig + ":" + start + "-" + end;
+								if (!finishedDisease)
+								{
+									germlineByDisease.Add(disease, mutationCount, rnaFractionASE, mutationASE);
+									finishedDisease = true;
+								}
 
-								//	//var overlappingCNVs = cnv.Where(r => r.Chromosome == ASETools.chromosomeNameToNonChrForm(annotatedVariant.contig) &&
-								//	//	r.Start < annotatedVariant.locus && r.End > annotatedVariant.locus);
-
-								//	var filename = ASETools.Configuration.defaultBaseDirectory + @"igv\" + case_.case_id + "_" + gene.hugoSymbol + ".bat";
-
-								//	//if (overlappingCNVs.Count() > 0)
-								//	//{
-								//	//	filename = ASETools.Configuration.defaultBaseDirectory + @"igv\" + case_.case_id + "_CNV_" + gene.hugoSymbol + ".bat";
-								//	//}
-
-								//	ASETools.IGV.writeBatchFile(case_, filename, position);
-								//	if (!oddcases.ContainsKey(case_.case_id))
-								//	{
-								//		oddcases.Add(case_.case_id, case_);
-								//	}
-
-								//}
-
-								germlineByDisease.Add(disease, mutationCount, rnaFractionASE, mutationASE);
-								germlineByGene.Add(gene.hugoSymbol, mutationCount, rnaFractionTowardsRef, mutationTowardsRef);
+								germlineByGene.Add(gene.hugoSymbol, mutationCount, rnaFractionASE, mutationASE);
 
 							}
 						}
