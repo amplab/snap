@@ -14,7 +14,7 @@ namespace CheckASEConsistency // Looks for single <case,gene> pairs that have AS
     {
         static ASETools.Configuration configuration;
         static List<ASETools.Case> casesToProcess = new List<ASETools.Case>();
-        static ASETools.GeneMap geneMap;
+        static ASETools.GeneMap consistentGeneMap;
         static StreamWriter outputFile;
         static int nCasesProcessed = 0;
         static int nFunnyInstances = 0;
@@ -40,8 +40,9 @@ namespace CheckASEConsistency // Looks for single <case,gene> pairs that have AS
 
             casesToProcess = cases.Select(x => x.Value).Where(x => x.annotated_selected_variants_filename != null && x.annotated_selected_variants_filename != "").ToList();
 
-            var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
-            geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
+            var consistentGeneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename).Where(x => !x.Value.inconsistent).ToDictionary(x => x.Key, x=> x.Value));
+            Console.WriteLine("total  " + consistentGeneLocationInformation.genesByName.Count() + " and " + ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename).Count() + " unfiltered");
+            consistentGeneMap = new ASETools.GeneMap(consistentGeneLocationInformation.genesByName);
 
             var outputFilename = configuration.finalResultsDirectory + ASETools.ASEConsistencyFilename;
             outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
@@ -51,7 +52,7 @@ namespace CheckASEConsistency // Looks for single <case,gene> pairs that have AS
                 return;
             }
 
-            outputFile.WriteLine("Case ID\tcontig\tlocus\tGenes\tn Variants\tminASE\tmaxASE\teach ASE\teach variant is somatic\teach tumor RNA ref count\teach tumor RNA alt count");
+            outputFile.WriteLine("Case ID\tcontig\tmin locus\tmax locus\tgenome range\tGenes\tn Variants\tminASE\tmaxASE\teach ASE\teach variant is somatic\teach tumor RNA ref count\teach tumor RNA alt count");
 
             Console.Write("Processing " + casesToProcess.Count() + " of " + cases.Count() + " cases; 1 dot/100 cases:");
 
@@ -69,13 +70,22 @@ namespace CheckASEConsistency // Looks for single <case,gene> pairs that have AS
             outputFile.WriteLine("**done**");
             outputFile.Close();
 
-            Console.WriteLine("Gene\t# Instances with funny ASE");
-            foreach (var geneEntry in geneToFunnyCount)
+            outputFilename = configuration.finalResultsDirectory + ASETools.GenesByFunnyASECountFilename;
+            var geneFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
+            if (null != geneFile)
             {
-                Console.WriteLine(geneEntry.Key + "\t" + geneEntry.Value);
+                geneFile.WriteLine("Gene\t# Instances with funny ASE");
+                foreach (var geneEntry in geneToFunnyCount)
+                {
+                    geneFile.WriteLine(geneEntry.Key + "\t" + geneEntry.Value);
+                }
+                geneFile.WriteLine("**done**");
+                geneFile.Close();
+            } else
+            {
+                Console.WriteLine("Unable to open output file " + outputFilename);
             }
 
-            Console.WriteLine();
             Console.WriteLine("Processed " + nInstancesChecked + " instances from among " + nAnnotatedSelectedVariants + 
                 " annotated selected variants, of which " + nFunnyInstances + " were questionable (" + nFunnyWithASomaticMutation + 
                 " of those had at least one somatic variant) in " + ASETools.ElapsedTimeInSeconds(timer));
@@ -118,14 +128,14 @@ namespace CheckASEConsistency // Looks for single <case,gene> pairs that have AS
                 for (int i = 0; i < annotatedSelectedVariants.Count(); i++)
                 {
                     var variant = annotatedSelectedVariants[i];
-                    var genesForThisVariant = geneMap.getGenesMappedTo(variant.contig, variant.locus);
+                    var genesForThisVariant = consistentGeneMap.getGenesMappedTo(variant.contig, variant.locus);
                     if (genesForThisVariant != currentGenesMappedTo)
                     {
                         ProcessSet(case_, currentGenesMappedTo, variantsInThisGroup, ref nInstancesCheckedThisThread);
                         currentGenesMappedTo = genesForThisVariant;
                         variantsInThisGroup = new List<ASETools.AnnotatedVariant>();
-                        variantsInThisGroup.Add(variant);
                     }
+                    variantsInThisGroup.Add(variant);
                 }
 
                 ProcessSet(case_, currentGenesMappedTo, variantsInThisGroup, ref nInstancesCheckedThisThread);
@@ -155,15 +165,18 @@ namespace CheckASEConsistency // Looks for single <case,gene> pairs that have AS
 
                 if (maxASE - minASE > 0.5)
                 {
+                    var minLocus = variantsToConsider.Select(x => x.locus).Min();
+                    var maxLocus = variantsToConsider.Select(x => x.locus).Max();
+
                     lock (outputFile)
                     {
                         nFunnyInstances++;
-                        if (variantsToConsider.Select(x => x.somaticMutation).Count() > 0)
+                        if (variantsToConsider.Where(x => x.somaticMutation).Count() > 0)
                         {
                             nFunnyWithASomaticMutation++;
                         }
 
-                        outputFile.Write(case_.case_id + "\t" + variantsToConsider[0].contig + "\t" + variantsToConsider[0].locus + "\t");
+                        outputFile.Write(case_.case_id + "\t" + variantsToConsider[0].contig + "\t" + minLocus + "\t" + maxLocus + "\t" + (maxLocus - minLocus) + "\t");
                         currentGenesMappedTo.ForEach(x => outputFile.Write(x.hugoSymbol + ","));
                         outputFile.Write("\t" + variantsToConsider.Count() + "\t" + minASE + "\t" + maxASE + "\t");
                         variantsToConsider.ForEach(x => outputFile.Write(x.tumorRNAReadCounts.AlleleSpecificValue() + ","));
