@@ -143,25 +143,25 @@ namespace MutationDistributions
 						mutationByDisease.Add(disease, new int[binCount]);
 					}
 				}
-				var cnv = new List<ASETools.CopyNumberVariation>();
-				if (case_.tumor_copy_number_filename != "")
-				{
-					try
-					{
-						cnv = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id)
-	.Where(r => Math.Abs(r.Segment_Mean) > 0.2).ToList();
+	//			var cnv = new List<ASETools.CopyNumberVariation>();
+	//			if (case_.tumor_copy_number_filename != "")
+	//			{
+	//				try
+	//				{
+	////					cnv = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id)
+	////.Where(r => Math.Abs(r.Segment_Mean) > 0.2).ToList();
 
-						var normalcnv = ASETools.CopyNumberVariation.ReadFile(case_.normal_copy_number_filename, case_.tumor_copy_number_file_id)
-							.Where(r => Math.Abs(r.Segment_Mean) > 0.2).ToList();
+	////					var normalcnv = ASETools.CopyNumberVariation.ReadFile(case_.normal_copy_number_filename, case_.tumor_copy_number_file_id)
+	////						.Where(r => Math.Abs(r.Segment_Mean) > 0.2).ToList();
 
-						// calculate the percent more covered in tumor than in normal
-					}
-					catch (Exception ex)
-					{
-						Console.WriteLine("couldnt open CNV for case file " + case_.case_id);
-					}
+	//					// calculate the percent more covered in tumor than in normal
+	//				}
+	//				catch (Exception ex)
+	//				{
+	//					Console.WriteLine("couldnt open CNV for case file " + case_.case_id);
+	//				}
 
-				}
+	//			}
 
 				var annotatedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
 				var somaticVariants = annotatedVariants.Where(r => r.somaticMutation);
@@ -227,13 +227,10 @@ namespace MutationDistributions
 									mutationASE = 0.0;
 								}
 
-								if (mutationCount > 0 && Math.Abs(mutationASE - rnaFractionASE) > 0.5)
+								if (mutationCount > 0 && Math.Abs(mutationASE - rnaFractionASE) > 0.5
+									&& case_.normal_rna_filename != "")
 								{
 									Console.WriteLine(case_.case_id + ":" + gene.hugoSymbol);
-
-									// how many of these are covered by CNVs?
-									var overlappingCNVs = cnv.Where(r => r.Chromosome == ASETools.chromosomeNameToNonChrForm(annotatedVariant.contig) &&
-										r.Start < annotatedVariant.locus && r.End > annotatedVariant.locus);
 								}
 
 								if (!finishedDisease)
@@ -336,6 +333,40 @@ namespace MutationDistributions
 			germlineByGene = new GermlineDictionary(binCount);
 
 			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname).Select(r => r.Value).ToList();
+
+			var filename = ASETools.Configuration.defaultBaseDirectory + "cnvRatios.txt";
+			var outFile = ASETools.CreateStreamWriterWithRetry(filename);
+			//////////////////////////////////////////////////////////
+			foreach (var case_ in cases)
+			{
+				if (case_.tumor_copy_number_filename != "" && case_.normal_copy_number_filename != "")
+				{
+					try
+					{
+						var cnv = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id)
+	.Where(r => Math.Abs(r.Segment_Mean) > 0.2).ToList();
+						var tumorBases = ASETools.CopyNumberVariation.getBasesinCNV(cnv);
+
+						var normalcnv = ASETools.CopyNumberVariation.ReadFile(case_.normal_copy_number_filename, case_.tumor_copy_number_file_id)
+							.Where(r => Math.Abs(r.Segment_Mean) > 0.2).ToList();
+						var normalBases = ASETools.CopyNumberVariation.getBasesinCNV(normalcnv);
+
+						outFile.Write(case_.case_id + "\t" + case_.disease() +"\t");
+						outFile.Write((double)tumorBases / normalBases);
+						outFile.WriteLine();
+
+					}
+					catch (Exception ex)
+					{
+						Console.WriteLine("couldnt open CNV for case file " + case_.case_id);
+					}
+
+				}
+			}
+			return;
+			////////////////////////////////////////
+
+
 			Console.WriteLine(cases.Count() + " cases to process");
 
 			var threads = new List<Thread>();
