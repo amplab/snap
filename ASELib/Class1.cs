@@ -1353,7 +1353,7 @@ namespace ASELib
             public List<string> programNames = new List<string>();
             public string binariesDirectory = defaultBaseDirectory + @"bin\";
             public string configuationFilePathname = defaultConfigurationFilePathame;
-            public string casesFilePathname = defaultBaseDirectory + "cases_tmp.txt";
+            public string casesFilePathname = defaultBaseDirectory + "cases.txt";
             public string indexDirectory = defaultBaseDirectory + @"indices\hg38-20";
             public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
             public string hpcScriptFilename = "";    // The empty string says to black hole this script
@@ -5505,27 +5505,36 @@ namespace ASELib
 				return str;
 			}
 
-			public double getTumorAlleleSpecificExpression(bool isAbsoluteValue = true)
+			public double GetTumorAlleleSpecificExpression()
 			{
-				return getAlleleSpecificExpression(tumorRNAReadCounts, isAbsoluteValue);
+				return GetAlleleSpecificExpression(tumorRNAReadCounts);
 			}
 
-			public double getNormalAlleleSpecificExpression(bool isAbsoluteValue = true)
+			public double GetNormalAlleleSpecificExpression()
 			{
-				return getAlleleSpecificExpression(normalRNAReadCounts, isAbsoluteValue);
+				return GetAlleleSpecificExpression(normalRNAReadCounts);
 			}
 
-			private static double getAlleleSpecificExpression(ReadCounts readCounts, bool isAbsoluteValue)
+			public double GetTumorAltAlleleFraction()
 			{
-				double rnaFractionTumor = (double)readCounts.nMatchingAlt / (readCounts.nMatchingReference + readCounts.nMatchingAlt);
+				return GetAltAlleleFraction(tumorRNAReadCounts);
+			}
 
-				if (isAbsoluteValue)
-				{
-					return Math.Abs(rnaFractionTumor * 2.0 - 1.0);
-				}
-				else {
-					return rnaFractionTumor;
-				}
+			public double GetNormalAltAlleleFraction()
+			{
+				return GetAltAlleleFraction(normalRNAReadCounts);
+			}
+
+			private static double GetAlleleSpecificExpression(ReadCounts readCounts)
+			{
+				var rnaFractionTumor = GetAltAlleleFraction(readCounts);
+
+				return Math.Abs(rnaFractionTumor * 2.0 - 1.0);
+			}
+
+			private static double GetAltAlleleFraction(ReadCounts readCounts)
+			{
+				return (double)readCounts.nMatchingAlt / (readCounts.nMatchingReference + readCounts.nMatchingAlt);
 			}
 
 			public AnnotatedVariant(string Hugo_symbol_, bool somaticMutation_, string contig_, int locus_, string reference_allele_, string alt_allele_, string variantType_, string variantClassification_, ReadCounts tumorDNAReadCounts_, ReadCounts tumorRNAReadCounts_, ReadCounts normalDNAReadCounts_, ReadCounts normalRNAReadCounts_)
@@ -7433,8 +7442,8 @@ namespace ASELib
 			{
 				var outFile = ASETools.CreateStreamWriterWithRetry(filename);
 
+				// start new session
 				outFile.WriteLine("new");
-
 
 				// Write normal CNV data
 				if (case_.normal_copy_number_filename != "")
@@ -7448,6 +7457,7 @@ namespace ASELib
 					outFile.WriteLine("load " + case_.tumor_copy_number_filename);
 				}
 
+				// load normal DNA, tumor DNA and tumor RNA
 				outFile.WriteLine("load " + case_.normal_dna_filename);
 				outFile.WriteLine("load " + case_.tumor_dna_filename);
 				outFile.WriteLine("load " + case_.tumor_rna_filename);

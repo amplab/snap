@@ -202,7 +202,7 @@ namespace ExpressionNearMutations
 							//
 							// Now convert to the amount of allele-specific expression.  50% is no ASE, while 0 or 100% is 100% ASE.
 							//
-							alleleSpecificExpression = annotatedVariant.getTumorAlleleSpecificExpression();
+							alleleSpecificExpression = annotatedVariant.GetTumorAlleleSpecificExpression();
 
 							// If we have the normal DNA and RNA for this sample, compute the normal ASE
 							if (annotatedVariant.normalRNAReadCounts != null && annotatedVariant.normalDNAReadCounts.nMatchingReference + annotatedVariant.normalDNAReadCounts.nMatchingAlt >= 10 &&   // We have at least 10 DNA reads
@@ -210,7 +210,7 @@ namespace ExpressionNearMutations
 								annotatedVariant.normalDNAReadCounts.nMatchingReference * 3 >= annotatedVariant.normalDNAReadCounts.nMatchingAlt * 2 &&         // It's not more than 2/3 variant DNA
 								annotatedVariant.normalDNAReadCounts.nMatchingAlt * 3 >= annotatedVariant.normalDNAReadCounts.nMatchingReference * 2)
 							{
-								alleleSpecificExpressionNormal = annotatedVariant.getNormalAlleleSpecificExpression();
+								alleleSpecificExpressionNormal = annotatedVariant.GetNormalAlleleSpecificExpression();
 								// add to data with normal
 								expressionValues.Add(annotatedVariant.contig, annotatedVariant.locus, alleleSpecificExpression, 0, true, alleleSpecificExpressionNormal, 0);
 							}
