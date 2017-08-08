@@ -46,14 +46,13 @@ namespace ApplyBonferroniCorrection
         {
             public bool foundAny = false;
             public double minP = 10000000;
-            public double bestZeroVsOne = 1;
+            public double bestZeroVsOne = double.MaxValue;
             public int bestZeroVsOneAt = -1;
             public bool bestZeroVsOneIsExclusive = false;
             public double bestLocalZeroVsOne = 1;
             public int bestLocalZeroVsOneAt = -1;
             public bool bestLocalZeroVsOneIsExclusive = false;
             public bool significant = false;
-            public double zeroVsOne = 0;
 
             public int minPAt = -1;
             public bool minPIsExclusive = false;
@@ -63,11 +62,11 @@ namespace ApplyBonferroniCorrection
         //
         // Apply the bonferroni correction and update our stats.
         //
-        static void ProcessSinglePValue(ref double p, int bonferroniCorrection, bool exclusive, bool oneVsNotOne, int regionIndex, PValueStats pValueStats, ASETools.Histogram histogramOfPValues)
+        static int ProcessSinglePValue(ref double p, int bonferroniCorrection, bool exclusive, bool oneVsNotOne, int regionIndex, PValueStats pValueStats, ASETools.Histogram histogramOfPValues)
         {
             if (p == double.NegativeInfinity)   // Not a p-value because not enough data
             {
-                return;
+                return 0;
             }
 
             histogramOfPValues.addValue(p);
@@ -81,20 +80,38 @@ namespace ApplyBonferroniCorrection
                 pValueStats.minPIsExclusive = exclusive;
                 pValueStats.minPIsOneVsNotOne = oneVsNotOne;
 
-                pValueStats.significant = p < configuration.significanceLevel;  // Recall, we're at the lowest p we've seen so far, so we can never set this to false if it's already true.
+                pValueStats.significant = p <= configuration.significanceLevel;  // Recall, we're at the lowest p we've seen so far, so we can never set this to false if it's already true.
             }
+
+            return p <= configuration.significanceLevel ? 1 : 0;
+            
         }
 
-        static void ProcessSingleResult(ASETools.SingleExpressionResult singleResult, int bonferroniCorrection, bool exclusive, int regionIndex, PValueStats pValueStats, ASETools.Histogram histogramOfPValues)
+        static int ProcessSingleResult(ASETools.SingleExpressionResult singleResult, int bonferroniCorrection, bool exclusive, int regionIndex, PValueStats pValueStats, ASETools.Histogram histogramOfPValues)
         {
-            ProcessSinglePValue(ref singleResult.oneVsMany, bonferroniCorrection, exclusive, false, regionIndex, pValueStats, histogramOfPValues);
-            ProcessSinglePValue(ref singleResult.oneVsNotOne, bonferroniCorrection, exclusive, true, regionIndex, pValueStats, histogramOfPValues);
+            int nSignificantResults = 0;
+            nSignificantResults += ProcessSinglePValue(ref singleResult.oneVsMany, bonferroniCorrection, exclusive, false, regionIndex, pValueStats, histogramOfPValues);
+            nSignificantResults += ProcessSinglePValue(ref singleResult.oneVsNotOne, bonferroniCorrection, exclusive, true, regionIndex, pValueStats, histogramOfPValues);
+            if (singleResult.oneMutationStats.n > 0 && singleResult.zeroMutationStats.n > 0 && singleResult.oneMutationStats.mean != 0 && singleResult.oneVsMany <= configuration.significanceLevel)
+            {
+                //
+                // We have a significant zero-vs-one.
+                //
+                double zeroVsOne = singleResult.zeroMutationStats.mean / singleResult.oneMutationStats.mean;
+                if (zeroVsOne < pValueStats.bestZeroVsOne)
+                {
+                    pValueStats.bestZeroVsOne = zeroVsOne;
+                    pValueStats.bestZeroVsOneAt = regionIndex;
+                    pValueStats.bestZeroVsOneIsExclusive = exclusive;
+                }
+            }
+
+            return nSignificantResults;
         }
 
 
-        static void ProcessFile(string filename, StreamWriter allSignificantResultsFile, int bonferroniCorrection, out int overallValidCount, ASETools.Histogram histogramOfPValues)
+        static void ProcessFile(string filename, StreamWriter allSignificantResultsFile, int bonferroniCorrection, ASETools.Histogram histogramOfPValues)
         {
-            overallValidCount = 0;
             if (!filename.EndsWith(".txt"))
             {
                 Console.WriteLine("ProcessFile: filename " + filename + " does not end in .txt");
@@ -112,7 +129,7 @@ namespace ApplyBonferroniCorrection
             // the input in order.
             //
             var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
-            outputFile.WriteLine("Hugo Symbol\tMin p\tMin p at\t0 vs. 1 ratio at MinP\tSignificant@.01\tBest 0 vs. 1 ratio for significant results\tBest 0 vs. 1 ratio at\t"+ ASETools.ExpressionResultsLine.getHeaderString());
+            outputFile.WriteLine("Hugo Symbol\tMin p\tMin p at\tSignificant@.01\tBest 0 vs. 1 ratio for significant results\tBest 0 vs. 1 ratio at\t"+ ASETools.ExpressionResultsLine.getHeaderString());
 
             int nSignificantReuslts = 0;
             foreach (var result in results)
@@ -121,188 +138,43 @@ namespace ApplyBonferroniCorrection
 
                 for (int i = 0; i < ASETools.nRegions; i++)
                 {
-                    ProcessSingleResult(result.nonExclusiveResultsByRange[i], bonferroniCorrection, false, i, pValueStats, histogramOfPValues);
-                    ProcessSingleResult(result.exclusiveResultsByRange[i], bonferroniCorrection, true, i, pValueStats, histogramOfPValues);
+                    nSignificantReuslts += ProcessSingleResult(result.nonExclusiveResultsByRange[i], bonferroniCorrection, false, i, pValueStats, histogramOfPValues);
+                    nSignificantReuslts += ProcessSingleResult(result.exclusiveResultsByRange[i], bonferroniCorrection, true, i, pValueStats, histogramOfPValues);
                 }
 
                 outputFile.Write(ASETools.ConvertToExcelString(result.hugo_symbol) + "\t");
 
                 if (pValueStats.minPAt == -1)
                 {
-                    outputFile.Write("*\t*\t*\tfalse\t*\t*\t")
+                    outputFile.Write("*\t*\tfalse\t*\t*\t");
                 } else
                 {
-                    outputFile.Write(pValueStats.minP + "\t" + ASETools.regionIndexToString(pValueStats.minPAt) + (pValueStats.minPIsExclusive ? " exclusive\t" : "\t");
-                    if (result.resultsByRange[pValueStats.minPIsExclusive][pValueStats.minpAt].)
-                }
-
-                + pValueStats.minP + "\t" + ASETools.regionIndexToString(pValueStats.minPAt) + (pValueStats.minPIsExclusive ? " exclusive" : "") + "\t");
-
-                if (result.result.resultsByRange[pValueStats.minPIsExclusive][])
-
-                string restOfOutputLine = "";   // Since we want to put minP at the beginning but don't know its value until the end, build up the output in this string.
-
-                for (int whichField = nFields - 4; whichField < nFields; whichField++)
-                {
-                    restOfOutputLine += "\t" + fields[whichField];
-                }
-         
-
-
-                for (int whichField = 1; whichField < nFields - 4; whichField++)    // First field is gene name, last four are nTumors, nZero, nOne, nMore
-                {
-                    if (fields[whichField] == "*" || (!fieldsToConvert[whichField] && !zeroValueFields[whichField] && !oneValueFields[whichField]) )
+                    outputFile.Write(pValueStats.minP + "\t" + ASETools.regionIndexToString(pValueStats.minPAt) + (pValueStats.minPIsExclusive ? " exclusive\t" : "\t") + (pValueStats.significant ? "true\t" : "false\t"));
+                    if (pValueStats.bestZeroVsOneAt != -1)
                     {
-                        restOfOutputLine += "\t" + fields[whichField];
-                    }
-                    else
+                        outputFile.Write(pValueStats.bestZeroVsOne + "\t" + ASETools.regionIndexToString(pValueStats.bestZeroVsOneAt) + (pValueStats.bestZeroVsOneIsExclusive ? " exclusive\t" : "\t"));
+                    } else
                     {
-                        try
-                        {
-                            double value = Convert.ToDouble(fields[whichField]);
-                            if (fieldsToConvert[whichField])
-                            {
-                                histogramOfPValues.addValue(value); // NB: Before Bonferroni correction.
-
-                                value *= bonferroniCorrection;
-                            }
-
-                            if (fieldsToConvert[whichField] && value < minP)
-                            {
-                                minP = value;
-                                minPAt = whichField;
-                                justSetMinP = true;
-                                zeroValue = -1;
-                                oneValue = -1;
-                                zeroVsOne = -1;
-                                foundAny = true;
-                            }
-
-                            if (fieldsToConvert[whichField] && value <= .01)
-                            {
-                                significant = true;
-                                zeroValue = -1;
-                                oneValue = -1;
-
-
-                            }
-
-                            if (zeroValueFields[whichField])
-                            {
-                                zeroValue = value;
-                            }
-
-                            if (oneValueFields[whichField])
-                            {
-                                oneValue = value;
-                            }
-
-                            if (-1 != zeroValue && -1 != oneValue)
-                            {
-                                if (justSetMinP)
-                                {
-                                    if (0 == oneValue)
-                                    {
-                                        zeroVsOne = 100000; // Something big.
-                                    }
-                                    else
-                                    {
-                                        zeroVsOne = zeroValue / oneValue;
-                                    }
-                                }
-
-                                if (significant && 0 != oneValue)
-                                {
-                                    double candidate = zeroValue / oneValue;
-                                    if (candidate > 1)
-                                    {
-                                        candidate = 1 / candidate;
-                                    }
-
-                                    if (candidate < bestZeroVsOne)
-                                    {
-                                        bestZeroVsOne = candidate;
-                                        bestZeroVsOneAt = whichField;
-                                    }
-
-                                    if (zeroValueLocalFields[whichField] || oneValueLocalFields[whichField] && candidate < bestLocalZeroVsOne)
-                                    {
-                                        bestLocalZeroVsOne = candidate;
-                                        bestLocalZeroVsOneAt = whichField;
-                                    }
-
-                                    allSignificantResultsFile.WriteLine(value + "\t" + fields[0] + "\t" + ASETools.GetFileNameFromPathname(filename, true) + "\t" + headerFields[whichField] + "\t" + candidate);
-                                    nSignificantReuslts++;
-                                }
-                                else if (significant)
-                                {
-                                    allSignificantResultsFile.WriteLine(value + "\t" + fields[0] + "\t" + ASETools.GetFileNameFromPathname(filename, true) + "\t" + headerFields[whichField]);
-                                    nSignificantReuslts++;
-                                }
-
-                                justSetMinP = false;
-                                zeroValue = -1;
-                                oneValue = -1;
-                                significant = false;
-                            }
-
-                            restOfOutputLine += "\t" + Convert.ToString(value);
-                        } catch (FormatException) {
-                            Console.WriteLine("Unparsable field " + fields[whichField] + " in line " + whichLine + " of file " + filename);
-                            outputFile.Close();
-                            File.Delete(outputFilename);
-                            return;
-                        }
+                        outputFile.Write("*\t*\t");
                     }
-                } // for each value field.
 
-                if (foundAny)
-                {
-                    outputFile.Write("\t" + minP + "\t" + headerFields[minPAt] + "\t" + zeroVsOne + "\t" + ((minP < .01) ? "yes" : "no"));
-                }
-                else
-                {
-                    outputFile.Write("\t*\t*\t*\t*");
                 }
 
-                if (bestZeroVsOneAt != -1)
-                {
-                    outputFile.Write("\t" + bestZeroVsOne + "\t" + headerFields[bestZeroVsOneAt]);
-                }
-                else
-                {
-                    outputFile.Write("\t*\t*");
-                }
-
-                if (bestLocalZeroVsOneAt != -1)
-                {
-                    outputFile.Write("\t" + bestLocalZeroVsOne + "\t" + headerFields[bestLocalZeroVsOneAt]);
-                }
-                else
-                {
-                    outputFile.Write("\t*\t*");
-                }
-
-                outputFile.WriteLine(restOfOutputLine);
+                outputFile.WriteLine(result.rawLine);
             }
 
-
-            Console.WriteLine(ASETools.GetFileNameFromPathname(filename, true) + " has " + nSignificantReuslts + " signficant results");
-            overallValidCount = nSignificantReuslts;
             outputFile.Close();
+            Console.WriteLine("input file " + filename + " has " + nSignificantReuslts + " significant results.");
         }
 
-        static void ProcessFileGroup(List<string> inputFiles, StreamWriter allSignificantResultsFile, out ASETools.Histogram histogramOfPValues)
+        static void ProcessFileGroup(List<string> inputFilenames, StreamWriter allSignificantResultsFile, out ASETools.Histogram histogramOfPValues)
         {
             int bonferonniCorrection = 0;
-            foreach (var inputFile in inputFiles)
+            foreach (var inputFilename in inputFilenames)
             {
-                if (!inputFile.ToLower().Contains("_by_range_graphs"))
+                if (!inputFilename.ToLower().Contains("_by_range_graphs"))
                 {
-                    int overallValidCount;
-                    ProcessFile(inputFile, allSignificantResultsFile, false, 0, out overallValidCount, null);
-
-                    bonferonniCorrection += overallValidCount;
+                    bonferonniCorrection += CountValidPValuesInFile(inputFilename);
                 }
             }
 
@@ -312,15 +184,9 @@ namespace ApplyBonferroniCorrection
 
             int totalSignificantResults = 0;
             histogramOfPValues = new ASETools.Histogram();
-            foreach (var inputFile in inputFiles)
+            foreach (var inputFilename in inputFilenames)
             {
-                if (!inputFile.ToLower().Contains("_by_range_graphs"))
-                {
-                    int overallValidCount;
-                    ProcessFile(inputFile, allSignificantResultsFile, true, bonferonniCorrection, out overallValidCount, histogramOfPValues);
-
-                    totalSignificantResults += overallValidCount;
-                }
+                ProcessFile(inputFilename, allSignificantResultsFile, bonferonniCorrection, histogramOfPValues);
             }
 
             Console.WriteLine("Set total of " + totalSignificantResults + " signficant results");
@@ -347,8 +213,8 @@ namespace ApplyBonferroniCorrection
             //
             List<List<string>> inputFileSets = new List<List<string>>();
 
-            inputFileSets.Add(Directory.GetFiles(configuration.finalResultsDirectory, "ExpressionDistributionByMutationCount*.txt").Where(x => !x.EndsWith(ASETools.bonferroniExtension)).ToList());
-            inputFileSets.Add(Directory.GetFiles(configuration.finalResultsDirectory, "AlleleSpecificExpressionDistributionByMutationCount*.txt").Where(x => !x.EndsWith(ASETools.bonferroniExtension)).ToList());
+            inputFileSets.Add(Directory.GetFiles(configuration.finalResultsDirectory, "ExpressionDistributionByMutationCount*.txt").Where(x => !x.Contains(ASETools.bonferroniExtension)).ToList());
+            inputFileSets.Add(Directory.GetFiles(configuration.finalResultsDirectory, "AlleleSpecificExpressionDistributionByMutationCount*.txt").Where(x => !x.Contains(ASETools.bonferroniExtension)).ToList());
 
             var allSignificantResultsFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + "AllSignificantResults.txt");
             allSignificantResultsFile.WriteLine("Effect size\tGene\tinput file\tp");

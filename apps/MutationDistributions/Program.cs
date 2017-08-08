@@ -147,7 +147,7 @@ namespace MutationDistributions
 
 				foreach (var annotatedVariant in annotatedVariants)
 				{
-					if (!annotatedVariant.hasSufficientReads())
+					if (!annotatedVariant.IsASECandidate())
 					{
 						continue;
 					}
@@ -195,7 +195,7 @@ namespace MutationDistributions
 							double mutationASE;
 							if (mutationCount > 0)
 							{
-								if (!mutations.First().hasSufficientReads())
+								if (!mutations.First().IsASECandidate())
 								{
 									continue;
 								}

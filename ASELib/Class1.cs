@@ -828,11 +828,12 @@ namespace ASELib
             public string tumor_rna_mapped_base_count_filename = "";
             public string selected_variant_counts_by_gene_filename = "";
             public string tumor_regional_methylation_filename = "";
+            public string normal_regional_methylation_filename = "";
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
 
             //
-            // Checksums for downloaded files. The tumor DNA BAMs aren't included here
-            // because they're BAM sliced and so don't have server-side md5s.
+            // Checksums for downloaded files. (NB: I'm not sure how to get the BAI md5s from the metadata, so they're left blank and the
+            // BAIs aren't checked.  You have to notice if they're corrupt by hand when samtools can't read them and delete & re-download them.)
             //
             public string normal_rna_file_bam_md5 = "";
             public string normal_rna_file_bai_md5 = "";
@@ -847,11 +848,43 @@ namespace ASELib
 			public string tumor_copy_number_file_md5 = "";
 			public string normal_copy_number_file_md5 = "";
 
-			//
-			// The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
-			// so so just take the column numbers on the command line.  (That seemed better than compiling file format knowledge into them.)
-			//
-			static public int ProjectColumn = -1;
+            //
+            // Sizes for derived files.
+            //
+            public long normal_dna_allcount_size = 0;
+            public long tumor_dna_allcount_size = 0;
+            public long normal_rna_allcount_size = 0;
+            public long tumor_rna_allcount_size = 0;
+            public long regional_expression_size = 0;
+            public long gene_expression_size = 0;
+            public long selected_variants_size = 0;
+            public long tumor_dna_reads_at_selected_variants_size = 0;
+            public long tumor_dna_reads_at_selected_variants_index_size = 0;
+            public long normal_dna_reads_at_selected_variants_size = 0;
+            public long normal_dna_reads_at_selected_variants_index_size = 0;
+            public long tumor_rna_reads_at_selected_variants_size = 0;
+            public long tumor_rna_reads_at_selected_variants_index_size = 0;
+            public long normal_rna_reads_at_selected_variants_size = 0;
+            public long normal_rna_reads_at_selected_variants_index_size = 0;
+            public long annotated_selected_variants_size = 0;
+            public long normal_allele_specific_gene_expression_size = 0;
+            public long tumor_allele_specific_gene_expression_size = 0;
+            public long tumor_dna_gene_coverage_size = 0;
+            public long vcf_size = 0;
+            public long extracted_maf_lines_size = 0;
+            public long normal_dna_mapped_base_count_size = 0;
+            public long tumor_dna_mapped_base_count_size = 0;
+            public long normal_rna_mapped_base_count_size = 0;
+            public long tumor_rna_mapped_base_count_size = 0;
+            public long selected_variant_counts_by_gene_size = 0;
+            public long tumor_regional_methylation_size = 0;
+            public long normal_regional_methylation_size = 0;
+
+            //
+            // The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
+            // so so just take the column numbers on the command line.  (That seemed better than compiling file format knowledge into them.)
+            //
+            static public int ProjectColumn = -1;
             static public int TumorRNAAllcountFilenameColumn = -1;
             static public int TumorRNAMappedBaseCountColumn = -1;
 
@@ -916,20 +949,25 @@ namespace ASELib
             public delegate string ColumnGetter(Case case_);
             public delegate void ColumnSetter(Case case_, string value);
             public delegate string ExpectedIdGetter(Case case_);
+            public delegate long SizeColumnGetter(Case case_);
+            public delegate void SizeColumnSetter(Case case_, long value);
             public class FieldInformation
             {
-                public FieldInformation(string columnName_, ColumnGetter getter_, ColumnSetter setter_, DerivedFile.Type type_, string extension_, ExpectedIdGetter idGetter_)
+                public FieldInformation(string columnName_, ColumnGetter getter_, ColumnSetter setter_, DerivedFile.Type type_, string extension_, ExpectedIdGetter idGetter_, string sizeColumnName_, SizeColumnGetter sizeColumnGetter_, SizeColumnSetter sizeColumnSetter_)
                 {
                     columnName = columnName_;
                     getter = getter_;
                     setter = setter_;
 
                     //
-                    // type, extension and id getter apply only to derived files.  For other fields, use the other constructor.
+                    // These fields apply only to derived files.  For other fields, use the other constructor.
                     //
                     type = type_;
                     extension = extension_;
                     idGetter = idGetter_;
+                    sizeColumnName = sizeColumnName_;
+                    sizeColumnGetter = sizeColumnGetter_;
+                    sizeColumnSetter = sizeColumnSetter_;
                 }
 
                 public FieldInformation(string columnName_, ColumnGetter getter_, ColumnSetter setter_)
@@ -949,6 +987,16 @@ namespace ASELib
                     setter(case_, value);
                 }
 
+                public void setSize(Case case_, long size)
+                {
+                    sizeColumnSetter(case_, size);
+                }
+
+                public long getSize(Case case_)
+                {
+                    return sizeColumnGetter(case_);
+                }
+
                 public string getExpectedId(Case case_)
                 {
                     return idGetter(case_);
@@ -960,6 +1008,9 @@ namespace ASELib
                 ExpectedIdGetter idGetter = c => "";
                 public readonly DerivedFile.Type type = DerivedFile.Type.Unknown;
                 public readonly string extension = "";
+                public readonly string sizeColumnName = ""; // For the size of derived file
+                SizeColumnGetter sizeColumnGetter;
+                SizeColumnSetter sizeColumnSetter;
             } // FieldInformation 
 
             public static FieldInformation[] AllFields = 
@@ -996,33 +1047,34 @@ namespace ASELib
 				new FieldInformation("Tumor Copy Number Size",                              c => Convert.ToString(c.tumor_copy_number_size), (c,v) => c.tumor_copy_number_size = LongFromString(v)),
 				new FieldInformation("Normal Copy Number Size",                             c => Convert.ToString(c.normal_copy_number_size), (c,v) => c.normal_copy_number_size = LongFromString(v)),
 
-				new FieldInformation("Normal DNA Allcount Filename",                        c => c.normal_dna_allcount_filename, (c,v) => c.normal_dna_allcount_filename = v, DerivedFile.Type.NormalDNAAllcount, normalDNAAllcountExtension, c => c.normal_dna_file_id),
-                new FieldInformation("Tumor DNA Allcount Filename",                         c => c.tumor_dna_allcount_filename, (c,v) => c.tumor_dna_allcount_filename = v, DerivedFile.Type.TumorDNAAllcount, tumorDNAAllcountExtension, c => c.tumor_dna_file_id),
-                new FieldInformation("Normal RNA Allcount Filename",                        c => c.normal_rna_allcount_filename, (c,v) => c.normal_rna_allcount_filename = v, DerivedFile.Type.NormalRNAAllcount, normalRNAAllcountExtension, c => c.normal_rna_file_id),
-                new FieldInformation("Tumor RNA Allcount Filename",                         c => c.tumor_rna_allcount_filename, (c,v) => c.tumor_rna_allcount_filename = v, DerivedFile.Type.TumorRNAAllcount, tumorRNAAllcountExtension, c => c.tumor_rna_file_id),
-                new FieldInformation("Regional Expression Filename",                        c => c.regional_expression_filename, (c,v) => c.regional_expression_filename = v, DerivedFile.Type.RegionalExpression, regionalExpressionExtension, c => c.tumor_rna_file_id),
-                new FieldInformation("Gene Expression Filename",                            c => c.gene_expression_filename, (c,v) => c.gene_expression_filename = v, DerivedFile.Type.GeneExpression, geneExpressionExtension, c => c.case_id),
-                new FieldInformation("Selected Variants Filename",                          c => c.selected_variants_filename, (c,v) => c.selected_variants_filename = v, DerivedFile.Type.SelectedVariants, selectedVariantsExtension, c => c.normal_dna_file_id),
-                new FieldInformation("Normal DNA Reads At Selected Variants Filename",      c => c.normal_dna_reads_at_selected_variants_filename, (c,v) => c.normal_dna_reads_at_selected_variants_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariants, normalDNAReadsAtSelectedVariantsExtension, c => c.normal_dna_file_id),
-                new FieldInformation("Normal DNA Reads At Selected Variants Index Filename",c => c.normal_dna_reads_at_selected_variants_index_filename, (c,v) => c.normal_dna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariantsIndex, normalDNAReadsAtSelectedVariantsIndexExtension, c => c.normal_dna_file_id),
-                new FieldInformation("Tumor DNA Reads At Selected Variants Filename",       c => c.tumor_dna_reads_at_selected_variants_filename, (c,v) => c.tumor_dna_reads_at_selected_variants_filename = v, DerivedFile.Type.TumorDNAReadsAtSelectedVariants, tumorDNAReadsAtSelectedVariantsExtension, c => c.tumor_dna_file_id),
-                new FieldInformation("Tumor DNA Reads At Selected Variants Index Filename", c => c.tumor_dna_reads_at_selected_variants_index_filename, (c,v) => c.tumor_dna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.TumorDNAReadsAtSelectedVariantsIndex, tumorDNAReadsAtSelectedVariantsIndexExtension, c => c.tumor_dna_file_id),
-                new FieldInformation("Normal RNA Reads At Selected Variants Filename",      c => c.normal_rna_reads_at_selected_variants_filename, (c,v) => c.normal_rna_reads_at_selected_variants_filename = v, DerivedFile.Type.NormalRNAReadsAtSelectedVariants, normalRNAReadsAtSelectedVariantsExtension, c => c.normal_rna_file_id),
-                new FieldInformation("Normal RNA Reads At Selected Variants Index Filename",c => c.normal_rna_reads_at_selected_variants_index_filename, (c,v) => c.normal_rna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.NormalRNAReadsAtSelectedVariantsIndex, normalRNAReadsAtSelectedVariantsIndexExtension, c => c.normal_rna_file_id),
-                new FieldInformation("Tumor RNA Reads At Selected Variants Filename",       c => c.tumor_rna_reads_at_selected_variants_filename, (c,v) => c.tumor_rna_reads_at_selected_variants_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariants, tumorRNAReadsAtSelectedVariantsExtension, c => c.tumor_rna_file_id),
-                new FieldInformation("Tumor RNA Reads At Selected Variants Index Filename", c => c.tumor_rna_reads_at_selected_variants_index_filename, (c,v) => c.tumor_rna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariantsIndex, tumorRNAReadsAtSelectedVariantsIndexExtension, c => c.tumor_rna_file_id),
-                new FieldInformation("Annotated Selected Variants Filename",                c => c.annotated_selected_variants_filename, (c,v) => c.annotated_selected_variants_filename = v, DerivedFile.Type.AnnotatedSelectedVariants, annotatedSelectedVariantsExtension, c => c.case_id),
-                new FieldInformation("Normal Allele Specific Gene Expression Filename",     c => c.normal_allele_specific_gene_expression_filename, (c,v) => c.normal_allele_specific_gene_expression_filename = v, DerivedFile.Type.NormalAlleleSpecificGeneExpression, normalAlleleSpecificGeneExpressionExtension, c => c.case_id),
-				new FieldInformation("Tumor Allele Specific Gene Expression Filename",      c => c.tumor_allele_specific_gene_expression_filename, (c,v) => c.tumor_allele_specific_gene_expression_filename = v, DerivedFile.Type.TumorAlleleSpecificGeneExpression, tumorAlleleSpecificGeneExpressionExtension, c => c.case_id),
-				new FieldInformation("Tumor DNA Gene Coverage Filename",                    c => c.tumor_dna_gene_coverage_filname, (c,v) => c.tumor_dna_gene_coverage_filname = v, DerivedFile.Type.TumorDNAGeneCoverage, tumorDNAGeneCoverageExtension, c => c.tumor_dna_file_id),
-                new FieldInformation("VCF Filename",                                        c => c.vcf_filename, (c,v) => c.vcf_filename = v, DerivedFile.Type.VCF, vcfExtension, c => c.normal_dna_file_id),
-                new FieldInformation("Extracted MAF Lines Filename",                        c => c.extracted_maf_lines_filename, (c,v) => c.extracted_maf_lines_filename = v, DerivedFile.Type.ExtractedMAFLines, extractedMAFLinesExtension, c => c.case_id),
-                new FieldInformation("Normal DNA Mapped Base Count Filename",               c => c.normal_dna_mapped_base_count_filename, (c, v) => c.normal_dna_mapped_base_count_filename = v, DerivedFile.Type.NormalDNAMappedBaseCount, normalDNAMappedBaseCountExtension, c => c.normal_dna_file_id),
-                new FieldInformation("Tumor DNA Mapped Base Count Filename",                c => c.tumor_dna_mapped_base_count_filename, (c, v) => c.tumor_dna_mapped_base_count_filename = v, DerivedFile.Type.TumorDNAMappedBaseCount, tumorDNAMappedBaseCountExtension, c => c.tumor_dna_file_id),
-                new FieldInformation("Normal RNA Mapped Base Count Filename",               c => c.normal_rna_mapped_base_count_filename, (c, v) => c.normal_rna_mapped_base_count_filename = v, DerivedFile.Type.NormalRNAMappedBaseCount, normalRNAMappedBaseCountExtension, c => c.normal_rna_file_id),
-                new FieldInformation("Tumor RNA Mapped Base Count Filename",                c => c.tumor_rna_mapped_base_count_filename, (c, v) => c.tumor_rna_mapped_base_count_filename = v, DerivedFile.Type.TumorRNAMappedBaseCount, tumorRNAMappedBaseCountExtension, c => c.tumor_rna_file_id),
-                new FieldInformation("Selected Variant Counts By Gene Filename",            c => c.selected_variant_counts_by_gene_filename, (c, v) => c.selected_variant_counts_by_gene_filename = v, DerivedFile.Type.SelectedVariantCountByGene, selectedVariantCountByGeneExtension, c => c.case_id),
-                new FieldInformation("Tumor Regional Methylation",                          c => c.tumor_regional_methylation_filename, (c, v) => c.tumor_regional_methylation_filename = v, DerivedFile.Type.TumorRegionalMethylation, tumorRegionalMethylationExtension, c => c.case_id),
+				new FieldInformation("Normal DNA Allcount Filename",                        c => c.normal_dna_allcount_filename, (c,v) => c.normal_dna_allcount_filename = v, DerivedFile.Type.NormalDNAAllcount, normalDNAAllcountExtension, c => c.normal_dna_file_id, "Normal DNA Allcount File Size", c => c.normal_dna_allcount_size, (c,v) => c.normal_dna_allcount_size = v),
+                new FieldInformation("Tumor DNA Allcount Filename",                         c => c.tumor_dna_allcount_filename, (c,v) => c.tumor_dna_allcount_filename = v, DerivedFile.Type.TumorDNAAllcount, tumorDNAAllcountExtension, c => c.tumor_dna_file_id, "Tumor DNA Allcount File Size", c => c.tumor_dna_allcount_size, (c, v) => c.tumor_dna_allcount_size = v),
+                new FieldInformation("Normal RNA Allcount Filename",                        c => c.normal_rna_allcount_filename, (c,v) => c.normal_rna_allcount_filename = v, DerivedFile.Type.NormalRNAAllcount, normalRNAAllcountExtension, c => c.normal_rna_file_id, "Normal RNA Allcount File Size", c => c.normal_rna_allcount_size, (c, v) => c.normal_rna_allcount_size = v),
+                new FieldInformation("Tumor RNA Allcount Filename",                         c => c.tumor_rna_allcount_filename, (c,v) => c.tumor_rna_allcount_filename = v, DerivedFile.Type.TumorRNAAllcount, tumorRNAAllcountExtension, c => c.tumor_rna_file_id, "Tumor RNA Allcount File Size", c => c.tumor_rna_allcount_size, (c, v) => c.tumor_rna_allcount_size = v),
+                new FieldInformation("Regional Expression Filename",                        c => c.regional_expression_filename, (c,v) => c.regional_expression_filename = v, DerivedFile.Type.RegionalExpression, regionalExpressionExtension, c => c.tumor_rna_file_id, "Regional Expression File Size", c => c.regional_expression_size, (c, v) => c.regional_expression_size = v),
+                new FieldInformation("Gene Expression Filename",                            c => c.gene_expression_filename, (c,v) => c.gene_expression_filename = v, DerivedFile.Type.GeneExpression, geneExpressionExtension, c => c.case_id, "Gene Expression File Size", c => c.gene_expression_size, (c, v) => c.gene_expression_size = v),
+                new FieldInformation("Selected Variants Filename",                          c => c.selected_variants_filename, (c,v) => c.selected_variants_filename = v, DerivedFile.Type.SelectedVariants, selectedVariantsExtension, c => c.normal_dna_file_id, "Selected Variants File Size", c=> c.selected_variants_size, (c, v) => c.selected_variants_size = v),
+                new FieldInformation("Normal DNA Reads At Selected Variants Filename",      c => c.normal_dna_reads_at_selected_variants_filename, (c,v) => c.normal_dna_reads_at_selected_variants_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariants, normalDNAReadsAtSelectedVariantsExtension, c => c.normal_dna_file_id, "Normal DNA Reads At Selected Variants File Size", c => c.normal_dna_reads_at_selected_variants_size, (c, v) => c.normal_dna_reads_at_selected_variants_size = v),
+                new FieldInformation("Normal DNA Reads At Selected Variants Index Filename",c => c.normal_dna_reads_at_selected_variants_index_filename, (c,v) => c.normal_dna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.NormalDNAReadsAtSelectedVariantsIndex, normalDNAReadsAtSelectedVariantsIndexExtension, c => c.normal_dna_file_id, "Normal DNA Reads At Selected Variants Index File Size", c => c.normal_dna_reads_at_selected_variants_index_size, (c, v) => c.normal_dna_reads_at_selected_variants_index_size = v),
+                new FieldInformation("Tumor DNA Reads At Selected Variants Filename",       c => c.tumor_dna_reads_at_selected_variants_filename, (c,v) => c.tumor_dna_reads_at_selected_variants_filename = v, DerivedFile.Type.TumorDNAReadsAtSelectedVariants, tumorDNAReadsAtSelectedVariantsExtension, c => c.tumor_dna_file_id, "Tumor DNA Reads At Selected Variants File Size", c => c.tumor_dna_reads_at_selected_variants_size, (c, v) => c.tumor_dna_reads_at_selected_variants_size = v),
+                new FieldInformation("Tumor DNA Reads At Selected Variants Index Filename", c => c.tumor_dna_reads_at_selected_variants_index_filename, (c,v) => c.tumor_dna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.TumorDNAReadsAtSelectedVariantsIndex, tumorDNAReadsAtSelectedVariantsIndexExtension, c => c.tumor_dna_file_id, "Tumor DNA Reads At Selected Variants Index File Size", c => c.tumor_dna_reads_at_selected_variants_index_size, (c, v) => c.tumor_dna_reads_at_selected_variants_index_size = v),
+                new FieldInformation("Normal RNA Reads At Selected Variants Filename",      c => c.normal_rna_reads_at_selected_variants_filename, (c,v) => c.normal_rna_reads_at_selected_variants_filename = v, DerivedFile.Type.NormalRNAReadsAtSelectedVariants, normalRNAReadsAtSelectedVariantsExtension, c => c.normal_rna_file_id, "Normal RNA Reads At Selected Variants File Size", c => c.normal_rna_reads_at_selected_variants_size, (c, v) => c.normal_rna_reads_at_selected_variants_size = v),
+                new FieldInformation("Normal RNA Reads At Selected Variants Index Filename",c => c.normal_rna_reads_at_selected_variants_index_filename, (c,v) => c.normal_rna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.NormalRNAReadsAtSelectedVariantsIndex, normalRNAReadsAtSelectedVariantsIndexExtension, c => c.normal_rna_file_id, "Normal RNA Reads At Selected Variants Index File Size", c => c.normal_rna_reads_at_selected_variants_index_size, (c, v) => c.normal_rna_reads_at_selected_variants_index_size = v),
+                new FieldInformation("Tumor RNA Reads At Selected Variants Filename",       c => c.tumor_rna_reads_at_selected_variants_filename, (c,v) => c.tumor_rna_reads_at_selected_variants_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariants, tumorRNAReadsAtSelectedVariantsExtension, c => c.tumor_rna_file_id, "Tumor RNA Reads At Selected Variants File Size", c => c.tumor_rna_reads_at_selected_variants_size, (c, v) => c.tumor_rna_reads_at_selected_variants_size = v),
+                new FieldInformation("Tumor RNA Reads At Selected Variants Index Filename", c => c.tumor_rna_reads_at_selected_variants_index_filename, (c,v) => c.tumor_rna_reads_at_selected_variants_index_filename = v, DerivedFile.Type.TumorRNAReadsAtSelectedVariantsIndex, tumorRNAReadsAtSelectedVariantsIndexExtension, c => c.tumor_rna_file_id, "Tumor RNA Reads At Selected Variants Index File Size", c => c.tumor_rna_reads_at_selected_variants_index_size, (c, v) => c.tumor_rna_reads_at_selected_variants_index_size = v),
+                new FieldInformation("Annotated Selected Variants Filename",                c => c.annotated_selected_variants_filename, (c,v) => c.annotated_selected_variants_filename = v, DerivedFile.Type.AnnotatedSelectedVariants, annotatedSelectedVariantsExtension, c => c.case_id, "Annotated Selected Variants File Size", c => c.annotated_selected_variants_size, (c, v) => c.annotated_selected_variants_size = v),
+                new FieldInformation("Normal Allele Specific Gene Expression Filename",     c => c.normal_allele_specific_gene_expression_filename, (c,v) => c.normal_allele_specific_gene_expression_filename = v, DerivedFile.Type.NormalAlleleSpecificGeneExpression, normalAlleleSpecificGeneExpressionExtension, c => c.case_id, "Normal Allele Specific Gene Expression File Size", c => c.normal_allele_specific_gene_expression_size, (c, v) => c.normal_allele_specific_gene_expression_size = v),
+                new FieldInformation("Tumor Allele Specific Gene Expression Filename",      c => c.tumor_allele_specific_gene_expression_filename, (c,v) => c.tumor_allele_specific_gene_expression_filename = v, DerivedFile.Type.TumorAlleleSpecificGeneExpression, tumorAlleleSpecificGeneExpressionExtension, c => c.case_id, "Tumor Allele Specific Gene Expression File Size", c => c.tumor_allele_specific_gene_expression_size, (c, v) => c.tumor_allele_specific_gene_expression_size = v),
+                new FieldInformation("Tumor DNA Gene Coverage Filename",                    c => c.tumor_dna_gene_coverage_filname, (c,v) => c.tumor_dna_gene_coverage_filname = v, DerivedFile.Type.TumorDNAGeneCoverage, tumorDNAGeneCoverageExtension, c => c.tumor_dna_file_id, "Tumor DNA Gene Coverage File Size", c => c.tumor_dna_gene_coverage_size, (c, v) => c.tumor_dna_gene_coverage_size = v),
+                new FieldInformation("VCF Filename",                                        c => c.vcf_filename, (c,v) => c.vcf_filename = v, DerivedFile.Type.VCF, vcfExtension, c => c.normal_dna_file_id, "VCF File Size", c => c.vcf_size, (c, v) => c.vcf_size = v),
+                new FieldInformation("Extracted MAF Lines Filename",                        c => c.extracted_maf_lines_filename, (c,v) => c.extracted_maf_lines_filename = v, DerivedFile.Type.ExtractedMAFLines, extractedMAFLinesExtension, c => c.case_id, "Extracted MAF Lines File Size", c => c.extracted_maf_lines_size, (c, v) => c.extracted_maf_lines_size = v),
+                new FieldInformation("Normal DNA Mapped Base Count Filename",               c => c.normal_dna_mapped_base_count_filename, (c, v) => c.normal_dna_mapped_base_count_filename = v, DerivedFile.Type.NormalDNAMappedBaseCount, normalDNAMappedBaseCountExtension, c => c.normal_dna_file_id, "Normal DNA Mapped Base Count File Size", c => c.normal_dna_mapped_base_count_size, (c, v) => c.normal_dna_mapped_base_count_size = v),
+                new FieldInformation("Tumor DNA Mapped Base Count Filename",                c => c.tumor_dna_mapped_base_count_filename, (c, v) => c.tumor_dna_mapped_base_count_filename = v, DerivedFile.Type.TumorDNAMappedBaseCount, tumorDNAMappedBaseCountExtension, c => c.tumor_dna_file_id, "Tumor DNA Mapped Base Count File Size", c => c.tumor_dna_mapped_base_count_size, (c, v) => c.tumor_dna_mapped_base_count_size = v),
+                new FieldInformation("Normal RNA Mapped Base Count Filename",               c => c.normal_rna_mapped_base_count_filename, (c, v) => c.normal_rna_mapped_base_count_filename = v, DerivedFile.Type.NormalRNAMappedBaseCount, normalRNAMappedBaseCountExtension, c => c.normal_rna_file_id, "Normal RNA Mapped Base Count File Size", c => c.normal_rna_mapped_base_count_size, (c, v) => c.normal_rna_mapped_base_count_size = v),
+                new FieldInformation("Tumor RNA Mapped Base Count Filename",                c => c.tumor_rna_mapped_base_count_filename, (c, v) => c.tumor_rna_mapped_base_count_filename = v, DerivedFile.Type.TumorRNAMappedBaseCount, tumorRNAMappedBaseCountExtension, c => c.tumor_rna_file_id, "Tumor RNA Mapped Base Count File Size", c => c.tumor_rna_mapped_base_count_size, (c, v) => c.tumor_rna_mapped_base_count_size = v),
+                new FieldInformation("Selected Variant Counts By Gene Filename",            c => c.selected_variant_counts_by_gene_filename, (c, v) => c.selected_variant_counts_by_gene_filename = v, DerivedFile.Type.SelectedVariantCountByGene, selectedVariantCountByGeneExtension, c => c.case_id, "Selected Variant Counts By Gene File Size", c => c.selected_variant_counts_by_gene_size, (c, v) => c.selected_variant_counts_by_gene_size = v),
+                new FieldInformation("Tumor Regional Methylation Filename",                 c => c.tumor_regional_methylation_filename, (c, v) => c.tumor_regional_methylation_filename = v, DerivedFile.Type.TumorRegionalMethylation, tumorRegionalMethylationExtension, c => c.case_id, "Tumor Regional Methylation File Size", c => c.tumor_regional_methylation_size, (c, v) => c.tumor_regional_methylation_size = v),
+                new FieldInformation("Normal Regional Methylation Filename",                c => c.normal_regional_methylation_filename, (c, v) => c.normal_regional_methylation_filename = v, DerivedFile.Type.NormalRegionalMethylation, normalRegionalMethylationExtension, c => c.case_id, "Normal Regional Methylation File Size", c => c.normal_regional_methylation_size, (c, v) => c.normal_regional_methylation_size = v),
 
                 new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
                 new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
@@ -1078,6 +1130,14 @@ namespace ASELib
                     value += "\t" + AllFields[i].getValue(this);
                 }
 
+                for (int i = 0; i < AllFields.Count(); i++)
+                {
+                    if (AllFields[i].type != DerivedFile.Type.Unknown)
+                    {
+                        value += "\t" + AllFields[i].getSize(this);
+                    }
+                }
+
                 return value;
 
             } // GenerateLine
@@ -1089,12 +1149,22 @@ namespace ASELib
                 //
                 // Header
                 //
-                for (int i = 0; i < AllFields.Count() - 1; i++)
+                for (int i = 0; i < AllFields.Count() - 1; i++) // We go to the next-to-last to get the tabs right
                 {
                     file.Write(AllFields[i].columnName + "\t");
                 }
 
-                file.WriteLine(AllFields[AllFields.Count() - 1].columnName);
+                file.Write(AllFields[AllFields.Count() - 1].columnName);
+
+                for (int i = 0; i < AllFields.Count(); i++)
+                {
+                    if (AllFields[i].type != DerivedFile.Type.Unknown)
+                    {
+                        file.Write("\t" + AllFields[i].sizeColumnName);
+                    }
+                }
+
+                file.WriteLine();
 
                 //
                 // Cases
@@ -1244,6 +1314,7 @@ namespace ASELib
                     {
                         var filename = derivedFilesByType[field.type][0].fileinfo.FullName;
                         field.setValue(this, filename);
+                        field.setSize(this, derivedFilesByType[field.type][0].fileinfo.Length);
                         if (GetFileIdFromPathname(filename) != field.getExpectedId(this))
                         {
                             Console.WriteLine("Found derived file with unexpected file ID: " + filename + ", expected file id: " + field.getExpectedId(this));
@@ -1282,9 +1353,34 @@ namespace ASELib
                     var writer = new StreamWriter(filename);
                     return writer;
                 }
-                catch (IOException)
+                catch (IOException e)
                 {
+                    if (e is FileNotFoundException || e is DirectoryNotFoundException)
+                    {
+                        return null;
+                    }
                     Console.WriteLine("IOException opening " + filename + " for write.  Sleeping and retrying.");
+                    Thread.Sleep(10 * 1000);
+                }
+            }
+        }
+
+        public static StreamWriter CreateAppendingStreamWriterWithRetry(string filename)
+        {
+            while (true)
+            {
+                try
+                {
+                    var writer = File.AppendText(filename);
+                    return writer;
+                }
+                catch (IOException e)
+                {
+                    if (e is FileNotFoundException || e is DirectoryNotFoundException)
+                    {
+                        return null;
+                    }
+                    Console.WriteLine("IOException opening " + filename + " for append.  Sleeping and retrying.");
                     Thread.Sleep(10 * 1000);
                 }
             }
@@ -2140,6 +2236,7 @@ namespace ASELib
         public const string tumorRNAMappedBaseCountExtension = ".tumor_rna_mapped_base_count.txt";
         public const string selectedVariantCountByGeneExtension = ".selected_variant_count_by_gene.txt";
         public const string tumorRegionalMethylationExtension = ".tumor_regional_methylation.txt";
+        public const string normalRegionalMethylationExtension = ".normal_regional_methylation.txt";
         public const string bonferroniExtension = "_bonferroni.txt";
 
         public const string scatterGraphsSummaryFilename = "_summary.txt";
@@ -2148,6 +2245,8 @@ namespace ASELib
         public const string heatMapFilename = "AlleleSpecificExpressionHeatMap.txt";
         public const string tumorHeatMapHistogramFilename = "TumorAlleleSpecificExpressionHeatMapHistograms.txt";
         public const string normalHeatMapHistogramFilename = "NormalAlleleSpecificExpressionHeatMapHistograms.txt";
+        public const string ASEConsistencyFilename = "ASEConsistency.txt";
+        public const string GenesByFunnyASECountFilename = "ASEInconsistencyByGene.txt";
 
         public class DerivedFile
         {
@@ -2192,7 +2291,7 @@ namespace ASELib
             public enum Type { Unknown, NormalRNAAllcount, TumorRNAAllcount, NormalDNAAllcount, TumorDNAAllcount, RegionalExpression, GeneExpression, TumorDNAGeneCoverage,
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines,
-                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, TumorRegionalMethylation,
+                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, TumorRegionalMethylation, NormalRegionalMethylation,
             };
         } // DerivedFile
 
@@ -2744,7 +2843,13 @@ namespace ASELib
                         var extendedFields = new string[maxNeededField + 2];
                         for (int i = 0; i <= maxNeededField; i++)
                         {
-                            extendedFields[i] = fields[i];
+                            if (i < fields.Count())
+                            {
+                                extendedFields[i] = fields[i];
+                            } else
+                            {
+                                extendedFields[i] = "";
+                            }
                         }
                         fields = extendedFields;
                     }
@@ -2798,14 +2903,14 @@ namespace ASELib
                     return Convert.ToInt32(AsString(fieldName));
                 }
 
-                public int AsIntMinusOneIfStar(string fieldname)
+                public int AsIntMinusOneIfStarOrEmptyString(string fieldName)
                 {
-                    if (fields[fieldMappings[fieldname]] == "*")
+                    if (fields[fieldMappings[fieldName]] == "*" || fields[fieldMappings[fieldName]] == "")
                     {
                         return -1;
                     }
 
-                    return AsInt(fieldname);
+                    return AsInt(fieldName);
                 }
 
                 public double AsDouble(string fieldName)
@@ -2813,9 +2918,9 @@ namespace ASELib
                     return Convert.ToDouble(AsString(fieldName));
                 }
 
-                public double AsDoubleNegativeInfinityIfStar(string fieldName)
+                public double AsDoubleNegativeInfinityIfStarOrEmptyString(string fieldName)
                 {
-                    if (fields[fieldMappings[fieldName]] == "*")
+                    if (fields[fieldMappings[fieldName]] == "*" || fields[fieldMappings[fieldName]] == "")
                     {
                         return double.NegativeInfinity;
                     }
@@ -2826,6 +2931,17 @@ namespace ASELib
                 public bool AsBool(string fieldName)
                 {
                     return Convert.ToBoolean(AsString(fieldName));
+                }
+
+                public string rawLine()
+                {
+                    var result = fields[0];
+                    for (int i = 1; i < fields.Count(); i++)
+                    {
+                        result += "\t" + fields[i];
+                    }
+
+                    return result;
                 }
 
                 Dictionary<string, int> fieldMappings;
@@ -3768,7 +3884,13 @@ namespace ASELib
                 }
             }
 
-			refFile.Close();
+            foreach (var resultEntry in results.Where(x => !x.Value.inconsistent && x.Value.maxLocus - x.Value.minLocus > 1000000))
+            {
+                var result = resultEntry.Value;
+                Console.WriteLine("Gene bigger than a megabase: " + result.hugoSymbol + " " + result.chromosome + ": " + result.minLocus + "-" + result.maxLocus + "(" + (result.maxLocus - result.minLocus) + ")");
+            }
+
+            refFile.Close();
 			return results;
 		}
 
@@ -5679,8 +5801,7 @@ namespace ASELib
 
 			}
 
-
-			public bool hasSufficientReads(bool isTumor = true)
+			public bool IsASECandidate(bool isTumor = true) // Has at least 10 tumor DNA & RNA reads, and has variant allele frequency between .4 and .6 in tumor DNA
 			{
 				// get read counts for either tumor or normal
 				var DNAReadCounts = isTumor ? this.tumorDNAReadCounts : this.normalDNAReadCounts;
@@ -5699,6 +5820,26 @@ namespace ASELib
 						DNAReadCounts.nMatchingReference * 3 >= DNAReadCounts.nMatchingAlt * 2 &&
 						DNAReadCounts.nMatchingAlt * 3 >= DNAReadCounts.nMatchingReference * 2);
 			}
+
+			public static int CompareByLocus(AnnotatedVariant one, AnnotatedVariant two)
+            {
+                if (one.contig != two.contig)
+                {
+                    return string.Compare(one.contig, two.contig);
+                }
+
+                if (one.locus < two.locus)
+                {
+                    return -1;
+                }
+
+                if (one.locus == two.locus)
+                {
+                    return 0;
+                }
+
+                return 1;
+            }
 
             public readonly string Hugo_symbol;                 // Only present for somatic mutations, otherwise ""
 			public readonly bool somaticMutation;
@@ -6262,16 +6403,26 @@ namespace ASELib
             public readonly NMeandAndStdDev oneMutationStats;
             public readonly NMeandAndStdDev moreThanOneMutationStats;
 
-            public static List<string> getHeaders(bool exclusive, string range)
+        public static List<string> getHeaders(bool mu, bool exclusive, string range)
             {
-                string exclusiveString = exclusive ? " exclusive" : "";
-                string[] headersArray = {range + " 1 vs. many" + exclusiveString,
-                                    range + " 1 vs. not 1"  + exclusiveString,
-                range + " 0 mutation N" + exclusiveString,
-                range + " 0 mutation mean" + exclusiveString,
-                range + " "}; // here
+                //
+                // This is pretty much a match for the code that generates the headers in the first place, which results in strange double spaces in some places.
+                //
+                var result = new List<string>();
+                string muString = ((!mu) ? "" : " mu") + (!exclusive? "" : " exclusive");
+                result.Add(range + " 1 vs. many" + muString);
+                result.Add(range + " 1 vs. not 1" + muString);
 
-                return null;
+                string[] mutationSets = { "0", "1", ">1" };
+
+                for (int i = 0; i < mutationSets.Count(); i++)
+                {
+                    result.Add(range + " " + mutationSets[i] + " mutation" + muString + " N");
+                    result.Add(range + " " + mutationSets[i] + " mutation " + muString + " mean");
+                    result.Add(range + " " + mutationSets[i] + " mutation " + muString + " stdDev");
+                }
+
+                return result;
             }
 
             public static string getHeaderString(bool exclusive, int rangeIndex)
@@ -6295,7 +6446,7 @@ namespace ASELib
                     rangeInBases = int.MaxValue;
                 } else
                 {
-                    rangeInBases = (1 << rangeIndex) * 1000;
+                    rangeInBases = (1 << rangeIndex-1) * 1000;
                 }
 
                 oneVsMany = oneVsMany_;
@@ -6305,32 +6456,21 @@ namespace ASELib
                 moreThanOneMutationStats = moreThanOneMutationStats_;
             }
 
-            public static SingleExpressionResult Parse(int rangeIndex, HeaderizedFile<ExpressionResultsLine>.FieldGrabber fieldGrabber, bool exclusive)
+            public static SingleExpressionResult Parse(int rangeIndex, HeaderizedFile<ExpressionResultsLine>.FieldGrabber fieldGrabber, bool mu, bool exclusive)
             {
-                string rangeString;
-                if (rangeIndex == 0)
-                {
-                    rangeString = "0Kbp ";
-                } else if (rangeIndex == nRegions - 1)
-                {
-                    rangeString = "whole autosome ";
-                } else
-                {
-                    rangeString = Convert.ToString(1 << rangeIndex) + "Kpb";
-                }
-
-                if (exclusive)
-                {
-                    rangeString += "exclusive ";
-                }
+                //
+                // This is pretty much a match for the code that generates the headers in the first place, which results in strange double spaces in some places.
+                //
+                string rangeString = regionIndexToString(rangeIndex);
+                string muString = ((!mu) ? "" : " mu") + (!exclusive ? "" : " exclusive");
 
                 return new SingleExpressionResult(
                     rangeIndex,
-                    fieldGrabber.AsDoubleNegativeInfinityIfStar(rangeString + "1 vs. many"),
-                    fieldGrabber.AsDoubleNegativeInfinityIfStar(rangeString + "1 vs. not 1"),
-                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStar(rangeString + "0 mutation N"), fieldGrabber.AsDoubleNegativeInfinityIfStar(rangeString + "0 mutation mean"), fieldGrabber.AsDoubleNegativeInfinityIfStar("0 mutation stdDev")),
-                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStar(rangeString + "1 mutation N"), fieldGrabber.AsDoubleNegativeInfinityIfStar(rangeString + "1 mutation mean"), fieldGrabber.AsDoubleNegativeInfinityIfStar("1 mutation stdDev")),
-                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStar(rangeString + ">1 mutation N"), fieldGrabber.AsDoubleNegativeInfinityIfStar(rangeString + ">1 mutation mean"), fieldGrabber.AsDoubleNegativeInfinityIfStar(">1 mutation stdDev"))
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 vs. many" + muString),
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 vs. not 1" + muString),
+                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " 0 mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 0 mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 0 mutation " + muString + " stdDev")),
+                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " 1 mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " 1 mutation " + muString + " stdDev")),
+                    new NMeandAndStdDev(fieldGrabber.AsIntMinusOneIfStarOrEmptyString(rangeString + " >1 mutation" + muString + " N"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " >1 mutation " + muString + " mean"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString(rangeString + " >1 mutation " + muString + " stdDev"))
                     );
             }
         } // SingleExpressionResult
@@ -6352,7 +6492,7 @@ namespace ASELib
                 for (var i = 0; i < nRegions; i++)
                 {
                     foreach (bool exclusive in BothBools) {
-                        wantedFields.AddRange(SingleExpressionResult.getHeaders(exclusive, regionIndexToString(i)));
+                        wantedFields.AddRange(SingleExpressionResult.getHeaders(false, exclusive, regionIndexToString(i)));
                     }
                 }
 
@@ -6361,7 +6501,7 @@ namespace ASELib
                 {
                     return null;
                 }
-                var headerizedFile = new HeaderizedFile<ExpressionResultsLine>(inputFile, false, true, "", wantedFields);
+                var headerizedFile = new HeaderizedFile<ExpressionResultsLine>(inputFile, false, false, "", wantedFields, false, true);  // We allow missing columns because genes with no data are truncated
 
                 List<ExpressionResultsLine> retVal;
                 headerizedFile.ParseFile(Parse, out retVal);
@@ -6369,14 +6509,16 @@ namespace ASELib
                 return retVal;
             }
 
-            public ExpressionResultsLine(string hugo_symbol_, SingleExpressionResult[] nonExclusiveResultsByRange_, SingleExpressionResult[] exclusiveResultsByRange_, int nZero_, int nOne_, int nMore_)
+            public ExpressionResultsLine(string hugo_symbol_, SingleExpressionResult[] nonExclusiveResultsByRange_, SingleExpressionResult[] exclusiveResultsByRange_, int nTumorsExcluded_, int nZero_, int nOne_, int nMore_, string rawLine_)
             {
                 hugo_symbol = hugo_symbol_;
                 nonExclusiveResultsByRange = nonExclusiveResultsByRange_;
                 exclusiveResultsByRange = exclusiveResultsByRange_;
+                nTumorsExcluded = nTumorsExcluded_;
                 nZero = nZero_;
                 nOne = nOne_;
                 nMore = nMore_;
+                rawLine = rawLine_;
 
                 resultsByRange.Add(true, nonExclusiveResultsByRange);
                 resultsByRange.Add(false, exclusiveResultsByRange);
@@ -6389,25 +6531,28 @@ namespace ASELib
 
                 for (int i = 0; i < nRegions; i++)
                 {
-                    nonExclusiveResults[i] = SingleExpressionResult.Parse(i, fieldGrabber, false);
-                    exclusiveResults[i] = SingleExpressionResult.Parse(i, fieldGrabber, true);
+                    nonExclusiveResults[i] = SingleExpressionResult.Parse(i, fieldGrabber, false, false);
+                    exclusiveResults[i] = SingleExpressionResult.Parse(i, fieldGrabber, false, true);
                 }
 
-                return new ExpressionResultsLine(fieldGrabber.AsString("Hugo Symbol"), nonExclusiveResults, exclusiveResults, fieldGrabber.AsIntMinusOneIfStar("nZero"), fieldGrabber.AsIntMinusOneIfStar("nOne"), fieldGrabber.AsIntMinusOneIfStar("nMore"));
+                return new ExpressionResultsLine(fieldGrabber.AsString("Hugo Symbol"), nonExclusiveResults, exclusiveResults, fieldGrabber.AsIntMinusOneIfStarOrEmptyString("nTumorsExcluded"),
+                    fieldGrabber.AsIntMinusOneIfStarOrEmptyString("nZero"), fieldGrabber.AsIntMinusOneIfStarOrEmptyString("nOne"), fieldGrabber.AsIntMinusOneIfStarOrEmptyString("nMore"),
+                    fieldGrabber.rawLine());
             }
 
             public static string getHeaderString()
             {
                 var result = "Hugo Symbol";
-                foreach (var exclusive in BothBools)
+                foreach (var inclusive in BothBools)
                 {
+                    bool exclusive = !inclusive;
                     for (int i = 0; i < nRegions; i++)
                     {
                         result += "\t" + SingleExpressionResult.getHeaderString(exclusive, i);
                     }
                 }
 
-                return result + "\tnZero\tnOne\tnMany";
+                return result + "\tnTumorsExcluded\tnZero\tnOne\tnMany";
             }
 
             public readonly string hugo_symbol;
@@ -6418,9 +6563,11 @@ namespace ASELib
             //
             // These are -1 if not filled in.
             //
+            public readonly int nTumorsExcluded;
             public readonly int nZero;
             public readonly int nOne;
             public readonly int nMore;
+            public readonly string rawLine;
         } // ExpressionResultsLine
 
         //
@@ -6432,7 +6579,7 @@ namespace ASELib
         {
             if (0 == regionIndex) return "0Kbp";
             if (nRegions - 1 == regionIndex) return "whole autosome";
-            return "" + (1 << regionIndex) + "Kbp";
+            return "" + (1 << (regionIndex-1)) + "Kbp";
         }
 
         public static int regionIndexToSizeInBases(int regionIndex)

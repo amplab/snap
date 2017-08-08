@@ -35,7 +35,7 @@ namespace SelectGermlineVariants
             public int nDNAReads = -1;
         }
 
-        static void EmitBestCandidate(StreamWriter outputFile, string chromosome, List<CandidateVariant> liveCandidates)
+        static void EmitBestCandidate(StreamWriter outputFile, string chromosome, List<CandidateVariant> liveCandidates, Dictionary<int, int> variantCountByOdds)
         {
             if (liveCandidates.Count() == 0)
             {
@@ -52,6 +52,15 @@ namespace SelectGermlineVariants
                 }
             }
 
+            if (variantCountByOdds != null)
+            {
+                if (!variantCountByOdds.ContainsKey((int)bestCandiate.odds))
+                {
+                    variantCountByOdds.Add((int)bestCandiate.odds, 0);
+                }
+
+                variantCountByOdds[(int)bestCandiate.odds]++;
+            }
             outputFile.WriteLine(chromosome + "\t" + bestCandiate.locus + "\t" + bestCandiate.line);
         }
 
@@ -149,6 +158,8 @@ namespace SelectGermlineVariants
                     Console.WriteLine("Corrupt vcf: missing body: " + case_.vcf_filename);
                     continue;
                 }
+
+                Dictionary<int, int> variantCountByOdds = computeDistribution ? new Dictionary<int, int>() : null;
 
                 //
                 // First, read in all of the variants, saving those that we can't immediately exclude because of one reason or another.
@@ -269,7 +280,7 @@ namespace SelectGermlineVariants
                     EliminateTooNearCandidates(liveCandidates, locus);
                     EliminateTooNearCandidates(previousGrainsCandidates, locus);
 
-                    goodCandidate = goodCandidate && alleleFrequency == 0.5 && alleleBalance > 0.4 && alleleBalance < 0.6 && alleleCount == 1 && alleleNumber == 2 && cigar == "1X" && odds > 20 && lastLocus + isolationDistance < locus;
+                    goodCandidate = goodCandidate && alleleFrequency == 0.5 && alleleBalance > 0.4 && alleleBalance < 0.6 && alleleCount == 1 && alleleNumber == 2 && cigar == "1X" && (odds > 20 || computeDistribution) && lastLocus + isolationDistance < locus;
 
                     if (goodCandidate)
                     {
@@ -341,7 +352,7 @@ namespace SelectGermlineVariants
                     // Now run through the grains, select only the variants that have enough reads, and emit the best one for each grain.
                     //
                     var outputFilename = case_.vcf_filename.Substring(0, case_.vcf_filename.LastIndexOf('.')) + ASETools.selectedVariantsExtension;
-                    var outputFile = new StreamWriter(outputFilename);
+                    var outputFile = computeDistribution ? StreamWriter.Null :  ASETools.CreateStreamWriterWithRetry(outputFilename);    // Don't actually write the output if we're computing distribution.
                     outputFile.WriteLine("SelectGermlineVariants v1.1 for input file " + case_.vcf_filename);      // v1.0 didn't take into account the read counts when selecting variants.
 
                     foreach (var grain in savedGrains)
@@ -359,22 +370,44 @@ namespace SelectGermlineVariants
                         if (remainingCandidates.Count() > 0)
                         {
                             nVariantsSelected++;
-                            EmitBestCandidate(outputFile, remainingCandidates[0].chromosome, remainingCandidates);
+                            EmitBestCandidate(outputFile, remainingCandidates[0].chromosome, remainingCandidates, variantCountByOdds);
                         }
                     }
 
                     outputFile.WriteLine("**done**");
                     outputFile.Close();
-                }
+                } // if it's not a bad file
 
+                if (computeDistribution)
+                {
+                    lock (workItems)    // Overloading this lock here, but it's harmless
+                    {
+                        var writer = ASETools.CreateAppendingStreamWriterWithRetry(configuration.finalResultsDirectory + "SelectedVariantDistribution.txt");
+                        if (writer != null)
+                        {
+                            writer.Write(case_.case_id);
+
+                            var maxOdds = variantCountByOdds.Select(x => x.Key).Max();
+                            for (int i = 0; i < 20; i++)
+                            {
+                                writer.Write("\t" + (variantCountByOdds.ContainsKey(i) ? variantCountByOdds[i] : 0));
+                            }
+                            writer.WriteLine("\t" + variantCountByOdds.Where(x => x.Key >= 20).Select(x => x.Value).Sum());
+                            writer.Close();
+                        }
+                    }
+                }
                 vcfFile.Close();
-            }
+            } // while (true) (loop over taking items from the work queue)
         } // ProcessRuns
 
 
+        static bool computeDistribution;
+        static ASETools.Configuration configuration;
+
         static void Main(string[] args)
         {
-            var configuration = ASETools.Configuration.loadFromFile(args);
+            configuration = ASETools.Configuration.loadFromFile(args);
 
             if (null == configuration)
             {
@@ -382,13 +415,16 @@ namespace SelectGermlineVariants
                 return;
             }
 
-            var caseIds = configuration.commandLineArgs.ToList();
+            var caseIds = configuration.commandLineArgs.Where(x => x != "-d").ToList();
 
             if (caseIds.Count() == 0)
             {
-                Console.WriteLine("usage: SelectGermlineVariants {-configuration configurationFile} <patrticipantIds>");
+                Console.WriteLine("usage: SelectGermlineVariants {-configuration configurationFile} {-d} <patrticipantIds>");
+                Console.WriteLine("-d says to compute the distribution of how many variants we would select by varying the required odds from FreeBayes.");
                 return;
             }
+
+            computeDistribution = configuration.commandLineArgs.Contains("-d");
 
             var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 

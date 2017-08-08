@@ -506,7 +506,7 @@ namespace ASEHeatMap
                 var nUnfiltered = annotatedSelectedVariants.Count();
 
                 annotatedSelectedVariants = annotatedSelectedVariants.Where(x => !x.somaticMutation && 
-				ASETools.isChromosomeAutosomal(x.contig) && x.hasSufficientReads()).ToList();
+				ASETools.isChromosomeAutosomal(x.contig) && x.IsASECandidate()).ToList();
 
                 //Console.WriteLine("Left with " + annotatedSelectedVariants.Count() + " of " + nUnfiltered);
 

@@ -197,7 +197,7 @@ namespace ExpressionNearMutations
 						double alleleSpecificExpressionNormal;
 
 						if (geneLocationInformation.genesByChromosome.ContainsKey(annotatedVariant.contig) &&
-							annotatedVariant.hasSufficientReads())
+                            annotatedVariant.IsASECandidate() && !annotatedVariant.somaticMutation)
 						{
 							//
 							// Now convert to the amount of allele-specific expression.  50% is no ASE, while 0 or 100% is 100% ASE.
