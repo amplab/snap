@@ -610,9 +610,6 @@ namespace ASEProcessManager
 				nWaitingForPrerequisites = 0;
 				filesToDownload = null;
 
-				var batchSize = 10;
-				var newCall = true;
-				var caseCount = 0;
 				foreach (var caseEntry in stateOfTheWorld.cases)
 				{
 					var case_ = caseEntry.Value;
@@ -631,27 +628,8 @@ namespace ASEProcessManager
 						nAddedToScript++;
 					}
 
-					if (newCall)
-					{
-						// write a command for each case id
-						script.Write(stateOfTheWorld.configuration.binariesDirectory + "MethylationAnalysis.exe -450");
-						hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "MethylationAnalysis.exe -450");
-						newCall = false;
-					}
-
-					script.Write(" " + case_.case_id);
-					hpcScript.Write(" " + case_.case_id);
-					caseCount += 1;
-
-					// If 10 cases have been placed on line, reset the call 
-					if (caseCount % batchSize == 0)
-					{
-						newCall = true;
-						caseCount = 0;
-						script.WriteLine();
-						hpcScript.WriteLine();
-					}
-
+					script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "MethylationAnalysis.exe 1000000");
+					hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "MethylationAnalysis.exe 1000000");
 				}
 
 

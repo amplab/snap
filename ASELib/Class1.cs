@@ -3502,6 +3502,19 @@ namespace ASELib
                     );
             }
 
+			static public Dictionary<string, int> GetMutationCounts(List<MAFLine> mafLines)
+			{
+				// group MAFLines by hugo symbol to count mutations over symbol
+				var mutationCounts = mafLines.GroupBy(r => r.Hugo_Symbol)
+					.Select(group => new
+					{
+						Hugo_Symbol = group.Key,
+						Count = group.Count()
+					});
+
+				return mutationCounts.ToDictionary(x => x.Hugo_Symbol, x => x.Count);
+			}
+
             static public List<MAFLine> ReadFile(string filename, string file_id, bool fileHasVersion)
             {
                 StreamReader inputFile;
