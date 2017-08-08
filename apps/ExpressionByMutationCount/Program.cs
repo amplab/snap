@@ -12,6 +12,226 @@ namespace ExpressionByMutationCount
 {
     class Program
     {
+        static void Main(string[] args)
+        {
+            var timer = new Stopwatch();
+            timer.Start();
+
+            configuration = ASETools.Configuration.loadFromFile(args);
+            if (null == configuration)
+            {
+                Console.WriteLine("Unable to load configuration.");
+            }
+
+            forAlleleSpecificExpression = false;
+            bool perChromosome = false;
+
+            foreach (var arg in configuration.commandLineArgs)
+            {
+                if (arg == "-a")
+                {
+                    forAlleleSpecificExpression = true;
+                }
+                else if (arg == "-c")
+                {
+                    perChromosome = true;
+                }
+                else
+                {
+                    PrintUsage();
+                    return;
+                }
+            }
+
+            var comparer = StringComparer.OrdinalIgnoreCase;
+
+            var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
+            if (null == cases)
+            {
+                Console.WriteLine("You must generate cases first.");
+                return;
+            }
+
+            var selectedGenes = ASETools.SelectedGene.LoadFromFile(configuration.selectedGenesFilename);
+            if (null == selectedGenes)
+            {
+                Console.WriteLine("Must first select genes.");
+                return;
+            }
+
+            int missingCount = cases.Where(caseEntry => (forAlleleSpecificExpression ? caseEntry.Value.tumor_allele_specific_gene_expression_filename : caseEntry.Value.gene_expression_filename) == "").Count();
+
+            var casesToProcess = new List<ASETools.Case>();
+            foreach (var caseEntry in cases)
+            {
+                var case_ = caseEntry.Value;
+
+                if (forAlleleSpecificExpression && case_.tumor_allele_specific_gene_expression_filename != "" ||
+                    !forAlleleSpecificExpression && case_.gene_expression_filename != "")
+                {
+                    casesToProcess.Add(case_);
+                }
+            }
+
+            var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
+            var geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
+
+            var genesToProcess = new Dictionary<string, GeneState>();
+
+            int nGenesSkipped = 0;
+            foreach (var selectedGene in selectedGenes)
+            {
+                //
+                // Load the unfiltered scatter graph for this gene into memory.
+                //
+
+                var geneScatterPlotLines = ASETools.GeneScatterGraphLine.LoadAllGeneScatterGraphEntries(configuration.geneScatterGraphsDirectory, true, selectedGene.Hugo_Symbol);
+                if (geneScatterPlotLines.Count() == 0)
+                {
+                    //
+                    // Probably not enough tumors to make the cut, skip this gene.
+                    //
+                    nGenesSkipped++;
+                    continue;
+                }
+
+                genesToProcess.Add(selectedGene.Hugo_Symbol, new GeneState(selectedGene.Hugo_Symbol, geneScatterPlotLines));
+            }
+
+            Console.WriteLine("Loaded " + cases.Count() + " cases, of which " + missingCount + " are missing gene expression, and " + genesToProcess.Count() + " genes in " + ASETools.ElapsedTimeInSeconds(timer));
+
+            timer.Reset();
+            timer.Start();
+
+            //
+            // Run through all of the {AlleleSpecific} expression files and add them to the per-gene state.  Do this in parallel, since there are a lot of them.
+            //
+            var threads = new List<Thread>();
+            for (int i = 0; i < Environment.ProcessorCount * 2 /* *2 because this is often IO bound*/; i++)
+            {
+                threads.Add(new Thread(() => ProcessRegionalExpressionFile(forAlleleSpecificExpression, casesToProcess, genesToProcess)));
+            }
+
+            Console.Write("Loading expression files (1 dot/100): ");
+            threads.ForEach(t => t.Start());
+            threads.ForEach(t => t.Join());
+
+            Console.WriteLine();
+            Console.WriteLine("Loaded and processed expression files in " + ASETools.ElapsedTimeInSeconds(timer));
+
+            Console.WriteLine("lock: " + lockMilliseconds + "ms; read: " + readMilliseconds + "ms, process: " + processMilliseconds + "ms, 1: " + process1Milliseconds + "ms, 2: " + process2Milliseconds + "ms, 3: " + process3Milliseconds + "ms.");
+
+            string baseFileName = configuration.finalResultsDirectory + (forAlleleSpecificExpression ? "AlleleSpecific" : "") + "ExpressionDistributionByMutationCount";
+
+            var panCancerOutputFile = ASETools.CreateStreamWriterWithRetry(baseFileName + ".txt");
+            WriteFileHeader(panCancerOutputFile, perChromosome);
+
+            var outputFilesByDisease = new Dictionary<string, StreamWriter>();
+
+            var listOfDiseases = ASETools.GetListOfDiseases(cases);
+
+            foreach (var disease in listOfDiseases)
+            {
+                outputFilesByDisease.Add(disease, ASETools.CreateStreamWriterWithRetry(baseFileName + "_" + disease + ".txt"));
+                WriteFileHeader(outputFilesByDisease[disease], perChromosome);
+            }
+
+            timer.Reset();
+            timer.Start();
+
+            //
+            // Now generate output for all of the genes.
+            //
+            foreach (var geneToProcessEntry in genesToProcess)
+            {
+                var geneToProcess = geneToProcessEntry.Value;
+
+                //
+                // Compute and write out the results.
+                //
+
+                panCancerOutputFile.Write(ASETools.ConvertToExcelString(geneToProcess.hugo_symbol));
+                foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
+                {
+                    perDiseaseOutputFileEntry.Value.Write(ASETools.ConvertToExcelString(geneToProcess.hugo_symbol));
+                }
+
+                foreach (var exclusive in ASETools.BothBools)
+                {
+                    bool[] musToUse = { false };
+                    if (!forAlleleSpecificExpression)
+                    {
+                        musToUse = ASETools.BothBools;
+                    }
+                    foreach (var mu in musToUse)
+                    {
+                        Dictionary<int, List<ExpressionInstance>> byRange;
+                        List<ExpressionInstance> wholeAutosome;
+
+                        byRange = geneToProcess.expressionByRange[false][mu][exclusive];
+
+                        if (byRange.Count() == 0)
+                        {
+                            continue;
+                        }
+
+                        wholeAutosome = geneToProcess.expressionByRange[true][mu][exclusive][ASETools.nRegions - 1];
+
+                        for (int i = 0; i < ASETools.nRegions - 1 /* -1 because we don't do whole autosome here*/; i++)
+                        {
+                            if (byRange.ContainsKey(i))
+                            {
+                                WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, byRange[i], geneToProcess, true);
+                            }
+                            else
+                            {
+                                WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, null, geneToProcess, false);
+                            }
+                        } // For all widths
+
+                        WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, wholeAutosome, geneToProcess, wholeAutosome.Count() > 0);
+                    } // mu
+                } // exclusive
+
+                if (perChromosome)
+                {
+                    for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
+                    {
+                        WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, geneToProcess.perChromosomeExpression[false][whichChromosome],
+                            geneToProcess, geneToProcess.perChromosomeExpression[false][whichChromosome].Count() > 0);
+                    }
+
+                    if (!forAlleleSpecificExpression)
+                    {
+                        for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
+                        {
+                            WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, geneToProcess.perChromosomeExpression[true][whichChromosome],
+                                geneToProcess, geneToProcess.perChromosomeExpression[true][whichChromosome].Count() > 0);
+                        }
+                    }
+                }
+
+                WriteCounts(panCancerOutputFile, geneToProcess, "", cases);
+                foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
+                {
+                    WriteCounts(perDiseaseOutputFileEntry.Value, geneToProcess, perDiseaseOutputFileEntry.Key, cases);
+                }
+            }  // foreach gene
+
+
+
+            panCancerOutputFile.Close();
+
+            foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
+            {
+                perDiseaseOutputFileEntry.Value.Close();
+            }
+
+            foreach (var geneToProcessEntry in genesToProcess)
+            {
+                geneToProcessEntry.Value.perGeneLinesFile.Close();
+            }
+        } // Main
         class ExpressionInstance : IComparer<ExpressionInstance>
         {
             public ExpressionInstance(string tumorType_, int nMutations_, double z_, string case_id_)
@@ -88,7 +308,75 @@ namespace ExpressionByMutationCount
                 {
                     perChromosomeExpression.Add(usingMu, new List<ExpressionInstance>[ASETools.nHumanNuclearChromosomes]);
                 }
-            }
+
+                //
+                // Create and write the header into the per gene lines file.
+                //
+                var filename = configuration.regionalExpressionDirectory + hugo_symbol.ToLower() + (forAlleleSpecificExpression ? "_allele_specific" : "") + "_lines.txt";
+                perGeneLinesFile = ASETools.CreateStreamWriterWithRetry(filename);
+                if (null == perGeneLinesFile)
+                {
+                    Console.WriteLine("Unable to open per gene lines file " + filename);
+                    throw new IOException();
+                }
+
+                perGeneLinesFile.Write("Case ID\tdisease abbr.\tHugo Symbol\tMutation Count");
+
+                foreach (var inclusive in ASETools.BothBools)
+                {
+                    var exclusive = !inclusive;  // This is so we to false then true, which is the order for the data in the input lines
+                    ulong width = 1000;
+                    perGeneLinesFile.Write("\t0" + (exclusive ? " exclusive" : ""));
+
+                    for (int i = 1; i < ASETools.nRegions - 1 /* -1 because we don't do whole autosome here*/; i++)
+                    {
+                        perGeneLinesFile.Write("\t" + ASETools.SizeToUnits(width) + "b" + (exclusive ? " exclusive" : ""));
+                        width *= 2;
+                    }
+
+                    perGeneLinesFile.Write("\tWhole Autosome" + (exclusive ? " exclusive" : ""));
+
+                    if (!forAlleleSpecificExpression)
+                    {
+
+                        perGeneLinesFile.Write("\t0" + (exclusive ? " exclusive" : "") + " mean");
+
+                        width = 1000;
+                        for (int i = 1; i < ASETools.nRegions - 1 /* -1 because we don't do whole autosome here*/; i++)
+                        {
+                            perGeneLinesFile.Write("\t" + ASETools.SizeToUnits(width) + "b mean" + (exclusive ? " exclusive" : ""));
+                            width *= 2;
+                        }
+
+                        perGeneLinesFile.Write("\tWhole Autosome mean " + (exclusive ? " exclusive" : ""));
+                    }
+                } // exclusive
+
+                //
+                // Even if we're not doing per-chromosome, write the headers, since they're in the input file that's being copied here.
+                //
+                for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
+                {
+                    perGeneLinesFile.Write("\t" + ASETools.ChromosomeIndexToName(whichChromosome, true));
+                }
+
+                if (!forAlleleSpecificExpression)
+                {
+                    for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
+                    {
+                        perGeneLinesFile.Write("\t" + ASETools.ChromosomeIndexToName(whichChromosome, true) + " mean");
+                    }
+                }
+
+                //
+                // Now the headers for the columns that are only filled in for genes with exactly one somatic mutation
+                //
+                perGeneLinesFile.Write("\tRef Allele\tAlt Allele\tContig\tLocus");
+                perGeneLinesFile.Write("\tNormal DNA nMatchingReference\tNormal DNA nMatchingAlt\tNormal DNA nMatchingNeither\tNormal DNA nMatchingBoth");
+                perGeneLinesFile.Write("\tTumor DNA nMatchingReference\tTumor DNA nMatchingAlt\tTumor DNA nMatchingNeither\tTumor DNA nMatchingBoth");
+                perGeneLinesFile.Write("\tTumor RNA nMatchingReference\tTumor RNA nMatchingAlt\tTumor RNA nMatchingNeither\tTumor RNA nMatchingBoth");
+                perGeneLinesFile.WriteLine("Variant Class\tVariant Type");
+            } // GeneState ctor
 
             public void AddExpression(string tumorType, int range, int nMutations, double z /* or mu, as approproate*/, string case_id, bool usingMu, bool exclusive)
             {
@@ -112,7 +400,7 @@ namespace ExpressionByMutationCount
                 perChromosomeExpression[usingMu][whichChromosome].Add(new ExpressionInstance(tumorType, nMutations, z, case_id));
             }
 
-            public bool loadPerCaseState(Dictionary<string, string> sampleToParticipantIDMap, Dictionary<string, ASETools.Case> experimentsByRNAAnalysisID, ASETools.Configuration configuration)
+            public bool loadPerCaseState(Dictionary<string, string> sampleToParticipantIDMap, Dictionary<string, ASETools.Case> experimentsByRNAAnalysisID)
             {
 
                 var geneScatterPlotLines = ASETools.GeneScatterGraphLine.LoadAllGeneScatterGraphEntries(configuration.geneScatterGraphsDirectory, true, hugo_symbol);
@@ -151,10 +439,10 @@ namespace ExpressionByMutationCount
             public Dictionary<bool, Dictionary<bool, Dictionary<bool, Dictionary<int, List<ExpressionInstance>>>>> expressionByRange = new Dictionary<bool,Dictionary<bool, Dictionary<bool, Dictionary<int, List<ExpressionInstance>>>>>();
 
             public readonly List<ASETools.GeneScatterGraphLine> scatterGraphLines;
-            public List<string> perGeneLines = new List<string>();
+            public StreamWriter perGeneLinesFile;
 
             public int nInputFilesPastThisGene = 0;
-        }
+        } // GeneState
 
         static List<ExpressionInstance> FilterUnusualMutantsIfRequested(List<ExpressionInstance> instances, GeneState geneState, bool excludeUnusualMutants)
         {
@@ -246,7 +534,7 @@ namespace ExpressionByMutationCount
             }
         }
 
-        static void WriteFileHeader(StreamWriter outputFile, bool forAlleleSpecificExpression, bool perChromosome)
+        static void WriteFileHeader(StreamWriter outputFile, bool perChromosome)
         {
             outputFile.Write("Hugo Symbol");
             for (int exclusive = 0; exclusive < 2; exclusive++)
@@ -298,13 +586,13 @@ namespace ExpressionByMutationCount
             int nOne = 0;
             int nMore = 0;
 
-            if (!geneToProcess.expressionByRange[true][false][false].ContainsKey(0))
+            if (!geneToProcess.expressionByRange[false][false][false].ContainsKey(0))
             {
                 outputFile.WriteLine("\t*\t*\t*\t*");
                 return;
             }
 
-            foreach (var expression in geneToProcess.expressionByRange[true][false][false][0])
+            foreach (var expression in geneToProcess.expressionByRange[false][false][false][0])
             {
                 if (disease != "" && cases[expression.case_id].disease() != disease)
                 {
@@ -396,275 +684,9 @@ namespace ExpressionByMutationCount
         }
 
 
-        static void Main(string[] args)
-        {
-            var timer = new Stopwatch();
-            timer.Start();
+        static ASETools.Configuration configuration;
+        static bool forAlleleSpecificExpression;
 
-            var configuration = ASETools.Configuration.loadFromFile(args);
-            if (null == configuration)
-            {
-                Console.WriteLine("Unable to load configuration.");
-            }
-
-            bool forAlleleSpecificExpression = false;
-            bool perChromosome = false;
-
-            foreach (var arg in configuration.commandLineArgs)
-            {
-                if (arg == "-a")
-                {
-                    forAlleleSpecificExpression = true;
-                }
-                else if (arg == "-c")
-                {
-                    perChromosome = true;
-                }
-                else
-                {
-                    PrintUsage();
-                    return;
-                }
-            }
-
-            var comparer = StringComparer.OrdinalIgnoreCase;
-
-            var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
-            if (null == cases)
-            {
-                Console.WriteLine("You must generate cases first.");
-                return;
-            }
-
-            var selectedGenes = ASETools.SelectedGene.LoadFromFile(configuration.selectedGenesFilename);
-            if (null == selectedGenes)
-            {
-                Console.WriteLine("Must first select genes.");
-                return;
-            }
-
-            int missingCount = cases.Where(caseEntry => (forAlleleSpecificExpression ? caseEntry.Value.tumor_allele_specific_gene_expression_filename : caseEntry.Value.gene_expression_filename) == "").Count();
-
-
-
-            var casesToProcess = new List<ASETools.Case>();
-            foreach (var caseEntry in cases)
-            {
-                var case_ = caseEntry.Value;
-
-                if (forAlleleSpecificExpression && case_.tumor_allele_specific_gene_expression_filename != "" ||
-                    !forAlleleSpecificExpression && case_.gene_expression_filename != "")
-                {
-                    casesToProcess.Add(case_);
-                }
-            }
-
-            var genesToProcess = new Dictionary<string, GeneState>();
-
-            int nGenesSkipped = 0;
-            foreach (var selectedGene in selectedGenes)
-            {
-                //
-                // Load the unfiltered scatter graph for this gene into memory.
-                //
-
-                var geneScatterPlotLines = ASETools.GeneScatterGraphLine.LoadAllGeneScatterGraphEntries(configuration.geneScatterGraphsDirectory, true, selectedGene.Hugo_Symbol);
-                if (geneScatterPlotLines.Count() == 0)
-                {
-                    //
-                    // Probably not enough tumors to make the cut, skip this gene.
-                    //
-                    nGenesSkipped++;
-                    continue;
-                }
-
-               genesToProcess.Add(selectedGene.Hugo_Symbol, new GeneState(selectedGene.Hugo_Symbol, geneScatterPlotLines));
-            }
-
-            Console.WriteLine("Loaded " + cases.Count() + " cases, of which " + missingCount + " are missing gene expression, and " + genesToProcess.Count() + " genes in " + ASETools.ElapsedTimeInSeconds(timer));
-
-            timer.Reset();
-            timer.Start();
-
-            //
-            // Run through all of the {AlleleSpecific} expression files and add them to the per-gene state.  Do this in parallel, since there are a lot of them.
-            //
-            var threads = new List<Thread>();
-            for (int i = 0; i < Environment.ProcessorCount * 2 /* *2 because this is often IO bound*/; i++)
-            {
-                threads.Add(new Thread(() => ProcessRegionalExpressionFile(forAlleleSpecificExpression, casesToProcess, genesToProcess)));
-            }
-
-            Console.Write("Loading expression files (1 dot/100): ");
-            threads.ForEach(t => t.Start());
-            threads.ForEach(t => t.Join());
-
-            Console.WriteLine();
-            Console.WriteLine("Loaded and processed expression files in " + ASETools.ElapsedTimeInSeconds(timer));
-
-Console.WriteLine("lock: " + lockMilliseconds + "ms; read: " + readMilliseconds + "ms, process: " + processMilliseconds + "ms, 1: " + process1Milliseconds + "ms, 2: " + process2Milliseconds + "ms, 3: " + process3Milliseconds + "ms.");
-
-            string baseFileName = configuration.finalResultsDirectory + (forAlleleSpecificExpression ? "AlleleSpecific" : "") + "ExpressionDistributionByMutationCount";
-
-            var panCancerOutputFile = ASETools.CreateStreamWriterWithRetry(baseFileName + ".txt");
-            WriteFileHeader(panCancerOutputFile, forAlleleSpecificExpression, perChromosome);
- 
-            var outputFilesByDisease = new Dictionary<string, StreamWriter>();
-
-            var listOfDiseases = ASETools.GetListOfDiseases(cases);
-
-            foreach (var disease in listOfDiseases)
-            {
-                outputFilesByDisease.Add(disease, ASETools.CreateStreamWriterWithRetry(baseFileName + "_" + disease + ".txt"));
-                WriteFileHeader(outputFilesByDisease[disease], forAlleleSpecificExpression, perChromosome);
-            }
-            
-            timer.Reset();
-            timer.Start();
-
-            //
-            // Now generate output for all of the genes.
-            //
-            foreach (var geneToProcessEntry in genesToProcess)
-            {
-                var geneToProcess = geneToProcessEntry.Value;
-
-                var perGeneLinesFile = StreamWriter.Null; /* ASETools.CreateStreamWriterWithRetry(configuration.regionalExpressionDirectory + geneToProcess.hugo_symbol.ToLower() + (forAlleleSpecificExpression ? "_allele_specific" : "") + "_lines.txt");*/
-                perGeneLinesFile.Write("Case ID\tdisease abbr.\tHugo Symbol\tMutation Count");
-
-                foreach (var exclusive in ASETools.BothBools)
-                {
-                    ulong width = 1000;
-                    perGeneLinesFile.Write("\t0" + (exclusive ? " exclusive" : ""));
-
-                    for (int i = 1; i < ASETools.nRegions - 1 /* -1 because we don't do whole autosome here*/; i++)
-                    {
-                        perGeneLinesFile.Write("\t" + ASETools.SizeToUnits(width) + "b" + (exclusive ? " exclusive" : ""));
-                        width *= 2;
-                    }
-
-                    perGeneLinesFile.Write("\tWhole Autosome" + (exclusive ? " exclusive" : ""));
-
-                    if (!forAlleleSpecificExpression)
-                    {
-
-                        perGeneLinesFile.Write("\t0" + (exclusive ? " exclusive" : "") + " mean");
-
-                        width = 1000;
-                        for (int i = 1; i < ASETools.nRegions - 1 /* -1 because we don't do whole autosome here*/; i++)
-                        {
-                            perGeneLinesFile.Write("\t" + ASETools.SizeToUnits(width) + "b mean" + (exclusive ? " exclusive" : ""));
-                            width *= 2;
-                        }
-
-                        perGeneLinesFile.Write("\tWhole Autosome mean " + (exclusive ? " exclusive" : ""));
-                    }
-                } // exclusive
-
-                //
-                // Even if we're not doing per-chromosome, write the headers, since they're in the input file that's being copied here.
-                //
-                for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
-                {
-                    perGeneLinesFile.Write("\t" + ASETools.ChromosomeIndexToName(whichChromosome, true));
-                }
-
-                if (!forAlleleSpecificExpression)
-                {
-                    for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
-                    {
-                        perGeneLinesFile.Write("\t" + ASETools.ChromosomeIndexToName(whichChromosome, true) + " mean");
-                    }
-                }
-
-                perGeneLinesFile.WriteLine();
-                foreach (var line in geneToProcess.perGeneLines)
-                {
-                    perGeneLinesFile.WriteLine(line);
-                }
-                perGeneLinesFile.Close();
-
-                //
-                // Compute and write out the results.
-                //
-
-                panCancerOutputFile.Write(ASETools.ConvertToExcelString(geneToProcess.hugo_symbol));
-                foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
-                {
-                    perDiseaseOutputFileEntry.Value.Write(ASETools.ConvertToExcelString(geneToProcess.hugo_symbol));
-                }
-
-                foreach (var exclusive in ASETools.BothBools)
-                {
-                    bool[] musToUse = { false };
-                    if (!forAlleleSpecificExpression)
-                    {
-                        musToUse = ASETools.BothBools;
-                    }
-                    foreach (var mu in musToUse)  
-                    {
-                        Dictionary<int, List<ExpressionInstance>> byRange;
-                        List<ExpressionInstance> wholeAutosome;
-
-                        byRange = geneToProcess.expressionByRange[false][mu][exclusive];
-
-                        if (byRange.Count() == 0)
-                        {
-                            continue;
-                        }
-                            
-                        wholeAutosome = geneToProcess.expressionByRange[true][mu][exclusive][ASETools.nRegions - 1];
-
-                        for (int i = 0; i < ASETools.nRegions - 1 /* -1 because we don't do whole autosome here*/; i++)
-                        {
-                            if (byRange.ContainsKey(i))
-                            {
-                                WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, byRange[i], geneToProcess, true);
-                            }
-                            else
-                            {
-                                WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, null, geneToProcess, false);
-                            }
-                        } // For all widths
-
-                        WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, wholeAutosome, geneToProcess, wholeAutosome.Count() > 0);
-                    } // mu
-                } // exclusive
-
-                if (perChromosome)
-                {
-                    for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
-                    {
-                        WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, geneToProcess.perChromosomeExpression[false][whichChromosome],
-                            geneToProcess, geneToProcess.perChromosomeExpression[false][whichChromosome].Count() > 0);
-                    }
-
-                    if (!forAlleleSpecificExpression)
-                    {
-                        for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
-                        {
-                            WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, geneToProcess.perChromosomeExpression[true][whichChromosome],
-                                geneToProcess, geneToProcess.perChromosomeExpression[true][whichChromosome].Count() > 0);
-                        }
-                    }
-                }
-
-                WriteCounts(panCancerOutputFile, geneToProcess, "", cases);
-                foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
-                {
-                    WriteCounts(perDiseaseOutputFileEntry.Value, geneToProcess, perDiseaseOutputFileEntry.Key, cases);
-                }
-            }  // foreach gene
-
-
-
-            panCancerOutputFile.Close();
-
-            foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
-            {
-                perDiseaseOutputFileEntry.Value.Close();
-            }
-        } // Main
 
         static int nLoaded = 0;
 
@@ -720,6 +742,11 @@ Console.WriteLine("lock: " + lockMilliseconds + "ms; read: " + readMilliseconds 
                     expressionForThisCase.Add(regionalSignalEntry.Key, new ASETools.AlleleSpecificSignal(regionalSignalEntry.Key, regionalSignalEntry.Value));
                 }
 
+                //
+                // Load the annotated variants so we can append the somatic mutations to genes with exactly one mutation
+                //
+                List<ASETools.AnnotatedVariant> annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
+
                 var disease = case_.disease();
 
                 foreach (var geneToProcess in genesToProcess)
@@ -739,7 +766,27 @@ Console.WriteLine("lock: " + lockMilliseconds + "ms; read: " + readMilliseconds 
                         processTimer.Start();
 
                         process1Timer.Start();
-                        //geneToProcess.perGeneLines.Add(case_.case_id + "\t" + disease + "\t" + thisExpression.OutputString());
+                        geneToProcess.perGeneLinesFile.Write(case_.case_id + "\t" + disease + "\t" + thisExpression.OutputString());
+                        if (thisExpression.mutationCount == 1)
+                        {
+                            var mutations = annotatedSelectedVariants.Where(x => x.Hugo_symbol == geneToProcess.hugo_symbol && x.somaticMutation).ToList();
+                            if (mutations.Count() != 1)
+                            {
+                                Console.WriteLine("Found wrong number of somatic mutations for gene " + geneToProcess.hugo_symbol + " in case " + case_.case_id + ": " + mutations.Count() + " != 1");
+                            } else
+                            {
+                                geneToProcess.perGeneLinesFile.WriteLine("\t" + mutations[0].reference_allele + "\t" + mutations[0].alt_allele + "\t" + mutations[0].contig + "\t" +  mutations[0].locus + "\t" +
+                                    mutations[0].normalDNAReadCounts.nMatchingReference + "\t" + mutations[0].normalDNAReadCounts.nMatchingAlt + "\t" + mutations[0].normalDNAReadCounts.nMatchingNeither + "\t" + mutations[0].normalDNAReadCounts.nMatchingBoth + "\t" +
+                                    mutations[0].tumorDNAReadCounts.nMatchingReference + "\t" + mutations[0].tumorDNAReadCounts.nMatchingAlt + "\t" + mutations[0].tumorDNAReadCounts.nMatchingNeither + "\t" + mutations[0].tumorDNAReadCounts.nMatchingBoth + "\t" +
+                                    mutations[0].tumorRNAReadCounts.nMatchingReference + "\t" + mutations[0].tumorRNAReadCounts.nMatchingAlt + "\t" + mutations[0].tumorRNAReadCounts.nMatchingNeither + "\t" + mutations[0].tumorRNAReadCounts.nMatchingBoth + "\t" +
+                                    mutations[0].variantClassification + "\t" + mutations[0].variantType);
+                            }
+                        }
+                        else
+                        {
+                            geneToProcess.perGeneLinesFile.WriteLine("\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*");
+                        }
+                        
                         process1Timer.Stop();
 
                         for (int i = 0; i < ASETools.nRegions; i++)

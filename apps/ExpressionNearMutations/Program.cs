@@ -197,10 +197,7 @@ namespace ExpressionNearMutations
 						double alleleSpecificExpressionNormal;
 
 						if (geneLocationInformation.genesByChromosome.ContainsKey(annotatedVariant.contig) &&
-							annotatedVariant.tumorDNAReadCounts.nMatchingReference + annotatedVariant.tumorDNAReadCounts.nMatchingAlt >= 10 &&
-							annotatedVariant.tumorRNAReadCounts.nMatchingReference + annotatedVariant.tumorRNAReadCounts.nMatchingAlt >= 10 &&
-							annotatedVariant.tumorDNAReadCounts.nMatchingReference * 3 >= annotatedVariant.tumorDNAReadCounts.nMatchingAlt * 2 &&
-							annotatedVariant.tumorDNAReadCounts.nMatchingAlt * 3 >= annotatedVariant.tumorDNAReadCounts.nMatchingReference * 2)
+                            annotatedVariant.IsASECandidate() && !annotatedVariant.somaticMutation)
 						{
 							double rnaFractionTumor = (double)annotatedVariant.tumorRNAReadCounts.nMatchingAlt / (annotatedVariant.tumorRNAReadCounts.nMatchingReference + annotatedVariant.tumorRNAReadCounts.nMatchingAlt);
 
