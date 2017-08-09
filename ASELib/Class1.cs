@@ -7533,16 +7533,32 @@ namespace ASELib
 			}
 			static CopyNumberVariation ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
 			{
-
+				// Start and End can be formatted in scientific notation, so we convert them accordingly
 				return new CopyNumberVariation(
-				   fields[fieldMappings["Sample"]],
-				   fields[fieldMappings["Chromosome"]],
-				   Convert.ToInt32(fields[fieldMappings["Start"]]),
-				   Convert.ToInt32(fields[fieldMappings["End"]]),
-				   Convert.ToInt32(fields[fieldMappings["Num_Probes"]]),
-				   Convert.ToDouble(fields[fieldMappings["Segment_Mean"]])
-				   );
+					fields[fieldMappings["Sample"]],
+					fields[fieldMappings["Chromosome"]],
+					Convert.ToInt32(Double.Parse(fields[fieldMappings["Start"]], System.Globalization.NumberStyles.Float)),
+					Convert.ToInt32(Double.Parse(fields[fieldMappings["End"]], System.Globalization.NumberStyles.Float)),
+					Convert.ToInt32(fields[fieldMappings["Num_Probes"]]),
+					Convert.ToDouble(fields[fieldMappings["Segment_Mean"]])
+					);
+			}
 
+			public bool OverlapsLocus(string Chromosome_, int Start_, int End_)
+			{
+				if (this.Chromosome != Chromosome_)
+				{
+					return false;
+				}
+
+				if (this.Start < End_ && this.End > Start_)
+				{
+					return true;
+				}
+				else
+				{
+					return false;
+				}
 			}
 
 			static public int getBasesinCNV(List<CopyNumberVariation> CNVs, double threshold = 0.2)
