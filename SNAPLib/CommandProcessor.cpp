@@ -2,23 +2,23 @@
 
 Module Name:
 
-CommandProcessor.cpp
+    CommandProcessor.cpp
 
 Abstract:
 
-Code for running the top-level commands of SNAP
+    Code for running the top-level commands of SNAP
 
 Authors:
 
-Bill Bolosky, November, 2014
+    Bill Bolosky, November, 2014
 
 Environment:
-`
+
 User mode service.
 
 Revision History:
 
-Pulled from the main program and expanded to handle daemon mode
+    Pulled from the main program and expanded to handle daemon mode
 
 --*/
 
@@ -35,7 +35,7 @@ Pulled from the main program and expanded to handle daemon mode
 #include "Error.h"
 #include "Compat.h"
 
-const char *SNAP_VERSION = "1.0beta.23";
+const char *SNAP_VERSION = "1.0dev.100";
 
 static void usage()
 {
@@ -55,7 +55,7 @@ void ProcessNonDaemonCommands(int argc, const char **argv) {
 			GenomeIndex::runIndexer(argc - 2, argv + 2);
 		} else {
 			//
-			// The error cases in index build don't really free memory properly, so we just don't allows it in daemon mode.
+			// The error cases in index build don't really free memory properly, so we just don't allow it in daemon mode.
 			//
 			WriteErrorMessage("The index command is not available in daemon mode.  Please run 'snap-aligner index' directly.\n");
 		}

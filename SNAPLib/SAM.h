@@ -86,8 +86,9 @@ public:
             const char *fileName, int numThreads, bool quicklyDropUnpairedReads, const ReaderContext& context);
         
         // result and fieldLengths must be of size nSAMFields
-        static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, _int64 *o_headerSize, bool* o_headerMatchesIndex, bool *o_sawWholeHeader = NULL);
-        
+        static bool parseHeader(const char *fileName, char *firstLine, char *endOfBuffer, const Genome *genome, _int64 *o_headerSize, bool* o_headerMatchesIndex, bool *o_sawWholeHeader = NULL, 
+            int *o_n_ref = NULL, GenomeLocation **o_ref_locations = NULL, char ***o_refNames = NULL);  // o_ref_locations is BigAlloc'ed
+         
         static char* skipToBeyondNextFieldSeparator(char *str, const char *endOfBuffer, size_t *o_charsUntilFirstSeparator = NULL);
 
 
@@ -165,7 +166,7 @@ public:
         const ReaderContext& context, LandauVishkinWithCigar * lv, char * buffer, size_t bufferSpace,
         size_t * spaceUsed, size_t qnameLen, Read * read, AlignmentResult result, 
         int mapQuality, GenomeLocation genomeLocation, Direction direction, bool secondaryAlignment, int* o_addFrontClipping,
-        bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
+        int internalScore, bool emitInternalScore, char *internalScoreTag, bool hasMate = false, bool firstInPair = false, Read * mate = NULL, 
         AlignmentResult mateResult = NotFound, GenomeLocation mateLocation = 0, Direction mateDirection = FORWARD,
         bool alignedAsPair = false) const; 
 

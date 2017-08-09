@@ -223,7 +223,7 @@ FASTQReader::getNextRead(Read *readToUpdate)
     return true;
 }
 
-// static char LAST[100000]; static int LASTLEN = 0;
+//static char LAST[100000]; static int LASTLEN = 0;
 
     _int64
 FASTQReader::getReadFromBuffer(char *buffer, _int64 validBytes, Read *readToUpdate, const char *fileName, DataReader *data, const ReaderContext &context)
@@ -278,7 +278,7 @@ FASTQReader::getReadFromBuffer(char *buffer, _int64 validBytes, Read *readToUpda
     readToUpdate->setBatch(data->getBatch());
     readToUpdate->setReadGroup(context.defaultReadGroup);
 
-    // memcpy(LAST, buffer, scan - buffer); LASTLEN = scan - buffer;
+    //memcpy(LAST, buffer, scan - buffer); LASTLEN = scan - buffer;
 
     return scan - buffer;
 
@@ -373,14 +373,17 @@ PairedInterleavedFASTQReader::getNextReadPair(Read *read0, Read *read1)
     //
 
     char* buffer;
-    _int64 validBytes;
-    if (! data->getData(&buffer, &validBytes)) {
+    _int64 validBytes, startBytes;
+    if (! data->getData(&buffer, &validBytes, &startBytes)) {
+      //fprintf(stderr, "!getData offset %lld\n", data->getFileOffset());
         data->nextBatch();
-        if (! data->getData(&buffer, &validBytes)) {
+        //fprintf(stderr, "FQ batch\n");
+        if (! data->getData(&buffer, &validBytes, &startBytes)) {
             return false;
         }
+      //fprintf(stderr, "nextBatch getData offset %lld\n", data->getFileOffset());
+      //fprintf(stderr, "FQ data %.10s, start ...%.10s, valid ...%.10s, %lld bytes\n", buffer, buffer+validBytes-10, buffer+startBytes-10, validBytes);
     }
-    
     _int64 bytesConsumed = FASTQReader::getReadFromBuffer(buffer, validBytes, read0, fileName, data, context);
     if (bytesConsumed == validBytes) {
         WriteErrorMessage("Input file seems to have an odd number of reads.  Ignoring the last one.");

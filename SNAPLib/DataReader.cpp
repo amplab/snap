@@ -27,11 +27,14 @@ Environment:
 #include "zlib.h"
 #include "exit.h"
 #include "Error.h"
+#include "Util.h"
 
 using std::max;
 using std::min;
 using std::map;
 using std::string;
+
+//#define VALIDATE_STDIO
 
 //
 // Read-Based
@@ -103,7 +106,10 @@ protected:
         int             holds;
         char*           extra;
         int             next, previous; // index of next/previous in free/ready list, -1 if end
-		bool			headerBuffer;	// Set if this is a special buffer that holds the rewound header.  These get read once and deallocated.
+        bool            headerBuffer; // Set if this is a special buffer that holds the rewound header.  These get read once and deallocated.g
+#ifdef VALIDATE_STDIO
+      _uint32           dataHash;
+#endif
 
 		void operator=(BufferInfo &peer) {
 			buffer = peer.buffer;
@@ -204,6 +210,7 @@ ReadBasedDataReader::ReadBasedDataReader(
  
     nextBufferForConsumer = -1;
     lastBufferForConsumer = -1;
+    //fprintf(stderr, "DataReader.cpp:%d nextBufferForReader %d -> %d\n", __LINE__, nextBufferForReader, 0);
     nextBufferForReader = 0;
     CreateEventObject(&releaseEvent);
     releaseWaitInMillis = 5; // wait up to 5 ms before allocating a new buffer
@@ -536,8 +543,10 @@ ReadBasedDataReader::nextBatch()
     info->state = InUse;
     _uint32 overflow = max((unsigned) info->offset, info->nBytesThatMayBeginARead) - info->nBytesThatMayBeginARead;
     _int64 nextStart = info->fileOffset + info->nBytesThatMayBeginARead; // for validation
-    //fprintf(stderr, "ReadBasedDataReader:nextBatch() finished buffer %d, starting buffer %d\n", nextBufferForConsumer, info->next);
+    //fprintf(stderr, "ReadBasedDataReader:nextBatch() finished buffer %d at %llu, starting buffer %d at %llu\n", nextBufferForConsumer, info->fileOffset, info->next, bufferInfo[info->next].fileOffset);
     //fprintf(stderr, "ReadBasedDataReader:nextBatch() skipping %u overflow bytes used in previous batch\n", overflow);
+    _ASSERT(bufferInfo[info->next].fileOffset == nextStart);
+    //fprintf(stderr, "DataReader.cpp:%d nextBufferForConsumer %d -> %d\n", __LINE__, nextBufferForConsumer, info->next);
     nextBufferForConsumer = info->next;
 
     bool first = true;
@@ -545,11 +554,11 @@ ReadBasedDataReader::nextBatch()
         nextStart = 0; // can no longer count on getting sequential buffers from file
         ReleaseExclusiveLock(&lock);
         if (! first) {
-            //fprintf(stderr, "ReadBasedDataReader::nextBatch thread %d wait for release\n", GetCurrentThreadId());
+	    //fprintf(stderr, "ReadBasedDataReader::nextBatch thread %d wait for release\n", GetCurrentThreadId());
             _int64 start = timeInNanos();
             bool waitSucceeded = WaitForEventWithTimeout(&releaseEvent, releaseWaitInMillis);
-             InterlockedAdd64AndReturnNewValue(&ReleaseWaitTime, timeInNanos() - start);
-            //fprintf(stderr, "ReadBasedDataReader::nextBatch thread %d released\n", GetCurrentThreadId());
+            InterlockedAdd64AndReturnNewValue(&ReleaseWaitTime, timeInNanos() - start);
+	    //fprintf(stderr, "ReadBasedDataReader::nextBatch thread %d released\n", GetCurrentThreadId());
             if (!waitSucceeded) {
                 AcquireExclusiveLock(&lock);
                 addBuffer();
@@ -581,7 +590,8 @@ ReadBasedDataReader::nextBatch()
     bool
 ReadBasedDataReader::isEOF()
 {
-    return bufferInfo[nextBufferForConsumer].isEOF;
+    BufferInfo* info = &bufferInfo[nextBufferForConsumer];
+    return info->isEOF && info->offset >= info->validBytes;
 }
     
     DataBatch
@@ -635,14 +645,10 @@ ReadBasedDataReader::releaseBatch(
                 if (info->holds > 0) {
                     info->holds--;
                 }
-                if (info->holds == 0) {
-                    //fprintf(stderr,"%x releaseBatch batch %d, releasing %s buffer %d\n", (unsigned) this, batch.batchID, info->state == InUse ? "InUse" : "Full", i);
+                if (info->holds == 0 && (i != nextBufferForConsumer || info->isEOF)) {
+                    //fprintf(stderr,"ReadBasedDataReader:releaseBatch batch %d, releasing %s buffer %d\n", batch.batchID, info->state == InUse ? "InUse" : "Full", i);
                     info->state = Empty;
                     // remove from ready list
-                    if (i == nextBufferForConsumer) {
-                        //fprintf(stderr, "ReadBasedDataReader::releaseBatch change nextBufferForConsumer %d->%d\n", nextBufferForConsumer, info->next);
-                        nextBufferForConsumer = info->next;
-                    }
                     if (i == lastBufferForConsumer) {
                         lastBufferForConsumer = info->previous;
                     }
@@ -672,13 +678,14 @@ ReadBasedDataReader::releaseBatch(
 						info->next = nextBufferForReader;
 						info->batchID = 0;
 #ifdef _DEBUG
-						memset(info->buffer, 0xde, bufferSize + extraBytes);
+						//memset(info->buffer, 0xde, bufferSize + extraBytes);
 #endif
+						//fprintf(stderr, "DataReader.cpp:%d nextBufferForReader %d -> %d\n", __LINE__, nextBufferForReader, i);
 						nextBufferForReader = i;
 					}
 					result = true;
                 } else {
-                    //fprintf(stderr,"%x releaseBatch batch %d, holds on buffer %d now %d\n", (unsigned) this, batch.batchID, i, info->holds);
+                    //fprintf(stderr,"releaseBatch batch %d, holds on buffer %d now %d\n", batch.batchID, i, info->holds);
                     result = false;
                 }
                 break;
@@ -743,6 +750,7 @@ ReadBasedDataReader::addBuffer()
     bufferInfo[nBuffers].next = nextBufferForReader;
     bufferInfo[nBuffers].previous = -1;
     bufferInfo[nBuffers].headerBuffer = false;
+    //fprintf(stderr, "DataReader.cpp:%d nextBufferForReader %d -> %d\n", __LINE__, nextBufferForReader, nBuffers);
     nextBufferForReader = nBuffers;
     nBuffers++;
     _ASSERT(nBuffers <= maxBuffers);
@@ -839,6 +847,7 @@ StdioDataReader::startIo()
         BufferInfo* info = &bufferInfo[nextBufferForReader];
         _ASSERT(info->state == Empty);
         int index = nextBufferForReader;
+	//fprintf(stderr, "DataReader.cpp:%d nextBufferForReader %d -> %d\n", __LINE__, nextBufferForReader, info->next);
         nextBufferForReader = info->next;
         info->batchID = nextBatchID++;
         // add to end of consumer list
@@ -850,7 +859,7 @@ StdioDataReader::startIo()
         info->previous = lastBufferForConsumer;
         lastBufferForConsumer = index;
 		if (nextBufferForConsumer == -1) {
-            //fprintf(stderr, "StdioDataReader::startIo set nextBufferForConsumder -1 -> %d\n", index);
+		  //fprintf(stderr, "StdioDataReader::startIo set nextBufferForConsumder -1 -> %d\n", index);
 			nextBufferForConsumer = index;
 		}
        
@@ -883,7 +892,7 @@ StdioDataReader::startIo()
         // We have to run this holding the lock, because otherwise there's no way to make the overflow buffer work properly.  
         //
         size_t bytesRead = fread(info->buffer + bufferOffset, 1, amountToRead, stdin);
-        //fprintf(stderr,"StdioDataReader:startIO(): Read offset 0x%llx into buffer at 0x%llx, size %d, copied 0x%x overflow bytes, start at 0x%llx, tid %d\n", readOffset, info->buffer, bytesRead, bufferOffset, readOffset - bufferOffset, GetCurrentThreadId());
+        //fprintf(stderr,"StdioDataReader:startIO(): Read offset 0x%llx into buffer %d at 0x%llx, size %d, copied 0x%x overflow bytes, start at 0x%llx, tid %d\n", readOffset, info-bufferInfo, info->buffer, bytesRead, bufferOffset, readOffset - bufferOffset, GetThreadId());
 
         readOffset += bytesRead;
 
@@ -900,6 +909,9 @@ StdioDataReader::startIo()
         }
 
         info->validBytes = (unsigned)(bytesRead + bufferOffset);
+#ifdef VALIDATE_STDIO
+	info->dataHash = util::hash(info->buffer, info->validBytes);
+#endif
 
         if (hitEOF) {
             info->nBytesThatMayBeginARead = (unsigned)(bytesRead + bufferOffset);
@@ -923,7 +935,7 @@ StdioDataReader::startIo()
     }
 
     if (nextBufferForConsumer == -1) {
-        //fprintf(stderr, "startIo thread %x reset releaseEvent\n", GetCurrentThreadId());
+        //fprintf(stderr, "startIo thread %x reset releaseEvent\n", GetThreadId());
         PreventEventWaitersFromProceeding(&releaseEvent);
     }
 }
@@ -963,12 +975,24 @@ StdioDataReader::waitForBuffer(
     }
 
     if (info->state == Full) {
+#ifdef VALIDATE_STDIO
+      if (info->dataHash != util::hash(info->buffer, info->validBytes)) {
+	WriteErrorMessage("Buffer contents modified\n");
+	soft_exit(1);
+      }
+#endif
         return;
     }
 
     _ASSERT(info->state != Reading);    // We're synchronous, we don't use Reading
     startIo();
     
+#ifdef VALIDATE_STDIO
+    if (info->dataHash != util::hash(info->buffer, info->validBytes)) {
+      WriteErrorMessage("Buffer contents modified\n");
+      soft_exit(1);
+    }
+#endif
     info->state = Full;
     info->buffer[info->validBytes] = 0;
 }
@@ -1101,6 +1125,7 @@ WindowsOverlappedDataReader::reinit(
 
     nextBufferForConsumer = -1; 
     lastBufferForConsumer = -1;
+    //fprintf(stderr, "DataReader.cpp:%d nextBufferForReader %d -> %d\n", __LINE__, nextBufferForReader, 0);
     nextBufferForReader = 0;
 
     readOffset.QuadPart = i_startingOffset;
@@ -1166,7 +1191,8 @@ WindowsOverlappedDataReader::startIo()
         _int64 finalStartOffset = min(fileSize.QuadPart, endingOffset);
         amountToRead = (unsigned)min(finalOffset - readOffset.QuadPart, (_int64) bufferSize);   // Cast OK because can't be longer than unsigned bufferSize
         info->isEOF = readOffset.QuadPart + amountToRead == finalOffset;
-        info->nBytesThatMayBeginARead = (unsigned)min((_int64)bufferSize - overflowBytes, finalStartOffset - readOffset.QuadPart);
+        info->nBytesThatMayBeginARead = info->isEOF && finalStartOffset == fileSize.QuadPart ? amountToRead
+            : (unsigned)min((_int64)bufferSize - overflowBytes, finalStartOffset - readOffset.QuadPart);
 
         _ASSERT(amountToRead >= info->nBytesThatMayBeginARead && (!info->isEOF || finalOffset == readOffset.QuadPart + amountToRead));
         ResetEvent(bufferLap->hEvent);
@@ -1361,7 +1387,9 @@ private:
         char* decompressed;
         _int64 decompressedStart;
         _int64 decompressedValid;
+        _int64 decompressedSize;
         bool allocated; // if decompressed has been allocated specially, not from inner extra data
+        void ensureSize(_int64 newSize, _int64 newTotal, _int64 copyOld);
     };
 
     // use only these routines to manipulate the linked  lists
@@ -1393,6 +1421,22 @@ private:
     ExclusiveLock lock; // lock on linked list pointers in this object and in Entry
 };
 
+void DecompressDataReader::Entry::ensureSize(_int64 newSize, _int64 extra, _int64 copyOld)
+{
+    if (newSize > decompressedSize) {
+        //WriteErrorMessage("DecompressDataReader: expanding decompress buffer from %lld to %lld\n", decompressedSize, newSize);
+        char * newSpace = (char*)BigAlloc(newSize + extra);
+        memcpy(newSpace, decompressed, copyOld);
+        if (allocated) {
+            BigDealloc(decompressed);
+            //fprintf(stderr, "Entry::ensureSize free 0x%llx-0x%llx\n", (_int64)decompressed, (_int64)decompressed + decompressedSize + extra);
+        }
+        decompressed = newSpace;
+        allocated = true;
+        decompressedSize = newSize;
+        //fprintf(stderr, "Entry::ensureSize allocate 0x%llx-0x%llx\n", (_int64)decompressed, (_int64)decompressed + decompressedSize + extra);
+    }
+}
 
 DecompressDataReader::DecompressDataReader(
     DataReader* i_inner,
@@ -1413,6 +1457,7 @@ DecompressDataReader::DecompressDataReader(
         entry->decompressed = NULL;
         entry->allocated = false;
         entry->batch = DataBatch(0, 0);
+        entry->decompressedSize = extraBytes;
     }
     available = entries;
     first = last = NULL;
@@ -1602,7 +1647,7 @@ DecompressDataReader::getExtra(
     char** o_extra,
     _int64* o_length)
 {
-    *o_extra = peekReady()->decompressed + extraBytes;
+    *o_extra = peekReady()->decompressed + peekReady()->decompressedSize;
     *o_length = totalExtra - extraBytes;
 }
     
@@ -1618,14 +1663,14 @@ DecompressDataReader::decompress(
     _int64* o_outputWritten,
     DecompressMode mode)
 {
-    if (inputBytes > 0xffffffff || outputBytes > 0xffffffff) {
+    if (inputBytes > 0xffffffff) {
         WriteErrorMessage("GzipDataReader: inputBytes or outputBytes > max unsigned int\n");
         soft_exit(1);
     }
     zstream->next_in = (Bytef*) input;
     zstream->avail_in = (uInt)inputBytes;
     zstream->next_out = (Bytef*) output;
-    zstream->avail_out = (uInt)outputBytes;
+    zstream->avail_out = (uInt)__min(outputBytes, 0xffffffff);
     if (heap != NULL) {
         zstream->zalloc = zalloc;
         zstream->zfree = zfree;
@@ -1756,6 +1801,23 @@ DecompressWorker::step()
     }
 }
 
+    _int64
+calculateDecompressedSize(char* compressed, _int64 compressedStart, _int64 compressedValid, _int64 input, _int64 output, _int64 fileOffset)
+{
+    do {
+        BgzfHeader* zip = (BgzfHeader*)(compressed + input);
+        input += zip->BSIZE() + 1;
+        output += zip->ISIZE();
+
+        if (input > compressedValid || zip->BSIZE() >= BAM_BLOCK || zip->ISIZE() > BAM_BLOCK) {
+            WriteErrorMessage("error reading BAM file at %lld\n", fileOffset + input);
+            soft_exit(1);
+        }
+
+    } while (input < compressedStart);
+    return output;
+}
+
     void
 DecompressDataReader::decompressThread(
     void* context)
@@ -1782,22 +1844,30 @@ DecompressDataReader::decompressThread(
                 soft_exit(1);
             }
             // mark as eof - no data
-            entry->decompressedValid = entry->decompressedStart = reader->overflowBytes;
             DataBatch b = reader->inner->getBatch();
             entry->batch = DataBatch(b.batchID + 1, b.fileID);
             // decompressed buffer is same as next-to-last batch, need to allocate own buffer
             entry->decompressed = (char*) BigAlloc(reader->totalExtra);
+            entry->decompressedSize = reader->extraBytes;
+            entry->decompressedValid = entry->decompressedStart = reader->overflowBytes;
             entry->allocated = true;
             stop = true;
         } else {
-            _int64 extraSize;
-            reader->inner->getExtra(&entry->decompressed, &extraSize);
-			_ASSERT(extraSize >= reader->extraBytes && extraSize >= reader->overflowBytes);
+            if (!entry->allocated) {
+                _int64 extraSize;
+                reader->inner->getExtra(&entry->decompressed, &extraSize);
+                entry->decompressedSize = reader->extraBytes;
+                _ASSERT(extraSize >= reader->extraBytes && extraSize >= reader->overflowBytes);
+            }
             // figure out offsets and advance inner data
             inputs.clear();
             outputs.clear();
             _int64 input = 0;
             _int64 output = reader->overflowBytes;
+
+            _int64 tempOutput = calculateDecompressedSize(entry->compressed, entry->compressedStart, entry->compressedValid, input, output, reader->getFileOffset() - input);
+            entry->ensureSize(tempOutput, reader->totalExtra - reader->extraBytes, reader->overflowBytes);
+
             do {
                 inputs.push_back(input);
                 outputs.push_back(output);
@@ -1805,8 +1875,8 @@ DecompressDataReader::decompressThread(
                 input += zip->BSIZE() + 1;
                 output += zip->ISIZE();
 
-                if (output > reader->extraBytes) {
-                    fprintf(stderr, "insufficient decompression space, increase -xf parameter\n");
+                if (output > entry->decompressedSize) {
+                    fprintf(stderr, "Bug in DecompressDataReader::decompressThread(); don't have enough decompress buffer when we thought we'd assured it.  Existing size %lld, needed (at least) %lld, entry @0x%p\n", entry->decompressedSize, output, entry);
                     soft_exit(1);
                 }
                 if (input > entry->compressedValid || zip->BSIZE() >= BAM_BLOCK || zip->ISIZE() > BAM_BLOCK) {
@@ -1875,10 +1945,14 @@ DecompressDataReader::decompressThreadContinuous(
             reader->holdBatch(entry->batch); // hold batch while decompressing
             reader->inner->advance(entry->compressedValid);
             reader->inner->nextBatch(); // start reading next batch
-            decompress(&zstream, NULL,
+            bool ok = decompress(&zstream, NULL,
                 entry->compressed, entry->compressedValid, &compressedRead,
-                entry->decompressed + reader->overflowBytes, reader->extraBytes - reader->overflowBytes, &decompressedWritten,
+                entry->decompressed + reader->overflowBytes, entry->decompressedSize - reader->overflowBytes, &decompressedWritten,
                 first ? StartMultiBlock : ContinueMultiBlock);
+            if (!ok) {
+                WriteErrorMessage("Failed to decompress BAM file at offset %lld\n", reader->inner->getFileOffset());
+                soft_exit(1);
+            }
             _ASSERT(compressedRead == entry->compressedValid && decompressedWritten <= reader->extraBytes - reader->overflowBytes);
             entry->decompressedValid = reader->overflowBytes + decompressedWritten;
             entry->decompressedStart = decompressedWritten;

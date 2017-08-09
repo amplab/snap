@@ -2,7 +2,7 @@
 
 Module Name:
 
-    geonome.cpp
+    Geonome.cpp
 
 Abstract:
 
@@ -149,7 +149,7 @@ Genome::saveToFile(const char *fileName) const
          curChar = contigs[i].name + n;
          if (*curChar == ' '){ *curChar = '_'; }
         }
-        fprintf(saveFile,"%lld %s\n",contigs[i].beginningLocation, contigs[i].name);
+        fprintf(saveFile,"%lld %s\n",GenomeLocationAsInt64(contigs[i].beginningLocation), contigs[i].name);
     }
 
 	//
@@ -252,6 +252,7 @@ Genome::loadFromFile(const char *fileName, unsigned chromosomePadding, GenomeLoc
 	      curName[pos] = contigNameBuffer[pos + n];
 	    }
         curName[contigSize] = '\0';
+        genome->contigs[i].mitochondrial = (!_stricmp(curName, "m")) || (!_stricmp(curName, "mt")) || (!_stricmp(curName, "chrm")) || (!_stricmp(curName, "chrmt"));
     } // for each contig
 
     if (0 != loadFile->advance(GenomeLocationAsInt64(minLocation))) {

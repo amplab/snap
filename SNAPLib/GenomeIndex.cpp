@@ -176,8 +176,8 @@ GenomeIndex::runIndexer(
 		else if (strcmp(argv[n], "-keysize") == 0) {
             if (n + 1 < argc) {
                 keySizeInBytes = atoi(argv[n+1]);
-                if (keySizeInBytes < 4 || keySizeInBytes > 8) {
-                    WriteErrorMessage("Key size must be between 4 and 8 inclusive\n");
+                if (keySizeInBytes < 2 || keySizeInBytes > 8) {
+                    WriteErrorMessage("Key size must be between 2 and 8 inclusive\n");
                     soft_exit(1);
                 }
                 n++;
@@ -194,9 +194,9 @@ GenomeIndex::runIndexer(
         }
     }
 
-    if (seedLen < 16 || seedLen > 32) {
+    if (seedLen < 8 || seedLen > 32) {
         // Seeds are stored in 64 bits, so they can't be larger than 32 bases for now.
-        WriteErrorMessage("Seed length must be between 16 and 32, inclusive\n");
+        WriteErrorMessage("Seed length must be between 8 and 32, inclusive\n");
         soft_exit(1);
     }
 
@@ -780,8 +780,8 @@ SNAPHashTable** GenomeIndex::allocateHashTables(
         soft_exit(1);
     }
 
-    if (hashTableKeySize < 4 || hashTableKeySize > 8) {
-        WriteErrorMessage("allocateHashTables: key size must be 4-8 inclusive\n");
+    if (hashTableKeySize < 2 || hashTableKeySize > 8) {
+        WriteErrorMessage("allocateHashTables: key size must be 2-8 inclusive\n");
         soft_exit(1);
     }
 
@@ -849,8 +849,7 @@ GenomeIndex::GenomeIndex() : nHashTables(0), hashTables(NULL), overflowTable32(N
 {
 }
 
-
-GenomeIndex::~GenomeIndex()
+void GenomeIndex::dropIndex()
 {
     if (NULL != hashTables) {
         for (unsigned i = 0; i < nHashTables; i++) {
@@ -859,28 +858,35 @@ GenomeIndex::~GenomeIndex()
         }
     }
 
-    delete [] hashTables;
+    delete[] hashTables;
     hashTables = NULL;
 
-	if (NULL != mappedTables) {
-		mappedTables->close();
-		mappedOverflowTable->close();
-	} else {
-		if (NULL != overflowTable32) {
-			BigDealloc(overflowTable32);
-			overflowTable32 = NULL;
-		}
+    if (NULL != mappedTables) {
+        mappedTables->close();
+        mappedOverflowTable->close();
+    }
+    else {
+        if (NULL != overflowTable32) {
+            BigDealloc(overflowTable32);
+            overflowTable32 = NULL;
+        }
 
-		if (NULL != overflowTable64) {
-			BigDealloc(overflowTable64);
-			overflowTable64 = NULL;
-		}
+        if (NULL != overflowTable64) {
+            BigDealloc(overflowTable64);
+            overflowTable64 = NULL;
+        }
 
-		if (NULL != tablesBlob) {
-			BigDealloc(tablesBlob);
-			tablesBlob = NULL;
-		}
-	}
+        if (NULL != tablesBlob) {
+            BigDealloc(tablesBlob);
+            tablesBlob = NULL;
+        }
+    }
+}
+
+
+GenomeIndex::~GenomeIndex()
+{
+    dropIndex();
 
 	delete genome;
 	genome = NULL;
@@ -1614,6 +1620,17 @@ GenomeIndex::loadFromDirectory(char *directoryName, bool map, bool prefetch)
     snprintf(filenameBuffer, filenameBufferSize, "%s%c%s", directoryName, PATH_SEP, GenomeIndexFileName);
 
     GenericFile *indexFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
+
+    for (int i = 0; i < 20 && NULL == indexFile; i++) {
+        //
+        // On Windows, stdio opens the file exclusively.  So, if we want to have multiple instances of snap
+        // read the same index and start at the same time (think cluster scheduler), then it helps to put
+        // in a little tolerance to spread it out.  Probably should use random exponential backoff here, but
+        // non-random constant is probably good enough in practice.
+        //
+        SleepForMillis(1000);
+        indexFile = GenericFile::open(filenameBuffer, GenericFile::ReadOnly);
+    }
 
     if (NULL == indexFile) {
         WriteErrorMessage("Unable to open file '%s' for read.\n",filenameBuffer);

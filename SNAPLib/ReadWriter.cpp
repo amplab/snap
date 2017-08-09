@@ -34,9 +34,19 @@ Environment:
 class SimpleReadWriter : public ReadWriter
 {
 public:
-    SimpleReadWriter(const FileFormat* i_format, DataWriter* i_writer, const Genome* i_genome)
-        : format(i_format), writer(i_writer), genome(i_genome)
-    {}
+    SimpleReadWriter(const FileFormat* i_format, DataWriter* i_writer, const Genome* i_genome, bool i_killIfTooSlow, bool i_emitInternalScore, char *i_internalScoreTag, bool i_ignoreAlignmentAdjustmentsForOm)
+        : format(i_format), writer(i_writer), genome(i_genome), killIfTooSlow(i_killIfTooSlow), lastTooSlowCheck(0), emitInternalScore(i_emitInternalScore), ignoreAlignmentAdjustmentsForOm(i_ignoreAlignmentAdjustmentsForOm)
+    {
+        if (emitInternalScore) {
+            if (strlen(i_internalScoreTag) != 2) {
+                WriteErrorMessage("SimpleReadWriter: bogus internal score tag\n");
+                soft_exit(1);
+            }
+            strcpy(internalScoreTag, i_internalScoreTag);
+        } else  {
+            internalScoreTag[0] = '\0';
+        }
+    }
 
     virtual ~SimpleReadWriter()
     {
@@ -45,10 +55,10 @@ public:
 
 	virtual bool writeHeader(const ReaderContext& context, bool sorted, int argc, const char **argv, const char *version, const char *rgLine, bool omitSQLines);
 
-    virtual bool writeReads(const ReaderContext& context, Read *read, SingleAlignmentResult *results, int nResults, bool firstIsPrimary);
+    virtual bool writeReads(const ReaderContext& context, Read *read, SingleAlignmentResult *results, _int64 nResults, bool firstIsPrimary);
 
-    virtual bool writePairs(const ReaderContext& context, Read **reads /* array of size 2 */, PairedAlignmentResult *result, int nResults, 
-        SingleAlignmentResult **singleResults /* array of size 2*/, int *nSingleResults /* array of size 2*/, bool firstIsPrimary);
+    virtual bool writePairs(const ReaderContext& context, Read **reads /* array of size 2 */, PairedAlignmentResult *result, _int64 nResults, 
+        SingleAlignmentResult **singleResults /* array of size 2*/, _int64 *nSingleResults /* array of size 2*/, bool firstIsPrimary);
 
     virtual void close();
 
@@ -57,6 +67,15 @@ private:
     DataWriter* writer;
     const Genome* genome;
     LandauVishkinWithCigar lvc;
+
+    void checkIfTooSlow();
+    bool killIfTooSlow;
+    _int64 lastTooSlowCheck;
+    _int64 writesSinceLastTooSlowCheck;
+
+    bool emitInternalScore;
+    char internalScoreTag[3];
+    bool ignoreAlignmentAdjustmentsForOm;
 };
 
     bool
@@ -116,12 +135,35 @@ SimpleReadWriter::writeHeader(
     return true;
 }
 
+    void
+SimpleReadWriter::checkIfTooSlow()
+{
+    const _int64 tooSlowCheckPeriod = 5 * 60 * 1000;    // 5 min in ms
+    const _int64 tooSlowCheckMinReadsPerCheckPeriod = 5 * 60 * 1000;    // One read/ms (or 1000 reads/s, but just on this thread).
+
+    if (killIfTooSlow) {
+        _int64 now = timeInMillis();
+        if (lastTooSlowCheck + tooSlowCheckPeriod <= now) {
+            if (lastTooSlowCheck != 0 && writesSinceLastTooSlowCheck < tooSlowCheckMinReadsPerCheckPeriod) {
+                WriteErrorMessage("Only wrote %lld writes during a %lld minute check period; we're probably out of memory and are giving up because of -kts\n", writesSinceLastTooSlowCheck, tooSlowCheckPeriod / (60 * 1000));
+                soft_exit(1);
+            }
+
+            lastTooSlowCheck = now;
+            writesSinceLastTooSlowCheck = 0;
+        }
+
+        writesSinceLastTooSlowCheck++;
+    } // if (killIfTooSlow)
+}
+
+
     bool
 SimpleReadWriter::writeReads(
     const ReaderContext& context, 
     Read *read, 
     SingleAlignmentResult *results, 
-    int nResults,
+    _int64 nResults,
     bool firstIsPrimary)
 {
     char* buffer;
@@ -129,7 +171,9 @@ SimpleReadWriter::writeReads(
     size_t used;
     bool result = false;
 
-    for (int i = 0; i < nResults; i++) {
+    checkIfTooSlow();
+
+    for (_int64 i = 0; i < nResults; i++) {
         if (results[i].status == NotFound) {
             results[i].location = InvalidGenomeLocation;
         }
@@ -157,7 +201,6 @@ SimpleReadWriter::writeReads(
         finalLocations = new GenomeLocation[nResults];
     }
 
-
     for (int pass = 0; pass < 2; pass++) { // Make two passes, one with whatever buffer space is left and one with a clean buffer.
         bool blewBuffer = false;
 
@@ -167,16 +210,19 @@ SimpleReadWriter::writeReads(
 
         used = 0;
 
-        for (int whichResult = 0; whichResult < nResults; whichResult++) {
+        for (_int64 whichResult = 0; whichResult < nResults; whichResult++) {
             int addFrontClipping = 0;
-            read->setAdditionalFrontClipping(0);
+            read->setAdditionalFrontClipping(results[whichResult].clippingForReadAdjustment);
             int cumulativeAddFrontClipping = 0;
             finalLocations[whichResult] = results[whichResult].location;
 
             unsigned nAdjustments = 0;
 
             while (!format->writeRead(context, &lvc, buffer + used, size - used, &usedBuffer[whichResult], read->getIdLength(), read, results[whichResult].status,
-                results[whichResult].mapq, finalLocations[whichResult], results[whichResult].direction, (whichResult > 0) || !firstIsPrimary, &addFrontClipping)) {
+                results[whichResult].mapq, finalLocations[whichResult], results[whichResult].direction, (whichResult > 0) || !firstIsPrimary, &addFrontClipping,
+                results[whichResult].scorePriorToClipping, emitInternalScore, internalScoreTag)) {
+
+                _ASSERT(0 == addFrontClipping || ignoreAlignmentAdjustmentsForOm); // Because of the alignment adjuster.
 
                 nAdjustments++;
 
@@ -260,9 +306,9 @@ SimpleReadWriter::writePairs(
     const ReaderContext& context, 
     Read **reads /* array of size NUM_READS_PER_PAIR */, 
     PairedAlignmentResult *result, 
-    int nResults,
+    _int64 nResults,
     SingleAlignmentResult **singleResults /* array of size NUM_READS_PER_PAIR*/, 
-    int *nSingleResults /* array of size NUM_READS_PER_PAIR*/, 
+    _int64 *nSingleResults /* array of size NUM_READS_PER_PAIR*/, 
     bool firstIsPrimary)
 {
     bool retVal = false;
@@ -275,6 +321,8 @@ SimpleReadWriter::writePairs(
     const int staticUsedBufferSize = 2000;
     size_t staticUsedBuffer[NUM_READS_PER_PAIR][staticUsedBufferSize];
     GenomeLocation staticLocationBuffer[NUM_READS_PER_PAIR][staticUsedBufferSize];
+
+    checkIfTooSlow();
 
     GenomeLocation *finalLocations[NUM_READS_PER_PAIR];
     size_t *usedBuffer[NUM_READS_PER_PAIR];
@@ -325,22 +373,12 @@ SimpleReadWriter::writePairs(
         // Write all of the pair alignments into the buffer.
         //
         for (int whichAlignmentPair = 0; whichAlignmentPair < nResults; whichAlignmentPair++) {
-            reads[0]->setAdditionalFrontClipping(0);
-            reads[1]->setAdditionalFrontClipping(0);
+            reads[0]->setAdditionalFrontClipping(result[whichAlignmentPair].clippingForReadAdjustment[0]);
+            reads[1]->setAdditionalFrontClipping(result[whichAlignmentPair].clippingForReadAdjustment[1]);
 
             GenomeLocation locations[2];
             locations[0] = result[whichAlignmentPair].status[0] != NotFound ? result[whichAlignmentPair].location[0] : InvalidGenomeLocation;
             locations[1] = result[whichAlignmentPair].status[1] != NotFound ? result[whichAlignmentPair].location[1] : InvalidGenomeLocation;
-
-            int writeOrder[2];  // The order in which we write the reads, which is just numerical by genome location.  SO writeOrder[0] gets written first, and writeOrder[1] second.
-
-            if (locations[0] <= locations[1]) {
-                writeOrder[0] = 0;
-                writeOrder[1] = 1;
-            } else {
-                writeOrder[0] = 1;
-                writeOrder[1] = 0;
-            }
 
             bool secondReadLocationChanged;
             int cumulativePositiveAddFrontClipping[NUM_READS_PER_PAIR] = { 0, 0 };
@@ -349,6 +387,17 @@ SimpleReadWriter::writePairs(
                 size_t tentativeUsed = 0;
                 secondReadLocationChanged = false;
 
+
+                int writeOrder[2];  // The order in which we write the reads, which is just numerical by genome location.  SO writeOrder[0] gets written first, and writeOrder[1] second.
+
+                if (locations[0] <= locations[1]) {
+                    writeOrder[0] = 0;
+                    writeOrder[1] = 1;
+                } else {
+                    writeOrder[0] = 1;
+                    writeOrder[1] = 0;
+                }
+
                 for (int firstOrSecond = 0; firstOrSecond < NUM_READS_PER_PAIR; firstOrSecond++) {  // looping over the order in which the reads are written, not the order in which they arrived
                     int whichRead = writeOrder[firstOrSecond];
                     //
@@ -356,11 +405,15 @@ SimpleReadWriter::writePairs(
                     //
                     int addFrontClipping = 0;
 
+
                     while (!format->writeRead(context, &lvc, buffer + used + tentativeUsed, size - used - tentativeUsed, &usedBuffer[firstOrSecond][whichAlignmentPair],
                         idLengths[whichRead], reads[whichRead], result[whichAlignmentPair].status[whichRead], result[whichAlignmentPair].mapq[whichRead], locations[whichRead], result[whichAlignmentPair].direction[whichRead],
-                        whichAlignmentPair != 0 || !firstIsPrimary, &addFrontClipping, true, writeOrder[firstOrSecond] == 0,
+                        whichAlignmentPair != 0 || !firstIsPrimary, &addFrontClipping, result[whichAlignmentPair].scorePriorToClipping[whichRead], emitInternalScore, internalScoreTag, 
+                        true, writeOrder[firstOrSecond] == 0,
                         reads[1 - whichRead], result[whichAlignmentPair].status[1 - whichRead], locations[1 - whichRead], result[whichAlignmentPair].direction[1 - whichRead],
                         result[whichAlignmentPair].alignedAsPair)) {
+
+                        _ASSERT(0 == addFrontClipping || ignoreAlignmentAdjustmentsForOm); // Because of the alignment adjuster
 
                         if (0 == addFrontClipping || locations[whichRead] == InvalidGenomeLocation) {
                             //
@@ -413,13 +466,13 @@ SimpleReadWriter::writePairs(
         for (int whichRead = 0; whichRead < NUM_READS_PER_PAIR; whichRead++) {
             for (int whichAlignment = 0; whichAlignment < nSingleResults[whichRead]; whichAlignment++) {
                 int addFrontClipping;
-                reads[whichRead]->setAdditionalFrontClipping(0);
+                reads[whichRead]->setAdditionalFrontClipping(singleResults[whichRead]->clippingForReadAdjustment);
                 GenomeLocation location = singleResults[whichRead][whichAlignment].status != NotFound ? singleResults[whichRead][whichAlignment].location : InvalidGenomeLocation;
                 int cumulativePositiveAddFrontClipping = 0;
 
                 while (!format->writeRead(context, &lvc, buffer + used, size - used, &usedBuffer[whichRead][nResults + whichAlignment], reads[whichRead]->getIdLength(),
                     reads[whichRead], singleResults[whichRead][whichAlignment].status, singleResults[whichRead][whichAlignment].mapq, location, singleResults[whichRead][whichAlignment].direction,
-                    true, &addFrontClipping)) {
+                    true, &addFrontClipping, singleResults[whichRead][whichAlignment].scorePriorToClipping, emitInternalScore, internalScoreTag)) {
 
                     if (0 == addFrontClipping) {
                         goto blownBuffer;
@@ -514,12 +567,25 @@ SimpleReadWriter::close()
 class SimpleReadWriterSupplier : public ReadWriterSupplier
 {
 public:
-    SimpleReadWriterSupplier(const FileFormat* i_format, DataWriterSupplier* i_dataSupplier, const Genome* i_genome)
+    SimpleReadWriterSupplier(const FileFormat* i_format, DataWriterSupplier* i_dataSupplier, const Genome* i_genome, bool i_killIfTooSlow, bool i_emitInternalScore, char *i_internalScoreTag, bool i_ignoreAlignmentAdjustmentsForOm)
         :
         format(i_format),
         dataSupplier(i_dataSupplier),
-        genome(i_genome)
-    {}
+        genome(i_genome),
+        killIfTooSlow(i_killIfTooSlow),
+        emitInternalScore(i_emitInternalScore),
+        ignoreAlignmentAdjustmentsForOm(i_ignoreAlignmentAdjustmentsForOm)
+    {
+        if (emitInternalScore) {
+            if (strlen(i_internalScoreTag) != 2) {
+                WriteErrorMessage("SimpleReadWriterSupplier: bad internal score tag\n");
+                soft_exit(1);
+            }
+            strcpy(internalScoreTag, i_internalScoreTag);
+        } else {
+            internalScoreTag[0] = '\0';
+        }
+    }
 
     ~SimpleReadWriterSupplier()
     {
@@ -528,7 +594,7 @@ public:
 
     virtual ReadWriter* getWriter()
     {
-        return new SimpleReadWriter(format, dataSupplier->getWriter(), genome);
+        return new SimpleReadWriter(format, dataSupplier->getWriter(), genome, killIfTooSlow, emitInternalScore, internalScoreTag, ignoreAlignmentAdjustmentsForOm);
     }
 
     virtual void close()
@@ -540,14 +606,22 @@ private:
     const FileFormat* format;
     DataWriterSupplier* dataSupplier;
     const Genome* genome;
+    bool killIfTooSlow;
+    bool emitInternalScore;
+    char internalScoreTag[3];
+    bool ignoreAlignmentAdjustmentsForOm;
 };
 
     ReadWriterSupplier*
 ReadWriterSupplier::create(
     const FileFormat* format,
     DataWriterSupplier* dataSupplier,
-    const Genome* genome)
+    const Genome* genome,
+    bool killIfTooSlow,
+    bool emitInternalScore, 
+    char *internalScoreTag,
+    bool ignoreAlignmentAdjustmentsForOm)
 {
-    return new SimpleReadWriterSupplier(format, dataSupplier, genome);
+    return new SimpleReadWriterSupplier(format, dataSupplier, genome, killIfTooSlow, emitInternalScore, internalScoreTag, ignoreAlignmentAdjustmentsForOm);
 }
 

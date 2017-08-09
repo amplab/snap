@@ -123,6 +123,8 @@ public:
         DataWriter::FilterSupplier* i_sortedFilterSupplier,
         size_t i_bufferSize,
         size_t i_bufferSpace,
+        bool i_emitInternalScore,
+        char *i_internalScoreTag,
         FileEncoder* i_encoder = NULL)
         :
         format(i_fileFormat),
@@ -134,8 +136,18 @@ public:
         sortedFilterSupplier(i_sortedFilterSupplier),
         bufferSize(i_bufferSize),
         bufferSpace(i_bufferSpace),
-        blocks()
+        blocks(),
+        emitInternalScore(i_emitInternalScore)
     {
+        if (emitInternalScore) {
+            if (strlen(i_internalScoreTag) != 2) {  // This should never happen, since the command line parser should catch it first.  Still, since we're about to strcpy into a fixed-length buffer, safety first.
+                WriteErrorMessage("SortedDataFilterSupplier: improper internal score tag\n");
+                soft_exit(1);
+            }
+            strcpy(internalScoreTag, i_internalScoreTag);
+        } else {
+            internalScoreTag[0] = '\0';
+        }
         InitializeExclusiveLock(&lock);
     }
 
@@ -172,6 +184,8 @@ private:
     SortBlockVector                 blocks;
     size_t                          bufferSize;
     size_t                          bufferSpace;
+    bool                            emitInternalScore;
+    char                            internalScoreTag[3];
 
 	friend class SortedDataFilter;
 };
@@ -224,7 +238,7 @@ SortedDataFilter::onNextBatch(
             GenomeLocation loc;
             GenomeDistance len;
 			parent->format->getSortInfo(parent->genome, fromBuffer + i->offset, i->length, &loc, &len);
-			_ASSERT(loc >= previous);
+			_ASSERT(loc == i->location && loc >= previous);
 			previous = loc;
 		}
 #endif
@@ -321,7 +335,7 @@ SortedDataFilterSupplier::mergeSort()
 #endif
 
     // set up buffered output
-    DataWriterSupplier* writerSupplier = DataWriterSupplier::create(sortedFileName, bufferSize, sortedFilterSupplier,
+    DataWriterSupplier* writerSupplier = DataWriterSupplier::create(sortedFileName, bufferSize, emitInternalScore, internalScoreTag ,sortedFilterSupplier,
         encoder, encoder != NULL ? 6 : 4); // use more buffers to let encoder run async
     DataWriter* writer = writerSupplier->getWriter();
     if (writer == NULL) {
@@ -496,12 +510,14 @@ DataWriterSupplier::sorted(
     const char* sortedFileName,
     DataWriter::FilterSupplier* sortedFilterSuppler,
     size_t maxBufferSize,
+    bool emitInternalScore,
+    char *internalScoreTag,
     FileEncoder* encoder)
 {
     const int bufferCount = 3;
     const size_t bufferSpace = tempBufferMemory > 0 ? tempBufferMemory : (numThreads * (size_t)1 << 30);
     const size_t bufferSize = bufferSpace / (bufferCount * numThreads);
     DataWriter::FilterSupplier* filterSupplier =
-        new SortedDataFilterSupplier(format, genome, tempFileName, sortedFileName, sortedFilterSuppler, bufferSize, bufferSpace, encoder);
-    return DataWriterSupplier::create(tempFileName, bufferSize, filterSupplier, NULL, bufferCount);
+        new SortedDataFilterSupplier(format, genome, tempFileName, sortedFileName, sortedFilterSuppler, bufferSize, bufferSpace, emitInternalScore, internalScoreTag, encoder);
+    return DataWriterSupplier::create(tempFileName, bufferSize, emitInternalScore, internalScoreTag, filterSupplier, NULL, bufferCount);
 }

@@ -14,7 +14,7 @@ Authors:
     Matei Zaharia, February, 2012
 
 Environment:
-`
+
     User mode service.
 
 Revision History:
@@ -353,7 +353,7 @@ void PairedAlignerContext::runIterationThread()
 	}
 
     Read *reads[NUM_READS_PER_PAIR];
-    int nSingleResults[2] = { 0, 0 };
+    _int64 nSingleResults[2] = { 0, 0 };
 
  	if (index == NULL) {
         // no alignment, just input/output
@@ -400,16 +400,22 @@ void PairedAlignerContext::runIterationThread()
     memoryPoolSize += ChimericPairedEndAligner::getBigAllocatorReservation(index, maxReadSize, maxHits, index->getSeedLength(), numSeedsFromCommandLine, seedCoverage, maxDist,
         extraSearchDepth, maxCandidatePoolSize, maxSecondaryAlignmentsPerContig);
 
-    unsigned maxPairedSecondaryHits;
-    unsigned maxSingleSecondaryHits;
+    _int64 maxPairedSecondaryHits;
+    _int64 maxSingleSecondaryHits;
 
     if (maxSecondaryAlignmentAdditionalEditDistance < 0) {
         maxPairedSecondaryHits = 0;
         maxSingleSecondaryHits = 0;
     } else {
-        maxPairedSecondaryHits = IntersectingPairedEndAligner::getMaxSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, index->getSeedLength(), minSpacing, maxSpacing);
-        maxSingleSecondaryHits = ChimericPairedEndAligner::getMaxSingleEndSecondaryResults(numSeedsFromCommandLine, seedCoverage, maxReadSize, maxHits, index->getSeedLength());
+        //
+        // Since we reallocate these if they overflow, just pick a value that doesn't waste too much memory.
+        //
+        maxPairedSecondaryHits = 32;
+        maxSingleSecondaryHits = 32;
     }
+
+    bool reallocatedSingleSecondaryBuffer = false;
+    bool reallocatedPairedSecondaryBuffer = false;
 
     memoryPoolSize += (1 + maxPairedSecondaryHits) * sizeof(PairedAlignmentResult) + maxSingleSecondaryHits * sizeof(SingleAlignmentResult);
 
@@ -417,7 +423,7 @@ void PairedAlignerContext::runIterationThread()
     
     IntersectingPairedEndAligner *intersectingAligner = new (allocator) IntersectingPairedEndAligner(index, maxReadSize, maxHits, maxDist, numSeedsFromCommandLine, 
                                                                 seedCoverage, minSpacing, maxSpacing, intersectingAlignerMaxHits, extraSearchDepth, 
-                                                                maxCandidatePoolSize, maxSecondaryAlignmentsPerContig ,allocator, noUkkonen, noOrderedEvaluation, noTruncation);
+                                                                maxCandidatePoolSize, maxSecondaryAlignmentsPerContig, allocator, noUkkonen, noOrderedEvaluation, noTruncation, ignoreAlignmentAdjustmentForOm);
 
 
     ChimericPairedEndAligner *aligner = new (allocator) ChimericPairedEndAligner(
@@ -433,6 +439,7 @@ void PairedAlignerContext::runIterationThread()
         noUkkonen,
         noOrderedEvaluation,
 		noTruncation,
+        ignoreAlignmentAdjustmentForOm,
         intersectingAligner,
 		minReadLength,
         maxSecondaryAlignmentsPerContig,
@@ -459,7 +466,14 @@ void PairedAlignerContext::runIterationThread()
     _uint64 lastReportTime = timeInMillis();
     _uint64 readsWhenLastReported = 0;
 
-    while (supplier->getNextReadPair(&reads[0], &reads[1])) {
+    _int64 startTime = timeInMillis();
+    while (supplier->getNextReadPair(&reads[0],&reads[1])) {
+        _int64 readFinishedTime;
+        if (options->profile) {
+            readFinishedTime = timeInMillis();
+            stats->millisReading += (readFinishedTime - startTime);
+        }
+
         // Check that the two IDs form a pair; they will usually be foo/1 and foo/2 for some foo.
         if (!ignoreMismatchedIDs) {
             Read::checkIdMatch(reads[0], reads[1]);
@@ -484,6 +498,7 @@ void PairedAlignerContext::runIterationThread()
             result.location[0] = InvalidGenomeLocation;
             result.location[1] = InvalidGenomeLocation;
             nSingleResults[0] = nSingleResults[1] = 0;
+            result.clippingForReadAdjustment[0] = result.clippingForReadAdjustment[1] = 0;
 
             bool pass0 = options->passFilter(reads[0], result.status[0], true, false);
             bool pass1 = options->passFilter(reads[1], result.status[1], true, false);
@@ -505,16 +520,46 @@ void PairedAlignerContext::runIterationThread()
         }
 
 
-
 #if     TIME_HISTOGRAM
         _int64 startTime = timeInNanos();
 #endif // TIME_HISTOGRAM
 
-        int nSecondaryResults;
-        int nSingleSecondaryResults[2];
+        _int64 nSecondaryResults;
+        _int64 nSingleSecondaryResults[2];
 
-        aligner->align(reads[0], reads[1], results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, results + 1,
-            maxSingleSecondaryHits, maxSecondaryAlignments, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1], singleSecondaryResults);
+        while (!aligner->align(reads[0], reads[1], results, maxSecondaryAlignmentAdditionalEditDistance, maxPairedSecondaryHits, &nSecondaryResults, results + 1,
+            maxSingleSecondaryHits, maxSecondaryAlignments, &nSingleSecondaryResults[0], &nSingleSecondaryResults[1], singleSecondaryResults)) {
+
+            _ASSERT(nSecondaryResults > maxPairedSecondaryHits || nSingleSecondaryResults[0] > maxSingleSecondaryHits);
+
+            if (nSecondaryResults > maxPairedSecondaryHits) {
+                if (reallocatedPairedSecondaryBuffer) {
+                    BigDealloc(results);
+                    results = NULL;
+                }
+
+                maxPairedSecondaryHits *= 2;
+                results = (PairedAlignmentResult *)BigAlloc((maxPairedSecondaryHits + 1) * sizeof(PairedAlignmentResult));
+                reallocatedPairedSecondaryBuffer = true;
+            }
+
+            if (nSingleSecondaryResults[0] > maxSingleSecondaryHits) {
+                if (reallocatedSingleSecondaryBuffer) {
+                    BigDealloc(singleSecondaryResults);
+                    singleSecondaryResults = NULL;
+                }
+
+                maxSingleSecondaryHits *= 2;
+                singleSecondaryResults = (SingleAlignmentResult *)BigAlloc(maxSingleSecondaryHits * sizeof(SingleAlignmentResult));
+                reallocatedSingleSecondaryBuffer = true;
+            }
+        }
+
+        _int64 alignFinishedTime;
+        if (options->profile) {
+            alignFinishedTime = timeInMillis();
+            stats->millisAligning += (alignFinishedTime - readFinishedTime);
+        }
 
 #if     TIME_HISTOGRAM
         _int64 runTime = timeInNanos() - startTime;
@@ -567,7 +612,13 @@ void PairedAlignerContext::runIterationThread()
             readWriter->writePairs(readerContext, reads, results, nSecondaryResults + 1, singleResults, nSingleSecondaryResults, firstIsPrimary);
         }
 
+        if (options->profile) {
+            startTime = timeInMillis();
+            stats->millisWriting += (startTime - alignFinishedTime);
+        }
+
         stats->extraAlignments += nSecondaryResults + (firstIsPrimary ? 0 : 1); // If first isn't primary, it's secondary.
+
         if (firstIsPrimary) {
             updateStats((PairedAlignerStats*)stats, reads[0], reads[1], &results[0], useful0, useful1);
         } else {
@@ -578,6 +629,16 @@ void PairedAlignerContext::runIterationThread()
     stats->lvCalls = aligner->getLocationsScored();
 
     allocator->checkCanaries();
+
+    if (reallocatedPairedSecondaryBuffer) {
+        BigDealloc(results);
+        results = NULL;
+    }
+
+    if (reallocatedSingleSecondaryBuffer) {
+        BigDealloc(singleSecondaryResults);
+        singleSecondaryResults = NULL;
+    }
 
     aligner->~ChimericPairedEndAligner();
     delete supplier;

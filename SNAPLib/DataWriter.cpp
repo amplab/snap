@@ -28,6 +28,37 @@ Environment:
 using std::min;
 using std::max;
 
+char *
+DataWriterSupplier::generateSortIntermediateFilePathName(AlignerOptions *options)
+{
+    const char * tempExtension = ".tmp";
+    char* tempFileName;
+    if (NULL != options->sortIntermediateDirectory) {
+        //
+        // Pathname is sortIntermediateDirectory + PATH_SEP + terminal component of outputFile.fileName + .tmp
+        //
+        const char *terminalComponent = strrchr(options->outputFile.fileName, PATH_SEP);
+        if (NULL == terminalComponent) {
+            terminalComponent = options->outputFile.fileName;
+        }
+        else {
+            terminalComponent++;    // Skips over the PATH_SEP
+        }
+
+        size_t len = strlen(options->sortIntermediateDirectory) + 1 + strlen(terminalComponent) + strlen(tempExtension) + 1;     // Last +1 for string terminating null
+        // todo: this is going to leak, but there's no easy way to free it, and it's small...
+        tempFileName = new char[len];
+        sprintf(tempFileName, "%s%c%s%s", options->sortIntermediateDirectory, PATH_SEP, terminalComponent, tempExtension);
+    } else {
+        size_t len = strlen(options->outputFile.fileName) + strlen(tempExtension) + 1;
+        // todo: this is going to leak, but there's no easy way to free it, and it's small...
+        tempFileName = new char[len];
+        sprintf(tempFileName, "%s%s", options->outputFile.fileName, tempExtension);
+    }
+
+    return tempFileName;
+}
+
 class AsyncDataWriterSupplier : public DataWriterSupplier
 {
 public:
@@ -512,6 +543,8 @@ AsyncDataWriterSupplier::advance(
 DataWriterSupplier::create(
     const char* filename,
     size_t bufferSize,
+    bool emitInternalScore,
+    char *internalScoreTag,
     DataWriter::FilterSupplier* filterSupplier,
     FileEncoder* encoder,
     int count)

@@ -115,8 +115,9 @@ void NWaiter::signal()
 	AllowEventWaitersToProceed(&_waiter);
 }
 
-char *FormatUIntWithCommas(_uint64 val, char *outputBuffer, size_t outputBufferSize)
+char *FormatUIntWithCommas(_uint64 val, char *outputBuffer, size_t outputBufferSize, size_t desiredLength = 0)
 {
+    _ASSERT(desiredLength < outputBufferSize);
 	//
 	// First, figure out the number of digits.
 	//
@@ -173,6 +174,10 @@ char *FormatUIntWithCommas(_uint64 val, char *outputBuffer, size_t outputBufferS
 		memcpy(outputBuffer + offset, tempBuf, strlen(tempBuf));
 		x /= 1000;
 	}
+
+    for (size_t i = strlen(outputBuffer); i < desiredLength; i++) {
+        strcat(outputBuffer, " ");
+    }
 
 	return outputBuffer;
 }

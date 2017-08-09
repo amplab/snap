@@ -125,8 +125,8 @@ SNAPHashTable *SNAPHashTable::loadCommon(GenericFile *loadFile)
         soft_exit(1);
     }
 
-    if (table->keySizeInBytes < 4 || table->keySizeInBytes > 8) {
-        WriteErrorMessage("SNAPHashTable::SNAPHashTable Key size must be between 4 and 8 inclusive.  Perhaps this is an old format hash table and needs to be rebuilt.\n");
+    if (table->keySizeInBytes < 2 || table->keySizeInBytes > 8) {
+        WriteErrorMessage("SNAPHashTable::SNAPHashTable Key size must be between 2 and 8 inclusive.  Perhaps this is an old format hash table and needs to be rebuilt.\n");
         soft_exit(1);
     }
 

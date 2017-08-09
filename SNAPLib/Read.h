@@ -190,15 +190,15 @@ public:
     //
     // write a batch of single reads, the first one of which is a primary alignment and the rest secondary.
     //
-    virtual bool writeReads(const ReaderContext& context, Read *read, SingleAlignmentResult *results, int nResults, bool firstIsPrimary) = 0;
+    virtual bool writeReads(const ReaderContext& context, Read *read, SingleAlignmentResult *results, _int64 nResults, bool firstIsPrimary) = 0;
 
     //
     // Write a batch of paired alignments, including some single secondary alignments.  reads needs to be exactly two reads, singleAlignmentResult is a pointer to two arrays of
     // SingleAlignmentResults for single alignments of the respective reads, and the number of results is given by the two ints pointed to by nSingleResults.  The first paired
     // result is primary, all others are secondary.
     //
-    virtual bool writePairs(const ReaderContext& context, Read **reads /* array of size 2 */, PairedAlignmentResult *result, int nResults,
-        SingleAlignmentResult **singleResults /* array of size 2*/, int *nSingleResults /* array of size 2*/, bool firstIsPrimary) = 0;
+    virtual bool writePairs(const ReaderContext& context, Read **reads /* array of size 2 */, PairedAlignmentResult *result, _int64 nResults,
+        SingleAlignmentResult **singleResults /* array of size 2*/, _int64 *nSingleResults /* array of size 2*/, bool firstIsPrimary) = 0;
 
 
     // close out this thread
@@ -215,7 +215,8 @@ public:
     virtual void close() = 0;
 
     static ReadWriterSupplier* create(const FileFormat* format, DataWriterSupplier* dataSupplier,
-        const Genome* genome);
+        const Genome* genome, bool killIfTooSlowbool, bool emitInternalScore, char *internalScoreTag,
+        bool ignoreAlignmentAdjustmentsForOm);
 };
 
 #define READ_GROUP_FROM_AUX     ((const char*) -1)
@@ -369,7 +370,7 @@ public:
                 const char *i_quality, 
                 unsigned i_dataLength)
         {
-            init(i_id, i_idLength, i_data, i_quality, i_dataLength, InvalidGenomeLocation, -1, 0, 0, 0, 0, 0, NULL, 0, 0);
+            init(i_id, i_idLength, i_data, i_quality, i_dataLength, InvalidGenomeLocation, -1, 0, 0, 0, 0, 0, NULL, 0, 0, 0, NULL, false);
         }
 
         void init(
@@ -388,6 +389,8 @@ public:
                 const char *        i_originalRNEXT,
                 unsigned            i_originalRNEXTLength,
                 unsigned            i_originalPNEXT,
+                _uint16             i_originalNBAMCigar,
+                _uint32 *           i_originalBAMCigar,
                 bool                allUpper = false)
         {
             id = i_id;
@@ -409,6 +412,17 @@ public:
             originalRNEXT = i_originalRNEXT;
             originalRNEXTLength = i_originalRNEXTLength;
             originalPNEXT = i_originalPNEXT;
+            if (i_originalNBAMCigar > MaxBAMCigarSlots) {
+                static bool warned = false;
+                if (!warned) {
+                    warned = true;
+                    WriteErrorMessage("Too many BAM fields to save in read (need %d, have %d), dropping.  This is your only warning.\n", i_originalNBAMCigar, MaxBAMCigarSlots);
+                }
+                originalNBAMCigar = 0;
+            } else {
+                originalNBAMCigar = i_originalNBAMCigar;
+            }
+            memcpy(originalBAMCigar, i_originalBAMCigar, sizeof(*originalBAMCigar) * originalNBAMCigar);
             currentReadDirection = FORWARD;
 
             localBufferAllocationOffset = 0;    // Clears out any allocations that might previously have been in the buffer
@@ -433,6 +447,15 @@ public:
                     }
 
                     unclippedData = data = upcaseForwardRead;
+
+					//
+					// Quality must also be in localBuffer if data is.  Copy it now.
+					//
+					memcpy(localBuffer + localBufferAllocationOffset, quality, unclippedLength);
+					unclippedQuality = quality = localBuffer + localBufferAllocationOffset;
+
+					localBufferAllocationOffset += unclippedLength;
+
                 }
             }
         }
@@ -466,8 +489,12 @@ public:
         inline const char *getOriginalRNEXT() {return originalRNEXT;}
         inline unsigned getOriginalRNEXTLength() {return originalRNEXTLength;}
         inline unsigned getOriginalPNEXT() {return originalPNEXT;}
+        inline _uint16 getOriginalNBAMCigar() { return originalNBAMCigar; }
+        inline _uint32 *getOriginalBAMCigar() { return originalBAMCigar; }
         inline void setAdditionalFrontClipping(int clipping)
         {
+            _ASSERT(0 <= clipping);
+
             data += clipping - additionalFrontClipping;
             dataLength -= clipping - additionalFrontClipping;
             quality += clipping - additionalFrontClipping;
@@ -679,6 +706,9 @@ private:
         const char *originalRNEXT;
         unsigned originalRNEXTLength;
         unsigned originalPNEXT;
+        static const int MaxBAMCigarSlots = 60;
+        _uint16 originalNBAMCigar;
+        _uint32 originalBAMCigar[MaxBAMCigarSlots];
 
 
         //

@@ -177,6 +177,11 @@ SAMReader::getNextRead(Read *readToUpdate)
     return getNextRead(readToUpdate, NULL, NULL, NULL, NULL, NULL, NULL);
 }
 
+struct RefNameEntry {
+    char *refName;
+    RefNameEntry *next;
+};
+
     bool
 SAMReader::parseHeader(
     const char *fileName, 
@@ -185,11 +190,23 @@ SAMReader::parseHeader(
     const Genome *genome, 
     _int64 *o_headerSize,
     bool *o_headerMatchesIndex,
-	bool *o_sawWholeHeader)
+	bool *o_sawWholeHeader,
+    int *o_n_ref,
+    GenomeLocation **o_ref_locations,
+    char ***o_refNames)
 {
+    _ASSERT((NULL == o_n_ref) == (NULL == o_ref_locations));    // both or neither are NULL, not one of each
+
     char *nextLineToProcess = firstLine;
     *o_headerMatchesIndex = true;
     int numSQLines = 0;
+    int n_ref_slots = 4096;
+    GenomeLocation *ref_locations = NULL;
+    if (NULL != o_ref_locations) {
+        ref_locations = (GenomeLocation *)BigAlloc(sizeof(GenomeLocation)* n_ref_slots);
+    }
+    RefNameEntry *refNameEntries = NULL;
+
     while (NULL != nextLineToProcess && nextLineToProcess < endOfBuffer && '@' == *nextLineToProcess) {
 		//
 		// Make sure we have the complete line.
@@ -218,7 +235,6 @@ SAMReader::parseHeader(
             //
             // Verify that they actually match what's in our reference genome.
             //
-            numSQLines++;
             if (nextLineToProcess + 3 >= endOfBuffer || ' ' != nextLineToProcess[3] && '\t' != nextLineToProcess[3]) {
                 WriteErrorMessage("Malformed SAM file '%s' has @SQ without a following space or tab.\n",fileName);
                 return false;
@@ -256,12 +272,57 @@ SAMReader::parseHeader(
             }
             contigName[contigNameBufferSize - 1] = '\0';
 
-            if (genome == NULL || !genome->getLocationOfContig(contigName, NULL)) {
+            GenomeLocation contigBase = InvalidGenomeLocation;
+            if (NULL != genome) {
+                if (!genome->getLocationOfContig(contigName, &contigBase)) {
+                    //
+                    // Try stripping off the leading "chr" if it has one.
+                    //
+                    if (strlen(contigName) < 3 || contigName[0] != 'c' || contigName[1] != 'h' || contigName[2] != 'r' || !genome->getLocationOfContig(contigName + 3, &contigBase)) {
+                        //
+                        // Change chrM into MT
+                        //
+                        if (strlen(contigName) != 4 || contigName[0] != 'c' || contigName[1] != 'h' || contigName[2] != 'r' || contigName[3] != 'M' || !genome->getLocationOfContig("MT", &contigBase)) {
+                            //
+                            // Try prefixing chr to short names.
+                            //
+                            const size_t maxShortNameSize = 2;
+                            char prefixedName[maxShortNameSize + 4];
+                            if (strlen(contigName) <= maxShortNameSize) {
+                                sprintf(prefixedName, "chr%s", contigName);
+                                genome->getLocationOfContig(prefixedName, &contigBase);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (InvalidGenomeLocation == contigBase) {
                 *o_headerMatchesIndex = false;
             }
 
+            if (NULL != o_ref_locations) {
+                if (numSQLines >= n_ref_slots) {
+                    GenomeLocation *new_ref_locations = (GenomeLocation *)BigAlloc(sizeof(GenomeLocation)* n_ref_slots * 2);
+                    memcpy(new_ref_locations, ref_locations, sizeof(GenomeLocation)* n_ref_slots);
+                    BigDealloc(ref_locations);
+                    ref_locations = new_ref_locations;
+                    n_ref_slots *= 2;
+                }
+                ref_locations[numSQLines] = contigBase;
+            }
+
+            if (NULL != o_refNames) {
+                RefNameEntry *newEntry = new RefNameEntry;
+                newEntry->refName = new char[strlen(contigName) + 1];
+                strcpy(newEntry->refName, contigName);
+                newEntry->next = refNameEntries;
+                refNameEntries = newEntry;
+            }
+
+            numSQLines++;
             delete[] contigName;
-        } else if (!strncmp("@HD",nextLineToProcess,3) || !strncmp("@RG",nextLineToProcess,3) || !strncmp("@PG",nextLineToProcess,3) ||
+        } else if (!strncmp("@HD", nextLineToProcess, 3) || !strncmp("@RG", nextLineToProcess, 3) || !strncmp("@PG", nextLineToProcess, 3) ||
             !strncmp("@CO",nextLineToProcess,3)) {
             //
             // Ignore these lines.
@@ -285,6 +346,24 @@ SAMReader::parseHeader(
 	if (NULL != o_sawWholeHeader) {
 		*o_sawWholeHeader = nextLineToProcess < endOfBuffer;
 	}
+
+    if (NULL != o_ref_locations) {
+        *o_n_ref = numSQLines;
+        *o_ref_locations = ref_locations;
+    }
+
+    if (NULL != o_refNames) {
+        *o_refNames = new char *[numSQLines];
+        for (int i = numSQLines - 1; i >= 0; i--) { // Build it backwards because the linked list is backwards
+            _ASSERT(refNameEntries != NULL);
+            (*o_refNames)[i] = refNameEntries->refName;
+            RefNameEntry *entry = refNameEntries;
+            refNameEntries = refNameEntries->next;
+            delete entry;
+        }
+
+        _ASSERT(NULL == refNameEntries); // We had exactly the right amount.
+    }
     return true;
 }
 
@@ -375,7 +454,13 @@ SAMReader::getReadFromLine(
         }
     }
 
-    GenomeLocation genomeLocation = parseLocation(locationOfContig, field, fieldLength);
+    GenomeLocation genomeLocation;
+    
+    if (InvalidGenomeLocation != locationOfContig) {
+        genomeLocation = parseLocation(locationOfContig, field, fieldLength);
+    } else {
+        genomeLocation = InvalidGenomeLocation;
+    }
 
     if (NULL != out_genomeLocation) {
         *out_genomeLocation = genomeLocation;
@@ -411,7 +496,7 @@ SAMReader::getReadFromLine(
         unsigned pnext = atoi(field[PNEXT]);    // Relies on atoi() returning 0 for non-numeric fields (i.e., *)
 
         read->init(field[QNAME],(unsigned)fieldLength[QNAME],field[SEQ],field[QUAL],(unsigned)fieldLength[SEQ], genomeLocation, atoi(field[MAPQ]), _flag, 
-            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping, field[RNEXT], (unsigned)fieldLength[RNEXT], pnext);
+            originalFrontClipping, originalBackClipping, originalFrontHardClipping, originalBackHardClipping, field[RNEXT], (unsigned)fieldLength[RNEXT], pnext, 0, NULL, false);
         //
         // If this read is RC in the SAM file, we need to reverse it here, since Reads are always the sense that they were as they came
         // out of the base caller.
@@ -492,7 +577,7 @@ SAMReader::parseContigName(
     memcpy(contigName,field[rfield],fieldLength[rfield]);
     contigName[fieldLength[rfield]] = '\0';
 
-    *o_locationOfContig = 0;
+    *o_locationOfContig = InvalidGenomeLocation;
     if ('*' != contigName[0] && genome != NULL && !genome->getLocationOfContig(contigName, o_locationOfContig, o_indexOfContig)) {
         //WriteErrorMessage("Unable to find contig '%s' in genome.  SAM file malformed.\n",contigName);
         //soft_exit(1);
@@ -873,17 +958,12 @@ SAMFormat::getWriterSupplier(
 {
     DataWriterSupplier* dataSupplier;
     if (options->sortOutput) {
-        size_t len = strlen(options->outputFile.fileName);
-        // todo: this is going to leak, but there's no easy way to free it, and it's small...
-        char* tempFileName = (char*) malloc(5 + len);
-        strcpy(tempFileName, options->outputFile.fileName);
-        strcpy(tempFileName + len, ".tmp");
-        dataSupplier = DataWriterSupplier::sorted(this, genome, tempFileName, options->sortMemory * (1ULL << 30),
-            options->numThreads, options->outputFile.fileName, NULL, options->writeBufferSize);
+        dataSupplier = DataWriterSupplier::sorted(this, genome, DataWriterSupplier::generateSortIntermediateFilePathName(options), options->sortMemory * (1ULL << 30),
+            options->numThreads, options->outputFile.fileName, NULL, options->writeBufferSize, options->emitInternalScore, options->internalScoreTag);
     } else {
-        dataSupplier = DataWriterSupplier::create(options->outputFile.fileName, options->writeBufferSize);
+        dataSupplier = DataWriterSupplier::create(options->outputFile.fileName, options->writeBufferSize, options->emitInternalScore, options->internalScoreTag);
     }
-    return ReadWriterSupplier::create(this, dataSupplier, genome);
+    return ReadWriterSupplier::create(this, dataSupplier, genome, options->killIfTooSlow, options->emitInternalScore, options->internalScoreTag, options->ignoreAlignmentAdjustmentsForOm);
 }
 
     bool
@@ -1178,6 +1258,9 @@ SAMFormat::writeRead(
     Direction direction,
     bool secondaryAlignment,
     int * o_addFrontClipping,
+    int internalScore,
+    bool emitInternalScore,
+    char *internalScoreTag,
     bool hasMate,
     bool firstInPair,
     Read * mate, 
@@ -1300,7 +1383,18 @@ SAMFormat::writeRead(
             readGroupString = read->getReadGroup();
         }
     }
-    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s\n",
+    const int internalScoreBufferSize = 100;    // Should be plenty for \tXX:i:%d
+    char internalScoreBuffer[internalScoreBufferSize];
+    if (emitInternalScore) {
+        int charsInInternalScore = snprintf(internalScoreBuffer, internalScoreBufferSize - 1, "\t%s:i:%d", internalScoreTag, (flags & SAM_UNMAPPED) ? -1 : internalScore);
+        if (charsInInternalScore >= internalScoreBufferSize) {
+            WriteErrorMessage("SAMFormat::writeRead overran internal buffer for internal score tag, which is kind of surprising.  %d\n", charsInInternalScore);
+        }
+    } else {
+        internalScoreBuffer[0] = '\0';
+    }
+
+    int charsInString = snprintf(buffer, bufferSpace, "%.*s\t%d\t%s\t%u\t%d\t%s\t%s\t%u\t%lld\t%.*s\t%.*s%s%.*s%s%s\tPG:Z:SNAP%s%.*s%s\n",
         qnameLen, read->getId(),
         flags,
         contigName,
@@ -1314,7 +1408,8 @@ SAMFormat::writeRead(
         fullLength, quality,
         aux != NULL ? "\t" : "", auxLen, aux != NULL ? aux : "",
         readGroupSeparator, readGroupString,
-        nmString, rglineAuxLen, rglineAux);
+        nmString, rglineAuxLen, rglineAux,
+        internalScoreBuffer);
 
     if (charsInString > bufferSpace) {
         //
@@ -1360,7 +1455,6 @@ SAMFormat::computeCigar(
 
     int netIndel;
     *o_extraBasesClippedAfter = 0;
-
 
     //
     // Apply the extra clipping.
@@ -1423,7 +1517,6 @@ SAMFormat::computeCigar(
     GenomeDistance newExtraBasesClippedAfter = __max(0, genomeLocation + dataLength + netIndel - (contig->beginningLocation + contig->length - genome->getChromosomePadding()));
     for (GenomeDistance pass = 0; pass < dataLength; pass++) {
         if (newExtraBasesClippedAfter == *o_extraBasesClippedAfter) {
-            *o_extraBasesClippedAfter = newExtraBasesClippedAfter;
             return;
         }
 
@@ -1533,7 +1626,7 @@ SAMFormat::validateCigarString(
 	GenomeDistance offsetInData = 0;
 	const char *reference = genome->getSubstring(genomeLocation, dataLength);
 	if (NULL == reference) {
-		WriteErrorMessage("validateCigarString: couldn't look up genome data for location %lld\n", genomeLocation);
+		WriteErrorMessage("validateCigarString: couldn't look up genome data for location %lld\n", genomeLocation.location);
 		soft_exit(1);
 	}
 	GenomeDistance offsetInReference = 0;

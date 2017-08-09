@@ -52,8 +52,11 @@ struct SingleAlignmentResult {
     GenomeLocation  location;	// Aligned genome location.
     Direction       direction;	// Did we match the reverse complement? 
     int             score;		// score of each end if matched
+    int             scorePriorToClipping;   // Score prior to soft clipping generated when a read aligns off the end of a contig
 
     int             mapq;		// mapping quality, encoded like a Phred score (but as an integer, not ASCII Phred + 33).
+
+    int             clippingForReadAdjustment;
 
     static int compareByContigAndScore(const void *first, const void *second);      // qsort()-style compare routine
     static int compareByScore(const void *first, const void *second);               // qsort()-style compare routine
@@ -79,8 +82,11 @@ struct PairedAlignmentResult {
 	// there to be in the same orientation w.r.t. the reference genome.
 
 	int score[NUM_READS_PER_PAIR];              // score of each end if matched
+    int scorePriorToClipping[NUM_READS_PER_PAIR]; // Score prior to soft clipping generated when a read aligns off the end of a contig
 
 	int mapq[NUM_READS_PER_PAIR];               // mapping quality of each end, encoded like a Phred score (but as an integer, not ASCII Phred + 33).
+
+    int clippingForReadAdjustment[NUM_READS_PER_PAIR];
 
 	bool fromAlignTogether;                     // Was this alignment created by aligning both reads together, rather than from some combination of single-end aligners?
 	bool alignedAsPair;                         // Were the reads aligned as a pair, or separately?

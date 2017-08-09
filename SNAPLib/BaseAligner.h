@@ -34,6 +34,7 @@ Revision History:
 #include "AlignerStats.h"
 #include "directions.h"
 #include "GenomeIndex.h"
+#include "AlignmentAdjuster.h"
 
 extern bool doAlignerPrefetch;
 
@@ -52,24 +53,23 @@ public:
         bool            i_noUkkonen,
         bool            i_noOrderedEvaluation,
 		bool			i_noTruncation,
+        bool            i_ignoreAlignmentAdjustmentsForOm,
         int             i_maxSecondaryAlignmentsPerContig,
         LandauVishkin<1>*i_landauVishkin = NULL,
         LandauVishkin<-1>*i_reverseLandauVishkin = NULL,
         AlignerStats   *i_stats = NULL,
         BigAllocator    *allocator = NULL);
 
-    static unsigned getMaxSecondaryResults(unsigned maxSeedsToUse, double maxSeedCoverage, unsigned maxReadSize, unsigned maxHits, unsigned seedLength);
-
     virtual ~BaseAligner();
 
-        void
+        bool
     AlignRead(
         Read                    *read,
         SingleAlignmentResult   *primaryResult,
         int                      maxEditDistanceForSecondaryResults,
-        int                      secondaryResultBufferSize,
-        int                     *nSecondaryResults,
-        int                      maxSecondaryResults,         // The most secondary results to return; always return the best ones
+        _int64                   secondaryResultBufferSize,
+        _int64                  *nSecondaryResults,
+        _int64                   maxSecondaryResults,         // The most secondary results to return; always return the best ones
         SingleAlignmentResult   *secondaryResults             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by AlignRead()
     );      // Retun value is true if there was enough room in the secondary alignment buffer for everything that was found.
 
@@ -110,7 +110,7 @@ public:
     inline void setStopOnFirstHit(bool newValue) {stopOnFirstHit = newValue;}
 
     static size_t getBigAllocatorReservation(GenomeIndex *index, bool ownLandauVishkin, unsigned maxHitsToConsider, unsigned maxReadSize, unsigned seedLen, 
-        unsigned numSeedsFromCommandLine, double seedCoverage, int maxSecondaryAlignmentsPerContig);
+        unsigned numSeedsFromCommandLine, double seedCoverage, int maxSecondaryAlignmentsPerContig, unsigned extraSearchDepth);
 
 private:
 
@@ -121,6 +121,8 @@ private:
     bool ownLandauVishkin;
 
     ProbabilityDistance *probDistance;
+
+    AlignmentAdjuster alignmentAdjuster;
 
     // Maximum distance to merge candidates that differ in indels over.
 #ifdef LONG_READS
@@ -270,9 +272,10 @@ private:
         Read                    *read[NUM_DIRECTIONS],
         SingleAlignmentResult   *primaryResult,
         int                      maxEditDistanceForSecondaryResults,
-        int                      secondaryResultBufferSize,
-        int                     *nSecondaryResults,
-        SingleAlignmentResult   *secondaryResults);
+        _int64                   secondaryResultBufferSize,
+        _int64                  *nSecondaryResults,
+        SingleAlignmentResult   *secondaryResults,
+        bool                    *overflowedSecondaryResultsBuffer);
 
     void clearCandidates();
 
@@ -296,6 +299,7 @@ private:
     bool     noUkkonen;
     bool     noOrderedEvaluation;
 	bool     noTruncation;
+    bool     ignoreAlignmentAdjustmentsForOm;
     bool     doesGenomeIndexHave64BitLocations;
     int      maxSecondaryAlignmentsPerContig;
 
@@ -332,10 +336,11 @@ private:
                                             // of hits at edit distance 4.
 
     void finalizeSecondaryResults(
-        SingleAlignmentResult    primaryResult,
-        int                     *nSecondaryResults,                     // in/out
+        Read                    *read,
+        SingleAlignmentResult   *primaryResult,
+        _int64                  *nSecondaryResults,                     // in/out
         SingleAlignmentResult   *secondaryResults,
-        int                      maxSecondaryResults,
+        _int64                   maxSecondaryResults,
         int                      maxEditDistanceForSecondaryResults,
         int                      bestScore);
 };

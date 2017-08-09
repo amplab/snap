@@ -2,7 +2,7 @@
 
 Module Name:
 
-    geonome.h
+    Geonome.h
 
 Abstract:
 
@@ -245,11 +245,12 @@ public:
         }
 
         struct Contig {
-            Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL) {}
+            Contig() : beginningLocation(InvalidGenomeLocation), length(0), nameLength(0), name(NULL), mitochondrial(false) {}
             GenomeLocation     beginningLocation;
             GenomeDistance     length;
             unsigned           nameLength;
             char              *name;
+            bool               mitochondrial;
         };
 
         inline const Contig *getContigs() const { return contigs; }

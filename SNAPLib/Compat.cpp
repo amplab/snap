@@ -431,7 +431,7 @@ OpenMemoryMappedFile(
     bool sequential)
 {
     MemoryMappedFile* result = new MemoryMappedFile();
-    result->fileHandle = CreateFile(filename, (write ? GENERIC_WRITE : 0) | GENERIC_READ, 0, NULL, OPEN_EXISTING,
+    result->fileHandle = CreateFile(filename, (write ? GENERIC_WRITE : 0) | GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL | (sequential ? FILE_FLAG_SEQUENTIAL_SCAN : FILE_FLAG_RANDOM_ACCESS), NULL);
     if (result->fileHandle == NULL) {
         WriteErrorMessage("unable to open mapped file %s error 0x%x\n", filename, GetLastError());

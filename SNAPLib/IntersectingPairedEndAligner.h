@@ -28,6 +28,7 @@ Revision History:
 #include "directions.h"
 #include "LandauVishkin.h"
 #include "FixedSizeMap.h"
+#include "AlignmentAdjuster.h"
 
 const unsigned DEFAULT_INTERSECTING_ALIGNER_MAX_HITS = 2000;
 const unsigned DEFAULT_MAX_CANDIDATE_POOL_SIZE = 1000000;
@@ -51,23 +52,8 @@ public:
         BigAllocator  *allocator,
         bool          noUkkonen_,
         bool          noOrderedEvaluation_,
-		bool		  noTruncation_);
-
-     static unsigned getMaxSecondaryResults(unsigned numSeedsFromCommandLine, double seedCoverage, unsigned maxReadSize, unsigned maxHits, unsigned seedLength, unsigned minSpacing, unsigned maxSpacing)
-     {
-        unsigned maxSeedsToUse;
-        if (0 != numSeedsFromCommandLine) {
-            maxSeedsToUse = numSeedsFromCommandLine;
-        } else {
-            maxSeedsToUse = (unsigned)(maxReadSize * seedCoverage / seedLength);
-        }
-
-		//
-		// The number of hits we can conceivably get is for each seed a result for every hit, times every possible pair for that hit.  The possible pairs
-		// run from min to max distance on either side, but if they're within max merge distance then they'll be merged.
-		//
-        return NUM_DIRECTIONS * maxHits * maxSeedsToUse * (maxSpacing - minSpacing + 1 + maxMergeDistance - 1) / maxMergeDistance * 2;
-     }
+		bool		  noTruncation_,
+        bool          ignoreAlignmentAdjustmentsForOm_);
 
      void setLandauVishkin(
         LandauVishkin<1> *landauVishkin_,
@@ -79,18 +65,18 @@ public:
     
     virtual ~IntersectingPairedEndAligner();
     
-    virtual void align(
+    virtual bool align(
         Read                  *read0,
         Read                  *read1,
         PairedAlignmentResult *result,
         int                    maxEditDistanceForSecondaryResults,
-        int                    secondaryResultBufferSize,
-        int                   *nSecondaryResults,
+        _int64                 secondaryResultBufferSize,
+        _int64                *nSecondaryResults,
         PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
-        int                    singleSecondaryBufferSize,
-        int                    maxSecondaryResultsToReturn,
-        int                   *nSingleEndSecondaryResultsForFirstRead,
-        int                   *nSingleEndSecondaryResultsForSecondRead,
+        _int64                 singleSecondaryBufferSize,
+        _int64                 maxSecondaryResultsToReturn,
+        _int64                *nSingleEndSecondaryResultsForFirstRead,
+        _int64                *nSingleEndSecondaryResultsForSecondRead,
         SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
         );
 
@@ -111,7 +97,7 @@ public:
 
 private:
 
-    IntersectingPairedEndAligner() {}  // This is for the counting allocator, it doesn't build a useful object
+    IntersectingPairedEndAligner() : alignmentAdjuster(NULL) {}  // This is for the counting allocator, it doesn't build a useful object
 
     static const int NUM_SET_PAIRS = 2;         // A "set pair" is read0 FORWARD + read1 RC, or read0 RC + read1 FORWARD.  Again, it doesn't make sense to change this.
 
@@ -138,6 +124,9 @@ private:
     bool            noUkkonen;
     bool            noOrderedEvaluation;
 	bool			noTruncation;
+    bool            ignoreAlignmentAdjustmentsForOm;
+
+    AlignmentAdjuster   alignmentAdjuster;
 
 	static const unsigned        maxMergeDistance;
 	

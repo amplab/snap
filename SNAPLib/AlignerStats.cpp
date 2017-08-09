@@ -13,7 +13,7 @@ Authors:
     Ravi Pandya, May, 2012
 
 Environment:
-`
+
     User mode service.
 
 Revision History:
@@ -39,6 +39,9 @@ AlignerStats::AlignerStats(AbstractStats* i_extra)
     alignedAsPairs(0),
     extra(i_extra),
     lvCalls(0),
+    millisReading(0),
+    millisAligning(0),
+    millisWriting(0),
     filtered(0),
     extraAlignments(0)
 {
@@ -89,6 +92,9 @@ AlignerStats::add(
     notFound += other->notFound;
     alignedAsPairs += other->alignedAsPairs;
     lvCalls += other->lvCalls;
+    millisReading += other->millisReading;
+    millisAligning += other->millisAligning;
+    millisWriting += other->millisWriting;
     filtered += other->filtered;
     extraAlignments += other->extraAlignments;
 

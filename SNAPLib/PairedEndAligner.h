@@ -37,20 +37,20 @@ class PairedEndAligner
 public:
     virtual ~PairedEndAligner() {}
     
-    virtual void align(
+    virtual bool align(
         Read                  *read0,
         Read                  *read1,
         PairedAlignmentResult *result,
         int                    maxEditDistanceForSecondaryResults,
-        int                    secondaryResultBufferSize,
-        int                   *nSecondaryResults,
+        _int64                 secondaryResultBufferSize,
+        _int64                *nSecondaryResults,
         PairedAlignmentResult *secondaryResults,             // The caller passes in a buffer of secondaryResultBufferSize and it's filled in by align()
-        int                    singleSecondaryBufferSize,
-        int                    maxSecondaryAlignmentsToReturn,
-        int                   *nSingleEndSecondaryResultsForFirstRead,
-        int                   *nSingleEndSecondaryResultsForSecondRead,
+        _int64                 singleSecondaryBufferSize,
+        _int64                 maxSecondaryAlignmentsToReturn,
+        _int64                *nSingleEndSecondaryResultsForFirstRead,
+        _int64                *nSingleEndSecondaryResultsForSecondRead,
         SingleAlignmentResult *singleEndSecondaryResults     // Single-end secondary alignments for when the paired-end alignment didn't work properly
-        ) = 0;
+        ) = 0; // return value is false iff there wasn't enough space in the secondary buffers
 
     virtual void setLandauVishkin(
         LandauVishkin<1>        *landauVishkin,
