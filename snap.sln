@@ -110,13 +110,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AVLTest", "tests\AVLTest\AV
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApplyBonferroniCorrection", "apps\ApplyBonferroniCorrection\ApplyBonferroniCorrection.csproj", "{A430C0AB-8F2C-4B49-826C-E6DB9BA16D41}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MethylationByMutationCount", "apps\MethylationByMutationCount\MethylationByMutationCount.csproj", "{CEF4E705-1A07-459D-8F3A-1256CF45346F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WriteIGVScript", "apps\WriteIGVScript\WriteIGVScript.csproj", "{DF994F10-6B0E-42CA-8A97-6FF9917B8AB6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RegionalSignalByDistance", "apps\RegionalSignalByDistance\RegionalSignalByDistance.csproj", "{F05C1094-A9BC-4B44-865E-57E5EDB582C4}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenomeBuild", "apps\ChangeGenomeBuild\GenomeBuild.csproj", "{BE6E7BC7-7F29-48A9-80DA-8B642ECAF795}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheckASEConsistency", "apps\CheckASEConsistency\CheckASEConsistency.csproj", "{9ACA7370-F585-4FF7-846B-9DAB32591CE4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MutationDistributions", "apps\MutationDistributions\MutationDistributions.csproj", "{AB63A343-10BE-42B2-87CB-A74DBB29C929}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
