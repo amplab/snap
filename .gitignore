@@ -64,7 +64,6 @@ obj
 /apps/CountMappedBases/bin
 /apps/ExpressionNearMutations/bin
 /apps/MethylationAnalysis/bin
-/apps/BisulfiteMethylation/bin
 /apps/DumpSubfile/bin
 /apps/ExpressionByMutationCount/bin
 /apps/FixASV/bin
@@ -73,21 +72,8 @@ obj
 /apps/CountVariantsInGenes/bin
 /apps/MannWhitney/bin
 /apps/SummarizeSelectedVariantCountsByGene/bin
-
-/apps/BisulfiteMethylation/bin
 /apps/ChangeGenomeBuild/bin
-/appsExtractBisulfiteReads/bin
-/apps/MethylationHeatmaps/bin
-/apps/MethylationDistribution/bin
-/apps/ExtractBisulfiteReads/bin
-/apps/MethylationHeatmaps/bin
-/apps/ChangeGenomeBuild/bin
-/apps/ExtractBisulfiteReads/bin
-/apps/MethylationDistributionPromotors/bin
-/apps/MethylationByMutationCount/bin
-/apps/FindSignificantGenes/bin
 /apps/ApplyBonferonniCorrection/bin
-/apps/RegionalSignalByDistance/bin
 /tests/AVLTest/bin
 /tests/MannWhitneyTest/bin
 

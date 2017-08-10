@@ -104,17 +104,15 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ASEHeatMap", "apps\ASEHeatM
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SummarizeSelectedVariantCountsByGene", "apps\SummarizeSelectedVariantCountsByGene\SummarizeSelectedVariantCountsByGene.csproj", "{B29AC441-9D3E-41B4-9D69-B1020F4F5E3E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FindSignificantGenes", "apps\FindSignificantGenes\FindSignificantGenes.csproj", "{4805A467-B2AD-493B-A2AD-5AD1FFCB6F45}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MannWhitneyTest", "tests\MannWhitneyTest\MannWhitneyTest.csproj", "{F000686B-4906-4ABB-AD13-EDDA003CA817}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AVLTest", "tests\AVLTest\AVLTest.csproj", "{056BB7B2-6024-4AA4-85B3-1F40D167F3E4}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApplyBonferroniCorrection", "apps\ApplyBonferroniCorrection\ApplyBonferroniCorrection.csproj", "{A430C0AB-8F2C-4B49-826C-E6DB9BA16D41}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MethylationByMutationCount", "apps\MethylationByMutationCount\MethylationByMutationCount.csproj", "{CEF4E705-1A07-459D-8F3A-1256CF45346F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WriteIGVScript", "apps\WriteIGVScript\WriteIGVScript.csproj", "{DF994F10-6B0E-42CA-8A97-6FF9917B8AB6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RegionalSignalByDistance", "apps\RegionalSignalByDistance\RegionalSignalByDistance.csproj", "{F05C1094-A9BC-4B44-865E-57E5EDB582C4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MutationDistributions", "apps\MutationDistributions\MutationDistributions.csproj", "{AB63A343-10BE-42B2-87CB-A74DBB29C929}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

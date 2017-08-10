@@ -572,131 +572,6 @@ namespace ASELib
 			public Dictionary<string, List<GeneLocationInfo>> genesByChromosome = new Dictionary<string, List<GeneLocationInfo>>();    // chromosome is in non-chr form.
 		}
 
-		public class Bisulfite
-		{
-			public string case_id;
-			public string project_id;
-			public decimal file_size;
-			public string data_category;
-			public string data_format;
-			public string file_name;
-			public string access;
-			public string annotation_id;
-
-
-			public delegate string ColumnGetter(Bisulfite case_);
-			public delegate void ColumnSetter(Bisulfite case_, string value);
-			public delegate string ExpectedIdGetter(Bisulfite case_);
-			public class FieldInformation
-			{
-				public FieldInformation(string columnName_, ColumnGetter getter_, ColumnSetter setter_, DerivedFile.Type type_, string extension_, ExpectedIdGetter idGetter_)
-				{
-					columnName = columnName_;
-					getter = getter_;
-					setter = setter_;
-
-					//
-					// type, extension and id getter apply only to derived files.  For other fields, use the other constructor.
-					//
-					type = type_;
-					extension = extension_;
-					idGetter = idGetter_;
-				}
-
-				public FieldInformation(string columnName_, ColumnGetter getter_, ColumnSetter setter_)
-				{
-					columnName = columnName_;
-					getter = getter_;
-					setter = setter_;
-				}
-
-				public string getValue(Bisulfite case_)
-				{
-					return getter(case_);
-				}
-
-				public void setValue(Bisulfite case_, string value)
-				{
-					setter(case_, value);
-				}
-
-				public string getExpectedId(Bisulfite case_)
-				{
-					return idGetter(case_);
-				}
-
-				public readonly string columnName;
-				ColumnGetter getter;
-				ColumnSetter setter;
-				ExpectedIdGetter idGetter = c => "";
-				public readonly DerivedFile.Type type = DerivedFile.Type.Unknown;
-				public readonly string extension = "";
-			} // FieldInformation 
-
-			public static FieldInformation[] BisulfiteFields =
-			{
-				new FieldInformation("case_id",                                             c => c.case_id, (c, v) => c.case_id = v),
-				new FieldInformation("project_id",                                             c => c.project_id, (c, v) => c.project_id = v),
-				new FieldInformation("file_size",                                             c => Convert.ToString(c.file_size), (c, v) => c.file_size = decimal.Parse(v, NumberStyles.Float)),
-				new FieldInformation("data_category",                                             c => c.data_category, (c, v) => c.data_category = v),
-				new FieldInformation("data_format",                                             c => c.data_format, (c, v) => c.data_format = v),
-				new FieldInformation("file_name",                                             c => c.file_name, (c, v) => c.file_name = v),
-				new FieldInformation("access",                                             c => c.access, (c, v) => c.access = v),
-				new FieldInformation("annotations_id",                                             c => c.annotation_id, (c, v) => c.annotation_id = v),
-
-			};
-
-
-			public static List<Bisulfite> LoadMetadata(string inputFilename)
-			{
-				if (!File.Exists(inputFilename))
-				{
-					return null;   // Nothing to load because we haven't generated a cases file yet.
-				}
-
-				var wantedFields = new List<string>();
-
-				foreach (var info in BisulfiteFields)
-				{
-					wantedFields.Add(info.columnName);
-				}
-
-				var inputFile = CreateStreamReaderWithRetry(inputFilename);
-				if (null == inputFile)
-				{
-					return null;
-				}
-
-				var headerizedFile = new HeaderizedFile<Bisulfite>(inputFile, false, false, "", wantedFields);
-
-				List<Bisulfite> listOfBisulfite;
-				Dictionary<string, int> fieldMappings;
-				if (!headerizedFile.ParseFile(fromSaveFileLine, out listOfBisulfite, out fieldMappings))
-				{
-					inputFile.Close();
-					return null;
-				}
-
-				inputFile.Close();
-
-				return listOfBisulfite;
-			} // LoadBisulfite
-
-			static public Bisulfite fromSaveFileLine(Dictionary<string, int> fieldMappings, string[] fields)
-			{
-				var case_ = new Bisulfite();
-
-				foreach (var info in BisulfiteFields)
-				{
-					info.setValue(case_, fields[fieldMappings[info.columnName]]);
-				}
-
-				return case_;
-			} // fromSaveFile
-
-
-		}
-
         public class GeneMap
         {
             public GeneMap(Dictionary<string, GeneLocationInfo> genesByName)
@@ -966,8 +841,8 @@ namespace ASELib
             public string normal_rna_mapped_base_count_filename = "";
             public string tumor_rna_mapped_base_count_filename = "";
             public string selected_variant_counts_by_gene_filename = "";
-			public string tumor_regional_methylation_filename = ""; // TODO add to CheckDone
-			public string normal_regional_methylation_filename = ""; // TODO add to CheckDone
+			public string tumor_regional_methylation_filename = "";
+			public string normal_regional_methylation_filename = "";
 			// If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
 			//
 			// Checksums for downloaded files. The tumor DNA BAMs aren't included here
@@ -1525,7 +1400,6 @@ namespace ASELib
             public List<string> programNames = new List<string>();
             public string binariesDirectory = defaultBaseDirectory + @"bin\";
             public string configuationFilePathname = defaultConfigurationFilePathame;
-			//public string casesFilePathname = bisulfiteDirectory + @"cases_withTNMethylation_temp.txt";  //defaultBaseDirectory + "cases.txt";
             public string casesFilePathname = defaultBaseDirectory + "cases_fpkm.txt";
 
 			public string indexDirectory = defaultBaseDirectory + @"indices\hg38-20";
