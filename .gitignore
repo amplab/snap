@@ -74,8 +74,10 @@ obj
 /apps/SummarizeSelectedVariantCountsByGene/bin
 /apps/ChangeGenomeBuild/bin
 /apps/ApplyBonferonniCorrection/bin
+/apps/MutationDistributions/bin
+/apps/WriteIGVScript/bin
 /tests/AVLTest/bin
 /tests/MannWhitneyTest/bin
-
+/apps/CheckASEConsistency/bin
 
 

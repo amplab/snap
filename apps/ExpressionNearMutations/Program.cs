@@ -116,6 +116,16 @@ namespace ExpressionNearMutations
 				timer.Start();
 
 				var inputFilename = forAlleleSpecificExpression ? case_.annotated_selected_variants_filename : case_.regional_expression_filename;
+				
+				// Used to filter out annotated variants in regions with copy number variation
+				List<ASETools.CopyNumberVariation> copyNumberVariation = new List<ASETools.CopyNumberVariation>();
+				if (case_.tumor_copy_number_filename != "")
+				{
+					// The cutoff we use here for choosing copy number variation is very loose (1.0).
+					// Setting this value to 1.0 looses 10-20% of annotated variants, depending on the sample.
+					copyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id)
+						.Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList(); 
+				}
 
 				if (inputFilename == "")
 				{
@@ -173,9 +183,6 @@ namespace ExpressionNearMutations
 				}
 				else
 				{
-					//
-					// Fill in something here when we have code for overall expression.
-					//
 					regionalExpressionLines = ASETools.Region.readFile(inputFilename);
 
 					if (regionalExpressionLines == null)
@@ -197,25 +204,29 @@ namespace ExpressionNearMutations
 						double alleleSpecificExpressionNormal;
 
 						if (geneLocationInformation.genesByChromosome.ContainsKey(annotatedVariant.contig) &&
-							annotatedVariant.tumorDNAReadCounts.nMatchingReference + annotatedVariant.tumorDNAReadCounts.nMatchingAlt >= 10 &&
-							annotatedVariant.tumorRNAReadCounts.nMatchingReference + annotatedVariant.tumorRNAReadCounts.nMatchingAlt >= 10 &&
-							annotatedVariant.tumorDNAReadCounts.nMatchingReference * 3 >= annotatedVariant.tumorDNAReadCounts.nMatchingAlt * 2 &&
-							annotatedVariant.tumorDNAReadCounts.nMatchingAlt * 3 >= annotatedVariant.tumorDNAReadCounts.nMatchingReference * 2)
+                            annotatedVariant.IsASECandidate() && !annotatedVariant.somaticMutation)
 						{
-							double rnaFractionTumor = (double)annotatedVariant.tumorRNAReadCounts.nMatchingAlt / (annotatedVariant.tumorRNAReadCounts.nMatchingReference + annotatedVariant.tumorRNAReadCounts.nMatchingAlt);
+
+							// Filter out annotated variants that are in regions of high copy number variation
+							var overlappingCNV = copyNumberVariation.Where(cnv =>
+								cnv.OverlapsLocus(ASETools.chromosomeNameToNonChrForm(annotatedVariant.contig),
+								annotatedVariant.locus, annotatedVariant.locus + 1));
+							var overlapsCNV = overlappingCNV.Count() > 0;
+
+							if (overlapsCNV)
+							{
+								continue;
+							}
 
 							//
 							// Now convert to the amount of allele-specific expression.  50% is no ASE, while 0 or 100% is 100% ASE.
 							//
-							alleleSpecificExpression = Math.Abs(rnaFractionTumor * 2.0 - 1.0);
+							alleleSpecificExpression = annotatedVariant.GetTumorAlleleSpecificExpression();
 
 							// If we have the normal DNA and RNA for this sample, compute the normal ASE
-							if (annotatedVariant.normalRNAReadCounts != null && annotatedVariant.normalDNAReadCounts.nMatchingReference + annotatedVariant.normalDNAReadCounts.nMatchingAlt >= 10 &&   // We have at least 10 DNA reads
-								annotatedVariant.normalRNAReadCounts.nMatchingReference + annotatedVariant.normalRNAReadCounts.nMatchingAlt >= 10 &&            // We have at least 10 RNA reads
-								annotatedVariant.normalDNAReadCounts.nMatchingReference * 3 >= annotatedVariant.normalDNAReadCounts.nMatchingAlt * 2 &&         // It's not more than 2/3 variant DNA
-								annotatedVariant.normalDNAReadCounts.nMatchingAlt * 3 >= annotatedVariant.normalDNAReadCounts.nMatchingReference * 2)
+							if (annotatedVariant.normalRNAReadCounts != null && annotatedVariant.IsASECandidate(false))
 							{
-								alleleSpecificExpressionNormal = Math.Abs(((double)annotatedVariant.normalRNAReadCounts.nMatchingAlt / (annotatedVariant.normalRNAReadCounts.nMatchingReference + annotatedVariant.normalRNAReadCounts.nMatchingAlt)) * 2.0 - 1.0);
+								alleleSpecificExpressionNormal = annotatedVariant.GetNormalAlleleSpecificExpression();
 								// add to data with normal
 								expressionValues.Add(annotatedVariant.contig, annotatedVariant.locus, alleleSpecificExpression, 0, true, alleleSpecificExpressionNormal, 0);
 							}
