@@ -1495,7 +1495,7 @@ namespace ASELib
             public List<string> programNames = new List<string>();
             public string binariesDirectory = defaultBaseDirectory + @"bin\";
             public string configuationFilePathname = defaultConfigurationFilePathame;
-            public string casesFilePathname = defaultBaseDirectory + "cases_fpkm.txt";
+            public string casesFilePathname = defaultBaseDirectory + "cases.txt";
 
 			public string indexDirectory = defaultBaseDirectory + @"indices\hg38-20";
 			public string indexDirectoryHg19 = defaultBaseDirectory + @"indices\hg19";

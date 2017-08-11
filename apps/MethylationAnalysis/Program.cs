@@ -323,8 +323,7 @@ namespace MethylationAnalysis
 			timer.Start();
 
 			var configuration = ASETools.Configuration.loadFromFile(args);
-			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname)
-				.ToList();
+			var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
 			if (null == cases)
 			{
