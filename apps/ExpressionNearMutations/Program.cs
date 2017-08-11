@@ -10,14 +10,14 @@ using System.Threading;
 
 namespace ExpressionNearMutations
 {
-    public class Program
+    class Program
     {
 
 
 		static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
 
 		// Generic class to hold tumor/normal signal at a locus. Use for ASE, expression and ASM values.
-		public class RegionalSignal
+		class RegionalSignal
 		{
 			// One expression state for whole autosome
 			public ASETools.RegionalExpressionState wholeAutosomeRegionalExpression = new ASETools.RegionalExpressionState();

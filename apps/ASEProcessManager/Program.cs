@@ -613,12 +613,7 @@ namespace ASEProcessManager
 				foreach (var caseEntry in stateOfTheWorld.cases)
 				{
 					var case_ = caseEntry.Value;
-					if (case_.tumor_regional_methylation_filename != "")
-					{
-						nDone++;
-						continue;
-					}
-					else if (case_.extracted_maf_lines_filename == "" || case_.tumor_methylation_filename == "")
+					if (case_.extracted_maf_lines_filename == "" || case_.tumor_methylation_filename == "")
 					{
 						nWaitingForPrerequisites++;
 						continue;
@@ -646,19 +641,6 @@ namespace ASEProcessManager
 					if (case_.extracted_maf_lines_filename == "" || case_.tumor_methylation_filename == "")
 					{
 						Console.WriteLine("Regional methylation file " + case_.annotated_selected_variants_filename + " exists, but dependencies do not.");
-						allOK = false;
-						continue;
-					}
-
-					if (case_.tumor_regional_methylation_filename == "")
-					{
-						continue;
-					}
-
-					var methylationWriteTime = new FileInfo(case_.tumor_regional_methylation_filename).LastWriteTime;
-					if (case_.tumor_regional_methylation_filename == "")
-					{
-						Console.WriteLine("Regional methylation file " + case_.tumor_regional_methylation_filename + " exists, but the precursor file does not.");
 						allOK = false;
 						continue;
 					}

@@ -332,10 +332,6 @@ namespace MethylationAnalysis
 				return;
 			}
 
-
-			DirectoryInfo d = new DirectoryInfo(@"F:\");
-			var annotatedFiles = d.GetFiles("*").Select(r => r.Name);
-
 			var selectedCases = cases.Select(kv => kv.Value).ToList();
 
 			Console.WriteLine("Processing " + selectedCases.Count() + " cases");
