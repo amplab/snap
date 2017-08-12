@@ -16,9 +16,9 @@ namespace ApplyBonferroniCorrection
         {
             int overallValidCount = 0;
 
-            var results = ASETools.ExpressionResultsLine.readFile(filename);
+			var results = ASETools.ExpressionResultsLine.readFile(filename);
 
-            if (null == results)
+			if (null == results)
             {
                 Console.WriteLine("Unable to load results from file " + filename);
                 return 0;
@@ -120,22 +120,22 @@ namespace ApplyBonferroniCorrection
 
             string outputFilename = filename.Substring(0, filename.Count() - 4) + ASETools.bonferroniExtension;
 
-            var results = ASETools.ExpressionResultsLine.readFile(filename);
- 
-            //
-            // We rearrange the order of the columns somewhat.  The input is geneName followed by sets of columns with uncorrected p values, raw value means or standard 
-            // deviations or counts, followed by four columns that have a count of tumors by mutation count for this gene.  We then add in min p and min p at columns.
-            // The final output format is gene name, min p, min p at, the four tumor count columns from the end of the input and then the rest of the columns from
-            // the input in order.
-            //
-            var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
+			var results = ASETools.ExpressionResultsLine.readFile(filename);
+
+			//
+			// We rearrange the order of the columns somewhat.  The input is geneName followed by sets of columns with uncorrected p values, raw value means or standard 
+			// deviations or counts, followed by four columns that have a count of tumors by mutation count for this gene.  We then add in min p and min p at columns.
+			// The final output format is gene name, min p, min p at, the four tumor count columns from the end of the input and then the rest of the columns from
+			// the input in order.
+			//
+			var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
             outputFile.WriteLine("Hugo Symbol\tMin p\tMin p at\tSignificant@.01\tBest 0 vs. 1 ratio for significant results\tBest 0 vs. 1 ratio at\t"+ ASETools.ExpressionResultsLine.getHeaderString());
 
             int nSignificantReuslts = 0;
             foreach (var result in results)
             {
                 var pValueStats = new PValueStats();
-
+				
                 for (int i = 0; i < ASETools.nRegions; i++)
                 {
                     nSignificantReuslts += ProcessSingleResult(result.nonExclusiveResultsByRange[i], bonferroniCorrection, false, i, pValueStats, histogramOfPValues);

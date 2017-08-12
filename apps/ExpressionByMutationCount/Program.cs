@@ -737,7 +737,7 @@ namespace ExpressionByMutationCount
                 readTimer.Stop();
 
                 var expressionForThisCase = new Dictionary<string, ASETools.AlleleSpecificSignal>();
-                foreach (var regionalSignalEntry in regionalSignalFile)
+                foreach (var regionalSignalEntry in regionalSignalFile.Item1)
                 {
                     expressionForThisCase.Add(regionalSignalEntry.Key, new ASETools.AlleleSpecificSignal(regionalSignalEntry.Key, regionalSignalEntry.Value));
                 }

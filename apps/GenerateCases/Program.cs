@@ -224,8 +224,10 @@ namespace GenerateCases
 
             var cases = new Dictionary<string, ASETools.Case>();
 
+			// Load in old cases to get old maf lines
+			var pastCases = ASETools.Case.LoadCases(@"\\msr-genomics-0\d$\gdc\cases.txt");
 
-            const string mafCondition = "{\"op\":\"in\",\"content\":{\"field\":\"data_format\",\"value\":[\"MAF\"]}}";
+			const string mafCondition = "{\"op\":\"in\",\"content\":{\"field\":\"data_format\",\"value\":[\"MAF\"]}}";
             const string bamOrTxtCondition = "{\"op\":\"in\",\"content\":{\"field\":\"data_format\",\"value\":[\"BAM\",\"TXT\"]}}";
  
             foreach (var caseEntry in allCases)
@@ -241,6 +243,8 @@ namespace GenerateCases
 				List<ASETools.GDCFile> maf = new List<ASETools.GDCFile>();
 				ASETools.GDCFile tumorCopyNumber = null;
 				ASETools.GDCFile normalCopyNumber = null;
+				ASETools.GDCFile tumorFPKM = null;
+				ASETools.GDCFile normalFPKM = null;
 
 				from = 1;
 
@@ -427,11 +431,25 @@ namespace GenerateCases
 										normalCopyNumber = ASETools.GDCFile.selectNewestUpdated(normalCopyNumber, file);
 									}
 								}
+								else if (file.data_type == "Gene Expression Quantification" && file.file_name.Contains("FPKM.txt")) // we only want normal FPKM
+								{
+									if (tumor)
+									{
+										tumorFPKM = ASETools.GDCFile.selectNewestUpdated(tumorFPKM, file);
+									}
+									else
+									{
+										normalFPKM = ASETools.GDCFile.selectNewestUpdated(normalFPKM, file);
+									}
+								}
+
+								
 							}
                         } // Foreach file in this batch
                     } // If file data parsed
 
                     from += pagination.count;
+
 
                     if (from >= pagination.total)
                     {
@@ -440,7 +458,12 @@ namespace GenerateCases
 
                 } // forever (looping over file pagination)
 
-                var mafFileIds = maf.Select(x => x.file_id);
+				// This is commented out because the MAF files from the TCGA server
+				// are now 7.0, and we are running on 6.0
+				//var mafFileIds = maf.Select(x => x.file_id);
+
+				// get old maf file ids
+				var mafFileIds = pastCases.Where(r => r.Value.case_id == gdcCase.case_id).Select(r => r.Value.maf_file_id);
 
                 if (tumorDNA.Count() == 0)
                 {
@@ -573,7 +596,7 @@ namespace GenerateCases
                             case_.tumor_copy_number_size = tumorCopyNumber.file_size;
                             case_.tumor_copy_number_file_md5 = tumorCopyNumber.md5sum;
 
-                            if (downloadedFiles.ContainsKey(case_.tumor_copy_number_file_id))
+							if (downloadedFiles.ContainsKey(case_.tumor_copy_number_file_id))
                             {
                                 case_.tumor_copy_number_filename = downloadedFiles[case_.tumor_copy_number_file_id].fileInfo.FullName;
                             }
@@ -594,6 +617,28 @@ namespace GenerateCases
 							if (downloadedFiles.ContainsKey(case_.normal_copy_number_file_id))
 							{
 								case_.normal_copy_number_filename = downloadedFiles[case_.normal_copy_number_file_id].fileInfo.FullName;
+							}
+						}
+						if (null != tumorFPKM)
+						{
+							case_.tumor_fpkm_file_id = tumorFPKM.file_id;
+							case_.tumor_fpkm_size = tumorFPKM.file_size;
+							case_.tumor_fpkm_file_md5 = tumorFPKM.md5sum;
+
+							if (downloadedFiles.ContainsKey(case_.tumor_fpkm_file_id))
+							{
+								case_.tumor_fpkm_filename = downloadedFiles[case_.tumor_fpkm_file_id].fileInfo.FullName;
+							}
+						}
+						if (null != normalFPKM)
+						{
+							case_.normal_fpkm_file_id = normalFPKM.file_id;
+							case_.normal_fpkm_size = normalFPKM.file_size;
+							case_.normal_fpkm_file_md5 = normalFPKM.md5sum;
+
+							if (downloadedFiles.ContainsKey(case_.normal_fpkm_file_id))
+							{
+								case_.tumor_fpkm_filename = downloadedFiles[case_.normal_fpkm_file_id].fileInfo.FullName;
 							}
 						}
 
