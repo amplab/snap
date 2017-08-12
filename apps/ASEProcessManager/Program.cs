@@ -1011,6 +1011,8 @@ namespace ASEProcessManager
                 nWaitingForPrerequisites = 0;
                 filesToDownload = null;
 
+                var currentCommandLine = "";
+
                 foreach (var caseEntry in stateOfTheWorld.cases)
                 {
                     var case_ = caseEntry.Value;
@@ -1032,7 +1034,7 @@ namespace ASEProcessManager
 								}
 							}
 						}
-						else if (case_.maf_filename == "" || case_.annotated_selected_variants_filename == "")
+						else if (case_.maf_filename == "" || case_.annotated_selected_variants_filename == "" || case_.tumor_copy_number_filename == "")
 						{
 							nWaitingForPrerequisites++;
 							continue;
@@ -1060,26 +1062,31 @@ namespace ASEProcessManager
 						}
 					}
 
-					// write a command for each case id
-					script.Write(stateOfTheWorld.configuration.binariesDirectory + "ExpressionNearMutations.exe");
-					hpcScript.Write(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "ExpressionNearMutations.exe");
+                    if (currentCommandLine == "")
+                    {
+                        currentCommandLine = "ExpressionNearMutations.exe" + (forAlleleSpecificExpression ? " -a" : "");
+                    }
 
-					if (forAlleleSpecificExpression)
-					{
-						script.Write(" -a");
-						hpcScript.Write(" -a");
-					}
+                    currentCommandLine += " " + case_.case_id;
 
-					script.Write(" " + case_.case_id);
-					hpcScript.Write(" " + case_.case_id);
+                    if (currentCommandLine.Count() > 1000)
+                    {
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + currentCommandLine);
+                        hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + currentCommandLine);
 
-					script.WriteLine();
-					hpcScript.WriteLine();
+                        currentCommandLine = "";
+                    }
 
 				}
 
+                if (currentCommandLine != "")
+                {
+                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + currentCommandLine);
+                    hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + currentCommandLine);
+                }
 
-			} // EvaluateStage
+
+            } // EvaluateStage
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
             {

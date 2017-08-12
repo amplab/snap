@@ -116,25 +116,20 @@ namespace ExpressionNearMutations
 				timer.Start();
 
 				var inputFilename = forAlleleSpecificExpression ? case_.annotated_selected_variants_filename : case_.regional_expression_filename;
-				
-				// Used to filter out annotated variants in regions with copy number variation
-				List<ASETools.CopyNumberVariation> copyNumberVariation = new List<ASETools.CopyNumberVariation>();
-				if (case_.tumor_copy_number_filename != "")
-				{
-					// The cutoff we use here for choosing copy number variation is very loose (1.0).
-					// Setting this value to 1.0 looses 10-20% of annotated variants, depending on the sample.
-					copyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id)
-						.Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList(); 
-				}
 
-				if (inputFilename == "")
+				if (inputFilename == "" || case_.tumor_copy_number_filename == "")
 				{
-					Console.WriteLine("Case " + case_.case_id + " doesn't have an input file yet.");
+					Console.WriteLine("Case " + case_.case_id + " doesn't have an input or copy number file yet.");
 					continue;
 				}
 
-				// Load MAF file for this case
-				var mafLines = ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, case_.maf_file_id, false);
+                // Used to filter out annotated variants in regions with copy number variation
+                // The cutoff we use here for choosing copy number variation is very loose (1.0).
+                // Setting this value to 1.0 looses 10-20% of annotated variants, depending on the sample.
+                var copyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
+
+                // Load MAF file for this case
+                var mafLines = ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, case_.maf_file_id, false);
 
 				if (null == mafLines)
 				{
