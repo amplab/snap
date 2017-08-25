@@ -594,6 +594,63 @@ namespace ASEProcessManager
 		} // AnnotateVariantsProcessingStage
 
 
+		class MethylationProcessingStage : ProcessingStage
+		{
+
+			public MethylationProcessingStage() { }
+
+			public string GetStageName() { return "Methylation"; }
+
+			public bool NeedsCases() { return true; }
+
+			public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+			{
+				nDone = 0;
+				nAddedToScript = 0;
+				nWaitingForPrerequisites = 0;
+				filesToDownload = null;
+
+				foreach (var caseEntry in stateOfTheWorld.cases)
+				{
+					var case_ = caseEntry.Value;
+					if (case_.extracted_maf_lines_filename == "" || case_.tumor_methylation_filename == "")
+					{
+						nWaitingForPrerequisites++;
+						continue;
+					}
+					else
+					{
+						nAddedToScript++;
+					}
+
+					script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "MethylationAnalysis.exe 1000000");
+					hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + "MethylationAnalysis.exe 1000000");
+				}
+
+
+			} // EvaluateStage
+
+			public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
+			{
+				bool allOK = true;
+
+				foreach (var caseEntry in stateOfTheWorld.cases)
+				{
+					var case_ = caseEntry.Value;
+
+					if (case_.extracted_maf_lines_filename == "" || case_.tumor_methylation_filename == "")
+					{
+						Console.WriteLine("Regional methylation file " + case_.annotated_selected_variants_filename + " exists, but dependencies do not.");
+						allOK = false;
+						continue;
+					}
+				}
+				return allOK;
+			} // EvaluateDependencies
+
+		} // MethylationProcessingStage
+
+
 		class SelectVariantsProcessingStage : ProcessingStage
         {
             public SelectVariantsProcessingStage() { }
@@ -1550,10 +1607,96 @@ namespace ASEProcessManager
 
         } // GenerateScatterGraphsProcessingStage
 
-        //
-        // This represents the state of the world.  Processing stages look at this state and generate actions to move us along.
-        //
-        class StateOfTheWorld
+
+		class FPKMProcessingStage : ProcessingStage
+		{
+			public FPKMProcessingStage() { }
+
+			public string GetStageName() { return "Process FPKM Data"; }
+
+			public bool NeedsCases() { return true; }
+
+			public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+			{
+				filesToDownload = new List<string>();
+				nDone = 0;
+				nAddedToScript = 0;
+				nWaitingForPrerequisites = 0;
+
+				foreach (var caseEntry in stateOfTheWorld.cases)
+				{
+					var case_ = caseEntry.Value;
+
+					if (case_.normal_fpkm_filename == "" && case_.normal_fpkm_file_id != "")
+					{
+						nWaitingForPrerequisites = 1;
+						filesToDownload.Add(case_.normal_fpkm_file_id);
+					}
+					
+					if (case_.tumor_fpkm_filename == "" && case_.tumor_fpkm_file_id != "")
+					{
+						nWaitingForPrerequisites = 1;
+						filesToDownload.Add(case_.tumor_fpkm_file_id);
+					}
+
+					// nAddedToScript = 1; // Commented out until there's something to add to the script.
+				}
+
+			} // EvaluateStage
+
+			public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld)
+			{
+				DateTime oldestFile;
+				if (stateOfTheWorld.scatterGraphsSummaryFile == "")
+				{
+					return true;
+				}
+
+				oldestFile = new FileInfo(stateOfTheWorld.scatterGraphsSummaryFile).LastWriteTime;
+				foreach (var selectedGene in stateOfTheWorld.selectedGenes)
+				{
+					if (!stateOfTheWorld.scatterGraphsByHugoSymbol.ContainsKey(selectedGene.Hugo_Symbol))
+					{
+						return true;
+					}
+
+					var date = new FileInfo(stateOfTheWorld.scatterGraphsByHugoSymbol[selectedGene.Hugo_Symbol]).LastWriteTime;
+					if (date < oldestFile)
+					{
+						oldestFile = date;
+					}
+				}
+
+				//
+				// Now look at the dependencies.
+				//
+				foreach (var caseEntry in stateOfTheWorld.cases)
+				{
+					var case_ = caseEntry.Value;
+
+					if (case_.annotated_selected_variants_filename == "" || new FileInfo(case_.annotated_selected_variants_filename).LastWriteTime > oldestFile)
+					{
+						Console.WriteLine("Case " + case_.case_id + " either doesn't have an annotated selected variants file, or it is newer than a gene scatter graph file that depends on it.");
+						return false;
+					}
+
+					if (case_.tumor_dna_mapped_base_count_filename == "" || new FileInfo(case_.tumor_dna_mapped_base_count_filename).LastWriteTime > oldestFile ||
+						case_.tumor_rna_mapped_base_count_filename == "" || new FileInfo(case_.tumor_rna_mapped_base_count_filename).LastWriteTime > oldestFile)
+					{
+						Console.WriteLine("Case " + case_.case_id + " either doesn't have a tumor mapped base count file, or it is newer than a gene scatter graph file that depends on it.");
+						return false;
+					}
+				}
+
+				return true;
+			} // EvaluateDependencies
+
+		} // FPKMProcessingStage
+
+		//
+		// This represents the state of the world.  Processing stages look at this state and generate actions to move us along.
+		//
+		class StateOfTheWorld
         {
             public StateOfTheWorld(ASETools.Configuration configuration_) 
             {
@@ -1778,6 +1921,16 @@ namespace ASEProcessManager
 					{
 						fileSizesFromGDC.Add(case_.normal_copy_number_file_id, case_.normal_copy_number_size);
 					}
+
+					if (case_.tumor_fpkm_file_id != "")
+					{
+						fileSizesFromGDC.Add(case_.tumor_fpkm_file_id, case_.tumor_fpkm_size);
+					}
+
+					if (case_.normal_fpkm_file_id != "")
+					{
+						fileSizesFromGDC.Add(case_.normal_fpkm_file_id, case_.normal_fpkm_size);
+					}
 				}
 
             }
@@ -1853,6 +2006,7 @@ namespace ASEProcessManager
             jobAddString = @"job add %1 /exclusive /numnodes:1-1 /scheduler:" + stateOfTheWorld.configuration.hpcScheduler + " ";
             
             Console.WriteLine();
+
 
             if (null != stateOfTheWorld.cases)
             {
@@ -1976,8 +2130,10 @@ namespace ASEProcessManager
 			processingStages.Add(new SelectGenesProcessingStage());
 			processingStages.Add(new CountMappedBasesProcessingStage());
 			processingStages.Add(new GenerateScatterGraphsProcessingStage());
+			//processingStages.Add(new MethylationProcessingStage());
+			processingStages.Add(new FPKMProcessingStage());
 
-			if (checkDependencies)
+            if (checkDependencies)
             {
                 bool allDependenciesOK = true;
                 foreach (var processingStage in processingStages)

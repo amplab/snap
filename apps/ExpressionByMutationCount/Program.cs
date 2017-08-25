@@ -537,12 +537,12 @@ namespace ExpressionByMutationCount
         static void WriteFileHeader(StreamWriter outputFile, bool perChromosome)
         {
             outputFile.Write("Hugo Symbol");
-            for (int exclusive = 0; exclusive < 2; exclusive++)
+            for (int inclusive = 0; inclusive < 2; inclusive++)
             {
                 for (int mu = 0; mu < (forAlleleSpecificExpression ? 1 : 2); mu++)
                 {
                     int width = 0;
-                    string muString = ((mu == 0) ? "" : " mu") + (exclusive == 0 ? "" : " exclusive");
+                    string muString = ((mu == 0) ? "" : " mu") + (inclusive == 0 ? " exclusive" : "");
                     for (int i = 0; i < ASETools.nRegions - 1 /* -1 is because we don't do whole autosome here*/; i++)
                     {
                         WriteHeaderGroup(width + "Kbp", outputFile, muString);
@@ -737,7 +737,7 @@ namespace ExpressionByMutationCount
                 readTimer.Stop();
 
                 var expressionForThisCase = new Dictionary<string, ASETools.AlleleSpecificSignal>();
-                foreach (var regionalSignalEntry in regionalSignalFile)
+                foreach (var regionalSignalEntry in regionalSignalFile.Item1)
                 {
                     expressionForThisCase.Add(regionalSignalEntry.Key, new ASETools.AlleleSpecificSignal(regionalSignalEntry.Key, regionalSignalEntry.Value));
                 }

@@ -53,6 +53,8 @@ namespace ExtractMAFLines
                       x.Variant_Classification == "IGR" ||
                       x.Variant_Classification == "Intron" ||
                       x.Variant_Classification == "Silent" || 
+                      x.Variant_Classification == "3'UTR" ||
+                      x.Variant_Classification == "5'UTR" ||
                       x.t_alt_count * 5 < x.t_depth ||
                       x.Chromosome.StartsWith("chrM")
                       )

@@ -73,16 +73,11 @@ obj
 /apps/MannWhitney/bin
 /apps/SummarizeSelectedVariantCountsByGene/bin
 /apps/ApplyBonferroniCorrection/bin
+/apps/ChangeGenomeBuild/bin
 /apps/MutationDistributions/bin
 /apps/WriteIGVScript/bin
 /tests/AVLTest/bin
 /tests/MannWhitneyTest/bin
 /apps/CheckASEConsistency/bin
-
-
-
-
-
-
-
+/apps/CountMAFs/bin
 

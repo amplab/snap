@@ -201,19 +201,19 @@ namespace GenerateCases
             Console.WriteLine(allCases.Count() + " (plus " + nDuplicateCases + " duplicates) in " + ASETools.ElapsedTimeInSeconds(stopwatch) + ", " + allCases.Count() * 1000 / stopwatch.ElapsedMilliseconds + "/s");
 
             //
-            // Now run through all of the cases looking to see which have files for tumor and matched normal DNA and tumor RNA.
+            // Now run through all of the cases looking to see which have files for tumor and matched normal DNA and tumor RNA and copy number.
             //
             int nMissingTumorDNA = 0;
             int nMissingNormalDNA = 0;
             int nMissingMatchedDNA = 0; // We have DNA, but not a pair that corresponds to what was used to generate the MAF
             int nMissingTumorRNA = 0;
             int nMissingMAF = 0;
+            int nMissingCopyNumber = 0;
             int nComplete = 0;
             int nWithNormalRNA = 0;
             int nWithTumorMethylation = 0;
 			int nWithTNMethylation = 0;
-			int nWithTumorCopyNumber = 0;
-			int nWithTNCopyNumber = 0;
+			int nWithNormalCopyNumber = 0;
 
             Console.Write("Loading files for cases...");
             periodicStopwatch.Stop();
@@ -224,8 +224,10 @@ namespace GenerateCases
 
             var cases = new Dictionary<string, ASETools.Case>();
 
+			// Load in old cases to get old maf lines
+			var pastCases = ASETools.Case.LoadCases(@"\\msr-genomics-0\d$\gdc\cases.txt");
 
-            const string mafCondition = "{\"op\":\"in\",\"content\":{\"field\":\"data_format\",\"value\":[\"MAF\"]}}";
+			const string mafCondition = "{\"op\":\"in\",\"content\":{\"field\":\"data_format\",\"value\":[\"MAF\"]}}";
             const string bamOrTxtCondition = "{\"op\":\"in\",\"content\":{\"field\":\"data_format\",\"value\":[\"BAM\",\"TXT\"]}}";
  
             foreach (var caseEntry in allCases)
@@ -241,6 +243,8 @@ namespace GenerateCases
 				List<ASETools.GDCFile> maf = new List<ASETools.GDCFile>();
 				ASETools.GDCFile tumorCopyNumber = null;
 				ASETools.GDCFile normalCopyNumber = null;
+				ASETools.GDCFile tumorFPKM = null;
+				ASETools.GDCFile normalFPKM = null;
 
 				from = 1;
 
@@ -258,7 +262,6 @@ namespace GenerateCases
                     string fileCondition = "{\"op\":\"in\",\"content\":{\"field\":\"cases.case_id\",\"value\":[\"" + gdcCase.case_id + "\"]}}";
                     string notMAFFilter = "{\"op\":,\"and\",\"content\":[" + fileCondition + "," + bamOrTxtCondition + "]}";
                     string mafFFilter = "{\"op\":,\"and\",\"content\":[" + fileCondition + "," + mafCondition + "]}";
-
 
                     var response = ASETools.DownloadStringWithRetry(webClient, 
                         ASETools.urlPrefix + "files?from=" + from + "&size=100&pretty=true&filters=" + fileCondition + 
@@ -427,11 +430,25 @@ namespace GenerateCases
 										normalCopyNumber = ASETools.GDCFile.selectNewestUpdated(normalCopyNumber, file);
 									}
 								}
+								else if (file.data_type == "Gene Expression Quantification" && file.file_name.Contains("FPKM.txt")) // we only want normal FPKM
+								{
+									if (tumor)
+									{
+										tumorFPKM = ASETools.GDCFile.selectNewestUpdated(tumorFPKM, file);
+									}
+									else
+									{
+										normalFPKM = ASETools.GDCFile.selectNewestUpdated(normalFPKM, file);
+									}
+								}
+
+								
 							}
                         } // Foreach file in this batch
                     } // If file data parsed
 
                     from += pagination.count;
+
 
                     if (from >= pagination.total)
                     {
@@ -440,7 +457,12 @@ namespace GenerateCases
 
                 } // forever (looping over file pagination)
 
-                var mafFileIds = maf.Select(x => x.file_id);
+				// This is commented out because the MAF files from the TCGA server
+				// are now 7.0, and we are running on 6.0
+				//var mafFileIds = maf.Select(x => x.file_id);
+
+				// get old maf file ids
+				var mafFileIds = pastCases.Where(r => r.Value.case_id == gdcCase.case_id).Select(r => r.Value.maf_file_id);
 
                 if (tumorDNA.Count() == 0)
                 {
@@ -457,6 +479,10 @@ namespace GenerateCases
                 else if (mafFileIds.Intersect(mafManifestFileIds).Count() == 0)
                 {
                     nMissingMAF++;
+                }
+                else if (tumorCopyNumber == null)
+                {
+                    nMissingCopyNumber++;
                 }
                 else
                 {
@@ -561,31 +587,18 @@ namespace GenerateCases
 							}
 						}
 
-						bool hasTumorCopyNumber = false;
+					    case_.tumor_copy_number_file_id = tumorCopyNumber.file_id;
+                        case_.tumor_copy_number_size = tumorCopyNumber.file_size;
+                        case_.tumor_copy_number_file_md5 = tumorCopyNumber.md5sum;
 
-						if (null != tumorCopyNumber)
+					    if (downloadedFiles.ContainsKey(case_.tumor_copy_number_file_id))
                         {
-							hasTumorCopyNumber = true;
-
-                            nWithTumorCopyNumber++;
-
-							case_.tumor_copy_number_file_id = tumorCopyNumber.file_id;
-                            case_.tumor_copy_number_size = tumorCopyNumber.file_size;
-                            case_.tumor_copy_number_file_md5 = tumorCopyNumber.md5sum;
-
-                            if (downloadedFiles.ContainsKey(case_.tumor_copy_number_file_id))
-                            {
-                                case_.tumor_copy_number_filename = downloadedFiles[case_.tumor_copy_number_file_id].fileInfo.FullName;
-                            }
+                            case_.tumor_copy_number_filename = downloadedFiles[case_.tumor_copy_number_file_id].fileInfo.FullName;
                         }
 
 						if (null != normalCopyNumber)
 						{
-							// keep track of samples that have both tumor and normal copy number
-							if (hasTumorCopyNumber)
-							{
-								nWithTNCopyNumber++;
-							}
+							nWithNormalCopyNumber++;
 
 							case_.normal_copy_number_file_id = normalCopyNumber.file_id;
 							case_.normal_copy_number_size = normalCopyNumber.file_size;
@@ -594,6 +607,28 @@ namespace GenerateCases
 							if (downloadedFiles.ContainsKey(case_.normal_copy_number_file_id))
 							{
 								case_.normal_copy_number_filename = downloadedFiles[case_.normal_copy_number_file_id].fileInfo.FullName;
+							}
+						}
+						if (null != tumorFPKM)
+						{
+							case_.tumor_fpkm_file_id = tumorFPKM.file_id;
+							case_.tumor_fpkm_size = tumorFPKM.file_size;
+							case_.tumor_fpkm_file_md5 = tumorFPKM.md5sum;
+
+							if (downloadedFiles.ContainsKey(case_.tumor_fpkm_file_id))
+							{
+								case_.tumor_fpkm_filename = downloadedFiles[case_.tumor_fpkm_file_id].fileInfo.FullName;
+							}
+						}
+						if (null != normalFPKM)
+						{
+							case_.normal_fpkm_file_id = normalFPKM.file_id;
+							case_.normal_fpkm_size = normalFPKM.file_size;
+							case_.normal_fpkm_file_md5 = normalFPKM.md5sum;
+
+							if (downloadedFiles.ContainsKey(case_.normal_fpkm_file_id))
+							{
+								case_.tumor_fpkm_filename = downloadedFiles[case_.normal_fpkm_file_id].fileInfo.FullName;
 							}
 						}
 
@@ -618,9 +653,9 @@ namespace GenerateCases
             Console.WriteLine(ASETools.ElapsedTimeInSeconds(periodicStopwatch));
 
             Console.WriteLine("Of " + allCases.Count() + ", " + nMissingTumorDNA + " don't have tumor DNA, " + nMissingNormalDNA + " don't have matched normal DNA, " + nMissingTumorRNA + " don't have tumor RNA, " 
-                + nMissingMAF + " don't have MAFs and " + nComplete + " are complete.  Of the complete, " + nWithNormalRNA + " also have normal RNA. \n " 
-				+ nWithTumorMethylation + " have tumor methylation, and " + nWithTNMethylation + " have both normal and tumor methylation.\n" 
-				+ nWithTumorCopyNumber + " have tumor copy number, and " + nWithTNCopyNumber + " have both normal and tumor copy number.\n");
+                + nMissingMAF + " don't have MAFs," + nMissingCopyNumber + " don't have copy number, and " + nComplete + " are complete.  Of the complete, " + nWithNormalRNA + " also have normal RNA." 
+				+ nWithTumorMethylation + " have tumor methylation, and " + nWithTNMethylation + " have both normal and tumor methylation, and" 
+				+ nWithNormalCopyNumber + " have normal copy number.");
 
 			ASETools.Case.SaveToFile(cases, configuration.casesFilePathname);
 

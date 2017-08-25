@@ -66,13 +66,32 @@ namespace CheckDone
                     // Not compressed, so just seek to the end of the file.  This skips checking for multiple **done** lines, but
                     // that's not really a problem I can forsee happening.
                     //
-                    FileStream filestream;
-                    try
+                    FileStream filestream = null;
+                    int retryCount = 0;
+                    while (true)
                     {
-                        filestream = new FileStream(filename, FileMode.Open);
-                    } catch
+                        try
+                        {
+                            filestream = new FileStream(filename, FileMode.Open);
+                            break;
+                        }
+                        catch (Exception e)
+                        {
+                            if (e is IOException && (e.HResult & 0xffff) == 32 /* sharing violation */ && retryCount < 3)
+                            {
+                                retryCount++;
+                                Thread.Sleep(1000);
+                            }
+                            else
+                            {
+                                Console.WriteLine("Exception opening " + filename + ", ignoring.  " + e.GetType() + ": " + e.Message + " retry count " + retryCount + ", HRESULT " + (e.HResult & 0xffff));
+                                break;
+                            }
+                        }
+                    }
+
+                    if (filestream == null)
                     {
-                        Console.WriteLine("Exception opening " + filename + ", ignoring.");
                         continue;
                     }
 
@@ -162,7 +181,6 @@ namespace CheckDone
                 HandleFilename(case_.normal_rna_mapped_base_count_filename);
                 HandleFilename(case_.tumor_rna_mapped_base_count_filename);
                 HandleFilename(case_.selected_variant_counts_by_gene_filename);
-                HandleFilename(case_.tumor_regional_methylation_filename);
             }
 
             Console.Write("Processing " + totalFiles + " files in " + FilenamesByDataDirectory.Count() + " data directories (one dot/hundred): ");
