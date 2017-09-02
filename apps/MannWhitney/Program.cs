@@ -72,7 +72,7 @@ namespace MannWhitney
 
             ASETools.MannWhitney<Mutation>.GetValue getValue = new ASETools.MannWhitney<Mutation>.GetValue(m => m.RatioOfRatios);
             ASETools.MannWhitney<Mutation>.WhichGroup whichGroup = new ASETools.MannWhitney<Mutation>.WhichGroup(m => m.isSingle);
-            var scatterGraphLines = ASETools.GeneScatterGraphLine.LoadAllGeneScatterGraphEntries(configuration.geneScatterGraphsDirectory, false, "*");
+            var scatterGraphLines = ASETools.GeneScatterGraphLine.LoadAllGeneScatterGraphLines(configuration.geneScatterGraphsDirectory, false, "*");
 
             var allHugoSymbols = new HashSet<string>();
             scatterGraphLines.ForEach(s => allHugoSymbols.Add(s.Hugo_Symbol));

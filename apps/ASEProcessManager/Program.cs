@@ -537,7 +537,7 @@ namespace ASEProcessManager
 						nAddedToScript++;
 					}
 
-                    casesToProcess += case_.case_id + " ";  // Batch them both to allow for thread parallism within the program and also to reduce the number of (slow) job add commands to set up the script.
+                    casesToProcess += case_.case_id + " ";  // Batch them both to allow for thread paralleleism within the program and also to reduce the number of (slow) job add commands to set up the script.
 
                     if (casesToProcess.Count() > 1000)
                     {

@@ -364,7 +364,7 @@ namespace MethylationAnalysis
 			// If no genes were selected, run all genes that are significant
 			if (selectedGenes.Count() == 0)
 			{
-				var significantResults = ASETools.CreateStreamReaderWithRetry(configuration.finalResultsDirectory + "AlleleSpecificExpressionDistributionByMutationCount_bonferroni.txt");
+				var significantResults = ASETools.CreateStreamReaderWithRetry(configuration.finalResultsDirectory + ASETools.AlleleSpecificExpressionDistributionByMutationCountFilenameBase + "_bonferroni.txt");
 				significantResults.ReadLine();
 
 				string line;

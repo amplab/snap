@@ -63,14 +63,54 @@ namespace ApplyBonferroniCorrection
         //
         // Apply the bonferroni correction and update our stats.
         //
-        static int ProcessSinglePValue(string hugoSymbol, double ASE, double ASENotOne, string inputFilename, ref double p, int bonferroniCorrection, bool exclusive, bool oneVsNotOne, int regionIndex, PValueStats pValueStats, ASETools.Histogram histogramOfPValues, StreamWriter allSignificantResultsFile)
+        static int ProcessSinglePValue(string hugoSymbol, int nOne, int nOther, double ASE, double ASENotOne, string inputFilename, ref double p, int bonferroniCorrection, 
+            bool exclusive, bool oneVsNotOne, int regionIndex, PValueStats pValueStats, HistogramSet histogramSet, StreamWriter allSignificantResultsFile)
         {
             if (p == double.NegativeInfinity)   // Not a p-value because not enough data
             {
                 return 0;
             }
 
-            histogramOfPValues.addValue(p);
+            histogramSet.allResults.addValue(p);
+            if (oneVsNotOne)
+            {
+                histogramSet.oneVsNotOne.addValue(p);
+            } else
+            {
+                histogramSet.oneVsMany.addValue(p);
+            }
+
+            if (ASETools.GetFileNameFromPathname(inputFilename).Contains("_"))
+            {
+                histogramSet.singleDisease.addValue(p);
+            } else
+            {
+                histogramSet.panCancer.addValue(p);
+            }
+
+            if (nOne > 20 && nOther > 20)
+            {
+                histogramSet.nGreaterThan20.addValue(p);
+            } else
+            {
+                histogramSet.nLessThanOrEqualTo20.addValue(p);
+            }
+
+            if (exclusive)
+            {
+                histogramSet.exclusive.addValue(p);
+            } else
+            {
+                histogramSet.inclusive.addValue(p);
+            }
+
+            if (regionIndex > 11)
+            {
+                histogramSet.atLeastAMegabase.addValue(p);
+            } else
+            {
+                histogramSet.lessThanAMegabase.addValue(p);
+            }
 
             p *= bonferroniCorrection;
 
@@ -95,7 +135,8 @@ namespace ApplyBonferroniCorrection
             }            
         }
 
-        static int ProcessSingleResult(string hugoSymbol, string inputFilename, ASETools.SingleExpressionResult singleResult, int bonferroniCorrection, bool exclusive, int regionIndex, PValueStats pValueStats, ASETools.Histogram histogramOfPValues, StreamWriter allSignificantResultsFile)
+        static int ProcessSingleResult(string hugoSymbol, string inputFilename, ASETools.SingleExpressionResult singleResult, int bonferroniCorrection, bool exclusive, int regionIndex, 
+            PValueStats pValueStats, HistogramSet histogramSet, StreamWriter allSignificantResultsFile)
         {
             int nSignificantResults = 0;
 
@@ -108,8 +149,8 @@ namespace ApplyBonferroniCorrection
                 ASENotOne = (singleResult.zeroMutationStats.n * singleResult.zeroMutationStats.mean + singleResult.moreThanOneMutationStats.n * singleResult.moreThanOneMutationStats.mean) / (singleResult.zeroMutationStats.n + singleResult.moreThanOneMutationStats.n);
             }
 
-            nSignificantResults += ProcessSinglePValue(hugoSymbol, singleResult.oneMutationStats.mean, ASENotOne, inputFilename, ref singleResult.oneVsMany, bonferroniCorrection, exclusive, false, regionIndex, pValueStats, histogramOfPValues, allSignificantResultsFile);
-            nSignificantResults += ProcessSinglePValue(hugoSymbol, singleResult.oneMutationStats.mean, ASENotOne, inputFilename, ref singleResult.oneVsNotOne, bonferroniCorrection, exclusive, true, regionIndex, pValueStats, histogramOfPValues, allSignificantResultsFile);
+            nSignificantResults += ProcessSinglePValue(hugoSymbol, singleResult.oneMutationStats.n, singleResult.moreThanOneMutationStats.n, singleResult.oneMutationStats.mean, singleResult.moreThanOneMutationStats.mean, inputFilename, ref singleResult.oneVsMany, bonferroniCorrection, exclusive, false, regionIndex, pValueStats, histogramSet, allSignificantResultsFile);
+            nSignificantResults += ProcessSinglePValue(hugoSymbol, singleResult.oneMutationStats.n, singleResult.moreThanOneMutationStats.n + singleResult.zeroMutationStats.n, singleResult.oneMutationStats.mean, ASENotOne, inputFilename, ref singleResult.oneVsNotOne, bonferroniCorrection, exclusive, true, regionIndex, pValueStats, histogramSet, allSignificantResultsFile);
 
             if (singleResult.oneMutationStats.n > 0 && singleResult.zeroMutationStats.n > 0 && singleResult.oneMutationStats.mean != 0 && (singleResult.oneVsNotOne <= configuration.significanceLevel || singleResult.oneVsNotOne <= configuration.significanceLevel))
             {
@@ -129,7 +170,7 @@ namespace ApplyBonferroniCorrection
         }
 
 
-        static int ProcessFile(string filename, StreamWriter allSignificantResultsFile, int bonferroniCorrection, ASETools.Histogram histogramOfPValues)
+        static int ProcessFile(string filename, StreamWriter allSignificantResultsFile, int bonferroniCorrection, HistogramSet histogramSet)
         {
             if (!filename.EndsWith(".txt"))
             {
@@ -158,8 +199,8 @@ namespace ApplyBonferroniCorrection
 				
                 for (int i = 0; i < ASETools.nRegions; i++)
                 {
-                    nSignificantReuslts += ProcessSingleResult(result.hugo_symbol, filename, result.nonExclusiveResultsByRange[i], bonferroniCorrection, false, i, pValueStats, histogramOfPValues, allSignificantResultsFile);
-                    nSignificantReuslts += ProcessSingleResult(result.hugo_symbol, filename, result.exclusiveResultsByRange[i], bonferroniCorrection, true, i, pValueStats, histogramOfPValues, allSignificantResultsFile);
+                    nSignificantReuslts += ProcessSingleResult(result.hugo_symbol, filename, result.nonExclusiveResultsByRange[i], bonferroniCorrection, false, i, pValueStats, histogramSet, allSignificantResultsFile);
+                    nSignificantReuslts += ProcessSingleResult(result.hugo_symbol, filename, result.exclusiveResultsByRange[i], bonferroniCorrection, true, i, pValueStats, histogramSet, allSignificantResultsFile);
                 }
 
                 outputFile.Write(ASETools.ConvertToExcelString(result.hugo_symbol) + "\t");
@@ -200,7 +241,7 @@ namespace ApplyBonferroniCorrection
             return nSignificantReuslts;
         }
 
-        static void ProcessFileGroup(List<string> inputFilenames, StreamWriter allSignificantResultsFile, out ASETools.Histogram histogramOfPValues)
+        static void ProcessFileGroup(List<string> inputFilenames, StreamWriter allSignificantResultsFile, out HistogramSet histogramSet)
         {
             int bonferonniCorrection = 0;
             foreach (var inputFilename in inputFilenames)
@@ -216,14 +257,56 @@ namespace ApplyBonferroniCorrection
             Console.WriteLine();
 
             int totalSignificantResults = 0;
-            histogramOfPValues = new ASETools.Histogram(inputFilenames[0]);
+            histogramSet = new HistogramSet(inputFilenames[0]);
             foreach (var inputFilename in inputFilenames)
             {
-                totalSignificantResults += ProcessFile(inputFilename, allSignificantResultsFile, bonferonniCorrection, histogramOfPValues);
+                totalSignificantResults += ProcessFile(inputFilename, allSignificantResultsFile, bonferonniCorrection, histogramSet);
             }
 
             Console.WriteLine("Set total of " + totalSignificantResults + " signficant results");
             Console.WriteLine();
+        }
+
+        class HistogramSet
+        {
+            public HistogramSet(string namePrefix)
+            {
+                allResults = new ASETools.Histogram(namePrefix + " all results");
+                oneVsMany = new ASETools.Histogram(namePrefix + " one vs. many");
+                oneVsNotOne = new ASETools.Histogram(namePrefix + " one vs. not one");
+                panCancer = new ASETools.Histogram(namePrefix + " pan cancer");
+                singleDisease = new ASETools.Histogram(namePrefix + " single disease");
+                nGreaterThan20 = new ASETools.Histogram(namePrefix + " n > 20");
+                nLessThanOrEqualTo20 = new ASETools.Histogram(namePrefix + " n <= 20");
+                lessThanAMegabase = new ASETools.Histogram(namePrefix + " less than a megabase");
+                atLeastAMegabase = new ASETools.Histogram(namePrefix + " at least a megabase");
+                inclusive = new ASETools.Histogram(namePrefix + " inclusive");
+                exclusive = new ASETools.Histogram(namePrefix + " exclusive");
+
+                allHistograms.Add(allResults);
+                allHistograms.Add(oneVsMany);
+                allHistograms.Add(oneVsNotOne);
+                allHistograms.Add(panCancer);
+                allHistograms.Add(singleDisease);
+                allHistograms.Add(nGreaterThan20);
+                allHistograms.Add(nLessThanOrEqualTo20);
+                allHistograms.Add(lessThanAMegabase);
+                allHistograms.Add(atLeastAMegabase);
+                allHistograms.Add(inclusive);
+                allHistograms.Add(exclusive);
+            }
+            public ASETools.Histogram allResults;
+            public ASETools.Histogram oneVsMany;
+            public ASETools.Histogram oneVsNotOne;
+            public ASETools.Histogram panCancer;
+            public ASETools.Histogram singleDisease;
+            public ASETools.Histogram nGreaterThan20;
+            public ASETools.Histogram nLessThanOrEqualTo20;
+            public ASETools.Histogram lessThanAMegabase;
+            public ASETools.Histogram atLeastAMegabase;
+            public ASETools.Histogram inclusive;
+            public ASETools.Histogram exclusive;
+            public List<ASETools.Histogram> allHistograms = new List<ASETools.Histogram>();
         }
 
         static void Main(string[] args)
@@ -250,12 +333,12 @@ namespace ApplyBonferroniCorrection
             List<List<string>> inputFileSets = new List<List<string>>();
 
             inputFileSets.Add(Directory.GetFiles(configuration.finalResultsDirectory, "ExpressionDistributionByMutationCount*.txt").Where(x => !x.Contains(ASETools.bonferroniExtension)).ToList());
-            inputFileSets.Add(Directory.GetFiles(configuration.finalResultsDirectory, "AlleleSpecificExpressionDistributionByMutationCount*.txt").Where(x => !x.Contains(ASETools.bonferroniExtension)).ToList());
+            inputFileSets.Add(Directory.GetFiles(configuration.finalResultsDirectory, ASETools.AlleleSpecificExpressionDistributionByMutationCountFilenameBase + "*.txt").Where(x => !x.Contains(ASETools.bonferroniExtension)).ToList());
 
             var allSignificantResultsFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.AllSignificantResultsFilename);
             allSignificantResultsFile.WriteLine("Hugo Symbol\tASE (one mutation)\tASE (not one mutation)\tinput file\texclusive\tOneVsMany\trange index\trange\tp");
 
-            var histogramsOfPValues = new List<ASETools.Histogram>();
+            var histogramSets = new List<HistogramSet>();
 
             foreach (var inputFileSet in inputFileSets)
             {
@@ -263,9 +346,12 @@ namespace ApplyBonferroniCorrection
                 {
                     continue;
                 }
-                ASETools.Histogram histogramOfPValues;
-                ProcessFileGroup(inputFileSet, allSignificantResultsFile, out histogramOfPValues);
-                histogramsOfPValues.Add(histogramOfPValues);
+
+                HistogramSet histogramSet;
+
+                ProcessFileGroup(inputFileSet, allSignificantResultsFile, out histogramSet);
+
+                histogramSets.Add(histogramSet);
             }
 
             allSignificantResultsFile.WriteLine("**done**");
@@ -273,14 +359,14 @@ namespace ApplyBonferroniCorrection
 
             var pValueHistogramFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.pValueHistogramFilename);
 
-            foreach (var histogramOfPValues in histogramsOfPValues)
+            foreach (var histogramSet in histogramSets)
             {
-                pValueHistogramFile.WriteLine(histogramOfPValues.name);
-                pValueHistogramFile.WriteLine("Min\tCount\tpdf\tcdf");
-                var histogramResults = histogramOfPValues.ComputeHistogram(0, 1, .01, "N2");
-                for (int i = 0; i < histogramResults.Length; i++)
+                foreach (var histogram in histogramSet.allHistograms)
                 {
-                    pValueHistogramFile.WriteLine(histogramResults[i].minValue + "\t" + histogramResults[i].count + "\t" + histogramResults[i].pdfValue + "\t" + histogramResults[i].cdfValue);
+
+                    pValueHistogramFile.WriteLine(histogram.name);
+                    pValueHistogramFile.WriteLine(ASETools.HistogramResultLine.Header());
+                    histogram.ComputeHistogram(0, 1, .01, "N2").ToList().ForEach(x => pValueHistogramFile.WriteLine(x));
                 }
             }
 

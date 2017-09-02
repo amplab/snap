@@ -80,4 +80,8 @@ obj
 /tests/MannWhitneyTest/bin
 /apps/CheckASEConsistency/bin
 /apps/CountMAFs/bin
+/apps/ASEMap/bin
+/apps/GenerateHistogramsForSignificantResults/bin
+/apps/PerGeneRNARatio/bin
+
 

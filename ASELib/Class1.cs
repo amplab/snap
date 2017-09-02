@@ -263,11 +263,9 @@ namespace ASELib
 
 
 
-			public static List<GeneScatterGraphLine> LoadAllGeneScatterGraphEntries(string directoryName, bool fromUnfiltered, string hugoSymbol /* this may be * to load all*/)
+			public static List<GeneScatterGraphLine> LoadAllGeneScatterGraphLines(string directoryName, bool fromUnfiltered, string hugoSymbol /* this may be * to load all*/)
 			{
 				var geneScatterGraphEntries = new List<GeneScatterGraphLine>();
-
-
 
                 string[] wantedFieldsArrayUnfilteredVersion =
                 {
@@ -2306,6 +2304,10 @@ namespace ASELib
         public const string GenesByFunnyASECountFilename = "ASEInconsistencyByGene.txt";
         public const string AllSignificantResultsFilename = "AllSignificantResults.txt";
         public const string pValueHistogramFilename = "pValueHistogram.txt";
+        public const string AlleleSpecificExpressionDistributionByMutationCountFilenameBase = "AlleleSpecificExpressionDistributionByMutationCount";
+        public const string HistogramsForSignficantResultsFilename = "HistogramsForSignificantResults.txt";
+        public const string PerGeneRNARatioFilename = "PerGeneRNARatio.txt";
+        public const string ASEMapFilename = "ASEMap.txt";
 
         public class DerivedFile
         {
@@ -4844,7 +4846,7 @@ namespace ASELib
 			}
 
 			// Returns a tuple of ExpressionMap, and list of labels corresponding to the expression values in the dictionary
-			public static Tuple<Dictionary<string, double[]>, List<string>> ReadFile(string filename, bool skipFirstLine = true, bool includeMutationCount = false)
+			public static Tuple<Dictionary<string, double[]>, List<string>> ReadFile(string filename, bool skipFirstLine = true, bool includeMutationCount = false, List<string> genesToInclude = null)
 			{
 				// keeps track of index of distances
 				List<string> index = new List<string>();
@@ -4855,6 +4857,15 @@ namespace ASELib
 				var reader = CreateStreamReaderWithRetry(filename);
 
 				string line;
+
+                List<string> excelizedGenesToInclude;
+                if (genesToInclude == null)
+                {
+                    excelizedGenesToInclude = null;
+                } else
+                {
+                    excelizedGenesToInclude = genesToInclude.Select(x => ConvertToExcelString(x)).ToList();
+                }
 
 				// skip first line if version or other info resides there
 				if (skipFirstLine)
@@ -4875,6 +4886,25 @@ namespace ASELib
 					{
 						break;
 					}
+
+                    if (excelizedGenesToInclude != null)
+                    {
+                        bool includeThisGene = false;
+
+                        foreach (var gene in excelizedGenesToInclude)
+                        {
+                            if (line.StartsWith(gene))
+                            {
+                                includeThisGene = true;
+                                break;
+                            }
+                        }
+
+                        if (!includeThisGene)
+                        {
+                            continue;
+                        }
+                    }
 
 					string[] fields = line.Split('\t');
 
@@ -4916,6 +4946,47 @@ namespace ASELib
                 return value.ToString();
             }
 		} // RegionalSignalFile
+
+        public class ASESignalLine // Should probably add the per-chromosome stuff here, too.
+        {
+            public static Dictionary<string, ASESignalLine> ReadFile(string filename, List<string> genesToInclude = null)
+            {
+                var regionalSignalFile = RegionalSignalFile.ReadFile(filename, true, true, genesToInclude);
+
+                var retVal = new Dictionary<string, ASESignalLine>();
+
+                foreach (var regionalSignalEntry in regionalSignalFile.Item1)
+                {
+                    var regionalSignal = regionalSignalEntry.Value;
+
+                    var inclusiveASE = new double[ASETools.nRegions];
+                    Array.Copy(regionalSignal, 1, inclusiveASE, 0, ASETools.nRegions);
+
+                    var exclusiveASE = new double[ASETools.nRegions];
+                    Array.Copy(regionalSignal, 1 + ASETools.nRegions, exclusiveASE, 0, ASETools.nRegions);
+
+                    retVal.Add(regionalSignalEntry.Key, new ASESignalLine((int)regionalSignal[0], regionalSignalEntry.Key, inclusiveASE, exclusiveASE));
+                }
+
+                return retVal;
+            }
+
+            ASESignalLine(int nMutations_, string hugo_symbol_, double[] inclusiveASE_, double [] exclusiveASE_)
+            {
+                nMutations = nMutations_;
+                nMutationsIndex = (nMutations < 2) ? nMutations : 2;
+                hugo_symbol = hugo_symbol_;
+                inclusiveASE = inclusiveASE_;
+                exclusiveASE = exclusiveASE_;
+            }
+
+            public readonly int nMutations;
+            public readonly int nMutationsIndex;    // 0, 1 or 2 depending on 0, 1, or > 1 mutations
+            public readonly string hugo_symbol;
+            public readonly double[] inclusiveASE;
+            public readonly double[] exclusiveASE;
+        } // ASESignalLine
+
 
         //
         // This breaks out the array of doubles from the entires in a RegionalSignalFile into a class that names them for the allele-specific expression case
@@ -7098,6 +7169,16 @@ namespace ASELib
             public double total = 0;    // The sum of all of the values in this line
             public double pdfValue = 0;
             public double cdfValue = 0;
+
+            public override string ToString()
+            {
+                return minValue + "\t" + count + "\t" + total + "\t" + pdfValue + "\t" + cdfValue;
+            }
+
+            public static string Header()
+            {
+                return "minVaue\tcount\ttotal\tpdf\tcdf";
+            }
         } // HistogramResultLine
 
         public class Histogram

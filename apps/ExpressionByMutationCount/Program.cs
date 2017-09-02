@@ -85,7 +85,7 @@ namespace ExpressionByMutationCount
                 // Load the unfiltered scatter graph for this gene into memory.
                 //
 
-                var geneScatterPlotLines = ASETools.GeneScatterGraphLine.LoadAllGeneScatterGraphEntries(configuration.geneScatterGraphsDirectory, true, selectedGene.Hugo_Symbol);
+                var geneScatterPlotLines = ASETools.GeneScatterGraphLine.LoadAllGeneScatterGraphLines(configuration.geneScatterGraphsDirectory, true, selectedGene.Hugo_Symbol);
                 if (geneScatterPlotLines.Count() == 0)
                 {
                     //
@@ -403,7 +403,7 @@ namespace ExpressionByMutationCount
             public bool loadPerCaseState(Dictionary<string, string> sampleToParticipantIDMap, Dictionary<string, ASETools.Case> experimentsByRNAAnalysisID)
             {
 
-                var geneScatterPlotLines = ASETools.GeneScatterGraphLine.LoadAllGeneScatterGraphEntries(configuration.geneScatterGraphsDirectory, true, hugo_symbol);
+                var geneScatterPlotLines = ASETools.GeneScatterGraphLine.LoadAllGeneScatterGraphLines(configuration.geneScatterGraphsDirectory, true, hugo_symbol);
                 if (null == geneScatterPlotLines || geneScatterPlotLines.Count() == 0)
                 {
                     return false;
@@ -799,7 +799,7 @@ namespace ExpressionByMutationCount
                             process2Timer.Stop();
 
                             process3Timer.Start();
-                            if (thisExpression.exclusive[i] != double.NegativeInfinity)
+                            if (thisExpression.exclusive[i] != double.NegativeInfinity && i != 0) // Exclude i = 0, since exclusive in-gene is the same as inclusive in-gene, so it only serves to increase the Bonferroni factor without doing anything
                             {
                                 geneToProcess.AddExpression(disease, i, thisExpression.mutationCount, thisExpression.exclusive[i], case_.case_id, false, true);
                             }

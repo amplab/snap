@@ -84,6 +84,48 @@ namespace MannWhitneyTest
 			{
 				throw new ArgumentException("distributions should not differ. P-value too low");
 			}
+
+            var random = new Random();
+            var pValueHistogram = new ASETools.Histogram("p values for uniform distribution");
+            for (int i = 0; i < 100000; i++)
+            {
+                int group0Size = random.Next(50000) + 10;
+                int group1Size = random.Next(5000) + 10;
+
+                var randomValues = new List<ComparableElement>(); 
+                for (int j = 0; j < group0Size + group1Size; j++)
+                {
+                    randomValues.Add(new ComparableElement(random.NextDouble(), j < group0Size));
+                }
+
+                var p = ASETools.MannWhitney<ComparableElement>.ComputeMannWhitney(randomValues, randomValues[0], x => x.group, x => x.value, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U, out z);
+
+                if (enoughData)
+                {
+                    pValueHistogram.addValue(p);
+                }
+
+                if (i % 1000 == 999) Console.Write(".");
+            }
+
+            Console.WriteLine();
+
+            var outputFile = ASETools.CreateStreamWriterWithRetry("MannWhitneyTestPValueHistograms.txt");
+
+            outputFile.WriteLine("p value histogram (should be flat line because the input's a uniform distribution)");
+            outputFile.WriteLine(ASETools.HistogramResultLine.Header());
+            pValueHistogram.ComputeHistogram(0, 1, .01).ToList().ForEach(x => outputFile.WriteLine(x));
+
+            //
+            // Now generate a p-value histogram for a distribution more like what we're measuring with ASE.  The values are means of randomly sized uniform distributions.
+            //
+            pValueHistogram = new ASETools.Histogram("");
+            for (int iteration = 0; iteration < 100000; iteration++)
+            {
+
+            }
+
+            outputFile.Close();
 		}
 
 	}

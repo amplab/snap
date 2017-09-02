@@ -257,7 +257,7 @@ namespace ASEHeatMap
                 return;
             }
 
-            var selectedGeneNames = allSignificantResults.Where(x => x.inputFile == "AlleleSpecificExpressionDistributionByMutationCount.txt" && x.range_index > 5).Select(x => x.hugo_symbol).Distinct().ToArray();
+            var selectedGeneNames = allSignificantResults.Where(x => x.inputFile == ASETools.AllSignificantResultsFilename + ".txt" && x.range_index > 5).Select(x => x.hugo_symbol).Distinct().ToArray();
 
             var selectedGenes = new List<ASETools.GeneLocationInfo>();
             foreach (var geneName in selectedGeneNames)
