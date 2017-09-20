@@ -12,8 +12,6 @@ namespace ExpressionNearMutations
 {
     class Program
     {
-
-
 		static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
 
 		// Generic class to hold tumor/normal signal at a locus. Use for ASE, expression and ASM values.
@@ -127,6 +125,11 @@ namespace ExpressionNearMutations
                 // The cutoff we use here for choosing copy number variation is very loose (1.0).
                 // Setting this value to 1.0 looses 10-20% of annotated variants, depending on the sample.
                 var copyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
+                List<ASETools.CopyNumberVariation> normalCopyNumberVariation = null;
+                if (case_.normal_copy_number_filename != "")
+                {
+                    normalCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.normal_copy_number_filename, case_.normal_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
+                }
 
                 // Load MAF file for this case
                 var mafLines = ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, case_.maf_file_id, false);
@@ -199,27 +202,15 @@ namespace ExpressionNearMutations
 						double alleleSpecificExpressionNormal;
 
 						if (geneLocationInformation.genesByChromosome.ContainsKey(annotatedVariant.contig) &&
-                            annotatedVariant.IsASECandidate() && !annotatedVariant.somaticMutation)
+                            annotatedVariant.IsASECandidate(true, copyNumberVariation, configuration, perGeneASEMap, geneMap) && !annotatedVariant.somaticMutation)
 						{
-
-							// Filter out annotated variants that are in regions of high copy number variation
-							var overlappingCNV = copyNumberVariation.Where(cnv =>
-								cnv.OverlapsLocus(ASETools.chromosomeNameToNonChrForm(annotatedVariant.contig),
-								annotatedVariant.locus, annotatedVariant.locus + 1));
-							var overlapsCNV = overlappingCNV.Count() > 0;
-
-							if (overlapsCNV)
-							{
-								continue;
-							}
-
 							//
 							// Now convert to the amount of allele-specific expression.  50% is no ASE, while 0 or 100% is 100% ASE.
 							//
 							alleleSpecificExpression = annotatedVariant.GetTumorAlleleSpecificExpression();
 
 							// If we have the normal DNA and RNA for this sample, compute the normal ASE
-							if (annotatedVariant.normalRNAReadCounts != null && annotatedVariant.IsASECandidate(false))
+							if (annotatedVariant.normalRNAReadCounts != null && annotatedVariant.IsASECandidate(false, normalCopyNumberVariation, configuration, perGeneASEMap, geneMap))
 							{
 								alleleSpecificExpressionNormal = annotatedVariant.GetNormalAlleleSpecificExpression();
 								// add to data with normal
@@ -229,7 +220,6 @@ namespace ExpressionNearMutations
 								// add to data without normal
 								expressionValues.Add(annotatedVariant.contig, annotatedVariant.locus, alleleSpecificExpression, 0, false);
 							}
-
 						}
 
 					}
@@ -309,14 +299,16 @@ namespace ExpressionNearMutations
             Console.WriteLine("-a means to use allele-specific expression, as opposed to total expression.");
         }
 
-       // static ASETools.ASEConfirguation configuration;
+        static ASETools.Configuration configuration;
+        static ASETools.GeneMap geneMap;
+        static Dictionary<bool, Dictionary<string, ASETools.ASEMapPerGeneLine>> perGeneASEMap;
 
         static void Main(string[] args)
         {
 			var timer = new Stopwatch();
 			timer.Start();
 
-			var configuration = ASETools.Configuration.loadFromFile(args);
+			configuration = ASETools.Configuration.loadFromFile(args);
 
 			if (null == configuration)
 			{
@@ -338,15 +330,25 @@ namespace ExpressionNearMutations
 				Console.WriteLine("Unable to load cases file " + configuration.casesFilePathname + ".  You must generate cases before running ExpressionNearMutations.");
 			}
 
-			// set ASE flag, if specified
-			bool forAlleleSpecificExpression = configuration.commandLineArgs[0] == "-a";
+            perGeneASEMap = ASETools.ASEMapPerGeneLine.ReadFromFileToDictionary(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+
+            if (null == perGeneASEMap)
+            {
+                Console.WriteLine("You must first create the per-gene ASE map in " + configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+                return;
+            }
+
+            geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
+            geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
+
+            // set ASE flag, if specified
+            bool forAlleleSpecificExpression = configuration.commandLineArgs[0] == "-a";
 
 			int argsConsumed = 0;
 			if (forAlleleSpecificExpression)
 			{
 				argsConsumed = 1;
 			}
-
 
 			int minExamplesPerRegion = 1;   // If there are fewer than this, then ignore the region.
 
@@ -395,7 +397,7 @@ namespace ExpressionNearMutations
 			threads.ForEach(t => t.Join());
 
 			timer.Stop();
-            Console.WriteLine("Processed " + (configuration.commandLineArgs.Count() - (forAlleleSpecificExpression ? 1 : 0)) + " experiments in " + (timer.ElapsedMilliseconds + 500) / 1000 + " seconds");
+            Console.WriteLine("Processed " + (configuration.commandLineArgs.Count() - (forAlleleSpecificExpression ? 1 : 0)) + " cases in " + (timer.ElapsedMilliseconds + 500) / 1000 + " seconds");
         }
     }
 }

@@ -73,7 +73,7 @@ namespace ASEMap
                             continue;   // Just skip the low-n ones to avoid noise.
                         }
 
-                        outputFile.WriteLine(chromosomeEntry.Key + "\t" + regionEntry.Key +  "\t" + tumor + "\t" + region.nCases + "\t" + ((long)(ASETools.ChromosomeNameToIndex(chromosomeEntry.Key) - 1) * 300000000 + regionEntry.Key)/ regionSize + "\t" +
+                        outputFile.WriteLine(chromosomeEntry.Key + "\t" + regionEntry.Key + "\t" + tumor + "\t" + region.nCases + "\t" + ((long)(ASETools.ChromosomeNameToIndex(chromosomeEntry.Key) - 1) * 300000000 + regionEntry.Key) / regionSize + "\t" +
                             region.totalASE / region.nCases + "\t" + Math.Sqrt(region.nCases * region.totalASESquared - region.totalASE * region.totalASE) / region.nCases);
                     }
                 }
@@ -82,9 +82,15 @@ namespace ASEMap
 
         static ASEMap normalMap = new ASEMap();
         static ASEMap tumorMap = new ASEMap();
+        static PerGeneASE globalNormalPerGeneASE = new PerGeneASE();
+        static PerGeneASE globalTumorPerGeneASE = new PerGeneASE();
 
         static void WorkerThread(List<ASETools.Case> casesToProcess)
         {
+            var thisThreadMeasurements = new List<ASEMeasurement>();
+            var normalPerGeneASEThisThread = new PerGeneASE();
+            var tumorPerGeneASEThisThread = new PerGeneASE();
+
             while (true)
             {
                 ASETools.Case case_;
@@ -93,6 +99,10 @@ namespace ASEMap
                 {
                     if (casesToProcess.Count() == 0)
                     {
+                        allMeasurements.AddRange(thisThreadMeasurements);
+                        globalNormalPerGeneASE.mergeEqually(normalPerGeneASEThisThread);
+                        globalTumorPerGeneASE.mergeEqually(tumorPerGeneASEThisThread);
+
                         return;
                     }
 
@@ -106,8 +116,11 @@ namespace ASEMap
                     }
                 }
 
+                var normalPerGeneASEThisCase = new PerGeneASE();
+                var tumorPerGeneASEThisCase = new PerGeneASE();
+
                 var annotatedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
-                var copyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
+                var tumorCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
                 List<ASETools.CopyNumberVariation> normalCopyNumberVariation = null;
                 if (case_.normal_copy_number_filename != "")
                 {
@@ -128,40 +141,144 @@ namespace ASEMap
                         continue;   // Only use germline variants for the map.
                     }
 
-                    if (annotatedVariant.normalRNAReadCounts != null && annotatedVariant.IsASECandidate(false))
+                    if (annotatedVariant.IsASECandidate(false, normalCopyNumberVariation, null, null, geneMap)) // null out the per-gene ASE, since we're where it comes from
                     {
-                        bool overlapsCNV = false;
-                        if (normalCopyNumberVariation != null)
-                        {
-                            var overlappingCNV = copyNumberVariation.Where(cnv =>
-                                    cnv.OverlapsLocus(ASETools.chromosomeNameToNonChrForm(annotatedVariant.contig),
-                                    annotatedVariant.locus, annotatedVariant.locus + 1));
-                            overlapsCNV = overlappingCNV.Count() > 0;
-                        }
+ 
+                        normalMap.addASE(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetNormalAlleleSpecificExpression());
+                        thisThreadMeasurements.Add(new ASEMeasurement(annotatedVariant.GetNormalAlleleSpecificExpression(), false));
+                        normalPerGeneASEThisCase.recordSample(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetNormalAlleleSpecificExpression());
 
-                        if (!overlapsCNV)
-                        {
-                            normalMap.addASE(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetNormalAlleleSpecificExpression());
-                        }
                     }
 
-                    if (annotatedVariant.IsASECandidate())
+                    if (annotatedVariant.IsASECandidate(true, tumorCopyNumberVariation, null, null, geneMap)) // null out the per-gene ASE, since we're where it comes from
                     {
-                        var overlappingCNV = copyNumberVariation.Where(cnv =>
-                            cnv.OverlapsLocus(ASETools.chromosomeNameToNonChrForm(annotatedVariant.contig),
-                            annotatedVariant.locus, annotatedVariant.locus + 1));
-                        var overlapsCNV = overlappingCNV.Count() > 0;
+ 
+                        tumorMap.addASE(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetTumorAlleleSpecificExpression());
+                        thisThreadMeasurements.Add(new ASEMeasurement(annotatedVariant.GetTumorAlleleSpecificExpression(), true));
+                        tumorPerGeneASEThisCase.recordSample(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetTumorAlleleSpecificExpression());
+                    }
+                } // foreach variant
 
-                        if (!overlapsCNV)
-                        {
-                            tumorMap.addASE(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetTumorAlleleSpecificExpression());
-                        }
-                   }
+                normalPerGeneASEThisThread.mergeInOneSample(normalPerGeneASEThisCase);
+                tumorPerGeneASEThisThread.mergeInOneSample(tumorPerGeneASEThisCase);
+            } // while true (loop over cases)
+        } // WorkerThread
+
+        static int nCasesProcessed = 0;
+
+        class ASEMeasurement : IComparer<ASEMeasurement>
+        {
+            public ASEMeasurement(double ase_, bool tumor_)
+            {
+                ase = ase_;
+                tumor = tumor_;
+            }
+
+            public readonly double ase;
+            public readonly bool tumor;
+
+            public int Compare(ASEMeasurement a, ASEMeasurement b)
+            {
+                if (a.ase < b.ase) return -1;
+                if (a.ase > b.ase) return 1;
+                return 0;
+            }
+        }
+
+        static List<ASEMeasurement> allMeasurements = new List<ASEMeasurement>();
+
+        class PerGeneASE
+        {
+            class PerGeneData
+            {
+                public int n = 0;
+                public double totalASE = 0;
+                public double totalASESquared = 0;
+            }
+
+            Dictionary<string, PerGeneData> genes = new Dictionary<string, PerGeneData>();
+
+            public void mergeEqually(PerGeneASE peer)
+            {
+                foreach (var geneEntry in peer.genes)
+                {
+                    var hugoSymbol = geneEntry.Key;
+                    var perGeneData = geneEntry.Value;
+
+                    if (!genes.ContainsKey(hugoSymbol))
+                    {
+                        genes.Add(hugoSymbol, new PerGeneData());
+                    }
+
+                    genes[hugoSymbol].n += perGeneData.n;
+                    genes[hugoSymbol].totalASE += perGeneData.totalASE;
+                    genes[hugoSymbol].totalASESquared += perGeneData.totalASESquared;
+                }
+            }
+
+            //
+            // Merges in a PerGeneASE that represents just one sample, so if it has multiple ASE value for a gene, just treat them as
+            // a single value at the gene's mean.
+            //
+            public void mergeInOneSample(PerGeneASE sample)
+            {
+                foreach (var geneEntry in sample.genes)
+                {
+                    var hugoSymbol = geneEntry.Key;
+                    var perGeneData = geneEntry.Value;
+
+                    if (!genes.ContainsKey(hugoSymbol))
+                    {
+                        genes.Add(hugoSymbol, new PerGeneData());
+                    }
+
+                    double sampleASE = perGeneData.totalASE / perGeneData.n;
+                    genes[hugoSymbol].n++;
+                    genes[hugoSymbol].totalASE += sampleASE;
+                    genes[hugoSymbol].totalASESquared += sampleASE * sampleASE;
+                }
+            }
+
+            public void recordSample(string chromosome, int locus, double ase)
+            {
+                foreach (var geneInfo in geneMap.getGenesMappedTo(chromosome, locus))
+                {
+                    if (!genes.ContainsKey(geneInfo.hugoSymbol))
+                    {
+                        genes.Add(geneInfo.hugoSymbol, new PerGeneData());
+                    }
+
+                    genes[geneInfo.hugoSymbol].n++;
+                    genes[geneInfo.hugoSymbol].totalASE += ase;
+                    genes[geneInfo.hugoSymbol].totalASESquared += ase * ase;
+                }
+            }
+
+            public void WriteToFile(StreamWriter outputFile, bool tumor, PerGeneASE peer)
+            {
+                int minSamplesToPrint = 10;
+
+                foreach (var geneInfo in genes)
+                {
+                    if (geneInfo.Value.n < minSamplesToPrint)
+                    {
+                        continue;
+                    }
+
+                    var hugo_symbol = geneInfo.Key;
+                    var geneLocation = geneLocationInformation.genesByName[hugo_symbol];
+
+                    outputFile.WriteLine(ASETools.ConvertToExcelString(hugo_symbol) + "\t" + tumor + "\t" + geneInfo.Value.n + "\t" + geneInfo.Value.totalASE / geneInfo.Value.n + "\t" +
+                        Math.Sqrt(geneInfo.Value.n * geneInfo.Value.totalASESquared - geneInfo.Value.totalASE * geneInfo.Value.totalASE) / geneInfo.Value.n + "\t" +
+                        ((peer.genes.ContainsKey(hugo_symbol) && peer.genes[hugo_symbol].n >= minSamplesToPrint) ? Convert.ToString(geneInfo.Value.totalASE / geneInfo.Value.n - peer.genes[hugo_symbol].totalASE / peer.genes[hugo_symbol].n) : "*") + "\t" +
+                        geneLocation.chromosome + "\t" + geneLocation.minLocus + "\t" + geneLocation.maxLocus
+                        );
                 }
             }
         }
 
-        static int nCasesProcessed = 0;
+        static ASETools.GeneMap geneMap;
+        static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
 
         static void Main(string[] args)
         {
@@ -175,6 +292,9 @@ namespace ASEMap
                 Console.WriteLine("Giving up because we were unable to load configuration.");
                 return;
             }
+
+            geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
+            geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
 
             var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
@@ -204,7 +324,31 @@ namespace ASEMap
             outputFile.WriteLine("**done**");
             outputFile.Close();
 
+            var perGeneOutputFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+            perGeneOutputFile.WriteLine("Hugo Symbol\tTumor\tn Samples\tmean ASE\tstandard deviation of ASE\tASE difference with opposite tumor/normal\tchromosome\tmin locus\tmax locus");
+
+            globalTumorPerGeneASE.WriteToFile(perGeneOutputFile, true, globalNormalPerGeneASE);
+            globalNormalPerGeneASE.WriteToFile(perGeneOutputFile, false, globalTumorPerGeneASE);
+            perGeneOutputFile.WriteLine("**done**");
+            perGeneOutputFile.Close();
+
             Console.WriteLine();
+
+            if (false) // For some reason, it takes more than a day to run Mann-Whitney on this, and then the p value is 0.  So, skip it.
+            {
+                bool enoughData;
+                bool reversed;
+                double nFirstGroup;
+                double nSecondGroup;
+                double U;
+                double z;
+
+                double p = ASETools.MannWhitney<ASEMeasurement>.ComputeMannWhitney(allMeasurements, allMeasurements[0], x => x.tumor, x => x.ase, out enoughData, out reversed, out nFirstGroup, out nSecondGroup, out U,
+                    out z);
+
+                Console.WriteLine((int)(nFirstGroup + nSecondGroup) + " total ASE measurements between tumor and normal.  Distributions differ with p = " + p + ".  Mean for tumor is " +
+                    allMeasurements.Where(x => x.tumor).Select(x => x.ase).Average() + " mean for normal is " + allMeasurements.Where(x => !x.tumor).Select(x => x.ase).Average());
+            }
             Console.Write("Took " + ASETools.ElapsedTimeInSeconds(timer));
 
         }

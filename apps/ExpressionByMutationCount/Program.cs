@@ -218,8 +218,6 @@ namespace ExpressionByMutationCount
                 }
             }  // foreach gene
 
-
-
             panCancerOutputFile.Close();
 
             foreach (var perDiseaseOutputFileEntry in outputFilesByDisease)
@@ -469,8 +467,7 @@ namespace ExpressionByMutationCount
                 retVal.Add(instance);
             }
 
-            return retVal;
-            
+            return retVal;            
         }
 
         static void ComputeMannWhitneyAndPrint(StreamWriter outputFile, List<ExpressionInstance> instances, ASETools.MannWhitney<ExpressionInstance>.WhichGroup selector, bool twoTailed, GeneState geneState, bool excludeUnusualMutants)
@@ -505,7 +502,7 @@ namespace ExpressionByMutationCount
             {
                 outputFile.Write("\t*");
             }
-        }
+        } // ComputeMannWhitneyAndPrint
 
         static void ComputeNMeanAndStandardDeviationAndPrint(StreamWriter outputFile, List<ExpressionInstance> instances, GeneState geneState, bool excludeUnusualMutants)
         {
@@ -577,7 +574,7 @@ namespace ExpressionByMutationCount
             }
 
             outputFile.WriteLine("\tnTumorsExcluded\tnZero\tnOne\tnMore");
-        }
+        } // WriteFileHeader
 
         static void WriteCounts(StreamWriter outputFile, GeneState geneToProcess, string disease, Dictionary<string, ASETools.Case> cases)
         {
@@ -625,7 +622,7 @@ namespace ExpressionByMutationCount
             }
 
             outputFile.WriteLine("\t" + nExcluded + "\t" + nZero + "\t" + nOne + "\t" + nMore);
-        }
+        } // WriteCounts
 
         static ASETools.MannWhitney<ExpressionInstance>.WhichGroup isZero = new ASETools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nMutations == 0);
         static ASETools.MannWhitney<ExpressionInstance>.WhichGroup isOne = new ASETools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nMutations == 1);
@@ -674,7 +671,7 @@ namespace ExpressionByMutationCount
                 }
                 panCancerOutputFile.Write("\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*\t*");
             }
-        }
+        } // WriteMannWhitneyToFiles
 
         static void PrintUsage()
         {
@@ -814,6 +811,6 @@ namespace ExpressionByMutationCount
                     if (nLoaded % 100 == 0) Console.Write(".");
                 }
             } // while true
-        } // LoadRegionalSignalWorker
+        } // ProcessRegionalExpressionFile
     }
 }

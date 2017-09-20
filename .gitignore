@@ -83,5 +83,7 @@ obj
 /apps/ASEMap/bin
 /apps/GenerateHistogramsForSignificantResults/bin
 /apps/PerGeneRNARatio/bin
+/apps/ExtractASVsForHighASERegions/bin/
+
 
 

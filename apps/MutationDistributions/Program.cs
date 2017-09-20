@@ -145,9 +145,11 @@ namespace MutationDistributions
 				var annotatedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
 				var somaticVariants = annotatedVariants.Where(r => r.somaticMutation);
 
-				foreach (var annotatedVariant in annotatedVariants)
+                var tumorCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
+
+                foreach (var annotatedVariant in annotatedVariants)
 				{
-					if (!annotatedVariant.IsASECandidate())
+					if (!annotatedVariant.IsASECandidate(true, tumorCopyNumberVariation, configuration, perGeneASEMap, geneMap))
 					{
 						continue;
 					}
@@ -195,7 +197,7 @@ namespace MutationDistributions
 							double mutationASE;
 							if (mutationCount > 0)
 							{
-								if (!mutations.First().IsASECandidate())
+								if (!mutations.First().IsASECandidate(true, tumorCopyNumberVariation, configuration, perGeneASEMap, geneMap))
 								{
 									continue;
 								}
@@ -284,9 +286,14 @@ namespace MutationDistributions
 			Console.WriteLine("Usage: MutationDistributions binCount");
 
 		}
-		static void Main(string[] args)
+
+        static ASETools.Configuration configuration;
+        static ASETools.GeneMap geneMap;
+        static Dictionary<bool, Dictionary<string, ASETools.ASEMapPerGeneLine>> perGeneASEMap;
+
+        static void Main(string[] args)
 		{
-			var configuration = ASETools.Configuration.loadFromFile(args);
+			configuration = ASETools.Configuration.loadFromFile(args);
 			outDirectory = configuration.finalResultsDirectory + @"mutationDistributions\";
 
 			var genes = ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename)
@@ -306,7 +313,18 @@ namespace MutationDistributions
 				return;
 			}
 
-			var binCount = Convert.ToInt32(configuration.commandLineArgs[0]);
+            perGeneASEMap = ASETools.ASEMapPerGeneLine.ReadFromFileToDictionary(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+
+            if (null == perGeneASEMap)
+            {
+                Console.WriteLine("You must first create the per-gene ASE map in " + configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+                return;
+            }
+
+            var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
+            geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
+
+            var binCount = Convert.ToInt32(configuration.commandLineArgs[0]);
 
 			germlineByDisease = new GermlineDictionary(binCount);
 			germlineByGene = new GermlineDictionary(binCount);

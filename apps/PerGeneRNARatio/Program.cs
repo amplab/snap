@@ -80,7 +80,7 @@ namespace PerGeneRNARatio
             outputFile.WriteLine("hugo symbol\tsignificant\tn\ttotal\tfraction over 0.5\tmean");
             foreach (var outputLine in outputLines)
             {
-                outputFile.WriteLine(outputLine.hugo_symbol + "\t" + outputLine.significant + "\t" + outputLine.n + "\t" + outputLine.total + "\t" + outputLine.fractionOverPoint5() + "\t" + outputLine.mean());
+                outputFile.WriteLine(ASETools.ConvertToExcelString(outputLine.hugo_symbol) + "\t" + outputLine.significant + "\t" + outputLine.n + "\t" + outputLine.total + "\t" + outputLine.fractionOverPoint5() + "\t" + outputLine.mean());
             }
 
             outputFile.WriteLine("**done**");

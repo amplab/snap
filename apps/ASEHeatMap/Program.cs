@@ -212,6 +212,8 @@ namespace ASEHeatMap
         static HeatMapsAndCount globalNormalHeatMapAndCount = new HeatMapsAndCount();
         static ASETools.GeneMap geneMap = null;
         static ASETools.Configuration configuration;
+        static Dictionary<bool, Dictionary<string, ASETools.ASEMapPerGeneLine>> perGeneASEMap;
+
 
         static void Main(string[] args)
         {
@@ -237,6 +239,14 @@ namespace ASEHeatMap
             if (null == cases)
             {
                 Console.WriteLine("Unable to load cases.");
+                return;
+            }
+
+            perGeneASEMap = ASETools.ASEMapPerGeneLine.ReadFromFileToDictionary(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+
+            if (null == perGeneASEMap)
+            {
+                Console.WriteLine("You must first create the per-gene ASE map in " + configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
                 return;
             }
 
@@ -512,13 +522,26 @@ namespace ASEHeatMap
                 var annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
                 var nUnfiltered = annotatedSelectedVariants.Count();
 
-                annotatedSelectedVariants = annotatedSelectedVariants.Where(x => !x.somaticMutation && 
-				ASETools.isChromosomeAutosomal(x.contig) && x.IsASECandidate()).ToList();
+
+                var copyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
+                List<ASETools.CopyNumberVariation> normalCopyNumberVariation = null;
+                if (case_.normal_copy_number_filename != "")
+                {
+                    normalCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.normal_copy_number_filename, case_.normal_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
+                }
+
+
+                var tumorAnnotatedSelectedVariants = annotatedSelectedVariants.Where(x => !x.somaticMutation &&
+                ASETools.isChromosomeAutosomal(x.contig) && x.IsASECandidate(true, copyNumberVariation, configuration, perGeneASEMap, geneMap)).ToList();
+
+                var normalAnnotatedSelectedVariants = annotatedSelectedVariants.Where(x => !x.somaticMutation &&
+                ASETools.isChromosomeAutosomal(x.contig) && x.normalRNAReadCounts != null && x.IsASECandidate(false, normalCopyNumberVariation, configuration, perGeneASEMap, geneMap)).ToList();
+
 
                 //Console.WriteLine("Left with " + annotatedSelectedVariants.Count() + " of " + nUnfiltered);
 
-                ProcessAnnotatedSelectedVariants(annotatedSelectedVariants, localTumorHeatMapAndASECount, x => x.tumorRNAReadCounts, selectedGenes);
-                ProcessAnnotatedSelectedVariants(annotatedSelectedVariants, localNormalHeatMapAndASECount, x => x.normalRNAReadCounts, selectedGenes);
+                ProcessAnnotatedSelectedVariants(tumorAnnotatedSelectedVariants, localTumorHeatMapAndASECount, x => x.tumorRNAReadCounts, selectedGenes);
+                ProcessAnnotatedSelectedVariants(normalAnnotatedSelectedVariants, localNormalHeatMapAndASECount, x => x.normalRNAReadCounts, selectedGenes);
 
                 if (Interlocked.Increment(ref nCasesProcessed) % 100 == 0)
                 {

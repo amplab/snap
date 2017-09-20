@@ -177,9 +177,9 @@ namespace ASELib
 				enoughData = true;
 				return p;
 			}
-		}
+        } // MannWhitney
 
-		public class GeneScatterGraphLine
+        public class GeneScatterGraphLine
 		{
 			public readonly string Hugo_Symbol;
 			public readonly string Chromosome;
@@ -406,8 +406,6 @@ namespace ASELib
                     Convert.ToBoolean(fields[fieldMappings["Multiple Mutations in this Gene"]]), Convert.ToInt32(fields[fieldMappings["n Mutations in this gene"]]), tumorDNAFraction, tumorRNAFraction, tumorDNAMultiple, tumorRNAMultiple, tumorDNARatio, tumorRNARatio,
                     ratioOfRatios, zKnown, zTumor, zNormal, z2Tumor, z2Normal, percentMeanTumor, percentMeanNormal, fromUnfilteredFile);
             }
-
-
         } // GeneScatterGraphLine
 
 
@@ -518,11 +516,11 @@ namespace ASELib
 
 				return isoform;
 			}
-		}
+        } // Isoform
 
 
-		// Holds Gene location and isoform information
-		public class GeneLocationInfo
+        // Holds Gene location and isoform information
+        public class GeneLocationInfo
 		{
 			public string hugoSymbol;
 			public string chromosome;   // in non-chr form
@@ -545,10 +543,10 @@ namespace ASELib
             }
 
 			public List<Isoform> isoforms = new List<Isoform>();
-		}
+        } // GeneLocationInfo
 
-		// Stores a dictionary of genes for each chromosome
-		public class GeneLocationsByNameAndChromosome
+        // Stores a dictionary of genes for each chromosome
+        public class GeneLocationsByNameAndChromosome
 		{
 			public GeneLocationsByNameAndChromosome(Dictionary<string, GeneLocationInfo> genesByName_)
 			{
@@ -568,7 +566,7 @@ namespace ASELib
 
 			public Dictionary<string, GeneLocationInfo> genesByName;
 			public Dictionary<string, List<GeneLocationInfo>> genesByChromosome = new Dictionary<string, List<GeneLocationInfo>>();    // chromosome is in non-chr form.
-		}
+        } // GeneLocationsByNameAndChromosome
 
         public class GeneMap
         {
@@ -697,8 +695,7 @@ namespace ASELib
                         }
                     } // While we have genome to cover.
                 } // foreach gene
-
-            }
+            } // GeneMap constructor
 
             class Range : IComparable
             {
@@ -839,17 +836,15 @@ namespace ASELib
             public string normal_rna_mapped_base_count_filename = "";
             public string tumor_rna_mapped_base_count_filename = "";
             public string selected_variant_counts_by_gene_filename = "";
-			// If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
-			//
-			// Checksums for downloaded files. The tumor DNA BAMs aren't included here
-			// because they're BAM sliced and so don't have server-side md5s.
-			//
-			public string normal_rna_file_bam_md5 = "";
+            //
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
+            //
+
             //
             // Checksums for downloaded files. (NB: I'm not sure how to get the BAI md5s from the metadata, so they're left blank and the
             // BAIs aren't checked.  You have to notice if they're corrupt by hand when samtools can't read them and delete & re-download them.)
             //
+            public string normal_rna_file_bam_md5 = "";
             public string normal_rna_file_bai_md5 = "";
             public string tumor_rna_file_bam_md5 = "";
             public string tumor_rna_file_bai_md5 = "";
@@ -1109,8 +1104,8 @@ namespace ASELib
 				new FieldInformation("Normal Methylation MD5",                              c => c.normal_methylation_file_md5, (c,v) => c.normal_methylation_file_md5 = v),
 				new FieldInformation("Tumor Copy Number MD5",                               c => c.tumor_copy_number_file_md5, (c,v) => c.tumor_copy_number_file_md5 = v),
 				new FieldInformation("Normal Copy Number MD5",                              c => c.normal_copy_number_file_md5, (c,v) => c.normal_copy_number_file_md5 = v),
-					new FieldInformation("Tumor FPKM MD5",                               c => c.tumor_fpkm_file_md5, (c,v) => c.tumor_fpkm_file_md5 = v),
-				new FieldInformation("Normal FPKM MD5",                              c => c.normal_fpkm_file_md5, (c,v) => c.normal_fpkm_file_md5 = v),
+				new FieldInformation("Tumor FPKM MD5",                                      c => c.tumor_fpkm_file_md5, (c,v) => c.tumor_fpkm_file_md5 = v),
+				new FieldInformation("Normal FPKM MD5",                                     c => c.normal_fpkm_file_md5, (c,v) => c.normal_fpkm_file_md5 = v),
 
 			}; // fieldInformation
 
@@ -1466,8 +1461,13 @@ namespace ASELib
                     var lines = File.ReadAllLines(filename);
                     return lines;
                 }
-                catch (IOException)
+                catch (IOException e)
                 {
+                    if (e is FileNotFoundException || e is DirectoryNotFoundException)
+                    {
+                        return null;
+                    }
+
                     Console.WriteLine("IOException reading " + filename + ".  Sleeping and retrying.");
                     Thread.Sleep(10 * 1000);
                 }
@@ -1515,6 +1515,7 @@ namespace ASELib
             public double significanceLevel = 0.01;
             public string geneLocationInformationFilename = defaultGeneLocationInformationFilename;
             public int minSampleCountForHeatMap = 100;
+            public double ASEInNormalAtWhichToExcludeGenes = 0.5;  // If there's at least this much ASE overall in the matched normal for a gene, then don't use selected variants for it.
 
 			public string geneScatterGraphsDirectory = defaultBaseDirectory + @"gene_scatter_graphs\";
 			// items used in bisulfite analysis
@@ -1666,6 +1667,8 @@ namespace ASELib
                         retVal.geneLocationInformationFilename = fields[1];
                     } else if (type == "min sample count for heatmap") {
                         retVal.minSampleCountForHeatMap = Convert.ToInt32(fields[1]);
+                    } else if (type == "max normal ASE for using variants") {
+                        retVal.ASEInNormalAtWhichToExcludeGenes = Convert.ToDouble(fields[1]);
                     } else {
                         Console.WriteLine("ASEConfiguration.loadFromFile: configuration file " + pathname + " contains a line with an unknown configuration parameter type: " + line + ".  Ignoring.");
                         continue;
@@ -1674,8 +1677,7 @@ namespace ASELib
 
                 return retVal;
             }
-
-        }
+        } // Configuration
 
         public class SelectedGene
         {
@@ -2308,6 +2310,8 @@ namespace ASELib
         public const string HistogramsForSignficantResultsFilename = "HistogramsForSignificantResults.txt";
         public const string PerGeneRNARatioFilename = "PerGeneRNARatio.txt";
         public const string ASEMapFilename = "ASEMap.txt";
+        public const string PerGeneASEMapFilename = "ASEMap-PerGene.txt";
+
 
         public class DerivedFile
         {
@@ -2610,8 +2614,6 @@ namespace ASELib
 
             Console.WriteLine("Scanned " + configuration.dataDirectories.Count() + " data directories in " + ElapsedTimeInSeconds(stopwatch) + ", containing " + state.nDownloadedFiles + " (" + SizeToUnits(state.totalBytesInDownloadedFiles) +
                 "B) downloaded and " + state.nDerivedFiles + " (" + SizeToUnits(state.totalBytesInDerivedFiles) + "B) derived files.  " + SizeToUnits(state.totalFreeBytes) + "B remain free of " + SizeToUnits(state.totalStorageBytes) + "B total.");
-
-
         } // ScanFilesystems
 
         public class MAFInfo
@@ -2685,7 +2687,7 @@ namespace ASELib
             public string file_id;
             public string md5Sum;
             public string filename;
-        }
+        } // MAFInfo
 
         //
         // Code for GetVolumeFreeSpace adapted from http://stackoverflow.com/questions/14465187/get-available-disk-free-space-for-a-given-path-on-windows
@@ -2711,7 +2713,7 @@ namespace ASELib
             }
 
             return FreeBytesAvailable;
-        }
+        } // GetVolumeFreeSpace
 
         //
         // Code to get computer memory size adapted from http://stackoverflow.com/questions/105031/how-do-you-get-total-amount-of-ram-the-computer-has
@@ -4404,9 +4406,9 @@ namespace ASELib
 			public ASETools.GeneLocationInfo geneLocationInfo;
 			public int mutationCount = 0;
 			public static StringComparer comparer;
-		}
+        } // GeneExpression
 
-		public class RegionalExpressionState
+        public class RegionalExpressionState
 		{
 			// Tumor expression data
 			public int nRegionsIncludedTumor = 0;
@@ -4455,11 +4457,10 @@ namespace ASELib
 				minMeanNormalExpression = Math.Min(minMeanNormalExpression, mu);
 				maxMeanNormalExpression = Math.Max(maxMeanNormalExpression, mu);
 			}
+        } // RegionalExpressionState
 
-		}
-
-		// file that contains distance over gene names. Files created from ExpressionNearMutations
-		public class RegionalSignalFile
+        // file that contains distance over gene names. Files created from ExpressionNearMutations
+        public class RegionalSignalFile
 		{
 			string fileHeader;
 			List<ASETools.GeneExpression> allExpressions;
@@ -5483,8 +5484,6 @@ namespace ASELib
 
                 public char[] data;
             }
-
-
         }// Genome
 
         public class RandomizingStreamWriter
@@ -5876,10 +5875,10 @@ namespace ASELib
 					new MethylationCounts(nMethylatedAlt, nUnmethylatedAlt, nNeitherAlt));
 
 			}
-		}
+        } // MethylationCounts
 
 
-		public class ReadCounts
+        public class ReadCounts
 		{
 
 			public double AlleleSpecificValue() // I'm not calling this "allele specific expression" because DNA doesn't have expression.
@@ -6127,10 +6126,10 @@ namespace ASELib
 				return (nMatchingReference.ToString() + '\t' + nMatchingAlt.ToString() + '\t' + nMatchingNeither.ToString() + '\t' + nMatchingBoth.ToString());
 			}
 
-		}
+        } // ReadCounts
 
 
-		public class RegionalExpressionLine
+        public class RegionalExpressionLine
 		{
 			public string contig;
 			public int contig_offset;                                       
@@ -6173,11 +6172,10 @@ namespace ASELib
 				mean_z = mean_z_;
 				mean_mu = mean_mu_;
 			}
-		}
+        } // RegionalExpressionLine
 
-		public class Region
+        public class Region
 		{
-
 			static List<string> getHeaders()
 			{
 				List<string> headers = new List<string>();
@@ -6385,11 +6383,10 @@ namespace ASELib
 			{
 				outputFile.WriteLine(String.Join("\t", getHeaders()));
 			}
-		}
+        } // Region
 
-		public class AnnotatedVariant
+        public class AnnotatedVariant
         {
-
 			public AnnotatedVariant(){}
 
 			public string toString()
@@ -6567,11 +6564,7 @@ namespace ASELib
 				}
 
 				// Write header
-				file.WriteLine("Hugo_symbol\tChromosome\tPosition\tRef_allele\tAlt_allele\tVariant_type\tVariant_classification\tSomatic\t" +
-					"tumorDNAmatchingRef\ttumorDNAmatchingAlt\ttumorDNAmatchingNeither\ttumorDNAmatchingBoth\t" +
-					"normalDNAmatchingRef\tnormalDNAmatchingAlt\tnormalDNAmatchingNeither\tnormalDNAmatchingBoth\t" +
-					"tumorRNAmatchingRef\ttumorRNAmatchingAlt\ttumorRNAmatchingNeither\ttumorRNAmatchingBoth\t" +
-					"normalRNAmatchingRef\tnormalRNAmatchingAlt\tnormalRNAmatchingNeither\tnormalRNAmatchingBoth");
+				file.WriteLine(headerString);
 
 				foreach (var annotatedVariant in annotatedVariants)
 				{
@@ -6582,8 +6575,14 @@ namespace ASELib
 
 			}
 
+            public static readonly string headerString = "Hugo_symbol\tChromosome\tPosition\tRef_allele\tAlt_allele\tVariant_type\tVariant_classification\tSomatic\t" +
+					"tumorDNAmatchingRef\ttumorDNAmatchingAlt\ttumorDNAmatchingNeither\ttumorDNAmatchingBoth\t" +
+					"normalDNAmatchingRef\tnormalDNAmatchingAlt\tnormalDNAmatchingNeither\tnormalDNAmatchingBoth\t" +
+					"tumorRNAmatchingRef\ttumorRNAmatchingAlt\ttumorRNAmatchingNeither\ttumorRNAmatchingBoth\t" +
+					"normalRNAmatchingRef\tnormalRNAmatchingAlt\tnormalRNAmatchingNeither\tnormalRNAmatchingBoth";
+
 			public readonly string Hugo_symbol;                 // Only present for somatic mutations, otherwise ""
-			public bool IsASECandidate(bool isTumor = true) // Has at least 10 tumor DNA & RNA reads, and has variant allele frequency between .4 and .6 in tumor DNA
+			bool IsASECandidate(bool isTumor = true) // Has at least 10 tumor DNA & RNA reads, and has variant allele frequency between .4 and .6 in tumor DNA
 			{
 				// get read counts for either tumor or normal
 				var DNAReadCounts = isTumor ? this.tumorDNAReadCounts : this.normalDNAReadCounts;
@@ -6602,6 +6601,46 @@ namespace ASELib
 						DNAReadCounts.nMatchingReference * 3 >= DNAReadCounts.nMatchingAlt * 2 &&
 						DNAReadCounts.nMatchingAlt * 3 >= DNAReadCounts.nMatchingReference * 2);
 			}
+
+            //
+            // A version that rolls in the copy number file check.
+            //
+            public bool IsASECandidate(bool isTumor, List<CopyNumberVariation> copyNumber, Configuration configuration, Dictionary<bool, Dictionary<string, ASEMapPerGeneLine>> perGeneASEMap, GeneMap geneMap)
+            {
+                if (!isTumor && normalRNAReadCounts == null) return false;
+
+                if (!IsASECandidate(isTumor))
+                {
+                    return false;
+                }
+
+                //
+                // If this is in a gene that has too much ASE in the matched normals, then it's not an ASE candidate.
+                //
+                if (perGeneASEMap != null)
+                {
+                    //
+                    // If any genes that contain this locus have ASE > 0.5, then reject this place.
+                    //
+                    foreach (var gene in geneMap.getGenesMappedTo(contig, locus))
+                    {
+                        if (perGeneASEMap[false].ContainsKey(gene.hugoSymbol) && perGeneASEMap[false][gene.hugoSymbol].meanASE >= configuration.ASEInNormalAtWhichToExcludeGenes)
+                        {
+                            return false;
+                        }
+                    }
+                }
+
+                if (copyNumber == null)
+                {
+                    return true;
+                }
+
+                var overlappingCNV = copyNumber.Where(cnv =>
+                    cnv.OverlapsLocus(ASETools.chromosomeNameToNonChrForm(contig),
+                    locus, locus + 1));
+                return overlappingCNV.Count() == 0;
+            }
 
 			public static int CompareByLocus(AnnotatedVariant one, AnnotatedVariant two)
             {
@@ -8690,6 +8729,362 @@ namespace ASELib
             public readonly string range;
             public readonly double p;
 
+        } // AllSignificantResultsLine
+
+        public class ASEMapLine
+        {
+            public static List<ASEMapLine>ReadFile(string pathnmame)
+            {
+                string [] wantedFields = { "Chromsome" /* sic -- this is a typo in the file header, not here*/, "locus", "tumor", "n cases", "index", "mean", "standard deviation" };
+
+                var inputFile = CreateStreamReaderWithRetry(pathnmame);
+                if (inputFile == null)
+                {
+                    Console.WriteLine("Unable to open " + pathnmame);
+                    return null;
+                }
+
+                var headerizedFile = new HeaderizedFile<ASEMapLine>(inputFile, false, true, "", wantedFields.ToList());
+
+                List<ASEMapLine> retVal;
+                headerizedFile.ParseFile(Parse, out retVal);
+
+                inputFile.Close();
+
+                return retVal;
+            }
+
+            static ASEMapLine Parse(HeaderizedFile<ASEMapLine>.FieldGrabber fieldGrabber)
+            {
+                return new ASEMapLine(fieldGrabber.AsString("Chromsome"), fieldGrabber.AsInt("locus"), fieldGrabber.AsBool("tumor"), fieldGrabber.AsInt("n cases"),
+                    fieldGrabber.AsInt("index"), fieldGrabber.AsDouble("mean"), fieldGrabber.AsDouble("standard deviation"));
+            }
+
+            ASEMapLine(string chromosome_, int locus_, bool tumor_, int nCases_, int index_, double mean_, double stdDev_)
+            {
+                chromosome = chromosome_;
+                locus = locus_;
+                tumor = tumor_;
+                nCases = nCases_;
+                index = index_;
+                mean = mean_;
+                stdDev = stdDev_;
+            }
+
+            public readonly string chromosome;
+            public readonly int locus;
+            public readonly bool tumor;
+            public readonly int nCases;
+            public readonly int index;              // This is the x coordinate for the scatter graph.
+            public readonly double mean;
+            public readonly double stdDev;
+        } // ASEMapLine
+
+        public class ASEMapPerGeneLine
+        {
+            public static Dictionary<bool, Dictionary<string, ASEMapPerGeneLine>> ReadFromFileToDictionary(string filename)
+            {
+                var allLines = ReadFromFile(filename);
+
+                if (null == allLines)
+                {
+                    return null;
+                }
+
+                var result = new Dictionary<bool, Dictionary<string, ASEMapPerGeneLine>>();
+                result.Add(true, new Dictionary<string, ASEMapPerGeneLine>());
+                result.Add(false, new Dictionary<string, ASEMapPerGeneLine>());
+
+                foreach (var line in allLines)
+                {
+                    result[line.tumor].Add(line.hugo_symbol, line);
+                }
+
+                return result;
+            }
+
+            public static List<ASEMapPerGeneLine> ReadFromFile(string filename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+
+                string[] wantedFields = { "Hugo Symbol", "Tumor", "n Samples", "mean ASE", "standard deviation of ASE", "ASE difference with opposite tumor/normal", "chromosome", "min locus", "max locus" };
+
+                var headerizedFile = new HeaderizedFile<ASEMapPerGeneLine>(inputFile, false, true, "", wantedFields.ToList());
+
+                List<ASEMapPerGeneLine> result;
+                if (!headerizedFile.ParseFile(parseLine, out result))
+                {
+                    return null;
+                }
+
+                inputFile.Close();
+
+                return result;
+            }
+
+            static ASEMapPerGeneLine parseLine(ASETools.HeaderizedFile<ASEMapPerGeneLine>.FieldGrabber fieldGrabber)
+            {
+                return new ASEMapPerGeneLine(fieldGrabber.AsString("Hugo Symbol"), fieldGrabber.AsBool("Tumor"), fieldGrabber.AsInt("n Samples"), fieldGrabber.AsDouble("mean ASE"), fieldGrabber.AsDouble("standard deviation of ASE"),
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("ASE difference with opposite tumor/normal"), fieldGrabber.AsString("chromosome"), fieldGrabber.AsInt("min locus"),
+                    fieldGrabber.AsInt("max locus"));
+            }
+
+            ASEMapPerGeneLine(string hugo_symbol_, bool tumor_, int nSamples_, double meanASE_, double stdDeviationASE_, double ASEDifference_, string chromosome_, int minLocus_, int maxLocus_)
+            {
+                hugo_symbol = ConvertToNonExcelString(hugo_symbol_);
+                tumor = tumor_;
+                nSamples = nSamples_;
+                meanASE = meanASE_;
+                stdDeviationASE = stdDeviationASE_;
+                ASEDifference = ASEDifference_;
+                chromosome = chromosome_;
+                minLocus = minLocus_;
+                maxLocus = maxLocus_;
+            }
+
+            public readonly string hugo_symbol;
+            public readonly bool tumor;
+            public readonly int nSamples;
+            public readonly double meanASE;
+            public readonly double stdDeviationASE;
+            public readonly double ASEDifference;   // Signed difference between meanASE and meanASE for !tumor.  -Inf if not there.
+            public readonly string chromosome;
+            public readonly int minLocus;
+            public readonly int maxLocus;
+        } // ASEMapPerGeneLine
+
+        //
+        // This for the BeatAML data, not TCGA
+        //
+        public class ClinicalSummaryLine
+        {
+            public static List<ClinicalSummaryLine> readFile(string filename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+
+                if (null == inputFile)
+                {
+                    return null;
+                }
+
+                string[] wantedFields =
+                {
+                    "patientId",
+                    "labId",
+                    "gender",
+                    "ageAtDiagnosis",
+                    "priorMalignancyNonMyeloid",
+                    "priorMalignancyType",
+                    "priorMalignancyChemo",
+                    "priorMalignancyRadiationTx",
+                    "priorMDS",
+                    "priorMDSMoreThanTwoMths",
+                    "priorMDSMPN",
+                    "priorMDSMPNMoreThanTwoMths",
+                    "priorMPN",
+                    "priorMPNMoreThanTwoMths",
+                    "performanceStatus",
+                    "dxAtInclusion",
+                    "specificDxAtInclusion",
+                    "fabBlastMorphology",
+                    "riskGroup",
+                    "karyotype",
+                    "otherCytogenetics",
+                    "dxAtSpecimenAcquisition",
+                    "ageAtSpecimenAcquisition",
+                    "timeOfSampleCollectionRelativeToInclusion",
+                    "specimenGroups",
+                    "specimenType",
+                    "rnaSeq",
+                    "exomeSeq",
+                    "ic50",
+                    "priorTreatmentTypeCount",
+                    "priorTreatmentTypes",
+                    "priorTreatmentRegimenCount",
+                    "priorTreatmentRegimens",
+                    "priorTreatmentStageCount",
+                    "priorTreatmentStages",
+                    "responseToInductionTx",
+                    "typeInductionTx",
+                    "responseDurationToInductionTx",
+                    "currentTreatmentType",
+                    "currentRegimen",
+                    "currentStage",
+                    "currentTreatmentDuration",
+                    "vitalStatus",
+                    "overallSurvival",
+                    "causeOfDeath",
+                    "percentBlastsBM",
+                    "percentBlastsPB",
+                    "percentAbnormalPlasmaBM",
+                    "percentBandsPB",
+                    "percentBasophilsPB",
+                    "percentEosinophilsPB",
+                    "percentImmatureGranulocytesPB",
+                    "percentLymphocytesPB",
+                    "percentMetamyelocytesPB",
+                    "percentMonocytesPB",
+                    "percentMyelocytesPB",
+                    "percentNeutrophilsPB",
+                    "percentNucleatedRBCsPB",
+                    "percentPromonocytes",
+                    "percentPromyelocytes",
+                    "percentPromyelocytesPB",
+                    "percentReactiveLymphocytesPB",
+                    "percentWBC",
+                    "wbcCount",
+                    "plateletCount",
+                    "albumin",
+                    "bCellGeneRearrangement",
+                    "bilirubin",
+                    "creatinine",
+                    "hemoglobin",
+                    "surfaceAntigensImmunohistochemicalStains",
+                    "tCellReceptorGene",
+                    "ALT",
+                    "AST",
+                    "ASXL1",
+                    "ASXL1_GeneTrails",
+                    "ATM",
+                    "BCL_1_t11_14",
+                    "BCL_2_14_18",
+                    "BCOR",
+                    "BCOR_GeneTrails",
+                    "BCORL1",
+                    "BCR_ABL",
+                    "BCR_ABL_International_Scale",
+                    "BCR_ABL_FISH_",
+                    "BCR_ABL_LOG_DROP",
+                    "BCR_ABL_RNA_Quant",
+                    "BRAF",
+                    "BRAF_Sequenome",
+                    "CAD",
+                    "Calreticulin",
+                    "CBL",
+                    "CBL_GeneTrails",
+                    "CCND2",
+                    "CD36",
+                    "CEBPA",
+                    "CEBPA_GeneTrails",
+                    "CEBPA_Sequenome",
+                    "CHEK2",
+                    "CIITA",
+                    "CREBBP",
+                    "CREBBP_GeneTrails",
+                    "CSF3R",
+                    "CSF3R_GeneTrails",
+                    "CUX1",
+                    "DNMT3A",
+                    "DNMT3A_GeneTrails",
+                    "ETV6",
+                    "ETV6_GeneTrails",
+                    "EZH2",
+                    "EZH2_GeneTrails",
+                    "FBXW7_GeneTrails",
+                    "FLT3",
+                    "FLT3_GeneTrails",
+                    "FLT3_Sequenome",
+                    "FLT3_D835",
+                    "FLT3_D835_GeneTrails",
+                    "FLT3_D835_Sequenome",
+                    "FLT3_ITD",
+                    "FLT3_ITD_GeneTrails",
+                    "FLT3_ITD_Internal",
+                    "FLT3_N676K_GeneTrails",
+                    "FLT3_V491L",
+                    "GATA1",
+                    "GATA1_GeneTrails",
+                    "GATA2",
+                    "GATA2_Genetrails",
+                    "GNAS",
+                    "IDH1",
+                    "IDH1_GeneTrails",
+                    "IDH1_Sequenome",
+                    "IDH2",
+                    "IDH2_GeneTrails",
+                    "IDH2_Sequenome",
+                    "IKZF1",
+                    "IKZF1_GeneTrails",
+                    "JAK1_GeneTrails",
+                    "JAK2",
+                    "JAK2_GeneTrails",
+                    "JAK2_Sequenome",
+                    "JAK3",
+                    "JAK3_GeneTrails",
+                    "KDM6A",
+                    "KDM6A_GeneTrails",
+                    "KIT",
+                    "KIT_GeneTrails",
+                    "KIT_Sequenome",
+                    "KMT2A",
+                    "KRAS",
+                    "KRAS_GeneTrails",
+                    "KRAS_Sequenome",
+                    "LDH",
+                    "MCV",
+                    "MEN1",
+                    "MLL",
+                    "MLL_GeneTrails",
+                    "MLL2",
+                    "MLL2_GeneTrails",
+                    "MPL",
+                    "MPL_GeneTrails",
+                    "MUTYH",
+                    "FGFR1_ZNF198",
+                    "HNF1A",
+                    "NF1",
+                    "NOTCH1",
+                    "NOTCH1_GeneTrails",
+                    "NPM",
+                    "NPM_GeneTrails",
+                    "NPM_Sequenome",
+                    "NPM_Internal",
+                    "NRAS",
+                    "NRAS_GeneTrails",
+                    "NRAS_Sequenome",
+                    "NRBC",
+                    "NTRK2",
+                    "PAX5",
+                    "PAX5_GeneTrails",
+                    "PHF6",
+                    "POT1",
+                    "PRDM1_GeneTrails",
+                    "PTPN11",
+                    "PTPN11_GeneTrails",
+                    "PTPN11_Sequenome",
+                    "ROS1",
+                    "RUNX1",
+                    "RUNX1_GeneTrails",
+                    "SETBP1",
+                    "CSF1R",
+                    "SF1",
+                    "SF3B1",
+                    "SF3B1_GeneTrails",
+                    "SRSF2",
+                    "SRSF2_GeneTrails",
+                    "STAG2",
+                    "STAG2_GeneTrails",
+                    "STAT3",
+                    "STAT3_Genetrails",
+                    "STK11",
+                    "SUZ12",
+                    "SUZ12_GeneTrails",
+                    "TET2",
+                    "TET2_GeneTrails",
+                    "TP53",
+                    "TP53_GeneTrails",
+                    "U2AF1",
+                    "U2AF1_GeneTrails",
+                    "WT1",
+                    "WT1_GeneTrails",
+                    "ZRSR2",
+                    "ZRSR2_GeneTrails",
+                    "PML_RAR_Alpha_t_15_17",
+                    "PML_RARA_Quantitivate"
+                };
+
+                var headerizedFile = new HeaderizedFile<ClinicalSummaryLine>(inputFile, false, false, "", wantedFields.ToList());
+            }
         }
     } // ASETools
 }

@@ -122,10 +122,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerGeneRNARatio", "apps\Per
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ASEMap", "apps\ASEMap\ASEMap.csproj", "{EBFA2D36-856E-4012-8280-539B36B5A8C7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExtractASVsForHighASERegions", "apps\ExtractASVsForHighASERegions\ExtractASVsForHighASERegions.csproj", "{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}"
+EndProject
 Global
-	GlobalSection(Performance) = preSolution
-		HasPerformanceSessions = true
-	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Debug|Mixed Platforms = Debug|Mixed Platforms
@@ -786,9 +785,28 @@ Global
 		{EBFA2D36-856E-4012-8280-539B36B5A8C7}.Release|Win32.Build.0 = Release|Any CPU
 		{EBFA2D36-856E-4012-8280-539B36B5A8C7}.Release|x64.ActiveCfg = Release|x64
 		{EBFA2D36-856E-4012-8280-539B36B5A8C7}.Release|x64.Build.0 = Release|x64
+		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Debug|Win32.Build.0 = Debug|Any CPU
+		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Debug|x64.ActiveCfg = Debug|x64
+		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Debug|x64.Build.0 = Debug|x64
+		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Release|Win32.ActiveCfg = Release|Any CPU
+		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Release|Win32.Build.0 = Release|Any CPU
+		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Release|x64.ActiveCfg = Release|x64
+		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
 	EndGlobalSection
 	GlobalSection(Performance) = preSolution
 		HasPerformanceSessions = true
