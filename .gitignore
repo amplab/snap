@@ -84,6 +84,8 @@ obj
 /apps/GenerateHistogramsForSignificantResults/bin
 /apps/PerGeneRNARatio/bin
 /apps/ExtractASVsForHighASERegions/bin/
+/apps/AnalyzeBeatAMLCases/bin/
+
 
 
 

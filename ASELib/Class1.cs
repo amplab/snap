@@ -2757,7 +2757,7 @@ namespace ASELib
             public delegate outputType FieldGrabberParser(FieldGrabber fieldGrabber);
 
             public HeaderizedFile(StreamReader inputFile_, bool hasVersion_, bool hasDone_, string expectedVersion_, List<string> wantedFields_, 
-				bool skipHash_ = false, bool allowMissingColumnsInData_ = false, int skippedRows_ = 0, bool allowMissingRowsInData_ = false)
+				bool skipHash_ = false, bool allowMissingColumnsInData_ = false, int skippedRows_ = 0, bool allowMissingRowsInData_ = false, char separator_ = '\t')
             {
                 inputFile = inputFile_;
                 hasVersion = hasVersion_;
@@ -2768,6 +2768,7 @@ namespace ASELib
                 allowMissingColumnsInData = allowMissingColumnsInData_;
 				skippedRows = skippedRows_;
 				allowMissingRowsInData = allowMissingRowsInData_;
+                separator = separator_;
             }
 
             //
@@ -2833,7 +2834,7 @@ namespace ASELib
                     return false;
                 }
 
-                var columns = header.Split('\t');
+                var columns = header.Split(separator);
                 var fieldMappings = new Dictionary<string, int>();
                 int maxNeededField = -1;
 
@@ -3010,6 +3011,21 @@ namespace ASELib
                     return result;
                 }
 
+                public bool YOrNToBool(string fieldName)
+                {
+                    if (fields[fieldMappings[fieldName]] == "y" || fields[fieldMappings[fieldName]] == "Y")
+                    {
+                        return true;
+                    }
+
+                    if (fields[fieldMappings[fieldName]] == "n" || fields[fieldMappings[fieldName]] == "N")
+                    {
+                        return false;
+                    }
+
+                    throw new FormatException();
+                }
+
                 Dictionary<string, int> fieldMappings;
                 string[] fields;
 
@@ -3025,6 +3041,7 @@ namespace ASELib
             bool allowMissingColumnsInData;
 			bool allowMissingRowsInData;
 			int skippedRows;
+            char separator;
         } // HeaderizedFile
 
         public static int ConvertToInt32TreatingNullStringAsZero(string value)
@@ -8858,6 +8875,30 @@ namespace ASELib
         //
         public class ClinicalSummaryLine
         {
+            static ClinicalSummaryLine Parse(HeaderizedFile<ClinicalSummaryLine>.FieldGrabber fieldGrabber)
+            {
+                return new ClinicalSummaryLine(
+                    fieldGrabber.AsInt("patientId"),
+                    fieldGrabber.AsString("labId"),
+                    fieldGrabber.AsString("gender"),
+                    fieldGrabber.AsIntMinusOneIfStarOrEmptyString("ageAtDiagnosis"),
+                    fieldGrabber.YOrNToBool("priorMalignancyNonMyeloid"),
+                    fieldGrabber.AsString("dxAtInclusion"),
+                    fieldGrabber.AsString("specificDxAtInclusion"),
+                    fieldGrabber.AsString("riskGroup"),
+                    fieldGrabber.AsString("karyotype"),
+                    fieldGrabber.AsString("dxAtSpecimenAcquisition"),
+                    fieldGrabber.AsIntMinusOneIfStarOrEmptyString("ageAtSpecimenAcquisition"),
+                    fieldGrabber.AsIntMinusOneIfStarOrEmptyString("timeOfSampleCollectionRelativeToInclusion"),
+                    fieldGrabber.YOrNToBool("rnaSeq"),
+                    fieldGrabber.YOrNToBool("exomeSeq"),
+                    fieldGrabber.AsString("vitalStatus"),
+                    fieldGrabber.AsIntMinusOneIfStarOrEmptyString("overallSurvival"),
+                    fieldGrabber.AsString("causeOfDeath"),
+                    fieldGrabber.AsString("TP53"),
+                    fieldGrabber.AsString("TP53_GeneTrails")
+                    );
+            }
             public static List<ClinicalSummaryLine> readFile(string filename)
             {
                 var inputFile = CreateStreamReaderWithRetry(filename);
@@ -9084,7 +9125,145 @@ namespace ASELib
                 };
 
                 var headerizedFile = new HeaderizedFile<ClinicalSummaryLine>(inputFile, false, false, "", wantedFields.ToList());
+
+                List<ClinicalSummaryLine> result;
+                headerizedFile.ParseFile(Parse, out result);
+
+                inputFile.Close();
+
+                return result;
             }
+
+
+
+            ClinicalSummaryLine(
+                int patientId_,
+                string labId_,
+                string gender_,
+                int ageAtDiag_,
+                bool priorMalignencyNonMyeloid_,
+                string dxAtInclusion_,
+                string specificDxAtInclusion_,
+                string riskGroup_,
+                string karyotype_,
+                string dXAtSpeciminAcquisition_,
+                int ageAtSpeciminAcquisition_,
+                int timeOfSampleCollectionRelativeToInclusion_,
+                bool rnaSeq_,
+                bool exomeSeq_,
+                string vitalStatus_,
+                int overallSurvival_,
+                string causeOfDeath_,
+                string TP53_,
+                string TP53_Genetrails_
+            )
+            {
+                patientId = patientId_;
+                labId = labId_;
+                gender = gender_;
+                ageAtDiag = ageAtDiag_;
+                priorMalignencyNonMyeloid = priorMalignencyNonMyeloid_;
+                dxAtInclusion = dxAtInclusion_;
+                specificDxAtInclusion = specificDxAtInclusion_;
+                riskGroup = riskGroup_;
+                karyotype = karyotype_;
+                dXAtSpeciminAcquisition = dXAtSpeciminAcquisition_;
+                ageAtSpeciminAcquisition = ageAtSpeciminAcquisition_;
+                timeOfSampleCollectionRelativeToInclusion = timeOfSampleCollectionRelativeToInclusion_;
+                rnaSeq = rnaSeq_;
+                exomeSeq = exomeSeq_;
+                vitalStatus = vitalStatus_;
+                overallSurvival = overallSurvival_;
+                causeOfDeath = causeOfDeath_;
+                TP53 = TP53_;
+                TP53_Genetrails = TP53_Genetrails_;
+            }
+
+            public readonly int patientId;
+            public readonly string labId;
+            public readonly string gender;
+            public readonly int ageAtDiag;
+            public readonly bool priorMalignencyNonMyeloid;
+            public readonly string dxAtInclusion;
+            public readonly string specificDxAtInclusion;
+            public readonly string riskGroup;
+            public readonly string karyotype;
+            public readonly string dXAtSpeciminAcquisition;
+            public readonly int ageAtSpeciminAcquisition;
+            public readonly int timeOfSampleCollectionRelativeToInclusion;
+            public readonly bool rnaSeq;
+            public readonly bool exomeSeq;
+            public readonly string vitalStatus;
+            public readonly int overallSurvival;
+            public readonly string causeOfDeath;
+            public readonly string TP53;
+            public readonly string TP53_Genetrails;
+        } // ClinicalSummaryLine
+
+        public class KaplanMeierPoint
+        {
+            public KaplanMeierPoint(int daysSinceInclusion_, double fractionAlive_)
+            {
+                daysSinceInclusion = daysSinceInclusion_;
+                fractionAlive = fractionAlive_;
+
+            }
+            public int daysSinceInclusion;
+            public double fractionAlive;
         }
+
+        static public List<KaplanMeierPoint> KaplanMeier(List<ClinicalSummaryLine> summaryLines)
+        {
+            var oneLinePerPatient = summaryLines.GroupByToDict<ClinicalSummaryLine, int>(x => x.patientId).Select(x => x.Value[0]).Where(x => x.overallSurvival > 0).ToList();
+            oneLinePerPatient.Sort((x, y) => x.overallSurvival.CompareTo(y.overallSurvival));   // This isn't necessary, but it's nice for debugging 
+
+            var longestSurvivor = summaryLines.Select(x => x.overallSurvival).Max();
+
+            var fractionAliveByDay = new double[longestSurvivor + 1];
+            fractionAliveByDay[0] = 1;
+
+            for (int day = 1; day <= longestSurvivor; day++)
+            {
+                fractionAliveByDay[day] = (double)oneLinePerPatient.Where(x => x.overallSurvival >= day).Count() / oneLinePerPatient.Where(x => x.overallSurvival >= day || x.vitalStatus == "Dead").Count();
+            }
+
+            var retVal = new List<KaplanMeierPoint>();
+            for (int day = 0; day <= longestSurvivor; day++)
+            {
+                if (day == 0 || fractionAliveByDay[day] != fractionAliveByDay[day-1]) {
+                    retVal.Add(new KaplanMeierPoint(day, fractionAliveByDay[day]));
+                }
+            }
+
+            return retVal;
+        }
+
+
     } // ASETools
+
+    //
+    // I love that C# lets you do stuff like this.  This is a simple groupBy method that takes an IEnumerable and a key extractor function, and returns a dictionary indexed on keys of lists 
+    // of elements in the enumerable.  This is a slight tweak on the existing GroupBy methods that fits my needs a little better.
+    //
+    public static class GroupByExtension
+    {
+        public static Dictionary<TKey, List<TSource>> GroupByToDict<TSource, TKey>(this IEnumerable<TSource> source, Func<TSource, TKey> keyExtractor)
+        {
+            var retVal = new Dictionary<TKey, List<TSource>>();
+
+            foreach (var element in source)
+            {
+                var key = keyExtractor(element);
+
+                if (!retVal.ContainsKey(key))
+                {
+                    retVal.Add(key, new List<TSource>());
+                }
+
+                retVal[key].Add(element);
+            }
+
+            return retVal;
+        }
+    } // GroupByExtension
 }

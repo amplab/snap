@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.26403.7
+VisualStudioVersion = 15.0.26730.16
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "snap", "apps\snap\snap.vcxproj", "{76E127A5-2247-4A10-9DC8-59518C7C6636}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -123,6 +123,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ASEMap", "apps\ASEMap\ASEMap.csproj", "{EBFA2D36-856E-4012-8280-539B36B5A8C7}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExtractASVsForHighASERegions", "apps\ExtractASVsForHighASERegions\ExtractASVsForHighASERegions.csproj", "{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AnalyzeBeatAMLCases", "apps\AnalyzeBeatAMLCases\AnalyzeBeatAMLCases.csproj", "{0C52EBCE-C8C3-4D8C-A8BA-3B29F71CA2E4}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -801,9 +803,28 @@ Global
 		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Release|Win32.Build.0 = Release|Any CPU
 		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Release|x64.ActiveCfg = Release|x64
 		{9715AB52-CCB2-4798-A9E0-0DC86AB7766A}.Release|x64.Build.0 = Release|x64
+		{0C52EBCE-C8C3-4D8C-A8BA-3B29F71CA2E4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0C52EBCE-C8C3-4D8C-A8BA-3B29F71CA2E4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0C52EBCE-C8C3-4D8C-A8BA-3B29F71CA2E4}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{0C52EBCE-C8C3-4D8C-A8BA-3B29F71CA2E4}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{0C52EBCE-C8C3-4D8C-A8BA-3B29F71CA2E4}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{0C52EBCE-C8C3-4D8C-A8BA-3B29F71CA2E4}.Debug|Win32.Build.0 = Debug|Any CPU
+		{0C52EBCE-C8C3-4D8C-A8BA-3B29F71CA2E4}.Debug|x64.ActiveCfg = Debug|x64
+		{0C52EBCE-C8C3-4D8C-A8BA-3B29F71CA2E4}.Debug|x64.Build.0 = Debug|x64
+		{0C52EBCE-C8C3-4D8C-A8BA-3B29F71CA2E4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0C52EBCE-C8C3-4D8C-A8BA-3B29F71CA2E4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0C52EBCE-C8C3-4D8C-A8BA-3B29F71CA2E4}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{0C52EBCE-C8C3-4D8C-A8BA-3B29F71CA2E4}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{0C52EBCE-C8C3-4D8C-A8BA-3B29F71CA2E4}.Release|Win32.ActiveCfg = Release|Any CPU
+		{0C52EBCE-C8C3-4D8C-A8BA-3B29F71CA2E4}.Release|Win32.Build.0 = Release|Any CPU
+		{0C52EBCE-C8C3-4D8C-A8BA-3B29F71CA2E4}.Release|x64.ActiveCfg = Release|x64
+		{0C52EBCE-C8C3-4D8C-A8BA-3B29F71CA2E4}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {54B8FD8D-AD1B-41AD-8132-0137B5CB61DA}
 	EndGlobalSection
 	GlobalSection(Performance) = preSolution
 		HasPerformanceSessions = true
