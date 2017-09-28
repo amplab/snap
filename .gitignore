@@ -48,43 +48,9 @@ obj
 /SNAP
 /snap-aligner
 /ASELib/bin
-/apps/ASEProcessManager/bin
-/apps/GenerateCases/bin
-/apps/GenerateMAFConfiguration/bin
-/apps/SplitIntoPieces/bin
-/apps/SelectGermlineVariants/bin
-/apps/RegionalExpression/bin
-/apps/ExtractMAFLines/bin
-/apps/ValidateVCFs/bin
-/apps/CheckGzip/bin
-/apps/GenerateReadExtractionScript/bin
-/apps/SelectGenes/bin
-/apps/AnnotateVariants/bin
-/apps/CheckDone/bin
-/apps/CountMappedBases/bin
-/apps/ExpressionNearMutations/bin
-/apps/MethylationAnalysis/bin
-/apps/DumpSubfile/bin
-/apps/ExpressionByMutationCount/bin
-/apps/FixASV/bin
-/apps/GenerateScatterGraphs/bin
-/apps/ASEHeatMap/bin
-/apps/CountVariantsInGenes/bin
-/apps/MannWhitney/bin
-/apps/SummarizeSelectedVariantCountsByGene/bin
-/apps/ApplyBonferroniCorrection/bin
-/apps/ChangeGenomeBuild/bin
-/apps/MutationDistributions/bin
-/apps/WriteIGVScript/bin
-/tests/AVLTest/bin
-/tests/MannWhitneyTest/bin
-/apps/CheckASEConsistency/bin
-/apps/CountMAFs/bin
-/apps/ASEMap/bin
-/apps/GenerateHistogramsForSignificantResults/bin
-/apps/PerGeneRNARatio/bin
-/apps/ExtractASVsForHighASERegions/bin/
-/apps/AnalyzeBeatAMLCases/bin/
+/apps/*/bin/
+/tests/*/bin/
+
 
 
 

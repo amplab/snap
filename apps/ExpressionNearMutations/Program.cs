@@ -221,7 +221,6 @@ namespace ExpressionNearMutations
 								expressionValues.Add(annotatedVariant.contig, annotatedVariant.locus, alleleSpecificExpression, 0, false);
 							}
 						}
-
 					}
 				}
 				else

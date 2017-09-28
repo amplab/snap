@@ -12,6 +12,7 @@ namespace ExpressionByMutationCount
 {
     class Program
     {
+
         static void Main(string[] args)
         {
             var timer = new Stopwatch();
@@ -26,21 +27,37 @@ namespace ExpressionByMutationCount
             forAlleleSpecificExpression = false;
             bool perChromosome = false;
 
-            foreach (var arg in configuration.commandLineArgs)
+            for (int i = 0; i < configuration.commandLineArgs.Count(); i++)
             {
-                if (arg == "-a")
+                if (configuration.commandLineArgs[i] == "-a")
                 {
                     forAlleleSpecificExpression = true;
                 }
-                else if (arg == "-c")
+                else if (configuration.commandLineArgs[i] == "-c")
                 {
                     perChromosome = true;
+                }
+                else if (configuration.commandLineArgs[i] == "-MaxASE" && configuration.commandLineArgs.Count() > i + 1)
+                {
+                    overallTumorASEAboveWhichToExcludeCases = Convert.ToDouble(configuration.commandLineArgs[i + 1]);
+                    i++;
+                }
+                else if (configuration.commandLineArgs[i] == "-MinASE" && configuration.commandLineArgs.Count() > i + 1)
+                {
+                    overallTumorASEBelowWhichToExcludeCases = Convert.ToDouble(configuration.commandLineArgs[i + 1]);
+                    i++;
                 }
                 else
                 {
                     PrintUsage();
                     return;
                 }
+            }
+
+            if (overallTumorASEBelowWhichToExcludeCases >= overallTumorASEAboveWhichToExcludeCases)
+            {
+                Console.WriteLine("You've selected min and max ASE in such a way that all cases are excluded.");
+                return;
             }
 
             var comparer = StringComparer.OrdinalIgnoreCase;
@@ -52,6 +69,11 @@ namespace ExpressionByMutationCount
                 return;
             }
 
+            if (overallTumorASEAboveWhichToExcludeCases <= 1.0 || overallTumorASEBelowWhichToExcludeCases >= 0)
+            {
+                perCaseASE = ASETools.PerCaseASE.loadAll(cases);
+            }
+
             var selectedGenes = ASETools.SelectedGene.LoadFromFile(configuration.selectedGenesFilename);
             if (null == selectedGenes)
             {
@@ -61,17 +83,15 @@ namespace ExpressionByMutationCount
 
             int missingCount = cases.Where(caseEntry => (forAlleleSpecificExpression ? caseEntry.Value.tumor_allele_specific_gene_expression_filename : caseEntry.Value.gene_expression_filename) == "").Count();
 
-            var casesToProcess = new List<ASETools.Case>();
-            foreach (var caseEntry in cases)
-            {
-                var case_ = caseEntry.Value;
-
-                if (forAlleleSpecificExpression && case_.tumor_allele_specific_gene_expression_filename != "" ||
-                    !forAlleleSpecificExpression && case_.gene_expression_filename != "")
-                {
-                    casesToProcess.Add(case_);
-                }
-            }
+            //
+            // Select the cases that have data, and if we're checking for it don't have too much tumor ASE.
+            //
+            var casesToProcess = cases.Select(x => x.Value).Where(x =>
+                (forAlleleSpecificExpression && x.tumor_allele_specific_gene_expression_filename != "" &&
+                    (perCaseASE == null || 
+                        perCaseASE.ContainsKey(x.case_id) && perCaseASE[x.case_id].tumorASE != double.NegativeInfinity && perCaseASE[x.case_id].tumorASE < overallTumorASEAboveWhichToExcludeCases && 
+                        perCaseASE[x.case_id].tumorASE > overallTumorASEBelowWhichToExcludeCases)) ||
+                (!forAlleleSpecificExpression && x.gene_expression_filename != "")).ToList();
 
             var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
             var geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
@@ -98,7 +118,7 @@ namespace ExpressionByMutationCount
                 genesToProcess.Add(selectedGene.Hugo_Symbol, new GeneState(selectedGene.Hugo_Symbol, geneScatterPlotLines));
             }
 
-            Console.WriteLine("Loaded " + cases.Count() + " cases, of which " + missingCount + " are missing gene expression, and " + genesToProcess.Count() + " genes in " + ASETools.ElapsedTimeInSeconds(timer));
+            Console.WriteLine("Loaded " + cases.Count() + " cases, of which " + missingCount + " are missing gene expression, processing " + casesToProcess.Count() + " of them, and loaded " + genesToProcess.Count() + " genes in " + ASETools.ElapsedTimeInSeconds(timer));
 
             timer.Reset();
             timer.Start();
@@ -122,6 +142,16 @@ namespace ExpressionByMutationCount
             Console.WriteLine("lock: " + lockMilliseconds + "ms; read: " + readMilliseconds + "ms, process: " + processMilliseconds + "ms, 1: " + process1Milliseconds + "ms, 2: " + process2Milliseconds + "ms, 3: " + process3Milliseconds + "ms.");
 
             string baseFileName = configuration.finalResultsDirectory + (forAlleleSpecificExpression ? "AlleleSpecific" : "") + "ExpressionDistributionByMutationCount";
+
+            if (forAlleleSpecificExpression && overallTumorASEAboveWhichToExcludeCases <= 1.0)
+            {
+                baseFileName += "-maxASE-" + overallTumorASEAboveWhichToExcludeCases;
+            }
+
+            if (forAlleleSpecificExpression && overallTumorASEBelowWhichToExcludeCases >= 0)
+            {
+                baseFileName += "-minASE-" + overallTumorASEBelowWhichToExcludeCases;
+            }
 
             var panCancerOutputFile = ASETools.CreateStreamWriterWithRetry(baseFileName + ".txt");
             WriteFileHeader(panCancerOutputFile, perChromosome);
@@ -675,15 +705,18 @@ namespace ExpressionByMutationCount
 
         static void PrintUsage()
         {
-            Console.WriteLine("usage: ExpressionByMutationCount {-a} {-c}");
+            Console.WriteLine("usage: ExpressionByMutationCount {-a} {-c} {-MaxASE maxASE}");
             Console.WriteLine("-a means allele-specific");
             Console.WriteLine("-c means do per-chromosome");
+            Console.WriteLine("-MaxASE means to exclude ASE > maxASE, to try to segregate regional effects from global ones");
         }
 
 
         static ASETools.Configuration configuration;
         static bool forAlleleSpecificExpression;
-
+        static double overallTumorASEAboveWhichToExcludeCases = 1.1;   // This is for the case where we want to treat tumors with high ASE as always just having multiple mutations, with the idea that they have scattered hypermethylation
+        static double overallTumorASEBelowWhichToExcludeCases = -1; 
+        static Dictionary<string, ASETools.PerCaseASE> perCaseASE = null;
 
         static int nLoaded = 0;
 

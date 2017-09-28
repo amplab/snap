@@ -24,6 +24,7 @@ namespace ASELib
         public const int GuidStringLength = 36;
 
 		public const int nHumanNuclearChromosomes = 24;   // 1-22, X and Y.
+        public const int nHumanAutosomes = 22;
 
 		// Used for writing out Bonferroni corrected p values in Mann Whitney tests
 		public class OutputLine
@@ -836,6 +837,7 @@ namespace ASELib
             public string normal_rna_mapped_base_count_filename = "";
             public string tumor_rna_mapped_base_count_filename = "";
             public string selected_variant_counts_by_gene_filename = "";
+            public string per_case_ase_filename = "";
             //
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
             //
@@ -890,6 +892,7 @@ namespace ASELib
             public long selected_variant_counts_by_gene_size = 0;
             public long tumor_regional_methylation_size = 0;
             public long normal_regional_methylation_size = 0;
+            public long per_case_ase_size = 0;
 
             //
             // The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
@@ -1090,6 +1093,7 @@ namespace ASELib
 				new FieldInformation("Normal RNA Mapped Base Count Filename",               c => c.normal_rna_mapped_base_count_filename, (c, v) => c.normal_rna_mapped_base_count_filename = v, DerivedFile.Type.NormalRNAMappedBaseCount, normalRNAMappedBaseCountExtension, c => c.normal_rna_file_id, "Normal RNA Mapped Base Count File Size", c => c.normal_rna_mapped_base_count_size, (c, v) => c.normal_rna_mapped_base_count_size = v),
 				new FieldInformation("Tumor RNA Mapped Base Count Filename",                c => c.tumor_rna_mapped_base_count_filename, (c, v) => c.tumor_rna_mapped_base_count_filename = v, DerivedFile.Type.TumorRNAMappedBaseCount, tumorRNAMappedBaseCountExtension, c => c.tumor_rna_file_id, "Tumor RNA Mapped Base Count File Size", c => c.tumor_rna_mapped_base_count_size, (c, v) => c.tumor_rna_mapped_base_count_size = v),
 				new FieldInformation("Selected Variant Counts By Gene Filename",            c => c.selected_variant_counts_by_gene_filename, (c, v) => c.selected_variant_counts_by_gene_filename = v, DerivedFile.Type.SelectedVariantCountByGene, selectedVariantCountByGeneExtension, c => c.case_id, "Selected Variant Counts By Gene File Size", c => c.selected_variant_counts_by_gene_size, (c, v) => c.selected_variant_counts_by_gene_size = v),
+                new FieldInformation("Per-Case ASE Filename",                               c => c.per_case_ase_filename, (c, v) => c.per_case_ase_filename = v, DerivedFile.Type.PerCaseASE, perCaseASEExtension, c => c.case_id, "Per-Case ASE File Size", c => c.per_case_ase_size, (c, v) => c.per_case_ase_size = v),
 
 
 				new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
@@ -2290,6 +2294,7 @@ namespace ASELib
         public const string normalRNAMappedBaseCountExtension = ".normal_rna_mapped_base_count.txt";
         public const string tumorRNAMappedBaseCountExtension = ".tumor_rna_mapped_base_count.txt";
         public const string selectedVariantCountByGeneExtension = ".selected_variant_count_by_gene.txt";
+        public const string perCaseASEExtension = ".per_case_ase";
         public const string bonferroniExtension = "_bonferroni.txt";
 
 		public const string scatterGraphsSummaryFilename = "_summary.txt";
@@ -2304,7 +2309,8 @@ namespace ASELib
         public const string normalHeatMapHistogramFilename = "NormalAlleleSpecificExpressionHeatMapHistograms.txt";
         public const string ASEConsistencyFilename = "ASEConsistency.txt";
         public const string GenesByFunnyASECountFilename = "ASEInconsistencyByGene.txt";
-        public const string AllSignificantResultsFilename = "AllSignificantResults.txt";
+        public const string AllSignificantResultsFilenameBase = "AllSignificantResults";
+        public const string AllSignificantResultsFilename = AllSignificantResultsFilenameBase + ".txt";
         public const string pValueHistogramFilename = "pValueHistogram.txt";
         public const string AlleleSpecificExpressionDistributionByMutationCountFilenameBase = "AlleleSpecificExpressionDistributionByMutationCount";
         public const string HistogramsForSignficantResultsFilename = "HistogramsForSignificantResults.txt";
@@ -2356,7 +2362,7 @@ namespace ASELib
             public enum Type { Unknown, NormalRNAAllcount, TumorRNAAllcount, NormalDNAAllcount, TumorDNAAllcount, RegionalExpression, GeneExpression, TumorDNAGeneCoverage,
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines,
-                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene,
+                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, PerCaseASE,
             };
         } // DerivedFile
 
@@ -2962,8 +2968,20 @@ namespace ASELib
 
                 public string AsString(string fieldName)
                 {
-                    var x =  ConvertToNonExcelString(fields[fieldMappings[fieldName]]);
-					return x;
+                    var x = ConvertToNonExcelString(fields[fieldMappings[fieldName]]);
+                    return x;
+                }
+
+                public string AsStringEmptyForNA(string fieldName)
+                {
+                    var x = ConvertToNonExcelString(fields[fieldMappings[fieldName]]);
+
+                    if (x == "NA")
+                    {
+                        return "";
+                    }
+
+                    return x;
                 }
                 public int AsInt(string fieldName)
                 {
@@ -8878,7 +8896,7 @@ namespace ASELib
             static ClinicalSummaryLine Parse(HeaderizedFile<ClinicalSummaryLine>.FieldGrabber fieldGrabber)
             {
                 return new ClinicalSummaryLine(
-                    fieldGrabber.AsInt("patientId"),
+                    fieldGrabber.AsString("patientId"),
                     fieldGrabber.AsString("labId"),
                     fieldGrabber.AsString("gender"),
                     fieldGrabber.AsIntMinusOneIfStarOrEmptyString("ageAtDiagnosis"),
@@ -8896,7 +8914,9 @@ namespace ASELib
                     fieldGrabber.AsIntMinusOneIfStarOrEmptyString("overallSurvival"),
                     fieldGrabber.AsString("causeOfDeath"),
                     fieldGrabber.AsString("TP53"),
-                    fieldGrabber.AsString("TP53_GeneTrails")
+                    fieldGrabber.AsString("TP53_GeneTrails"),
+                    fieldGrabber.AsString("priorTreatmentRegimens"),
+                    fieldGrabber.AsString("currentRegimen")
                     );
             }
             public static List<ClinicalSummaryLine> readFile(string filename)
@@ -9137,7 +9157,7 @@ namespace ASELib
 
 
             ClinicalSummaryLine(
-                int patientId_,
+                string patientId_,
                 string labId_,
                 string gender_,
                 int ageAtDiag_,
@@ -9155,7 +9175,9 @@ namespace ASELib
                 int overallSurvival_,
                 string causeOfDeath_,
                 string TP53_,
-                string TP53_Genetrails_
+                string TP53_Genetrails_,
+                string priorTreatmentRegimens_,
+                string currentRegimen_
             )
             {
                 patientId = patientId_;
@@ -9177,9 +9199,16 @@ namespace ASELib
                 causeOfDeath = causeOfDeath_;
                 TP53 = TP53_;
                 TP53_Genetrails = TP53_Genetrails_;
+                priorTreatmentRegimens = priorTreatmentRegimens_;
+                currentRegimen = currentRegimen_;
             }
 
-            public readonly int patientId;
+            public bool p53Mutant()
+            {
+                return TP53.ToLower().Contains("positive") || TP53_Genetrails.ToLower().Contains("positive");
+            }
+
+            public readonly string patientId;
             public readonly string labId;
             public readonly string gender;
             public readonly int ageAtDiag;
@@ -9198,6 +9227,8 @@ namespace ASELib
             public readonly string causeOfDeath;
             public readonly string TP53;
             public readonly string TP53_Genetrails;
+            public readonly string priorTreatmentRegimens;  // This is actually a list separated by "|", but for now we just get the raw string
+            public readonly string currentRegimen;
         } // ClinicalSummaryLine
 
         public class KaplanMeierPoint
@@ -9212,9 +9243,10 @@ namespace ASELib
             public double fractionAlive;
         }
 
-        static public List<KaplanMeierPoint> KaplanMeier(List<ClinicalSummaryLine> summaryLines)
+        static public List<KaplanMeierPoint> KaplanMeier(List<ClinicalSummaryLine> summaryLines, out int n)
         {
-            var oneLinePerPatient = summaryLines.GroupByToDict<ClinicalSummaryLine, int>(x => x.patientId).Select(x => x.Value[0]).Where(x => x.overallSurvival > 0).ToList();
+            var oneLinePerPatient = summaryLines.GroupByToDict<ClinicalSummaryLine, string>(x => x.patientId).Select(x => x.Value[0]).Where(x => x.overallSurvival > 0).ToList();
+            n = oneLinePerPatient.Count();
             oneLinePerPatient.Sort((x, y) => x.overallSurvival.CompareTo(y.overallSurvival));   // This isn't necessary, but it's nice for debugging 
 
             var longestSurvivor = summaryLines.Select(x => x.overallSurvival).Max();
@@ -9236,9 +9268,144 @@ namespace ASELib
             }
 
             return retVal;
+        } // KaplanMeier
+
+        public class BeatAMLSampleMapping
+        {
+            public static Dictionary<string, List<BeatAMLSampleMapping>> readFromFile(string filename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+                if (null == inputFile)
+                {
+                    return null;
+                }
+
+                string[] wantedFields =
+                {
+                    "PatientID",
+                    "AML_Original_LabID",
+                    "Normal_Original_LabID",
+                    "AML_SeqID",
+                    "Normal_SeqID",
+                    "AML_BAM",
+                    "Normal_BAM",
+                    "AML_Outliers",
+                    "Normal_Outliers",
+                    "RNA_SeqID",
+                    "RNA_BAM",
+                    "RNA_Outliers"
+                };
+
+                var headerizedFile = new HeaderizedFile<BeatAMLSampleMapping>(inputFile, false, false, "", wantedFields.ToList());
+
+                List<BeatAMLSampleMapping> allMappings;
+                headerizedFile.ParseFile(parse, out allMappings);
+
+                return allMappings.GroupByToDict<BeatAMLSampleMapping, string>(x => x.patientId);
+            }
+
+            static BeatAMLSampleMapping parse(HeaderizedFile<BeatAMLSampleMapping>.FieldGrabber fieldGrabber)
+            {
+                return new BeatAMLSampleMapping(fieldGrabber.AsString("PatientID"), fieldGrabber.AsStringEmptyForNA("AML_Original_LabID"), fieldGrabber.AsStringEmptyForNA("Normal_Original_LabID"),
+                    fieldGrabber.AsStringEmptyForNA("AML_SeqID"), fieldGrabber.AsStringEmptyForNA("Normal_SeqID"), fieldGrabber.AsStringEmptyForNA("AML_BAM"), fieldGrabber.AsStringEmptyForNA("Normal_BAM"),
+                    fieldGrabber.AsStringEmptyForNA("AML_Outliers"), fieldGrabber.AsStringEmptyForNA("Normal_Outliers"), fieldGrabber.AsStringEmptyForNA("RNA_SeqID"), fieldGrabber.AsStringEmptyForNA("RNA_BAM"),
+                    fieldGrabber.AsStringEmptyForNA("RNA_Outliers"));
+            }
+
+            BeatAMLSampleMapping(string patientId_, string AML_Original_LabID_, string Normal_Original_LabID_, string AML_SeqID_, string Normal_SeqID_, string AML_BAM_, string Normal_BAM_, string AML_Outliers_, string Normal_Outliers_, 
+                string RNA_SeqID_, string RNA_BAM_, string RNA_Outliers_)
+            {
+                patientId = patientId_;
+                AML_Original_LabID = AML_Original_LabID_;
+                Normal_Original_LabID = Normal_Original_LabID_;
+                AML_SeqID = AML_SeqID_;
+                Normal_SeqID = Normal_SeqID_;
+                AML_BAM = AML_BAM_;
+                Normal_BAM = Normal_BAM_;
+                AML_Outliers = AML_Outliers_;
+                Normal_Outliers = Normal_Outliers_;
+                RNA_SeqID = RNA_SeqID_;
+                RNA_BAM = RNA_BAM_;
+                RNA_Outliers = RNA_Outliers_;
+            }
+
+            public readonly string patientId;
+            public readonly string AML_Original_LabID;
+            public readonly string Normal_Original_LabID;
+            public readonly string AML_SeqID;
+            public readonly string Normal_SeqID;
+            public readonly string AML_BAM;
+            public readonly string Normal_BAM;
+            public readonly string AML_Outliers;
+            public readonly string Normal_Outliers;
+            public readonly string RNA_SeqID;
+            public readonly string RNA_BAM;
+            public readonly string RNA_Outliers;
+        } // BeatAMLSampleMapping
+
+        public class PerCaseASE
+        {
+            static public Dictionary<string, PerCaseASE> loadAll(Dictionary<string, Case> cases)
+            {
+                return loadAll(cases.Select(x => x.Value).ToList());
+            }
+
+            static public Dictionary<string, PerCaseASE> loadAll(List<Case> cases)
+            {
+                var retVal = new Dictionary<string, PerCaseASE>();
+
+                string[] wantedFields =
+                {
+                    "Normal ASE",
+                    "Tumor ASE"
+                };
+
+                foreach (var case_ in cases)
+                {
+                    if (case_.per_case_ase_filename == "")
+                    {
+                        continue;
+                    }
+
+                    var inputFile = CreateStreamReaderWithRetry(case_.per_case_ase_filename);
+
+                    if (null == inputFile)
+                    {
+                        Console.WriteLine("PerCaseASE.loadAll: unable to open file " + case_.per_case_ase_filename + ".  Skipping.");
+                        continue;
+                    }
+
+                    var headerizedFile = new HeaderizedFile<PerCaseASE>(inputFile, false, true, "", wantedFields.ToList());
+
+                    List<PerCaseASE> thisFileValue;
+                    headerizedFile.ParseFile(parse, out thisFileValue);
+
+                    if (thisFileValue.Count() != 1)
+                    {
+                        Console.WriteLine("PerCaseASE.loadAll: Found incorrect number of elements in " + case_.per_case_ase_filename);
+                        continue;
+                    }
+
+                    retVal.Add(case_.case_id, thisFileValue[0]);  
+                } // foreach
+
+                return retVal;
+            } // loadAll
+
+            static PerCaseASE parse(HeaderizedFile<PerCaseASE>.FieldGrabber fieldGrabber)
+            {
+                return new PerCaseASE(fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Normal ASE"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Tumor ASE"));
+            }
+
+            PerCaseASE(double normalASE_, double tumorASE_)
+            {
+                normalASE = normalASE_;
+                tumorASE = tumorASE_;
+            }
+
+            public readonly double normalASE;
+            public readonly double tumorASE;
         }
-
-
     } // ASETools
 
     //

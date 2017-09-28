@@ -321,10 +321,36 @@ namespace ApplyBonferroniCorrection
                 return;
             }
 
-            if (configuration.commandLineArgs.Count() != 0)
+            double minASE = -1;
+            double maxASE = 2;
+
+            for (int i = 0; i < configuration.commandLineArgs.Count(); i++)
             {
-                Console.WriteLine("usage: ApplyBonferonniCorrection {-configuration configuration}");
-                return;
+                if (configuration.commandLineArgs[i] == "-MaxASE" && configuration.commandLineArgs.Count() > i + 1)
+                {
+                    maxASE = Convert.ToDouble(configuration.commandLineArgs[i + 1]);
+                    i++;
+                } else if (configuration.commandLineArgs[i] == "-MinASE" && configuration.commandLineArgs.Count() > i + 1)
+                {
+                    minASE = Convert.ToDouble(configuration.commandLineArgs[i + 1]);
+                    i++;
+                } else
+                {
+                    Console.WriteLine("usage: ApplyBonferonniCorrection {-configuration configuration} {-MaxASE maxASE} {-MinASE minASE}");
+                    return;
+                }
+            }
+
+            string filenameExtra = "";
+
+            if (maxASE <= 1)
+            {
+                filenameExtra = "-maxASE-" + maxASE;
+            }
+
+            if (minASE >= 0)
+            {
+                filenameExtra += "-minASE-" + minASE;
             }
 
             //
@@ -333,9 +359,10 @@ namespace ApplyBonferroniCorrection
             List<List<string>> inputFileSets = new List<List<string>>();
 
             inputFileSets.Add(Directory.GetFiles(configuration.finalResultsDirectory, "ExpressionDistributionByMutationCount*.txt").Where(x => !x.Contains(ASETools.bonferroniExtension)).ToList());
-            inputFileSets.Add(Directory.GetFiles(configuration.finalResultsDirectory, ASETools.AlleleSpecificExpressionDistributionByMutationCountFilenameBase + "*.txt").Where(x => !x.Contains(ASETools.bonferroniExtension)).ToList());
+            inputFileSets.Add(Directory.GetFiles(configuration.finalResultsDirectory, ASETools.AlleleSpecificExpressionDistributionByMutationCountFilenameBase + filenameExtra + "*.txt").
+                Where(x => !x.Contains(ASETools.bonferroniExtension) && (maxASE <= 1 || !x.Contains("-maxASE-")) && (minASE >= 0 || !x.Contains("-minASE-"))).ToList());
 
-            var allSignificantResultsFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.AllSignificantResultsFilename);
+            var allSignificantResultsFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.AllSignificantResultsFilenameBase + filenameExtra + ".txt");
             allSignificantResultsFile.WriteLine("Hugo Symbol\tASE (one mutation)\tASE (not one mutation)\tinput file\texclusive\tOneVsMany\trange index\trange\tp");
 
             var histogramSets = new List<HistogramSet>();
