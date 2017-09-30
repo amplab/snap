@@ -19,6 +19,12 @@ namespace ASELib
 {
     public class ASETools
     {
+        static ASETools()   // This is the static initializer, which gets called at program start
+        {
+            tumorToString.Add(true, "Tumor");
+            tumorToString.Add(false, "Normal");
+        }
+
         public const string urlPrefix = @"https://gdc-api.nci.nih.gov/";
 
         public const int GuidStringLength = 36;
@@ -1093,8 +1099,6 @@ namespace ASELib
 				new FieldInformation("Normal RNA Mapped Base Count Filename",               c => c.normal_rna_mapped_base_count_filename, (c, v) => c.normal_rna_mapped_base_count_filename = v, DerivedFile.Type.NormalRNAMappedBaseCount, normalRNAMappedBaseCountExtension, c => c.normal_rna_file_id, "Normal RNA Mapped Base Count File Size", c => c.normal_rna_mapped_base_count_size, (c, v) => c.normal_rna_mapped_base_count_size = v),
 				new FieldInformation("Tumor RNA Mapped Base Count Filename",                c => c.tumor_rna_mapped_base_count_filename, (c, v) => c.tumor_rna_mapped_base_count_filename = v, DerivedFile.Type.TumorRNAMappedBaseCount, tumorRNAMappedBaseCountExtension, c => c.tumor_rna_file_id, "Tumor RNA Mapped Base Count File Size", c => c.tumor_rna_mapped_base_count_size, (c, v) => c.tumor_rna_mapped_base_count_size = v),
 				new FieldInformation("Selected Variant Counts By Gene Filename",            c => c.selected_variant_counts_by_gene_filename, (c, v) => c.selected_variant_counts_by_gene_filename = v, DerivedFile.Type.SelectedVariantCountByGene, selectedVariantCountByGeneExtension, c => c.case_id, "Selected Variant Counts By Gene File Size", c => c.selected_variant_counts_by_gene_size, (c, v) => c.selected_variant_counts_by_gene_size = v),
-                new FieldInformation("Per-Case ASE Filename",                               c => c.per_case_ase_filename, (c, v) => c.per_case_ase_filename = v, DerivedFile.Type.PerCaseASE, perCaseASEExtension, c => c.case_id, "Per-Case ASE File Size", c => c.per_case_ase_size, (c, v) => c.per_case_ase_size = v),
-
 
 				new FieldInformation("Normal RNA BAM MD5",                                  c => c.normal_rna_file_bam_md5, (c,v) => c.normal_rna_file_bam_md5 = v),
 				new FieldInformation("Normal RNA BAI MD5",                                  c => c.normal_rna_file_bai_md5, (c,v) => c.normal_rna_file_bai_md5 = v),
@@ -2294,7 +2298,6 @@ namespace ASELib
         public const string normalRNAMappedBaseCountExtension = ".normal_rna_mapped_base_count.txt";
         public const string tumorRNAMappedBaseCountExtension = ".tumor_rna_mapped_base_count.txt";
         public const string selectedVariantCountByGeneExtension = ".selected_variant_count_by_gene.txt";
-        public const string perCaseASEExtension = ".per_case_ase";
         public const string bonferroniExtension = "_bonferroni.txt";
 
 		public const string scatterGraphsSummaryFilename = "_summary.txt";
@@ -2317,6 +2320,7 @@ namespace ASELib
         public const string PerGeneRNARatioFilename = "PerGeneRNARatio.txt";
         public const string ASEMapFilename = "ASEMap.txt";
         public const string PerGeneASEMapFilename = "ASEMap-PerGene.txt";
+        public const string PerCaseASEFilename = "PerCaseASE.txt";
 
 
         public class DerivedFile
@@ -2362,7 +2366,7 @@ namespace ASELib
             public enum Type { Unknown, NormalRNAAllcount, TumorRNAAllcount, NormalDNAAllcount, TumorDNAAllcount, RegionalExpression, GeneExpression, TumorDNAGeneCoverage,
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
                 TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines,
-                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, PerCaseASE,
+                NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, 
             };
         } // DerivedFile
 
@@ -6450,6 +6454,12 @@ namespace ASELib
 				return GetAlleleSpecificExpression(normalRNAReadCounts);
 			}
 
+            public double GetAlleleSpecificExpression(bool tumor)
+            {
+                if (tumor) return GetTumorAlleleSpecificExpression();
+                return GetNormalAlleleSpecificExpression();
+            }
+
 			public double GetTumorAltAlleleFraction()
 			{
 				return GetAltAlleleFraction(tumorRNAReadCounts);
@@ -7235,6 +7245,7 @@ namespace ASELib
 		}
 
         public static bool[] BothBools = { true, false };   // There's probably something like this in the runtime, but whatever.
+        public static Dictionary<bool, string> tumorToString = new Dictionary<bool, string>();  // true -> Tumor, false -> Normal
 
         public class HistogramResultLine
         {

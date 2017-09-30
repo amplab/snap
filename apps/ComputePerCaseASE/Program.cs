@@ -15,6 +15,8 @@ namespace ComputePerCaseASE
         static ASETools.Configuration configuration;
         static Dictionary<bool, Dictionary<string, ASETools.ASEMapPerGeneLine>> perGeneASEMap;
 
+        static List<string> outputLines = new List<string>();
+
         static void Main(string[] args)
         {
             var timer = new Stopwatch();
@@ -52,6 +54,35 @@ namespace ComputePerCaseASE
             threads.ForEach(t => t.Start());
             threads.ForEach(t => t.Join());
 
+            var outputFilename = configuration.finalResultsDirectory + ASETools.PerCaseASEFilename;
+            var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
+            if (outputFile == null)
+            {
+                Console.WriteLine("Unable to open output file " + outputFilename + ". Aborting.");
+                return;
+            }
+
+            outputFile.Write("Case ID");
+
+            foreach (var notTumor in ASETools.BothBools)
+            {
+                outputFile.Write("\t" + ASETools.tumorToString[!notTumor] + " ASE");
+                for (int i = 1; i <= ASETools.nHumanAutosomes; i++)
+                {
+                    outputFile.Write("\t" + ASETools.tumorToString[!notTumor] + " chr" + i + " ASE");
+                }
+                outputFile.Write("\t" + ASETools.tumorToString[!notTumor] + " median chromosome ASE\t" + ASETools.tumorToString[!notTumor] + " min chromosome ASE\t" + ASETools.tumorToString[!notTumor] + " max chromosome ASE");
+            }
+            outputFile.WriteLine();
+
+            foreach (var outputLine in outputLines)
+            {
+                outputFile.WriteLine(outputLine);
+            }
+
+            outputFile.WriteLine("**done**");
+            outputFile.Close();
+
             Console.WriteLine();
             Console.WriteLine("Processed " + nCases + " in " + ASETools.ElapsedTimeInSeconds(timer));
         }
@@ -60,31 +91,48 @@ namespace ComputePerCaseASE
 
         class Measurements
         {
-            public int nNormal = 0, nTumor = 0;
-            public double normal = 0, tumor = 0;
+            List<double> observations = new List<double>();
 
-            public string getASE(bool forTumor)
+            public void recordObservation(double observation)
             {
-                if (forTumor)
+                observations.Add(observation);
+            }
+
+            public double getASE()
+            {
+                return observations.Average();
+            }
+
+            public bool hasAnyObservations()
+            {
+                return observations.Count() != 0;
+            }
+
+            public double getMedian()
+            {
+                int n = observations.Count();
+
+                if (n == 0)
                 {
-                    if (nTumor == 0)
-                    {
-                        return "*";
-                    }
-                    return Convert.ToString(tumor / nTumor);
+                    return 0;
+                }
+
+                observations.Sort();
+
+                if (n % 2 == 1)
+                {
+                    return observations[n / 2];
                 } else
                 {
-                    if (nNormal == 0)
-                    {
-                        return "*";
-                    }
-                    return Convert.ToString(normal / nNormal);
+                    return (observations[n / 2] + observations[n / 2 + 1]) / 2;
                 }
             }
         }
 
         static void WorkerThread(List<ASETools.Case> casesToProcess)
         {
+            var localOutputLines = new List<string>();
+
             while (true)
             {
                 ASETools.Case case_;
@@ -93,6 +141,7 @@ namespace ComputePerCaseASE
                 {
                     if (casesToProcess.Count() == 0)
                     {
+                        outputLines.AddRange(localOutputLines);
                         return;
                     }
 
@@ -121,63 +170,82 @@ namespace ComputePerCaseASE
                 }
 
 
-                var overall = new Measurements();
-                var perChromosome = new Measurements[ASETools.nHumanNuclearChromosomes]; 
-                for (int i = 0; i < ASETools.nHumanNuclearChromosomes; i++)
+                var overall = new Dictionary<bool, Measurements>();
+                var perChromosome = new Dictionary<bool, Measurements[]>();
+                foreach (var tumor in ASETools.BothBools)
                 {
-                    perChromosome[i] = new Measurements();
+                    overall.Add(tumor, new Measurements());
+                    perChromosome.Add(tumor, new Measurements[ASETools.nHumanNuclearChromosomes]);
+                    for (int i = 0; i < ASETools.nHumanNuclearChromosomes; i++)
+                    {
+                        perChromosome[tumor][i] = new Measurements();
+                    }
                 }
 
                 foreach (var variant in annotatedSelectedVariants)
                 {
                     int index = ASETools.ChromosomeNameToIndex(variant.contig);
 
-                    if (!variant.somaticMutation && variant.IsASECandidate(false, normalCopyNumberVariation, configuration, perGeneASEMap, geneMap))
+                    foreach (bool tumor in ASETools.BothBools)
                     {
-                        overall.nNormal++;
-                        overall.normal += variant.GetNormalAlleleSpecificExpression();
-                        if (index != -1) {
-                            perChromosome[index].nNormal++;
-                            perChromosome[index].normal += variant.GetNormalAlleleSpecificExpression();
-                        }
-                    }
-
-                    if (!variant.somaticMutation && variant.IsASECandidate(true, tumorCopyNumberVariation, configuration, perGeneASEMap, geneMap))
-                    {
-                        overall.nTumor++;
-                        overall.tumor += variant.GetTumorAlleleSpecificExpression();
-                        if (index != -1)
+                        if (!variant.somaticMutation && variant.IsASECandidate(tumor, normalCopyNumberVariation, configuration, perGeneASEMap, geneMap))
                         {
-                            perChromosome[index].nTumor++;
-                            perChromosome[index].tumor += variant.GetTumorAlleleSpecificExpression();
+                            overall[tumor].recordObservation(variant.GetAlleleSpecificExpression(tumor));
+                            if (index != -1)
+                            {
+                                perChromosome[tumor][index].recordObservation(variant.GetAlleleSpecificExpression(tumor));
+                            }
                         }
-                    }
+                    } // foreach tumor/normal
                 } // foreach variant
 
-                var outputFilename = ASETools.GetDirectoryFromPathname(case_.annotated_selected_variants_filename) + @"\" + case_.case_id + ASETools.perCaseASEExtension;
-                var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
-                if (outputFile == null)
-                {
-                    Console.WriteLine("Unable to open output file " + outputFilename + ".  Skipping.");
-                    continue;
-                }
+                string outputLine = case_.case_id;
 
-                outputFile.Write("Normal ASE\tTumor ASE");
-                for (int i = 0; i < ASETools.nHumanNuclearChromosomes; i++)
+                foreach (var notTumor in ASETools.BothBools) // We use notTumor here because we want to have normals first, since it makes the output file easier to work with
                 {
-                    outputFile.Write("\tNormal " + ASETools.ChromosomeIndexToName(i) + " ASE\tTumor " + ASETools.ChromosomeIndexToName(i) + "ASE");
-                }
-                outputFile.WriteLine();
+                    if (overall[!notTumor].hasAnyObservations())
+                    {
+                        outputLine += "\t" + overall[!notTumor].getASE();
+                    } else
+                    {
+                        outputLine += "\t*";
+                    }
 
-                outputFile.Write(overall.getASE(false) + "\t" + overall.getASE(true));
-                for (int i = 0; i < ASETools.nHumanNuclearChromosomes; i++)
-                {
-                    outputFile.Write("\t" + perChromosome[i].getASE(false) + "\t" + perChromosome[i].getASE(true));
-                }
-                outputFile.WriteLine();
-                outputFile.WriteLine("**done**");
-                outputFile.Close();
+                    var perChromosomeASEs = new List<double>();
 
+                    for (int i = 1; i <= ASETools.nHumanAutosomes; i++)
+                    {
+                        if (perChromosome[!notTumor][i].hasAnyObservations())
+                        {
+                            perChromosomeASEs.Add(perChromosome[!notTumor][i].getASE());
+                            outputLine += "\t" + perChromosome[!notTumor][i].getASE();
+                        } else
+                        {
+                            outputLine += "\t*";
+                        }
+                    }  // for chromosomes
+
+ 
+                    int n = perChromosomeASEs.Count();
+                    if (n == 0)
+                    {
+                        outputLine += "\t*\t*\t*";
+                    }
+                    else
+                    {
+                        perChromosomeASEs.Sort();
+                        if (n % 2 == 1)
+                        {
+                            outputLine += "\t" + perChromosomeASEs[n / 2];
+                        }
+                        else
+                        {
+                            outputLine += "\t" + (perChromosomeASEs[n / 2] + perChromosomeASEs[n / 2 - 1]) / 2;
+                        }
+                        outputLine += "\t" + perChromosomeASEs[0] + "\t" + perChromosomeASEs[perChromosomeASEs.Count() - 1];        // Min & Max
+                    }
+                } // foreach notTumor
+                localOutputLines.Add(outputLine);
             } // while true
         } // WorkerThread
     }
