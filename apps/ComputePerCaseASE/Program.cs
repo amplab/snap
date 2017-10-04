@@ -103,9 +103,9 @@ namespace ComputePerCaseASE
                 return observations.Average();
             }
 
-            public bool hasAnyObservations()
+            public bool hasEnoughObservations()
             {
-                return observations.Count() != 0;
+                return observations.Count() >= 10;
             }
 
             public double getMedian()
@@ -203,7 +203,7 @@ namespace ComputePerCaseASE
 
                 foreach (var notTumor in ASETools.BothBools) // We use notTumor here because we want to have normals first, since it makes the output file easier to work with
                 {
-                    if (overall[!notTumor].hasAnyObservations())
+                    if (overall[!notTumor].hasEnoughObservations())
                     {
                         outputLine += "\t" + overall[!notTumor].getASE();
                     } else
@@ -215,7 +215,7 @@ namespace ComputePerCaseASE
 
                     for (int i = 1; i <= ASETools.nHumanAutosomes; i++)
                     {
-                        if (perChromosome[!notTumor][i].hasAnyObservations())
+                        if (perChromosome[!notTumor][i].hasEnoughObservations())
                         {
                             perChromosomeASEs.Add(perChromosome[!notTumor][i].getASE());
                             outputLine += "\t" + perChromosome[!notTumor][i].getASE();

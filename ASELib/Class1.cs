@@ -9367,9 +9367,24 @@ namespace ASELib
 
                 string[] wantedFields =
                 {
+                    "Case ID",
                     "Normal ASE",
-                    "Tumor ASE"
+                    "Tumor ASE",
+                    "Normal median chromosome ASE",
+                    "Normal min chromosome ASE",
+                    "Normal max chromosome ASE",
+                    "Tumor median chromosome ASE",
+                    "Tumor min chromosome ASE",
+                    "Tumor max chromosome ASE"
                 };
+
+                var wantedFieldsList = wantedFields.ToList();
+
+                for (int i = 1; i <= nHumanAutosomes; i++)
+                {
+                    wantedFieldsList.Add("Normal chr" + i + " ASE");
+                    wantedFieldsList.Add("Tumor chr" + i + " ASE");
+                }
 
                 foreach (var case_ in cases)
                 {
@@ -9386,7 +9401,7 @@ namespace ASELib
                         continue;
                     }
 
-                    var headerizedFile = new HeaderizedFile<PerCaseASE>(inputFile, false, true, "", wantedFields.ToList());
+                    var headerizedFile = new HeaderizedFile<PerCaseASE>(inputFile, false, true, "", wantedFieldsList);
 
                     List<PerCaseASE> thisFileValue;
                     headerizedFile.ParseFile(parse, out thisFileValue);
@@ -9405,17 +9420,53 @@ namespace ASELib
 
             static PerCaseASE parse(HeaderizedFile<PerCaseASE>.FieldGrabber fieldGrabber)
             {
-                return new PerCaseASE(fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Normal ASE"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Tumor ASE"));
+                var perChromosomeNormalASE = new double[nHumanAutosomes + 1];   // +1 because indexed by chromosome number.  [0] is unused
+                var perChromosomeTumorASE = new double[nHumanAutosomes + 1];   // +1 because indexed by chromosome number.  [0] is unused
+
+                perChromosomeNormalASE[0] = perChromosomeTumorASE[0] = double.NegativeInfinity;
+
+                for (int i = 1; i <= nHumanAutosomes; i++)
+                {
+                    perChromosomeNormalASE[i] = fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Normal chr" + i + " ASE");
+                    perChromosomeTumorASE[i] = fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Tumor chr" + i + " ASE");
+                }
+                return new PerCaseASE(
+                    fieldGrabber.AsString("Case ID"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Normal ASE"),
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Tumor ASE"), perChromosomeNormalASE, perChromosomeTumorASE,
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Tumor min chromosome ASE"),
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Tumor median chromosome ASE"),
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Tumor max chromosome ASE"),
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Normal min chromosome ASE"),
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Normal median chromosome ASE"),
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("Normal max chromosome ASE"));
             }
 
-            PerCaseASE(double normalASE_, double tumorASE_)
+            PerCaseASE(string caseId_, double normalASE_, double tumorASE_, double[] perChromosomeNormalASE_, double[] perChromosomeTumorASE_,
+                double tumorMinChromosome_, double tumorMedianChromosome_, double tumorMaxChromosome_, double normalMinChromosome_, double normalMedianChromosome_,
+                double normalMaxChromosome_)
             {
+                caseId = caseId_;
                 normalASE = normalASE_;
                 tumorASE = tumorASE_;
+                perChromosomeNormalASE = perChromosomeNormalASE_;
+                perChromosomeTumorASE = perChromosomeTumorASE_;
+                tumorMinChromosome = tumorMinChromosome_;
+                tumorMedianChromosome = tumorMedianChromosome_;
+                tumorMaxChromosome = tumorMaxChromosome_;
+                normalMinChromosome = normalMinChromosome_;
+                normalMedianChromosome = normalMedianChromosome_;
+                normalMaxChromosome = normalMaxChromosome_;
             }
 
+            public readonly string caseId;
             public readonly double normalASE;
             public readonly double tumorASE;
+
+            public readonly double[] perChromosomeNormalASE;
+            public readonly double[] perChromosomeTumorASE;
+
+            public readonly double tumorMinChromosome, tumorMedianChromosome, tumorMaxChromosome;
+            public readonly double normalMinChromosome, normalMedianChromosome, normalMaxChromosome;
         }
     } // ASETools
 
