@@ -41,7 +41,7 @@ namespace ComputePerCaseASE
                 Console.WriteLine("Unable to load cases.");
             }
 
-            var casesToProcess = cases.Where(x => x.Value.per_case_ase_filename == "" && x.Value.annotated_selected_variants_filename != "" && x.Value.tumor_copy_number_filename != "").Select(x => x.Value).ToList();
+            var casesToProcess = cases.Where(x => x.Value.annotated_selected_variants_filename != "" && x.Value.tumor_copy_number_filename != "").Select(x => x.Value).ToList();
             int nCases = casesToProcess.Count();
             Console.Write("Processing " + nCases + " cases, 1 dot/100 cases: ");
 
@@ -72,6 +72,8 @@ namespace ComputePerCaseASE
                     outputFile.Write("\t" + ASETools.tumorToString[!notTumor] + " chr" + i + " ASE");
                 }
                 outputFile.Write("\t" + ASETools.tumorToString[!notTumor] + " median chromosome ASE\t" + ASETools.tumorToString[!notTumor] + " min chromosome ASE\t" + ASETools.tumorToString[!notTumor] + " max chromosome ASE");
+                outputFile.Write("\t" + ASETools.tumorToString[!notTumor] + " 10MB region count" + "\t" + ASETools.tumorToString[!notTumor] + " 10MB region median " + "\t" + ASETools.tumorToString[!notTumor] + " 10MB region min" + "\t" +
+                    ASETools.tumorToString[!notTumor] + " 10MB region max" + "\t" + ASETools.tumorToString[!notTumor] + " 10MB region mean");
             }
             outputFile.WriteLine();
 
@@ -105,7 +107,7 @@ namespace ComputePerCaseASE
 
             public bool hasEnoughObservations()
             {
-                return observations.Count() >= 10;
+                return observations.Count() >= 30;
             }
 
             public double getMedian()
@@ -172,6 +174,8 @@ namespace ComputePerCaseASE
 
                 var overall = new Dictionary<bool, Measurements>();
                 var perChromosome = new Dictionary<bool, Measurements[]>();
+                var per10MB = new Dictionary<bool, List<Measurements>>();
+ 
                 foreach (var tumor in ASETools.BothBools)
                 {
                     overall.Add(tumor, new Measurements());
@@ -180,17 +184,35 @@ namespace ComputePerCaseASE
                     {
                         perChromosome[tumor][i] = new Measurements();
                     }
+                    per10MB.Add(tumor, new List<Measurements>());
                 }
 
-                foreach (var variant in annotatedSelectedVariants)
+                string currentChromosome = "";
+                int currentLocus = 0;
+                annotatedSelectedVariants.Sort();
+
+                for (int i = 0; i < annotatedSelectedVariants.Count(); i++)
                 {
+                    var variant = annotatedSelectedVariants[i];
                     int index = ASETools.ChromosomeNameToIndex(variant.contig);
+
+                    if (variant.contig != currentChromosome || variant.locus / 10000000 != currentLocus / 10000000)
+                    {
+                        foreach (bool tumor in ASETools.BothBools)
+                        {
+                            per10MB[tumor].Insert(0, new Measurements());
+                        }
+
+                        currentChromosome = variant.contig;
+                        currentLocus = variant.locus;
+                    }
 
                     foreach (bool tumor in ASETools.BothBools)
                     {
                         if (!variant.somaticMutation && variant.IsASECandidate(tumor, normalCopyNumberVariation, configuration, perGeneASEMap, geneMap))
                         {
                             overall[tumor].recordObservation(variant.GetAlleleSpecificExpression(tumor));
+                            per10MB[tumor][0].recordObservation(variant.GetAlleleSpecificExpression(tumor));
                             if (index != -1)
                             {
                                 perChromosome[tumor][index].recordObservation(variant.GetAlleleSpecificExpression(tumor));
@@ -242,7 +264,29 @@ namespace ComputePerCaseASE
                         {
                             outputLine += "\t" + (perChromosomeASEs[n / 2] + perChromosomeASEs[n / 2 - 1]) / 2;
                         }
-                        outputLine += "\t" + perChromosomeASEs[0] + "\t" + perChromosomeASEs[perChromosomeASEs.Count() - 1];        // Min & Max
+                        outputLine += "\t" + perChromosomeASEs[0] + "\t" + perChromosomeASEs[n - 1];        // Min & Max
+                    }
+
+                    var good10MBRegions = per10MB[!notTumor].Where(x => x.hasEnoughObservations()).Select(x => x.getASE()).ToList();
+                    n = good10MBRegions.Count();
+                    outputLine += "\t" + n;
+                    if (n < 10)
+                    {
+                        outputLine += "\t*\t*\t*\t*";
+                    } else
+                    {
+                        good10MBRegions.Sort();
+                        // median
+                        if (n % 2 == 1)
+                        {
+                            outputLine += "\t" + good10MBRegions[n / 2];
+                        } else
+                        {
+                            outputLine += "\t" + (good10MBRegions[n / 2] + good10MBRegions[n / 2 - 1]) / 2;
+                        }
+
+                        // min, max, mean
+                        outputLine += "\t" + good10MBRegions[0] + "\t" + good10MBRegions[n - 1] + "\t" + good10MBRegions.Average();
                     }
                 } // foreach notTumor
                 localOutputLines.Add(outputLine);

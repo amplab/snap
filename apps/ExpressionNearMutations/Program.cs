@@ -27,71 +27,73 @@ namespace ExpressionNearMutations
 			public Dictionary<string, ASETools.GeneExpression> geneExpressions;
 
 			public bool hasNormal;
-			public RegionalSignal(Dictionary<string, ASETools.GeneExpression> geneExpressions_, ASETools.GeneLocationsByNameAndChromosome geneLocationInformation, bool hasNormal_)
-		{
-			geneExpressions = geneExpressions_;
-			hasNormal = hasNormal_;
 
-			for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
-			{
-				perChromosomeRegionalExpressionState[whichChromosome] = new ASETools.RegionalExpressionState();
-			}
 
-			foreach (var geneEntry in geneLocationInformation.genesByName)
-			{
-				var chromosome = geneEntry.Value.chromosome;
-				if (!allButThisChromosomeAutosomalRegionalExpressionState.ContainsKey(chromosome))
-				{
-					allButThisChromosomeAutosomalRegionalExpressionState.Add(chromosome, new ASETools.RegionalExpressionState());
-				}
-			}
-		}
+		    public RegionalSignal(Dictionary<string, ASETools.GeneExpression> geneExpressions_, ASETools.GeneLocationsByNameAndChromosome geneLocationInformation, bool hasNormal_)
+		    {
+			    geneExpressions = geneExpressions_;
+			    hasNormal = hasNormal_;
 
-		public void Add(string chromosome, int offset, double z_tumor, double mu_tumor, bool hasNormalValues, double z_normal = 0, double mu_normal = 0)
-		{
-			if (ASETools.isChromosomeAutosomal(chromosome))
-			{
-				// Autosome
-				wholeAutosomeRegionalExpression.AddTumorExpression(z_tumor, mu_tumor);
-				if (hasNormalValues)
-					wholeAutosomeRegionalExpression.AddNormalExpression(z_normal, mu_normal);
-				// Exclusive whole chromosomes
-				foreach (var entry in allButThisChromosomeAutosomalRegionalExpressionState)
-				{
-					if (entry.Key != chromosome)
-					{
-						entry.Value.AddTumorExpression(z_tumor, mu_tumor);
-						if (hasNormalValues)
-							entry.Value.AddNormalExpression(z_normal, mu_normal);
-					}
-				}
-			}
+			    for (int whichChromosome = 0; whichChromosome < ASETools.nHumanNuclearChromosomes; whichChromosome++)
+			    {
+				    perChromosomeRegionalExpressionState[whichChromosome] = new ASETools.RegionalExpressionState();
+			    }
 
-			int chromosomeId = ASETools.ChromosomeNameToIndex(chromosome);
-			// Whole chromosomes
-			if (chromosomeId != -1)
-			{
-				perChromosomeRegionalExpressionState[chromosomeId].AddTumorExpression(z_tumor, mu_tumor);
+			    foreach (var geneEntry in geneLocationInformation.genesByName)
+			    {
+				    var chromosome = geneEntry.Value.chromosome;
+				    if (!allButThisChromosomeAutosomalRegionalExpressionState.ContainsKey(chromosome))
+				    {
+					    allButThisChromosomeAutosomalRegionalExpressionState.Add(chromosome, new ASETools.RegionalExpressionState());
+				    }
+			    }
+            } // RegionalSignal
 
-				if (hasNormalValues)
-					perChromosomeRegionalExpressionState[chromosomeId].AddNormalExpression(z_normal, mu_normal);
-			}
-			// Regional, same chromosome
-			foreach (var geneLocation in geneLocationInformation.genesByChromosome[chromosome])
-			{
-				if (!geneExpressions.ContainsKey(geneLocation.hugoSymbol))
-				{
-					geneExpressions.Add(geneLocation.hugoSymbol, new ASETools.GeneExpression(geneLocation));
-				}
-				geneExpressions[geneLocation.hugoSymbol].AddRegionalExpression(offset, z_tumor, mu_tumor, true); // Recall that for allele-specifc expresion, z is really the level of allele-specific expression, not the expression z score.
+            public void Add(string chromosome, int locus, double z_tumor, double mu_tumor, bool hasNormalValues, double z_normal = 0, double mu_normal = 0)
+		    {
+			    if (ASETools.isChromosomeAutosomal(chromosome))
+			    {
+				    // Autosome
+				    wholeAutosomeRegionalExpression.AddTumorExpression(z_tumor, mu_tumor);
+				    if (hasNormalValues)
+					    wholeAutosomeRegionalExpression.AddNormalExpression(z_normal, mu_normal);
+				    // Exclusive whole chromosomes
+				    foreach (var entry in allButThisChromosomeAutosomalRegionalExpressionState)
+				    {
+					    if (entry.Key != chromosome)
+					    {
+						    entry.Value.AddTumorExpression(z_tumor, mu_tumor);
+						    if (hasNormalValues)
+							    entry.Value.AddNormalExpression(z_normal, mu_normal);
+					    }
+				    }
+			    }
 
-				if (hasNormalValues)
-					geneExpressions[geneLocation.hugoSymbol].AddRegionalExpression(offset, z_normal, mu_normal, false); // Recall that for allele-specifc expresion, z is really the level of allele-specific expression, not the expression z score.
-			}
-		}
-	}
+			    int chromosomeId = ASETools.ChromosomeNameToIndex(chromosome);
+			    // Whole chromosomes
+			    if (chromosomeId != -1)
+			    {
+				    perChromosomeRegionalExpressionState[chromosomeId].AddTumorExpression(z_tumor, mu_tumor);
 
-	static void ProcessCases(List<ASETools.Case> casesToProcess, bool forAlleleSpecificExpression, int minExamplesPerRegion)
+				    if (hasNormalValues)
+					    perChromosomeRegionalExpressionState[chromosomeId].AddNormalExpression(z_normal, mu_normal);
+			    }
+			    // Regional, same chromosome
+			    foreach (var geneLocation in geneLocationInformation.genesByChromosome[chromosome])
+			    {
+				    if (!geneExpressions.ContainsKey(geneLocation.hugoSymbol))
+				    {
+					    geneExpressions.Add(geneLocation.hugoSymbol, new ASETools.GeneExpression(geneLocation));
+				    }
+				    geneExpressions[geneLocation.hugoSymbol].AddRegionalExpression(locus, z_tumor, mu_tumor, true); // Recall that for allele-specifc expresion, z is really the level of allele-specific expression, not the expression z score.
+
+				    if (hasNormalValues)
+					    geneExpressions[geneLocation.hugoSymbol].AddRegionalExpression(locus, z_normal, mu_normal, false); // Recall that for allele-specifc expresion, z is really the level of allele-specific expression, not the expression z score.
+			    }
+            } // Add
+        } // RegionalSignal
+
+        static void ProcessCases(List<ASETools.Case> casesToProcess, bool forAlleleSpecificExpression, int minExamplesPerRegion)
 		{
             var timer = new Stopwatch();
 
@@ -123,7 +125,7 @@ namespace ExpressionNearMutations
 
                 // Used to filter out annotated variants in regions with copy number variation
                 // The cutoff we use here for choosing copy number variation is very loose (1.0).
-                // Setting this value to 1.0 looses 10-20% of annotated variants, depending on the sample.
+                // Setting this value to 1.0 loses 10-20% of annotated variants, depending on the sample.
                 var copyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
                 List<ASETools.CopyNumberVariation> normalCopyNumberVariation = null;
                 if (case_.normal_copy_number_filename != "")
@@ -165,7 +167,7 @@ namespace ExpressionNearMutations
 
 					// Increment the muation count by 1
 					geneExpressions[mafLine.Hugo_Symbol].mutationCount++;
-				}
+				} // foreach maf line
 
 				List<ASETools.AnnotatedVariant> annotatedVariants = null;
 				List<ASETools.RegionalExpressionLine> regionalExpressionLines = null;
@@ -198,27 +200,19 @@ namespace ExpressionNearMutations
 				{
 					foreach (var annotatedVariant in annotatedVariants)
 					{
-						double alleleSpecificExpression;
-						double alleleSpecificExpressionNormal;
-
 						if (geneLocationInformation.genesByChromosome.ContainsKey(annotatedVariant.contig) &&
                             annotatedVariant.IsASECandidate(true, copyNumberVariation, configuration, perGeneASEMap, geneMap) && !annotatedVariant.somaticMutation)
 						{
-							//
-							// Now convert to the amount of allele-specific expression.  50% is no ASE, while 0 or 100% is 100% ASE.
-							//
-							alleleSpecificExpression = annotatedVariant.GetTumorAlleleSpecificExpression();
-
 							// If we have the normal DNA and RNA for this sample, compute the normal ASE
 							if (annotatedVariant.normalRNAReadCounts != null && annotatedVariant.IsASECandidate(false, normalCopyNumberVariation, configuration, perGeneASEMap, geneMap))
 							{
-								alleleSpecificExpressionNormal = annotatedVariant.GetNormalAlleleSpecificExpression();
 								// add to data with normal
-								expressionValues.Add(annotatedVariant.contig, annotatedVariant.locus, alleleSpecificExpression, 0, true, alleleSpecificExpressionNormal, 0);
+								expressionValues.Add(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetTumorAlleleSpecificExpression(), 0, true, annotatedVariant.GetNormalAlleleSpecificExpression(), 0);
 							}
-							else {
+							else
+                            {
 								// add to data without normal
-								expressionValues.Add(annotatedVariant.contig, annotatedVariant.locus, alleleSpecificExpression, 0, false);
+								expressionValues.Add(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetTumorAlleleSpecificExpression(), 0, false);
 							}
 						}
 					}
@@ -240,7 +234,7 @@ namespace ExpressionNearMutations
 							expressionValues.Add(region.contig,  region.contig_offset, region.mean_z, region.mean_mu, false);
 						}
 					}
-				}
+				} // not for ASE (i.e., total expression)
 
 				//
 				// Write the output file for tumor and normal, if data exists.
@@ -289,8 +283,8 @@ namespace ExpressionNearMutations
 					var nRemaining = casesToProcess.Count();
 					Console.WriteLine("Processed case " + case_.case_id + " in " + (timer.ElapsedMilliseconds + 500) / 1000 + "s.  " + nRemaining + " remain" + ((1 == nRemaining) ? "s" : "") + " queued.");
 				}
-			} // while true
-        }
+			} // while true (i.e., for each case)
+        } // ProcessCases
 
         static void PrintUsageMessage()
         {

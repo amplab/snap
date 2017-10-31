@@ -144,7 +144,7 @@ namespace ASEHeatMap
                 {
                     outputFile.Write("Allele Specific Expression\tCount of samples at this ASE\tpdf of ASE count");
                     writeColumnHeaders(outputFile, "Near selected genes ", true);
-                    writeColumnHeaders(outputFile, "exclusive and exlcusive of gene ", true);
+                    writeColumnHeaders(outputFile, "exclusive and exclusive of gene ", true);
                     writeColumnHeaders(outputFile, "exclusive ", true);
                     writeColumnHeaders(outputFile, "", false);
                 }
@@ -267,14 +267,10 @@ namespace ASEHeatMap
                 return;
             }
 
-            var selectedGeneNames = allSignificantResults.Where(x => x.inputFile == ASETools.AllSignificantResultsFilename + ".txt" && x.range_index > 5).Select(x => x.hugo_symbol).Distinct().ToArray();
+            var selectedGeneNames = allSignificantResults.Where(x => x.inputFile == ASETools.AlleleSpecificExpressionDistributionByMutationCountFilenameBase + ".txt" && x.range_index > 5).Select(x => x.hugo_symbol).Distinct().ToArray();
 
-            var selectedGenes = new List<ASETools.GeneLocationInfo>();
-            foreach (var geneName in selectedGeneNames)
-            {
-                selectedGenes.Add(geneLocationInformation.genesByName[geneName]);
-            }
-
+            var selectedGenes = geneLocationInformation.genesByName.Where(x => selectedGeneNames.Contains(x.Value.hugoSymbol)).Select(x => x.Value).ToList();
+ 
             Console.Write("Progress (1 dot/100 cases): ");
 
             var threads = new List<Thread>();
@@ -532,10 +528,10 @@ namespace ASEHeatMap
 
 
                 var tumorAnnotatedSelectedVariants = annotatedSelectedVariants.Where(x => !x.somaticMutation &&
-                ASETools.isChromosomeAutosomal(x.contig) && x.IsASECandidate(true, copyNumberVariation, configuration, perGeneASEMap, geneMap)).ToList();
+                ASETools.isChromosomeAutosomal(x.contig) && x.IsASECandidate(true, copyNumberVariation, configuration, perGeneASEMap, geneMap, 30)).ToList();
 
                 var normalAnnotatedSelectedVariants = annotatedSelectedVariants.Where(x => !x.somaticMutation &&
-                ASETools.isChromosomeAutosomal(x.contig) && x.normalRNAReadCounts != null && x.IsASECandidate(false, normalCopyNumberVariation, configuration, perGeneASEMap, geneMap)).ToList();
+                ASETools.isChromosomeAutosomal(x.contig) && x.normalRNAReadCounts != null && x.IsASECandidate(false, normalCopyNumberVariation, configuration, perGeneASEMap, geneMap, 30)).ToList();
 
 
                 //Console.WriteLine("Left with " + annotatedSelectedVariants.Count() + " of " + nUnfiltered);

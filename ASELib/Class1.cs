@@ -843,7 +843,6 @@ namespace ASELib
             public string normal_rna_mapped_base_count_filename = "";
             public string tumor_rna_mapped_base_count_filename = "";
             public string selected_variant_counts_by_gene_filename = "";
-            public string per_case_ase_filename = "";
             //
             // If you add another drived file type and it has a **done** terminator, please add it to the CheckDone tool.     
             //
@@ -898,7 +897,6 @@ namespace ASELib
             public long selected_variant_counts_by_gene_size = 0;
             public long tumor_regional_methylation_size = 0;
             public long normal_regional_methylation_size = 0;
-            public long per_case_ase_size = 0;
 
             //
             // The column numbers from the cases file for these fields.  They're used by C++ programs, which don't have access to the HeaderizedFile class,
@@ -4371,20 +4369,20 @@ namespace ASELib
 				}
 			}
 
-			public void AddRegionalExpression(int chromosomeOffset, double z, double mu, bool isTumor)
+			public void AddRegionalExpression(int locus, double z, double mu, bool isTumor)
 			{
 				int distance;
-				if (chromosomeOffset >= geneLocationInfo.minLocus && chromosomeOffset <= geneLocationInfo.maxLocus)
+				if (locus >= geneLocationInfo.minLocus && locus <= geneLocationInfo.maxLocus)
 				{
 					distance = 0;
 				}
-				else if (chromosomeOffset < geneLocationInfo.minLocus)
+				else if (locus < geneLocationInfo.minLocus)
 				{
-					distance = geneLocationInfo.minLocus - chromosomeOffset;
+					distance = geneLocationInfo.minLocus - locus;
 				}
 				else
 				{
-					distance = chromosomeOffset - geneLocationInfo.maxLocus;
+					distance = locus - geneLocationInfo.maxLocus;
 				}
 
 				for (int sizeIndex = nRegionSizes - 1; sizeIndex >= 0; sizeIndex--)
@@ -4986,6 +4984,15 @@ namespace ASELib
                 return value.ToString();
             }
 		} // RegionalSignalFile
+
+        public static string stringForDouble(double value)
+        {
+            if (value == double.NegativeInfinity)
+            {
+                return "*";
+            }
+            return Convert.ToString(value);
+        }
 
         public class ASESignalLine // Should probably add the per-chromosome stuff here, too.
         {
@@ -6165,6 +6172,16 @@ namespace ASELib
 				return (nMatchingReference.ToString() + '\t' + nMatchingAlt.ToString() + '\t' + nMatchingNeither.ToString() + '\t' + nMatchingBoth.ToString());
 			}
 
+            public int totalReads()
+            {
+                return nMatchingAlt + nMatchingBoth + nMatchingNeither + nMatchingReference;
+            }
+
+            public int usefulReads()
+            {
+                return nMatchingReference + nMatchingAlt;
+            }
+
         } // ReadCounts
 
 
@@ -6424,7 +6441,7 @@ namespace ASELib
 			}
         } // Region
 
-        public class AnnotatedVariant
+        public class AnnotatedVariant : IComparable
         {
 			public AnnotatedVariant(){}
 
@@ -6627,7 +6644,7 @@ namespace ASELib
 					"normalRNAmatchingRef\tnormalRNAmatchingAlt\tnormalRNAmatchingNeither\tnormalRNAmatchingBoth";
 
 			public readonly string Hugo_symbol;                 // Only present for somatic mutations, otherwise ""
-			bool IsASECandidate(bool isTumor = true) // Has at least 10 tumor DNA & RNA reads, and has variant allele frequency between .4 and .6 in tumor DNA
+			bool IsASECandidate(bool isTumor = true, int minCoverage = 10) // Has at least 10 tumor DNA & RNA reads, and has variant allele frequency between .4 and .6 in tumor DNA
 			{
 				// get read counts for either tumor or normal
 				var DNAReadCounts = isTumor ? this.tumorDNAReadCounts : this.normalDNAReadCounts;
@@ -6641,8 +6658,8 @@ namespace ASELib
 
 				// check there is sufficient coverage for DNA and RNA
 				// check annotated variant is not a possible minor subclone
-				return (DNAReadCounts.nMatchingReference + DNAReadCounts.nMatchingAlt >= 10 &&
-						RNAReadCounts.nMatchingReference + RNAReadCounts.nMatchingAlt >= 10 &&
+				return (DNAReadCounts.nMatchingReference + DNAReadCounts.nMatchingAlt >= minCoverage &&
+						RNAReadCounts.nMatchingReference + RNAReadCounts.nMatchingAlt >= minCoverage &&
 						DNAReadCounts.nMatchingReference * 3 >= DNAReadCounts.nMatchingAlt * 2 &&
 						DNAReadCounts.nMatchingAlt * 3 >= DNAReadCounts.nMatchingReference * 2);
 			}
@@ -6650,11 +6667,11 @@ namespace ASELib
             //
             // A version that rolls in the copy number file check.
             //
-            public bool IsASECandidate(bool isTumor, List<CopyNumberVariation> copyNumber, Configuration configuration, Dictionary<bool, Dictionary<string, ASEMapPerGeneLine>> perGeneASEMap, GeneMap geneMap)
+            public bool IsASECandidate(bool isTumor, List<CopyNumberVariation> copyNumber, Configuration configuration, Dictionary<bool, Dictionary<string, ASEMapPerGeneLine>> perGeneASEMap, GeneMap geneMap, int minCoverage = 10)
             {
                 if (!isTumor && normalRNAReadCounts == null) return false;
 
-                if (!IsASECandidate(isTumor))
+                if (!IsASECandidate(isTumor, minCoverage))
                 {
                     return false;
                 }
@@ -6705,6 +6722,11 @@ namespace ASELib
                 }
 
                 return 1;
+            }
+
+            public int CompareTo(object peer)
+            {
+                return CompareByLocus(this, (AnnotatedVariant)peer);
             }
 
 			public readonly bool somaticMutation;
@@ -7461,10 +7483,10 @@ namespace ASELib
                     );
             }
 
-            public void writeToFile(StreamWriter outputFile)
+            public void appendToString(ref string outputLine)
             {
-                outputFile.Write((oneVsMany == double.NegativeInfinity ? "*" : Convert.ToString(oneVsMany)) + "\t" + (oneVsNotOne == double.NegativeInfinity ? "*" : Convert.ToString(oneVsNotOne)) + "\t" +
-                    zeroMutationStats.outputString() + "\t" + oneMutationStats.outputString() + "\t" + moreThanOneMutationStats.outputString());
+                outputLine += (oneVsMany == double.NegativeInfinity ? "*" : Convert.ToString(oneVsMany)) + "\t" + (oneVsNotOne == double.NegativeInfinity ? "*" : Convert.ToString(oneVsNotOne)) + "\t" +
+                    zeroMutationStats.outputString() + "\t" + oneMutationStats.outputString() + "\t" + moreThanOneMutationStats.outputString();
             }
         } // SingleExpressionResult
 
@@ -7478,7 +7500,11 @@ namespace ASELib
                     "nTumorsExcluded",
                     "nZero",
                     "nOne",
-                    "nMore"
+                    "nMore",
+                    "nSingleContibutingToAltFraction",
+                    "nMultipleContributingToAltFraction",
+                    "single alt fraction",
+                    "multiple alt fraction"
                 };
 
                 var wantedFields = wantedFieldsOtherThanExpression.ToList();
@@ -7502,7 +7528,8 @@ namespace ASELib
                 return retVal;
             }
 
-            public ExpressionResultsLine(string hugo_symbol_, SingleExpressionResult[] nonExclusiveResultsByRange_, SingleExpressionResult[] exclusiveResultsByRange_, int nTumorsExcluded_, int nZero_, int nOne_, int nMore_, string rawLine_)
+            public ExpressionResultsLine(string hugo_symbol_, SingleExpressionResult[] nonExclusiveResultsByRange_, SingleExpressionResult[] exclusiveResultsByRange_, int nTumorsExcluded_, int nZero_, int nOne_, int nMore_, 
+                int nSingleContribuingToAltFraction_, int nMultipleContributingToAltFraction_, double singleAltFraction_, double multipleAltFraction_, string rawLine_)
             {
                 hugo_symbol = hugo_symbol_;
                 nonExclusiveResultsByRange = nonExclusiveResultsByRange_;
@@ -7511,6 +7538,10 @@ namespace ASELib
                 nZero = nZero_;
                 nOne = nOne_;
                 nMore = nMore_;
+                nSingleContibutingToAltFraction = nSingleContribuingToAltFraction_;
+                nMultipleContributingToAltFraction = nMultipleContributingToAltFraction_;
+                singleAltFraction = singleAltFraction_;
+                multipleAltFraction = multipleAltFraction_;
                 rawLine = rawLine_;
 
                 resultsByRange.Add(true, nonExclusiveResultsByRange);
@@ -7530,6 +7561,8 @@ namespace ASELib
 
                 return new ExpressionResultsLine(fieldGrabber.AsString("Hugo Symbol"), nonExclusiveResults, exclusiveResults, fieldGrabber.AsIntMinusOneIfStarOrEmptyString("nTumorsExcluded"),
                     fieldGrabber.AsIntMinusOneIfStarOrEmptyString("nZero"), fieldGrabber.AsIntMinusOneIfStarOrEmptyString("nOne"), fieldGrabber.AsIntMinusOneIfStarOrEmptyString("nMore"),
+                    fieldGrabber.AsInt("nSingleContibutingToAltFraction"), fieldGrabber.AsInt("nMultipleContributingToAltFraction"), 
+                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("single alt fraction"), fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("multiple alt fraction"),
                     fieldGrabber.rawLine());
             }
 
@@ -7544,7 +7577,7 @@ namespace ASELib
                     }
                 }
 
-                return result + "\tnTumorsExcluded\tnZero\tnOne\tnMany";
+                return result + "\tnTumorsExcluded\tnZero\tnOne\tnMore\tnSingleContibutingToAltFraction\tnMultipleContributingToAltFraction\tsingle alt fraction\tmultiple alt fraction";
             }
 
             public readonly string hugo_symbol;
@@ -7559,6 +7592,10 @@ namespace ASELib
             public readonly int nZero;
             public readonly int nOne;
             public readonly int nMore;
+            public readonly int nSingleContibutingToAltFraction;
+            public readonly int nMultipleContributingToAltFraction;
+            public readonly double singleAltFraction;
+            public readonly double multipleAltFraction;
             public readonly string rawLine;
         } // ExpressionResultsLine
 
@@ -9356,12 +9393,7 @@ namespace ASELib
 
         public class PerCaseASE
         {
-            static public Dictionary<string, PerCaseASE> loadAll(Dictionary<string, Case> cases)
-            {
-                return loadAll(cases.Select(x => x.Value).ToList());
-            }
-
-            static public Dictionary<string, PerCaseASE> loadAll(List<Case> cases)
+            static public Dictionary<string, PerCaseASE> loadAll(Configuration configuration)
             {
                 var retVal = new Dictionary<string, PerCaseASE>();
 
@@ -9386,34 +9418,14 @@ namespace ASELib
                     wantedFieldsList.Add("Tumor chr" + i + " ASE");
                 }
 
-                foreach (var case_ in cases)
-                {
-                    if (case_.per_case_ase_filename == "")
-                    {
-                        continue;
-                    }
 
-                    var inputFile = CreateStreamReaderWithRetry(case_.per_case_ase_filename);
+                var inputFile = CreateStreamReaderWithRetry(configuration.finalResultsDirectory + PerCaseASEFilename);
+                var headerizedFile = new HeaderizedFile<PerCaseASE>(inputFile, false, true, "", wantedFieldsList);
 
-                    if (null == inputFile)
-                    {
-                        Console.WriteLine("PerCaseASE.loadAll: unable to open file " + case_.per_case_ase_filename + ".  Skipping.");
-                        continue;
-                    }
+                List<PerCaseASE> allPerCaseASE;
+                headerizedFile.ParseFile(parse, out allPerCaseASE);
 
-                    var headerizedFile = new HeaderizedFile<PerCaseASE>(inputFile, false, true, "", wantedFieldsList);
-
-                    List<PerCaseASE> thisFileValue;
-                    headerizedFile.ParseFile(parse, out thisFileValue);
-
-                    if (thisFileValue.Count() != 1)
-                    {
-                        Console.WriteLine("PerCaseASE.loadAll: Found incorrect number of elements in " + case_.per_case_ase_filename);
-                        continue;
-                    }
-
-                    retVal.Add(case_.case_id, thisFileValue[0]);  
-                } // foreach
+                allPerCaseASE.ForEach(x => retVal.Add(x.caseId, x));
 
                 return retVal;
             } // loadAll

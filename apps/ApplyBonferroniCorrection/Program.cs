@@ -54,6 +54,7 @@ namespace ApplyBonferroniCorrection
             public int bestLocalZeroVsOneAt = -1;
             public bool bestLocalZeroVsOneIsExclusive = false;
             public bool significant = false;
+            public List<string> significantAt = new List<string>();
 
             public int minPAt = -1;
             public bool minPIsExclusive = false;
@@ -126,6 +127,8 @@ namespace ApplyBonferroniCorrection
 
             if (p <= configuration.significanceLevel)
             {
+                pValueStats.significantAt.Add(Convert.ToString(regionIndex) + (exclusive ? "E" : ""));
+
                 allSignificantResultsFile.WriteLine(hugoSymbol + "\t" + ASE + "\t" + (ASENotOne == double.NegativeInfinity ? "*" : Convert.ToString(ASENotOne)) + "\t" + 
                     ASETools.GetFileNameFromPathname(inputFilename) + "\t" + exclusive + "\t" + !oneVsNotOne + "\t" + regionIndex + "\t" + ASETools.regionIndexToString(regionIndex) + "\t" + p);
                 return 1;
@@ -152,11 +155,13 @@ namespace ApplyBonferroniCorrection
             nSignificantResults += ProcessSinglePValue(hugoSymbol, singleResult.oneMutationStats.n, singleResult.moreThanOneMutationStats.n, singleResult.oneMutationStats.mean, singleResult.moreThanOneMutationStats.mean, inputFilename, ref singleResult.oneVsMany, bonferroniCorrection, exclusive, false, regionIndex, pValueStats, histogramSet, allSignificantResultsFile);
             nSignificantResults += ProcessSinglePValue(hugoSymbol, singleResult.oneMutationStats.n, singleResult.moreThanOneMutationStats.n + singleResult.zeroMutationStats.n, singleResult.oneMutationStats.mean, ASENotOne, inputFilename, ref singleResult.oneVsNotOne, bonferroniCorrection, exclusive, true, regionIndex, pValueStats, histogramSet, allSignificantResultsFile);
 
-            if (singleResult.oneMutationStats.n > 0 && singleResult.zeroMutationStats.n > 0 && singleResult.oneMutationStats.mean != 0 && (singleResult.oneVsNotOne <= configuration.significanceLevel || singleResult.oneVsNotOne <= configuration.significanceLevel))
+            if (singleResult.oneMutationStats.n > 0 && singleResult.zeroMutationStats.n > 0 && singleResult.oneMutationStats.mean != 0 && 
+                (singleResult.oneVsNotOne <= configuration.significanceLevel && singleResult.oneVsNotOne != double.NegativeInfinity|| singleResult.oneVsMany <= configuration.significanceLevel && singleResult.oneVsMany != double.NegativeInfinity))
             {
                 //
                 // We have a significant zero-vs-one.
                 //
+
                 double zeroVsOne = singleResult.oneMutationStats.mean / singleResult.zeroMutationStats.mean;
                 if (zeroVsOne > pValueStats.bestZeroVsOne)
                 {
@@ -169,6 +174,36 @@ namespace ApplyBonferroniCorrection
             return nSignificantResults;
         }
 
+        class SortKeyAndLine : IComparable
+        {
+            public SortKeyAndLine(bool significant_, double amount_, string hugo_symbol_, string outputLine_)
+            {
+                significant = significant_;
+                amount = amount_;
+                hugo_symbol = hugo_symbol_;
+                outputLine = outputLine_;
+            }
+            public readonly bool significant;
+            public readonly double amount;
+            public readonly string hugo_symbol;
+            public readonly string outputLine;
+
+            public int CompareTo(object peerObject)
+            {
+                SortKeyAndLine peer = (SortKeyAndLine)peerObject;
+                // Sort order is significant before not, then backward by amount (so larger amounts sort first).
+
+                if (significant && !peer.significant) return -1;
+                if (peer.significant && !significant) return 1;
+
+                if (significant)
+                {
+                    if (amount != peer.amount) return peer.amount.CompareTo(amount);  // I cleverely reversed the order in the CompareTo to get it to sort higher first.
+                }
+
+                return hugo_symbol.CompareTo(peer.hugo_symbol);
+            }
+        }
 
         static int ProcessFile(string filename, StreamWriter allSignificantResultsFile, int bonferroniCorrection, HistogramSet histogramSet)
         {
@@ -177,7 +212,6 @@ namespace ApplyBonferroniCorrection
                 Console.WriteLine("ProcessFile: filename " + filename + " does not end in .txt");
                 return 0;
             }
-
 
             string outputFilename = filename.Substring(0, filename.Count() - 4) + ASETools.bonferroniExtension;
 
@@ -189,8 +223,8 @@ namespace ApplyBonferroniCorrection
 			// The final output format is gene name, min p, min p at, the four tumor count columns from the end of the input and then the rest of the columns from
 			// the input in order.
 			//
-			var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
-            outputFile.WriteLine("Hugo Symbol\tMin p\tMin p at\tSignificant@.01\tBest 0 vs. 1 ratio for significant results\tBest 0 vs. 1 ratio at\t"+ ASETools.ExpressionResultsLine.getHeaderString());
+
+            var sortableLines = new List<SortKeyAndLine>();
 
             int nSignificantReuslts = 0;
             foreach (var result in results)
@@ -203,37 +237,47 @@ namespace ApplyBonferroniCorrection
                     nSignificantReuslts += ProcessSingleResult(result.hugo_symbol, filename, result.exclusiveResultsByRange[i], bonferroniCorrection, true, i, pValueStats, histogramSet, allSignificantResultsFile);
                 }
 
-                outputFile.Write(ASETools.ConvertToExcelString(result.hugo_symbol) + "\t");
-
+                var outputLine = ASETools.ConvertToExcelString(result.hugo_symbol) + "\t" + ASETools.stringForDouble(result.singleAltFraction) + "\t" + ASETools.stringForDouble(result.multipleAltFraction) + "\t";
+ 
                 if (pValueStats.minPAt == -1)
                 {
-                    outputFile.Write("*\t*\tfalse\t*\t*\t");
+                    outputLine += "*\t*\tfalse\t*\t*\t";
                 } else
                 {
-                    outputFile.Write(pValueStats.minP + "\t" + ASETools.regionIndexToString(pValueStats.minPAt) + (pValueStats.minPIsExclusive ? " exclusive\t" : "\t") + (pValueStats.significant ? "true\t" : "false\t"));
+                    outputLine +=  pValueStats.minP + "\t" + ASETools.regionIndexToString(pValueStats.minPAt) + (pValueStats.minPIsExclusive ? " exclusive\t" : "\t") + (pValueStats.significant ? "true\t" : "false\t");
                     if (pValueStats.bestZeroVsOneAt != -1)
                     {
-                        outputFile.Write(pValueStats.bestZeroVsOne + "\t" + ASETools.regionIndexToString(pValueStats.bestZeroVsOneAt) + (pValueStats.bestZeroVsOneIsExclusive ? " exclusive\t" : "\t"));
+                        outputLine += pValueStats.bestZeroVsOne + "\t" + ASETools.regionIndexToString(pValueStats.bestZeroVsOneAt) + (pValueStats.bestZeroVsOneIsExclusive ? " exclusive\t" : "\t");
                     } else
                     {
-                        outputFile.Write("*\t*\t");
+                        outputLine += "*\t*\t";
                     }
-
                 }
 
-                outputFile.Write(result.hugo_symbol);    // Yes, this is here twice.  We want it as the first column, and then having it again lets us use ASETools.ExpressionResultsLine.getHeaderString(), which is convenient
+                pValueStats.significantAt.ForEach(x => outputLine += x + ",");
+
+                outputLine += "\t" + ASETools.ConvertToExcelString(result.hugo_symbol);    // Yes, this is here twice.  We want it as the first column, and then having it again lets us use ASETools.ExpressionResultsLine.getHeaderString(), which is convenient
 
                 foreach (bool exclusive in ASETools.BothBools)
                 {
                      for (int region = 0; region < ASETools.nRegions; region++)
                     {
-                        outputFile.Write("\t");
-                        result.resultsByRange[exclusive][region].writeToFile(outputFile);
+                        outputLine += "\t";
+                        result.resultsByRange[exclusive][region].appendToString(ref outputLine);
                     }
                 }
 
-                outputFile.WriteLine("\t" + result.nTumorsExcluded + "\t" + result.nZero + "\t" + result.nOne + "\t" + result.nMore);
+                outputLine += "\t" + result.nTumorsExcluded + "\t" + result.nZero + "\t" + result.nOne + "\t" + result.nMore + "\t" + result.nSingleContibutingToAltFraction + "\t" + result.nMultipleContributingToAltFraction + "\t" + 
+                    ASETools.stringForDouble(result.singleAltFraction) + "\t" + ASETools.stringForDouble(result.multipleAltFraction);
+
+                sortableLines.Add(new SortKeyAndLine(pValueStats.significant, pValueStats.bestZeroVsOne, result.hugo_symbol, outputLine));
             }
+            var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
+            outputFile.WriteLine("Hugo Symbol\tAlt fraction for single mutations\tAlt fraction for multiple mutations\tMin p\tMin p at\tSignificant@.01\tBest 0 vs. 1 ratio for significant results\tBest 0 vs. 1 ratio at\tSignificant At\t" + ASETools.ExpressionResultsLine.getHeaderString());
+
+            sortableLines.Sort();
+
+            sortableLines.ForEach(x => outputFile.WriteLine(x.outputLine));
 
             outputFile.Close();
             Console.WriteLine("input file " + filename + " has " + nSignificantReuslts + " significant results.");
@@ -323,6 +367,7 @@ namespace ApplyBonferroniCorrection
 
             double minASE = -1;
             double maxASE = 2;
+            double minMaxChromASE = -1;
 
             for (int i = 0; i < configuration.commandLineArgs.Count(); i++)
             {
@@ -333,6 +378,10 @@ namespace ApplyBonferroniCorrection
                 } else if (configuration.commandLineArgs[i] == "-MinASE" && configuration.commandLineArgs.Count() > i + 1)
                 {
                     minASE = Convert.ToDouble(configuration.commandLineArgs[i + 1]);
+                    i++;
+                } else if (configuration.commandLineArgs[i] == "-MinMaxChromASE" && configuration.commandLineArgs.Count() > i + 1)
+                {
+                    minMaxChromASE = Convert.ToDouble(configuration.commandLineArgs[i + 1]);
                     i++;
                 } else
                 {
@@ -353,6 +402,11 @@ namespace ApplyBonferroniCorrection
                 filenameExtra += "-minASE-" + minASE;
             }
 
+            if (minMaxChromASE >= 0)
+            {
+                filenameExtra += "-minMaxChromASE-";
+            }
+
             //
             // Get the list of input files.  Note that these lists will also include the output files, so we filter them with a .Where().
             //
@@ -360,7 +414,7 @@ namespace ApplyBonferroniCorrection
 
             inputFileSets.Add(Directory.GetFiles(configuration.finalResultsDirectory, "ExpressionDistributionByMutationCount*.txt").Where(x => !x.Contains(ASETools.bonferroniExtension)).ToList());
             inputFileSets.Add(Directory.GetFiles(configuration.finalResultsDirectory, ASETools.AlleleSpecificExpressionDistributionByMutationCountFilenameBase + filenameExtra + "*.txt").
-                Where(x => !x.Contains(ASETools.bonferroniExtension) && (maxASE <= 1 || !x.Contains("-maxASE-")) && (minASE >= 0 || !x.Contains("-minASE-"))).ToList());
+                Where(x => !x.Contains(ASETools.bonferroniExtension) && (maxASE <= 1 || !x.Contains("-maxASE-")) && (minASE >= 0 || !x.Contains("-minASE-")) && (minMaxChromASE >= 0 || !x.Contains("-minMaxChromASE-"))).ToList());
 
             var allSignificantResultsFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.AllSignificantResultsFilenameBase + filenameExtra + ".txt");
             allSignificantResultsFile.WriteLine("Hugo Symbol\tASE (one mutation)\tASE (not one mutation)\tinput file\texclusive\tOneVsMany\trange index\trange\tp");

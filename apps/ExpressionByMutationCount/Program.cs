@@ -47,6 +47,11 @@ namespace ExpressionByMutationCount
                     overallTumorASEBelowWhichToExcludeCases = Convert.ToDouble(configuration.commandLineArgs[i + 1]);
                     i++;
                 }
+                else if (configuration.commandLineArgs[i] == "-MinMaxChromASE" && configuration.commandLineArgs.Count() > i + 1)
+                {
+                    maxChromosomeASEBelowWhichToExcludeCases = Convert.ToDouble(configuration.commandLineArgs[i + 1]);
+                    i++;
+                }
                 else
                 {
                     PrintUsage();
@@ -69,9 +74,9 @@ namespace ExpressionByMutationCount
                 return;
             }
 
-            if (overallTumorASEAboveWhichToExcludeCases <= 1.0 || overallTumorASEBelowWhichToExcludeCases >= 0)
+            if (overallTumorASEAboveWhichToExcludeCases <= 1.0 || overallTumorASEBelowWhichToExcludeCases >= 0 || maxChromosomeASEBelowWhichToExcludeCases >= 0)
             {
-                perCaseASE = ASETools.PerCaseASE.loadAll(cases);
+                perCaseASE = ASETools.PerCaseASE.loadAll(configuration);
             }
 
             var selectedGenes = ASETools.SelectedGene.LoadFromFile(configuration.selectedGenesFilename);
@@ -90,7 +95,7 @@ namespace ExpressionByMutationCount
                 (forAlleleSpecificExpression && x.tumor_allele_specific_gene_expression_filename != "" &&
                     (perCaseASE == null || 
                         perCaseASE.ContainsKey(x.case_id) && perCaseASE[x.case_id].tumorASE != double.NegativeInfinity && perCaseASE[x.case_id].tumorASE < overallTumorASEAboveWhichToExcludeCases && 
-                        perCaseASE[x.case_id].tumorASE > overallTumorASEBelowWhichToExcludeCases)) ||
+                        perCaseASE[x.case_id].tumorASE > overallTumorASEBelowWhichToExcludeCases && perCaseASE[x.case_id].tumorMaxChromosome >= maxChromosomeASEBelowWhichToExcludeCases)) ||
                 (!forAlleleSpecificExpression && x.gene_expression_filename != "")).ToList();
 
             var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
@@ -115,7 +120,7 @@ namespace ExpressionByMutationCount
                     continue;
                 }
 
-                genesToProcess.Add(selectedGene.Hugo_Symbol, new GeneState(selectedGene.Hugo_Symbol, geneScatterPlotLines));
+                genesToProcess.Add(selectedGene.Hugo_Symbol, new GeneState(selectedGene.Hugo_Symbol, geneScatterPlotLines, !(overallTumorASEAboveWhichToExcludeCases <= 1.0 || overallTumorASEBelowWhichToExcludeCases >= 0 || maxChromosomeASEBelowWhichToExcludeCases >= 0)));
             }
 
             Console.WriteLine("Loaded " + cases.Count() + " cases, of which " + missingCount + " are missing gene expression, processing " + casesToProcess.Count() + " of them, and loaded " + genesToProcess.Count() + " genes in " + ASETools.ElapsedTimeInSeconds(timer));
@@ -139,7 +144,7 @@ namespace ExpressionByMutationCount
             Console.WriteLine();
             Console.WriteLine("Loaded and processed expression files in " + ASETools.ElapsedTimeInSeconds(timer));
 
-            Console.WriteLine("lock: " + lockMilliseconds + "ms; read: " + readMilliseconds + "ms, process: " + processMilliseconds + "ms, 1: " + process1Milliseconds + "ms, 2: " + process2Milliseconds + "ms, 3: " + process3Milliseconds + "ms.");
+            Console.WriteLine("lock: " + lockMilliseconds/60000 + "m; read: " + readMilliseconds/60000 + "m, process: " + processMilliseconds/60000 + "m, 1: " + process1Milliseconds/60000 + "m, 2: " + process2Milliseconds/60000 + "m, 3: " + process3Milliseconds/60000 + "m.");
 
             string baseFileName = configuration.finalResultsDirectory + (forAlleleSpecificExpression ? "AlleleSpecific" : "") + "ExpressionDistributionByMutationCount";
 
@@ -151,6 +156,11 @@ namespace ExpressionByMutationCount
             if (forAlleleSpecificExpression && overallTumorASEBelowWhichToExcludeCases >= 0)
             {
                 baseFileName += "-minASE-" + overallTumorASEBelowWhichToExcludeCases;
+            }
+
+            if (forAlleleSpecificExpression && maxChromosomeASEBelowWhichToExcludeCases >= 0)
+            {
+                baseFileName += "-minMaxChromASE-" + maxChromosomeASEBelowWhichToExcludeCases;
             }
 
             var panCancerOutputFile = ASETools.CreateStreamWriterWithRetry(baseFileName + ".txt");
@@ -202,10 +212,12 @@ namespace ExpressionByMutationCount
 
                         if (byRange.Count() == 0)
                         {
-                            continue;
+                            wholeAutosome = null;
                         }
-
-                        wholeAutosome = geneToProcess.expressionByRange[true][mu][exclusive][ASETools.nRegions - 1];
+                        else
+                        {
+                            wholeAutosome = geneToProcess.expressionByRange[true][mu][exclusive][ASETools.nRegions - 1];
+                        }
 
                         for (int i = 0; i < ASETools.nRegions - 1 /* -1 because we don't do whole autosome here*/; i++)
                         {
@@ -219,7 +231,7 @@ namespace ExpressionByMutationCount
                             }
                         } // For all widths
 
-                        WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, wholeAutosome, geneToProcess, wholeAutosome.Count() > 0);
+                        WriteMannWhitneyToFiles(panCancerOutputFile, outputFilesByDisease, wholeAutosome, geneToProcess, wholeAutosome != null && wholeAutosome.Count() > 0);
                     } // mu
                 } // exclusive
 
@@ -312,7 +324,7 @@ namespace ExpressionByMutationCount
 
         class GeneState
         {
-            public GeneState(string hugo_symbol_, List<ASETools.GeneScatterGraphLine> scatterGraphLines_)
+            public GeneState(string hugo_symbol_, List<ASETools.GeneScatterGraphLine> scatterGraphLines_, bool outputPerGeneLines)
             {
                 hugo_symbol = hugo_symbol_;
                 scatterGraphLines = scatterGraphLines_;
@@ -340,12 +352,18 @@ namespace ExpressionByMutationCount
                 //
                 // Create and write the header into the per gene lines file.
                 //
-                var filename = configuration.regionalExpressionDirectory + hugo_symbol.ToLower() + (forAlleleSpecificExpression ? "_allele_specific" : "") + "_lines.txt";
-                perGeneLinesFile = ASETools.CreateStreamWriterWithRetry(filename);
-                if (null == perGeneLinesFile)
+                if (outputPerGeneLines)
                 {
-                    Console.WriteLine("Unable to open per gene lines file " + filename);
-                    throw new IOException();
+                    var filename = configuration.regionalExpressionDirectory + hugo_symbol.ToLower() + (forAlleleSpecificExpression ? "_allele_specific" : "") + "_lines.txt";
+                    perGeneLinesFile = ASETools.CreateStreamWriterWithRetry(filename);
+                    if (null == perGeneLinesFile)
+                    {
+                        Console.WriteLine("Unable to open per gene lines file " + filename);
+                        throw new IOException();
+                    }
+                } else
+                {
+                    perGeneLinesFile = new StreamWriter(Stream.Null);
                 }
 
                 perGeneLinesFile.Write("Case ID\tdisease abbr.\tHugo Symbol\tMutation Count");
@@ -469,8 +487,23 @@ namespace ExpressionByMutationCount
             public readonly List<ASETools.GeneScatterGraphLine> scatterGraphLines;
             public StreamWriter perGeneLinesFile;
 
-            public int nInputFilesPastThisGene = 0;
+            public Counts overallCounts = new Counts();
+            public Dictionary<string, Counts> countsByDisease = new Dictionary<string, Counts>();
         } // GeneState
+
+        public class Counts
+        {
+            public int nExcluded = 0;
+            public int nZero = 0;
+            public int nSingle = 0;
+            public int nMultiple = 0;
+
+            public double totalTumorAltAlleleFractionSingle = 0;
+            public int nTumorFractionSingle = 0;   // Different from nSingle because not all of the sites qualify, becuase of copy number, DNA ratio, etc.
+
+            public double totalTumorAltAlleleFractionMultiple = 0;  // This has one value per tumor added, which is the mean for that tumor.
+            public int nTumorFractionMultiple = 0;
+        }
 
         static List<ExpressionInstance> FilterUnusualMutantsIfRequested(List<ExpressionInstance> instances, GeneState geneState, bool excludeUnusualMutants)
         {
@@ -603,55 +636,43 @@ namespace ExpressionByMutationCount
                 }
             }
 
-            outputFile.WriteLine("\tnTumorsExcluded\tnZero\tnOne\tnMore");
+            outputFile.WriteLine("\tnTumorsExcluded\tnZero\tnOne\tnMore\tnSingleContibutingToAltFraction\tnMultipleContributingToAltFraction\tsingle alt fraction\tmultiple alt fraction");
         } // WriteFileHeader
 
         static void WriteCounts(StreamWriter outputFile, GeneState geneToProcess, string disease, Dictionary<string, ASETools.Case> cases)
         {
-            int nExcluded = 0;
-            int nZero = 0;
-            int nOne = 0;
-            int nMore = 0;
-
-            if (!geneToProcess.expressionByRange[false][false][false].ContainsKey(0))
+            Counts counts;
+            if (disease == "")
             {
-                outputFile.WriteLine("\t*\t*\t*\t*");
-                return;
-            }
-
-            foreach (var expression in geneToProcess.expressionByRange[false][false][false][0])
+                counts = geneToProcess.overallCounts;
+            } else
             {
-                if (disease != "" && cases[expression.case_id].disease() != disease)
+                if (geneToProcess.countsByDisease.ContainsKey(disease))
                 {
-                    continue;
-                }
-
-                if (geneToProcess.perCaseState.ContainsKey(expression.case_id))
+                    counts = geneToProcess.countsByDisease[disease];
+                } else
                 {
-                    var state = geneToProcess.perCaseState[expression.case_id];
-                    if (state.highDNA || state.lowDNA || state.truncatingMutation)
-                    {
-                        //
-                        // Ignore excluded ones.
-                        //
-                        nExcluded++;
-                        continue;
-                    }
-                }
-
-                if (expression.nMutations == 0)
-                {
-                    nZero++;
-                }
-                else if (expression.nMutations == 1)
-                {
-                    nOne++;
-                } else {
-                    nMore++;
+                    counts = new Counts();
                 }
             }
 
-            outputFile.WriteLine("\t" + nExcluded + "\t" + nZero + "\t" + nOne + "\t" + nMore);
+            outputFile.Write("\t" + counts.nExcluded + "\t" + counts.nZero + "\t" + counts.nSingle + "\t" + counts.nMultiple + "\t" + counts.nTumorFractionSingle + "\t" + counts.nTumorFractionMultiple);
+
+            if (counts.nTumorFractionSingle != 0)
+            {
+                outputFile.Write("\t" + counts.totalTumorAltAlleleFractionSingle / counts.nTumorFractionSingle);
+            } else
+            {
+                outputFile.Write("\t*");
+            }
+
+            if (counts.nTumorFractionMultiple != 0)
+            {
+                outputFile.WriteLine("\t" + counts.totalTumorAltAlleleFractionMultiple / counts.nTumorFractionMultiple);
+            } else
+            {
+                outputFile.WriteLine("\t*");
+            }
         } // WriteCounts
 
         static ASETools.MannWhitney<ExpressionInstance>.WhichGroup isZero = new ASETools.MannWhitney<ExpressionInstance>.WhichGroup(x => x.nMutations == 0);
@@ -715,7 +736,8 @@ namespace ExpressionByMutationCount
         static ASETools.Configuration configuration;
         static bool forAlleleSpecificExpression;
         static double overallTumorASEAboveWhichToExcludeCases = 1.1;   // This is for the case where we want to treat tumors with high ASE as always just having multiple mutations, with the idea that they have scattered hypermethylation
-        static double overallTumorASEBelowWhichToExcludeCases = -1; 
+        static double overallTumorASEBelowWhichToExcludeCases = -1;
+        static double maxChromosomeASEBelowWhichToExcludeCases = -1;
         static Dictionary<string, ASETools.PerCaseASE> perCaseASE = null;
 
         static int nLoaded = 0;
@@ -775,24 +797,77 @@ namespace ExpressionByMutationCount
                 //
                 // Load the annotated variants so we can append the somatic mutations to genes with exactly one mutation
                 //
+                readTimer.Start();
                 List<ASETools.AnnotatedVariant> annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
+                var tumorCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
+
+                readTimer.Stop();
 
                 var disease = case_.disease();
 
                 foreach (var geneToProcess in genesToProcess)
                 {
-
-                    if (!expressionForThisCase.ContainsKey(geneToProcess.hugo_symbol))
-                    {
-                        continue;
-                    }
-
-                    var thisExpression = expressionForThisCase[geneToProcess.hugo_symbol];
-
                     lockTimer.Start();
                     lock (geneToProcess)
                     {
                         lockTimer.Stop();
+
+                        if (!geneToProcess.countsByDisease.ContainsKey(disease))
+                        {
+                            geneToProcess.countsByDisease.Add(disease, new Counts());
+                        }
+
+                        if (!expressionForThisCase.ContainsKey(geneToProcess.hugo_symbol))
+                        {
+                            geneToProcess.overallCounts.nExcluded++;
+                            geneToProcess.countsByDisease[disease].nExcluded++;
+                            continue;
+                        }
+
+                        int mutationCount = annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == geneToProcess.hugo_symbol).Count();
+                        if (mutationCount == 0)
+                        {
+                            geneToProcess.countsByDisease[disease].nZero++;
+                            geneToProcess.overallCounts.nZero++;
+                        } else if (mutationCount == 1)
+                        {
+                            var asv = annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == geneToProcess.hugo_symbol).ToList()[0];
+                            if (asv.IsASECandidate(true, tumorCopyNumberVariation, configuration, null, null)) // We skip the check for genes that have lots of ASE in the normal, because this is per-gene so it's OK
+                            {
+                                geneToProcess.countsByDisease[disease].nTumorFractionSingle++;
+                                geneToProcess.countsByDisease[disease].totalTumorAltAlleleFractionSingle += asv.GetTumorAltAlleleFraction();
+                                geneToProcess.overallCounts.nTumorFractionSingle++;
+                                geneToProcess.overallCounts.totalTumorAltAlleleFractionSingle += asv.GetTumorAlleleSpecificExpression();
+                            }
+                            geneToProcess.countsByDisease[disease].nSingle++;
+                            geneToProcess.overallCounts.nSingle++;
+                        } else
+                        {
+                            int nValidASE = 0;
+                            double totalFraction = 0;
+                            foreach (var asv in annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == geneToProcess.hugo_symbol))
+                            {
+                                if (asv.IsASECandidate(true, tumorCopyNumberVariation, configuration, null, null)) // We skip the check for genes that have lots of ASE in the normal, because this is per-gene so it's OK
+                                {
+                                    nValidASE++;
+                                    totalFraction += asv.GetTumorAltAlleleFraction();
+                                }
+                            }
+
+                            if (nValidASE > 0)
+                            {
+                                geneToProcess.countsByDisease[disease].nTumorFractionMultiple++;
+                                geneToProcess.countsByDisease[disease].totalTumorAltAlleleFractionMultiple += totalFraction / nValidASE;
+                                geneToProcess.overallCounts.nTumorFractionMultiple++;
+                                geneToProcess.overallCounts.totalTumorAltAlleleFractionMultiple += totalFraction / nValidASE;
+
+                            }
+                            geneToProcess.countsByDisease[disease].nMultiple++;
+                            geneToProcess.overallCounts.nMultiple++;
+                        }
+
+                        var thisExpression = expressionForThisCase[geneToProcess.hugo_symbol];
+
                         processTimer.Start();
 
                         process1Timer.Start();

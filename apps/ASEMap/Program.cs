@@ -141,7 +141,7 @@ namespace ASEMap
                         continue;   // Only use germline variants for the map.
                     }
 
-                    if (annotatedVariant.IsASECandidate(false, normalCopyNumberVariation, null, null, geneMap)) // null out the per-gene ASE, since we're where it comes from
+                    if (!annotatedVariant.somaticMutation && annotatedVariant.IsASECandidate(false, normalCopyNumberVariation, null, null, geneMap)) // null out the per-gene ASE, since we're where it comes from
                     {
  
                         normalMap.addASE(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetNormalAlleleSpecificExpression());
@@ -150,7 +150,7 @@ namespace ASEMap
 
                     }
 
-                    if (annotatedVariant.IsASECandidate(true, tumorCopyNumberVariation, null, null, geneMap)) // null out the per-gene ASE, since we're where it comes from
+                    if (!annotatedVariant.somaticMutation && annotatedVariant.IsASECandidate(true, tumorCopyNumberVariation, null, null, geneMap)) // null out the per-gene ASE, since we're where it comes from
                     {
  
                         tumorMap.addASE(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetTumorAlleleSpecificExpression());
