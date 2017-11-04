@@ -13,7 +13,7 @@ namespace FindASERuns
     {
         static ASETools.Configuration configuration;
         static ASETools.GeneMap geneMap;
-        static Dictionary<bool, Dictionary<string, ASETools.ASEMapPerGeneLine>> perGeneASEMap;
+        static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
 
         static double minRangeASE = 0.3;
         static double ASERangeIncrement = 0.05;

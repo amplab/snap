@@ -2990,6 +2990,51 @@ namespace ASELib
                     return Convert.ToInt32(AsString(fieldName));
                 }
 
+                public string AsStringFromSquareBracketString(string fieldName)
+                {
+                    var rawValue = AsString(fieldName);
+                    if (rawValue == "")
+                    {
+                        return "";
+                    }
+
+                    if (rawValue.First() != '[' || rawValue.Last() != ']')
+                    {
+                        throw new FormatException("FieldGrabber.AsStringFromSquareBracketString: doesn't have square brackets: " + rawValue);
+                    }
+
+                    return rawValue.Substring(1, rawValue.Length - 2);
+                }
+
+                public string AsStringFromSquareBracketSingleQuoteString(string fieldName)
+                {
+                    var deBracketed = AsStringFromSquareBracketString(fieldName);
+
+                    if (deBracketed == "")
+                    {
+                        return "";
+                    }
+
+                    if (deBracketed.First() != '\'' || deBracketed.Last() != '\'')
+                    {
+                        throw new FormatException("FieldGrabber.AsStringFromSquareBracketSingleQuoteString: missing single quotes: " + deBracketed);
+                    }
+
+                    return deBracketed.Substring(1, deBracketed.Length - 2);
+                }
+
+                public int AsIntFromSquareBracketInt(string fieldName)
+                {
+                    return Convert.ToInt32(AsStringFromSquareBracketString(fieldName));
+                }
+
+                public long AsLongFromSquareBracketLong(string fieldName)
+                {
+                    return Convert.ToInt64(AsStringFromSquareBracketString(fieldName));
+                }
+
+ 
+
                 public int AsIntMinusOneIfStarOrEmptyString(string fieldName)
                 {
                     if (fields[fieldMappings[fieldName]] == "*" || fields[fieldMappings[fieldName]] == "")
@@ -6487,6 +6532,12 @@ namespace ASELib
 				return GetAltAlleleFraction(normalRNAReadCounts);
 			}
 
+            public double GetAltAlleleFraction(bool tumor)
+            {
+                if (tumor) return GetTumorAltAlleleFraction();
+                return GetNormalAltAlleleFraction();
+            }
+
 			private static double GetAlleleSpecificExpression(ReadCounts readCounts)
 			{
 				var rnaFractionTumor = GetAltAlleleFraction(readCounts);
@@ -6667,7 +6718,7 @@ namespace ASELib
             //
             // A version that rolls in the copy number file check.
             //
-            public bool IsASECandidate(bool isTumor, List<CopyNumberVariation> copyNumber, Configuration configuration, Dictionary<bool, Dictionary<string, ASEMapPerGeneLine>> perGeneASEMap, GeneMap geneMap, int minCoverage = 10)
+            public bool IsASECandidate(bool isTumor, List<CopyNumberVariation> copyNumber, Configuration configuration, Dictionary<string, ASEMapPerGeneLine> perGeneASEMap, GeneMap geneMap, int minCoverage = 10)
             {
                 if (!isTumor && normalRNAReadCounts == null) return false;
 
@@ -6686,7 +6737,7 @@ namespace ASELib
                     //
                     foreach (var gene in geneMap.getGenesMappedTo(contig, locus))
                     {
-                        if (perGeneASEMap[false].ContainsKey(gene.hugoSymbol) && perGeneASEMap[false][gene.hugoSymbol].meanASE >= configuration.ASEInNormalAtWhichToExcludeGenes)
+                        if (perGeneASEMap.ContainsKey(gene.hugoSymbol) && perGeneASEMap[gene.hugoSymbol].sampleData[false].meanASE >= configuration.ASEInNormalAtWhichToExcludeGenes)
                         {
                             return false;
                         }
@@ -7308,6 +7359,11 @@ namespace ASELib
             public double max()
             {
                 return values.Max();
+            }
+
+            public double mean()
+            {
+                return values.Average();
             }
 
             public void merge(Histogram peer)
@@ -8865,7 +8921,7 @@ namespace ASELib
 
         public class ASEMapPerGeneLine
         {
-            public static Dictionary<bool, Dictionary<string, ASEMapPerGeneLine>> ReadFromFileToDictionary(string filename)
+            public static Dictionary<string, ASEMapPerGeneLine> ReadFromFileToDictionary(string filename)
             {
                 var allLines = ReadFromFile(filename);
 
@@ -8874,14 +8930,9 @@ namespace ASELib
                     return null;
                 }
 
-                var result = new Dictionary<bool, Dictionary<string, ASEMapPerGeneLine>>();
-                result.Add(true, new Dictionary<string, ASEMapPerGeneLine>());
-                result.Add(false, new Dictionary<string, ASEMapPerGeneLine>());
+                var result = new Dictionary<string, ASEMapPerGeneLine>();
 
-                foreach (var line in allLines)
-                {
-                    result[line.tumor].Add(line.hugo_symbol, line);
-                }
+                allLines.ForEach(x => result.Add(x.hugo_symbol, x));
 
                 return result;
             }
@@ -8890,7 +8941,10 @@ namespace ASELib
             {
                 var inputFile = CreateStreamReaderWithRetry(filename);
 
-                string[] wantedFields = { "Hugo Symbol", "Tumor", "n Samples", "mean ASE", "standard deviation of ASE", "ASE difference with opposite tumor/normal", "chromosome", "min locus", "max locus" };
+                string[] wantedFields = { "Hugo Symbol", "n Tumor Samples", "mean Tumor ASE",  "Tumor Fraction of RNA at Variant Sites", "standard deviation of Tumor ASE",
+                    "n Normal Samples", "mean Normal ASE", "Normal Fraction of RNA at Variant Sites", "standard deviation of Normal ASE", "Tumor ASE minus Normal ASE",
+                    "Absolute value of Tumor ASE minus Normal ASE", "Bonferroni Corrected MW p value for normal differing from tumor",
+                    "chromosome", "min locus", "max locus" };
 
                 var headerizedFile = new HeaderizedFile<ASEMapPerGeneLine>(inputFile, false, true, "", wantedFields.ToList());
 
@@ -8907,30 +8961,46 @@ namespace ASELib
 
             static ASEMapPerGeneLine parseLine(ASETools.HeaderizedFile<ASEMapPerGeneLine>.FieldGrabber fieldGrabber)
             {
-                return new ASEMapPerGeneLine(fieldGrabber.AsString("Hugo Symbol"), fieldGrabber.AsBool("Tumor"), fieldGrabber.AsInt("n Samples"), fieldGrabber.AsDouble("mean ASE"), fieldGrabber.AsDouble("standard deviation of ASE"),
-                    fieldGrabber.AsDoubleNegativeInfinityIfStarOrEmptyString("ASE difference with opposite tumor/normal"), fieldGrabber.AsString("chromosome"), fieldGrabber.AsInt("min locus"),
+                return new ASEMapPerGeneLine(fieldGrabber.AsString("Hugo Symbol"), fieldGrabber.AsInt("n Tumor Samples"), fieldGrabber.AsDouble("mean Tumor ASE"), fieldGrabber.AsDouble("standard deviation of Tumor ASE"), fieldGrabber.AsDouble("Tumor Fraction of RNA at Variant Sites"),
+                    fieldGrabber.AsInt("n Normal Samples"), fieldGrabber.AsDouble("mean Normal ASE"), fieldGrabber.AsDouble("standard deviation of Normal ASE"), fieldGrabber.AsDouble("Normal Fraction of RNA at Variant Sites"), 
+                    fieldGrabber.AsDouble("Tumor ASE minus Normal ASE"), 
+                    fieldGrabber.AsString("chromosome"), fieldGrabber.AsInt("min locus"),
                     fieldGrabber.AsInt("max locus"));
             }
 
-            ASEMapPerGeneLine(string hugo_symbol_, bool tumor_, int nSamples_, double meanASE_, double stdDeviationASE_, double ASEDifference_, string chromosome_, int minLocus_, int maxLocus_)
+            ASEMapPerGeneLine(string hugo_symbol_, int nSamplesTumor, double meanASETumor, double stdDeviationTumor, double meanFractionRNAReadsTumor,
+                int nSamplesNormal, double meanASENormal, double stdDeviationNormal, double meanFractionRNAReadsNormal, double TumorExcessASEOverNormal_, string chromosome_, int minLocus_, int maxLocus_)
             {
                 hugo_symbol = ConvertToNonExcelString(hugo_symbol_);
-                tumor = tumor_;
-                nSamples = nSamples_;
-                meanASE = meanASE_;
-                stdDeviationASE = stdDeviationASE_;
-                ASEDifference = ASEDifference_;
+                sampleData.Add(true, new SampleData(nSamplesTumor, meanASETumor, stdDeviationTumor, meanFractionRNAReadsTumor));
+                sampleData.Add(false, new SampleData(nSamplesNormal, meanASENormal, stdDeviationNormal, meanFractionRNAReadsNormal));
+
+
+                TumorExcessASEOverNormal = TumorExcessASEOverNormal_;
                 chromosome = chromosome_;
                 minLocus = minLocus_;
                 maxLocus = maxLocus_;
             }
 
+            public class SampleData
+            {
+                public SampleData(int nSamples_, double meanASE_, double stdDeviation_, double meanFractionRNAReads_)
+                {
+                    nSamples = nSamples_;
+                    meanASE = meanASE_;
+                    stdDeviation = stdDeviation_;
+                    meanFractionRNAReads = meanFractionRNAReads_;
+                }
+                public readonly int nSamples;
+                public readonly double meanASE;
+                public readonly double stdDeviation;
+                public readonly double meanFractionRNAReads;
+            }
+
             public readonly string hugo_symbol;
-            public readonly bool tumor;
-            public readonly int nSamples;
-            public readonly double meanASE;
-            public readonly double stdDeviationASE;
-            public readonly double ASEDifference;   // Signed difference between meanASE and meanASE for !tumor.  -Inf if not there.
+            public readonly Dictionary<bool, SampleData> sampleData = new Dictionary<bool, SampleData>();
+ 
+            public readonly double TumorExcessASEOverNormal;   // Signed difference between tumor meanASE and normal meanASE
             public readonly string chromosome;
             public readonly int minLocus;
             public readonly int maxLocus;

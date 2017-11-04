@@ -39,7 +39,7 @@ namespace ExtractASVsForHighASERegions
 
         static ASETools.Configuration configuration;
         static ASETools.GeneMap geneMap;
-        static Dictionary<bool, Dictionary<string, ASETools.ASEMapPerGeneLine>> perGeneASEMap;
+        static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
 
         static void Main(string[] args)
         {

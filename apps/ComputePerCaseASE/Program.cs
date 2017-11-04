@@ -13,7 +13,7 @@ namespace ComputePerCaseASE
     {
         static ASETools.GeneMap geneMap;
         static ASETools.Configuration configuration;
-        static Dictionary<bool, Dictionary<string, ASETools.ASEMapPerGeneLine>> perGeneASEMap;
+        static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
 
         static List<string> outputLines = new List<string>();
 

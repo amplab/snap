@@ -13,7 +13,7 @@ namespace ASEDistributionBySite
     {
         static ASETools.GeneMap geneMap;
         static ASETools.Configuration configuration;
-        static Dictionary<bool, Dictionary<string, ASETools.ASEMapPerGeneLine>> perGeneASEMap;
+        static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
         static ASETools.Histogram tumorResultsHistogram = new ASETools.Histogram();
         static ASETools.Histogram normalResultsHistogram = new ASETools.Histogram();
         static int nProcessed = 0;

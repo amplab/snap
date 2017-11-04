@@ -212,7 +212,7 @@ namespace ASEHeatMap
         static HeatMapsAndCount globalNormalHeatMapAndCount = new HeatMapsAndCount();
         static ASETools.GeneMap geneMap = null;
         static ASETools.Configuration configuration;
-        static Dictionary<bool, Dictionary<string, ASETools.ASEMapPerGeneLine>> perGeneASEMap;
+        static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
 
 
         static void Main(string[] args)
