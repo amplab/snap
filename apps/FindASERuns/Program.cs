@@ -127,11 +127,11 @@ namespace FindASERuns
                     }
                 } // lock casesToProcess
 
-                var tumorCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
 
+                var copyNumber = ASETools.CopyNumberVariation.ReadBothFiles(case_);
                 //
                 // Get all of the ASE candidates 
-                var variants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename).Where(x => !x.somaticMutation && x.IsASECandidate(true, tumorCopyNumberVariation, configuration, perGeneASEMap, geneMap)).ToList();
+                var variants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename).Where(x => !x.somaticMutation && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap)).ToList();
 
                 if (variants.Count() == 0)
                 {

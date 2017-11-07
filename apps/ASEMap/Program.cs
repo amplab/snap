@@ -122,12 +122,9 @@ namespace ASEMap
                 var annotatedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
                 double tumorMappedBaseCount = (double)(ASETools.MappedBaseCount.readFromFile(case_.tumor_rna_mapped_base_count_filename).mappedBaseCount);
                 double normalMappedBaseCount = 0;
-                var tumorCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
-                List<ASETools.CopyNumberVariation> normalCopyNumberVariation = null;
-                if (case_.normal_copy_number_filename != "")
-                {
-                    normalCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.normal_copy_number_filename, case_.normal_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
-                }
+
+                var copyNumber = ASETools.CopyNumberVariation.ReadBothFiles(case_);
+
                 if (case_.normal_rna_mapped_base_count_filename != "")
                 {
                     normalMappedBaseCount = (double)(ASETools.MappedBaseCount.readFromFile(case_.normal_rna_mapped_base_count_filename).mappedBaseCount);
@@ -147,14 +144,14 @@ namespace ASEMap
                         continue;   // Only use germline variants for the map.
                     }
 
-                    if (!annotatedVariant.somaticMutation && annotatedVariant.IsASECandidate(false, normalCopyNumberVariation, null, null, geneMap)) // null out the per-gene ASE, since we're where it comes from
+                    if (!annotatedVariant.somaticMutation && annotatedVariant.IsASECandidate(false, copyNumber, null, null, geneMap)) // null out the per-gene ASE, since we're where it comes from
                     {
                         normalMap.addASE(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetNormalAlleleSpecificExpression());
                         thisThreadMeasurements.Add(new ASEMeasurement(annotatedVariant.GetNormalAlleleSpecificExpression(), false));
                         normalPerGeneASEThisCase.recordSample(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetNormalAlleleSpecificExpression(), annotatedVariant.normalRNAReadCounts.totalReads() / normalMappedBaseCount);
                     }
 
-                    if (!annotatedVariant.somaticMutation && annotatedVariant.IsASECandidate(true, tumorCopyNumberVariation, null, null, geneMap)) // null out the per-gene ASE, since we're where it comes from
+                    if (!annotatedVariant.somaticMutation && annotatedVariant.IsASECandidate(true, copyNumber, null, null, geneMap)) // null out the per-gene ASE, since we're where it comes from
                     {
  
                         tumorMap.addASE(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetTumorAlleleSpecificExpression());

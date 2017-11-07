@@ -110,13 +110,8 @@ namespace ASEDistributionBySite
                     cases.RemoveAt(0);
                 }
 
+                var copyNumber = ASETools.CopyNumberVariation.ReadBothFiles(case_);
                 var annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename).Where(x => !x.somaticMutation).ToList();
-                var tumorCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
-                List<ASETools.CopyNumberVariation> normalCopyNumberVariation = null;
-                if (case_.normal_copy_number_filename != "")
-                {
-                    normalCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.normal_copy_number_filename, case_.normal_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
-                }
 
                 if (annotatedSelectedVariants == null)
                 {
@@ -126,12 +121,12 @@ namespace ASEDistributionBySite
 
                 foreach (var variant in annotatedSelectedVariants)
                 {
-                    if (variant.IsASECandidate(true, tumorCopyNumberVariation, configuration, perGeneASEMap, geneMap))
+                    if (variant.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap))
                     {
                         localTumorHistogram.addValue(variant.GetTumorAlleleSpecificExpression());
                     }
 
-                    if (normalCopyNumberVariation != null && variant.IsASECandidate(false, normalCopyNumberVariation, configuration, perGeneASEMap, geneMap))
+                    if (variant.IsASECandidate(false, copyNumber, configuration, perGeneASEMap, geneMap))
                     {
                         localNormalHistogram.addValue(variant.GetNormalAlleleSpecificExpression());
                     }

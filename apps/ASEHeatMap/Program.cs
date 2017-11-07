@@ -518,20 +518,13 @@ namespace ASEHeatMap
                 var annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
                 var nUnfiltered = annotatedSelectedVariants.Count();
 
-
-                var copyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
-                List<ASETools.CopyNumberVariation> normalCopyNumberVariation = null;
-                if (case_.normal_copy_number_filename != "")
-                {
-                    normalCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.normal_copy_number_filename, case_.normal_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
-                }
-
+                var copyNumber = ASETools.CopyNumberVariation.ReadBothFiles(case_);
 
                 var tumorAnnotatedSelectedVariants = annotatedSelectedVariants.Where(x => !x.somaticMutation &&
-                ASETools.isChromosomeAutosomal(x.contig) && x.IsASECandidate(true, copyNumberVariation, configuration, perGeneASEMap, geneMap, 30)).ToList();
+                ASETools.isChromosomeAutosomal(x.contig) && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap, 30)).ToList();
 
                 var normalAnnotatedSelectedVariants = annotatedSelectedVariants.Where(x => !x.somaticMutation &&
-                ASETools.isChromosomeAutosomal(x.contig) && x.normalRNAReadCounts != null && x.IsASECandidate(false, normalCopyNumberVariation, configuration, perGeneASEMap, geneMap, 30)).ToList();
+                ASETools.isChromosomeAutosomal(x.contig) && x.normalRNAReadCounts != null && x.IsASECandidate(false, copyNumber, configuration, perGeneASEMap, geneMap, 30)).ToList();
 
 
                 //Console.WriteLine("Left with " + annotatedSelectedVariants.Count() + " of " + nUnfiltered);

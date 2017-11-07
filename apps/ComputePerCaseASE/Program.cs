@@ -158,13 +158,9 @@ namespace ComputePerCaseASE
                 } // lock
 
                 var annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
-                var tumorCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
-                List<ASETools.CopyNumberVariation> normalCopyNumberVariation = null;
-                if (case_.normal_copy_number_filename != "")
-                {
-                    normalCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.normal_copy_number_filename, case_.normal_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
-                }
 
+                var copyNumber = ASETools.CopyNumberVariation.ReadBothFiles(case_);
+ 
                 if (annotatedSelectedVariants == null)
                 {
                     Console.WriteLine("Unable to read annotated selected variants from " + case_.annotated_selected_variants_filename);
@@ -209,7 +205,7 @@ namespace ComputePerCaseASE
 
                     foreach (bool tumor in ASETools.BothBools)
                     {
-                        if (!variant.somaticMutation && variant.IsASECandidate(tumor, normalCopyNumberVariation, configuration, perGeneASEMap, geneMap))
+                        if (!variant.somaticMutation && variant.IsASECandidate(tumor, copyNumber, configuration, perGeneASEMap, geneMap))
                         {
                             overall[tumor].recordObservation(variant.GetAlleleSpecificExpression(tumor));
                             per10MB[tumor][0].recordObservation(variant.GetAlleleSpecificExpression(tumor));

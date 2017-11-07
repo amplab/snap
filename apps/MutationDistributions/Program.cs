@@ -145,11 +145,11 @@ namespace MutationDistributions
 				var annotatedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
 				var somaticVariants = annotatedVariants.Where(r => r.somaticMutation);
 
-                var tumorCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
+                var copyNumber = ASETools.CopyNumberVariation.ReadBothFiles(case_);
 
                 foreach (var annotatedVariant in annotatedVariants)
 				{
-					if (!annotatedVariant.IsASECandidate(true, tumorCopyNumberVariation, configuration, perGeneASEMap, geneMap))
+					if (!annotatedVariant.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap))
 					{
 						continue;
 					}
@@ -197,7 +197,7 @@ namespace MutationDistributions
 							double mutationASE;
 							if (mutationCount > 0)
 							{
-								if (!mutations.First().IsASECandidate(true, tumorCopyNumberVariation, configuration, perGeneASEMap, geneMap))
+								if (!mutations.First().IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap))
 								{
 									continue;
 								}

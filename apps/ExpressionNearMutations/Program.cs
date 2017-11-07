@@ -123,15 +123,8 @@ namespace ExpressionNearMutations
 					continue;
 				}
 
-                // Used to filter out annotated variants in regions with copy number variation
-                // The cutoff we use here for choosing copy number variation is very loose (1.0).
-                // Setting this value to 1.0 loses 10-20% of annotated variants, depending on the sample.
-                var copyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
-                List<ASETools.CopyNumberVariation> normalCopyNumberVariation = null;
-                if (case_.normal_copy_number_filename != "")
-                {
-                    normalCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.normal_copy_number_filename, case_.normal_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
-                }
+
+                var copyNumber = ASETools.CopyNumberVariation.ReadBothFiles(case_);
 
                 // Load MAF file for this case
                 var mafLines = ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, case_.maf_file_id, false);
@@ -201,10 +194,10 @@ namespace ExpressionNearMutations
 					foreach (var annotatedVariant in annotatedVariants)
 					{
 						if (geneLocationInformation.genesByChromosome.ContainsKey(annotatedVariant.contig) &&
-                            annotatedVariant.IsASECandidate(true, copyNumberVariation, configuration, perGeneASEMap, geneMap) && !annotatedVariant.somaticMutation)
+                            annotatedVariant.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap) && !annotatedVariant.somaticMutation)
 						{
 							// If we have the normal DNA and RNA for this sample, compute the normal ASE
-							if (annotatedVariant.normalRNAReadCounts != null && annotatedVariant.IsASECandidate(false, normalCopyNumberVariation, configuration, perGeneASEMap, geneMap))
+							if (annotatedVariant.normalRNAReadCounts != null && annotatedVariant.IsASECandidate(false, copyNumber, configuration, perGeneASEMap, geneMap))
 							{
 								// add to data with normal
 								expressionValues.Add(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetTumorAlleleSpecificExpression(), 0, true, annotatedVariant.GetNormalAlleleSpecificExpression(), 0);

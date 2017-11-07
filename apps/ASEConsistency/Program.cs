@@ -180,13 +180,9 @@ namespace ASEConsistency
                     }
                 } // lock (casesToProcess)
 
+
+                var copyNumber = ASETools.CopyNumberVariation.ReadBothFiles(case_);
                 var annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
-                var tumorCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
-                List<ASETools.CopyNumberVariation> normalCopyNumberVariation = null;
-                if (case_.normal_copy_number_filename != "")
-                {
-                    normalCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.normal_copy_number_filename, case_.normal_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
-                }
 
                 var map = new Dictionary<bool, Dictionary<string, List<double>>>(); // tumor/normal->gene->ASEs
                 map.Add(false, new Dictionary<string, List<double>>());
@@ -201,7 +197,7 @@ namespace ASEConsistency
 
                     foreach (var tumor in ASETools.BothBools)
                     {
-                        if (variant.IsASECandidate(tumor, tumorCopyNumberVariation, configuration, perGeneASEMap, geneMap))
+                        if (variant.IsASECandidate(tumor, copyNumber, configuration, perGeneASEMap, geneMap))
                         {
                             localReferenceFraction[tumor].addValue(1 - variant.GetAltAlleleFraction(tumor));
 
@@ -218,8 +214,6 @@ namespace ASEConsistency
 
                                 map[tumor][gene.hugoSymbol].Add(variant.GetAlleleSpecificExpression(tumor));
                             } // foreach mapped gene
-
-
                         } // if it's an ASE candidate
                     } // tumor in BothBools
                 } // foreach variant

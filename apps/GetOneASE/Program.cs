@@ -54,9 +54,10 @@ namespace GetOneASE
                 }
 
                 var annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
-                var tumorCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
 
-                annotatedSelectedVariants = annotatedSelectedVariants.Where(x => x.contig == args[i + 1] && x.IsASECandidate(true, tumorCopyNumberVariation, configuration, perGeneASEMap, geneMap) && !x.somaticMutation).ToList();
+                var copyNumber = ASETools.CopyNumberVariation.ReadBothFiles(case_);
+
+                annotatedSelectedVariants = annotatedSelectedVariants.Where(x => x.contig == args[i + 1] && x.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap) && !x.somaticMutation).ToList();
                 annotatedSelectedVariants.Sort();
 
                 foreach (var variant in annotatedSelectedVariants)

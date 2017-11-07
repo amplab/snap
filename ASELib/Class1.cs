@@ -6712,15 +6712,20 @@ namespace ASELib
 				return (DNAReadCounts.nMatchingReference + DNAReadCounts.nMatchingAlt >= minCoverage &&
 						RNAReadCounts.nMatchingReference + RNAReadCounts.nMatchingAlt >= minCoverage &&
 						DNAReadCounts.nMatchingReference * 3 >= DNAReadCounts.nMatchingAlt * 2 &&
-						DNAReadCounts.nMatchingAlt * 3 >= DNAReadCounts.nMatchingReference * 2);
+						DNAReadCounts.nMatchingAlt * 3 >= DNAReadCounts.nMatchingReference * 2 && 
+                        (DNAReadCounts.nMatchingNeither + DNAReadCounts.nMatchingBoth) * 20 < DNAReadCounts.totalReads() &&
+                        (RNAReadCounts.nMatchingNeither + RNAReadCounts.nMatchingBoth) * 20 < RNAReadCounts.totalReads());
 			}
 
             //
             // A version that rolls in the copy number file check.
             //
-            public bool IsASECandidate(bool isTumor, List<CopyNumberVariation> copyNumber, Configuration configuration, Dictionary<string, ASEMapPerGeneLine> perGeneASEMap, GeneMap geneMap, int minCoverage = 10)
+            public bool IsASECandidate(bool isTumor, Dictionary<bool, List<CopyNumberVariation>> copyNumber, Configuration configuration, Dictionary<string, ASEMapPerGeneLine> perGeneASEMap, GeneMap geneMap, int minCoverage = 10)
             {
-                if (!isTumor && normalRNAReadCounts == null) return false;
+                if (!isTumor && normalRNAReadCounts == null)
+                {
+                    return false;
+                }
 
                 if (!IsASECandidate(isTumor, minCoverage))
                 {
@@ -6744,12 +6749,12 @@ namespace ASELib
                     }
                 }
 
-                if (copyNumber == null)
+                if (copyNumber[isTumor] == null)
                 {
                     return true;
                 }
 
-                var overlappingCNV = copyNumber.Where(cnv =>
+                var overlappingCNV = copyNumber[isTumor].Where(cnv =>
                     cnv.OverlapsLocus(ASETools.chromosomeNameToNonChrForm(contig),
                     locus, locus + 1));
                 return overlappingCNV.Count() == 0;
@@ -8695,8 +8700,13 @@ namespace ASELib
 				return CNVs.Select(r => r.End - r.Start).Sum();
 			}
 
-			static public List<CopyNumberVariation> ReadFile(string filename, string file_id)
+			static public List<CopyNumberVariation> ReadFile(string filename)
 			{
+                if (filename == "")
+                {
+                    return null;
+                }
+
 				StreamReader inputFile;
 
 				inputFile = CreateStreamReaderWithRetry(filename);
@@ -8723,6 +8733,14 @@ namespace ASELib
 
 				return result;
 			} // ReadFile
+
+            static public Dictionary<bool, List<CopyNumberVariation>> ReadBothFiles(Case case_)
+            {
+                var retVal = new Dictionary<bool, List<CopyNumberVariation>>();
+                retVal.Add(true, ReadFile(case_.tumor_copy_number_filename).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList());
+                retVal.Add(false, ReadFile(case_.normal_copy_number_filename).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList());
+                return retVal;
+            }
 		}
 
 		public class IGV
@@ -9549,7 +9567,86 @@ namespace ASELib
 
             public readonly double tumorMinChromosome, tumorMedianChromosome, tumorMaxChromosome;
             public readonly double normalMinChromosome, normalMedianChromosome, normalMaxChromosome;
-        }
+        }  // PerCaseASE
+
+        public class WorkerThreadHelper<TQueueItem, TPerThreadState>
+        {
+            public delegate void HandleOneItem(TQueueItem item, TPerThreadState perThreadState);
+            public delegate void FinishUp();
+            public delegate TPerThreadState CreatePerThreadState();
+            public delegate void ItemDequeued();
+            public WorkerThreadHelper(List<TQueueItem> queue_, HandleOneItem handleOneItem_, FinishUp finishUp_, 
+                CreatePerThreadState createPerThreadState_, ItemDequeued itemDequeued_)
+            {
+                queue = queue_;
+                handleOneItem = handleOneItem_;
+                finishUp = finishUp_;
+                createPerThreadState = createPerThreadState_;
+                itemDequeued = itemDequeued_;
+            }
+
+            public void run()
+            {
+                run(Environment.ProcessorCount);
+            }
+
+            public void run(int nThreads)
+            {
+                var threads = new List<Thread>();
+                for (int i = 0; i < nThreads; i++)
+                {
+                    threads.Add(new Thread(() => WorkerThread(this)));
+                }
+
+                threads.ForEach(t => t.Start());
+                threads.ForEach(t => t.Join());
+
+            }
+
+            static void WorkerThread(WorkerThreadHelper<TQueueItem, TPerThreadState> helper)
+            {
+                helper.WorkerThread();
+            }
+
+            void WorkerThread()
+            {
+                var perThreadState = createPerThreadState();
+
+                while (true)
+                {
+                    TQueueItem queueItem;
+                    lock (queue)
+                    {
+                        if (queue.Count() == 0)
+                        {
+                            if (finishUp != null)
+                            {
+                                finishUp();
+                            }
+                            return;
+                        }
+
+                        queueItem = queue[0];
+                        queue.RemoveAt(0);
+
+                        if (itemDequeued != null)
+                        {
+                            itemDequeued();
+                        }
+                    }
+
+                    handleOneItem(queueItem, perThreadState);
+                } // while (true)
+            }
+
+            List<TQueueItem> queue;
+            HandleOneItem handleOneItem;
+            FinishUp finishUp;
+            CreatePerThreadState createPerThreadState;
+            ItemDequeued itemDequeued;
+        } // WorkerThreadHelper
+
+
     } // ASETools
 
     //

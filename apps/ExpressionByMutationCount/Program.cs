@@ -799,7 +799,7 @@ namespace ExpressionByMutationCount
                 //
                 readTimer.Start();
                 List<ASETools.AnnotatedVariant> annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
-                var tumorCopyNumberVariation = ASETools.CopyNumberVariation.ReadFile(case_.tumor_copy_number_filename, case_.tumor_copy_number_file_id).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList();
+                var copyNumber = ASETools.CopyNumberVariation.ReadBothFiles(case_);
 
                 readTimer.Stop();
 
@@ -832,7 +832,7 @@ namespace ExpressionByMutationCount
                         } else if (mutationCount == 1)
                         {
                             var asv = annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == geneToProcess.hugo_symbol).ToList()[0];
-                            if (asv.IsASECandidate(true, tumorCopyNumberVariation, configuration, null, null)) // We skip the check for genes that have lots of ASE in the normal, because this is per-gene so it's OK
+                            if (asv.IsASECandidate(true, copyNumber, configuration, null, null)) // We skip the check for genes that have lots of ASE in the normal, because this is per-gene so it's OK
                             {
                                 geneToProcess.countsByDisease[disease].nTumorFractionSingle++;
                                 geneToProcess.countsByDisease[disease].totalTumorAltAlleleFractionSingle += asv.GetTumorAltAlleleFraction();
@@ -847,7 +847,7 @@ namespace ExpressionByMutationCount
                             double totalFraction = 0;
                             foreach (var asv in annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == geneToProcess.hugo_symbol))
                             {
-                                if (asv.IsASECandidate(true, tumorCopyNumberVariation, configuration, null, null)) // We skip the check for genes that have lots of ASE in the normal, because this is per-gene so it's OK
+                                if (asv.IsASECandidate(true, copyNumber, configuration, null, null)) // We skip the check for genes that have lots of ASE in the normal, because this is per-gene so it's OK
                                 {
                                     nValidASE++;
                                     totalFraction += asv.GetTumorAltAlleleFraction();
