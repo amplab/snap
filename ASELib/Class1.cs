@@ -2319,6 +2319,7 @@ namespace ASELib
         public const string ASEMapFilename = "ASEMap.txt";
         public const string PerGeneASEMapFilename = "ASEMap-PerGene.txt";
         public const string PerCaseASEFilename = "PerCaseASE.txt";
+        public const string OverallASEFilename = "OverallASE.txt";
 
 
         public class DerivedFile
@@ -8738,7 +8739,11 @@ namespace ASELib
             {
                 var retVal = new Dictionary<bool, List<CopyNumberVariation>>();
                 retVal.Add(true, ReadFile(case_.tumor_copy_number_filename).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList());
-                retVal.Add(false, ReadFile(case_.normal_copy_number_filename).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList());
+                if (case_.normal_copy_number_filename == "") {
+                    retVal.Add(false, null);
+                } else {
+                    retVal.Add(false, ReadFile(case_.normal_copy_number_filename).Where(r => Math.Abs(r.Segment_Mean) > 1.0).ToList());
+                }
                 return retVal;
             }
 		}
@@ -9569,20 +9574,18 @@ namespace ASELib
             public readonly double normalMinChromosome, normalMedianChromosome, normalMaxChromosome;
         }  // PerCaseASE
 
-        public class WorkerThreadHelper<TQueueItem, TPerThreadState>
+        public class WorkerThreadHelper<TQueueItem, TPerThreadState>  where TPerThreadState : new()
         {
             public delegate void HandleOneItem(TQueueItem item, TPerThreadState perThreadState);
-            public delegate void FinishUp();
-            public delegate TPerThreadState CreatePerThreadState();
+            public delegate void FinishUp(TPerThreadState perThreadState);
             public delegate void ItemDequeued();
-            public WorkerThreadHelper(List<TQueueItem> queue_, HandleOneItem handleOneItem_, FinishUp finishUp_, 
-                CreatePerThreadState createPerThreadState_, ItemDequeued itemDequeued_)
+            public WorkerThreadHelper(List<TQueueItem> queue_, HandleOneItem handleOneItem_, FinishUp finishUp_, ItemDequeued itemDequeued_, int nItemsPerDot_ = 0)
             {
                 queue = queue_;
                 handleOneItem = handleOneItem_;
                 finishUp = finishUp_;
-                createPerThreadState = createPerThreadState_;
                 itemDequeued = itemDequeued_;
+                nItemsPerDot = nItemsPerDot_;
             }
 
             public void run()
@@ -9592,6 +9595,7 @@ namespace ASELib
 
             public void run(int nThreads)
             {
+                nItemsProcessed = 0;
                 var threads = new List<Thread>();
                 for (int i = 0; i < nThreads; i++)
                 {
@@ -9600,6 +9604,11 @@ namespace ASELib
 
                 threads.ForEach(t => t.Start());
                 threads.ForEach(t => t.Join());
+
+                if (nItemsPerDot != 0)
+                {
+                    Console.WriteLine();
+                }
 
             }
 
@@ -9610,7 +9619,7 @@ namespace ASELib
 
             void WorkerThread()
             {
-                var perThreadState = createPerThreadState();
+                var perThreadState = new TPerThreadState();
 
                 while (true)
                 {
@@ -9621,7 +9630,7 @@ namespace ASELib
                         {
                             if (finishUp != null)
                             {
-                                finishUp();
+                                finishUp(perThreadState);
                             }
                             return;
                         }
@@ -9633,6 +9642,12 @@ namespace ASELib
                         {
                             itemDequeued();
                         }
+
+                        nItemsProcessed++;
+                        if (nItemsPerDot != 0 && nItemsProcessed % nItemsPerDot == 0)
+                        {
+                            Console.Write(".");
+                        }
                     }
 
                     handleOneItem(queueItem, perThreadState);
@@ -9642,8 +9657,9 @@ namespace ASELib
             List<TQueueItem> queue;
             HandleOneItem handleOneItem;
             FinishUp finishUp;
-            CreatePerThreadState createPerThreadState;
             ItemDequeued itemDequeued;
+            int nItemsPerDot = 0;
+            int nItemsProcessed = 0;
         } // WorkerThreadHelper
 
 

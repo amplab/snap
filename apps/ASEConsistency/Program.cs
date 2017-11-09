@@ -18,6 +18,7 @@ namespace ASEConsistency
         static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
         static Dictionary<bool, Dictionary<string, ASETools.Histogram>> perGeneResults = new Dictionary<bool, Dictionary<string, ASETools.Histogram>>();
         static Dictionary<bool, ASETools.Histogram> overallResults = new Dictionary<bool, ASETools.Histogram>();
+        static Dictionary<bool, ASETools.Histogram> overallSameExonResults = new Dictionary<bool, ASETools.Histogram>();
         static Dictionary<bool, ASETools.Histogram> referenceFraction = new Dictionary<bool, ASETools.Histogram>();
 
         static StreamWriter badInstancesFile;
@@ -49,6 +50,7 @@ namespace ASEConsistency
                 overallResults.Add(tumor, new ASETools.Histogram());
                 perGeneResults.Add(tumor, new Dictionary<string, ASETools.Histogram>());
                 referenceFraction.Add(tumor, new ASETools.Histogram("reference fraction: tumor " + tumor));
+                overallSameExonResults.Add(tumor, new ASETools.Histogram());
             }
 
             geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
@@ -93,6 +95,13 @@ namespace ASEConsistency
                 overallResults[tumor].ComputeHistogram(0, 1, 0.01).ToList().ForEach(x => outputFile.WriteLine(x.ToString()));
             }
 
+            foreach(var tumor in ASETools.BothBools)
+            {
+                outputFile.WriteLine("Overall result (same exon): tumor " + tumor);
+                outputFile.WriteLine(ASETools.HistogramResultLine.Header());
+                overallSameExonResults[tumor].ComputeHistogram(0, 1, 0.01).ToList().ForEach(x => outputFile.WriteLine(x.ToString()));
+            }
+
             foreach (var tumor in ASETools.BothBools)
             {
                 outputFile.WriteLine();
@@ -127,17 +136,31 @@ namespace ASEConsistency
 
         } // Main
 
+        struct ASEAndLocus
+        {
+            public readonly int locus;
+            public readonly double ASE;
+
+            public ASEAndLocus(int locus_, double ASE_)
+            {
+                locus = locus_;
+                ASE = ASE_;
+            }
+        }
+
         static void WorkerThread(List<ASETools.Case> casesToProcess)
         {
             var localPerGeneResults = new Dictionary<bool, Dictionary<string, ASETools.Histogram>>();
             var localOverallResults = new Dictionary<bool, ASETools.Histogram>();
             var localReferenceFraction = new Dictionary<bool, ASETools.Histogram>();
+            var localOverallSameExonResults = new Dictionary<bool, ASETools.Histogram>();
 
             foreach (var tumor in ASETools.BothBools)
             {
                 localPerGeneResults.Add(tumor, new Dictionary<string, ASETools.Histogram>());
                 localOverallResults.Add(tumor, new ASETools.Histogram());
                 localReferenceFraction.Add(tumor, new ASETools.Histogram());
+                localOverallSameExonResults.Add(tumor, new ASETools.Histogram());
             }
 
             while (true)
@@ -167,6 +190,7 @@ namespace ASEConsistency
 
                             overallResults[tumor].merge(localOverallResults[tumor]);
                             referenceFraction[tumor].merge(localReferenceFraction[tumor]);
+                            overallSameExonResults[tumor].merge(localOverallSameExonResults[tumor]);
                         } // tumor/normal
                         return;
                     }
@@ -184,9 +208,9 @@ namespace ASEConsistency
                 var copyNumber = ASETools.CopyNumberVariation.ReadBothFiles(case_);
                 var annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
 
-                var map = new Dictionary<bool, Dictionary<string, List<double>>>(); // tumor/normal->gene->ASEs
-                map.Add(false, new Dictionary<string, List<double>>());
-                map.Add(true, new Dictionary<string, List<double>>());
+                var map = new Dictionary<bool, Dictionary<string, List<ASEAndLocus>>>(); // tumor/normal->gene->ASEs
+                map.Add(false, new Dictionary<string, List<ASEAndLocus>>());
+                map.Add(true, new Dictionary<string, List<ASEAndLocus>>());
 
                 foreach (var variant in annotatedSelectedVariants)
                 {
@@ -209,10 +233,10 @@ namespace ASEConsistency
                             foreach (var gene in geneMap.getGenesMappedTo(variant.contig, variant.locus)) {
                                 if (!map[tumor].ContainsKey(gene.hugoSymbol))
                                 {
-                                    map[tumor].Add(gene.hugoSymbol, new List<double>());
+                                    map[tumor].Add(gene.hugoSymbol, new List<ASEAndLocus>());
                                 }
 
-                                map[tumor][gene.hugoSymbol].Add(variant.GetAlleleSpecificExpression(tumor));
+                                map[tumor][gene.hugoSymbol].Add(new ASEAndLocus(variant.locus, variant.GetAlleleSpecificExpression(tumor)));
                             } // foreach mapped gene
                         } // if it's an ASE candidate
                     } // tumor in BothBools
@@ -233,10 +257,34 @@ namespace ASEConsistency
                             localPerGeneResults[tumor].Add(hugo_symbol, new ASETools.Histogram(hugo_symbol + " tumor: " + tumor));
                         }
 
-                        var spread = gene.Value.Max() - gene.Value.Min();
+                        var spread = gene.Value.Select(x => x.ASE).Max() - gene.Value.Select(x => x.ASE).Min();
                         localPerGeneResults[tumor][hugo_symbol].addValue(spread);
 
                         localOverallResults[tumor].addValue(spread);
+
+                        //
+                        // See if we have any results in the same exon.
+                        //
+                        double maxPerExonValue = -1;
+                        foreach (var isoform in geneLocationInformation.genesByName[hugo_symbol].isoforms)
+                        {
+                            foreach (ASETools.Exon exon in isoform.exons)
+                            {
+                                var matchingResults = gene.Value.Where(x => x.locus >= exon.start && x.locus <= exon.end).ToList();
+
+                                if (matchingResults.Count() < 2)
+                                {
+                                    continue;
+                                }
+
+                                maxPerExonValue = Math.Max(maxPerExonValue, matchingResults.Select(x => x.ASE).Max() - matchingResults.Select(x => x.ASE).Min());
+                            }
+                        }
+
+                        if (maxPerExonValue >= 0)
+                        {
+                            localOverallSameExonResults[tumor].addValue(maxPerExonValue);
+                        }
 
                         StreamWriter outputFile = null;
                         if (spread >= 0.98)
