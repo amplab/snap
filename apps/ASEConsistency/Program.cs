@@ -20,6 +20,9 @@ namespace ASEConsistency
         static Dictionary<bool, ASETools.Histogram> overallResults = new Dictionary<bool, ASETools.Histogram>();
         static Dictionary<bool, ASETools.Histogram> overallSameExonResults = new Dictionary<bool, ASETools.Histogram>();
         static Dictionary<bool, ASETools.Histogram> referenceFraction = new Dictionary<bool, ASETools.Histogram>();
+        static Dictionary<bool, ASETools.Histogram> overallResultsHighReadCount = new Dictionary<bool, ASETools.Histogram>();
+
+        static int highReadCount = 30;
 
         static StreamWriter badInstancesFile;
         static StreamWriter questionableInstancesFile;
@@ -48,6 +51,7 @@ namespace ASEConsistency
             foreach (var tumor in ASETools.BothBools)
             {
                 overallResults.Add(tumor, new ASETools.Histogram());
+                overallResultsHighReadCount.Add(tumor, new ASETools.Histogram());
                 perGeneResults.Add(tumor, new Dictionary<string, ASETools.Histogram>());
                 referenceFraction.Add(tumor, new ASETools.Histogram("reference fraction: tumor " + tumor));
                 overallSameExonResults.Add(tumor, new ASETools.Histogram());
@@ -95,7 +99,14 @@ namespace ASEConsistency
                 overallResults[tumor].ComputeHistogram(0, 1, 0.01).ToList().ForEach(x => outputFile.WriteLine(x.ToString()));
             }
 
-            foreach(var tumor in ASETools.BothBools)
+            foreach (var tumor in ASETools.BothBools)
+            {
+                outputFile.WriteLine("Overall results (min read count " + highReadCount + ": tumor " + tumor);
+                outputFile.WriteLine(ASETools.HistogramResultLine.Header());
+                overallResultsHighReadCount[tumor].ComputeHistogram(0, 1, 0.01).ToList().ForEach(x => outputFile.WriteLine(x.ToString()));
+            }
+
+            foreach (var tumor in ASETools.BothBools)
             {
                 outputFile.WriteLine("Overall result (same exon): tumor " + tumor);
                 outputFile.WriteLine(ASETools.HistogramResultLine.Header());
@@ -152,12 +163,14 @@ namespace ASEConsistency
         {
             var localPerGeneResults = new Dictionary<bool, Dictionary<string, ASETools.Histogram>>();
             var localOverallResults = new Dictionary<bool, ASETools.Histogram>();
+            var localOverallResultsHighMapCount = new Dictionary<bool, ASETools.Histogram>();
             var localReferenceFraction = new Dictionary<bool, ASETools.Histogram>();
             var localOverallSameExonResults = new Dictionary<bool, ASETools.Histogram>();
 
             foreach (var tumor in ASETools.BothBools)
             {
                 localPerGeneResults.Add(tumor, new Dictionary<string, ASETools.Histogram>());
+                localOverallResultsHighMapCount.Add(tumor, new ASETools.Histogram());
                 localOverallResults.Add(tumor, new ASETools.Histogram());
                 localReferenceFraction.Add(tumor, new ASETools.Histogram());
                 localOverallSameExonResults.Add(tumor, new ASETools.Histogram());
@@ -189,6 +202,7 @@ namespace ASEConsistency
                             }
 
                             overallResults[tumor].merge(localOverallResults[tumor]);
+                            overallResultsHighReadCount[tumor].merge(localOverallResultsHighMapCount[tumor]);
                             referenceFraction[tumor].merge(localReferenceFraction[tumor]);
                             overallSameExonResults[tumor].merge(localOverallSameExonResults[tumor]);
                         } // tumor/normal
@@ -209,8 +223,13 @@ namespace ASEConsistency
                 var annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
 
                 var map = new Dictionary<bool, Dictionary<string, List<ASEAndLocus>>>(); // tumor/normal->gene->ASEs
-                map.Add(false, new Dictionary<string, List<ASEAndLocus>>());
-                map.Add(true, new Dictionary<string, List<ASEAndLocus>>());
+                var mapHighReadCount = new Dictionary<bool, Dictionary<string, List<ASEAndLocus>>>();
+
+                foreach (var tumor in ASETools.BothBools)
+                {
+                    map.Add(tumor, new Dictionary<string, List<ASEAndLocus>>());
+                    mapHighReadCount.Add(tumor, new Dictionary<string, List<ASEAndLocus>>());
+                }
 
                 foreach (var variant in annotatedSelectedVariants)
                 {
@@ -237,6 +256,16 @@ namespace ASEConsistency
                                 }
 
                                 map[tumor][gene.hugoSymbol].Add(new ASEAndLocus(variant.locus, variant.GetAlleleSpecificExpression(tumor)));
+
+                                if (variant.IsASECandidate(tumor, copyNumber, configuration, perGeneASEMap, geneMap, highReadCount))
+                                {
+                                    if (!mapHighReadCount[tumor].ContainsKey(gene.hugoSymbol))
+                                    {
+                                        mapHighReadCount[tumor].Add(gene.hugoSymbol, new List<ASEAndLocus>());
+                                    }
+
+                                    mapHighReadCount[tumor][gene.hugoSymbol].Add(new ASEAndLocus(variant.locus, variant.GetAlleleSpecificExpression(tumor)));
+                                }
                             } // foreach mapped gene
                         } // if it's an ASE candidate
                     } // tumor in BothBools
@@ -261,6 +290,12 @@ namespace ASEConsistency
                         localPerGeneResults[tumor][hugo_symbol].addValue(spread);
 
                         localOverallResults[tumor].addValue(spread);
+
+                        if (mapHighReadCount[tumor].ContainsKey(hugo_symbol) && mapHighReadCount[tumor][hugo_symbol].Count() >= 2)
+                        {
+                            var values = mapHighReadCount[tumor][hugo_symbol].Select(x => x.ASE);
+                            localOverallResultsHighMapCount[tumor].addValue(values.Max() - values.Min());
+                        }
 
                         //
                         // See if we have any results in the same exon.

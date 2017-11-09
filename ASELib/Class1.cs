@@ -9642,15 +9642,18 @@ namespace ASELib
                         {
                             itemDequeued();
                         }
+                    }
 
+                    handleOneItem(queueItem, perThreadState);
+
+                    lock (queue)
+                    {
                         nItemsProcessed++;
                         if (nItemsPerDot != 0 && nItemsProcessed % nItemsPerDot == 0)
                         {
                             Console.Write(".");
                         }
                     }
-
-                    handleOneItem(queueItem, perThreadState);
                 } // while (true)
             }
 
