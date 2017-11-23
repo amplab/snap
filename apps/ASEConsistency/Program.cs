@@ -51,6 +51,7 @@ namespace ASEConsistency
                     overallResults[tumor].Add(readDepth, new ASETools.Histogram());
                     overallResultsWithCorrection[tumor].Add(readDepth, new ASETools.Histogram());
                 }
+
                 perGeneResults.Add(tumor, new Dictionary<string, ASETools.Histogram>());
                 referenceFraction.Add(tumor, new ASETools.Histogram("reference fraction: tumor " + tumor));
                 overallSameExonResults.Add(tumor, new ASETools.Histogram());

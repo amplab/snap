@@ -9720,7 +9720,12 @@ namespace ASELib
                         {
                             itemDequeued();
                         }
+                    }
 
+                    handleOneItem(queueItem, perThreadState);
+
+                    lock (queue)
+                    {
                         nItemsProcessed++;
                     }
 
