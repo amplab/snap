@@ -1545,6 +1545,12 @@ namespace ASELib
             public int minRNAReadCoverage = 10;
             public int minDNAReadCoverage = 10;
 
+            public int getMinReadCoverage(bool dna)
+            {
+                if (dna) return minDNAReadCoverage;
+                return minRNAReadCoverage;
+            }
+
 
 			public string[] commandLineArgs = null;    // The args excluding -configuration <filename>
 

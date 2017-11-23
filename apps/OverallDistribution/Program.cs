@@ -70,7 +70,9 @@ namespace OverallDistribution
                                 foreach (var dna in ASETools.BothBools)
                                 {
                                     var readCounts = variant.getReadCount(tumor, dna);
-                                    perThreadReadDepthDistribution[tumor][somatic][dna].addValue(readCounts.nMatchingAlt + readCounts.nMatchingReference);
+                                    if (readCounts.usefulReads() > configuration.getMinReadCoverage(dna)) {
+                                        perThreadReadDepthDistribution[tumor][somatic][dna].addValue(readCounts.usefulReads());
+                                    }
                                 }
                             }
 
@@ -210,7 +212,7 @@ namespace OverallDistribution
                     {
                         outputFile.WriteLine("Read depth distribution tumor: " + tumor + ", somatic: " + somatic + ", dna: " + dna);
                         outputFile.WriteLine(ASETools.HistogramResultLine.Header());
-                        readDepthDisribution[tumor][somatic][dna].ComputeHistogram(0, 2000, 1).ToList().ForEach(x => outputFile.WriteLine(x.ToString()));
+                        readDepthDisribution[tumor][somatic][dna].ComputeHistogram(0, 10000, 1).ToList().ForEach(x => outputFile.WriteLine(x.ToString()));
                         outputFile.WriteLine();
                     }
                 }
