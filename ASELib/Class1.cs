@@ -549,6 +549,11 @@ namespace ASELib
                 return chromosome == locusChromosome && minLocus <= locus && maxLocus >= locus;
             }
 
+            public int size()
+            {
+                return maxLocus - minLocus;
+            }
+
 			public List<Isoform> isoforms = new List<Isoform>();
         } // GeneLocationInfo
 
@@ -1537,6 +1542,9 @@ namespace ASELib
 			public const string unfilteredCountsExtention = @"_unfiltered_counts.txt";
 			public const string methylationREFsFilename = defaultBaseDirectory + "compositeREFs450.txt";
 
+            public int minRNAReadCoverage = 10;
+            public int minDNAReadCoverage = 10;
+
 
 			public string[] commandLineArgs = null;    // The args excluding -configuration <filename>
 
@@ -1673,8 +1681,12 @@ namespace ASELib
                         retVal.geneLocationInformationFilename = fields[1];
                     } else if (type == "min sample count for heatmap") {
                         retVal.minSampleCountForHeatMap = Convert.ToInt32(fields[1]);
-                    } else if (type == "max normal ASE for using variants") {
+                    } else if (type == "max normal ase for using variants") {
                         retVal.ASEInNormalAtWhichToExcludeGenes = Convert.ToDouble(fields[1]);
+                    } else if (type == "min rna read coverage") {
+                        retVal.minRNAReadCoverage = Convert.ToInt32(fields[1]);
+                    } else if (type == "min dna read coverage") {
+                        retVal.minDNAReadCoverage = Convert.ToInt32(fields[1]);
                     } else {
                         Console.WriteLine("ASEConfiguration.loadFromFile: configuration file " + pathname + " contains a line with an unknown configuration parameter type: " + line + ".  Ignoring.");
                         continue;
@@ -2320,6 +2332,7 @@ namespace ASELib
         public const string PerGeneASEMapFilename = "ASEMap-PerGene.txt";
         public const string PerCaseASEFilename = "PerCaseASE.txt";
         public const string OverallASEFilename = "OverallASE.txt";
+        public const string ASECorrectionFilename = "ase_correction.txt";
 
 
         public class DerivedFile
@@ -3026,15 +3039,22 @@ namespace ASELib
 
                 public int AsIntFromSquareBracketInt(string fieldName)
                 {
+                    if (AsString(fieldName) == "") return 0;
+
                     return Convert.ToInt32(AsStringFromSquareBracketString(fieldName));
                 }
 
                 public long AsLongFromSquareBracketLong(string fieldName)
                 {
+                    if (AsString(fieldName) == "") return 0;
+
                     return Convert.ToInt64(AsStringFromSquareBracketString(fieldName));
                 }
 
- 
+                public long AsLong(string fieldName)
+                {
+                    return Convert.ToInt64(AsString(fieldName));
+                } 
 
                 public int AsIntMinusOneIfStarOrEmptyString(string fieldName)
                 {
@@ -3227,7 +3247,6 @@ namespace ASELib
 		// contains annotation data from one line in a methylation file
 		public class AnnotationLine
 		{
-
 			public static List<AnnotationLine> filterByTSS(List<AnnotationLine> sites, int maxDistance = 2000)
 			{
 				var filteredSites = sites.Where(r =>
@@ -4362,6 +4381,29 @@ namespace ASELib
 
             public readonly double mean;
             public readonly double stddev;
+        }
+
+        public class RunningMeanAndStdDev
+        {
+            public RunningMeanAndStdDev() { }
+
+            public void addValue(double value)
+            {
+                n++;
+                total += value;
+                totalOfSquares += value * value;
+            }
+
+            public MeanAndStdDev getMeanAndStdDev()
+            {
+                if (n == 0) return new MeanAndStdDev(0, 0);
+
+                return new MeanAndStdDev(total / n, Math.Sqrt(n * totalOfSquares - total * total) / n);
+            }
+
+            int n = 0;
+            double total = 0;
+            double totalOfSquares = 0;
         }
 
         //
@@ -6507,20 +6549,20 @@ namespace ASELib
 				return str;
 			}
 
-			public double GetTumorAlleleSpecificExpression()
+			public double GetTumorAlleleSpecificExpression(ASECorrection aseCorrection = null)
 			{
-				return GetAlleleSpecificExpression(tumorRNAReadCounts);
+				return GetAlleleSpecificExpression(tumorRNAReadCounts, aseCorrection);
 			}
 
-			public double GetNormalAlleleSpecificExpression()
+			public double GetNormalAlleleSpecificExpression(ASECorrection aseCorrection = null)
 			{
-				return GetAlleleSpecificExpression(normalRNAReadCounts);
+				return GetAlleleSpecificExpression(normalRNAReadCounts, aseCorrection);
 			}
 
-            public double GetAlleleSpecificExpression(bool tumor)
+            public double GetAlleleSpecificExpression(bool tumor, ASECorrection aseCorrection = null)
             {
-                if (tumor) return GetTumorAlleleSpecificExpression();
-                return GetNormalAlleleSpecificExpression();
+                if (tumor) return GetTumorAlleleSpecificExpression(aseCorrection);
+                return GetNormalAlleleSpecificExpression(aseCorrection);
             }
 
 			public double GetTumorAltAlleleFraction()
@@ -6539,11 +6581,19 @@ namespace ASELib
                 return GetNormalAltAlleleFraction();
             }
 
-			private static double GetAlleleSpecificExpression(ReadCounts readCounts)
+			private static double GetAlleleSpecificExpression(ReadCounts readCounts, ASECorrection aseCorrection)
 			{
 				var rnaFractionTumor = GetAltAlleleFraction(readCounts);
 
-				return Math.Abs(rnaFractionTumor * 2.0 - 1.0);
+                double rawASE = Math.Abs(rnaFractionTumor * 2.0 - 1.0);
+
+                if (aseCorrection == null)
+                {
+                    return rawASE;
+                } else
+                {
+                    return aseCorrection.getCorrectedASE(rawASE, readCounts.usefulReads());
+                }
 			}
 
 			private static double GetAltAlleleFraction(ReadCounts readCounts)
@@ -6666,6 +6716,28 @@ namespace ASELib
                 return retVal;
 			}
 
+            public ReadCounts getReadCount(bool tumor, bool dna)
+            {
+                if (tumor)
+                {
+                    if (dna)
+                    {
+                        return tumorDNAReadCounts;
+                    } else
+                    {
+                        return tumorRNAReadCounts;
+                    }
+                } else
+                {
+                    if (dna)
+                    {
+                        return normalDNAReadCounts;
+                    } else
+                    {
+                        return normalRNAReadCounts;
+                    }
+                }
+            }
 			
 			public static void writeFile(string filename, List<AnnotatedVariant> annotatedVariants)
 			{
@@ -6696,7 +6768,7 @@ namespace ASELib
 					"normalRNAmatchingRef\tnormalRNAmatchingAlt\tnormalRNAmatchingNeither\tnormalRNAmatchingBoth";
 
 			public readonly string Hugo_symbol;                 // Only present for somatic mutations, otherwise ""
-			bool IsASECandidate(bool isTumor = true, int minCoverage = 10) // Has at least 10 tumor DNA & RNA reads, and has variant allele frequency between .4 and .6 in tumor DNA
+			bool IsASECandidate(bool isTumor, int minRNACoverage, int minDNACoverage) // Has at least 10 tumor DNA & RNA reads, and has variant allele frequency between .4 and .6 in tumor DNA
 			{
 				// get read counts for either tumor or normal
 				var DNAReadCounts = isTumor ? this.tumorDNAReadCounts : this.normalDNAReadCounts;
@@ -6710,8 +6782,8 @@ namespace ASELib
 
 				// check there is sufficient coverage for DNA and RNA
 				// check annotated variant is not a possible minor subclone
-				return (DNAReadCounts.nMatchingReference + DNAReadCounts.nMatchingAlt >= minCoverage &&
-						RNAReadCounts.nMatchingReference + RNAReadCounts.nMatchingAlt >= minCoverage &&
+				return (DNAReadCounts.nMatchingReference + DNAReadCounts.nMatchingAlt >= minDNACoverage &&
+						RNAReadCounts.nMatchingReference + RNAReadCounts.nMatchingAlt >= minRNACoverage &&
 						DNAReadCounts.nMatchingReference * 3 >= DNAReadCounts.nMatchingAlt * 2 &&
 						DNAReadCounts.nMatchingAlt * 3 >= DNAReadCounts.nMatchingReference * 2 && 
                         (DNAReadCounts.nMatchingNeither + DNAReadCounts.nMatchingBoth) * 20 < DNAReadCounts.totalReads() &&
@@ -6721,14 +6793,20 @@ namespace ASELib
             //
             // A version that rolls in the copy number file check.
             //
-            public bool IsASECandidate(bool isTumor, Dictionary<bool, List<CopyNumberVariation>> copyNumber, Configuration configuration, Dictionary<string, ASEMapPerGeneLine> perGeneASEMap, GeneMap geneMap, int minCoverage = 10)
+            public bool IsASECandidate(bool isTumor, Dictionary<bool, List<CopyNumberVariation>> copyNumber, Configuration configuration, Dictionary<string, ASEMapPerGeneLine> perGeneASEMap, GeneMap geneMap, int inputMinRNACoverage = -1, int inputMinDNACoverage = -1)
             {
                 if (!isTumor && normalRNAReadCounts == null)
                 {
                     return false;
                 }
 
-                if (!IsASECandidate(isTumor, minCoverage))
+                //
+                // If provided, the input min coverage numbers override the ones in the configuration.  If not, stick with the configuration.
+                //
+                int minRNACoverage = (inputMinRNACoverage == -1) ? configuration.minRNAReadCoverage : inputMinRNACoverage;
+                int minDNACoverage = (inputMinDNACoverage == -1) ? configuration.minDNAReadCoverage : inputMinDNACoverage;
+
+                if (!IsASECandidate(isTumor, minRNACoverage, minDNACoverage))
                 {
                     return false;
                 }
@@ -9644,13 +9722,16 @@ namespace ASELib
                         }
 
                         nItemsProcessed++;
+                    }
+
+                    handleOneItem(queueItem, perThreadState);
+                    lock (queue)
+                    {
                         if (nItemsPerDot != 0 && nItemsProcessed % nItemsPerDot == 0)
                         {
                             Console.Write(".");
                         }
                     }
-
-                    handleOneItem(queueItem, perThreadState);
                 } // while (true)
             }
 
@@ -9661,6 +9742,91 @@ namespace ASELib
             int nItemsPerDot = 0;
             int nItemsProcessed = 0;
         } // WorkerThreadHelper
+
+        public class ASECorrection
+        {
+            public static ASECorrection LoadFromFile(string filename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+
+                if (null == inputFile)
+                {
+                    Console.WriteLine("Unable to open ASECorrection file " + filename);
+                    return null;
+                }
+
+                var lines = new List<string>();
+
+                inputFile.ReadLine();   // Skip the header
+                {
+                    string line;
+                    while (null != (line = inputFile.ReadLine())) {
+                        lines.Add(line);
+                    }
+                }
+                inputFile.Close();
+
+                if (lines.Count() == 0)
+                {
+                    Console.WriteLine("ASECorrection file " + filename + " doesn't appear to have any data.");
+                    return null;
+                }
+
+                int maxReadDepth = lines.Select(x => Convert.ToInt32(x.Split('\t')[0])).ToList().Max();
+
+                var retVal = new ASECorrection();
+                retVal.maxReadDepth = maxReadDepth;
+                retVal.correction = new double[retVal.maxReadDepth+1, 101];
+
+                for (int i = 0; i <= maxReadDepth; i++)
+                {
+                    for (int j = 0; j < 101; j++)
+                    {
+                        retVal.correction[i, j] = 0;
+                    }
+                }
+
+                foreach (var line in lines)
+                {
+                    var fields = line.Split('\t');
+                    if (fields.Count() != 102)
+                    {
+                        Console.WriteLine("ASECorrection file " + filename + " has a line with the wrong number of fields " + fields.Count() + " != 102: " + line);
+                        return null;
+                    }
+
+                    int readDepth = Convert.ToInt32(fields[0]);
+                    for (int i = 0; i < 101; i++)
+                    {
+                        if (fields[i + 1] == "*")
+                        {
+                            retVal.correction[readDepth, i] = 0;
+                        }
+                        else
+                        {
+                            retVal.correction[readDepth, i] = Convert.ToDouble(fields[i + 1]);
+                        }
+                    } // for each field
+
+                } // for each line (read depth)
+                return retVal;
+            } // LoadFromFile
+
+            public double getCorrectedASE(double rawASE, int readDepth)
+            {
+                if (readDepth > maxReadDepth)
+                {
+                    return rawASE;
+                }
+
+                return rawASE + correction[readDepth, (int)(Math.Round(rawASE * 100))];
+            }
+
+            int maxReadDepth = 0;
+
+            double[,] correction = null;
+        }
+
 
 
     } // ASETools

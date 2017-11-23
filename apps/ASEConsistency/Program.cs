@@ -17,12 +17,15 @@ namespace ASEConsistency
         static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
         static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
         static Dictionary<bool, Dictionary<string, ASETools.Histogram>> perGeneResults = new Dictionary<bool, Dictionary<string, ASETools.Histogram>>();
-        static Dictionary<bool, ASETools.Histogram> overallResults = new Dictionary<bool, ASETools.Histogram>();
+        static Dictionary<bool, Dictionary<int, ASETools.Histogram>> overallResults = new Dictionary<bool, Dictionary<int, ASETools.Histogram>>(); // tumor, min read depth
+        static Dictionary<bool, Dictionary<int, ASETools.Histogram>> overallResultsWithCorrection = new Dictionary<bool, Dictionary<int, ASETools.Histogram>>(); // tumor, min read depth
         static Dictionary<bool, ASETools.Histogram> overallSameExonResults = new Dictionary<bool, ASETools.Histogram>();
+        static Dictionary<bool, ASETools.Histogram> overallReadDepthDifference = new Dictionary<bool, ASETools.Histogram>();
+        static Dictionary<bool, ASETools.Histogram> overallReadDepthDifferenceSameExon = new Dictionary<bool, ASETools.Histogram>();
         static Dictionary<bool, ASETools.Histogram> referenceFraction = new Dictionary<bool, ASETools.Histogram>();
+        static ASETools.ASECorrection ASECorrection;
 
-        static StreamWriter badInstancesFile;
-        static StreamWriter questionableInstancesFile;
+        static int[] readDepths = { 10, 25, 45, 110, 135, 250 };    // The values must be in ascending order for the code to work properly.
 
         static int nProcessed = 0;
 
@@ -39,18 +42,20 @@ namespace ASEConsistency
                 return;
             }
 
-            badInstancesFile = ASETools.CreateStreamWriterWithRetry("ReallyInconsistentASELocations.txt");
-            questionableInstancesFile = ASETools.CreateStreamWriterWithRetry("KindaInconsistentASELocations.txt");
-            string header = "Case ID\tgene\tchrom\tmin locus\tmax locus\ttumor";
-            badInstancesFile.WriteLine(header);
-            questionableInstancesFile.WriteLine(header);
-
             foreach (var tumor in ASETools.BothBools)
             {
-                overallResults.Add(tumor, new ASETools.Histogram());
+                overallResults.Add(tumor, new Dictionary<int, ASETools.Histogram>());
+                overallResultsWithCorrection.Add(tumor, new Dictionary<int, ASETools.Histogram>());
+                foreach (var readDepth in readDepths)
+                {
+                    overallResults[tumor].Add(readDepth, new ASETools.Histogram());
+                    overallResultsWithCorrection[tumor].Add(readDepth, new ASETools.Histogram());
+                }
                 perGeneResults.Add(tumor, new Dictionary<string, ASETools.Histogram>());
                 referenceFraction.Add(tumor, new ASETools.Histogram("reference fraction: tumor " + tumor));
                 overallSameExonResults.Add(tumor, new ASETools.Histogram());
+                overallReadDepthDifference.Add(tumor, new ASETools.Histogram());
+                overallReadDepthDifferenceSameExon.Add(tumor, new ASETools.Histogram());
             }
 
             geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
@@ -61,6 +66,13 @@ namespace ASEConsistency
             if (null == perGeneASEMap)
             {
                 Console.WriteLine("You must first create the per-gene ASE map in " + configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+                return;
+            }
+
+            ASECorrection = ASETools.ASECorrection.LoadFromFile(configuration.finalResultsDirectory + ASETools.ASECorrectionFilename);
+            if (null == ASECorrection)
+            {
+                Console.WriteLine("Unable to load ASE correction");
                 return;
             }
 
@@ -90,12 +102,33 @@ namespace ASEConsistency
 
             foreach (var tumor in ASETools.BothBools)
             {
-                outputFile.WriteLine("Overall results: tumor " + tumor);
+                outputFile.WriteLine("Read depth difference distribution (same exon), tumor: " + tumor);
                 outputFile.WriteLine(ASETools.HistogramResultLine.Header());
-                overallResults[tumor].ComputeHistogram(0, 1, 0.01).ToList().ForEach(x => outputFile.WriteLine(x.ToString()));
+                overallReadDepthDifferenceSameExon[tumor].ComputeHistogram(0, 200, 1).ToList().ForEach(x => outputFile.WriteLine(x.ToString()));
             }
 
-            foreach(var tumor in ASETools.BothBools)
+            foreach (var tumor in ASETools.BothBools)
+            {
+                outputFile.WriteLine("Read depth difference distribution, tumor: " + tumor);
+                outputFile.WriteLine(ASETools.HistogramResultLine.Header());
+                overallReadDepthDifference[tumor].ComputeHistogram(0, 200, 1).ToList().ForEach(x => outputFile.WriteLine(x.ToString()));
+            }
+
+            foreach (var tumor in ASETools.BothBools)
+            {
+                foreach (var readDepth in readDepths)
+                {
+                    outputFile.WriteLine("Overall results: tumor " + tumor + ", min read depth: " + readDepth);
+                    outputFile.WriteLine(ASETools.HistogramResultLine.Header());
+                    overallResults[tumor][readDepth].ComputeHistogram(0, 1, 0.01).ToList().ForEach(x => outputFile.WriteLine(x.ToString()));
+
+                    outputFile.WriteLine("Overall results with correction: tumor " + tumor + ", min read depth: " + readDepth);
+                    outputFile.WriteLine(ASETools.HistogramResultLine.Header());
+                    overallResultsWithCorrection[tumor][readDepth].ComputeHistogram(0, 1, 0.01).ToList().ForEach(x => outputFile.WriteLine(x.ToString()));
+                }
+            }
+
+            foreach (var tumor in ASETools.BothBools)
             {
                 outputFile.WriteLine("Overall result (same exon): tumor " + tumor);
                 outputFile.WriteLine(ASETools.HistogramResultLine.Header());
@@ -126,12 +159,6 @@ namespace ASEConsistency
             outputFile.WriteLine("**done**");
             outputFile.Close();
 
-            badInstancesFile.WriteLine("**done**");
-            badInstancesFile.Close();
-
-            questionableInstancesFile.WriteLine("**done**");
-            questionableInstancesFile.Close();
-
             Console.WriteLine("Took " + ASETools.ElapsedTimeInSeconds(timer));
 
         } // Main
@@ -151,16 +178,27 @@ namespace ASEConsistency
         static void WorkerThread(List<ASETools.Case> casesToProcess)
         {
             var localPerGeneResults = new Dictionary<bool, Dictionary<string, ASETools.Histogram>>();
-            var localOverallResults = new Dictionary<bool, ASETools.Histogram>();
+            var localOverallResults = new Dictionary<bool, Dictionary<int, ASETools.Histogram>>();
+            var localOverallResultsWithCorrection = new Dictionary<bool, Dictionary<int, ASETools.Histogram>>();
             var localReferenceFraction = new Dictionary<bool, ASETools.Histogram>();
             var localOverallSameExonResults = new Dictionary<bool, ASETools.Histogram>();
+            var localOverallReadDepthDifference = new Dictionary<bool, ASETools.Histogram>();
+            var localOverallReadDepthDifferenceSameExon = new Dictionary<bool, ASETools.Histogram>();
 
             foreach (var tumor in ASETools.BothBools)
             {
                 localPerGeneResults.Add(tumor, new Dictionary<string, ASETools.Histogram>());
-                localOverallResults.Add(tumor, new ASETools.Histogram());
+                localOverallResults.Add(tumor, new Dictionary<int, ASETools.Histogram>());
+                localOverallResultsWithCorrection.Add(tumor, new Dictionary<int, ASETools.Histogram>());
+                foreach (var readDepth in readDepths)
+                {
+                    localOverallResults[tumor].Add(readDepth, new ASETools.Histogram());
+                    localOverallResultsWithCorrection[tumor].Add(readDepth, new ASETools.Histogram());
+                }
                 localReferenceFraction.Add(tumor, new ASETools.Histogram());
                 localOverallSameExonResults.Add(tumor, new ASETools.Histogram());
+                localOverallReadDepthDifference.Add(tumor, new ASETools.Histogram());
+                localOverallReadDepthDifferenceSameExon.Add(tumor, new ASETools.Histogram());
             }
 
             while (true)
@@ -188,9 +226,15 @@ namespace ASEConsistency
                                 }
                             }
 
-                            overallResults[tumor].merge(localOverallResults[tumor]);
+                            foreach (var readDepth in readDepths)
+                            {
+                                overallResults[tumor][readDepth].merge(localOverallResults[tumor][readDepth]);
+                                overallResultsWithCorrection[tumor][readDepth].merge(localOverallResultsWithCorrection[tumor][readDepth]);
+                            }
                             referenceFraction[tumor].merge(localReferenceFraction[tumor]);
                             overallSameExonResults[tumor].merge(localOverallSameExonResults[tumor]);
+                            overallReadDepthDifference[tumor].merge(localOverallReadDepthDifference[tumor]);
+                            overallReadDepthDifferenceSameExon[tumor].merge(localOverallReadDepthDifference[tumor]);
                         } // tumor/normal
                         return;
                     }
@@ -208,9 +252,20 @@ namespace ASEConsistency
                 var copyNumber = ASETools.CopyNumberVariation.ReadBothFiles(case_);
                 var annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
 
-                var map = new Dictionary<bool, Dictionary<string, List<ASEAndLocus>>>(); // tumor/normal->gene->ASEs
-                map.Add(false, new Dictionary<string, List<ASEAndLocus>>());
-                map.Add(true, new Dictionary<string, List<ASEAndLocus>>());
+                var map = new Dictionary<bool, Dictionary<int, Dictionary<string, List<ASEAndLocus>>>>(); // tumor/normal->min read depth->gene->ASEs
+                var mapWithCorrection = new Dictionary<bool, Dictionary<int, Dictionary<string, List<ASEAndLocus>>>>(); // tumor/normal->min read depth->gene->ASEs
+                var readDepthMap = new Dictionary<bool, Dictionary<string, List<int>>>(); // tumor->gene name->read depth
+                foreach (var tumor in ASETools.BothBools)
+                {
+                    map.Add(tumor, new Dictionary<int, Dictionary<string, List<ASEAndLocus>>>());
+                    mapWithCorrection.Add(tumor, new Dictionary<int, Dictionary<string, List<ASEAndLocus>>>());
+                    foreach (var readDepth in readDepths)
+                    {
+                        map[tumor].Add(readDepth, new Dictionary<string, List<ASEAndLocus>>());
+                        mapWithCorrection[tumor].Add(readDepth, new Dictionary<string, List<ASEAndLocus>>());
+                    }
+                    readDepthMap.Add(tumor, new Dictionary<string, List<int>>());
+                }
 
                 foreach (var variant in annotatedSelectedVariants)
                 {
@@ -221,36 +276,56 @@ namespace ASEConsistency
 
                     foreach (var tumor in ASETools.BothBools)
                     {
-                        if (variant.IsASECandidate(tumor, copyNumber, configuration, perGeneASEMap, geneMap))
+                        foreach (var readDepth in readDepths)
                         {
-                            localReferenceFraction[tumor].addValue(1 - variant.GetAltAlleleFraction(tumor));
-
-                            if (geneMap.getGenesMappedTo(variant.contig, variant.locus).Count() != 1)   // Skip loci in more than one gene (or in none)
+                            if (variant.IsASECandidate(tumor, copyNumber, configuration, perGeneASEMap, geneMap, readDepth))
                             {
-                                continue;
-                            }
-
-                            foreach (var gene in geneMap.getGenesMappedTo(variant.contig, variant.locus)) {
-                                if (!map[tumor].ContainsKey(gene.hugoSymbol))
+                                if (readDepth == readDepths[0])
                                 {
-                                    map[tumor].Add(gene.hugoSymbol, new List<ASEAndLocus>());
+                                    localReferenceFraction[tumor].addValue(1 - variant.GetAltAlleleFraction(tumor));
                                 }
 
-                                map[tumor][gene.hugoSymbol].Add(new ASEAndLocus(variant.locus, variant.GetAlleleSpecificExpression(tumor)));
-                            } // foreach mapped gene
-                        } // if it's an ASE candidate
+                                if (geneMap.getGenesMappedTo(variant.contig, variant.locus).Count() != 1)   // Skip loci in more than one gene (or in none)
+                                {
+                                    continue;
+                                }
+
+                                foreach (var gene in geneMap.getGenesMappedTo(variant.contig, variant.locus))
+                                {
+                                    if (!map[tumor][readDepth].ContainsKey(gene.hugoSymbol))
+                                    {
+                                        map[tumor][readDepth].Add(gene.hugoSymbol, new List<ASEAndLocus>());
+                                        mapWithCorrection[tumor][readDepth].Add(gene.hugoSymbol, new List<ASEAndLocus>());
+                                    }
+
+                                    map[tumor][readDepth][gene.hugoSymbol].Add(new ASEAndLocus(variant.locus, variant.GetAlleleSpecificExpression(tumor)));
+                                    mapWithCorrection[tumor][readDepth][gene.hugoSymbol].Add(new ASEAndLocus(variant.locus, variant.GetAlleleSpecificExpression(tumor, ASECorrection)));
+
+                                    if (readDepth == readDepths[0])
+                                    {
+                                        if (!readDepthMap[tumor].ContainsKey(gene.hugoSymbol))
+                                        {
+                                            readDepthMap[tumor].Add(gene.hugoSymbol, new List<int>());
+                                        }
+
+                                        readDepthMap[tumor][gene.hugoSymbol].Add(variant.getReadCount(tumor, false).usefulReads());
+                                    }
+                                } // foreach mapped gene
+                            } // if it's an ASE candidate
+                        }// read depth
                     } // tumor in BothBools
                 } // foreach variant
 
                 foreach (var tumor in ASETools.BothBools)
                 {
-                    foreach (var gene in map[tumor])
+                    foreach (var gene in map[tumor][readDepths[0]])
                     {
                         if (gene.Value.Count() < 2)
                         {
                             continue;
                         }
 
+ 
                         var hugo_symbol = gene.Key;
                         if (!localPerGeneResults[tumor].ContainsKey(hugo_symbol))
                         {
@@ -260,7 +335,7 @@ namespace ASEConsistency
                         var spread = gene.Value.Select(x => x.ASE).Max() - gene.Value.Select(x => x.ASE).Min();
                         localPerGeneResults[tumor][hugo_symbol].addValue(spread);
 
-                        localOverallResults[tumor].addValue(spread);
+                        localOverallReadDepthDifference[tumor].addValue(readDepthMap[tumor][hugo_symbol].Max() - readDepthMap[tumor][hugo_symbol].Min());
 
                         //
                         // See if we have any results in the same exon.
@@ -286,24 +361,19 @@ namespace ASEConsistency
                             localOverallSameExonResults[tumor].addValue(maxPerExonValue);
                         }
 
-                        StreamWriter outputFile = null;
-                        if (spread >= 0.98)
+                        foreach (var readDepth in readDepths)
                         {
-                            outputFile = badInstancesFile;
-                        } else if (spread >= 0.330 && spread <= 0.332)
-                        {
-                            outputFile = questionableInstancesFile;
-                        }
-
-                        if (null != outputFile) { 
-
-                            lock (outputFile)
+                            if (!map[tumor][readDepth].ContainsKey(hugo_symbol) || map[tumor][readDepth][hugo_symbol].Count() < 2)
                             {
-                                // "Case ID\tgene\tchrom\tmin locus\tmax locus\ttumor"
-                                outputFile.WriteLine(case_.case_id + "\t" + hugo_symbol + "\t" + geneLocationInformation.genesByName[hugo_symbol].chromosome + "\t" + geneLocationInformation.genesByName[hugo_symbol].minLocus + "\t" +
-                                    geneLocationInformation.genesByName[hugo_symbol].maxLocus + "\t" + tumor);
+                                break;
                             }
-                        } 
+
+                            var spreadAtThisReadDepth = map[tumor][readDepth][hugo_symbol].Select(x => x.ASE).Max() - map[tumor][readDepth][hugo_symbol].Select(x => x.ASE).Min();
+                            var spreadAtThisReadDepthWithCorrection = mapWithCorrection[tumor][readDepth][hugo_symbol].Select(x => x.ASE).Max() - mapWithCorrection[tumor][readDepth][hugo_symbol].Select(x => x.ASE).Min();
+
+                            localOverallResults[tumor][readDepth].addValue(spreadAtThisReadDepth);
+                            localOverallResultsWithCorrection[tumor][readDepth].addValue(spreadAtThisReadDepthWithCorrection);
+                        }
                     } // foreach gene
                 } // foreach tumor in bothbools
             } // while (true)

@@ -200,12 +200,12 @@ namespace ExpressionNearMutations
 							if (annotatedVariant.normalRNAReadCounts != null && annotatedVariant.IsASECandidate(false, copyNumber, configuration, perGeneASEMap, geneMap))
 							{
 								// add to data with normal
-								expressionValues.Add(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetTumorAlleleSpecificExpression(), 0, true, annotatedVariant.GetNormalAlleleSpecificExpression(), 0);
+								expressionValues.Add(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetTumorAlleleSpecificExpression(ASECorrection), 0, true, annotatedVariant.GetNormalAlleleSpecificExpression(ASECorrection), 0);
 							}
 							else
                             {
 								// add to data without normal
-								expressionValues.Add(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetTumorAlleleSpecificExpression(), 0, false);
+								expressionValues.Add(annotatedVariant.contig, annotatedVariant.locus, annotatedVariant.GetTumorAlleleSpecificExpression(ASECorrection), 0, false);
 							}
 						}
 					}
@@ -288,6 +288,7 @@ namespace ExpressionNearMutations
         static ASETools.Configuration configuration;
         static ASETools.GeneMap geneMap;
         static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
+        static ASETools.ASECorrection ASECorrection;
 
         static void Main(string[] args)
         {
@@ -326,6 +327,11 @@ namespace ExpressionNearMutations
 
             geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
             geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
+            ASECorrection = ASETools.ASECorrection.LoadFromFile(configuration.finalResultsDirectory + ASETools.ASECorrectionFilename);
+            if (ASECorrection == null)
+            {
+                Console.WriteLine("***WARNING*** running with no ASE correction.");
+            }
 
             // set ASE flag, if specified
             bool forAlleleSpecificExpression = configuration.commandLineArgs[0] == "-a";

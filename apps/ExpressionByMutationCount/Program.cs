@@ -52,6 +52,16 @@ namespace ExpressionByMutationCount
                     maxChromosomeASEBelowWhichToExcludeCases = Convert.ToDouble(configuration.commandLineArgs[i + 1]);
                     i++;
                 }
+                else if (configuration.commandLineArgs[i] == "-TP53Mutant")
+                {
+                    dependOnTP53 = true;
+                    excludeTP53Mutants = false;
+                }
+                else if (configuration.commandLineArgs[i] == "-NoTP53Mutant")
+                {
+                    dependOnTP53 = true;
+                    excludeTP53Mutants = true;
+                }
                 else
                 {
                     PrintUsage();
@@ -120,7 +130,8 @@ namespace ExpressionByMutationCount
                     continue;
                 }
 
-                genesToProcess.Add(selectedGene.Hugo_Symbol, new GeneState(selectedGene.Hugo_Symbol, geneScatterPlotLines, !(overallTumorASEAboveWhichToExcludeCases <= 1.0 || overallTumorASEBelowWhichToExcludeCases >= 0 || maxChromosomeASEBelowWhichToExcludeCases >= 0)));
+                genesToProcess.Add(selectedGene.Hugo_Symbol, new GeneState(selectedGene.Hugo_Symbol, geneScatterPlotLines, 
+                    !(overallTumorASEAboveWhichToExcludeCases <= 1.0 || overallTumorASEBelowWhichToExcludeCases >= 0 || maxChromosomeASEBelowWhichToExcludeCases >= 0 || dependOnTP53)));
             }
 
             Console.WriteLine("Loaded " + cases.Count() + " cases, of which " + missingCount + " are missing gene expression, processing " + casesToProcess.Count() + " of them, and loaded " + genesToProcess.Count() + " genes in " + ASETools.ElapsedTimeInSeconds(timer));
@@ -161,6 +172,17 @@ namespace ExpressionByMutationCount
             if (forAlleleSpecificExpression && maxChromosomeASEBelowWhichToExcludeCases >= 0)
             {
                 baseFileName += "-minMaxChromASE-" + maxChromosomeASEBelowWhichToExcludeCases;
+            }
+
+            if (dependOnTP53)
+            {
+                if (excludeTP53Mutants)
+                {
+                    baseFileName += "-NoTP53Mutants-";
+                } else
+                {
+                    baseFileName += "-OnlyTP53Mutants-";
+                }
             }
 
             var panCancerOutputFile = ASETools.CreateStreamWriterWithRetry(baseFileName + ".txt");
@@ -726,10 +748,11 @@ namespace ExpressionByMutationCount
 
         static void PrintUsage()
         {
-            Console.WriteLine("usage: ExpressionByMutationCount {-a} {-c} {-MaxASE maxASE}");
+            Console.WriteLine("usage: ExpressionByMutationCount {-a} {-c} {-MaxASE maxASE} {-TP53Mutant|-NoTP53Mutant}");
             Console.WriteLine("-a means allele-specific");
             Console.WriteLine("-c means do per-chromosome");
             Console.WriteLine("-MaxASE means to exclude ASE > maxASE, to try to segregate regional effects from global ones");
+            Console.WriteLine("-TP53Mutant means to consider only cases with mutations in TP53.  -NoTP53Mutant considers only those cases without TP53 mutations.");
         }
 
 
@@ -739,6 +762,8 @@ namespace ExpressionByMutationCount
         static double overallTumorASEBelowWhichToExcludeCases = -1;
         static double maxChromosomeASEBelowWhichToExcludeCases = -1;
         static Dictionary<string, ASETools.PerCaseASE> perCaseASE = null;
+        static bool dependOnTP53 = false;
+        static bool excludeTP53Mutants = false;
 
         static int nLoaded = 0;
 
@@ -784,7 +809,28 @@ namespace ExpressionByMutationCount
                     cases.RemoveAt(0);
                 }
 
+                //
+                // Load the annotated variants so we can append the somatic mutations to genes with exactly one mutation
+                //
                 readTimer.Start();
+                List<ASETools.AnnotatedVariant> annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
+                readTimer.Stop();
+
+                //
+                // If we're segregating based on TP53, check that now and skip this case if it's not in the right class.
+                //
+                if (dependOnTP53)
+                {
+                    int tp53MutationCount = annotatedSelectedVariants.Where(x => x.somaticMutation && x.Hugo_symbol == "TP53").Count();
+
+                    if ((tp53MutationCount != 0) == excludeTP53Mutants)
+                    {
+                        continue;
+                    }
+                }
+
+                readTimer.Start();
+                var copyNumber = ASETools.CopyNumberVariation.ReadBothFiles(case_);
                 var regionalSignalFile = ASETools.RegionalSignalFile.ReadFile(forAlleleSpecificExpression ? case_.tumor_allele_specific_gene_expression_filename : case_.gene_expression_filename, true, true);
                 readTimer.Stop();
 
@@ -793,15 +839,6 @@ namespace ExpressionByMutationCount
                 {
                     expressionForThisCase.Add(regionalSignalEntry.Key, new ASETools.AlleleSpecificSignal(regionalSignalEntry.Key, regionalSignalEntry.Value));
                 }
-
-                //
-                // Load the annotated variants so we can append the somatic mutations to genes with exactly one mutation
-                //
-                readTimer.Start();
-                List<ASETools.AnnotatedVariant> annotatedSelectedVariants = ASETools.AnnotatedVariant.readFile(case_.annotated_selected_variants_filename);
-                var copyNumber = ASETools.CopyNumberVariation.ReadBothFiles(case_);
-
-                readTimer.Stop();
 
                 var disease = case_.disease();
 

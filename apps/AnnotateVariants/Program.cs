@@ -167,7 +167,6 @@ namespace AnnotateVariants
                 if (!cases.ContainsKey(configuration.commandLineArgs[i]))
                 {
                     Console.WriteLine(configuration.commandLineArgs[i] + " does not appear to be a case ID.  Ignoring.");
-                    Console.WriteLine(configuration.commandLineArgs[i] + " does not appear to be a caseID.  Ignoring.");
                 } else
                 {
                     casesToProcess.Add(cases[configuration.commandLineArgs[i]]);

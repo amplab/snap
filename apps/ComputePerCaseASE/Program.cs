@@ -14,6 +14,8 @@ namespace ComputePerCaseASE
         static ASETools.GeneMap geneMap;
         static ASETools.Configuration configuration;
         static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
+        static ASETools.ASECorrection ASECorrection;
+
 
         static Dictionary<string, int> perCaseRawMAFCount = new Dictionary<string, int>();
 
@@ -33,7 +35,7 @@ namespace ComputePerCaseASE
 
             void HandleOneItem(List<ASETools.Case> cases)
             {
-                var mafLines =  ASETools.MAFLine.ReadFile(cases[0].maf_filename, cases[0].maf_file_id, false);
+                var mafLines =  ASETools.MAFLine.ReadFile(cases[0].maf_filename, cases[0].maf_file_id, true);
 
                 foreach (var case_ in cases)
                 {
@@ -68,6 +70,13 @@ namespace ComputePerCaseASE
             var geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
             geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
             perGeneASEMap = ASETools.ASEMapPerGeneLine.ReadFromFileToDictionary(configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename);
+            ASECorrection = ASETools.ASECorrection.LoadFromFile(configuration.finalResultsDirectory + ASETools.ASECorrectionFilename);
+            if (null == ASECorrection)
+            {
+                Console.WriteLine("Unable to load ASE correction");
+                return;
+            }
+
 
             var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
 
@@ -250,11 +259,11 @@ namespace ComputePerCaseASE
                     {
                         if (!variant.somaticMutation && variant.IsASECandidate(tumor, copyNumber, configuration, perGeneASEMap, geneMap))
                         {
-                            overall[tumor].recordObservation(variant.GetAlleleSpecificExpression(tumor));
-                            per10MB[tumor][0].recordObservation(variant.GetAlleleSpecificExpression(tumor));
+                            overall[tumor].recordObservation(variant.GetAlleleSpecificExpression(tumor, ASECorrection));
+                            per10MB[tumor][0].recordObservation(variant.GetAlleleSpecificExpression(tumor, ASECorrection));
                             if (index != -1)
                             {
-                                perChromosome[tumor][index].recordObservation(variant.GetAlleleSpecificExpression(tumor));
+                                perChromosome[tumor][index].recordObservation(variant.GetAlleleSpecificExpression(tumor, ASECorrection));
                             }
                         }
                     } // foreach tumor/normal
@@ -328,7 +337,7 @@ namespace ComputePerCaseASE
                         outputLine += "\t" + good10MBRegions[0] + "\t" + good10MBRegions[n - 1] + "\t" + good10MBRegions.Average();
                     }
                 } // foreach notTumor
-                outputLine += "\t" + ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, case_.case_id, true).Count() + "\t" + perCaseRawMAFCount[case_.case_id];
+                outputLine += "\t" + ASETools.MAFLine.ReadFile(case_.extracted_maf_lines_filename, case_.case_id, false).Count() + "\t" + perCaseRawMAFCount[case_.case_id];
                 localOutputLines.Add(outputLine);
             } // while true
         } // WorkerThread

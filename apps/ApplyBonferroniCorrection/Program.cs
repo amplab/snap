@@ -12,6 +12,8 @@ namespace ApplyBonferroniCorrection
     class Program
     {
         static ASETools.Configuration configuration;
+        static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
+
 
         static int CountValidPValuesInFile(string filename)
         {
@@ -237,7 +239,22 @@ namespace ApplyBonferroniCorrection
                     nSignificantReuslts += ProcessSingleResult(result.hugo_symbol, filename, result.exclusiveResultsByRange[i], bonferroniCorrection, true, i, pValueStats, histogramSet, allSignificantResultsFile);
                 }
 
-                var outputLine = ASETools.ConvertToExcelString(result.hugo_symbol) + "\t" + ASETools.stringForDouble(result.singleAltFraction) + "\t" + ASETools.stringForDouble(result.multipleAltFraction) + "\t";
+                var outputLine = ASETools.ConvertToExcelString(result.hugo_symbol);
+                if (result.nSingleContibutingToAltFraction < 10)
+                {
+                    outputLine += "\t*";
+                } else
+                {
+                    outputLine += "\t" + ASETools.stringForDouble(result.singleAltFraction);
+                }
+
+                if (result.nMultipleContributingToAltFraction < 10)
+                {
+                    outputLine += "\t*\t";
+                } else
+                {
+                    outputLine += "\t" + ASETools.stringForDouble(result.multipleAltFraction) + "\t";
+                }
  
                 if (pValueStats.minPAt == -1)
                 {
@@ -256,6 +273,14 @@ namespace ApplyBonferroniCorrection
 
                 pValueStats.significantAt.ForEach(x => outputLine += x + ",");
 
+                if (geneLocationInformation.genesByName.ContainsKey(result.hugo_symbol))
+                {
+                    outputLine += "\t" + geneLocationInformation.genesByName[result.hugo_symbol].size();
+                } else
+                {
+                    outputLine += "\t*";
+                }
+
                 outputLine += "\t" + ASETools.ConvertToExcelString(result.hugo_symbol);    // Yes, this is here twice.  We want it as the first column, and then having it again lets us use ASETools.ExpressionResultsLine.getHeaderString(), which is convenient
 
                 foreach (bool exclusive in ASETools.BothBools)
@@ -273,7 +298,7 @@ namespace ApplyBonferroniCorrection
                 sortableLines.Add(new SortKeyAndLine(pValueStats.significant, pValueStats.bestZeroVsOne, result.hugo_symbol, outputLine));
             }
             var outputFile = ASETools.CreateStreamWriterWithRetry(outputFilename);
-            outputFile.WriteLine("Hugo Symbol\tAlt fraction for single mutations\tAlt fraction for multiple mutations\tMin p\tMin p at\tSignificant@.01\tBest 0 vs. 1 ratio for significant results\tBest 0 vs. 1 ratio at\tSignificant At\t" + ASETools.ExpressionResultsLine.getHeaderString());
+            outputFile.WriteLine("Hugo Symbol\tAlt fraction for single mutations\tAlt fraction for multiple mutations\tMin p\tMin p at\tSignificant@.01\tBest 0 vs. 1 ratio for significant results\tBest 0 vs. 1 ratio at\tSignificant At\tGene Size\t" + ASETools.ExpressionResultsLine.getHeaderString());
 
             sortableLines.Sort();
 
@@ -365,9 +390,13 @@ namespace ApplyBonferroniCorrection
                 return;
             }
 
+            geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
+
             double minASE = -1;
             double maxASE = 2;
             double minMaxChromASE = -1;
+            bool dependOnTP53 = false;
+            bool excludeTP53Mutants = false;
 
             for (int i = 0; i < configuration.commandLineArgs.Count(); i++)
             {
@@ -383,9 +412,19 @@ namespace ApplyBonferroniCorrection
                 {
                     minMaxChromASE = Convert.ToDouble(configuration.commandLineArgs[i + 1]);
                     i++;
+                }
+                else if (configuration.commandLineArgs[i] == "-TP53Mutant")
+                {
+                    dependOnTP53 = true;
+                    excludeTP53Mutants = false;
+                }
+                else if (configuration.commandLineArgs[i] == "-NoTP53Mutant")
+                {
+                    dependOnTP53 = true;
+                    excludeTP53Mutants = true;
                 } else
                 {
-                    Console.WriteLine("usage: ApplyBonferonniCorrection {-configuration configuration} {-MaxASE maxASE} {-MinASE minASE}");
+                    Console.WriteLine("usage: ApplyBonferonniCorrection {-configuration configuration} {-MaxASE maxASE} {-MinASE minASE} {-TP53Mutant|-NoTP53Mutant}");
                     return;
                 }
             }
@@ -406,15 +445,26 @@ namespace ApplyBonferroniCorrection
             {
                 filenameExtra += "-minMaxChromASE-";
             }
+            if (dependOnTP53)
+            {
+                if (excludeTP53Mutants)
+                {
+                    filenameExtra += "-NoTP53Mutants-";
+                }
+                else
+                {
+                    filenameExtra += "-OnlyTP53Mutants-";
+                }
+            }
 
             //
             // Get the list of input files.  Note that these lists will also include the output files, so we filter them with a .Where().
             //
             List<List<string>> inputFileSets = new List<List<string>>();
 
-            inputFileSets.Add(Directory.GetFiles(configuration.finalResultsDirectory, "ExpressionDistributionByMutationCount*.txt").Where(x => !x.Contains(ASETools.bonferroniExtension)).ToList());
+            //inputFileSets.Add(Directory.GetFiles(configuration.finalResultsDirectory, "ExpressionDistributionByMutationCount*.txt").Where(x => !x.Contains("bonferroni")).ToList());
             inputFileSets.Add(Directory.GetFiles(configuration.finalResultsDirectory, ASETools.AlleleSpecificExpressionDistributionByMutationCountFilenameBase + filenameExtra + "*.txt").
-                Where(x => !x.Contains(ASETools.bonferroniExtension) && (maxASE <= 1 || !x.Contains("-maxASE-")) && (minASE >= 0 || !x.Contains("-minASE-")) && (minMaxChromASE >= 0 || !x.Contains("-minMaxChromASE-"))).ToList());
+                Where(x => !x.Contains("bonferroni") && (maxASE <= 1 || !x.Contains("-maxASE-")) && (minASE >= 0 || !x.Contains("-minASE-")) && (minMaxChromASE >= 0 || !x.Contains("-minMaxChromASE-")) && (dependOnTP53 || !x.Contains("TP53"))).ToList());
 
             var allSignificantResultsFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.AllSignificantResultsFilenameBase + filenameExtra + ".txt");
             allSignificantResultsFile.WriteLine("Hugo Symbol\tASE (one mutation)\tASE (not one mutation)\tinput file\texclusive\tOneVsMany\trange index\trange\tp");

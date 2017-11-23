@@ -1126,7 +1126,7 @@ namespace ASEProcessManager
 
                     currentCommandLine += " " + case_.case_id;
 
-                    if (currentCommandLine.Count() > 1000)
+                    if (currentCommandLine.Count() > 5000)
                     {
                         script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + currentCommandLine);
                         hpcScript.WriteLine(jobAddString + stateOfTheWorld.configuration.hpcBinariesDirectory + currentCommandLine);

@@ -16,6 +16,8 @@ namespace OverallDistribution
         static ASETools.GeneMap geneMap;
         static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
         static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
+        static Dictionary<bool, Dictionary<bool, Dictionary<bool, ASETools.Histogram>>> readDepthDisribution = new Dictionary<bool, Dictionary<bool, Dictionary<bool, ASETools.Histogram>>>();  // tumor, somatic, DNA in that order
+        static Dictionary<int, ASETools.Histogram> ASEByReadDepthDistribution = new Dictionary<int, ASETools.Histogram>();  // We only do tumor somatic for this.  Maps read depth->ASE distribution.
 
         class PerThreadState
         {
@@ -24,14 +26,23 @@ namespace OverallDistribution
                 foreach (var tumor in ASETools.BothBools)
                 {
                     perThreadResult.Add(tumor, new Dictionary<bool, ASETools.Histogram>());
+                    perThreadReadDepthDistribution.Add(tumor, new Dictionary<bool, Dictionary<bool, ASETools.Histogram>>());
                     foreach (var somatic in ASETools.BothBools)
                     {
                         perThreadResult[tumor].Add(somatic, new ASETools.Histogram());
+                        perThreadReadDepthDistribution[tumor].Add(somatic, new Dictionary<bool, ASETools.Histogram>());
+
+                        foreach (var dna in ASETools.BothBools)
+                        {
+                            perThreadReadDepthDistribution[tumor][somatic].Add(dna, new ASETools.Histogram());
+                        }
                     }
                 }
             }
 
-            public Dictionary<bool, Dictionary<bool, ASETools.Histogram>> perThreadResult = new Dictionary<bool, Dictionary<bool, ASETools.Histogram>>();
+            Dictionary<bool, Dictionary<bool, ASETools.Histogram>> perThreadResult = new Dictionary<bool, Dictionary<bool, ASETools.Histogram>>();
+            Dictionary<bool, Dictionary<bool, Dictionary<bool, ASETools.Histogram>>> perThreadReadDepthDistribution = new Dictionary<bool, Dictionary<bool, Dictionary<bool, ASETools.Histogram>>>();    // tumor, somatic, DNA in that order
+            Dictionary<int, ASETools.Histogram> perThreadASEByReadDepthDistribution = new Dictionary<int, ASETools.Histogram>();  // We only do tumor somatic for this.  Maps read depth->ASE distribution.
 
             public static void HandleOneCase(ASETools.Case case_, PerThreadState perThreadState)
             {
@@ -54,12 +65,33 @@ namespace OverallDistribution
                                 continue;
                             }
 
+                            if (variant.IsASECandidate(tumor, copyNumber, configuration, perGeneASEMap, geneMap, 1))   // Force read depth to 1, since we're measuring the read depth distribution (though < 10 was filtered upstream)
+                            {
+                                foreach (var dna in ASETools.BothBools)
+                                {
+                                    var readCounts = variant.getReadCount(tumor, dna);
+                                    perThreadReadDepthDistribution[tumor][somatic][dna].addValue(readCounts.nMatchingAlt + readCounts.nMatchingReference);
+                                }
+                            }
+
                             if (variant.IsASECandidate(tumor, copyNumber, configuration, perGeneASEMap, geneMap))
                             {
                                 perThreadResult[tumor][somatic].addValue(variant.GetAlleleSpecificExpression(tumor));
                             }
                         } // somatic
                     } // tumor
+
+                    if (!variant.somaticMutation && variant.IsASECandidate(true, copyNumber, configuration, perGeneASEMap, geneMap, 10))
+                    {
+                        int readDepth = variant.tumorRNAReadCounts.usefulReads();
+
+                        if (!perThreadASEByReadDepthDistribution.ContainsKey(readDepth))
+                        {
+                            perThreadASEByReadDepthDistribution.Add(readDepth, new ASETools.Histogram());
+                        }
+
+                        perThreadASEByReadDepthDistribution[readDepth].addValue(variant.GetAlleleSpecificExpression(true));
+                    }
                 } // variant
             } // HandleOneCase
 
@@ -76,6 +108,24 @@ namespace OverallDistribution
                     foreach (var tumor in ASETools.BothBools)
                     {
                         overallResult[tumor][somatic].merge(perThreadResult[tumor][somatic]);
+
+                        foreach (var dna in ASETools.BothBools)
+                        {
+                            readDepthDisribution[tumor][somatic][dna].merge(perThreadReadDepthDistribution[tumor][somatic][dna]);
+                        }
+                    }
+                }
+
+                foreach (var byReadDepthEntry in perThreadASEByReadDepthDistribution)
+                {
+                    var readDepth = byReadDepthEntry.Key;
+                    var histogram = byReadDepthEntry.Value;
+                    if (!ASEByReadDepthDistribution.ContainsKey(readDepth))
+                    {
+                        ASEByReadDepthDistribution.Add(readDepth, histogram);
+                    } else
+                    {
+                        ASEByReadDepthDistribution[readDepth].merge(histogram);
                     }
                 }
             } // FinishUp
@@ -91,9 +141,16 @@ namespace OverallDistribution
             foreach (var tumor in ASETools.BothBools)
             {
                 overallResult.Add(tumor, new Dictionary<bool, ASETools.Histogram>());
+                readDepthDisribution.Add(tumor, new Dictionary<bool, Dictionary<bool, ASETools.Histogram>>());
                 foreach (var somatic in ASETools.BothBools)
                 {
                     overallResult[tumor].Add(somatic, new ASETools.Histogram());
+                    readDepthDisribution[tumor].Add(somatic, new Dictionary<bool, ASETools.Histogram>());
+
+                    foreach (var dna in ASETools.BothBools)
+                    {
+                        readDepthDisribution[tumor][somatic].Add(dna, new ASETools.Histogram());
+                    }
                 }
             }
 
@@ -142,6 +199,32 @@ namespace OverallDistribution
                     outputFile.WriteLine(ASETools.HistogramResultLine.Header());
                     overallResult[tumor][!germline].ComputeHistogram(0, 1, 0.01).ToList().ForEach(x => outputFile.WriteLine(x.ToString()));
                     outputFile.WriteLine();
+                }
+            }
+
+            foreach (var tumor in ASETools.BothBools)
+            {
+                foreach (var somatic in ASETools.BothBools)
+                {
+                    foreach (var dna in ASETools.BothBools)
+                    {
+                        outputFile.WriteLine("Read depth distribution tumor: " + tumor + ", somatic: " + somatic + ", dna: " + dna);
+                        outputFile.WriteLine(ASETools.HistogramResultLine.Header());
+                        readDepthDisribution[tumor][somatic][dna].ComputeHistogram(0, 2000, 1).ToList().ForEach(x => outputFile.WriteLine(x.ToString()));
+                        outputFile.WriteLine();
+                    }
+                }
+            }
+
+            for (int readDepth = 10; readDepth <= 500; readDepth++)
+            {
+                if (ASEByReadDepthDistribution.ContainsKey(readDepth))
+                {
+                    outputFile.WriteLine("ASE distributon for tumor somatic sites with read depth exactly " + readDepth);
+                    outputFile.WriteLine(ASETools.HistogramResultLine.Header());
+                    ASEByReadDepthDistribution[readDepth].ComputeHistogram(0, 1, 0.01).ToList().ForEach(x => outputFile.WriteLine(x.ToString()));
+                    outputFile.WriteLine();
+
                 }
             }
 
