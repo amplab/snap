@@ -79,11 +79,40 @@ namespace GenerateASECorrection
             return (double)Dindex(p, g) / (g - 1);
         }
 
+
+        static double[,] F_array;
+        static int nDiscreteVAFValues = 201;   // 0 -> 1 by 0.005. The granularity gets reduced by 2x when converting to ASE.
+        static int maxReadDepth;
+
+        static void ComputeOneRow(int realVAFIndex, int unused)
+        {
+            double p = (double)realVAFIndex / (nDiscreteVAFValues - 1);
+ 
+            //
+            // Ordinarily, p is in the middle of its bucket range.  However, since p can't be less than 0 or greater than 1, in those cases it's
+            // at the extreme and we adjust it to the middle here.
+            //
+            if (0 == realVAFIndex)
+            {
+                p = (double)1 / (2 * (nDiscreteVAFValues - 1));
+            }
+            else if (realVAFIndex == nDiscreteVAFValues - 1)
+            {
+                p = (double)(2 * (nDiscreteVAFValues - 1) - 1) / (2 * (nDiscreteVAFValues - 1));
+            }
+
+            for (int readDepth = 1; readDepth <= maxReadDepth; readDepth++)
+            {
+                for (int nMappedToVariantAllele = 0; nMappedToVariantAllele <= readDepth; nMappedToVariantAllele++) // This is "k" in the math
+                {
+                    int measuredVAFIndex = Dindex((double)nMappedToVariantAllele / readDepth, nDiscreteVAFValues);
+                    var binomial = MathNet.Numerics.Distributions.Binomial.PMF(p, readDepth, nMappedToVariantAllele);
+                    F_array[realVAFIndex, measuredVAFIndex] += empericalReadDepthPDF[readDepth] * binomial;
+                } // nMappedToVariantAllele
+            } // readDepth
+        }
         static void Main(string[] args)
         {
-            int maxReadDepth = empericalReadDepthPDF.Count() - 1;
-            int nDiscreteVAFValues = 101;   // 0 -> 1 by 0.01
-
             var timer = new Stopwatch();
             timer.Start();
 
@@ -92,6 +121,8 @@ namespace GenerateASECorrection
             {
                 Console.WriteLine("Unable to load configuration");
             }
+
+            maxReadDepth = empericalReadDepthPDF.Count() - 1;
 
             for (int i = 0; i < configuration.commandLineArgs.Count(); i++)
             {
@@ -106,7 +137,21 @@ namespace GenerateASECorrection
                 }
             } // for each arg
 
-            var fFile = ASETools.CreateStreamWriterWithRetry(@"f:\temp\F_array.txt");
+ 
+
+            F_array = new double[nDiscreteVAFValues, nDiscreteVAFValues];
+
+            var indices = new List<int>();
+
+            for (int realVAFIndex = 0; realVAFIndex < nDiscreteVAFValues; realVAFIndex++)
+            {
+                indices.Add(realVAFIndex);
+            }
+
+            var threading = new ASETools.WorkerThreadHelper<int, int>(indices, ComputeOneRow, null, null, 1);
+            threading.run();
+
+            var fFile = ASETools.CreateStreamWriterWithRetry(@"c:\temp\F_array.txt");
             fFile.Write("Real VAF");
             for (int measuredVAFIndex = 0; measuredVAFIndex < nDiscreteVAFValues; measuredVAFIndex++)
             {
@@ -114,35 +159,28 @@ namespace GenerateASECorrection
             }
             fFile.WriteLine();
 
-            var random = new System.Random();
+            for (int realVAFIndex = 0; realVAFIndex < nDiscreteVAFValues; realVAFIndex++)
+            {
+                fFile.Write((double)realVAFIndex / (nDiscreteVAFValues - 1));
 
-            var F_array = new double[nDiscreteVAFValues, nDiscreteVAFValues];
-
-            for (int realVAFIndex = 0; realVAFIndex < nDiscreteVAFValues; realVAFIndex++) {
-                double p = (double)realVAFIndex / (nDiscreteVAFValues - 1);
-                fFile.Write(p);
                 for (int measuredVAFIndex = 0; measuredVAFIndex < nDiscreteVAFValues; measuredVAFIndex++)
                 {
-                    for (int readDepth = 0; readDepth <= maxReadDepth; readDepth++)
-                    {
-                        F_array[realVAFIndex, measuredVAFIndex] = 0;
-
-                        for (int nMappedToVariantAllele = 0; nMappedToVariantAllele <= readDepth; nMappedToVariantAllele++)
-                        {
-                            if (Dindex((double) nMappedToVariantAllele / readDepth, nDiscreteVAFValues) == measuredVAFIndex)     // Yes, we could do a better job by limiting the range of the inner loop so the obvious ones here won't happen, but it doesn't matter that much
-                            {
-                                //
-                                // Add in pdf of this read depth times the binomial pdf for this p and k.
-                                //
-                                F_array[realVAFIndex, measuredVAFIndex] += empericalReadDepthPDF[readDepth] *  Combinatorics.Combinations(readDepth, nMappedToVariantAllele) * Math.Pow(p, nMappedToVariantAllele) * Math.Pow(1 - p, readDepth - nMappedToVariantAllele);
-                            }
-                        }
-                    } // readDepth
                     fFile.Write("\t" + F_array[realVAFIndex, measuredVAFIndex]);
-                } // measuredVAFIndex
+                }
                 fFile.WriteLine();
-                Console.Write(".");
-            } // realVAFIndex
+            }
+
+            fFile.WriteLine("**done**");
+
+            fFile.Close();
+
+            var F = MathNet.Numerics.LinearAlgebra.Matrix<double>.Build.DenseOfArray(F_array);
+
+            Console.WriteLine("F_array[30,30] is " + F_array[30, 30] + " and F[30,30] is " + F[30, 30]);
+
+            Console.WriteLine("F.Determinant() is " + F.Determinant());
+
+            Console.WriteLine("Took " + ASETools.ElapsedTimeInSeconds(timer));
 
         } // Main
 
@@ -758,7 +796,6 @@ namespace GenerateASECorrection
         };
 
         static double [] empericalReadDepthPDF = { // Nothing like 10K line manifest constants in code!
-            0,
 0,
 0,
 0,

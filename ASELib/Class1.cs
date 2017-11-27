@@ -9728,16 +9728,15 @@ namespace ASELib
                         }
                     }
 
-                    handleOneItem(queueItem, perThreadState);
+                    if (null != handleOneItem)  // It's not clear what use it would be not to have one, but just in case
+                    {
+                        handleOneItem(queueItem, perThreadState);
+                    }
 
                     lock (queue)
                     {
                         nItemsProcessed++;
-                    }
 
-                    handleOneItem(queueItem, perThreadState);
-                    lock (queue)
-                    {
                         if (nItemsPerDot != 0 && nItemsProcessed % nItemsPerDot == 0)
                         {
                             Console.Write(".");
