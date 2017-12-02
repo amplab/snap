@@ -77,6 +77,8 @@ namespace SplitIntoPieces
             string[] lines = File.ReadAllLines(args[0]);
             int nLines = lines.Count();
 
+            Console.WriteLine("Read " + nLines + " lines.");
+
 
             if (randomize)
             {

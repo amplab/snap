@@ -204,6 +204,15 @@ namespace OverallDistribution
                 }
             }
 
+            //
+            // Write the tumor germline ASE distribution into its own file, beause it's needed programmatically elsewhere.
+            //
+            var tumorGermlineASEDistributionFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.TumorGermlineASEDistributionFilename);
+            tumorGermlineASEDistributionFile.WriteLine(ASETools.HistogramResultLine.Header());
+            overallResult[true][false].ComputeHistogram(0, 1, 0.01).ToList().ForEach(x => tumorGermlineASEDistributionFile.WriteLine(x.ToString()));
+            tumorGermlineASEDistributionFile.WriteLine("**done**");
+            tumorGermlineASEDistributionFile.Close();
+
             foreach (var tumor in ASETools.BothBools)
             {
                 foreach (var somatic in ASETools.BothBools)
@@ -217,6 +226,16 @@ namespace OverallDistribution
                     }
                 }
             }
+
+            //
+            // Write the tumor RNA read depth into its own file, because it's needed programmatically elsewhere.
+            //
+            var tumorRNAReadDepthFile = ASETools.CreateStreamWriterWithRetry(configuration.finalResultsDirectory + ASETools.TumorRNAReadDepthDistributionFilename);
+            tumorRNAReadDepthFile.WriteLine(ASETools.HistogramResultLine.Header());
+            readDepthDisribution[true][false][false].ComputeHistogram(0, 10000, 1).ToList().ForEach(x => tumorRNAReadDepthFile.WriteLine(x.ToString()));
+            tumorRNAReadDepthFile.WriteLine("**done**");
+            tumorRNAReadDepthFile.Close();
+
 
             for (int readDepth = 10; readDepth <= 500; readDepth++)
             {

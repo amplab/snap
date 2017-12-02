@@ -1506,13 +1506,14 @@ namespace ASELib
             public string configuationFilePathname = defaultConfigurationFilePathame;
             public string casesFilePathname = defaultBaseDirectory + "cases.txt";
 
-			public string indexDirectory = defaultBaseDirectory + @"indices\hg38-20";
+			public string indexDirectory = defaultBaseDirectory + @"indices\hg38-16";
 			public string indexDirectoryHg19 = defaultBaseDirectory + @"indices\hg19";
+            public string localIndexDirectory = @"d:\gdc\indices\hg38-16";
 			public string derivedFilesDirectory = "derived_files";    // This is relative to each download directory
             public string hpcScriptFilename = "";    // The empty string says to black hole this script
             public string hpcScheduler = "gcr";
             public string hpcBinariesDirectory = @"\\gcr\scratch\b99\bolosky\";
-            public string hpcIndexDirectory = @"\\msr-genomics-0\d$\gdc\indices\hg38-20";
+            public string hpcIndexDirectory = @"\\msr-genomics-0\d$\gdc\indices\hg38-16";
             public string azureScriptFilename = ""; // The empty string says to black hole this script
             public string expressionFilesDirectory = @"\\msr-genomics-0\d$\gdc\expression\";
             public string completedVCFsDirectory = "";  // Where completed VCFs from Azure are dropped
@@ -1533,8 +1534,11 @@ namespace ASELib
 			public const string bisulfiteDirectory = defaultBaseDirectory  + @"bisulfate\";
 			public const string bisulfiteCasesFilePathname = bisulfiteDirectory + "cases_bisulfite.txt";
 
-			// chain files
-			public const string hg38Tohg19ChainFile = defaultBaseDirectory + @"chain\hg38ToHg19.over.chain";
+            public string chromosomeMapsDirectory = defaultBaseDirectory + @"chromosome_maps\";
+            public string redundantChromosomeRegionFilename = "redundantRegions.txt";
+
+            // chain files
+            public const string hg38Tohg19ChainFile = defaultBaseDirectory + @"chain\hg38ToHg19.over.chain";
 			public const string hg19Tohg38ChainFile = defaultBaseDirectory + @"chain\hg19ToHg38.over.chain";
             public string regionalExpressionDirectory = defaultBaseDirectory + @"regional_expression\";
 
@@ -2339,6 +2343,10 @@ namespace ASELib
         public const string PerCaseASEFilename = "PerCaseASE.txt";
         public const string OverallASEFilename = "OverallASE.txt";
         public const string ASECorrectionFilename = "ase_correction.txt";
+        public const string TumorRNAReadDepthDistributionFilename = "TumorRNAReadDepth.txt";
+        public const string TumorGermlineASEDistributionFilename = "TumorGermlineASEDistribution.txt";
+        public const string allLociExtension = "-all-loci.sam";
+        public const string allLociAlignedExtension = "-all-loci-aligned.sam";
 
 
         public class DerivedFile
@@ -4400,11 +4408,23 @@ namespace ASELib
                 totalOfSquares += value * value;
             }
 
+            public void merge(RunningMeanAndStdDev peer)
+            {
+                n += peer.n;
+                total += peer.total;
+                totalOfSquares += peer.totalOfSquares;
+            }
+
             public MeanAndStdDev getMeanAndStdDev()
             {
                 if (n == 0) return new MeanAndStdDev(0, 0);
 
                 return new MeanAndStdDev(total / n, Math.Sqrt(n * totalOfSquares - total * total) / n);
+            }
+
+            public int getCount()
+            {
+                return n;
             }
 
             int n = 0;
@@ -5604,6 +5624,16 @@ namespace ASELib
                 return contigsByName[contigName].data[offset - 1];   // Offset - 1 because genome coordinates are 1 based, while C# is 0 based.
             }
 
+            public bool isAContig(string contigName)
+            {
+                return contigsByName.ContainsKey(formatContig(contigName));
+            }
+
+            public int getContigLength(string contigName)
+            {
+                return contigsByName[formatContig(contigName)].size;
+            }
+
             int chromosomePadding;
             long genomeLength;
             int nContigs;
@@ -6021,6 +6051,8 @@ namespace ASELib
         public class ReadCounts
 		{
 
+            enum MappedReadResult { MatchesRef, MatchesAlt, MatchesNeither, MatchesBoth };
+
 			public double AlleleSpecificValue() // I'm not calling this "allele specific expression" because DNA doesn't have expression.
 			{
 				if (nMatchingAlt + nMatchingReference == 0)
@@ -6110,6 +6142,12 @@ namespace ASELib
 						.ToDictionary(x => x.Key, x => x.Value);
 				}
 
+                //
+                // Keep track of the reads we've mapped, so if we wind up with both ends of a single read covering the variant
+                // that we only count it once (or not at all if it doesn't map the same way).
+                //
+                var readResults = new Dictionary<string, MappedReadResult>();
+
 				string line;
 				while (null != (line = subfileReader.ReadLine()))
 				{
@@ -6150,6 +6188,7 @@ namespace ASELib
 						//
 						continue;
 					}
+
 					if (!(start > 1 + samLine.mappedBases.Keys.Min()) || !(start < samLine.mappedBases.Keys.Max() - 1))
 					{
 						//
@@ -6157,6 +6196,14 @@ namespace ASELib
 						//
 						continue;
 					}
+
+                    if (samLine.mappedQual[start] < 10)
+                    {
+                        //
+                        // Too low of a base call quality at the variant site.  Ignore this read.
+                        //
+                        continue;
+                    }
 
 					bool matchesRef = false;
 					bool matchesAlt = false;
@@ -6188,26 +6235,55 @@ namespace ASELib
 							return null;
 					}
 
+                    MappedReadResult result;
+
 					// increment matches
 					if (matchesRef)
 					{
 						if (matchesAlt)
 						{
-							nMatchingBoth++;
+                            result = MappedReadResult.MatchesBoth;
 						}
 						else
 						{
-							nMatchingRef++;
+                            result = MappedReadResult.MatchesRef;
 						}
 					}
 					else if (matchesAlt)
 					{
-						nMatchingAlt++;
+                        result = MappedReadResult.MatchesAlt;
 					}
 					else
 					{
-						nMatchingNeither++;
+                        result = MappedReadResult.MatchesNeither;
 					}
+
+                    if (samLine.qname == "*" || !readResults.ContainsKey(samLine.qname))
+                    {
+                        switch (result)
+                        {
+                            case MappedReadResult.MatchesRef: nMatchingRef++; break;
+                            case MappedReadResult.MatchesAlt: nMatchingAlt++; break;
+                            case MappedReadResult.MatchesBoth: nMatchingBoth++; break;
+                            case MappedReadResult.MatchesNeither: nMatchingNeither++; break;
+                        }
+                        if (samLine.qname != "*")
+                        {
+                            readResults.Add(samLine.qname, result);
+                        }
+                    } else if (readResults[samLine.qname] != result)
+                    {
+                        //
+                        // The other end of this read also mapped to the same location, and it has a different result.  Just ignore the read.
+                        //
+                        switch (readResults[samLine.qname])
+                        {
+                            case MappedReadResult.MatchesRef: nMatchingRef--; break;
+                            case MappedReadResult.MatchesAlt: nMatchingAlt--; break;
+                            case MappedReadResult.MatchesBoth: nMatchingBoth--; break;
+                            case MappedReadResult.MatchesNeither: nMatchingNeither--; break;
+                        }
+                    }
 				} // foreach SAMLine
 
 				subfileReader.Close();
@@ -6589,9 +6665,19 @@ namespace ASELib
 
 			private static double GetAlleleSpecificExpression(ReadCounts readCounts, ASECorrection aseCorrection)
 			{
-				var rnaFractionTumor = GetAltAlleleFraction(readCounts);
+                //
+                // This used to work by doing:
+                // var rnaFractionTumor = GetAltAlleleFraction(readCounts);
+                // double rawASE = Math.Abs(rnaFractionTumor * 2.0 - 1.0);
+                //
+                // But due to the vaugaries of floating point, it would produce slightly different values
+                // for the same difference in read counts (i.e., |a - b|) depending on whether
+                // a or b was bigger.
+                //
+                int a = Math.Max(readCounts.nMatchingAlt, readCounts.nMatchingReference);
+                int b = Math.Min(readCounts.nMatchingAlt, readCounts.nMatchingReference);
 
-                double rawASE = Math.Abs(rnaFractionTumor * 2.0 - 1.0);
+                double rawASE = ((double)(a - b)) / (a + b);
 
                 if (aseCorrection == null)
                 {
@@ -6883,6 +6969,11 @@ namespace ASELib
             public readonly ReadCounts normalDNAReadCounts;
             public readonly ReadCounts normalRNAReadCounts; // This will be null if there is no normal RNA for this case.
         } // AnnotatedVariant
+        
+        public static int PhredToInt(char phred)
+        {
+            return (int)phred - 33;
+        }
 
         public class SAMLine
         {
@@ -6906,7 +6997,6 @@ namespace ASELib
                 tlen = Convert.ToInt32(fields[8]);
                 seq = fields[9];
                 qual = fields[10];
-
 
                 //
                 // Break down the bases in seq based on their mapped location.  Orindarily, this is one
@@ -6939,6 +7029,7 @@ namespace ASELib
                             for (int i = 0; i < count; i++)
                             {
                                 mappedBases.Add(currentPos, seq[offsetInSeq]);
+                                mappedQual.Add(currentPos, PhredToInt(qual[offsetInSeq]));
 
                                 currentPos++;
                                 offsetInSeq++;
@@ -6961,6 +7052,7 @@ namespace ASELib
 							for (int i = 0; i < count; i++)
 							{
 								mappedBases.Add(currentPos, 'N'); // Add placeholder for DEL
+                                mappedQual.Add(currentPos, 70);     // Just use a high quality for a missing base
 								currentPos++;
 							}
 
@@ -7019,6 +7111,7 @@ namespace ASELib
 
 			// Dictionary of position and bases at position
             public Dictionary<int, char> mappedBases = new Dictionary<int, char>();
+            public Dictionary<int, int> mappedQual = new Dictionary<int, int>();            // base call quality, converted from phred to int
 
 		} // SAMLine
 

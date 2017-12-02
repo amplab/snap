@@ -29,6 +29,27 @@ namespace ManageBeatAMLDownloads
             public readonly int version;
             public readonly string parentId;
 
+            BeatAMLFolder(int versionComment_, string eTag_, string id_, int createdByPrincipalId_, int versionNumber_, int projectId_, int modifiedByPrincipalId_, long modifiedOn_,
+                string concreteType_, long createdOn_, int benefactorId_, string alias_, string name_, string nodeType_, int version_, string parentId_)
+            {
+                versionComment = versionComment_;
+                eTag = eTag_;
+                id = id_;
+                createdByPrincipalId = createdByPrincipalId_;
+                versionNumber = versionNumber_;
+                projectId = projectId_;
+                modifiedByPrincipalId = modifiedByPrincipalId_;
+                modifiedOn = modifiedOn_;
+                concreteType = concreteType_;
+                createdOn = createdOn_;
+                benefactorId = benefactorId_;
+                alias = alias_;
+                name = name_;
+                nodeType = nodeType_;
+                version = version_;
+                parentId = parentId_;
+            }
+
             public static List<BeatAMLFolder> readFile(string filename)
             {
                 var inputFile = ASETools.CreateStreamReaderWithRetry(filename);
@@ -58,9 +79,9 @@ namespace ManageBeatAMLDownloads
                     "folder.parentId",
                 };
 
-                var headerizedFile = new ASETools.HeaderizedFile<BeatAMLFile>(inputFile, false, false, "", wantedFields.ToList());
+                var headerizedFile = new ASETools.HeaderizedFile<BeatAMLFolder>(inputFile, false, false, "", wantedFields.ToList());
 
-                List<BeatAMLFile> retVal;
+                List<BeatAMLFolder> retVal;
 
                 if (!headerizedFile.ParseFile(parser, out retVal))
                 {
@@ -69,6 +90,14 @@ namespace ManageBeatAMLDownloads
                 }
 
                 return retVal;
+            } // readFile
+
+            static BeatAMLFolder parser(ASETools.HeaderizedFile<BeatAMLFolder>.FieldGrabber fieldGrabber)
+            {
+                return new BeatAMLFolder(fieldGrabber.AsInt("folder.versionComment"), fieldGrabber.AsString("folder.eTag"), fieldGrabber.AsString("folder.id"), fieldGrabber.AsInt("folder.createdByPrincipalId"), fieldGrabber.AsInt("folder.versionNumber"),
+                    fieldGrabber.AsInt("folder.projectId"), fieldGrabber.AsInt("folder.modifiedByPrincipalId"), fieldGrabber.AsLong("folder.modifiedOn"), fieldGrabber.AsStringFromSquareBracketSingleQuoteString("folder.concreteType"),
+                    fieldGrabber.AsLong("folder.createdOn"), fieldGrabber.AsInt("folder.benefactorId"), fieldGrabber.AsString("folder.alias"), fieldGrabber.AsString("folder.name"), fieldGrabber.AsString("folder.nodeType"),
+                    fieldGrabber.AsInt("folder.versionLabel"), fieldGrabber.AsString("folder.parentId"));
             }
 
 
@@ -185,9 +214,30 @@ namespace ManageBeatAMLDownloads
                     fieldGrabber.AsStringFromSquareBracketSingleQuoteString("file.dataType"), fieldGrabber.AsString("file.mutation"));
             }
         }
+
+        static void printSubtree(BeatAMLFolder root, string rootPath, List<BeatAMLFolder> dirs, List<BeatAMLFile> files)
+        {
+            var path = rootPath + "/" + root.name;
+            Console.WriteLine("Folder " + root.id + ", pathname " + path + ", " + files.Where(x => x.parentId == root.id).Count() + " files, comprising " +
+                ASETools.SizeToUnits((ulong)files.Where(x => x.parentId == root.id).Select(x => x.fileSize).Sum())  + "B, and " + dirs.Where(x => x.parentId == root.id).Count() + " subdirs.  ID: " + root.id);
+            foreach (var subdir in dirs.Where(x => x.parentId == root.id))
+            {
+                printSubtree(subdir, path, dirs, files);
+            }
+        }
+
         static void Main(string[] args)
         {
             var files = BeatAMLFile.readFile(@"f:\temp\all_files.txt");
+            var dirs = BeatAMLFolder.readFile(@"f:\temp\all_dirs.txt");
+
+            Console.WriteLine(files.Count() + " files (" + ASETools.SizeToUnits((ulong)files.Select(x => x.fileSize).Sum()) + "B) and " + dirs.Count() + " dirs.");
+
+            var topLevelDirs = dirs.Where(x => x.parentId == "syn2942337").ToList();
+            foreach (var topLevelDir in topLevelDirs)
+            {
+                printSubtree(topLevelDir, "", dirs, files);
+            }
         }
     }
 }

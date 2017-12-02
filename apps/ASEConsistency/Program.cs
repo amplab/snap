@@ -17,6 +17,7 @@ namespace ASEConsistency
         static Dictionary<string, ASETools.ASEMapPerGeneLine> perGeneASEMap;
         static ASETools.GeneLocationsByNameAndChromosome geneLocationInformation;
         static Dictionary<bool, Dictionary<string, ASETools.Histogram>> perGeneResults = new Dictionary<bool, Dictionary<string, ASETools.Histogram>>();
+        static Dictionary<bool, Dictionary<string, ASETools.RunningMeanAndStdDev>> perGeneRefFraction = new Dictionary<bool, Dictionary<string, ASETools.RunningMeanAndStdDev>>();
         static Dictionary<bool, Dictionary<int, ASETools.Histogram>> overallResults = new Dictionary<bool, Dictionary<int, ASETools.Histogram>>(); // tumor, min read depth
         static Dictionary<bool, Dictionary<int, ASETools.Histogram>> overallResultsWithCorrection = new Dictionary<bool, Dictionary<int, ASETools.Histogram>>(); // tumor, min read depth
         static Dictionary<bool, ASETools.Histogram> overallSameExonResults = new Dictionary<bool, ASETools.Histogram>();
@@ -53,6 +54,7 @@ namespace ASEConsistency
                 }
 
                 perGeneResults.Add(tumor, new Dictionary<string, ASETools.Histogram>());
+                perGeneRefFraction.Add(tumor, new Dictionary<string, ASETools.RunningMeanAndStdDev>());
                 referenceFraction.Add(tumor, new ASETools.Histogram("reference fraction: tumor " + tumor));
                 overallSameExonResults.Add(tumor, new ASETools.Histogram());
                 overallReadDepthDifference.Add(tumor, new ASETools.Histogram());
@@ -146,6 +148,16 @@ namespace ASEConsistency
 
             foreach (var tumor in ASETools.BothBools)
             {
+                var extremeRefFraction = perGeneRefFraction[tumor].Where(x => x.Value.getCount() >= 20 && (x.Value.getMeanAndStdDev().mean > 0.7 || x.Value.getMeanAndStdDev().mean < 0.3)).ToList();
+                extremeRefFraction.Sort((x, y) => y.Value.getMeanAndStdDev().mean.CompareTo(x.Value.getMeanAndStdDev().mean));// NB: Backward comparison to put the highest mean ones first.
+
+                outputFile.WriteLine("Genes with min 20 variants and ref fraction > 0.7, tumor: " + tumor);
+                outputFile.WriteLine("Gene\tn\tReference Fraction");
+                extremeRefFraction.ForEach(x => outputFile.WriteLine(x.Key + "\t" + x.Value.getCount() + "\t" + x.Value.getMeanAndStdDev().mean));
+            }
+
+            foreach (var tumor in ASETools.BothBools)
+            {
                 var interestingPerGene = perGeneResults[tumor].Select(x => x.Value).Where(x => x.count() >= 100).ToList();
                 interestingPerGene.Sort((x, y) => y.mean().CompareTo(x.mean()));    // NB: Backward comparison to put the highest mean ones first.
 
@@ -179,6 +191,7 @@ namespace ASEConsistency
         static void WorkerThread(List<ASETools.Case> casesToProcess)
         {
             var localPerGeneResults = new Dictionary<bool, Dictionary<string, ASETools.Histogram>>();
+            var localPerGeneRefFraction = new Dictionary<bool, Dictionary<string, ASETools.RunningMeanAndStdDev>>();
             var localOverallResults = new Dictionary<bool, Dictionary<int, ASETools.Histogram>>();
             var localOverallResultsWithCorrection = new Dictionary<bool, Dictionary<int, ASETools.Histogram>>();
             var localReferenceFraction = new Dictionary<bool, ASETools.Histogram>();
@@ -189,6 +202,7 @@ namespace ASEConsistency
             foreach (var tumor in ASETools.BothBools)
             {
                 localPerGeneResults.Add(tumor, new Dictionary<string, ASETools.Histogram>());
+                localPerGeneRefFraction.Add(tumor, new Dictionary<string, ASETools.RunningMeanAndStdDev>());
                 localOverallResults.Add(tumor, new Dictionary<int, ASETools.Histogram>());
                 localOverallResultsWithCorrection.Add(tumor, new Dictionary<int, ASETools.Histogram>());
                 foreach (var readDepth in readDepths)
@@ -224,6 +238,21 @@ namespace ASEConsistency
                                 else
                                 {
                                     perGeneResults[tumor][hugo_symbol].merge(localResult);
+                                }
+                            }
+
+                            foreach (var localPerGeneRefFractionEntry in localPerGeneRefFraction[tumor])
+                            {
+                                var hugo_symbol = localPerGeneRefFractionEntry.Key;
+                                var localResult = localPerGeneRefFractionEntry.Value;
+
+                                if (!perGeneRefFraction[tumor].ContainsKey(hugo_symbol))
+                                {
+                                    perGeneRefFraction[tumor].Add(hugo_symbol, localResult);
+                                }
+                                else
+                                {
+                                    perGeneRefFraction[tumor][hugo_symbol].merge(localResult);
                                 }
                             }
 
@@ -310,6 +339,13 @@ namespace ASEConsistency
                                         }
 
                                         readDepthMap[tumor][gene.hugoSymbol].Add(variant.getReadCount(tumor, false).usefulReads());
+
+                                        if (!localPerGeneRefFraction[tumor].ContainsKey(gene.hugoSymbol))
+                                        {
+                                            localPerGeneRefFraction[tumor].Add(gene.hugoSymbol, new ASETools.RunningMeanAndStdDev());
+                                        }
+
+                                        localPerGeneRefFraction[tumor][gene.hugoSymbol].addValue(1 - variant.GetAltAlleleFraction(tumor));
                                     }
                                 } // foreach mapped gene
                             } // if it's an ASE candidate

@@ -1523,18 +1523,13 @@ namespace ASEProcessManager
 
                 if (stateOfTheWorld.scatterGraphsSummaryFile == "")
                 {
+Console.WriteLine("Missing summary file");
                     missingAnything = true;
-                } else
-                {
-                    foreach (var selectedGene in stateOfTheWorld.selectedGenes)
-                    {
-                        if (!stateOfTheWorld.scatterGraphsByHugoSymbol.ContainsKey(selectedGene.Hugo_Symbol))
-                        {
-                            missingAnything = true;
-                            break;
-                        }
-                    }
-                }
+                } 
+                //
+                // Don't check that there are files for the selected genes, since they might not be there due to too small n.
+                //
+
 
                 if (!missingAnything)
                 {
@@ -1607,8 +1602,79 @@ namespace ASEProcessManager
 
         } // GenerateScatterGraphsProcessingStage
 
+        class GenerateAllLociProcessingStage : ProcessingStage
+        {
+            public GenerateAllLociProcessingStage() { }
 
-		class FPKMProcessingStage : ProcessingStage
+            public string GetStageName() { return "Generate All Loci Files"; }
+
+            public bool NeedsCases() { return false; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;   // There are no prerequesites for this, so it will always stay zero
+                filesToDownload = null;
+
+                for (int chromosomeNumber = 1; chromosomeNumber <= ASETools.nHumanAutosomes; chromosomeNumber++)
+                {
+                    if (File.Exists(stateOfTheWorld.configuration.chromosomeMapsDirectory + "chr" + chromosomeNumber + ASETools.allLociExtension))
+                    {
+                        nDone++;
+                    } else
+                    {
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateReadsForRepetitiveRegionDetection.exe " + stateOfTheWorld.configuration.indexDirectory + " " + chromosomeNumber + " " +
+                            stateOfTheWorld.configuration.chromosomeMapsDirectory +"chr" + chromosomeNumber +
+                            ASETools.allLociExtension + " 48");
+                        nAddedToScript++;
+                    }
+                }
+            }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }   // Really no dependencies for this unless the reference genome changes
+        }
+
+        class AlignAllLociProcessingStage : ProcessingStage
+        {
+            public AlignAllLociProcessingStage() { }
+
+            public string GetStageName() { return "Align all loci"; }
+
+            public bool NeedsCases() { return false; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+                filesToDownload = null;
+
+                for (int chromosomeNumber = 1; chromosomeNumber <= ASETools.nHumanAutosomes; chromosomeNumber++)
+                {
+                    if (File.Exists(stateOfTheWorld.configuration.chromosomeMapsDirectory + "chr" + chromosomeNumber + ASETools.allLociAlignedExtension))
+                    {
+                        nDone++;
+                    }
+                    else if (!File.Exists(stateOfTheWorld.configuration.chromosomeMapsDirectory + "chr" + chromosomeNumber + ASETools.allLociExtension))
+                    {
+                        nWaitingForPrerequisites++;
+                    }
+                    else
+                    {
+                        script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "snap.exe single " + stateOfTheWorld.configuration.localIndexDirectory + " " + stateOfTheWorld.configuration.chromosomeMapsDirectory + "chr" + chromosomeNumber +
+                            ASETools.allLociExtension + " -o " + stateOfTheWorld.configuration.chromosomeMapsDirectory +"chr" + chromosomeNumber + ASETools.allLociAlignedExtension + " -om 3 -omax 1 -x -D 3 -map -mrl 48");
+                        nAddedToScript++;
+                    }
+                }
+            }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }   // Really no dependencies for this unless the reference genome changes, since the input files are effectively constants
+
+        }
+
+
+        class FPKMProcessingStage : ProcessingStage
 		{
 			public FPKMProcessingStage() { }
 
@@ -2132,6 +2198,8 @@ namespace ASEProcessManager
 			processingStages.Add(new GenerateScatterGraphsProcessingStage());
 			//processingStages.Add(new MethylationProcessingStage());
 			processingStages.Add(new FPKMProcessingStage());
+            processingStages.Add(new GenerateAllLociProcessingStage());
+            processingStages.Add(new AlignAllLociProcessingStage());
 
             if (checkDependencies)
             {

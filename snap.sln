@@ -144,6 +144,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ErrorSim", "apps\ErrorSim\E
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateASECorrection", "apps\GenerateASECorrection\GenerateASECorrection.csproj", "{21C5906A-7C87-47AE-BC05-894D992F9556}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateReadsForRepetitiveRegionDetection", "apps\GenerateReadsForRepetitiveRegionDetection\GenerateReadsForRepetitiveRegionDetection.csproj", "{1209A996-5777-4C16-8D4B-C2D825FCCAF2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MakeRepetitiveRegionMap", "apps\MakeRepetitiveRegionMap\MakeRepetitiveRegionMap.csproj", "{854FEC5E-4071-444B-9E5B-686438C535B6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -981,6 +985,38 @@ Global
 		{21C5906A-7C87-47AE-BC05-894D992F9556}.Release|Win32.Build.0 = Release|Any CPU
 		{21C5906A-7C87-47AE-BC05-894D992F9556}.Release|x64.ActiveCfg = Release|x64
 		{21C5906A-7C87-47AE-BC05-894D992F9556}.Release|x64.Build.0 = Release|x64
+		{1209A996-5777-4C16-8D4B-C2D825FCCAF2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1209A996-5777-4C16-8D4B-C2D825FCCAF2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1209A996-5777-4C16-8D4B-C2D825FCCAF2}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{1209A996-5777-4C16-8D4B-C2D825FCCAF2}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{1209A996-5777-4C16-8D4B-C2D825FCCAF2}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{1209A996-5777-4C16-8D4B-C2D825FCCAF2}.Debug|Win32.Build.0 = Debug|Any CPU
+		{1209A996-5777-4C16-8D4B-C2D825FCCAF2}.Debug|x64.ActiveCfg = Debug|x64
+		{1209A996-5777-4C16-8D4B-C2D825FCCAF2}.Debug|x64.Build.0 = Debug|x64
+		{1209A996-5777-4C16-8D4B-C2D825FCCAF2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1209A996-5777-4C16-8D4B-C2D825FCCAF2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1209A996-5777-4C16-8D4B-C2D825FCCAF2}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{1209A996-5777-4C16-8D4B-C2D825FCCAF2}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{1209A996-5777-4C16-8D4B-C2D825FCCAF2}.Release|Win32.ActiveCfg = Release|Any CPU
+		{1209A996-5777-4C16-8D4B-C2D825FCCAF2}.Release|Win32.Build.0 = Release|Any CPU
+		{1209A996-5777-4C16-8D4B-C2D825FCCAF2}.Release|x64.ActiveCfg = Release|x64
+		{1209A996-5777-4C16-8D4B-C2D825FCCAF2}.Release|x64.Build.0 = Release|x64
+		{854FEC5E-4071-444B-9E5B-686438C535B6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{854FEC5E-4071-444B-9E5B-686438C535B6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{854FEC5E-4071-444B-9E5B-686438C535B6}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{854FEC5E-4071-444B-9E5B-686438C535B6}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{854FEC5E-4071-444B-9E5B-686438C535B6}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{854FEC5E-4071-444B-9E5B-686438C535B6}.Debug|Win32.Build.0 = Debug|Any CPU
+		{854FEC5E-4071-444B-9E5B-686438C535B6}.Debug|x64.ActiveCfg = Debug|x64
+		{854FEC5E-4071-444B-9E5B-686438C535B6}.Debug|x64.Build.0 = Debug|x64
+		{854FEC5E-4071-444B-9E5B-686438C535B6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{854FEC5E-4071-444B-9E5B-686438C535B6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{854FEC5E-4071-444B-9E5B-686438C535B6}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{854FEC5E-4071-444B-9E5B-686438C535B6}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{854FEC5E-4071-444B-9E5B-686438C535B6}.Release|Win32.ActiveCfg = Release|Any CPU
+		{854FEC5E-4071-444B-9E5B-686438C535B6}.Release|Win32.Build.0 = Release|Any CPU
+		{854FEC5E-4071-444B-9E5B-686438C535B6}.Release|x64.ActiveCfg = Release|x64
+		{854FEC5E-4071-444B-9E5B-686438C535B6}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
