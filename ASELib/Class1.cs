@@ -843,6 +843,7 @@ namespace ASELib
 			public string tumor_dna_gene_coverage_filname = "";
             public string vcf_filename = "";
             public string extracted_maf_lines_filename = "";
+            public string all_maf_lines_filename = "";
             public string normal_dna_mapped_base_count_filename = "";
             public string tumor_dna_mapped_base_count_filename = "";
             public string normal_rna_mapped_base_count_filename = "";
@@ -895,6 +896,7 @@ namespace ASELib
             public long tumor_dna_gene_coverage_size = 0;
             public long vcf_size = 0;
             public long extracted_maf_lines_size = 0;
+            public long all_maf_lines_size = 0;
             public long normal_dna_mapped_base_count_size = 0;
             public long tumor_dna_mapped_base_count_size = 0;
             public long normal_rna_mapped_base_count_size = 0;
@@ -1076,7 +1078,7 @@ namespace ASELib
 				new FieldInformation("Tumor FPKM Size",										c => Convert.ToString(c.tumor_fpkm_size), (c,v) => c.tumor_fpkm_size = LongFromString(v)),
 				new FieldInformation("Normal FPKM Size",									c => Convert.ToString(c.normal_fpkm_size), (c,v) => c.normal_fpkm_size = LongFromString(v)),
 
-						new FieldInformation("Normal DNA Allcount Filename",                        c => c.normal_dna_allcount_filename, (c,v) => c.normal_dna_allcount_filename = v, DerivedFile.Type.NormalDNAAllcount, normalDNAAllcountExtension, c => c.normal_dna_file_id, "Normal DNA Allcount File Size", c => c.normal_dna_allcount_size, (c,v) => c.normal_dna_allcount_size = v),
+				new FieldInformation("Normal DNA Allcount Filename",                        c => c.normal_dna_allcount_filename, (c,v) => c.normal_dna_allcount_filename = v, DerivedFile.Type.NormalDNAAllcount, normalDNAAllcountExtension, c => c.normal_dna_file_id, "Normal DNA Allcount File Size", c => c.normal_dna_allcount_size, (c,v) => c.normal_dna_allcount_size = v),
 				new FieldInformation("Tumor DNA Allcount Filename",                         c => c.tumor_dna_allcount_filename, (c,v) => c.tumor_dna_allcount_filename = v, DerivedFile.Type.TumorDNAAllcount, tumorDNAAllcountExtension, c => c.tumor_dna_file_id, "Tumor DNA Allcount File Size", c => c.tumor_dna_allcount_size, (c, v) => c.tumor_dna_allcount_size = v),
 				new FieldInformation("Normal RNA Allcount Filename",                        c => c.normal_rna_allcount_filename, (c,v) => c.normal_rna_allcount_filename = v, DerivedFile.Type.NormalRNAAllcount, normalRNAAllcountExtension, c => c.normal_rna_file_id, "Normal RNA Allcount File Size", c => c.normal_rna_allcount_size, (c, v) => c.normal_rna_allcount_size = v),
 				new FieldInformation("Tumor RNA Allcount Filename",                         c => c.tumor_rna_allcount_filename, (c,v) => c.tumor_rna_allcount_filename = v, DerivedFile.Type.TumorRNAAllcount, tumorRNAAllcountExtension, c => c.tumor_rna_file_id, "Tumor RNA Allcount File Size", c => c.tumor_rna_allcount_size, (c, v) => c.tumor_rna_allcount_size = v),
@@ -1096,8 +1098,9 @@ namespace ASELib
 				new FieldInformation("Tumor Allele Specific Gene Expression Filename",      c => c.tumor_allele_specific_gene_expression_filename, (c,v) => c.tumor_allele_specific_gene_expression_filename = v, DerivedFile.Type.TumorAlleleSpecificGeneExpression, tumorAlleleSpecificGeneExpressionExtension, c => c.case_id, "Tumor Allele Specific Gene Expression File Size", c => c.tumor_allele_specific_gene_expression_size, (c, v) => c.tumor_allele_specific_gene_expression_size = v),
 				new FieldInformation("Tumor DNA Gene Coverage Filename",                    c => c.tumor_dna_gene_coverage_filname, (c,v) => c.tumor_dna_gene_coverage_filname = v, DerivedFile.Type.TumorDNAGeneCoverage, tumorDNAGeneCoverageExtension, c => c.tumor_dna_file_id, "Tumor DNA Gene Coverage File Size", c => c.tumor_dna_gene_coverage_size, (c, v) => c.tumor_dna_gene_coverage_size = v),
 				new FieldInformation("VCF Filename",                                        c => c.vcf_filename, (c,v) => c.vcf_filename = v, DerivedFile.Type.VCF, vcfExtension, c => c.normal_dna_file_id, "VCF File Size", c => c.vcf_size, (c, v) => c.vcf_size = v),
-				new FieldInformation("Extracted MAF Lines Filename",                        c => c.extracted_maf_lines_filename, (c,v) => c.extracted_maf_lines_filename = v, DerivedFile.Type.ExtractedMAFLines, extractedMAFLinesExtension, c => c.case_id, "Extracted MAF Lines File Size", c => c.extracted_maf_lines_size, (c, v) => c.extracted_maf_lines_size = v),
-				new FieldInformation("Normal DNA Mapped Base Count Filename",               c => c.normal_dna_mapped_base_count_filename, (c, v) => c.normal_dna_mapped_base_count_filename = v, DerivedFile.Type.NormalDNAMappedBaseCount, normalDNAMappedBaseCountExtension, c => c.normal_dna_file_id, "Normal DNA Mapped Base Count File Size", c => c.normal_dna_mapped_base_count_size, (c, v) => c.normal_dna_mapped_base_count_size = v),
+                new FieldInformation("Extracted MAF Lines Filename",                        c => c.extracted_maf_lines_filename, (c,v) => c.extracted_maf_lines_filename = v, DerivedFile.Type.ExtractedMAFLines, extractedMAFLinesExtension, c => c.case_id, "Extracted MAF Lines File Size", c => c.extracted_maf_lines_size, (c, v) => c.extracted_maf_lines_size = v),
+                new FieldInformation("All MAF Lines Filename",                              c => c.all_maf_lines_filename, (c,v) => c.all_maf_lines_filename = v, DerivedFile.Type.AllMAFLines, allMAFLinesExtension, c => c.case_id, "All MAF Lines File Size", c => c.all_maf_lines_size, (c, v) => c.all_maf_lines_size = v),
+                new FieldInformation("Normal DNA Mapped Base Count Filename",               c => c.normal_dna_mapped_base_count_filename, (c, v) => c.normal_dna_mapped_base_count_filename = v, DerivedFile.Type.NormalDNAMappedBaseCount, normalDNAMappedBaseCountExtension, c => c.normal_dna_file_id, "Normal DNA Mapped Base Count File Size", c => c.normal_dna_mapped_base_count_size, (c, v) => c.normal_dna_mapped_base_count_size = v),
 				new FieldInformation("Tumor DNA Mapped Base Count Filename",                c => c.tumor_dna_mapped_base_count_filename, (c, v) => c.tumor_dna_mapped_base_count_filename = v, DerivedFile.Type.TumorDNAMappedBaseCount, tumorDNAMappedBaseCountExtension, c => c.tumor_dna_file_id, "Tumor DNA Mapped Base Count File Size", c => c.tumor_dna_mapped_base_count_size, (c, v) => c.tumor_dna_mapped_base_count_size = v),
 				new FieldInformation("Normal RNA Mapped Base Count Filename",               c => c.normal_rna_mapped_base_count_filename, (c, v) => c.normal_rna_mapped_base_count_filename = v, DerivedFile.Type.NormalRNAMappedBaseCount, normalRNAMappedBaseCountExtension, c => c.normal_rna_file_id, "Normal RNA Mapped Base Count File Size", c => c.normal_rna_mapped_base_count_size, (c, v) => c.normal_rna_mapped_base_count_size = v),
 				new FieldInformation("Tumor RNA Mapped Base Count Filename",                c => c.tumor_rna_mapped_base_count_filename, (c, v) => c.tumor_rna_mapped_base_count_filename = v, DerivedFile.Type.TumorRNAMappedBaseCount, tumorRNAMappedBaseCountExtension, c => c.tumor_rna_file_id, "Tumor RNA Mapped Base Count File Size", c => c.tumor_rna_mapped_base_count_size, (c, v) => c.tumor_rna_mapped_base_count_size = v),
@@ -2312,6 +2315,7 @@ namespace ASELib
         public const string tumorDNAReadsAtSelectedVariantsIndexExtension = ".tumor-dna-reads-at-selected-variants.txt.index";
         public const string vcfExtension = ".vcf";
         public const string extractedMAFLinesExtension = ".extracted_maf_lines.txt";
+        public const string allMAFLinesExtension = ".all_maf_lines";
         public const string tumorDNAGeneCoverageExtension = ".tumor_dna_gene_coverage.txt";
         public const string normalDNAMappedBaseCountExtension = ".normal_dna_mapped_base_count.txt";
         public const string tumorDNAMappedBaseCountExtension = ".tumor_dna_mapped_base_count.txt";
@@ -2391,7 +2395,7 @@ namespace ASELib
 
             public enum Type { Unknown, NormalRNAAllcount, TumorRNAAllcount, NormalDNAAllcount, TumorDNAAllcount, RegionalExpression, GeneExpression, TumorDNAGeneCoverage,
                 SelectedVariants, NormalDNAReadsAtSelectedVariants, NormalDNAReadsAtSelectedVariantsIndex, TumorDNAReadsAtSelectedVariants, TumorDNAReadsAtSelectedVariantsIndex, TumorRNAReadsAtSelectedVariants,
-                TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines,
+                TumorRNAReadsAtSelectedVariantsIndex, NormalRNAReadsAtSelectedVariants, NormalRNAReadsAtSelectedVariantsIndex, AnnotatedSelectedVariants, NormalAlleleSpecificGeneExpression, TumorAlleleSpecificGeneExpression, VCF, ExtractedMAFLines, AllMAFLines,
                 NormalDNAMappedBaseCount, TumorDNAMappedBaseCount, NormalRNAMappedBaseCount, TumorRNAMappedBaseCount, SelectedVariantCountByGene, 
             };
         } // DerivedFile
@@ -3497,7 +3501,7 @@ namespace ASELib
 			}
 		}
 
-		public class MAFLine
+		public class MAFLine : IComparable
         {
             public readonly string Hugo_Symbol;
             public readonly string NCBI_Build;
@@ -3523,6 +3527,24 @@ namespace ASELib
             public readonly int n_alt_count;
 
             public readonly string maf_file_id; // Of the MAF file
+
+            public MAFLine(string Chromosome_, int Start_Position_) // A constructor for making keys for comparison in AVL Trees
+            {
+                Chromosome = Chromosome_;
+                Start_Position = Start_Position_;
+            }
+
+            public int CompareTo(object peerObject)
+            {
+                MAFLine peer = (MAFLine)peerObject;
+
+                if (Chromosome != peer.Chromosome)
+                {
+                    return Chromosome.CompareTo(peer.Chromosome);
+                }
+
+                return Start_Position.CompareTo(peer.Start_Position);
+            }
 
             MAFLine(string Hugo_Symbol_, 
              string NCBI_Build_,
@@ -7095,6 +7117,11 @@ namespace ASELib
                 return (flag & Unmapped) == Unmapped;
             }
 
+            public bool isSecondaryAlignment()
+            {
+                return (flag & SecondaryAligment) == SecondaryAligment;
+            }
+
             public readonly string qname;
             public readonly int flag;
             public readonly string rname;
@@ -7108,6 +7135,7 @@ namespace ASELib
             public readonly string qual;
 
             public const int Unmapped = 0x4;
+            public const int SecondaryAligment = 0x100;
 
 			// Dictionary of position and bases at position
             public Dictionary<int, char> mappedBases = new Dictionary<int, char>();
@@ -7859,6 +7887,12 @@ namespace ASELib
 
         public class AVLTree<TValue>  where TValue : IComparable
         {
+            public static AVLTree<TValue> CreateFromList(List<TValue> list)
+            {
+                var tree = new AVLTree<TValue>();
+                list.ForEach(x => tree.Insert(x));
+                return tree;
+            }
             class Node
             {
                 public TValue value;
@@ -7866,7 +7900,7 @@ namespace ASELib
                 public Node left = null, right = null, parent = null;
 
                 public enum Balance { AVLLeft, AVLBalanced, AVLRight, AVLNew};
-                public Balance balance = Balance.AVLNew; 
+                public Balance balance = Balance.AVLNew;
 
                 public int checkAndReturnDepth()
                 {
@@ -8326,7 +8360,6 @@ namespace ASELib
                     doubleRotate(node, node.left, node.left.right, Node.Balance.AVLLeft);
                 }
             }
-
             void singleRotate(Node node, Node child, Node.Balance whichSide)
             {
                 //
@@ -9928,7 +9961,86 @@ namespace ASELib
             int maxReadDepth = 0;
 
             double[,] correction = null;
-        }
+        } // ASECorrection
+
+        public class ASERepetitiveRegionMap
+        {
+            class SingleRepetitiveRegion : IComparable
+            {
+                public int chromosomeNumber;
+                public int start;
+                public int end;
+
+                public SingleRepetitiveRegion(int chromosomeNumber_, int start_, int end_)
+                {
+                    chromosomeNumber = chromosomeNumber_;
+                    start = start_;
+                    end = end_;
+                }
+
+                public int CompareTo(object peerObject)
+                {
+                    SingleRepetitiveRegion peer = (SingleRepetitiveRegion)peerObject;
+
+                    if (chromosomeNumber != peer.chromosomeNumber)
+                    {
+                        return chromosomeNumber.CompareTo(peer.chromosomeNumber);
+                    }
+
+                    return start.CompareTo(peer.start);
+                }
+            }
+            static public ASERepetitiveRegionMap loadFromFile(string filename)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+                if (null == inputFile)
+                {
+                    Console.WriteLine("ASERepetitiveRegionMap: unable to open input file " + filename);
+                    return null;
+                }
+
+                string[] wantedFields =
+                {
+                    "Chromosome",
+                    "Begin",
+                    "End"
+                };
+
+                var headerizedFile = new HeaderizedFile<SingleRepetitiveRegion>(inputFile, false, true, "", wantedFields.ToList());
+
+                List<SingleRepetitiveRegion> lines;
+                headerizedFile.ParseFile(parser, out lines);
+
+                var tree = new AVLTree<SingleRepetitiveRegion>();
+                lines.ForEach(x => tree.Insert(x));
+
+                return new ASERepetitiveRegionMap(tree);
+            }
+
+            AVLTree<SingleRepetitiveRegion> tree;
+
+            ASERepetitiveRegionMap(AVLTree<SingleRepetitiveRegion> tree_)
+            {
+                tree = tree_;
+            }
+
+            public bool isInRepetitiveRegion(char chromosomeNumber, int locus)
+            {
+                var key = new SingleRepetitiveRegion(chromosomeNumber, locus, locus);
+                SingleRepetitiveRegion result;
+                if (!tree.FindFirstLessThanOrEqualTo(key, out result))
+                {
+                    return false;
+                }
+
+                return result.chromosomeNumber == chromosomeNumber && result.end >= locus;
+            }
+
+            static SingleRepetitiveRegion parser(HeaderizedFile<SingleRepetitiveRegion>.FieldGrabber fieldGrabber)
+            {
+                return new SingleRepetitiveRegion(fieldGrabber.AsInt("Chromosome"), fieldGrabber.AsInt("Begin"), fieldGrabber.AsInt("End"));
+            }
+        } // ASERepetitiveRegionMap
 
 
 

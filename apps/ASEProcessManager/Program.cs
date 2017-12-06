@@ -681,7 +681,8 @@ namespace ASEProcessManager
                         continue;
                     }
 
-                    if (case_.vcf_filename == "" || case_.tumor_rna_allcount_filename == "" || case_.tumor_dna_allcount_filename == "")
+                    if (case_.vcf_filename == "" || case_.tumor_rna_allcount_filename == "" || case_.tumor_dna_allcount_filename == "" ||
+                        case_.all_maf_lines_filename == "")
                     {
                         nWaitingForPrerequisites++;
                         continue;
@@ -880,7 +881,7 @@ namespace ASEProcessManager
                     {
                         nWaitingForPrerequisites++;
                     }
-                    else if (case_.extracted_maf_lines_filename != null && case_.extracted_maf_lines_filename != "")
+                    else if (case_.extracted_maf_lines_filename != "" && case_.all_maf_lines_filename != "")
                     {
                         nDone++;
                     }

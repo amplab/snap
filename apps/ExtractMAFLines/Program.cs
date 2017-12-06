@@ -44,36 +44,47 @@ namespace ExtractMAFLines
 
                     Directory.CreateDirectory(caseDirectory);  // This is a no-op if the directory already exists.
 
-                    var selectedLines = mafLines.Where(x => case_.tumor_dna_file_id == x.tumor_bam_uuid &&
-                    !(x.n_alt_count >= 10 ||
-                      x.t_depth == 0 ||
-                      x.n_depth > 0 && (double)x.n_alt_count / (double)x.n_depth * 5.0 >= (double)x.t_alt_count / (double)x.t_depth ||
-                      x.Variant_Classification == "3'Flank" ||
-                      x.Variant_Classification == "5'Flank" ||
-                      x.Variant_Classification == "IGR" ||
-                      x.Variant_Classification == "Intron" ||
-                      x.Variant_Classification == "Silent" || 
-                      x.Variant_Classification == "3'UTR" ||
-                      x.Variant_Classification == "5'UTR" ||
-                      x.t_alt_count * 5 < x.t_depth ||
-                      x.Chromosome.StartsWith("chrM")
-                      )
-                    ).ToList();    // The second half of the condition rejects MAF lines that look like germline variants (or pseudogenes that are mismapped), or are in uninteresting regions (IGRs, Introns, etc.) and minor subclones (< 20%) and mitochondrial genes
-
-                    nSelectedThisDisease += selectedLines.Count();
-
-                    if (selectedLines.Count() == 0)
+                    if (doExtractedMafLineFile && case_.extracted_maf_lines_filename == "")
                     {
-                        Console.WriteLine("Found no MAF lines for case " + case_.case_id);
-                        continue;
+                        var selectedLines = mafLines.Where(x => case_.tumor_dna_file_id == x.tumor_bam_uuid &&
+                        !(x.n_alt_count >= 10 ||
+                          x.t_depth == 0 ||
+                          x.n_depth > 0 && (double)x.n_alt_count / (double)x.n_depth * 5.0 >= (double)x.t_alt_count / (double)x.t_depth ||
+                          x.Variant_Classification == "3'Flank" ||
+                          x.Variant_Classification == "5'Flank" ||
+                          x.Variant_Classification == "IGR" ||
+                          x.Variant_Classification == "Intron" ||
+                          x.Variant_Classification == "Silent" ||
+                          x.Variant_Classification == "3'UTR" ||
+                          x.Variant_Classification == "5'UTR" ||
+                          x.t_alt_count * 5 < x.t_depth ||
+                          x.Chromosome.StartsWith("chrM")
+                          )
+                        ).ToList();    // The second half of the condition rejects MAF lines that look like germline variants (or pseudogenes that are mismapped), or are in uninteresting regions (IGRs, Introns, etc.) and minor subclones (< 20%) and mitochondrial genes
+
+                        nSelectedThisDisease += selectedLines.Count();
+
+                        if (selectedLines.Count() == 0)
+                        {
+                            Console.WriteLine("Found no MAF lines for case " + case_.case_id);
+                            continue;
+                        }
+
+                        ASETools.MAFLine.WriteToFile(caseDirectory + case_.case_id + ASETools.extractedMAFLinesExtension, selectedLines);
                     }
 
-                    ASETools.MAFLine.WriteToFile(caseDirectory + case_.case_id + ASETools.extractedMAFLinesExtension, selectedLines);
+                    if (doAllMafLineFile && case_.all_maf_lines_filename == "")
+                    {
+                        ASETools.MAFLine.WriteToFile(caseDirectory + case_.case_id + ASETools.allMAFLinesExtension, mafLines);
+                    }
                 }
 
                 Console.WriteLine("selected " + nSelectedThisDisease + " of " + mafLines.Count() + " for " + mafFilename + " in " + ASETools.ElapsedTimeInSeconds(timer));
             }
         }
+
+        static bool doAllMafLineFile = true;
+        static bool doExtractedMafLineFile = true;
 
         static void Main(string[] args)
         {
@@ -82,9 +93,22 @@ namespace ExtractMAFLines
 
             var configuration = ASETools.Configuration.loadFromFile(args);
             
-            if (configuration.commandLineArgs.Count() != 0) {
-                Console.WriteLine("usage: ExtractMAFLines {-configuration configurationFileName}");
+            if (configuration.commandLineArgs.Count() >1 || 
+                    configuration.commandLineArgs.Count() == 1 && configuration.commandLineArgs[0] != "-a" && configuration.commandLineArgs[0] != "-e") {
+                Console.WriteLine("usage: ExtractMAFLines {-configuration configurationFileName} {-a|-e}");
+                Console.WriteLine("-a means only to crerate the all maf line file, while -e means only to create the extracted maf line file.");
                 return;
+            }
+
+            if (configuration.commandLineArgs.Count() == 1)
+            {
+                if (configuration.commandLineArgs[0] == "-e")
+                {
+                    doAllMafLineFile = false;
+                } else
+                {
+                    doExtractedMafLineFile = false;
+                }
             }
      
             var cases = ASETools.Case.LoadCases(configuration.casesFilePathname);
@@ -103,8 +127,14 @@ namespace ExtractMAFLines
             {
                 var case_ = caseEntry.Value;
 
-                if (case_.extracted_maf_lines_filename != null && case_.extracted_maf_lines_filename != "" || case_.maf_filename == null || case_.maf_filename == "")
+                if (case_.maf_filename == "")
                 {
+                    continue;
+                }
+
+                if ((case_.extracted_maf_lines_filename != "" || !doExtractedMafLineFile) && (case_.all_maf_lines_filename != "" || !doAllMafLineFile)
+                {
+                    // Nothing to do for this file.
                     continue;
                 }
 

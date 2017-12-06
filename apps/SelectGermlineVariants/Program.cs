@@ -160,6 +160,7 @@ namespace SelectGermlineVariants
                 }
 
                 Dictionary<int, int> variantCountByOdds = computeDistribution ? new Dictionary<int, int>() : null;
+                var mafLines = ASETools.AVLTree<ASETools.MAFLine>.CreateFromList(ASETools.MAFLine.ReadFile(case_.all_maf_lines_filename, case_.case_id, false));
 
                 //
                 // First, read in all of the variants, saving those that we can't immediately exclude because of one reason or another.
@@ -252,6 +253,23 @@ namespace SelectGermlineVariants
                         Console.WriteLine("out-of-order variant " + line + " in file " + case_.vcf_filename + ". Skipping file.");
                         badFile = true;
                         break;
+                    }
+
+                    //
+                    // Eliminate any candidates that are too near to a somatic mutation (any somatic mutation, not just the ones we
+                    // select as interesting).
+                    //
+                    var key = new ASETools.MAFLine(fields[0], (int)locus);
+                    ASETools.MAFLine nextLowestMAFLine = null, nextHighestMAFLine = null;
+                    if (mafLines.FindFirstLessThanOrEqualTo(key, out nextLowestMAFLine) && 
+                        nextLowestMAFLine.Chromosome == fields[0] && nextLowestMAFLine.End_Positon + isolationDistance > locus)
+                    {
+                        goodCandidate = false;
+                    }
+                    else if (mafLines.FindFirstGreaterThanOrEqualTo(key, out nextHighestMAFLine) &&
+                        nextHighestMAFLine.Chromosome == fields[0] && locus + isolationDistance > nextHighestMAFLine.Start_Position)
+                    {
+                        goodCandidate = false;
                     }
 
                     //
@@ -440,9 +458,9 @@ namespace SelectGermlineVariants
                     continue;
                 }
 
-                if (cases[caseId].vcf_filename == "" || cases[caseId].tumor_rna_allcount_filename == "")
+                if (cases[caseId].vcf_filename == "" || cases[caseId].tumor_rna_allcount_filename == "" || cases[caseId].all_maf_lines_filename == "")
                 {
-                    Console.WriteLine(caseId + " doesn't appear to have a complete set of vcf and allcount files yet.  Ignoring.");
+                    Console.WriteLine(caseId + " doesn't appear to have a complete set of vcf, allcount and all MAF lines files yet.  Ignoring.");
                     continue;
                 }
 
