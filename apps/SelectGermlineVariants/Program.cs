@@ -160,7 +160,7 @@ namespace SelectGermlineVariants
                 }
 
                 Dictionary<int, int> variantCountByOdds = computeDistribution ? new Dictionary<int, int>() : null;
-                var mafLines = ASETools.AVLTree<ASETools.MAFLine>.CreateFromList(ASETools.MAFLine.ReadFile(case_.all_maf_lines_filename, case_.case_id, false));
+                var mafLines = ASETools.AVLTree<ASETools.MAFLine>.CreateFromList(ASETools.MAFLine.ReadFileOnlyOnePerLocus(case_.all_maf_lines_filename, case_.case_id, false));
 
                 //
                 // First, read in all of the variants, saving those that we can't immediately exclude because of one reason or another.
@@ -268,6 +268,9 @@ namespace SelectGermlineVariants
                     }
                     else if (mafLines.FindFirstGreaterThanOrEqualTo(key, out nextHighestMAFLine) &&
                         nextHighestMAFLine.Chromosome == fields[0] && locus + isolationDistance > nextHighestMAFLine.Start_Position)
+                    {
+                        goodCandidate = false;
+                    } else if (repetitiveRegionMap.isCloseToRepetitiveRegion(ASETools.ChromosomeNameToIndex(fields[0]), (int)locus, (int)isolationDistance))
                     {
                         goodCandidate = false;
                     }
@@ -422,6 +425,7 @@ namespace SelectGermlineVariants
 
         static bool computeDistribution;
         static ASETools.Configuration configuration;
+        static ASETools.ASERepetitiveRegionMap repetitiveRegionMap;
 
         static void Main(string[] args)
         {
@@ -471,6 +475,10 @@ namespace SelectGermlineVariants
 
             var timer = new Stopwatch();
             timer.Start();
+
+            Console.Write("Loading repetitive region map...");
+            repetitiveRegionMap = ASETools.ASERepetitiveRegionMap.loadFromFile(configuration.redundantChromosomeRegionFilename);
+            Console.WriteLine(ASETools.ElapsedTimeInSeconds(timer));
 
             var threads = new List<Thread>();
             for (int i = 0; i < Environment.ProcessorCount; i++)

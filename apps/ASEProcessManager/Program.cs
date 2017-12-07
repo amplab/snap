@@ -671,6 +671,12 @@ namespace ASEProcessManager
 
                 int nOnCurrentLine = 0;
 
+                if (!File.Exists(stateOfTheWorld.configuration.redundantChromosomeRegionFilename))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
                 foreach (var caseEntry in stateOfTheWorld.cases)
                 {
                     var case_ = caseEntry.Value;
@@ -690,7 +696,7 @@ namespace ASEProcessManager
 
                     nAddedToScript++;
 
-                    if (nOnCurrentLine >= 16)
+                    if (nOnCurrentLine >= 100)
                     {
                         script.WriteLine();
                         hpcScript.WriteLine();
@@ -1524,7 +1530,6 @@ namespace ASEProcessManager
 
                 if (stateOfTheWorld.scatterGraphsSummaryFile == "")
                 {
-Console.WriteLine("Missing summary file");
                     missingAnything = true;
                 } 
                 //
@@ -1634,7 +1639,7 @@ Console.WriteLine("Missing summary file");
             }
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }   // Really no dependencies for this unless the reference genome changes
-        }
+        } // GenerateAllLociProcessingStage
 
         class AlignAllLociProcessingStage : ProcessingStage
         {
@@ -1672,7 +1677,42 @@ Console.WriteLine("Missing summary file");
 
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }   // Really no dependencies for this unless the reference genome changes, since the input files are effectively constants
 
-        }
+        } // AlignAllLociProcessingStage
+
+        class RepetitveRegionMapProcessingStage : ProcessingStage
+        {
+            public RepetitveRegionMapProcessingStage() { }
+
+            public string GetStageName() { return "Make Repetitive Region Map"; }
+            public bool NeedsCases() { return false; }
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+                filesToDownload = null;
+                
+                if (File.Exists(stateOfTheWorld.configuration.redundantChromosomeRegionFilename))
+                {
+                    nDone++;
+                    return;
+                }
+
+                for (int chromosomeNumber = 1; chromosomeNumber <= ASETools.nHumanAutosomes; chromosomeNumber++)
+                {
+                    if (!File.Exists(stateOfTheWorld.configuration.chromosomeMapsDirectory + "chr" + chromosomeNumber + ASETools.allLociAlignedExtension))
+                    {
+                        nWaitingForPrerequisites++;
+                        return;
+                    }
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "MakeRepetitiveRegionMap.exe");
+                nAddedToScript++;
+            }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }   // Really no dependencies for this unless the reference genome changes, since the input files are effectively constants
+        } // RepetitveRegionMapProcessingStage
 
 
         class FPKMProcessingStage : ProcessingStage
@@ -2201,6 +2241,7 @@ Console.WriteLine("Missing summary file");
 			processingStages.Add(new FPKMProcessingStage());
             processingStages.Add(new GenerateAllLociProcessingStage());
             processingStages.Add(new AlignAllLociProcessingStage());
+            processingStages.Add(new RepetitveRegionMapProcessingStage());
 
             if (checkDependencies)
             {

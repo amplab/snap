@@ -75,7 +75,7 @@ namespace ExtractMAFLines
 
                     if (doAllMafLineFile && case_.all_maf_lines_filename == "")
                     {
-                        ASETools.MAFLine.WriteToFile(caseDirectory + case_.case_id + ASETools.allMAFLinesExtension, mafLines);
+                        ASETools.MAFLine.WriteToFile(caseDirectory + case_.case_id + ASETools.allMAFLinesExtension, mafLines.Where(x => case_.tumor_dna_file_id == x.tumor_bam_uuid).ToList());
                     }
                 }
 
@@ -132,7 +132,7 @@ namespace ExtractMAFLines
                     continue;
                 }
 
-                if ((case_.extracted_maf_lines_filename != "" || !doExtractedMafLineFile) && (case_.all_maf_lines_filename != "" || !doAllMafLineFile)
+                if ((case_.extracted_maf_lines_filename != "" || !doExtractedMafLineFile) && (case_.all_maf_lines_filename != "" || !doAllMafLineFile))
                 {
                     // Nothing to do for this file.
                     continue;

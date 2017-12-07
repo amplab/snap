@@ -25,16 +25,16 @@ namespace MakeRepetitiveRegionMap
                 return;
             }
 
-            if (configuration.commandLineArgs.Count() != 1)
+            if (configuration.commandLineArgs.Count() != 0)
             {
-                Console.WriteLine("usage: MakeRepetitiveRegionMap outputFilename");
+                Console.WriteLine("usage: MakeRepetitiveRegionMap");
                 return;
             }
 
             var timer = new Stopwatch();
             timer.Start();
 
-            outputFile = ASETools.CreateStreamWriterWithRetry(configuration.commandLineArgs[0]);
+            outputFile = ASETools.CreateStreamWriterWithRetry(configuration.redundantChromosomeRegionFilename);
             outputFile.WriteLine("Chromosome\tBegin\tEnd");
 
             var queue = new List<int>();
@@ -56,7 +56,6 @@ namespace MakeRepetitiveRegionMap
         static void HandleOneChromosome(int chromosomeNumber, int unused)
         {
             var inputFilename = configuration.chromosomeMapsDirectory + "chr" + chromosomeNumber + ASETools.allLociAlignedExtension;
-if (chromosomeNumber == 22) inputFilename = @"c:\temp\chr22-all-loci-aligned.sam"; else return; // BJB
             var inputFile = ASETools.CreateStreamReaderWithRetry(inputFilename);
 
             if (null == inputFile)

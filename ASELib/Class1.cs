@@ -1538,7 +1538,7 @@ namespace ASELib
 			public const string bisulfiteCasesFilePathname = bisulfiteDirectory + "cases_bisulfite.txt";
 
             public string chromosomeMapsDirectory = defaultBaseDirectory + @"chromosome_maps\";
-            public string redundantChromosomeRegionFilename = "redundantRegions.txt";
+            public string redundantChromosomeRegionFilename = defaultBaseDirectory + "redundantRegions.txt";
 
             // chain files
             public const string hg38Tohg19ChainFile = defaultBaseDirectory + @"chain\hg38ToHg19.over.chain";
@@ -3689,6 +3689,45 @@ namespace ASELib
 
                 return result;
             } // ReadFile
+
+            static public List<MAFLine> ReadFileOnlyOnePerLocus(string filename, string file_id, bool fileHasVersion)
+            {
+                var rawList = ReadFile(filename, file_id, fileHasVersion);
+                rawList.Sort();
+
+                int n = rawList.Count();
+
+                var cookedList = new List<MAFLine>();
+
+                bool inRun = false;
+
+                for (int i = 0; i < n; i++)
+                {
+                    if (inRun && rawList[i-1].Chromosome == rawList[i].Chromosome && rawList[i-1].Start_Position == rawList[i].Start_Position)
+                    {
+                        continue;
+                    }
+
+                    inRun = false;
+
+                    int endPosition = rawList[i].End_Positon;
+                    int biggestInRun = i;
+
+                    for (int j = i + 1; j < n && rawList[j].Chromosome == rawList[i].Chromosome && rawList[j].Start_Position == rawList[i].Start_Position; j++)
+                    {
+                        inRun = true;
+                        if (rawList[j].End_Positon > endPosition)
+                        {
+                            endPosition = rawList[j].End_Positon;
+                            biggestInRun = j;
+                        }
+                    }
+
+                    cookedList.Add(rawList[biggestInRun]);
+                } // for all in raw list
+
+                return cookedList;
+            }
 
             public static void WriteHeaderLine(StreamWriter outputStream)
             {
@@ -7634,6 +7673,119 @@ namespace ASELib
             public readonly string name;
         } // Histogram
 
+        public class PreBucketedHistogram
+        {
+            double minBucket;
+            double maxBucket;
+            double increment;
+            int nBuckets;
+            HistogramResultLine[] buckets;
+            string name;
+
+            double minSeenValue = double.MaxValue;
+            double maxSeenValue = double.MinValue;
+            double totalSeenValue = 0;
+            int nValues = 0;
+
+            public PreBucketedHistogram(double minBucket_, double maxBucket_, double increment_, string name_ = "")
+            {
+                minBucket = minBucket_;
+                maxBucket = maxBucket_;
+                increment = increment_;
+                nBuckets = (int)((maxBucket - minBucket) / increment) + 1;  // +1 is for "more"
+                buckets = new HistogramResultLine[nBuckets];
+                for (int i = 0; i < nBuckets; i++)
+                {
+                    buckets[i] = new HistogramResultLine();
+                }
+
+                name = name_;
+            }
+
+            public void addValue(double value)
+            {
+                int whichBucket;
+                if (value > maxBucket)
+                {
+                    whichBucket = nBuckets - 1;
+                } else
+                {
+                    whichBucket = (int)((value - minBucket) / increment);
+                }
+
+                buckets[whichBucket].count++;
+                buckets[whichBucket].total += value;
+
+                minSeenValue = Math.Min(minSeenValue, value);
+                maxSeenValue = Math.Max(maxSeenValue, value);
+                totalSeenValue += value;
+                nValues++;
+            }
+
+            public double min()
+            {
+                return minSeenValue;
+            }
+
+            public double max()
+            {
+                return maxSeenValue;
+            }
+
+            public double mean()
+            {
+                return totalSeenValue / nValues;
+            }
+
+            public void merge(PreBucketedHistogram peer)
+            {
+                if (peer.minBucket != minBucket || peer.maxBucket != maxBucket || peer.increment != increment || peer.nBuckets != nBuckets)
+                {
+                    throw new FormatException("Can't merge pre-bucketed histograms with different parameters");
+                }
+
+                for (int i = 0; i < nBuckets; i++)
+                {
+                    buckets[i].count += peer.buckets[i].count;
+                    buckets[i].total += peer.buckets[i].total;
+                }
+
+                minSeenValue = Math.Min(minSeenValue, peer.minSeenValue);
+                maxSeenValue = Math.Max(maxSeenValue, peer.maxSeenValue);
+                totalSeenValue += peer.totalSeenValue;
+                nValues += peer.nValues;
+            }
+
+            public int count()
+            {
+                return nValues;
+            }
+
+            public HistogramResultLine[] ComputeHistogram(string format = "G")
+            {
+                var result = new HistogramResultLine[nBuckets];
+
+                double x = minBucket;
+                long runningCount = 0;
+                for (int i = 0; i < nBuckets; i++)
+                {
+                    result[i] = new HistogramResultLine();
+                    result[i].minValue = x.ToString(format);
+                    result[i].count = buckets[i].count;
+                    result[i].total = buckets[i].total;
+                    result[i].pdfValue = ((double)result[i].count) / nValues;
+                    runningCount += result[i].count;
+                    result[i].cdfValue = ((double)runningCount) / nValues;
+                    x += increment;
+                }
+
+                result[nBuckets - 1].minValue = "More";
+
+                return result;
+            }// ComputeHistogram
+
+        } // PreBucketedHistogram
+
         public class NMeandAndStdDev
         {
             public NMeandAndStdDev(int n_, double mean_, double stdDev_)
@@ -10034,6 +10186,24 @@ namespace ASELib
                 }
 
                 return result.chromosomeNumber == chromosomeNumber && result.end >= locus;
+            }
+
+            public bool isCloseToRepetitiveRegion(int chromosomeNumber, int locus, int range)
+            {
+                var key = new SingleRepetitiveRegion(chromosomeNumber, locus, locus);
+
+                SingleRepetitiveRegion result;
+                if (tree.FindFirstLessThanOrEqualTo(key, out result) && chromosomeNumber == result.chromosomeNumber && result.end + range >= locus)
+                {
+                    return true;
+                }
+
+                if (tree.FindFirstGreaterThanOrEqualTo(key, out result) && chromosomeNumber == result.chromosomeNumber && locus + range >= result.start)
+                {
+                    return true;
+                }
+
+                return false;
             }
 
             static SingleRepetitiveRegion parser(HeaderizedFile<SingleRepetitiveRegion>.FieldGrabber fieldGrabber)
