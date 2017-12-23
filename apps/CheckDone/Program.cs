@@ -95,8 +95,10 @@ namespace CheckDone
                         continue;
                     }
 
-                    int bytesToCheckThisFile = nBytesToCheck;
-                    byte[] buffer = lastBitOfFile;
+                    var index = filename.EndsWith(".index");
+
+                    int bytesToCheckThisFile = index ? nBytesToCheckIndex : nBytesToCheck;
+                    byte[] buffer = index ? lastBitOfFileIndex : lastBitOfFile;
 
                     if (filestream.Length < bytesToCheckThisFile)
                     {
@@ -114,16 +116,43 @@ namespace CheckDone
                         continue;
                     }
 
-                    if (buffer[0] != '*' ||
-                        buffer[1] != '*' ||
-                        buffer[2] != 'd' ||
-                        buffer[3] != 'o' ||
-                        buffer[4] != 'n' ||
-                        buffer[5] != 'e' ||
-                        buffer[6] != '*' ||
-                        buffer[7] != '*' ||
-                        buffer[8] != '\r' ||
-                        buffer[9] != '\n')
+                    if ((!index && (
+                            buffer[0] != '*' ||
+                            buffer[1] != '*' ||
+                            buffer[2] != 'd' ||
+                            buffer[3] != 'o' ||
+                            buffer[4] != 'n' ||
+                            buffer[5] != 'e' ||
+                            buffer[6] != '*' ||
+                            buffer[7] != '*' ||
+                            buffer[8] != '\r' ||
+                            buffer[9] != '\n'))     ||
+                        (index && 
+                            (buffer[0] != '*' ||    // **done**\t\t\r\n
+                            buffer[1] != '*' ||
+                            buffer[2] != 'd' ||
+                            buffer[3] != 'o' ||
+                            buffer[4] != 'n' ||
+                            buffer[5] != 'e' ||
+                            buffer[6] != '*' ||
+                            buffer[7] != '*' ||
+                            buffer[8] != '\t' ||
+                            buffer[9] != '\t' ||
+                            buffer[10] != '\r' ||
+                            buffer[11] != '\n') &&
+
+                            (buffer[2] != '*' || // **done**\r\n
+                            buffer[3] != '*' ||
+                            buffer[4] != 'd' ||
+                            buffer[5] != 'o' ||
+                            buffer[6] != 'n' ||
+                            buffer[7] != 'e' ||
+                            buffer[8] != '*' ||
+                            buffer[9] != '*' ||
+                            buffer[10] != '\r' ||
+                            buffer[11] != '\n')
+                        )
+                    )
                     {
                         Console.WriteLine(filename + " is truncated.");
                     }
@@ -174,8 +203,11 @@ namespace CheckDone
                 HandleFilename(case_.tumor_dna_reads_at_selected_variants_index_filename);
                 HandleFilename(case_.tumor_rna_reads_at_selected_variants_index_filename);
                 HandleFilename(case_.annotated_selected_variants_filename);
+                HandleFilename(case_.normal_allele_specific_gene_expression_filename);
+                HandleFilename(case_.tumor_allele_specific_gene_expression_filename);
                 HandleFilename(case_.tumor_dna_gene_coverage_filname);
                 HandleFilename(case_.extracted_maf_lines_filename);
+                HandleFilename(case_.all_maf_lines_filename);
                 HandleFilename(case_.normal_dna_mapped_base_count_filename);
                 HandleFilename(case_.tumor_dna_mapped_base_count_filename);
                 HandleFilename(case_.normal_rna_mapped_base_count_filename);

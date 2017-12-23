@@ -327,10 +327,12 @@ namespace ExpressionNearMutations
 
             geneLocationInformation = new ASETools.GeneLocationsByNameAndChromosome(ASETools.readKnownGeneFile(configuration.geneLocationInformationFilename));
             geneMap = new ASETools.GeneMap(geneLocationInformation.genesByName);
-            ASECorrection = ASETools.ASECorrection.LoadFromFile(configuration.finalResultsDirectory + ASETools.ASECorrectionFilename);
+            var ASECorrectionFilename = configuration.finalResultsDirectory + ASETools.ASECorrectionFilename;
+            ASECorrection = ASETools.ASECorrection.LoadFromFile(ASECorrectionFilename);
             if (ASECorrection == null)
             {
-                Console.WriteLine("***WARNING*** running with no ASE correction.");
+                Console.WriteLine("Unable to load ASE correction from " + ASECorrectionFilename);
+                return;
             }
 
             // set ASE flag, if specified

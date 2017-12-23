@@ -382,7 +382,7 @@ namespace SelectGermlineVariants
 
                         foreach (var candidate in grain)
                         {
-                            if (candidate.nDNAReads >= 10 && candidate.nRNAReads >= 10)
+                            if (candidate.nDNAReads >= 10 && candidate.nRNAReads >= 10 && candidate.nDNAReads < 10000000 && candidate.nRNAReads < 1000000)  // Get rid of the extraorindarily high read counts because they can make extracted files > 2GB, which breaks the code
                             {
                                 remainingCandidates.Add(candidate);
                             }

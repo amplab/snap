@@ -1077,6 +1077,12 @@ namespace ASEProcessManager
 
                 var currentCommandLine = "";
 
+                if (forAlleleSpecificExpression && !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename))
+                {
+                    nWaitingForPrerequisites++;
+                    return;
+                }
+
                 foreach (var caseEntry in stateOfTheWorld.cases)
                 {
                     var case_ = caseEntry.Value;
@@ -1714,6 +1720,234 @@ namespace ASEProcessManager
             public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }   // Really no dependencies for this unless the reference genome changes, since the input files are effectively constants
         } // RepetitveRegionMapProcessingStage
 
+        class OverallDistributionProcessingStage : ProcessingStage
+        {
+            public OverallDistributionProcessingStage() { }
+
+            public string GetStageName() { return "Overall Distribution"; }
+
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+                filesToDownload = null;
+
+                //
+                // There are two versions: one with and one without correction.  This is because the uncorrected version is used to generate the correction, which is in turn used to generate the
+                // corrected version.
+                //
+
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.UncorrectedOverallASEFilename))
+                {
+                    nDone++;
+                } else if (!stateOfTheWorld.cases.Select(x => x.Value).All(x => x.annotated_selected_variants_filename != "" && x.tumor_copy_number_filename != "" && (x.normal_copy_number_filename != "" || x.normal_copy_number_file_id == "")))
+                {
+                    nWaitingForPrerequisites++;
+                } else
+                {
+                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "OverallDistribution.exe");
+                    nAddedToScript++;
+                }
+
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.CorrectedOverallASEFilename))
+                {
+                    nDone++;
+                }
+                else if (!stateOfTheWorld.cases.Select(x => x.Value).All(x => x.annotated_selected_variants_filename != "" && x.tumor_copy_number_filename != "" && (x.normal_copy_number_filename != "" || x.normal_copy_number_file_id == "")) ||
+                    !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.UncorrectedOverallASEFilename))
+                { 
+                    nWaitingForPrerequisites++;
+                }
+                else
+                {
+                    script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "OverallDistribution.exe -c");
+                    nAddedToScript++;
+                }
+            } // EvaluateStage
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+        } // OverallDistributionProcessingStage
+
+        class CorrectionProcessingStage : ProcessingStage
+        {
+            public CorrectionProcessingStage() { }
+
+            public string GetStageName() { return "ASE Correction"; }
+
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+                filesToDownload = null;
+
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename))
+                {
+                    nDone++;
+                    return;
+                }
+
+                if (!File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.UncorrectedOverallASEFilename) || !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.TumorRNAReadDepthDistributionFilename))
+                {
+                    nWaitingForPrerequisites++;
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "GenerateASECorrection.exe");
+                nAddedToScript++;
+            }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+        } // CorrectionProcessingStage
+
+        class AllSitesReadDepthProcessingStage : ProcessingStage
+        {
+            public AllSitesReadDepthProcessingStage() { }
+
+            public string GetStageName() { return "All Sites Read Depth"; }
+
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                filesToDownload = null;
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.AllSitesReadDepthFilename))
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (stateOfTheWorld.cases.Select(x => x.Value).Any(x => x.tumor_dna_allcount_filename == "" || x.normal_dna_allcount_filename == "" || x.tumor_rna_allcount_filename == "" || x.normal_rna_allcount_filename == "" && x.normal_rna_file_id != ""))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                nAddedToScript = 1;
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "AllSitesReadDepthDistribution.exe");
+            } // EvaluateStage
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+        } // AllSitesReadDepthProcessingStage
+
+        class ExpressionByMutationCountProcessingStage : ProcessingStage
+        {
+            public ExpressionByMutationCountProcessingStage() { }
+
+            public string GetStageName() { return "Expression by Mutation Count"; }
+
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+                filesToDownload = null;
+
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + "AlleleSpecificExpressionByMutationCount.txt"))
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (stateOfTheWorld.cases.Select(x => x.Value).Any(x => x.tumor_allele_specific_gene_expression_filename == ""))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ExpressionByMutationCount.exe -a");
+                nAddedToScript = 1;
+            }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+        } // ExpressionByMutationCountProcessingStage
+
+        class BonferroniProcessingStage : ProcessingStage
+        {
+            public BonferroniProcessingStage() { }
+
+            public string GetStageName() { return "Apply Bonferroni Correction"; }
+
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+
+            {
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+                filesToDownload = null;
+
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + "AlleleSpecificExpressionByMutationCount_bonferroni.txt"))
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (!File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + "AlleleSpecificExpressionByMutationCount.txt"))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ApplyBonferroniCorrection.exe");
+            }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+        } // BonferroniProcessingStage
+
+        class ASEConsistencyProcessingStage : ProcessingStage
+        {
+            public ASEConsistencyProcessingStage() { }
+            public string GetStageName() { return "ASE Consistency"; }
+
+            public bool NeedsCases() { return true; }
+
+            public void EvaluateStage(StateOfTheWorld stateOfTheWorld, StreamWriter script, ASETools.RandomizingStreamWriter hpcScript, StreamWriter linuxScript, StreamWriter azureScript, out List<string> filesToDownload, out int nDone, out int nAddedToScript, out int nWaitingForPrerequisites)
+            {
+                nDone = 0;
+                nAddedToScript = 0;
+                nWaitingForPrerequisites = 0;
+                filesToDownload = null;
+
+                if (File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ASEConsistencyFilename))
+                {
+                    nDone = 1;
+                    return;
+                }
+
+                if (!File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.ASECorrectionFilename) || stateOfTheWorld.cases.Select(x => x.Value).Any(x => x.annotated_selected_variants_filename == "" || x.tumor_copy_number_filename == "") ||
+                    !File.Exists(stateOfTheWorld.configuration.finalResultsDirectory + ASETools.PerGeneASEMapFilename))
+                {
+                    nWaitingForPrerequisites = 1;
+                    return;
+                }
+
+                script.WriteLine(stateOfTheWorld.configuration.binariesDirectory + "ASEConsistency.exe");
+                nAddedToScript = 1;
+            }
+
+            public bool EvaluateDependencies(StateOfTheWorld stateOfTheWorld) { return true; }
+
+        } // ASEConsistencyProcessingStage
+
+
 
         class FPKMProcessingStage : ProcessingStage
 		{
@@ -2242,6 +2476,12 @@ namespace ASEProcessManager
             processingStages.Add(new GenerateAllLociProcessingStage());
             processingStages.Add(new AlignAllLociProcessingStage());
             processingStages.Add(new RepetitveRegionMapProcessingStage());
+            processingStages.Add(new OverallDistributionProcessingStage());
+            processingStages.Add(new CorrectionProcessingStage());
+            processingStages.Add(new AllSitesReadDepthProcessingStage());
+            processingStages.Add(new ExpressionByMutationCountProcessingStage());
+            processingStages.Add(new BonferroniProcessingStage());
+            processingStages.Add(new ASEConsistencyProcessingStage());
 
             if (checkDependencies)
             {

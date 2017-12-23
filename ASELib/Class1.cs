@@ -1377,6 +1377,17 @@ namespace ASELib
                     }
                 }
             } // loadFileLocations
+
+            public string getAllcountFilename(bool tumor, bool dna)
+            {
+                if (tumor)
+                {
+                    if (dna) return tumor_dna_allcount_filename;
+                    return tumor_rna_allcount_filename;
+                }
+                if (dna) return normal_dna_allcount_filename;
+                return normal_rna_allcount_filename;
+            } // getAllcountFilename
         } // Case
 
         public static long LongFromString(string String)
@@ -2345,12 +2356,14 @@ namespace ASELib
         public const string ASEMapFilename = "ASEMap.txt";
         public const string PerGeneASEMapFilename = "ASEMap-PerGene.txt";
         public const string PerCaseASEFilename = "PerCaseASE.txt";
-        public const string OverallASEFilename = "OverallASE.txt";
+        public const string UncorrectedOverallASEFilename = "UncorrectedOverallASE.txt";
+        public const string CorrectedOverallASEFilename = "CorrectedOverallASE.txt";
         public const string ASECorrectionFilename = "ase_correction.txt";
         public const string TumorRNAReadDepthDistributionFilename = "TumorRNAReadDepth.txt";
         public const string TumorGermlineASEDistributionFilename = "TumorGermlineASEDistribution.txt";
         public const string allLociExtension = "-all-loci.sam";
         public const string allLociAlignedExtension = "-all-loci-aligned.sam";
+        public const string AllSitesReadDepthFilename = "AllSitesReadDepth.txt";
 
 
         public class DerivedFile
@@ -2797,7 +2810,8 @@ namespace ASELib
             public delegate outputType FieldGrabberParser(FieldGrabber fieldGrabber);
 
             public HeaderizedFile(StreamReader inputFile_, bool hasVersion_, bool hasDone_, string expectedVersion_, List<string> wantedFields_, 
-				bool skipHash_ = false, bool allowMissingColumnsInData_ = false, int skippedRows_ = 0, bool allowMissingRowsInData_ = false, char separator_ = '\t')
+				bool skipHash_ = false, bool allowMissingColumnsInData_ = false, int skippedRows_ = 0, bool allowMissingRowsInData_ = false, 
+                char separator_ = '\t', bool stopAtBlankLine_ = false)
             {
                 inputFile = inputFile_;
                 hasVersion = hasVersion_;
@@ -2809,6 +2823,7 @@ namespace ASELib
 				skippedRows = skippedRows_;
 				allowMissingRowsInData = allowMissingRowsInData_;
                 separator = separator_;
+                stopAtBlankLine = stopAtBlankLine_;
             }
 
             //
@@ -2935,6 +2950,11 @@ namespace ASELib
                     if ("**done**" == inputLine.Trim()) {
                         sawDone = true;
                         continue;
+                    }
+
+                    if (inputLine == "" && stopAtBlankLine)
+                    {
+                        break;
                     }
 
                     var fields = inputLine.Split('\t');
@@ -3146,6 +3166,7 @@ namespace ASELib
 			bool allowMissingRowsInData;
 			int skippedRows;
             char separator;
+            bool stopAtBlankLine;
         } // HeaderizedFile
 
         public static int ConvertToInt32TreatingNullStringAsZero(string value)
@@ -6218,14 +6239,13 @@ namespace ASELib
 					{
 						samLine = new ASETools.SAMLine(line);
 					}
-					catch (FormatException)
+					catch (Exception e)
 					{
 						Console.WriteLine("Unable to parse sam line in extracted reads subfile " + subfileName + ": " + line);
-						subfileReader.Close();
-						return null;
+                        throw e;
 					}
 
-					if (samLine.isUnmapped() || samLine.mapq < 10)
+					if (samLine.isUnmapped() || samLine.mapq < 10 /*|| samLine.isDuplicate()*/)
 					{
 						//
 						// Probably half of a paired-end read with the other end mapped.  Ignore it.
@@ -6252,10 +6272,10 @@ namespace ASELib
 
 					if (!(start > 1 + samLine.mappedBases.Keys.Min()) || !(start < samLine.mappedBases.Keys.Max() - 1))
 					{
-						//
-						// There is no padding on the variant. Without it, its hard to make a match call. Ignore.
-						//
-						continue;
+                        //
+                        // There is no padding on the variant. Without it, its hard to make a match call. Ignore.
+                        //
+					    continue;
 					}
 
                     if (samLine.mappedQual[start] < 10)
@@ -6328,6 +6348,7 @@ namespace ASELib
                             case MappedReadResult.MatchesBoth: nMatchingBoth++; break;
                             case MappedReadResult.MatchesNeither: nMatchingNeither++; break;
                         }
+
                         if (samLine.qname != "*")
                         {
                             readResults.Add(samLine.qname, result);
@@ -7067,88 +7088,97 @@ namespace ASELib
                 int offsetInCigarString = 0;
                 int offsetInSeq = 0;
 
-				// keep track of cigar elements
-				int cigarElementStart = 0;
-				int cigarElementLength = 0;
+                // keep track of cigar elements
+                int cigarElementStart = 0;
+                int cigarElementLength = 0;
 
-                while (offsetInCigarString < cigar.Count())
+                try
                 {
-                    switch (cigar[offsetInCigarString])
+
+                    while (offsetInCigarString < cigar.Count())
                     {
-                        case 'M':
-						case 'I':
-						case '=':
-                        case 'X':
-                            offsetInCigarString++;  // Consume the M, = or X
-                            int count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
+                        switch (cigar[offsetInCigarString])
+                        {
+                            case 'M':
+                            case 'I':
+                            case '=':
+                            case 'X':
+                                offsetInCigarString++;  // Consume the M, = or X
+                                int count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
 
-                            if (0 == count)
-                            {
-                                throw new FormatException();
-                            }
+                                if (0 == count)
+                                {
+                                    throw new FormatException();
+                                }
 
-                            for (int i = 0; i < count; i++)
-                            {
-                                mappedBases.Add(currentPos, seq[offsetInSeq]);
-                                mappedQual.Add(currentPos, PhredToInt(qual[offsetInSeq]));
+                                for (int i = 0; i < count; i++)
+                                {
+                                    mappedBases.Add(currentPos, seq[offsetInSeq]);
+                                    mappedQual.Add(currentPos, PhredToInt(qual[offsetInSeq]));
 
-                                currentPos++;
-                                offsetInSeq++;
-                            }
+                                    currentPos++;
+                                    offsetInSeq++;
+                                }
 
-							// reset cigar element information
-							cigarElementLength = 0;
-							cigarElementStart = offsetInCigarString;
+                                // reset cigar element information
+                                cigarElementLength = 0;
+                                cigarElementStart = offsetInCigarString;
 
-                            break;
-						case 'D':
-							offsetInCigarString++;  // Consume the M, = or X
-							count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
+                                break;
+                            case 'D':
+                                offsetInCigarString++;  // Consume the M, = or X
+                                count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
 
-							if (0 == count)
-							{
-								throw new FormatException();
-							}
-                            
-							for (int i = 0; i < count; i++)
-							{
-								mappedBases.Add(currentPos, 'N'); // Add placeholder for DEL
-                                mappedQual.Add(currentPos, 70);     // Just use a high quality for a missing base
-								currentPos++;
-							}
+                                if (0 == count)
+                                {
+                                    throw new FormatException();
+                                }
 
-							// reset cigar element information
-							cigarElementLength = 0;
-							cigarElementStart = offsetInCigarString;
+                                for (int i = 0; i < count; i++)
+                                {
+                                    mappedBases.Add(currentPos, 'N'); // Add placeholder for DEL
+                                    mappedQual.Add(currentPos, 70);     // Just use a high quality for a missing base
+                                    currentPos++;
+                                }
 
-							break;
-						case 'N':
-						case 'H':
-							offsetInCigarString++;  // Consume the M, = or X
-							count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
+                                // reset cigar element information
+                                cigarElementLength = 0;
+                                cigarElementStart = offsetInCigarString;
 
-							// skip region. Reset
-							currentPos += count;
+                                break;
+                            case 'N':
+                            case 'H':
+                                offsetInCigarString++;  // Consume the M, = or X
+                                count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
 
-							cigarElementLength = 0;
-							cigarElementStart = offsetInCigarString;
-							break;
-						case 'S':
-							offsetInCigarString++;  // Consume the M, = or X
-							count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
+                                // skip region. Reset
+                                currentPos += count;
 
-							// skip region. Reset
-							offsetInSeq += count;
+                                cigarElementLength = 0;
+                                cigarElementStart = offsetInCigarString;
+                                break;
+                            case 'S':
+                                offsetInCigarString++;  // Consume the M, = or X
+                                count = GetNextNumberFromString(cigar.Substring(cigarElementStart, cigarElementLength));
 
-							cigarElementLength = 0;
-							cigarElementStart = offsetInCigarString;
-							break;
-						default:
-							offsetInCigarString++;
-							cigarElementLength++;
-							break;
-					} // switch over character in the CIGAR string
-                } // while over the CIGAR string
+                                // skip region. Reset
+                                offsetInSeq += count;
+
+                                cigarElementLength = 0;
+                                cigarElementStart = offsetInCigarString;
+                                break;
+                            default:
+                                offsetInCigarString++;
+                                cigarElementLength++;
+                                break;
+                        } // switch over character in the CIGAR string
+                    } // while over the CIGAR string
+                } catch (Exception e)
+                {
+                    Console.WriteLine("SAMLine.SAMLine: error parsing cigar string " + cigar);
+                    throw e;
+                } // catch
+
             } // SAMLine
 
             public bool isUnmapped()
@@ -7159,6 +7189,11 @@ namespace ASELib
             public bool isSecondaryAlignment()
             {
                 return (flag & SecondaryAligment) == SecondaryAligment;
+            }
+
+            public bool isDuplicate()
+            {
+                return (flag & Duplicate) == Duplicate;
             }
 
             public readonly string qname;
@@ -7175,6 +7210,7 @@ namespace ASELib
 
             public const int Unmapped = 0x4;
             public const int SecondaryAligment = 0x100;
+            public const int Duplicate = 0x400;
 
 			// Dictionary of position and bases at position
             public Dictionary<int, char> mappedBases = new Dictionary<int, char>();
@@ -7573,7 +7609,7 @@ namespace ASELib
         public class HistogramResultLine
         {
             public string minValue;
-            public int count = 0;
+            public long count = 0;
             public double total = 0;    // The sum of all of the values in this line
             public double pdfValue = 0;
             public double cdfValue = 0;
@@ -7585,8 +7621,59 @@ namespace ASELib
 
             public static string Header()
             {
-                return "minVaue\tcount\ttotal\tpdf\tcdf";
+                return "minValue\tcount\ttotal\tpdf\tcdf";
             }
+
+            static public HistogramResultLine[] ReadFromFile(string filename)
+            {
+                var file = CreateStreamReaderWithRetry(filename);
+                if (null == file)
+                {
+                    Console.WriteLine("ASETools.Histogram.ReadFromFile: unable to open " + filename);
+                    return null;
+                }
+
+                var retVal =  ReadFromStream(file, true);
+                file.Close();
+
+                return retVal;
+            }
+
+            static public HistogramResultLine[] ReadFromStream(StreamReader file, bool wholeFile)
+            { 
+
+                string[] wantedFields = { "minValue", "count", "total", "pdf", "cdf" };
+
+                var headerizedFile = new HeaderizedFile<HistogramResultLine>(file, false, wholeFile, "", wantedFields.ToList(), false, false, 0, false, '\t', !wholeFile); // If not whole file, then don't expect **done** and stop at the first blank line
+
+                List<HistogramResultLine> lines;
+
+                if (!headerizedFile.ParseFile(parse, out lines))
+                {
+                    Console.WriteLine("ASETools.Histogram.ReadFromFile: unable to parse input file.");
+                    file.Close();
+                    return null;
+                }
+
+
+                return lines.ToArray();
+            }
+
+            static HistogramResultLine parse(HeaderizedFile<HistogramResultLine>.FieldGrabber fieldGrabber)
+            {
+                return new HistogramResultLine(fieldGrabber.AsString("minValue"), fieldGrabber.AsInt("count"), fieldGrabber.AsDouble("total"), fieldGrabber.AsDouble("pdf"), fieldGrabber.AsDouble("cdf"));
+            }
+
+            public HistogramResultLine(string minValue_, int count_, double total_, double pdfValue_, double cdfValue_)
+            {
+                minValue = minValue_;
+                count = count_;
+                total = total_;
+                pdfValue = pdfValue_;
+                cdfValue = cdfValue_;
+            }
+
+            public HistogramResultLine() { }
         } // HistogramResultLine
 
         public class Histogram
@@ -7657,7 +7744,7 @@ namespace ASELib
                 }
 
                 int overallCount = values.Count();
-                int runningCount = 0;
+                long runningCount = 0;
                 for (int whichBucket = 0; whichBucket < nBuckets; whichBucket++)
                 {
                     runningCount += result[whichBucket].count;
@@ -7668,6 +7755,38 @@ namespace ASELib
 
                 return result;
             } // ComputeHistogram
+
+            public static double[] ReadStreamToPDFValues(StreamReader inputStream, bool wholeFile)
+            {
+                var lines = HistogramResultLine.ReadFromStream(inputStream, wholeFile);
+                if (null == lines) return null;
+
+                return lines.Select(x => x.pdfValue).ToArray();
+            }
+
+            public static double[] ReadFileToPDFValues(string filename)
+            {
+                var lines = HistogramResultLine.ReadFromFile(filename);
+                if (null == lines) return null;
+
+                return lines.Select(x => x.pdfValue).ToArray();
+            }
+
+            public static double[] ReadStreamToCDFValues(StreamReader inputStream, bool wholeFile)
+            {
+                var lines = HistogramResultLine.ReadFromStream(inputStream, wholeFile);
+                if (null == lines) return null;
+
+                return lines.Select(x => x.cdfValue).ToArray();
+            }
+
+            public static double[] ReadFileToCDFValues(string filename)
+            {
+                var lines = HistogramResultLine.ReadFromFile(filename);
+                if (null == lines) return null;
+
+                return lines.Select(x => x.cdfValue).ToArray();
+            }
 
             List<double> values = new List<double>();
             public readonly string name;
@@ -7685,7 +7804,7 @@ namespace ASELib
             double minSeenValue = double.MaxValue;
             double maxSeenValue = double.MinValue;
             double totalSeenValue = 0;
-            int nValues = 0;
+            long nValues = 0;
 
             public PreBucketedHistogram(double minBucket_, double maxBucket_, double increment_, string name_ = "")
             {
@@ -7704,6 +7823,11 @@ namespace ASELib
 
             public void addValue(double value)
             {
+                if (value < minBucket)
+                {
+                    throw new FormatException("PreBucketedHistogram " + name + " : value (" + value + ") smaller than minBucket (" + minBucket + ")");
+                }
+
                 int whichBucket;
                 if (value > maxBucket)
                 {
@@ -7712,6 +7836,7 @@ namespace ASELib
                 {
                     whichBucket = (int)((value - minBucket) / increment);
                 }
+
 
                 buckets[whichBucket].count++;
                 buckets[whichBucket].total += value;
@@ -7756,7 +7881,7 @@ namespace ASELib
                 nValues += peer.nValues;
             }
 
-            public int count()
+            public long count()
             {
                 return nValues;
             }
@@ -8978,7 +9103,6 @@ namespace ASELib
 
 		public class EnsembleGeneFile
 		{
-
 			static Tuple<string, string> ParseLine(Dictionary<string, int> fieldMappings, string[] fields)
 			{
 				var ensemblId = fields[fieldMappings["Gene stable ID"]];
@@ -10211,6 +10335,102 @@ namespace ASELib
                 return new SingleRepetitiveRegion(fieldGrabber.AsInt("Chromosome"), fieldGrabber.AsInt("Begin"), fieldGrabber.AsInt("End"));
             }
         } // ASERepetitiveRegionMap
+
+        //
+        // PDFs of ASE at each read depth
+        //
+        public class MeasuredASEMatrix
+        {
+            public MeasuredASEMatrix(int nDiscreteASEValues_, int maxReadDepth_)
+            {
+                nDiscreteASEValues = nDiscreteASEValues_;
+                maxReadDepth = maxReadDepth_;
+                pdfMatrix = new double[nDiscreteASEValues, maxReadDepth + 1];
+            }
+
+            double[,] pdfMatrix;
+            int nDiscreteASEValues;
+            int maxReadDepth;
+
+            public double getValue(double ase, int readDepth)
+            {
+                int ASEIndex = (int)Math.Round(ase * (nDiscreteASEValues - 1));
+
+                int column = Math.Min(maxReadDepth, readDepth);
+
+                return pdfMatrix[ASEIndex, column];
+            }
+
+            static public MeasuredASEMatrix readFromFile(string filename, bool tumor, bool somatic)
+            {
+                var inputFile = CreateStreamReaderWithRetry(filename);
+
+                if (null == inputFile)
+                {
+                    Console.WriteLine("MeasuredASEMatrix: unable to open " + filename);
+                    return null;
+                }
+
+                var rows = new Dictionary<int, double[]>();
+
+                int maxReadDepth = -1;
+
+                string inputLine;
+                while (null  != (inputLine = inputFile.ReadLine()))
+                {
+                    if (inputLine.StartsWith("ASE distributon for tumor: "))
+                    {
+                        var words = inputLine.Split(' ');
+                        if (words.Count() != 13)
+                        {
+                            Console.WriteLine("MeasuredASEMatrix: failed to parse header line " + inputLine);
+                            continue;
+                        }
+
+                        if (tumor && words[4] != "True" || !tumor && words[4] != "False")
+                        {
+                            continue;
+                        }
+
+                        if (somatic && words[6] != "True" || !somatic && words[6] != "False")
+                        {
+                            continue;
+                        }
+
+                        int readDepth = Convert.ToInt32(words[12]);
+
+                        rows.Add(readDepth, Histogram.ReadStreamToPDFValues(inputFile, false));
+
+                        maxReadDepth = Math.Max(maxReadDepth, readDepth);
+                    }
+                }
+
+                if (rows.Count() == 0)
+                {
+                    Console.WriteLine("MeasuredASEMatrix.readFromFile: Unable to find any data in " + filename);
+                    return null;
+                }
+
+                int nDiscreteASEValues = rows[maxReadDepth].Count();
+                if (rows.Any(x => x.Value.Count() != nDiscreteASEValues))
+                {
+                    Console.WriteLine("MeasuredASEMatrix.readFromFile: not all rows (pdf's) have the same number of values (discrete ASE values)");
+                    return null;
+                }
+
+                var retVal = new MeasuredASEMatrix(nDiscreteASEValues, maxReadDepth);
+                foreach(var rowEntry in rows)
+                {
+                    for (int i = 0; i < nDiscreteASEValues; i++)
+                    {
+                        retVal.pdfMatrix[i, rowEntry.Key] = rowEntry.Value[i];
+                    }
+                }
+
+                return retVal;
+
+            }
+        }
 
 
 
